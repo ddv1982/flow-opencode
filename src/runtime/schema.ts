@@ -1,19 +1,20 @@
 import { z } from "zod";
+import { DECOMPOSITION_POLICIES, GOAL_MODES, NEEDS_INPUT_OUTCOME_KINDS, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./contracts";
+
+function isNeedsInputOutcomeKind(
+  value: (typeof OUTCOME_KINDS)[number],
+): value is (typeof NEEDS_INPUT_OUTCOME_KINDS)[number] {
+  return NEEDS_INPUT_OUTCOME_KINDS.includes(value as (typeof NEEDS_INPUT_OUTCOME_KINDS)[number]);
+}
 
 export const FeatureStatusSchema = z.enum(["pending", "in_progress", "completed", "blocked"]);
 export const SessionStatusSchema = z.enum(["planning", "ready", "running", "blocked", "completed"]);
 export const ApprovalStatusSchema = z.enum(["pending", "approved"]);
-export const GoalModeSchema = z.enum(["implementation", "review", "review_and_fix"]);
-export const DecompositionPolicySchema = z.enum(["atomic_feature", "iterative_refinement", "open_ended"]);
-export const ValidationStatusSchema = z.enum(["passed", "failed", "failed_existing", "partial"]);
-export const WorkerStatusSchema = z.enum(["ok", "needs_input"]);
-export const OutcomeKindSchema = z.enum([
-  "completed",
-  "replan_required",
-  "blocked_external",
-  "needs_operator_input",
-  "contract_error",
-]);
+export const GoalModeSchema = z.enum(GOAL_MODES);
+export const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
+export const ValidationStatusSchema = z.enum(VALIDATION_STATUSES);
+export const WorkerStatusSchema = z.enum(WORKER_STATUSES);
+export const OutcomeKindSchema = z.enum(OUTCOME_KINDS);
 
 export const ArtifactSchema = z.object({
   path: z.string().min(1),
@@ -44,7 +45,7 @@ export const ReviewFindingSchema = z.object({
 });
 
 export const ReviewSchema = z.object({
-  status: z.enum(["passed", "failed", "needs_followup"]),
+  status: z.enum(REVIEW_STATUSES),
   summary: z.string().min(1),
   blockingFindings: z.array(ReviewFindingSchema).default([]),
 });
@@ -61,7 +62,7 @@ export const OutcomeSchema = z.object({
 
 export const FeatureResultSchema = z.object({
   featureId: z.string().min(1),
-  verificationStatus: z.enum(["passed", "partial", "failed", "not_recorded"]).optional(),
+  verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
   notes: z.array(NoteSchema).optional(),
   followUps: z.array(FollowUpSchema).optional(),
 });
@@ -95,7 +96,7 @@ export const WorkerResultSchema = z.discriminatedUnion("status", [
   }),
   WorkerResultBaseSchema.extend({
     status: z.literal("needs_input"),
-    outcome: OutcomeSchema.refine((value) => value.kind !== "completed", {
+    outcome: OutcomeSchema.refine((value) => isNeedsInputOutcomeKind(value.kind), {
       message: "needs_input outcomes must not use 'completed'.",
     }),
   }),

@@ -111,7 +111,8 @@ Instead, create plugin tools that are authoritative for transitions. Smallest us
 - `flow_plan_select_features`
 - `flow_run_start`
 - `flow_run_complete_feature`
-- `flow_reset`
+- `flow_reset_feature`
+- `flow_reset_session`
 
 If we want a smaller API, these can collapse into one `flow_runtime` tool with an `action` enum, but separate tools will be easier for the model to use correctly.
 

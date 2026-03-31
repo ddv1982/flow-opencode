@@ -114,6 +114,25 @@ bun run check
 - runtime tools: `src/tools.ts`
 - runtime state and rendering: `src/runtime/*`
 
+### Tool schema note
+
+OpenCode plugin tools expect `args` to be a raw Zod shape, not a top-level `z.object(...)` or `z.discriminatedUnion(...)`.
+
+Good:
+
+```ts
+const ArgsShape = {
+  featureId: z.string().optional(),
+};
+```
+
+Avoid using a top-level schema instance directly as `args`. Keep richer schemas for runtime validation inside the implementation path.
+
+This plugin intentionally splits validation into two layers:
+
+- SDK-facing tool `args` stay as raw shapes for OpenCode compatibility
+- stricter semantic validation happens in runtime schemas like `WorkerResultSchema` during execution
+
 ### Derived docs
 
 The plugin writes derived docs from runtime state into:

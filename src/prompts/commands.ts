@@ -46,8 +46,8 @@ export const FLOW_RESET_COMMAND_TEMPLATE = `Reset Flow state.
 Arguments: $ARGUMENTS
 
 Behavior:
-- If the arguments are exactly \`session\`, clear the active Flow session through \`flow_reset\`.
-- If the arguments start with \`feature\`, reset the named feature through \`flow_reset\`.
+- If the arguments are exactly \`session\`, clear the active Flow session through \`flow_reset_session\`.
+- If the arguments start with \`feature\`, reset the named feature through \`flow_reset_feature\`.
 - Otherwise explain the valid forms briefly.
 
 Always summarize what changed and the next logical command.`;

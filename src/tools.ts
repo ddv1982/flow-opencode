@@ -1,9 +1,11 @@
 import { tool } from "@opencode-ai/plugin";
-import { z } from "zod";
-import { WorkerResultSchema } from "./runtime/schema";
 import { loadSession, saveSession, createSession, deleteSession } from "./runtime/session";
 import { applyPlan, approvePlan, completeRun, resetFeature, selectPlanFeatures, startRun } from "./runtime/transitions";
 import { summarizeSession } from "./runtime/summary";
+import { DECOMPOSITION_POLICIES, GOAL_MODES, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./runtime/contracts";
+
+const z = tool.schema;
+const featureIdSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Feature ids must be lowercase kebab-case");
 
 const PlanArgsSchema = z.object({
   summary: z.string().min(1),
@@ -12,7 +14,7 @@ const PlanArgsSchema = z.object({
   architectureDecisions: z.array(z.string().min(1)).default([]),
   features: z.array(
     z.object({
-      id: z.string().min(1),
+      id: featureIdSchema,
       title: z.string().min(1),
       summary: z.string().min(1),
       fileTargets: z.array(z.string().min(1)).default([]),
@@ -21,8 +23,8 @@ const PlanArgsSchema = z.object({
       blockedBy: z.array(z.string().min(1)).optional(),
     }),
   ).min(1),
-  goalMode: z.enum(["implementation", "review", "review_and_fix"]).optional(),
-  decompositionPolicy: z.enum(["atomic_feature", "iterative_refinement", "open_ended"]).optional(),
+  goalMode: z.enum(GOAL_MODES).optional(),
+  decompositionPolicy: z.enum(DECOMPOSITION_POLICIES).optional(),
   completionPolicy: z
     .object({
       minCompletedFeatures: z.number().int().positive().optional(),
@@ -45,6 +47,81 @@ const PlanningContextArgsSchema = z.object({
     .optional(),
 });
 
+const WorkerResultArgsShape = {
+  contractVersion: z.literal("1"),
+  status: z.enum(WORKER_STATUSES),
+  summary: z.string().min(1),
+  artifactsChanged: z.array(z.object({ path: z.string().min(1), kind: z.string().min(1).optional() })).default([]),
+  validationRun: z
+    .array(
+      z.object({
+        command: z.string().min(1),
+        status: z.enum(VALIDATION_STATUSES),
+        summary: z.string().min(1),
+      }),
+    )
+    .default([]),
+  decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
+  nextStep: z.string().min(1),
+  outcome: z
+    .object({
+      kind: z.enum(OUTCOME_KINDS),
+      category: z.string().min(1).optional(),
+      summary: z.string().min(1).optional(),
+      resolutionHint: z.string().min(1).optional(),
+      retryable: z.boolean().optional(),
+      autoResolvable: z.boolean().optional(),
+      needsHuman: z.boolean().optional(),
+    })
+    .optional(),
+  featureResult: z.object({
+    featureId: z.string().min(1),
+    verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
+    notes: z.array(z.object({ note: z.string().min(1) })).optional(),
+    followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).optional(),
+  }),
+  featureReview: z.object({
+    status: z.enum(REVIEW_STATUSES),
+    summary: z.string().min(1),
+    blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
+  }),
+  finalReview: z
+    .object({
+      status: z.enum(REVIEW_STATUSES),
+      summary: z.string().min(1),
+      blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
+    })
+    .optional(),
+};
+
+const FlowStatusArgsShape = {};
+
+const FlowPlanStartArgsShape = {
+  goal: z.string().min(1).optional(),
+  repoProfile: z.array(z.string().min(1)).optional(),
+};
+
+const FlowPlanApplyArgsShape = {
+  plan: PlanArgsSchema,
+  planning: PlanningContextArgsSchema.optional(),
+};
+
+const FlowPlanApproveArgsShape = {
+  featureIds: z.array(featureIdSchema).optional(),
+};
+
+const FlowPlanSelectArgsShape = {
+  featureIds: z.array(featureIdSchema),
+};
+
+const FlowRunStartArgsShape = {
+  featureId: featureIdSchema.optional(),
+};
+
+const FlowResetFeatureArgsShape = {
+  featureId: featureIdSchema,
+};
+
 function parseFeatureIds(raw?: string[]): string[] {
   return (raw ?? []).map((value) => value.trim()).filter(Boolean);
 }
@@ -57,19 +134,16 @@ export function createTools(_ctx: unknown) {
   return {
     flow_status: tool({
       description: "Show the active Flow session summary",
-      args: {},
+      args: FlowStatusArgsShape,
       async execute(_args: any, context: any) {
         const session = await loadSession(context.worktree);
         return toJson(summarizeSession(session));
       },
-    } as any),
+    }),
 
     flow_plan_start: tool({
       description: "Create or refresh the active Flow planning session",
-      args: {
-        goal: z.string().min(1).optional(),
-        repoProfile: z.array(z.string().min(1)).optional(),
-      },
+      args: FlowPlanStartArgsShape,
       async execute(args: any, context: any) {
         const input = args as { goal?: string; repoProfile?: string[] };
         const existing = await loadSession(context.worktree);
@@ -124,14 +198,11 @@ export function createTools(_ctx: unknown) {
           session: summarizeSession(session).session,
         });
       },
-    } as any),
+    }),
 
     flow_plan_apply: tool({
       description: "Persist a Flow draft plan into the active session",
-      args: {
-        plan: PlanArgsSchema,
-        planning: PlanningContextArgsSchema.optional(),
-      },
+      args: FlowPlanApplyArgsShape,
       async execute(args: any, context: any) {
         const input = args as {
           plan: unknown;
@@ -167,13 +238,11 @@ export function createTools(_ctx: unknown) {
           session: summarizeSession(saved).session,
         });
       },
-    } as any),
+    }),
 
     flow_plan_approve: tool({
       description: "Approve the active Flow draft plan",
-        args: {
-          featureIds: z.array(z.string().min(1)).optional(),
-        },
+      args: FlowPlanApproveArgsShape,
       async execute(args: any, context: any) {
         const input = args as { featureIds?: string[] };
         const session = await loadSession(context.worktree);
@@ -193,13 +262,11 @@ export function createTools(_ctx: unknown) {
           session: summarizeSession(saved).session,
         });
       },
-    } as any),
+    }),
 
     flow_plan_select_features: tool({
       description: "Keep only selected features in the active Flow draft plan",
-        args: {
-          featureIds: z.array(z.string().min(1)),
-        },
+      args: FlowPlanSelectArgsShape,
       async execute(args: any, context: any) {
         const input = args as { featureIds: string[] };
         const session = await loadSession(context.worktree);
@@ -219,13 +286,11 @@ export function createTools(_ctx: unknown) {
           session: summarizeSession(saved).session,
         });
       },
-    } as any),
+    }),
 
     flow_run_start: tool({
       description: "Start the next runnable Flow feature",
-        args: {
-          featureId: z.string().min(1).optional(),
-        },
+      args: FlowRunStartArgsShape,
       async execute(args: any, context: any) {
         const input = args as { featureId?: string };
         const session = await loadSession(context.worktree);
@@ -247,11 +312,11 @@ export function createTools(_ctx: unknown) {
           reason: result.value.reason,
         });
       },
-    } as any),
+    }),
 
     flow_run_complete_feature: tool({
       description: "Persist the result of a Flow feature execution",
-      args: WorkerResultSchema,
+      args: WorkerResultArgsShape,
       async execute(args: any, context: any) {
         const input = args as unknown;
         const session = await loadSession(context.worktree);
@@ -271,28 +336,13 @@ export function createTools(_ctx: unknown) {
           session: summarizeSession(saved).session,
         });
       },
-    } as any),
+    }),
 
-    flow_reset: tool({
-      description: "Reset a Flow feature or clear the active session",
-        args: {
-          scope: z.enum(["feature", "session"]),
-          featureId: z.string().min(1).optional(),
-        },
+    flow_reset_feature: tool({
+      description: "Reset a Flow feature to pending",
+      args: FlowResetFeatureArgsShape,
       async execute(args: any, context: any) {
-        const input = args as { scope: "feature" | "session"; featureId?: string };
-        if (input.scope === "session") {
-          await deleteSession(context.worktree);
-          return toJson({
-            status: "ok",
-            summary: "Cleared the active Flow session.",
-            nextCommand: "/flow-plan <goal>",
-          });
-        }
-
-        if (!input.featureId) {
-          return toJson({ status: "error", summary: "featureId is required when resetting a feature." });
-        }
+        const input = args as { featureId: string };
 
         const session = await loadSession(context.worktree);
         if (!session) {
@@ -311,6 +361,19 @@ export function createTools(_ctx: unknown) {
           session: summarizeSession(saved).session,
         });
       },
-    } as any),
+    }),
+
+    flow_reset_session: tool({
+      description: "Clear the active Flow session",
+      args: FlowStatusArgsShape,
+      async execute(_args: any, context: any) {
+        await deleteSession(context.worktree);
+        return toJson({
+          status: "ok",
+          summary: "Cleared the active Flow session.",
+          nextCommand: "/flow-plan <goal>",
+        });
+      },
+    }),
   };
 }

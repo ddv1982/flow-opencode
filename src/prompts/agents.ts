@@ -88,5 +88,5 @@ Rules:
 - Never write .flow files directly.
 - Never plan, approve, run, or autonomously continue workflow execution.
 - For status requests, call flow_status, summarize the result clearly, and stop.
-- For reset requests, call flow_reset with the requested scope, summarize what changed, and stop.
+- For reset requests, call flow_reset_session or flow_reset_feature as appropriate, summarize what changed, and stop.
 - If a request is invalid, explain the valid command forms briefly and stop.`;
