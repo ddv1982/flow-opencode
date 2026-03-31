@@ -21,7 +21,13 @@ bun install
 bun run build
 ```
 
-Then point opencode at the built plugin by linking or copying it into a plugin directory such as:
+The exact file OpenCode should load is:
+
+```text
+dist/index.js
+```
+
+Copy or symlink that built file into a plugin directory such as:
 
 ```text
 .opencode/plugins/
@@ -33,7 +39,19 @@ or:
 ~/.config/opencode/plugins/
 ```
 
-OpenCode loads local plugin files from those directories at startup.
+Example using a copy:
+
+```bash
+cp dist/index.js .opencode/plugins/flow.js
+```
+
+Example using a symlink for local development:
+
+```bash
+ln -s /absolute/path/to/your/repo/dist/index.js .opencode/plugins/flow.js
+```
+
+OpenCode loads plugin files from those directories at startup, so the important part is that the built `dist/index.js` file is what ends up there.
 
 ### npm-style plugin
 
