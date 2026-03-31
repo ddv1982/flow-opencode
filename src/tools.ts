@@ -98,6 +98,10 @@ const WorkerResultArgsShape = {
 
 const FlowStatusArgsShape = {};
 
+const FlowAutoPrepareArgsShape = {
+  argumentString: z.string().optional(),
+};
+
 const FlowPlanStartArgsShape = {
   goal: z.string().min(1).optional(),
   repoProfile: z.array(z.string().min(1)).optional(),
@@ -218,6 +222,45 @@ export function createTools(_ctx: unknown) {
           status: "ok",
           summary: `Planning session ready for goal: ${session.goal}`,
           session: summarizeSession(session).session,
+        });
+      },
+    }),
+
+    flow_auto_prepare: tool({
+      description: "Classify a flow-auto invocation",
+      args: FlowAutoPrepareArgsShape,
+      async execute(args: any, context: any) {
+        const input = args as { argumentString?: string };
+        const trimmed = (input.argumentString ?? "").trim();
+        const session = await loadSession(context.worktree);
+        const isResume = trimmed === "" || trimmed === "resume";
+        const resumableSession = session && session.status !== "completed" ? session : null;
+
+        if (isResume) {
+          if (!resumableSession) {
+            return toJson({
+              status: "missing_goal",
+              mode: "missing_goal",
+              summary: "No active Flow session exists. Provide a goal to start a new autonomous run.",
+              nextCommand: "/flow-auto <goal>",
+            });
+          }
+
+          return toJson({
+            status: "ok",
+            mode: "resume",
+            goal: resumableSession.goal,
+            summary: `Resuming active Flow goal: ${resumableSession.goal}`,
+            nextCommand: "/flow-status",
+          });
+        }
+
+        return toJson({
+          status: "ok",
+          mode: "start_new_goal",
+          goal: trimmed,
+          summary: `Starting a new autonomous Flow goal: ${trimmed}`,
+          nextCommand: "/flow-status",
         });
       },
     }),

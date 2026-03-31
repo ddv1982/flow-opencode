@@ -68,6 +68,7 @@ Rules:
 - Prefer compact progress summaries over long narration.
 - Auto-approve plans when autonomy is clearly requested.
 - Stop only for completion, a real external blocker, or a human product decision.
+- When invoked with empty input or \`resume\`, treat the command as resume-only. If no active session exists, stop and request a goal instead of creating one.
 - If a blocker is potentially solvable from repo evidence, validation output, or external research, it is not a stopping point. Investigate, make the smallest credible recovery plan, execute it, and continue.
 - Never advance to the next feature while the current feature still has review findings. Stay on the current feature until it is clean or truly blocked.
 - Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, and repeat until the final state is clean.
@@ -76,26 +77,29 @@ Rules:
 - If a feature lands in a blocked state with a retryable or auto-resolvable outcome, use repo reads plus external research when useful, then reset that feature through the runtime and continue instead of stopping.
 - Runtime contract or completion-gating errors are internal recovery work, not external blockers. Adjust the review, validation, or completion path and retry.
 - When tool errors include structured recovery metadata, satisfy \`recovery.prerequisite\` first. Only call \`recovery.nextRuntimeTool\` when it is present. Treat \`recovery.nextCommand\` as user-facing guidance, not the agent's only option.
+- Do not derive, infer, or invent a new autonomous goal from repository inspection when invoked without a goal and no active session exists.
 
 Autonomous loop:
-1. If needed, initialize planning with flow_plan_start.
-2. Inspect repo context and create or refresh the plan.
-3. Persist it with flow_plan_apply.
-4. Approve it with flow_plan_approve.
-5. Start the next feature with flow_run_start.
-6. Use flow-worker to implement the feature and run targeted validation.
-7. Use flow-reviewer to review the feature result.
-8. Persist the reviewer output with flow_review_record_feature.
-9. If the reviewer returns needs_fix, send the findings back to flow-worker, fix them, rerun targeted validation, and ask flow-reviewer to review again. Repeat until approved or blocked.
-10. Persist the approved feature result with flow_run_complete_feature.
-11. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, then perform the indicated runtime action when one is provided, and continue instead of stopping.
-12. If the runtime routes back into planning because the feature needs decomposition, replan and continue.
-13. If broad validation or final review surfaces repo findings, do not mark the session blocked just because they were unexpected. Research the recommended fixes, make a repair plan, implement it, rerun broad validation, and review again.
-14. When the last feature is done, run broad final validation for the repo with flow-worker, then use flow-reviewer for a final cross-feature review.
-15. Persist the final reviewer output with flow_review_record_final.
-16. If the reviewer returns needs_fix, fix the findings, rerun broad validation, and review again until approved.
-17. Only then allow final completion.
-18. Repeat until the session is complete or blocked.
+1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
+2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
+3. If needed, initialize planning with flow_plan_start.
+4. Inspect repo context and create or refresh the plan.
+5. Persist it with flow_plan_apply.
+6. Approve it with flow_plan_approve.
+7. Start the next feature with flow_run_start.
+8. Use flow-worker to implement the feature and run targeted validation.
+9. Use flow-reviewer to review the feature result.
+10. Persist the reviewer output with flow_review_record_feature.
+11. If the reviewer returns needs_fix, send the findings back to flow-worker, fix them, rerun targeted validation, and ask flow-reviewer to review again. Repeat until approved or blocked.
+12. Persist the approved feature result with flow_run_complete_feature.
+13. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, then perform the indicated runtime action when one is provided, and continue instead of stopping.
+14. If the runtime routes back into planning because the feature needs decomposition, replan and continue.
+15. If broad validation or final review surfaces repo findings, do not mark the session blocked just because they were unexpected. Research the recommended fixes, make a repair plan, implement it, rerun broad validation, and review again.
+16. When the last feature is done, run broad final validation for the repo with flow-worker, then use flow-reviewer for a final cross-feature review.
+17. Persist the final reviewer output with flow_review_record_final.
+18. If the reviewer returns needs_fix, fix the findings, rerun broad validation, and review again until approved.
+19. Only then allow final completion.
+20. Repeat until the session is complete or blocked.
 
 Planning content must follow this contract:
 

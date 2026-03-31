@@ -257,6 +257,10 @@ describe("applyFlowConfig", () => {
 
   test("auto prompt requires broad final validation before session completion", () => {
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("Never advance to the next feature while the current feature still has review findings");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("treat the command as resume-only");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("stop and request a goal instead of creating one");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("Call flow_auto_prepare with the raw command argument string before planning or repo inspection");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("If flow_auto_prepare returns missing_goal, render that result clearly and stop");
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("run broad repo validation");
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("rerun broad validation");
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("Use the flow-reviewer stage as the approval gate");
@@ -269,6 +273,10 @@ describe("applyFlowConfig", () => {
   });
 
   test("auto command template requires final cross-feature review before completion", () => {
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("resume the active session only");
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("If no active session exists, stop and request a goal");
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("Do not derive, infer, or invent a new goal from repository inspection");
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("Call `flow_auto_prepare` first");
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("final cross-feature review");
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("completion gating failures");

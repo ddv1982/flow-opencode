@@ -74,6 +74,15 @@ Autonomous flow:
 2. Let Flow plan, execute, validate, review, fix, and continue until complete or blocked
 3. `/flow-status` at any point to inspect state
 
+Resume behavior:
+
+- `/flow-auto` with no argument is resume-only
+- `/flow-auto resume` is the explicit equivalent
+- if no active Flow session exists, Flow should stop and ask for a goal
+- completed sessions are not considered active resumable sessions
+- Flow should not invent a new goal from repository inspection when no session exists
+- `flow-auto` is runtime-gated through `flow_auto_prepare` before planning begins
+
 ## Execution Guarantees
 
 Flow is intentionally strict.
@@ -173,6 +182,7 @@ Current injected agents:
 Current runtime tools:
 
 - `flow_status`
+- `flow_auto_prepare`
 - `flow_plan_start`
 - `flow_plan_apply`
 - `flow_plan_approve`

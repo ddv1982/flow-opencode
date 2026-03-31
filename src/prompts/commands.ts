@@ -32,8 +32,10 @@ export const FLOW_AUTO_COMMAND_TEMPLATE = `Run Flow autonomously.
 Arguments: $ARGUMENTS
 
 Behavior:
-- If the argument string is empty or \`resume\`, resume the active session if one exists.
+- If the argument string is empty or \`resume\`, resume the active session only. If no active session exists, stop and request a goal.
 - Otherwise treat the full argument string as a new autonomous goal.
+- Do not derive, infer, or invent a new goal from repository inspection when invoked without a goal and no active session exists.
+- Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
 - Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.
 - Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not as reasons to stop.
 - When blocked by a solvable finding, inspect the evidence, use the same repo and research tools used during planning, make the smallest recovery plan, execute it, and keep iterating.

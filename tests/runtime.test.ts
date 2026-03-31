@@ -451,6 +451,74 @@ describe("runtime transitions", () => {
     expect(indexDoc).not.toContain("Completed runtime setup.");
   });
 
+  test("flow_auto_prepare returns missing_goal for empty input without a session", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+
+    const response = await tools.flow_auto_prepare.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("missing_goal");
+    expect(parsed.mode).toBe("missing_goal");
+    expect(parsed.nextCommand).toBe("/flow-auto <goal>");
+  });
+
+  test("flow_auto_prepare resumes an existing session for empty input", async () => {
+    const worktree = makeTempDir();
+    await saveSession(worktree, createSession("Build a workflow plugin"));
+    const tools = createTools({}) as any;
+
+    const response = await tools.flow_auto_prepare.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.mode).toBe("resume");
+    expect(parsed.goal).toBe("Build a workflow plugin");
+  });
+
+  test("flow_auto_prepare does not resume a completed session", async () => {
+    const worktree = makeTempDir();
+    const session = createSession("Build a workflow plugin");
+    session.status = "completed";
+    session.approval = "approved";
+    session.timestamps.completedAt = new Date().toISOString();
+    await saveSession(worktree, session);
+    const tools = createTools({}) as any;
+
+    const response = await tools.flow_auto_prepare.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("missing_goal");
+    expect(parsed.mode).toBe("missing_goal");
+    expect(parsed.nextCommand).toBe("/flow-auto <goal>");
+  });
+
+  test("flow_auto_prepare treats resume as missing_goal when no session exists", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+
+    const response = await tools.flow_auto_prepare.execute({ argumentString: "resume" }, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("missing_goal");
+    expect(parsed.mode).toBe("missing_goal");
+  });
+
+  test("flow_auto_prepare classifies explicit goals as start_new_goal", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+
+    const response = await tools.flow_auto_prepare.execute(
+      { argumentString: "Improve Flow recovery behavior" },
+      { worktree },
+    );
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.mode).toBe("start_new_goal");
+    expect(parsed.goal).toBe("Improve Flow recovery behavior");
+  });
+
   test("returns to planning when the worker requires replanning", () => {
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());

@@ -116,6 +116,7 @@ The execution model includes:
 The tool runtime in `src/tools.ts` currently exposes:
 
 - `flow_status`
+- `flow_auto_prepare`
 - `flow_plan_start`
 - `flow_plan_apply`
 - `flow_plan_approve`
@@ -213,6 +214,14 @@ The command templates in `src/prompts/commands.ts` implement the user-facing wor
 - `/flow-auto` runs plan, approval, execution, review, and replanning autonomously
 - `/flow-status` reads runtime state only
 - `/flow-reset` resets a feature or clears the session
+
+The current autonomous contract is also intentionally strict about empty-input behavior:
+
+- empty `/flow-auto` is resume-only
+- empty `/flow-auto` with no active session must stop and request a goal
+- completed sessions are not resumable in that path
+- the autonomous agent must not invent a new goal from repository inspection in that path
+- a dedicated `flow_auto_prepare` runtime tool now gates that decision before planning starts
 
 ### Rendering strategy
 
