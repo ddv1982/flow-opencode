@@ -1,108 +1,119 @@
-# Flow For OpenCode: Implementation Plan
+# Flow For OpenCode: Retrospective Implementation Plan
+
+## Purpose
+
+This document is a reference plan rewritten from the code that exists today.
+
+It answers two questions:
+
+- what has actually been implemented in this plugin
+- what implementation plan we would have written if we were planning toward the current design from the start
 
 ## Goal
 
-Build an opencode-native workflow plugin that supports:
+Build an OpenCode-native workflow plugin that can:
 
-- planning a scoped goal into an ordered feature plan
-- approving and trimming that plan
-- executing one feature at a time with review/validation evidence
-- autonomous plan-and-run loops for broader goals
-- status inspection and reset/reopen flows
-- durable workflow state across opencode sessions
+- create and persist a scoped planning session
+- turn a goal into a structured feature plan
+- approve or narrow that plan before execution
+- execute one feature at a time
+- require validation evidence before a feature can complete
+- require reviewer approval before a feature or full session can advance
+- support autonomous plan, run, review, and replan loops
+- expose status and reset flows through runtime tools and slash commands
+- persist durable state and readable markdown artifacts under `.flow/`
 
-The design should feel native to opencode instead of recreating a shell-heavy wrapper system.
+## What The Codebase Implements Today
 
-## Research Findings
+### Package and entrypoints
 
-### Opencode primitives we should use
+The plugin is a small TypeScript package built with Bun:
 
-- Plugins can be loaded locally or from npm.
-- Plugins can contribute hooks and custom tools.
-- Plugins can also mutate runtime config through a `config` hook.
-- Commands are prompt templates, not shell-first wrappers.
-- Agents can be defined with focused prompts and restricted permissions.
-- Skills are optional, on-demand instruction packs.
-- Custom tools are the right place for authoritative state transitions.
-
-### Concrete implication
-
-The cleanest architecture is:
-
-1. a TypeScript plugin package
-2. a `config` hook that injects commands and agents
-3. plugin-owned custom tools that act as the workflow runtime
-4. prompt-only slash commands that instruct agents to call those tools
-
-This avoids the least opencode-native parts of the older design:
-
-- bash wrappers as the primary interface
-- command files owning workflow transitions
-- a separate terminal loop for autonomy
-
-## Recommended Architecture
-
-## 1. Package shape
-
-Use a small npm-style TypeScript plugin package:
-
-- `src/index.ts`
-- `src/config.ts`
-- `src/runtime/`
-- `src/tools/`
-- `src/agents/`
-- `src/prompts/`
-- `src/state/`
 - `package.json`
 - `tsconfig.json`
+- `src/index.ts`
+- `src/config.ts`
+- `src/tools.ts`
+- `src/runtime/`
+- `src/prompts/`
+- `tests/`
 
-## 2. Plugin responsibilities
+The entrypoint in `src/index.ts` exports a plugin that registers:
 
-The plugin should do three things.
+- a `config` hook
+- a Flow tool surface
 
-1. Detect whether the current workspace should expose the workflow commands.
-2. Inject opencode config for commands and agents.
-3. Register custom tools that own workflow state transitions.
+### Config injection
 
-Recommended detection rules:
+The config hook in `src/config.ts` injects five agents:
 
-- always active inside this repo during development
-- later: active when `.flow/` exists, or when the user explicitly invokes a flow command
+- `flow-planner`
+- `flow-worker`
+- `flow-auto`
+- `flow-reviewer`
+- `flow-control`
 
-## 3. State model
+It also injects five slash commands:
 
-Keep durable workflow state, but make it thinner than the previous implementation.
+- `/flow-plan`
+- `/flow-run`
+- `/flow-auto`
+- `/flow-status`
+- `/flow-reset`
 
-Recommended canonical artifact:
+This is unconditional config injection. There is no workspace-detection gate in the current implementation.
+
+### Runtime state and artifacts
+
+The canonical session artifact is:
 
 - `.flow/session.json`
 
-Recommended optional derived artifacts:
+The plugin also renders derived markdown artifacts on every save:
 
 - `.flow/docs/index.md`
 - `.flow/docs/features/<feature-id>.md`
-- `.flow/history/*.json`
 
-Recommended top-level schema:
+State is loaded and saved through `src/runtime/session.ts`, with paths defined in `src/runtime/paths.ts`.
+
+### Session model
+
+The runtime schema in `src/runtime/schema.ts` implements a single active session with:
 
 - `version`
 - `id`
 - `goal`
 - `status`
 - `approval`
+- `planning`
 - `plan`
 - `execution`
 - `notes`
 - `artifacts`
 - `timestamps`
 
-Keep one active session for the MVP. Add multi-session support only after the single-session workflow is solid.
+The planning model includes:
 
-## 4. Runtime surface
+- plan summary and overview
+- requirements
+- architecture decisions
+- ordered features
+- goal mode
+- decomposition policy
+- completion policy
+- planning context such as repo profile, research, and implementation approach
 
-Do not make slash commands the runtime.
+The execution model includes:
 
-Instead, create plugin tools that are authoritative for transitions. Smallest useful tool surface:
+- active feature tracking
+- last outcome, next step, and validation run
+- last reviewer decision
+- last feature result
+- execution history
+
+### Tool surface
+
+The tool runtime in `src/tools.ts` currently exposes:
 
 - `flow_status`
 - `flow_plan_start`
@@ -111,280 +122,240 @@ Instead, create plugin tools that are authoritative for transitions. Smallest us
 - `flow_plan_select_features`
 - `flow_run_start`
 - `flow_run_complete_feature`
+- `flow_review_record_feature`
+- `flow_review_record_final`
 - `flow_reset_feature`
 - `flow_reset_session`
 
-If we want a smaller API, these can collapse into one `flow_runtime` tool with an `action` enum, but separate tools will be easier for the model to use correctly.
+Compared with the earlier plan, the implemented runtime is stricter and more complete because reviewer decisions are first-class state transitions.
 
-Tool responsibilities:
+### Transition rules
 
-- validate inputs
-- load and save `.flow/session.json`
-- enforce state transitions
-- generate compact summaries for agents and commands
-- reject invalid transitions deterministically
+The transition engine in `src/runtime/transitions.ts` enforces:
 
-## 5. Agents
+- plan schema validation through Zod
+- feature dependency and blocker graph validation
+- duplicate and cyclic dependency rejection
+- plan narrowing only while the plan is still a draft
+- plan approval only before execution starts
+- one active feature at a time
+- runnable feature selection based on dependencies and blockers
+- replan flow when a worker returns `replan_required`
+- blocked flow when a worker returns a blocking outcome
+- dependency-aware feature reset that also resets downstream dependents
 
-Inject two dedicated subagents and optionally one orchestrator profile.
+### Review and validation gates
 
-### `flow-planner`
+This is a major implemented behavior and should be part of any accurate plan.
 
-Purpose:
+A feature cannot complete successfully unless:
 
-- inspect repo context
-- optionally use research tools
-- return a compact structured plan payload
+- validation evidence is present
+- validation passes fully
+- a reviewer decision has already been recorded
+- the reviewer decision is approved for the active scope
+- `featureReview` is passing
 
-Constraints:
+The final completion path is stricter. When the last feature completes, the runtime also requires:
 
-- read-only
-- no direct writes to `.flow/`
-- repo evidence first
-- use external research only to resolve implementation direction, tradeoffs, and validation signals
+- `validationScope: broad`
+- a recorded final reviewer decision through `flow_review_record_final`
+- a passing `finalReview`
 
-Tools:
+This means the plugin does not treat review as advisory text. Review is a persisted workflow gate.
 
-- allow read/search tools
-- allow `webfetch`
-- allow task/question if useful
-- allow external research tools when available
-- deny edit/write/bash for MVP planner mode
+### Agent design
 
-### `flow-worker`
+The prompt layer in `src/prompts/agents.ts` defines clear roles:
 
-Purpose:
+- `flow-planner`: read-only planning agent
+- `flow-worker`: single-feature execution agent
+- `flow-auto`: autonomous orchestration agent
+- `flow-reviewer`: read-only approval gate for feature and final review
+- `flow-control`: status and reset agent only
 
-- execute exactly one planned feature
-- run targeted validation
-- return structured execution and review output
+Notable implemented constraints:
 
-Constraints:
+- planner, reviewer, and control agents are explicitly read-only
+- worker must not complete work while findings remain
+- autonomous flow must keep looping through fix, validate, and review until clean or truly blocked
+- final completion requires broad validation and final cross-feature review
 
-- scoped to one feature
-- supporting edits allowed
-- must inspect existing code before editing
-- must return review and validation evidence
+### Command behavior
 
-Tools:
+The command templates in `src/prompts/commands.ts` implement the user-facing workflow:
 
-- allow read/search/edit/bash
-- allow task only if we explicitly want nested subagents later
+- `/flow-plan` supports draft creation, feature selection, and approval from arguments
+- `/flow-run` executes exactly one approved feature
+- `/flow-auto` runs plan, approval, execution, review, and replanning autonomously
+- `/flow-status` reads runtime state only
+- `/flow-reset` resets a feature or clears the session
 
-### Optional `flow-orchestrator`
+### Rendering strategy
 
-Purpose:
+The current implementation did not stop at JSON-only summaries.
 
-- drive `/flow-auto`
-- call runtime tools
-- spawn planner and worker subagents
-- continue until completion or real blocker
+`src/runtime/render.ts` renders:
 
-This can also be handled by the default agent via command prompts, so it is optional for MVP.
+- a session index document with plan, status, next command, notes, artifacts, validation, reviewer state, and history
+- per-feature documents with summaries, file targets, verification, dependencies, and execution history
 
-## 6. Commands
+Markdown rendering also normalizes multiline content to avoid malformed docs.
 
-Inject commands through plugin config instead of requiring manual `.opencode/commands` setup.
+### Testing coverage
 
-Recommended commands:
+The current test suite covers both configuration and runtime behavior.
 
-- `/flow-plan <goal>`
-- `/flow-run [feature-id]`
-- `/flow-auto <goal|resume>`
-- `/flow-status`
-- `/flow-reset [feature <id>|session]`
+`tests/config.test.ts` covers:
 
-Command behavior should be prompt-driven and tool-backed.
+- command and agent injection
+- read-only agent configuration
+- tool arg-shape compatibility
+- prompt and contract expectations for worker, reviewer, and autonomous flows
 
-Example shape:
+`tests/runtime.test.ts` covers:
 
-- `/flow-plan` tells the agent to call `flow_plan_start`, dispatch `flow-planner`, show a compact draft, then call `flow_plan_apply` and `flow_plan_approve` only when appropriate.
-- `/flow-run` tells the agent to call `flow_run_start`, dispatch `flow-worker`, then persist the result via `flow_run_complete_feature`.
-- `/flow-auto` tells the agent to repeat planning and execution steps until completion, pause, or human dependency.
+- session creation, save, and load
+- markdown doc rendering
+- plan apply, select, and approve flows
+- feature start and completion flows
+- reviewer recording behavior
+- blocked and replan-required outcomes
+- final-review completion rules
+- reset behavior
 
-## 7. Autonomous mode
+## Architecture We Effectively Chose
 
-This is the biggest place to be opencode-native.
+If we reduce the implemented design to its core architectural decisions, it is this:
 
-Do not shell into a separate terminal-owned loop for MVP.
+1. Build a TypeScript plugin package.
+2. Use the plugin `config` hook to inject commands and agents.
+3. Make Flow tools the only authoritative state transition layer.
+4. Keep one active durable session in `.flow/session.json`.
+5. Treat planning, execution, review, and reset as explicit runtime transitions.
+6. Keep slash commands prompt-driven, but always tool-backed.
+7. Require persisted reviewer decisions before successful completion.
+8. Render markdown docs as derived artifacts for human inspection.
+9. Keep autonomous execution inside OpenCode's agent model rather than a terminal-owned loop.
 
-Instead:
+## Retrospective Implementation Plan
 
-- `/flow-auto` runs as a normal opencode command
-- the acting agent uses runtime tools plus `task` subagents
-- the loop stays inside opencode's native agent model
+If we were planning toward the current implementation from scratch, this is the plan we would write.
 
-Loop outline:
-
-1. load or initialize state
-2. if no approved plan exists, run planner
-3. if approval is required, stop and ask
-4. start next runnable feature
-5. run worker
-6. persist result
-7. if replan is required, return to planning
-8. stop on complete, blocked, paused, or human decision
-
-## 8. Research strategy inside planning
-
-Research should be optional and capability-based.
-
-Planner instructions should say:
-
-- use repo evidence first
-- if Ref tools are available, use them first for docs
-- if Exa tools are available, use them second for code/examples
-- use `webfetch` or built-in web search as fallback
-- keep research bounded and source-linked
-
-Do not make the plugin depend on a specific MCP server being installed.
-
-## 9. Rendering strategy
-
-Do not overinvest in derived markdown early.
-
-For MVP:
-
-- runtime tools return structured JSON plus concise human summaries
-- commands render compact status blocks in chat
-- write `.flow/docs/*` only if it materially improves usability
-
-This keeps the authoritative state in one place and reduces sync bugs.
-
-## 10. Hooks
-
-Use hooks sparingly in v1.
-
-Possible hooks worth adding later:
-
-- `config`: inject commands, agents, permissions
-- `session.idle`: optional notification when autonomous flow finishes
-- `experimental.session.compacting`: inject current flow state into compaction context
-
-Do not build the core workflow around hooks other than `config`.
-
-## MVP Scope
-
-Build this first:
-
-1. plugin scaffold and build pipeline
-2. config hook that injects commands and agents
-3. session schema and state load/save helpers
-4. planning runtime tools
-5. planner agent prompt and payload contract
-6. run runtime tools
-7. worker agent prompt and payload contract
-8. `/flow-status` and `/flow-reset`
-9. `/flow-auto` loop inside opencode
-
-Defer this until later:
-
-- multiple concurrent sessions
-- startup hooks and summaries
-- rich rendered docs per feature
-- external notifications
-- advanced review-only and review-and-fix plan modes
-
-## Implementation Phases
-
-## Phase 1: Scaffold
+## Phase 1: Scaffold The Plugin
 
 - create `package.json`, `tsconfig.json`, and `src/index.ts`
-- add build output to `dist/index.js`
-- verify plugin loads locally
+- set up Bun build, test, and typecheck scripts
+- export a plugin that wires config injection and custom tools
 
-## Phase 2: Config injection
+## Phase 2: Inject Commands And Agents
 
-- add `config` hook
-- inject commands
-- inject agents with correct permissions
-- validate command names and agent prompts in a live opencode session
+- add a config hook in `src/config.ts`
+- inject planner, worker, auto, reviewer, and control agents
+- inject `/flow-plan`, `/flow-run`, `/flow-auto`, `/flow-status`, and `/flow-reset`
+- lock planner, reviewer, and control to read-only tool permissions
 
-## Phase 3: Runtime core
+## Phase 3: Define Runtime Schema And Persistence
 
-- define session schema types
-- implement state read/write helpers
-- implement deterministic transition functions
-- implement summary projection helpers
+- create Zod schemas for sessions, plans, features, worker results, and reviewer decisions
+- persist a single active session to `.flow/session.json`
+- create session load, save, create, and delete helpers
+- define runtime path helpers for session and docs artifacts
 
-## Phase 4: Planner flow
+## Phase 4: Implement Planning Transitions
 
-- implement `flow_plan_start`, `flow_plan_apply`, `flow_plan_approve`, `flow_plan_select_features`
-- write planner prompt and output contract
-- test narrow goal, broad goal, and underspecified goal cases
+- implement `flow_plan_start`
+- implement `flow_plan_apply`
+- implement `flow_plan_select_features`
+- implement `flow_plan_approve`
+- validate feature ids, dependency graphs, and selection consistency
+- store planning context such as repo profile, research, and implementation approach
 
-## Phase 5: Execution flow
+## Phase 5: Implement Execution Transitions
 
-- implement `flow_run_start` and `flow_run_complete_feature`
-- write worker prompt and output contract
-- test completed, blocked, and replan-required outcomes
+- implement `flow_run_start`
+- select the next runnable feature from dependency-aware plan state
+- enforce single active feature execution
+- implement `flow_run_complete_feature`
+- support successful completion, replanning, and blocked outcomes
+- record artifacts, notes, validation runs, and execution history
 
-## Phase 6: Autonomous flow
+## Phase 6: Make Review A First-Class Gate
 
-- add `/flow-auto`
-- implement loop guardrails
-- test completion, approval stop, blocker stop, and replan loop
+- add reviewer decision schema and persistence
+- implement `flow_review_record_feature`
+- implement `flow_review_record_final`
+- require recorded approval before successful feature completion
+- require broad validation and final review on session completion
 
-## Phase 7: Hardening
+## Phase 7: Add Reset And Inspection Flows
 
-- add schema validation for planner and worker payloads
-- add fixture-based tests for transition logic
-- add integration smoke tests for command prompts and tool contracts
+- implement `flow_status`
+- implement `flow_reset_feature`
+- implement `flow_reset_session`
+- make feature reset dependency-aware so downstream work returns to pending when needed
 
-## Testing Plan
+## Phase 8: Add Derived Markdown Rendering
 
-### Unit tests
+- render `.flow/docs/index.md`
+- render `.flow/docs/features/<feature-id>.md`
+- include summary, feature progress, validation evidence, reviewer decisions, and history
+- prune stale feature docs after plan changes
 
-- session schema validation
-- transition rules
-- feature selection and reset behavior
-- summary projection helpers
+## Phase 9: Write Prompt Contracts And Command Templates
 
-### Fixture tests
+- define plan, worker, and reviewer contracts in prompts
+- make planner produce compact structured plans
+- make worker operate on exactly one feature
+- make reviewer return `approved`, `needs_fix`, or `blocked`
+- encode autonomous review and fix loops in the auto prompt
 
-- fresh plan creation
-- plan approval
-- run start with active feature
-- worker completion
-- worker replan-required
-- blocked/human-input outcomes
-- session reset and feature reset
+## Phase 10: Harden With Tests
 
-### Live manual tests
+- test config injection and permissions
+- test raw tool arg shapes
+- test session persistence and doc rendering
+- test planning and approval transitions
+- test execution and review gating
+- test replan-required and blocked outcomes
+- test final-review completion rules
+- test reset behavior
 
-- `/flow-plan` with a small implementation goal
-- `/flow-plan` with a broad review/fix goal
-- `/flow-run`
-- `/flow-auto <goal>`
-- `/flow-status`
-- `/flow-reset feature <id>`
-- `/flow-reset session`
+## Scope We Actually Reached
+
+Implemented now:
+
+- plugin scaffold and build pipeline
+- config-driven command and agent injection
+- single-session durable runtime
+- planning and execution transition tools
+- explicit reviewer and final-review tools
+- autonomous prompt-driven loop design
+- status and reset flows
+- derived markdown docs
+- transition and prompt tests
+
+Not implemented in the current codebase:
+
+- multi-session support
+- conditional activation based on workspace detection
+- additional hooks beyond `config`
+- external notifications
+- history archives outside the session artifact
 
 ## Design Decisions To Keep
 
-- runtime tools are authoritative for transitions
-- planner is read-only
-- worker is scoped to one feature
-- broad goals are valid
-- replanning during execution is normal, not an error
-- external research is optional and bounded
-
-## Design Decisions To Drop
-
-- shell wrappers as the main execution path
-- command markdown reconstructing workflow transitions
-- a separate terminal-only autonomy runner for MVP
-- duplicated state ownership across prompt files and runtime code
-
-## Open Questions
-
-1. Do we want the public command names to stay `flow-*`, or should this plugin use a new prefix?
-2. Do we want single-session only for v1, or do we need `--all` style multi-session support immediately?
-3. Should the plugin persist derived markdown docs in v1, or rely entirely on chat summaries plus `session.json`?
-4. Should `/flow-plan` require explicit approval every time, or allow an auto-approve mode only for `/flow-auto`?
+- tools own runtime state transitions
+- one active session is enough for v1
+- one active feature at a time keeps execution deterministic
+- review approval is persisted, not implied
+- final completion requires broader validation than normal feature work
+- replanning is a normal path, not a failure mode
+- markdown docs are derived artifacts, not the source of truth
+- autonomy stays inside OpenCode's native agent model
 
 ## Recommendation
 
-Start with a TypeScript plugin that injects commands and agents through a `config` hook, and put all real workflow behavior into plugin tools backed by a thin `.flow/session.json` runtime.
+Use this document as the reference implementation plan for the plugin as-built.
 
-That gives us the same core workflow shape while making the implementation clearly opencode-native.
+It reflects the current codebase more accurately than the original draft because it captures the parts that turned out to matter most in implementation: strict transition ownership in tools, persisted reviewer gates, final-review completion rules, and derived `.flow/docs` artifacts alongside `.flow/session.json`.
