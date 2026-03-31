@@ -262,11 +262,16 @@ describe("applyFlowConfig", () => {
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("Use the flow-reviewer stage as the approval gate");
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("Persist every reviewer decision through flow_review_record_feature or flow_review_record_final");
     expect(FLOW_AUTO_AGENT_PROMPT).toContain("If the reviewer returns needs_fix");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("If a feature lands in a blocked state with a retryable or auto-resolvable outcome");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("satisfy `recovery.prerequisite` first");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("Only call `recovery.nextRuntimeTool` when it is present");
   });
 
   test("auto command template requires final cross-feature review before completion", () => {
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("final cross-feature review");
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("completion gating failures");
   });
 
   test("run command template requires final completion gating for the last feature", () => {

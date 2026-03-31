@@ -164,6 +164,28 @@ The final completion path is stricter. When the last feature completes, the runt
 
 This means the plugin does not treat review as advisory text. Review is a persisted workflow gate.
 
+### Recovery contract and blocked-state behavior
+
+The current runtime also returns structured recovery metadata for retryable failures.
+
+That recovery metadata includes:
+
+- `errorCode`
+- `resolutionHint`
+- `recoveryStage`
+- `prerequisite`
+- optional `requiredArtifact`
+- `nextCommand`
+- optional `nextRuntimeTool`
+- optional `nextRuntimeArgs`
+
+This matters because the implemented system now distinguishes between:
+
+- failures blocked on missing prerequisites such as reviewer decisions or validation reruns
+- failures that have an immediately executable next step such as `flow_reset_feature`
+
+Blocked session summaries also became smarter. When the latest blocked outcome is retryable or auto-resolvable and does not require human input, the runtime now points the next command back to `/flow-reset feature <id>` instead of stopping at `/flow-status`.
+
 ### Agent design
 
 The prompt layer in `src/prompts/agents.ts` defines clear roles:
@@ -180,6 +202,7 @@ Notable implemented constraints:
 - worker must not complete work while findings remain
 - autonomous flow must keep looping through fix, validate, and review until clean or truly blocked
 - final completion requires broad validation and final cross-feature review
+- autonomous recovery must satisfy structured prerequisites before using any runtime recovery action
 
 ### Command behavior
 
@@ -223,6 +246,7 @@ The current test suite covers both configuration and runtime behavior.
 - blocked and replan-required outcomes
 - final-review completion rules
 - reset behavior
+- prerequisite-aware recovery metadata for review, validation, payload, and reset failures
 
 ## Architecture We Effectively Chose
 
@@ -288,6 +312,14 @@ If we were planning toward the current implementation from scratch, this is the 
 - require recorded approval before successful feature completion
 - require broad validation and final review on session completion
 
+## Phase 6.5: Add Structured Recovery Metadata
+
+- add typed recovery metadata to transition failures
+- distinguish missing prerequisites from executable next actions
+- keep user-facing `nextCommand` valid even when no runtime action is yet possible
+- expose runtime reset actions only when they are actually executable
+- make blocked session summaries point back into recovery when the outcome is retryable
+
 ## Phase 7: Add Reset And Inspection Flows
 
 - implement `flow_status`
@@ -309,6 +341,7 @@ If we were planning toward the current implementation from scratch, this is the 
 - make worker operate on exactly one feature
 - make reviewer return `approved`, `needs_fix`, or `blocked`
 - encode autonomous review and fix loops in the auto prompt
+- encode prerequisite-aware recovery handling in the auto prompt so structured runtime errors lead back into execution instead of stopping
 
 ## Phase 10: Harden With Tests
 
@@ -331,6 +364,7 @@ Implemented now:
 - planning and execution transition tools
 - explicit reviewer and final-review tools
 - autonomous prompt-driven loop design
+- prerequisite-aware structured recovery metadata on transition failures
 - status and reset flows
 - derived markdown docs
 - transition and prompt tests
@@ -351,6 +385,7 @@ Not implemented in the current codebase:
 - review approval is persisted, not implied
 - final completion requires broader validation than normal feature work
 - replanning is a normal path, not a failure mode
+- runtime recovery should distinguish missing prerequisites from executable next actions
 - markdown docs are derived artifacts, not the source of truth
 - autonomy stays inside OpenCode's native agent model
 

@@ -348,7 +348,11 @@ export function createTools(_ctx: unknown) {
 
         const result = completeRun(session, input);
         if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
+          return toJson({
+            status: "error",
+            summary: result.message,
+            recovery: result.recovery,
+          });
         }
 
         const saved = await saveSession(context.worktree, result.value);

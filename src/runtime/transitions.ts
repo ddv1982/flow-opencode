@@ -12,10 +12,33 @@ import {
 
 export type TransitionResult<T> =
   | { ok: true; value: T }
-  | { ok: false; message: string };
+  | { ok: false; message: string; recovery?: TransitionRecovery };
 
-export function fail<T>(message: string): TransitionResult<T> {
-  return { ok: false, message };
+export type TransitionRecovery = {
+  errorCode: string;
+  resolutionHint: string;
+  recoveryStage: "record_review" | "rerun_validation" | "retry_completion" | "reset_feature";
+  prerequisite:
+    | "reviewer_result_required"
+    | "validation_rerun_required"
+    | "completion_payload_rebuild_required"
+    | "feature_reset_required";
+  requiredArtifact?:
+    | "feature_reviewer_decision"
+    | "final_reviewer_decision"
+    | "feature_review_payload"
+    | "final_review_payload"
+    | "targeted_validation_result"
+    | "broad_validation_result";
+  nextCommand: string;
+  nextRuntimeTool?: "flow_review_record_feature" | "flow_review_record_final" | "flow_run_complete_feature" | "flow_reset_feature";
+  nextRuntimeArgs?: Record<string, unknown>;
+  retryable?: boolean;
+  autoResolvable?: boolean;
+};
+
+export function fail<T>(message: string, recovery?: TransitionRecovery): TransitionResult<T> {
+  return { ok: false, message, recovery };
 }
 
 export function succeed<T>(value: T): TransitionResult<T> {
@@ -178,6 +201,132 @@ function completionThresholdReached(features: Feature[], plan: Plan): boolean {
   }
 
   return completedCount === features.length;
+}
+
+function buildCompletionRecovery(
+  featureId: string,
+  wasFinalFeature: boolean,
+  kind:
+    | "missing_validation"
+    | "failing_validation"
+    | "missing_reviewer_decision"
+    | "missing_validation_scope"
+    | "failing_feature_review"
+    | "missing_final_review"
+    | "failing_final_review",
+): TransitionRecovery {
+  if (kind === "missing_reviewer_decision") {
+    return wasFinalFeature
+      ? {
+          errorCode: "missing_final_reviewer_decision",
+          resolutionHint: "Record a final reviewer approval, then rerun the current Flow feature to persist final completion.",
+          recoveryStage: "record_review",
+          prerequisite: "reviewer_result_required",
+          requiredArtifact: "final_reviewer_decision",
+          nextCommand: "/flow-status",
+          retryable: true,
+          autoResolvable: true,
+        }
+      : {
+          errorCode: "missing_feature_reviewer_decision",
+          resolutionHint: "Record a feature reviewer approval, then rerun the current Flow feature to persist completion.",
+          recoveryStage: "record_review",
+          prerequisite: "reviewer_result_required",
+          requiredArtifact: "feature_reviewer_decision",
+          nextCommand: "/flow-status",
+          retryable: true,
+          autoResolvable: true,
+        };
+  }
+
+  if (kind === "missing_validation_scope") {
+    return wasFinalFeature
+      ? {
+          errorCode: "missing_broad_validation",
+          resolutionHint: "Run broad repo validation for the final completion path and retry with validationScope set to 'broad'.",
+          recoveryStage: "rerun_validation",
+          prerequisite: "validation_rerun_required",
+          requiredArtifact: "broad_validation_result",
+          nextCommand: "/flow-status",
+          retryable: true,
+          autoResolvable: true,
+        }
+      : {
+          errorCode: "missing_targeted_validation",
+          resolutionHint: "Run targeted validation for the active feature and retry with validationScope set to 'targeted'.",
+          recoveryStage: "rerun_validation",
+          prerequisite: "validation_rerun_required",
+          requiredArtifact: "targeted_validation_result",
+          nextCommand: "/flow-status",
+          retryable: true,
+          autoResolvable: true,
+        };
+  }
+
+  if (kind === "missing_final_review") {
+    return {
+      errorCode: "missing_final_review_payload",
+      resolutionHint: "Run the final cross-feature review, include a passing finalReview in the worker result, and rerun the current Flow feature.",
+      recoveryStage: "retry_completion",
+      prerequisite: "completion_payload_rebuild_required",
+      requiredArtifact: "final_review_payload",
+      nextCommand: "/flow-status",
+      retryable: true,
+      autoResolvable: true,
+    };
+  }
+
+  if (kind === "failing_final_review") {
+    return {
+      errorCode: "failing_final_review",
+      resolutionHint: "Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview.",
+      recoveryStage: "reset_feature",
+      prerequisite: "feature_reset_required",
+      nextCommand: `/flow-reset feature ${featureId}`,
+      nextRuntimeTool: "flow_reset_feature",
+      nextRuntimeArgs: { featureId },
+      retryable: true,
+      autoResolvable: true,
+    };
+  }
+
+  if (kind === "failing_feature_review") {
+    return {
+      errorCode: "failing_feature_review",
+      resolutionHint: "Fix the feature review findings, rerun targeted validation, and rerun the current Flow feature.",
+      recoveryStage: "reset_feature",
+      prerequisite: "feature_reset_required",
+      nextCommand: `/flow-reset feature ${featureId}`,
+      nextRuntimeTool: "flow_reset_feature",
+      nextRuntimeArgs: { featureId },
+      retryable: true,
+      autoResolvable: true,
+    };
+  }
+
+  if (kind === "missing_validation") {
+    return {
+      errorCode: "missing_validation_evidence",
+      resolutionHint: "Run the required validation for the current Flow feature and retry completion with recorded validation evidence.",
+      recoveryStage: "rerun_validation",
+      prerequisite: "validation_rerun_required",
+      nextCommand: "/flow-status",
+      retryable: true,
+      autoResolvable: true,
+    };
+  }
+
+  return {
+    errorCode: "failing_validation",
+    resolutionHint: "Fix the failing validation, rerun the relevant checks, and rerun the current Flow feature.",
+    recoveryStage: "reset_feature",
+    prerequisite: "feature_reset_required",
+    nextCommand: `/flow-reset feature ${featureId}`,
+    nextRuntimeTool: "flow_reset_feature",
+    nextRuntimeArgs: { featureId },
+    retryable: true,
+    autoResolvable: true,
+  };
 }
 
 function collectDependents(features: Feature[], featureId: string): Set<string> {
@@ -464,31 +613,58 @@ export function completeRun(session: Session, workerInput: unknown): TransitionR
 
   if (worker.status === "ok") {
     if (worker.validationRun.length === 0) {
-      return fail("Worker result cannot complete the feature without recorded validation evidence.");
+      return fail(
+        "Worker result cannot complete the feature without recorded validation evidence.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation"),
+      );
     }
     if (!isValidationPassing(worker.validationRun)) {
-      return fail("Worker result cannot complete the feature because validation did not fully pass.");
+      return fail(
+        "Worker result cannot complete the feature because validation did not fully pass.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "failing_validation"),
+      );
     }
     if (!hasApprovedReviewerDecision(session, featureId, wasFinalFeature)) {
-      return fail("Worker result cannot complete without a recorded approved reviewer decision.");
+      return fail(
+        "Worker result cannot complete without a recorded approved reviewer decision.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "missing_reviewer_decision"),
+      );
     }
     if (!wasFinalFeature && worker.validationScope !== "targeted") {
-      return fail("Worker result cannot complete the feature without targeted validation.");
+      return fail(
+        "Worker result cannot complete the feature without targeted validation.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
+      );
     }
     if (!isReviewPassing(worker.featureReview)) {
-      return fail("Worker result cannot complete the feature because featureReview is not passing.");
+      return fail(
+        "Worker result cannot complete the feature because featureReview is not passing.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "failing_feature_review"),
+      );
     }
     if (worker.finalReview && !isReviewPassing(worker.finalReview)) {
-      return fail("Worker result cannot complete the feature because finalReview is not passing.");
+      return fail(
+        "Worker result cannot complete the feature because finalReview is not passing.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
+      );
     }
     if (wasFinalFeature && worker.validationScope !== "broad") {
-      return fail("Worker result cannot complete the session without broad final validation.");
+      return fail(
+        "Worker result cannot complete the session without broad final validation.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
+      );
     }
     if (wasFinalFeature && !worker.finalReview) {
-      return fail("Worker result cannot complete the session without a finalReview.");
+      return fail(
+        "Worker result cannot complete the session without a finalReview.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "missing_final_review"),
+      );
     }
     if (plan.completionPolicy?.requireFinalReview && wasFinalFeature && !isReviewPassing(worker.finalReview)) {
-      return fail("Worker result cannot complete the session because a passing finalReview is required.");
+      return fail(
+        "Worker result cannot complete the session because a passing finalReview is required.",
+        buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
+      );
     }
 
     plan.features = plan.features.map((feature) =>

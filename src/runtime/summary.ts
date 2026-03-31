@@ -62,6 +62,18 @@ export function deriveNextCommand(session: Session): string {
   if (session.status === "ready" || session.status === "running") {
     return "/flow-run";
   }
+  if (session.status === "blocked") {
+    const lastFeatureId = session.execution.lastFeatureId;
+    const outcome = session.execution.lastOutcome;
+
+    if (
+      lastFeatureId &&
+      !outcome?.needsHuman &&
+      (outcome?.retryable || outcome?.autoResolvable || outcome?.kind === "contract_error")
+    ) {
+      return `/flow-reset feature ${lastFeatureId}`;
+    }
+  }
   if (session.status === "completed") {
     return "/flow-plan <goal>";
   }

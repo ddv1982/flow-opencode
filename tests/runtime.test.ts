@@ -581,6 +581,7 @@ describe("runtime transitions", () => {
     const summary = summarizeSession(blocked.value);
     expect(summary.session?.lastNextStep).toBe("Ask the operator to provide API credentials.");
     expect(summary.session?.lastOutcome?.kind).toBe("needs_operator_input");
+    expect(summary.session?.nextCommand).toBe("/flow-status");
 
     await saveSession(worktree, blocked.value);
     const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
@@ -652,6 +653,47 @@ describe("runtime transitions", () => {
     expect(indexDoc).toContain("next step: none");
   });
 
+  test("suggests resetting blocked features when the outcome is retryable", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const blocked = completeRun(started.value.session, {
+      contractVersion: "1",
+      status: "needs_input",
+      summary: "Validation exposed a recoverable repo issue.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "failed", summary: "A repo test failed." }],
+      validationScope: "broad",
+      reviewIterations: 1,
+      decisions: [{ summary: "Investigate and repair the failing path." }],
+      nextStep: "Research the failure, fix it, and rerun the feature.",
+      outcome: {
+        kind: "contract_error",
+        summary: "The runtime completion path needs another iteration.",
+        resolutionHint: "Reset the feature and rerun it after fixing the issue.",
+        retryable: true,
+        autoResolvable: true,
+        needsHuman: false,
+      },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "failed" },
+      featureReview: { status: "needs_followup", summary: "More work is required.", blockingFindings: [] },
+    });
+    expect(blocked.ok).toBe(true);
+    if (!blocked.ok) return;
+
+    expect(summarizeSession(blocked.value).session?.nextCommand).toBe("/flow-reset feature setup-runtime");
+  });
+
   test("rejects inconsistent ok status with replan outcome", () => {
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
@@ -693,6 +735,55 @@ describe("runtime transitions", () => {
     expect(completed.ok).toBe(false);
     if (completed.ok) return;
     expect(completed.message).toContain("validation failed");
+  });
+
+  test("final-path reviewer failures return final recovery metadata even without final payload fields", () => {
+    const session = createSession("Build a workflow plugin");
+    const plan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+        requireFinalReview: true,
+      },
+      features: [samplePlan().features[0]],
+    };
+
+    const applied = applyPlan(session, plan);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const completed = completeRun(started.value.session, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Session should complete.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.recovery?.errorCode).toBe("missing_final_reviewer_decision");
+    expect(completed.recovery?.recoveryStage).toBe("record_review");
+    expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
+    expect(completed.recovery?.requiredArtifact).toBe("final_reviewer_decision");
+    expect(completed.recovery?.nextCommand).toBe("/flow-status");
+    expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
   });
 
   test("rejects malformed dependency graphs during plan apply", () => {
@@ -1137,6 +1228,222 @@ describe("runtime transitions", () => {
     const parsed = JSON.parse(response);
     expect(parsed.status).toBe("error");
     expect(parsed.summary).toContain("validation failed");
+  });
+
+  test("tool returns machine-readable recovery details for missing final reviewer approval", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const session = createSession("Build a workflow plugin");
+    const plan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+        requireFinalReview: true,
+      },
+      features: [samplePlan().features[0]],
+    };
+
+    const applied = applyPlan(session, plan);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    await saveSession(worktree, started.value.session);
+    const response = await tools.flow_run_complete_feature.execute(
+      {
+        contractVersion: "1",
+        status: "ok",
+        summary: "Completed runtime setup.",
+        artifactsChanged: [],
+        validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+        validationScope: "broad",
+        reviewIterations: 1,
+        decisions: [],
+        nextStep: "Session should complete.",
+        outcome: { kind: "completed" },
+        featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+        featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+        finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
+      },
+      { worktree },
+    );
+
+    const parsed = JSON.parse(response);
+    expect(parsed.status).toBe("error");
+    expect(parsed.recovery.errorCode).toBe("missing_final_reviewer_decision");
+    expect(parsed.recovery.recoveryStage).toBe("record_review");
+    expect(parsed.recovery.prerequisite).toBe("reviewer_result_required");
+    expect(parsed.recovery.requiredArtifact).toBe("final_reviewer_decision");
+    expect(parsed.recovery.nextCommand).toBe("/flow-status");
+    expect(parsed.recovery.nextRuntimeTool).toBeUndefined();
+    expect(parsed.recovery.retryable).toBe(true);
+  });
+
+  test("tool returns machine-readable recovery details for missing broad validation", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const session = createSession("Build a workflow plugin");
+    const plan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+      },
+      features: [samplePlan().features[0]],
+    };
+
+    const applied = applyPlan(session, plan);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    await saveSession(worktree, reviewed.value);
+    const response = await tools.flow_run_complete_feature.execute(
+      {
+        contractVersion: "1",
+        status: "ok",
+        summary: "Completed runtime setup.",
+        artifactsChanged: [],
+        validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+        validationScope: "targeted",
+        reviewIterations: 1,
+        decisions: [],
+        nextStep: "Session should complete.",
+        outcome: { kind: "completed" },
+        featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+        featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+        finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
+      },
+      { worktree },
+    );
+
+    const parsed = JSON.parse(response);
+    expect(parsed.status).toBe("error");
+    expect(parsed.recovery.errorCode).toBe("missing_broad_validation");
+    expect(parsed.recovery.recoveryStage).toBe("rerun_validation");
+    expect(parsed.recovery.prerequisite).toBe("validation_rerun_required");
+    expect(parsed.recovery.requiredArtifact).toBe("broad_validation_result");
+    expect(parsed.recovery.nextCommand).toBe("/flow-status");
+    expect(parsed.recovery.nextRuntimeTool).toBeUndefined();
+    expect(parsed.recovery.autoResolvable).toBe(true);
+  });
+
+  test("feature reviewer recovery exposes runtime tool guidance without suggesting flow-run", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const completed = completeRun(started.value.session, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Run the next feature.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.recovery?.errorCode).toBe("missing_feature_reviewer_decision");
+    expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
+    expect(completed.recovery?.requiredArtifact).toBe("feature_reviewer_decision");
+    expect(completed.recovery?.nextCommand).toBe("/flow-status");
+    expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
+    expect(completed.recovery?.nextRuntimeArgs).toBeUndefined();
+  });
+
+  test("missing final review payload exposes prerequisite instead of fake retry action", () => {
+    const session = createSession("Build a workflow plugin");
+    const plan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+        requireFinalReview: true,
+      },
+      features: [samplePlan().features[0]],
+    };
+
+    const applied = applyPlan(session, plan);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "broad",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Session should complete.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.recovery?.errorCode).toBe("missing_final_review_payload");
+    expect(completed.recovery?.recoveryStage).toBe("retry_completion");
+    expect(completed.recovery?.prerequisite).toBe("completion_payload_rebuild_required");
+    expect(completed.recovery?.requiredArtifact).toBe("final_review_payload");
+    expect(completed.recovery?.nextCommand).toBe("/flow-status");
+    expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
   });
 
   test("requires a recorded reviewer approval before successful completion", () => {

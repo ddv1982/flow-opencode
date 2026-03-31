@@ -35,6 +35,8 @@ Behavior:
 - If the argument string is empty or \`resume\`, resume the active session if one exists.
 - Otherwise treat the full argument string as a new autonomous goal.
 - Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.
+- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not as reasons to stop.
+- When blocked by a solvable finding, inspect the evidence, use the same repo and research tools used during planning, make the smallest recovery plan, execute it, and keep iterating.
 - Do not advance to the next feature until the current one is clean.
 - Before final completion, run broad repo validation, perform a final cross-feature review, fix any findings, rerun broad validation, and only then finish with a passing \`finalReview\`.
 - Use Flow runtime tools for every state transition.
