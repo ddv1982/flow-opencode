@@ -20,7 +20,7 @@
     "planning",
     "execution"
   ],
-  "author": "ddv1982",
+  "author": "Douwe de Vries",
   "license": "MIT",
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.3.10"
