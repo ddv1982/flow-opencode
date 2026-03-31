@@ -67,6 +67,7 @@ export function createSession(goal: string, planning?: Partial<PlanningContext>)
       lastOutcome: null,
       lastNextStep: null,
       lastFeatureResult: null,
+      lastReviewerDecision: null,
       lastValidationRun: [],
       history: [],
     },

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DECOMPOSITION_POLICIES, GOAL_MODES, NEEDS_INPUT_OUTCOME_KINDS, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./contracts";
+import { DECOMPOSITION_POLICIES, GOAL_MODES, NEEDS_INPUT_OUTCOME_KINDS, OUTCOME_KINDS, REVIEW_STATUSES, REVIEWER_DECISION_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./contracts";
 
 function isNeedsInputOutcomeKind(
   value: (typeof OUTCOME_KINDS)[number],
@@ -50,6 +50,16 @@ export const ReviewSchema = z.object({
   blockingFindings: z.array(ReviewFindingSchema).default([]),
 });
 
+export const ReviewerDecisionSchema = z.object({
+  scope: z.enum(["feature", "final"]),
+  featureId: z.string().min(1).optional(),
+  status: z.enum(REVIEWER_DECISION_STATUSES),
+  summary: z.string().min(1),
+  blockingFindings: z.array(ReviewFindingSchema).default([]),
+  followUps: z.array(FollowUpSchema).default([]),
+  suggestedValidation: z.array(z.string().min(1)).default([]),
+});
+
 export const OutcomeSchema = z.object({
   kind: OutcomeKindSchema,
   category: z.string().min(1).optional(),
@@ -72,6 +82,8 @@ const WorkerResultBaseSchema = z.object({
   summary: z.string().min(1),
   artifactsChanged: z.array(ArtifactSchema).default([]),
   validationRun: z.array(ValidationRunSchema).default([]),
+  validationScope: z.enum(["targeted", "broad"]).optional(),
+  reviewIterations: z.number().int().nonnegative().optional(),
   decisions: z.array(DecisionSchema).default([]),
   nextStep: z.string().min(1),
   featureResult: FeatureResultSchema,
@@ -155,6 +167,7 @@ export const ExecutionHistoryEntrySchema = z.object({
   artifactsChanged: z.array(ArtifactSchema).default([]),
   decisions: z.array(DecisionSchema).default([]),
   featureResult: FeatureResultSchema.optional(),
+  reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
   featureReview: ReviewSchema.optional(),
   finalReview: ReviewSchema.optional(),
 });
@@ -175,6 +188,7 @@ export const SessionSchema = z.object({
     lastOutcome: OutcomeSchema.nullable().default(null),
     lastNextStep: z.string().min(1).nullable().default(null),
     lastFeatureResult: FeatureResultSchema.nullable().default(null),
+    lastReviewerDecision: ReviewerDecisionSchema.nullable().default(null),
     lastValidationRun: z.array(ValidationRunSchema).default([]),
     history: z.array(ExecutionHistoryEntrySchema).default([]),
   }),

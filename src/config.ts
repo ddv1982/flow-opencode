@@ -1,4 +1,4 @@
-import { FLOW_AUTO_AGENT_PROMPT, FLOW_CONTROL_AGENT_PROMPT, FLOW_PLANNER_AGENT_PROMPT, FLOW_WORKER_AGENT_PROMPT } from "./prompts/agents";
+import { FLOW_AUTO_AGENT_PROMPT, FLOW_CONTROL_AGENT_PROMPT, FLOW_PLANNER_AGENT_PROMPT, FLOW_REVIEWER_AGENT_PROMPT, FLOW_WORKER_AGENT_PROMPT } from "./prompts/agents";
 import {
   FLOW_AUTO_COMMAND_TEMPLATE,
   FLOW_PLAN_COMMAND_TEMPLATE,
@@ -33,6 +33,16 @@ function buildAgents() {
       mode: "primary",
       description: "Plan, approve, execute, and replan Flow work autonomously.",
       prompt: FLOW_AUTO_AGENT_PROMPT,
+    },
+    "flow-reviewer": {
+      mode: "primary",
+      description: "Review Flow work and decide whether it may advance.",
+      prompt: FLOW_REVIEWER_AGENT_PROMPT,
+      tools: {
+        edit: false,
+        write: false,
+        bash: false,
+      },
     },
     "flow-control": {
       mode: "primary",

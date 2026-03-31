@@ -43,6 +43,7 @@ export function summarizeSession(session: Session | null) {
       lastOutcome: session.execution.lastOutcome,
       lastNextStep: session.execution.lastNextStep,
       lastFeatureResult: session.execution.lastFeatureResult,
+      lastReviewerDecision: session.execution.lastReviewerDecision,
       lastValidationRun: session.execution.lastValidationRun,
       lastOutcomeKind: session.execution.lastOutcomeKind,
       nextCommand: deriveNextCommand(session),

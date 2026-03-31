@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { tool } from "@opencode-ai/plugin";
 import { applyFlowConfig } from "../src/config";
+import { FLOW_AUTO_COMMAND_TEMPLATE, FLOW_RUN_COMMAND_TEMPLATE } from "../src/prompts/commands";
+import { FLOW_AUTO_AGENT_PROMPT, FLOW_REVIEWER_AGENT_PROMPT, FLOW_WORKER_AGENT_PROMPT } from "../src/prompts/agents";
+import { FLOW_REVIEWER_CONTRACT, FLOW_WORKER_CONTRACT } from "../src/prompts/contracts";
 import { WorkerResultSchema } from "../src/runtime/schema";
 import { createTools } from "../src/tools";
 
@@ -25,6 +28,7 @@ describe("applyFlowConfig", () => {
     expect(config.agent?.["flow-planner"]).toBeDefined();
     expect(config.agent?.["flow-worker"]).toBeDefined();
     expect(config.agent?.["flow-auto"]).toBeDefined();
+    expect(config.agent?.["flow-reviewer"]).toBeDefined();
     expect(config.agent?.["flow-control"]).toBeDefined();
     expect(config.command?.["flow-plan"]).toBeDefined();
     expect(config.command?.["flow-run"]).toBeDefined();
@@ -39,6 +43,15 @@ describe("applyFlowConfig", () => {
 
     expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
     expect(config.command?.["flow-reset"]?.agent).toBe("flow-control");
+  });
+
+  test("configures flow-reviewer as read-only", () => {
+    const config: { agent?: Record<string, any>; command?: Record<string, any> } = {};
+    applyFlowConfig(config);
+
+    expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
+    expect(config.agent?.["flow-reviewer"]?.tools?.write).toBe(false);
+    expect(config.agent?.["flow-reviewer"]?.tools?.bash).toBe(false);
   });
 
   test("exports sdk-compatible raw arg shapes for every tool", () => {
@@ -98,6 +111,18 @@ describe("applyFlowConfig", () => {
     expect(schemas.flow_run_start.safeParse({ featureId: "setup-runtime" }).success).toBe(true);
     expect(schemas.flow_run_start.safeParse({ featureId: 1 }).success).toBe(false);
 
+    expect(
+      schemas.flow_review_record_feature.safeParse({
+        scope: "feature",
+        featureId: "setup-runtime",
+        status: "approved",
+        summary: "Looks good.",
+      }).success,
+    ).toBe(true);
+    expect(schemas.flow_review_record_feature.safeParse({ scope: "feature", status: "approved", summary: "Missing id." }).success).toBe(false);
+    expect(schemas.flow_review_record_final.safeParse({ scope: "final", status: "approved", summary: "Looks good." }).success).toBe(true);
+    expect(schemas.flow_review_record_final.safeParse({ scope: "bad", summary: "Nope.", status: "approved" }).success).toBe(false);
+
     expect(schemas.flow_reset_session.safeParse({}).success).toBe(true);
     expect(schemas.flow_reset_session.safeParse({ anything: true }).success).toBe(true);
     expect(schemas.flow_reset_feature.safeParse({ featureId: "setup-runtime" }).success).toBe(true);
@@ -115,6 +140,8 @@ describe("applyFlowConfig", () => {
       summary: "Completed runtime setup.",
       artifactsChanged: [],
       validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -141,6 +168,8 @@ describe("applyFlowConfig", () => {
       summary: "Completed runtime setup.",
       artifactsChanged: [],
       validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -201,5 +230,48 @@ describe("applyFlowConfig", () => {
 
     expect(schemas.flow_plan_apply.safeParse(validPlan).success).toBe(true);
     expect(schemas.flow_plan_apply.safeParse(invalidPlan).success).toBe(false);
+  });
+
+  test("worker contract requires clean review before ok completion", () => {
+    expect(FLOW_WORKER_CONTRACT).toContain("never return status: ok until targeted validation is complete and featureReview has no blocking findings");
+    expect(FLOW_WORKER_CONTRACT).toContain("validationScope: broad");
+    expect(FLOW_WORKER_CONTRACT).toContain("reviewIterations");
+    expect(FLOW_WORKER_CONTRACT).toContain("final completion path for the session");
+  });
+
+  test("worker prompt requires iterative review and fix loops", () => {
+    expect(FLOW_WORKER_AGENT_PROMPT).toContain("Do not complete a feature while review findings remain");
+    expect(FLOW_WORKER_AGENT_PROMPT).toContain("fix them, rerun targeted validation, and review again");
+    expect(FLOW_WORKER_AGENT_PROMPT).toContain("how many review/fix iterations were needed");
+    expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
+    expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
+  });
+
+  test("reviewer contract and prompt require explicit approval gating", () => {
+    expect(FLOW_REVIEWER_CONTRACT).toContain("status: approved | needs_fix | blocked");
+    expect(FLOW_REVIEWER_CONTRACT).toContain("scope: feature | final");
+    expect(FLOW_REVIEWER_CONTRACT).toContain("return approved only when the current feature is clean enough to advance");
+    expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Do not write code");
+    expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Return needs_fix when the current feature should continue");
+  });
+
+  test("auto prompt requires broad final validation before session completion", () => {
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("Never advance to the next feature while the current feature still has review findings");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("run broad repo validation");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("rerun broad validation");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("Use the flow-reviewer stage as the approval gate");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("Persist every reviewer decision through flow_review_record_feature or flow_review_record_final");
+    expect(FLOW_AUTO_AGENT_PROMPT).toContain("If the reviewer returns needs_fix");
+  });
+
+  test("auto command template requires final cross-feature review before completion", () => {
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("final cross-feature review");
+    expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
+  });
+
+  test("run command template requires final completion gating for the last feature", () => {
+    expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_final");
+    expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
+    expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
   });
 });

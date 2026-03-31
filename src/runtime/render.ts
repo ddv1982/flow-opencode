@@ -162,6 +162,15 @@ ${bulletList(entry.validationRun.map((item) => `${item.status} | ${item.command}
 #### Decisions
 
 ${bulletList(entry.decisions.map((item) => item.summary))}
+` : ""}${entry.reviewerDecision ? `
+#### Reviewer Decision
+
+${bulletList([
+  `scope: ${entry.reviewerDecision.scope}`,
+  ...(entry.reviewerDecision.featureId ? [`feature id: ${entry.reviewerDecision.featureId}`] : []),
+  `status: ${entry.reviewerDecision.status}`,
+  `summary: ${entry.reviewerDecision.summary}`,
+])}
 ` : ""}${entry.outcome ? `
 #### Outcome
 
@@ -196,6 +205,7 @@ function renderIndexDoc(session: Session): string {
 - approval: ${session.approval}
 - next command: ${deriveNextCommand(session)}
 - next step: ${session.execution.lastNextStep ? toInlineText(session.execution.lastNextStep) : "none"}
+- reviewer decision: ${session.execution.lastReviewerDecision ? `${session.execution.lastReviewerDecision.scope} | ${session.execution.lastReviewerDecision.status} | ${toInlineText(session.execution.lastReviewerDecision.summary)}` : "none"}
 - created: ${session.timestamps.createdAt}
 - updated: ${session.timestamps.updatedAt}
 

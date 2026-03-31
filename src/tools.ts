@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
 import { loadSession, saveSession, createSession, deleteSession } from "./runtime/session";
-import { applyPlan, approvePlan, completeRun, resetFeature, selectPlanFeatures, startRun } from "./runtime/transitions";
+import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "./runtime/transitions";
 import { summarizeSession } from "./runtime/summary";
 import { DECOMPOSITION_POLICIES, GOAL_MODES, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./runtime/contracts";
 
@@ -61,6 +61,8 @@ const WorkerResultArgsShape = {
       }),
     )
     .default([]),
+  validationScope: z.enum(["targeted", "broad"]).optional(),
+  reviewIterations: z.number().int().nonnegative().optional(),
   decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
   nextStep: z.string().min(1),
   outcome: z
@@ -116,6 +118,25 @@ const FlowPlanSelectArgsShape = {
 
 const FlowRunStartArgsShape = {
   featureId: featureIdSchema.optional(),
+};
+
+const FlowReviewRecordFeatureArgsShape = {
+  scope: z.literal("feature"),
+  featureId: featureIdSchema,
+  status: z.enum(["approved", "needs_fix", "blocked"]),
+  summary: z.string().min(1),
+  blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
+  followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).default([]),
+  suggestedValidation: z.array(z.string().min(1)).default([]),
+};
+
+const FlowReviewRecordFinalArgsShape = {
+  scope: z.literal("final"),
+  status: z.enum(["approved", "needs_fix", "blocked"]),
+  summary: z.string().min(1),
+  blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
+  followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).default([]),
+  suggestedValidation: z.array(z.string().min(1)).default([]),
 };
 
 const FlowResetFeatureArgsShape = {
@@ -180,6 +201,7 @@ export function createTools(_ctx: unknown) {
                   lastOutcome: null,
                   lastNextStep: null,
                   lastFeatureResult: null,
+                  lastReviewerDecision: null,
                   lastValidationRun: [],
                 },
                 notes: [],
@@ -333,6 +355,52 @@ export function createTools(_ctx: unknown) {
         return toJson({
           status: "ok",
           summary: summarizeSession(saved).summary,
+          session: summarizeSession(saved).session,
+        });
+      },
+    }),
+
+    flow_review_record_feature: tool({
+      description: "Record the reviewer decision for the active feature",
+      args: FlowReviewRecordFeatureArgsShape,
+      async execute(args: any, context: any) {
+        const session = await loadSession(context.worktree);
+        if (!session) {
+          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
+        }
+
+        const result = recordReviewerDecision(session, args);
+        if (!result.ok) {
+          return toJson({ status: "error", summary: result.message });
+        }
+
+        const saved = await saveSession(context.worktree, result.value);
+        return toJson({
+          status: "ok",
+          summary: "Reviewer decision recorded.",
+          session: summarizeSession(saved).session,
+        });
+      },
+    }),
+
+    flow_review_record_final: tool({
+      description: "Record the reviewer decision for final cross-feature validation",
+      args: FlowReviewRecordFinalArgsShape,
+      async execute(args: any, context: any) {
+        const session = await loadSession(context.worktree);
+        if (!session) {
+          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
+        }
+
+        const result = recordReviewerDecision(session, args);
+        if (!result.ok) {
+          return toJson({ status: "error", summary: result.message });
+        }
+
+        const saved = await saveSession(context.worktree, result.value);
+        return toJson({
+          status: "ok",
+          summary: "Reviewer decision recorded.",
           session: summarizeSession(saved).session,
         });
       },

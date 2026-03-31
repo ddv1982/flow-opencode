@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import {
   PlanSchema,
+  ReviewerDecisionSchema,
   WorkerResultSchema,
   type Feature,
   type PlanningContext,
@@ -51,7 +52,21 @@ function clearExecution(session: Session): void {
   session.execution.lastOutcome = null;
   session.execution.lastNextStep = null;
   session.execution.lastFeatureResult = null;
+  session.execution.lastReviewerDecision = null;
   session.execution.lastValidationRun = [];
+}
+
+function hasApprovedReviewerDecision(session: Session, featureId: string, wasFinalFeature: boolean): boolean {
+  const decision = session.execution.lastReviewerDecision;
+  if (!decision || decision.status !== "approved") {
+    return false;
+  }
+
+  if (wasFinalFeature) {
+    return decision.scope === "final";
+  }
+
+  return decision.scope === "feature" && decision.featureId === featureId;
 }
 
 function normalizePlan(planInput: unknown): Plan {
@@ -148,6 +163,10 @@ function isReviewPassing(review: WorkerResult["featureReview"] | WorkerResult["f
   }
 
   return review.status === "passed" && review.blockingFindings.length === 0;
+}
+
+function isValidationPassing(validationRun: Session["execution"]["lastValidationRun"]): boolean {
+  return validationRun.length > 0 && validationRun.every((item) => item.status === "passed");
 }
 
 function completionThresholdReached(features: Feature[], plan: Plan): boolean {
@@ -381,6 +400,7 @@ export function startRun(session: Session, requestedId?: string): TransitionResu
   next.execution.lastFeatureId = targetResult.value.id;
   next.execution.lastSummary = `Running feature '${targetResult.value.id}'.`;
   next.execution.lastOutcomeKind = null;
+  next.execution.lastReviewerDecision = null;
   return succeed({
     session: next,
     feature: plan.features.find((feature) => feature.id === targetResult.value.id) ?? null,
@@ -436,17 +456,36 @@ export function completeRun(session: Session, workerInput: unknown): TransitionR
     artifactsChanged: worker.artifactsChanged,
     decisions: worker.decisions,
     featureResult: worker.featureResult,
+    reviewerDecision: next.execution.lastReviewerDecision,
     featureReview: worker.featureReview,
     finalReview: worker.finalReview,
   });
   next.notes = worker.decisions.map((decision) => decision.summary);
 
   if (worker.status === "ok") {
+    if (worker.validationRun.length === 0) {
+      return fail("Worker result cannot complete the feature without recorded validation evidence.");
+    }
+    if (!isValidationPassing(worker.validationRun)) {
+      return fail("Worker result cannot complete the feature because validation did not fully pass.");
+    }
+    if (!hasApprovedReviewerDecision(session, featureId, wasFinalFeature)) {
+      return fail("Worker result cannot complete without a recorded approved reviewer decision.");
+    }
+    if (!wasFinalFeature && worker.validationScope !== "targeted") {
+      return fail("Worker result cannot complete the feature without targeted validation.");
+    }
     if (!isReviewPassing(worker.featureReview)) {
       return fail("Worker result cannot complete the feature because featureReview is not passing.");
     }
     if (worker.finalReview && !isReviewPassing(worker.finalReview)) {
       return fail("Worker result cannot complete the feature because finalReview is not passing.");
+    }
+    if (wasFinalFeature && worker.validationScope !== "broad") {
+      return fail("Worker result cannot complete the session without broad final validation.");
+    }
+    if (wasFinalFeature && !worker.finalReview) {
+      return fail("Worker result cannot complete the session without a finalReview.");
     }
     if (plan.completionPolicy?.requireFinalReview && wasFinalFeature && !isReviewPassing(worker.finalReview)) {
       return fail("Worker result cannot complete the session because a passing finalReview is required.");
@@ -509,6 +548,7 @@ export function resetFeature(session: Session, featureId: string): TransitionRes
     next.execution.lastOutcome = null;
     next.execution.lastNextStep = null;
     next.execution.lastFeatureResult = null;
+    next.execution.lastReviewerDecision = null;
     next.artifacts = [];
     next.notes = [];
   }
@@ -518,5 +558,28 @@ export function resetFeature(session: Session, featureId: string): TransitionRes
       : `Reset feature '${featureId}' to pending.`;
   next.execution.lastOutcomeKind = null;
   next.timestamps.completedAt = null;
+  return succeed(next);
+}
+
+export function recordReviewerDecision(session: Session, input: unknown): TransitionResult<Session> {
+  let decision: Session["execution"]["lastReviewerDecision"];
+  try {
+    decision = ReviewerDecisionSchema.parse(input);
+  } catch (error) {
+    return fail(`Reviewer decision validation failed: ${formatValidationError(error)}`);
+  }
+
+  const next = cloneSession(session);
+  if (decision.scope === "feature") {
+    if (!next.execution.activeFeatureId) {
+      return fail("There is no active feature to review.");
+    }
+    if (decision.featureId !== next.execution.activeFeatureId) {
+      return fail(`Reviewer decision feature '${decision.featureId}' does not match active feature '${next.execution.activeFeatureId}'.`);
+    }
+  }
+
+  next.execution.lastReviewerDecision = decision;
+  next.execution.lastSummary = decision.summary;
   return succeed(next);
 }

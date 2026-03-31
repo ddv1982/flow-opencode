@@ -23,7 +23,8 @@ Arguments: $ARGUMENTS
 Behavior:
 - Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
-- Otherwise implement exactly one feature, validate it, review the changed files, and persist the result through \`flow_run_complete_feature\`.
+- Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\`.
+- If the active feature is the final completion path for the session, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`.
 - End with a compact summary of changes, validation evidence, and the runtime's next step.`;
 
 export const FLOW_AUTO_COMMAND_TEMPLATE = `Run Flow autonomously.
@@ -33,7 +34,9 @@ Arguments: $ARGUMENTS
 Behavior:
 - If the argument string is empty or \`resume\`, resume the active session if one exists.
 - Otherwise treat the full argument string as a new autonomous goal.
-- Plan, approve, execute, and replan as needed until completion or a real blocker.
+- Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.
+- Do not advance to the next feature until the current one is clean.
+- Before final completion, run broad repo validation, perform a final cross-feature review, fix any findings, rerun broad validation, and only then finish with a passing \`finalReview\`.
 - Use Flow runtime tools for every state transition.
 - End with the latest runtime summary.`;
 

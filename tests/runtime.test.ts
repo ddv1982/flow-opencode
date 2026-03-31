@@ -7,7 +7,7 @@ import { createSession, deleteSession, loadSession, saveSession } from "../src/r
 import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import { summarizeSession } from "../src/runtime/summary";
 import { createTools } from "../src/tools";
-import { approvePlan, applyPlan, completeRun, resetFeature, selectPlanFeatures, startRun } from "../src/runtime/transitions";
+import { approvePlan, applyPlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "../src/runtime/transitions";
 
 const tempDirs: string[] = [];
 
@@ -240,12 +240,23 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks correct.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [{ path: "src/runtime/session.ts" }],
       validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [{ summary: "Kept a single session artifact." }],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -275,12 +286,23 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks correct.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [{ path: "src/runtime/session.ts", kind: "updated" }],
       validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [{ summary: "Kept a single session artifact." }],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -318,12 +340,23 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks correct.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [{ path: "src/runtime/session.ts" }],
       validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [{ summary: "Kept a single session artifact." }],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -377,12 +410,23 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks correct.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [{ path: "src/runtime/session.ts" }],
       validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [{ summary: "Kept a single session artifact." }],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -432,6 +476,8 @@ describe("runtime transitions", () => {
       summary: "The feature needs to be split further.",
       artifactsChanged: [],
       validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 0,
       decisions: [{ summary: "Feature is too broad after inspection." }],
       nextStep: "Create a refined plan.",
       outcome: { kind: "replan_required", needsHuman: false },
@@ -469,6 +515,8 @@ describe("runtime transitions", () => {
       summary: "The feature needs to be split further.",
       artifactsChanged: [],
       validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 0,
       decisions: [{ summary: "Feature is too broad after inspection." }],
       nextStep: "Create a refined plan.",
       outcome: { kind: "replan_required", needsHuman: false },
@@ -504,6 +552,8 @@ describe("runtime transitions", () => {
       summary: "Waiting on an operator decision.",
       artifactsChanged: [],
       validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 0,
       decisions: [{ summary: "External API credentials are missing." }],
       nextStep: "Ask the operator to provide API credentials.",
       outcome: {
@@ -566,6 +616,8 @@ describe("runtime transitions", () => {
       summary: "Waiting on an operator decision.",
       artifactsChanged: [],
       validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 0,
       decisions: [{ summary: "External API credentials are missing." }],
       nextStep: "Ask the operator to provide API credentials.",
       outcome: {
@@ -614,12 +666,23 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [],
-      validationRun: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Create a refined plan.",
       outcome: { kind: "replan_required", needsHuman: false },
@@ -691,12 +754,23 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks correct.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [],
-      validationRun: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Run the next feature.",
       outcome: { kind: "completed" },
@@ -714,7 +788,50 @@ describe("runtime transitions", () => {
     expect(completed.message).toContain("featureReview");
   });
 
-  test("enforces completion policy final review requirements", () => {
+  test("rejects successful worker results when validation does not fully pass", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "partial", summary: "Some checks remain unresolved." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Run the next feature.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "partial" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.message).toContain("validation did not fully pass");
+  });
+
+  test("allows final completion when broad validation and final review both pass", () => {
     const session = createSession("Build a workflow plugin");
     const plan = {
       ...samplePlan(),
@@ -737,23 +854,86 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [],
-      validationRun: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "broad",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Session should complete.",
       outcome: { kind: "completed" },
       featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
       featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+      finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) return;
+
+    expect(completed.value.status).toBe("completed");
+  });
+
+  test("requires broad validation before final session completion", () => {
+    const session = createSession("Build a workflow plugin");
+    const plan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+      },
+      features: [samplePlan().features[0]],
+    };
+
+    const applied = applyPlan(session, plan);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Session should complete.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+      finalReview: { status: "passed", summary: "Feature review is clean.", blockingFindings: [] },
     });
 
     expect(completed.ok).toBe(false);
     if (completed.ok) return;
 
-    expect(completed.message).toContain("finalReview");
+    expect(completed.message).toContain("broad final validation");
   });
 
   test("does not allow a completed session to start more work", () => {
@@ -777,17 +957,28 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [],
-      validationRun: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "broad",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Session should complete.",
       outcome: { kind: "completed" },
       featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
       featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+      finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
     });
     expect(completed.ok).toBe(true);
     if (!completed.ok) return;
@@ -817,14 +1008,25 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    await saveSession(worktree, started.value.session);
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    await saveSession(worktree, reviewed.value);
     const response = await tools.flow_run_complete_feature.execute(
       {
         contractVersion: "1",
         status: "ok",
         summary: "Completed runtime setup.",
         artifactsChanged: [],
-        validationRun: [],
+        validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+        validationScope: "targeted",
+        reviewIterations: 1,
         decisions: [],
         nextStep: "Run the next feature.",
         outcome: { kind: "completed" },
@@ -862,17 +1064,28 @@ describe("runtime transitions", () => {
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
-    const completed = completeRun(started.value.session, {
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "final",
+      status: "approved",
+      summary: "Final review looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
       artifactsChanged: [],
-      validationRun: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "broad",
+      reviewIterations: 1,
       decisions: [],
       nextStep: "Session should complete.",
       outcome: { kind: "completed" },
       featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
       featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+      finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
     });
     expect(completed.ok).toBe(true);
     if (!completed.ok) return;
@@ -924,6 +1137,71 @@ describe("runtime transitions", () => {
     const parsed = JSON.parse(response);
     expect(parsed.status).toBe("error");
     expect(parsed.summary).toContain("validation failed");
+  });
+
+  test("requires a recorded reviewer approval before successful completion", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const completed = completeRun(started.value.session, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Run the next feature.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.message).toContain("recorded approved reviewer decision");
+  });
+
+  test("records reviewer decisions for the active feature", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "needs_fix",
+      summary: "A follow-up fix is required.",
+      blockingFindings: [{ summary: "Adjust one failing branch." }],
+      suggestedValidation: ["bun test"],
+    });
+
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    expect(reviewed.value.execution.lastReviewerDecision?.status).toBe("needs_fix");
+    expect(reviewed.value.execution.lastReviewerDecision?.featureId).toBe("setup-runtime");
   });
 
   test("resets a feature and clears session files", async () => {
