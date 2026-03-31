@@ -22,11 +22,11 @@ Flow provides:
 
 ```mermaid
 flowchart TD
-    A[Goal] --> B[/flow-plan]
+    A[Goal] --> B[Run flow-plan]
     B --> C[Draft plan saved]
-    C --> D{/flow-plan approve?}
-    D -->|Yes| E[/flow-run or /flow-auto]
-    D -->|Select subset| F[/flow-plan select feature ids]
+    C --> D{Plan approved?}
+    D -->|Yes| E[Run flow-run or flow-auto]
+    D -->|Select subset| F[Run flow-plan select]
     F --> C
     E --> G[Start one runnable feature]
     G --> H[Implement and run validation]
