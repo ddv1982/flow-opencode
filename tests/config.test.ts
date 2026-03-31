@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { tool } from "@opencode-ai/plugin";
-import { applyFlowConfig } from "../src/config";
+import FlowPlugin from "../src/index";
+import { applyFlowConfig, createConfigHook } from "../src/config";
 import { FLOW_AUTO_COMMAND_TEMPLATE, FLOW_RUN_COMMAND_TEMPLATE } from "../src/prompts/commands";
 import { FLOW_AUTO_AGENT_PROMPT, FLOW_REVIEWER_AGENT_PROMPT, FLOW_WORKER_AGENT_PROMPT } from "../src/prompts/agents";
 import { FLOW_REVIEWER_CONTRACT, FLOW_WORKER_CONTRACT } from "../src/prompts/contracts";
@@ -19,6 +20,21 @@ function getToolSchemas() {
 }
 
 describe("applyFlowConfig", () => {
+  test("plugin entrypoint returns Flow config and tool hooks", async () => {
+    const ctx = { worktree: "/tmp/flow-plugin-test" } as any;
+    const plugin = await FlowPlugin(ctx);
+
+    expect(typeof plugin.config).toBe("function");
+    expect(plugin.tool).toBeDefined();
+    expect(Object.keys(plugin.tool ?? {})).toEqual(Object.keys(createTools(ctx)));
+
+    const config = { command: { existing: { description: "keep me" } } } as any;
+    await plugin.config?.(config);
+
+    expect(config.command.existing).toEqual({ description: "keep me" });
+    expect(config.command["flow-plan"]).toBeDefined();
+  });
+
   test("injects commands and agents", () => {
     const config: { agent?: Record<string, unknown>; command?: Record<string, unknown> } = {};
     applyFlowConfig(config);
@@ -52,6 +68,21 @@ describe("applyFlowConfig", () => {
     expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
     expect(config.agent?.["flow-reviewer"]?.tools?.write).toBe(false);
     expect(config.agent?.["flow-reviewer"]?.tools?.bash).toBe(false);
+  });
+
+  test("createConfigHook is async and preserves unrelated config entries", async () => {
+    const hook = createConfigHook({});
+    const config = {
+      agent: { existing: { mode: "primary", description: "already here" } },
+      command: { existing: { description: "already here", agent: "existing" } },
+    } as any;
+
+    await expect(hook(config)).resolves.toBeUndefined();
+
+    expect(config.agent.existing).toEqual({ mode: "primary", description: "already here" });
+    expect(config.command.existing).toEqual({ description: "already here", agent: "existing" });
+    expect(config.agent["flow-control"]).toBeDefined();
+    expect(config.command["flow-reset"]).toBeDefined();
   });
 
   test("exports sdk-compatible raw arg shapes for every tool", () => {

@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSession, deleteSession, loadSession, saveSession } from "../src/runtime/session";
-import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
-import { summarizeSession } from "../src/runtime/summary";
+import { getFeatureDocPath, getIndexDocPath, getSessionPath } from "../src/runtime/paths";
+import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
 import { createTools } from "../src/tools";
 import { approvePlan, applyPlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "../src/runtime/transitions";
 
@@ -63,6 +63,27 @@ describe("runtime transitions", () => {
     expect(indexDoc).toContain("goal: Build a workflow plugin");
   });
 
+  test("rejects malformed persisted session data", async () => {
+    const worktree = makeTempDir();
+    mkdirSync(join(worktree, ".flow"), { recursive: true });
+    await writeFile(getSessionPath(worktree), "{not valid json", "utf8");
+
+    await expect(loadSession(worktree)).rejects.toThrow();
+  });
+
+  test("saveSession refreshes updatedAt while preserving createdAt", async () => {
+    const worktree = makeTempDir();
+    const created = createSession("Build a workflow plugin");
+    const firstSave = await saveSession(worktree, created);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const secondSave = await saveSession(worktree, firstSave);
+
+    expect(secondSave.timestamps.createdAt).toBe(firstSave.timestamps.createdAt);
+    expect(new Date(secondSave.timestamps.updatedAt).getTime()).toBeGreaterThan(new Date(firstSave.timestamps.updatedAt).getTime());
+  });
+
   test("renders feature docs for planned work", async () => {
     const worktree = makeTempDir();
     const session = createSession("Build a workflow plugin");
@@ -76,6 +97,26 @@ describe("runtime transitions", () => {
     expect(featureDoc).toContain("# Feature setup-runtime");
     expect(featureDoc).toContain("Create runtime helpers");
     expect(featureDoc).toContain("src/runtime/session.ts");
+  });
+
+  test("prunes stale feature docs when a plan is narrowed", async () => {
+    const worktree = makeTempDir();
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    await saveSession(worktree, applied.value);
+    await expect(readFile(getFeatureDocPath(worktree, "execute-feature"), "utf8")).resolves.toContain("# Feature execute-feature");
+
+    const selected = selectPlanFeatures(applied.value, ["setup-runtime"]);
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) return;
+
+    await saveSession(worktree, selected.value);
+
+    await expect(readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8")).resolves.toContain("# Feature setup-runtime");
+    await expect(readFile(getFeatureDocPath(worktree, "execute-feature"), "utf8")).rejects.toThrow();
   });
 
   test("renders multiline content without breaking markdown structure", async () => {
@@ -721,6 +762,55 @@ describe("runtime transitions", () => {
     expect(indexDoc).toContain("next step: none");
   });
 
+  test("summarizeSession reports missing state when no session exists", () => {
+    expect(summarizeSession(null)).toEqual({
+      status: "missing",
+      summary: "No active Flow session found.",
+    });
+  });
+
+  test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {
+    const planning = createSession("Build a workflow plugin");
+    expect(deriveNextCommand(planning)).toBe("/flow-plan <goal>");
+
+    const applied = applyPlan(planning, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    expect(deriveNextCommand(applied.value)).toBe("/flow-plan");
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    expect(deriveNextCommand(approved.value)).toBe("/flow-run");
+
+    const running = startRun(approved.value);
+    expect(running.ok).toBe(true);
+    if (!running.ok) return;
+
+    expect(deriveNextCommand(running.value.session)).toBe("/flow-run");
+
+    const blocked = {
+      ...approved.value,
+      status: "blocked" as const,
+      execution: {
+        ...approved.value.execution,
+        lastFeatureId: "setup-runtime",
+        lastOutcome: {
+          kind: "blocked_external" as const,
+          summary: "Waiting on human decision.",
+          needsHuman: true,
+        },
+      },
+    };
+
+    expect(deriveNextCommand(blocked)).toBe("/flow-status");
+
+    const completed = { ...approved.value, status: "completed" as const };
+    expect(deriveNextCommand(completed)).toBe("/flow-plan <goal>");
+  });
+
   test("suggests resetting blocked features when the outcome is retryable", () => {
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
@@ -1198,6 +1288,54 @@ describe("runtime transitions", () => {
     const parsed = JSON.parse(response);
     expect(parsed.status).toBe("ok");
     expect(parsed.session.lastOutcomeKind).toBe("completed");
+  });
+
+  test("flow_status returns a machine-readable missing-session summary", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const response = await tools.flow_status.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("missing");
+    expect(parsed.summary).toBe("No active Flow session found.");
+  });
+
+  test("flow_reset_session clears persisted session state and docs", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    await saveSession(worktree, createSession("Build a workflow plugin"));
+
+    const response = await tools.flow_reset_session.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.nextCommand).toBe("/flow-plan <goal>");
+    expect(await loadSession(worktree)).toBeNull();
+    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
+  });
+
+  test("tools return machine-readable missing-session responses for plan, review, and reset operations", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const cases = [
+      ["flow_plan_apply", { plan: samplePlan() }, "missing_session", "/flow-plan <goal>"],
+      ["flow_plan_approve", {}, "missing_session", undefined],
+      ["flow_plan_select_features", { featureIds: ["setup-runtime"] }, "missing_session", undefined],
+      ["flow_review_record_feature", { scope: "feature", featureId: "setup-runtime", status: "approved", summary: "Looks good." }, "missing_session", undefined],
+      ["flow_review_record_final", { scope: "final", status: "approved", summary: "Looks good." }, "missing_session", undefined],
+      ["flow_reset_feature", { featureId: "setup-runtime" }, "missing_session", undefined],
+    ] as const;
+
+    for (const [toolName, args, expectedStatus, expectedNextCommand] of cases) {
+      const response = await tools[toolName].execute(args, { worktree });
+      const parsed = JSON.parse(response);
+
+      expect(parsed.status).toBe(expectedStatus);
+      expect(parsed.summary).toContain("No active Flow");
+      if (expectedNextCommand) {
+        expect(parsed.nextCommand).toBe(expectedNextCommand);
+      }
+    }
   });
 
   test("tool rejects flow_run_start for completed sessions", async () => {
