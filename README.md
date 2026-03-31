@@ -5,8 +5,8 @@ Flow is an opencode-native workflow plugin for goal planning, feature execution,
 ## What it provides
 
 - `/flow-plan` to create or update a draft plan
-- `/flow-run` to execute one approved feature
-- `/flow-auto` to plan, approve, and execute autonomously
+- `/flow-run` to execute one approved feature with reviewer gating
+- `/flow-auto` to plan, approve, execute, review, fix, and validate autonomously
 - `/flow-status` to inspect the active workflow session
 - `/flow-reset` to reopen a feature or clear the active session
 
@@ -70,7 +70,7 @@ Typical flow:
 1. `/flow-plan <goal>`
 2. Review the draft plan
 3. `/flow-plan approve`
-4. `/flow-run` or `/flow-auto`
+4. `/flow-run` or `/flow-auto <goal>`
 5. `/flow-status`
 
 Useful commands:
@@ -78,18 +78,35 @@ Useful commands:
 - `/flow-plan <goal>` creates or refreshes a draft plan
 - `/flow-plan approve` approves the draft plan
 - `/flow-plan select <feature-id>` narrows the current draft to the listed feature ids
-- `/flow-run [feature-id]` executes the next runnable feature or a specific runnable feature
-- `/flow-auto <goal>` plans and executes autonomously
+- `/flow-run [feature-id]` executes the next runnable feature or a specific runnable feature, then requires recorded reviewer approval before completion
+- `/flow-auto <goal>` plans and executes autonomously from a new goal
+- `/flow-auto resume` resumes an active autonomous session
 - `/flow-status` shows the current session summary
 - `/flow-reset feature <id>` reopens a feature
 - `/flow-reset session` clears the active session
+
+### Autonomous execution model
+
+`/flow-auto` uses a reviewer-gated loop:
+
+1. plan
+2. approve
+3. execute the current feature
+4. run targeted validation
+5. review the result
+6. fix findings and repeat until approved
+7. persist the feature only after recorded reviewer approval
+8. on the final feature, run broad validation and require a passing `finalReview`
+
+This means Flow will not advance to the next feature until the current one is clean, and it will not complete the session until final broad validation and review pass.
 
 ## Architecture
 
 - A plugin `config` hook injects commands and agents.
 - Custom tools own workflow state transitions.
 - Session state is persisted in `.flow/session.json`.
-- Planner and worker behavior live in dedicated agent prompts.
+- Planner, worker, reviewer, control, and autonomous orchestration behavior live in dedicated agent prompts.
+- Reviewer decisions are durably recorded and gate successful completion.
 
 ## Development
 
@@ -113,6 +130,14 @@ bun run check
 - plugin config injection: `src/config.ts`
 - runtime tools: `src/tools.ts`
 - runtime state and rendering: `src/runtime/*`
+
+### Agents
+
+- `flow-planner`: planning only
+- `flow-worker`: implementation and validation
+- `flow-reviewer`: review-only approval gate
+- `flow-control`: status/reset only
+- `flow-auto`: orchestrates the full planner-worker-reviewer loop
 
 ### Tool schema note
 
@@ -143,6 +168,13 @@ The plugin writes derived docs from runtime state into:
 ```
 
 These docs are projections of `session.json`, not a second source of truth.
+
+They include:
+
+- session summary and next command
+- validation and outcome summaries
+- feature-level execution history
+- recorded reviewer decisions for completed work
 
 ## State
 
