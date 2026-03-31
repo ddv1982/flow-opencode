@@ -1,0 +1,36 @@
+{
+  "name": "opencode-plugin-flow",
+  "version": "0.1.0",
+  "description": "Stateful planning and execution workflow plugin for OpenCode",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outfile ./dist/index.js --target node",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run test && bun run build"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "workflow",
+    "planning",
+    "execution"
+  ],
+  "author": "ddv1982",
+  "license": "MIT",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "^1.1.19"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.1.19",
+    "bun-types": "latest",
+    "typescript": "^5.6.3"
+  }
+}
