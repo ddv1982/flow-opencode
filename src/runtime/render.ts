@@ -19,6 +19,14 @@ function maybeSection(title: string, items: string[]): string {
   return `## ${title}\n\n${bulletList(items)}\n\n`;
 }
 
+function maybeTitledList(title: string, items: string[], level = "##"): string {
+  if (items.length === 0) {
+    return "";
+  }
+
+  return `${level} ${title}\n\n${bulletList(items)}\n`;
+}
+
 function maybeApproachSection(session: Session): string {
   const approach = session.planning.implementationApproach;
   if (!approach) {
@@ -133,7 +141,16 @@ function renderFeatureResultDetails(
     return "";
   }
 
-  return `## Feature Result\n\n- feature id: ${featureResult.featureId}\n- verification: ${featureResult.verificationStatus ?? "not_recorded"}\n${featureResult.notes && featureResult.notes.length > 0 ? `\n### Notes\n\n${bulletList(featureResult.notes.map((item) => item.note))}\n` : ""}${featureResult.followUps && featureResult.followUps.length > 0 ? `\n### Follow Ups\n\n${bulletList(featureResult.followUps.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)))}\n` : ""}\n`;
+  const sections = [
+    maybeTitledList("Notes", featureResult.notes?.map((item) => item.note) ?? [], "###"),
+    maybeTitledList(
+      "Follow Ups",
+      featureResult.followUps?.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)) ?? [],
+      "###",
+    ),
+  ].filter(Boolean);
+
+  return `## Feature Result\n\n- feature id: ${featureResult.featureId}\n- verification: ${featureResult.verificationStatus ?? "not_recorded"}\n${sections.length > 0 ? `\n${sections.join("\n")}` : "\n"}`;
 }
 
 function renderFeatureHistory(session: Session, feature: Feature): string {
@@ -142,51 +159,52 @@ function renderFeatureHistory(session: Session, feature: Feature): string {
     return "## Execution History\n\n- none\n";
   }
 
-  return `## Execution History\n\n${entries
-    .map(
-      (entry) => `### ${entry.recordedAt}
+  const renderedEntries = entries.map((entry) => {
+    const sections = [
+      maybeTitledList(
+        "Changed Artifacts",
+        entry.artifactsChanged.map((artifact) => (artifact.kind ? `${artifact.path} (${artifact.kind})` : artifact.path)),
+        "####",
+      ),
+      maybeTitledList(
+        "Validation",
+        entry.validationRun.map((item) => `${item.status} | ${item.command} | ${item.summary}`),
+        "####",
+      ),
+      maybeTitledList("Decisions", entry.decisions.map((item) => item.summary), "####"),
+      entry.reviewerDecision
+        ? maybeTitledList(
+            "Reviewer Decision",
+            [
+              `scope: ${entry.reviewerDecision.scope}`,
+              ...(entry.reviewerDecision.featureId ? [`feature id: ${entry.reviewerDecision.featureId}`] : []),
+              `status: ${entry.reviewerDecision.status}`,
+              `summary: ${entry.reviewerDecision.summary}`,
+            ],
+            "####",
+          )
+        : "",
+      entry.outcome ? maybeTitledList("Outcome", renderOutcomeLines(entry.outcome), "####") : "",
+      maybeTitledList("Notes", entry.featureResult?.notes?.map((item) => item.note) ?? [], "####"),
+      maybeTitledList(
+        "Follow Ups",
+        entry.featureResult?.followUps?.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)) ?? [],
+        "####",
+      ),
+      renderReviewBlock("Feature Review", entry.featureReview),
+      renderReviewBlock("Final Review", entry.finalReview),
+    ].filter(Boolean);
+
+    return `### ${entry.recordedAt}
 
 - status: ${entry.status}
 - outcome: ${entry.outcomeKind ?? "none"}
 - summary: ${toInlineText(entry.summary)}
 - next step: ${entry.nextStep ? toInlineText(entry.nextStep) : "none"}
-${entry.artifactsChanged.length > 0 ? `
-#### Changed Artifacts
+${sections.length > 0 ? `\n${sections.join("\n")}` : ""}`;
+  });
 
-${bulletList(entry.artifactsChanged.map((artifact) => (artifact.kind ? `${artifact.path} (${artifact.kind})` : artifact.path)))}
-` : ""}${entry.validationRun.length > 0 ? `
-#### Validation
-
-${bulletList(entry.validationRun.map((item) => `${item.status} | ${item.command} | ${item.summary}`))}
-` : ""}${entry.decisions.length > 0 ? `
-#### Decisions
-
-${bulletList(entry.decisions.map((item) => item.summary))}
-` : ""}${entry.reviewerDecision ? `
-#### Reviewer Decision
-
-${bulletList([
-  `scope: ${entry.reviewerDecision.scope}`,
-  ...(entry.reviewerDecision.featureId ? [`feature id: ${entry.reviewerDecision.featureId}`] : []),
-  `status: ${entry.reviewerDecision.status}`,
-  `summary: ${entry.reviewerDecision.summary}`,
-])}
-` : ""}${entry.outcome ? `
-#### Outcome
-
-${bulletList(renderOutcomeLines(entry.outcome))}
-` : ""}${entry.featureResult?.notes && entry.featureResult.notes.length > 0 ? `
-#### Notes
-
-${bulletList(entry.featureResult.notes.map((item) => item.note))}
-` : ""}${entry.featureResult?.followUps && entry.featureResult.followUps.length > 0 ? `
-#### Follow Ups
-
-${bulletList(entry.featureResult.followUps.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)))}
-` : ""}
-${renderReviewBlock("Feature Review", entry.featureReview)}${renderReviewBlock("Final Review", entry.finalReview)}`,
-    )
-    .join("\n")}`;
+  return `## Execution History\n\n${renderedEntries.join("\n")}`;
 }
 
 function renderIndexDoc(session: Session): string {

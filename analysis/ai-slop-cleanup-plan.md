@@ -72,3 +72,12 @@
 1. Extract repeated Flow guardrail text into shared prompt fragments/constants.
 2. Preserve the effective prompt/template strings exactly where tests or downstream behavior rely on wording.
 3. Avoid changing contracts or runtime logic.
+
+## Pass 7 Scope
+- `src/runtime/render.ts`
+- `tests/runtime.test.ts` as behavior lock
+
+## Pass 7 Smell focus
+1. Reduce nested inline conditionals in the render helpers without changing emitted markdown.
+2. Prefer simpler section assembly over larger template-string expressions.
+3. Keep file output, headings, and formatting stable under the existing render tests.
