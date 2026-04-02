@@ -28,3 +28,28 @@
 1. Duplicate wrapper flow: load session -> missing-session response -> transition -> error response -> save -> summary.
 2. Keep tool payloads and response shapes unchanged.
 3. Reduce repetition without moving business logic out of transition functions.
+
+## Pass 3 Scope
+- `src/runtime/schema.ts`
+- `src/tools.ts`
+- new shared shape-helper module if needed
+- `tests/config.test.ts` and `tests/runtime.test.ts` as behavior lock
+
+## Pass 3 Smell focus
+1. Duplicate field/object schema definitions between runtime schemas and tool arg shapes.
+2. Extract shared shape builders for common contracts only.
+3. Preserve existing runtime validation strictness and current tool payload compatibility.
+
+## Pass 3 Non-goals
+- Do not redesign transition logic.
+- Do not change prompt text.
+- Do not force top-level tool args to use runtime Zod schemas directly if that risks SDK compatibility.
+
+## Pass 4 Scope
+- `src/runtime/transitions.ts`
+- `tests/runtime.test.ts` as behavior lock
+
+## Pass 4 Smell focus
+1. Replace the long `buildCompletionRecovery()` branch ladder with data-backed helper builders.
+2. Keep every error code, resolution hint, and runtime recovery field unchanged.
+3. Preserve final-feature vs normal-feature distinctions exactly.
