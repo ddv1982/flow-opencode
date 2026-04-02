@@ -8,6 +8,34 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function normalizeSession(session: Session): Session {
+  return SessionSchema.parse({
+    ...session,
+    timestamps: {
+      ...session.timestamps,
+      updatedAt: now(),
+    },
+  });
+}
+
+async function writeSessionFile(worktree: string, session: Session): Promise<void> {
+  const sessionPath = getSessionPath(worktree);
+  await mkdir(worktree + "/.flow", { recursive: true });
+  await writeFile(sessionPath, JSON.stringify(session, null, 2) + "\n", "utf8");
+}
+
+async function syncSessionDocs(worktree: string, session: Session): Promise<void> {
+  await renderSessionDocs(worktree, session);
+}
+
+async function removeSessionFile(worktree: string): Promise<void> {
+  await rm(getSessionPath(worktree), { force: true });
+}
+
+async function removeSessionDocs(worktree: string): Promise<void> {
+  await deleteSessionDocs(worktree);
+}
+
 export async function loadSession(worktree: string): Promise<Session | null> {
   const sessionPath = getSessionPath(worktree);
 
@@ -24,24 +52,15 @@ export async function loadSession(worktree: string): Promise<Session | null> {
 }
 
 export async function saveSession(worktree: string, session: Session): Promise<Session> {
-  const sessionPath = getSessionPath(worktree);
-  const normalized = SessionSchema.parse({
-    ...session,
-    timestamps: {
-      ...session.timestamps,
-      updatedAt: now(),
-    },
-  });
-
-  await mkdir(worktree + "/.flow", { recursive: true });
-  await writeFile(sessionPath, JSON.stringify(normalized, null, 2) + "\n", "utf8");
-  await renderSessionDocs(worktree, normalized);
+  const normalized = normalizeSession(session);
+  await writeSessionFile(worktree, normalized);
+  await syncSessionDocs(worktree, normalized);
   return normalized;
 }
 
 export async function deleteSession(worktree: string): Promise<void> {
-  await rm(getSessionPath(worktree), { force: true });
-  await deleteSessionDocs(worktree);
+  await removeSessionFile(worktree);
+  await removeSessionDocs(worktree);
 }
 
 export function createSession(goal: string, planning?: Partial<PlanningContext>): Session {

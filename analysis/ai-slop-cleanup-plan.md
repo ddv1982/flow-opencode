@@ -81,3 +81,12 @@
 1. Reduce nested inline conditionals in the render helpers without changing emitted markdown.
 2. Prefer simpler section assembly over larger template-string expressions.
 3. Keep file output, headings, and formatting stable under the existing render tests.
+
+## Pass 8 Scope
+- `src/runtime/session.ts`
+- `tests/runtime.test.ts` as behavior lock
+
+## Pass 8 Smell focus
+1. Split raw session persistence from docs synchronization helpers.
+2. Keep the public behavior of `saveSession()` and `deleteSession()` unchanged.
+3. Reduce coupling by making the file-write and docs-sync boundaries explicit.
