@@ -62,3 +62,13 @@
 1. Extract the duplicated feature-subset validation used by `approvePlan()` and `selectPlanFeatures()`.
 2. Keep approval vs selection behavior differences intact.
 3. Preserve exact user-facing failure messages where they currently differ.
+
+## Pass 6 Scope
+- `src/prompts/agents.ts`
+- `src/prompts/commands.ts`
+- `tests/config.test.ts` as behavior lock
+
+## Pass 6 Smell focus
+1. Extract repeated Flow guardrail text into shared prompt fragments/constants.
+2. Preserve the effective prompt/template strings exactly where tests or downstream behavior rely on wording.
+3. Avoid changing contracts or runtime logic.

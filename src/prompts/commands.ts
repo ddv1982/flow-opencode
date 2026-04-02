@@ -1,3 +1,5 @@
+const FLOW_FINAL_COMPLETION_REVIEW_RULE = "- Before final completion, run broad repo validation, perform a final cross-feature review, fix any findings, rerun broad validation, and only then finish with a passing `finalReview`.";
+
 export const FLOW_PLAN_COMMAND_TEMPLATE = `Manage the active Flow plan.
 
 Arguments: $ARGUMENTS
@@ -40,7 +42,7 @@ Behavior:
 - Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not as reasons to stop.
 - When blocked by a solvable finding, inspect the evidence, use the same repo and research tools used during planning, make the smallest recovery plan, execute it, and keep iterating.
 - Do not advance to the next feature until the current one is clean.
-- Before final completion, run broad repo validation, perform a final cross-feature review, fix any findings, rerun broad validation, and only then finish with a passing \`finalReview\`.
+${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 - Use Flow runtime tools for every state transition.
 - End with the latest runtime summary.`;
 
