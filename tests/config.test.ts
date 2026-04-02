@@ -85,6 +85,24 @@ describe("applyFlowConfig", () => {
     expect(config.command["flow-reset"]).toBeDefined();
   });
 
+  test("injects fresh config objects instead of sharing mutable references across calls", () => {
+    const first: { agent?: Record<string, any>; command?: Record<string, any> } = {};
+    const second: { agent?: Record<string, any>; command?: Record<string, any> } = {};
+
+    applyFlowConfig(first);
+    applyFlowConfig(second);
+
+    expect(first.agent?.["flow-planner"]).not.toBe(second.agent?.["flow-planner"]);
+    expect(first.agent?.["flow-reviewer"]).not.toBe(second.agent?.["flow-reviewer"]);
+    expect(first.agent?.["flow-planner"]?.tools).not.toBe(second.agent?.["flow-planner"]?.tools);
+    expect(first.agent?.["flow-planner"]?.tools).not.toBe(first.agent?.["flow-reviewer"]?.tools);
+    expect(first.command?.["flow-plan"]).not.toBe(second.command?.["flow-plan"]);
+
+    first.agent!["flow-planner"].tools.edit = true;
+    expect(second.agent?.["flow-planner"]?.tools?.edit).toBe(false);
+    expect(first.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
+  });
+
   test("exports sdk-compatible raw arg shapes for every tool", () => {
     const { tools, schemas } = getToolSchemas();
 

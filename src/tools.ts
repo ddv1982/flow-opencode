@@ -1,8 +1,9 @@
 import { tool } from "@opencode-ai/plugin";
 import { loadSession, saveSession, createSession, deleteSession } from "./runtime/session";
-import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "./runtime/transitions";
+import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun, type TransitionResult } from "./runtime/transitions";
 import { summarizeSession } from "./runtime/summary";
 import { DECOMPOSITION_POLICIES, GOAL_MODES, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./runtime/contracts";
+import type { Session } from "./runtime/schema";
 
 const z = tool.schema;
 const featureIdSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Feature ids must be lowercase kebab-case");
@@ -155,6 +156,53 @@ function toJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+type ToolContext = {
+  worktree: string;
+};
+
+type ToolResponse = Record<string, unknown>;
+
+function missingSessionResponse(summary = "No active Flow session exists.", nextCommand?: string): ToolResponse {
+  return nextCommand ? { status: "missing_session", summary, nextCommand } : { status: "missing_session", summary };
+}
+
+function errorResponse(summary: string, extra?: ToolResponse): ToolResponse {
+  return {
+    status: "error",
+    summary,
+    ...(extra ?? {}),
+  };
+}
+
+async function withSession(
+  context: ToolContext,
+  execute: (session: Session) => Promise<string>,
+  missingResponse: ToolResponse = missingSessionResponse(),
+): Promise<string> {
+  const session = await loadSession(context.worktree);
+  if (!session) {
+    return toJson(missingResponse);
+  }
+
+  return execute(session);
+}
+
+async function persistTransition<T>(
+  context: ToolContext,
+  result: TransitionResult<T>,
+  getSession: (value: T) => Session,
+  onSuccess: (saved: Session, value: T) => ToolResponse,
+  onError: (result: Extract<TransitionResult<T>, { ok: false }>) => ToolResponse = (failure) =>
+    errorResponse(failure.message),
+): Promise<string> {
+  if (!result.ok) {
+    return toJson(onError(result));
+  }
+
+  const saved = await saveSession(context.worktree, getSession(result.value));
+  return toJson(onSuccess(saved, result.value));
+}
+
 export function createTools(_ctx: unknown) {
   return {
     flow_status: tool({
@@ -282,26 +330,21 @@ export function createTools(_ctx: unknown) {
             };
           };
         };
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({
-            status: "missing_session",
-            summary: "No active Flow planning session exists.",
-            nextCommand: "/flow-plan <goal>",
-          });
-        }
-
-        const result = applyPlan(session, input.plan, input.planning);
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: "Draft plan saved.",
-          session: summarizeSession(saved).session,
-        });
+        return withSession(
+          context,
+          async (session) =>
+            persistTransition(
+              context,
+              applyPlan(session, input.plan, input.planning),
+              (value) => value,
+              (saved) => ({
+                status: "ok",
+                summary: "Draft plan saved.",
+                session: summarizeSession(saved).session,
+              }),
+            ),
+          missingSessionResponse("No active Flow planning session exists.", "/flow-plan <goal>"),
+        );
       },
     }),
 
@@ -310,22 +353,18 @@ export function createTools(_ctx: unknown) {
       args: FlowPlanApproveArgsShape,
       async execute(args: any, context: any) {
         const input = args as { featureIds?: string[] };
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
-        }
-
-        const result = approvePlan(session, parseFeatureIds(input.featureIds));
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: "Plan approved.",
-          session: summarizeSession(saved).session,
-        });
+        return withSession(context, async (session) =>
+          persistTransition(
+            context,
+            approvePlan(session, parseFeatureIds(input.featureIds)),
+            (value) => value,
+            (saved) => ({
+              status: "ok",
+              summary: "Plan approved.",
+              session: summarizeSession(saved).session,
+            }),
+          ),
+        );
       },
     }),
 
@@ -334,22 +373,18 @@ export function createTools(_ctx: unknown) {
       args: FlowPlanSelectArgsShape,
       async execute(args: any, context: any) {
         const input = args as { featureIds: string[] };
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
-        }
-
-        const result = selectPlanFeatures(session, parseFeatureIds(input.featureIds));
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: "Draft plan narrowed.",
-          session: summarizeSession(saved).session,
-        });
+        return withSession(context, async (session) =>
+          persistTransition(
+            context,
+            selectPlanFeatures(session, parseFeatureIds(input.featureIds)),
+            (value) => value,
+            (saved) => ({
+              status: "ok",
+              summary: "Draft plan narrowed.",
+              session: summarizeSession(saved).session,
+            }),
+          ),
+        );
       },
     }),
 
@@ -358,24 +393,23 @@ export function createTools(_ctx: unknown) {
       args: FlowRunStartArgsShape,
       async execute(args: any, context: any) {
         const input = args as { featureId?: string };
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists.", nextCommand: "/flow-plan <goal>" });
-        }
-
-        const result = startRun(session, input.featureId);
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value.session);
-        return toJson({
-          status: result.value.reason === "complete" ? "complete" : result.value.feature ? "ok" : "blocked",
-          summary: summarizeSession(saved).summary,
-          session: summarizeSession(saved).session,
-          feature: result.value.feature,
-          reason: result.value.reason,
-        });
+        return withSession(
+          context,
+          async (session) =>
+            persistTransition(
+              context,
+              startRun(session, input.featureId),
+              (value) => value.session,
+              (saved, value) => ({
+                status: value.reason === "complete" ? "complete" : value.feature ? "ok" : "blocked",
+                summary: summarizeSession(saved).summary,
+                session: summarizeSession(saved).session,
+                feature: value.feature,
+                reason: value.reason,
+              }),
+            ),
+          missingSessionResponse("No active Flow session exists.", "/flow-plan <goal>"),
+        );
       },
     }),
 
@@ -384,26 +418,19 @@ export function createTools(_ctx: unknown) {
       args: WorkerResultArgsShape,
       async execute(args: any, context: any) {
         const input = args as unknown;
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
-        }
-
-        const result = completeRun(session, input);
-        if (!result.ok) {
-          return toJson({
-            status: "error",
-            summary: result.message,
-            recovery: result.recovery,
-          });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: summarizeSession(saved).summary,
-          session: summarizeSession(saved).session,
-        });
+        return withSession(context, async (session) =>
+          persistTransition(
+            context,
+            completeRun(session, input),
+            (value) => value,
+            (saved) => ({
+              status: "ok",
+              summary: summarizeSession(saved).summary,
+              session: summarizeSession(saved).session,
+            }),
+            (failure) => errorResponse(failure.message, { recovery: failure.recovery }),
+          ),
+        );
       },
     }),
 
@@ -411,22 +438,18 @@ export function createTools(_ctx: unknown) {
       description: "Record the reviewer decision for the active feature",
       args: FlowReviewRecordFeatureArgsShape,
       async execute(args: any, context: any) {
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
-        }
-
-        const result = recordReviewerDecision(session, args);
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: "Reviewer decision recorded.",
-          session: summarizeSession(saved).session,
-        });
+        return withSession(context, async (session) =>
+          persistTransition(
+            context,
+            recordReviewerDecision(session, args),
+            (value) => value,
+            (saved) => ({
+              status: "ok",
+              summary: "Reviewer decision recorded.",
+              session: summarizeSession(saved).session,
+            }),
+          ),
+        );
       },
     }),
 
@@ -434,22 +457,18 @@ export function createTools(_ctx: unknown) {
       description: "Record the reviewer decision for final cross-feature validation",
       args: FlowReviewRecordFinalArgsShape,
       async execute(args: any, context: any) {
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
-        }
-
-        const result = recordReviewerDecision(session, args);
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: "Reviewer decision recorded.",
-          session: summarizeSession(saved).session,
-        });
+        return withSession(context, async (session) =>
+          persistTransition(
+            context,
+            recordReviewerDecision(session, args),
+            (value) => value,
+            (saved) => ({
+              status: "ok",
+              summary: "Reviewer decision recorded.",
+              session: summarizeSession(saved).session,
+            }),
+          ),
+        );
       },
     }),
 
@@ -459,22 +478,18 @@ export function createTools(_ctx: unknown) {
       async execute(args: any, context: any) {
         const input = args as { featureId: string };
 
-        const session = await loadSession(context.worktree);
-        if (!session) {
-          return toJson({ status: "missing_session", summary: "No active Flow session exists." });
-        }
-
-        const result = resetFeature(session, input.featureId);
-        if (!result.ok) {
-          return toJson({ status: "error", summary: result.message });
-        }
-
-        const saved = await saveSession(context.worktree, result.value);
-        return toJson({
-          status: "ok",
-          summary: `Reset feature '${input.featureId}'.`,
-          session: summarizeSession(saved).session,
-        });
+        return withSession(context, async (session) =>
+          persistTransition(
+            context,
+            resetFeature(session, input.featureId),
+            (value) => value,
+            (saved) => ({
+              status: "ok",
+              summary: `Reset feature '${input.featureId}'.`,
+              session: summarizeSession(saved).session,
+            }),
+          ),
+        );
       },
     }),
 
