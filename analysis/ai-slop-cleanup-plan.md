@@ -53,3 +53,12 @@
 1. Replace the long `buildCompletionRecovery()` branch ladder with data-backed helper builders.
 2. Keep every error code, resolution hint, and runtime recovery field unchanged.
 3. Preserve final-feature vs normal-feature distinctions exactly.
+
+## Pass 5 Scope
+- `src/runtime/transitions.ts`
+- `tests/runtime.test.ts` as behavior lock
+
+## Pass 5 Smell focus
+1. Extract the duplicated feature-subset validation used by `approvePlan()` and `selectPlanFeatures()`.
+2. Keep approval vs selection behavior differences intact.
+3. Preserve exact user-facing failure messages where they currently differ.

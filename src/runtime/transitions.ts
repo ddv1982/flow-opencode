@@ -67,6 +67,34 @@ function ensureRequestedFeatureIdsExist(features: Feature[], requestedIds: strin
   return null;
 }
 
+function selectDependencyConsistentFeatureSubset(
+  features: Feature[],
+  featureIds: string[],
+  dependencyErrorMessage: (featureId: string) => string,
+): TransitionResult<Feature[]> {
+  const unknownIdsError = ensureRequestedFeatureIdsExist(features, featureIds);
+  if (unknownIdsError) {
+    return fail(unknownIdsError);
+  }
+
+  const selectedIds = new Set(featureIds);
+  const filtered = features.filter((feature) => selectedIds.has(feature.id));
+  if (filtered.length === 0) {
+    return fail("None of the requested feature ids matched the draft plan.");
+  }
+
+  const filteredIds = new Set(filtered.map((feature) => feature.id));
+  for (const feature of filtered) {
+    const unresolvedDependsOn = (feature.dependsOn ?? []).filter((id) => !filteredIds.has(id));
+    const unresolvedBlockedBy = (feature.blockedBy ?? []).filter((id) => !filteredIds.has(id));
+    if (unresolvedDependsOn.length > 0 || unresolvedBlockedBy.length > 0) {
+      return fail(dependencyErrorMessage(feature.id));
+    }
+  }
+
+  return succeed(filtered);
+}
+
 function clearExecution(session: Session): void {
   session.execution.activeFeatureId = null;
   session.execution.lastFeatureId = null;
@@ -464,28 +492,16 @@ export function approvePlan(session: Session, featureIds?: string[]): Transition
   }
 
   if (featureIds && featureIds.length > 0) {
-    const unknownIdsError = ensureRequestedFeatureIdsExist(next.plan.features, featureIds);
-    if (unknownIdsError) {
-      return fail(unknownIdsError);
+    const subset = selectDependencyConsistentFeatureSubset(
+      next.plan.features,
+      featureIds,
+      (featureId) => `Feature '${featureId}' depends on omitted features. Select a dependency-consistent set before approval.`,
+    );
+    if (!subset.ok) {
+      return subset;
     }
 
-    const selectedIds = new Set(featureIds);
-    const filtered = next.plan.features.filter((feature) => selectedIds.has(feature.id));
-
-    if (filtered.length === 0) {
-      return fail("None of the requested feature ids matched the draft plan.");
-    }
-
-    const filteredIds = new Set(filtered.map((feature) => feature.id));
-    for (const feature of filtered) {
-      const unresolvedDependsOn = (feature.dependsOn ?? []).filter((id) => !filteredIds.has(id));
-      const unresolvedBlockedBy = (feature.blockedBy ?? []).filter((id) => !filteredIds.has(id));
-      if (unresolvedDependsOn.length > 0 || unresolvedBlockedBy.length > 0) {
-        return fail(`Feature '${feature.id}' depends on omitted features. Select a dependency-consistent set before approval.`);
-      }
-    }
-
-    next.plan.features = filtered.map((feature) => ({ ...feature, status: "pending" }));
+    next.plan.features = subset.value.map((feature) => ({ ...feature, status: "pending" }));
   }
 
   next.approval = "approved";
@@ -506,27 +522,16 @@ export function selectPlanFeatures(session: Session, featureIds: string[]): Tran
     return fail("Provide at least one feature id to keep in the draft plan.");
   }
 
-  const unknownIdsError = ensureRequestedFeatureIdsExist(next.plan.features, featureIds);
-  if (unknownIdsError) {
-    return fail(unknownIdsError);
+  const subset = selectDependencyConsistentFeatureSubset(
+    next.plan.features,
+    featureIds,
+    (featureId) => `Feature '${featureId}' depends on omitted features. Keep a dependency-consistent set.`,
+  );
+  if (!subset.ok) {
+    return subset;
   }
 
-  const selected = new Set(featureIds);
-  const filtered = next.plan.features.filter((feature) => selected.has(feature.id));
-  if (filtered.length === 0) {
-    return fail("None of the requested feature ids matched the draft plan.");
-  }
-
-  const filteredIds = new Set(filtered.map((feature) => feature.id));
-  for (const feature of filtered) {
-    const unresolvedDependsOn = (feature.dependsOn ?? []).filter((id) => !filteredIds.has(id));
-    const unresolvedBlockedBy = (feature.blockedBy ?? []).filter((id) => !filteredIds.has(id));
-    if (unresolvedDependsOn.length > 0 || unresolvedBlockedBy.length > 0) {
-      return fail(`Feature '${feature.id}' depends on omitted features. Keep a dependency-consistent set.`);
-    }
-  }
-
-  next.plan.features = filtered.map((feature) => ({ ...feature, status: feature.status === "completed" ? "completed" : "pending" }));
+  next.plan.features = subset.value.map((feature) => ({ ...feature, status: feature.status === "completed" ? "completed" : "pending" }));
   next.approval = "pending";
   next.status = "planning";
   clearExecution(next);
