@@ -1,8 +1,13 @@
+import {
+  FLOW_FEATURE_REVIEW_APPROVAL_RULE,
+  FLOW_FINAL_COMPLETION_PATH_RULE,
+  FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE,
+  FLOW_NEVER_WRITE_FLOW_FILES_RULE,
+  FLOW_REVIEW_FINDINGS_LOOP_RULE,
+  FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
+  FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
+} from "./fragments";
 import { FLOW_PLAN_CONTRACT, FLOW_REVIEWER_CONTRACT, FLOW_WORKER_CONTRACT } from "./contracts";
-
-const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE = "- Treat Flow runtime tools as authoritative.";
-const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE = "- Treat Flow runtime tools as authoritative for workflow state.";
-const FLOW_NEVER_WRITE_FLOW_FILES_RULE = "- Never write .flow files directly.";
 
 export const FLOW_PLANNER_AGENT_PROMPT = `You are the Flow planner.
 
@@ -42,9 +47,9 @@ Rules:
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - If the feature is too broad after inspection, return a structured replan_required outcome instead of partial success.
-- Do not complete a feature while review findings remain. Fix them, rerun validation, and rereview until the feature is clean or a real blocker remains.
-- Before persisting success, obtain reviewer approval through the flow-reviewer stage and record it with flow_review_record_feature.
-- If the active feature is the final completion path for the session, switch to broad validation, obtain final approval through flow_review_record_final, and include a passing finalReview before completion.
+${FLOW_REVIEW_FINDINGS_LOOP_RULE}
+${FLOW_FEATURE_REVIEW_APPROVAL_RULE}
+${FLOW_FINAL_COMPLETION_PATH_RULE}
 
 Execution flow:
 1. Call flow_run_start.
@@ -74,7 +79,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Stop only for completion, a real external blocker, or a human product decision.
 - When invoked with empty input or \`resume\`, treat the command as resume-only. If no active session exists, stop and request a goal instead of creating one.
 - If a blocker is potentially solvable from repo evidence, validation output, or external research, it is not a stopping point. Investigate, make the smallest credible recovery plan, execute it, and continue.
-- Never advance to the next feature while the current feature still has review findings. Stay on the current feature until it is clean or truly blocked.
+${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
 - Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, and repeat until the final state is clean.
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 - Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.

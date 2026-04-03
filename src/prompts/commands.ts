@@ -1,4 +1,4 @@
-const FLOW_FINAL_COMPLETION_REVIEW_RULE = "- Before final completion, run broad repo validation, perform a final cross-feature review, fix any findings, rerun broad validation, and only then finish with a passing `finalReview`.";
+import { FLOW_FINAL_COMPLETION_REVIEW_RULE, FLOW_RUNTIME_STATE_TRANSITION_RULE } from "./fragments";
 
 export const FLOW_PLAN_COMMAND_TEMPLATE = `Manage the active Flow plan.
 
@@ -43,7 +43,7 @@ Behavior:
 - When blocked by a solvable finding, inspect the evidence, use the same repo and research tools used during planning, make the smallest recovery plan, execute it, and keep iterating.
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
-- Use Flow runtime tools for every state transition.
+${FLOW_RUNTIME_STATE_TRANSITION_RULE}
 - End with the latest runtime summary.`;
 
 export const FLOW_STATUS_COMMAND_TEMPLATE = `Inspect the active Flow session.

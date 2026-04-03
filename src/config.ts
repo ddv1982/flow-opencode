@@ -6,25 +6,49 @@ import {
   FLOW_RUN_COMMAND_TEMPLATE,
   FLOW_STATUS_COMMAND_TEMPLATE,
 } from "./prompts/commands";
+import { FLOW_READ_ONLY_PERMISSION, FLOW_READ_ONLY_TOOLS } from "./config-shared";
 
 type MutableConfig = {
+  // OpenCode config merging is intentionally flexible. Keep this boundary broad and
+  // clone our injected entries defensively instead of over-constraining caller-owned config.
   agent?: Record<string, unknown>;
   command?: Record<string, unknown>;
 };
 
-const FLOW_READ_ONLY_TOOLS = {
-  edit: false,
-  write: false,
-  bash: false,
-} as const;
+type FlowReadOnlyPermission = {
+  edit: "deny";
+  bash: "deny";
+};
+
+type FlowAgentConfig = {
+  mode: "primary";
+  description: string;
+  prompt: string;
+  permission?: FlowReadOnlyPermission;
+  tools?: typeof FLOW_READ_ONLY_TOOLS;
+};
+
+type FlowCommandConfig = {
+  description: string;
+  agent: string;
+  template: string;
+};
+
+function createReadOnlyPrimaryAgent(description: string, prompt: string): FlowAgentConfig {
+  return {
+    mode: "primary",
+    description,
+    prompt,
+    permission: FLOW_READ_ONLY_PERMISSION,
+    tools: FLOW_READ_ONLY_TOOLS,
+  };
+}
 
 const FLOW_AGENTS = {
-  "flow-planner": {
-    mode: "primary",
-    description: "Create and refine compact Flow plans grounded in repo evidence.",
-    prompt: FLOW_PLANNER_AGENT_PROMPT,
-    tools: FLOW_READ_ONLY_TOOLS,
-  },
+  "flow-planner": createReadOnlyPrimaryAgent(
+    "Create and refine compact Flow plans grounded in repo evidence.",
+    FLOW_PLANNER_AGENT_PROMPT,
+  ),
   "flow-worker": {
     mode: "primary",
     description: "Execute one approved Flow feature with focused validation and review.",
@@ -35,19 +59,15 @@ const FLOW_AGENTS = {
     description: "Plan, approve, execute, and replan Flow work autonomously.",
     prompt: FLOW_AUTO_AGENT_PROMPT,
   },
-  "flow-reviewer": {
-    mode: "primary",
-    description: "Review Flow work and decide whether it may advance.",
-    prompt: FLOW_REVIEWER_AGENT_PROMPT,
-    tools: FLOW_READ_ONLY_TOOLS,
-  },
-  "flow-control": {
-    mode: "primary",
-    description: "Inspect or reset Flow runtime state without executing work.",
-    prompt: FLOW_CONTROL_AGENT_PROMPT,
-    tools: FLOW_READ_ONLY_TOOLS,
-  },
-};
+  "flow-reviewer": createReadOnlyPrimaryAgent(
+    "Review Flow work and decide whether it may advance.",
+    FLOW_REVIEWER_AGENT_PROMPT,
+  ),
+  "flow-control": createReadOnlyPrimaryAgent(
+    "Inspect or reset Flow runtime state without executing work.",
+    FLOW_CONTROL_AGENT_PROMPT,
+  ),
+} satisfies Record<string, FlowAgentConfig>;
 
 const FLOW_COMMANDS = {
   "flow-plan": {
@@ -75,20 +95,17 @@ const FLOW_COMMANDS = {
     agent: "flow-control",
     template: FLOW_RESET_COMMAND_TEMPLATE,
   },
-};
+} satisfies Record<string, FlowCommandConfig>;
 
-function cloneAgentConfig(agent: (typeof FLOW_AGENTS)[keyof typeof FLOW_AGENTS]) {
-  if (!("tools" in agent)) {
-    return { ...agent };
-  }
-
+function cloneAgentConfig(agent: FlowAgentConfig) {
   return {
     ...agent,
-    tools: { ...agent.tools },
+    ...(agent.tools ? { tools: { ...agent.tools } } : {}),
+    ...(agent.permission ? { permission: { ...agent.permission } } : {}),
   };
 }
 
-function cloneCommandConfig(command: (typeof FLOW_COMMANDS)[keyof typeof FLOW_COMMANDS]) {
+function cloneCommandConfig(command: FlowCommandConfig) {
   return {
     ...command,
   };

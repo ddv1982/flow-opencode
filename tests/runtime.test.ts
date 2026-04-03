@@ -3,9 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSession, deleteSession, loadSession, saveSession } from "../src/runtime/session";
+import { createSession, deleteSession, deleteSessionArtifacts, deleteSessionState, loadSession, saveSession, saveSessionState, syncSessionArtifacts } from "../src/runtime/session";
 import { getFeatureDocPath, getIndexDocPath, getSessionPath } from "../src/runtime/paths";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
+import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "../src/runtime/adapters";
 import { createTools } from "../src/tools";
 import { approvePlan, applyPlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "../src/runtime/transitions";
 
@@ -82,6 +83,41 @@ describe("runtime transitions", () => {
 
     expect(secondSave.timestamps.createdAt).toBe(firstSave.timestamps.createdAt);
     expect(new Date(secondSave.timestamps.updatedAt).getTime()).toBeGreaterThan(new Date(firstSave.timestamps.updatedAt).getTime());
+  });
+
+  test("saveSessionState persists source-of-truth session state without rendering docs", async () => {
+    const worktree = makeTempDir();
+    const created = createSession("Build a workflow plugin");
+
+    const saved = await saveSessionState(worktree, created);
+
+    await expect(readFile(getSessionPath(worktree), "utf8")).resolves.toContain('"goal": "Build a workflow plugin"');
+    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
+    expect(saved.goal).toBe("Build a workflow plugin");
+  });
+
+  test("syncSessionArtifacts renders docs from persisted session state", async () => {
+    const worktree = makeTempDir();
+    const created = createSession("Build a workflow plugin");
+    const saved = await saveSessionState(worktree, created);
+
+    await syncSessionArtifacts(worktree, saved);
+
+    await expect(readFile(getIndexDocPath(worktree), "utf8")).resolves.toContain("# Flow Session");
+  });
+
+  test("deleteSessionState and deleteSessionArtifacts can clean persistence and docs independently", async () => {
+    const worktree = makeTempDir();
+    const created = createSession("Build a workflow plugin");
+    const saved = await saveSession(worktree, created);
+    expect(saved.goal).toBe("Build a workflow plugin");
+
+    await deleteSessionState(worktree);
+    await expect(readFile(getSessionPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(getIndexDocPath(worktree), "utf8")).resolves.toContain("# Flow Session");
+
+    await deleteSessionArtifacts(worktree);
+    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
   });
 
   test("renders feature docs for planned work", async () => {
@@ -1288,6 +1324,182 @@ describe("runtime transitions", () => {
     const parsed = JSON.parse(response);
     expect(parsed.status).toBe("ok");
     expect(parsed.session.lastOutcomeKind).toBe("completed");
+  });
+
+  test("worker completion adapter preserves the documented payload shape for runtime parsing", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const adapted = adaptFlowRunCompleteFeatureInput({
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [{ path: "src/runtime/session.ts" }],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Tests passed." }],
+      validationScope: "targeted",
+      decisions: [{ summary: "Kept the runtime contract stable." }],
+      nextStep: "Run the next feature.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    const parsed = completeRun(reviewed.value, adapted);
+
+    expect(parsed.ok).toBe(true);
+  });
+
+  test("worker completion adapter preserves all optional worker-result fields", () => {
+    const adapted = adaptFlowRunCompleteFeatureInput({
+      contractVersion: "1",
+      status: "needs_input",
+      summary: "Waiting on operator input.",
+      artifactsChanged: [{ path: "src/runtime/session.ts", kind: "source" }],
+      validationRun: [{ command: "bun test", status: "partial", summary: "One manual check remains." }],
+      validationScope: "broad",
+      reviewIterations: 2,
+      decisions: [{ summary: "Stopped before unsafe completion." }],
+      nextStep: "Ask the operator to confirm migration timing.",
+      outcome: {
+        kind: "needs_operator_input",
+        category: "release",
+        summary: "Manual release approval required.",
+        resolutionHint: "Confirm the rollout window.",
+        retryable: true,
+        autoResolvable: false,
+        needsHuman: true,
+      },
+      featureResult: {
+        featureId: "setup-runtime",
+        verificationStatus: "partial",
+        notes: [{ note: "Manual verification remains." }],
+        followUps: [{ summary: "Confirm rollout timing", severity: "medium" }],
+      },
+      featureReview: {
+        status: "needs_followup",
+        summary: "Needs operator confirmation.",
+        blockingFindings: [{ summary: "Release timing not approved." }],
+      },
+      finalReview: {
+        status: "needs_followup",
+        summary: "Final approval still pending.",
+        blockingFindings: [{ summary: "Awaiting operator sign-off." }],
+      },
+    });
+
+    expect(adapted).toEqual({
+      contractVersion: "1",
+      status: "needs_input",
+      summary: "Waiting on operator input.",
+      artifactsChanged: [{ path: "src/runtime/session.ts", kind: "source" }],
+      validationRun: [{ command: "bun test", status: "partial", summary: "One manual check remains." }],
+      validationScope: "broad",
+      reviewIterations: 2,
+      decisions: [{ summary: "Stopped before unsafe completion." }],
+      nextStep: "Ask the operator to confirm migration timing.",
+      outcome: {
+        kind: "needs_operator_input",
+        category: "release",
+        summary: "Manual release approval required.",
+        resolutionHint: "Confirm the rollout window.",
+        retryable: true,
+        autoResolvable: false,
+        needsHuman: true,
+      },
+      featureResult: {
+        featureId: "setup-runtime",
+        verificationStatus: "partial",
+        notes: [{ note: "Manual verification remains." }],
+        followUps: [{ summary: "Confirm rollout timing", severity: "medium" }],
+      },
+      featureReview: {
+        status: "needs_followup",
+        summary: "Needs operator confirmation.",
+        blockingFindings: [{ summary: "Release timing not approved." }],
+      },
+      finalReview: {
+        status: "needs_followup",
+        summary: "Final approval still pending.",
+        blockingFindings: [{ summary: "Awaiting operator sign-off." }],
+      },
+    });
+  });
+
+  test("reviewer decision adapter preserves optional reviewer payload fields", () => {
+    expect(
+      adaptReviewerDecisionInput({
+        scope: "feature",
+        featureId: "setup-runtime",
+        status: "needs_fix",
+        summary: "Needs another pass.",
+        blockingFindings: [{ summary: "Validation evidence is incomplete." }],
+        followUps: [{ summary: "Rerun targeted tests", severity: "medium" }],
+        suggestedValidation: ["bun test tests/runtime.test.ts"],
+      }),
+    ).toEqual({
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "needs_fix",
+      summary: "Needs another pass.",
+      blockingFindings: [{ summary: "Validation evidence is incomplete." }],
+      followUps: [{ summary: "Rerun targeted tests", severity: "medium" }],
+      suggestedValidation: ["bun test tests/runtime.test.ts"],
+    });
+  });
+
+  test("reviewer decision tool accepts the adapted top-level payload for final review", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    await saveSession(worktree, started.value.session);
+
+    const response = await tools.flow_review_record_final.execute(
+      {
+        scope: "final",
+        status: "approved",
+        summary: "Final state looks good.",
+        blockingFindings: [],
+        followUps: [],
+        suggestedValidation: ["bun run check"],
+      },
+      { worktree },
+    );
+
+    const parsed = JSON.parse(response);
+    expect(parsed.status).toBe("ok");
+    expect(parsed.session.lastReviewerDecision.scope).toBe("final");
+    expect(parsed.session.lastReviewerDecision.suggestedValidation).toEqual(["bun run check"]);
   });
 
   test("flow_status returns a machine-readable missing-session summary", async () => {

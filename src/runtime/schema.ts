@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DECOMPOSITION_POLICIES, GOAL_MODES, NEEDS_INPUT_OUTCOME_KINDS, OUTCOME_KINDS, REVIEW_STATUSES, REVIEWER_DECISION_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./contracts";
+import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN, REVIEW_SCOPES, VALIDATION_SCOPES } from "./primitives";
 
 function isNeedsInputOutcomeKind(
   value: (typeof OUTCOME_KINDS)[number],
@@ -51,7 +52,7 @@ export const ReviewSchema = z.object({
 });
 
 export const ReviewerDecisionSchema = z.object({
-  scope: z.enum(["feature", "final"]),
+  scope: z.enum(REVIEW_SCOPES),
   featureId: z.string().min(1).optional(),
   status: z.enum(REVIEWER_DECISION_STATUSES),
   summary: z.string().min(1),
@@ -82,7 +83,7 @@ const WorkerResultBaseSchema = z.object({
   summary: z.string().min(1),
   artifactsChanged: z.array(ArtifactSchema).default([]),
   validationRun: z.array(ValidationRunSchema).default([]),
-  validationScope: z.enum(["targeted", "broad"]).optional(),
+  validationScope: z.enum(VALIDATION_SCOPES).optional(),
   reviewIterations: z.number().int().nonnegative().optional(),
   decisions: z.array(DecisionSchema).default([]),
   nextStep: z.string().min(1),
@@ -115,7 +116,7 @@ export const WorkerResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export const FeatureSchema = z.object({
-  id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Feature ids must be lowercase kebab-case"),
+  id: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
   title: z.string().min(1),
   summary: z.string().min(1),
   status: FeatureStatusSchema.default("pending"),

@@ -1,12 +1,14 @@
 import { tool } from "@opencode-ai/plugin";
 import { loadSession, saveSession, createSession, deleteSession } from "./runtime/session";
+import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "./runtime/adapters";
 import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun, type TransitionResult } from "./runtime/transitions";
 import { summarizeSession } from "./runtime/summary";
 import { DECOMPOSITION_POLICIES, GOAL_MODES, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./runtime/contracts";
+import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN, FEATURE_REVIEW_SCOPE, FINAL_REVIEW_SCOPE, VALIDATION_SCOPES } from "./runtime/primitives";
 import type { Session } from "./runtime/schema";
 
 const z = tool.schema;
-const featureIdSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Feature ids must be lowercase kebab-case");
+const featureIdSchema = z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
 
 const PlanArgsSchema = z.object({
   summary: z.string().min(1),
@@ -62,7 +64,7 @@ const WorkerResultArgsShape = {
       }),
     )
     .default([]),
-  validationScope: z.enum(["targeted", "broad"]).optional(),
+  validationScope: z.enum(VALIDATION_SCOPES).optional(),
   reviewIterations: z.number().int().nonnegative().optional(),
   decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
   nextStep: z.string().min(1),
@@ -126,7 +128,7 @@ const FlowRunStartArgsShape = {
 };
 
 const FlowReviewRecordFeatureArgsShape = {
-  scope: z.literal("feature"),
+  scope: z.literal(FEATURE_REVIEW_SCOPE),
   featureId: featureIdSchema,
   status: z.enum(["approved", "needs_fix", "blocked"]),
   summary: z.string().min(1),
@@ -136,7 +138,7 @@ const FlowReviewRecordFeatureArgsShape = {
 };
 
 const FlowReviewRecordFinalArgsShape = {
-  scope: z.literal("final"),
+  scope: z.literal(FINAL_REVIEW_SCOPE),
   status: z.enum(["approved", "needs_fix", "blocked"]),
   summary: z.string().min(1),
   blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
@@ -417,7 +419,7 @@ export function createTools(_ctx: unknown) {
       description: "Persist the result of a Flow feature execution",
       args: WorkerResultArgsShape,
       async execute(args: any, context: any) {
-        const input = args as unknown;
+        const input = adaptFlowRunCompleteFeatureInput(args);
         return withSession(context, async (session) =>
           persistTransition(
             context,
@@ -441,7 +443,7 @@ export function createTools(_ctx: unknown) {
         return withSession(context, async (session) =>
           persistTransition(
             context,
-            recordReviewerDecision(session, args),
+            recordReviewerDecision(session, adaptReviewerDecisionInput(args)),
             (value) => value,
             (saved) => ({
               status: "ok",
@@ -460,7 +462,7 @@ export function createTools(_ctx: unknown) {
         return withSession(context, async (session) =>
           persistTransition(
             context,
-            recordReviewerDecision(session, args),
+            recordReviewerDecision(session, adaptReviewerDecisionInput(args)),
             (value) => value,
             (saved) => ({
               status: "ok",

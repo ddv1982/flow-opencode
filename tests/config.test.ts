@@ -68,6 +68,10 @@ describe("applyFlowConfig", () => {
     expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
     expect(config.agent?.["flow-reviewer"]?.tools?.write).toBe(false);
     expect(config.agent?.["flow-reviewer"]?.tools?.bash).toBe(false);
+    expect(config.agent?.["flow-reviewer"]?.permission?.edit).toBe("deny");
+    expect(config.agent?.["flow-reviewer"]?.permission?.bash).toBe("deny");
+    expect(config.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
+    expect(config.agent?.["flow-control"]?.permission?.bash).toBe("deny");
   });
 
   test("createConfigHook is async and preserves unrelated config entries", async () => {
@@ -96,11 +100,14 @@ describe("applyFlowConfig", () => {
     expect(first.agent?.["flow-reviewer"]).not.toBe(second.agent?.["flow-reviewer"]);
     expect(first.agent?.["flow-planner"]?.tools).not.toBe(second.agent?.["flow-planner"]?.tools);
     expect(first.agent?.["flow-planner"]?.tools).not.toBe(first.agent?.["flow-reviewer"]?.tools);
+    expect(first.agent?.["flow-planner"]?.permission).not.toBe(second.agent?.["flow-planner"]?.permission);
     expect(first.command?.["flow-plan"]).not.toBe(second.command?.["flow-plan"]);
 
     first.agent!["flow-planner"].tools.edit = true;
+    first.agent!["flow-planner"].permission.edit = "allow";
     expect(second.agent?.["flow-planner"]?.tools?.edit).toBe(false);
     expect(first.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
+    expect(second.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
   });
 
   test("exports sdk-compatible raw arg shapes for every tool", () => {

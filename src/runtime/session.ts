@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { renderSessionDocs, deleteSessionDocs } from "./render";
+import { deleteSessionDocs, renderSessionDocs } from "./render";
 import { getSessionPath } from "./paths";
 import { SessionSchema, type PlanningContext, type Session } from "./schema";
 
@@ -24,16 +24,8 @@ async function writeSessionFile(worktree: string, session: Session): Promise<voi
   await writeFile(sessionPath, JSON.stringify(session, null, 2) + "\n", "utf8");
 }
 
-async function syncSessionDocs(worktree: string, session: Session): Promise<void> {
-  await renderSessionDocs(worktree, session);
-}
-
 async function removeSessionFile(worktree: string): Promise<void> {
   await rm(getSessionPath(worktree), { force: true });
-}
-
-async function removeSessionDocs(worktree: string): Promise<void> {
-  await deleteSessionDocs(worktree);
 }
 
 export async function loadSession(worktree: string): Promise<Session | null> {
@@ -51,16 +43,33 @@ export async function loadSession(worktree: string): Promise<Session | null> {
   }
 }
 
-export async function saveSession(worktree: string, session: Session): Promise<Session> {
+export async function saveSessionState(worktree: string, session: Session): Promise<Session> {
   const normalized = normalizeSession(session);
   await writeSessionFile(worktree, normalized);
-  await syncSessionDocs(worktree, normalized);
   return normalized;
 }
 
-export async function deleteSession(worktree: string): Promise<void> {
+export async function syncSessionArtifacts(worktree: string, session: Session): Promise<void> {
+  await renderSessionDocs(worktree, session);
+}
+
+export async function saveSession(worktree: string, session: Session): Promise<Session> {
+  const normalized = await saveSessionState(worktree, session);
+  await syncSessionArtifacts(worktree, normalized);
+  return normalized;
+}
+
+export async function deleteSessionState(worktree: string): Promise<void> {
   await removeSessionFile(worktree);
-  await removeSessionDocs(worktree);
+}
+
+export async function deleteSessionArtifacts(worktree: string): Promise<void> {
+  await deleteSessionDocs(worktree);
+}
+
+export async function deleteSession(worktree: string): Promise<void> {
+  await deleteSessionState(worktree);
+  await deleteSessionArtifacts(worktree);
 }
 
 export function createSession(goal: string, planning?: Partial<PlanningContext>): Session {
