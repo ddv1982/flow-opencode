@@ -50,12 +50,33 @@ export const FLOW_STATUS_COMMAND_TEMPLATE = `Inspect the active Flow session.
 
 Call \`flow_status\`, render the runtime result clearly, and stop.`;
 
+export const FLOW_HISTORY_COMMAND_TEMPLATE = `Inspect stored Flow session history.
+
+Arguments: $ARGUMENTS
+
+Behavior:
+- If the arguments are empty, call \`flow_history\`, render the runtime result clearly, and stop.
+- If the arguments start with \`show\`, call \`flow_history_show\` with the provided session id.
+- Otherwise explain the valid forms briefly.
+
+Always summarize what you found and the next logical command.`;
+
+export const FLOW_SESSION_COMMAND_TEMPLATE = `Manage the active Flow session pointer.
+
+Arguments: $ARGUMENTS
+
+Behavior:
+- If the arguments start with \`activate\`, call \`flow_session_activate\` with the provided session id.
+- Otherwise explain the valid forms briefly.
+
+Always summarize what changed and the next logical command.`;
+
 export const FLOW_RESET_COMMAND_TEMPLATE = `Reset Flow state.
 
 Arguments: $ARGUMENTS
 
 Behavior:
-- If the arguments are exactly \`session\`, clear the active Flow session through \`flow_reset_session\`.
+- If the arguments are exactly \`session\`, archive the active Flow session through \`flow_reset_session\`.
 - If the arguments start with \`feature\`, reset the named feature through \`flow_reset_feature\`.
 - Otherwise explain the valid forms briefly.
 

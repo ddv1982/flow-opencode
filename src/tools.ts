@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
-import { loadSession, saveSession, createSession, deleteSession } from "./runtime/session";
+import { activateSession, archiveSession, createSession, listSessionHistory, loadSession, loadStoredSession, saveSession } from "./runtime/session";
 import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "./runtime/adapters";
 import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun, type TransitionResult } from "./runtime/transitions";
 import { summarizeSession } from "./runtime/summary";
@@ -100,6 +100,13 @@ const WorkerResultArgsShape = {
 };
 
 const FlowStatusArgsShape = {};
+const FlowHistoryArgsShape = {};
+const FlowHistoryShowArgsShape = {
+  sessionId: z.string().min(1),
+};
+const FlowSessionActivateArgsShape = {
+  sessionId: z.string().min(1),
+};
 
 const FlowAutoPrepareArgsShape = {
   argumentString: z.string().optional(),
@@ -213,6 +220,99 @@ export function createTools(_ctx: unknown) {
       async execute(_args: any, context: any) {
         const session = await loadSession(context.worktree);
         return toJson(summarizeSession(session));
+      },
+    }),
+
+    flow_history: tool({
+      description: "Show stored Flow session history across active and archived runs",
+      args: FlowHistoryArgsShape,
+      async execute(_args: any, context: any) {
+        const history = await listSessionHistory(context.worktree);
+        const activeCount = history.activeSessionId ? 1 : 0;
+        const totalCount = history.sessions.length + history.archived.length;
+        const resumableStoredSession = history.sessions.find((session) => session.status !== "completed");
+
+        if (totalCount === 0) {
+          return toJson({
+            status: "missing",
+            summary: "No Flow session history found.",
+            history,
+            nextCommand: "/flow-plan <goal>",
+          });
+        }
+
+        return toJson({
+          status: "ok",
+          summary: `Found ${totalCount} Flow session ${totalCount === 1 ? "entry" : "entries"} (${activeCount} active, ${history.archived.length} archived).`,
+          history,
+          nextCommand: history.activeSessionId
+            ? "/flow-status"
+            : resumableStoredSession
+              ? `/flow-session activate ${resumableStoredSession.id}`
+              : "/flow-plan <goal>",
+        });
+      },
+    }),
+
+    flow_history_show: tool({
+      description: "Show a specific stored Flow session by id",
+      args: FlowHistoryShowArgsShape,
+      async execute(args: any, context: any) {
+        const input = args as { sessionId: string };
+        const found = await loadStoredSession(context.worktree, input.sessionId);
+
+        if (!found) {
+          return toJson({
+            status: "missing_session",
+            summary: `No stored Flow session exists for id '${input.sessionId}'.`,
+            nextCommand: "/flow-history",
+          });
+        }
+
+        const nextCommand = found.active
+          ? "/flow-status"
+          : found.source === "sessions" && found.session.status !== "completed"
+            ? `/flow-session activate ${input.sessionId}`
+            : found.session.status === "completed"
+              ? "/flow-plan <goal>"
+              : "/flow-history";
+        const summarizedSession = summarizeSession(found.session).session;
+
+        return toJson({
+          status: "ok",
+          summary: `Showing ${found.source === "archive" ? "archived" : "stored"} Flow session '${input.sessionId}'.`,
+          source: found.source,
+          active: found.active,
+          path: found.path,
+          archivePath: found.archivePath ?? null,
+          archivedAt: found.archivedAt ?? null,
+          session: found.active ? summarizedSession : { ...summarizedSession, nextCommand },
+          nextCommand,
+        });
+      },
+    }),
+
+    flow_session_activate: tool({
+      description: "Activate a stored Flow session by id",
+      args: FlowSessionActivateArgsShape,
+      async execute(args: any, context: any) {
+        const input = args as { sessionId: string };
+        const session = await activateSession(context.worktree, input.sessionId);
+
+        if (!session) {
+          return toJson({
+            status: "missing_session",
+            summary: `No stored Flow session exists for id '${input.sessionId}'.`,
+            nextCommand: "/flow-history",
+          });
+        }
+
+        return toJson({
+          status: "ok",
+          summary: `Activated Flow session: ${session.goal}`,
+          session: summarizeSession(session).session,
+          nextCommand: "/flow-status",
+        });
       },
     }),
 
@@ -496,13 +596,15 @@ export function createTools(_ctx: unknown) {
     }),
 
     flow_reset_session: tool({
-      description: "Clear the active Flow session",
+      description: "Archive and clear the active Flow session",
       args: FlowStatusArgsShape,
       async execute(_args: any, context: any) {
-        await deleteSession(context.worktree);
+        const archived = await archiveSession(context.worktree);
         return toJson({
           status: "ok",
-          summary: "Cleared the active Flow session.",
+          summary: archived ? "Archived and cleared the active Flow session." : "No active Flow session existed.",
+          archivedSessionId: archived?.sessionId ?? null,
+          archivedTo: archived?.archivedTo ?? null,
           nextCommand: "/flow-plan <goal>",
         });
       },

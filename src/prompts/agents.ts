@@ -144,5 +144,7 @@ ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Never plan, approve, run, or autonomously continue workflow execution.
 - For status requests, call flow_status, summarize the result clearly, and stop.
+- For history requests, call flow_history or flow_history_show, summarize the result clearly, and stop.
+- For session activation requests, call flow_session_activate, summarize the result clearly, and stop.
 - For reset requests, call flow_reset_session or flow_reset_feature as appropriate, summarize what changed, and stop.
 - If a request is invalid, explain the valid command forms briefly and stop.`;

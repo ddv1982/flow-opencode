@@ -4,7 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSession, deleteSession, deleteSessionArtifacts, deleteSessionState, loadSession, saveSession, saveSessionState, syncSessionArtifacts } from "../src/runtime/session";
-import { getFeatureDocPath, getIndexDocPath, getSessionPath } from "../src/runtime/paths";
+import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getSessionPath } from "../src/runtime/paths";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
 import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "../src/runtime/adapters";
 import { createTools } from "../src/tools";
@@ -24,12 +24,28 @@ afterEach(() => {
   }
 });
 
+async function activeSessionId(worktree: string): Promise<string> {
+  return (await readFile(getActiveSessionPath(worktree), "utf8")).trim();
+}
+
+async function activeSessionPath(worktree: string): Promise<string> {
+  return getSessionPath(worktree, await activeSessionId(worktree));
+}
+
+async function activeIndexDocPath(worktree: string): Promise<string> {
+  return getIndexDocPath(worktree, await activeSessionId(worktree));
+}
+
+async function activeFeatureDocPath(worktree: string, featureId: string): Promise<string> {
+  return getFeatureDocPath(worktree, await activeSessionId(worktree), featureId);
+}
+
 function samplePlan() {
   return {
     summary: "Implement a small workflow feature set.",
     overview: "Create one setup feature and one execution feature.",
     requirements: ["Keep state durable", "Keep commands concise"],
-    architectureDecisions: ["Persist a single session artifact", "Run one feature per worker invocation"],
+    architectureDecisions: ["Persist session history under .flow/sessions/<id>", "Run one feature per worker invocation"],
     features: [
       {
         id: "setup-runtime",
@@ -57,17 +73,51 @@ describe("runtime transitions", () => {
     await saveSession(worktree, created);
 
     const loaded = await loadSession(worktree);
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
     expect(loaded?.goal).toBe("Build a workflow plugin");
     expect(loaded?.status).toBe("planning");
     expect(indexDoc).toContain("# Flow Session");
     expect(indexDoc).toContain("goal: Build a workflow plugin");
   });
 
+  test("stores active and historical sessions under .flow/sessions", async () => {
+    const worktree = makeTempDir();
+    const first = await saveSession(worktree, createSession("First goal"));
+
+    expect(await activeSessionId(worktree)).toBe(first.id);
+    await expect(readFile(getSessionPath(worktree, first.id), "utf8")).resolves.toContain('"goal": "First goal"');
+    await expect(readFile(getIndexDocPath(worktree, first.id), "utf8")).resolves.toContain("goal: First goal");
+
+    const second = await saveSession(worktree, createSession("Second goal"));
+
+    expect(await activeSessionId(worktree)).toBe(second.id);
+    await expect(readFile(getSessionPath(worktree, first.id), "utf8")).resolves.toContain('"goal": "First goal"');
+    await expect(readFile(getSessionPath(worktree, second.id), "utf8")).resolves.toContain('"goal": "Second goal"');
+    await expect(readFile(getIndexDocPath(worktree, second.id), "utf8")).resolves.toContain("goal: Second goal");
+  });
+
+  test("migrates a legacy .flow/session.json into the session-history layout", async () => {
+    const worktree = makeTempDir();
+    const legacy = createSession("Legacy goal");
+
+    mkdirSync(join(worktree, ".flow"), { recursive: true });
+    await writeFile(getLegacySessionPath(worktree), JSON.stringify(legacy, null, 2) + "\n", "utf8");
+
+    const loaded = await loadSession(worktree);
+
+    expect(loaded?.id).toBe(legacy.id);
+    expect(await activeSessionId(worktree)).toBe(legacy.id);
+    await expect(readFile(getLegacySessionPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(getSessionPath(worktree, legacy.id), "utf8")).resolves.toContain('"goal": "Legacy goal"');
+    await expect(readFile(getIndexDocPath(worktree, legacy.id), "utf8")).resolves.toContain("goal: Legacy goal");
+  });
+
   test("rejects malformed persisted session data", async () => {
     const worktree = makeTempDir();
-    mkdirSync(join(worktree, ".flow"), { recursive: true });
-    await writeFile(getSessionPath(worktree), "{not valid json", "utf8");
+    const sessionId = "malformed-session";
+    mkdirSync(join(worktree, ".flow", "sessions", sessionId), { recursive: true });
+    await writeFile(getActiveSessionPath(worktree), `${sessionId}\n`, "utf8");
+    await writeFile(getSessionPath(worktree, sessionId), "{not valid json", "utf8");
 
     await expect(loadSession(worktree)).rejects.toThrow();
   });
@@ -91,8 +141,8 @@ describe("runtime transitions", () => {
 
     const saved = await saveSessionState(worktree, created);
 
-    await expect(readFile(getSessionPath(worktree), "utf8")).resolves.toContain('"goal": "Build a workflow plugin"');
-    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(await activeSessionPath(worktree), "utf8")).resolves.toContain('"goal": "Build a workflow plugin"');
+    await expect(readFile(await activeIndexDocPath(worktree), "utf8")).rejects.toThrow();
     expect(saved.goal).toBe("Build a workflow plugin");
   });
 
@@ -103,7 +153,7 @@ describe("runtime transitions", () => {
 
     await syncSessionArtifacts(worktree, saved);
 
-    await expect(readFile(getIndexDocPath(worktree), "utf8")).resolves.toContain("# Flow Session");
+    await expect(readFile(await activeIndexDocPath(worktree), "utf8")).resolves.toContain("# Flow Session");
   });
 
   test("deleteSessionState and deleteSessionArtifacts can clean persistence and docs independently", async () => {
@@ -113,11 +163,11 @@ describe("runtime transitions", () => {
     expect(saved.goal).toBe("Build a workflow plugin");
 
     await deleteSessionState(worktree);
-    await expect(readFile(getSessionPath(worktree), "utf8")).rejects.toThrow();
-    await expect(readFile(getIndexDocPath(worktree), "utf8")).resolves.toContain("# Flow Session");
+    await expect(readFile(await activeSessionPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(await activeIndexDocPath(worktree), "utf8")).resolves.toContain("# Flow Session");
 
     await deleteSessionArtifacts(worktree);
-    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(await activeIndexDocPath(worktree), "utf8")).rejects.toThrow();
   });
 
   test("renders feature docs for planned work", async () => {
@@ -128,7 +178,7 @@ describe("runtime transitions", () => {
     if (!applied.ok) return;
 
     await saveSession(worktree, applied.value);
-    const featureDoc = await readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8");
+    const featureDoc = await readFile(await activeFeatureDocPath(worktree, "setup-runtime"), "utf8");
 
     expect(featureDoc).toContain("# Feature setup-runtime");
     expect(featureDoc).toContain("Create runtime helpers");
@@ -143,7 +193,7 @@ describe("runtime transitions", () => {
     if (!applied.ok) return;
 
     await saveSession(worktree, applied.value);
-    await expect(readFile(getFeatureDocPath(worktree, "execute-feature"), "utf8")).resolves.toContain("# Feature execute-feature");
+    await expect(readFile(await activeFeatureDocPath(worktree, "execute-feature"), "utf8")).resolves.toContain("# Feature execute-feature");
 
     const selected = selectPlanFeatures(applied.value, ["setup-runtime"]);
     expect(selected.ok).toBe(true);
@@ -151,8 +201,8 @@ describe("runtime transitions", () => {
 
     await saveSession(worktree, selected.value);
 
-    await expect(readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8")).resolves.toContain("# Feature setup-runtime");
-    await expect(readFile(getFeatureDocPath(worktree, "execute-feature"), "utf8")).rejects.toThrow();
+    await expect(readFile(await activeFeatureDocPath(worktree, "setup-runtime"), "utf8")).resolves.toContain("# Feature setup-runtime");
+    await expect(readFile(await activeFeatureDocPath(worktree, "execute-feature"), "utf8")).rejects.toThrow();
   });
 
   test("renders multiline content without breaking markdown structure", async () => {
@@ -175,8 +225,8 @@ describe("runtime transitions", () => {
     if (!applied.ok) return;
 
     await saveSession(worktree, applied.value);
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
-    const featureDoc = await readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
+    const featureDoc = await readFile(await activeFeatureDocPath(worktree, "setup-runtime"), "utf8");
 
     expect(indexDoc).toContain("goal: Build a workflow plugin / with multiline context");
     expect(indexDoc).toContain("summary: Implement docs / without malformed markdown");
@@ -390,7 +440,7 @@ describe("runtime transitions", () => {
     if (!completed.ok) return;
 
     await saveSession(worktree, completed.value);
-    const featureDoc = await readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8");
+    const featureDoc = await readFile(await activeFeatureDocPath(worktree, "setup-runtime"), "utf8");
 
     expect(featureDoc).toContain("## Execution History");
     expect(featureDoc).toContain("Completed runtime setup.");
@@ -463,8 +513,8 @@ describe("runtime transitions", () => {
     if (!replanned.ok) return;
 
     await saveSession(worktree, replanned.value);
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
-    const featureDoc = await readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
+    const featureDoc = await readFile(await activeFeatureDocPath(worktree, "setup-runtime"), "utf8");
 
     expect(replanned.value.execution.history).toHaveLength(1);
     expect(indexDoc).toContain("Completed runtime setup.");
@@ -524,7 +574,7 @@ describe("runtime transitions", () => {
     expect(nextSession?.goal).toBe("Different goal");
     expect(nextSession?.execution.history).toHaveLength(0);
 
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
     expect(indexDoc).not.toContain("Completed runtime setup.");
   });
 
@@ -672,7 +722,7 @@ describe("runtime transitions", () => {
     if (!replanned.ok) return;
 
     await saveSession(worktree, replanned.value);
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
     expect(indexDoc).toContain("next command: /flow-plan <goal>");
   });
 
@@ -729,8 +779,8 @@ describe("runtime transitions", () => {
     expect(summary.session?.nextCommand).toBe("/flow-status");
 
     await saveSession(worktree, blocked.value);
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
-    const featureDoc = await readFile(getFeatureDocPath(worktree, "setup-runtime"), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
+    const featureDoc = await readFile(await activeFeatureDocPath(worktree, "setup-runtime"), "utf8");
 
     expect(indexDoc).toContain("next step: Ask the operator to provide API credentials.");
     expect(indexDoc).toContain("resolution hint: Set the API token and rerun the feature.");
@@ -788,7 +838,7 @@ describe("runtime transitions", () => {
     const response = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
     const parsed = JSON.parse(response);
     const refreshed = await loadSession(worktree);
-    const indexDoc = await readFile(getIndexDocPath(worktree), "utf8");
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
 
     expect(parsed.status).toBe("ok");
     expect(refreshed?.execution.lastOutcome).toBeNull();
@@ -1512,18 +1562,173 @@ describe("runtime transitions", () => {
     expect(parsed.summary).toBe("No active Flow session found.");
   });
 
-  test("flow_reset_session clears persisted session state and docs", async () => {
+  test("flow_history returns a machine-readable missing-history summary", async () => {
     const worktree = makeTempDir();
     const tools = createTools({}) as any;
-    await saveSession(worktree, createSession("Build a workflow plugin"));
+    const response = await tools.flow_history.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("missing");
+    expect(parsed.summary).toBe("No Flow session history found.");
+    expect(parsed.history.activeSessionId).toBeNull();
+    expect(parsed.history.sessions).toEqual([]);
+    expect(parsed.history.archived).toEqual([]);
+    expect(parsed.nextCommand).toBe("/flow-plan <goal>");
+  });
+
+  test("flow_history lists active and archived session runs", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const first = await saveSession(worktree, createSession("First goal"));
+    const second = await saveSession(worktree, createSession("Second goal"));
+
+    const resetResponse = await tools.flow_reset_session.execute({}, { worktree });
+    const resetParsed = JSON.parse(resetResponse);
+    expect(resetParsed.archivedSessionId).toBe(second.id);
+    expect(resetParsed.archivedTo).toMatch(new RegExp(`^\\.flow/archive/${second.id}-`));
+    await expect(readFile(join(worktree, resetParsed.archivedTo, "session.json"), "utf8")).resolves.toContain('"goal": "Second goal"');
+
+    const response = await tools.flow_history.execute({}, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.summary).toContain("2 Flow session entries");
+    expect(parsed.history.activeSessionId).toBeNull();
+    expect(parsed.history.sessions).toHaveLength(1);
+    expect(parsed.history.sessions[0]).toMatchObject({
+      id: first.id,
+      goal: "First goal",
+      active: false,
+      path: `.flow/sessions/${first.id}`,
+    });
+    expect(parsed.history.archived).toHaveLength(1);
+    expect(parsed.history.archived[0]).toMatchObject({
+      id: second.id,
+      goal: "Second goal",
+      active: false,
+      archivePath: resetParsed.archivedTo,
+    });
+    expect(parsed.history.archived[0].path).toBe(resetParsed.archivedTo);
+    expect(parsed.nextCommand).toBe(`/flow-session activate ${first.id}`);
+    expect(getArchiveDir(worktree)).toContain(".flow/archive");
+  });
+
+  test("flow_history_show returns active stored session details by id", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const first = await saveSession(worktree, createSession("First goal"));
+    const second = await saveSession(worktree, createSession("Second goal"));
+
+    const response = await tools.flow_history_show.execute({ sessionId: first.id }, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.source).toBe("sessions");
+    expect(parsed.active).toBe(false);
+    expect(parsed.path).toBe(`.flow/sessions/${first.id}`);
+    expect(parsed.archivePath).toBeNull();
+    expect(parsed.session.id).toBe(first.id);
+    expect(parsed.session.goal).toBe("First goal");
+    expect(parsed.session.nextCommand).toBe(`/flow-session activate ${first.id}`);
+    expect(parsed.nextCommand).toBe(`/flow-session activate ${first.id}`);
+    expect(await activeSessionId(worktree)).toBe(second.id);
+  });
+
+  test("flow_history_show returns archived session details by id", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const saved = await saveSession(worktree, createSession("Archived goal"));
+
+    const resetResponse = await tools.flow_reset_session.execute({}, { worktree });
+    const resetParsed = JSON.parse(resetResponse);
+    const response = await tools.flow_history_show.execute({ sessionId: saved.id }, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.source).toBe("archive");
+    expect(parsed.active).toBe(false);
+    expect(parsed.path).toBe(resetParsed.archivedTo);
+    expect(parsed.archivePath).toBe(resetParsed.archivedTo);
+    expect(parsed.session.id).toBe(saved.id);
+    expect(parsed.session.goal).toBe("Archived goal");
+    expect(parsed.session.nextCommand).toBe("/flow-history");
+    expect(parsed.nextCommand).toBe("/flow-history");
+  });
+
+  test("flow_history_show does not suggest activation for completed stored sessions", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const completed = createSession("Completed goal");
+    const saved = await saveSession(worktree, {
+      ...completed,
+      status: "completed",
+      timestamps: {
+        ...completed.timestamps,
+        completedAt: new Date().toISOString(),
+      },
+    });
+    await saveSession(worktree, createSession("Current active goal"));
+
+    const response = await tools.flow_history_show.execute({ sessionId: saved.id }, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.source).toBe("sessions");
+    expect(parsed.session.status).toBe("completed");
+    expect(parsed.session.nextCommand).toBe("/flow-plan <goal>");
+    expect(parsed.nextCommand).toBe("/flow-plan <goal>");
+  });
+
+  test("flow_session_activate switches the active session pointer", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const first = await saveSession(worktree, createSession("First goal"));
+    const second = await saveSession(worktree, createSession("Second goal"));
+
+    expect(await activeSessionId(worktree)).toBe(second.id);
+
+    const response = await tools.flow_session_activate.execute({ sessionId: first.id }, { worktree });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.summary).toBe("Activated Flow session: First goal");
+    expect(parsed.session.id).toBe(first.id);
+    expect(parsed.nextCommand).toBe("/flow-status");
+    expect(await activeSessionId(worktree)).toBe(first.id);
+    expect((await loadSession(worktree))?.id).toBe(first.id);
+  });
+
+  test("history show and session activate report missing ids clearly", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+
+    const showResponse = await tools.flow_history_show.execute({ sessionId: "missing-id" }, { worktree });
+    const showParsed = JSON.parse(showResponse);
+    expect(showParsed.status).toBe("missing_session");
+    expect(showParsed.nextCommand).toBe("/flow-history");
+
+    const activateResponse = await tools.flow_session_activate.execute({ sessionId: "missing-id" }, { worktree });
+    const activateParsed = JSON.parse(activateResponse);
+    expect(activateParsed.status).toBe("missing_session");
+    expect(activateParsed.nextCommand).toBe("/flow-history");
+  });
+
+  test("flow_reset_session archives the active session and clears the active pointer", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+    const saved = await saveSession(worktree, createSession("Build a workflow plugin"));
 
     const response = await tools.flow_reset_session.execute({}, { worktree });
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
+    expect(parsed.summary).toBe("Archived and cleared the active Flow session.");
+    expect(parsed.archivedSessionId).toBe(saved.id);
+    expect(parsed.archivedTo).toMatch(new RegExp(`^\.flow/archive/${saved.id}-`));
     expect(parsed.nextCommand).toBe("/flow-plan <goal>");
     expect(await loadSession(worktree)).toBeNull();
-    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(join(worktree, parsed.archivedTo, "session.json"), "utf8")).resolves.toContain('"goal": "Build a workflow plugin"');
+    await expect(readFile(join(worktree, parsed.archivedTo, "docs", "index.md"), "utf8")).resolves.toContain("# Flow Session");
   });
 
   test("tools return machine-readable missing-session responses for plan, review, and reset operations", async () => {
@@ -1948,10 +2153,11 @@ describe("runtime transitions", () => {
     expect(reset.value.plan?.features[0]?.status).toBe("pending");
 
     await saveSession(worktree, reset.value);
+    const sessionId = await activeSessionId(worktree);
     await deleteSession(worktree);
     const loaded = await loadSession(worktree);
     expect(loaded).toBeNull();
-    await expect(readFile(getIndexDocPath(worktree), "utf8")).rejects.toThrow();
+    await expect(readFile(getIndexDocPath(worktree, sessionId), "utf8")).rejects.toThrow();
   });
 
   test("resetting a prerequisite also resets dependent features", () => {

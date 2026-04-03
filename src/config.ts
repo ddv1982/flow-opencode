@@ -1,9 +1,11 @@
 import { FLOW_AUTO_AGENT_PROMPT, FLOW_CONTROL_AGENT_PROMPT, FLOW_PLANNER_AGENT_PROMPT, FLOW_REVIEWER_AGENT_PROMPT, FLOW_WORKER_AGENT_PROMPT } from "./prompts/agents";
 import {
   FLOW_AUTO_COMMAND_TEMPLATE,
+  FLOW_HISTORY_COMMAND_TEMPLATE,
   FLOW_PLAN_COMMAND_TEMPLATE,
   FLOW_RESET_COMMAND_TEMPLATE,
   FLOW_RUN_COMMAND_TEMPLATE,
+  FLOW_SESSION_COMMAND_TEMPLATE,
   FLOW_STATUS_COMMAND_TEMPLATE,
 } from "./prompts/commands";
 import { FLOW_READ_ONLY_PERMISSION, FLOW_READ_ONLY_TOOLS } from "./config-shared";
@@ -89,6 +91,16 @@ const FLOW_COMMANDS = {
     description: "Inspect the active Flow session",
     agent: "flow-control",
     template: FLOW_STATUS_COMMAND_TEMPLATE,
+  },
+  "flow-history": {
+    description: "Inspect stored Flow session history",
+    agent: "flow-control",
+    template: FLOW_HISTORY_COMMAND_TEMPLATE,
+  },
+  "flow-session": {
+    description: "Activate a stored Flow session",
+    agent: "flow-control",
+    template: FLOW_SESSION_COMMAND_TEMPLATE,
   },
   "flow-reset": {
     description: "Reset a Flow feature or clear the active session",

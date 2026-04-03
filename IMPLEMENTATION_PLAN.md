@@ -53,12 +53,14 @@ The config hook in `src/config.ts` injects five agents:
 - `flow-reviewer`
 - `flow-control`
 
-It also injects five slash commands:
+It also injects seven slash commands:
 
 - `/flow-plan`
 - `/flow-run`
 - `/flow-auto`
 - `/flow-status`
+- `/flow-history`
+- `/flow-session`
 - `/flow-reset`
 
 This is unconditional config injection. There is no workspace-detection gate in the current implementation.
@@ -67,12 +69,13 @@ This is unconditional config injection. There is no workspace-detection gate in 
 
 The canonical session artifact is:
 
-- `.flow/session.json`
+- `.flow/active`
+- `.flow/sessions/<session-id>/session.json`
 
 The plugin also renders derived markdown artifacts on every save:
 
-- `.flow/docs/index.md`
-- `.flow/docs/features/<feature-id>.md`
+- `.flow/sessions/<session-id>/docs/index.md`
+- `.flow/sessions/<session-id>/docs/features/<feature-id>.md`
 
 State is loaded and saved through `src/runtime/session.ts`, with paths defined in `src/runtime/paths.ts`.
 
@@ -116,6 +119,8 @@ The execution model includes:
 The tool runtime in `src/tools.ts` currently exposes:
 
 - `flow_status`
+- `flow_history`
+- `flow_history_show`
 - `flow_auto_prepare`
 - `flow_plan_start`
 - `flow_plan_apply`
@@ -125,6 +130,7 @@ The tool runtime in `src/tools.ts` currently exposes:
 - `flow_run_complete_feature`
 - `flow_review_record_feature`
 - `flow_review_record_final`
+- `flow_session_activate`
 - `flow_reset_feature`
 - `flow_reset_session`
 
@@ -213,7 +219,9 @@ The command templates in `src/prompts/commands.ts` implement the user-facing wor
 - `/flow-run` executes exactly one approved feature
 - `/flow-auto` runs plan, approval, execution, review, and replanning autonomously
 - `/flow-status` reads runtime state only
-- `/flow-reset` resets a feature or clears the session
+- `/flow-history` reads current and archived session history, and can inspect one stored session by id
+- `/flow-session` repoints the active session pointer to a stored session id
+- `/flow-reset` resets a feature or archives the active session
 
 The current autonomous contract is also intentionally strict about empty-input behavior:
 
@@ -264,7 +272,7 @@ If we reduce the implemented design to its core architectural decisions, it is t
 1. Build a TypeScript plugin package.
 2. Use the plugin `config` hook to inject commands and agents.
 3. Make Flow tools the only authoritative state transition layer.
-4. Keep one active durable session in `.flow/session.json`.
+4. Keep one active durable session pointer in `.flow/active` and store run history under `.flow/sessions/<session-id>/session.json`.
 5. Treat planning, execution, review, and reset as explicit runtime transitions.
 6. Keep slash commands prompt-driven, but always tool-backed.
 7. Require persisted reviewer decisions before successful completion.
@@ -285,13 +293,13 @@ If we were planning toward the current implementation from scratch, this is the 
 
 - add a config hook in `src/config.ts`
 - inject planner, worker, auto, reviewer, and control agents
-- inject `/flow-plan`, `/flow-run`, `/flow-auto`, `/flow-status`, and `/flow-reset`
+- inject `/flow-plan`, `/flow-run`, `/flow-auto`, `/flow-status`, `/flow-history`, `/flow-session`, and `/flow-reset`
 - lock planner, reviewer, and control to read-only tool permissions
 
 ## Phase 3: Define Runtime Schema And Persistence
 
 - create Zod schemas for sessions, plans, features, worker results, and reviewer decisions
-- persist a single active session to `.flow/session.json`
+- persist the active session under `.flow/sessions/<session-id>/session.json` and track it via `.flow/active`
 - create session load, save, create, and delete helpers
 - define runtime path helpers for session and docs artifacts
 
@@ -332,14 +340,17 @@ If we were planning toward the current implementation from scratch, this is the 
 ## Phase 7: Add Reset And Inspection Flows
 
 - implement `flow_status`
+- implement `flow_history`
+- implement `flow_history_show`
+- implement `flow_session_activate`
 - implement `flow_reset_feature`
 - implement `flow_reset_session`
 - make feature reset dependency-aware so downstream work returns to pending when needed
 
 ## Phase 8: Add Derived Markdown Rendering
 
-- render `.flow/docs/index.md`
-- render `.flow/docs/features/<feature-id>.md`
+- render `.flow/sessions/<session-id>/docs/index.md`
+- render `.flow/sessions/<session-id>/docs/features/<feature-id>.md`
 - include summary, feature progress, validation evidence, reviewer decisions, and history
 - prune stale feature docs after plan changes
 
@@ -389,7 +400,7 @@ Not implemented in the current codebase:
 ## Design Decisions To Keep
 
 - tools own runtime state transitions
-- one active session is enough for v1
+- one active pointer with retained session history is enough for v1
 - one active feature at a time keeps execution deterministic
 - review approval is persisted, not implied
 - final completion requires broader validation than normal feature work
@@ -402,4 +413,4 @@ Not implemented in the current codebase:
 
 Use this document as the reference implementation plan for the plugin as-built.
 
-It reflects the current codebase more accurately than the original draft because it captures the parts that turned out to matter most in implementation: strict transition ownership in tools, persisted reviewer gates, final-review completion rules, and derived `.flow/docs` artifacts alongside `.flow/session.json`.
+It reflects the current codebase more accurately than the original draft because it captures the parts that turned out to matter most in implementation: strict transition ownership in tools, persisted reviewer gates, final-review completion rules, and derived session docs beside `.flow/sessions/<session-id>/session.json`.

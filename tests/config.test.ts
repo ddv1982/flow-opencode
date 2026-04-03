@@ -50,14 +50,18 @@ describe("applyFlowConfig", () => {
     expect(config.command?.["flow-run"]).toBeDefined();
     expect(config.command?.["flow-auto"]).toBeDefined();
     expect(config.command?.["flow-status"]).toBeDefined();
+    expect(config.command?.["flow-history"]).toBeDefined();
+    expect(config.command?.["flow-session"]).toBeDefined();
     expect(config.command?.["flow-reset"]).toBeDefined();
   });
 
-  test("routes status and reset through the control agent", () => {
+  test("routes status, history, session activation, and reset through the control agent", () => {
     const config: { agent?: Record<string, any>; command?: Record<string, any> } = {};
     applyFlowConfig(config);
 
     expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
+    expect(config.command?.["flow-history"]?.agent).toBe("flow-control");
+    expect(config.command?.["flow-session"]?.agent).toBe("flow-control");
     expect(config.command?.["flow-reset"]?.agent).toBe("flow-control");
   });
 
@@ -86,6 +90,8 @@ describe("applyFlowConfig", () => {
     expect(config.agent.existing).toEqual({ mode: "primary", description: "already here" });
     expect(config.command.existing).toEqual({ description: "already here", agent: "existing" });
     expect(config.agent["flow-control"]).toBeDefined();
+    expect(config.command["flow-history"]).toBeDefined();
+    expect(config.command["flow-session"]).toBeDefined();
     expect(config.command["flow-reset"]).toBeDefined();
   });
 
@@ -135,6 +141,12 @@ describe("applyFlowConfig", () => {
 
     expect(schemas.flow_status.safeParse({}).success).toBe(true);
     expect(schemas.flow_status.safeParse({ extra: true }).success).toBe(true);
+    expect(schemas.flow_history.safeParse({}).success).toBe(true);
+    expect(schemas.flow_history.safeParse({ extra: true }).success).toBe(true);
+    expect(schemas.flow_history_show.safeParse({ sessionId: "abc123" }).success).toBe(true);
+    expect(schemas.flow_history_show.safeParse({}).success).toBe(false);
+    expect(schemas.flow_session_activate.safeParse({ sessionId: "abc123" }).success).toBe(true);
+    expect(schemas.flow_session_activate.safeParse({}).success).toBe(false);
 
     expect(schemas.flow_plan_start.safeParse({ goal: "Build a workflow plugin" }).success).toBe(true);
     expect(schemas.flow_plan_start.safeParse({ goal: 123 }).success).toBe(false);

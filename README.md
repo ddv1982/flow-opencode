@@ -15,8 +15,9 @@ Flow provides:
 - broad final validation before session completion
 - autonomous plan, run, review, and replan loops
 - structured recovery metadata for retryable runtime failures
-- durable session state in `.flow/session.json`
-- readable derived docs in `.flow/docs/`
+- durable session state in `.flow/sessions/<session-id>/session.json`
+- readable derived docs in `.flow/sessions/<session-id>/docs/`
+- an `.flow/active` pointer plus archived session history in `.flow/archive/`
 
 ## Workflow
 
@@ -54,8 +55,10 @@ Flow injects these slash commands into OpenCode:
 | `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
 | `/flow-auto resume` | Resume the active autonomous session |
 | `/flow-status` | Show the current session summary |
+| `/flow-history` | Show stored Flow session history or inspect one by id |
+| `/flow-session activate <id>` | Point Flow at a different stored session |
 | `/flow-reset feature <id>` | Reset a feature and dependent features back to pending |
-| `/flow-reset session` | Clear the active session |
+| `/flow-reset session` | Archive the active session and clear the active pointer |
 
 ## Quick Start
 
@@ -133,19 +136,20 @@ Examples:
 
 ## Runtime State
 
-Flow keeps one active session per worktree.
+Flow keeps one active session per worktree through an `.flow/active` pointer. Session history is retained under `.flow/sessions/`, and `/flow-reset session` archives the active session into `.flow/archive/`.
 
 Authoritative state:
 
 ```text
-.flow/session.json
+.flow/active
+.flow/sessions/<session-id>/session.json
 ```
 
 Derived docs:
 
 ```text
-.flow/docs/index.md
-.flow/docs/features/<feature-id>.md
+.flow/sessions/<session-id>/docs/index.md
+.flow/sessions/<session-id>/docs/features/<feature-id>.md
 ```
 
 `session.json` is the source of truth. The markdown docs are projections of that state for easier inspection.
@@ -167,9 +171,9 @@ The plugin is built around a small set of responsibilities:
 
 1. A plugin `config` hook injects commands and agents.
 2. Runtime tools own all state transitions.
-3. Session state is stored in `.flow/session.json`.
+3. Session state is stored under `.flow/sessions/<session-id>/session.json` with `.flow/active` pointing at the current run.
 4. Prompted agents call those tools instead of mutating state directly.
-5. Derived markdown docs are rendered from saved session state.
+5. Derived markdown docs are rendered beside each saved session under `.flow/sessions/<session-id>/docs/`.
 
 Current injected agents:
 
@@ -182,6 +186,8 @@ Current injected agents:
 Current runtime tools:
 
 - `flow_status`
+- `flow_history`
+- `flow_history_show`
 - `flow_auto_prepare`
 - `flow_plan_start`
 - `flow_plan_apply`
@@ -191,6 +197,7 @@ Current runtime tools:
 - `flow_run_complete_feature`
 - `flow_review_record_feature`
 - `flow_review_record_final`
+- `flow_session_activate`
 - `flow_reset_feature`
 - `flow_reset_session`
 
