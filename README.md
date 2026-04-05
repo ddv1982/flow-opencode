@@ -15,8 +15,6 @@ Use Flow when you want:
 - reviewer-gated progression
 - broad final validation before the whole session finishes
 
-If you want long autonomous runs, keep Flow strict and tune efficiency in OpenCode/provider configuration first. Flow is now designed to stay lean and let OpenCode/provider systems handle most compaction and caching concerns.
-
 ## How Flow Works
 
 ```mermaid
@@ -156,11 +154,6 @@ If you ever need to copy the file yourself, build first and then copy `dist/inde
 
 - `.opencode/plugins/`
 - `~/.config/opencode/plugins/`
-
-## More Documentation
-
-- [Development guide](docs/development.md)
-- [Performance tuning](docs/performance-tuning.md)
 
 ## License
 
