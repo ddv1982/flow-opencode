@@ -26,6 +26,7 @@ export const FLOW_WORKER_CONTRACT = `Return exactly one worker result payload wi
 - nextStep: string
 - reviewIterations?: number
 - validationScope?: targeted | broad
+- outcome?: { kind, category?, summary?, resolutionHint?, retryable?, autoResolvable?, needsHuman? }
 - featureResult: { featureId, verificationStatus?: passed | partial | failed | not_recorded, notes?: { note }[], followUps?: { summary, severity? }[] }
 - featureReview: { status: passed | failed | needs_followup, summary, blockingFindings: { summary }[] }
 - finalReview?: same shape as featureReview

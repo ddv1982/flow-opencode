@@ -3,9 +3,18 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSummaryFixtureSessions, buildSummaryFixtures, collectTokenEfficiencyMeasurements } from "../analysis/token-efficiency-measurements";
+import { pathToFileURL } from "node:url";
+import {
+  buildSummaryFixtureSessions,
+  buildSummaryFixtures,
+  collectTokenEfficiencyMeasurements,
+  normalizeTokenEfficiencyMeasurements,
+  readBaselineMeasurements,
+  resolveTokenEfficiencyArtifactPath,
+  writeTokenEfficiencyMeasurementsArtifact,
+} from "../analysis/token-efficiency-measurements";
 import { createSession, deleteSession, deleteSessionArtifacts, deleteSessionState, loadSession, saveSession, saveSessionState, syncSessionArtifacts } from "../src/runtime/session";
-import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getSessionPath } from "../src/runtime/paths";
+import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getProjectTokenEfficiencyPath, getSessionPath, getSessionTokenEfficiencyPath } from "../src/runtime/paths";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
 import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "../src/runtime/adapters";
 import { createTools } from "../src/tools";
@@ -1143,20 +1152,129 @@ describe("runtime transitions", () => {
   test("collectTokenEfficiencyMeasurements captures prompt, command, and summary baseline inputs", () => {
     const measurements = collectTokenEfficiencyMeasurements();
     const summaries = buildSummaryFixtures();
+    const baseline = readBaselineMeasurements();
 
     expect(measurements.schemaVersion).toBe(1);
-    expect(measurements.phase1bGate.status).toBe("deferred");
+    expect(measurements.phase1bGate.status).toBe("no_go");
     expect(measurements.totals.promptAndCommandBytes).toBe(measurements.totals.promptBytes + measurements.totals.commandBytes);
+    expect(measurements.phase1bGate.inputs.baselinePromptAndCommandBytes).toBe(baseline.totals.promptAndCommandBytes);
+    expect(measurements.phase1bGate.inputs.baselineAverageSummaryBytes).toBe(baseline.totals.averageSummaryBytes);
+    expect(measurements.phase1bGate.inputs.phase1aPromptAndCommandBytesRemoved).toBe(
+      measurements.phase1bGate.inputs.baselinePromptAndCommandBytes - measurements.totals.promptAndCommandBytes,
+    );
 
-    for (const [name, summary] of Object.entries(summaries)) {
-      expect(measurements.summaries[name as keyof typeof measurements.summaries].bytes).toBe(
+    for (const name of ["planning", "running", "blocked", "completed"] as const) {
+      const summary = summaries[name];
+
+      expect(measurements.summaries[name].bytes).toBe(
         Buffer.byteLength(JSON.stringify(summary)),
       );
-      expect(measurements.summaries[name as keyof typeof measurements.summaries].status).toBe(summary.status);
-      expect(measurements.summaries[name as keyof typeof measurements.summaries].nextCommand).toBe(
+      expect(measurements.summaries[name].status).toBe(summary.status);
+      expect(measurements.summaries[name].nextCommand).toBe(
         summary.session?.nextCommand ?? null,
       );
+      expect(measurements.phase1bGate.inputs.baselineSummaryBytesByFixture[name]).toBe(
+        baseline.summaries[name].bytes,
+      );
     }
+  });
+
+  test("collectTokenEfficiencyMeasurements fails loudly when the baseline file is missing", () => {
+    const missingBaselinePath = pathToFileURL(join(makeTempDir(), "missing-baseline.json"));
+
+    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: missingBaselinePath })).toThrow(
+      "Failed to read token-efficiency baseline",
+    );
+  });
+
+  test("collectTokenEfficiencyMeasurements fails loudly when the baseline file is malformed", async () => {
+    const malformedBaselinePath = join(makeTempDir(), "malformed-baseline.json");
+    await writeFile(malformedBaselinePath, JSON.stringify({ totals: { promptAndCommandBytes: -1 } }), "utf8");
+
+    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(malformedBaselinePath) })).toThrow(
+      "Invalid token-efficiency baseline",
+    );
+  });
+
+  test("collectTokenEfficiencyMeasurements fails loudly when the baseline file is invalid JSON", async () => {
+    const invalidJsonBaselinePath = join(makeTempDir(), "invalid-json-baseline.json");
+    await writeFile(invalidJsonBaselinePath, "{not-json", "utf8");
+
+    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(invalidJsonBaselinePath) })).toThrow(
+      "Failed to parse token-efficiency baseline",
+    );
+  });
+
+  test("collectTokenEfficiencyMeasurements rejects an unexpected baseline schema version", async () => {
+    const invalidVersionBaselinePath = join(makeTempDir(), "invalid-version-baseline.json");
+    await writeFile(
+      invalidVersionBaselinePath,
+      JSON.stringify({
+        schemaVersion: 2,
+        totals: { promptAndCommandBytes: 18192, averageSummaryBytes: 1225.25 },
+        summaries: {
+          planning: { bytes: 1029 },
+          running: { bytes: 1231 },
+          blocked: { bytes: 1493 },
+          completed: { bytes: 1148 },
+        },
+      }),
+      "utf8",
+    );
+
+    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(invalidVersionBaselinePath) })).toThrow(
+      "Invalid token-efficiency baseline",
+    );
+  });
+
+  test("collectTokenEfficiencyMeasurements rejects baselines missing expected summary fixtures", async () => {
+    const missingFixtureBaselinePath = join(makeTempDir(), "missing-fixture-baseline.json");
+    await writeFile(
+      missingFixtureBaselinePath,
+      JSON.stringify({
+        schemaVersion: 1,
+        totals: { promptAndCommandBytes: 18192, averageSummaryBytes: 1225.25 },
+        summaries: {
+          planning: { bytes: 1029 },
+          running: { bytes: 1231 },
+          blocked: { bytes: 1493 },
+        },
+      }),
+      "utf8",
+    );
+
+    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(missingFixtureBaselinePath) })).toThrow(
+      "Invalid token-efficiency baseline",
+    );
+  });
+
+  test("token-efficiency artifact is stored inside the active session structure when a session exists", async () => {
+    const worktree = makeTempDir();
+    const session = await saveSession(worktree, createSession("Measure token efficiency"));
+    const artifactPath = getSessionTokenEfficiencyPath(worktree, session.id);
+
+    expect(resolveTokenEfficiencyArtifactPath(worktree)).toEqual(pathToFileURL(artifactPath));
+
+    const writtenPath = writeTokenEfficiencyMeasurementsArtifact({ worktree });
+    const artifact = JSON.parse(await readFile(writtenPath, "utf8"));
+    const generated = collectTokenEfficiencyMeasurements();
+
+    expect(writtenPath).toEqual(pathToFileURL(artifactPath));
+    expect(normalizeTokenEfficiencyMeasurements(artifact)).toEqual(normalizeTokenEfficiencyMeasurements(generated));
+  });
+
+  test("token-efficiency artifact falls back to the project .flow directory without an active session", async () => {
+    const worktree = makeTempDir();
+    const artifactPath = getProjectTokenEfficiencyPath(worktree);
+
+    expect(resolveTokenEfficiencyArtifactPath(worktree)).toEqual(pathToFileURL(artifactPath));
+
+    const writtenPath = writeTokenEfficiencyMeasurementsArtifact({ worktree });
+    const artifact = JSON.parse(await readFile(writtenPath, "utf8"));
+    const generated = collectTokenEfficiencyMeasurements();
+
+    expect(writtenPath).toEqual(pathToFileURL(artifactPath));
+    expect(normalizeTokenEfficiencyMeasurements(artifact)).toEqual(normalizeTokenEfficiencyMeasurements(generated));
   });
 
   test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {

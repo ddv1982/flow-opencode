@@ -24,6 +24,14 @@ export function getSessionPath(worktree: string, sessionId: string): string {
   return join(getSessionDir(worktree, sessionId), "session.json");
 }
 
+export function getProjectTokenEfficiencyPath(worktree: string): string {
+  return join(getFlowDir(worktree), "token-efficiency-measurements.current.json");
+}
+
+export function getSessionTokenEfficiencyPath(worktree: string, sessionId: string): string {
+  return join(getSessionDir(worktree, sessionId), "token-efficiency-measurements.current.json");
+}
+
 export function getDocsDir(worktree: string, sessionId: string): string {
   return join(getSessionDir(worktree, sessionId), "docs");
 }

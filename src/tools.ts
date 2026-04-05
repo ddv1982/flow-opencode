@@ -80,7 +80,7 @@ const WorkerResultArgsShape = {
     })
     .optional(),
   featureResult: z.object({
-    featureId: z.string().min(1),
+    featureId: featureIdSchema,
     verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
     notes: z.array(z.object({ note: z.string().min(1) })).optional(),
     followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).optional(),

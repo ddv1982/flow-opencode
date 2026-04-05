@@ -1,3 +1,7 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { z } from "zod";
 import {
   FLOW_AUTO_AGENT_PROMPT,
   FLOW_CONTROL_AGENT_PROMPT,
@@ -14,6 +18,7 @@ import {
   FLOW_SESSION_COMMAND_TEMPLATE,
   FLOW_STATUS_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
+import { getActiveSessionPath, getProjectTokenEfficiencyPath, getSessionTokenEfficiencyPath } from "../src/runtime/paths";
 import { createSession } from "../src/runtime/session";
 import { summarizeSession } from "../src/runtime/summary";
 import { applyPlan, approvePlan, completeRun, recordReviewerDecision, startRun } from "../src/runtime/transitions";
@@ -29,6 +34,32 @@ type SummaryMeasurement = TextMeasurement & {
   status: string;
   nextCommand: string | null;
 };
+
+const SUMMARY_FIXTURE_NAMES = ["planning", "running", "blocked", "completed"] as const;
+
+export const BASELINE_MEASUREMENTS_PATH = new URL("./token-efficiency-measurements.baseline.json", import.meta.url);
+
+const BaselineSummaryMeasurementSchema = z.object({
+  bytes: z.number().nonnegative(),
+});
+
+const BaselineMeasurementsSchema = z.object({
+  schemaVersion: z.literal(1),
+  totals: z.object({
+    promptAndCommandBytes: z.number().nonnegative(),
+    averageSummaryBytes: z.number().nonnegative(),
+  }),
+  summaries: z
+    .object({
+      planning: BaselineSummaryMeasurementSchema,
+      running: BaselineSummaryMeasurementSchema,
+      blocked: BaselineSummaryMeasurementSchema,
+      completed: BaselineSummaryMeasurementSchema,
+    })
+    .strict(),
+});
+
+type BaselineMeasurements = z.infer<typeof BaselineMeasurementsSchema>;
 
 function samplePlan() {
   return {
@@ -78,6 +109,72 @@ function measureSummary(summary: SessionSummary): SummaryMeasurement {
     status: summary.status,
     nextCommand: summary.session?.nextCommand ?? null,
   };
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function describeFilePath(path: URL): string {
+  try {
+    return fileURLToPath(path);
+  } catch {
+    return path.pathname;
+  }
+}
+
+export function readBaselineMeasurements(path: URL = BASELINE_MEASUREMENTS_PATH): BaselineMeasurements {
+  const filePath = describeFilePath(path);
+  let serialized: string;
+
+  try {
+    serialized = readFileSync(path, "utf8");
+  } catch (error) {
+    throw new Error(`Failed to read token-efficiency baseline at ${filePath}: ${describeError(error)}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch (error) {
+    throw new Error(`Failed to parse token-efficiency baseline at ${filePath}: ${describeError(error)}`);
+  }
+
+  const result = BaselineMeasurementsSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `Invalid token-efficiency baseline at ${filePath}: ${z.prettifyError(result.error)}`,
+    );
+  }
+
+  return result.data;
+}
+
+export function normalizeTokenEfficiencyMeasurements<T extends { recordedAt: string }>(measurements: T): Omit<T, "recordedAt"> {
+  const { recordedAt: _recordedAt, ...rest } = measurements;
+  return rest;
+}
+
+function readActiveSessionIdSync(worktree: string): string | null {
+  try {
+    const value = readFileSync(getActiveSessionPath(worktree), "utf8").trim();
+    return value || null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export function resolveTokenEfficiencyArtifactPath(worktree = process.cwd()): URL {
+  const resolvedWorktree = resolve(worktree);
+  const activeSessionId = readActiveSessionIdSync(resolvedWorktree);
+  const artifactPath = activeSessionId
+    ? getSessionTokenEfficiencyPath(resolvedWorktree, activeSessionId)
+    : getProjectTokenEfficiencyPath(resolvedWorktree);
+  return pathToFileURL(artifactPath);
 }
 
 export function buildSummaryFixtureSessions() {
@@ -166,7 +263,7 @@ export function buildSummaryFixtures() {
   };
 }
 
-export function collectTokenEfficiencyMeasurements() {
+export function collectTokenEfficiencyMeasurements(options?: { baselinePath?: URL }) {
   const agentPrompts = {
     FLOW_PLANNER_AGENT_PROMPT,
     FLOW_WORKER_AGENT_PROMPT,
@@ -199,6 +296,20 @@ export function collectTokenEfficiencyMeasurements() {
   const totalCommandBytes = Object.values(commandFixtures).reduce((sum, item) => sum + item.bytes, 0);
   const summaryBytes = Object.values(summaryFixtureMeasurements).map((item) => item.bytes);
   const averageSummaryBytes = summaryBytes.reduce((sum, value) => sum + value, 0) / summaryBytes.length;
+  const baseline = readBaselineMeasurements(options?.baselinePath);
+  const missingBaselineFixtures = SUMMARY_FIXTURE_NAMES.filter((name) => baseline.summaries[name] === undefined);
+  if (missingBaselineFixtures.length > 0) {
+    throw new Error(
+      `Token-efficiency baseline is missing summary fixtures: ${missingBaselineFixtures.join(", ")}`,
+    );
+  }
+
+  const baselinePromptAndCommandBytes = baseline.totals.promptAndCommandBytes;
+  const baselineAverageSummaryBytes = baseline.totals.averageSummaryBytes;
+  const baselineSummaryBytesByFixture = Object.fromEntries(
+    SUMMARY_FIXTURE_NAMES.map((name) => [name, baseline.summaries[name].bytes]),
+  );
+  const phase1aPromptAndCommandBytesRemoved = baselinePromptAndCommandBytes - (totalPromptBytes + totalCommandBytes);
 
   return {
     schemaVersion: 1,
@@ -213,24 +324,51 @@ export function collectTokenEfficiencyMeasurements() {
       averageSummaryBytes,
     },
     phase1bGate: {
-      status: "deferred",
-      reason: "Compact summary work is gated behind Phase 1A prompt reductions and explicit no-regression verification.",
+      status: "no_go",
+      reason:
+        phase1aPromptAndCommandBytesRemoved > 0
+          ? "Phase 1A prompt reductions landed, but compact-v1 measurements are still absent, so the Phase 1B gate remains no-go."
+          : "Phase 1A prompt reductions are not yet reflected in the baseline comparison, so the Phase 1B gate remains no-go.",
+      missingEvidence: ["compactV1SummaryBytesByFixture"],
       thresholds: {
         minimumAverageSummaryReductionRatio: 0.25,
         minimumAverageCompactVsPhase1ABytesRemovedRatio: 0.1,
         allowSummaryRegressions: false,
       },
       inputs: {
-        baselinePromptAndCommandBytes: totalPromptBytes + totalCommandBytes,
-        baselineAverageSummaryBytes: averageSummaryBytes,
-        baselineSummaryBytesByFixture: Object.fromEntries(
-          Object.entries(summaryFixtureMeasurements).map(([name, value]) => [name, value.bytes]),
-        ),
+        baselinePromptAndCommandBytes,
+        baselineAverageSummaryBytes,
+        baselineSummaryBytesByFixture,
+        phase1aPromptAndCommandBytesRemoved,
       },
     },
   };
 }
 
+export function renderTokenEfficiencyMeasurements() {
+  return `${JSON.stringify(collectTokenEfficiencyMeasurements(), null, 2)}\n`;
+}
+
+export function writeTokenEfficiencyMeasurementsArtifact(options?: { path?: URL; worktree?: string }) {
+  const path = options?.path ?? resolveTokenEfficiencyArtifactPath(options?.worktree);
+  mkdirSync(new URL(".", path), { recursive: true });
+  writeFileSync(path, renderTokenEfficiencyMeasurements(), "utf8");
+  return path;
+}
+
+function parseWorktreeArg(argv: string[]): string | undefined {
+  const index = argv.findIndex((value) => value === "--worktree");
+  if (index === -1) {
+    return process.env.FLOW_WORKTREE;
+  }
+
+  return argv[index + 1] ?? process.env.FLOW_WORKTREE;
+}
+
 if (import.meta.main) {
-  console.log(JSON.stringify(collectTokenEfficiencyMeasurements(), null, 2));
+  if (process.argv.includes("--write")) {
+    writeTokenEfficiencyMeasurementsArtifact({ worktree: parseWorktreeArg(process.argv.slice(2)) });
+  } else {
+    process.stdout.write(renderTokenEfficiencyMeasurements());
+  }
 }

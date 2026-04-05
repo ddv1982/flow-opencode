@@ -53,7 +53,7 @@ export const ReviewSchema = z.object({
 
 export const ReviewerDecisionSchema = z.object({
   scope: z.enum(REVIEW_SCOPES),
-  featureId: z.string().min(1).optional(),
+  featureId: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE).optional(),
   status: z.enum(REVIEWER_DECISION_STATUSES),
   summary: z.string().min(1),
   blockingFindings: z.array(ReviewFindingSchema).default([]),
@@ -72,7 +72,7 @@ export const OutcomeSchema = z.object({
 });
 
 export const FeatureResultSchema = z.object({
-  featureId: z.string().min(1),
+  featureId: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
   verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
   notes: z.array(NoteSchema).optional(),
   followUps: z.array(FollowUpSchema).optional(),

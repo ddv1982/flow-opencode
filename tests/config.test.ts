@@ -265,6 +265,29 @@ describe("applyFlowConfig", () => {
     expect(WorkerResultSchema.safeParse(invalidCrossField).success).toBe(false);
   });
 
+  test("worker tool raw schema rejects invalid feature ids in featureResult", () => {
+    const { schemas } = getToolSchemas();
+    const rawSchema = schemas.flow_run_complete_feature;
+
+    const invalidFeatureId = {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Run the next feature.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "Bad Id", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    };
+
+    expect(rawSchema.safeParse(invalidFeatureId).success).toBe(false);
+    expect(WorkerResultSchema.safeParse(invalidFeatureId).success).toBe(false);
+  });
+
   test("planning tool schema matches runtime feature id format constraints", () => {
     const { schemas } = getToolSchemas();
 

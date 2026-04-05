@@ -84,7 +84,6 @@ Resume behavior:
 - if no active Flow session exists, Flow should stop and ask for a goal
 - completed sessions are not considered active resumable sessions
 - Flow should not invent a new goal from repository inspection when no session exists
-- `flow-auto` is runtime-gated through `flow_auto_prepare` before planning begins
 
 ## Execution Guarantees
 
@@ -273,13 +272,21 @@ For local development you can also symlink the built file.
 
 ### Package-based install
 
-This repo is structured like an npm-style plugin package. After publishing, it can be added to `opencode.json`:
+This is the intended package install path **after the plugin is published**.
+
+Today, the supported path in this repo is the local-development install above.
+
+After publishing, it can be added to `opencode.json`:
 
 ```json
 {
   "plugin": ["opencode-plugin-flow"]
 }
 ```
+
+## For Contributors And Maintainers
+
+The remaining sections are mainly for plugin developers and maintainers.
 
 ## Development
 
@@ -308,6 +315,59 @@ Key source files:
 - `src/runtime/render.ts`: derived markdown rendering
 - `src/prompts/agents.ts`: agent instructions
 - `src/prompts/commands.ts`: slash command templates
+
+## Maintainer Note: Token Efficiency
+
+Most end users can ignore this section.
+
+These measurements are for plugin maintainers who want to track whether Flow's prompts and summaries are getting smaller or drifting over time.
+
+What this does:
+
+- records a token-efficiency snapshot for the current project/session
+- shows the current prompt, command, and summary measurements
+- compares the current measurements against the plugin baseline
+- helps decide whether more aggressive compaction work is justified
+
+What this does **not** do:
+
+- it does not automatically reduce runtime tokens by itself
+- it does not change normal `/flow-status` output for end users
+- it does not enable compact mode by default
+
+Current status:
+
+- Flow prompt + command surface was reduced from **18192 bytes** to **16297 bytes**
+- default `flow_status` / `summarizeSession` behavior is preserved
+- compact mode is **not enabled yet**
+- `bun run measure:token-efficiency` writes a measurement snapshot into the target project's `.flow/` structure
+
+Supporting artifacts:
+
+- `analysis/token-efficiency-measurements.ts`
+- `analysis/token-efficiency-measurements.baseline.json`
+- `tests/token-efficiency-verification.test.ts`
+
+Where the measurement is stored:
+
+- with an active session:
+  - `<worktree>/.flow/sessions/<active-session-id>/token-efficiency-measurements.current.json`
+- without an active session:
+  - `<worktree>/.flow/token-efficiency-measurements.current.json`
+- example:
+  - `bun run measure:token-efficiency -- --worktree ~/projects/ai-therapist`
+- the file is a **current snapshot**, so it is overwritten on the next run for that same scope
+
+Measurement guardrails:
+
+- the generator now fails loudly if the baseline file is missing or malformed, instead of silently falling back
+- the plugin baseline used for comparison lives in:
+  - `analysis/token-efficiency-measurements.baseline.json`
+
+Optional OpenCode/provider guidance:
+
+- `analysis/token-efficiency-provider-compaction-research.md` documents optional guidance for OpenCode compaction settings and provider prompt caching
+- this guidance is **docs-only optional guidance**, not required runtime behavior for Flow
 
 ## Tool Schema Note
 
