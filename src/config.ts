@@ -58,7 +58,7 @@ const FLOW_AGENTS = {
   },
   "flow-auto": {
     mode: "primary",
-    description: "Plan, approve, execute, and replan Flow work autonomously.",
+    description: "Coordinate Flow planning, execution, review, and recovery autonomously.",
     prompt: FLOW_AUTO_AGENT_PROMPT,
   },
   "flow-reviewer": createReadOnlyPrimaryAgent(
@@ -83,7 +83,7 @@ const FLOW_COMMANDS = {
     template: FLOW_RUN_COMMAND_TEMPLATE,
   },
   "flow-auto": {
-    description: "Run Flow autonomously until completion or a real blocker",
+    description: "Coordinate Flow autonomously until completion or a real blocker",
     agent: "flow-auto",
     template: FLOW_AUTO_COMMAND_TEMPLATE,
   },

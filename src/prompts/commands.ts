@@ -1,4 +1,11 @@
-import { FLOW_FINAL_COMPLETION_REVIEW_RULE, FLOW_RUNTIME_STATE_TRANSITION_RULE } from "./fragments";
+import {
+  FLOW_COORDINATOR_BOUNDARY_RULE,
+  FLOW_FINAL_COMPLETION_REVIEW_RULE,
+  FLOW_NO_INFERRED_GOAL_RULE,
+  FLOW_RESUME_ONLY_RULE,
+  FLOW_RUNTIME_STATE_TRANSITION_RULE,
+  FLOW_STRUCTURED_RECOVERY_RULE,
+} from "./fragments";
 
 export const FLOW_PLAN_COMMAND_TEMPLATE = `Manage the active Flow plan.
 
@@ -24,20 +31,25 @@ Behavior:
 
 export const FLOW_AUTO_COMMAND_TEMPLATE = `Run Flow autonomously.
 
-Arguments: $ARGUMENTS
-
 Behavior:
-- If the argument string is empty or \`resume\`, resume the active session only. If no active session exists, stop and request a goal.
-- Otherwise treat the full argument string as a new autonomous goal.
-- Do not derive, infer, or invent a new goal from repository inspection when invoked without a goal and no active session exists.
+- Treat this command as a coordinator entrypoint for Flow's existing planner, worker, reviewer, and runtime tools.
+${FLOW_COORDINATOR_BOUNDARY_RULE}
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
-- Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.
+- If the argument string is non-empty and not \`resume\`, treat the full argument string as a new autonomous goal.
+${FLOW_RESUME_ONLY_RULE}
+${FLOW_NO_INFERRED_GOAL_RULE}
+- Plan or refresh only when the runtime says planning is needed, approve that plan, then keep work on the current feature until it is clean or truly blocked.
+- Use \`flow-worker\` for implementation plus validation and \`flow-reviewer\` for approval; persist every reviewer decision before advancing, retrying, blocking, or completing.
 - Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.
 - When blocked by a solvable finding, inspect the evidence, use repo and research tools as needed, make the smallest recovery plan, execute it, and keep iterating.
+- If a feature lands in a retryable or auto-resolvable blocked state, satisfy the runtime prerequisite, reset it through the runtime when appropriate, and continue instead of stopping.
+${FLOW_STRUCTURED_RECOVERY_RULE}
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_RUNTIME_STATE_TRANSITION_RULE}
-- End with the latest runtime summary.`;
+- End with the latest runtime summary.
+
+Arguments: $ARGUMENTS`;
 
 export const FLOW_STATUS_COMMAND_TEMPLATE = `Inspect the active Flow session.
 
