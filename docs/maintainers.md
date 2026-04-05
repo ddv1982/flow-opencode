@@ -64,6 +64,15 @@ The plugin is built around a small set of responsibilities:
 4. Prompted agents call those tools instead of mutating state directly.
 5. Derived markdown docs are rendered beside each saved session under `.flow/sessions/<session-id>/docs/`.
 
+## Token Efficiency
+
+Keep Flow prompts narrow and stable. Prefer platform-native efficiency controls before adding plugin-specific machinery:
+
+- keep orchestration prompts focused on routing and recovery, not duplicated workflow narration
+- enable OpenCode compaction and provider cache keys when sessions get long
+- treat `experimental.session.compacting` as optional escalation only if there is real evidence of Flow state loss
+- avoid introducing Flow-owned compaction or measurement plumbing unless a concrete failure mode justifies it
+
 Current injected agents:
 
 - `flow-planner`

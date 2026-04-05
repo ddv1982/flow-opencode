@@ -11,6 +11,8 @@ For real runtime wins, focus on:
 - OpenCode compaction
 - avoiding unnecessary extra orchestration
 
+Flow itself should stay strict and lean. It should not grow a separate compaction layer unless there is evidence that long sessions are losing important Flow state.
+
 Flow itself already keeps its workflow strict. The main tuning happens in your OpenCode config.
 
 ## Recommended Baseline
