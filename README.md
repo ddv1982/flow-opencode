@@ -1,46 +1,19 @@
-# Flow Plugin For OpenCode
+# Flow Plugin for OpenCode
 
 `opencode-plugin-flow` adds a durable planning and execution workflow to OpenCode.
 
-It turns a goal into a tracked session, breaks that goal into features, executes one feature at a time, and requires validation and reviewer approval before work can advance.
+It turns a goal into a tracked session, breaks that goal into features, executes one feature at a time, and requires validation plus reviewer approval before work can advance.
 
 ## What Flow Does
 
 Flow provides:
 
-- planning with a persisted draft plan
-- explicit plan approval and feature selection
-- single-feature execution with validation evidence
-- reviewer-gated completion for each feature
-- broad final validation before session completion
-- autonomous plan, run, review, and replan loops
-- structured recovery metadata for retryable runtime failures
-- durable session state in `.flow/sessions/<session-id>/session.json`
-- readable derived docs in `.flow/sessions/<session-id>/docs/`
-- an `.flow/active` pointer plus archived session history in `.flow/archive/`
-
-## Workflow
-
-```mermaid
-flowchart TD
-    A[Goal] --> B[Run flow-plan]
-    B --> C[Draft plan saved]
-    C --> D{Plan approved?}
-    D -->|Yes| E[Run flow-run or flow-auto]
-    D -->|Select subset| F[Run flow-plan select]
-    F --> C
-    E --> G[Start one runnable feature]
-    G --> H[Implement and run validation]
-    H --> I[Review current result]
-    I -->|needs_fix| H
-    I -->|blocked| J[Blocked session]
-    I -->|approved| K[Persist feature result]
-    K --> L{Last required feature?}
-    L -->|No| E
-    L -->|Yes| M[Broad validation and final review]
-    M -->|needs_fix| H
-    M -->|approved| N[Completed session]
-```
+- persisted planning and approval
+- feature-by-feature execution
+- validation evidence for completed work
+- reviewer-gated progression
+- broad final validation before full completion
+- resumable sessions stored in `.flow/`
 
 ## Commands
 
@@ -48,21 +21,21 @@ Flow injects these slash commands into OpenCode:
 
 | Command | Purpose |
 | --- | --- |
-| `/flow-plan <goal>` | Create or refresh a draft plan for a goal |
-| `/flow-plan select <feature-id...>` | Keep only the listed features in the current draft |
-| `/flow-plan approve [feature-id...]` | Approve the current draft plan, optionally keeping only listed features |
+| `/flow-plan <goal>` | Create or refresh a draft plan |
+| `/flow-plan select <feature-id...>` | Keep only selected features in the draft |
+| `/flow-plan approve [feature-id...]` | Approve the current draft plan |
 | `/flow-run [feature-id]` | Execute exactly one approved feature |
 | `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
 | `/flow-auto resume` | Resume the active autonomous session |
 | `/flow-status` | Show the current session summary |
-| `/flow-history` | Show stored Flow session history or inspect one by id |
-| `/flow-session activate <id>` | Point Flow at a different stored session |
-| `/flow-reset feature <id>` | Reset a feature and dependent features back to pending |
-| `/flow-reset session` | Archive the active session and clear the active pointer |
+| `/flow-history` | Show stored session history |
+| `/flow-session activate <id>` | Switch the active session |
+| `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
+| `/flow-reset session` | Archive the active session and clear it |
 
 ## Quick Start
 
-Typical manual flow:
+### Manual flow
 
 1. `/flow-plan Add a workflow plugin for OpenCode`
 2. Review the proposed features
@@ -71,71 +44,22 @@ Typical manual flow:
 5. Repeat `/flow-run` until complete
 6. `/flow-status`
 
-Autonomous flow:
+### Autonomous flow
 
 1. `/flow-auto Add a workflow plugin for OpenCode`
-2. Let Flow plan, execute, validate, review, fix, and continue until complete or blocked
-3. `/flow-status` at any point to inspect state
+2. Let Flow plan, execute, validate, review, and continue until complete or blocked
+3. Use `/flow-status` at any time to inspect progress
 
-Resume behavior:
+### Resume behavior
 
 - `/flow-auto` with no argument is resume-only
 - `/flow-auto resume` is the explicit equivalent
-- if no active Flow session exists, Flow should stop and ask for a goal
-- completed sessions are not considered active resumable sessions
-- Flow should not invent a new goal from repository inspection when no session exists
+- if no active session exists, Flow asks for a goal
+- completed sessions are not resumable
 
-## Execution Guarantees
+## Session Files
 
-Flow is intentionally strict.
-
-For a feature to complete successfully, the runtime requires:
-
-- an approved plan
-- exactly one active feature
-- recorded validation evidence
-- fully passing validation for that completion path
-- a recorded reviewer decision
-- an approved reviewer decision for the current scope
-- a passing `featureReview`
-
-For final session completion, Flow also requires:
-
-- broad validation for the repo, not just targeted validation
-- a final reviewer decision recorded through the runtime
-- a passing `finalReview`
-
-This is the main design choice in the plugin: review is not just advice in chat. It is a persisted gate in workflow state.
-
-## Recovery Model
-
-Retryable runtime failures can include structured recovery metadata alongside the error summary.
-
-That metadata can include:
-
-- `errorCode`
-- `resolutionHint`
-- `recoveryStage`
-- `prerequisite`
-- optional `requiredArtifact`
-- `nextCommand`
-- optional `nextRuntimeTool`
-- optional `nextRuntimeArgs`
-
-The runtime uses this to distinguish between missing prerequisites and immediately executable actions.
-
-Examples:
-
-- missing reviewer approval reports a `reviewer_result_required` prerequisite and the missing reviewer-decision artifact
-- missing validation scope or evidence reports `validation_rerun_required`
-- missing final review payload reports `completion_payload_rebuild_required`
-- failing review or validation can point directly to `flow_reset_feature` when reset is the correct executable next step
-
-`nextCommand` is always user-facing slash-command guidance. `nextRuntimeTool` only appears when the runtime can safely recommend an immediately executable tool action.
-
-## Runtime State
-
-Flow keeps one active session per worktree through an `.flow/active` pointer. Session history is retained under `.flow/sessions/`, and `/flow-reset session` archives the active session into `.flow/archive/`.
+Flow keeps one active session per worktree.
 
 Authoritative state:
 
@@ -151,106 +75,48 @@ Derived docs:
 .flow/sessions/<session-id>/docs/features/<feature-id>.md
 ```
 
-`session.json` is the source of truth. The markdown docs are projections of that state for easier inspection.
+Archived sessions live under:
 
-The session model includes:
+```text
+.flow/archive/
+```
 
-- goal and lifecycle status
-- plan approval state
-- planning context and implementation approach
-- ordered features with dependency metadata
-- active feature and execution history
-- validation evidence
-- reviewer decisions
-- notes, artifacts, and timestamps
+## Execution Guarantees
 
-## Architecture
+Flow is intentionally strict.
 
-The plugin is built around a small set of responsibilities:
+For a feature to complete successfully, Flow requires:
 
-1. A plugin `config` hook injects commands and agents.
-2. Runtime tools own all state transitions.
-3. Session state is stored under `.flow/sessions/<session-id>/session.json` with `.flow/active` pointing at the current run.
-4. Prompted agents call those tools instead of mutating state directly.
-5. Derived markdown docs are rendered beside each saved session under `.flow/sessions/<session-id>/docs/`.
+- an approved plan
+- exactly one active feature
+- recorded validation evidence
+- passing validation for that completion path
+- a recorded reviewer decision
+- an approved reviewer decision for the current scope
+- a passing `featureReview`
 
-Current injected agents:
+For full session completion, Flow also requires:
 
-- `flow-planner`
-- `flow-worker`
-- `flow-auto`
-- `flow-reviewer`
-- `flow-control`
-
-Current runtime tools:
-
-- `flow_status`
-- `flow_history`
-- `flow_history_show`
-- `flow_auto_prepare`
-- `flow_plan_start`
-- `flow_plan_apply`
-- `flow_plan_approve`
-- `flow_plan_select_features`
-- `flow_run_start`
-- `flow_run_complete_feature`
-- `flow_review_record_feature`
-- `flow_review_record_final`
-- `flow_session_activate`
-- `flow_reset_feature`
-- `flow_reset_session`
-
-## Agent Roles
-
-`flow-planner`
-
-- reads the repo and creates a compact execution-ready plan
-- does not write code
-- does not write `.flow` files directly
-
-`flow-worker`
-
-- executes exactly one approved feature
-- runs validation
-- iterates on fixes when review finds issues
-- persists completion only through runtime tools
-
-`flow-reviewer`
-
-- reviews feature-level or final cross-feature state
-- returns `approved`, `needs_fix`, or `blocked`
-- does not write code
-
-`flow-auto`
-
-- orchestrates planning, approval, execution, validation, review, fixing, and replanning
-- keeps looping until completion or a real blocker
-- treats runtime contract errors, completion-gating failures, and failing validation as recovery work when they are internally solvable
-- uses repo evidence first and external research when useful to choose the next repair step before resetting and rerunning blocked features
-- satisfies structured recovery prerequisites before taking the next runtime action
-
-`flow-control`
-
-- handles status and reset requests only
+- broad validation for the repo
+- a final reviewer decision
+- a passing `finalReview`
 
 ## Install
 
-### Local development plugin
-
-Build the plugin:
+### Local development install
 
 ```bash
 bun install
 bun run build
 ```
 
-OpenCode should load the built entrypoint:
+OpenCode should load:
 
 ```text
 dist/index.js
 ```
 
-Place that built file in an OpenCode plugin directory such as:
+Place the built file in an OpenCode plugin directory such as:
 
 ```text
 .opencode/plugins/
@@ -268,15 +134,9 @@ Example:
 cp dist/index.js .opencode/plugins/flow.js
 ```
 
-For local development you can also symlink the built file.
+### Package install
 
-### Package-based install
-
-This is the intended package install path **after the plugin is published**.
-
-Today, the supported path in this repo is the local-development install above.
-
-After publishing, it can be added to `opencode.json`:
+This is the intended install path after the plugin is published:
 
 ```json
 {
@@ -284,135 +144,10 @@ After publishing, it can be added to `opencode.json`:
 }
 ```
 
-## For Contributors And Maintainers
+## More Documentation
 
-The remaining sections are mainly for plugin developers and maintainers.
-
-## Development
-
-Install dependencies and run the full local check:
-
-```bash
-bun install
-bun run check
-```
-
-Useful scripts:
-
-- `bun run build`
-- `bun run test`
-- `bun run typecheck`
-- `bun run check`
-
-Key source files:
-
-- `src/index.ts`: plugin entrypoint
-- `src/config.ts`: command and agent injection
-- `src/tools.ts`: runtime tool surface
-- `src/runtime/schema.ts`: session and contract schemas
-- `src/runtime/transitions.ts`: state transition rules
-- `src/runtime/session.ts`: load and save helpers
-- `src/runtime/render.ts`: derived markdown rendering
-- `src/prompts/agents.ts`: agent instructions
-- `src/prompts/commands.ts`: slash command templates
-
-## Maintainer Note: Token Efficiency
-
-Most end users can ignore this section.
-
-These measurements are for plugin maintainers who want to track whether Flow's prompts and summaries are getting smaller or drifting over time.
-
-What this does:
-
-- records a token-efficiency snapshot for the current project/session
-- shows the current prompt, command, and summary measurements
-- compares the current measurements against the plugin baseline
-- helps decide whether more aggressive compaction work is justified
-
-What this does **not** do:
-
-- it does not automatically reduce runtime tokens by itself
-- it does not change normal `/flow-status` output for end users
-- it does not enable compact mode by default
-
-Current status:
-
-- Flow prompt + command surface was reduced from **18192 bytes** to **16297 bytes**
-- default `flow_status` / `summarizeSession` behavior is preserved
-- compact mode is **not enabled yet**
-- `bun run measure:token-efficiency` writes a measurement snapshot into the target project's `.flow/` structure
-
-Supporting artifacts:
-
-- `analysis/token-efficiency-measurements.ts`
-- `analysis/token-efficiency-measurements.baseline.json`
-- `tests/token-efficiency-verification.test.ts`
-
-Where the measurement is stored:
-
-- with an active session:
-  - `<worktree>/.flow/sessions/<active-session-id>/token-efficiency-measurements.current.json`
-- without an active session:
-  - `<worktree>/.flow/token-efficiency-measurements.current.json`
-- example:
-  - `bun run measure:token-efficiency -- --worktree ~/projects/ai-therapist`
-- the file is a **current snapshot**, so it is overwritten on the next run for that same scope
-
-Measurement guardrails:
-
-- the generator now fails loudly if the baseline file is missing or malformed, instead of silently falling back
-- the plugin baseline used for comparison lives in:
-  - `analysis/token-efficiency-measurements.baseline.json`
-
-Optional OpenCode/provider guidance:
-
-- `analysis/token-efficiency-provider-compaction-research.md` documents optional guidance for OpenCode compaction settings and provider prompt caching
-- this guidance is **docs-only optional guidance**, not required runtime behavior for Flow
-
-## Tool Schema Note
-
-OpenCode plugin tools expect `args` to be provided as a raw Zod shape, not a top-level schema object.
-
-Example:
-
-```ts
-const FlowRunStartArgsShape = {
-  featureId: z.string().optional(),
-};
-```
-
-This plugin uses two validation layers:
-
-- SDK-facing tool `args` stay as raw shapes for OpenCode compatibility
-- stricter runtime validation happens later through schemas such as `WorkerResultSchema`
-
-Runtime transition failures can also carry structured recovery metadata so agents can tell the difference between:
-
-- a missing prerequisite
-- a missing artifact
-- a valid user-facing next command
-- an immediately executable runtime action
-
-## Testing
-
-The test suite currently covers:
-
-- command and agent injection
-- tool argument shape compatibility
-- session creation, save, and load
-- markdown doc rendering
-- plan application, selection, and approval
-- feature execution and reviewer gating
-- blocked and replan-required outcomes
-- final-review completion rules
-- reset behavior
-- prerequisite-aware recovery metadata and autonomous recovery behavior
-
-Run tests with:
-
-```bash
-bun test
-```
+- [Maintainer and contributor notes](docs/maintainers.md)
+- [Token-efficiency notes](docs/token-efficiency.md)
 
 ## License
 
