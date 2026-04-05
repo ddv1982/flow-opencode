@@ -29,7 +29,7 @@ Useful scripts:
 - `src/config.ts` — command and agent injection
 - `src/tools.ts` — runtime tool surface
 - `src/runtime/schema.ts` — session and contract schemas
-- `src/runtime/transitions.ts` — state transition rules
+- `src/runtime/transitions/` — state transition rules split by lifecycle phase
 - `src/runtime/session.ts` — load and save helpers
 - `src/runtime/render.ts` — derived markdown rendering
 - `src/prompts/agents.ts` — agent instructions

@@ -138,7 +138,7 @@ Compared with the earlier plan, the implemented runtime is stricter and more com
 
 ### Transition rules
 
-The transition engine in `src/runtime/transitions.ts` enforces:
+The transition engine in `src/runtime/transitions/` enforces:
 
 - plan schema validation through Zod
 - feature dependency and blocker graph validation
