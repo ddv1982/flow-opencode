@@ -1,4 +1,6 @@
 import { WorkerResultSchema, type Session, type WorkerResult } from "../schema";
+import { featureWouldReachCompletion } from "../domain";
+import { nowIso } from "../time";
 import { buildCompletionRecovery } from "./execution-recovery";
 import { cloneSession, fail, formatValidationError, succeed, type TransitionResult } from "./shared";
 import { completionThresholdReached, markSessionCompleted, projectCompletedFeatures } from "./execution-state";
@@ -133,7 +135,10 @@ function validateSuccessfulCompletion(
 }
 
 function finalizeSuccessfulCompletion(next: Session, featureId: string, summary: string): TransitionResult<Session> {
-  const plan = next.plan!;
+  const plan = next.plan;
+  if (!plan) {
+    return fail("There is no active plan to complete.");
+  }
   plan.features = projectCompletedFeatures(plan.features, featureId);
   next.execution.activeFeatureId = null;
 
@@ -146,7 +151,10 @@ function finalizeSuccessfulCompletion(next: Session, featureId: string, summary:
 }
 
 function finalizeIncompleteCompletion(next: Session, featureId: string, outcomeKind: WorkerOutcomeKind): Session {
-  const plan = next.plan!;
+  const plan = next.plan;
+  if (!plan) {
+    return next;
+  }
   next.execution.activeFeatureId = null;
 
   if (outcomeKind === "replan_required") {
@@ -185,10 +193,13 @@ export function completeRun(session: Session, workerInput: unknown): TransitionR
   }
 
   const next = cloneSession(session);
-  const plan = next.plan!;
+  const plan = next.plan;
+  if (!plan) {
+    return fail("There is no active plan to apply the worker result to.");
+  }
   const featureId = session.execution.activeFeatureId;
-  const recordedAt = new Date().toISOString();
-  const wasFinalFeature = completionThresholdReached(projectCompletedFeatures(plan.features, featureId), plan);
+  const recordedAt = nowIso();
+  const wasFinalFeature = featureWouldReachCompletion(plan, featureId);
 
   recordWorkerResult(next, featureId, worker, recordedAt);
 

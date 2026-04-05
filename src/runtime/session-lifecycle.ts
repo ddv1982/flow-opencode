@@ -5,14 +5,7 @@ import { deleteSessionDocs } from "./render";
 import { getArchiveDir, getReviewsDir, getSessionDir, getSessionPath } from "./paths";
 import { SessionSchema, type PlanningContext, type Session } from "./schema";
 import { migrateLegacySessionIfNeeded, readSessionFromPath, resolveActiveSessionId, writeActiveSessionId } from "./session-workspace";
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-function archiveTimestamp(): string {
-  return now().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "");
-}
+import { archiveTimestampNow, nowIso } from "./time";
 
 export async function deleteSessionState(worktree: string): Promise<void> {
   const sessionId = await resolveActiveSessionId(worktree);
@@ -50,7 +43,7 @@ export async function archiveSession(worktree: string): Promise<{ sessionId: str
   }
 
   const sourceDir = getSessionDir(worktree, sessionId);
-  const archivedDir = join(getArchiveDir(worktree), `${sessionId}-${archiveTimestamp()}`);
+  const archivedDir = join(getArchiveDir(worktree), `${sessionId}-${archiveTimestampNow()}`);
 
   try {
     await rename(sourceDir, archivedDir);
@@ -87,7 +80,7 @@ export async function activateSession(worktree: string, sessionId: string): Prom
 }
 
 export function createSession(goal: string, planning?: Partial<PlanningContext>): Session {
-  const createdAt = now();
+  const createdAt = nowIso();
 
   return SessionSchema.parse({
     version: 1,

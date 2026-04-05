@@ -38,7 +38,8 @@ const REVIEW_DECISION_RECOVERY: Record<"feature" | "final", StaticCompletionReco
   },
   final: {
     errorCode: "missing_final_reviewer_decision",
-    resolutionHint: "Record a final reviewer approval, then rerun the current Flow feature to persist final completion.",
+    resolutionHint:
+      "The active feature is on the session's final completion path. Record a final reviewer approval, then rerun the current Flow feature to persist final completion.",
     recoveryStage: "record_review",
     prerequisite: "reviewer_result_required",
     requiredArtifact: "final_reviewer_decision",
@@ -61,7 +62,8 @@ const VALIDATION_SCOPE_RECOVERY: Record<"targeted" | "broad", StaticCompletionRe
   },
   broad: {
     errorCode: "missing_broad_validation",
-    resolutionHint: "Run broad repo validation for the final completion path and retry with validationScope set to 'broad'.",
+    resolutionHint:
+      "The active feature is on the session's final completion path. Run broad repo validation and retry with validationScope set to 'broad'.",
     recoveryStage: "rerun_validation",
     prerequisite: "validation_rerun_required",
     requiredArtifact: "broad_validation_result",
@@ -77,7 +79,8 @@ const STATIC_COMPLETION_RECOVERY: Record<
 > = {
   missing_final_review: {
     errorCode: "missing_final_review_payload",
-    resolutionHint: "Run the final cross-feature review, include a passing finalReview in the worker result, and rerun the current Flow feature.",
+    resolutionHint:
+      "The active feature is on the session's final completion path. Run the final cross-feature review, include a passing finalReview in the worker result, and rerun the current Flow feature.",
     recoveryStage: "retry_completion",
     prerequisite: "completion_payload_rebuild_required",
     requiredArtifact: "final_review_payload",

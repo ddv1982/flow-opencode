@@ -3,8 +3,36 @@ import { tool } from "@opencode-ai/plugin";
 import { PlanSchema, ReviewerDecisionSchema, WorkerResultSchema } from "../src/runtime/schema";
 import { createTools } from "../src/tools";
 
+type ToolDefinition = {
+  args: Record<string, unknown>;
+};
+
+type WorkerPayloadLike = {
+  contractVersion: string;
+  status: string;
+  summary: string;
+  artifactsChanged: Array<{ path: string; kind?: string }>;
+  validationRun: Array<{ command: string; status: string; summary: string }>;
+  validationScope?: string;
+  reviewIterations?: number;
+  decisions: Array<{ summary: string }>;
+  nextStep: string;
+  outcome?: {
+    kind: string;
+    category?: string;
+    summary?: string;
+    resolutionHint?: string;
+    retryable?: boolean;
+    autoResolvable?: boolean;
+    needsHuman?: boolean;
+  };
+  featureResult: { featureId: string; verificationStatus?: string };
+  featureReview: { status: string; summary: string; blockingFindings: Array<{ summary: string }> };
+  finalReview?: { status: string; summary: string; blockingFindings: Array<{ summary: string }> };
+};
+
 function getToolSchemas() {
-  const tools = createTools({}) as Record<string, { args: Record<string, any> }>;
+  const tools = createTools({}) as unknown as Record<string, ToolDefinition>;
 
   return Object.fromEntries(
     Object.entries(tools).map(([name, definition]) => [name, tool.schema.object(definition.args)]),
@@ -29,7 +57,7 @@ function samplePlan() {
   };
 }
 
-function sampleWorkerResult(): any {
+function sampleWorkerResult(): WorkerPayloadLike {
   return {
     contractVersion: "1" as const,
     status: "ok" as const,

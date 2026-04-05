@@ -1,3 +1,4 @@
+import { summarizeCompletion } from "./domain";
 import type { Feature, Session } from "./schema";
 
 function summarizeFeature(feature: Feature): string {
@@ -15,6 +16,7 @@ export function summarizeSession(session: Session | null) {
   const features = session.plan?.features ?? [];
   const completedCount = features.filter((feature) => feature.status === "completed").length;
   const activeFeature = features.find((feature) => feature.id === session.execution.activeFeatureId) ?? null;
+  const completion = summarizeCompletion(session);
 
   return {
     status: session.status,
@@ -26,6 +28,7 @@ export function summarizeSession(session: Session | null) {
       status: session.status,
       planSummary: session.plan?.summary ?? null,
       planOverview: session.plan?.overview ?? null,
+      completion,
       activeFeature,
       featureProgress: {
         completed: completedCount,

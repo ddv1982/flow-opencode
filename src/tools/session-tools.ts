@@ -1,20 +1,22 @@
 import { tool } from "@opencode-ai/plugin";
+import { parseToolArgs, resolveSessionRoot, summarizePersistedSession, toJson } from "../runtime/application";
 import { activateSession, archiveSession, createSession, listSessionHistory, loadSession, loadStoredSession, saveSessionState, syncSessionArtifacts } from "../runtime/session";
 import { summarizeSession } from "../runtime/summary";
 import {
   FlowAutoPrepareArgsShape,
+  FlowAutoPrepareArgsSchema,
   FlowHistoryArgsShape,
+  FlowHistoryArgsSchema,
   FlowHistoryShowArgsShape,
+  FlowHistoryShowArgsSchema,
   FlowPlanStartArgsShape,
+  FlowPlanStartArgsSchema,
   FlowSessionActivateArgsShape,
+  FlowSessionActivateArgsSchema,
   FlowStatusArgsShape,
-  type FlowAutoPrepareArgs,
-  type FlowHistoryShowArgs,
-  type FlowPlanStartArgs,
-  type FlowSessionActivateArgs,
+  FlowStatusArgsSchema,
   type ToolContext,
 } from "./schemas";
-import { resolveSessionRoot, summarizePersistedSession, toJson } from "./helpers";
 
 export function createSessionTools() {
   return {
@@ -22,6 +24,8 @@ export function createSessionTools() {
       description: "Show the active Flow session summary",
       args: FlowStatusArgsShape,
       async execute(_args: unknown, context: ToolContext) {
+        const parsed = parseToolArgs(FlowStatusArgsSchema, _args);
+        if (!parsed.ok) return parsed.response;
         const session = await loadSession(resolveSessionRoot(context));
         return toJson(summarizeSession(session));
       },
@@ -31,6 +35,8 @@ export function createSessionTools() {
       description: "Show stored Flow session history across active and archived runs",
       args: FlowHistoryArgsShape,
       async execute(_args: unknown, context: ToolContext) {
+        const parsed = parseToolArgs(FlowHistoryArgsSchema, _args);
+        if (!parsed.ok) return parsed.response;
         const history = await listSessionHistory(resolveSessionRoot(context));
         const activeCount = history.activeSessionId ? 1 : 0;
         const totalCount = history.sessions.length + history.archived.length;
@@ -62,7 +68,9 @@ export function createSessionTools() {
       description: "Show a specific stored Flow session by id",
       args: FlowHistoryShowArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowHistoryShowArgs;
+        const parsed = parseToolArgs(FlowHistoryShowArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         const found = await loadStoredSession(resolveSessionRoot(context), input.sessionId);
 
         if (!found) {
@@ -100,7 +108,9 @@ export function createSessionTools() {
       description: "Activate a stored Flow session by id",
       args: FlowSessionActivateArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowSessionActivateArgs;
+        const parsed = parseToolArgs(FlowSessionActivateArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         const session = await activateSession(resolveSessionRoot(context), input.sessionId);
 
         if (!session) {
@@ -124,7 +134,9 @@ export function createSessionTools() {
       description: "Create or refresh the active Flow planning session",
       args: FlowPlanStartArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowPlanStartArgs;
+        const parsed = parseToolArgs(FlowPlanStartArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         const sessionRoot = resolveSessionRoot(context);
         const existing = await loadSession(sessionRoot);
 
@@ -186,7 +198,9 @@ export function createSessionTools() {
       description: "Classify a flow-auto invocation",
       args: FlowAutoPrepareArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowAutoPrepareArgs;
+        const parsed = parseToolArgs(FlowAutoPrepareArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         const trimmed = (input.argumentString ?? "").trim();
         const session = await loadSession(resolveSessionRoot(context));
         const isResume = trimmed === "" || trimmed === "resume";
@@ -225,6 +239,8 @@ export function createSessionTools() {
       description: "Archive and clear the active Flow session",
       args: FlowStatusArgsShape,
       async execute(_args: unknown, context: ToolContext) {
+        const parsed = parseToolArgs(FlowStatusArgsSchema, _args);
+        if (!parsed.ok) return parsed.response;
         const archived = await archiveSession(resolveSessionRoot(context));
         return toJson({
           status: "ok",

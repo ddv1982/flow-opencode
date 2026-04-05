@@ -15,14 +15,6 @@ import { SessionSchema, type Session } from "./schema";
 
 const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
 
-export function now(): string {
-  return new Date().toISOString();
-}
-
-export function archiveTimestamp(): string {
-  return now().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "");
-}
-
 export async function readSessionFromPath(sessionPath: string): Promise<Session> {
   const raw = await readFile(sessionPath, "utf8");
   return SessionSchema.parse(JSON.parse(raw));

@@ -1,7 +1,8 @@
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { getDocsDir, getFeatureDocPath, getFeaturesDocsDir, getIndexDocPath } from "./paths";
+import { renderFeatureDoc } from "./render-feature-sections";
+import { renderIndexDoc } from "./render-index-sections";
 import type { Session } from "./schema";
-import { renderFeatureDoc, renderIndexDoc } from "./render-sections";
 
 async function pruneFeatureDocs(worktree: string, sessionId: string, activeFeatureIds: Set<string>): Promise<void> {
   const featuresDir = getFeaturesDocsDir(worktree, sessionId);

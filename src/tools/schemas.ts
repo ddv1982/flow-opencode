@@ -1,4 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
+import type { WorkspaceContext } from "../runtime/application";
 import {
   DECOMPOSITION_POLICIES,
   GOAL_MODES,
@@ -166,6 +167,21 @@ export const FlowResetFeatureArgsShape = {
   featureId: featureIdSchema,
 };
 
+export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
+export const FlowHistoryArgsSchema = z.object(FlowHistoryArgsShape);
+export const FlowHistoryShowArgsSchema = z.object(FlowHistoryShowArgsShape);
+export const FlowSessionActivateArgsSchema = z.object(FlowSessionActivateArgsShape);
+export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
+export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
+export const FlowPlanApplyArgsSchema = z.object(FlowPlanApplyArgsShape);
+export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
+export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
+export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
+export const WorkerResultArgsSchema = z.object(WorkerResultArgsShape);
+export const FlowReviewRecordFeatureArgsSchema = z.object(FlowReviewRecordFeatureArgsShape);
+export const FlowReviewRecordFinalArgsSchema = z.object(FlowReviewRecordFinalArgsShape);
+export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
+
 export type FlowHistoryShowArgs = {
   sessionId: string;
 };
@@ -204,9 +220,4 @@ export type FlowResetFeatureArgs = {
   featureId: string;
 };
 
-export type ToolContext = {
-  worktree?: string;
-  directory?: string;
-};
-
-export type ToolResponse = Record<string, unknown>;
+export type ToolContext = WorkspaceContext;

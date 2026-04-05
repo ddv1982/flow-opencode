@@ -1,29 +1,35 @@
 import { tool } from "@opencode-ai/plugin";
-import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "../runtime/adapters";
-import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "../runtime/transitions";
-import {
-  FlowPlanApplyArgsShape,
-  FlowPlanApproveArgsShape,
-  FlowPlanSelectArgsShape,
-  FlowResetFeatureArgsShape,
-  FlowReviewRecordFeatureArgsShape,
-  FlowReviewRecordFinalArgsShape,
-  FlowRunStartArgsShape,
-  WorkerResultArgsShape,
-  type FlowPlanApplyArgs,
-  type FlowPlanApproveArgs,
-  type FlowPlanSelectArgs,
-  type FlowResetFeatureArgs,
-  type FlowRunStartArgs,
-  type ToolContext,
-} from "./schemas";
 import {
   errorResponse,
   missingSessionResponse,
-  parseFeatureIds,
+  parseToolArgs,
   summarizePersistedSession,
   withPersistedTransition,
-} from "./helpers";
+} from "../runtime/application";
+import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "../runtime/transitions";
+import {
+  FlowPlanApplyArgsSchema,
+  FlowPlanApplyArgsShape,
+  FlowPlanApproveArgsSchema,
+  FlowPlanApproveArgsShape,
+  FlowPlanSelectArgsSchema,
+  FlowPlanSelectArgsShape,
+  FlowResetFeatureArgsSchema,
+  FlowResetFeatureArgsShape,
+  FlowReviewRecordFeatureArgsSchema,
+  FlowReviewRecordFeatureArgsShape,
+  FlowReviewRecordFinalArgsSchema,
+  FlowReviewRecordFinalArgsShape,
+  FlowRunStartArgsSchema,
+  FlowRunStartArgsShape,
+  WorkerResultArgsSchema,
+  WorkerResultArgsShape,
+  type ToolContext,
+} from "./schemas";
+
+function parseFeatureIds(raw?: string[]): string[] {
+  return (raw ?? []).map((value) => value.trim()).filter(Boolean);
+}
 
 export function createRuntimeTools() {
   return {
@@ -31,7 +37,9 @@ export function createRuntimeTools() {
       description: "Persist a Flow draft plan into the active session",
       args: FlowPlanApplyArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowPlanApplyArgs;
+        const parsed = parseToolArgs(FlowPlanApplyArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         return withPersistedTransition(context, (session) => applyPlan(session, input.plan, input.planning), {
           getSession: (value) => value,
           onSuccess: (saved) => ({
@@ -48,7 +56,9 @@ export function createRuntimeTools() {
       description: "Approve the active Flow draft plan",
       args: FlowPlanApproveArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowPlanApproveArgs;
+        const parsed = parseToolArgs(FlowPlanApproveArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         return withPersistedTransition(context, (session) => approvePlan(session, parseFeatureIds(input.featureIds)), {
           getSession: (value) => value,
           onSuccess: (saved) => ({
@@ -64,7 +74,9 @@ export function createRuntimeTools() {
       description: "Keep only selected features in the active Flow draft plan",
       args: FlowPlanSelectArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowPlanSelectArgs;
+        const parsed = parseToolArgs(FlowPlanSelectArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         return withPersistedTransition(context, (session) => selectPlanFeatures(session, parseFeatureIds(input.featureIds)), {
           getSession: (value) => value,
           onSuccess: (saved) => ({
@@ -80,7 +92,9 @@ export function createRuntimeTools() {
       description: "Start the next runnable Flow feature",
       args: FlowRunStartArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowRunStartArgs;
+        const parsed = parseToolArgs(FlowRunStartArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         return withPersistedTransition(context, (session) => startRun(session, input.featureId), {
           getSession: (value) => value.session,
           onSuccess: (saved, value) => {
@@ -103,7 +117,9 @@ export function createRuntimeTools() {
       description: "Persist the result of a Flow feature execution",
       args: WorkerResultArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = adaptFlowRunCompleteFeatureInput(args);
+        const parsed = parseToolArgs(WorkerResultArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
         return withPersistedTransition(context, (session) => completeRun(session, input), {
           getSession: (value) => value,
           onSuccess: (saved) => {
@@ -124,7 +140,10 @@ export function createRuntimeTools() {
       description: "Record the reviewer decision for the active feature",
       args: FlowReviewRecordFeatureArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        return withPersistedTransition(context, (session) => recordReviewerDecision(session, adaptReviewerDecisionInput(args)), {
+        const parsed = parseToolArgs(FlowReviewRecordFeatureArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
+        return withPersistedTransition(context, (session) => recordReviewerDecision(session, input), {
           getSession: (value) => value,
           onSuccess: (saved) => ({
             status: "ok",
@@ -139,7 +158,10 @@ export function createRuntimeTools() {
       description: "Record the reviewer decision for final cross-feature validation",
       args: FlowReviewRecordFinalArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        return withPersistedTransition(context, (session) => recordReviewerDecision(session, adaptReviewerDecisionInput(args)), {
+        const parsed = parseToolArgs(FlowReviewRecordFinalArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
+        return withPersistedTransition(context, (session) => recordReviewerDecision(session, input), {
           getSession: (value) => value,
           onSuccess: (saved) => ({
             status: "ok",
@@ -154,7 +176,9 @@ export function createRuntimeTools() {
       description: "Reset a Flow feature to pending",
       args: FlowResetFeatureArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        const input = args as FlowResetFeatureArgs;
+        const parsed = parseToolArgs(FlowResetFeatureArgsSchema, args);
+        if (!parsed.ok) return parsed.response;
+        const input = parsed.value;
 
         return withPersistedTransition(context, (session) => resetFeature(session, input.featureId), {
           getSession: (value) => value,

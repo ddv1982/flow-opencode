@@ -11,9 +11,15 @@ function blockRun(session: Session, message: string): { session: Session; featur
   return { session: blocked, feature: null, reason: message };
 }
 
-function startFeatureRun(session: Session, featureId: string): { session: Session; feature: Feature | null } {
+function startFeatureRun(
+  session: Session,
+  featureId: string,
+): TransitionResult<{ session: Session; feature: Feature | null; reason?: string }> {
   const next = cloneSession(session);
-  const plan = next.plan!;
+  const plan = next.plan;
+  if (!plan) {
+    return fail("There is no approved plan to run.");
+  }
 
   plan.features = markFeatureInProgress(plan.features, featureId);
   next.status = "running";
@@ -23,10 +29,10 @@ function startFeatureRun(session: Session, featureId: string): { session: Sessio
   next.execution.lastOutcomeKind = null;
   next.execution.lastReviewerDecision = null;
 
-  return {
+  return succeed({
     session: next,
     feature: plan.features.find((feature) => feature.id === featureId) ?? null,
-  };
+  });
 }
 
 export function startRun(session: Session, requestedId?: string): TransitionResult<{ session: Session; feature: Feature | null; reason?: string }> {
@@ -57,5 +63,5 @@ export function startRun(session: Session, requestedId?: string): TransitionResu
     return succeed(blockRun(session, targetResult.message));
   }
 
-  return succeed(startFeatureRun(session, targetResult.value.id));
+  return startFeatureRun(session, targetResult.value.id);
 }

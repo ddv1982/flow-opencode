@@ -1,4 +1,5 @@
 import { PlanSchema, type Feature, type PlanningContext, type Plan, type Session } from "../schema";
+import { nowIso } from "../time";
 import { clearExecution, cloneSession, fail, formatValidationError, indexFeatures, succeed, type TransitionResult } from "./shared";
 
 type DraftPlanEditMessages = {
@@ -121,7 +122,11 @@ function validatePlanGraph(plan: Plan): string | null {
     }
 
     visitState.set(featureId, "visiting");
-    const feature = byId.get(featureId)!;
+    const feature = byId.get(featureId);
+    if (!feature) {
+      visitState.set(featureId, "visited");
+      return false;
+    }
     const edges = [...(feature.dependsOn ?? []), ...(feature.blockedBy ?? [])];
     for (const edge of edges) {
       if (visit(edge)) {
@@ -218,7 +223,7 @@ export function approvePlan(session: Session, featureIds?: string[]): Transition
 
   next.approval = "approved";
   next.status = "ready";
-  next.timestamps.approvedAt = new Date().toISOString();
+  next.timestamps.approvedAt = nowIso();
   return succeed(next);
 }
 

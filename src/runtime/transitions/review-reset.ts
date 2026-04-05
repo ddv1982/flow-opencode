@@ -71,7 +71,10 @@ export function resetFeature(session: Session, featureId: string): TransitionRes
   }
 
   const next = cloneSession(session);
-  const plan = next.plan!;
+  const plan = next.plan;
+  if (!plan) {
+    return fail("There is no active plan to reset.");
+  }
   const feature = plan.features.find((item) => item.id === featureId);
   if (!feature) {
     return fail(`Feature '${featureId}' was not found in the active plan.`);

@@ -1,15 +1,15 @@
 import { renderSessionDocs } from "./render";
 import { getSessionPath } from "./paths";
 import { SessionSchema, type Session } from "./schema";
-import { now, readSessionFromPath, resolveActiveSessionId, writeActiveSessionId, writeSessionFile } from "./session-workspace";
-
+import { readSessionFromPath, resolveActiveSessionId, writeActiveSessionId, writeSessionFile } from "./session-workspace";
+import { nowIso } from "./time";
 
 function normalizeSession(session: Session): Session {
   return SessionSchema.parse({
     ...session,
     timestamps: {
       ...session.timestamps,
-      updatedAt: now(),
+      updatedAt: nowIso(),
     },
   });
 }

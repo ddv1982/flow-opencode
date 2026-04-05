@@ -8,11 +8,11 @@ export const FLOW_REVIEW_FINDINGS_LOOP_RULE =
 export const FLOW_FEATURE_REVIEW_APPROVAL_RULE =
   "- Before persisting success, get flow-reviewer approval and record it with flow_review_record_feature.";
 export const FLOW_FINAL_COMPLETION_PATH_RULE =
-  "- On the final completion path, switch to broad validation, get final approval through flow_review_record_final, and include a passing finalReview before completion.";
+  "- Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending. On the final completion path, switch to broad validation, get final approval through flow_review_record_final, and include a passing finalReview before completion.";
 export const FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE =
   "- Never advance to the next feature while the current feature still has review findings. Stay on the current feature until it is clean or truly blocked.";
 export const FLOW_FINAL_COMPLETION_REVIEW_RULE =
-  "- Before final completion, run broad repo validation, do a final cross-feature review, fix findings, rerun broad validation, and only then finish with a passing `finalReview`.";
+  "- Before final completion, run broad repo validation, do a final cross-feature review, fix findings, rerun broad validation, and only then finish with a passing `finalReview`. The final completion path can be reached by satisfying completionPolicy.minCompletedFeatures even when other plan features remain pending.";
 export const FLOW_NO_INFERRED_GOAL_RULE =
   "- Do not derive, infer, or invent a new goal from repository inspection when invoked without a goal and no active session exists.";
 export const FLOW_RESUME_ONLY_RULE =

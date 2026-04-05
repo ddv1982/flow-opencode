@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveSessionRoot } from "../src/tools/helpers";
+import { resolveSessionRoot } from "../src/runtime/application";
 
 describe("resolveSessionRoot", () => {
   test("falls back to process.cwd when worktree and directory resolve to filesystem roots", () => {

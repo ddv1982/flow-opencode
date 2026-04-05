@@ -16,6 +16,7 @@ bun run check
 Useful scripts:
 
 - `bun run build`
+- `bun run deadcode`
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
@@ -27,10 +28,12 @@ Useful scripts:
 - `src/index.ts` — plugin entrypoint
 - `src/installer.ts` — local OpenCode plugin installer
 - `src/config.ts` — command and agent injection
-- `src/tools.ts` — runtime tool surface
+- `src/tools.ts` — OpenCode runtime tool surface
 - `src/runtime/schema.ts` — session and contract schemas
-- `src/runtime/transitions/` — state transition rules split by lifecycle phase
-- `src/runtime/session.ts` — load and save helpers
+- `src/runtime/transitions/` — domain state transition rules split by lifecycle phase
+- `src/runtime/domain/completion.ts` — shared completion-policy calculations
+- `src/runtime/application/tool-runtime.ts` — application-level tool orchestration helpers
+- `src/runtime/session.ts` — persistence and lifecycle exports
 - `src/runtime/render.ts` — derived markdown rendering
 - `src/prompts/agents.ts` — agent instructions
 - `src/prompts/commands.ts` — slash-command templates
@@ -40,10 +43,11 @@ Useful scripts:
 Flow is built around a small set of responsibilities:
 
 1. A plugin `config` hook injects commands and agents.
-2. Runtime tools own all state transitions.
+2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers.
 3. Session state is stored under `.flow/sessions/<session-id>/session.json` with `.flow/active` pointing at the current run.
-4. Prompted agents call runtime tools instead of mutating state directly.
-5. Readable markdown docs are rendered beside each saved session under `.flow/sessions/<session-id>/docs/`.
+4. Domain transitions remain authoritative for workflow state changes.
+5. Prompted agents call runtime tools instead of mutating state directly.
+6. Readable markdown docs are rendered beside each saved session under `.flow/sessions/<session-id>/docs/`.
 
 ## Current Agent Roles
 

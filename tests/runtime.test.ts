@@ -6,9 +6,24 @@ import { join } from "node:path";
 import { createSession, deleteSession, deleteSessionArtifacts, deleteSessionState, loadSession, saveSession, saveSessionState, syncSessionArtifacts } from "../src/runtime/session";
 import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getSessionPath } from "../src/runtime/paths";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
-import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "../src/runtime/adapters";
 import { createTools } from "../src/tools";
 import { approvePlan, applyPlan, completeRun, recordReviewerDecision, resetFeature, selectPlanFeatures, startRun } from "../src/runtime/transitions";
+
+type TestToolContext = {
+  worktree?: string;
+  directory?: string;
+};
+
+type TestToolDefinition = {
+  args: Record<string, unknown>;
+  execute: (args: unknown, context: TestToolContext) => Promise<string>;
+};
+
+type TestTools = Record<string, TestToolDefinition>;
+
+function createTestTools(): TestTools {
+  return createTools({}) as unknown as TestTools;
+}
 
 const tempDirs: string[] = [];
 
@@ -685,7 +700,7 @@ describe("runtime transitions", () => {
 
     await saveSession(worktree, completed.value);
 
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const response = await tools.flow_plan_start.execute({ goal: "Different goal" }, { worktree });
     const parsed = JSON.parse(response);
     const nextSession = await loadSession(worktree);
@@ -700,7 +715,7 @@ describe("runtime transitions", () => {
 
   test("flow_auto_prepare returns missing_goal for empty input without a session", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_auto_prepare.execute({}, { worktree });
     const parsed = JSON.parse(response);
@@ -713,7 +728,7 @@ describe("runtime transitions", () => {
   test("flow_auto_prepare resumes an existing session for empty input", async () => {
     const worktree = makeTempDir();
     await saveSession(worktree, createSession("Build a workflow plugin"));
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_auto_prepare.execute({}, { worktree });
     const parsed = JSON.parse(response);
@@ -730,7 +745,7 @@ describe("runtime transitions", () => {
     session.approval = "approved";
     session.timestamps.completedAt = new Date().toISOString();
     await saveSession(worktree, session);
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_auto_prepare.execute({}, { worktree });
     const parsed = JSON.parse(response);
@@ -742,7 +757,7 @@ describe("runtime transitions", () => {
 
   test("flow_auto_prepare treats resume as missing_goal when no session exists", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_auto_prepare.execute({ argumentString: "resume" }, { worktree });
     const parsed = JSON.parse(response);
@@ -753,7 +768,7 @@ describe("runtime transitions", () => {
 
   test("flow_auto_prepare classifies explicit goals as start_new_goal", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_auto_prepare.execute(
       { argumentString: "Improve Flow recovery behavior" },
@@ -768,7 +783,7 @@ describe("runtime transitions", () => {
 
   test("flow_auto_prepare falls back to context.directory when worktree resolves to root", async () => {
     const directory = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_auto_prepare.execute(
       { argumentString: "Improve Flow recovery behavior" },
@@ -783,7 +798,7 @@ describe("runtime transitions", () => {
 
   test("flow_plan_start persists under context.directory when worktree resolves to root", async () => {
     const directory = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const response = await tools.flow_plan_start.execute(
       { goal: "Build a workflow plugin" },
@@ -799,7 +814,7 @@ describe("runtime transitions", () => {
 
   test("runtime tool transitions persist session state and refresh docs", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
     const before = await readFile(await activeIndexDocPath(worktree), "utf8");
@@ -958,7 +973,7 @@ describe("runtime transitions", () => {
 
   test("same-goal planning refresh clears last actionable metadata", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
     expect(applied.ok).toBe(true);
@@ -1033,6 +1048,15 @@ describe("runtime transitions", () => {
             "activeFeature": null,
             "approval": "approved",
             "artifacts": [],
+            "completion": {
+              "activeFeatureTriggersSessionCompletion": false,
+              "canCompleteWithPendingFeatures": false,
+              "completedFeatures": 0,
+              "remainingBeyondTarget": 0,
+              "requiresFinalReview": false,
+              "targetCompletedFeatures": 2,
+              "totalFeatures": 2,
+            },
             "featureLines": [
               "setup-runtime (blocked): Create runtime helpers",
               "execute-feature (pending): Implement execution flow",
@@ -1103,6 +1127,15 @@ describe("runtime transitions", () => {
             "activeFeature": null,
             "approval": "approved",
             "artifacts": [],
+            "completion": {
+              "activeFeatureTriggersSessionCompletion": false,
+              "canCompleteWithPendingFeatures": false,
+              "completedFeatures": 1,
+              "remainingBeyondTarget": 0,
+              "requiresFinalReview": true,
+              "targetCompletedFeatures": 1,
+              "totalFeatures": 1,
+            },
             "featureLines": [
               "setup-runtime (completed): Create runtime helpers",
             ],
@@ -1162,6 +1195,15 @@ describe("runtime transitions", () => {
             "activeFeature": null,
             "approval": "pending",
             "artifacts": [],
+            "completion": {
+              "activeFeatureTriggersSessionCompletion": false,
+              "canCompleteWithPendingFeatures": false,
+              "completedFeatures": 0,
+              "remainingBeyondTarget": 0,
+              "requiresFinalReview": false,
+              "targetCompletedFeatures": 2,
+              "totalFeatures": 2,
+            },
             "featureLines": [
               "setup-runtime (pending): Create runtime helpers",
               "execute-feature (pending): Implement execution flow",
@@ -1221,6 +1263,15 @@ describe("runtime transitions", () => {
             },
             "approval": "approved",
             "artifacts": [],
+            "completion": {
+              "activeFeatureTriggersSessionCompletion": false,
+              "canCompleteWithPendingFeatures": false,
+              "completedFeatures": 0,
+              "remainingBeyondTarget": 0,
+              "requiresFinalReview": false,
+              "targetCompletedFeatures": 2,
+              "totalFeatures": 2,
+            },
             "featureLines": [
               "setup-runtime (in_progress): Create runtime helpers",
               "execute-feature (pending): Implement execution flow",
@@ -1269,7 +1320,7 @@ describe("runtime transitions", () => {
   });
 
   test("flow_status returns the unchanged default summary shape for planning/running/blocked/completed fixtures", async () => {
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     for (const session of Object.values(buildSummaryFixtureSessions())) {
       const worktree = makeTempDir();
@@ -1280,6 +1331,36 @@ describe("runtime transitions", () => {
 
       expect(normalizeSummaryFixture(parsed)).toEqual(normalizeSummaryFixture(summarizeSession(session)));
     }
+  });
+
+  test("summarizeSession exposes threshold-based final completion context while other features remain pending", async () => {
+    const worktree = makeTempDir();
+    const thresholdPlan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+        requireFinalReview: true,
+      },
+    };
+
+    const running = assertOk(startRun(assertOk(approvePlan(assertOk(applyPlan(createSession("Build a workflow plugin"), thresholdPlan)))))).session;
+    const summary = summarizeSession(running);
+
+    expect(summary.session?.completion).toEqual({
+      activeFeatureTriggersSessionCompletion: true,
+      canCompleteWithPendingFeatures: true,
+      completedFeatures: 0,
+      remainingBeyondTarget: 1,
+      requiresFinalReview: true,
+      targetCompletedFeatures: 1,
+      totalFeatures: 2,
+    });
+
+    await saveSession(worktree, running);
+    const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
+    expect(indexDoc).toContain("completion target: 1/2 features");
+    expect(indexDoc).toContain("pending allowed at completion: yes");
+    expect(indexDoc).toContain("active feature triggers session completion: yes");
   });
 
   test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {
@@ -1762,7 +1843,7 @@ describe("runtime transitions", () => {
 
   test("tool accepts the documented top-level worker payload", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
     expect(applied.ok).toBe(true);
@@ -1809,7 +1890,7 @@ describe("runtime transitions", () => {
     expect(parsed.session.lastOutcomeKind).toBe("completed");
   });
 
-  test("worker completion adapter preserves the documented payload shape for runtime parsing", () => {
+  test("completeRun accepts the documented top-level worker payload directly", () => {
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
     expect(applied.ok).toBe(true);
@@ -1832,7 +1913,7 @@ describe("runtime transitions", () => {
     expect(reviewed.ok).toBe(true);
     if (!reviewed.ok) return;
 
-    const adapted = adaptFlowRunCompleteFeatureInput({
+    const payload = {
       contractVersion: "1",
       status: "ok",
       summary: "Completed runtime setup.",
@@ -1844,52 +1925,37 @@ describe("runtime transitions", () => {
       outcome: { kind: "completed" },
       featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
       featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
-    });
+    };
 
-    const parsed = completeRun(reviewed.value, adapted);
+    const parsed = completeRun(reviewed.value, payload);
 
     expect(parsed.ok).toBe(true);
   });
 
-  test("worker completion adapter preserves all optional worker-result fields", () => {
-    const adapted = adaptFlowRunCompleteFeatureInput({
-      contractVersion: "1",
-      status: "needs_input",
-      summary: "Waiting on operator input.",
-      artifactsChanged: [{ path: "src/runtime/session.ts", kind: "source" }],
-      validationRun: [{ command: "bun test", status: "partial", summary: "One manual check remains." }],
-      validationScope: "broad",
-      reviewIterations: 2,
-      decisions: [{ summary: "Stopped before unsafe completion." }],
-      nextStep: "Ask the operator to confirm migration timing.",
-      outcome: {
-        kind: "needs_operator_input",
-        category: "release",
-        summary: "Manual release approval required.",
-        resolutionHint: "Confirm the rollout window.",
-        retryable: true,
-        autoResolvable: false,
-        needsHuman: true,
-      },
-      featureResult: {
-        featureId: "setup-runtime",
-        verificationStatus: "partial",
-        notes: [{ note: "Manual verification remains." }],
-        followUps: [{ summary: "Confirm rollout timing", severity: "medium" }],
-      },
-      featureReview: {
-        status: "needs_followup",
-        summary: "Needs operator confirmation.",
-        blockingFindings: [{ summary: "Release timing not approved." }],
-      },
-      finalReview: {
-        status: "needs_followup",
-        summary: "Final approval still pending.",
-        blockingFindings: [{ summary: "Awaiting operator sign-off." }],
-      },
-    });
+  test("completeRun preserves optional worker-result fields without adapters", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
 
-    expect(adapted).toEqual({
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const payload = {
       contractVersion: "1",
       status: "needs_input",
       summary: "Waiting on operator input.",
@@ -1924,21 +1990,32 @@ describe("runtime transitions", () => {
         summary: "Final approval still pending.",
         blockingFindings: [{ summary: "Awaiting operator sign-off." }],
       },
-    });
+    };
+
+    const result = completeRun(reviewed.value, payload);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.execution.lastFeatureResult?.verificationStatus).toBe("partial");
+    expect(result.value.execution.lastFeatureResult?.followUps?.[0]?.summary).toBe("Confirm rollout timing");
+    expect(result.value.execution.history.at(-1)?.finalReview?.status).toBe("needs_followup");
   });
 
-  test("reviewer decision adapter preserves optional reviewer payload fields", () => {
-    expect(
-      adaptReviewerDecisionInput({
-        scope: "feature",
-        featureId: "setup-runtime",
-        status: "needs_fix",
-        summary: "Needs another pass.",
-        blockingFindings: [{ summary: "Validation evidence is incomplete." }],
-        followUps: [{ summary: "Rerun targeted tests", severity: "medium" }],
-        suggestedValidation: ["bun test tests/runtime.test.ts"],
-      }),
-    ).toEqual({
+  test("recordReviewerDecision preserves optional reviewer payload fields without adapters", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const input = {
       scope: "feature",
       featureId: "setup-runtime",
       status: "needs_fix",
@@ -1946,12 +2023,20 @@ describe("runtime transitions", () => {
       blockingFindings: [{ summary: "Validation evidence is incomplete." }],
       followUps: [{ summary: "Rerun targeted tests", severity: "medium" }],
       suggestedValidation: ["bun test tests/runtime.test.ts"],
-    });
+    };
+
+    const result = recordReviewerDecision(started.value.session, input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.execution.lastReviewerDecision?.scope).toBe("feature");
+    expect(result.value.execution.lastReviewerDecision?.status).toBe("needs_fix");
+    expect(result.value.execution.lastReviewerDecision?.followUps[0]?.summary).toBe("Rerun targeted tests");
   });
 
-  test("reviewer decision tool accepts the adapted top-level payload for final review", async () => {
+  test("reviewer decision tool accepts the top-level payload for final review", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
     expect(applied.ok).toBe(true);
@@ -1987,7 +2072,7 @@ describe("runtime transitions", () => {
 
   test("tools keep representative top-level response shapes across the split helpers", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const planStartResponse = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
     const planStartParsed = JSON.parse(planStartResponse);
@@ -2005,7 +2090,7 @@ describe("runtime transitions", () => {
 
   test("flow_status returns a machine-readable missing-session summary", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const response = await tools.flow_status.execute({}, { worktree });
     const parsed = JSON.parse(response);
 
@@ -2015,7 +2100,7 @@ describe("runtime transitions", () => {
 
   test("flow_history returns a machine-readable missing-history summary", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const response = await tools.flow_history.execute({}, { worktree });
     const parsed = JSON.parse(response);
 
@@ -2027,9 +2112,27 @@ describe("runtime transitions", () => {
     expect(parsed.nextCommand).toBe("/flow-plan <goal>");
   });
 
+  test("no-arg tools accept undefined args", async () => {
+    const worktree = makeTempDir();
+    const tools = createTestTools();
+
+    const statusResponse = await tools.flow_status.execute(undefined, { worktree });
+    const statusParsed = JSON.parse(statusResponse);
+    expect(statusParsed.status).toBe("missing");
+
+    const historyResponse = await tools.flow_history.execute(undefined, { worktree });
+    const historyParsed = JSON.parse(historyResponse);
+    expect(historyParsed.status).toBe("missing");
+
+    const resetResponse = await tools.flow_reset_session.execute(undefined, { worktree });
+    const resetParsed = JSON.parse(resetResponse);
+    expect(resetParsed.status).toBe("ok");
+    expect(resetParsed.summary).toBe("No active Flow session existed.");
+  });
+
   test("flow_history lists active and archived session runs", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const first = await saveSession(worktree, createSession("First goal"));
     const second = await saveSession(worktree, createSession("Second goal"));
 
@@ -2066,7 +2169,7 @@ describe("runtime transitions", () => {
 
   test("flow_history_show returns active stored session details by id", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const first = await saveSession(worktree, createSession("First goal"));
     const second = await saveSession(worktree, createSession("Second goal"));
 
@@ -2087,7 +2190,7 @@ describe("runtime transitions", () => {
 
   test("flow_history_show returns archived session details by id", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const saved = await saveSession(worktree, createSession("Archived goal"));
 
     const resetResponse = await tools.flow_reset_session.execute({}, { worktree });
@@ -2108,7 +2211,7 @@ describe("runtime transitions", () => {
 
   test("flow_history_show does not suggest activation for completed stored sessions", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const completed = createSession("Completed goal");
     const saved = await saveSession(worktree, {
       ...completed,
@@ -2132,7 +2235,7 @@ describe("runtime transitions", () => {
 
   test("flow_session_activate switches the active session pointer", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const first = await saveSession(worktree, createSession("First goal"));
     const second = await saveSession(worktree, createSession("Second goal"));
 
@@ -2151,7 +2254,7 @@ describe("runtime transitions", () => {
 
   test("history show and session activate report missing ids clearly", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
 
     const showResponse = await tools.flow_history_show.execute({ sessionId: "missing-id" }, { worktree });
     const showParsed = JSON.parse(showResponse);
@@ -2166,7 +2269,7 @@ describe("runtime transitions", () => {
 
   test("flow_reset_session archives the active session and clears the active pointer", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const saved = await saveSession(worktree, createSession("Build a workflow plugin"));
 
     const response = await tools.flow_reset_session.execute({}, { worktree });
@@ -2184,7 +2287,7 @@ describe("runtime transitions", () => {
 
   test("tools return machine-readable missing-session responses for plan, review, and reset operations", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const cases = [
       ["flow_plan_apply", { plan: samplePlan() }, "missing_session", "/flow-plan <goal>"],
       ["flow_plan_approve", {}, "missing_session", undefined],
@@ -2208,7 +2311,7 @@ describe("runtime transitions", () => {
 
   test("tool rejects flow_run_start for completed sessions", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const plan = {
       ...samplePlan(),
@@ -2265,7 +2368,7 @@ describe("runtime transitions", () => {
 
   test("tool rejects the old nested worker payload shape", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
     expect(applied.ok).toBe(true);
@@ -2306,7 +2409,7 @@ describe("runtime transitions", () => {
 
   test("tool returns machine-readable recovery details for missing final reviewer approval", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const plan = {
       ...samplePlan(),
@@ -2362,7 +2465,7 @@ describe("runtime transitions", () => {
 
   test("tool returns machine-readable recovery details for missing broad validation", async () => {
     const worktree = makeTempDir();
-    const tools = createTools({}) as any;
+    const tools = createTestTools();
     const session = createSession("Build a workflow plugin");
     const plan = {
       ...samplePlan(),

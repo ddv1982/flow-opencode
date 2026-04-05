@@ -1,4 +1,5 @@
 import type { Feature, Session } from "../schema";
+import { nowIso } from "../time";
 import { cloneSession, indexFeatures } from "./shared";
 
 export type RunnableFeatureResult =
@@ -22,7 +23,7 @@ export function markSessionCompleted(session: Session, summary: string): Session
   next.execution.activeFeatureId = null;
   next.execution.lastSummary = summary;
   next.execution.lastOutcomeKind = "completed";
-  next.timestamps.completedAt = new Date().toISOString();
+  next.timestamps.completedAt = nowIso();
   return next;
 }
 

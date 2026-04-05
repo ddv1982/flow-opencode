@@ -8,8 +8,44 @@ import { FLOW_REVIEWER_CONTRACT, FLOW_WORKER_CONTRACT } from "../src/prompts/con
 import { WorkerResultSchema } from "../src/runtime/schema";
 import { createTools } from "../src/tools";
 
+type AgentTools = {
+  edit?: boolean;
+  write?: boolean;
+  bash?: boolean;
+};
+
+type AgentPermission = {
+  edit?: string;
+  bash?: string;
+};
+
+type AgentConfigShape = {
+  mode?: string;
+  description?: string;
+  prompt?: string;
+  tools?: AgentTools;
+  permission?: AgentPermission;
+  [key: string]: unknown;
+};
+
+type CommandConfigShape = {
+  description?: string;
+  agent?: string;
+  template?: string;
+  [key: string]: unknown;
+};
+
+type MutableConfig = {
+  agent?: Record<string, AgentConfigShape>;
+  command?: Record<string, CommandConfigShape>;
+};
+
+type ToolDefinition = {
+  args: Record<string, unknown>;
+};
+
 function getToolSchemas() {
-  const tools = createTools({}) as Record<string, { args: Record<string, any> }>;
+  const tools = createTools({}) as unknown as Record<string, ToolDefinition>;
 
   return {
     tools,
@@ -41,18 +77,19 @@ function expectNoFlowManagedCompaction(content: string) {
 
 describe("applyFlowConfig", () => {
   test("plugin entrypoint returns Flow config and tool hooks", async () => {
-    const ctx = { worktree: "/tmp/flow-plugin-test" } as any;
+    const ctx = { worktree: "/tmp/flow-plugin-test" } as unknown as Parameters<typeof FlowPlugin>[0];
     const plugin = await FlowPlugin(ctx);
 
     expect(typeof plugin.config).toBe("function");
     expect(plugin.tool).toBeDefined();
     expect(Object.keys(plugin.tool ?? {})).toEqual(Object.keys(createTools(ctx)));
 
-    const config = { command: { existing: { description: "keep me" } } } as any;
-    await plugin.config?.(config);
+    const config: MutableConfig = { command: { existing: { description: "keep me" } } };
+    const pluginConfigArg = config as unknown as Parameters<NonNullable<typeof plugin.config>>[0];
+    await plugin.config?.(pluginConfigArg);
 
-    expect(config.command.existing).toEqual({ description: "keep me" });
-    expect(config.command["flow-plan"]).toBeDefined();
+    expect(config.command?.existing).toEqual({ description: "keep me" });
+    expect(config.command?.["flow-plan"]).toBeDefined();
   });
 
   test("createTools preserves the expected ordered tool surface", () => {
@@ -76,7 +113,7 @@ describe("applyFlowConfig", () => {
   });
 
   test("injects commands and agents", () => {
-    const config: { agent?: Record<string, unknown>; command?: Record<string, unknown> } = {};
+    const config: MutableConfig = {};
     applyFlowConfig(config);
 
     expect(config.agent).toBeDefined();
@@ -96,7 +133,7 @@ describe("applyFlowConfig", () => {
   });
 
   test("routes status, history, session activation, and reset through the control agent", () => {
-    const config: { agent?: Record<string, any>; command?: Record<string, any> } = {};
+    const config: MutableConfig = {};
     applyFlowConfig(config);
 
     expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
@@ -106,7 +143,7 @@ describe("applyFlowConfig", () => {
   });
 
   test("configures flow-reviewer as read-only", () => {
-    const config: { agent?: Record<string, any>; command?: Record<string, any> } = {};
+    const config: MutableConfig = {};
     applyFlowConfig(config);
 
     expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
@@ -120,24 +157,24 @@ describe("applyFlowConfig", () => {
 
   test("createConfigHook is async and preserves unrelated config entries", async () => {
     const hook = createConfigHook({});
-    const config = {
+    const config: MutableConfig = {
       agent: { existing: { mode: "primary", description: "already here" } },
       command: { existing: { description: "already here", agent: "existing" } },
-    } as any;
+    };
 
-    await expect(hook(config)).resolves.toBeUndefined();
+    await expect(hook(config as unknown as Parameters<typeof hook>[0])).resolves.toBeUndefined();
 
-    expect(config.agent.existing).toEqual({ mode: "primary", description: "already here" });
-    expect(config.command.existing).toEqual({ description: "already here", agent: "existing" });
-    expect(config.agent["flow-control"]).toBeDefined();
-    expect(config.command["flow-history"]).toBeDefined();
-    expect(config.command["flow-session"]).toBeDefined();
-    expect(config.command["flow-reset"]).toBeDefined();
+    expect(config.agent?.existing).toEqual({ mode: "primary", description: "already here" });
+    expect(config.command?.existing).toEqual({ description: "already here", agent: "existing" });
+    expect(config.agent?.["flow-control"]).toBeDefined();
+    expect(config.command?.["flow-history"]).toBeDefined();
+    expect(config.command?.["flow-session"]).toBeDefined();
+    expect(config.command?.["flow-reset"]).toBeDefined();
   });
 
   test("injects fresh config objects instead of sharing mutable references across calls", () => {
-    const first: { agent?: Record<string, any>; command?: Record<string, any> } = {};
-    const second: { agent?: Record<string, any>; command?: Record<string, any> } = {};
+    const first: MutableConfig = {};
+    const second: MutableConfig = {};
 
     applyFlowConfig(first);
     applyFlowConfig(second);
@@ -149,8 +186,13 @@ describe("applyFlowConfig", () => {
     expect(first.agent?.["flow-planner"]?.permission).not.toBe(second.agent?.["flow-planner"]?.permission);
     expect(first.command?.["flow-plan"]).not.toBe(second.command?.["flow-plan"]);
 
-    first.agent!["flow-planner"].tools.edit = true;
-    first.agent!["flow-planner"].permission.edit = "allow";
+    const firstPlanner = first.agent?.["flow-planner"];
+    if (!firstPlanner?.tools || !firstPlanner.permission) {
+      throw new Error("Missing flow-planner config in test setup.");
+    }
+
+    firstPlanner.tools.edit = true;
+    firstPlanner.permission.edit = "allow";
     expect(second.agent?.["flow-planner"]?.tools?.edit).toBe(false);
     expect(first.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
     expect(second.agent?.["flow-planner"]?.permission?.edit).toBe("deny");

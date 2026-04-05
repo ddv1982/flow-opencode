@@ -36,7 +36,8 @@ Status rules:
 - if status is needs_input, outcome.kind must be replan_required | blocked_external | needs_operator_input | contract_error
 - never return status: ok with a non-completion outcome
 - never return status: ok until targeted validation is complete and featureReview has no blocking findings
-- when the active feature is the final completion path for the session, run broad validation, include finalReview, and use validationScope: broad`;
+- when the active feature is the final completion path for the session, run broad validation, include finalReview, and use validationScope: broad
+- treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending`;
 
 export const FLOW_REVIEWER_CONTRACT = `Return exactly one reviewer result payload with:
 

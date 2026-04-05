@@ -1,3 +1,4 @@
+import { summarizeCompletion } from "./domain";
 import { deriveNextCommand } from "./summary";
 import type { Feature, Session } from "./schema";
 import { bulletList, formatFollowUpLines, joinSections, maybeSection, maybeTitledList, renderOutcomeLines, toInlineText } from "./render-sections-shared";
@@ -69,15 +70,28 @@ function renderIndexSummarySection(session: Session): string {
 function renderPlanSection(session: Session, features: Feature[]): string {
   const plan = session.plan;
   const activeFeature = features.find((feature) => feature.id === session.execution.activeFeatureId) ?? null;
-  const completedCount = features.filter((feature) => feature.status === "completed").length;
+  const completion = summarizeCompletion(session);
+  const completedCount = completion?.completedFeatures ?? features.filter((feature) => feature.status === "completed").length;
+  const planLines = [
+    `- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}`,
+    `- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}`,
+    `- progress: ${completedCount}/${features.length} completed`,
+    `- active feature: ${activeFeature ? activeFeature.id : "none"}`,
+  ];
+
+  if (completion) {
+    planLines.push(`- completion target: ${completion.targetCompletedFeatures}/${completion.totalFeatures} features`);
+    planLines.push(`- pending allowed at completion: ${completion.canCompleteWithPendingFeatures ? "yes" : "no"}`);
+    planLines.push(`- final review required: ${completion.requiresFinalReview ? "yes" : "no"}`);
+    planLines.push(
+      `- active feature triggers session completion: ${completion.activeFeatureTriggersSessionCompletion ? "yes" : "no"}`,
+    );
+  }
 
   return joinSections([
     `## Plan
 
-- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}
-- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}
-- progress: ${completedCount}/${features.length} completed
-- active feature: ${activeFeature ? activeFeature.id : "none"}`,
+${planLines.join("\n")}`,
     maybeSection("Requirements", plan?.requirements ?? []),
     maybeSection("Architecture Decisions", plan?.architectureDecisions ?? []),
     maybeSection("Repo Profile", session.planning.repoProfile),
