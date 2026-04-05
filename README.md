@@ -155,6 +155,10 @@ If you ever need to copy the file yourself, build first and then copy `dist/inde
 - `.opencode/plugins/`
 - `~/.config/opencode/plugins/`
 
+## Contributing
+
+If you want to work on the plugin itself, see the [Development Guide](docs/development.md).
+
 ## License
 
 This project is licensed under the MIT License. See `LICENSE` for the full text.
