@@ -101,7 +101,7 @@ Autonomous loop:
 5. Use flow-worker to implement the current feature and run targeted validation.
 6. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature before deciding what happens next.
 7. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
-8. Persist an approved feature result with flow_run_complete_feature. If that runtime step fails, inspect the recovery metadata, satisfy the stated prerequisite, and perform the indicated runtime action when one is provided.
+8. Persist an approved feature result with flow_run_complete_feature. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated runtime action when one is provided.
 9. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
 10. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final, and keep fixing/revalidating until the final review passes.
 11. Only then allow final completion.
