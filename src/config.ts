@@ -17,16 +17,11 @@ type MutableConfig = {
   command?: Record<string, unknown>;
 };
 
-type FlowReadOnlyPermission = {
-  edit: "deny";
-  bash: "deny";
-};
-
 type FlowAgentConfig = {
   mode: "primary";
   description: string;
   prompt: string;
-  permission?: FlowReadOnlyPermission;
+  permission?: typeof FLOW_READ_ONLY_PERMISSION;
   tools?: typeof FLOW_READ_ONLY_TOOLS;
 };
 
@@ -117,21 +112,22 @@ function cloneAgentConfig(agent: FlowAgentConfig) {
   };
 }
 
-function cloneCommandConfig(command: FlowCommandConfig) {
-  return {
-    ...command,
-  };
-}
-
 export function applyFlowConfig(config: MutableConfig): void {
+  const clonedAgents = Object.fromEntries(
+    Object.entries(FLOW_AGENTS).map(([name, agent]) => [name, cloneAgentConfig(agent)]),
+  );
+  const clonedCommands = Object.fromEntries(
+    Object.entries(FLOW_COMMANDS).map(([name, command]) => [name, { ...command }]),
+  );
+
   config.agent = {
     ...(config.agent ?? {}),
-    ...Object.fromEntries(Object.entries(FLOW_AGENTS).map(([name, agent]) => [name, cloneAgentConfig(agent)])),
+    ...clonedAgents,
   };
 
   config.command = {
     ...(config.command ?? {}),
-    ...Object.fromEntries(Object.entries(FLOW_COMMANDS).map(([name, command]) => [name, cloneCommandConfig(command)])),
+    ...clonedCommands,
   };
 }
 

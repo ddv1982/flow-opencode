@@ -797,6 +797,21 @@ describe("runtime transitions", () => {
     await expect(readFile(join(directory, ".flow", "active"), "utf8")).resolves.toContain(parsed.session.id);
   });
 
+  test("runtime tool transitions persist session state and refresh docs", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+
+    await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
+    const before = await readFile(await activeIndexDocPath(worktree), "utf8");
+    expect(before).toContain("summary: No plan yet.");
+
+    await tools.flow_plan_apply.execute({ plan: samplePlan() }, { worktree });
+    const afterApply = await readFile(await activeIndexDocPath(worktree), "utf8");
+    const session = await loadSession(worktree);
+    expect(session?.plan?.summary).toBe(samplePlan().summary);
+    expect(afterApply).toContain("summary: Implement a small workflow feature set.");
+  });
+
   test("returns to planning when the worker requires replanning", () => {
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());

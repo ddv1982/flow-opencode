@@ -1,6 +1,7 @@
 import type { Feature, Session } from "./schema";
 import {
   bulletList,
+  formatFollowUpLines,
   joinSections,
   maybeQuotedSection,
   maybeSection,
@@ -46,7 +47,7 @@ function renderFeatureHistory(session: Session, feature: Feature): string {
       maybeTitledList("Notes", entry.featureResult?.notes?.map((item) => item.note) ?? [], "####"),
       maybeTitledList(
         "Follow Ups",
-        entry.featureResult?.followUps?.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)) ?? [],
+        formatFollowUpLines(entry.featureResult?.followUps ?? []),
         "####",
       ),
       renderReviewBlock("Feature Review", entry.featureReview),

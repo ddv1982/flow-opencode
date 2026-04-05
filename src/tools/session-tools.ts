@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
-import { activateSession, archiveSession, createSession, listSessionHistory, loadSession, loadStoredSession, saveSession } from "../runtime/session";
+import { activateSession, archiveSession, createSession, listSessionHistory, loadSession, loadStoredSession, saveSessionState, syncSessionArtifacts } from "../runtime/session";
 import { summarizeSession } from "../runtime/summary";
 import {
   FlowAutoPrepareArgsShape,
@@ -172,7 +172,8 @@ export function createSessionTools() {
                 },
               };
 
-        const session = await saveSession(sessionRoot, base);
+        const session = await saveSessionState(sessionRoot, base);
+        await syncSessionArtifacts(sessionRoot, session);
         return toJson({
           status: "ok",
           summary: `Planning session ready for goal: ${session.goal}`,

@@ -71,59 +71,62 @@ function validateSuccessfulCompletion(
   wasFinalFeature: boolean,
   requireFinalReview: boolean,
 ): TransitionResult<void> {
-  if (worker.validationRun.length === 0) {
-    return fail(
-      "Worker result cannot complete the feature without recorded validation evidence.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation"),
-    );
-  }
-  if (!isValidationPassing(worker.validationRun)) {
-    return fail(
-      "Worker result cannot complete the feature because validation did not fully pass.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "failing_validation"),
-    );
-  }
-  if (!hasApprovedReviewerDecision(session, featureId, wasFinalFeature)) {
-    return fail(
-      "Worker result cannot complete without a recorded approved reviewer decision.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "missing_reviewer_decision"),
-    );
-  }
-  if (!wasFinalFeature && worker.validationScope !== "targeted") {
-    return fail(
-      "Worker result cannot complete the feature without targeted validation.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
-    );
-  }
-  if (!isReviewPassing(worker.featureReview)) {
-    return fail(
-      "Worker result cannot complete the feature because featureReview is not passing.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "failing_feature_review"),
-    );
-  }
-  if (worker.finalReview && !isReviewPassing(worker.finalReview)) {
-    return fail(
-      "Worker result cannot complete the feature because finalReview is not passing.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
-    );
-  }
-  if (wasFinalFeature && worker.validationScope !== "broad") {
-    return fail(
-      "Worker result cannot complete the session without broad final validation.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
-    );
-  }
-  if (wasFinalFeature && !worker.finalReview) {
-    return fail(
-      "Worker result cannot complete the session without a finalReview.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "missing_final_review"),
-    );
-  }
-  if (requireFinalReview && !isReviewPassing(worker.finalReview)) {
-    return fail(
-      "Worker result cannot complete the session because a passing finalReview is required.",
-      buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
-    );
+  const completionChecks: Array<{
+    kind: Parameters<typeof buildCompletionRecovery>[2];
+    message: string;
+    failing: () => boolean;
+  }> = [
+    {
+      kind: "missing_validation",
+      message: "Worker result cannot complete the feature without recorded validation evidence.",
+      failing: () => worker.validationRun.length === 0,
+    },
+    {
+      kind: "failing_validation",
+      message: "Worker result cannot complete the feature because validation did not fully pass.",
+      failing: () => !isValidationPassing(worker.validationRun),
+    },
+    {
+      kind: "missing_reviewer_decision",
+      message: "Worker result cannot complete without a recorded approved reviewer decision.",
+      failing: () => !hasApprovedReviewerDecision(session, featureId, wasFinalFeature),
+    },
+    {
+      kind: "missing_validation_scope",
+      message: "Worker result cannot complete the feature without targeted validation.",
+      failing: () => !wasFinalFeature && worker.validationScope !== "targeted",
+    },
+    {
+      kind: "failing_feature_review",
+      message: "Worker result cannot complete the feature because featureReview is not passing.",
+      failing: () => !isReviewPassing(worker.featureReview),
+    },
+    {
+      kind: "failing_final_review",
+      message: "Worker result cannot complete the feature because finalReview is not passing.",
+      failing: () => Boolean(worker.finalReview && !isReviewPassing(worker.finalReview)),
+    },
+    {
+      kind: "missing_validation_scope",
+      message: "Worker result cannot complete the session without broad final validation.",
+      failing: () => wasFinalFeature && worker.validationScope !== "broad",
+    },
+    {
+      kind: "missing_final_review",
+      message: "Worker result cannot complete the session without a finalReview.",
+      failing: () => wasFinalFeature && !worker.finalReview,
+    },
+    {
+      kind: "failing_final_review",
+      message: "Worker result cannot complete the session because a passing finalReview is required.",
+      failing: () => requireFinalReview && !isReviewPassing(worker.finalReview),
+    },
+  ];
+
+  for (const check of completionChecks) {
+    if (check.failing()) {
+      return fail(check.message, buildCompletionRecovery(featureId, wasFinalFeature, check.kind));
+    }
   }
 
   return succeed(undefined);

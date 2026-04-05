@@ -20,3 +20,9 @@ export const FLOW_RESUME_ONLY_RULE =
 export const FLOW_STRUCTURED_RECOVERY_RULE =
   "- When tool errors include structured recovery metadata, satisfy `recovery.prerequisite` first. Only call `recovery.nextRuntimeTool` when it is present. Treat `recovery.nextCommand` as user-facing guidance, not the agent's only option.";
 export const FLOW_RUNTIME_STATE_TRANSITION_RULE = "- Use Flow runtime tools for every state transition.";
+export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =
+  "- Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.";
+export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
+  "- Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.";
+export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =
+  "- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.";

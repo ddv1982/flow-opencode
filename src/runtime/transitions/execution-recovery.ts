@@ -23,6 +23,8 @@ type ResetFeatureRecoveryKind =
   | "failing_final_review"
   | "failing_validation";
 
+type DynamicRecoveryKind = "missing_reviewer_decision" | "missing_validation_scope";
+
 const REVIEW_DECISION_RECOVERY: Record<"feature" | "final", StaticCompletionRecovery> = {
   feature: {
     errorCode: "missing_feature_reviewer_decision",
@@ -143,20 +145,34 @@ function buildResetFeatureRecovery(
   };
 }
 
+const DYNAMIC_STATUS_RECOVERY: Record<
+  DynamicRecoveryKind,
+  (wasFinalFeature: boolean) => StaticCompletionRecovery
+> = {
+  missing_reviewer_decision: (wasFinalFeature) =>
+    REVIEW_DECISION_RECOVERY[wasFinalFeature ? "final" : "feature"],
+  missing_validation_scope: (wasFinalFeature) =>
+    VALIDATION_SCOPE_RECOVERY[wasFinalFeature ? "broad" : "targeted"],
+};
+
+function isDynamicRecoveryKind(kind: CompletionRecoveryKind): kind is DynamicRecoveryKind {
+  return kind in DYNAMIC_STATUS_RECOVERY;
+}
+
+function isResetFeatureRecoveryKind(kind: CompletionRecoveryKind): kind is ResetFeatureRecoveryKind {
+  return kind in RESET_FEATURE_COMPLETION_RECOVERY;
+}
+
 export function buildCompletionRecovery(
   featureId: string,
   wasFinalFeature: boolean,
   kind: CompletionRecoveryKind,
 ): TransitionRecovery {
-  if (kind === "missing_reviewer_decision") {
-    return buildStatusRecovery(REVIEW_DECISION_RECOVERY[wasFinalFeature ? "final" : "feature"]);
+  if (isDynamicRecoveryKind(kind)) {
+    return buildStatusRecovery(DYNAMIC_STATUS_RECOVERY[kind](wasFinalFeature));
   }
 
-  if (kind === "missing_validation_scope") {
-    return buildStatusRecovery(VALIDATION_SCOPE_RECOVERY[wasFinalFeature ? "broad" : "targeted"]);
-  }
-
-  if (kind === "failing_feature_review" || kind === "failing_final_review" || kind === "failing_validation") {
+  if (isResetFeatureRecoveryKind(kind)) {
     return buildResetFeatureRecovery(featureId, RESET_FEATURE_COMPLETION_RECOVERY[kind]);
   }
 

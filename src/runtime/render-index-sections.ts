@@ -1,6 +1,6 @@
 import { deriveNextCommand } from "./summary";
 import type { Feature, Session } from "./schema";
-import { bulletList, joinSections, maybeSection, maybeTitledList, renderOutcomeLines, toInlineText } from "./render-sections-shared";
+import { bulletList, formatFollowUpLines, joinSections, maybeSection, maybeTitledList, renderOutcomeLines, toInlineText } from "./render-sections-shared";
 
 function maybeApproachSection(session: Session): string {
   const approach = session.planning.implementationApproach;
@@ -39,7 +39,7 @@ function renderFeatureResultDetails(
     maybeTitledList("Notes", featureResult.notes?.map((item) => item.note) ?? [], "###"),
     maybeTitledList(
       "Follow Ups",
-      featureResult.followUps?.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)) ?? [],
+      formatFollowUpLines(featureResult.followUps ?? []),
       "###",
     ),
   ].filter(Boolean);

@@ -50,6 +50,14 @@ export function maybeQuotedSection(title: string, value: string | null | undefin
   return `## ${title}\n\n${toQuotedBlock(value)}`;
 }
 
+export function formatFollowUpLine(item: { summary: string; severity?: string }): string {
+  return item.severity ? `${item.summary} (${item.severity})` : item.summary;
+}
+
+export function formatFollowUpLines(items: Array<{ summary: string; severity?: string }>): string[] {
+  return items.map(formatFollowUpLine);
+}
+
 export function renderReviewBlock(
   title: string,
   review:

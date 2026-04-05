@@ -1,5 +1,5 @@
 import { parse } from "node:path";
-import { loadSession, saveSession } from "../runtime/session";
+import { loadSession, saveSessionState, syncSessionArtifacts } from "../runtime/session";
 import { summarizeSession } from "../runtime/summary";
 import type { Session } from "../runtime/schema";
 import type { TransitionResult } from "../runtime/transitions";
@@ -13,23 +13,37 @@ export function toJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function asWritableRootCandidate(rawPath: string | undefined): string | null {
+  const path = rawPath?.trim();
+  if (!path) {
+    return null;
+  }
+
+  if (parse(path).root === path) {
+    return null;
+  }
+
+  return path;
+}
+
 export function resolveSessionRoot(context: ToolContext): string {
-  const worktree = context.worktree?.trim();
-  const directory = context.directory?.trim();
+  const candidateWorktree = asWritableRootCandidate(context.worktree);
+  const candidateDirectory = asWritableRootCandidate(context.directory);
+  const candidateCwd = asWritableRootCandidate(process.cwd());
 
-  if (worktree && worktree !== parse(worktree).root) {
-    return worktree;
+  if (candidateWorktree) {
+    return candidateWorktree;
   }
 
-  if (directory) {
-    return directory;
+  if (candidateDirectory) {
+    return candidateDirectory;
   }
 
-  if (worktree) {
-    return worktree;
+  if (candidateCwd) {
+    return candidateCwd;
   }
 
-  throw new Error("Flow tool context is missing both worktree and directory.");
+  throw new Error("Flow tool context is missing a writable workspace root (worktree or directory).");
 }
 
 export function summarizePersistedSession(session: Session) {
@@ -68,11 +82,44 @@ export async function persistTransition<T>(
   onSuccess: (saved: Session, value: T) => ToolResponse,
   onError: (result: Extract<TransitionResult<T>, { ok: false }>) => ToolResponse = (failure) =>
     errorResponse(failure.message),
+  options: { syncArtifacts?: boolean } = { syncArtifacts: true },
 ): Promise<string> {
   if (!result.ok) {
     return toJson(onError(result));
   }
 
-  const saved = await saveSession(resolveSessionRoot(context), getSession(result.value));
+  const worktree = resolveSessionRoot(context);
+  const saved = await saveSessionState(worktree, getSession(result.value));
+  if (options.syncArtifacts) {
+    await syncSessionArtifacts(worktree, saved);
+  }
   return toJson(onSuccess(saved, result.value));
+}
+
+export async function withPersistedTransition<T>(
+  context: ToolContext,
+  runTransition: (session: Session) => TransitionResult<T>,
+  options: {
+    getSession: (value: T) => Session;
+    onSuccess: (saved: Session, value: T) => ToolResponse;
+    missingResponse?: ToolResponse;
+    onError?: (result: Extract<TransitionResult<T>, { ok: false }>) => ToolResponse;
+    syncArtifacts?: boolean;
+  },
+): Promise<string> {
+  const syncArtifacts = options.syncArtifacts ?? true;
+
+  return withSession(
+    context,
+    async (session) =>
+      persistTransition(
+        context,
+        runTransition(session),
+        options.getSession,
+        options.onSuccess,
+        options.onError,
+        { syncArtifacts },
+      ),
+    options.missingResponse ?? missingSessionResponse(),
+  );
 }

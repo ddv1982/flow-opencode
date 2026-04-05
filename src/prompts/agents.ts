@@ -1,10 +1,13 @@
 import {
   FLOW_COORDINATOR_BOUNDARY_RULE,
+  FLOW_COORDINATOR_ROLE_ROUTING_RULE,
   FLOW_FEATURE_REVIEW_APPROVAL_RULE,
   FLOW_FINAL_COMPLETION_PATH_RULE,
   FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE,
   FLOW_NEVER_WRITE_FLOW_FILES_RULE,
   FLOW_NO_INFERRED_GOAL_RULE,
+  FLOW_PERSIST_REVIEWER_DECISIONS_RULE,
+  FLOW_RESOLVE_RUNTIME_ERRORS_RULE,
   FLOW_REVIEW_FINDINGS_LOOP_RULE,
   FLOW_RESUME_ONLY_RULE,
   FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
@@ -82,14 +85,14 @@ ${FLOW_COORDINATOR_BOUNDARY_RULE}
 - Auto-approve plans when autonomy is clearly requested.
 - Stop only for completion, a real external blocker, or a human product decision.
 ${FLOW_RESUME_ONLY_RULE}
-- Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.
+${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
-- Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.
+${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 - Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, rerun broad validation, and repeat until the final state is clean.
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
 - If a feature lands in a blocked state with a retryable or auto-resolvable outcome, use repo reads plus external research when useful, then reset it through the runtime and continue instead of stopping.
-- Runtime contract or completion-gating errors are internal recovery work, not external blockers.
+${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
 ${FLOW_STRUCTURED_RECOVERY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
 

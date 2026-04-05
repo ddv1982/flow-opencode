@@ -1,65 +1,102 @@
 import { tool } from "@opencode-ai/plugin";
-import { DECOMPOSITION_POLICIES, GOAL_MODES, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "../runtime/contracts";
+import {
+  DECOMPOSITION_POLICIES,
+  GOAL_MODES,
+  OUTCOME_KINDS,
+  REVIEWER_DECISION_STATUSES,
+  REVIEW_STATUSES,
+  VALIDATION_STATUSES,
+  VERIFICATION_STATUSES,
+  WORKER_STATUSES,
+} from "../runtime/contracts";
 import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN, FEATURE_REVIEW_SCOPE, FINAL_REVIEW_SCOPE, VALIDATION_SCOPES } from "../runtime/primitives";
 import type { PlanningContext } from "../runtime/schema";
 
 const z = tool.schema;
+
 export const featureIdSchema = z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
+
+const reviewFindingSchema = z.object({
+  summary: z.string().min(1),
+});
+
+const followUpSchema = z.object({
+  summary: z.string().min(1),
+  severity: z.string().min(1).optional(),
+});
+
+const artifactSchema = z.object({
+  path: z.string().min(1),
+  kind: z.string().min(1).optional(),
+});
+
+const validationRunSchema = z.object({
+  command: z.string().min(1),
+  status: z.enum(VALIDATION_STATUSES),
+  summary: z.string().min(1),
+});
+
+const reviewSchema = z.object({
+  status: z.enum(REVIEW_STATUSES),
+  summary: z.string().min(1),
+  blockingFindings: z.array(reviewFindingSchema).default([]),
+});
+
+const completionPolicySchema = z.object({
+  minCompletedFeatures: z.number().int().positive().optional(),
+  requireFinalReview: z.boolean().optional(),
+});
+
+const featureSchema = z.object({
+  id: featureIdSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  fileTargets: z.array(z.string().min(1)).default([]),
+  verification: z.array(z.string().min(1)).default([]),
+  dependsOn: z.array(z.string().min(1)).optional(),
+  blockedBy: z.array(z.string().min(1)).optional(),
+});
+
+const implementationApproachSchema = z.object({
+  chosenDirection: z.string().min(1),
+  keyConstraints: z.array(z.string().min(1)).default([]),
+  validationSignals: z.array(z.string().min(1)).default([]),
+  sources: z.array(z.string().min(1)).default([]),
+});
+
+const reviewerDecisionStatusSchema = z.enum(REVIEWER_DECISION_STATUSES);
 
 export const PlanArgsSchema = z.object({
   summary: z.string().min(1),
   overview: z.string().min(1),
   requirements: z.array(z.string().min(1)).default([]),
   architectureDecisions: z.array(z.string().min(1)).default([]),
-  features: z.array(
-    z.object({
-      id: featureIdSchema,
-      title: z.string().min(1),
-      summary: z.string().min(1),
-      fileTargets: z.array(z.string().min(1)).default([]),
-      verification: z.array(z.string().min(1)).default([]),
-      dependsOn: z.array(z.string().min(1)).optional(),
-      blockedBy: z.array(z.string().min(1)).optional(),
-    }),
-  ).min(1),
+  features: z.array(featureSchema).min(1),
   goalMode: z.enum(GOAL_MODES).optional(),
   decompositionPolicy: z.enum(DECOMPOSITION_POLICIES).optional(),
-  completionPolicy: z
-    .object({
-      minCompletedFeatures: z.number().int().positive().optional(),
-      requireFinalReview: z.boolean().optional(),
-    })
-    .optional(),
+  completionPolicy: completionPolicySchema.optional(),
   notes: z.array(z.string().min(1)).optional(),
 });
 
 export const PlanningContextArgsSchema = z.object({
   repoProfile: z.array(z.string().min(1)).optional(),
   research: z.array(z.string().min(1)).optional(),
-  implementationApproach: z
-    .object({
-      chosenDirection: z.string().min(1),
-      keyConstraints: z.array(z.string().min(1)).default([]),
-      validationSignals: z.array(z.string().min(1)).default([]),
-      sources: z.array(z.string().min(1)).default([]),
-    })
-    .optional(),
+  implementationApproach: implementationApproachSchema.optional(),
+});
+
+const featureResultSchema = z.object({
+  featureId: featureIdSchema,
+  verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
+  notes: z.array(z.object({ note: z.string().min(1) })).optional(),
+  followUps: z.array(followUpSchema).optional(),
 });
 
 export const WorkerResultArgsShape = {
   contractVersion: z.literal("1"),
   status: z.enum(WORKER_STATUSES),
   summary: z.string().min(1),
-  artifactsChanged: z.array(z.object({ path: z.string().min(1), kind: z.string().min(1).optional() })).default([]),
-  validationRun: z
-    .array(
-      z.object({
-        command: z.string().min(1),
-        status: z.enum(VALIDATION_STATUSES),
-        summary: z.string().min(1),
-      }),
-    )
-    .default([]),
+  artifactsChanged: z.array(artifactSchema).default([]),
+  validationRun: z.array(validationRunSchema).default([]),
   validationScope: z.enum(VALIDATION_SCOPES).optional(),
   reviewIterations: z.number().int().nonnegative().optional(),
   decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
@@ -75,24 +112,9 @@ export const WorkerResultArgsShape = {
       needsHuman: z.boolean().optional(),
     })
     .optional(),
-  featureResult: z.object({
-    featureId: featureIdSchema,
-    verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
-    notes: z.array(z.object({ note: z.string().min(1) })).optional(),
-    followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).optional(),
-  }),
-  featureReview: z.object({
-    status: z.enum(REVIEW_STATUSES),
-    summary: z.string().min(1),
-    blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
-  }),
-  finalReview: z
-    .object({
-      status: z.enum(REVIEW_STATUSES),
-      summary: z.string().min(1),
-      blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
-    })
-    .optional(),
+  featureResult: featureResultSchema,
+  featureReview: reviewSchema,
+  finalReview: reviewSchema.optional(),
 };
 
 export const FlowStatusArgsShape = {};
@@ -126,18 +148,18 @@ export const FlowRunStartArgsShape = {
 export const FlowReviewRecordFeatureArgsShape = {
   scope: z.literal(FEATURE_REVIEW_SCOPE),
   featureId: featureIdSchema,
-  status: z.enum(["approved", "needs_fix", "blocked"]),
+  status: reviewerDecisionStatusSchema,
   summary: z.string().min(1),
-  blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
-  followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).default([]),
+  blockingFindings: z.array(reviewFindingSchema).default([]),
+  followUps: z.array(followUpSchema).default([]),
   suggestedValidation: z.array(z.string().min(1)).default([]),
 };
 export const FlowReviewRecordFinalArgsShape = {
   scope: z.literal(FINAL_REVIEW_SCOPE),
-  status: z.enum(["approved", "needs_fix", "blocked"]),
+  status: reviewerDecisionStatusSchema,
   summary: z.string().min(1),
-  blockingFindings: z.array(z.object({ summary: z.string().min(1) })).default([]),
-  followUps: z.array(z.object({ summary: z.string().min(1), severity: z.string().min(1).optional() })).default([]),
+  blockingFindings: z.array(reviewFindingSchema).default([]),
+  followUps: z.array(followUpSchema).default([]),
   suggestedValidation: z.array(z.string().min(1)).default([]),
 };
 export const FlowResetFeatureArgsShape = {

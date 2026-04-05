@@ -17,7 +17,13 @@ import {
   type FlowRunStartArgs,
   type ToolContext,
 } from "./schemas";
-import { errorResponse, missingSessionResponse, parseFeatureIds, persistTransition, summarizePersistedSession, withSession } from "./helpers";
+import {
+  errorResponse,
+  missingSessionResponse,
+  parseFeatureIds,
+  summarizePersistedSession,
+  withPersistedTransition,
+} from "./helpers";
 
 export function createRuntimeTools() {
   return {
@@ -26,21 +32,15 @@ export function createRuntimeTools() {
       args: FlowPlanApplyArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowPlanApplyArgs;
-        return withSession(
-          context,
-          async (session) =>
-            persistTransition(
-              context,
-              applyPlan(session, input.plan, input.planning),
-              (value) => value,
-              (saved) => ({
-                status: "ok",
-                summary: "Draft plan saved.",
-                session: summarizePersistedSession(saved).session,
-              }),
-            ),
-          missingSessionResponse("No active Flow planning session exists.", "/flow-plan <goal>"),
-        );
+        return withPersistedTransition(context, (session) => applyPlan(session, input.plan, input.planning), {
+          getSession: (value) => value,
+          onSuccess: (saved) => ({
+            status: "ok",
+            summary: "Draft plan saved.",
+            session: summarizePersistedSession(saved).session,
+          }),
+          missingResponse: missingSessionResponse("No active Flow planning session exists.", "/flow-plan <goal>"),
+        });
       },
     }),
 
@@ -49,18 +49,14 @@ export function createRuntimeTools() {
       args: FlowPlanApproveArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowPlanApproveArgs;
-        return withSession(context, async (session) =>
-          persistTransition(
-            context,
-            approvePlan(session, parseFeatureIds(input.featureIds)),
-            (value) => value,
-            (saved) => ({
-              status: "ok",
-              summary: "Plan approved.",
-              session: summarizePersistedSession(saved).session,
-            }),
-          ),
-        );
+        return withPersistedTransition(context, (session) => approvePlan(session, parseFeatureIds(input.featureIds)), {
+          getSession: (value) => value,
+          onSuccess: (saved) => ({
+            status: "ok",
+            summary: "Plan approved.",
+            session: summarizePersistedSession(saved).session,
+          }),
+        });
       },
     }),
 
@@ -69,18 +65,14 @@ export function createRuntimeTools() {
       args: FlowPlanSelectArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowPlanSelectArgs;
-        return withSession(context, async (session) =>
-          persistTransition(
-            context,
-            selectPlanFeatures(session, parseFeatureIds(input.featureIds)),
-            (value) => value,
-            (saved) => ({
-              status: "ok",
-              summary: "Draft plan narrowed.",
-              session: summarizePersistedSession(saved).session,
-            }),
-          ),
-        );
+        return withPersistedTransition(context, (session) => selectPlanFeatures(session, parseFeatureIds(input.featureIds)), {
+          getSession: (value) => value,
+          onSuccess: (saved) => ({
+            status: "ok",
+            summary: "Draft plan narrowed.",
+            session: summarizePersistedSession(saved).session,
+          }),
+        });
       },
     }),
 
@@ -89,27 +81,21 @@ export function createRuntimeTools() {
       args: FlowRunStartArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowRunStartArgs;
-        return withSession(
-          context,
-          async (session) =>
-            persistTransition(
-              context,
-              startRun(session, input.featureId),
-              (value) => value.session,
-              (saved, value) => {
-                const summary = summarizePersistedSession(saved);
+        return withPersistedTransition(context, (session) => startRun(session, input.featureId), {
+          getSession: (value) => value.session,
+          onSuccess: (saved, value) => {
+            const summary = summarizePersistedSession(saved);
 
-                return {
-                  status: value.reason === "complete" ? "complete" : value.feature ? "ok" : "blocked",
-                  summary: summary.summary,
-                  session: summary.session,
-                  feature: value.feature,
-                  reason: value.reason,
-                };
-              },
-            ),
-          missingSessionResponse("No active Flow session exists.", "/flow-plan <goal>"),
-        );
+            return {
+              status: value.reason === "complete" ? "complete" : value.feature ? "ok" : "blocked",
+              summary: summary.summary,
+              session: summary.session,
+              feature: value.feature,
+              reason: value.reason,
+            };
+          },
+          missingResponse: missingSessionResponse("No active Flow session exists.", "/flow-plan <goal>"),
+        });
       },
     }),
 
@@ -118,23 +104,19 @@ export function createRuntimeTools() {
       args: WorkerResultArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = adaptFlowRunCompleteFeatureInput(args);
-        return withSession(context, async (session) =>
-          persistTransition(
-            context,
-            completeRun(session, input),
-            (value) => value,
-            (saved) => {
-              const summary = summarizePersistedSession(saved);
+        return withPersistedTransition(context, (session) => completeRun(session, input), {
+          getSession: (value) => value,
+          onSuccess: (saved) => {
+            const summary = summarizePersistedSession(saved);
 
-              return {
-                status: "ok",
-                summary: summary.summary,
-                session: summary.session,
-              };
-            },
-            (failure) => errorResponse(failure.message, { recovery: failure.recovery }),
-          ),
-        );
+            return {
+              status: "ok",
+              summary: summary.summary,
+              session: summary.session,
+            };
+          },
+          onError: (failure) => errorResponse(failure.message, { recovery: failure.recovery }),
+        });
       },
     }),
 
@@ -142,18 +124,14 @@ export function createRuntimeTools() {
       description: "Record the reviewer decision for the active feature",
       args: FlowReviewRecordFeatureArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        return withSession(context, async (session) =>
-          persistTransition(
-            context,
-            recordReviewerDecision(session, adaptReviewerDecisionInput(args)),
-            (value) => value,
-            (saved) => ({
-              status: "ok",
-              summary: "Reviewer decision recorded.",
-              session: summarizePersistedSession(saved).session,
-            }),
-          ),
-        );
+        return withPersistedTransition(context, (session) => recordReviewerDecision(session, adaptReviewerDecisionInput(args)), {
+          getSession: (value) => value,
+          onSuccess: (saved) => ({
+            status: "ok",
+            summary: "Reviewer decision recorded.",
+            session: summarizePersistedSession(saved).session,
+          }),
+        });
       },
     }),
 
@@ -161,18 +139,14 @@ export function createRuntimeTools() {
       description: "Record the reviewer decision for final cross-feature validation",
       args: FlowReviewRecordFinalArgsShape,
       async execute(args: unknown, context: ToolContext) {
-        return withSession(context, async (session) =>
-          persistTransition(
-            context,
-            recordReviewerDecision(session, adaptReviewerDecisionInput(args)),
-            (value) => value,
-            (saved) => ({
-              status: "ok",
-              summary: "Reviewer decision recorded.",
-              session: summarizePersistedSession(saved).session,
-            }),
-          ),
-        );
+        return withPersistedTransition(context, (session) => recordReviewerDecision(session, adaptReviewerDecisionInput(args)), {
+          getSession: (value) => value,
+          onSuccess: (saved) => ({
+            status: "ok",
+            summary: "Reviewer decision recorded.",
+            session: summarizePersistedSession(saved).session,
+          }),
+        });
       },
     }),
 
@@ -182,18 +156,14 @@ export function createRuntimeTools() {
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowResetFeatureArgs;
 
-        return withSession(context, async (session) =>
-          persistTransition(
-            context,
-            resetFeature(session, input.featureId),
-            (value) => value,
-            (saved) => ({
-              status: "ok",
-              summary: `Reset feature '${input.featureId}'.`,
-              session: summarizePersistedSession(saved).session,
-            }),
-          ),
-        );
+        return withPersistedTransition(context, (session) => resetFeature(session, input.featureId), {
+          getSession: (value) => value,
+          onSuccess: (saved) => ({
+            status: "ok",
+            summary: `Reset feature '${input.featureId}'.`,
+            session: summarizePersistedSession(saved).session,
+          }),
+        });
       },
     }),
   };
