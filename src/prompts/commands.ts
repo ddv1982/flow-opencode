@@ -12,7 +12,7 @@ Behavior:
 For planning:
 - Call \`flow_plan_start\` first.
 - Read the repo before finalizing the plan.
-- Use external research only when it materially improves implementation direction.
+- Use external research only when it materially improves direction.
 - Persist the draft through \`flow_plan_apply\`.
 - End with a concise draft summary and the next approval step.
 
@@ -27,7 +27,7 @@ Behavior:
 - If no feature is runnable, summarize the runtime result and stop.
 - Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\`.
 - If the active feature is the final completion path for the session, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`.
-- End with a compact summary of changes, validation evidence, and the runtime's next step.`;
+- End with a compact summary of changes, validation evidence, and the runtime next step.`;
 
 export const FLOW_AUTO_COMMAND_TEMPLATE = `Run Flow autonomously.
 
@@ -39,7 +39,7 @@ Behavior:
 - Do not derive, infer, or invent a new goal from repository inspection when invoked without a goal and no active session exists.
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
 - Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.
-- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not as reasons to stop.
+- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve.
 - When blocked by a solvable finding, inspect the evidence, use the same repo and research tools used during planning, make the smallest recovery plan, execute it, and keep iterating.
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
@@ -59,7 +59,7 @@ Behavior:
 - If the arguments start with \`show\`, call \`flow_history_show\` with the provided session id.
 - Otherwise explain the valid forms briefly.
 
-Always summarize what you found and the next logical command.`;
+Always summarize what you found and the next command.`;
 
 export const FLOW_SESSION_COMMAND_TEMPLATE = `Manage the active Flow session pointer.
 
@@ -69,7 +69,7 @@ Behavior:
 - If the arguments start with \`activate\`, call \`flow_session_activate\` with the provided session id.
 - Otherwise explain the valid forms briefly.
 
-Always summarize what changed and the next logical command.`;
+Always summarize what changed and the next command.`;
 
 export const FLOW_RESET_COMMAND_TEMPLATE = `Reset Flow state.
 
@@ -80,4 +80,4 @@ Behavior:
 - If the arguments start with \`feature\`, reset the named feature through \`flow_reset_feature\`.
 - Otherwise explain the valid forms briefly.
 
-Always summarize what changed and the next logical command.`;
+Always summarize what changed and the next command.`;
