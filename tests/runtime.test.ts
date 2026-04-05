@@ -606,7 +606,7 @@ describe("runtime transitions", () => {
     expect(parsed.goal).toBe("Improve Flow recovery behavior");
   });
 
-  test("flow_auto_prepare falls back to context.directory when worktree resolves to root", async () => {
+  test("flow_auto_prepare classification is read-only when worktree resolves to root", async () => {
     const directory = makeTempDir();
     const tools = createTestTools();
 
@@ -618,10 +618,10 @@ describe("runtime transitions", () => {
 
     expect(parsed.status).toBe("ok");
     expect(parsed.mode).toBe("start_new_goal");
-    await expect(readFile(join(directory, ".flow", ".gitignore"), "utf8")).resolves.toContain("sessions/");
+    await expect(readFile(join(directory, ".flow", ".gitignore"), "utf8")).rejects.toThrow();
   });
 
-  test("flow_auto_prepare treats root-like worktree aliases as root and falls back to context.directory", async () => {
+  test("flow_auto_prepare classification is read-only for root-like worktree aliases", async () => {
     const directory = makeTempDir();
     const tools = createTestTools();
 
@@ -633,7 +633,7 @@ describe("runtime transitions", () => {
 
     expect(parsed.status).toBe("ok");
     expect(parsed.mode).toBe("start_new_goal");
-    await expect(readFile(join(directory, ".flow", ".gitignore"), "utf8")).resolves.toContain("sessions/");
+    await expect(readFile(join(directory, ".flow", ".gitignore"), "utf8")).rejects.toThrow();
   });
 
   test("flow_plan_start persists under context.directory when worktree resolves to root", async () => {

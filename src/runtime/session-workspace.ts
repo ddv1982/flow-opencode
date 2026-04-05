@@ -81,23 +81,15 @@ export async function writeSessionFile(worktree: string, session: Session): Prom
 }
 
 export async function migrateLegacySessionIfNeeded(worktree: string): Promise<void> {
-  await ensureWorkspace(worktree);
-
   if (await readActiveSessionId(worktree)) {
     return;
   }
 
   const legacySessionPath = getLegacySessionPath(worktree);
+  let raw: string;
 
   try {
-    const raw = await readFile(legacySessionPath, "utf8");
-    const session = SessionSchema.parse(JSON.parse(raw));
-
-    await writeSessionFile(worktree, session);
-    await renderSessionDocs(worktree, session);
-    await writeActiveSessionId(worktree, session.id);
-    await rm(legacySessionPath, { force: true });
-    await rm(getLegacyDocsDir(worktree), { recursive: true, force: true });
+    raw = await readFile(legacySessionPath, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return;
@@ -105,6 +97,14 @@ export async function migrateLegacySessionIfNeeded(worktree: string): Promise<vo
 
     throw error;
   }
+
+  const session = SessionSchema.parse(JSON.parse(raw));
+  await ensureWorkspace(worktree);
+  await writeSessionFile(worktree, session);
+  await renderSessionDocs(worktree, session);
+  await writeActiveSessionId(worktree, session.id);
+  await rm(legacySessionPath, { force: true });
+  await rm(getLegacyDocsDir(worktree), { recursive: true, force: true });
 }
 
 export async function resolveActiveSessionId(worktree: string): Promise<string | null> {
