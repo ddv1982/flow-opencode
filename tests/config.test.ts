@@ -393,14 +393,24 @@ describe("applyFlowConfig", () => {
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("completion gating failures");
   });
 
-  test("auto command template keeps resume guardrails ahead of iterative execution guidance", () => {
+  test("auto command template keeps classification guardrails ahead of iterative execution guidance", () => {
     expectInOrder(FLOW_AUTO_COMMAND_TEMPLATE, [
-      "If the argument string is empty or `resume`",
-      "Otherwise treat the full argument string as a new autonomous goal.",
-      "Do not derive, infer, or invent a new goal from repository inspection",
+      "Treat this command as a coordinator entrypoint",
       "Call `flow_auto_prepare` first",
-      "Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.",
+      "If the argument string is non-empty and not `resume`",
+      "If the argument string is empty or `resume`",
+      "Do not derive, infer, or invent a new goal from repository inspection",
+      "Plan or refresh only when the runtime says planning is needed",
       "Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.",
+    ]);
+  });
+
+  test("auto command template keeps stable coordinator guidance ahead of volatile arguments", () => {
+    expectInOrder(FLOW_AUTO_COMMAND_TEMPLATE, [
+      "Behavior:",
+      "Treat this command as a coordinator entrypoint",
+      "End with the latest runtime summary.",
+      "Arguments: $ARGUMENTS",
     ]);
   });
 
