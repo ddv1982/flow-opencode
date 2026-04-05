@@ -99,6 +99,16 @@ These are repo-local recommendations inferred from the official docs above:
 4. **If `experimental.session.compacting` is ever used, only inject durable workflow state.** Good candidates would be active feature, approval state, blockers, and next step. Replacing the full compaction prompt is higher risk because it could accidentally omit Flow review/approval constraints.
 5. **`setCacheKey` is safest as opt-in config guidance.** Based on OpenCode's config docs plus OpenAI's `prompt_cache_key` guidance, enabling a provider-managed cache key appears useful when many requests share the same large Flow prefix. This is an inference from the combined docs, not a stronger guarantee made by OpenCode.
 
+## Flow adoption guardrails
+
+If this guidance is referenced in repo docs later, keep these boundaries explicit:
+
+- Do **not** make OpenCode compaction or provider caching a prerequisite for successful Flow runs.
+- Do **not** let compaction hooks drop reviewer/final-review requirements or approval-checkpoint state.
+- Do **not** turn `flow-reviewer` or `flow-control` into executing agents as part of any compaction strategy.
+- Do **not** treat cached prefixes as a correctness mechanism; they are a cost/latency optimization only.
+- Do **not** broaden this note into runtime behavior without a separate measured implementation pass.
+
 ## Recommended optional wording for future docs
 
 If this is surfaced to users later, keep it narrow:
