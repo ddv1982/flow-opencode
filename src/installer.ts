@@ -4,6 +4,9 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 export const FLOW_PLUGIN_FILENAME = "flow.js";
+const OPENCODE_PLUGIN_DIRECTORIES = [
+  [".opencode", "plugins"],
+] as const;
 export const INSTALL_USAGE = `Install the built Flow plugin into an OpenCode plugin directory.
 
 Usage:
@@ -57,7 +60,14 @@ export function resolveInstallTarget({
   homeDir = homedir(),
   filename = FLOW_PLUGIN_FILENAME,
 }: ResolveInstallTargetOptions): string {
-  return join(homeDir, ".config", "opencode", "plugins", filename);
+  return join(homeDir, ".opencode", "plugins", filename);
+}
+
+export function resolveInstallTargets({
+  homeDir = homedir(),
+  filename = FLOW_PLUGIN_FILENAME,
+}: ResolveInstallTargetOptions): string[] {
+  return OPENCODE_PLUGIN_DIRECTORIES.map((segments) => join(homeDir, ...segments, filename));
 }
 
 export async function installBuiltPlugin({
@@ -86,15 +96,19 @@ export async function runInstallCommand(
   await build();
 
   const resolvedSourceFile = sourceFile ? resolveFromCwd(cwd, sourceFile) : join(cwd, "dist", "index.js");
-  const destinationFile = resolveInstallTarget({
-    homeDir,
-  });
+  const destinationFiles = resolveInstallTargets({ homeDir });
+  let installedPath: string | null = null;
 
-  return installBuiltPlugin({
-    sourceFile: resolvedSourceFile,
-    destinationFile,
-    logger,
-  });
+  for (const destinationFile of destinationFiles) {
+    const current = await installBuiltPlugin({
+      sourceFile: resolvedSourceFile,
+      destinationFile,
+      logger,
+    });
+    installedPath ??= current;
+  }
+
+  return installedPath ?? undefined;
 }
 
 export async function runUninstallCommand(
@@ -106,10 +120,16 @@ export async function runUninstallCommand(
     return;
   }
 
-  const destinationFile = resolveInstallTarget({ homeDir });
-  await rm(destinationFile, { force: true });
-  logger(`Removed Flow plugin from ${destinationFile}`);
-  return destinationFile;
+  const destinationFiles = resolveInstallTargets({ homeDir });
+  let removedPath: string | null = null;
+
+  for (const destinationFile of destinationFiles) {
+    await rm(destinationFile, { force: true });
+    logger(`Removed Flow plugin from ${destinationFile}`);
+    removedPath ??= destinationFile;
+  }
+
+  return removedPath ?? undefined;
 }
 
 async function assertSourceFileExists(sourceFile: string): Promise<void> {

@@ -35,7 +35,7 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/ins
 Both install the plugin to:
 
 ```text
-~/.config/opencode/plugins/flow.js
+~/.opencode/plugins/flow.js
 ```
 
 ### Uninstall
@@ -57,7 +57,6 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 If you ever need to copy the file yourself, build first and then copy `dist/index.js` into one of OpenCode's documented local plugin directories:
 
 - `.opencode/plugins/`
-- `~/.config/opencode/plugins/`
 
 ## Quick Start
 

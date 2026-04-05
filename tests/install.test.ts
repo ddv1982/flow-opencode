@@ -3,7 +3,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FLOW_PLUGIN_FILENAME, installBuiltPlugin, resolveInstallTarget, runInstallCommand, runUninstallCommand, shouldShowHelp, INSTALL_USAGE, UNINSTALL_USAGE } from "../src/installer";
+import {
+  FLOW_PLUGIN_FILENAME,
+  installBuiltPlugin,
+  resolveInstallTarget,
+  resolveInstallTargets,
+  runInstallCommand,
+  runUninstallCommand,
+  shouldShowHelp,
+  INSTALL_USAGE,
+  UNINSTALL_USAGE,
+} from "../src/installer";
 
 const tempDirs: string[] = [];
 
@@ -37,8 +47,14 @@ describe("installer", () => {
     const homeDir = "/tmp/flow-home";
 
     expect(resolveInstallTarget({ homeDir })).toBe(
-      join(homeDir, ".config", "opencode", "plugins", FLOW_PLUGIN_FILENAME),
+      join(homeDir, ".opencode", "plugins", FLOW_PLUGIN_FILENAME),
     );
+  });
+
+  test("resolveInstallTargets returns the configured OpenCode plugin directory", () => {
+    const homeDir = "/tmp/flow-home";
+
+    expect(resolveInstallTargets({ homeDir })).toEqual([join(homeDir, ".opencode", "plugins", FLOW_PLUGIN_FILENAME)]);
   });
 
   test("installBuiltPlugin creates directories and copies the built artifact", async () => {
@@ -59,7 +75,7 @@ describe("installer", () => {
     expect(logs).toEqual([`Installed Flow plugin to ${destinationFile}`]);
   });
 
-  test("runInstallCommand installs to the global plugin directory by default", async () => {
+  test("runInstallCommand installs to the configured plugin directory", async () => {
     const cwd = makeTempDir();
     const homeDir = makeTempDir();
     const logs: string[] = [];
@@ -76,12 +92,12 @@ describe("installer", () => {
       logger: (message) => logs.push(message),
     });
 
-    const expectedPath = join(homeDir, ".config", "opencode", "plugins", FLOW_PLUGIN_FILENAME);
+    const expectedPaths = resolveInstallTargets({ homeDir });
 
     expect(buildCalls).toBe(1);
-    expect(installedPath).toBe(expectedPath);
-    expect(await readFile(expectedPath, "utf8")).toBe("global-install\n");
-    expect(logs.at(-1)).toBe(`Installed Flow plugin to ${expectedPath}`);
+    expect(installedPath).toBe(expectedPaths[0]);
+    await expect(Promise.all(expectedPaths.map((path) => readFile(path, "utf8")))).resolves.toEqual(["global-install\n"]);
+    expect(logs).toEqual(expectedPaths.map((path) => `Installed Flow plugin to ${path}`));
   });
 
   test("installBuiltPlugin reports a clear error when the build artifact is missing", async () => {
@@ -96,22 +112,26 @@ describe("installer", () => {
     ).rejects.toThrow("Run `bun run build` first");
   });
 
-  test("runUninstallCommand removes the installed plugin file", async () => {
+  test("runUninstallCommand removes installed plugin files from the configured directory", async () => {
     const homeDir = makeTempDir();
-    const destinationFile = resolveInstallTarget({ homeDir });
+    const destinationFiles = resolveInstallTargets({ homeDir });
     const logs: string[] = [];
 
-    await mkdir(join(homeDir, ".config", "opencode", "plugins"), { recursive: true });
-    await writeFile(destinationFile, "installed\n", "utf8");
+    await Promise.all(destinationFiles.map(async (path) => {
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(path, "installed\n", "utf8");
+    }));
 
     const removedPath = await runUninstallCommand([], {
       homeDir,
       logger: (message) => logs.push(message),
     });
 
-    await expect(readFile(destinationFile, "utf8")).rejects.toThrow();
-    expect(removedPath).toBe(destinationFile);
-    expect(logs).toEqual([`Removed Flow plugin from ${destinationFile}`]);
+    await Promise.all(destinationFiles.map(async (path) => {
+      await expect(readFile(path, "utf8")).rejects.toThrow();
+    }));
+    expect(removedPath).toBe(destinationFiles[0]);
+    expect(logs).toEqual(destinationFiles.map((path) => `Removed Flow plugin from ${path}`));
   });
 
   test("runUninstallCommand accepts help and ignores missing files", async () => {
@@ -125,7 +145,7 @@ describe("installer", () => {
       logger: (message) => logs.push(message),
     });
 
-    expect(removedPath).toBe(resolveInstallTarget({ homeDir }));
+    expect(removedPath).toBe(resolveInstallTargets({ homeDir })[0]);
 
     logs.length = 0;
     await runUninstallCommand(["--help"], {
