@@ -1,0 +1,140 @@
+import { deriveNextCommand } from "./summary";
+import type { Feature, Session } from "./schema";
+import { bulletList, joinSections, maybeSection, maybeTitledList, renderOutcomeLines, toInlineText } from "./render-sections-shared";
+
+function maybeApproachSection(session: Session): string {
+  const approach = session.planning.implementationApproach;
+  if (!approach) {
+    return "";
+  }
+
+  return joinSections([
+    "## Implementation Approach\n\n" + `- chosen direction: ${toInlineText(approach.chosenDirection)}`,
+    maybeTitledList("Key Constraints", approach.keyConstraints, "###"),
+    maybeTitledList("Validation Signals", approach.validationSignals, "###"),
+    maybeTitledList("Sources", approach.sources, "###"),
+  ]).trimEnd();
+}
+
+function formatFeatureLine(feature: Feature): string {
+  return `- ${feature.id} | ${feature.status} | ${toInlineText(feature.title)}`;
+}
+
+function renderFeatureResultDetails(
+  featureResult:
+    | {
+        featureId: string;
+        verificationStatus?: string;
+        notes?: Array<{ note: string }>;
+        followUps?: Array<{ summary: string; severity?: string }>;
+      }
+    | null
+    | undefined,
+): string {
+  if (!featureResult) {
+    return "";
+  }
+
+  const sections = [
+    maybeTitledList("Notes", featureResult.notes?.map((item) => item.note) ?? [], "###"),
+    maybeTitledList(
+      "Follow Ups",
+      featureResult.followUps?.map((item) => (item.severity ? `${item.summary} (${item.severity})` : item.summary)) ?? [],
+      "###",
+    ),
+  ].filter(Boolean);
+
+  return joinSections([
+    `## Feature Result\n\n- feature id: ${featureResult.featureId}\n- verification: ${featureResult.verificationStatus ?? "not_recorded"}`,
+    ...sections,
+  ]).trimEnd();
+}
+
+function renderIndexSummarySection(session: Session): string {
+  const reviewerDecision = session.execution.lastReviewerDecision;
+
+  return `## Summary
+
+- session id: ${session.id}
+- goal: ${toInlineText(session.goal)}
+- status: ${session.status}
+- approval: ${session.approval}
+- next command: ${deriveNextCommand(session)}
+- next step: ${session.execution.lastNextStep ? toInlineText(session.execution.lastNextStep) : "none"}
+- reviewer decision: ${reviewerDecision ? `${reviewerDecision.scope} | ${reviewerDecision.status} | ${toInlineText(reviewerDecision.summary)}` : "none"}
+- created: ${session.timestamps.createdAt}
+- updated: ${session.timestamps.updatedAt}`;
+}
+
+function renderPlanSection(session: Session, features: Feature[]): string {
+  const plan = session.plan;
+  const activeFeature = features.find((feature) => feature.id === session.execution.activeFeatureId) ?? null;
+  const completedCount = features.filter((feature) => feature.status === "completed").length;
+
+  return joinSections([
+    `## Plan
+
+- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}
+- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}
+- progress: ${completedCount}/${features.length} completed
+- active feature: ${activeFeature ? activeFeature.id : "none"}`,
+    maybeSection("Requirements", plan?.requirements ?? []),
+    maybeSection("Architecture Decisions", plan?.architectureDecisions ?? []),
+    maybeSection("Repo Profile", session.planning.repoProfile),
+    maybeSection("Research", session.planning.research),
+    maybeApproachSection(session),
+  ]).trimEnd();
+}
+
+function renderFeaturesSection(features: Feature[]): string {
+  return `## Features\n\n${features.length === 0 ? "- none" : features.map(formatFeatureLine).join("\n")}`;
+}
+
+function renderOutcomeSection(session: Session): string {
+  if (!session.execution.lastOutcome) {
+    return "";
+  }
+
+  return `## Outcome\n\n${bulletList(renderOutcomeLines(session.execution.lastOutcome))}`;
+}
+
+function renderChangedArtifactsSection(session: Session): string {
+  if (session.artifacts.length === 0) {
+    return "";
+  }
+
+  return `## Changed Artifacts\n\n${bulletList(session.artifacts.map((artifact) => (artifact.kind ? `${artifact.path} (${artifact.kind})` : artifact.path)))}`;
+}
+
+function renderLastValidationRunSection(session: Session): string {
+  if (session.execution.lastValidationRun.length === 0) {
+    return "";
+  }
+
+  return `## Last Validation Run\n\n${bulletList(session.execution.lastValidationRun.map((item) => `${item.status} | ${item.command} | ${item.summary}`))}`;
+}
+
+function renderExecutionHistoryOverviewSection(session: Session): string {
+  if (session.execution.history.length === 0) {
+    return "";
+  }
+
+  return `## Execution History\n\n${bulletList(session.execution.history.map((item) => `${item.recordedAt} | ${item.featureId} | ${item.status} | ${item.summary}`))}`;
+}
+
+export function renderIndexDoc(session: Session): string {
+  const features = session.plan?.features ?? [];
+
+  return joinSections([
+    "# Flow Session",
+    renderIndexSummarySection(session),
+    renderPlanSection(session, features),
+    renderFeaturesSection(features),
+    renderOutcomeSection(session),
+    renderFeatureResultDetails(session.execution.lastFeatureResult),
+    maybeSection("Notes", session.notes),
+    renderChangedArtifactsSection(session),
+    renderLastValidationRunSection(session),
+    renderExecutionHistoryOverviewSection(session),
+  ]);
+}
