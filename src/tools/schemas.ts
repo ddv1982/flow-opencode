@@ -1,121 +1,39 @@
 import { tool } from "@opencode-ai/plugin";
 import type { WorkspaceContext } from "../runtime/application";
-import {
-  DECOMPOSITION_POLICIES,
-  GOAL_MODES,
-  OUTCOME_KINDS,
-  REVIEWER_DECISION_STATUSES,
-  REVIEW_STATUSES,
-  VALIDATION_STATUSES,
-  VERIFICATION_STATUSES,
-  WORKER_STATUSES,
-} from "../runtime/contracts";
-import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN, FEATURE_REVIEW_SCOPE, FINAL_REVIEW_SCOPE, VALIDATION_SCOPES } from "../runtime/primitives";
+import { REVIEWER_DECISION_STATUSES, WORKER_STATUSES } from "../runtime/contracts";
+import { FEATURE_REVIEW_SCOPE, FINAL_REVIEW_SCOPE, VALIDATION_SCOPES } from "../runtime/primitives";
+import { buildSharedSchemas } from "../runtime/shared-schema";
 import type { PlanningContext } from "../runtime/schema";
 
 const z = tool.schema;
-
-export const featureIdSchema = z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
-
-const reviewFindingSchema = z.object({
-  summary: z.string().min(1),
+const sharedSchemas = buildSharedSchemas(z, {
+  includeFeatureStatus: false,
+  defaultGoalMode: false,
+  defaultDecompositionPolicy: false,
+  defaultPlanningArrays: false,
 });
 
-const followUpSchema = z.object({
-  summary: z.string().min(1),
-  severity: z.string().min(1).optional(),
-});
-
-const artifactSchema = z.object({
-  path: z.string().min(1),
-  kind: z.string().min(1).optional(),
-});
-
-const validationRunSchema = z.object({
-  command: z.string().min(1),
-  status: z.enum(VALIDATION_STATUSES),
-  summary: z.string().min(1),
-});
-
-const reviewSchema = z.object({
-  status: z.enum(REVIEW_STATUSES),
-  summary: z.string().min(1),
-  blockingFindings: z.array(reviewFindingSchema).default([]),
-});
-
-const completionPolicySchema = z.object({
-  minCompletedFeatures: z.number().int().positive().optional(),
-  requireFinalReview: z.boolean().optional(),
-});
-
-const featureSchema = z.object({
-  id: featureIdSchema,
-  title: z.string().min(1),
-  summary: z.string().min(1),
-  fileTargets: z.array(z.string().min(1)).default([]),
-  verification: z.array(z.string().min(1)).default([]),
-  dependsOn: z.array(z.string().min(1)).optional(),
-  blockedBy: z.array(z.string().min(1)).optional(),
-});
-
-const implementationApproachSchema = z.object({
-  chosenDirection: z.string().min(1),
-  keyConstraints: z.array(z.string().min(1)).default([]),
-  validationSignals: z.array(z.string().min(1)).default([]),
-  sources: z.array(z.string().min(1)).default([]),
-});
+export const featureIdSchema = sharedSchemas.featureIdSchema;
 
 const reviewerDecisionStatusSchema = z.enum(REVIEWER_DECISION_STATUSES);
 
-export const PlanArgsSchema = z.object({
-  summary: z.string().min(1),
-  overview: z.string().min(1),
-  requirements: z.array(z.string().min(1)).default([]),
-  architectureDecisions: z.array(z.string().min(1)).default([]),
-  features: z.array(featureSchema).min(1),
-  goalMode: z.enum(GOAL_MODES).optional(),
-  decompositionPolicy: z.enum(DECOMPOSITION_POLICIES).optional(),
-  completionPolicy: completionPolicySchema.optional(),
-  notes: z.array(z.string().min(1)).optional(),
-});
-
-export const PlanningContextArgsSchema = z.object({
-  repoProfile: z.array(z.string().min(1)).optional(),
-  research: z.array(z.string().min(1)).optional(),
-  implementationApproach: implementationApproachSchema.optional(),
-});
-
-const featureResultSchema = z.object({
-  featureId: featureIdSchema,
-  verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
-  notes: z.array(z.object({ note: z.string().min(1) })).optional(),
-  followUps: z.array(followUpSchema).optional(),
-});
+export const PlanArgsSchema = sharedSchemas.planSchema;
+export const PlanningContextArgsSchema = sharedSchemas.planningContextSchema;
 
 export const WorkerResultArgsShape = {
   contractVersion: z.literal("1"),
   status: z.enum(WORKER_STATUSES),
   summary: z.string().min(1),
-  artifactsChanged: z.array(artifactSchema).default([]),
-  validationRun: z.array(validationRunSchema).default([]),
+  artifactsChanged: z.array(sharedSchemas.artifactSchema).default([]),
+  validationRun: z.array(sharedSchemas.validationRunSchema).default([]),
   validationScope: z.enum(VALIDATION_SCOPES).optional(),
   reviewIterations: z.number().int().nonnegative().optional(),
-  decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
+  decisions: z.array(sharedSchemas.decisionSchema).default([]),
   nextStep: z.string().min(1),
-  outcome: z
-    .object({
-      kind: z.enum(OUTCOME_KINDS),
-      category: z.string().min(1).optional(),
-      summary: z.string().min(1).optional(),
-      resolutionHint: z.string().min(1).optional(),
-      retryable: z.boolean().optional(),
-      autoResolvable: z.boolean().optional(),
-      needsHuman: z.boolean().optional(),
-    })
-    .optional(),
-  featureResult: featureResultSchema,
-  featureReview: reviewSchema,
-  finalReview: reviewSchema.optional(),
+  outcome: sharedSchemas.outcomeSchema.optional(),
+  featureResult: sharedSchemas.featureResultSchema,
+  featureReview: sharedSchemas.reviewSchema,
+  finalReview: sharedSchemas.reviewSchema.optional(),
 };
 
 export const FlowStatusArgsShape = {};
@@ -151,16 +69,16 @@ export const FlowReviewRecordFeatureArgsShape = {
   featureId: featureIdSchema,
   status: reviewerDecisionStatusSchema,
   summary: z.string().min(1),
-  blockingFindings: z.array(reviewFindingSchema).default([]),
-  followUps: z.array(followUpSchema).default([]),
+  blockingFindings: z.array(sharedSchemas.reviewFindingSchema).default([]),
+  followUps: z.array(sharedSchemas.followUpSchema).default([]),
   suggestedValidation: z.array(z.string().min(1)).default([]),
 };
 export const FlowReviewRecordFinalArgsShape = {
   scope: z.literal(FINAL_REVIEW_SCOPE),
   status: reviewerDecisionStatusSchema,
   summary: z.string().min(1),
-  blockingFindings: z.array(reviewFindingSchema).default([]),
-  followUps: z.array(followUpSchema).default([]),
+  blockingFindings: z.array(sharedSchemas.reviewFindingSchema).default([]),
+  followUps: z.array(sharedSchemas.followUpSchema).default([]),
   suggestedValidation: z.array(z.string().min(1)).default([]),
 };
 export const FlowResetFeatureArgsShape = {

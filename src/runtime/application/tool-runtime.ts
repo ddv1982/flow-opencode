@@ -1,7 +1,6 @@
 import { parse } from "node:path";
 import { loadSession, saveSessionState, syncSessionArtifacts } from "../session";
 import type { Session } from "../schema";
-import { summarizeSession } from "../summary";
 import type { TransitionResult } from "../transitions";
 
 export type WorkspaceContext = {
@@ -64,10 +63,6 @@ export function resolveSessionRoot(context: WorkspaceContext): string {
   throw new Error("Flow tool context is missing a writable workspace root (worktree or directory).");
 }
 
-export function summarizePersistedSession(session: Session) {
-  return summarizeSession(session);
-}
-
 export function missingSessionResponse(summary = "No active Flow session exists.", nextCommand?: string): RuntimeToolResponse {
   return nextCommand ? { status: "missing_session", summary, nextCommand } : { status: "missing_session", summary };
 }
@@ -124,11 +119,19 @@ export async function persistTransition<T>(
   options: { syncArtifacts?: boolean } = { syncArtifacts: true },
   runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<string> {
+  const worktree = resolveSessionRoot(context);
+
   if (!result.ok) {
+    if (result.session) {
+      const saved = await runtime.saveSessionState(worktree, result.session);
+      if (options.syncArtifacts) {
+        await runtime.syncSessionArtifacts(worktree, saved);
+      }
+    }
+
     return toJson(onError(result));
   }
 
-  const worktree = resolveSessionRoot(context);
   const saved = await runtime.saveSessionState(worktree, getSession(result.value));
   if (options.syncArtifacts) {
     await runtime.syncSessionArtifacts(worktree, saved);

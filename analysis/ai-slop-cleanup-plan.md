@@ -90,3 +90,43 @@
 1. Split raw session persistence from docs synchronization helpers.
 2. Keep the public behavior of `saveSession()` and `deleteSession()` unchanged.
 3. Reduce coupling by making the file-write and docs-sync boundaries explicit.
+
+## Pass 9 Scope
+- `src/tools/schemas.ts`
+- `src/runtime/schema.ts` (read-only unless a narrow extraction is needed)
+- `tests/schema-alignment.test.ts` as behavior lock
+
+## Pass 9 Smell focus
+1. Reduce duplicated nested schema definitions between tool raw arg shapes and runtime schemas.
+2. Reuse runtime schema building blocks for shared fields while keeping the current tool-level strictness boundary.
+3. Preserve the documented top-level tool payload compatibility.
+
+## Pass 10 Scope
+- `tests/runtime.test.ts`
+- new split test file(s) under `tests/`
+
+## Pass 10 Smell focus
+1. Split the oversized runtime suite by concern to improve maintainability and reviewability.
+2. Keep assertions and behavior coverage unchanged while relocating tests.
+3. Avoid introducing shared mutable test state across files.
+
+## Pass 11 Scope
+- `src/tools/runtime-tools.ts`
+- `src/tools/session-tools.ts`
+- `src/tools/parsed-tool.ts` (new helper)
+
+## Pass 11 Smell focus
+1. Remove repeated `parseToolArgs` + early-return scaffolding from tool execute handlers.
+2. Keep tool argument validation semantics and error response shape unchanged.
+3. Preserve all existing tool response payloads and status branching.
+
+## Pass 12 Scope
+- `tests/runtime.test.ts`
+- `tests/runtime-summary.test.ts` (new)
+- `tests/runtime-completion-contracts.test.ts` (new)
+- `tests/runtime-test-helpers.ts`
+
+## Pass 12 Smell focus
+1. Further split the remaining monolithic runtime suite by concern (core transitions vs summary logic vs completion/contract guards).
+2. Keep test assertions and coverage intact while relocating blocks.
+3. Reuse shared test helpers to reduce duplicate fixture/setup scaffolding across suites.

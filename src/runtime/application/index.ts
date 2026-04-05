@@ -5,7 +5,6 @@ export {
   parseToolArgs,
   persistTransition,
   resolveSessionRoot,
-  summarizePersistedSession,
   toJson,
   withPersistedTransition,
   withSession,

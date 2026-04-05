@@ -3,7 +3,7 @@ import type { Feature, Session } from "../schema";
 
 export type TransitionResult<T> =
   | { ok: true; value: T }
-  | { ok: false; message: string; recovery?: TransitionRecovery };
+  | { ok: false; message: string; recovery?: TransitionRecovery; session?: Session };
 
 export type TransitionRecovery = {
   errorCode: string;
@@ -28,8 +28,8 @@ export type TransitionRecovery = {
   autoResolvable?: boolean;
 };
 
-export function fail<T>(message: string, recovery?: TransitionRecovery): TransitionResult<T> {
-  return { ok: false, message, recovery };
+export function fail<T>(message: string, recovery?: TransitionRecovery, session?: Session): TransitionResult<T> {
+  return { ok: false, message, recovery, session };
 }
 
 export function succeed<T>(value: T): TransitionResult<T> {

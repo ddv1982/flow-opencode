@@ -212,7 +212,7 @@ export function completeRun(session: Session, workerInput: unknown): TransitionR
       Boolean(plan.completionPolicy?.requireFinalReview && wasFinalFeature),
     );
     if (!validation.ok) {
-      return validation;
+      return fail(validation.message, validation.recovery, next);
     }
 
     return finalizeSuccessfulCompletion(next, featureId, worker.summary);

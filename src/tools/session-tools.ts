@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
-import { parseToolArgs, resolveSessionRoot, summarizePersistedSession, toJson } from "../runtime/application";
+import { resolveSessionRoot, toJson } from "../runtime/application";
 import { activateSession, archiveSession, createSession, listSessionHistory, loadSession, loadStoredSession, saveSessionState, syncSessionArtifacts } from "../runtime/session";
 import { summarizeSession } from "../runtime/summary";
 import {
@@ -15,28 +15,24 @@ import {
   FlowSessionActivateArgsSchema,
   FlowStatusArgsShape,
   FlowStatusArgsSchema,
-  type ToolContext,
 } from "./schemas";
+import { withParsedArgs } from "./parsed-tool";
 
 export function createSessionTools() {
   return {
     flow_status: tool({
       description: "Show the active Flow session summary",
       args: FlowStatusArgsShape,
-      async execute(_args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowStatusArgsSchema, _args);
-        if (!parsed.ok) return parsed.response;
+      execute: withParsedArgs(FlowStatusArgsSchema, async (_input, context) => {
         const session = await loadSession(resolveSessionRoot(context));
         return toJson(summarizeSession(session));
-      },
+      }),
     }),
 
     flow_history: tool({
       description: "Show stored Flow session history across active and archived runs",
       args: FlowHistoryArgsShape,
-      async execute(_args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowHistoryArgsSchema, _args);
-        if (!parsed.ok) return parsed.response;
+      execute: withParsedArgs(FlowHistoryArgsSchema, async (_input, context) => {
         const history = await listSessionHistory(resolveSessionRoot(context));
         const activeCount = history.activeSessionId ? 1 : 0;
         const totalCount = history.sessions.length + history.archived.length;
@@ -61,16 +57,13 @@ export function createSessionTools() {
               ? `/flow-session activate ${resumableStoredSession.id}`
               : "/flow-plan <goal>",
         });
-      },
+      }),
     }),
 
     flow_history_show: tool({
       description: "Show a specific stored Flow session by id",
       args: FlowHistoryShowArgsShape,
-      async execute(args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowHistoryShowArgsSchema, args);
-        if (!parsed.ok) return parsed.response;
-        const input = parsed.value;
+      execute: withParsedArgs(FlowHistoryShowArgsSchema, async (input, context) => {
         const found = await loadStoredSession(resolveSessionRoot(context), input.sessionId);
 
         if (!found) {
@@ -101,16 +94,13 @@ export function createSessionTools() {
           session: found.active ? summarizedSession : { ...summarizedSession, nextCommand },
           nextCommand,
         });
-      },
+      }),
     }),
 
     flow_session_activate: tool({
       description: "Activate a stored Flow session by id",
       args: FlowSessionActivateArgsShape,
-      async execute(args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowSessionActivateArgsSchema, args);
-        if (!parsed.ok) return parsed.response;
-        const input = parsed.value;
+      execute: withParsedArgs(FlowSessionActivateArgsSchema, async (input, context) => {
         const session = await activateSession(resolveSessionRoot(context), input.sessionId);
 
         if (!session) {
@@ -127,16 +117,13 @@ export function createSessionTools() {
           session: summarizeSession(session).session,
           nextCommand: "/flow-status",
         });
-      },
+      }),
     }),
 
     flow_plan_start: tool({
       description: "Create or refresh the active Flow planning session",
       args: FlowPlanStartArgsShape,
-      async execute(args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowPlanStartArgsSchema, args);
-        if (!parsed.ok) return parsed.response;
-        const input = parsed.value;
+      execute: withParsedArgs(FlowPlanStartArgsSchema, async (input, context) => {
         const sessionRoot = resolveSessionRoot(context);
         const existing = await loadSession(sessionRoot);
 
@@ -189,18 +176,15 @@ export function createSessionTools() {
         return toJson({
           status: "ok",
           summary: `Planning session ready for goal: ${session.goal}`,
-          session: summarizePersistedSession(session).session,
+          session: summarizeSession(session).session,
         });
-      },
+      }),
     }),
 
     flow_auto_prepare: tool({
       description: "Classify a flow-auto invocation",
       args: FlowAutoPrepareArgsShape,
-      async execute(args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowAutoPrepareArgsSchema, args);
-        if (!parsed.ok) return parsed.response;
-        const input = parsed.value;
+      execute: withParsedArgs(FlowAutoPrepareArgsSchema, async (input, context) => {
         const trimmed = (input.argumentString ?? "").trim();
         const session = await loadSession(resolveSessionRoot(context));
         const isResume = trimmed === "" || trimmed === "resume";
@@ -232,15 +216,13 @@ export function createSessionTools() {
           summary: `Starting a new autonomous Flow goal: ${trimmed}`,
           nextCommand: "/flow-status",
         });
-      },
+      }),
     }),
 
     flow_reset_session: tool({
       description: "Archive and clear the active Flow session",
       args: FlowStatusArgsShape,
-      async execute(_args: unknown, context: ToolContext) {
-        const parsed = parseToolArgs(FlowStatusArgsSchema, _args);
-        if (!parsed.ok) return parsed.response;
+      execute: withParsedArgs(FlowStatusArgsSchema, async (_input, context) => {
         const archived = await archiveSession(resolveSessionRoot(context));
         return toJson({
           status: "ok",
@@ -249,7 +231,7 @@ export function createSessionTools() {
           archivedTo: archived?.archivedTo ?? null,
           nextCommand: "/flow-plan <goal>",
         });
-      },
+      }),
     }),
   };
 }
