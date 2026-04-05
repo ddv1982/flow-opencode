@@ -85,7 +85,7 @@ ${FLOW_RESUME_ONLY_RULE}
 - Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
 - Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.
-- Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, and repeat until the final state is clean.
+- Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, rerun broad validation, and repeat until the final state is clean.
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
 - If a feature lands in a blocked state with a retryable or auto-resolvable outcome, use repo reads plus external research when useful, then reset it through the runtime and continue instead of stopping.

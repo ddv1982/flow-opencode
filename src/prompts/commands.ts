@@ -36,6 +36,7 @@ Behavior:
 ${FLOW_COORDINATOR_BOUNDARY_RULE}
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
 - If the argument string is non-empty and not \`resume\`, treat the full argument string as a new autonomous goal.
+- If the argument string is empty or \`resume\`, resume the active session only.
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
 - Plan or refresh only when the runtime says planning is needed, approve that plan, then keep work on the current feature until it is clean or truly blocked.
