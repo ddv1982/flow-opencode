@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildSummaryFixtureSessions, buildSummaryFixtures, collectTokenEfficiencyMeasurements } from "../analysis/token-efficiency-measurements";
 import { createSession, deleteSession, deleteSessionArtifacts, deleteSessionState, loadSession, saveSession, saveSessionState, syncSessionArtifacts } from "../src/runtime/session";
 import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getSessionPath } from "../src/runtime/paths";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
@@ -63,6 +64,20 @@ function samplePlan() {
         dependsOn: ["setup-runtime"],
       },
     ],
+  };
+}
+
+function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
+  if (!summary.session) {
+    return summary;
+  }
+
+  return {
+    ...summary,
+    session: {
+      ...summary.session,
+      id: "<session-id>",
+    },
   };
 }
 
@@ -853,6 +868,286 @@ describe("runtime transitions", () => {
       status: "missing",
       summary: "No active Flow session found.",
     });
+  });
+
+  test("summarizeSession preserves the default planning/running/blocked/completed payloads", () => {
+    expect(
+      Object.fromEntries(
+        Object.entries(buildSummaryFixtures()).map(([name, summary]) => [name, normalizeSummaryFixture(summary)]),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "blocked": {
+          "session": {
+            "activeFeature": null,
+            "approval": "approved",
+            "artifacts": [],
+            "featureLines": [
+              "setup-runtime (blocked): Create runtime helpers",
+              "execute-feature (pending): Implement execution flow",
+            ],
+            "featureProgress": {
+              "completed": 0,
+              "total": 2,
+            },
+            "features": [
+              {
+                "id": "setup-runtime",
+                "status": "blocked",
+                "summary": "Add runtime helper files and state persistence.",
+                "title": "Create runtime helpers",
+              },
+              {
+                "id": "execute-feature",
+                "status": "pending",
+                "summary": "Wire runtime tools to feature execution.",
+                "title": "Implement execution flow",
+              },
+            ],
+            "goal": "Build a workflow plugin",
+            "id": "<session-id>",
+            "lastFeatureResult": {
+              "featureId": "setup-runtime",
+              "followUps": [
+                {
+                  "severity": "high",
+                  "summary": "Provide the missing API token.",
+                },
+              ],
+              "notes": [
+                {
+                  "note": "No code changes were made.",
+                },
+              ],
+              "verificationStatus": "not_recorded",
+            },
+            "lastNextStep": "Ask the operator to provide API credentials.",
+            "lastOutcome": {
+              "kind": "needs_operator_input",
+              "needsHuman": true,
+              "resolutionHint": "Set the API token and rerun the feature.",
+              "retryable": true,
+              "summary": "Credentials are required before work can continue.",
+            },
+            "lastOutcomeKind": "needs_operator_input",
+            "lastReviewerDecision": null,
+            "lastValidationRun": [],
+            "nextCommand": "/flow-status",
+            "notes": [
+              "External API credentials are missing.",
+            ],
+            "planOverview": "Create one setup feature and one execution feature.",
+            "planSummary": "Implement a small workflow feature set.",
+            "planning": {
+              "repoProfile": [],
+              "research": [],
+            },
+            "status": "blocked",
+          },
+          "status": "blocked",
+          "summary": "Waiting on an operator decision.",
+        },
+        "completed": {
+          "session": {
+            "activeFeature": null,
+            "approval": "approved",
+            "artifacts": [],
+            "featureLines": [
+              "setup-runtime (completed): Create runtime helpers",
+            ],
+            "featureProgress": {
+              "completed": 1,
+              "total": 1,
+            },
+            "features": [
+              {
+                "id": "setup-runtime",
+                "status": "completed",
+                "summary": "Add runtime helper files and state persistence.",
+                "title": "Create runtime helpers",
+              },
+            ],
+            "goal": "Build a workflow plugin",
+            "id": "<session-id>",
+            "lastFeatureResult": {
+              "featureId": "setup-runtime",
+              "verificationStatus": "passed",
+            },
+            "lastNextStep": "Session should complete.",
+            "lastOutcome": {
+              "kind": "completed",
+            },
+            "lastOutcomeKind": "completed",
+            "lastReviewerDecision": {
+              "blockingFindings": [],
+              "followUps": [],
+              "scope": "final",
+              "status": "approved",
+              "suggestedValidation": [],
+              "summary": "Final review looks good.",
+            },
+            "lastValidationRun": [
+              {
+                "command": "bun test",
+                "status": "passed",
+                "summary": "Runtime tests passed.",
+              },
+            ],
+            "nextCommand": "/flow-plan <goal>",
+            "notes": [],
+            "planOverview": "Create one setup feature and one execution feature.",
+            "planSummary": "Implement a small workflow feature set.",
+            "planning": {
+              "repoProfile": [],
+              "research": [],
+            },
+            "status": "completed",
+          },
+          "status": "completed",
+          "summary": "Completed runtime setup.",
+        },
+        "planning": {
+          "session": {
+            "activeFeature": null,
+            "approval": "pending",
+            "artifacts": [],
+            "featureLines": [
+              "setup-runtime (pending): Create runtime helpers",
+              "execute-feature (pending): Implement execution flow",
+            ],
+            "featureProgress": {
+              "completed": 0,
+              "total": 2,
+            },
+            "features": [
+              {
+                "id": "setup-runtime",
+                "status": "pending",
+                "summary": "Add runtime helper files and state persistence.",
+                "title": "Create runtime helpers",
+              },
+              {
+                "id": "execute-feature",
+                "status": "pending",
+                "summary": "Wire runtime tools to feature execution.",
+                "title": "Implement execution flow",
+              },
+            ],
+            "goal": "Build a workflow plugin",
+            "id": "<session-id>",
+            "lastFeatureResult": null,
+            "lastNextStep": null,
+            "lastOutcome": null,
+            "lastOutcomeKind": null,
+            "lastReviewerDecision": null,
+            "lastValidationRun": [],
+            "nextCommand": "/flow-plan",
+            "notes": [],
+            "planOverview": "Create one setup feature and one execution feature.",
+            "planSummary": "Implement a small workflow feature set.",
+            "planning": {
+              "repoProfile": [],
+              "research": [],
+            },
+            "status": "planning",
+          },
+          "status": "planning",
+          "summary": "Implement a small workflow feature set.",
+        },
+        "running": {
+          "session": {
+            "activeFeature": {
+              "fileTargets": [
+                "src/runtime/session.ts",
+              ],
+              "id": "setup-runtime",
+              "status": "in_progress",
+              "summary": "Add runtime helper files and state persistence.",
+              "title": "Create runtime helpers",
+              "verification": [
+                "bun test",
+              ],
+            },
+            "approval": "approved",
+            "artifacts": [],
+            "featureLines": [
+              "setup-runtime (in_progress): Create runtime helpers",
+              "execute-feature (pending): Implement execution flow",
+            ],
+            "featureProgress": {
+              "completed": 0,
+              "total": 2,
+            },
+            "features": [
+              {
+                "id": "setup-runtime",
+                "status": "in_progress",
+                "summary": "Add runtime helper files and state persistence.",
+                "title": "Create runtime helpers",
+              },
+              {
+                "id": "execute-feature",
+                "status": "pending",
+                "summary": "Wire runtime tools to feature execution.",
+                "title": "Implement execution flow",
+              },
+            ],
+            "goal": "Build a workflow plugin",
+            "id": "<session-id>",
+            "lastFeatureResult": null,
+            "lastNextStep": null,
+            "lastOutcome": null,
+            "lastOutcomeKind": null,
+            "lastReviewerDecision": null,
+            "lastValidationRun": [],
+            "nextCommand": "/flow-run",
+            "notes": [],
+            "planOverview": "Create one setup feature and one execution feature.",
+            "planSummary": "Implement a small workflow feature set.",
+            "planning": {
+              "repoProfile": [],
+              "research": [],
+            },
+            "status": "running",
+          },
+          "status": "running",
+          "summary": "Running feature 'setup-runtime'.",
+        },
+      }
+    `);
+  });
+
+  test("flow_status returns the unchanged default summary shape for planning/running/blocked/completed fixtures", async () => {
+    const tools = createTools({}) as any;
+
+    for (const session of Object.values(buildSummaryFixtureSessions())) {
+      const worktree = makeTempDir();
+      await saveSession(worktree, session);
+
+      const response = await tools.flow_status.execute({}, { worktree });
+      const parsed = JSON.parse(response);
+
+      expect(normalizeSummaryFixture(parsed)).toEqual(normalizeSummaryFixture(summarizeSession(session)));
+    }
+  });
+
+  test("collectTokenEfficiencyMeasurements captures prompt, command, and summary baseline inputs", () => {
+    const measurements = collectTokenEfficiencyMeasurements();
+    const summaries = buildSummaryFixtures();
+
+    expect(measurements.schemaVersion).toBe(1);
+    expect(measurements.phase1bGate.status).toBe("deferred");
+    expect(measurements.totals.promptAndCommandBytes).toBe(measurements.totals.promptBytes + measurements.totals.commandBytes);
+
+    for (const [name, summary] of Object.entries(summaries)) {
+      expect(measurements.summaries[name as keyof typeof measurements.summaries].bytes).toBe(
+        Buffer.byteLength(JSON.stringify(summary)),
+      );
+      expect(measurements.summaries[name as keyof typeof measurements.summaries].status).toBe(summary.status);
+      expect(measurements.summaries[name as keyof typeof measurements.summaries].nextCommand).toBe(
+        summary.session?.nextCommand ?? null,
+      );
+    }
   });
 
   test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {
