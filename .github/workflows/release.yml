@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run typecheck, tests, and build
+        run: bun run check
+
+      - name: Prepare release assets
+        run: |
+          cp dist/index.js flow.js
+          cp scripts/release-install.sh install.sh
+          cp scripts/release-uninstall.sh uninstall.sh
+          shasum -a 256 flow.js > flow.js.sha256
+
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --clobber
+          else
+            gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes "Release $tag"
+          fi

@@ -136,7 +136,13 @@ bun install
 bun run install:opencode
 ```
 
-This builds the plugin and copies it to the global OpenCode plugin directory:
+Or, after a GitHub release is published, install directly from the latest release asset installer:
+
+```bash
+curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
+```
+
+Both approaches install the plugin into the global OpenCode plugin directory:
 
 ```text
 ~/.config/opencode/plugins/flow.js
@@ -146,6 +152,12 @@ To remove it again:
 
 ```bash
 bun run uninstall:opencode
+```
+
+Or uninstall directly from the latest release asset:
+
+```bash
+curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uninstall.sh | bash
 ```
 
 ### Manual fallback

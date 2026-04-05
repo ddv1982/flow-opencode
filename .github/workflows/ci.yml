@@ -19,7 +19,7 @@ jobs:
 
       - name: Lint workflow syntax
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspaces" rhysd/actionlint:1.7.7 /workspaces/.github/workflows/ci.yml
+          docker run --rm -v "${{ github.workspace }}:/workspaces" -w /workspaces rhysd/actionlint:1.7.7
 
   detect-relevant-changes:
     needs: workflow-lint
