@@ -621,6 +621,21 @@ describe("runtime transitions", () => {
     await expect(readFile(join(directory, ".flow", ".gitignore"), "utf8")).resolves.toContain("sessions/");
   });
 
+  test("flow_auto_prepare treats root-like worktree aliases as root and falls back to context.directory", async () => {
+    const directory = makeTempDir();
+    const tools = createTestTools();
+
+    const response = await tools.flow_auto_prepare.execute(
+      { argumentString: "Improve Flow recovery behavior" },
+      { worktree: "///", directory },
+    );
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    expect(parsed.mode).toBe("start_new_goal");
+    await expect(readFile(join(directory, ".flow", ".gitignore"), "utf8")).resolves.toContain("sessions/");
+  });
+
   test("flow_plan_start persists under context.directory when worktree resolves to root", async () => {
     const directory = makeTempDir();
     const tools = createTestTools();
@@ -628,6 +643,22 @@ describe("runtime transitions", () => {
     const response = await tools.flow_plan_start.execute(
       { goal: "Build a workflow plugin" },
       { worktree: "/", directory },
+    );
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    const sessionPath = getSessionPath(directory, parsed.session.id);
+    await expect(readFile(sessionPath, "utf8")).resolves.toContain('"goal": "Build a workflow plugin"');
+    await expect(readFile(join(directory, ".flow", "active"), "utf8")).resolves.toContain(parsed.session.id);
+  });
+
+  test("flow_plan_start persists under context.directory when worktree resolves to a root-like alias", async () => {
+    const directory = makeTempDir();
+    const tools = createTestTools();
+
+    const response = await tools.flow_plan_start.execute(
+      { goal: "Build a workflow plugin" },
+      { worktree: "///", directory },
     );
     const parsed = JSON.parse(response);
 

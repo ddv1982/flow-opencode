@@ -1,4 +1,4 @@
-import { parse } from "node:path";
+import { parse, resolve } from "node:path";
 import { loadSession, saveSessionState, syncSessionArtifacts } from "../session";
 import type { Session } from "../schema";
 import type { TransitionResult } from "../transitions";
@@ -36,11 +36,12 @@ function asWritableRootCandidate(rawPath: string | undefined): string | null {
     return null;
   }
 
-  if (parse(path).root === path) {
+  const normalized = resolve(path);
+  if (parse(normalized).root === normalized) {
     return null;
   }
 
-  return path;
+  return normalized;
 }
 
 export function resolveSessionRoot(context: WorkspaceContext): string {

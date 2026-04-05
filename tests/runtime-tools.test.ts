@@ -55,6 +55,23 @@ describe("runtime tools and recovery", () => {
     expect(resetParsed.summary).toBe("No active Flow session existed.");
   });
 
+  test("flow_plan_start accepts an OpenCode-like context payload and persists under directory", async () => {
+    const directory = makeTempDir();
+    const tools = createTestTools();
+    const context = {
+      worktree: "///",
+      directory,
+      sessionId: "opaque-runtime-session-id",
+      commandName: "flow-plan",
+    } as unknown as { worktree?: string; directory?: string };
+
+    const response = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, context);
+    const parsed = JSON.parse(response);
+
+    expect(parsed.status).toBe("ok");
+    await expect(readFile(join(directory, ".flow", "active"), "utf8")).resolves.toContain(parsed.session.id);
+  });
+
   test("flow_history lists active and archived session runs", async () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
