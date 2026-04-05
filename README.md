@@ -22,8 +22,8 @@ If you want long autonomous runs, keep Flow strict and tune efficiency in OpenCo
 ```mermaid
 flowchart TD
     A[Goal] --> B{Start mode}
-    B -->|Manual| C[/flow-plan]
-    B -->|Autonomous| D[/flow-auto]
+    B -->|Manual| C["/flow-plan"]
+    B -->|Autonomous| D["/flow-auto"]
 
     C --> E[Draft plan]
     D --> E
