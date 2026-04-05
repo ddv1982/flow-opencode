@@ -80,7 +80,7 @@ function measureSummary(summary: SessionSummary): SummaryMeasurement {
   };
 }
 
-export function buildSummaryFixtures() {
+export function buildSummaryFixtureSessions() {
   const planning = assertOk(applyPlan(createSession("Build a workflow plugin"), samplePlan()));
   const approved = assertOk(approvePlan(planning));
   const running = assertOk(startRun(approved)).session;
@@ -148,10 +148,21 @@ export function buildSummaryFixtures() {
   );
 
   return {
-    planning: summarizeSession(planning),
-    running: summarizeSession(running),
-    blocked: summarizeSession(blocked),
-    completed: summarizeSession(completed),
+    planning,
+    running,
+    blocked,
+    completed,
+  };
+}
+
+export function buildSummaryFixtures() {
+  const sessions = buildSummaryFixtureSessions();
+
+  return {
+    planning: summarizeSession(sessions.planning),
+    running: summarizeSession(sessions.running),
+    blocked: summarizeSession(sessions.blocked),
+    completed: summarizeSession(sessions.completed),
   };
 }
 
