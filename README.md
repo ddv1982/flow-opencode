@@ -15,6 +15,8 @@ Flow provides:
 - broad final validation before full completion
 - resumable sessions stored in `.flow/`
 
+For longer sessions, keep the workflow strict and tune efficiency in OpenCode/provider configuration first. The recommended knobs are stable prompts, OpenCode compaction, and provider cache keys.
+
 ## Commands
 
 Flow injects these slash commands into OpenCode:
