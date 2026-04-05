@@ -244,6 +244,112 @@ describe("runtime completion and contract guards", () => {
     expect(completed.recovery?.nextRuntimeArgs).toEqual({ featureId: "setup-runtime" });
   });
 
+  test("uses reviewer-decision recovery before other final-path guard failures", () => {
+    const session = createSession("Build a workflow plugin");
+    const plan = {
+      ...samplePlan(),
+      completionPolicy: {
+        minCompletedFeatures: 1,
+        requireFinalReview: true,
+      },
+      features: [samplePlan().features[0]],
+    };
+
+    const applied = applyPlan(session, plan);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    // Intentionally skip reviewer decision and use the wrong validation scope so
+    // multiple guard checks could fail. The first failing rule should remain
+    // missing_reviewer_decision.
+    const completed = completeRun(started.value.session, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [],
+      validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [],
+      nextStep: "Session should complete.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.recovery?.errorCode).toBe("missing_final_reviewer_decision");
+    expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
+  });
+
+  test("retains failure-path projections when completion guard rejects an ok result", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const approved = approvePlan(applied.value);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    const started = startRun(approved.value);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const reviewed = recordReviewerDecision(started.value.session, {
+      scope: "feature",
+      featureId: "setup-runtime",
+      status: "approved",
+      summary: "Looks good.",
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+
+    const completed = completeRun(reviewed.value, {
+      contractVersion: "1",
+      status: "ok",
+      summary: "Completed runtime setup.",
+      artifactsChanged: [{ path: "src/runtime/session.ts" }],
+      validationRun: [{ command: "bun test", status: "failed", summary: "Runtime tests failed." }],
+      validationScope: "targeted",
+      reviewIterations: 1,
+      decisions: [{ summary: "Recorded failure evidence before retry." }],
+      nextStep: "Fix failing test and retry.",
+      outcome: { kind: "completed" },
+      featureResult: { featureId: "setup-runtime", verificationStatus: "failed" },
+      featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+    });
+
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+
+    expect(completed.recovery?.errorCode).toBe("failing_validation");
+    expect(completed.session).toBeDefined();
+    if (!completed.session) return;
+
+    expect(completed.session.execution.lastValidationRun).toEqual([
+      { command: "bun test", status: "failed", summary: "Runtime tests failed." },
+    ]);
+    expect(completed.session.execution.history).toHaveLength(1);
+    expect(completed.session.execution.history[0]?.summary).toBe("Completed runtime setup.");
+    expect(completed.session.execution.history[0]?.status).toBe("ok");
+    expect(completed.session.execution.history[0]?.outcomeKind).toBe("completed");
+    expect(completed.session.artifacts).toEqual([{ path: "src/runtime/session.ts" }]);
+    expect(completed.session.notes).toEqual(["Recorded failure evidence before retry."]);
+    expect(completed.session.status).toBe("running");
+    expect(completed.session.execution.activeFeatureId).toBe("setup-runtime");
+  });
+
   test("allows final completion when broad validation and final review both pass", () => {
     const session = createSession("Build a workflow plugin");
     const plan = {

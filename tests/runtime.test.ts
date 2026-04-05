@@ -208,6 +208,98 @@ describe("runtime transitions", () => {
     expect(approved.value.status).toBe("ready");
   });
 
+  test("rejects duplicate feature ids during plan apply", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, {
+      ...samplePlan(),
+      features: [
+        samplePlan().features[0],
+        { ...samplePlan().features[0], title: "Duplicate setup feature" },
+      ],
+    });
+
+    expect(applied.ok).toBe(false);
+    if (applied.ok) return;
+    expect(applied.message).toBe("Plan validation failed: duplicate feature id 'setup-runtime'.");
+  });
+
+  test("rejects unknown blocker references during plan apply", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, {
+      ...samplePlan(),
+      features: [
+        {
+          ...samplePlan().features[0],
+          blockedBy: ["missing-feature"],
+        },
+      ],
+    });
+
+    expect(applied.ok).toBe(false);
+    if (applied.ok) return;
+    expect(applied.message).toBe("Plan validation failed: feature 'setup-runtime' is blocked by unknown feature 'missing-feature'.");
+  });
+
+  test("rejects self dependency and self blocker during plan apply", () => {
+    const session = createSession("Build a workflow plugin");
+    const selfDependency = applyPlan(session, {
+      ...samplePlan(),
+      features: [
+        {
+          ...samplePlan().features[0],
+          dependsOn: ["setup-runtime"],
+        },
+      ],
+    });
+
+    expect(selfDependency.ok).toBe(false);
+    if (selfDependency.ok) return;
+    expect(selfDependency.message).toBe("Plan validation failed: feature 'setup-runtime' cannot depend on itself.");
+
+    const selfBlocker = applyPlan(session, {
+      ...samplePlan(),
+      features: [
+        {
+          ...samplePlan().features[0],
+          blockedBy: ["setup-runtime"],
+        },
+      ],
+    });
+
+    expect(selfBlocker.ok).toBe(false);
+    if (selfBlocker.ok) return;
+    expect(selfBlocker.message).toBe("Plan validation failed: feature 'setup-runtime' cannot block itself.");
+  });
+
+  test("rejects cyclic dependency graphs during plan apply", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, {
+      ...samplePlan(),
+      features: [
+        {
+          id: "setup-runtime",
+          title: "Create runtime helpers",
+          summary: "Add runtime helper files and state persistence.",
+          fileTargets: ["src/runtime/session.ts"],
+          verification: ["bun test"],
+          dependsOn: ["execute-feature"],
+        },
+        {
+          id: "execute-feature",
+          title: "Implement execution flow",
+          summary: "Wire runtime tools to feature execution.",
+          fileTargets: ["src/tools.ts"],
+          verification: ["bun test"],
+          dependsOn: ["setup-runtime"],
+        },
+      ],
+    });
+
+    expect(applied.ok).toBe(false);
+    if (applied.ok) return;
+    expect(applied.message).toBe("Plan validation failed: the feature dependency graph contains a cycle.");
+  });
+
   test("selects a dependency-consistent subset of features", () => {
     const session = createSession("Build a workflow plugin");
     const applied = applyPlan(session, samplePlan());
@@ -220,6 +312,60 @@ describe("runtime transitions", () => {
 
     expect(selected.value.plan?.features).toHaveLength(1);
     expect(selected.value.plan?.features[0]?.id).toBe("setup-runtime");
+  });
+
+  test("selectPlanFeatures preserves completed statuses while narrowing draft plans", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const draftWithCompleted = {
+      ...applied.value,
+      plan: applied.value.plan
+        ? {
+            ...applied.value.plan,
+            features: applied.value.plan.features.map((feature) =>
+              feature.id === "setup-runtime" ? { ...feature, status: "completed" as const } : feature,
+            ),
+          }
+        : null,
+    };
+
+    const selected = selectPlanFeatures(draftWithCompleted, ["setup-runtime"]);
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) return;
+
+    expect(selected.value.plan?.features).toHaveLength(1);
+    expect(selected.value.plan?.features[0]?.id).toBe("setup-runtime");
+    expect(selected.value.plan?.features[0]?.status).toBe("completed");
+  });
+
+  test("approvePlan resets selected features to pending", () => {
+    const session = createSession("Build a workflow plugin");
+    const applied = applyPlan(session, samplePlan());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    const draftWithCompleted = {
+      ...applied.value,
+      plan: applied.value.plan
+        ? {
+            ...applied.value.plan,
+            features: applied.value.plan.features.map((feature) =>
+              feature.id === "setup-runtime" ? { ...feature, status: "completed" as const } : feature,
+            ),
+          }
+        : null,
+    };
+
+    const approved = approvePlan(draftWithCompleted, ["setup-runtime"]);
+    expect(approved.ok).toBe(true);
+    if (!approved.ok) return;
+
+    expect(approved.value.plan?.features).toHaveLength(1);
+    expect(approved.value.plan?.features[0]?.id).toBe("setup-runtime");
+    expect(approved.value.plan?.features[0]?.status).toBe("pending");
   });
 
   test("rejects mixed valid and invalid requested feature ids", () => {
