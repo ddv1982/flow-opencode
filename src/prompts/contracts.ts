@@ -20,15 +20,15 @@ export const FLOW_WORKER_CONTRACT = `Return exactly one worker result payload wi
 - contractVersion: "1"
 - status: ok | needs_input
 - summary: string
-- artifactsChanged: { path: string, kind?: string }[]
-- validationRun: { command: string, status: passed | failed | failed_existing | partial, summary: string }[]
-- decisions: { summary: string }[]
+- artifactsChanged: { path, kind? }[]
+- validationRun: { command, status: passed | failed | failed_existing | partial, summary }[]
+- decisions: { summary }[]
 - nextStep: string
 - reviewIterations?: number
 - validationScope?: targeted | broad
-- featureResult: { featureId: string, verificationStatus?: passed | partial | failed | not_recorded, notes?: { note: string }[], followUps?: { summary: string, severity?: string }[] }
-- featureReview: { status: passed | failed | needs_followup, summary: string, blockingFindings: { summary: string }[] }
-- finalReview?: { status: passed | failed | needs_followup, summary: string, blockingFindings: { summary: string }[] }
+- featureResult: { featureId, verificationStatus?: passed | partial | failed | not_recorded, notes?: { note }[], followUps?: { summary, severity? }[] }
+- featureReview: { status: passed | failed | needs_followup, summary, blockingFindings: { summary }[] }
+- finalReview?: same shape as featureReview
 
 Status rules:
 - if status is ok, outcome must be omitted or use kind: completed
@@ -43,8 +43,8 @@ export const FLOW_REVIEWER_CONTRACT = `Return exactly one reviewer result payloa
 - featureId?: string
 - status: approved | needs_fix | blocked
 - summary: string
-- blockingFindings: { summary: string }[]
-- followUps?: { summary: string, severity?: string }[]
+- blockingFindings: { summary }[]
+- followUps?: { summary, severity? }[]
 - suggestedValidation?: string[]
 
 Reviewer rules:

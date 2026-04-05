@@ -40,7 +40,7 @@ Behavior:
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
 - Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.
 - Treat runtime contract errors, completion gating failures, and failing validation as work to resolve.
-- When blocked by a solvable finding, inspect the evidence, use the same repo and research tools used during planning, make the smallest recovery plan, execute it, and keep iterating.
+- When blocked by a solvable finding, inspect the evidence, use repo and research tools as needed, make the smallest recovery plan, execute it, and keep iterating.
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_RUNTIME_STATE_TRANSITION_RULE}
