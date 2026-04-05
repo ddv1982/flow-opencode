@@ -5,7 +5,7 @@ import { applyPlan, approvePlan, completeRun, recordReviewerDecision, resetFeatu
 import { summarizeSession } from "./runtime/summary";
 import { DECOMPOSITION_POLICIES, GOAL_MODES, OUTCOME_KINDS, REVIEW_STATUSES, VALIDATION_STATUSES, VERIFICATION_STATUSES, WORKER_STATUSES } from "./runtime/contracts";
 import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN, FEATURE_REVIEW_SCOPE, FINAL_REVIEW_SCOPE, VALIDATION_SCOPES } from "./runtime/primitives";
-import type { Session } from "./runtime/schema";
+import type { PlanningContext, Session } from "./runtime/schema";
 
 const z = tool.schema;
 const featureIdSchema = z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
@@ -157,6 +157,44 @@ const FlowResetFeatureArgsShape = {
   featureId: featureIdSchema,
 };
 
+type FlowHistoryShowArgs = {
+  sessionId: string;
+};
+
+type FlowSessionActivateArgs = {
+  sessionId: string;
+};
+
+type FlowAutoPrepareArgs = {
+  argumentString?: string;
+};
+
+type FlowPlanStartArgs = {
+  goal?: string;
+  repoProfile?: string[];
+};
+
+type FlowPlanApplyArgs = {
+  plan: unknown;
+  planning?: Partial<PlanningContext>;
+};
+
+type FlowPlanApproveArgs = {
+  featureIds?: string[];
+};
+
+type FlowPlanSelectArgs = {
+  featureIds: string[];
+};
+
+type FlowRunStartArgs = {
+  featureId?: string;
+};
+
+type FlowResetFeatureArgs = {
+  featureId: string;
+};
+
 function parseFeatureIds(raw?: string[]): string[] {
   return (raw ?? []).map((value) => value.trim()).filter(Boolean);
 }
@@ -170,6 +208,10 @@ type ToolContext = {
 };
 
 type ToolResponse = Record<string, unknown>;
+
+function summarizePersistedSession(session: Session) {
+  return summarizeSession(session);
+}
 
 function missingSessionResponse(summary = "No active Flow session exists.", nextCommand?: string): ToolResponse {
   return nextCommand ? { status: "missing_session", summary, nextCommand } : { status: "missing_session", summary };
@@ -217,7 +259,7 @@ export function createTools(_ctx: unknown) {
     flow_status: tool({
       description: "Show the active Flow session summary",
       args: FlowStatusArgsShape,
-      async execute(_args: any, context: any) {
+      async execute(_args: unknown, context: ToolContext) {
         const session = await loadSession(context.worktree);
         return toJson(summarizeSession(session));
       },
@@ -226,7 +268,7 @@ export function createTools(_ctx: unknown) {
     flow_history: tool({
       description: "Show stored Flow session history across active and archived runs",
       args: FlowHistoryArgsShape,
-      async execute(_args: any, context: any) {
+      async execute(_args: unknown, context: ToolContext) {
         const history = await listSessionHistory(context.worktree);
         const activeCount = history.activeSessionId ? 1 : 0;
         const totalCount = history.sessions.length + history.archived.length;
@@ -257,8 +299,8 @@ export function createTools(_ctx: unknown) {
     flow_history_show: tool({
       description: "Show a specific stored Flow session by id",
       args: FlowHistoryShowArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { sessionId: string };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowHistoryShowArgs;
         const found = await loadStoredSession(context.worktree, input.sessionId);
 
         if (!found) {
@@ -295,8 +337,8 @@ export function createTools(_ctx: unknown) {
     flow_session_activate: tool({
       description: "Activate a stored Flow session by id",
       args: FlowSessionActivateArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { sessionId: string };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowSessionActivateArgs;
         const session = await activateSession(context.worktree, input.sessionId);
 
         if (!session) {
@@ -319,8 +361,8 @@ export function createTools(_ctx: unknown) {
     flow_plan_start: tool({
       description: "Create or refresh the active Flow planning session",
       args: FlowPlanStartArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { goal?: string; repoProfile?: string[] };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowPlanStartArgs;
         const existing = await loadSession(context.worktree);
 
         if (!input.goal && !existing) {
@@ -379,8 +421,8 @@ export function createTools(_ctx: unknown) {
     flow_auto_prepare: tool({
       description: "Classify a flow-auto invocation",
       args: FlowAutoPrepareArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { argumentString?: string };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowAutoPrepareArgs;
         const trimmed = (input.argumentString ?? "").trim();
         const session = await loadSession(context.worktree);
         const isResume = trimmed === "" || trimmed === "resume";
@@ -418,20 +460,8 @@ export function createTools(_ctx: unknown) {
     flow_plan_apply: tool({
       description: "Persist a Flow draft plan into the active session",
       args: FlowPlanApplyArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as {
-          plan: unknown;
-          planning?: {
-            repoProfile?: string[];
-            research?: string[];
-            implementationApproach?: {
-              chosenDirection: string;
-              keyConstraints: string[];
-              validationSignals: string[];
-              sources: string[];
-            };
-          };
-        };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowPlanApplyArgs;
         return withSession(
           context,
           async (session) =>
@@ -442,7 +472,7 @@ export function createTools(_ctx: unknown) {
               (saved) => ({
                 status: "ok",
                 summary: "Draft plan saved.",
-                session: summarizeSession(saved).session,
+                session: summarizePersistedSession(saved).session,
               }),
             ),
           missingSessionResponse("No active Flow planning session exists.", "/flow-plan <goal>"),
@@ -453,8 +483,8 @@ export function createTools(_ctx: unknown) {
     flow_plan_approve: tool({
       description: "Approve the active Flow draft plan",
       args: FlowPlanApproveArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { featureIds?: string[] };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowPlanApproveArgs;
         return withSession(context, async (session) =>
           persistTransition(
             context,
@@ -463,7 +493,7 @@ export function createTools(_ctx: unknown) {
             (saved) => ({
               status: "ok",
               summary: "Plan approved.",
-              session: summarizeSession(saved).session,
+              session: summarizePersistedSession(saved).session,
             }),
           ),
         );
@@ -473,8 +503,8 @@ export function createTools(_ctx: unknown) {
     flow_plan_select_features: tool({
       description: "Keep only selected features in the active Flow draft plan",
       args: FlowPlanSelectArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { featureIds: string[] };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowPlanSelectArgs;
         return withSession(context, async (session) =>
           persistTransition(
             context,
@@ -483,7 +513,7 @@ export function createTools(_ctx: unknown) {
             (saved) => ({
               status: "ok",
               summary: "Draft plan narrowed.",
-              session: summarizeSession(saved).session,
+              session: summarizePersistedSession(saved).session,
             }),
           ),
         );
@@ -493,8 +523,8 @@ export function createTools(_ctx: unknown) {
     flow_run_start: tool({
       description: "Start the next runnable Flow feature",
       args: FlowRunStartArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { featureId?: string };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowRunStartArgs;
         return withSession(
           context,
           async (session) =>
@@ -502,13 +532,17 @@ export function createTools(_ctx: unknown) {
               context,
               startRun(session, input.featureId),
               (value) => value.session,
-              (saved, value) => ({
-                status: value.reason === "complete" ? "complete" : value.feature ? "ok" : "blocked",
-                summary: summarizeSession(saved).summary,
-                session: summarizeSession(saved).session,
-                feature: value.feature,
-                reason: value.reason,
-              }),
+              (saved, value) => {
+                const summary = summarizePersistedSession(saved);
+
+                return {
+                  status: value.reason === "complete" ? "complete" : value.feature ? "ok" : "blocked",
+                  summary: summary.summary,
+                  session: summary.session,
+                  feature: value.feature,
+                  reason: value.reason,
+                };
+              },
             ),
           missingSessionResponse("No active Flow session exists.", "/flow-plan <goal>"),
         );
@@ -518,18 +552,22 @@ export function createTools(_ctx: unknown) {
     flow_run_complete_feature: tool({
       description: "Persist the result of a Flow feature execution",
       args: WorkerResultArgsShape,
-      async execute(args: any, context: any) {
+      async execute(args: unknown, context: ToolContext) {
         const input = adaptFlowRunCompleteFeatureInput(args);
         return withSession(context, async (session) =>
           persistTransition(
             context,
             completeRun(session, input),
             (value) => value,
-            (saved) => ({
-              status: "ok",
-              summary: summarizeSession(saved).summary,
-              session: summarizeSession(saved).session,
-            }),
+            (saved) => {
+              const summary = summarizePersistedSession(saved);
+
+              return {
+                status: "ok",
+                summary: summary.summary,
+                session: summary.session,
+              };
+            },
             (failure) => errorResponse(failure.message, { recovery: failure.recovery }),
           ),
         );
@@ -539,7 +577,7 @@ export function createTools(_ctx: unknown) {
     flow_review_record_feature: tool({
       description: "Record the reviewer decision for the active feature",
       args: FlowReviewRecordFeatureArgsShape,
-      async execute(args: any, context: any) {
+      async execute(args: unknown, context: ToolContext) {
         return withSession(context, async (session) =>
           persistTransition(
             context,
@@ -548,7 +586,7 @@ export function createTools(_ctx: unknown) {
             (saved) => ({
               status: "ok",
               summary: "Reviewer decision recorded.",
-              session: summarizeSession(saved).session,
+              session: summarizePersistedSession(saved).session,
             }),
           ),
         );
@@ -558,7 +596,7 @@ export function createTools(_ctx: unknown) {
     flow_review_record_final: tool({
       description: "Record the reviewer decision for final cross-feature validation",
       args: FlowReviewRecordFinalArgsShape,
-      async execute(args: any, context: any) {
+      async execute(args: unknown, context: ToolContext) {
         return withSession(context, async (session) =>
           persistTransition(
             context,
@@ -567,7 +605,7 @@ export function createTools(_ctx: unknown) {
             (saved) => ({
               status: "ok",
               summary: "Reviewer decision recorded.",
-              session: summarizeSession(saved).session,
+              session: summarizePersistedSession(saved).session,
             }),
           ),
         );
@@ -577,8 +615,8 @@ export function createTools(_ctx: unknown) {
     flow_reset_feature: tool({
       description: "Reset a Flow feature to pending",
       args: FlowResetFeatureArgsShape,
-      async execute(args: any, context: any) {
-        const input = args as { featureId: string };
+      async execute(args: unknown, context: ToolContext) {
+        const input = args as FlowResetFeatureArgs;
 
         return withSession(context, async (session) =>
           persistTransition(
@@ -588,7 +626,7 @@ export function createTools(_ctx: unknown) {
             (saved) => ({
               status: "ok",
               summary: `Reset feature '${input.featureId}'.`,
-              session: summarizeSession(saved).session,
+              session: summarizePersistedSession(saved).session,
             }),
           ),
         );
@@ -598,7 +636,7 @@ export function createTools(_ctx: unknown) {
     flow_reset_session: tool({
       description: "Archive and clear the active Flow session",
       args: FlowStatusArgsShape,
-      async execute(_args: any, context: any) {
+      async execute(_args: unknown, context: ToolContext) {
         const archived = await archiveSession(context.worktree);
         return toJson({
           status: "ok",

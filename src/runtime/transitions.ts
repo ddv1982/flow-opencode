@@ -95,6 +95,27 @@ function selectDependencyConsistentFeatureSubset(
   return succeed(filtered);
 }
 
+function projectSelectedFeatures(features: Feature[], preserveCompleted: boolean): Feature[] {
+  return features.map((feature) => ({
+    ...feature,
+    status: preserveCompleted && feature.status === "completed" ? "completed" : "pending",
+  }));
+}
+
+function selectProjectedFeatureSubset(
+  features: Feature[],
+  featureIds: string[],
+  dependencyErrorMessage: (featureId: string) => string,
+  preserveCompleted: boolean,
+): TransitionResult<Feature[]> {
+  const subset = selectDependencyConsistentFeatureSubset(features, featureIds, dependencyErrorMessage);
+  if (!subset.ok) {
+    return subset;
+  }
+
+  return succeed(projectSelectedFeatures(subset.value, preserveCompleted));
+}
+
 function clearExecution(session: Session): void {
   session.execution.activeFeatureId = null;
   session.execution.lastFeatureId = null;
@@ -144,6 +165,13 @@ function isFeatureRunnable(feature: Feature, completed: Set<string>): boolean {
 type RunnableFeatureResult =
   | { ok: true; value: Feature }
   | { ok: false; message: string; reason: "invalid_request" | "blocked" };
+
+type DraftPlanEditMessages = {
+  missingPlan: string;
+  activeSession: string;
+};
+
+type DraftPlanSession = Session & { plan: Plan };
 
 function validatePlanGraph(plan: Plan): string | null {
   const ids = new Set<string>();
@@ -231,6 +259,25 @@ function completionThresholdReached(features: Feature[], plan: Plan): boolean {
   return completedCount === features.length;
 }
 
+function prepareDraftPlanEdit(
+  session: Session,
+  messages: DraftPlanEditMessages,
+): TransitionResult<DraftPlanSession> {
+  const next = cloneSession(session);
+  const { plan } = next;
+  if (!plan) {
+    return fail(messages.missingPlan);
+  }
+  if (next.status !== "planning" || next.execution.activeFeatureId) {
+    return fail(messages.activeSession);
+  }
+
+  return succeed({
+    ...next,
+    plan,
+  });
+}
+
 type CompletionRecoveryKind =
   | "missing_validation"
   | "failing_validation"
@@ -248,6 +295,15 @@ type StaticCompletionRecovery = Omit<
   nextRuntimeTool?: TransitionRecovery["nextRuntimeTool"];
   nextRuntimeArgs?: TransitionRecovery["nextRuntimeArgs"];
 };
+
+type ResetFeatureRecoveryKind =
+  | "failing_feature_review"
+  | "failing_final_review"
+  | "failing_validation";
+
+type WorkerOutcomeKind = NonNullable<WorkerResult["outcome"]>["kind"];
+type ReviewerDecision = NonNullable<Session["execution"]["lastReviewerDecision"]>;
+type FeatureScopeReviewerDecision = ReviewerDecision & { scope: "feature" };
 
 const REVIEW_DECISION_RECOVERY: Record<"feature" | "final", StaticCompletionRecovery> = {
   feature: {
@@ -320,6 +376,36 @@ const STATIC_COMPLETION_RECOVERY: Record<
   },
 };
 
+const RESET_FEATURE_COMPLETION_RECOVERY: Record<
+  ResetFeatureRecoveryKind,
+  Omit<StaticCompletionRecovery, "nextCommand" | "nextRuntimeTool" | "nextRuntimeArgs">
+> = {
+  failing_final_review: {
+    errorCode: "failing_final_review",
+    resolutionHint: "Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview.",
+    recoveryStage: "reset_feature",
+    prerequisite: "feature_reset_required",
+    retryable: true,
+    autoResolvable: true,
+  },
+  failing_feature_review: {
+    errorCode: "failing_feature_review",
+    resolutionHint: "Fix the feature review findings, rerun targeted validation, and rerun the current Flow feature.",
+    recoveryStage: "reset_feature",
+    prerequisite: "feature_reset_required",
+    retryable: true,
+    autoResolvable: true,
+  },
+  failing_validation: {
+    errorCode: "failing_validation",
+    resolutionHint: "Fix the failing validation, rerun the relevant checks, and rerun the current Flow feature.",
+    recoveryStage: "reset_feature",
+    prerequisite: "feature_reset_required",
+    retryable: true,
+    autoResolvable: true,
+  },
+};
+
 function buildStatusRecovery(recovery: StaticCompletionRecovery): TransitionRecovery {
   return {
     ...recovery,
@@ -352,37 +438,8 @@ function buildCompletionRecovery(
     return buildStatusRecovery(VALIDATION_SCOPE_RECOVERY[wasFinalFeature ? "broad" : "targeted"]);
   }
 
-  if (kind === "failing_final_review") {
-    return buildResetFeatureRecovery(featureId, {
-      errorCode: "failing_final_review",
-      resolutionHint: "Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview.",
-      recoveryStage: "reset_feature",
-      prerequisite: "feature_reset_required",
-      retryable: true,
-      autoResolvable: true,
-    });
-  }
-
-  if (kind === "failing_feature_review") {
-    return buildResetFeatureRecovery(featureId, {
-      errorCode: "failing_feature_review",
-      resolutionHint: "Fix the feature review findings, rerun targeted validation, and rerun the current Flow feature.",
-      recoveryStage: "reset_feature",
-      prerequisite: "feature_reset_required",
-      retryable: true,
-      autoResolvable: true,
-    });
-  }
-
-  if (kind === "failing_validation") {
-    return buildResetFeatureRecovery(featureId, {
-      errorCode: "failing_validation",
-      resolutionHint: "Fix the failing validation, rerun the relevant checks, and rerun the current Flow feature.",
-      recoveryStage: "reset_feature",
-      prerequisite: "feature_reset_required",
-      retryable: true,
-      autoResolvable: true,
-    });
+  if (kind === "failing_feature_review" || kind === "failing_final_review" || kind === "failing_validation") {
+    return buildResetFeatureRecovery(featureId, RESET_FEATURE_COMPLETION_RECOVERY[kind]);
   }
 
   return buildStatusRecovery(STATIC_COMPLETION_RECOVERY[kind]);
@@ -441,6 +498,43 @@ function firstRunnableFeature(features: Feature[], requestedId?: string): Runnab
   return { ok: true, value: runnable };
 }
 
+function markFeatureInProgress(features: Feature[], featureId: string): Feature[] {
+  return features.map((feature) => {
+    if (feature.id !== featureId) {
+      return feature.status === "in_progress" ? { ...feature, status: "pending" } : feature;
+    }
+
+    return { ...feature, status: "in_progress" };
+  });
+}
+
+function blockRun(session: Session, message: string): { session: Session; feature: null; reason: string } {
+  const blocked = cloneSession(session);
+  blocked.status = "blocked";
+  blocked.execution.activeFeatureId = null;
+  blocked.execution.lastSummary = message;
+  blocked.execution.lastOutcomeKind = "blocked";
+  return { session: blocked, feature: null, reason: message };
+}
+
+function startFeatureRun(session: Session, featureId: string): { session: Session; feature: Feature | null } {
+  const next = cloneSession(session);
+  const plan = next.plan!;
+
+  plan.features = markFeatureInProgress(plan.features, featureId);
+  next.status = "running";
+  next.execution.activeFeatureId = featureId;
+  next.execution.lastFeatureId = featureId;
+  next.execution.lastSummary = `Running feature '${featureId}'.`;
+  next.execution.lastOutcomeKind = null;
+  next.execution.lastReviewerDecision = null;
+
+  return {
+    session: next,
+    feature: plan.features.find((feature) => feature.id === featureId) ?? null,
+  };
+}
+
 function markSessionCompleted(session: Session, summary: string): Session {
   const next = cloneSession(session);
   next.status = "completed";
@@ -483,25 +577,28 @@ export function applyPlan(
 }
 
 export function approvePlan(session: Session, featureIds?: string[]): TransitionResult<Session> {
-  const next = cloneSession(session);
-  if (!next.plan) {
-    return fail("There is no draft plan to approve.");
-  }
-  if (next.status !== "planning" || next.execution.activeFeatureId) {
-    return fail("The active session is already executing work. Replanning or approval is only allowed while reviewing a draft plan.");
+  const editable = prepareDraftPlanEdit(session, {
+    missingPlan: "There is no draft plan to approve.",
+    activeSession: "The active session is already executing work. Replanning or approval is only allowed while reviewing a draft plan.",
+  });
+  if (!editable.ok) {
+    return editable;
   }
 
+  const next = editable.value;
+
   if (featureIds && featureIds.length > 0) {
-    const subset = selectDependencyConsistentFeatureSubset(
+    const subset = selectProjectedFeatureSubset(
       next.plan.features,
       featureIds,
       (featureId) => `Feature '${featureId}' depends on omitted features. Select a dependency-consistent set before approval.`,
+      false,
     );
     if (!subset.ok) {
       return subset;
     }
 
-    next.plan.features = subset.value.map((feature) => ({ ...feature, status: "pending" }));
+    next.plan.features = subset.value;
   }
 
   next.approval = "approved";
@@ -511,27 +608,29 @@ export function approvePlan(session: Session, featureIds?: string[]): Transition
 }
 
 export function selectPlanFeatures(session: Session, featureIds: string[]): TransitionResult<Session> {
-  const next = cloneSession(session);
-  if (!next.plan) {
-    return fail("There is no draft plan to narrow.");
-  }
-  if (next.status !== "planning" || next.execution.activeFeatureId) {
-    return fail("The active session is already executing work. Narrow the plan only while it is still a draft.");
+  const editable = prepareDraftPlanEdit(session, {
+    missingPlan: "There is no draft plan to narrow.",
+    activeSession: "The active session is already executing work. Narrow the plan only while it is still a draft.",
+  });
+  if (!editable.ok) {
+    return editable;
   }
   if (featureIds.length === 0) {
     return fail("Provide at least one feature id to keep in the draft plan.");
   }
 
-  const subset = selectDependencyConsistentFeatureSubset(
+  const next = editable.value;
+  const subset = selectProjectedFeatureSubset(
     next.plan.features,
     featureIds,
     (featureId) => `Feature '${featureId}' depends on omitted features. Keep a dependency-consistent set.`,
+    true,
   );
   if (!subset.ok) {
     return subset;
   }
 
-  next.plan.features = subset.value.map((feature) => ({ ...feature, status: feature.status === "completed" ? "completed" : "pending" }));
+  next.plan.features = subset.value;
   next.approval = "pending";
   next.status = "planning";
   clearExecution(next);
@@ -557,39 +656,151 @@ export function startRun(session: Session, requestedId?: string): TransitionResu
     });
   }
 
-  const next = cloneSession(session);
-  const plan = next.plan!;
-  const targetResult = firstRunnableFeature(plan.features, requestedId);
+  const targetResult = firstRunnableFeature(session.plan.features, requestedId);
   if (!targetResult.ok) {
     if (targetResult.reason === "invalid_request") {
       return fail(targetResult.message);
     }
 
-    const blocked = cloneSession(next);
-    blocked.status = "blocked";
-    blocked.execution.activeFeatureId = null;
-    blocked.execution.lastSummary = targetResult.message;
-    blocked.execution.lastOutcomeKind = "blocked";
-    return succeed({ session: blocked, feature: null, reason: targetResult.message });
+    return succeed(blockRun(session, targetResult.message));
   }
 
-  plan.features = plan.features.map((feature) => {
-    if (feature.id !== targetResult.value.id) {
-      return feature.status === "in_progress" ? { ...feature, status: "pending" } : feature;
-    }
+  return succeed(startFeatureRun(session, targetResult.value.id));
+}
 
-    return { ...feature, status: "in_progress" };
+function inferWorkerOutcomeKind(worker: WorkerResult): WorkerOutcomeKind | "completed" | "needs_input" {
+  return worker.outcome?.kind ?? (worker.status === "ok" ? "completed" : "needs_input");
+}
+
+function projectCompletedFeatures(features: Feature[], featureId: string): Feature[] {
+  return features.map((feature) => (feature.id === featureId ? { ...feature, status: "completed" } : feature));
+}
+
+function recordWorkerResult(session: Session, featureId: string, worker: WorkerResult, recordedAt: string): void {
+  const outcomeKind = inferWorkerOutcomeKind(worker);
+
+  session.artifacts = worker.artifactsChanged;
+  session.execution.lastValidationRun = worker.validationRun;
+  session.execution.lastFeatureId = featureId;
+  session.execution.lastSummary = worker.summary;
+  session.execution.lastOutcomeKind = outcomeKind;
+  session.execution.lastOutcome = worker.outcome ?? null;
+  session.execution.lastNextStep = worker.nextStep;
+  session.execution.lastFeatureResult = worker.featureResult;
+  session.execution.history.push({
+    featureId,
+    status: worker.status,
+    summary: worker.summary,
+    recordedAt,
+    outcomeKind,
+    outcome: worker.outcome ?? null,
+    nextStep: worker.nextStep,
+    validationRun: worker.validationRun,
+    artifactsChanged: worker.artifactsChanged,
+    decisions: worker.decisions,
+    featureResult: worker.featureResult,
+    reviewerDecision: session.execution.lastReviewerDecision,
+    featureReview: worker.featureReview,
+    finalReview: worker.finalReview,
   });
-  next.status = "running";
-  next.execution.activeFeatureId = targetResult.value.id;
-  next.execution.lastFeatureId = targetResult.value.id;
-  next.execution.lastSummary = `Running feature '${targetResult.value.id}'.`;
-  next.execution.lastOutcomeKind = null;
-  next.execution.lastReviewerDecision = null;
-  return succeed({
-    session: next,
-    feature: plan.features.find((feature) => feature.id === targetResult.value.id) ?? null,
-  });
+  session.notes = worker.decisions.map((decision) => decision.summary);
+}
+
+function validateSuccessfulCompletion(
+  session: Session,
+  worker: WorkerResult,
+  featureId: string,
+  wasFinalFeature: boolean,
+  requireFinalReview: boolean,
+): TransitionResult<void> {
+  if (worker.validationRun.length === 0) {
+    return fail(
+      "Worker result cannot complete the feature without recorded validation evidence.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation"),
+    );
+  }
+  if (!isValidationPassing(worker.validationRun)) {
+    return fail(
+      "Worker result cannot complete the feature because validation did not fully pass.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "failing_validation"),
+    );
+  }
+  if (!hasApprovedReviewerDecision(session, featureId, wasFinalFeature)) {
+    return fail(
+      "Worker result cannot complete without a recorded approved reviewer decision.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "missing_reviewer_decision"),
+    );
+  }
+  if (!wasFinalFeature && worker.validationScope !== "targeted") {
+    return fail(
+      "Worker result cannot complete the feature without targeted validation.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
+    );
+  }
+  if (!isReviewPassing(worker.featureReview)) {
+    return fail(
+      "Worker result cannot complete the feature because featureReview is not passing.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "failing_feature_review"),
+    );
+  }
+  if (worker.finalReview && !isReviewPassing(worker.finalReview)) {
+    return fail(
+      "Worker result cannot complete the feature because finalReview is not passing.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
+    );
+  }
+  if (wasFinalFeature && worker.validationScope !== "broad") {
+    return fail(
+      "Worker result cannot complete the session without broad final validation.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
+    );
+  }
+  if (wasFinalFeature && !worker.finalReview) {
+    return fail(
+      "Worker result cannot complete the session without a finalReview.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "missing_final_review"),
+    );
+  }
+  if (requireFinalReview && !isReviewPassing(worker.finalReview)) {
+    return fail(
+      "Worker result cannot complete the session because a passing finalReview is required.",
+      buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
+    );
+  }
+
+  return succeed(undefined);
+}
+
+function finalizeSuccessfulCompletion(next: Session, featureId: string, summary: string): TransitionResult<Session> {
+  const plan = next.plan!;
+  plan.features = projectCompletedFeatures(plan.features, featureId);
+  next.execution.activeFeatureId = null;
+
+  if (completionThresholdReached(plan.features, plan)) {
+    return succeed(markSessionCompleted(next, summary));
+  }
+
+  next.status = "ready";
+  return succeed(next);
+}
+
+function finalizeIncompleteCompletion(next: Session, featureId: string, outcomeKind: WorkerOutcomeKind): Session {
+  const plan = next.plan!;
+  next.execution.activeFeatureId = null;
+
+  if (outcomeKind === "replan_required") {
+    next.plan = null;
+    next.status = "planning";
+    next.approval = "pending";
+    next.timestamps.approvedAt = null;
+    return next;
+  }
+
+  plan.features = plan.features.map((feature) =>
+    feature.id === featureId ? { ...feature, status: "blocked" } : feature,
+  );
+  next.status = "blocked";
+  return next;
 }
 
 export function completeRun(session: Session, workerInput: unknown): TransitionResult<Session> {
@@ -616,122 +827,65 @@ export function completeRun(session: Session, workerInput: unknown): TransitionR
   const plan = next.plan!;
   const featureId = session.execution.activeFeatureId;
   const recordedAt = new Date().toISOString();
-  const wasFinalFeature = completionThresholdReached(
-    plan.features.map((feature) => (feature.id === featureId ? { ...feature, status: "completed" } : feature)),
-    plan,
-  );
+  const wasFinalFeature = completionThresholdReached(projectCompletedFeatures(plan.features, featureId), plan);
 
-  next.artifacts = worker.artifactsChanged;
-  next.execution.lastValidationRun = worker.validationRun;
-  next.execution.lastFeatureId = featureId;
-  next.execution.lastSummary = worker.summary;
-  next.execution.lastOutcomeKind = worker.outcome?.kind ?? (worker.status === "ok" ? "completed" : "needs_input");
-  next.execution.lastOutcome = worker.outcome ?? null;
-  next.execution.lastNextStep = worker.nextStep;
-  next.execution.lastFeatureResult = worker.featureResult;
-  next.execution.history.push({
-    featureId,
-    status: worker.status,
-    summary: worker.summary,
-    recordedAt,
-    outcomeKind: worker.outcome?.kind ?? (worker.status === "ok" ? "completed" : null),
-    outcome: worker.outcome ?? null,
-    nextStep: worker.nextStep,
-    validationRun: worker.validationRun,
-    artifactsChanged: worker.artifactsChanged,
-    decisions: worker.decisions,
-    featureResult: worker.featureResult,
-    reviewerDecision: next.execution.lastReviewerDecision,
-    featureReview: worker.featureReview,
-    finalReview: worker.finalReview,
-  });
-  next.notes = worker.decisions.map((decision) => decision.summary);
+  recordWorkerResult(next, featureId, worker, recordedAt);
 
   if (worker.status === "ok") {
-    if (worker.validationRun.length === 0) {
-      return fail(
-        "Worker result cannot complete the feature without recorded validation evidence.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation"),
-      );
-    }
-    if (!isValidationPassing(worker.validationRun)) {
-      return fail(
-        "Worker result cannot complete the feature because validation did not fully pass.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "failing_validation"),
-      );
-    }
-    if (!hasApprovedReviewerDecision(session, featureId, wasFinalFeature)) {
-      return fail(
-        "Worker result cannot complete without a recorded approved reviewer decision.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "missing_reviewer_decision"),
-      );
-    }
-    if (!wasFinalFeature && worker.validationScope !== "targeted") {
-      return fail(
-        "Worker result cannot complete the feature without targeted validation.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
-      );
-    }
-    if (!isReviewPassing(worker.featureReview)) {
-      return fail(
-        "Worker result cannot complete the feature because featureReview is not passing.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "failing_feature_review"),
-      );
-    }
-    if (worker.finalReview && !isReviewPassing(worker.finalReview)) {
-      return fail(
-        "Worker result cannot complete the feature because finalReview is not passing.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
-      );
-    }
-    if (wasFinalFeature && worker.validationScope !== "broad") {
-      return fail(
-        "Worker result cannot complete the session without broad final validation.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation_scope"),
-      );
-    }
-    if (wasFinalFeature && !worker.finalReview) {
-      return fail(
-        "Worker result cannot complete the session without a finalReview.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "missing_final_review"),
-      );
-    }
-    if (plan.completionPolicy?.requireFinalReview && wasFinalFeature && !isReviewPassing(worker.finalReview)) {
-      return fail(
-        "Worker result cannot complete the session because a passing finalReview is required.",
-        buildCompletionRecovery(featureId, wasFinalFeature, "failing_final_review"),
-      );
-    }
-
-    plan.features = plan.features.map((feature) =>
-      feature.id === featureId ? { ...feature, status: "completed" } : feature,
+    const validation = validateSuccessfulCompletion(
+      session,
+      worker,
+      featureId,
+      wasFinalFeature,
+      Boolean(plan.completionPolicy?.requireFinalReview && wasFinalFeature),
     );
-    next.execution.activeFeatureId = null;
-
-    if (completionThresholdReached(plan.features, plan)) {
-      return succeed(markSessionCompleted(next, worker.summary));
+    if (!validation.ok) {
+      return validation;
     }
 
-    next.status = "ready";
-    return succeed(next);
+    return finalizeSuccessfulCompletion(next, featureId, worker.summary);
   }
 
-  const outcomeKind = worker.outcome.kind;
-  next.execution.activeFeatureId = null;
+  return succeed(finalizeIncompleteCompletion(next, featureId, worker.outcome.kind));
+}
 
-  if (outcomeKind === "replan_required") {
-    next.plan = null;
-    next.status = "planning";
-    next.approval = "pending";
-    next.timestamps.approvedAt = null;
-    return succeed(next);
+function resetAffectedFeatures(features: Feature[], affected: Set<string>): Feature[] {
+  return features.map((item) => (affected.has(item.id) ? { ...item, status: "pending" } : item));
+}
+
+function clearLastRunProjection(session: Session): void {
+  session.execution.lastFeatureId = null;
+  session.execution.lastValidationRun = [];
+  session.execution.lastOutcome = null;
+  session.execution.lastNextStep = null;
+  session.execution.lastFeatureResult = null;
+  session.execution.lastReviewerDecision = null;
+  session.artifacts = [];
+  session.notes = [];
+}
+
+function buildResetSummary(featureId: string, affectedCount: number): string {
+  return affectedCount > 1
+    ? `Reset feature '${featureId}' and its dependent features to pending.`
+    : `Reset feature '${featureId}' to pending.`;
+}
+
+function validateFeatureScopeReviewerDecision(
+  session: Session,
+  decision: FeatureScopeReviewerDecision,
+): TransitionResult<void> {
+  if (!session.execution.activeFeatureId) {
+    return fail("There is no active feature to review.");
+  }
+  if (decision.featureId !== session.execution.activeFeatureId) {
+    return fail(`Reviewer decision feature '${decision.featureId}' does not match active feature '${session.execution.activeFeatureId}'.`);
   }
 
-  plan.features = plan.features.map((feature) =>
-    feature.id === featureId ? { ...feature, status: "blocked" } : feature,
-  );
-  next.status = "blocked";
-  return succeed(next);
+  return succeed(undefined);
+}
+
+function isFeatureScopeReviewerDecision(decision: ReviewerDecision): decision is FeatureScopeReviewerDecision {
+  return decision.scope === "feature";
 }
 
 export function resetFeature(session: Session, featureId: string): TransitionResult<Session> {
@@ -748,33 +902,23 @@ export function resetFeature(session: Session, featureId: string): TransitionRes
 
   const affected = collectDependents(plan.features, featureId);
   affected.add(featureId);
-  plan.features = plan.features.map((item) => (affected.has(item.id) ? { ...item, status: "pending" } : item));
+  plan.features = resetAffectedFeatures(plan.features, affected);
   next.status = next.approval === "approved" ? "ready" : "planning";
   if (next.execution.activeFeatureId && affected.has(next.execution.activeFeatureId)) {
     next.execution.activeFeatureId = null;
   }
   const shouldClearLastRun = next.execution.lastFeatureId ? affected.has(next.execution.lastFeatureId) : false;
   if (shouldClearLastRun) {
-    next.execution.lastFeatureId = null;
-    next.execution.lastValidationRun = [];
-    next.execution.lastOutcome = null;
-    next.execution.lastNextStep = null;
-    next.execution.lastFeatureResult = null;
-    next.execution.lastReviewerDecision = null;
-    next.artifacts = [];
-    next.notes = [];
+    clearLastRunProjection(next);
   }
-  next.execution.lastSummary =
-    affected.size > 1
-      ? `Reset feature '${featureId}' and its dependent features to pending.`
-      : `Reset feature '${featureId}' to pending.`;
+  next.execution.lastSummary = buildResetSummary(featureId, affected.size);
   next.execution.lastOutcomeKind = null;
   next.timestamps.completedAt = null;
   return succeed(next);
 }
 
 export function recordReviewerDecision(session: Session, input: unknown): TransitionResult<Session> {
-  let decision: Session["execution"]["lastReviewerDecision"];
+  let decision: ReviewerDecision;
   try {
     decision = ReviewerDecisionSchema.parse(input);
   } catch (error) {
@@ -782,12 +926,10 @@ export function recordReviewerDecision(session: Session, input: unknown): Transi
   }
 
   const next = cloneSession(session);
-  if (decision.scope === "feature") {
-    if (!next.execution.activeFeatureId) {
-      return fail("There is no active feature to review.");
-    }
-    if (decision.featureId !== next.execution.activeFeatureId) {
-      return fail(`Reviewer decision feature '${decision.featureId}' does not match active feature '${next.execution.activeFeatureId}'.`);
+  if (isFeatureScopeReviewerDecision(decision)) {
+    const validation = validateFeatureScopeReviewerDecision(next, decision);
+    if (!validation.ok) {
+      return validation;
     }
   }
 
