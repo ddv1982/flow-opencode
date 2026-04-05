@@ -3,18 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import {
-  buildSummaryFixtureSessions,
-  buildSummaryFixtures,
-  collectTokenEfficiencyMeasurements,
-  normalizeTokenEfficiencyMeasurements,
-  readBaselineMeasurements,
-  resolveTokenEfficiencyArtifactPath,
-  writeTokenEfficiencyMeasurementsArtifact,
-} from "../analysis/token-efficiency-measurements";
 import { createSession, deleteSession, deleteSessionArtifacts, deleteSessionState, loadSession, saveSession, saveSessionState, syncSessionArtifacts } from "../src/runtime/session";
-import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getProjectTokenEfficiencyPath, getSessionPath, getSessionTokenEfficiencyPath } from "../src/runtime/paths";
+import { getActiveSessionPath, getArchiveDir, getFeatureDocPath, getIndexDocPath, getLegacySessionPath, getSessionPath } from "../src/runtime/paths";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
 import { adaptFlowRunCompleteFeatureInput, adaptReviewerDecisionInput } from "../src/runtime/adapters";
 import { createTools } from "../src/tools";
@@ -73,6 +63,103 @@ function samplePlan() {
         dependsOn: ["setup-runtime"],
       },
     ],
+  };
+}
+
+function assertOk<T>(result: { ok: true; value: T } | { ok: false; message: string }): T {
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
+
+  return result.value;
+}
+
+function buildSummaryFixtureSessions() {
+  const planning = assertOk(applyPlan(createSession("Build a workflow plugin"), samplePlan()));
+  const approved = assertOk(approvePlan(planning));
+  const running = assertOk(startRun(approved)).session;
+  const blocked = assertOk(
+    completeRun(running, {
+      contractVersion: "1",
+      status: "needs_input",
+      summary: "Waiting on an operator decision.",
+      artifactsChanged: [],
+      validationRun: [],
+      validationScope: "targeted",
+      reviewIterations: 0,
+      decisions: [{ summary: "External API credentials are missing." }],
+      nextStep: "Ask the operator to provide API credentials.",
+      outcome: {
+        kind: "needs_operator_input",
+        summary: "Credentials are required before work can continue.",
+        resolutionHint: "Set the API token and rerun the feature.",
+        retryable: true,
+        needsHuman: true,
+      },
+      featureResult: {
+        featureId: "setup-runtime",
+        verificationStatus: "not_recorded",
+        notes: [{ note: "No code changes were made." }],
+        followUps: [{ summary: "Provide the missing API token.", severity: "high" }],
+      },
+      featureReview: { status: "needs_followup", summary: "Blocked by missing credentials.", blockingFindings: [] },
+    }),
+  );
+
+  const finalPlan = {
+    ...samplePlan(),
+    completionPolicy: {
+      minCompletedFeatures: 1,
+      requireFinalReview: true,
+    },
+    features: [samplePlan().features[0]],
+  };
+  const completed = assertOk(
+    completeRun(
+      assertOk(
+        recordReviewerDecision(
+          assertOk(startRun(assertOk(approvePlan(assertOk(applyPlan(createSession("Build a workflow plugin"), finalPlan)))))).session,
+          {
+            scope: "final",
+            status: "approved",
+            summary: "Final review looks good.",
+          },
+        ),
+      ),
+      {
+        contractVersion: "1",
+        status: "ok",
+        summary: "Completed runtime setup.",
+        artifactsChanged: [],
+        validationRun: [{ command: "bun test", status: "passed", summary: "Runtime tests passed." }],
+        validationScope: "broad",
+        reviewIterations: 1,
+        decisions: [],
+        nextStep: "Session should complete.",
+        outcome: { kind: "completed" },
+        featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
+        featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+        finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
+      },
+    ),
+  );
+
+  return {
+    planning,
+    running,
+    blocked,
+    completed,
+  };
+}
+
+function buildSummaryFixtures() {
+  const sessions = buildSummaryFixtureSessions();
+
+  return {
+    planning: summarizeSession(sessions.planning),
+    running: summarizeSession(sessions.running),
+    blocked: summarizeSession(sessions.blocked),
+    completed: summarizeSession(sessions.completed),
   };
 }
 
@@ -1147,134 +1234,6 @@ describe("runtime transitions", () => {
 
       expect(normalizeSummaryFixture(parsed)).toEqual(normalizeSummaryFixture(summarizeSession(session)));
     }
-  });
-
-  test("collectTokenEfficiencyMeasurements captures prompt, command, and summary baseline inputs", () => {
-    const measurements = collectTokenEfficiencyMeasurements();
-    const summaries = buildSummaryFixtures();
-    const baseline = readBaselineMeasurements();
-
-    expect(measurements.schemaVersion).toBe(1);
-    expect(measurements.phase1bGate.status).toBe("no_go");
-    expect(measurements.totals.promptAndCommandBytes).toBe(measurements.totals.promptBytes + measurements.totals.commandBytes);
-    expect(measurements.phase1bGate.inputs.baselinePromptAndCommandBytes).toBe(baseline.totals.promptAndCommandBytes);
-    expect(measurements.phase1bGate.inputs.baselineAverageSummaryBytes).toBe(baseline.totals.averageSummaryBytes);
-    expect(measurements.phase1bGate.inputs.phase1aPromptAndCommandBytesRemoved).toBe(
-      measurements.phase1bGate.inputs.baselinePromptAndCommandBytes - measurements.totals.promptAndCommandBytes,
-    );
-
-    for (const name of ["planning", "running", "blocked", "completed"] as const) {
-      const summary = summaries[name];
-
-      expect(measurements.summaries[name].bytes).toBe(
-        Buffer.byteLength(JSON.stringify(summary)),
-      );
-      expect(measurements.summaries[name].status).toBe(summary.status);
-      expect(measurements.summaries[name].nextCommand).toBe(
-        summary.session?.nextCommand ?? null,
-      );
-      expect(measurements.phase1bGate.inputs.baselineSummaryBytesByFixture[name]).toBe(
-        baseline.summaries[name].bytes,
-      );
-    }
-  });
-
-  test("collectTokenEfficiencyMeasurements fails loudly when the baseline file is missing", () => {
-    const missingBaselinePath = pathToFileURL(join(makeTempDir(), "missing-baseline.json"));
-
-    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: missingBaselinePath })).toThrow(
-      "Failed to read token-efficiency baseline",
-    );
-  });
-
-  test("collectTokenEfficiencyMeasurements fails loudly when the baseline file is malformed", async () => {
-    const malformedBaselinePath = join(makeTempDir(), "malformed-baseline.json");
-    await writeFile(malformedBaselinePath, JSON.stringify({ totals: { promptAndCommandBytes: -1 } }), "utf8");
-
-    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(malformedBaselinePath) })).toThrow(
-      "Invalid token-efficiency baseline",
-    );
-  });
-
-  test("collectTokenEfficiencyMeasurements fails loudly when the baseline file is invalid JSON", async () => {
-    const invalidJsonBaselinePath = join(makeTempDir(), "invalid-json-baseline.json");
-    await writeFile(invalidJsonBaselinePath, "{not-json", "utf8");
-
-    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(invalidJsonBaselinePath) })).toThrow(
-      "Failed to parse token-efficiency baseline",
-    );
-  });
-
-  test("collectTokenEfficiencyMeasurements rejects an unexpected baseline schema version", async () => {
-    const invalidVersionBaselinePath = join(makeTempDir(), "invalid-version-baseline.json");
-    await writeFile(
-      invalidVersionBaselinePath,
-      JSON.stringify({
-        schemaVersion: 2,
-        totals: { promptAndCommandBytes: 18192, averageSummaryBytes: 1225.25 },
-        summaries: {
-          planning: { bytes: 1029 },
-          running: { bytes: 1231 },
-          blocked: { bytes: 1493 },
-          completed: { bytes: 1148 },
-        },
-      }),
-      "utf8",
-    );
-
-    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(invalidVersionBaselinePath) })).toThrow(
-      "Invalid token-efficiency baseline",
-    );
-  });
-
-  test("collectTokenEfficiencyMeasurements rejects baselines missing expected summary fixtures", async () => {
-    const missingFixtureBaselinePath = join(makeTempDir(), "missing-fixture-baseline.json");
-    await writeFile(
-      missingFixtureBaselinePath,
-      JSON.stringify({
-        schemaVersion: 1,
-        totals: { promptAndCommandBytes: 18192, averageSummaryBytes: 1225.25 },
-        summaries: {
-          planning: { bytes: 1029 },
-          running: { bytes: 1231 },
-          blocked: { bytes: 1493 },
-        },
-      }),
-      "utf8",
-    );
-
-    expect(() => collectTokenEfficiencyMeasurements({ baselinePath: pathToFileURL(missingFixtureBaselinePath) })).toThrow(
-      "Invalid token-efficiency baseline",
-    );
-  });
-
-  test("token-efficiency artifact is stored inside the active session structure when a session exists", async () => {
-    const worktree = makeTempDir();
-    const session = await saveSession(worktree, createSession("Measure token efficiency"));
-    const artifactPath = getSessionTokenEfficiencyPath(worktree, session.id);
-
-    expect(resolveTokenEfficiencyArtifactPath(worktree)).toEqual(pathToFileURL(artifactPath));
-
-    const writtenPath = writeTokenEfficiencyMeasurementsArtifact({ worktree });
-    const artifact = JSON.parse(await readFile(writtenPath, "utf8"));
-    const generated = collectTokenEfficiencyMeasurements();
-
-    expect(writtenPath).toEqual(pathToFileURL(artifactPath));
-    expect(normalizeTokenEfficiencyMeasurements(artifact)).toEqual(normalizeTokenEfficiencyMeasurements(generated));
-  });
-
-  test("token-efficiency artifact falls back to the project .flow directory without an active session", async () => {
-    const worktree = makeTempDir();
-    const artifactPath = getProjectTokenEfficiencyPath(worktree);
-
-    expect(resolveTokenEfficiencyArtifactPath(worktree)).toEqual(pathToFileURL(artifactPath));
-
-    const writtenPath = writeTokenEfficiencyMeasurementsArtifact({ worktree });
-    const artifact = JSON.parse(await readFile(writtenPath, "utf8"));
-    const generated = collectTokenEfficiencyMeasurements();
-
-    expect(writtenPath).toEqual(pathToFileURL(artifactPath));
-    expect(normalizeTokenEfficiencyMeasurements(artifact)).toEqual(normalizeTokenEfficiencyMeasurements(generated));
   });
 
   test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {

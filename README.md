@@ -147,7 +147,7 @@ This is the intended install path after the plugin is published:
 ## More Documentation
 
 - [Maintainer and contributor notes](docs/maintainers.md)
-- [Token-efficiency notes](docs/token-efficiency.md)
+- [Performance and token-efficiency notes](docs/token-efficiency.md)
 
 ## License
 

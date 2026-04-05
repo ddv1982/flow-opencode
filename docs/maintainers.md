@@ -17,7 +17,6 @@ Useful scripts:
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
-- `bun run measure:token-efficiency`
 
 ## Key Source Files
 
