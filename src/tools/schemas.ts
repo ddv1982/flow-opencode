@@ -183,7 +183,8 @@ export type FlowResetFeatureArgs = {
 };
 
 export type ToolContext = {
-  worktree: string;
+  worktree?: string;
+  directory?: string;
 };
 
 export type ToolResponse = Record<string, unknown>;

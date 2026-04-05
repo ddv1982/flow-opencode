@@ -1,3 +1,4 @@
+import { parse } from "node:path";
 import { loadSession, saveSession } from "../runtime/session";
 import { summarizeSession } from "../runtime/summary";
 import type { Session } from "../runtime/schema";
@@ -10,6 +11,25 @@ export function parseFeatureIds(raw?: string[]): string[] {
 
 export function toJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+export function resolveSessionRoot(context: ToolContext): string {
+  const worktree = context.worktree?.trim();
+  const directory = context.directory?.trim();
+
+  if (worktree && worktree !== parse(worktree).root) {
+    return worktree;
+  }
+
+  if (directory) {
+    return directory;
+  }
+
+  if (worktree) {
+    return worktree;
+  }
+
+  throw new Error("Flow tool context is missing both worktree and directory.");
 }
 
 export function summarizePersistedSession(session: Session) {
@@ -33,7 +53,7 @@ export async function withSession(
   execute: (session: Session) => Promise<string>,
   missingResponse: ToolResponse = missingSessionResponse(),
 ): Promise<string> {
-  const session = await loadSession(context.worktree);
+  const session = await loadSession(resolveSessionRoot(context));
   if (!session) {
     return toJson(missingResponse);
   }
@@ -53,6 +73,6 @@ export async function persistTransition<T>(
     return toJson(onError(result));
   }
 
-  const saved = await saveSession(context.worktree, getSession(result.value));
+  const saved = await saveSession(resolveSessionRoot(context), getSession(result.value));
   return toJson(onSuccess(saved, result.value));
 }

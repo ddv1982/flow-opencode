@@ -14,7 +14,7 @@ import {
   type FlowSessionActivateArgs,
   type ToolContext,
 } from "./schemas";
-import { summarizePersistedSession, toJson } from "./helpers";
+import { resolveSessionRoot, summarizePersistedSession, toJson } from "./helpers";
 
 export function createSessionTools() {
   return {
@@ -22,7 +22,7 @@ export function createSessionTools() {
       description: "Show the active Flow session summary",
       args: FlowStatusArgsShape,
       async execute(_args: unknown, context: ToolContext) {
-        const session = await loadSession(context.worktree);
+        const session = await loadSession(resolveSessionRoot(context));
         return toJson(summarizeSession(session));
       },
     }),
@@ -31,7 +31,7 @@ export function createSessionTools() {
       description: "Show stored Flow session history across active and archived runs",
       args: FlowHistoryArgsShape,
       async execute(_args: unknown, context: ToolContext) {
-        const history = await listSessionHistory(context.worktree);
+        const history = await listSessionHistory(resolveSessionRoot(context));
         const activeCount = history.activeSessionId ? 1 : 0;
         const totalCount = history.sessions.length + history.archived.length;
         const resumableStoredSession = history.sessions.find((session) => session.status !== "completed");
@@ -63,7 +63,7 @@ export function createSessionTools() {
       args: FlowHistoryShowArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowHistoryShowArgs;
-        const found = await loadStoredSession(context.worktree, input.sessionId);
+        const found = await loadStoredSession(resolveSessionRoot(context), input.sessionId);
 
         if (!found) {
           return toJson({
@@ -101,7 +101,7 @@ export function createSessionTools() {
       args: FlowSessionActivateArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowSessionActivateArgs;
-        const session = await activateSession(context.worktree, input.sessionId);
+        const session = await activateSession(resolveSessionRoot(context), input.sessionId);
 
         if (!session) {
           return toJson({
@@ -125,7 +125,8 @@ export function createSessionTools() {
       args: FlowPlanStartArgsShape,
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowPlanStartArgs;
-        const existing = await loadSession(context.worktree);
+        const sessionRoot = resolveSessionRoot(context);
+        const existing = await loadSession(sessionRoot);
 
         if (!input.goal && !existing) {
           return toJson({
@@ -171,7 +172,7 @@ export function createSessionTools() {
                 },
               };
 
-        const session = await saveSession(context.worktree, base);
+        const session = await saveSession(sessionRoot, base);
         return toJson({
           status: "ok",
           summary: `Planning session ready for goal: ${session.goal}`,
@@ -186,7 +187,7 @@ export function createSessionTools() {
       async execute(args: unknown, context: ToolContext) {
         const input = args as FlowAutoPrepareArgs;
         const trimmed = (input.argumentString ?? "").trim();
-        const session = await loadSession(context.worktree);
+        const session = await loadSession(resolveSessionRoot(context));
         const isResume = trimmed === "" || trimmed === "resume";
         const resumableSession = session && session.status !== "completed" ? session : null;
 
@@ -223,7 +224,7 @@ export function createSessionTools() {
       description: "Archive and clear the active Flow session",
       args: FlowStatusArgsShape,
       async execute(_args: unknown, context: ToolContext) {
-        const archived = await archiveSession(context.worktree);
+        const archived = await archiveSession(resolveSessionRoot(context));
         return toJson({
           status: "ok",
           summary: archived ? "Archived and cleared the active Flow session." : "No active Flow session existed.",
