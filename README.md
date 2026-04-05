@@ -15,47 +15,49 @@ Use Flow when you want:
 - reviewer-gated progression
 - broad final validation before the whole session finishes
 
-## How Flow Works
+## Install
 
-```mermaid
-flowchart TD
-    A[Goal] --> B{Start mode}
-    B -->|Manual| C["/flow-plan"]
-    B -->|Autonomous| D["/flow-auto"]
+Choose one install path:
 
-    C --> E[Draft plan]
-    D --> E
-    E --> F[Approve plan]
-    F --> G[Choose next approved feature]
-    G --> H[flow-worker executes + validates]
-    H --> I[flow-reviewer reviews]
-    I -->|needs_fix| H
-    I -->|blocked| J[Stop or reset/replan]
-    I -->|approved| K{More features?}
-    K -->|Yes| G
-    K -->|No| L[Broad final validation]
-    L --> M[Final review]
-    M -->|needs_fix| H
-    M -->|approved| N[Session complete]
+### Local repo
+
+```bash
+bun install
+bun run install:opencode
 ```
 
-## Commands
+### Latest GitHub release
 
-Flow injects these slash commands into OpenCode:
+```bash
+curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
+```
 
-| Command | Purpose |
-| --- | --- |
-| `/flow-plan <goal>` | Create or refresh a draft plan |
-| `/flow-plan select <feature-id...>` | Keep only selected features in the draft |
-| `/flow-plan approve [feature-id...]` | Approve the current draft plan |
-| `/flow-run [feature-id]` | Execute exactly one approved feature |
-| `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
-| `/flow-auto resume` | Resume the active autonomous session |
-| `/flow-status` | Show the current session summary |
-| `/flow-history` | Show stored session history |
-| `/flow-session activate <id>` | Switch the active session |
-| `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
-| `/flow-reset session` | Archive the active session and clear it |
+Both install the plugin to:
+
+```text
+~/.config/opencode/plugins/flow.js
+```
+
+### Uninstall
+
+From the repo:
+
+```bash
+bun run uninstall:opencode
+```
+
+From the latest GitHub release:
+
+```bash
+curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uninstall.sh | bash
+```
+
+### Manual fallback
+
+If you ever need to copy the file yourself, build first and then copy `dist/index.js` into one of OpenCode's documented local plugin directories:
+
+- `.opencode/plugins/`
+- `~/.config/opencode/plugins/`
 
 ## Quick Start
 
@@ -81,7 +83,49 @@ Flow injects these slash commands into OpenCode:
 - if no active session exists, Flow asks for a goal
 - completed sessions are not resumable
 
-## Where Flow Stores Progress
+## Commands
+
+Flow adds these slash commands to OpenCode:
+
+| Command | Purpose |
+| --- | --- |
+| `/flow-plan <goal>` | Create or refresh a draft plan |
+| `/flow-plan select <feature-id...>` | Keep only selected features in the draft |
+| `/flow-plan approve [feature-id...]` | Approve the current draft plan |
+| `/flow-run [feature-id]` | Execute exactly one approved feature |
+| `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
+| `/flow-auto resume` | Resume the active autonomous session |
+| `/flow-status` | Show the current session summary |
+| `/flow-history` | Show stored session history |
+| `/flow-session activate <id>` | Switch the active session |
+| `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
+| `/flow-reset session` | Archive the active session and clear it |
+
+## How Flow Works
+
+```mermaid
+flowchart TD
+    A[Goal] --> B{Start mode}
+    B -->|Manual| C["/flow-plan"]
+    B -->|Autonomous| D["/flow-auto"]
+
+    C --> E[Draft plan]
+    D --> E
+    E --> F[Approve plan]
+    F --> G[Choose next approved feature]
+    G --> H[flow-worker executes + validates]
+    H --> I[flow-reviewer reviews]
+    I -->|needs_fix| H
+    I -->|blocked| J[Stop or reset/replan]
+    I -->|approved| K{More features?}
+    K -->|Yes| G
+    K -->|No| L[Broad final validation]
+    L --> M[Final review]
+    M -->|needs_fix| H
+    M -->|approved| N[Session complete]
+```
+
+## Storage
 
 Flow keeps one active session per worktree.
 
@@ -105,7 +149,7 @@ Archived sessions live under:
 .flow/archive/
 ```
 
-## What Flow Will Not Skip
+## Completion gates
 
 Flow is intentionally strict.
 
@@ -124,48 +168,6 @@ Flow will not mark the whole session complete unless it also has:
 - broad validation for the repo
 - a final reviewer decision
 - a passing `finalReview`
-
-## Install
-
-### Install from this repo
-
-Use the explicit installer command:
-
-```bash
-bun install
-bun run install:opencode
-```
-
-Or, after a GitHub release is published, install directly from the latest release asset installer:
-
-```bash
-curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
-```
-
-Both approaches install the plugin into the global OpenCode plugin directory:
-
-```text
-~/.config/opencode/plugins/flow.js
-```
-
-To remove it again:
-
-```bash
-bun run uninstall:opencode
-```
-
-Or uninstall directly from the latest release asset:
-
-```bash
-curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uninstall.sh | bash
-```
-
-### Manual fallback
-
-If you ever need to copy the file yourself, build first and then copy `dist/index.js` into one of OpenCode's documented local plugin directories:
-
-- `.opencode/plugins/`
-- `~/.config/opencode/plugins/`
 
 ## Contributing
 
