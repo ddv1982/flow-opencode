@@ -72,11 +72,20 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
     return summary;
   }
 
+  const planning =
+    summary.session.planning.implementationApproach === undefined
+      ? {
+          repoProfile: summary.session.planning.repoProfile,
+          research: summary.session.planning.research,
+        }
+      : summary.session.planning;
+
   return {
     ...summary,
     session: {
       ...summary.session,
       id: "<session-id>",
+      planning,
     },
   };
 }

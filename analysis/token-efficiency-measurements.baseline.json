@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-04-05T00:15:45.012Z",
+  "prompts": {
+    "FLOW_PLANNER_AGENT_PROMPT": {
+      "bytes": 2051,
+      "lines": 53
+    },
+    "FLOW_WORKER_AGENT_PROMPT": {
+      "bytes": 3710,
+      "lines": 64
+    },
+    "FLOW_AUTO_AGENT_PROMPT": {
+      "bytes": 6437,
+      "lines": 111
+    },
+    "FLOW_REVIEWER_AGENT_PROMPT": {
+      "bytes": 1312,
+      "lines": 31
+    },
+    "FLOW_CONTROL_AGENT_PROMPT": {
+      "bytes": 791,
+      "lines": 13
+    }
+  },
+  "commands": {
+    "FLOW_PLAN_COMMAND_TEMPLATE": {
+      "bytes": 765,
+      "lines": 17
+    },
+    "FLOW_RUN_COMMAND_TEMPLATE": {
+      "bytes": 775,
+      "lines": 10
+    },
+    "FLOW_AUTO_COMMAND_TEMPLATE": {
+      "bytes": 1250,
+      "lines": 16
+    },
+    "FLOW_STATUS_COMMAND_TEMPLATE": {
+      "bytes": 98,
+      "lines": 3
+    },
+    "FLOW_HISTORY_COMMAND_TEMPLATE": {
+      "bytes": 367,
+      "lines": 10
+    },
+    "FLOW_SESSION_COMMAND_TEMPLATE": {
+      "bytes": 280,
+      "lines": 9
+    },
+    "FLOW_RESET_COMMAND_TEMPLATE": {
+      "bytes": 356,
+      "lines": 10
+    }
+  },
+  "summaries": {
+    "planning": {
+      "bytes": 1029,
+      "lines": 1,
+      "status": "planning",
+      "nextCommand": "/flow-plan"
+    },
+    "running": {
+      "bytes": 1231,
+      "lines": 1,
+      "status": "running",
+      "nextCommand": "/flow-run"
+    },
+    "blocked": {
+      "bytes": 1493,
+      "lines": 1,
+      "status": "blocked",
+      "nextCommand": "/flow-status"
+    },
+    "completed": {
+      "bytes": 1148,
+      "lines": 1,
+      "status": "completed",
+      "nextCommand": "/flow-plan <goal>"
+    }
+  },
+  "totals": {
+    "promptBytes": 14301,
+    "commandBytes": 3891,
+    "promptAndCommandBytes": 18192,
+    "averageSummaryBytes": 1225.25
+  },
+  "phase1bGate": {
+    "status": "deferred",
+    "reason": "Compact summary work is gated behind Phase 1A prompt reductions and explicit no-regression verification.",
+    "thresholds": {
+      "minimumAverageSummaryReductionRatio": 0.25,
+      "minimumAverageCompactVsPhase1ABytesRemovedRatio": 0.1,
+      "allowSummaryRegressions": false
+    },
+    "inputs": {
+      "baselinePromptAndCommandBytes": 18192,
+      "baselineAverageSummaryBytes": 1225.25,
+      "baselineSummaryBytesByFixture": {
+        "planning": 1029,
+        "running": 1231,
+        "blocked": 1493,
+        "completed": 1148
+      }
+    }
+  }
+}
