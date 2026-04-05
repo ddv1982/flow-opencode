@@ -1,4 +1,4 @@
-# Recommended OpenCode Config for Flow
+# Performance Tuning
 
 This guide is for people who want Flow to stay high-quality while also being as fast and token-efficient as possible.
 
@@ -11,9 +11,9 @@ For real runtime wins, focus on:
 - OpenCode compaction
 - avoiding unnecessary extra orchestration
 
-Flow itself should stay strict and lean. It should not grow a separate compaction layer unless there is evidence that long sessions are losing important Flow state.
+Flow should stay strict and lean. It should not grow a separate compaction layer unless there is evidence that long sessions are losing important Flow state.
 
-Flow itself already keeps its workflow strict. The main tuning happens in your OpenCode config.
+Most tuning happens in your OpenCode config, not inside Flow itself.
 
 ## Recommended Baseline
 
@@ -52,6 +52,7 @@ Start with something like this in your `opencode.json`:
 Lets OpenCode compact the session when context gets full.
 
 Use this if:
+
 - you run longer Flow sessions
 - you use `flow-auto` a lot
 - you want less manual intervention
@@ -65,6 +66,7 @@ Use this if:
 Drops older tool output that often adds token noise without helping the next step much.
 
 Use this if:
+
 - your sessions accumulate lots of shell/tool output
 - you care about reducing unnecessary context growth
 
@@ -77,10 +79,11 @@ Use this if:
 Leaves token headroom so OpenCode can compact before the window is exhausted.
 
 Use this if:
+
 - you want safer behavior in long sessions
 - you use larger prompts, tool results, or long histories
 
-You can raise or lower it depending on your model/context window, but `10000` is a reasonable conservative start.
+You can raise or lower it depending on your model/context window, but `10000` is a reasonable conservative starting point.
 
 ### `provider.*.options.setCacheKey`
 
@@ -96,6 +99,7 @@ You can raise or lower it depending on your model/context window, but `10000` is
 Helps OpenCode consistently attach cache keys where the provider supports them.
 
 Use this if:
+
 - you repeatedly run similar Flow prompts
 - you want better prompt-cache hit rates
 - you care about latency and cost on repeated work
@@ -157,8 +161,6 @@ Use this if you care more about cost and responsiveness in long sessions:
 This is leaner, but may compact sooner and more aggressively.
 
 ## Quality Guardrails
-
-Flow should stay strict even when tuned for efficiency.
 
 Do **not** optimize by weakening:
 

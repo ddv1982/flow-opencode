@@ -1,21 +1,45 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` adds a durable planning and execution workflow to OpenCode.
+`opencode-plugin-flow` adds a strict planning-and-execution workflow to OpenCode.
 
-It turns a goal into a tracked session, breaks that goal into features, executes one feature at a time, and requires validation plus reviewer approval before work can advance.
+Flow turns a goal into a tracked session, breaks the work into features, executes one feature at a time, and requires validation plus reviewer approval before work can advance.
 
-## What Flow Does
+## What Flow Is Good For
 
-Flow provides:
+Use Flow when you want:
 
-- persisted planning and approval
-- feature-by-feature execution
-- validation evidence for completed work
+- a durable session stored in `.flow/`
+- a reviewed plan before execution
+- one-feature-at-a-time execution
+- validation evidence before completion
 - reviewer-gated progression
-- broad final validation before full completion
-- resumable sessions stored in `.flow/`
+- broad final validation before the whole session finishes
 
-For longer sessions, keep the workflow strict and tune efficiency in OpenCode/provider configuration first. The recommended knobs are stable prompts, OpenCode compaction, and provider cache keys.
+If you want long autonomous runs, keep Flow strict and tune efficiency in OpenCode/provider configuration first. Flow is now designed to stay lean and let OpenCode/provider systems handle most compaction and caching concerns.
+
+## How Flow Works
+
+```mermaid
+flowchart TD
+    A[Goal] --> B{Start mode}
+    B -->|Manual| C[/flow-plan]
+    B -->|Autonomous| D[/flow-auto]
+
+    C --> E[Draft plan]
+    D --> E
+    E --> F[Approve plan]
+    F --> G[Choose next approved feature]
+    G --> H[flow-worker executes + validates]
+    H --> I[flow-reviewer reviews]
+    I -->|needs_fix| H
+    I -->|blocked| J[Stop or reset/replan]
+    I -->|approved| K{More features?}
+    K -->|Yes| G
+    K -->|No| L[Broad final validation]
+    L --> M[Final review]
+    M -->|needs_fix| H
+    M -->|approved| N[Session complete]
+```
 
 ## Commands
 
@@ -150,8 +174,8 @@ This will be the simpler end-user install path after the plugin is published:
 
 ## More Documentation
 
-- [Maintainer and contributor notes](docs/maintainers.md)
-- [Performance and token-efficiency notes](docs/token-efficiency.md)
+- [Development guide](docs/development.md)
+- [Performance tuning](docs/performance-tuning.md)
 
 ## License
 
