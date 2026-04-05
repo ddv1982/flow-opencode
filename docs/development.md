@@ -19,10 +19,13 @@ Useful scripts:
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
+- `bun run install:opencode`
+- `bun run uninstall:opencode`
 
 ## Important Source Files
 
 - `src/index.ts` — plugin entrypoint
+- `src/installer.ts` — local OpenCode plugin installer
 - `src/config.ts` — command and agent injection
 - `src/tools.ts` — runtime tool surface
 - `src/runtime/schema.ts` — session and contract schemas

@@ -129,48 +129,33 @@ Flow will not mark the whole session complete unless it also has:
 
 ## Install
 
-### Use locally today
+### Install from this repo
 
-This is the current way to use the plugin from this repo:
+Use the explicit installer command:
 
 ```bash
 bun install
-bun run build
+bun run install:opencode
 ```
 
-OpenCode should load:
+This builds the plugin and copies it to the global OpenCode plugin directory:
 
 ```text
-dist/index.js
+~/.config/opencode/plugins/flow.js
 ```
 
-Place the built file in an OpenCode plugin directory such as:
-
-```text
-.opencode/plugins/
-```
-
-or:
-
-```text
-~/.config/opencode/plugins/
-```
-
-Example:
+To remove it again:
 
 ```bash
-cp dist/index.js .opencode/plugins/flow.js
+bun run uninstall:opencode
 ```
 
-### Future package install
+### Manual fallback
 
-This will be the simpler end-user install path after the plugin is published:
+If you ever need to copy the file yourself, build first and then copy `dist/index.js` into one of OpenCode's documented local plugin directories:
 
-```json
-{
-  "plugin": ["opencode-plugin-flow"]
-}
-```
+- `.opencode/plugins/`
+- `~/.config/opencode/plugins/`
 
 ## More Documentation
 
