@@ -59,18 +59,18 @@ Flow injects these slash commands into OpenCode:
 - if no active session exists, Flow asks for a goal
 - completed sessions are not resumable
 
-## Session Files
+## Where Flow Stores Progress
 
 Flow keeps one active session per worktree.
 
-Authoritative state:
+Main session state:
 
 ```text
 .flow/active
 .flow/sessions/<session-id>/session.json
 ```
 
-Derived docs:
+Readable docs:
 
 ```text
 .flow/sessions/<session-id>/docs/index.md
@@ -83,11 +83,11 @@ Archived sessions live under:
 .flow/archive/
 ```
 
-## Execution Guarantees
+## What Flow Will Not Skip
 
 Flow is intentionally strict.
 
-For a feature to complete successfully, Flow requires:
+Flow will not mark a feature complete unless it has:
 
 - an approved plan
 - exactly one active feature
@@ -97,7 +97,7 @@ For a feature to complete successfully, Flow requires:
 - an approved reviewer decision for the current scope
 - a passing `featureReview`
 
-For full session completion, Flow also requires:
+Flow will not mark the whole session complete unless it also has:
 
 - broad validation for the repo
 - a final reviewer decision
@@ -105,7 +105,9 @@ For full session completion, Flow also requires:
 
 ## Install
 
-### Local development install
+### Use locally today
+
+This is the current way to use the plugin from this repo:
 
 ```bash
 bun install
@@ -136,9 +138,9 @@ Example:
 cp dist/index.js .opencode/plugins/flow.js
 ```
 
-### Package install
+### Future package install
 
-This is the intended install path after the plugin is published:
+This will be the simpler end-user install path after the plugin is published:
 
 ```json
 {
