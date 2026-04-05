@@ -1939,6 +1939,24 @@ describe("runtime transitions", () => {
     expect(parsed.session.lastReviewerDecision.suggestedValidation).toEqual(["bun run check"]);
   });
 
+  test("tools keep representative top-level response shapes across the split helpers", async () => {
+    const worktree = makeTempDir();
+    const tools = createTools({}) as any;
+
+    const planStartResponse = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
+    const planStartParsed = JSON.parse(planStartResponse);
+    expect(Object.keys(planStartParsed)).toEqual(["status", "summary", "session"]);
+    expect(planStartParsed.status).toBe("ok");
+    expect(planStartParsed.session.goal).toBe("Build a workflow plugin");
+
+    const planApplyResponse = await tools.flow_plan_apply.execute({ plan: samplePlan() }, { worktree });
+    const planApplyParsed = JSON.parse(planApplyResponse);
+    expect(Object.keys(planApplyParsed)).toEqual(["status", "summary", "session"]);
+    expect(planApplyParsed.status).toBe("ok");
+    expect(planApplyParsed.summary).toBe("Draft plan saved.");
+    expect(planApplyParsed.session.goal).toBe("Build a workflow plugin");
+  });
+
   test("flow_status returns a machine-readable missing-session summary", async () => {
     const worktree = makeTempDir();
     const tools = createTools({}) as any;

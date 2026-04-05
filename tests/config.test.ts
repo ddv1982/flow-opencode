@@ -55,6 +55,26 @@ describe("applyFlowConfig", () => {
     expect(config.command["flow-plan"]).toBeDefined();
   });
 
+  test("createTools preserves the expected ordered tool surface", () => {
+    expect(Object.keys(createTools({}))).toEqual([
+      "flow_status",
+      "flow_history",
+      "flow_history_show",
+      "flow_session_activate",
+      "flow_plan_start",
+      "flow_auto_prepare",
+      "flow_reset_session",
+      "flow_plan_apply",
+      "flow_plan_approve",
+      "flow_plan_select_features",
+      "flow_run_start",
+      "flow_run_complete_feature",
+      "flow_review_record_feature",
+      "flow_review_record_final",
+      "flow_reset_feature",
+    ]);
+  });
+
   test("injects commands and agents", () => {
     const config: { agent?: Record<string, unknown>; command?: Record<string, unknown> } = {};
     applyFlowConfig(config);
