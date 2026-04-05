@@ -19,6 +19,26 @@ function getToolSchemas() {
   };
 }
 
+function expectInOrder(content: string, snippets: string[]) {
+  let previousIndex = -1;
+
+  for (const snippet of snippets) {
+    const index = content.indexOf(snippet);
+
+    expect(index).toBeGreaterThan(-1);
+    expect(index).toBeGreaterThan(previousIndex);
+    previousIndex = index;
+  }
+}
+
+function expectNoFlowManagedCompaction(content: string) {
+  const normalized = content.toLowerCase();
+
+  expect(normalized).not.toContain("compaction");
+  expect(normalized).not.toContain("token accounting");
+  expect(normalized).not.toContain("token measurement");
+}
+
 describe("applyFlowConfig", () => {
   test("plugin entrypoint returns Flow config and tool hooks", async () => {
     const ctx = { worktree: "/tmp/flow-plugin-test" } as any;
@@ -373,9 +393,37 @@ describe("applyFlowConfig", () => {
     expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("completion gating failures");
   });
 
+  test("auto command template keeps resume guardrails ahead of iterative execution guidance", () => {
+    expectInOrder(FLOW_AUTO_COMMAND_TEMPLATE, [
+      "If the argument string is empty or `resume`",
+      "Otherwise treat the full argument string as a new autonomous goal.",
+      "Do not derive, infer, or invent a new goal from repository inspection",
+      "Call `flow_auto_prepare` first",
+      "Plan, approve, execute, review, fix findings, and replan as needed until completion or a real blocker.",
+      "Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.",
+    ]);
+  });
+
   test("run command template requires final completion gating for the last feature", () => {
     expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_final");
     expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
     expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
+  });
+
+  test("run command template keeps final completion gating after feature review approval", () => {
+    expectInOrder(FLOW_RUN_COMMAND_TEMPLATE, [
+      "run targeted validation",
+      "obtain reviewer approval through `flow_review_record_feature`",
+      "On the final completion path, run broad validation",
+      "obtain final approval through `flow_review_record_final`",
+      "persist the result through `flow_run_complete_feature`",
+    ]);
+  });
+
+  test("flow prompts and command templates avoid Flow-managed compaction guidance", () => {
+    expectNoFlowManagedCompaction(FLOW_AUTO_AGENT_PROMPT);
+    expectNoFlowManagedCompaction(FLOW_WORKER_AGENT_PROMPT);
+    expectNoFlowManagedCompaction(FLOW_AUTO_COMMAND_TEMPLATE);
+    expectNoFlowManagedCompaction(FLOW_RUN_COMMAND_TEMPLATE);
   });
 });
