@@ -64,3 +64,10 @@ Reducing to 3 concurrent validators is acceptable if the machine reports <8 GB f
 - Run only the minimum test target(s) needed for assigned assertion IDs, then escalate to broader test runs only if required by assertion wording.
 - Keep filesystem side effects confined to test-managed temp directories.
 - If a test fails, report exact failing test names and messages; do not edit tests or source during validation.
+
+## Flow Validator Guidance: node-script
+
+- Scope: Node/Bun script assertions that exercise plugin behavior in-process with mocked context.
+- Use deterministic one-shot scripts (`node -e`, `bun -e`, or committed script files) and capture stdout/stderr plus exit code.
+- Run script checks in repo root; use temp directories for any filesystem side effects and never touch real HOME plugin paths.
+- Do not alter source during validation; only write assigned flow-report/evidence artifacts.
