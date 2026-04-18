@@ -48,6 +48,29 @@ function compareIsoDescending(
 	return (right ?? "").localeCompare(left ?? "");
 }
 
+function compareArchiveDescending(
+	left: string | null,
+	right: string | null,
+): number {
+	const normalize = (value: string | null): [string, number] => {
+		if (!value) return ["", -1];
+		const match = value.match(/^(.*?)(?:-(\d+))?$/);
+		return [
+			match?.[1] ?? value,
+			match?.[2] ? Number.parseInt(match[2], 10) : 0,
+		];
+	};
+
+	const [rightBase, rightSuffix] = normalize(right);
+	const [leftBase, leftSuffix] = normalize(left);
+	const baseComparison = rightBase.localeCompare(leftBase);
+	if (baseComparison !== 0) {
+		return baseComparison;
+	}
+
+	return rightSuffix - leftSuffix;
+}
+
 function toHistoryEntry(
 	worktree: string,
 	session: Session,
@@ -91,7 +114,9 @@ function parseArchiveDirectoryName(directoryName: string): {
 	sessionId: string;
 	archivedAt: string | null;
 } {
-	const match = directoryName.match(/^(.*)-(\d{8}T?\d{6}|\d{14})$/);
+	const match = directoryName.match(
+		/^(.*)-(\d{8}T\d{6}\.\d{3}(?:-\d+)?|\d{8}T?\d{6}|\d{14})$/,
+	);
 	if (!match) {
 		return { sessionId: directoryName, archivedAt: null };
 	}
@@ -120,7 +145,7 @@ async function findArchivedSessionDirectory(
 	}
 
 	matches.sort((left, right) =>
-		compareIsoDescending(left.archivedAt, right.archivedAt),
+		compareArchiveDescending(left.archivedAt, right.archivedAt),
 	);
 	return matches[0] ?? null;
 }
@@ -230,7 +255,7 @@ export async function listSessionHistory(worktree: string): Promise<{
 		}
 	}
 	archived.sort((left, right) =>
-		compareIsoDescending(
+		compareArchiveDescending(
 			left.archivedAt ?? left.updatedAt,
 			right.archivedAt ?? right.updatedAt,
 		),

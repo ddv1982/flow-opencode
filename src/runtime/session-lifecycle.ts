@@ -61,20 +61,33 @@ export async function archiveSession(
 	}
 
 	const sourceDir = getSessionDir(worktree, sessionId);
-	const archivedDir = join(
-		getArchiveDir(worktree),
-		`${sessionId}-${archiveTimestampNow()}`,
-	);
+	let archivedDir: string | null = null;
 
-	try {
-		await rename(sourceDir, archivedDir);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			await writeActiveSessionId(worktree, null);
-			return null;
+	for (let attempt = 0; ; attempt += 1) {
+		const timestamp = archiveTimestampNow();
+		const suffix = attempt === 0 ? "" : `-${attempt}`;
+		const candidate = join(
+			getArchiveDir(worktree),
+			`${sessionId}-${timestamp}${suffix}`,
+		);
+
+		try {
+			await rename(sourceDir, candidate);
+			archivedDir = candidate;
+			break;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code === "ENOENT") {
+				await writeActiveSessionId(worktree, null);
+				return null;
+			}
+
+			if (code === "EEXIST" || code === "ENOTEMPTY") {
+				continue;
+			}
+
+			throw error;
 		}
-
-		throw error;
 	}
 
 	await writeActiveSessionId(worktree, null);

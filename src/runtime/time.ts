@@ -3,10 +3,7 @@ export function nowIso(): string {
 }
 
 export function toArchiveTimestamp(value: string): string {
-	return value
-		.replace(/[-:]/g, "")
-		.replace(/\.\d{3}Z$/, "")
-		.replace("T", "");
+	return value.replace(/[-:]/g, "").replace("Z", "");
 }
 
 export function archiveTimestampNow(): string {
