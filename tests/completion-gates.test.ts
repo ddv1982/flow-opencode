@@ -256,9 +256,16 @@ describe("completion gates", () => {
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
 					validationScope: "broad",
+					finalReview: {
+						status: "failed",
+						summary: "Repo-wide validation is blocked.",
+						blockingFindings: [
+							{ summary: "A blocking repo-wide issue remains." },
+						],
+					},
 				}),
-			expectedErrorCode: "missing_final_review_payload",
-			expectedNextCommand: "/flow-status",
+			expectedErrorCode: "failing_final_review",
+			expectedNextCommand: "/flow-reset feature setup-runtime",
 		},
 	])("returns $expectedErrorCode for $name", ({
 		setup,
