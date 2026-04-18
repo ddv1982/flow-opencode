@@ -1,0 +1,37 @@
+{
+  "milestone": "transitions-refactor",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 14,
+    "passed": 14,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-TRANS-001",
+    "VAL-TRANS-002",
+    "VAL-TRANS-003",
+    "VAL-TRANS-004",
+    "VAL-TRANS-005",
+    "VAL-TRANS-006",
+    "VAL-TRANS-007",
+    "VAL-TRANS-008",
+    "VAL-TRANS-009",
+    "VAL-TRANS-010",
+    "VAL-TRANS-011",
+    "VAL-TRANS-012",
+    "VAL-TRANS-013",
+    "VAL-TRANS-014"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added a known-constraint note that bench --filter output may include extra groups; validators should assert only contract-required rows (used in VAL-TRANS-014).",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}

@@ -39,6 +39,7 @@ Reducing to 3 concurrent validators is acceptable if the machine reports <8 GB f
 ## Known Constraints
 
 - The user testing validator must NOT run `bun run bench` as part of assertion validation unless the specific assertion (M5 bench gates, cross-area bench gate) explicitly requires it. Benchmarks take substantial time and CPU.
+- `bun run bench -- --filter <suite>` may still print additional benchmark groups depending on harness behavior. For assertion-level validation, parse and assert only the contract-required benchmark rows (for example, transition reducer rows for `VAL-TRANS-014`).
 - Some assertions reference artifacts produced by earlier milestones (e.g. `bench/BASELINE.md`, `tests/__fixtures__/render/`). If a validator is asked to verify an M5 assertion before M1/M3 has landed, return with a clear blocker — the precondition isn't met.
 - Biome 2.x removed the `--check` flag from `format`. The correct read-only invocation is `bunx biome format .` (which writes nothing unless `--write` is passed).
 - If mission-worker safety gating blocks `biome format` commands, use this equivalent formatter-only check command instead: `node_modules/.bin/biome check <repo-root> --formatter-enabled=true --linter-enabled=false --files-ignore-unknown=true --vcs-use-ignore-file=true`.
