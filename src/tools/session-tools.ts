@@ -184,37 +184,46 @@ export function createSessionTools() {
 					const base =
 						!existing || existing.status === "completed" || isNewGoal
 							? createSession(goal, planningOptions)
-							: {
-									...existing,
-									goal,
-									status: "planning" as const,
-									approval: "pending" as const,
-									plan: null,
-									planning: {
-										...existing.planning,
-										repoProfile:
-											input.repoProfile ?? existing.planning.repoProfile,
-									},
-									execution: {
-										...existing.execution,
-										activeFeatureId: null,
-										lastFeatureId: null,
-										lastSummary: null,
-										lastOutcomeKind: null,
-										lastOutcome: null,
-										lastNextStep: null,
-										lastFeatureResult: null,
-										lastReviewerDecision: null,
-										lastValidationRun: [],
-									},
-									notes: [],
-									artifacts: [],
-									timestamps: {
-										...existing.timestamps,
-										approvedAt: null,
-										completedAt: null,
-									},
-								};
+							: existing.goal === goal
+								? {
+										...existing,
+										planning: {
+											...existing.planning,
+											repoProfile:
+												input.repoProfile ?? existing.planning.repoProfile,
+										},
+									}
+								: {
+										...existing,
+										goal,
+										status: "planning" as const,
+										approval: "pending" as const,
+										plan: null,
+										planning: {
+											...existing.planning,
+											repoProfile:
+												input.repoProfile ?? existing.planning.repoProfile,
+										},
+										execution: {
+											...existing.execution,
+											activeFeatureId: null,
+											lastFeatureId: null,
+											lastSummary: null,
+											lastOutcomeKind: null,
+											lastOutcome: null,
+											lastNextStep: null,
+											lastFeatureResult: null,
+											lastReviewerDecision: null,
+											lastValidationRun: [],
+										},
+										notes: [],
+										artifacts: [],
+										timestamps: {
+											...existing.timestamps,
+											approvedAt: null,
+											completedAt: null,
+										},
+									};
 
 					const session = await saveSessionState(sessionRoot, base);
 					await syncSessionArtifacts(sessionRoot, session);
@@ -255,7 +264,7 @@ export function createSessionTools() {
 							mode: "resume",
 							goal: resumableSession.goal,
 							summary: `Resuming active Flow goal: ${resumableSession.goal}`,
-							nextCommand: "/flow-status",
+							nextCommand: "/flow-auto resume",
 						});
 					}
 

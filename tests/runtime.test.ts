@@ -1282,12 +1282,20 @@ describe("runtime transitions", () => {
 		const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
 
 		expect(parsed.status).toBe("ok");
-		expect(refreshed?.execution.lastOutcome).toBeNull();
-		expect(refreshed?.execution.lastNextStep).toBeNull();
-		expect(refreshed?.execution.lastFeatureResult).toBeNull();
-		expect(indexDoc).not.toContain(
+		expect(refreshed?.execution.lastOutcome).toEqual(
+			blocked.value.execution.lastOutcome,
+		);
+		expect(refreshed?.execution.lastNextStep).toBe(
+			blocked.value.execution.lastNextStep,
+		);
+		expect(refreshed?.execution.lastFeatureResult).toEqual(
+			blocked.value.execution.lastFeatureResult,
+		);
+		expect(indexDoc).toContain(
 			"resolution hint: Set the API token and rerun the feature.",
 		);
-		expect(indexDoc).toContain("next step: none");
+		expect(indexDoc).toContain(
+			"next step: Ask the operator to provide API credentials.",
+		);
 	});
 });

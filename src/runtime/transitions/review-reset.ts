@@ -144,6 +144,20 @@ export function recordReviewerDecision(
 		);
 	}
 
+	if (decision.scope === "final" && decision.featureId !== undefined) {
+		return fail(
+			"Reviewer decision validation failed: featureId: Final reviewer decisions must not include a featureId.",
+		);
+	}
+	if (
+		decision.scope === "feature" &&
+		(decision.featureId === undefined || decision.featureId.trim() === "")
+	) {
+		return fail(
+			"Reviewer decision validation failed: featureId: Feature reviewer decisions must include a featureId.",
+		);
+	}
+
 	const next = cloneSession(session);
 	if (isFeatureScopeReviewerDecision(decision)) {
 		const validation = validateFeatureScopeReviewerDecision(next, decision);
