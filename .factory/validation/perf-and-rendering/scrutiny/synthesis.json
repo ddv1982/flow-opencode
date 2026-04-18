@@ -1,64 +1,40 @@
 {
   "milestone": "perf-and-rendering",
-  "round": 2,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
-      "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test",
+      "command": "bun test",
       "exitCode": 0
     },
     "typecheck": {
       "passed": true,
-      "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun run typecheck",
+      "command": "bun run typecheck",
       "exitCode": 0
     },
     "lint": {
       "passed": true,
-      "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun run lint",
+      "command": "bun run lint",
       "exitCode": 0
     }
   },
   "reviewsSummary": {
     "total": 1,
-    "passed": 0,
-    "failed": 1,
-    "failedFeatures": [
-      "m5-scrutiny-fixes"
-    ]
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "m5-scrutiny-fixes",
-      "severity": "blocking",
-      "description": "Commit-isolated verification failed: src/runtime/session.ts re-exports cache helper symbols that are not exported by src/runtime/session-workspace.ts, producing TS2305 failures and a runtime ReferenceError in bundle sanity."
-    },
-    {
-      "featureId": "m5-scrutiny-fixes",
-      "severity": "blocking",
-      "description": "m5-read-cache-mkdir contract remains unresolved in committed code: tests/runtime/workspace-cache.test.ts still asserts mkdir call count equals 30 instead of enforcing the required <= 2 threshold."
-    },
-    {
-      "featureId": "m5-scrutiny-fixes",
-      "severity": "blocking",
-      "description": "m5-bundle-optimization mock-peer validation remains unresolved in committed code: scripts/cross-area/bundle-sanity.mjs imports repo dist/index.js directly without resolver wiring that guarantees use of the created @opencode-ai/plugin shim."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
-      "target": "core-worker skill",
-      "suggestion": "Require verification evidence to be captured against the committed SHA in an isolated clean state (or equivalent) before declaring feature completion.",
-      "evidence": "Feature m5-scrutiny-fixes reported completion while post-commit working tree remained dirty and commit 415b90e fails isolated typecheck/runtime smoke.",
-      "isSystemic": true
-    },
-    {
-      "target": "AGENTS.md / mission guidance",
-      "suggestion": "Strengthen enforcement language that implementation features must not leave required functional changes uncommitted when handing off completion.",
-      "evidence": "The fix commit omits required session-workspace helper exports while dependent imports were committed, allowing an incomplete and broken isolated commit to pass local non-isolated verification.",
+      "target": "AGENTS.md / worker handoff procedure",
+      "suggestion": "Require worker handoff `commitId` to match the exact commit SHA used for final isolated verification; if post-handoff fixes land, require handoff amendment before marking complete.",
+      "evidence": "Review of `m5-scrutiny-fixes` found handoff metadata pinned to `415b90e` while effective resolved code was at `eb22176`, reducing traceability between claimed and verified state.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": ".factory/validation/perf-and-rendering/scrutiny/synthesis.round1.json"
+  "previousRound": ".factory/validation/perf-and-rendering/scrutiny/synthesis.round2.json"
 }
