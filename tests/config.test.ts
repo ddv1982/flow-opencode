@@ -95,9 +95,13 @@ function expectNoFlowManagedCompaction(content: string) {
 
 describe("applyFlowConfig", () => {
 	test("plugin entrypoint returns Flow config and tool hooks", async () => {
-		const ctx = { worktree: "/tmp/flow-plugin-test" } as unknown as Parameters<
-			typeof FlowPlugin
-		>[0];
+		const appLog = {
+			log: () => undefined,
+		};
+		const ctx = {
+			worktree: "/tmp/flow-plugin-test",
+			client: { app: appLog },
+		} as unknown as Parameters<typeof FlowPlugin>[0];
 		const plugin = await FlowPlugin(ctx);
 
 		expect(typeof plugin.config).toBe("function");
@@ -116,6 +120,27 @@ describe("applyFlowConfig", () => {
 
 		expect(config.command?.existing).toEqual({ description: "keep me" });
 		expect(config.command?.["flow-plan"]).toBeDefined();
+	});
+
+	test("plugin entrypoint logs through ctx.client.app.log", async () => {
+		const logCalls: Array<Record<string, unknown>> = [];
+		const ctx = {
+			worktree: "/tmp/flow-plugin-test",
+			client: {
+				app: {
+					log(entry: Record<string, unknown>) {
+						logCalls.push(entry);
+					},
+				},
+			},
+		} as unknown as Parameters<typeof FlowPlugin>[0];
+
+		await FlowPlugin(ctx);
+
+		expect(logCalls).toContainEqual({
+			level: "info",
+			message: "Flow plugin initialized.",
+		});
 	});
 
 	test("createTools preserves the expected ordered tool surface", () => {
