@@ -1,6 +1,6 @@
 import { getSessionPath } from "./paths";
 import { renderSessionDocs } from "./render";
-import { type Session, SessionSchema } from "./schema";
+import type { Session } from "./schema";
 import {
 	readSessionFromPath,
 	resolveActiveSessionId,
@@ -10,14 +10,14 @@ import {
 } from "./session-workspace";
 import { nowIso } from "./time";
 
-function normalizeSession(session: Session): Session {
-	return SessionSchema.parse({
+function refreshUpdatedAt(session: Session): Session {
+	return {
 		...session,
 		timestamps: {
 			...session.timestamps,
 			updatedAt: nowIso(),
 		},
-	});
+	};
 }
 
 export async function loadSession(worktree: string): Promise<Session | null> {
@@ -42,7 +42,7 @@ export async function saveSessionState(
 	session: Session,
 ): Promise<Session> {
 	return withSessionSaveLock(worktree, async () => {
-		const normalized = normalizeSession(session);
+		const normalized = refreshUpdatedAt(session);
 		await writeSessionFile(worktree, normalized);
 		await writeActiveSessionId(worktree, normalized.id);
 		return normalized;
@@ -61,7 +61,7 @@ export async function saveSession(
 	session: Session,
 ): Promise<Session> {
 	return withSessionSaveLock(worktree, async () => {
-		const normalized = normalizeSession(session);
+		const normalized = refreshUpdatedAt(session);
 		await writeSessionFile(worktree, normalized);
 		await writeActiveSessionId(worktree, normalized.id);
 		await syncSessionArtifacts(worktree, normalized);

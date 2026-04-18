@@ -50,6 +50,12 @@ export function validateSuccessfulCompletion(
 	featureId: string,
 	wasFinalFeature: boolean,
 ): TransitionResult<void> {
+	if (worker.outcome?.kind && worker.outcome.kind !== "completed") {
+		return fail(
+			`Worker result validation failed: outcome.kind: expected "completed", received "${worker.outcome.kind}"`,
+		);
+	}
+
 	const completionChecks: Array<{
 		kind: CompletionRecoveryKind;
 		message: string;

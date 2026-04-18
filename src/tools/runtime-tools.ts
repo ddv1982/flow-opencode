@@ -164,9 +164,10 @@ export function createRuntimeTools() {
 			execute: withParsedArgs(
 				WorkerResultArgsSchema,
 				async (input, context) => {
+					const workerInput = input as Parameters<typeof completeRun>[1];
 					return withPersistedTransition(
 						context,
-						(session) => completeRun(session, input),
+						(session) => completeRun(session, workerInput),
 						{
 							getSession: (value) => value,
 							onSuccess: (saved) => {
@@ -178,8 +179,11 @@ export function createRuntimeTools() {
 									session: summary.session,
 								};
 							},
-							onError: (failure) =>
-								errorResponse(failure.message, { recovery: failure.recovery }),
+							onError: (failure) => {
+								return errorResponse(failure.message, {
+									recovery: failure.recovery,
+								});
+							},
 						},
 					);
 				},

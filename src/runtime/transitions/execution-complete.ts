@@ -1,5 +1,5 @@
 import { featureWouldReachCompletion } from "../domain";
-import { type Session, type WorkerResult, WorkerResultSchema } from "../schema";
+import type { Session, WorkerResult, WorkerResultArgs } from "../schema";
 import { nowIso } from "../time";
 import { validateSuccessfulCompletion } from "./execution-completion-guards";
 import { recordWorkerResult } from "./execution-completion-recording";
@@ -8,13 +8,7 @@ import {
 	markSessionCompleted,
 	projectCompletedFeatures,
 } from "./execution-state";
-import {
-	cloneSession,
-	fail,
-	formatValidationError,
-	succeed,
-	type TransitionResult,
-} from "./shared";
+import { cloneSession, fail, succeed, type TransitionResult } from "./shared";
 
 type WorkerOutcomeKind = NonNullable<WorkerResult["outcome"]>["kind"];
 
@@ -66,26 +60,20 @@ function finalizeIncompleteCompletion(
 
 export function completeRun(
 	session: Session,
-	workerInput: unknown,
+	worker: WorkerResultArgs | WorkerResult | Record<string, unknown>,
 ): TransitionResult<Session> {
-	let worker: WorkerResult;
-	try {
-		worker = WorkerResultSchema.parse(workerInput);
-	} catch (error) {
-		return fail(
-			`Worker result validation failed: ${formatValidationError(error)}`,
-		);
-	}
-
+	const typedWorker = worker as WorkerResult;
 	if (!session.plan) {
 		return fail("There is no active plan to apply the worker result to.");
 	}
 	if (!session.execution.activeFeatureId) {
 		return fail("There is no active feature to complete.");
 	}
-	if (worker.featureResult.featureId !== session.execution.activeFeatureId) {
+	if (
+		typedWorker.featureResult.featureId !== session.execution.activeFeatureId
+	) {
 		return fail(
-			`Worker result feature '${worker.featureResult.featureId}' does not match active feature '${session.execution.activeFeatureId}'.`,
+			`Worker result feature '${typedWorker.featureResult.featureId}' does not match active feature '${session.execution.activeFeatureId}'.`,
 		);
 	}
 
@@ -98,12 +86,12 @@ export function completeRun(
 	const recordedAt = nowIso();
 	const wasFinalFeature = featureWouldReachCompletion(plan, featureId);
 
-	recordWorkerResult(next, featureId, worker, recordedAt);
+	recordWorkerResult(next, featureId, typedWorker, recordedAt);
 
-	if (worker.status === "ok") {
+	if (typedWorker.status === "ok") {
 		const validation = validateSuccessfulCompletion(
 			session,
-			worker,
+			typedWorker,
 			featureId,
 			wasFinalFeature,
 		);
@@ -111,10 +99,10 @@ export function completeRun(
 			return fail(validation.message, validation.recovery, next);
 		}
 
-		return finalizeSuccessfulCompletion(next, featureId, worker.summary);
+		return finalizeSuccessfulCompletion(next, featureId, typedWorker.summary);
 	}
 
 	return succeed(
-		finalizeIncompleteCompletion(next, featureId, worker.outcome.kind),
+		finalizeIncompleteCompletion(next, featureId, typedWorker.outcome.kind),
 	);
 }
