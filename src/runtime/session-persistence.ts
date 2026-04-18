@@ -8,7 +8,7 @@ import {
 	writeActiveSessionId,
 	writeSessionFile,
 } from "./session-workspace";
-import { nowIso } from "./time";
+import { nowIso } from "./util";
 
 function refreshUpdatedAt(session: Session): Session {
 	return {

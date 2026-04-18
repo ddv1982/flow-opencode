@@ -5,7 +5,7 @@ import {
 	listSessionHistory,
 	saveSession,
 } from "../src/runtime/session";
-import * as time from "../src/runtime/time";
+import * as time from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();

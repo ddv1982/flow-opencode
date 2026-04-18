@@ -15,7 +15,7 @@ import {
 	resolveActiveSessionId,
 	writeActiveSessionId,
 } from "./session-workspace";
-import { archiveTimestampNow, nowIso } from "./time";
+import { archiveTimestampNow, nowIso } from "./util";
 
 export async function deleteSessionState(worktree: string): Promise<void> {
 	const sessionId = await resolveActiveSessionId(worktree);

@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
 import type { WorkspaceContext } from "../runtime/application";
-import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN } from "../runtime/primitives";
+import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN } from "../runtime/constants";
 import type { PlanArgs, PlanningContextArgs } from "../runtime/schema";
 import {
 	OutcomeSchema,
