@@ -1,0 +1,108 @@
+{
+  "milestone": "opencode-integration-and-release",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 8,
+    "passed": 4,
+    "failed": 4,
+    "failedFeatures": [
+      "m6-compaction-hook",
+      "m6-pack-invariants-script",
+      "m6-release-smoke-tests",
+      "m6-final-check"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m6-compaction-hook",
+      "severity": "blocking",
+      "description": "Compacting hook resolves session root from context.directory before context.worktree, which can miss active sessions when directory is a subfolder."
+    },
+    {
+      "featureId": "m6-pack-invariants-script",
+      "severity": "blocking",
+      "description": "tests/cross-area/pack-invariants.test.ts hardcodes machine-specific absolute repository paths, making the test non-portable."
+    },
+    {
+      "featureId": "m6-release-smoke-tests",
+      "severity": "blocking",
+      "description": "importBuiltPlugin() reuses a fixed ESM URL, so the resume-flow test does not actually reload dist/index.js and cannot validate reload behavior."
+    },
+    {
+      "featureId": "m6-final-check",
+      "severity": "blocking",
+      "description": "package.json scripts.check omits bun run bench even though final-gate feature/contract wording requires check to include bench."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Updated .factory/library/architecture.md to document post-M6 tool metadata behavior (context.metadata callback side effect + string execute returns).",
+      "sourceFeature": "m6-tool-metadata"
+    },
+    {
+      "target": "library",
+      "description": "Added explicit session-root precedence guidance (worktree before directory, including hooks) to prevent compacting-hook root-resolution regressions.",
+      "sourceFeature": "m6-compaction-hook"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add a mission-level portability rule that tests must not use machine-specific absolute repository paths and must resolve paths relative to worktree/import.meta.dir.",
+      "evidence": "m6-pack-invariants-script review found /Users/vriesd absolute paths in tests/cross-area/pack-invariants.test.ts.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Align the definition of bun run check across feature text, validation contract, and package.json (explicitly decide whether bench is part of check).",
+      "evidence": "m6-final-check review found feature/contract require bench in check while package.json scripts.check omits bun run bench.",
+      "isSystemic": true
+    },
+    {
+      "target": "core-worker skill",
+      "suggestion": "Require orientation reads to include .factory/library/environment.md and add objective procedure-compliance checks before claiming followedProcedure=true.",
+      "evidence": "m6-pack-invariants-script and m6-release-smoke-tests reviews reported portability/procedure misses that environment guidance and stricter compliance checks would likely prevent.",
+      "isSystemic": true
+    },
+    {
+      "target": "core-worker skill",
+      "suggestion": "Clarify test-first expectations for release-metadata/doc-only features where validation is primarily file/package inspection rather than new behavior tests.",
+      "evidence": "m6-version-changelog-readme review identified friction from strictly requiring red-test-first flow on documentation/release metadata scope.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Change .factory/services.yaml format_check command due Biome --check inconsistency observation.",
+      "reason": "ambiguous"
+    },
+    {
+      "observation": "Add AGENTS guidance about verification-step reference ordering.",
+      "reason": "already-documented"
+    },
+    {
+      "observation": "Directly mutate validation-contract evidence regex for VAL-RELEASE-001 in this validator run.",
+      "reason": "out-of-scope for apply-now changes in this pass"
+    }
+  ],
+  "previousRound": null
+}

@@ -64,7 +64,8 @@ src/
    - Parses args once via `withParsedArgs` (single-parse boundary, post-M3).
    - Calls a transition function (`applyPlan`, `completeRun`, ...).
    - On success, saves via `saveSession(worktree, nextSession)` — atomically writes `session.json` and renders `docs/index.md` + `docs/features/<id>.md` incrementally (post-M5).
-   - Returns a structured `{ title, metadata, output }` result (post-M6) containing the JSON envelope.
+   - Emits TUI metadata via `context.metadata?.({ title, metadata })` (post-M6).
+   - Returns a JSON envelope string from `execute` (OpenCode tool contract).
 
 ## State Machine
 
@@ -77,6 +78,7 @@ Completion gate (`validateSuccessfulCompletion`) enforces 8 rules before a featu
 ## Invariants
 
 - **Exactly one active feature** at a time (`execution.activeFeatureId` is either null or a valid id in `plan.features`).
+- **Session root precedence**: when both are present, resolve from `ctx.worktree` before `ctx.directory` (including plugin hooks).
 - **Dependency graph is acyclic** (enforced at plan-apply time; cycles via `dependsOn` or `blockedBy` are rejected).
 - **Reviewer gate before completion**: no feature reaches `completed` without a persisted approved reviewer decision for its scope.
 - **Atomic state writes** (post-M2): `.flow/active` and `session.json` are never half-written. In-process saves on the same worktree are serialized (last-writer-wins).
