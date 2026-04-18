@@ -4,6 +4,7 @@ commands:
   test: bun test
   test_ci: bun test --randomize
   bench: bun run bench
+  bench_smoke: bun run bench:smoke
   build: bun run build
   lint: bun run lint
   format_check: bunx biome format --check .
