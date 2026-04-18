@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
 	getDocsDir,
 	getFeatureDocPath,
@@ -8,6 +8,50 @@ import {
 import { renderFeatureDoc } from "./render-feature-sections";
 import { renderIndexDoc } from "./render-index-sections";
 import type { Session } from "./schema";
+
+type RenderedDoc = {
+	path: string;
+	content: string;
+};
+
+function createContentHash(input: string): string {
+	let hash = 2166136261;
+
+	for (let index = 0; index < input.length; index += 1) {
+		hash ^= input.charCodeAt(index);
+		hash = Math.imul(hash, 16777619);
+	}
+
+	return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function createRenderComparableSession(session: Session): Session {
+	return {
+		...session,
+		timestamps: {
+			...session.timestamps,
+			updatedAt: session.timestamps.createdAt,
+		},
+	};
+}
+
+async function writeDocIfChanged(doc: RenderedDoc): Promise<boolean> {
+	const nextHash = createContentHash(doc.content);
+
+	try {
+		const previousContent = await readFile(doc.path, "utf8");
+		if (createContentHash(previousContent) === nextHash) {
+			return false;
+		}
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw error;
+		}
+	}
+
+	await writeFile(doc.path, doc.content, "utf8");
+	return true;
+}
 
 async function pruneFeatureDocs(
 	worktree: string,
@@ -40,25 +84,24 @@ export async function renderSessionDocs(
 	session: Session,
 ): Promise<void> {
 	const sessionId = session.id;
+	const renderSession = createRenderComparableSession(session);
 	const docsDir = getDocsDir(worktree, sessionId);
 	const featuresDir = getFeaturesDocsDir(worktree, sessionId);
-	const features = session.plan?.features ?? [];
+	const features = renderSession.plan?.features ?? [];
 
 	await mkdir(docsDir, { recursive: true });
 	await mkdir(featuresDir, { recursive: true });
-	await writeFile(
-		getIndexDocPath(worktree, sessionId),
-		renderIndexDoc(session),
-		"utf8",
-	);
+	await writeDocIfChanged({
+		path: getIndexDocPath(worktree, sessionId),
+		content: renderIndexDoc(renderSession),
+	});
 
 	await Promise.all(
 		features.map((feature) =>
-			writeFile(
-				getFeatureDocPath(worktree, sessionId, feature.id),
-				renderFeatureDoc(session, feature),
-				"utf8",
-			),
+			writeDocIfChanged({
+				path: getFeatureDocPath(worktree, sessionId, feature.id),
+				content: renderFeatureDoc(renderSession, feature),
+			}),
 		),
 	);
 	await pruneFeatureDocs(
