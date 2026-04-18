@@ -50,11 +50,11 @@ export function maybeQuotedSection(title: string, value: string | null | undefin
   return `## ${title}\n\n${toQuotedBlock(value)}`;
 }
 
-export function formatFollowUpLine(item: { summary: string; severity?: string }): string {
+export function formatFollowUpLine(item: { summary: string; severity?: string | undefined }): string {
   return item.severity ? `${item.summary} (${item.severity})` : item.summary;
 }
 
-export function formatFollowUpLines(items: Array<{ summary: string; severity?: string }>): string[] {
+export function formatFollowUpLines(items: Array<{ summary: string; severity?: string | undefined }>): string[] {
   return items.map(formatFollowUpLine);
 }
 
@@ -85,12 +85,12 @@ export function renderOutcomeLines(
   outcome:
     | {
         kind: string;
-        category?: string;
-        summary?: string;
-        resolutionHint?: string;
-        retryable?: boolean;
-        autoResolvable?: boolean;
-        needsHuman?: boolean;
+        category?: string | undefined;
+        summary?: string | undefined;
+        resolutionHint?: string | undefined;
+        retryable?: boolean | undefined;
+        autoResolvable?: boolean | undefined;
+        needsHuman?: boolean | undefined;
       }
     | null
     | undefined,

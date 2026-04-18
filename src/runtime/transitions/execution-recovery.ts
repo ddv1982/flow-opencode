@@ -10,8 +10,20 @@ export type { CompletionRecoveryKind } from "./execution-recovery-policy";
 
 function buildStatusRecovery(recovery: StatusRecoveryTemplate): TransitionRecovery {
   return {
-    ...recovery,
+    errorCode: recovery.errorCode,
+    resolutionHint: recovery.resolutionHint,
+    recoveryStage: recovery.recoveryStage,
+    prerequisite: recovery.prerequisite,
+    ...(recovery.requiredArtifact ? { requiredArtifact: recovery.requiredArtifact } : {}),
     nextCommand: recovery.nextCommand ?? "/flow-status",
+    ...(recovery.nextRuntimeTool
+      ? {
+          nextRuntimeTool: recovery.nextRuntimeTool,
+          ...(recovery.nextRuntimeArgs ? { nextRuntimeArgs: recovery.nextRuntimeArgs } : {}),
+        }
+      : {}),
+    ...(recovery.retryable !== undefined ? { retryable: recovery.retryable } : {}),
+    ...(recovery.autoResolvable !== undefined ? { autoResolvable: recovery.autoResolvable } : {}),
   };
 }
 
@@ -20,10 +32,16 @@ function buildResetFeatureRecovery(
   recovery: Omit<StatusRecoveryTemplate, "nextCommand" | "nextRuntimeTool" | "nextRuntimeArgs">,
 ): TransitionRecovery {
   return {
-    ...recovery,
+    errorCode: recovery.errorCode,
+    resolutionHint: recovery.resolutionHint,
+    recoveryStage: recovery.recoveryStage,
+    prerequisite: recovery.prerequisite,
+    ...(recovery.requiredArtifact ? { requiredArtifact: recovery.requiredArtifact } : {}),
     nextCommand: `/flow-reset feature ${featureId}`,
     nextRuntimeTool: "flow_reset_feature",
     nextRuntimeArgs: { featureId },
+    ...(recovery.retryable !== undefined ? { retryable: recovery.retryable } : {}),
+    ...(recovery.autoResolvable !== undefined ? { autoResolvable: recovery.autoResolvable } : {}),
   };
 }
 

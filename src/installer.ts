@@ -96,7 +96,7 @@ export async function runInstallCommand(
   await build();
 
   const resolvedSourceFile = sourceFile ? resolveFromCwd(cwd, sourceFile) : join(cwd, "dist", "index.js");
-  const destinationFiles = resolveInstallTargets({ homeDir });
+  const destinationFiles = resolveInstallTargets(homeDir ? { homeDir } : {});
   let installedPath: string | null = null;
 
   for (const destinationFile of destinationFiles) {
@@ -120,7 +120,7 @@ export async function runUninstallCommand(
     return;
   }
 
-  const destinationFiles = resolveInstallTargets({ homeDir });
+  const destinationFiles = resolveInstallTargets(homeDir ? { homeDir } : {});
   let removedPath: string | null = null;
 
   for (const destinationFile of destinationFiles) {

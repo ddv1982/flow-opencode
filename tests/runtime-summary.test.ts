@@ -12,6 +12,10 @@ afterEach(() => {
   cleanupTempDirs();
 });
 
+function toolContext(worktree: string, directory?: string) {
+  return (directory ? { worktree, directory } : { worktree }) as Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
+}
+
 async function activeIndexDocPath(worktree: string): Promise<string> {
   return getIndexDocPath(worktree, await activeSessionId(worktree));
 }
@@ -434,7 +438,7 @@ describe("runtime summary", () => {
       const worktree = makeTempDir();
       await saveSession(worktree, session);
 
-      const response = await tools.flow_status.execute({}, { worktree });
+      const response = await tools.flow_status.execute({}, toolContext(worktree));
       const parsed = JSON.parse(response);
 
       expect(normalizeSummaryFixture(parsed)).toEqual(normalizeSummaryFixture(summarizeSession(session)));

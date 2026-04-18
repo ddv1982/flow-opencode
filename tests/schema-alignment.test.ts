@@ -7,28 +7,30 @@ type ToolDefinition = {
   args: Record<string, unknown>;
 };
 
+type ToolSchemas = Record<keyof ReturnType<typeof createTools>, ReturnType<typeof tool.schema.object>>;
+
 type WorkerPayloadLike = {
   contractVersion: string;
   status: string;
   summary: string;
-  artifactsChanged: Array<{ path: string; kind?: string }>;
+  artifactsChanged: Array<{ path: string; kind?: string | undefined }>;
   validationRun: Array<{ command: string; status: string; summary: string }>;
-  validationScope?: string;
-  reviewIterations?: number;
+  validationScope?: string | undefined;
+  reviewIterations?: number | undefined;
   decisions: Array<{ summary: string }>;
   nextStep: string;
   outcome?: {
     kind: string;
-    category?: string;
-    summary?: string;
-    resolutionHint?: string;
-    retryable?: boolean;
-    autoResolvable?: boolean;
-    needsHuman?: boolean;
+    category?: string | undefined;
+    summary?: string | undefined;
+    resolutionHint?: string | undefined;
+    retryable?: boolean | undefined;
+    autoResolvable?: boolean | undefined;
+    needsHuman?: boolean | undefined;
   };
-  featureResult: { featureId: string; verificationStatus?: string };
+  featureResult: { featureId: string; verificationStatus?: string | undefined };
   featureReview: { status: string; summary: string; blockingFindings: Array<{ summary: string }> };
-  finalReview?: { status: string; summary: string; blockingFindings: Array<{ summary: string }> };
+  finalReview?: { status: string; summary: string; blockingFindings: Array<{ summary: string }> } | undefined;
 };
 
 function getToolSchemas() {
@@ -36,7 +38,7 @@ function getToolSchemas() {
 
   return Object.fromEntries(
     Object.entries(tools).map(([name, definition]) => [name, tool.schema.object(definition.args)]),
-  ) as Record<string, ReturnType<typeof tool.schema.object>>;
+  ) as ToolSchemas;
 }
 
 function samplePlan() {
@@ -124,12 +126,12 @@ describe("schema alignment", () => {
     expect(schemas.flow_run_complete_feature.safeParse(valid).success).toBe(true);
 
     const artifactPathInvalid = structuredClone(valid);
-    artifactPathInvalid.artifactsChanged[0].path = "";
+    artifactPathInvalid.artifactsChanged[0]!.path = "";
     expect(WorkerResultSchema.safeParse(artifactPathInvalid).success).toBe(false);
     expect(schemas.flow_run_complete_feature.safeParse(artifactPathInvalid).success).toBe(false);
 
     const validationStatusInvalid = structuredClone(valid);
-    validationStatusInvalid.validationRun[0].status = "broken";
+    validationStatusInvalid.validationRun[0]!.status = "broken";
     expect(WorkerResultSchema.safeParse(validationStatusInvalid).success).toBe(false);
     expect(schemas.flow_run_complete_feature.safeParse(validationStatusInvalid).success).toBe(false);
 

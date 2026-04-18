@@ -137,9 +137,10 @@ export function createSessionTools() {
 
         const goal = input.goal ?? existing!.goal;
         const isNewGoal = Boolean(existing && input.goal && input.goal !== existing.goal);
+        const planningOptions = input.repoProfile ? { repoProfile: input.repoProfile } : undefined;
         const base =
           !existing || existing.status === "completed" || isNewGoal
-            ? createSession(goal, { repoProfile: input.repoProfile })
+            ? createSession(goal, planningOptions)
             : {
                 ...existing,
                 goal,

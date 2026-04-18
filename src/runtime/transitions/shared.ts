@@ -29,7 +29,12 @@ export type TransitionRecovery = {
 };
 
 export function fail<T>(message: string, recovery?: TransitionRecovery, session?: Session): TransitionResult<T> {
-  return { ok: false, message, recovery, session };
+  return {
+    ok: false,
+    message,
+    ...(recovery ? { recovery } : {}),
+    ...(session ? { session } : {}),
+  };
 }
 
 export function succeed<T>(value: T): TransitionResult<T> {

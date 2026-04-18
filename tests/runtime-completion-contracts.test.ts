@@ -5,6 +5,10 @@ import { createTempDirRegistry, createTestTools, samplePlan } from "./runtime-te
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
 
+function toolContext(worktree: string): Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1] {
+  return toolContext(worktree) as Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
+}
+
 afterEach(() => {
   cleanupTempDirs();
 });
@@ -551,8 +555,9 @@ describe("runtime completion and contract guards", () => {
         outcome: { kind: "completed" },
         featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
         featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+        finalReview: undefined,
       },
-      { worktree },
+      toolContext(worktree),
     );
 
     const parsed = JSON.parse(response);
@@ -731,7 +736,7 @@ describe("runtime completion and contract guards", () => {
         followUps: [],
         suggestedValidation: ["bun run check"],
       },
-      { worktree },
+      toolContext(worktree),
     );
 
     const parsed = JSON.parse(response);
@@ -744,13 +749,13 @@ describe("runtime completion and contract guards", () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
 
-    const planStartResponse = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
+    const planStartResponse = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, toolContext(worktree));
     const planStartParsed = JSON.parse(planStartResponse);
     expect(Object.keys(planStartParsed)).toEqual(["status", "summary", "session"]);
     expect(planStartParsed.status).toBe("ok");
     expect(planStartParsed.session.goal).toBe("Build a workflow plugin");
 
-    const planApplyResponse = await tools.flow_plan_apply.execute({ plan: samplePlan() }, { worktree });
+    const planApplyResponse = await tools.flow_plan_apply.execute({ plan: samplePlan(), planning: undefined }, toolContext(worktree));
     const planApplyParsed = JSON.parse(planApplyResponse);
     expect(Object.keys(planApplyParsed)).toEqual(["status", "summary", "session"]);
     expect(planApplyParsed.status).toBe("ok");

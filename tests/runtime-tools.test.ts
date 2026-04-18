@@ -12,11 +12,15 @@ afterEach(() => {
   cleanupTempDirs();
 });
 
+function toolContext(worktree: string, directory?: string) {
+  return (directory ? { worktree, directory } : { worktree }) as Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
+}
+
 describe("runtime tools and recovery", () => {
   test("flow_status returns a machine-readable missing-session summary", async () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
-    const response = await tools.flow_status.execute({}, { worktree });
+    const response = await tools.flow_status.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("missing");
@@ -26,7 +30,7 @@ describe("runtime tools and recovery", () => {
   test("flow_history returns a machine-readable missing-history summary", async () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
-    const response = await tools.flow_history.execute({}, { worktree });
+    const response = await tools.flow_history.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("missing");
@@ -41,15 +45,15 @@ describe("runtime tools and recovery", () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
 
-    const statusResponse = await tools.flow_status.execute(undefined, { worktree });
+    const statusResponse = await tools.flow_status.execute(undefined as never, toolContext(worktree));
     const statusParsed = JSON.parse(statusResponse);
     expect(statusParsed.status).toBe("missing");
 
-    const historyResponse = await tools.flow_history.execute(undefined, { worktree });
+    const historyResponse = await tools.flow_history.execute(undefined as never, toolContext(worktree));
     const historyParsed = JSON.parse(historyResponse);
     expect(historyParsed.status).toBe("missing");
 
-    const resetResponse = await tools.flow_reset_session.execute(undefined, { worktree });
+    const resetResponse = await tools.flow_reset_session.execute(undefined as never, toolContext(worktree));
     const resetParsed = JSON.parse(resetResponse);
     expect(resetParsed.status).toBe("ok");
     expect(resetParsed.summary).toBe("No active Flow session existed.");
@@ -63,7 +67,7 @@ describe("runtime tools and recovery", () => {
       directory,
       sessionId: "opaque-runtime-session-id",
       commandName: "flow-plan",
-    } as unknown as { worktree?: string; directory?: string };
+    } as unknown as Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
 
     const response = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, context);
     const parsed = JSON.parse(response);
@@ -78,13 +82,13 @@ describe("runtime tools and recovery", () => {
     const first = await saveSession(worktree, createSession("First goal"));
     const second = await saveSession(worktree, createSession("Second goal"));
 
-    const resetResponse = await tools.flow_reset_session.execute({}, { worktree });
+    const resetResponse = await tools.flow_reset_session.execute({}, toolContext(worktree));
     const resetParsed = JSON.parse(resetResponse);
     expect(resetParsed.archivedSessionId).toBe(second.id);
     expect(resetParsed.archivedTo).toMatch(new RegExp(`^\\.flow/archive/${second.id}-`));
     await expect(readFile(join(worktree, resetParsed.archivedTo, "session.json"), "utf8")).resolves.toContain('"goal": "Second goal"');
 
-    const response = await tools.flow_history.execute({}, { worktree });
+    const response = await tools.flow_history.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -115,7 +119,7 @@ describe("runtime tools and recovery", () => {
     const first = await saveSession(worktree, createSession("First goal"));
     const second = await saveSession(worktree, createSession("Second goal"));
 
-    const response = await tools.flow_history_show.execute({ sessionId: first.id }, { worktree });
+    const response = await tools.flow_history_show.execute({ sessionId: first.id }, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -135,9 +139,9 @@ describe("runtime tools and recovery", () => {
     const tools = createTestTools();
     const saved = await saveSession(worktree, createSession("Archived goal"));
 
-    const resetResponse = await tools.flow_reset_session.execute({}, { worktree });
+    const resetResponse = await tools.flow_reset_session.execute({}, toolContext(worktree));
     const resetParsed = JSON.parse(resetResponse);
-    const response = await tools.flow_history_show.execute({ sessionId: saved.id }, { worktree });
+    const response = await tools.flow_history_show.execute({ sessionId: saved.id }, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -165,7 +169,7 @@ describe("runtime tools and recovery", () => {
     });
     await saveSession(worktree, createSession("Current active goal"));
 
-    const response = await tools.flow_history_show.execute({ sessionId: saved.id }, { worktree });
+    const response = await tools.flow_history_show.execute({ sessionId: saved.id }, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -183,7 +187,7 @@ describe("runtime tools and recovery", () => {
 
     expect(await activeSessionId(worktree)).toBe(second.id);
 
-    const response = await tools.flow_session_activate.execute({ sessionId: first.id }, { worktree });
+    const response = await tools.flow_session_activate.execute({ sessionId: first.id }, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -198,12 +202,12 @@ describe("runtime tools and recovery", () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
 
-    const showResponse = await tools.flow_history_show.execute({ sessionId: "missing-id" }, { worktree });
+    const showResponse = await tools.flow_history_show.execute({ sessionId: "missing-id" }, toolContext(worktree));
     const showParsed = JSON.parse(showResponse);
     expect(showParsed.status).toBe("missing_session");
     expect(showParsed.nextCommand).toBe("/flow-history");
 
-    const activateResponse = await tools.flow_session_activate.execute({ sessionId: "missing-id" }, { worktree });
+    const activateResponse = await tools.flow_session_activate.execute({ sessionId: "missing-id" }, toolContext(worktree));
     const activateParsed = JSON.parse(activateResponse);
     expect(activateParsed.status).toBe("missing_session");
     expect(activateParsed.nextCommand).toBe("/flow-history");
@@ -214,7 +218,7 @@ describe("runtime tools and recovery", () => {
     const tools = createTestTools();
     const saved = await saveSession(worktree, createSession("Build a workflow plugin"));
 
-    const response = await tools.flow_reset_session.execute({}, { worktree });
+    const response = await tools.flow_reset_session.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -240,7 +244,7 @@ describe("runtime tools and recovery", () => {
     ] as const;
 
     for (const [toolName, args, expectedStatus, expectedNextCommand] of cases) {
-      const response = await tools[toolName].execute(args, { worktree });
+      const response = await (tools[toolName] as { execute: (args: unknown, context: Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1]) => Promise<string> }).execute(args, toolContext(worktree));
       const parsed = JSON.parse(response);
 
       expect(parsed.status).toBe(expectedStatus);
@@ -301,7 +305,7 @@ describe("runtime tools and recovery", () => {
     if (!completed.ok) return;
 
     await saveSession(worktree, completed.value);
-    const response = await tools.flow_run_start.execute({}, { worktree });
+    const response = await tools.flow_run_start.execute({ featureId: undefined }, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("error");
@@ -340,8 +344,8 @@ describe("runtime tools and recovery", () => {
           featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
           featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
         },
-      },
-      { worktree },
+      } as never,
+      toolContext(worktree),
     );
 
     const parsed = JSON.parse(response);
@@ -391,7 +395,7 @@ describe("runtime tools and recovery", () => {
         featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
         finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
       },
-      { worktree },
+      toolContext(worktree),
     );
 
     const parsed = JSON.parse(response);
@@ -436,8 +440,9 @@ describe("runtime tools and recovery", () => {
         outcome: { kind: "completed" },
         featureResult: { featureId: "setup-runtime", verificationStatus: "passed" },
         featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
+        finalReview: undefined,
       },
-      { worktree },
+      toolContext(worktree),
     );
 
     const parsed = JSON.parse(response);
@@ -506,7 +511,7 @@ describe("runtime tools and recovery", () => {
         featureReview: { status: "passed", summary: "Looks good.", blockingFindings: [] },
         finalReview: { status: "passed", summary: "Repo-wide validation is clean.", blockingFindings: [] },
       },
-      { worktree },
+      toolContext(worktree),
     );
 
     const parsed = JSON.parse(response);

@@ -14,6 +14,10 @@ afterEach(() => {
   cleanupTempDirs();
 });
 
+function toolContext(worktree: string, directory?: string) {
+  return (directory ? { worktree, directory } : { worktree }) as Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
+}
+
 async function activeSessionPath(worktree: string): Promise<string> {
   return getSessionPath(worktree, await activeSessionId(worktree));
 }
@@ -672,7 +676,7 @@ describe("runtime transitions", () => {
     await saveSession(worktree, completed.value);
 
     const tools = createTestTools();
-    const response = await tools.flow_plan_start.execute({ goal: "Different goal" }, { worktree });
+    const response = await tools.flow_plan_start.execute({ goal: "Different goal" }, toolContext(worktree));
     const parsed = JSON.parse(response);
     const nextSession = await loadSession(worktree);
 
@@ -688,7 +692,7 @@ describe("runtime transitions", () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
 
-    const response = await tools.flow_auto_prepare.execute({}, { worktree });
+    const response = await tools.flow_auto_prepare.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("missing_goal");
@@ -701,7 +705,7 @@ describe("runtime transitions", () => {
     await saveSession(worktree, createSession("Build a workflow plugin"));
     const tools = createTestTools();
 
-    const response = await tools.flow_auto_prepare.execute({}, { worktree });
+    const response = await tools.flow_auto_prepare.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("ok");
@@ -718,7 +722,7 @@ describe("runtime transitions", () => {
     await saveSession(worktree, session);
     const tools = createTestTools();
 
-    const response = await tools.flow_auto_prepare.execute({}, { worktree });
+    const response = await tools.flow_auto_prepare.execute({}, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("missing_goal");
@@ -730,7 +734,7 @@ describe("runtime transitions", () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
 
-    const response = await tools.flow_auto_prepare.execute({ argumentString: "resume" }, { worktree });
+    const response = await tools.flow_auto_prepare.execute({ argumentString: "resume" }, toolContext(worktree));
     const parsed = JSON.parse(response);
 
     expect(parsed.status).toBe("missing_goal");
@@ -743,7 +747,7 @@ describe("runtime transitions", () => {
 
     const response = await tools.flow_auto_prepare.execute(
       { argumentString: "Improve Flow recovery behavior" },
-      { worktree },
+      toolContext(worktree),
     );
     const parsed = JSON.parse(response);
 
@@ -758,7 +762,7 @@ describe("runtime transitions", () => {
 
     const response = await tools.flow_auto_prepare.execute(
       { argumentString: "Improve Flow recovery behavior" },
-      { worktree: "/", directory },
+      toolContext("/", directory),
     );
     const parsed = JSON.parse(response);
 
@@ -773,7 +777,7 @@ describe("runtime transitions", () => {
 
     const response = await tools.flow_auto_prepare.execute(
       { argumentString: "Improve Flow recovery behavior" },
-      { worktree: "///", directory },
+      toolContext("///", directory),
     );
     const parsed = JSON.parse(response);
 
@@ -788,7 +792,7 @@ describe("runtime transitions", () => {
 
     const response = await tools.flow_plan_start.execute(
       { goal: "Build a workflow plugin" },
-      { worktree: "/", directory },
+      toolContext("/", directory),
     );
     const parsed = JSON.parse(response);
 
@@ -804,7 +808,7 @@ describe("runtime transitions", () => {
 
     const response = await tools.flow_plan_start.execute(
       { goal: "Build a workflow plugin" },
-      { worktree: "///", directory },
+      toolContext("///", directory),
     );
     const parsed = JSON.parse(response);
 
@@ -818,11 +822,11 @@ describe("runtime transitions", () => {
     const worktree = makeTempDir();
     const tools = createTestTools();
 
-    await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
+    await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, toolContext(worktree));
     const before = await readFile(await activeIndexDocPath(worktree), "utf8");
     expect(before).toContain("summary: No plan yet.");
 
-    await tools.flow_plan_apply.execute({ plan: samplePlan() }, { worktree });
+    await tools.flow_plan_apply.execute({ plan: samplePlan(), planning: undefined }, toolContext(worktree));
     const afterApply = await readFile(await activeIndexDocPath(worktree), "utf8");
     const session = await loadSession(worktree);
     expect(session?.plan?.summary).toBe(samplePlan().summary);
@@ -1018,7 +1022,7 @@ describe("runtime transitions", () => {
     if (!blocked.ok) return;
 
     await saveSession(worktree, blocked.value);
-    const response = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, { worktree });
+    const response = await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, toolContext(worktree));
     const parsed = JSON.parse(response);
     const refreshed = await loadSession(worktree);
     const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");

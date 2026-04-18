@@ -44,6 +44,8 @@ type ToolDefinition = {
   args: Record<string, unknown>;
 };
 
+type ToolSchemas = Record<keyof ReturnType<typeof createTools>, ReturnType<typeof tool.schema.object>>;
+
 function getToolSchemas() {
   const tools = createTools({}) as unknown as Record<string, ToolDefinition>;
 
@@ -51,7 +53,7 @@ function getToolSchemas() {
     tools,
     schemas: Object.fromEntries(
       Object.entries(tools).map(([name, definition]) => [name, tool.schema.object(definition.args)]),
-    ) as Record<string, ReturnType<typeof tool.schema.object>>,
+    ) as ToolSchemas,
   };
 }
 
@@ -212,7 +214,7 @@ describe("applyFlowConfig", () => {
         expect(value).not.toBeNull();
       }
 
-      expect(schemas[name]).toBeDefined();
+      expect(schemas[name as keyof typeof schemas]).toBeDefined();
 
       expect(name.length).toBeGreaterThan(0);
     }

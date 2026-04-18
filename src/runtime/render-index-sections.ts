@@ -25,9 +25,9 @@ function renderFeatureResultDetails(
   featureResult:
     | {
         featureId: string;
-        verificationStatus?: string;
-        notes?: Array<{ note: string }>;
-        followUps?: Array<{ summary: string; severity?: string }>;
+        verificationStatus?: string | undefined;
+        notes?: Array<{ note: string }> | undefined;
+        followUps?: Array<{ summary: string; severity?: string | undefined }> | undefined;
       }
     | null
     | undefined,

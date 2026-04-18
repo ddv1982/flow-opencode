@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getActiveSessionPath } from "../src/runtime/paths";
 import { createTools } from "../src/tools";
+import type { ToolContext } from "../src/tools/schemas";
 
-export type TestToolContext = {
+export type TestToolContext = Partial<ToolContext> & {
   worktree?: string;
   directory?: string;
 };
@@ -15,7 +16,7 @@ export type TestToolDefinition = {
   execute: (args: unknown, context: TestToolContext) => Promise<string>;
 };
 
-export type TestTools = Record<string, TestToolDefinition>;
+export type TestTools = ReturnType<typeof createTools> & Record<string, TestToolDefinition>;
 
 export function createTestTools(): TestTools {
   return createTools({}) as unknown as TestTools;
