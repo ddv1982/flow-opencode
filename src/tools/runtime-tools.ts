@@ -35,6 +35,19 @@ import {
 	WorkerResultArgsShape,
 } from "./schemas";
 
+const flowPlanApplyArgsShape =
+	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
+	FlowPlanApplyArgsSchema.shape as any;
+const workerResultArgsShape =
+	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
+	WorkerResultArgsShape as any;
+const flowReviewRecordFeatureArgsShape =
+	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
+	FlowReviewRecordFeatureArgsShape as any;
+const flowReviewRecordFinalArgsShape =
+	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
+	FlowReviewRecordFinalArgsShape as any;
+
 function parseFeatureIds(raw?: string[]): string[] {
 	return (raw ?? []).map((value) => value.trim()).filter(Boolean);
 }
@@ -43,60 +56,7 @@ export function createRuntimeTools() {
 	return {
 		flow_plan_apply: tool({
 			description: "Persist a Flow draft plan into the active session",
-			args: {
-				plan: tool.schema
-					.object({
-						summary: tool.schema.string().min(1),
-						overview: tool.schema.string().min(1),
-						requirements: tool.schema
-							.array(tool.schema.string().min(1))
-							.default([]),
-						architectureDecisions: tool.schema
-							.array(tool.schema.string().min(1))
-							.default([]),
-						features: tool.schema
-							.array(
-								tool.schema.object({
-									id: tool.schema
-										.string()
-										.regex(
-											/^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-											"Feature ids must be lowercase kebab-case",
-										),
-									title: tool.schema.string().min(1),
-									summary: tool.schema.string().min(1),
-									fileTargets: tool.schema
-										.array(tool.schema.string().min(1))
-										.default([]),
-									verification: tool.schema
-										.array(tool.schema.string().min(1))
-										.default([]),
-									dependsOn: tool.schema
-										.array(tool.schema.string().min(1))
-										.optional(),
-									blockedBy: tool.schema
-										.array(tool.schema.string().min(1))
-										.optional(),
-								}),
-							)
-							.min(1),
-						goalMode: tool.schema.string().min(1).optional(),
-						decompositionPolicy: tool.schema.string().min(1).optional(),
-						completionPolicy: tool.schema
-							.object({
-								minCompletedFeatures: tool.schema
-									.number()
-									.int()
-									.positive()
-									.optional(),
-								requireFinalReview: tool.schema.boolean().optional(),
-							})
-							.optional(),
-						notes: tool.schema.array(tool.schema.string().min(1)).optional(),
-					})
-					.strict(),
-				planning: tool.schema.custom().optional(),
-			},
+			args: flowPlanApplyArgsShape,
 			execute: withParsedArgs(
 				FlowPlanApplyArgsSchema,
 				async (input, context) => {
@@ -213,7 +173,7 @@ export function createRuntimeTools() {
 
 		flow_run_complete_feature: tool({
 			description: "Persist the result of a Flow feature execution",
-			args: WorkerResultArgsShape,
+			args: workerResultArgsShape,
 			execute: withParsedArgs(
 				WorkerResultArgsSchema,
 				async (input, context) => {
@@ -244,9 +204,7 @@ export function createRuntimeTools() {
 
 		flow_review_record_feature: tool({
 			description: "Record the reviewer decision for the active feature",
-			args: {
-				...FlowReviewRecordFeatureArgsShape,
-			},
+			args: flowReviewRecordFeatureArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordFeatureArgsSchema,
 				async (input, context) => {
@@ -269,9 +227,7 @@ export function createRuntimeTools() {
 		flow_review_record_final: tool({
 			description:
 				"Record the reviewer decision for final cross-feature validation",
-			args: {
-				...FlowReviewRecordFinalArgsShape,
-			},
+			args: flowReviewRecordFinalArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordFinalArgsSchema,
 				async (input, context) => {

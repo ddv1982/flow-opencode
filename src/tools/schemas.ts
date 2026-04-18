@@ -3,11 +3,13 @@ import type { WorkspaceContext } from "../runtime/application";
 import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN } from "../runtime/primitives";
 import type { PlanArgs, PlanningContextArgs } from "../runtime/schema";
 import {
+	OutcomeSchema,
 	PlanArgsSchema,
 	PlanningContextArgsSchema,
 	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
 	FlowReviewRecordFinalArgsSchema as RuntimeFlowReviewRecordFinalArgsSchema,
 	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
+	WorkerResultBaseSchema as RuntimeWorkerResultBaseSchema,
 } from "../runtime/schema";
 
 const z = tool.schema;
@@ -58,116 +60,21 @@ export const FlowReviewRecordFeatureArgsSchema =
 	RuntimeFlowReviewRecordFeatureArgsSchema;
 export const FlowReviewRecordFinalArgsSchema =
 	RuntimeFlowReviewRecordFinalArgsSchema;
+export const RuntimeWorkerResultBaseShape = RuntimeWorkerResultBaseSchema.shape;
+export const RuntimeFlowReviewRecordFeatureArgsShape =
+	RuntimeFlowReviewRecordFeatureArgsSchema.shape;
+export const RuntimeFlowReviewRecordFinalArgsShape =
+	RuntimeFlowReviewRecordFinalArgsSchema.shape;
 
 export const FlowPlanApplyArgsShape = FlowPlanApplyArgsSchema.shape;
-export const FlowReviewRecordFeatureArgsShape = {
-	scope: z.literal("feature"),
-	featureId: featureIdSchema,
-	status: z.enum(["approved", "needs_fix", "blocked"]),
-	summary: z.string().min(1),
-	blockingFindings: z
-		.array(z.object({ summary: z.string().min(1) }))
-		.default([]),
-	followUps: z
-		.array(
-			z.object({
-				summary: z.string().min(1),
-				severity: z.string().min(1).optional(),
-			}),
-		)
-		.default([]),
-	suggestedValidation: z.array(z.string().min(1)).default([]),
-} satisfies Readonly<Record<string, unknown>>;
-export const FlowReviewRecordFinalArgsShape = {
-	scope: z.literal("final"),
-	status: z.enum(["approved", "needs_fix", "blocked"]),
-	summary: z.string().min(1),
-	blockingFindings: z
-		.array(z.object({ summary: z.string().min(1) }))
-		.default([]),
-	followUps: z
-		.array(
-			z.object({
-				summary: z.string().min(1),
-				severity: z.string().min(1).optional(),
-			}),
-		)
-		.default([]),
-	suggestedValidation: z.array(z.string().min(1)).default([]),
-} satisfies Readonly<Record<string, unknown>>;
+export const FlowReviewRecordFeatureArgsShape =
+	RuntimeFlowReviewRecordFeatureArgsShape;
+export const FlowReviewRecordFinalArgsShape =
+	RuntimeFlowReviewRecordFinalArgsShape;
 export const WorkerResultArgsShape = {
-	contractVersion: z.literal("1"),
+	...RuntimeWorkerResultBaseShape,
 	status: z.enum(["ok", "needs_input"]),
-	summary: z.string().min(1),
-	artifactsChanged: z
-		.array(
-			z.object({
-				path: z.string().min(1),
-				kind: z.string().min(1).optional(),
-			}),
-		)
-		.default([]),
-	validationRun: z
-		.array(
-			z.object({
-				command: z.string().min(1),
-				status: z.enum(["passed", "failed", "failed_existing", "partial"]),
-				summary: z.string().min(1),
-			}),
-		)
-		.default([]),
-	validationScope: z.enum(["targeted", "broad"]).optional(),
-	reviewIterations: z.number().int().nonnegative().optional(),
-	decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
-	nextStep: z.string().min(1),
-	outcome: z
-		.object({
-			kind: z.enum([
-				"completed",
-				"replan_required",
-				"blocked_external",
-				"needs_operator_input",
-				"contract_error",
-			]),
-			category: z.string().min(1).optional(),
-			summary: z.string().min(1).optional(),
-			resolutionHint: z.string().min(1).optional(),
-			retryable: z.boolean().optional(),
-			autoResolvable: z.boolean().optional(),
-			needsHuman: z.boolean().optional(),
-		})
-		.optional(),
-	featureResult: z.object({
-		featureId: featureIdSchema,
-		verificationStatus: z
-			.enum(["passed", "partial", "failed", "not_recorded"])
-			.optional(),
-		notes: z.array(z.object({ note: z.string().min(1) })).optional(),
-		followUps: z
-			.array(
-				z.object({
-					summary: z.string().min(1),
-					severity: z.string().min(1).optional(),
-				}),
-			)
-			.optional(),
-	}),
-	featureReview: z.object({
-		status: z.enum(["passed", "failed", "needs_followup"]),
-		summary: z.string().min(1),
-		blockingFindings: z
-			.array(z.object({ summary: z.string().min(1) }))
-			.default([]),
-	}),
-	finalReview: z
-		.object({
-			status: z.enum(["passed", "failed", "needs_followup"]),
-			summary: z.string().min(1),
-			blockingFindings: z
-				.array(z.object({ summary: z.string().min(1) }))
-				.default([]),
-		})
-		.optional(),
+	outcome: OutcomeSchema.optional(),
 } satisfies Readonly<Record<string, unknown>>;
 
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
