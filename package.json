@@ -9,6 +9,7 @@
 	],
 	"scripts": {
 		"build": "bun build ./src/index.ts --outfile ./dist/index.js --target node",
+		"bench": "bun run ./bench/index.ts",
 		"deadcode": "knip --include files,dependencies",
 		"lint": "bunx biome check . --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"test": "bun test",
@@ -37,6 +38,7 @@
 		"@biomejs/biome": "^2.2.6",
 		"bun-types": "latest",
 		"knip": "^5.63.1",
+		"mitata": "^1.0.34",
 		"typescript": "^6.0.2"
 	}
 }
