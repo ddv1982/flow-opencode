@@ -18,4 +18,9 @@ export {
 	saveSessionState,
 	syncSessionArtifacts,
 } from "./session-persistence";
-export { readActiveSessionId } from "./session-workspace";
+export {
+	readActiveSessionId,
+	resetSessionWorkspaceFsForTests,
+	setSessionWorkspaceFsForTests,
+	writeActiveSessionId,
+} from "./session-workspace";

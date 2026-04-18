@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	getActiveSessionPath,
@@ -14,6 +14,85 @@ import { renderSessionDocs } from "./render";
 import { type Session, SessionSchema } from "./schema";
 
 const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
+const sessionSaveQueues = new Map<string, Promise<void>>();
+
+type SessionWorkspaceFs = {
+	open: typeof open;
+	rename: typeof rename;
+};
+
+const sessionWorkspaceFs: SessionWorkspaceFs = {
+	open,
+	rename,
+};
+
+async function writeFileAtomically(
+	targetPath: string,
+	contents: string,
+): Promise<void> {
+	const tempPath = `${targetPath}.tmp`;
+	const fileHandle = await sessionWorkspaceFs.open(tempPath, "w");
+
+	try {
+		await fileHandle.writeFile(contents, "utf8");
+		await fileHandle.sync();
+	} catch (error) {
+		await fileHandle.close();
+		await rm(tempPath, { force: true });
+		throw error;
+	}
+
+	await fileHandle.close();
+
+	try {
+		await sessionWorkspaceFs.rename(tempPath, targetPath);
+	} catch (error) {
+		await rm(tempPath, { force: true });
+		throw error;
+	}
+}
+
+export function setSessionWorkspaceFsForTests(
+	nextFs: Partial<SessionWorkspaceFs>,
+): void {
+	if (nextFs.open) {
+		sessionWorkspaceFs.open = nextFs.open;
+	}
+	if (nextFs.rename) {
+		sessionWorkspaceFs.rename = nextFs.rename;
+	}
+}
+
+export function resetSessionWorkspaceFsForTests(): void {
+	sessionWorkspaceFs.open = open;
+	sessionWorkspaceFs.rename = rename;
+}
+
+export async function withSessionSaveLock<T>(
+	worktree: string,
+	task: () => Promise<T>,
+): Promise<T> {
+	const previous = sessionSaveQueues.get(worktree) ?? Promise.resolve();
+	let release = () => {};
+	const current = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	sessionSaveQueues.set(
+		worktree,
+		previous.then(() => current),
+	);
+
+	await previous;
+
+	try {
+		return await task();
+	} finally {
+		release();
+		if (sessionSaveQueues.get(worktree) === current) {
+			sessionSaveQueues.delete(worktree);
+		}
+	}
+}
 
 export async function readSessionFromPath(
 	sessionPath: string,
@@ -82,7 +161,7 @@ export async function writeActiveSessionId(
 		return;
 	}
 
-	await writeFile(getActiveSessionPath(worktree), `${sessionId}\n`, "utf8");
+	await writeFileAtomically(getActiveSessionPath(worktree), `${sessionId}\n`);
 }
 
 export async function writeSessionFile(
@@ -91,10 +170,9 @@ export async function writeSessionFile(
 ): Promise<void> {
 	await ensureWorkspace(worktree);
 	await mkdir(getSessionDir(worktree, session.id), { recursive: true });
-	await writeFile(
+	await writeFileAtomically(
 		getSessionPath(worktree, session.id),
 		`${JSON.stringify(session, null, 2)}\n`,
-		"utf8",
 	);
 }
 

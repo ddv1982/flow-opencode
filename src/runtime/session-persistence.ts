@@ -4,6 +4,7 @@ import { type Session, SessionSchema } from "./schema";
 import {
 	readSessionFromPath,
 	resolveActiveSessionId,
+	withSessionSaveLock,
 	writeActiveSessionId,
 	writeSessionFile,
 } from "./session-workspace";
@@ -40,10 +41,12 @@ export async function saveSessionState(
 	worktree: string,
 	session: Session,
 ): Promise<Session> {
-	const normalized = normalizeSession(session);
-	await writeSessionFile(worktree, normalized);
-	await writeActiveSessionId(worktree, normalized.id);
-	return normalized;
+	return withSessionSaveLock(worktree, async () => {
+		const normalized = normalizeSession(session);
+		await writeSessionFile(worktree, normalized);
+		await writeActiveSessionId(worktree, normalized.id);
+		return normalized;
+	});
 }
 
 export async function syncSessionArtifacts(
