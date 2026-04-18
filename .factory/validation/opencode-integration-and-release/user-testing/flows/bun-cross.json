@@ -1,0 +1,135 @@
+{
+  "groupId": "bun-cross",
+  "surface": "bun-test",
+  "assertions": [
+    {
+      "id": "VAL-CROSS-001",
+      "status": "pass",
+      "reason": "Manual end-to-end cross-area flow test passed with expected JSON envelope and artifact consistency assertions.",
+      "evidence": [
+        {
+          "command": "bun test tests/cross-area/manual-flow.test.ts",
+          "exitCode": 0,
+          "observation": "1 pass, 0 fail; test 'drives plan to final completion with stable JSON envelopes and artifacts' passed. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-001.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "status": "pass",
+      "reason": "Autonomous happy-path with recovery metadata round-trip passed.",
+      "evidence": [
+        {
+          "command": "bun test tests/cross-area/autonomous-flow.test.ts",
+          "exitCode": 0,
+          "observation": "1 pass, 0 fail; blocked/reset/replan recovery assertions passed. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-002.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "status": "pass",
+      "reason": "Resume flow after module reload passed, including completed-session missing_goal behavior.",
+      "evidence": [
+        {
+          "command": "bun test tests/cross-area/resume-flow.test.ts",
+          "exitCode": 0,
+          "observation": "1 pass, 0 fail; re-import resume and '/flow-auto resume' assertions passed. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-003.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "status": "pass",
+      "reason": "Baseline regression guard conditions passed: full suite and randomized seeds green; typecheck/lint/deadcode/check all exited 0.",
+      "evidence": [
+        {
+          "command": "bun test",
+          "exitCode": 0,
+          "observation": "247 pass, 0 fail across 46 files. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-bun-test.log"
+        },
+        {
+          "command": "bun test --randomize --seed=1",
+          "exitCode": 0,
+          "observation": "247 pass, 0 fail. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-randomize-seed-1.log"
+        },
+        {
+          "command": "bun test --randomize --seed=42",
+          "exitCode": 0,
+          "observation": "247 pass, 0 fail. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-randomize-seed-42.log"
+        },
+        {
+          "command": "bun test --randomize --seed=99",
+          "exitCode": 0,
+          "observation": "247 pass, 0 fail. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-randomize-seed-99.log"
+        },
+        {
+          "command": "bun run typecheck",
+          "exitCode": 0,
+          "observation": "Typecheck succeeded with no TS errors. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-typecheck.log"
+        },
+        {
+          "command": "bun run lint",
+          "exitCode": 0,
+          "observation": "Biome lint succeeded with no errors. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-lint.log"
+        },
+        {
+          "command": "bun run deadcode",
+          "exitCode": 0,
+          "observation": "Knip deadcode check exited successfully. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-deadcode.log"
+        },
+        {
+          "command": "bun run check",
+          "exitCode": 0,
+          "observation": "Aggregate check command completed successfully (including test/build/lint/deadcode/bench stages). Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-006-check.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-012",
+      "status": "pass",
+      "reason": "Completion recovery kind to stable errorCode matrix assertions passed.",
+      "evidence": [
+        {
+          "command": "bun test tests/cross-area/recovery-errorcode-matrix.test.ts",
+          "exitCode": 0,
+          "observation": "1 pass, 0 fail; stable/unique recovery errorCode mapping assertions passed. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-012.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-013",
+      "status": "pass",
+      "reason": "deriveNextCommand coverage across every session status passed.",
+      "evidence": [
+        {
+          "command": "bun test tests/cross-area/next-command-coverage.test.ts",
+          "exitCode": 0,
+          "observation": "1 pass, 0 fail; planning/ready/running/blocked/completed next-command assertions passed. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-013.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-014",
+      "status": "pass",
+      "reason": "summarizeSession envelope golden-snapshot stability test passed.",
+      "evidence": [
+        {
+          "command": "bun test tests/cross-area/summarize-goldens.test.ts",
+          "exitCode": 0,
+          "observation": "1 pass, 0 fail; seven canonical summarize fixtures matched expected golden output. Evidence log: evidence/opencode-integration-and-release/bun-cross/VAL-CROSS-014.log"
+        }
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "bun test",
+    "bun test --randomize",
+    "bun run typecheck",
+    "bun run lint",
+    "bun run deadcode",
+    "bun run check"
+  ],
+  "frictions": [],
+  "blockers": []
+}

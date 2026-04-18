@@ -1,0 +1,50 @@
+{
+  "milestone": "opencode-integration-and-release",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 27,
+    "passed": 27,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CROSS-001",
+    "VAL-CROSS-002",
+    "VAL-CROSS-003",
+    "VAL-CROSS-005",
+    "VAL-CROSS-006",
+    "VAL-CROSS-010",
+    "VAL-CROSS-011",
+    "VAL-CROSS-012",
+    "VAL-CROSS-013",
+    "VAL-CROSS-014",
+    "VAL-CROSS-015",
+    "VAL-RELEASE-001",
+    "VAL-RELEASE-002",
+    "VAL-RELEASE-003",
+    "VAL-RELEASE-004",
+    "VAL-RELEASE-005",
+    "VAL-RELEASE-006",
+    "VAL-RELEASE-007",
+    "VAL-RELEASE-008",
+    "VAL-RELEASE-009",
+    "VAL-RELEASE-010",
+    "VAL-RELEASE-011",
+    "VAL-RELEASE-012",
+    "VAL-RELEASE-013",
+    "VAL-RELEASE-014",
+    "VAL-RELEASE-015",
+    "VAL-RELEASE-016"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added validator constraints discovered during flow runs (bun --filter behavior, externalized peer dependency requirement for temp-HOME plugin imports, and semver-free version comparison guidance).",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}

@@ -1,0 +1,37 @@
+{
+  "groupId": "node-release",
+  "surface": "node-script",
+  "assertions": [
+    {
+      "id": "VAL-RELEASE-012",
+      "status": "pass",
+      "reason": "Built bundle smoke script loaded dist/index.js, observed exactly 5 agents / 7 commands / 15 tools, and all 15 tool execute calls returned parseable JSON without throwing.",
+      "evidence": [
+        {
+          "command": "bun /tmp/val-release-012.mjs",
+          "exitCode": 0,
+          "observation": "Logged '5 agents / 7 commands / 15 tools' and JSON counts {agentCount:5, commandCount:7, toolCount:15}; see evidence/opencode-integration-and-release/node-release/VAL-RELEASE-012-smoke.log"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-015",
+      "status": "pass",
+      "reason": "Cold-start budget script completed successfully and reported median import time below the 150 ms threshold.",
+      "evidence": [
+        {
+          "command": "node /Users/vriesd/projects/flow-opencode/scripts/cross-area/cold-start-budget.mjs",
+          "exitCode": 0,
+          "observation": "Script output medianMs=16.04 with thresholdMs=150 (iterations=7); see evidence/opencode-integration-and-release/node-release/VAL-CROSS-015-cold-start-budget.log"
+        }
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "bun",
+    "bun -e (temporary smoke script)",
+    "node"
+  ],
+  "frictions": [],
+  "blockers": []
+}

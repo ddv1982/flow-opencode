@@ -44,6 +44,9 @@ Reducing to 3 concurrent validators is acceptable if the machine reports <8 GB f
 - Biome 2.x removed the `--check` flag from `format`. The correct read-only invocation is `bunx biome format .` (which writes nothing unless `--write` is passed).
 - If mission-worker safety gating blocks `biome format` commands, use this equivalent formatter-only check command instead: `node_modules/.bin/biome check <repo-root> --formatter-enabled=true --linter-enabled=false --files-ignore-unknown=true --vcs-use-ignore-file=true`.
 - Format scope is constrained by `biome.json` `files.includes` (currently excludes `.factory/`, `dist/`, `node_modules/`, and `bun.lock`).
+- In this repo, `bun test --filter "<test name>"` may still execute the full test file. Treat `--filter` as best-effort and collect evidence from explicit file-targeted runs when assertion scope must be narrow.
+- For temp-HOME install smoke imports, remember the built bundle externalizes `@opencode-ai/plugin`. If importing the installed plugin directly, provide that peer dependency from the isolated environment (or use a shim) so the smoke import resolves.
+- Validation scripts should not assume `semver` is available in ad-hoc Node commands; prefer deterministic built-in comparators unless the assertion explicitly requires the `semver` package.
 
 ## Flow Validator Guidance: fs-inspection
 

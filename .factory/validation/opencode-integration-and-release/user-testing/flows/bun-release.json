@@ -1,0 +1,102 @@
+{
+  "groupId": "bun-release",
+  "surface": "bun-test",
+  "assertions": [
+    {
+      "id": "VAL-RELEASE-002",
+      "status": "pass",
+      "reason": "Runtime tools test confirms every Flow tool emits non-empty metadata and still returns a string.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/runtime-tools.test.ts --filter \"every Flow tool emits non-empty metadata and still returns a string\"",
+          "exitCode": 0,
+          "observation": "Passed test: \"every Flow tool emits non-empty metadata and still returns a string\"."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-003",
+      "status": "pass",
+      "reason": "Compacting hook test verifies output context includes goal and execution phase for an active session.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/runtime-tools.test.ts --filter \"every Flow tool emits non-empty metadata and still returns a string\"",
+          "exitCode": 0,
+          "observation": "Passed test: \"experimental.session.compacting appends goal and execution phase for an active Flow session\"."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-004",
+      "status": "pass",
+      "reason": "Compacting hook no-active-session test confirms graceful no-op behavior with no prompt set.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/runtime-tools.test.ts --filter \"every Flow tool emits non-empty metadata and still returns a string\"",
+          "exitCode": 0,
+          "observation": "Passed test: \"experimental.session.compacting is a graceful no-op when no active Flow session exists\"."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-005",
+      "status": "pass",
+      "reason": "Installer tests confirm canonical install target is ~/.config/opencode/plugins/flow.js when no legacy install exists.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/install.test.ts",
+          "exitCode": 0,
+          "observation": "Passed test: \"runInstallCommand installs to the canonical plugin directory when no legacy install exists\"."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-006",
+      "status": "pass",
+      "reason": "Installer tests confirm legacy ~/.opencode/plugins/flow.js path is preserved and used when pre-seeded.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/install.test.ts",
+          "exitCode": 0,
+          "observation": "Passed test: \"runInstallCommand preserves a legacy install path in place\"."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-007",
+      "status": "pass",
+      "reason": "Uninstall tests verify plugin removal from canonical and legacy paths, including the combined seeded-path case.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/install.test.ts",
+          "exitCode": 0,
+          "observation": "Passed test: \"runUninstallCommand removes installed plugin files for canonical and legacy homes\"."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-013",
+      "status": "pass",
+      "reason": "End-to-end manual flow test reaches completed state, and completion-gate coverage confirms reviewer approval is required before successful completion.",
+      "evidence": [
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/cross-area/manual-flow.test.ts",
+          "exitCode": 0,
+          "observation": "Passed test: \"drives plan to final completion with stable JSON envelopes and artifacts\"; final session status is completed."
+        },
+        {
+          "command": "cd \"/Users/vriesd/projects/flow-opencode\" && bun test tests/runtime-tools.test.ts --filter \"every Flow tool emits non-empty metadata and still returns a string\"",
+          "exitCode": 0,
+          "observation": "Passed test: \"requires a recorded reviewer approval before successful completion\"."
+        }
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "bun test"
+  ],
+  "frictions": [
+    "Bun test --filter did not narrow execution to a single test in runtime-tools.test.ts; the full file ran successfully."
+  ],
+  "blockers": []
+}

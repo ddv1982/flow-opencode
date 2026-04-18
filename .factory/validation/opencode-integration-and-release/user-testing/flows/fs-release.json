@@ -1,0 +1,135 @@
+{
+  "groupId": "fs-release",
+  "surface": "fs-inspection",
+  "assertions": [
+    {
+      "id": "VAL-RELEASE-001",
+      "status": "pass",
+      "reason": "No disallowed console.* calls outside installer entry points and plugin hot path uses ctx.client?.app?.log?.(...)",
+      "evidence": [
+        {
+          "command": "rg -n \"console\\.\" \"src\" | rg -v 'install-opencode|uninstall-opencode|installer.ts'",
+          "exitCode": 1,
+          "observation": "rg exit 1 with no output indicates zero disallowed console.* matches outside installer files."
+        },
+        {
+          "command": "rg -n \"client\\?\\.app\\?\\.log\\?\\.\\(\" \"src/index.ts\" \"src/config.ts\" \"src/tools.ts\" \"src/tools\" \"src/runtime\"",
+          "exitCode": 0,
+          "observation": "Found plugin runtime logging via optional-chained client app log calls. Output: src/tools.ts:24:\tctx.client?.app?.log?.(entry); | src/index.ts:21:\t(ctx as PluginLogContext).client?.app?.log?.({"
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-008",
+      "status": "pass",
+      "reason": "package.json version is valid SemVer-like and greater than 0.1.10.",
+      "evidence": [
+        {
+          "command": "node -e \"const v=require('./package.json').version; const m=v.match(/^(\\\\d+)\\\\.(\\\\d+)\\\\.(\\\\d+)(?:[-+].*)?$/); const base=[0,1,10]; let gt=false; if(m){const cur=[+m[1],+m[2],+m[3]]; gt=cur[0]>base[0]|| (cur[0]===base[0]&& (cur[1]>base[1] || (cur[1]===base[1]&&cur[2]>base[2])));} console.log(JSON.stringify({version:v,semverLike:Boolean(m),gt_0_1_10:gt})); process.exit(m&&gt?0:1);\"",
+          "exitCode": 0,
+          "observation": "Version check JSON confirms semver validity and precedence > 0.1.10. Output: {\"version\":\"1.0.0\",\"semverLike\":true,\"gt_0_1_10\":true}"
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-009",
+      "status": "pass",
+      "reason": "CHANGELOG exists, is tracked, and latest release section matches version/date with Added/Changed/Breaking headings.",
+      "evidence": [
+        {
+          "command": "test -f \"CHANGELOG.md\"",
+          "exitCode": 0,
+          "observation": "CHANGELOG.md exists at repo root."
+        },
+        {
+          "command": "git ls-files --error-unmatch CHANGELOG.md",
+          "exitCode": 0,
+          "observation": "CHANGELOG.md is tracked by git. Output: CHANGELOG.md"
+        },
+        {
+          "command": "node -e \"const fs=require('fs'); const p=require('./package.json'); const ch=fs.readFileSync('./CHANGELOG.md','utf8'); const m=ch.match(/^## \\\\[(.+?)\\\\] - (\\\\d{4}-\\\\d{2}-\\\\d{2})/m); const topVersion=m?.[1]??null; const date=m?.[2]??null; const firstSectionStart=m?m.index + m[0].length:0; const nextHeadingIdx=ch.slice(firstSectionStart).search(/^## \\\\[/m); const latest=nextHeadingIdx===-1?ch.slice(firstSectionStart):ch.slice(firstSectionStart, firstSectionStart+nextHeadingIdx); const hasAdded=/^### Added\\\\b/m.test(latest); const hasChanged=/^### Changed\\\\b/m.test(latest); const hasBreaking=/^### Breaking(?: Changes)?\\\\b/m.test(latest); const ok=Boolean(topVersion===p.version && date && hasAdded && hasChanged && hasBreaking); console.log(JSON.stringify({packageVersion:p.version,topVersion,date,hasAdded,hasChanged,hasBreaking})); process.exit(ok?0:1);\"",
+          "exitCode": 0,
+          "observation": "Latest changelog section check passed for version/date and required headings. Output: {\"packageVersion\":\"1.0.0\",\"topVersion\":\"1.0.0\",\"date\":\"2026-04-18\",\"hasAdded\":true,\"hasChanged\":true,\"hasBreaking\":true}"
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-010",
+      "status": "pass",
+      "reason": "Release install/uninstall scripts reference canonical .config path and keep legacy path handling in guarded compatibility branches.",
+      "evidence": [
+        {
+          "command": "test -f \"scripts/release-install.sh\" && test -f \"scripts/release-uninstall.sh\"",
+          "exitCode": 0,
+          "observation": "Both release scripts exist."
+        },
+        {
+          "command": "rg -n \"\\.config/opencode/plugins/flow\\.js\" \"scripts/release-install.sh\" \"scripts/release-uninstall.sh\"",
+          "exitCode": 0,
+          "observation": "Canonical .config plugin path appears in both release scripts. Output: scripts/release-uninstall.sh:4:CANONICAL_PLUGIN_PATH=\"${HOME}/.config/opencode/plugins/flow.js\" | scripts/release-install.sh:6:CANONICAL_PLUGIN_PATH=\"${HOME}/.config/opencode/plugins/flow.js\""
+        },
+        {
+          "command": "node <<'NODE'\nconst fs=require('fs');\nconst install=fs.readFileSync('/Users/vriesd/projects/flow-opencode/scripts/release-install.sh','utf8');\nconst uninstall=fs.readFileSync('/Users/vriesd/projects/flow-opencode/scripts/release-uninstall.sh','utf8');\nconst out={\n  installHasCanonical: install.includes('${HOME}/.config/opencode/plugins/flow.js'),\n  uninstallHasCanonical: uninstall.includes('${HOME}/.config/opencode/plugins/flow.js'),\n  installLegacyGuard: install.includes('if [[ -f \"\\$LEGACY_PLUGIN_PATH\" ]]; then') && install.includes('PLUGIN_PATH=\"\\$LEGACY_PLUGIN_PATH\"'),\n  uninstallLegacyGuard: uninstall.includes('if [[ -f \"\\$LEGACY_PLUGIN_PATH\" ]]; then') && uninstall.includes('rm -f \"\\$LEGACY_PLUGIN_PATH\"')\n};\nconsole.log(JSON.stringify(out));\nprocess.exit(Object.values(out).every(Boolean)?0:1);\nNODE",
+          "exitCode": 0,
+          "observation": "Legacy path use is confined to conditional compatibility/fallback blocks. Output: {\"installHasCanonical\":true,\"uninstallHasCanonical\":true,\"installLegacyGuard\":true,\"uninstallLegacyGuard\":true}"
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-014",
+      "status": "pass",
+      "reason": "Bundle keeps @opencode-ai/plugin as external reference and does not inline createOpencodeClient symbol.",
+      "evidence": [
+        {
+          "command": "node -e \"const fs=require('fs'); const d=fs.readFileSync('./dist/index.js','utf8'); const hasCreate=d.includes('createOpencodeClient'); const hasPeerRef=d.includes('@opencode-ai/plugin'); console.log(JSON.stringify({hasCreateOpencodeClient:hasCreate,hasPeerRef})); process.exit((!hasCreate&&hasPeerRef)?0:1);\"",
+          "exitCode": 0,
+          "observation": "Bundle symbol/external reference check passed. Output: {\"hasCreateOpencodeClient\":false,\"hasPeerRef\":true}"
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-016",
+      "status": "pass",
+      "reason": "README documents canonical .config install path and migration section with legacy path confined there.",
+      "evidence": [
+        {
+          "command": "node <<'NODE'\nconst fs=require('fs');\nconst readme=fs.readFileSync('README.md','utf8');\nconst canonical='~/.config/opencode/plugins/flow.js';\nconst legacy='~/.opencode/plugins/flow.js';\nconst migrationHeader='## Migration / Upgrade';\nconst hasCanonical=readme.includes(canonical);\nconst migrationStart=readme.indexOf(migrationHeader);\nconst afterMigration=migrationStart===-1?'' : readme.slice(migrationStart + migrationHeader.length);\nconst nextH2Idx=afterMigration.search(/^##\\s+/m);\nconst migrationSection= migrationStart===-1 ? '' : (nextH2Idx===-1 ? afterMigration : afterMigration.slice(0,nextH2Idx));\nconst hasMigrationHeader=migrationStart!==-1;\nconst hasLegacyInMigration= migrationSection.includes(legacy);\nconst legacyMentions=[...readme.matchAll(/~\\/\\.opencode\\/plugins\\/flow\\.js/g)].map(m=>m.index);\nconst allLegacyInsideMigration=legacyMentions.every(i=>migrationStart!==-1 && i>=migrationStart && i<=migrationStart + migrationSection.length + migrationHeader.length);\nconst ok=hasCanonical&&hasMigrationHeader&&hasLegacyInMigration&&allLegacyInsideMigration;\nconsole.log(JSON.stringify({hasCanonical,hasMigrationHeader,hasLegacyInMigration,legacyMentionCount:legacyMentions.length,allLegacyInsideMigration}));\nprocess.exit(ok?0:1);\nNODE",
+          "exitCode": 0,
+          "observation": "README path and migration-section checks passed. Output: {\"hasCanonical\":true,\"hasMigrationHeader\":true,\"hasLegacyInMigration\":true,\"legacyMentionCount\":1,\"allLegacyInsideMigration\":true}"
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-011",
+      "status": "pass",
+      "reason": "No indented schema declarations in runtime/schema.ts; cross-area test verifies stable schema object identity across separate imports.",
+      "evidence": [
+        {
+          "command": "rg -n '^\\s{2,}const \\w+Schema\\s*=\\s*z\\.' 'src/runtime/schema.ts'",
+          "exitCode": 1,
+          "observation": "rg exit 1 with no output indicates no function-scoped (indented) const *Schema = z.* declarations."
+        },
+        {
+          "command": "test -f \"tests/cross-area/module-scope-schemas.test.ts\"",
+          "exitCode": 0,
+          "observation": "Module-scope schema identity test file exists."
+        },
+        {
+          "command": "rg -n \"await import\\(\\\"\\.\\./\\.\\./src/runtime/schema\\\"\\)|toBe\\(runtimeSchema\\.(SessionSchema|PlanSchema)\\)\" \"tests/cross-area/module-scope-schemas.test.ts\"",
+          "exitCode": 0,
+          "observation": "Test file contains re-import and identity assertions (toBe) for runtime schemas. Output: 6:\t\tconst reimported = await import(\"../../src/runtime/schema\"); | 8:\t\texpect(reimported.SessionSchema).toBe(runtimeSchema.SessionSchema); | 9:\t\texpect(reimported.PlanSchema).toBe(runtimeSchema.PlanSchema);"
+        }
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "rg",
+    "node -e",
+    "test",
+    "git ls-files"
+  ],
+  "frictions": [
+    "Contract sample for VAL-RELEASE-008 references semver package, but Node could not resolve semver in this environment; used deterministic built-in Node semver-like comparator instead."
+  ],
+  "blockers": []
+}

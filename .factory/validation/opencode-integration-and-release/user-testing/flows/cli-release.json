@@ -1,0 +1,107 @@
+{
+  "groupId": "cli-release",
+  "surface": "cli-smoke",
+  "assertions": [
+    {
+      "id": "VAL-RELEASE-011",
+      "status": "pass",
+      "reason": "`bun run check` exited 0; typecheck, deadcode, tests, build, lint, and bench:smoke all completed (tests reported 247 pass / 0 fail).",
+      "evidence": [
+        {
+          "command": "bun run check",
+          "exitCode": 0,
+          "observation": "Top-level check command and all sub-steps succeeded; see VAL-RELEASE-011-bun-run-check.log and VAL-RELEASE-011-exit-code.txt under mission evidence."
+        }
+      ]
+    },
+    {
+      "id": "VAL-RELEASE-015",
+      "status": "pass",
+      "reason": "`package.json.files` exactly matches [dist, LICENSE, README.md, CHANGELOG.md], and `npm pack --dry-run --json` contains only the allowlisted release artifacts plus package.json.",
+      "evidence": [
+        {
+          "command": "node -e \"...check package.json files allowlist...\"",
+          "exitCode": 0,
+          "observation": "expected and actual package.json files sets were identical; logged in VAL-RELEASE-015-package-files.log."
+        },
+        {
+          "command": "npm pack --dry-run --json",
+          "exitCode": 0,
+          "observation": "Dry-run pack succeeded; output captured in npm-pack-dry-run.json and npm-pack-dry-run-paths.txt."
+        },
+        {
+          "command": "node -e \"...check packed paths allowlist...\"",
+          "exitCode": 0,
+          "observation": "Packed file list exactly matched [CHANGELOG.md, LICENSE, README.md, dist/index.js, dist/index.js.map, package.json]; logged in VAL-RELEASE-015-pack-allowlist.log."
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "status": "pass",
+      "reason": "Install/use/uninstall lifecycle passed in isolated temp HOME: canonical install created, module syntax check passed, bytes matched dist/index.js, flow_status returned missing-session response, and uninstall removed canonical then legacy fallback path.",
+      "evidence": [
+        {
+          "command": "HOME=$TMP_HOME bun run install:opencode",
+          "exitCode": 0,
+          "observation": "Installed to <tmp>/.config/opencode/plugins/flow.js with legacy path not created; see VAL-CROSS-005-install.log and home snapshots."
+        },
+        {
+          "command": "node --check <tmp>/.config/opencode/plugins/flow.js",
+          "exitCode": 0,
+          "observation": "Installed plugin file is valid JavaScript syntax; logged in VAL-CROSS-005-node-check.log."
+        },
+        {
+          "command": "cmp -s <tmp>/.config/opencode/plugins/flow.js dist/index.js",
+          "exitCode": 0,
+          "observation": "Installed plugin bytes matched dist/index.js exactly (bytes_match_exit=0 in VAL-CROSS-005-install-use-uninstall.log)."
+        },
+        {
+          "command": "node --input-type=module -e \"...import installed plugin and run flow_status...\"",
+          "exitCode": 0,
+          "observation": "flow_status returned {\"status\":\"missing\",\"summary\":\"No active Flow session found.\"}; output in VAL-CROSS-005-flow-status.json."
+        },
+        {
+          "command": "HOME=$TMP_HOME bun run uninstall:opencode",
+          "exitCode": 0,
+          "observation": "Canonical installed plugin removed successfully; see VAL-CROSS-005-uninstall-canonical.log and home snapshot after canonical uninstall."
+        },
+        {
+          "command": "(seed legacy path) && HOME=$TMP_HOME bun run uninstall:opencode",
+          "exitCode": 0,
+          "observation": "Legacy fallback plugin path removed successfully after pre-seeding; see VAL-CROSS-005-uninstall-legacy.log and home snapshot after legacy uninstall."
+        }
+      ]
+    },
+    {
+      "id": "VAL-CROSS-010",
+      "status": "pass",
+      "reason": "Release artifact invariants held: npm pack dry-run contained exactly the six expected files and pack-invariants script passed with matching package/changelog version.",
+      "evidence": [
+        {
+          "command": "npm pack --dry-run --json",
+          "exitCode": 0,
+          "observation": "Packed paths were exactly CHANGELOG.md, LICENSE, README.md, dist/index.js, dist/index.js.map, package.json; see npm-pack-dry-run-paths.txt."
+        },
+        {
+          "command": "node scripts/cross-area/pack-invariants.mjs",
+          "exitCode": 0,
+          "observation": "Script reported: 'Pack invariants OK: 6 expected files and version 1.0.0.' (VAL-CROSS-010-pack-invariants.log)."
+        }
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "bun run check",
+    "npm pack --dry-run --json",
+    "node scripts/cross-area/pack-invariants.mjs",
+    "HOME=$TMP_HOME bun run install:opencode",
+    "node --check <tmp>/.config/opencode/plugins/flow.js",
+    "node --input-type=module -e \"...flow_status smoke...\"",
+    "HOME=$TMP_HOME bun run uninstall:opencode"
+  ],
+  "frictions": [
+    "Initial Node import of the installed plugin failed because @opencode-ai/plugin is externalized and not resolvable from temp HOME; resolved by linking the repo's @opencode-ai/plugin package under the temp plugin path node_modules for the smoke import step."
+  ],
+  "blockers": []
+}
