@@ -39,6 +39,10 @@ Follow this procedure in order for EVERY feature. Skipping steps is a handoff fa
 - Run `bun test <new-file>` and confirm the new tests fail for the right reason (red). Do not continue to implementation until you have confirmed red.
 - For each added test file, track the list of cases for the handoff's `tests.added`.
 
+**Exception — test-only / coverage / tooling features:** Some features add only test coverage for an existing implementation (e.g., m2-completion-gates, m2-startrun-branches), or are pure tooling/configuration changes (e.g., m1-tsconfig-strict, m1-biome-adoption). For these, the tests themselves ARE the deliverable — running them once they exist and confirming they pass is sufficient. Set `skillFeedback.followedProcedure: true` and note in `salientSummary` that the feature is test-only or tooling-only (not behavior-changing). Do NOT skip test authoring; do confirm they exercise the contract assertions in `fulfills`.
+
+**Auditability:** When you set `followedProcedure: true`, your handoff transcript must show evidence of: (a) reading mission.md/AGENTS.md/library docs, (b) running each verification command listed in your feature's `verificationSteps`, (c) the test files you added/updated existing in the working tree at commit time. Inconsistency between transcript and `followedProcedure: true` will be caught by scrutiny.
+
 ### 4. Implement
 
 - Make minimal changes to pass the new tests.
