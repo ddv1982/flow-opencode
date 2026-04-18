@@ -15,6 +15,7 @@ import { type Session, SessionSchema } from "./schema";
 
 const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();
+const preparedWorkspaceGitignoreCache = new Map<string, string>();
 
 type SessionWorkspaceFs = {
 	open: typeof open;
@@ -108,12 +109,13 @@ export async function ensureWorkspace(worktree: string): Promise<void> {
 
 	const gitignorePath = join(flowDir, ".gitignore");
 	let existingEntries: string[] = [];
+	let existingContents = "";
 
 	try {
-		existingEntries = (await readFile(gitignorePath, "utf8"))
+		existingContents = await readFile(gitignorePath, "utf8");
+		existingEntries = existingContents
 			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.filter(Boolean);
+			.filter((line) => line.length > 0);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
 			throw error;
@@ -127,11 +129,16 @@ export async function ensureWorkspace(worktree: string): Promise<void> {
 		}
 	}
 
-	await writeFile(
-		gitignorePath,
-		nextEntries.map((entry) => `${entry}\n`).join(""),
-		"utf8",
-	);
+	const nextContents = nextEntries.map((entry) => `${entry}\n`).join("");
+	if (preparedWorkspaceGitignoreCache.get(gitignorePath) === existingContents) {
+		return;
+	}
+
+	if (existingContents !== nextContents) {
+		await writeFile(gitignorePath, nextContents, "utf8");
+	}
+
+	preparedWorkspaceGitignoreCache.set(gitignorePath, nextContents);
 }
 
 export async function readActiveSessionId(
