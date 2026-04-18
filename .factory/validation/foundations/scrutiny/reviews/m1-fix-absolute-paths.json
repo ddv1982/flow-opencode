@@ -1,0 +1,21 @@
+{
+  "featureId": "m1-fix-absolute-paths",
+  "reviewedAt": "2026-04-18T12:22:01Z",
+  "commitId": "eca52e6f3f84295a90d636d164464c9563579a13",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix commit removes all machine-specific absolute paths flagged in the two prior failed reviews and replaces them with `import.meta.dir`-based resolution. `tests/fixtures-contract.test.ts` now derives `repoRoot` and uses it for both glob scanning and file reads, and `tests/render-fixtures.test.ts` now derives `fixtureRoot` relative to the test file. No remaining blocking portability defects were found in scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure's mandatory red-first step is still too rigid for portability-only test fixes that intentionally update existing tests in place; this caused another documented procedure deviation even though the implementation was correct and minimal.",
+      "evidence": ".factory/skills/core-worker/SKILL.md:35 requires 'Write failing tests FIRST'; handoff 2026-04-18T12-18-03-483Z__m1-fix-absolute-paths__2ac3d0ac-6475-4b54-b710-021a9edcc29c.json:103-116 records followedProcedure=false for that step and suggests a portability-fix exception."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/foundations/scrutiny/reviews/m1-bench-harness.json; .factory/validation/foundations/scrutiny/reviews/m1-fixture-dedup.json",
+  "summary": "Pass. This rerun fix addresses both prior blocking failures by removing `/Users/vriesd` absolute paths from `tests/render-fixtures.test.ts` and `tests/fixtures-contract.test.ts`, replacing them with portable `import.meta.dir` path resolution. The reviewed diff is scoped correctly to portability changes and no new issues were identified."
+}
