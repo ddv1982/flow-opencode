@@ -104,6 +104,7 @@ Flow adds these slash commands to OpenCode:
 | `/flow-auto resume` | Resume the active autonomous session |
 | `/flow-status` | Show the current session summary |
 | `/flow-history` | Show stored session history |
+| `/flow-history show <session-id>` | Show a specific stored session |
 | `/flow-session activate <id>` | Switch the active session |
 | `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
 | `/flow-reset session` | Archive the active session and clear it |
@@ -175,6 +176,8 @@ Flow will not mark the whole session complete unless it also has:
 - broad validation for the repo
 - a final reviewer decision
 - a passing `finalReview`
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Contributing
 

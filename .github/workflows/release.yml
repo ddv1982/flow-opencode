@@ -38,8 +38,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+
+          awk -v version="$version" '
+            BEGIN { in_section = 0 }
+            $0 ~ ("^## \\[?" version "\\]?") {
+              in_section = 1
+            }
+            in_section {
+              if ($0 ~ /^## / && $0 !~ ("^## \\[?" version "\\]?")) {
+                exit
+              }
+              print
+            }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ -s release-notes.md ]; then
+            notes_flag="--notes-file release-notes.md"
+          else
+            rm -f release-notes.md
+            notes_flag="--notes Release $tag"
+          fi
+
           if gh release view "$tag" >/dev/null 2>&1; then
+            if [ -s release-notes.md ]; then
+              gh release edit "$tag" --notes-file release-notes.md
+            fi
             gh release upload "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --clobber
           else
-            gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes "Release $tag"
+            if [ -s release-notes.md ]; then
+              gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes-file release-notes.md
+            else
+              gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes "Release $tag"
+            fi
           fi
