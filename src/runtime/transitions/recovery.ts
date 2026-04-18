@@ -114,7 +114,7 @@ export function buildCompletionRecovery(
 					: {
 							errorCode: "missing_feature_reviewer_decision",
 							resolutionHint:
-								"Record a feature reviewer approval for the active feature, then rerun the current Flow feature to persist completion.",
+								"Record a feature reviewer approval, then rerun the current Flow feature to persist completion.",
 							recoveryStage: "record_review",
 							prerequisite: "reviewer_result_required",
 							requiredArtifact: "feature_reviewer_decision",
@@ -129,7 +129,7 @@ export function buildCompletionRecovery(
 					? {
 							errorCode: "missing_broad_validation",
 							resolutionHint:
-								"Run the required broad validation for the full session, then rerun the current Flow feature to persist final completion.",
+								"The active feature is on the session's final completion path. Run broad repo validation and retry with validationScope set to 'broad'.",
 							recoveryStage: "rerun_validation",
 							prerequisite: "validation_rerun_required",
 							requiredArtifact: "broad_validation_result",
@@ -140,7 +140,7 @@ export function buildCompletionRecovery(
 					: {
 							errorCode: "missing_targeted_validation",
 							resolutionHint:
-								"Run the required targeted validation for the active feature, then rerun the current Flow feature to persist completion.",
+								"Run targeted validation for the active feature and retry with validationScope set to 'targeted'.",
 							recoveryStage: "rerun_validation",
 							prerequisite: "validation_rerun_required",
 							requiredArtifact: "targeted_validation_result",
@@ -153,7 +153,7 @@ export function buildCompletionRecovery(
 			return buildResetFeatureRecovery(featureId, {
 				errorCode: "failing_feature_review",
 				resolutionHint:
-					"Address the blocking feature review findings, rerun validation as needed, and rerun the current Flow feature.",
+					"Fix the feature review findings, rerun targeted validation, and rerun the current Flow feature.",
 				recoveryStage: "reset_feature",
 				prerequisite: "feature_reset_required",
 				retryable: true,
@@ -163,7 +163,7 @@ export function buildCompletionRecovery(
 			return buildStatusRecovery({
 				errorCode: "missing_final_review_payload",
 				resolutionHint:
-					"Provide the required finalReview payload, then rerun the current Flow feature to persist final completion.",
+					"The active feature is on the session's final completion path. Run the final cross-feature review, include a passing finalReview in the worker result, and rerun the current Flow feature.",
 				recoveryStage: "retry_completion",
 				prerequisite: "completion_payload_rebuild_required",
 				requiredArtifact: "final_review_payload",
@@ -175,7 +175,7 @@ export function buildCompletionRecovery(
 			return buildResetFeatureRecovery(featureId, {
 				errorCode: "failing_final_review",
 				resolutionHint:
-					"Address the blocking final review findings, rerun broad validation if needed, and rerun the current Flow feature.",
+					"Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview.",
 				recoveryStage: "reset_feature",
 				prerequisite: "feature_reset_required",
 				retryable: true,

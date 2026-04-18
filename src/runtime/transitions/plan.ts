@@ -227,8 +227,7 @@ export function applyPlan(
 			...session.execution,
 		},
 	};
-	clearExecution(next);
-	return succeed(next);
+	return succeed(clearExecution(next));
 }
 
 export function approvePlan(
@@ -301,9 +300,8 @@ export function selectPlanFeatures(
 	}
 
 	next.plan.features = subset.value;
-	clearExecution(next);
 	return succeed({
-		...next,
+		...clearExecution(next),
 		approval: "pending",
 		status: "planning",
 	});

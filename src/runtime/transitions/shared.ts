@@ -70,16 +70,22 @@ export function formatValidationError(error: unknown): string {
 	return error instanceof Error ? error.message : "Unknown validation error";
 }
 
-export function clearExecution(session: Session): void {
-	session.execution.activeFeatureId = null;
-	session.execution.lastFeatureId = null;
-	session.execution.lastSummary = null;
-	session.execution.lastOutcomeKind = null;
-	session.execution.lastOutcome = null;
-	session.execution.lastNextStep = null;
-	session.execution.lastFeatureResult = null;
-	session.execution.lastReviewerDecision = null;
-	session.execution.lastValidationRun = [];
+export function clearExecution(session: Session): Session {
+	return {
+		...session,
+		execution: {
+			...session.execution,
+			activeFeatureId: null,
+			lastFeatureId: null,
+			lastSummary: null,
+			lastOutcomeKind: null,
+			lastOutcome: null,
+			lastNextStep: null,
+			lastFeatureResult: null,
+			lastReviewerDecision: null,
+			lastValidationRun: [],
+		},
+	};
 }
 
 export function indexFeatures(features: Feature[]): Map<string, Feature> {
