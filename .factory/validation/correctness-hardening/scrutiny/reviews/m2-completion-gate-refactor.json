@@ -1,0 +1,21 @@
+{
+  "featureId": "m2-completion-gate-refactor",
+  "reviewedAt": "2026-04-18T14:22:11Z",
+  "commitId": "e351b927e404c7379c9a29539fb892fc1ad0c850",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Pass. The fix addresses the prior blocker by removing the unreachable duplicate `failing_final_review` guard and updating call sites/tests accordingly. Reviewing both diffs shows the original round-2 change (present-but-failing finalReview in VAL-CORRECT-031) is now aligned with runtime behavior because only the live general `failing_final_review` branch remains, and the mission contract text now explicitly documents that shared branch behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Architecture documentation appears stale on completion-gate rule count after this refactor.",
+      "evidence": ".factory/library/architecture.md:75 says `validateSuccessfulCompletion` enforces 9 rules, but src/runtime/transitions/execution-completion-guards.ts now contains 8 checks (`kind:` entries at lines 59, 65, 71, 78, 84, 90, 97, 103)."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/correctness-hardening/scrutiny/reviews/m2-scrutiny-fixes-round2.json",
+  "summary": "Reviewed fix feature m2-completion-gate-refactor against prior failure m2-scrutiny-fixes-round2 and both commit diffs (9f8b1a3 and e351b92). The previous isolation blocker is resolved by deleting dead runtime guard code; no correctness regressions were found in the reviewed scope."
+}

@@ -72,7 +72,7 @@ Session states: `planning` → `ready` → `running` → `blocked` ⟷ `running`
 
 Transitions own every state change; the tool layer is a thin adapter. Transition functions are pure: take current `Session`, return `TransitionResult<Session>` with `.ok: true` + nextSession or `.ok: false` + error + recovery metadata.
 
-Completion gate (`validateSuccessfulCompletion`) enforces 9 rules before a feature can move to `completed`. The final feature requires broad validation + `finalReview` decision. These rules are parameterized and covered by M2's completion-gate matrix.
+Completion gate (`validateSuccessfulCompletion`) enforces 8 rules before a feature can move to `completed` (after removal of the dead duplicate final-review guard in M2). The final feature requires broad validation + `finalReview` decision. These rules are parameterized and covered by M2's completion-gate matrix.
 
 ## Invariants
 

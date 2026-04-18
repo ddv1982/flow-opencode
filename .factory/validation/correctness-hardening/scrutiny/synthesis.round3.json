@@ -1,0 +1,48 @@
+{
+  "milestone": "correctness-hardening",
+  "round": 3,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "m2-scrutiny-fixes-round2"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m2-scrutiny-fixes-round2",
+      "severity": "blocking",
+      "description": "The updated \"required final review not passing\" case now provides a failing finalReview, but that condition is already consumed by the earlier generic guard at src/runtime/transitions/execution-completion-guards.ts:91-96 (`worker.finalReview && !isReviewPassing(worker.finalReview)`), before the requireFinalReview-specific guard at lines 110-113. As a result, this test still does not uniquely exercise the requireFinalReview path: removing the dedicated requireFinalReview guard would keep this case green. This leaves VAL-CORRECT-031 isolation unresolved."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "validation-contract.md",
+      "suggestion": "Strengthen VAL-CORRECT-031 wording so validation must prove the requireFinalReview-specific branch is exercised (not just matching failing_final_review output).",
+      "evidence": "validation-contract.md:252-253 requires failing_final_review + reset command; runtime has two failing_final_review checks (src/runtime/transitions/execution-completion-guards.ts:91-96 and 110-113), and both VAL-CORRECT-028 (tests/completion-gates.test.ts:210-225) and VAL-CORRECT-031 (249-268) satisfy the earlier generic check.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/correctness-hardening/scrutiny/synthesis.round2.json"
+}
