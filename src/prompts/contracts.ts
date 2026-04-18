@@ -15,7 +15,7 @@ Optional context:
 - research?: string[]
 - implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }`;
 
-export const FLOW_WORKER_CONTRACT = `Return exactly one worker result payload with:
+export const FLOW_WORKER_CONTRACT = `Return exactly one raw JSON object for the worker result payload with no markdown fences, commentary, or trailing text:
 
 - contractVersion: "1"
 - status: ok | needs_input
@@ -39,7 +39,7 @@ Status rules:
 - when the active feature is the final completion path for the session, run broad validation, include finalReview, and use validationScope: broad
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending`;
 
-export const FLOW_REVIEWER_CONTRACT = `Return exactly one reviewer result payload with:
+export const FLOW_REVIEWER_CONTRACT = `Return exactly one raw JSON object for the reviewer result payload with no markdown fences, commentary, or trailing text:
 
 - scope: feature | final
 - featureId?: string

@@ -3,8 +3,13 @@ import {
 	errorResponse,
 	missingSessionResponse,
 	withPersistedTransition,
+	withSession,
 } from "../runtime/application";
 import { FLOW_PLAN_WITH_GOAL_COMMAND } from "../runtime/constants";
+import {
+	normalizeReviewerDecision,
+	normalizeWorkerResult,
+} from "../runtime/contract-normalization";
 import type { WorkerResult } from "../runtime/schema";
 import { summarizeSession } from "../runtime/summary";
 import {
@@ -23,6 +28,8 @@ import {
 	FlowPlanApproveArgsShape,
 	FlowPlanSelectArgsSchema,
 	FlowPlanSelectArgsShape,
+	FlowRawPayloadArgsSchema,
+	FlowRawPayloadArgsShape,
 	FlowResetFeatureArgsSchema,
 	FlowResetFeatureArgsShape,
 	FlowReviewRecordFeatureArgsSchema,
@@ -48,9 +55,30 @@ const flowReviewRecordFeatureArgsShape =
 const flowReviewRecordFinalArgsShape =
 	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
 	FlowReviewRecordFinalArgsShape as any;
+const flowRawPayloadArgsShape =
+	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
+	FlowRawPayloadArgsShape as any;
 
 function parseFeatureIds(raw?: string[]): string[] {
 	return (raw ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+function toReviewerDecisionInput(
+	input: ReturnType<typeof normalizeReviewerDecision> extends
+		| { ok: true; value: infer TValue }
+		| { ok: false; error: string }
+		? TValue
+		: never,
+) {
+	return {
+		scope: input.scope,
+		status: input.status,
+		summary: input.summary,
+		blockingFindings: input.blockingFindings ?? [],
+		followUps: input.followUps ?? [],
+		suggestedValidation: input.suggestedValidation ?? [],
+		...(input.scope === "feature" ? { featureId: input.featureId } : {}),
+	};
 }
 
 export function createRuntimeTools() {
@@ -202,7 +230,8 @@ export function createRuntimeTools() {
 		}),
 
 		flow_run_complete_feature: tool({
-			description: "Persist the result of a Flow feature execution",
+			description:
+				"Low-level/internal: persist an already-validated Flow feature execution result",
 			args: workerResultArgsShape,
 			execute: withParsedArgs(
 				WorkerResultArgsSchema,
@@ -241,7 +270,8 @@ export function createRuntimeTools() {
 		}),
 
 		flow_review_record_feature: tool({
-			description: "Record the reviewer decision for the active feature",
+			description:
+				"Low-level/internal: record an already-validated reviewer decision for the active feature",
 			args: flowReviewRecordFeatureArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordFeatureArgsSchema,
@@ -270,9 +300,90 @@ export function createRuntimeTools() {
 			),
 		}),
 
+		flow_review_record_feature_from_raw: tool({
+			description:
+				"Normalize a raw reviewer payload and record the decision for the active feature",
+			args: flowRawPayloadArgsShape,
+			execute: withParsedArgs(
+				FlowRawPayloadArgsSchema,
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: "Normalize feature reviewer payload",
+						metadata: {
+							sessionId: null,
+						},
+					});
+					return withSession(context, async (session) => {
+						const activeFeatureId = session.execution.activeFeatureId;
+						const normalized = normalizeReviewerDecision(
+							input.raw,
+							"feature",
+							activeFeatureId ?? undefined,
+						);
+						if (!normalized.ok) {
+							context.metadata?.({
+								title: "Reviewer payload invalid",
+								metadata: {
+									sessionId: session.id,
+									featureId: activeFeatureId,
+								},
+							});
+							return JSON.stringify(
+								errorResponse(normalized.error, {
+									recovery: {
+										errorCode: normalized.kind,
+										resolutionHint:
+											"Re-emit exactly one valid reviewer JSON object for the active feature and retry.",
+										recoveryStage: "record_review",
+										prerequisite: "reviewer_result_required",
+										requiredArtifact: "feature_reviewer_decision",
+										nextCommand: "Retry reviewer output with clean JSON.",
+										nextRuntimeTool: "flow_review_record_feature_from_raw",
+										retryable: true,
+									},
+								}),
+								null,
+								2,
+							);
+						}
+						const decisionInput = toReviewerDecisionInput(normalized.value);
+
+						context.metadata?.({
+							title: `Reviewer ${decisionInput.status} ${
+								decisionInput.scope === "feature"
+									? decisionInput.featureId
+									: "feature"
+							}`,
+							metadata: {
+								sessionId: session.id,
+								featureId:
+									decisionInput.scope === "feature"
+										? decisionInput.featureId
+										: null,
+								status: decisionInput.status,
+							},
+						});
+
+						return withPersistedTransition(
+							context,
+							(current) => recordReviewerDecision(current, decisionInput),
+							{
+								getSession: (value) => value,
+								onSuccess: (saved) => ({
+									status: "ok",
+									summary: "Reviewer decision recorded.",
+									session: summarizeSession(saved).session,
+								}),
+							},
+						);
+					});
+				},
+			),
+		}),
+
 		flow_review_record_final: tool({
 			description:
-				"Record the reviewer decision for final cross-feature validation",
+				"Low-level/internal: record an already-validated reviewer decision for final cross-feature validation",
 			args: flowReviewRecordFinalArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordFinalArgsSchema,
@@ -296,6 +407,154 @@ export function createRuntimeTools() {
 							}),
 						},
 					);
+				},
+			),
+		}),
+
+		flow_review_record_final_from_raw: tool({
+			description:
+				"Normalize a raw reviewer payload and record the final reviewer decision",
+			args: flowRawPayloadArgsShape,
+			execute: withParsedArgs(
+				FlowRawPayloadArgsSchema,
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: "Normalize final reviewer payload",
+						metadata: {
+							sessionId: null,
+						},
+					});
+					return withSession(context, async (session) => {
+						const normalized = normalizeReviewerDecision(input.raw, "final");
+						if (!normalized.ok) {
+							context.metadata?.({
+								title: "Final reviewer payload invalid",
+								metadata: {
+									sessionId: session.id,
+								},
+							});
+							return JSON.stringify(
+								errorResponse(normalized.error, {
+									recovery: {
+										errorCode: normalized.kind,
+										resolutionHint:
+											"Re-emit exactly one valid final-reviewer JSON object and retry.",
+										recoveryStage: "record_review",
+										prerequisite: "reviewer_result_required",
+										requiredArtifact: "final_reviewer_decision",
+										nextCommand: "Retry final reviewer output with clean JSON.",
+										nextRuntimeTool: "flow_review_record_final_from_raw",
+										retryable: true,
+									},
+								}),
+								null,
+								2,
+							);
+						}
+
+						const decisionInput = toReviewerDecisionInput(normalized.value);
+						context.metadata?.({
+							title: `Final reviewer ${decisionInput.status}`,
+							metadata: {
+								sessionId: session.id,
+								status: decisionInput.status,
+							},
+						});
+
+						return withPersistedTransition(
+							context,
+							(current) => recordReviewerDecision(current, decisionInput),
+							{
+								getSession: (value) => value,
+								onSuccess: (saved) => ({
+									status: "ok",
+									summary: "Reviewer decision recorded.",
+									session: summarizeSession(saved).session,
+								}),
+							},
+						);
+					});
+				},
+			),
+		}),
+
+		flow_run_complete_feature_from_raw: tool({
+			description:
+				"Normalize a raw worker payload and persist the result of a Flow feature execution",
+			args: flowRawPayloadArgsShape,
+			execute: withParsedArgs(
+				FlowRawPayloadArgsSchema,
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: "Normalize worker payload",
+						metadata: {
+							sessionId: null,
+						},
+					});
+					return withSession(context, async (session) => {
+						const normalized = normalizeWorkerResult(
+							input.raw,
+							session.execution.activeFeatureId ?? undefined,
+						);
+						if (!normalized.ok) {
+							context.metadata?.({
+								title: "Worker payload invalid",
+								metadata: {
+									sessionId: session.id,
+									featureId: session.execution.activeFeatureId,
+								},
+							});
+							return JSON.stringify(
+								errorResponse(normalized.error, {
+									recovery: {
+										errorCode: normalized.kind,
+										resolutionHint:
+											"Re-emit exactly one valid worker JSON object for the active feature and retry.",
+										recoveryStage: "retry_completion",
+										prerequisite: "completion_payload_rebuild_required",
+										requiredArtifact: "feature_review_payload",
+										nextCommand: "Retry worker output with clean JSON.",
+										nextRuntimeTool: "flow_run_complete_feature_from_raw",
+										retryable: true,
+									},
+								}),
+								null,
+								2,
+							);
+						}
+
+						context.metadata?.({
+							title: `Complete ${normalized.value.featureResult.featureId}`,
+							metadata: {
+								sessionId: session.id,
+								featureId: normalized.value.featureResult.featureId,
+								status: normalized.value.status,
+							},
+						});
+
+						return withPersistedTransition(
+							context,
+							(current) =>
+								completeRun(current, normalized.value as WorkerResult),
+							{
+								getSession: (value) => value,
+								onSuccess: (saved) => {
+									const summary = summarizeSession(saved);
+
+									return {
+										status: "ok",
+										summary: summary.summary,
+										session: summary.session,
+									};
+								},
+								onError: (failure) => {
+									return errorResponse(failure.message, {
+										recovery: failure.recovery,
+									});
+								},
+							},
+						);
+					});
 				},
 			),
 		}),

@@ -9,9 +9,9 @@ export const FLOW_COORDINATOR_BOUNDARY_RULE =
 export const FLOW_REVIEW_FINDINGS_LOOP_RULE =
 	"- Do not complete a feature while review findings remain. Fix them, rerun validation, and rereview until the feature is clean or a real blocker remains.";
 export const FLOW_FEATURE_REVIEW_APPROVAL_RULE =
-	"- Before persisting success, get flow-reviewer approval and record it with flow_review_record_feature.";
+	"- Before persisting success, get flow-reviewer approval and record the raw reviewer output with flow_review_record_feature_from_raw.";
 export const FLOW_FINAL_COMPLETION_PATH_RULE =
-	"- Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending. On the final completion path, switch to broad validation, get final approval through flow_review_record_final, and include a passing finalReview before completion.";
+	"- Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending. On the final completion path, switch to broad validation, get final approval through flow_review_record_final_from_raw, and include a passing finalReview before completion.";
 export const FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE =
 	"- Never advance to the next feature while the current feature still has review findings. Stay on the current feature until it is clean or truly blocked.";
 export const FLOW_FINAL_COMPLETION_REVIEW_RULE =
@@ -27,6 +27,6 @@ export const FLOW_RUNTIME_STATE_TRANSITION_RULE =
 export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =
 	"- Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.";
 export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
-	"- Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.";
+	"- Persist every reviewer decision through flow_review_record_feature_from_raw or flow_review_record_final_from_raw before deciding whether to continue, fix, block, or complete.";
 export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =
 	"- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.";

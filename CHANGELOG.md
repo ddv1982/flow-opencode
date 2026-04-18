@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.1] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.1 hardens reviewer and worker contract ingestion so malformed raw JSON can no longer silently leak into runtime persistence. The release adds strict object scanning, duplicate-key detection, clearer malformed-payload recovery codes, and safer raw wrapper tools for reviewer/final-review/worker completion ingestion.
+
+### Added
+
+- Added `src/runtime/contract-normalization.ts` with strict raw JSON contract parsing and normalization for reviewer and worker payloads.
+- Added raw-ingestion runtime tools for feature review, final review, and worker completion persistence.
+- Added regression coverage for duplicate keys, trailing text, non-object payloads, schema failures, and raw-wrapper recovery behavior.
+
+### Changed
+
+- Updated Flow worker/auto command guidance to route reviewer and worker persistence through the safer `*_from_raw` tools.
+- Marked direct structured persistence tools as low-level/internal so the safer raw-ingestion wrappers are the preferred path.
+- Improved malformed-payload recovery metadata to surface precise error codes such as `duplicate_json_key`, `trailing_text`, `non_object_payload`, and `schema_validation_failed`.
+
 ## [1.0.0] - 2026-04-18
 
 ### Highlights

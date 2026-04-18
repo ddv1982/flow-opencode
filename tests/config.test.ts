@@ -166,7 +166,10 @@ describe("applyFlowConfig", () => {
 			"flow_run_start",
 			"flow_run_complete_feature",
 			"flow_review_record_feature",
+			"flow_review_record_feature_from_raw",
 			"flow_review_record_final",
+			"flow_review_record_final_from_raw",
+			"flow_run_complete_feature_from_raw",
 			"flow_reset_feature",
 		]);
 	});
@@ -189,6 +192,20 @@ describe("applyFlowConfig", () => {
 		expect(config.command?.["flow-history"]).toBeDefined();
 		expect(config.command?.["flow-session"]).toBeDefined();
 		expect(config.command?.["flow-reset"]).toBeDefined();
+	});
+
+	test("marks direct persistence tools as low-level internal descriptions", () => {
+		const tools = createTools({});
+
+		expect(tools.flow_run_complete_feature.description).toContain(
+			"Low-level/internal",
+		);
+		expect(tools.flow_review_record_feature.description).toContain(
+			"Low-level/internal",
+		);
+		expect(tools.flow_review_record_final.description).toContain(
+			"Low-level/internal",
+		);
 	});
 
 	test("routes status, history, session activation, and reset through the control agent", () => {
@@ -561,6 +578,9 @@ describe("applyFlowConfig", () => {
 
 	test("worker contract requires clean review before ok completion", () => {
 		expect(FLOW_WORKER_CONTRACT).toContain(
+			"Return exactly one raw JSON object for the worker result payload with no markdown fences, commentary, or trailing text",
+		);
+		expect(FLOW_WORKER_CONTRACT).toContain(
 			"never return status: ok until targeted validation is complete and featureReview has no blocking findings",
 		);
 		expect(FLOW_WORKER_CONTRACT).toContain("validationScope: broad");
@@ -585,6 +605,9 @@ describe("applyFlowConfig", () => {
 	});
 
 	test("reviewer contract and prompt require explicit approval gating", () => {
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"Return exactly one raw JSON object for the reviewer result payload with no markdown fences, commentary, or trailing text",
+		);
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"status: approved | needs_fix | blocked",
 		);
@@ -620,13 +643,13 @@ describe("applyFlowConfig", () => {
 			"Use the flow-reviewer stage as the approval gate",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"Persist every reviewer decision through flow_review_record_feature or flow_review_record_final",
+			"Persist every reviewer decision through flow_review_record_feature_from_raw or flow_review_record_final_from_raw",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If the reviewer returns needs_fix",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata",
+			"If flow_run_complete_feature_from_raw fails, inspect the runtime error and any structured recovery metadata",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If a feature lands in a blocked state with a retryable or auto-resolvable outcome",
@@ -679,7 +702,9 @@ describe("applyFlowConfig", () => {
 	});
 
 	test("run command template requires final completion gating for the last feature", () => {
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_final");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"flow_review_record_final_from_raw",
+		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
 	});
@@ -687,10 +712,10 @@ describe("applyFlowConfig", () => {
 	test("run command template keeps final completion gating after feature review approval", () => {
 		expectInOrder(FLOW_RUN_COMMAND_TEMPLATE, [
 			"run targeted validation",
-			"obtain reviewer approval through `flow_review_record_feature`",
+			"obtain reviewer approval through `flow_review_record_feature_from_raw`",
 			"On the final completion path, run broad validation",
-			"obtain final approval through `flow_review_record_final`",
-			"persist the result through `flow_run_complete_feature`",
+			"obtain final approval through `flow_review_record_final_from_raw`",
+			"persist the result through `flow_run_complete_feature_from_raw`",
 		]);
 	});
 

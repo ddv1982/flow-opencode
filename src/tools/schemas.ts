@@ -62,6 +62,9 @@ export const FlowRunStartArgsShape = {
 export const FlowResetFeatureArgsShape = {
 	featureId: featureIdSchema,
 };
+export const FlowRawPayloadArgsShape = {
+	raw: z.string().min(1),
+};
 
 export const WorkerResultArgsSchema = RuntimeWorkerResultArgsSchema;
 export const FlowReviewRecordFeatureArgsSchema =
@@ -97,6 +100,7 @@ export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
 export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
 export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
+export const FlowRawPayloadArgsSchema = z.object(FlowRawPayloadArgsShape);
 
 export type FlowHistoryShowArgs = {
 	sessionId: string;
@@ -129,4 +133,8 @@ export type FlowRunStartArgs = {
 
 export type FlowResetFeatureArgs = {
 	featureId: string;
+};
+
+export type FlowRawPayloadArgs = {
+	raw: string;
 };

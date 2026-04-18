@@ -25,7 +25,7 @@ function makeTempDir(): string {
 function runPackInvariants(
 	packJson: unknown,
 	changelogText: string,
-	packageVersion = "1.0.0",
+	packageVersion = "1.0.1",
 ) {
 	const directory = makeTempDir();
 	const packJsonPath = join(directory, "pack.json");
@@ -81,7 +81,6 @@ describe("pack invariants script", () => {
 			],
 			readFileSync(resolve(repoRoot, "CHANGELOG.md"), "utf8"),
 		);
-
 		expect(await process.exited).toBe(0);
 		expect(await new Response(process.stdout).text()).toContain(
 			"Pack invariants OK",
@@ -101,9 +100,9 @@ describe("pack invariants script", () => {
 					],
 				},
 			],
-			"## [1.0.0] - 2026-04-18\n",
+			"## [1.2.3] - 2026-04-18\n",
+			"1.0.1",
 		);
-
 		expect(await process.exited).toBe(1);
 		const stderr = await new Response(process.stderr).text();
 		expect(stderr).toContain("Missing pack files:");
@@ -121,12 +120,11 @@ describe("pack invariants script", () => {
 				},
 			],
 			"## [1.2.3] - 2026-04-18\n",
-			"1.0.0",
+			"1.0.1",
 		);
-
 		expect(await process.exited).toBe(1);
 		expect(await new Response(process.stderr).text()).toContain(
-			"package.json version 1.0.0 does not match top CHANGELOG version 1.2.3",
+			"package.json version 1.0.1 does not match top CHANGELOG version 1.2.3",
 		);
 	});
 });
