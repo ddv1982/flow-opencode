@@ -1,14 +1,6 @@
 import type { Plan, PlanInput, PlanningContext, Session } from "../schema";
 import { nowIso } from "../time";
-import { selectProjectedFeatureSubset } from "./plan-feature-selection";
-import { validatePlanGraph } from "./plan-graph-validation";
-import {
-	clearExecution,
-	cloneSession,
-	fail,
-	succeed,
-	type TransitionResult,
-} from "./shared";
+import { clearExecution, fail, succeed, type TransitionResult } from "./shared";
 
 type DraftPlanEditMessages = {
 	missingPlan: string;
@@ -59,22 +51,146 @@ function normalizePlan(planInput: ApplyPlanInput): Plan {
 	};
 }
 
+function ensureRequestedFeatureIdsExist(
+	features: Plan["features"],
+	requestedIds: string[],
+): string | null {
+	const knownIds = new Set(features.map((feature) => feature.id));
+	const unknownIds = requestedIds.filter((id) => !knownIds.has(id));
+	return unknownIds.length > 0
+		? `Unknown feature ids: ${unknownIds.join(", ")}.`
+		: null;
+}
+
+function selectProjectedFeatureSubset(
+	features: Plan["features"],
+	featureIds: string[],
+	dependencyErrorMessage: (featureId: string) => string,
+	preserveCompleted: boolean,
+): TransitionResult<Plan["features"]> {
+	const unknownIdsError = ensureRequestedFeatureIdsExist(features, featureIds);
+	if (unknownIdsError) {
+		return fail(unknownIdsError);
+	}
+
+	const selectedIds = new Set(featureIds);
+	const filtered = features.filter((feature) => selectedIds.has(feature.id));
+	if (filtered.length === 0) {
+		return fail("None of the requested feature ids matched the draft plan.");
+	}
+
+	const filteredIds = new Set(filtered.map((feature) => feature.id));
+	for (const feature of filtered) {
+		const unresolvedDependsOn = (feature.dependsOn ?? []).filter(
+			(id) => !filteredIds.has(id),
+		);
+		const unresolvedBlockedBy = (feature.blockedBy ?? []).filter(
+			(id) => !filteredIds.has(id),
+		);
+		if (unresolvedDependsOn.length > 0 || unresolvedBlockedBy.length > 0) {
+			return fail(dependencyErrorMessage(feature.id));
+		}
+	}
+
+	return succeed(
+		filtered.map((feature) => ({
+			...feature,
+			status:
+				preserveCompleted && feature.status === "completed"
+					? "completed"
+					: "pending",
+		})),
+	);
+}
+
+function validatePlanGraph(plan: Plan): string | null {
+	const ids = new Set<string>();
+
+	for (const feature of plan.features) {
+		if (ids.has(feature.id)) {
+			return `Plan validation failed: duplicate feature id '${feature.id}'.`;
+		}
+		ids.add(feature.id);
+	}
+
+	const byId = new Map(plan.features.map((feature) => [feature.id, feature]));
+	for (const feature of plan.features) {
+		for (const dependencyId of feature.dependsOn ?? []) {
+			if (!ids.has(dependencyId)) {
+				return `Plan validation failed: feature '${feature.id}' depends on unknown feature '${dependencyId}'.`;
+			}
+			if (dependencyId === feature.id) {
+				return `Plan validation failed: feature '${feature.id}' cannot depend on itself.`;
+			}
+		}
+
+		for (const blockerId of feature.blockedBy ?? []) {
+			if (!ids.has(blockerId)) {
+				return `Plan validation failed: feature '${feature.id}' is blocked by unknown feature '${blockerId}'.`;
+			}
+			if (blockerId === feature.id) {
+				return `Plan validation failed: feature '${feature.id}' cannot block itself.`;
+			}
+		}
+	}
+
+	const visitState = new Map<string, "visiting" | "visited">();
+	const visit = (featureId: string): boolean => {
+		const current = visitState.get(featureId);
+		if (current === "visiting") {
+			return true;
+		}
+		if (current === "visited") {
+			return false;
+		}
+
+		visitState.set(featureId, "visiting");
+		const feature = byId.get(featureId);
+		if (!feature) {
+			visitState.set(featureId, "visited");
+			return false;
+		}
+
+		for (const edge of [
+			...(feature.dependsOn ?? []),
+			...(feature.blockedBy ?? []),
+		]) {
+			if (visit(edge)) {
+				return true;
+			}
+		}
+
+		visitState.set(featureId, "visited");
+		return false;
+	};
+
+	for (const feature of plan.features) {
+		if (visit(feature.id)) {
+			return "Plan validation failed: the feature dependency graph contains a cycle.";
+		}
+	}
+
+	return null;
+}
+
 function prepareDraftPlanEdit(
 	session: Session,
 	messages: DraftPlanEditMessages,
 ): TransitionResult<DraftPlanSession> {
-	const next = cloneSession(session);
-	const { plan } = next;
+	const { plan } = session;
 	if (!plan) {
 		return fail(messages.missingPlan);
 	}
-	if (next.status !== "planning" || next.execution.activeFeatureId) {
+	if (session.status !== "planning" || session.execution.activeFeatureId) {
 		return fail(messages.activeSession);
 	}
 
 	return succeed({
-		...next,
-		plan,
+		...session,
+		plan: {
+			...plan,
+			features: [...plan.features],
+		},
 	});
 }
 
@@ -89,20 +205,29 @@ export function applyPlan(
 		return fail(planGraphError);
 	}
 
-	const next = cloneSession(session);
-	next.plan = plan;
-	next.status = "planning";
-	next.approval = "pending";
-	next.timestamps.approvedAt = null;
-	next.timestamps.completedAt = null;
-	clearExecution(next);
-	next.notes = [];
-	next.planning = {
-		repoProfile: planning?.repoProfile ?? next.planning.repoProfile,
-		research: planning?.research ?? next.planning.research,
-		implementationApproach:
-			planning?.implementationApproach ?? next.planning.implementationApproach,
+	const next: Session = {
+		...session,
+		plan,
+		status: "planning",
+		approval: "pending",
+		timestamps: {
+			...session.timestamps,
+			approvedAt: null,
+			completedAt: null,
+		},
+		notes: [],
+		planning: {
+			repoProfile: planning?.repoProfile ?? session.planning.repoProfile,
+			research: planning?.research ?? session.planning.research,
+			implementationApproach:
+				planning?.implementationApproach ??
+				session.planning.implementationApproach,
+		},
+		execution: {
+			...session.execution,
+		},
 	};
+	clearExecution(next);
 	return succeed(next);
 }
 
@@ -136,10 +261,15 @@ export function approvePlan(
 		next.plan.features = subset.value;
 	}
 
-	next.approval = "approved";
-	next.status = "ready";
-	next.timestamps.approvedAt = nowIso();
-	return succeed(next);
+	return succeed({
+		...next,
+		approval: "approved",
+		status: "ready",
+		timestamps: {
+			...next.timestamps,
+			approvedAt: nowIso(),
+		},
+	});
 }
 
 export function selectPlanFeatures(
@@ -171,8 +301,10 @@ export function selectPlanFeatures(
 	}
 
 	next.plan.features = subset.value;
-	next.approval = "pending";
-	next.status = "planning";
 	clearExecution(next);
-	return succeed(next);
+	return succeed({
+		...next,
+		approval: "pending",
+		status: "planning",
+	});
 }

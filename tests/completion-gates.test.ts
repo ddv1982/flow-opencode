@@ -7,7 +7,7 @@ import {
 	recordReviewerDecision,
 	startRun,
 } from "../src/runtime/transitions";
-import { validateSuccessfulCompletion } from "../src/runtime/transitions/execution-completion-guards";
+import { validateSuccessfulCompletion } from "../src/runtime/transitions/shared";
 import { samplePlan } from "./runtime-test-helpers";
 
 function createStartedSession(options?: {

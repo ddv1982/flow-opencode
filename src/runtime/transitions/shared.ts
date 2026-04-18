@@ -1,6 +1,8 @@
 import { ZodError } from "zod";
 import type { Feature, Session } from "../schema";
 
+export { validateSuccessfulCompletion } from "./execution";
+
 export type TransitionResult<T> =
 	| { ok: true; value: T }
 	| {
@@ -66,10 +68,6 @@ export function formatValidationError(error: unknown): string {
 	}
 
 	return error instanceof Error ? error.message : "Unknown validation error";
-}
-
-export function cloneSession(session: Session): Session {
-	return structuredClone(session);
 }
 
 export function clearExecution(session: Session): void {

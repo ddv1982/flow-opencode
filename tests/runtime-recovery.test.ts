@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { CompletionRecoveryKind } from "../src/runtime/transitions/execution-recovery";
-import { buildCompletionRecovery } from "../src/runtime/transitions/execution-recovery";
+import type { CompletionRecoveryKind } from "../src/runtime/transitions/recovery";
+import { buildCompletionRecovery } from "../src/runtime/transitions/recovery";
 
 describe("runtime recovery policy mapping", () => {
 	test("maps missing_reviewer_decision to feature vs final status recovery", () => {
