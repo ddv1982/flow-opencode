@@ -1,0 +1,43 @@
+{
+  "milestone": "schema-unification",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 16,
+    "passed": 13,
+    "failed": 3,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SCHEMA-001",
+    "VAL-SCHEMA-004",
+    "VAL-SCHEMA-006",
+    "VAL-SCHEMA-007",
+    "VAL-SCHEMA-008",
+    "VAL-SCHEMA-009",
+    "VAL-SCHEMA-010",
+    "VAL-SCHEMA-011",
+    "VAL-SCHEMA-012",
+    "VAL-SCHEMA-013",
+    "VAL-SCHEMA-014",
+    "VAL-SCHEMA-015",
+    "VAL-SCHEMA-016"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-SCHEMA-002",
+      "reason": "Contract expects derivation usage (.omit/.pick/.extend) in src/tools/schemas.ts; observed zero occurrences."
+    },
+    {
+      "id": "VAL-SCHEMA-003",
+      "reason": "Contract expects tool-arg derivation via .omit/.pick/.extend; observed import/alias usage but no .omit/.pick/.extend calls."
+    },
+    {
+      "id": "VAL-SCHEMA-005",
+      "reason": "Contract expects parse activity to be only at the tool boundary; observed extra .parse calls inside src/runtime/transitions (plan.ts, review-reset.ts)."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

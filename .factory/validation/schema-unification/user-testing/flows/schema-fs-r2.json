@@ -1,0 +1,82 @@
+{
+  "groupId": "schema-fs-r2",
+  "testedAt": "2026-04-18T16:19:03Z",
+  "isolation": {
+    "repoRoot": "/Users/vriesd/projects/flow-opencode",
+    "missionDir": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02",
+    "surface": "fs-inspection",
+    "mode": "read-only repository inspection",
+    "allowedWrites": {
+      "flowReport": ".factory/validation/schema-unification/user-testing/flows/schema-fs-r2.json",
+      "evidenceDir": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/evidence/schema-unification/schema-fs-r2/"
+    }
+  },
+  "toolsUsed": ["fs-inspection", "rg", "Execute", "Read"],
+  "assertions": [
+    {
+      "id": "VAL-SCHEMA-002",
+      "title": "runtime/schema.ts is the single source of truth",
+      "status": "pass",
+      "commandsRun": [
+        "rg -n \"z\\\\.object\\\\(|z\\\\.discriminatedUnion\" \"/Users/vriesd/projects/flow-opencode/src\"",
+        "rg -n \"\\\\.(shape|omit|pick|extend)\\\\b|as Runtime\" \"/Users/vriesd/projects/flow-opencode/src/tools/schemas.ts\""
+      ],
+      "evidenceSnippets": [
+        "All z.object/z.discriminatedUnion constructor matches are confined to src/runtime/schema.ts and src/tools/schemas.ts.",
+        "src/tools/schemas.ts shows runtime-derived schema usage via alias pattern (as Runtime...) and .shape usage."
+      ],
+      "evidenceFiles": [
+        "schema-unification/schema-fs-r2/VAL-SCHEMA-002.txt"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-SCHEMA-003",
+      "title": "Tool arg schemas are derived from runtime schemas",
+      "status": "pass",
+      "commandsRun": [
+        "rg -n 'from \"../runtime/schema\"' \"/Users/vriesd/projects/flow-opencode/src/tools/schemas.ts\"",
+        "rg -n \"buildSharedSchemas\" \"/Users/vriesd/projects/flow-opencode/src/tools/schemas.ts\"",
+        "rg -n \"\\\\.(shape|omit|pick|extend)\\\\b|as Runtime\" \"/Users/vriesd/projects/flow-opencode/src/tools/schemas.ts\""
+      ],
+      "evidenceSnippets": [
+        "src/tools/schemas.ts imports from ../runtime/schema (both type and runtime imports).",
+        "No buildSharedSchemas references found.",
+        "Derivation/re-export markers present (as Runtime... and .shape lines)."
+      ],
+      "evidenceFiles": [
+        "schema-unification/schema-fs-r2/VAL-SCHEMA-003.txt"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-SCHEMA-005",
+      "title": "Tool boundary parses exactly once",
+      "status": "pass",
+      "commandsRun": [
+        "rg -n \"parseToolArgs|\\\\.parse\\\\(\" \"/Users/vriesd/projects/flow-opencode/src/tools\" \"/Users/vriesd/projects/flow-opencode/src/runtime/transitions\"",
+        "rg -n \"flow_run_complete_feature|withParsedArgs|completeRun\\\\(\" \"/Users/vriesd/projects/flow-opencode/src/tools/runtime-tools.ts\"",
+        "rg -n \"parseToolArgs|schema\\\\.parse\\\\(\" \"/Users/vriesd/projects/flow-opencode/src/runtime/application/tool-runtime.ts\" \"/Users/vriesd/projects/flow-opencode/src/tools/parsed-tool.ts\""
+      ],
+      "evidenceSnippets": [
+        "Search in src/tools + src/runtime/transitions shows parse usage only through parseToolArgs at the tool boundary.",
+        "flow_run_complete_feature uses withParsedArgs(...) and forwards input to completeRun(session, input as WorkerResult) without local re-parse.",
+        "schema.parse occurs in parseToolArgs (runtime/application/tool-runtime.ts), called by withParsedArgs in src/tools/parsed-tool.ts."
+      ],
+      "evidenceFiles": [
+        "schema-unification/schema-fs-r2/VAL-SCHEMA-005.txt"
+      ],
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Initial attempt to read guidance from /Users/vriesd/.factory/library/user-testing.md returned ENOENT; guidance exists at repo-local .factory/library/user-testing.md.",
+      "resolved": true,
+      "resolution": "Read guidance from /Users/vriesd/projects/flow-opencode/.factory/library/user-testing.md and proceeded.",
+      "affectedAssertions": ["VAL-SCHEMA-002", "VAL-SCHEMA-003", "VAL-SCHEMA-005"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Revalidated 3 pending schema-unification fs-inspection assertions (VAL-SCHEMA-002/003/005): all 3 passed, with evidence captured under schema-unification/schema-fs-r2/."
+}
