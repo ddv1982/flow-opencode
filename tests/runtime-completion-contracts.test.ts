@@ -5,8 +5,10 @@ import { createTempDirRegistry, createTestTools, samplePlan } from "./runtime-te
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
 
-function toolContext(worktree: string): Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1] {
-  return toolContext(worktree) as Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
+type ExecuteContext = Parameters<ReturnType<typeof createTestTools>["flow_status"]["execute"]>[1];
+
+function toolContext(worktree: string): ExecuteContext {
+  return { worktree } as unknown as ExecuteContext;
 }
 
 afterEach(() => {
