@@ -1,0 +1,34 @@
+{
+  "featureId": "m5-read-cache-mkdir",
+  "reviewedAt": "2026-04-18T18:04:21Z",
+  "commitId": "26880a774a11b786dcecddf27e2aee19c1366c0f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Session read-cache behavior is mostly covered, but the mkdir optimization requirement for prepared workspaces is not implemented as specified and the new test asserts the wrong threshold.",
+    "issues": [
+      {
+        "file": "src/runtime/session-workspace.ts",
+        "line": 211,
+        "severity": "blocking",
+        "description": "VAL-PERF-009/feature expectedBehavior requires that after one `ensureWorkspace`, 10 subsequent `saveSession` calls issue at most 2 total `mkdir` calls. The implementation still calls `mkdir(getSessionDir(...), { recursive: true })` on every save, and `saveSession` also triggers `renderSessionDocs` which calls two more `mkdir`s per save (`src/runtime/render.ts:92-93`), so mkdir calls still scale linearly with save count."
+      },
+      {
+        "file": "tests/runtime/workspace-cache.test.ts",
+        "line": 25,
+        "severity": "blocking",
+        "description": "The new verification test contradicts the contract: it is named for the \"at most two mkdir calls\" requirement but asserts `expect(mkdirSpy.mock.calls).toHaveLength(30)`. This would pass even when the required optimization is not present, so the feature's required behavior is not validated."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker handoff marks `skillFeedback.followedProcedure: true`, but the delivered VAL-PERF-009 test does not match the literal contract threshold (≤2 mkdir calls). This suggests the current procedure is not being enforced tightly enough during assertion-coverage self-checks.",
+      "evidence": "core-worker SKILL.md step 7 requires literal assertion-coverage confirmation; handoff `skillFeedback.followedProcedure` is true; `tests/runtime/workspace-cache.test.ts:25` asserts 30 mkdir calls instead of ≤2 from validation-contract VAL-PERF-009."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the feature does add read-cache/invalidation and concurrency coverage, but it does not satisfy the prepared-workspace mkdir optimization requirement as specified, and its new test encodes the wrong success criterion."
+}

@@ -1,0 +1,21 @@
+{
+  "featureId": "m5-perf-gate",
+  "reviewedAt": "2026-04-18T18:03:08Z",
+  "commitId": "240d424",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Pass. The feature is a verification-only regression gate; commit 240d424 is intentionally empty, and transcript/handoff evidence shows `bun test` (230 pass, 0 fail) and `bun run check` both exited 0 as required by expectedBehavior and VAL-PERF-016/017.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "`core-worker` procedure does not explicitly describe verification-only gate features (no code/test edits) or the empty-commit handoff pattern, which led the worker to note an empty commit was required outside the documented procedure.",
+      "evidence": "Skill file `/Users/vriesd/projects/flow-opencode/.factory/skills/core-worker/SKILL.md` focuses on implementation + test-authoring flow, while handoff `/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T18-00-42-854Z__m5-perf-gate__2ff4faf3-e38e-40d5-92d2-7358ae53c8ac.json` records `git commit --allow-empty` as required for this gate."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed m5-perf-gate evidence (feature entry, handoff, commit diff, transcript skeleton, and skill docs). No code defects were introduced; required regression-gate validations were executed and passed, so the feature review passes."
+}

@@ -1,0 +1,39 @@
+{
+  "featureId": "m5-bundle-optimization",
+  "reviewedAt": "2026-04-18T18:03:59Z",
+  "commitId": "f3e1096",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The bundle optimization changes are mostly in place, but the smoke-load validations do not actually exercise bundle loading with a mocked `@opencode-ai/plugin` peer dependency, so a key expected behavior is not reliably validated.",
+    "issues": [
+      {
+        "file": "scripts/cross-area/bundle-sanity.mjs",
+        "line": 60,
+        "severity": "blocking",
+        "description": "The script creates a mocked peer package under `packageDir/node_modules` (line 28) but imports `file://${distPath}` from the repository `dist/` path (line 60) without `NODE_PATH`, `process.chdir`, or loader wiring. Node resolves `@opencode-ai/plugin` from the repo dependency tree instead of the mock, so this does not satisfy the requirement to validate Node loading with a mocked peer dep."
+      },
+      {
+        "file": "tests/smoke/dist-load.test.ts",
+        "line": 66,
+        "severity": "non_blocking",
+        "description": "The smoke test has the same mock-resolution gap: it writes a temp peer stub (line 33) but imports `dist/index.js` from the repo path (line 66), so the test can pass via the repo's real `node_modules/@opencode-ai/plugin` rather than the intended mock host shim."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker marked `skillFeedback.followedProcedure: true`, but transcript/handoff evidence for this M5 feature does not include the `bun run bench` step required by the skill.",
+      "evidence": ".factory/skills/core-worker/SKILL.md:64 requires `For M5 features: bun run bench fully + update bench/RESULTS.md`; handoff commands list only bun test/typecheck/lint/deadcode/build/targeted smoke (handoff lines 16, 21, 26, 31, 36, 46)."
+    },
+    {
+      "area": "skills",
+      "observation": "The core-worker smoke-check procedure asks for a mocked-ctx Node VM load but does not explicitly instruct how to wire mocked peer-dependency resolution for `dist/index.js`, which contributed to the ineffective mock setup in this feature.",
+      "evidence": ".factory/skills/core-worker/SKILL.md:70 requires smoke loading `dist/index.js`; environment guidance about peer shim wiring exists separately in .factory/library/environment.md:27 (`NODE_PATH` / `--experimental-vm-modules`)."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed due to a blocking validation gap: both new smoke paths create a peer mock but import the bundle in a way that still resolves `@opencode-ai/plugin` from repo `node_modules`, so mocked-peer loading is not truly verified."
+}

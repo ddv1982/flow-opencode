@@ -1,0 +1,45 @@
+{
+  "featureId": "m5-incremental-renderer",
+  "reviewedAt": "2026-04-18T18:05:22Z",
+  "commitId": "29cf948",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Fail. The feature adds write-skipping mechanics, but the implementation breaks markdown correctness by forcing `updatedAt` to `createdAt` during rendering, and the new parity tests mask this by normalizing timestamps instead of enforcing byte-level equality required by the feature contract.",
+    "issues": [
+      {
+        "file": "src/runtime/render.ts",
+        "line": 33,
+        "severity": "blocking",
+        "description": "`createRenderComparableSession` rewrites `timestamps.updatedAt` to `timestamps.createdAt` before rendering. Because `renderIndexDoc` prints `session.timestamps.updatedAt`, rendered `index.md` can show stale/incorrect metadata (e.g., persisted session `updatedAt` differs while doc still shows the created timestamp), which changes behavior relative to pre-M5 rendering."
+      },
+      {
+        "file": "tests/runtime/render-snapshot.test.ts",
+        "line": 40,
+        "severity": "blocking",
+        "description": "Snapshot parity assertions normalize and scrub timestamps (`normalizeMarkdown`) before comparing output, so the test no longer enforces byte-for-byte parity. This conflicts with VAL-PERF-008 evidence requirements (`Buffer.compare(actual, expected) === 0`) and can hide rendering regressions."
+      },
+      {
+        "file": "tests/cross-area/markdown-parity.test.ts",
+        "line": 19,
+        "severity": "blocking",
+        "description": "Cross-area parity test also normalizes timestamps before comparison, which weakens the required byte-identical guarantee for VAL-CROSS-008 and allows non-identical markdown bytes to pass."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker marked `skillFeedback.followedProcedure: true`, but the delivered parity tests do not satisfy the validation-contract's literal byte-compare evidence. The skill may need an explicit check to prevent normalization-based parity tests for byte-identical assertions.",
+      "evidence": "Skill step 7 in `.factory/skills/core-worker/SKILL.md` requires literal assertion-evidence coverage; handoff `2026-04-18T17-31-00-815Z__m5-incremental-renderer__7acf7380-3b2e-45d5-a9f4-c0f2ed2d5b88.json` reports `followedProcedure: true`; tests use normalization at `tests/runtime/render-snapshot.test.ts:40` and `tests/cross-area/markdown-parity.test.ts:19` instead of byte comparison."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Validation contract pathing for VAL-CROSS-008 appears stale and may mislead workers/reviewers.",
+      "evidence": "`validation-contract.md` VAL-CROSS-008 points to `tests/__fixtures__/cross-area/markdown-parity/`, but the repository currently has fixture goldens under `tests/__fixtures__/render/` and no `tests/__fixtures__/cross-area/` directory."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature metadata, handoff, transcript skeleton, skill procedure, and commit 29cf948 diff. I found blocking correctness/parity issues: docs can emit stale `updatedAt` values, and parity tests were weakened from byte-level checks to normalized string comparisons. Report marked as fail."
+}
