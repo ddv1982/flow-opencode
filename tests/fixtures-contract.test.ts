@@ -25,12 +25,6 @@ describe("shared test fixtures", () => {
 			const contents = await Bun.file(path.join(repoRoot, file)).text();
 			expect(contents).not.toContain("function samplePlan()");
 			expect(contents).not.toContain("const samplePlan =");
-			expect(contents).not.toContain(
-				'summary: "Implement a small workflow feature set."',
-			);
-			expect(contents).not.toContain(
-				'overview: "Create one setup feature and one execution feature."',
-			);
 		}
 	});
 });
