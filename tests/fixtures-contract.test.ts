@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
 import { PlanSchema, SessionSchema } from "../src/runtime/schema";
 import { samplePlan, sampleSession } from "./fixtures";
 
@@ -9,10 +10,9 @@ describe("shared test fixtures", () => {
 	});
 
 	test("canonical plan and session literals are only defined in tests/fixtures.ts", async () => {
+		const repoRoot = path.resolve(import.meta.dir, "..");
 		const testFiles = Array.from(
-			new Bun.Glob("tests/**/*.ts").scanSync(
-				"/Users/vriesd/projects/flow-opencode",
-			),
+			new Bun.Glob("tests/**/*.ts").scanSync(repoRoot),
 		).filter(
 			(file) =>
 				file !== "tests/fixtures.ts" &&
@@ -22,9 +22,7 @@ describe("shared test fixtures", () => {
 		);
 
 		for (const file of testFiles) {
-			const contents = await Bun.file(
-				`/Users/vriesd/projects/flow-opencode/${file}`,
-			).text();
+			const contents = await Bun.file(path.join(repoRoot, file)).text();
 			expect(contents).not.toContain("function samplePlan()");
 			expect(contents).not.toContain("const samplePlan =");
 			expect(contents).not.toContain(

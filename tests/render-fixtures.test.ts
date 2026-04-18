@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import {
 	createApprovedSession,
 	createCompletedSession,
@@ -141,7 +142,12 @@ describe("render fixtures", () => {
 		test(`matches committed golden snapshot for ${fixture.name}`, async () => {
 			const worktree = makeTempDir();
 			const rendered = await renderFixture(worktree, fixture.session);
-			const fixtureRoot = `/Users/vriesd/projects/flow-opencode/tests/__fixtures__/render/${fixture.name}`;
+			const fixtureRoot = path.resolve(
+				import.meta.dir,
+				"__fixtures__",
+				"render",
+				fixture.name,
+			);
 			const actualFeatureFiles = await readdir(`${fixtureRoot}/features`).catch(
 				() => [],
 			);
