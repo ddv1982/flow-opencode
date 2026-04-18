@@ -18,7 +18,6 @@ function createStartedSession(options?: {
 	session: Session;
 	featureId: string;
 	wasFinalFeature: boolean;
-	requireFinalReview: boolean;
 } {
 	const finalFeature = options?.finalFeature ?? false;
 	const requireFinalReview = options?.requireFinalReview ?? false;
@@ -77,7 +76,6 @@ function createStartedSession(options?: {
 		session,
 		featureId,
 		wasFinalFeature: finalFeature,
-		requireFinalReview,
 	};
 }
 
@@ -273,13 +271,12 @@ describe("completion gates", () => {
 		expectedErrorCode,
 		expectedNextCommand,
 	}) => {
-		const { session, featureId, wasFinalFeature, requireFinalReview } = setup();
+		const { session, featureId, wasFinalFeature } = setup();
 		const result = validateSuccessfulCompletion(
 			session,
 			worker(featureId),
 			featureId,
 			wasFinalFeature,
-			requireFinalReview,
 		);
 
 		expect(result.ok).toBe(false);
@@ -311,11 +308,10 @@ describe("completion gates", () => {
 			expectedOk: true,
 		},
 	])("$name", ({ reviewerDecision, expectedOk }) => {
-		const { session, featureId, wasFinalFeature, requireFinalReview } =
-			createStartedSession({
-				finalFeature: true,
-				reviewerDecision,
-			});
+		const { session, featureId, wasFinalFeature } = createStartedSession({
+			finalFeature: true,
+			reviewerDecision,
+		});
 		const result = validateSuccessfulCompletion(
 			session,
 			createWorkerResult(featureId, {
@@ -328,7 +324,6 @@ describe("completion gates", () => {
 			}),
 			featureId,
 			wasFinalFeature,
-			requireFinalReview,
 		);
 
 		expect(result.ok).toBe(expectedOk);

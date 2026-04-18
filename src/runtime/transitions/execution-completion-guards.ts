@@ -49,7 +49,6 @@ export function validateSuccessfulCompletion(
 	worker: WorkerResult,
 	featureId: string,
 	wasFinalFeature: boolean,
-	requireFinalReview: boolean,
 ): TransitionResult<void> {
 	const completionChecks: Array<{
 		kind: CompletionRecoveryKind;
@@ -105,12 +104,6 @@ export function validateSuccessfulCompletion(
 			message:
 				"Worker result cannot complete the session without a finalReview.",
 			failing: () => wasFinalFeature && !worker.finalReview,
-		},
-		{
-			kind: "failing_final_review",
-			message:
-				"Worker result cannot complete the session because a passing finalReview is required.",
-			failing: () => requireFinalReview && !isReviewPassing(worker.finalReview),
 		},
 	];
 

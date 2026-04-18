@@ -106,7 +106,6 @@ export function completeRun(
 			worker,
 			featureId,
 			wasFinalFeature,
-			Boolean(plan.completionPolicy?.requireFinalReview && wasFinalFeature),
 		);
 		if (!validation.ok) {
 			return fail(validation.message, validation.recovery, next);
