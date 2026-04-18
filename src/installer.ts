@@ -4,7 +4,12 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 export const FLOW_PLUGIN_FILENAME = "flow.js";
-const OPENCODE_PLUGIN_DIRECTORIES = [[".opencode", "plugins"]] as const;
+const CANONICAL_OPENCODE_PLUGIN_DIRECTORY = [
+	".config",
+	"opencode",
+	"plugins",
+] as const;
+const LEGACY_OPENCODE_PLUGIN_DIRECTORY = [".opencode", "plugins"] as const;
 export const INSTALL_USAGE = `Install the built Flow plugin into an OpenCode plugin directory.
 
 Usage:
@@ -58,16 +63,17 @@ export function resolveInstallTarget({
 	homeDir = homedir(),
 	filename = FLOW_PLUGIN_FILENAME,
 }: ResolveInstallTargetOptions): string {
-	return join(homeDir, ".opencode", "plugins", filename);
+	return join(homeDir, ...CANONICAL_OPENCODE_PLUGIN_DIRECTORY, filename);
 }
 
 export function resolveInstallTargets({
 	homeDir = homedir(),
 	filename = FLOW_PLUGIN_FILENAME,
 }: ResolveInstallTargetOptions): string[] {
-	return OPENCODE_PLUGIN_DIRECTORIES.map((segments) =>
-		join(homeDir, ...segments, filename),
-	);
+	return [
+		join(homeDir, ...CANONICAL_OPENCODE_PLUGIN_DIRECTORY, filename),
+		join(homeDir, ...LEGACY_OPENCODE_PLUGIN_DIRECTORY, filename),
+	];
 }
 
 export async function installBuiltPlugin({
@@ -104,19 +110,24 @@ export async function runInstallCommand(
 	const resolvedSourceFile = sourceFile
 		? resolveFromCwd(cwd, sourceFile)
 		: join(cwd, "dist", "index.js");
-	const destinationFiles = resolveInstallTargets(homeDir ? { homeDir } : {});
-	let installedPath: string | null = null;
+	const [canonicalPath, legacyPath] = resolveInstallTargets(
+		homeDir ? { homeDir } : {},
+	);
+	const destinationFile = legacyPath
+		? (await pathExists(legacyPath))
+			? legacyPath
+			: canonicalPath
+		: canonicalPath;
 
-	for (const destinationFile of destinationFiles) {
-		const current = await installBuiltPlugin({
-			sourceFile: resolvedSourceFile,
-			destinationFile,
-			logger,
-		});
-		installedPath ??= current;
+	if (!destinationFile) {
+		return undefined;
 	}
 
-	return installedPath ?? undefined;
+	return installBuiltPlugin({
+		sourceFile: resolvedSourceFile,
+		destinationFile,
+		logger,
+	});
 }
 
 export async function runUninstallCommand(
@@ -135,9 +146,11 @@ export async function runUninstallCommand(
 	let removedPath: string | null = null;
 
 	for (const destinationFile of destinationFiles) {
-		await rm(destinationFile, { force: true });
-		logger(`Removed Flow plugin from ${destinationFile}`);
-		removedPath ??= destinationFile;
+		if (await pathExists(destinationFile)) {
+			await rm(destinationFile, { force: true });
+			logger(`Removed Flow plugin from ${destinationFile}`);
+			removedPath ??= destinationFile;
+		}
 	}
 
 	return removedPath ?? undefined;
@@ -150,6 +163,15 @@ async function assertSourceFileExists(sourceFile: string): Promise<void> {
 		throw new Error(
 			`Build artifact not found at ${sourceFile}. Run \`bun run build\` first.`,
 		);
+	}
+}
+
+async function pathExists(target: string): Promise<boolean> {
+	try {
+		await access(target, constants.F_OK);
+		return true;
+	} catch {
+		return false;
 	}
 }
 

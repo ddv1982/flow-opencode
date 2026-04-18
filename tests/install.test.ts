@@ -23,6 +23,19 @@ function makeTempDir(): string {
 	return dir;
 }
 
+function getInstallTargets(homeDir: string): {
+	canonicalPath: string;
+	legacyPath: string;
+} {
+	const [canonicalPath, legacyPath] = resolveInstallTargets({ homeDir });
+
+	if (!canonicalPath || !legacyPath) {
+		throw new Error("Expected canonical and legacy install targets.");
+	}
+
+	return { canonicalPath, legacyPath };
+}
+
 async function writeBuiltPlugin(
 	cwd: string,
 	content = "export default 'flow';\n",
@@ -56,14 +69,15 @@ describe("installer", () => {
 		const homeDir = "/tmp/flow-home";
 
 		expect(resolveInstallTarget({ homeDir })).toBe(
-			join(homeDir, ".opencode", "plugins", FLOW_PLUGIN_FILENAME),
+			join(homeDir, ".config", "opencode", "plugins", FLOW_PLUGIN_FILENAME),
 		);
 	});
 
-	test("resolveInstallTargets returns the configured OpenCode plugin directory", () => {
+	test("resolveInstallTargets returns canonical and legacy OpenCode plugin directories", () => {
 		const homeDir = "/tmp/flow-home";
 
 		expect(resolveInstallTargets({ homeDir })).toEqual([
+			join(homeDir, ".config", "opencode", "plugins", FLOW_PLUGIN_FILENAME),
 			join(homeDir, ".opencode", "plugins", FLOW_PLUGIN_FILENAME),
 		]);
 	});
@@ -92,11 +106,12 @@ describe("installer", () => {
 		expect(logs).toEqual([`Installed Flow plugin to ${destinationFile}`]);
 	});
 
-	test("runInstallCommand installs to the configured plugin directory", async () => {
+	test("runInstallCommand installs to the canonical plugin directory when no legacy install exists", async () => {
 		const cwd = makeTempDir();
 		const homeDir = makeTempDir();
 		const logs: string[] = [];
 		let buildCalls = 0;
+		const { canonicalPath, legacyPath } = getInstallTargets(homeDir);
 
 		await writeBuiltPlugin(cwd, "global-install\n");
 
@@ -109,16 +124,38 @@ describe("installer", () => {
 			logger: (message) => logs.push(message),
 		});
 
-		const expectedPaths = resolveInstallTargets({ homeDir });
-
 		expect(buildCalls).toBe(1);
-		expect(installedPath).toBe(expectedPaths[0]);
-		await expect(
-			Promise.all(expectedPaths.map((path) => readFile(path, "utf8"))),
-		).resolves.toEqual(["global-install\n"]);
-		expect(logs).toEqual(
-			expectedPaths.map((path) => `Installed Flow plugin to ${path}`),
+		expect(installedPath).toBe(canonicalPath);
+		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
+			"global-install\n",
 		);
+		await expect(readFile(legacyPath, "utf8")).rejects.toThrow();
+		expect(logs).toEqual([`Installed Flow plugin to ${canonicalPath}`]);
+	});
+
+	test("runInstallCommand preserves a legacy install path in place", async () => {
+		const cwd = makeTempDir();
+		const homeDir = makeTempDir();
+		const logs: string[] = [];
+		const { canonicalPath, legacyPath } = getInstallTargets(homeDir);
+
+		await writeBuiltPlugin(cwd, "legacy-install\n");
+		await mkdir(join(legacyPath, ".."), { recursive: true });
+		await writeFile(legacyPath, "old-legacy-install\n", "utf8");
+
+		const installedPath = await runInstallCommand([], {
+			cwd,
+			homeDir,
+			build: async () => {},
+			logger: (message) => logs.push(message),
+		});
+
+		expect(installedPath).toBe(legacyPath);
+		await expect(readFile(legacyPath, "utf8")).resolves.toBe(
+			"legacy-install\n",
+		);
+		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
+		expect(logs).toEqual([`Installed Flow plugin to ${legacyPath}`]);
 	});
 
 	test("installBuiltPlugin reports a clear error when the build artifact is missing", async () => {
@@ -133,17 +170,15 @@ describe("installer", () => {
 		).rejects.toThrow("Run `bun run build` first");
 	});
 
-	test("runUninstallCommand removes installed plugin files from the configured directory", async () => {
+	test("runUninstallCommand removes installed plugin files from either location", async () => {
 		const homeDir = makeTempDir();
 		const destinationFiles = resolveInstallTargets({ homeDir });
 		const logs: string[] = [];
 
-		await Promise.all(
-			destinationFiles.map(async (path) => {
-				await mkdir(join(path, ".."), { recursive: true });
-				await writeFile(path, "installed\n", "utf8");
-			}),
-		);
+		for (const path of destinationFiles) {
+			await mkdir(join(path, ".."), { recursive: true });
+			await writeFile(path, "installed\n", "utf8");
+		}
 
 		const removedPath = await runUninstallCommand([], {
 			homeDir,
@@ -174,7 +209,7 @@ describe("installer", () => {
 			logger: (message) => logs.push(message),
 		});
 
-		expect(removedPath).toBe(resolveInstallTargets({ homeDir })[0]);
+		expect(removedPath).toBeUndefined();
 
 		logs.length = 0;
 		await runUninstallCommand(["--help"], {
