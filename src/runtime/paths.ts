@@ -1,4 +1,45 @@
-import { join } from "node:path";
+import { join, relative } from "node:path";
+
+export class InvalidFlowPathInputError extends Error {
+	readonly code = "INVALID_FLOW_PATH_INPUT";
+
+	constructor(kind: "session" | "feature", value: string) {
+		super(`Invalid ${kind} id '${value}'.`);
+		this.name = "InvalidFlowPathInputError";
+	}
+}
+
+function sanitizePathComponent(
+	kind: "session" | "feature",
+	value: string,
+): string {
+	if (
+		value.length === 0 ||
+		value === "." ||
+		value === ".." ||
+		value.startsWith("/") ||
+		value.includes("/") ||
+		value.includes("\\") ||
+		value.split(/[/\\]+/).includes("..")
+	) {
+		throw new InvalidFlowPathInputError(kind, value);
+	}
+
+	return value;
+}
+
+function assertDescendant(base: string, target: string): string {
+	const rel = relative(base, target);
+	if (
+		rel === ".." ||
+		rel.startsWith(`..${"/"}`) ||
+		rel.startsWith(`..${"\\"}`)
+	) {
+		throw new InvalidFlowPathInputError("session", target);
+	}
+
+	return target;
+}
 
 export function getFlowDir(worktree: string): string {
 	return join(worktree, ".flow");
@@ -17,7 +58,11 @@ export function getSessionsDir(worktree: string): string {
 }
 
 export function getSessionDir(worktree: string, sessionId: string): string {
-	return join(getSessionsDir(worktree), sessionId);
+	const sessionsDir = getSessionsDir(worktree);
+	return assertDescendant(
+		sessionsDir,
+		join(sessionsDir, sanitizePathComponent("session", sessionId)),
+	);
 }
 
 export function getSessionPath(worktree: string, sessionId: string): string {
@@ -48,7 +93,11 @@ export function getFeatureDocPath(
 	sessionId: string,
 	featureId: string,
 ): string {
-	return join(getFeaturesDocsDir(worktree, sessionId), `${featureId}.md`);
+	const featuresDir = getFeaturesDocsDir(worktree, sessionId);
+	return assertDescendant(
+		featuresDir,
+		join(featuresDir, `${sanitizePathComponent("feature", featureId)}.md`),
+	);
 }
 
 export function getLegacySessionPath(worktree: string): string {

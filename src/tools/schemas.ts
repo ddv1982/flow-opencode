@@ -143,16 +143,22 @@ export const WorkerResultArgsShape = {
 export const FlowStatusArgsShape = {};
 export const FlowHistoryArgsShape = {};
 export const FlowHistoryShowArgsShape = {
-	sessionId: z.string().min(1),
+	sessionId: z
+		.string()
+		.min(1)
+		.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case"),
 };
 export const FlowSessionActivateArgsShape = {
-	sessionId: z.string().min(1),
+	sessionId: z
+		.string()
+		.min(1)
+		.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case"),
 };
 export const FlowAutoPrepareArgsShape = {
 	argumentString: z.string().optional(),
 };
 export const FlowPlanStartArgsShape = {
-	goal: z.string().min(1).optional(),
+	goal: z.string().trim().min(1).optional(),
 	repoProfile: z.array(z.string().min(1)).optional(),
 };
 export const FlowPlanApplyArgsShape = {
