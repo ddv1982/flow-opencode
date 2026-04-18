@@ -53,11 +53,8 @@ jobs:
             }
           ' CHANGELOG.md > release-notes.md
 
-          if [ -s release-notes.md ]; then
-            notes_flag="--notes-file release-notes.md"
-          else
+          if [ ! -s release-notes.md ]; then
             rm -f release-notes.md
-            notes_flag="--notes Release $tag"
           fi
 
           if gh release view "$tag" >/dev/null 2>&1; then
