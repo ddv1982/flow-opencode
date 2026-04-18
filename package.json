@@ -46,7 +46,8 @@
 		"ignore": [
 			"src/types/typecheck.ts",
 			"tests/schema-equivalence.test-d.ts",
-			"scripts/cross-area/bundle-sanity.mjs"
+			"scripts/cross-area/bundle-sanity.mjs",
+			"scripts/cross-area/bench-gate.mjs"
 		]
 	}
 }
