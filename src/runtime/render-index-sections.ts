@@ -78,8 +78,7 @@ function renderIndexSummarySection(session: Session): string {
 - next command: ${deriveNextCommand(session)}
 - next step: ${session.execution.lastNextStep ? toInlineText(session.execution.lastNextStep) : "none"}
 - reviewer decision: ${reviewerDecision ? `${reviewerDecision.scope} | ${reviewerDecision.status} | ${toInlineText(reviewerDecision.summary)}` : "none"}
-- created: ${session.timestamps.createdAt}
-- updated: ${session.timestamps.updatedAt}`;
+- created: ${session.timestamps.createdAt}`;
 }
 
 function renderPlanSection(session: Session, features: Feature[]): string {

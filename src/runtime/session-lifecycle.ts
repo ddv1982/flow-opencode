@@ -10,6 +10,7 @@ import {
 import { deleteSessionDocs } from "./render";
 import { type PlanningContext, type Session, SessionSchema } from "./schema";
 import {
+	clearPreparedSessionDir,
 	migrateLegacySessionIfNeeded,
 	readSessionFromPath,
 	resolveActiveSessionId,
@@ -49,6 +50,7 @@ export async function deleteSession(worktree: string): Promise<void> {
 		recursive: true,
 		force: true,
 	});
+	clearPreparedSessionDir(worktree, sessionId);
 	await writeActiveSessionId(worktree, null);
 }
 
@@ -91,6 +93,7 @@ export async function archiveSession(
 	}
 
 	await writeActiveSessionId(worktree, null);
+	clearPreparedSessionDir(worktree, sessionId);
 	return {
 		sessionId,
 		archivedTo: relative(worktree, archivedDir),

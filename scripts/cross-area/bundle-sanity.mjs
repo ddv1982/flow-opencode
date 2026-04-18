@@ -1,4 +1,13 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -43,21 +52,24 @@ async function main() {
 		writeFileSync(
 			join(peerDir, "index.js"),
 			[
+				"import { createRequire } from 'node:module';",
+				`const require = createRequire(${JSON.stringify(join(projectRoot, "package.json"))});`,
+				"const zodModule = require('zod');",
+				"const z = zodModule.z ?? zodModule;",
+				"const SHIM_TAG = 'flow-bundle-sanity-shim-v1';",
 				"export function tool(definition) {",
-				"  return definition;",
+				"  return { ...definition, __shimTag: SHIM_TAG };",
 				"}",
-				"tool.schema = {",
-				"  string: (options = {}) => ({ type: 'string', ...options }),",
-				"  number: (options = {}) => ({ type: 'number', ...options }),",
-				"  boolean: (options = {}) => ({ type: 'boolean', ...options }),",
-				"  enum: (values, options = {}) => ({ type: 'enum', values, ...options }),",
-				"  array: (item, options = {}) => ({ type: 'array', item, ...options }),",
-				"  object: (shape, options = {}) => ({ type: 'object', shape, ...options }),",
-				"};",
+				"tool.schema = z;",
 			].join("\n"),
 		);
 
-		const pluginModule = await import(`file://${distPath}`);
+		const packageDistPath = join(packageDir, "index.js");
+		const packageSourcemapPath = join(packageDir, "index.js.map");
+		copyFileSync(distPath, packageDistPath);
+		copyFileSync(sourcemapPath, packageSourcemapPath);
+
+		const pluginModule = await import(`file://${packageDistPath}`);
 		const plugin = await pluginModule.default({ worktree });
 		const config = { agent: {}, command: {} };
 		await plugin.config(config);
@@ -76,11 +88,17 @@ async function main() {
 		if (toolResults.planStart.status !== "ok") {
 			throw new Error("flow_plan_start failed in bundle sanity smoke.");
 		}
+		if (toolResults.status.status !== "planning") {
+			throw new Error("flow_status did not report the expected planning status.");
+		}
 		if (toolResults.status.session?.goal !== "Bundle sanity") {
 			throw new Error("flow_status did not expose the expected session goal.");
 		}
 		if ((toolResults.history.history?.sessions ?? []).length < 1) {
 			throw new Error("flow_history did not report the stored session.");
+		}
+		if (plugin.tool.flow_status.__shimTag !== "flow-bundle-sanity-shim-v1") {
+			throw new Error("Bundle did not resolve @opencode-ai/plugin from the mock shim.");
 		}
 
 		const report = {
@@ -94,6 +112,8 @@ async function main() {
 			configCommands: Object.keys(config.command).length,
 			toolCount: Object.keys(plugin.tool).length,
 			nodeMajor: Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10),
+			shimTagVerified:
+				plugin.tool.flow_status.__shimTag === "flow-bundle-sanity-shim-v1",
 		};
 
 		if (report.sizeBytes > 716800) {

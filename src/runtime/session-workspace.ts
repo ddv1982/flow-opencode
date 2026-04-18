@@ -25,6 +25,9 @@ const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();
 const preparedWorkspaceGitignoreCache = new Map<string, string>();
 const preparedWorkspaceRoots = new Set<string>();
+const preparedSessionDirs = new Set<string>();
+const preparedDocsDirs = new Set<string>();
+const preparedFeaturesDocsDirs = new Set<string>();
 const sessionReadCache = new Map<
 	string,
 	{
@@ -42,6 +45,10 @@ const sessionWorkspaceFs: SessionWorkspaceFs = {
 	open,
 	rename,
 };
+
+function getPreparedSessionDirKey(worktree: string, sessionId: string): string {
+	return `${worktree}::${sessionId}`;
+}
 
 async function writeFileAtomically(
 	targetPath: string,
@@ -208,12 +215,65 @@ export async function writeSessionFile(
 ): Promise<void> {
 	await ensureWorkspace(worktree);
 	const sessionPath = getSessionPath(worktree, session.id);
-	await mkdir(getSessionDir(worktree, session.id), { recursive: true });
+	await ensureSessionDirPrepared(worktree, session.id);
 	await writeFileAtomically(
 		sessionPath,
 		`${JSON.stringify(session, null, 2)}\n`,
 	);
 	sessionReadCache.delete(sessionPath);
+}
+
+export async function ensureSessionDirPrepared(
+	worktree: string,
+	sessionId: string,
+): Promise<void> {
+	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
+	if (preparedSessionDirs.has(cacheKey)) {
+		return;
+	}
+
+	await mkdir(getSessionDir(worktree, sessionId), { recursive: true });
+	preparedSessionDirs.add(cacheKey);
+}
+
+export function clearPreparedSessionDir(
+	worktree: string,
+	sessionId: string,
+): void {
+	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
+	preparedSessionDirs.delete(cacheKey);
+	preparedDocsDirs.delete(cacheKey);
+	preparedFeaturesDocsDirs.delete(cacheKey);
+}
+
+export async function ensureSessionDocsPrepared(
+	worktree: string,
+	sessionId: string,
+): Promise<void> {
+	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
+	if (preparedDocsDirs.has(cacheKey)) {
+		return;
+	}
+
+	await mkdir(join(getSessionDir(worktree, sessionId), "docs"), {
+		recursive: true,
+	});
+	preparedDocsDirs.add(cacheKey);
+}
+
+export async function ensureSessionFeaturesDocsPrepared(
+	worktree: string,
+	sessionId: string,
+): Promise<void> {
+	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
+	if (preparedFeaturesDocsDirs.has(cacheKey)) {
+		return;
+	}
+
+	await mkdir(join(getSessionDir(worktree, sessionId), "docs", "features"), {
+		recursive: true,
+	});
+	preparedFeaturesDocsDirs.add(cacheKey);
 }
 
 export async function migrateLegacySessionIfNeeded(

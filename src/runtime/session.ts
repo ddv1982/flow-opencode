@@ -19,6 +19,10 @@ export {
 	syncSessionArtifacts,
 } from "./session-persistence";
 export {
+	clearPreparedSessionDir,
+	ensureSessionDirPrepared,
+	ensureSessionDocsPrepared,
+	ensureSessionFeaturesDocsPrepared,
 	ensureWorkspace,
 	readActiveSessionId,
 	resetSessionWorkspaceFsForTests,

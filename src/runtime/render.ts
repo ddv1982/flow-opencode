@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
 	getDocsDir,
 	getFeatureDocPath,
@@ -8,6 +8,11 @@ import {
 import { renderFeatureDoc } from "./render-feature-sections";
 import { renderIndexDoc } from "./render-index-sections";
 import type { Session } from "./schema";
+import {
+	ensureSessionDirPrepared,
+	ensureSessionDocsPrepared,
+	ensureSessionFeaturesDocsPrepared,
+} from "./session";
 
 type RenderedDoc = {
 	path: string;
@@ -23,16 +28,6 @@ function createContentHash(input: string): string {
 	}
 
 	return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-function createRenderComparableSession(session: Session): Session {
-	return {
-		...session,
-		timestamps: {
-			...session.timestamps,
-			updatedAt: session.timestamps.createdAt,
-		},
-	};
 }
 
 async function writeDocIfChanged(doc: RenderedDoc): Promise<boolean> {
@@ -84,13 +79,12 @@ export async function renderSessionDocs(
 	session: Session,
 ): Promise<void> {
 	const sessionId = session.id;
-	const renderSession = createRenderComparableSession(session);
-	const docsDir = getDocsDir(worktree, sessionId);
-	const featuresDir = getFeaturesDocsDir(worktree, sessionId);
+	const renderSession = session;
 	const features = renderSession.plan?.features ?? [];
 
-	await mkdir(docsDir, { recursive: true });
-	await mkdir(featuresDir, { recursive: true });
+	await ensureSessionDirPrepared(worktree, sessionId);
+	await ensureSessionDocsPrepared(worktree, sessionId);
+	await ensureSessionFeaturesDocsPrepared(worktree, sessionId);
 	await writeDocIfChanged({
 		path: getIndexDocPath(worktree, sessionId),
 		content: renderIndexDoc(renderSession),

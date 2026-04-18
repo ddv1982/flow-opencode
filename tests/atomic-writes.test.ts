@@ -223,20 +223,12 @@ function renderSessionDocsForAssertion(
 	index: string;
 	features: Map<string, string>;
 } {
-	const renderSession = {
-		...session,
-		timestamps: {
-			...session.timestamps,
-			updatedAt: session.timestamps.createdAt,
-		},
-	};
-
 	return {
-		index: renderIndexDoc(renderSession),
+		index: renderIndexDoc(session),
 		features: new Map(
-			(renderSession.plan?.features ?? []).map((feature) => [
+			(session.plan?.features ?? []).map((feature) => [
 				feature.id,
-				renderFeatureDoc(renderSession, feature),
+				renderFeatureDoc(session, feature),
 			]),
 		),
 	};

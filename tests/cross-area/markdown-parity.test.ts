@@ -1,10 +1,20 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createMidExecutionSession } from "../../bench/fixtures";
 import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
-import { saveSession } from "../../src/runtime/session";
+import { renderSessionDocs } from "../../src/runtime/render";
+import { ensureWorkspace, saveSession } from "../../src/runtime/session";
+import { setNowIsoOverride } from "../../src/runtime/util";
 import { createTempDirRegistry } from "../runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
@@ -13,24 +23,27 @@ const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
 
 afterEach(() => {
 	mock.restore();
+	setNowIsoOverride(null);
 	cleanupTempDirs();
 });
 
-function normalizeMarkdown(value: string): string {
-	return value
-		.replace(/- updated: .+/g, "- updated: <normalized-updated-at>")
-		.replace(/- created: .+/g, "- created: <normalized-created-at>")
-		.replace(
-			/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/g,
-			"<normalized-timestamp>",
-		);
-}
+beforeEach(() => {
+	let callCount = 0;
+	setNowIsoOverride(() => {
+		const value = new Date(
+			Date.parse("2026-01-01T00:00:00.000Z") + callCount * 1_000,
+		).toISOString();
+		callCount += 1;
+		return value;
+	});
+});
 
 describe("cross-area markdown parity", () => {
 	test("10-feature fixture preserves golden bytes and rewrites only the changed feature doc plus index", async () => {
 		const worktree = makeTempDir();
 		const session = createMidExecutionSession(10);
-		const saved = await saveSession(worktree, session);
+		await ensureWorkspace(worktree);
+		await renderSessionDocs(worktree, session);
 		const fixtureRoot = path.resolve(
 			import.meta.dir,
 			"..",
@@ -39,36 +52,28 @@ describe("cross-area markdown parity", () => {
 			"mid-execution-10-features",
 		);
 
-		expect(
-			normalizeMarkdown(
-				await readFile(getIndexDocPath(worktree, saved.id), "utf8"),
-			),
-		).toBe(
-			normalizeMarkdown(await readFile(`${fixtureRoot}/index.md`, "utf8")),
+		expect(await readFile(getIndexDocPath(worktree, session.id), "utf8")).toBe(
+			await readFile(`${fixtureRoot}/index.md`, "utf8"),
 		);
 
-		for (const feature of saved.plan?.features ?? []) {
+		for (const feature of session.plan?.features ?? []) {
 			expect(
-				normalizeMarkdown(
-					await readFile(
-						getFeatureDocPath(worktree, saved.id, feature.id),
-						"utf8",
-					),
+				await readFile(
+					getFeatureDocPath(worktree, session.id, feature.id),
+					"utf8",
 				),
 			).toBe(
-				normalizeMarkdown(
-					await readFile(`${fixtureRoot}/features/${feature.id}.md`, "utf8"),
-				),
+				await readFile(`${fixtureRoot}/features/${feature.id}.md`, "utf8"),
 			);
 		}
 
 		const changedFeatureId = "feature-6";
-		const plan = saved.plan;
+		const plan = session.plan;
 		if (!plan) {
 			throw new Error("Expected plan for mutation test.");
 		}
 		const mutated = {
-			...saved,
+			...session,
 			plan: {
 				...plan,
 				features: plan.features.map((feature) =>
@@ -94,8 +99,8 @@ describe("cross-area markdown parity", () => {
 		expect(docWrites).toHaveLength(2);
 		expect(docWrites.sort()).toEqual(
 			[
-				getIndexDocPath(worktree, saved.id),
-				getFeatureDocPath(worktree, saved.id, changedFeatureId),
+				getIndexDocPath(worktree, session.id),
+				getFeatureDocPath(worktree, session.id, changedFeatureId),
 			].sort(),
 		);
 	});

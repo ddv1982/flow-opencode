@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -11,6 +11,7 @@ import {
 import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import { saveSession } from "../src/runtime/session";
 import { applyPlan } from "../src/runtime/transitions";
+import { setNowIsoOverride } from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
@@ -18,7 +19,19 @@ const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
 );
 
 afterEach(() => {
+	setNowIsoOverride(null);
 	cleanupTempDirs();
+});
+
+beforeEach(() => {
+	let callCount = 0;
+	setNowIsoOverride(() => {
+		const value = new Date(
+			Date.parse("2026-01-01T00:00:00.000Z") + callCount * 1_000,
+		).toISOString();
+		callCount += 1;
+		return value;
+	});
 });
 
 function assertOk<T>(
@@ -33,13 +46,13 @@ function assertOk<T>(
 
 type FixtureSpec = {
 	name: string;
-	session: ReturnType<typeof createSession>;
+	createSession: () => ReturnType<typeof createSession>;
 	featureIds: string[];
 };
 
 async function renderFixture(
 	worktree: string,
-	session: FixtureSpec["session"],
+	session: ReturnType<FixtureSpec["createSession"]>,
 ) {
 	const saved = await saveSession(worktree, session);
 	const index = await readFile(getIndexDocPath(worktree, saved.id), "utf8");
@@ -59,21 +72,11 @@ async function renderFixture(
 	return { saved, index, featureDocs: new Map(featureDocs) };
 }
 
-function normalizeMarkdown(value: string): string {
-	return value
-		.replace(/- updated: .+/g, "- updated: <normalized-updated-at>")
-		.replace(/- created: .+/g, "- created: <normalized-created-at>")
-		.replace(
-			/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/g,
-			"<normalized-timestamp>",
-		);
-}
-
 describe("render fixtures", () => {
 	const fixtures = [
 		{
 			name: "empty-plan",
-			session: {
+			createSession: () => ({
 				...createSession("Empty plan fixture"),
 				id: "render-empty-plan",
 				timestamps: {
@@ -82,31 +85,32 @@ describe("render fixtures", () => {
 					approvedAt: null,
 					completedAt: null,
 				},
-			},
+			}),
 			featureIds: [],
 		},
 		{
 			name: "single-feature",
-			session: assertOk(
-				applyPlan(
-					{
-						...createSession("Single feature fixture"),
-						id: "render-single-feature",
-						timestamps: {
-							createdAt: "2026-01-01T00:00:00.000Z",
-							updatedAt: "2026-01-01T00:00:00.000Z",
-							approvedAt: null,
-							completedAt: null,
+			createSession: () =>
+				assertOk(
+					applyPlan(
+						{
+							...createSession("Single feature fixture"),
+							id: "render-single-feature",
+							timestamps: {
+								createdAt: "2026-01-01T00:00:00.000Z",
+								updatedAt: "2026-01-01T00:00:00.000Z",
+								approvedAt: null,
+								completedAt: null,
+							},
 						},
-					},
-					createPlan(1),
+						createPlan(1),
+					),
 				),
-			),
 			featureIds: ["feature-1"],
 		},
 		{
 			name: "mid-execution-10-features",
-			session: createMidExecutionSession(10),
+			createSession: () => createMidExecutionSession(10),
 			featureIds: Array.from(
 				{ length: 10 },
 				(_, index) => `feature-${index + 1}`,
@@ -114,7 +118,7 @@ describe("render fixtures", () => {
 		},
 		{
 			name: "save-session-20-features",
-			session: createApprovedSession(20),
+			createSession: () => createApprovedSession(20),
 			featureIds: Array.from(
 				{ length: 20 },
 				(_, index) => `feature-${index + 1}`,
@@ -122,7 +126,7 @@ describe("render fixtures", () => {
 		},
 		{
 			name: "all-completed",
-			session: createCompletedSession(5),
+			createSession: () => createCompletedSession(5),
 			featureIds: Array.from(
 				{ length: 5 },
 				(_, index) => `feature-${index + 1}`,
@@ -130,7 +134,7 @@ describe("render fixtures", () => {
 		},
 		{
 			name: "hundred-features",
-			session: createApprovedSession(100),
+			createSession: () => createApprovedSession(100),
 			featureIds: Array.from(
 				{ length: 100 },
 				(_, index) => `feature-${index + 1}`,
@@ -141,7 +145,7 @@ describe("render fixtures", () => {
 	for (const fixture of fixtures) {
 		test(`matches committed golden snapshot for ${fixture.name}`, async () => {
 			const worktree = makeTempDir();
-			const rendered = await renderFixture(worktree, fixture.session);
+			const rendered = await renderFixture(worktree, fixture.createSession());
 			const fixtureRoot = path.resolve(
 				import.meta.dir,
 				"__fixtures__",
@@ -153,9 +157,7 @@ describe("render fixtures", () => {
 			);
 
 			const expectedIndex = await readFile(`${fixtureRoot}/index.md`, "utf8");
-			expect(normalizeMarkdown(rendered.index)).toBe(
-				normalizeMarkdown(expectedIndex),
-			);
+			expect(rendered.index).toBe(expectedIndex);
 
 			expect([...rendered.featureDocs.keys()].sort()).toEqual(
 				[...fixture.featureIds].sort(),
@@ -165,12 +167,8 @@ describe("render fixtures", () => {
 			);
 
 			for (const featureId of fixture.featureIds) {
-				expect(
-					normalizeMarkdown(rendered.featureDocs.get(featureId) ?? ""),
-				).toBe(
-					normalizeMarkdown(
-						await readFile(`${fixtureRoot}/features/${featureId}.md`, "utf8"),
-					),
+				expect(rendered.featureDocs.get(featureId) ?? "").toBe(
+					await readFile(`${fixtureRoot}/features/${featureId}.md`, "utf8"),
 				);
 			}
 		});
