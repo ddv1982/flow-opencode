@@ -32,11 +32,13 @@ bun run install:opencode
 curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
 ```
 
-Both install the plugin to:
+By default, both install flows place the plugin at:
 
 ```text
-~/.opencode/plugins/flow.js
+~/.config/opencode/plugins/flow.js
 ```
+
+If you already have a legacy install at `~/.opencode/plugins/flow.js`, Flow keeps using that location until you remove or migrate it.
 
 ### Uninstall
 
@@ -56,7 +58,15 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 
 If you ever need to copy the file yourself, build first and then copy `dist/index.js` into one of OpenCode's documented local plugin directories:
 
-- `.opencode/plugins/`
+- `~/.config/opencode/plugins/`
+
+## Migration / Upgrade
+
+Flow now treats `~/.config/opencode/plugins/flow.js` as the canonical install path.
+
+- New installs go to `~/.config/opencode/plugins/flow.js`
+- Existing legacy installs at `~/.opencode/plugins/flow.js` are preserved in place for compatibility
+- `bun run uninstall:opencode` and the release uninstall script remove Flow from either location
 
 ## Quick Start
 

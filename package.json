@@ -1,11 +1,14 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "0.1.10",
+	"version": "1.0.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
 	"files": [
-		"dist"
+		"dist",
+		"LICENSE",
+		"README.md",
+		"CHANGELOG.md"
 	],
 	"scripts": {
 		"build": "python3 -c \"import subprocess, sys; sys.exit(subprocess.run(['bun','build','--target=node','--outdir=./dist','--entry-naming=index.js','--external=@opencode-ai/plugin','--minify-syntax','--minify-whitespace','--sourcemap=external','./src/index.ts']).returncode)\" # --external @opencode-ai/plugin --sourcemap external",
