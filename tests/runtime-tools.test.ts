@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+	FLOW_HISTORY_COMMAND,
+	FLOW_PLAN_WITH_GOAL_COMMAND,
+	FLOW_STATUS_COMMAND,
+	flowSessionActivateCommand,
+} from "../src/runtime/constants";
 import { getArchiveDir, getIndexDocPath } from "../src/runtime/paths";
 import {
 	createSession,
@@ -60,7 +66,7 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.history.activeSessionId).toBeNull();
 		expect(parsed.history.sessions).toEqual([]);
 		expect(parsed.history.archived).toEqual([]);
-		expect(parsed.nextCommand).toBe("/flow-plan <goal>");
+		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
 	test("no-arg tools accept undefined args", async () => {
@@ -157,7 +163,7 @@ describe("runtime tools and recovery", () => {
 			archivePath: resetParsed.archivedTo,
 		});
 		expect(parsed.history.archived[0].path).toBe(resetParsed.archivedTo);
-		expect(parsed.nextCommand).toBe(`/flow-session activate ${first.id}`);
+		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
 		expect(getArchiveDir(worktree)).toContain(".flow/archive");
 	});
 
@@ -181,9 +187,9 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.session.id).toBe(first.id);
 		expect(parsed.session.goal).toBe("First goal");
 		expect(parsed.session.nextCommand).toBe(
-			`/flow-session activate ${first.id}`,
+			flowSessionActivateCommand(first.id),
 		);
-		expect(parsed.nextCommand).toBe(`/flow-session activate ${first.id}`);
+		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
 		expect(await activeSessionId(worktree)).toBe(second.id);
 	});
 
@@ -210,8 +216,8 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.archivePath).toBe(resetParsed.archivedTo);
 		expect(parsed.session.id).toBe(saved.id);
 		expect(parsed.session.goal).toBe("Archived goal");
-		expect(parsed.session.nextCommand).toBe("/flow-history");
-		expect(parsed.nextCommand).toBe("/flow-history");
+		expect(parsed.session.nextCommand).toBe(FLOW_HISTORY_COMMAND);
+		expect(parsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 	});
 
 	test("flow_history_show does not suggest activation for completed stored sessions", async () => {
@@ -237,8 +243,8 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.status).toBe("ok");
 		expect(parsed.source).toBe("sessions");
 		expect(parsed.session.status).toBe("completed");
-		expect(parsed.session.nextCommand).toBe("/flow-plan <goal>");
-		expect(parsed.nextCommand).toBe("/flow-plan <goal>");
+		expect(parsed.session.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
 	test("flow_session_activate switches the active session pointer", async () => {
@@ -258,7 +264,7 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toBe("Activated Flow session: First goal");
 		expect(parsed.session.id).toBe(first.id);
-		expect(parsed.nextCommand).toBe("/flow-status");
+		expect(parsed.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(await activeSessionId(worktree)).toBe(first.id);
 		expect((await loadSession(worktree))?.id).toBe(first.id);
 	});
@@ -273,7 +279,7 @@ describe("runtime tools and recovery", () => {
 		);
 		const showParsed = JSON.parse(showResponse);
 		expect(showParsed.status).toBe("missing_session");
-		expect(showParsed.nextCommand).toBe("/flow-history");
+		expect(showParsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 
 		const activateResponse = await tools.flow_session_activate.execute(
 			{ sessionId: "missing-id" },
@@ -281,7 +287,7 @@ describe("runtime tools and recovery", () => {
 		);
 		const activateParsed = JSON.parse(activateResponse);
 		expect(activateParsed.status).toBe("missing_session");
-		expect(activateParsed.nextCommand).toBe("/flow-history");
+		expect(activateParsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 	});
 
 	test("flow_reset_session archives the active session and clears the active pointer", async () => {
@@ -306,7 +312,7 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.archivedTo).toMatch(
 			new RegExp(`^\\.flow/archive/${saved.id}-`),
 		);
-		expect(parsed.nextCommand).toBe("/flow-plan <goal>");
+		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 		expect(await loadSession(worktree)).toBeNull();
 		await expect(
 			readFile(join(worktree, parsed.archivedTo, "session.json"), "utf8"),
@@ -572,7 +578,7 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.recovery.recoveryStage).toBe("record_review");
 		expect(parsed.recovery.prerequisite).toBe("reviewer_result_required");
 		expect(parsed.recovery.requiredArtifact).toBe("final_reviewer_decision");
-		expect(parsed.recovery.nextCommand).toBe("/flow-status");
+		expect(parsed.recovery.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(parsed.recovery.nextRuntimeTool).toBeUndefined();
 		expect(parsed.recovery.retryable).toBe(true);
 	});
@@ -726,7 +732,7 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.recovery.recoveryStage).toBe("rerun_validation");
 		expect(parsed.recovery.prerequisite).toBe("validation_rerun_required");
 		expect(parsed.recovery.requiredArtifact).toBe("broad_validation_result");
-		expect(parsed.recovery.nextCommand).toBe("/flow-status");
+		expect(parsed.recovery.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(parsed.recovery.nextRuntimeTool).toBeUndefined();
 		expect(parsed.recovery.autoResolvable).toBe(true);
 	});
@@ -783,7 +789,7 @@ describe("runtime tools and recovery", () => {
 		expect(completed.recovery?.requiredArtifact).toBe(
 			"feature_reviewer_decision",
 		);
-		expect(completed.recovery?.nextCommand).toBe("/flow-status");
+		expect(completed.recovery?.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
 		expect(completed.recovery?.nextRuntimeArgs).toBeUndefined();
 	});
@@ -848,7 +854,7 @@ describe("runtime tools and recovery", () => {
 		expect(completed.recovery?.requiredArtifact).toBe(
 			"targeted_validation_result",
 		);
-		expect(completed.recovery?.nextCommand).toBe("/flow-status");
+		expect(completed.recovery?.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
 		expect(completed.recovery?.nextRuntimeArgs).toBeUndefined();
 	});
@@ -921,7 +927,7 @@ describe("runtime tools and recovery", () => {
 			"completion_payload_rebuild_required",
 		);
 		expect(completed.recovery?.requiredArtifact).toBe("final_review_payload");
-		expect(completed.recovery?.nextCommand).toBe("/flow-status");
+		expect(completed.recovery?.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
 	});
 

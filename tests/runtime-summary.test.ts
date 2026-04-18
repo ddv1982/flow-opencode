@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import {
+	FLOW_PLAN_COMMAND,
+	FLOW_PLAN_WITH_GOAL_COMMAND,
+	FLOW_RUN_COMMAND,
+	FLOW_STATUS_COMMAND,
+	flowResetFeatureCommand,
+} from "../src/runtime/constants";
 import { getIndexDocPath } from "../src/runtime/paths";
 import { createSession, saveSession } from "../src/runtime/session";
 import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
@@ -553,25 +560,25 @@ describe("runtime summary", () => {
 
 	test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {
 		const planning = createSession("Build a workflow plugin");
-		expect(deriveNextCommand(planning)).toBe("/flow-plan <goal>");
+		expect(deriveNextCommand(planning)).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 
 		const applied = applyPlan(planning, samplePlan());
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
 
-		expect(deriveNextCommand(applied.value)).toBe("/flow-plan");
+		expect(deriveNextCommand(applied.value)).toBe(FLOW_PLAN_COMMAND);
 
 		const approved = approvePlan(applied.value);
 		expect(approved.ok).toBe(true);
 		if (!approved.ok) return;
 
-		expect(deriveNextCommand(approved.value)).toBe("/flow-run");
+		expect(deriveNextCommand(approved.value)).toBe(FLOW_RUN_COMMAND);
 
 		const running = startRun(approved.value);
 		expect(running.ok).toBe(true);
 		if (!running.ok) return;
 
-		expect(deriveNextCommand(running.value.session)).toBe("/flow-run");
+		expect(deriveNextCommand(running.value.session)).toBe(FLOW_RUN_COMMAND);
 
 		const blocked = {
 			...approved.value,
@@ -587,10 +594,10 @@ describe("runtime summary", () => {
 			},
 		};
 
-		expect(deriveNextCommand(blocked)).toBe("/flow-status");
+		expect(deriveNextCommand(blocked)).toBe(FLOW_STATUS_COMMAND);
 
 		const completed = { ...approved.value, status: "completed" as const };
-		expect(deriveNextCommand(completed)).toBe("/flow-plan <goal>");
+		expect(deriveNextCommand(completed)).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
 	test("suggests resetting blocked features when the outcome is retryable", () => {
@@ -646,7 +653,7 @@ describe("runtime summary", () => {
 		if (!blocked.ok) return;
 
 		expect(summarizeSession(blocked.value).session?.nextCommand).toBe(
-			"/flow-reset feature setup-runtime",
+			flowResetFeatureCommand("setup-runtime"),
 		);
 	});
 });

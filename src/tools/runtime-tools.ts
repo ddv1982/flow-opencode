@@ -4,6 +4,7 @@ import {
 	missingSessionResponse,
 	withPersistedTransition,
 } from "../runtime/application";
+import { FLOW_PLAN_WITH_GOAL_COMMAND } from "../runtime/constants";
 import { summarizeSession } from "../runtime/summary";
 import {
 	applyPlan,
@@ -67,7 +68,7 @@ export function createRuntimeTools() {
 							}),
 							missingResponse: missingSessionResponse(
 								"No active Flow planning session exists.",
-								"/flow-plan <goal>",
+								FLOW_PLAN_WITH_GOAL_COMMAND,
 							),
 						},
 					);
@@ -150,7 +151,7 @@ export function createRuntimeTools() {
 							},
 							missingResponse: missingSessionResponse(
 								"No active Flow session exists.",
-								"/flow-plan <goal>",
+								FLOW_PLAN_WITH_GOAL_COMMAND,
 							),
 						},
 					);

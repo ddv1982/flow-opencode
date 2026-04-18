@@ -1,4 +1,5 @@
 import { parse, resolve } from "node:path";
+import { errorResponse } from "../errors";
 import type { Session } from "../schema";
 import {
 	loadSession,
@@ -77,17 +78,6 @@ export function missingSessionResponse(
 	return nextCommand
 		? { status: "missing_session", summary, nextCommand }
 		: { status: "missing_session", summary };
-}
-
-export function errorResponse(
-	summary: string,
-	extra?: RuntimeToolResponse,
-): RuntimeToolResponse {
-	return {
-		status: "error",
-		summary,
-		...(extra ?? {}),
-	};
 }
 
 export function parseToolArgs<T>(
@@ -197,3 +187,5 @@ export async function withPersistedTransition<T>(
 		runtime,
 	);
 }
+
+export { errorResponse };

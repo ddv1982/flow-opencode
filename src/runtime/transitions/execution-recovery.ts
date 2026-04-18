@@ -1,3 +1,4 @@
+import { FLOW_STATUS_COMMAND, flowResetFeatureCommand } from "../constants";
 import {
 	type CompletionRecoveryKind,
 	resolveResetFeatureRecovery,
@@ -19,7 +20,7 @@ function buildStatusRecovery(
 		...(recovery.requiredArtifact
 			? { requiredArtifact: recovery.requiredArtifact }
 			: {}),
-		nextCommand: recovery.nextCommand ?? "/flow-status",
+		nextCommand: recovery.nextCommand ?? FLOW_STATUS_COMMAND,
 		...(recovery.nextRuntimeTool
 			? {
 					nextRuntimeTool: recovery.nextRuntimeTool,
@@ -52,7 +53,7 @@ function buildResetFeatureRecovery(
 		...(recovery.requiredArtifact
 			? { requiredArtifact: recovery.requiredArtifact }
 			: {}),
-		nextCommand: `/flow-reset feature ${featureId}`,
+		nextCommand: flowResetFeatureCommand(featureId),
 		nextRuntimeTool: "flow_reset_feature",
 		nextRuntimeArgs: { featureId },
 		...(recovery.retryable !== undefined

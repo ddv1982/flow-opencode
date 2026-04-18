@@ -1,3 +1,4 @@
+import { FLOW_STATUS_COMMAND } from "../constants";
 import type { TransitionRecovery } from "./shared";
 
 export type CompletionRecoveryKind =
@@ -37,7 +38,7 @@ const REVIEW_DECISION_RECOVERY: Record<
 		recoveryStage: "record_review",
 		prerequisite: "reviewer_result_required",
 		requiredArtifact: "feature_reviewer_decision",
-		nextCommand: "/flow-status",
+		nextCommand: FLOW_STATUS_COMMAND,
 		retryable: true,
 		autoResolvable: true,
 	},
@@ -48,7 +49,7 @@ const REVIEW_DECISION_RECOVERY: Record<
 		recoveryStage: "record_review",
 		prerequisite: "reviewer_result_required",
 		requiredArtifact: "final_reviewer_decision",
-		nextCommand: "/flow-status",
+		nextCommand: FLOW_STATUS_COMMAND,
 		retryable: true,
 		autoResolvable: true,
 	},
@@ -65,7 +66,7 @@ const VALIDATION_SCOPE_RECOVERY: Record<
 		recoveryStage: "rerun_validation",
 		prerequisite: "validation_rerun_required",
 		requiredArtifact: "targeted_validation_result",
-		nextCommand: "/flow-status",
+		nextCommand: FLOW_STATUS_COMMAND,
 		retryable: true,
 		autoResolvable: true,
 	},
@@ -76,7 +77,7 @@ const VALIDATION_SCOPE_RECOVERY: Record<
 		recoveryStage: "rerun_validation",
 		prerequisite: "validation_rerun_required",
 		requiredArtifact: "broad_validation_result",
-		nextCommand: "/flow-status",
+		nextCommand: FLOW_STATUS_COMMAND,
 		retryable: true,
 		autoResolvable: true,
 	},
@@ -98,7 +99,7 @@ const STATIC_COMPLETION_RECOVERY: Record<
 		recoveryStage: "retry_completion",
 		prerequisite: "completion_payload_rebuild_required",
 		requiredArtifact: "final_review_payload",
-		nextCommand: "/flow-status",
+		nextCommand: FLOW_STATUS_COMMAND,
 		retryable: true,
 		autoResolvable: true,
 	},
@@ -108,7 +109,7 @@ const STATIC_COMPLETION_RECOVERY: Record<
 			"Run the required validation for the current Flow feature and retry completion with recorded validation evidence.",
 		recoveryStage: "rerun_validation",
 		prerequisite: "validation_rerun_required",
-		nextCommand: "/flow-status",
+		nextCommand: FLOW_STATUS_COMMAND,
 		retryable: true,
 		autoResolvable: true,
 	},

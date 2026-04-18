@@ -1,6 +1,14 @@
 import { tool } from "@opencode-ai/plugin";
 import { resolveSessionRoot, toJson } from "../runtime/application";
 import {
+	FLOW_AUTO_RESUME_COMMAND,
+	FLOW_AUTO_WITH_GOAL_COMMAND,
+	FLOW_HISTORY_COMMAND,
+	FLOW_PLAN_WITH_GOAL_COMMAND,
+	FLOW_STATUS_COMMAND,
+	flowSessionActivateCommand,
+} from "../runtime/constants";
+import {
 	activateSession,
 	archiveSession,
 	createSession,
@@ -57,7 +65,7 @@ export function createSessionTools() {
 							status: "missing",
 							summary: "No Flow session history found.",
 							history,
-							nextCommand: "/flow-plan <goal>",
+							nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 						});
 					}
 
@@ -66,10 +74,10 @@ export function createSessionTools() {
 						summary: `Found ${totalCount} Flow session ${totalCount === 1 ? "entry" : "entries"} (${activeCount} active, ${history.archived.length} archived).`,
 						history,
 						nextCommand: history.activeSessionId
-							? "/flow-status"
+							? FLOW_STATUS_COMMAND
 							: resumableStoredSession
-								? `/flow-session activate ${resumableStoredSession.id}`
-								: "/flow-plan <goal>",
+								? flowSessionActivateCommand(resumableStoredSession.id)
+								: FLOW_PLAN_WITH_GOAL_COMMAND,
 					});
 				},
 			),
@@ -90,18 +98,18 @@ export function createSessionTools() {
 						return toJson({
 							status: "missing_session",
 							summary: `No stored Flow session exists for id '${input.sessionId}'.`,
-							nextCommand: "/flow-history",
+							nextCommand: FLOW_HISTORY_COMMAND,
 						});
 					}
 
 					const nextCommand = found.active
-						? "/flow-status"
+						? FLOW_STATUS_COMMAND
 						: found.source === "sessions" &&
 								found.session.status !== "completed"
-							? `/flow-session activate ${input.sessionId}`
+							? flowSessionActivateCommand(input.sessionId)
 							: found.session.status === "completed"
-								? "/flow-plan <goal>"
-								: "/flow-history";
+								? FLOW_PLAN_WITH_GOAL_COMMAND
+								: FLOW_HISTORY_COMMAND;
 					const summarizedSession = summarizeSession(found.session).session;
 
 					return toJson({
@@ -136,7 +144,7 @@ export function createSessionTools() {
 						return toJson({
 							status: "missing_session",
 							summary: `No stored Flow session exists for id '${input.sessionId}'.`,
-							nextCommand: "/flow-history",
+							nextCommand: FLOW_HISTORY_COMMAND,
 						});
 					}
 
@@ -144,7 +152,7 @@ export function createSessionTools() {
 						status: "ok",
 						summary: `Activated Flow session: ${session.goal}`,
 						session: summarizeSession(session).session,
-						nextCommand: "/flow-status",
+						nextCommand: FLOW_STATUS_COMMAND,
 					});
 				},
 			),
@@ -163,7 +171,7 @@ export function createSessionTools() {
 						return toJson({
 							status: "missing_goal",
 							summary: "Provide a goal to create a new Flow plan.",
-							nextCommand: "/flow-plan <goal>",
+							nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 						});
 					}
 
@@ -172,7 +180,7 @@ export function createSessionTools() {
 						return toJson({
 							status: "missing_goal",
 							summary: "Provide a goal to create a new Flow plan.",
-							nextCommand: "/flow-plan <goal>",
+							nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 						});
 					}
 					const isNewGoal = Boolean(
@@ -255,7 +263,7 @@ export function createSessionTools() {
 								mode: "missing_goal",
 								summary:
 									"No active Flow session exists. Provide a goal to start a new autonomous run.",
-								nextCommand: "/flow-auto <goal>",
+								nextCommand: FLOW_AUTO_WITH_GOAL_COMMAND,
 							});
 						}
 
@@ -264,7 +272,7 @@ export function createSessionTools() {
 							mode: "resume",
 							goal: resumableSession.goal,
 							summary: `Resuming active Flow goal: ${resumableSession.goal}`,
-							nextCommand: "/flow-auto resume",
+							nextCommand: FLOW_AUTO_RESUME_COMMAND,
 						});
 					}
 
@@ -273,7 +281,7 @@ export function createSessionTools() {
 						mode: "start_new_goal",
 						goal: trimmed,
 						summary: `Starting a new autonomous Flow goal: ${trimmed}`,
-						nextCommand: "/flow-status",
+						nextCommand: FLOW_STATUS_COMMAND,
 					});
 				},
 			),
@@ -291,7 +299,7 @@ export function createSessionTools() {
 						: "No active Flow session existed.",
 					archivedSessionId: archived?.sessionId ?? null,
 					archivedTo: archived?.archivedTo ?? null,
-					nextCommand: "/flow-plan <goal>",
+					nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 				});
 			}),
 		}),

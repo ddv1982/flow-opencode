@@ -1,3 +1,10 @@
+import {
+	FLOW_PLAN_COMMAND,
+	FLOW_PLAN_WITH_GOAL_COMMAND,
+	FLOW_RUN_COMMAND,
+	FLOW_STATUS_COMMAND,
+	flowResetFeatureCommand,
+} from "./constants";
 import { summarizeCompletion } from "./domain";
 import type { Feature, Session } from "./schema";
 
@@ -65,13 +72,13 @@ export function summarizeSession(session: Session | null) {
 
 export function deriveNextCommand(session: Session): string {
 	if (!session.plan) {
-		return "/flow-plan <goal>";
+		return FLOW_PLAN_WITH_GOAL_COMMAND;
 	}
 	if (session.status === "planning") {
-		return "/flow-plan";
+		return FLOW_PLAN_COMMAND;
 	}
 	if (session.status === "ready" || session.status === "running") {
-		return "/flow-run";
+		return FLOW_RUN_COMMAND;
 	}
 	if (session.status === "blocked") {
 		const lastFeatureId = session.execution.lastFeatureId;
@@ -84,12 +91,12 @@ export function deriveNextCommand(session: Session): string {
 				outcome?.autoResolvable ||
 				outcome?.kind === "contract_error")
 		) {
-			return `/flow-reset feature ${lastFeatureId}`;
+			return flowResetFeatureCommand(lastFeatureId);
 		}
 	}
 	if (session.status === "completed") {
-		return "/flow-plan <goal>";
+		return FLOW_PLAN_WITH_GOAL_COMMAND;
 	}
 
-	return "/flow-status";
+	return FLOW_STATUS_COMMAND;
 }
