@@ -1,0 +1,28 @@
+{
+  "featureId": "m4-transitions-consolidation-r2",
+  "reviewedAt": "2026-04-18T16:59:18Z",
+  "commitId": "24846eb02cd1b1c4fa5fc41ba0a2e1db0a82e85f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit repairs the corrupted recovery/execution consolidation and keeps transition behavior/tests mostly intact, but it fails the feature’s explicit LOC constraint by relaxing the maintainability gate to 550 and allowing execution.ts to remain above the permitted 500-line fallback.",
+    "issues": [
+      {
+        "file": "tests/transitions-consolidation.test.ts",
+        "line": 25,
+        "severity": "blocking",
+        "description": "Feature m4-transitions-consolidation-r2 requires each non-index transition file to stay <= 400 LOC, with only a <= 500 fallback if justified. This test was changed to a 550 cap (`toBeLessThanOrEqual(550)`), which allows src/runtime/transitions/execution.ts (535 LOC at commit 24846eb) to pass despite exceeding the feature’s allowed fallback."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Transition file-size policy is inconsistent across mission artifacts, which made it easy for this feature to drift from its own acceptance criteria.",
+      "evidence": "Mission AGENTS.md says transition files have a soft cap of 400 LOC; features.json for m4-transitions-consolidation-r2 states <=400 LOC (or <=500 with justification); validation-contract.md VAL-TRANS-011 states <=550 LOC; tests/transitions-consolidation.test.ts enforces 550 at lines 25 and 43."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, and commit 24846eb in detail. Recovery/execution consolidation repairs are present, but the feature does not meet its own documented LOC acceptance bound because the test gate was widened to 550 instead of the specified <=500 fallback."
+}

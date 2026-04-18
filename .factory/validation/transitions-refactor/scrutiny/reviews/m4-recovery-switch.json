@@ -1,0 +1,33 @@
+{
+  "featureId": "m4-recovery-switch",
+  "reviewedAt": "2026-04-18T16:58:35Z",
+  "commitId": "080edf8b86e02ca7b1ac2e7a49ef9bf53e60ef44",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The codebase does use a single exhaustive switch in `buildCompletionRecovery` and legacy recovery indirection symbols are removed, but recovery envelope `resolutionHint` strings are not byte-identical to the pre-refactor behavior required by the feature contract.",
+    "issues": [
+      {
+        "file": "src/runtime/transitions/recovery.ts",
+        "line": 132,
+        "severity": "blocking",
+        "description": "Behavior-preservation regression: several `resolutionHint` strings differ from the pre-refactor map-based implementation (historical baseline: `src/runtime/transitions/execution-recovery-policy.ts` at `24846eb^`, lines 65/76/98/128/137). Current literals at lines 132, 143, 156, 166, and 178 changed wording, violating the feature requirement that existing error-envelope strings remain byte-identical."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "Feature handoff points to a commit that does not contain the reviewed feature's code diff, which weakens traceability for scrutiny and makes it easy to miss when a feature was actually introduced earlier.",
+      "evidence": "Handoff commitId is `080edf8b86e02ca7b1ac2e7a49ef9bf53e60ef44`, but `git show --stat` for that commit changes constants/util modules only and does not include `src/runtime/transitions/recovery.ts`."
+    },
+    {
+      "area": "conventions",
+      "observation": "Current verification guidance for this feature does not directly assert `resolutionHint` string parity, so wording drift can slip through while tests still pass.",
+      "evidence": "Feature verification step relies on `git diff main tests/ — no edits to expected error strings`; transcript skeleton for session `6642cda4-22a9-4998-8dc5-31993f70ca02` shows this was used, and no direct string-parity assertion against recovery payload literals was executed."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed `m4-recovery-switch` using the handoff, transcript skeleton, and commit/file diffs. Although the exhaustive switch shape is present and legacy map symbols are removed, the recovery envelope wording changed versus pre-refactor behavior; this violates the feature's byte-identical string requirement, so the review fails."
+}

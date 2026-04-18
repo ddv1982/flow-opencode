@@ -1,0 +1,33 @@
+{
+  "featureId": "m4-clone-reduction",
+  "reviewedAt": "2026-04-18T16:59:01Z",
+  "commitId": "080edf8b86e02ca7b1ac2e7a49ef9bf53e60ef44",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature meets the literal \"no structuredClone in transitions\" target, but the clone-removal refactor introduced a behavioral regression: selectPlanFeatures mutates the caller's input session object via shared execution references.",
+    "issues": [
+      {
+        "file": "src/runtime/transitions/plan.ts",
+        "line": 189,
+        "severity": "blocking",
+        "description": "prepareDraftPlanEdit returns `{ ...session }` without cloning `execution`, and selectPlanFeatures later calls `clearExecution(next)` (plan.ts:304), which mutates `session.execution` in place (shared.ts:73-82). This violates transition purity and changes behavior after replacing deep clone semantics. Repro: `bun -e \"...selectPlanFeatures...\"` yields `before='before', afterInput=null` for the same input object."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Feature-to-commit traceability is ambiguous for no-op verification sessions: the m4-clone-reduction handoff commit points to m4-constants-util-merge, while the actual structuredClone removal landed earlier.",
+      "evidence": "Handoff commitId is 080edf8 (constants/util merge diff has no structuredClone removal); `git show 24846eb -- src/runtime/transitions/shared.ts` contains the `structuredClone` deletion."
+    },
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure lacks explicit guidance for already-implemented/no-op features, which leads to `followedProcedure: true` handoffs without test-first evidence or feature-specific code changes.",
+      "evidence": "core-worker SKILL.md mandates test-first + implementation commit per feature, but transcript/handoff for workerSessionId 7246eda0-6589-48eb-9d90-859b7793e60b reports no code changes and only validation on existing HEAD."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature m4-clone-reduction using the handoff, commit diff, transcript skeleton, and skill procedure. Found one blocking regression tied to clone-removal semantics: input session mutation in plan transition flow. Report marked fail."
+}

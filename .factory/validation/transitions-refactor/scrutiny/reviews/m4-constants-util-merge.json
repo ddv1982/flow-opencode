@@ -1,0 +1,33 @@
+{
+  "featureId": "m4-constants-util-merge",
+  "reviewedAt": "2026-04-18T16:57:34Z",
+  "commitId": "080edf8",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The merge largely completed the module consolidation and import rewrites, but `toArchiveTimestamp` no longer preserves prior behavior for ISO strings without milliseconds, which violates the feature's behavior-preservation requirement.",
+    "issues": [
+      {
+        "file": "src/runtime/util.ts",
+        "line": 6,
+        "severity": "blocking",
+        "description": "Regression in `toArchiveTimestamp`: `value.replace(/[-:]/g, \"\").replace(/\\.(\\d{3})Z$/, \".$1\")` leaves a trailing `Z` for inputs without fractional seconds (e.g. `2025-04-05T19:42:13Z` -> `20250405T194213Z`). The previous implementation in `src/runtime/time.ts` removed `Z` unconditionally (`replace(\"Z\", \"\")`). This breaks the 'preserve exact behavior' expectation for the exported utility."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker skill requires writing failing tests first for observable behavior, but this refactor feature appears to have relied on existing tests and import rewrites only while still reporting `followedProcedure: true`.",
+      "evidence": "Transcript skeleton for worker session `15f53eb7-7513-4925-9060-2403a6cdd68f` shows no new red-first test flow before edits; handoff marks `skillFeedback.followedProcedure` true and `tests.added` is empty."
+    },
+    {
+      "area": "conventions",
+      "observation": "Validation assertion wording says time utilities preserve exact behavior, but the practical evidence target/tests cover only one millisecond-formatted input, leaving compatibility cases unguarded.",
+      "evidence": "validation-contract.md VAL-TRANS-005 (lines 465-468) and tests/archive-collision.test.ts only assert `toArchiveTimestamp('2025-04-05T19:42:13.482Z')` shape; the regression at src/runtime/util.ts:6 for non-millisecond ISO strings is not exercised."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature `m4-constants-util-merge` (commit `080edf8`), including handoff, transcript skeleton, and diff. Consolidation was completed, but a blocking behavior regression exists in `toArchiveTimestamp` for non-millisecond ISO input, so the feature review fails."
+}

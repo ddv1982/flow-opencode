@@ -1,0 +1,21 @@
+{
+  "featureId": "m4-refactor-gate",
+  "reviewedAt": "2026-04-18T16:56:58Z",
+  "commitId": "5cf855f84b898340ccade01ec146aa8010b6a3a7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The commit adds `bench/RESULTS.md` with the required M4 transition reducer section, all four specified reducer rows, correct baselines, and delta percentages that are all well within the \u2264 +5% regression gate (negative deltas). Transcript skeleton and handoff evidence show the requested gate/benchmark commands were executed and recorded.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker skill directs users to run `bun run bench -- --filter <relevant>`, but the current bench harness ignores filter arguments and still runs all suites, which can repeatedly cause confusion during benchmark-gate features.",
+      "evidence": "`bench/index.ts` imports every benchmark file unconditionally before `run()`; the handoff for session `342b562a-1e73-425c-b5a2-363c021dee24` records that `--filter transitions` emitted all suites despite targeted intent."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature `m4-refactor-gate` (commit `5cf855f84b898340ccade01ec146aa8010b6a3a7`): scope and deliverable are satisfied, and no blocking/non-blocking code defects were found in the committed diff. One shared-state skill/harness mismatch was noted for future process hardening."
+}
