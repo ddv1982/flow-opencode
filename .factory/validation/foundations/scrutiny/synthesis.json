@@ -1,0 +1,123 @@
+{
+  "milestone": "foundations",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 6,
+    "passed": 2,
+    "failed": 4,
+    "failedFeatures": [
+      "m1-tsconfig-strict",
+      "m1-biome-adoption",
+      "m1-bench-harness",
+      "m1-fixture-dedup"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m1-tsconfig-strict",
+      "file": "tests/runtime-completion-contracts.test.ts",
+      "line": 9,
+      "severity": "blocking",
+      "description": "Helper `toolContext` recursively calls itself (`toolContext(worktree)`), creating infinite recursion/stack overflow when invoked."
+    },
+    {
+      "featureId": "m1-biome-adoption",
+      "file": "src/runtime/shared-schema.ts",
+      "line": 17,
+      "severity": "blocking",
+      "description": "Schema bridge typing was narrowed to `unknown` while fluent method chaining remained, introducing a strict typecheck regression."
+    },
+    {
+      "featureId": "m1-bench-harness",
+      "file": "tests/render-fixtures.test.ts",
+      "line": 144,
+      "severity": "blocking",
+      "description": "Test uses a machine-specific absolute path (`/Users/vriesd/...`), making the fixture parity test non-portable."
+    },
+    {
+      "featureId": "m1-fixture-dedup",
+      "file": "tests/fixtures-contract.test.ts",
+      "line": 14,
+      "severity": "blocking",
+      "description": "Contract test uses a machine-specific absolute repo root, so scans can become vacuous outside that exact checkout path."
+    },
+    {
+      "featureId": "m1-fixture-dedup",
+      "file": "tests/fixtures-contract.test.ts",
+      "line": 25,
+      "severity": "blocking",
+      "description": "Fixture file reads are path-bound to `/Users/vriesd/projects/flow-opencode`, breaking portability of duplicate-fixture enforcement."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "services.yaml",
+      "description": "Added `commands.format_check: bunx biome format --check .` so format-check assertions have an explicit shared command.",
+      "sourceFeature": "m1-biome-adoption"
+    },
+    {
+      "target": "library",
+      "description": "Added a portability gotcha to `.factory/library/environment.md` documenting that tests must avoid machine-specific absolute repository paths.",
+      "sourceFeature": "m1-bench-harness"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": ".factory/skills/core-worker/SKILL.md",
+      "suggestion": "Add a maintenance/lint-only exception path: when a feature is explicitly non-behavioral cleanup, allow skipping mandatory red-first test authoring while still requiring relevant validators.",
+      "evidence": "Observed in m1-tsconfig-strict, m1-biome-adoption, m1-check-green, and m1-fixture-dedup reviews where workers recorded repeated deviations against the current mandatory red-first step.",
+      "isSystemic": true
+    },
+    {
+      "target": ".factory/skills/core-worker/SKILL.md",
+      "suggestion": "Clarify policy for pre-existing baseline validator failures (for example lint/deadcode already failing before feature work): require explicit attribution and evidence instead of forcing strict pass/fail ambiguity.",
+      "evidence": "Observed in m1-fix-typecheck-regression and m1-biome-adoption reviews where handoffs documented pre-existing validator failures conflicting with strict skill wording.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add an explicit convention forbidding machine-specific absolute repository paths in tests; require worktree-relative path resolution.",
+      "evidence": "Blocking failures in m1-bench-harness and m1-fixture-dedup both stemmed from hard-coded `/Users/vriesd/projects/flow-opencode/...` test paths.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Require updating the 'Known Pre-Existing Issues' section when baseline toolchain/harness issues are discovered so later workers and validators do not repeatedly rediscover them.",
+      "evidence": "Multiple reviews reported stale/empty Known Pre-Existing Issues while handoffs referenced recurring baseline validator/harness anomalies.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Add fallback command variants for every `bun run <script>` in services.yaml to account for wrapper behavior.",
+      "reason": "ambiguous"
+    },
+    {
+      "observation": "Record a recurring Bun test harness hang as an established known issue.",
+      "reason": "not reproducible in this scrutiny run (`bun test` passed cleanly), so evidence is currently insufficient."
+    },
+    {
+      "observation": "Document lint scope narrowing (`src tests bench`) as a mission-wide convention.",
+      "reason": "already-documented in code (`package.json` script) and not yet shown to be a broad systemic policy gap."
+    }
+  ],
+  "previousRound": null
+}

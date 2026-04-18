@@ -1,0 +1,39 @@
+{
+  "featureId": "m1-fixture-dedup",
+  "reviewedAt": "2026-04-18T12:08:39Z",
+  "commitId": "8f6ae6b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Fixture consolidation and the new test:ci script were implemented, but the new fixture contract test is hard-coded to a machine-specific absolute path, making duplicate-literal enforcement non-portable and potentially vacuous outside the worker's checkout path.",
+    "issues": [
+      {
+        "file": "tests/fixtures-contract.test.ts",
+        "line": 14,
+        "severity": "blocking",
+        "description": "The test scans files using a hard-coded root path (`/Users/vriesd/projects/flow-opencode`). On CI or other developer machines this path may not exist, so the scan can return no files and the duplicate-literal assertion can pass without actually validating repository test files."
+      },
+      {
+        "file": "tests/fixtures-contract.test.ts",
+        "line": 25,
+        "severity": "blocking",
+        "description": "The file read path is also hard-coded to `/Users/vriesd/projects/flow-opencode/${file}`, coupling the contract test to one local checkout path and breaking/invalidating the duplicate-fixture check in other environments."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure's strict red-first requirement appears too rigid for fixture-dedup/refactor tasks where proving a red state often requires deliberate temporary breakage of shared helpers.",
+      "evidence": "Handoff skillFeedback marks followedProcedure=false with deviation at step '3. Write failing tests FIRST' and includes a suggested procedure adjustment for fixture/refactor tasks."
+    },
+    {
+      "area": "conventions",
+      "observation": "Mission-level 'Known Pre-Existing Issues' documentation appears stale; recurring lint/deadcode failures are known but AGENTS still says none are documented.",
+      "evidence": "Mission AGENTS.md says 'Known Pre-Existing Issues: None documented yet', while this handoff's discoveredIssues records pre-existing lint and deadcode failures already tracked by milestone context."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed m1-fixture-dedup via feature metadata, worker transcript skeleton, handoff, and commit 8f6ae6b diff. The core fixture dedup work landed, but the new fixtures contract test is path-bound to one local filesystem location, so its duplicate-literal protection is not reliable across environments. Marking this feature review as fail until the contract test uses worktree-relative paths."
+}

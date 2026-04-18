@@ -1,0 +1,38 @@
+{
+  "featureId": "m1-bench-harness",
+  "reviewedAt": "2026-04-18T12:08:53Z",
+  "commitId": "cdbcd2c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Implementation satisfies the benchmark-harness deliverables (five mitata benchmark files, bench script, baseline measurements, and six golden fixture families), but introduces a non-portable absolute path in the new render-fixture parity test.",
+    "issues": [
+      {
+        "file": "tests/render-fixtures.test.ts",
+        "line": 144,
+        "severity": "blocking",
+        "description": "Fixture root is hard-coded to `/Users/vriesd/projects/flow-opencode/tests/__fixtures__/render/...`, so tests fail when the repo is checked out at any other path (CI or other developers). Resolve fixture paths relative to the repository/test file instead of using a machine-specific absolute path."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission guidance does not explicitly prohibit machine-specific absolute repo paths in tests, which allowed a non-portable path to be committed.",
+      "evidence": "tests/render-fixtures.test.ts:144 hard-codes `/Users/vriesd/projects/flow-opencode/tests/__fixtures__/render/${fixture.name}`."
+    },
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure requires exact `bun run <script>` verification commands, but this environment can return Bun help for those invocations via the worker wrapper; workers then need undocumented fallback behavior.",
+      "evidence": ".factory/skills/core-worker/SKILL.md lines 54-58 require `bun run typecheck/lint/deadcode/build`; handoff 2026-04-18T11-53-37-912Z lines 96-104 records `followedProcedure: false` with this specific deviation."
+    },
+    {
+      "area": "services",
+      "observation": "Shared command registry documents only `bun run <script>` validator forms and does not include equivalent fallback commands for environments where wrapper behavior breaks script execution.",
+      "evidence": ".factory/services.yaml lines 3 and 7-9 define typecheck/build/lint/deadcode as `bun run ...`; the handoff line 86 reports these forms printed Bun help in this environment."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed m1-bench-harness at commit cdbcd2c: required benchmark and fixture assets are present, but approval should fail due to a blocking portability bug in tests/render-fixtures.test.ts (machine-specific absolute fixture path)."
+}

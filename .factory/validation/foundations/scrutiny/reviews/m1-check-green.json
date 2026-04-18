@@ -1,0 +1,26 @@
+{
+  "featureId": "m1-check-green",
+  "reviewedAt": "2026-04-18T12:09:03Z",
+  "commitId": "ab175e1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation matches the feature’s prescribed lint-cleanup intent: Biome mechanical rewrites were applied, `shared-schema.ts` received a targeted `noExplicitAny` override plus M3-context comment, and the schema-alignment non-null assertion was replaced with an explicit defined check. The commit preserves stated invariants (top-level Biome recommended+formatter enabled, no runtime dependency changes, knip ignore entry retained) and records a green `bun run check`/`bun run lint` outcome in the handoff.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `core-worker` procedure’s strict “write failing tests first” step does not fit purely mechanical lint/format cleanup features, causing recurring documented deviations even when behavior changes are minimal and already covered.",
+      "evidence": "Handoff `skillFeedback.followedProcedure=false` with deviation at step 3 for this feature; `.factory/skills/core-worker/SKILL.md` currently requires failing-test-first for every feature without a maintenance/lint-only exception."
+    },
+    {
+      "area": "conventions",
+      "observation": "Lint scope was narrowed to `src tests bench` to avoid diagnostics from generated `dist` output, but this rationale is not explicitly documented in mission shared-state guidance.",
+      "evidence": "`package.json` (commit `ab175e1`) changes `scripts.lint` from `biome check .` to `biome check src tests bench`; handoff states remaining diagnostics included generated `dist/index.js` and that scope update restored green checks."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature m1-check-green at commit ab175e1 and found it functionally complete for its stated goals, with no blocking code defects. Reported two shared-state observations: a skill-procedure mismatch for lint-only work and an undocumented lint-scope convention introduced to keep generated `dist` artifacts out of Biome gating."
+}

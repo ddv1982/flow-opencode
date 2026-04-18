@@ -1,0 +1,38 @@
+{
+  "featureId": "m1-tsconfig-strict",
+  "reviewedAt": "2026-04-18T12:09:09Z",
+  "commitId": "e6e841f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The tsconfig strict flags were enabled, but the committed test changes include a blocking regression: a helper in `tests/runtime-completion-contracts.test.ts` was changed to call itself recursively, which causes infinite recursion when invoked and prevents the suite from completing cleanly.",
+    "issues": [
+      {
+        "file": "tests/runtime-completion-contracts.test.ts",
+        "line": 9,
+        "severity": "blocking",
+        "description": "The new `toolContext` helper returns `toolContext(worktree)` (self-call) instead of a context object. Any call to this helper triggers infinite recursion/stack overflow, so the feature does not satisfy the expected `bun test` pass behavior."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `core-worker` skill's verification procedure requires `bun run lint`, `bun run deadcode`, and `bun run build`, but this feature transcript/handoff only records `bun run typecheck` and `bun test` (with the final test run timing out). This suggests enforcement drift between skill requirements and accepted handoffs.",
+      "evidence": ".factory/skills/core-worker/SKILL.md (Step 5 Verify) vs handoff `verification.commandsRun` for worker session `42045553-8872-4d5c-b875-879d0554f274`."
+    },
+    {
+      "area": "skills",
+      "observation": "The worker reports `followedProcedure: false` because the skill mandates writing failing tests first, but this strictness-only feature is non-behavioral and primarily type-tightening. The skill guidance appears too rigid for this feature class.",
+      "evidence": "Handoff `skillFeedback.deviations` for Step 3 plus `skillFeedback.suggestedChanges` explicitly requesting an exception for strictness-only passes."
+    },
+    {
+      "area": "knowledge",
+      "observation": "A recurring environment issue (`bun test` hanging in the mission exec harness) was discovered in this handoff, but mission shared state does not capture it in AGENTS known issues, which may cause repeated rediscovery by later workers.",
+      "evidence": "Handoff `discoveredIssues[0]` reports post-change `bun test` timeout/hang; mission `AGENTS.md` section \"Known Pre-Existing Issues\" is still empty."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: commit `e6e841f` introduced a blocking recursive helper in `tests/runtime-completion-contracts.test.ts`, which undermines test completion and violates the feature's expected behavior. Additional shared-state gaps were observed around skill/verification alignment and documentation of the known Bun hang."
+}

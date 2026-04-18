@@ -1,0 +1,26 @@
+{
+  "featureId": "m1-fix-typecheck-regression",
+  "reviewedAt": "2026-04-18T12:08:48Z",
+  "commitId": "360adb8486af2eb1f18820e2eadc32129a6c61b9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The commit restores the shared-schema/tool-schema type surface to a typecheck-clean state and keeps runtime behavior intact (including explicit handling of optional planning fields at the tool boundary). No actionable correctness bugs were found in the reviewed diff.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure requires `bun run lint` and `bun run deadcode` to exit 0, but this feature was marked successful while both exited 1 due pre-existing baseline debt. The skill needs explicit guidance for handling known baseline validator failures without creating ambiguity.",
+      "evidence": "/Users/vriesd/projects/flow-opencode/.factory/skills/core-worker/SKILL.md:56-57 require lint/deadcode to exit 0; /Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T11-45-51-314Z__m1-fix-typecheck-regression__c8a82654-835a-4423-ba63-70f4c723dcff.json:36-37 and :46-47 record exitCode 1 for both commands."
+    },
+    {
+      "area": "conventions",
+      "observation": "Mission shared state did not document the pre-existing lint/deadcode baseline issues, so workers had to rediscover and re-justify them during feature verification.",
+      "evidence": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/AGENTS.md:73-75 says no known pre-existing issues; the same handoff above records pre-existing lint/deadcode failures in verification and discoveredIssues."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature metadata, handoff, transcript skeleton, skill instructions, and commit 360adb8486af2eb1f18820e2eadc32129a6c61b9. The implementation satisfies the feature’s type-regression objective with no code defects identified in scope; review status is pass. Two shared-state gaps were recorded around validator-baseline documentation/procedure."
+}

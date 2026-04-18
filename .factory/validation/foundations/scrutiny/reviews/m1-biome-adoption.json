@@ -1,0 +1,38 @@
+{
+  "featureId": "m1-biome-adoption",
+  "reviewedAt": "2026-04-18T12:10:50Z",
+  "commitId": "bf18b97d97749235a0b5a4d97ff32719bfefbff7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The Biome normalization pass is largely mechanical and achieved the intended lint cleanup, but the commit introduces a blocking TypeScript typing regression in `src/runtime/shared-schema.ts` that breaks the schema-builder fluent typing contract.",
+    "issues": [
+      {
+        "file": "src/runtime/shared-schema.ts",
+        "line": 17,
+        "severity": "blocking",
+        "description": "The `SchemaApi` bridge was tightened to `unknown` return types (for example `string().regex`, `number().int().positive`) while the file still chains methods like `.optional()` (for example line 160: `schema.number().int().positive().optional()`). Under strict TypeScript this is not a type-safe fluent API and constitutes a typecheck regression introduced by this feature commit."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure is too rigid for lint/format-only features: it mandates test-first red/green and a full verification matrix for every feature, which directly conflicted with this cleanup task and produced recorded procedure deviations.",
+      "evidence": "/Users/vriesd/projects/flow-opencode/.factory/skills/core-worker/SKILL.md:38-40 and :50-58; /Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T11-25-46-456Z__m1-biome-adoption__8f1621dd-91c1-466b-84ae-839dba59cb76.json:67-77."
+    },
+    {
+      "area": "services",
+      "observation": "The shared command catalog does not include a dedicated Biome format-check command, which left the worker using a direct `bunx biome format --check .` invocation that was blocked in worker mode and prevented direct assertion evidence capture.",
+      "evidence": "/Users/vriesd/projects/flow-opencode/.factory/services.yaml:1-10 has no Biome format-check command; handoff records blocked format-check execution at /Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T11-25-46-456Z__m1-biome-adoption__8f1621dd-91c1-466b-84ae-839dba59cb76.json:36-39 and :62-64."
+    },
+    {
+      "area": "conventions",
+      "observation": "Mission guidance says build/typecheck-oriented verification should be part of feature completion evidence, but this handoff was accepted with only lint/test/format entries. The enforcement boundary between AGENTS expectations and actual worker acceptance is unclear.",
+      "evidence": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/AGENTS.md:53-54 and :67-69; handoff command list at /Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T11-25-46-456Z__m1-biome-adoption__8f1621dd-91c1-466b-84ae-839dba59cb76.json:20-44."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature metadata, worker transcript skeleton, skill procedure, handoff evidence, and commit bf18b97d97749235a0b5a4d97ff32719bfefbff7. The feature fails scrutiny due to a blocking shared-schema typing regression introduced in the commit; additional shared-state gaps were noted around skill fit and validation-command documentation."
+}

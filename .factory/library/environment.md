@@ -40,3 +40,4 @@ None. No API keys, no network requests, no databases.
 - The `tsconfig.json` uses `moduleResolution: "bundler"`, so bundle-first imports are idiomatic.
 - `bun build` does NOT auto-externalize peer deps. You must add `--external <pkg>` explicitly. Missed in the pre-M5 build.
 - Bun's `Date.now` is mockable via `mock.module()` but leaks across tests unless restored — prefer mocking `nowIso` at the boundary.
+- Tests must not use machine-specific absolute repository paths; use worktree-relative paths (`import.meta.dir`, `process.cwd()`, or resolved fixtures) to keep checks portable across CI and developer machines.
