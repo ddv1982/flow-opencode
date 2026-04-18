@@ -70,7 +70,7 @@ export function createRuntimeTools() {
 								) as Parameters<typeof applyPlan>[2]);
 					return withPersistedTransition(
 						context,
-						(session) => applyPlan(session, input.plan, planning),
+						(session) => applyPlan(session, { ...input.plan }, planning),
 						{
 							getSession: (value) => value,
 							onSuccess: (saved) => ({

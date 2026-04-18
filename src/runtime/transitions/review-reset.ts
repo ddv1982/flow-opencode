@@ -1,16 +1,16 @@
-import { type Feature, ReviewerDecisionSchema, type Session } from "../schema";
-import {
-	cloneSession,
-	fail,
-	formatValidationError,
-	succeed,
-	type TransitionResult,
-} from "./shared";
+import type { Feature, ReviewerDecision, Session } from "../schema";
+import { cloneSession, fail, succeed, type TransitionResult } from "./shared";
 
-type ReviewerDecision = NonNullable<
-	Session["execution"]["lastReviewerDecision"]
->;
 type FeatureScopeReviewerDecision = ReviewerDecision & { scope: "feature" };
+type RecordReviewerDecisionInput = {
+	scope: string;
+	status: string;
+	summary: string;
+	featureId?: string | undefined;
+	blockingFindings?: ReviewerDecision["blockingFindings"];
+	followUps?: ReviewerDecision["followUps"];
+	suggestedValidation?: ReviewerDecision["suggestedValidation"];
+};
 
 function collectDependents(
 	features: Feature[],
@@ -133,30 +133,46 @@ export function resetFeature(
 
 export function recordReviewerDecision(
 	session: Session,
-	input: unknown,
+	input: RecordReviewerDecisionInput,
 ): TransitionResult<Session> {
-	let decision: ReviewerDecision;
-	try {
-		decision = ReviewerDecisionSchema.parse(input);
-	} catch (error) {
-		return fail(
-			`Reviewer decision validation failed: ${formatValidationError(error)}`,
-		);
-	}
-
-	if (decision.scope === "final" && decision.featureId !== undefined) {
+	const rawInput = input;
+	if (input.scope === "final" && rawInput.featureId !== undefined) {
 		return fail(
 			"Reviewer decision validation failed: featureId: Final reviewer decisions must not include a featureId.",
 		);
 	}
 	if (
-		decision.scope === "feature" &&
-		(decision.featureId === undefined || decision.featureId.trim() === "")
+		input.scope === "feature" &&
+		(input.featureId === undefined || input.featureId.trim() === "")
 	) {
 		return fail(
 			"Reviewer decision validation failed: featureId: Feature reviewer decisions must include a featureId.",
 		);
 	}
+	if (input.scope !== "feature" && input.scope !== "final") {
+		return fail(
+			`Reviewer decision validation failed: scope: Invalid enum value. Expected 'feature' | 'final', received '${input.scope}'.`,
+		);
+	}
+	if (
+		input.status !== "approved" &&
+		input.status !== "needs_fix" &&
+		input.status !== "blocked"
+	) {
+		return fail(
+			`Reviewer decision validation failed: status: Invalid enum value. Expected 'approved' | 'needs_fix' | 'blocked', received '${input.status}'.`,
+		);
+	}
+
+	const decision: ReviewerDecision = {
+		scope: input.scope,
+		status: input.status,
+		summary: input.summary,
+		blockingFindings: input.blockingFindings ?? [],
+		followUps: input.followUps ?? [],
+		suggestedValidation: input.suggestedValidation ?? [],
+		...(input.featureId !== undefined ? { featureId: input.featureId } : {}),
+	};
 
 	const next = cloneSession(session);
 	if (isFeatureScopeReviewerDecision(decision)) {

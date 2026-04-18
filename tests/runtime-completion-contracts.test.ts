@@ -181,26 +181,27 @@ describe("runtime completion and contract guards", () => {
 
 	test("rejects unsafe feature ids during plan apply", () => {
 		const session = createSession("Build a workflow plugin");
-		const invalidPlan = {
-			...samplePlan(),
-			features: [
+		const runtimeTools = createTestTools();
+
+		return expect(
+			runtimeTools.flow_plan_apply.execute(
 				{
-					id: "../escape",
-					title: "Bad feature id",
-					summary: "Should be rejected.",
-					fileTargets: [],
-					verification: [],
+					plan: {
+						...samplePlan(),
+						features: [
+							{
+								id: "../escape",
+								title: "Bad feature id",
+								summary: "Should be rejected.",
+								fileTargets: [],
+								verification: [],
+							},
+						],
+					},
 				},
-			],
-		};
-
-		const applied = applyPlan(session, invalidPlan);
-		expect(applied.ok).toBe(false);
-		if (applied.ok) return;
-
-		expect(applied.message).toContain(
-			"Feature ids must be lowercase kebab-case",
-		);
+				toolContext(session.id),
+			),
+		).resolves.toContain("Feature ids must be lowercase kebab-case");
 	});
 
 	test("rejects successful worker results when review failed", () => {

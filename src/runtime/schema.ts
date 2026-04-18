@@ -289,10 +289,12 @@ export type FlowReviewRecordFinalArgs = z.input<
 	typeof FlowReviewRecordFinalArgsSchema
 >;
 export type Plan = z.infer<typeof PlanSchema>;
+export type PlanInput = z.input<typeof PlanSchema>;
 export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
 export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
+export type ReviewerDecisionInput = z.input<typeof ReviewerDecisionSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type WorkerResult = z.infer<typeof WorkerResultSchema>;
 export type WorkerResultArgs = z.input<typeof WorkerResultArgsSchema>;
