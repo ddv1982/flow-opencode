@@ -19,7 +19,7 @@
 		"test": "bun test",
 		"test:ci": "bun test --randomize",
 		"typecheck": "tsc --noEmit",
-		"check": "bun run typecheck && bun run deadcode && bun run test && bun run build && bun run lint && bun run bench:smoke",
+		"check": "bun run typecheck && bun run deadcode && bun run build && bun run test && bun run lint && bun run bench:smoke",
 		"install:opencode": "bun run ./src/install-opencode.ts",
 		"uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
 	},
