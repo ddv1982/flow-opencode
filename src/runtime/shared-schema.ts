@@ -14,35 +14,34 @@ import {
 	REVIEW_SCOPES,
 } from "./primitives";
 
+// biome-ignore lint/suspicious/noExplicitAny: schema-factory type erasure is required here so the shared builder can model both runtime and tool schema factories
 type SchemaApi = {
 	string: () => {
-		min: (length: number) => unknown;
-		regex: (pattern: RegExp, message?: string) => unknown;
-		optional: () => unknown;
-		default: (value: string) => unknown;
+		min: (length: number) => any;
+		regex: (pattern: RegExp, message?: string) => any;
+		optional: () => any;
+		default: (value: string) => any;
 	};
 	number: () => {
 		int: () => {
-			positive: () => unknown;
+			positive: () => any;
 		};
 	};
 	boolean: () => {
-		optional: () => unknown;
-		default: (value: boolean) => unknown;
+		optional: () => any;
+		default: (value: boolean) => any;
 	};
 	enum: (values: readonly string[]) => {
-		optional: () => unknown;
-		default: (value: string) => unknown;
+		optional: () => any;
+		default: (value: string) => any;
 	};
-	object: (shape: Record<string, unknown>) => {
-		optional: () => unknown;
+	object: (shape: Record<string, any>) => any;
+	array: (schema: any) => {
+		default: (value: unknown[]) => any;
+		min: (length: number) => any;
+		optional: () => any;
 	};
-	array: (schema: unknown) => {
-		default: (value: unknown[]) => unknown;
-		min: (length: number) => unknown;
-		optional: () => unknown;
-	};
-	literal: (value: string) => unknown;
+	literal: (value: string) => any;
 };
 
 export type SharedSchemaBuildOptions = {
@@ -59,10 +58,7 @@ const FEATURE_STATUSES = [
 	"blocked",
 ] as const;
 
-export function buildSharedSchemas(
-	schema: SchemaApi,
-	options: SharedSchemaBuildOptions,
-) {
+export function buildSharedSchemas(schema: SchemaApi, options: SharedSchemaBuildOptions) {
 	const featureIdSchema = schema
 		.string()
 		.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
@@ -133,7 +129,7 @@ export function buildSharedSchemas(
 		followUps: schema.array(followUpSchema).optional(),
 	});
 
-	const featureShape: Record<string, unknown> = {
+	const featureShape: Record<string, any> = {
 		id: featureIdSchema,
 		title: schema.string().min(1),
 		summary: schema.string().min(1),

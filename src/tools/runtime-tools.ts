@@ -16,6 +16,7 @@ import {
 } from "../runtime/transitions";
 import { withParsedArgs } from "./parsed-tool";
 import {
+	type FlowPlanApplyArgs,
 	FlowPlanApplyArgsSchema,
 	FlowPlanApplyArgsShape,
 	FlowPlanApproveArgsSchema,
@@ -46,9 +47,17 @@ export function createRuntimeTools() {
 			execute: withParsedArgs(
 				FlowPlanApplyArgsSchema,
 				async (input, context) => {
+					const planning =
+						input.planning === undefined
+							? undefined
+							: Object.fromEntries(
+									Object.entries(input.planning).filter(
+										([, value]) => value !== undefined,
+									),
+								) as FlowPlanApplyArgs["planning"];
 					return withPersistedTransition(
 						context,
-						(session) => applyPlan(session, input.plan, input.planning),
+						(session) => applyPlan(session, input.plan, planning),
 						{
 							getSession: (value) => value,
 							onSuccess: (saved) => ({
