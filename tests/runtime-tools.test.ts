@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	FLOW_HISTORY_COMMAND,
@@ -27,9 +27,20 @@ import {
 	createTempDirRegistry,
 	createTestTools,
 	samplePlan,
+	sampleSession,
 } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
+
+type FlowPluginWithHooks = {
+	hooks?: {
+		"experimental.session.compacting"?: (
+			input: unknown,
+			context: ReturnType<typeof toolContext>,
+			output: { context?: string[]; prompt?: string },
+		) => Promise<void>;
+	};
+};
 
 afterEach(() => {
 	cleanupTempDirs();
@@ -1257,5 +1268,66 @@ describe("runtime tools and recovery", () => {
 
 			metadata.mockClear();
 		}
+	});
+
+	test("experimental.session.compacting appends goal and execution phase for an active Flow session", async () => {
+		const worktree = makeTempDir();
+		const plugin = (await (
+			await import("../src/index")
+		).default({
+			worktree,
+		} as unknown as Parameters<
+			typeof import("../src/index").default
+		>[0])) as FlowPluginWithHooks;
+		const hook = plugin.hooks?.["experimental.session.compacting"];
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing experimental.session.compacting hook");
+		}
+
+		const session = sampleSession("demo-goal");
+		await mkdir(join(worktree, ".flow"), { recursive: true });
+		await writeFile(
+			join(worktree, ".flow", "active"),
+			`${session.id}\n`,
+			"utf8",
+		);
+		await saveSession(worktree, {
+			...session,
+			status: "running",
+		});
+
+		const output: { context: string[]; prompt?: string } = { context: [] };
+		await hook({}, toolContext(worktree), output);
+
+		const joined = output.context.join("\n");
+		expect(joined).toContain("demo-goal");
+		expect(joined).toContain("execution");
+		expect(output.prompt).toBeUndefined();
+	});
+
+	test("experimental.session.compacting is a graceful no-op when no active Flow session exists", async () => {
+		const worktree = makeTempDir();
+		const plugin = (await (
+			await import("../src/index")
+		).default({
+			worktree,
+		} as unknown as Parameters<
+			typeof import("../src/index").default
+		>[0])) as FlowPluginWithHooks;
+		const hook = plugin.hooks?.["experimental.session.compacting"];
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing experimental.session.compacting hook");
+		}
+
+		const output: { context: string[]; prompt?: string } = { context: [] };
+		await expect(
+			hook({}, toolContext(worktree), output),
+		).resolves.toBeUndefined();
+		expect(output.prompt).toBeUndefined();
+		expect(output.context.length).toBeLessThanOrEqual(1);
 	});
 });

@@ -54,6 +54,10 @@ type ToolDefinition = {
 	args: Record<string, unknown>;
 };
 
+type FlowPluginHooks = {
+	hooks?: Record<string, unknown>;
+};
+
 type ToolSchemas = Record<
 	keyof ReturnType<typeof createTools>,
 	ReturnType<typeof tool.schema.object>
@@ -103,6 +107,7 @@ describe("applyFlowConfig", () => {
 			client: { app: appLog },
 		} as unknown as Parameters<typeof FlowPlugin>[0];
 		const plugin = await FlowPlugin(ctx);
+		const pluginWithHooks = plugin as typeof plugin & FlowPluginHooks;
 
 		expect(typeof plugin.config).toBe("function");
 		expect(plugin.tool).toBeDefined();
@@ -120,6 +125,9 @@ describe("applyFlowConfig", () => {
 
 		expect(config.command?.existing).toEqual({ description: "keep me" });
 		expect(config.command?.["flow-plan"]).toBeDefined();
+		expect(
+			typeof pluginWithHooks.hooks?.["experimental.session.compacting"],
+		).toBe("function");
 	});
 
 	test("plugin entrypoint logs through ctx.client.app.log", async () => {
