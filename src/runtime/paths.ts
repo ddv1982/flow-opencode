@@ -17,6 +17,7 @@ function sanitizePathComponent(
 		value.length === 0 ||
 		value === "." ||
 		value === ".." ||
+		value.includes("..") ||
 		value.startsWith("/") ||
 		value.includes("/") ||
 		value.includes("\\") ||

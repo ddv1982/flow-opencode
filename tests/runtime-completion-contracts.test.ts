@@ -948,6 +948,45 @@ describe("runtime completion and contract guards", () => {
 		]);
 	});
 
+	test("reviewer decision tool rejects featureId on final review at parse time", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		await saveSession(worktree, started.value.session);
+
+		const response = await tools.flow_review_record_final.execute(
+			{
+				scope: "final",
+				featureId: "some-feature",
+				status: "approved",
+				summary: "Final state looks good.",
+				blockingFindings: [],
+				followUps: [],
+				suggestedValidation: ["bun run check"],
+			} as never,
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("featureId");
+		expect(parsed.summary).not.toContain(
+			"Final review decisions cannot target",
+		);
+	});
+
 	test("tools keep representative top-level response shapes across the split helpers", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();

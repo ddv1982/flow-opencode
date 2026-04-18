@@ -3,10 +3,14 @@ import { open, readdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	getActiveSessionPath,
+	getFeatureDocPath,
 	getFlowDir,
+	getIndexDocPath,
 	getSessionDir,
 	getSessionPath,
 } from "../src/runtime/paths";
+import { renderFeatureDoc } from "../src/runtime/render-feature-sections";
+import { renderIndexDoc } from "../src/runtime/render-index-sections";
 import { SessionSchema } from "../src/runtime/schema";
 import {
 	readActiveSessionId,
@@ -137,6 +141,52 @@ describe("atomic writes", () => {
 		expect(parsed.notes[0] && winnerTags.has(parsed.notes[0])).toBe(true);
 	});
 
+	test("concurrent saveSession calls keep docs consistent with the final saved session", async () => {
+		const worktree = makeTempDir();
+		const base = sampleSession("Concurrent docs writes");
+		const featureIds = base.plan?.features.map((feature) => feature.id) ?? [];
+
+		await Promise.all(
+			Array.from({ length: 16 }, (_, index) =>
+				saveSession(worktree, {
+					...base,
+					goal: `Concurrent docs writes ${index}`,
+					notes: [`docs-tag-${index}`],
+					plan: base.plan
+						? {
+								...base.plan,
+								overview: `Plan overview ${index}`,
+								features: base.plan.features.map((feature, featureIndex) => ({
+									...feature,
+									summary: `Feature ${featureIndex} summary ${index}`,
+								})),
+							}
+						: base.plan,
+				}),
+			),
+		);
+
+		const saved = SessionSchema.parse(
+			JSON.parse(await readFile(getSessionPath(worktree, base.id), "utf8")),
+		);
+		const indexDoc = await readFile(getIndexDocPath(worktree, base.id), "utf8");
+
+		const rendered = renderSessionDocsForAssertion(saved);
+		expect(indexDoc).toBe(rendered.index);
+
+		for (const featureId of featureIds) {
+			const featureDoc = await readFile(
+				getFeatureDocPath(worktree, base.id, featureId),
+				"utf8",
+			);
+			const expectedFeatureDoc = rendered.features.get(featureId);
+			if (!expectedFeatureDoc) {
+				throw new Error(`Missing rendered feature doc for ${featureId}`);
+			}
+			expect(featureDoc).toBe(expectedFeatureDoc);
+		}
+	});
+
 	test("atomic writer fsyncs temp files before rename", async () => {
 		const worktree = makeTempDir();
 		const syncs: string[] = [];
@@ -165,4 +215,21 @@ describe("atomic writes", () => {
 
 function sincsHasActive(syncs: string[]): boolean {
 	return syncs.some((path) => path.endsWith(join(".flow", "active.tmp")));
+}
+
+function renderSessionDocsForAssertion(
+	session: (typeof SessionSchema)["_output"],
+): {
+	index: string;
+	features: Map<string, string>;
+} {
+	return {
+		index: renderIndexDoc(session),
+		features: new Map(
+			(session.plan?.features ?? []).map((feature) => [
+				feature.id,
+				renderFeatureDoc(session, feature),
+			]),
+		),
+	};
 }

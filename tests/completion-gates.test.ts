@@ -256,14 +256,9 @@ describe("completion gates", () => {
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
 					validationScope: "broad",
-					finalReview: {
-						status: "needs_followup",
-						summary: "Repo-wide validation needs follow-up.",
-						blockingFindings: [{ summary: "Final review is not yet passing." }],
-					},
 				}),
-			expectedErrorCode: "failing_final_review",
-			expectedNextCommand: "/flow-reset feature setup-runtime",
+			expectedErrorCode: "missing_final_review_payload",
+			expectedNextCommand: "/flow-status",
 		},
 	])("returns $expectedErrorCode for $name", ({
 		setup,

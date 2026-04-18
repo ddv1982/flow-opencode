@@ -60,7 +60,11 @@ export async function saveSession(
 	worktree: string,
 	session: Session,
 ): Promise<Session> {
-	const normalized = await saveSessionState(worktree, session);
-	await syncSessionArtifacts(worktree, normalized);
-	return normalized;
+	return withSessionSaveLock(worktree, async () => {
+		const normalized = normalizeSession(session);
+		await writeSessionFile(worktree, normalized);
+		await writeActiveSessionId(worktree, normalized.id);
+		await syncSessionArtifacts(worktree, normalized);
+		return normalized;
+	});
 }

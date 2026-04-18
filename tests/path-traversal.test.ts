@@ -112,13 +112,33 @@ describe("path traversal hardening", () => {
 	test("derived path builders reject traversal and absolute inputs", () => {
 		const worktree = makeTempDir();
 
-		for (const sessionId of ["..", "../escape", "/tmp/x", "a/b", "a\\b"]) {
+		for (const sessionId of [
+			"..",
+			"../escape",
+			"/tmp/x",
+			"a/b",
+			"a\\b",
+			"safe..id",
+			"..hidden",
+			"name..",
+			"a..b..c",
+		]) {
 			expect(() => getSessionPath(worktree, sessionId)).toThrow(
 				InvalidFlowPathInputError,
 			);
 		}
 
-		for (const featureId of ["..", "../escape", "/tmp/x", "a/b", "a\\b"]) {
+		for (const featureId of [
+			"..",
+			"../escape",
+			"/tmp/x",
+			"a/b",
+			"a\\b",
+			"safe..id",
+			"..hidden",
+			"name..",
+			"a..b..c",
+		]) {
 			expect(() =>
 				getFeatureDocPath(worktree, "safe-session", featureId),
 			).toThrow(InvalidFlowPathInputError);
@@ -142,6 +162,21 @@ describe("path traversal hardening", () => {
 				"docs",
 				"features",
 				"safe-feature.md",
+			),
+		);
+
+		expect(getSessionPath(worktree, "dot.dot")).toBe(
+			join(worktree, ".flow", "sessions", "dot.dot", "session.json"),
+		);
+		expect(getFeatureDocPath(worktree, "safe-session", "dot.dot")).toBe(
+			join(
+				worktree,
+				".flow",
+				"sessions",
+				"safe-session",
+				"docs",
+				"features",
+				"dot.dot.md",
 			),
 		);
 	});

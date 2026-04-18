@@ -170,12 +170,55 @@ describe("installer", () => {
 		).rejects.toThrow("Run `bun run build` first");
 	});
 
-	test("runUninstallCommand removes installed plugin files from either location", async () => {
+	test.each([
+		{
+			name: "canonical-only",
+			seed: ({ canonicalPath }: ReturnType<typeof getInstallTargets>) => [
+				canonicalPath,
+			],
+			expectedRemoved: ({
+				canonicalPath,
+			}: ReturnType<typeof getInstallTargets>) => [canonicalPath],
+			expectedReturn: ({
+				canonicalPath,
+			}: ReturnType<typeof getInstallTargets>) => canonicalPath,
+		},
+		{
+			name: "legacy-only",
+			seed: ({ legacyPath }: ReturnType<typeof getInstallTargets>) => [
+				legacyPath,
+			],
+			expectedRemoved: ({
+				legacyPath,
+			}: ReturnType<typeof getInstallTargets>) => [legacyPath],
+			expectedReturn: ({ legacyPath }: ReturnType<typeof getInstallTargets>) =>
+				legacyPath,
+		},
+		{
+			name: "canonical and legacy",
+			seed: ({
+				canonicalPath,
+				legacyPath,
+			}: ReturnType<typeof getInstallTargets>) => [canonicalPath, legacyPath],
+			expectedRemoved: ({
+				canonicalPath,
+				legacyPath,
+			}: ReturnType<typeof getInstallTargets>) => [canonicalPath, legacyPath],
+			expectedReturn: ({
+				canonicalPath,
+			}: ReturnType<typeof getInstallTargets>) => canonicalPath,
+		},
+	])("runUninstallCommand removes installed plugin files for $name homes", async ({
+		seed,
+		expectedRemoved,
+		expectedReturn,
+	}) => {
 		const homeDir = makeTempDir();
-		const destinationFiles = resolveInstallTargets({ homeDir });
+		const targets = getInstallTargets(homeDir);
 		const logs: string[] = [];
+		const seededPaths = seed(targets);
 
-		for (const path of destinationFiles) {
+		for (const path of seededPaths) {
 			await mkdir(join(path, ".."), { recursive: true });
 			await writeFile(path, "installed\n", "utf8");
 		}
@@ -185,14 +228,15 @@ describe("installer", () => {
 			logger: (message) => logs.push(message),
 		});
 
-		await Promise.all(
-			destinationFiles.map(async (path) => {
-				await expect(readFile(path, "utf8")).rejects.toThrow();
-			}),
-		);
-		expect(removedPath).toBe(destinationFiles[0]);
+		for (const path of seededPaths) {
+			await expect(readFile(path, "utf8")).rejects.toThrow();
+		}
+
+		expect(removedPath).toBe(expectedReturn(targets));
 		expect(logs).toEqual(
-			destinationFiles.map((path) => `Removed Flow plugin from ${path}`),
+			expectedRemoved(targets).map(
+				(path) => `Removed Flow plugin from ${path}`,
+			),
 		);
 	});
 

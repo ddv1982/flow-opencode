@@ -229,9 +229,9 @@ export const WorkerResultArgsSchema = z.object(WorkerResultArgsShape);
 export const FlowReviewRecordFeatureArgsSchema = z.object(
 	FlowReviewRecordFeatureArgsShape,
 );
-export const FlowReviewRecordFinalArgsSchema = z.object(
-	FlowReviewRecordFinalArgsShape,
-);
+export const FlowReviewRecordFinalArgsSchema = z
+	.object(FlowReviewRecordFinalArgsShape)
+	.strict();
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
 
 export type FlowHistoryShowArgs = {
