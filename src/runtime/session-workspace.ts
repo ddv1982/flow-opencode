@@ -1,4 +1,12 @@
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	open,
+	readFile,
+	rename,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import {
 	getActiveSessionPath,
@@ -16,6 +24,14 @@ import { type Session, SessionSchema } from "./schema";
 const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();
 const preparedWorkspaceGitignoreCache = new Map<string, string>();
+const preparedWorkspaceRoots = new Set<string>();
+const sessionReadCache = new Map<
+	string,
+	{
+		key: string;
+		session: Session;
+	}
+>();
 
 type SessionWorkspaceFs = {
 	open: typeof open;
@@ -98,14 +114,29 @@ export async function withSessionSaveLock<T>(
 export async function readSessionFromPath(
 	sessionPath: string,
 ): Promise<Session> {
+	const { mtimeMs, size } = await stat(sessionPath);
+	const cacheKey = `${mtimeMs}:${size}`;
+	const cached = sessionReadCache.get(sessionPath);
+	if (cached?.key === cacheKey) {
+		return cached.session;
+	}
+
 	const raw = await readFile(sessionPath, "utf8");
-	return SessionSchema.parse(JSON.parse(raw));
+	const parsed = SessionSchema.parse(JSON.parse(raw));
+	sessionReadCache.set(sessionPath, {
+		key: cacheKey,
+		session: parsed,
+	});
+	return parsed;
 }
 
 export async function ensureWorkspace(worktree: string): Promise<void> {
 	const flowDir = getFlowDir(worktree);
-	await mkdir(getSessionsDir(worktree), { recursive: true });
-	await mkdir(getArchiveDir(worktree), { recursive: true });
+	if (!preparedWorkspaceRoots.has(worktree)) {
+		await mkdir(getSessionsDir(worktree), { recursive: true });
+		await mkdir(getArchiveDir(worktree), { recursive: true });
+		preparedWorkspaceRoots.add(worktree);
+	}
 
 	const gitignorePath = join(flowDir, ".gitignore");
 	let existingEntries: string[] = [];
@@ -176,11 +207,13 @@ export async function writeSessionFile(
 	session: Session,
 ): Promise<void> {
 	await ensureWorkspace(worktree);
+	const sessionPath = getSessionPath(worktree, session.id);
 	await mkdir(getSessionDir(worktree, session.id), { recursive: true });
 	await writeFileAtomically(
-		getSessionPath(worktree, session.id),
+		sessionPath,
 		`${JSON.stringify(session, null, 2)}\n`,
 	);
+	sessionReadCache.delete(sessionPath);
 }
 
 export async function migrateLegacySessionIfNeeded(
