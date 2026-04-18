@@ -1,6 +1,6 @@
 {
   "milestone": "perf-and-rendering",
-  "round": 1,
+  "round": 2,
   "status": "pass",
   "assertionsSummary": {
     "total": 26,
@@ -40,11 +40,13 @@
   "blockedAssertions": [],
   "appliedUpdates": [],
   "previousRound": null,
-  "generatedAt": "2026-04-18T19:08:21.398106Z",
+  "generatedAt": "2026-04-18T19:18:01.477771Z",
   "flowReports": [
     "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/bun-test.json",
     "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/cli-smoke.json",
     "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/fs-inspection.json",
-    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/node-script.json"
-  ]
+    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/node-script.json",
+    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/rerun-noop.json"
+  ],
+  "summary": "Rerun triage found no failed/blocked assertions and no newly pending perf-and-rendering assertions; prior passing validation results remain in effect."
 }
