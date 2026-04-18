@@ -1,49 +1,52 @@
 import type { Plan, Session } from "../schema";
 
 function completedFeatureCount(features: Plan["features"]): number {
-  return features.filter((feature) => feature.status === "completed").length;
+	return features.filter((feature) => feature.status === "completed").length;
 }
 
 function targetCompletedFeatureCount(plan: Plan): number {
-  return plan.completionPolicy?.minCompletedFeatures ?? plan.features.length;
+	return plan.completionPolicy?.minCompletedFeatures ?? plan.features.length;
 }
 
-export function featureWouldReachCompletion(plan: Plan, featureId: string): boolean {
-  const target = targetCompletedFeatureCount(plan);
-  const projectedCompleted = plan.features.filter(
-    (feature) => feature.status === "completed" || feature.id === featureId,
-  ).length;
-  return projectedCompleted >= target;
+export function featureWouldReachCompletion(
+	plan: Plan,
+	featureId: string,
+): boolean {
+	const target = targetCompletedFeatureCount(plan);
+	const projectedCompleted = plan.features.filter(
+		(feature) => feature.status === "completed" || feature.id === featureId,
+	).length;
+	return projectedCompleted >= target;
 }
 
 export function summarizeCompletion(session: Session): {
-  completedFeatures: number;
-  targetCompletedFeatures: number;
-  totalFeatures: number;
-  canCompleteWithPendingFeatures: boolean;
-  requiresFinalReview: boolean;
-  activeFeatureTriggersSessionCompletion: boolean;
-  remainingBeyondTarget: number;
+	completedFeatures: number;
+	targetCompletedFeatures: number;
+	totalFeatures: number;
+	canCompleteWithPendingFeatures: boolean;
+	requiresFinalReview: boolean;
+	activeFeatureTriggersSessionCompletion: boolean;
+	remainingBeyondTarget: number;
 } | null {
-  const plan = session.plan;
-  if (!plan) {
-    return null;
-  }
+	const plan = session.plan;
+	if (!plan) {
+		return null;
+	}
 
-  const completedFeatures = completedFeatureCount(plan.features);
-  const targetCompletedFeatures = targetCompletedFeatureCount(plan);
-  const totalFeatures = plan.features.length;
-  const activeFeatureId = session.execution.activeFeatureId;
+	const completedFeatures = completedFeatureCount(plan.features);
+	const targetCompletedFeatures = targetCompletedFeatureCount(plan);
+	const totalFeatures = plan.features.length;
+	const activeFeatureId = session.execution.activeFeatureId;
 
-  return {
-    completedFeatures,
-    targetCompletedFeatures,
-    totalFeatures,
-    canCompleteWithPendingFeatures: targetCompletedFeatures < totalFeatures,
-    requiresFinalReview: Boolean(plan.completionPolicy?.requireFinalReview),
-    activeFeatureTriggersSessionCompletion: activeFeatureId
-      ? featureWouldReachCompletion(plan, activeFeatureId)
-      : false,
-    remainingBeyondTarget: Math.max(totalFeatures - targetCompletedFeatures, 0),
-  };
+	return {
+		completedFeatures,
+		targetCompletedFeatures,
+		totalFeatures,
+		canCompleteWithPendingFeatures: targetCompletedFeatures < totalFeatures,
+		requiresFinalReview: Boolean(plan.completionPolicy?.requireFinalReview),
+		activeFeatureTriggersSessionCompletion: activeFeatureId
+			? featureWouldReachCompletion(plan, activeFeatureId)
+			: false,
+		remainingBeyondTarget: Math.max(totalFeatures - targetCompletedFeatures, 0),
+	};
 }

@@ -1,60 +1,75 @@
 import { summarizeCompletion } from "./domain";
-import { deriveNextCommand } from "./summary";
+import {
+	bulletList,
+	formatFollowUpLines,
+	joinSections,
+	maybeSection,
+	maybeTitledList,
+	renderOutcomeLines,
+	toInlineText,
+} from "./render-sections-shared";
 import type { Feature, Session } from "./schema";
-import { bulletList, formatFollowUpLines, joinSections, maybeSection, maybeTitledList, renderOutcomeLines, toInlineText } from "./render-sections-shared";
+import { deriveNextCommand } from "./summary";
 
 function maybeApproachSection(session: Session): string {
-  const approach = session.planning.implementationApproach;
-  if (!approach) {
-    return "";
-  }
+	const approach = session.planning.implementationApproach;
+	if (!approach) {
+		return "";
+	}
 
-  return joinSections([
-    "## Implementation Approach\n\n" + `- chosen direction: ${toInlineText(approach.chosenDirection)}`,
-    maybeTitledList("Key Constraints", approach.keyConstraints, "###"),
-    maybeTitledList("Validation Signals", approach.validationSignals, "###"),
-    maybeTitledList("Sources", approach.sources, "###"),
-  ]).trimEnd();
+	return joinSections([
+		"## Implementation Approach\n\n" +
+			`- chosen direction: ${toInlineText(approach.chosenDirection)}`,
+		maybeTitledList("Key Constraints", approach.keyConstraints, "###"),
+		maybeTitledList("Validation Signals", approach.validationSignals, "###"),
+		maybeTitledList("Sources", approach.sources, "###"),
+	]).trimEnd();
 }
 
 function formatFeatureLine(feature: Feature): string {
-  return `- ${feature.id} | ${feature.status} | ${toInlineText(feature.title)}`;
+	return `- ${feature.id} | ${feature.status} | ${toInlineText(feature.title)}`;
 }
 
 function renderFeatureResultDetails(
-  featureResult:
-    | {
-        featureId: string;
-        verificationStatus?: string | undefined;
-        notes?: Array<{ note: string }> | undefined;
-        followUps?: Array<{ summary: string; severity?: string | undefined }> | undefined;
-      }
-    | null
-    | undefined,
+	featureResult:
+		| {
+				featureId: string;
+				verificationStatus?: string | undefined;
+				notes?: Array<{ note: string }> | undefined;
+				followUps?:
+					| Array<{ summary: string; severity?: string | undefined }>
+					| undefined;
+		  }
+		| null
+		| undefined,
 ): string {
-  if (!featureResult) {
-    return "";
-  }
+	if (!featureResult) {
+		return "";
+	}
 
-  const sections = [
-    maybeTitledList("Notes", featureResult.notes?.map((item) => item.note) ?? [], "###"),
-    maybeTitledList(
-      "Follow Ups",
-      formatFollowUpLines(featureResult.followUps ?? []),
-      "###",
-    ),
-  ].filter(Boolean);
+	const sections = [
+		maybeTitledList(
+			"Notes",
+			featureResult.notes?.map((item) => item.note) ?? [],
+			"###",
+		),
+		maybeTitledList(
+			"Follow Ups",
+			formatFollowUpLines(featureResult.followUps ?? []),
+			"###",
+		),
+	].filter(Boolean);
 
-  return joinSections([
-    `## Feature Result\n\n- feature id: ${featureResult.featureId}\n- verification: ${featureResult.verificationStatus ?? "not_recorded"}`,
-    ...sections,
-  ]).trimEnd();
+	return joinSections([
+		`## Feature Result\n\n- feature id: ${featureResult.featureId}\n- verification: ${featureResult.verificationStatus ?? "not_recorded"}`,
+		...sections,
+	]).trimEnd();
 }
 
 function renderIndexSummarySection(session: Session): string {
-  const reviewerDecision = session.execution.lastReviewerDecision;
+	const reviewerDecision = session.execution.lastReviewerDecision;
 
-  return `## Summary
+	return `## Summary
 
 - session id: ${session.id}
 - goal: ${toInlineText(session.goal)}
@@ -68,87 +83,98 @@ function renderIndexSummarySection(session: Session): string {
 }
 
 function renderPlanSection(session: Session, features: Feature[]): string {
-  const plan = session.plan;
-  const activeFeature = features.find((feature) => feature.id === session.execution.activeFeatureId) ?? null;
-  const completion = summarizeCompletion(session);
-  const completedCount = completion?.completedFeatures ?? features.filter((feature) => feature.status === "completed").length;
-  const planLines = [
-    `- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}`,
-    `- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}`,
-    `- progress: ${completedCount}/${features.length} completed`,
-    `- active feature: ${activeFeature ? activeFeature.id : "none"}`,
-  ];
+	const plan = session.plan;
+	const activeFeature =
+		features.find(
+			(feature) => feature.id === session.execution.activeFeatureId,
+		) ?? null;
+	const completion = summarizeCompletion(session);
+	const completedCount =
+		completion?.completedFeatures ??
+		features.filter((feature) => feature.status === "completed").length;
+	const planLines = [
+		`- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}`,
+		`- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}`,
+		`- progress: ${completedCount}/${features.length} completed`,
+		`- active feature: ${activeFeature ? activeFeature.id : "none"}`,
+	];
 
-  if (completion) {
-    planLines.push(`- completion target: ${completion.targetCompletedFeatures}/${completion.totalFeatures} features`);
-    planLines.push(`- pending allowed at completion: ${completion.canCompleteWithPendingFeatures ? "yes" : "no"}`);
-    planLines.push(`- final review required: ${completion.requiresFinalReview ? "yes" : "no"}`);
-    planLines.push(
-      `- active feature triggers session completion: ${completion.activeFeatureTriggersSessionCompletion ? "yes" : "no"}`,
-    );
-  }
+	if (completion) {
+		planLines.push(
+			`- completion target: ${completion.targetCompletedFeatures}/${completion.totalFeatures} features`,
+		);
+		planLines.push(
+			`- pending allowed at completion: ${completion.canCompleteWithPendingFeatures ? "yes" : "no"}`,
+		);
+		planLines.push(
+			`- final review required: ${completion.requiresFinalReview ? "yes" : "no"}`,
+		);
+		planLines.push(
+			`- active feature triggers session completion: ${completion.activeFeatureTriggersSessionCompletion ? "yes" : "no"}`,
+		);
+	}
 
-  return joinSections([
-    `## Plan
+	return joinSections([
+		`## Plan
 
 ${planLines.join("\n")}`,
-    maybeSection("Requirements", plan?.requirements ?? []),
-    maybeSection("Architecture Decisions", plan?.architectureDecisions ?? []),
-    maybeSection("Repo Profile", session.planning.repoProfile),
-    maybeSection("Research", session.planning.research),
-    maybeApproachSection(session),
-  ]).trimEnd();
+		maybeSection("Requirements", plan?.requirements ?? []),
+		maybeSection("Architecture Decisions", plan?.architectureDecisions ?? []),
+		maybeSection("Repo Profile", session.planning.repoProfile),
+		maybeSection("Research", session.planning.research),
+		maybeApproachSection(session),
+	]).trimEnd();
 }
 
 function renderFeaturesSection(features: Feature[]): string {
-  return `## Features\n\n${features.length === 0 ? "- none" : features.map(formatFeatureLine).join("\n")}`;
+	return `## Features\n\n${features.length === 0 ? "- none" : features.map(formatFeatureLine).join("\n")}`;
 }
 
 function renderOutcomeSection(session: Session): string {
-  if (!session.execution.lastOutcome) {
-    return "";
-  }
+	if (!session.execution.lastOutcome) {
+		return "";
+	}
 
-  return `## Outcome\n\n${bulletList(renderOutcomeLines(session.execution.lastOutcome))}`;
+	return `## Outcome\n\n${bulletList(renderOutcomeLines(session.execution.lastOutcome))}`;
 }
 
 function renderChangedArtifactsSection(session: Session): string {
-  if (session.artifacts.length === 0) {
-    return "";
-  }
+	if (session.artifacts.length === 0) {
+		return "";
+	}
 
-  return `## Changed Artifacts\n\n${bulletList(session.artifacts.map((artifact) => (artifact.kind ? `${artifact.path} (${artifact.kind})` : artifact.path)))}`;
+	return `## Changed Artifacts\n\n${bulletList(session.artifacts.map((artifact) => (artifact.kind ? `${artifact.path} (${artifact.kind})` : artifact.path)))}`;
 }
 
 function renderLastValidationRunSection(session: Session): string {
-  if (session.execution.lastValidationRun.length === 0) {
-    return "";
-  }
+	if (session.execution.lastValidationRun.length === 0) {
+		return "";
+	}
 
-  return `## Last Validation Run\n\n${bulletList(session.execution.lastValidationRun.map((item) => `${item.status} | ${item.command} | ${item.summary}`))}`;
+	return `## Last Validation Run\n\n${bulletList(session.execution.lastValidationRun.map((item) => `${item.status} | ${item.command} | ${item.summary}`))}`;
 }
 
 function renderExecutionHistoryOverviewSection(session: Session): string {
-  if (session.execution.history.length === 0) {
-    return "";
-  }
+	if (session.execution.history.length === 0) {
+		return "";
+	}
 
-  return `## Execution History\n\n${bulletList(session.execution.history.map((item) => `${item.recordedAt} | ${item.featureId} | ${item.status} | ${item.summary}`))}`;
+	return `## Execution History\n\n${bulletList(session.execution.history.map((item) => `${item.recordedAt} | ${item.featureId} | ${item.status} | ${item.summary}`))}`;
 }
 
 export function renderIndexDoc(session: Session): string {
-  const features = session.plan?.features ?? [];
+	const features = session.plan?.features ?? [];
 
-  return joinSections([
-    "# Flow Session",
-    renderIndexSummarySection(session),
-    renderPlanSection(session, features),
-    renderFeaturesSection(features),
-    renderOutcomeSection(session),
-    renderFeatureResultDetails(session.execution.lastFeatureResult),
-    maybeSection("Notes", session.notes),
-    renderChangedArtifactsSection(session),
-    renderLastValidationRunSection(session),
-    renderExecutionHistoryOverviewSection(session),
-  ]);
+	return joinSections([
+		"# Flow Session",
+		renderIndexSummarySection(session),
+		renderPlanSection(session, features),
+		renderFeaturesSection(features),
+		renderOutcomeSection(session),
+		renderFeatureResultDetails(session.execution.lastFeatureResult),
+		maybeSection("Notes", session.notes),
+		renderChangedArtifactsSection(session),
+		renderLastValidationRunSection(session),
+		renderExecutionHistoryOverviewSection(session),
+	]);
 }
