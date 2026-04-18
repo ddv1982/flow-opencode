@@ -1,6 +1,6 @@
 {
   "milestone": "correctness-hardening",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,89 +20,29 @@
     }
   },
   "reviewsSummary": {
-    "total": 12,
-    "passed": 7,
-    "failed": 5,
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
     "failedFeatures": [
-      "m2-atomic-writes",
-      "m2-completion-gates",
-      "m2-input-validation",
-      "m2-install-target-migration",
-      "m2-tool-semantics-fixes"
+      "m2-scrutiny-fixes"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "m2-atomic-writes",
+      "featureId": "m2-scrutiny-fixes",
       "severity": "blocking",
-      "description": "Concurrent saveSession calls are not fully serialized because syncSessionArtifacts runs outside the save lock, allowing docs artifact write interleaving."
-    },
-    {
-      "featureId": "m2-completion-gates",
-      "severity": "blocking",
-      "description": "Completion-gate matrix validates recovery.errorCode instead of the contract-required recovery kind semantics for VAL-CORRECT-023..031."
-    },
-    {
-      "featureId": "m2-completion-gates",
-      "severity": "blocking",
-      "description": "The required-final-review-not-passing matrix case is not isolated from an earlier optional-final-review guard, so that dedicated check can be dropped without failing the test."
-    },
-    {
-      "featureId": "m2-input-validation",
-      "severity": "blocking",
-      "description": "Derived path builders still accept IDs containing '..' as a substring (for example safe..id), which does not fully satisfy the input-hardening requirement."
-    },
-    {
-      "featureId": "m2-install-target-migration",
-      "severity": "blocking",
-      "description": "Uninstall coverage does not independently test canonical-only and legacy-only seeded homes, leaving path-specific uninstall behavior insufficiently verified."
-    },
-    {
-      "featureId": "m2-tool-semantics-fixes",
-      "severity": "blocking",
-      "description": "flow_review_record_final still allows payloads containing featureId to bypass rejection because schema parsing strips unknown keys before runtime scope validation."
+      "description": "VAL-CORRECT-031 isolation is still not enforced: the completion-gate matrix case duplicates the missing-final-review path, so requireFinalReview-specific guard behavior can regress without test failure, and expectations diverge from the contract."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
-      "target": ".factory/skills/core-worker/SKILL.md",
-      "suggestion": "Add explicit test-only/validation-only execution variants so red-first and commit-order requirements are applied appropriately by feature type.",
-      "evidence": "Skill-procedure mismatch was reported across multiple correctness-hardening reviews (m2-input-validation, m2-install-target-migration, m2-legacy-migration, m2-regression-randomize, m2-tool-semantics-fixes).",
-      "isSystemic": true
-    },
-    {
-      "target": ".factory/skills/core-worker/SKILL.md",
-      "suggestion": "Clarify and enforce auditable procedure compliance signals (required doc reads and followedProcedure reporting) to avoid transcript/handoff inconsistencies.",
-      "evidence": "m2-completion-gates and m2-tool-semantics-fixes reviews reported discrepancies between transcript skeleton evidence and followedProcedure status.",
-      "isSystemic": true
-    },
-    {
       "target": "validation-contract.md",
-      "suggestion": "Resolve and standardize completion-recovery assertion semantics (kind vs errorCode) so contracts, tests, and runtime surfaces align.",
-      "evidence": "m2-completion-gates review identified contract text requiring kind assertions while runtime recovery currently exposes errorCode.",
-      "isSystemic": true
-    },
-    {
-      "target": "AGENTS.md",
-      "suggestion": "Add guidance that feature verification steps must reference existing repo paths/commands to prevent stale or non-existent test-file references.",
-      "evidence": "m2-install-target-migration review found features.json verificationSteps pointing to a non-existent tests/install-target.test.ts path.",
+      "suggestion": "Align VAL-CORRECT-031 contract wording, runtime expectation, and completion-gate tests so the assertion uniquely validates requireFinalReview behavior.",
+      "evidence": "The new m2-scrutiny-fixes review found contract/test divergence: contract expects failing_final_review + reset command while tests currently assert missing_final_review_payload + /flow-status.",
       "isSystemic": false
     }
   ],
-  "rejectedObservations": [
-    {
-      "observation": "Formatter write commands may be blocked in worker mode and should be documented as a universal skill rule.",
-      "reason": "ambiguous: this appears environment/policy specific and was observed in a single review only."
-    },
-    {
-      "observation": "Canonical barrel import guidance should require exporting ensureWorkspace from src/runtime/session.ts.",
-      "reason": "already-documented/low-signal: one-off friction that does not currently demonstrate a systemic correctness or validation failure."
-    },
-    {
-      "observation": "Additional red-first procedure mismatch notes across multiple features.",
-      "reason": "duplicate: consolidated into systemic core-worker skill guidance recommendations above."
-    }
-  ],
-  "previousRound": null
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/correctness-hardening/scrutiny/synthesis.round1.json"
 }

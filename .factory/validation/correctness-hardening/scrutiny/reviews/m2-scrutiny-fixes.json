@@ -1,0 +1,28 @@
+{
+  "featureId": "m2-scrutiny-fixes",
+  "reviewedAt": "2026-04-18T14:00:38Z",
+  "commitId": "583d5bbec17f97d31d4f5ddc9a30a58e9408d9ea",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The fix commit correctly addresses four prior blocking findings (atomic save lock scope, '..' substring sanitization, strict final-review args parsing, and uninstall coverage matrix). However, the completion-gate fix remains insufficient: the VAL-CORRECT-031 test still does not uniquely exercise the requireFinalReview guard.",
+    "issues": [
+      {
+        "file": "tests/completion-gates.test.ts",
+        "line": 249,
+        "severity": "blocking",
+        "description": "The \"required final review not passing\" case now omits finalReview and expects missing_final_review_payload (/flow-status), which is already covered by the prior \"missing final review on final feature\" case (lines 238-246). In guard order, `wasFinalFeature && !worker.finalReview` (src/runtime/transitions/execution-completion-guards.ts:107) fails before the requireFinalReview-specific check (line 113), so removing the dedicated requireFinalReview branch would still leave this test green. This does not resolve the original isolation failure and also diverges from VAL-CORRECT-031 contract expectations (`validation-contract.md`:252-253, failing_final_review with reset command)."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Contract and test expectations for VAL-CORRECT-031 are now out of sync, which makes future scrutiny ambiguous.",
+      "evidence": "Mission contract still states VAL-CORRECT-031 should produce failing_final_review + reset command (`/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/validation-contract.md`:252-253), while the new matrix case expects missing_final_review_payload + /flow-status (`tests/completion-gates.test.ts`:249-261)."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/correctness-hardening/scrutiny/reviews/m2-atomic-writes.json, .factory/validation/correctness-hardening/scrutiny/reviews/m2-completion-gates.json, .factory/validation/correctness-hardening/scrutiny/reviews/m2-input-validation.json, .factory/validation/correctness-hardening/scrutiny/reviews/m2-install-target-migration.json, .factory/validation/correctness-hardening/scrutiny/reviews/m2-tool-semantics-fixes.json",
+  "summary": "Fail. Four of five fix areas are adequately addressed, but the completion-gate isolation fix is still blocking because the VAL-CORRECT-031 case remains non-isolated and contract-misaligned."
+}
