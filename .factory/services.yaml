@@ -1,0 +1,12 @@
+commands:
+  install: bun install
+  typecheck: bun run typecheck
+  test: bun test
+  test_ci: bun test --randomize
+  bench: bun run bench
+  build: bun run build
+  lint: bun run lint
+  deadcode: bun run deadcode
+  check: bun run check
+
+services: {}
