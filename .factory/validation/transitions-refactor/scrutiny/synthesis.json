@@ -1,7 +1,7 @@
 {
   "milestone": "transitions-refactor",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -20,80 +20,21 @@
     }
   },
   "reviewsSummary": {
-    "total": 5,
+    "total": 1,
     "passed": 1,
-    "failed": 4,
-    "failedFeatures": [
-      "m4-transitions-consolidation-r2",
-      "m4-constants-util-merge",
-      "m4-clone-reduction",
-      "m4-recovery-switch"
-    ]
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "m4-transitions-consolidation-r2",
-      "severity": "blocking",
-      "description": "LOC gate was relaxed to <=550 in tests/transitions-consolidation.test.ts, allowing execution.ts to exceed the feature's <=500 fallback acceptance bound."
-    },
-    {
-      "featureId": "m4-constants-util-merge",
-      "severity": "blocking",
-      "description": "toArchiveTimestamp in src/runtime/util.ts regresses non-millisecond ISO handling by leaving trailing 'Z' (e.g. 2025-04-05T19:42:13Z -> 20250405T194213Z)."
-    },
-    {
-      "featureId": "m4-clone-reduction",
-      "severity": "blocking",
-      "description": "selectPlanFeatures path mutates caller input via shared execution object references after clone reduction (prepareDraftPlanEdit + clearExecution)."
-    },
-    {
-      "featureId": "m4-recovery-switch",
-      "severity": "blocking",
-      "description": "Recovery envelope resolutionHint strings in src/runtime/transitions/recovery.ts are not byte-identical to pre-refactor wording despite preservation requirement."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
-      "target": "AGENTS.md",
-      "suggestion": "Unify transition-file LOC policy into one authoritative threshold and require feature descriptions/tests/contracts to reference that exact value.",
-      "evidence": "m4-transitions-consolidation-r2 review found conflicting limits across AGENTS.md (soft 400), feature text (<=400/<=500 fallback), VAL-TRANS-011 (<=550), and enforcing test (<=550).",
-      "isSystemic": true
-    },
-    {
       "target": "skills/core-worker",
-      "suggestion": "Require explicit feature-to-commit traceability in handoffs (commit must contain the reviewed diff, or handoff must name the actual introducing commit).",
-      "evidence": "m4-clone-reduction and m4-recovery-switch reviews observed handoff commit references that did not include the feature's diff, weakening scrutiny traceability.",
-      "isSystemic": true
-    },
-    {
-      "target": "validation-contract.md",
-      "suggestion": "Add explicit assertions/tests for toArchiveTimestamp compatibility with ISO inputs lacking milliseconds and for recovery resolutionHint string parity where wording stability is required.",
-      "evidence": "m4-constants-util-merge and m4-recovery-switch passed existing broad checks while specific behavior/string regressions were still possible.",
-      "isSystemic": true
-    },
-    {
-      "target": "skills/core-worker",
-      "suggestion": "Add a no-op feature pathway: when work is already implemented, require explicit evidence of no-op justification plus targeted regression tests validating invariants.",
-      "evidence": "m4-clone-reduction review noted followedProcedure=true handoff without feature-specific implementation evidence; this pattern can bypass test-first intent.",
-      "isSystemic": true
-    },
-    {
-      "target": "skills/core-worker",
-      "suggestion": "Align benchmark guidance with harness reality: either require implementing filter support before using --filter guidance or update the skill to avoid implying filter isolation works today.",
-      "evidence": "m4-refactor-gate review confirmed bench/index.ts behavior currently runs all suites despite --filter intent.",
+      "suggestion": "Align validation procedure wording so `bun run check` can satisfy deadcode verification without requiring a redundant standalone `bun run deadcode` command.",
+      "evidence": "m4-scrutiny-fixes review recorded recurring procedure deviation: mission verification relied on `bun run check` while skill step 5 still required explicit `bun run deadcode`.",
       "isSystemic": true
     }
   ],
-  "rejectedObservations": [
-    {
-      "observation": "Core-worker test-first compliance concern from m4-constants-util-merge",
-      "reason": "feature-specific and partially duplicative of the broader no-op/traceability guidance; handled via systemic skill recommendations above"
-    },
-    {
-      "observation": "Traceability concerns reported separately in m4-clone-reduction and m4-recovery-switch",
-      "reason": "duplicate; merged into one systemic guidance recommendation on handoff commit traceability"
-    }
-  ],
-  "previousRound": null
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/transitions-refactor/scrutiny/synthesis.round1.json"
 }
