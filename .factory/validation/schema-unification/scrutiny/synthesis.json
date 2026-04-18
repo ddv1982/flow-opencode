@@ -1,6 +1,6 @@
 {
   "milestone": "schema-unification",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,79 +20,36 @@
     }
   },
   "reviewsSummary": {
-    "total": 4,
-    "passed": 1,
-    "failed": 3,
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
     "failedFeatures": [
-      "m3-collapse-shared-schema",
-      "m3-single-parse-boundary",
-      "m3-schema-regression-gate"
+      "m3-scrutiny-fixes"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "m3-collapse-shared-schema",
+      "featureId": "m3-scrutiny-fixes",
       "severity": "blocking",
-      "description": "Tool argument schemas in src/tools/schemas.ts remain manually duplicated instead of being derived from runtime schemas via .omit/.pick/.extend, leaving drift risk and missing the feature contract."
+      "description": "Bundle-size gate remains unresolved: recorded and current evidence report dist/index.js at 994583 bytes, which exceeds the schema milestone threshold of <= 990000 bytes."
     },
     {
-      "featureId": "m3-collapse-shared-schema",
+      "featureId": "m3-scrutiny-fixes",
       "severity": "blocking",
-      "description": "The replacement compile-time schema-equivalence assertions are tautological because they compare schema inputs to aliases derived from those same schemas, so they cannot detect divergence."
-    },
-    {
-      "featureId": "m3-single-parse-boundary",
-      "severity": "blocking",
-      "description": "completeRun widened its input type and casts to WorkerResult, so the transition no longer accepts a strongly typed WorkerResult boundary as required."
-    },
-    {
-      "featureId": "m3-single-parse-boundary",
-      "severity": "blocking",
-      "description": "WorkerResultArgsSchema allows missing outcome while completeRun dereferences worker.outcome.kind on non-ok paths, creating a runtime throw path instead of a structured validation envelope."
-    },
-    {
-      "featureId": "m3-schema-regression-gate",
-      "severity": "blocking",
-      "description": "Recorded bundle-size evidence shows dist/index.js at 993402 bytes, exceeding the required schema milestone gate threshold of <= 990000."
-    },
-    {
-      "featureId": "m3-schema-regression-gate",
-      "severity": "blocking",
-      "description": "No bun run lint execution was recorded in the feature's gate verification evidence, leaving the regression-gate lint requirement unverified."
+      "description": "Tool-schema de-duplication remains incomplete: src/tools/schemas.ts still contains manually redeclared tool arg shapes and src/tools/runtime-tools.ts still includes a duplicated flow_plan_apply args declaration instead of consuming fully runtime-derived schemas."
     }
   ],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [
-    {
-      "target": ".factory/skills/core-worker/SKILL.md",
-      "suggestion": "Add explicit guidance that compile-time equivalence assertions must compare independently defined runtime/tool types (not aliases derived from the same schema constants), with a concrete anti-pattern/example.",
-      "evidence": "m3-collapse-shared-schema passed handoff while tests/schema-equivalence.test-d.ts used tautological checks that could not catch schema drift.",
-      "isSystemic": false
-    },
-    {
-      "target": "AGENTS.md",
-      "suggestion": "Add a schema-boundary convention that z.custom<T>() should not be used for runtime-constrained literals/enums at tool boundaries unless paired with explicit runtime refinement, because it does not validate values by default.",
-      "evidence": "m3-collapse-shared-schema review found permissive z.custom<T>() usage in src/tools/schemas.ts that could accept invalid literals at parse boundaries.",
-      "isSystemic": false
-    },
-    {
-      "target": ".factory/skills/core-worker/SKILL.md",
-      "suggestion": "Clarify verification expectations for validation-only/regression-gate features: when full-suite commands are mandatory versus when scoped/targeted checks are acceptable.",
-      "evidence": "m3-single-parse-boundary and m3-schema-regression-gate both reported process mismatches between strict skill requirements and observed scoped-validation practice.",
-      "isSystemic": true
-    },
-    {
-      "target": "AGENTS.md",
-      "suggestion": "Require feature verificationSteps and expectedBehavior command requirements to be reconciled with mission-level validation requirements before feature assignment (for example lint/deadcode expectations and SessionSchema.parse search scope).",
-      "evidence": "m3-single-parse-boundary and m3-schema-regression-gate showed conflicting expectations between feature text and mission guidance, causing avoidable ambiguity during validation.",
-      "isSystemic": true
-    }
-  ],
+  "suggestedGuidanceUpdates": [],
   "rejectedObservations": [
     {
-      "observation": "core-worker red-first test authoring requirement is unsuitable for verification-only gate features.",
-      "reason": "duplicate of the broader skill-alignment recommendation already captured under suggestedGuidanceUpdates for .factory/skills/core-worker/SKILL.md."
+      "observation": "Shared architecture docs should define additional coupling rules for OpenCode tool({ args }) declarations and runtime-derived schemas.",
+      "reason": "already-documented: .factory/library/architecture.md already states that tool-arg schemas are derived from runtime schemas; current issue is implementation drift, not missing shared-state documentation."
+    },
+    {
+      "observation": "core-worker verification should treat bun run check as sufficient evidence instead of explicit deadcode/build entries.",
+      "reason": "duplicate: this process-gap recommendation was already captured in round 1 guidance updates for the core-worker skill."
     }
   ],
-  "previousRound": null
+  "previousRound": ".factory/validation/schema-unification/scrutiny/synthesis.round1.json"
 }
