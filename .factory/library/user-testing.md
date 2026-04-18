@@ -40,3 +40,25 @@ Reducing to 3 concurrent validators is acceptable if the machine reports <8 GB f
 
 - The user testing validator must NOT run `bun run bench` as part of assertion validation unless the specific assertion (M5 bench gates, cross-area bench gate) explicitly requires it. Benchmarks take substantial time and CPU.
 - Some assertions reference artifacts produced by earlier milestones (e.g. `bench/BASELINE.md`, `tests/__fixtures__/render/`). If a validator is asked to verify an M5 assertion before M1/M3 has landed, return with a clear blocker — the precondition isn't met.
+- Biome 2.x removed the `--check` flag from `format`. The correct read-only invocation is `bunx biome format .` (which writes nothing unless `--write` is passed). Format scope is constrained by `biome.json` `files.includes` (currently excludes `.factory/`, `dist/`, `node_modules/`, and `bun.lock`).
+
+## Flow Validator Guidance: fs-inspection
+
+- Scope: read-only contract checks against tracked files and generated artifacts in the repository.
+- Allowed writes: only the assigned flow report JSON and evidence files under your assigned mission evidence folder.
+- Do not modify source files, package metadata, or mission files while validating.
+- Prefer deterministic commands (`rg`, `node -e`, `test`, `git ls-files`) and include raw command output snippets in evidence.
+
+## Flow Validator Guidance: cli-smoke
+
+- Scope: command-based behavior checks for `bun` scripts used by foundations assertions.
+- Run only required foundations commands (`bun run typecheck`, `bun run lint`, `bunx biome format .`, `bun run bench` where required by assertion, `bun run check`) and any command explicitly needed to collect assertion evidence.
+- Do not run installer/uninstaller commands against the real HOME; use temp HOME overrides when needed.
+- Capture exit code and key stdout/stderr lines for each asserted command.
+
+## Flow Validator Guidance: bun-test
+
+- Scope: test assertions validated through Bun tests (foundations currently uses fixture-contract assertions).
+- Run only the minimum test target(s) needed for assigned assertion IDs, then escalate to broader test runs only if required by assertion wording.
+- Keep filesystem side effects confined to test-managed temp directories.
+- If a test fails, report exact failing test names and messages; do not edit tests or source during validation.
