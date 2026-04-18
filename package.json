@@ -13,6 +13,7 @@
 		"deadcode": "knip --include files,dependencies",
 		"lint": "bunx biome check . --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"test": "bun test",
+		"test:ci": "bun test --randomize",
 		"typecheck": "tsc --noEmit",
 		"check": "bun run typecheck && bun run deadcode && bun run test && bun run build && bun run lint",
 		"install:opencode": "bun run ./src/install-opencode.ts",

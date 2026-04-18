@@ -6,6 +6,7 @@ import {
 	WorkerResultSchema,
 } from "../src/runtime/schema";
 import { createTools } from "../src/tools";
+import { cloneSamplePlan } from "./fixtures";
 
 type ToolDefinition = {
 	args: Record<string, unknown>;
@@ -61,27 +62,6 @@ function getToolSchemas() {
 	) as ToolSchemas;
 }
 
-function samplePlan() {
-	return {
-		summary: "Implement a small workflow feature set.",
-		overview: "Create one setup feature and one execution feature.",
-		requirements: ["Keep state durable", "Keep commands concise"],
-		architectureDecisions: [
-			"Persist session history under .flow/sessions/<id>",
-			"Run one feature per worker invocation",
-		],
-		features: [
-			{
-				id: "setup-runtime",
-				title: "Create runtime helpers",
-				summary: "Add runtime helper files and state persistence.",
-				fileTargets: ["src/runtime/session.ts"],
-				verification: ["bun test"],
-			},
-		],
-	};
-}
-
 function sampleWorkerResult(): WorkerPayloadLike {
 	return {
 		contractVersion: "1" as const,
@@ -114,7 +94,10 @@ function sampleWorkerResult(): WorkerPayloadLike {
 describe("schema alignment", () => {
 	test("plan payloads stay aligned between runtime and tool schemas", () => {
 		const schemas = getToolSchemas();
-		const validPlan = samplePlan();
+		const validPlan = {
+			...cloneSamplePlan(),
+			features: [cloneSamplePlan().features[0]!],
+		};
 
 		expect(PlanSchema.safeParse(validPlan).success).toBe(true);
 		expect(schemas.flow_plan_apply.safeParse({ plan: validPlan }).success).toBe(

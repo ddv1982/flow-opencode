@@ -5,6 +5,12 @@ import { join } from "node:path";
 import { getActiveSessionPath } from "../src/runtime/paths";
 import { createTools } from "../src/tools";
 import type { ToolContext } from "../src/tools/schemas";
+import {
+	createSampleSession,
+	cloneSamplePlan,
+	samplePlan as canonicalSamplePlan,
+	sampleSession as canonicalSampleSession,
+} from "./fixtures";
 
 export type TestToolContext = Partial<ToolContext> & {
 	worktree?: string;
@@ -49,30 +55,11 @@ export async function activeSessionId(worktree: string): Promise<string> {
 }
 
 export function samplePlan() {
-	return {
-		summary: "Implement a small workflow feature set.",
-		overview: "Create one setup feature and one execution feature.",
-		requirements: ["Keep state durable", "Keep commands concise"],
-		architectureDecisions: [
-			"Persist session history under .flow/sessions/<id>",
-			"Run one feature per worker invocation",
-		],
-		features: [
-			{
-				id: "setup-runtime",
-				title: "Create runtime helpers",
-				summary: "Add runtime helper files and state persistence.",
-				fileTargets: ["src/runtime/session.ts"],
-				verification: ["bun test"],
-			},
-			{
-				id: "execute-feature",
-				title: "Implement execution flow",
-				summary: "Wire runtime tools to feature execution.",
-				fileTargets: ["src/tools.ts"],
-				verification: ["bun test"],
-				dependsOn: ["setup-runtime"],
-			},
-		],
-	};
+	return cloneSamplePlan();
 }
+
+export function sampleSession(goal?: string) {
+	return goal === undefined ? structuredClone(canonicalSampleSession) : createSampleSession(goal);
+}
+
+export { canonicalSamplePlan, canonicalSampleSession };
