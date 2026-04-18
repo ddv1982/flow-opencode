@@ -1,0 +1,15 @@
+{
+  "featureId": "m3-constants-errors-module",
+  "reviewedAt": "2026-04-18T15:08:39Z",
+  "commitId": "f20c325",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Implementation satisfies the feature contract: runtime/constants.ts and runtime/errors.ts were added, summary/transitions/tools now consume centralized slash-command constants, no inline /flow literals remain on nextCommand lines outside constants.ts, and runtime tool error envelopes are centralized via errorResponse.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, and commit f20c325. The feature is complete and aligned with expected behavior; no blocking or non-blocking defects were found."
+}

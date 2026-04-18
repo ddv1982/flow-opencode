@@ -1,0 +1,39 @@
+{
+  "featureId": "m3-single-parse-boundary",
+  "reviewedAt": "2026-04-18T15:10:39Z",
+  "commitId": "a8837c0",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature removed the explicit re-parse in `completeRun` and removed save-time session re-parse, but it introduced blocking boundary regressions: `completeRun` is no longer strongly typed to `WorkerResult`, and malformed `needs_input` payloads can bypass parse-time rejection and crash before producing the expected validation error envelope.",
+    "issues": [
+      {
+        "file": "src/runtime/transitions/execution-complete.ts",
+        "line": 63,
+        "severity": "blocking",
+        "description": "`completeRun` does not satisfy the feature/contract requirement to accept typed `WorkerResult` input. The signature was widened to `WorkerResultArgs | WorkerResult | Record<string, unknown>` and immediately cast (`const typedWorker = worker as WorkerResult`), which removes compile-time guarantees and reintroduces an unsafe boundary."
+      },
+      {
+        "file": "src/runtime/schema.ts",
+        "line": 209,
+        "severity": "blocking",
+        "description": "`WorkerResultArgsSchema` makes `outcome` optional for all statuses. Combined with `completeRun` dereferencing `typedWorker.outcome.kind` on the `status !== \"ok\"` path (`src/runtime/transitions/execution-complete.ts:106`), a `needs_input` payload without `outcome` can pass tool parsing and then throw at runtime instead of returning a structured validation error response."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `core-worker` skill requires a full `bun test` in verification, but this feature transcript shows targeted test runs after edits while still reporting `skillFeedback.followedProcedure: true`. The skill/procedure guidance appears stricter than actual mission practice for scoped schema/refactor features.",
+      "evidence": "Skill requires `bun test` in step 5 (`.factory/skills/core-worker/SKILL.md:59`). Transcript skeleton for `da54e78a-e180-4247-98c2-aba422a1e8e2` shows post-change runs of `bun test tests/runtime-tools.test.ts tests/runtime-completion-contracts.test.ts` and a combined command with targeted tests, but no full post-change `bun test`."
+    },
+    {
+      "area": "conventions",
+      "observation": "Feature metadata and shared architecture intent are misaligned on `SessionSchema.parse` expectations. The feature expected behavior states no `SessionSchema.parse` matches in `src/runtime`, but runtime load/create paths still intentionally parse sessions.",
+      "evidence": "Feature expectedBehavior includes `rg for WorkerResultSchema.parse and SessionSchema.parse in src/runtime returns no matches`. Current runtime still has `SessionSchema.parse` at `src/runtime/session-workspace.ts:102`, `src/runtime/session-workspace.ts:206`, and `src/runtime/session-lifecycle.ts:127`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed with 2 blocking issues. The implementation removed double parsing in some paths, but it weakened `completeRun` typing and introduced a malformed-`needs_input` crash path that bypasses the expected validation envelope."
+}

@@ -1,0 +1,39 @@
+{
+  "featureId": "m3-schema-regression-gate",
+  "reviewedAt": "2026-04-18T15:09:31Z",
+  "commitId": "f20c325",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The regression gate was executed, but required gate criteria are not fully satisfied: the recorded bundle size exceeds the declared ≤990000 threshold and no lint run is recorded for this final gate.",
+    "issues": [
+      {
+        "file": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T15-05-42-731Z__m3-schema-regression-gate__e8c262da-d3cd-4b29-b826-9dbc5898b128.json",
+        "line": 38,
+        "severity": "blocking",
+        "description": "Bundle-size gate failed in the worker's own evidence: dist/index.js is reported as 993402 bytes, while the feature and contract gate require ≤990000 (see features.json and VAL-SCHEMA-016)."
+      },
+      {
+        "file": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T15-05-42-731Z__m3-schema-regression-gate__e8c262da-d3cd-4b29-b826-9dbc5898b128.json",
+        "line": 16,
+        "severity": "blocking",
+        "description": "No lint execution is recorded in verification.commandsRun for this final regression gate (command list includes init/log/test/typecheck/build/diff/status only). This leaves the stated lint-clean requirement unverified."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "core-worker procedure is not aligned with verification-only regression-gate features: it mandates red-first test authoring, which the worker necessarily skipped and flagged as a deviation.",
+      "evidence": "handoff.skillFeedback.deviations in the reviewed handoff cites skipping SKILL.md step '3. Write failing tests FIRST'; core-worker SKILL.md line 42+ requires this for every feature."
+    },
+    {
+      "area": "conventions",
+      "observation": "Mission guidance and feature-specific verification expectations are inconsistent about gate commands (lint/deadcode).",
+      "evidence": "AGENTS.md line 68 and core-worker SKILL.md lines 58-62 require lint/deadcode evidence in commandsRun, while this feature's features.json verificationSteps lines 1463-1467 only require test, typecheck, build-size, and test-diff checks."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: evidence shows bundle-size threshold violation (993402 > 990000) and missing lint-gate evidence for this final regression gate; shared-state gaps were also noted around skill/procedure alignment for verification-only features."
+}

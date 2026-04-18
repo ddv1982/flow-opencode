@@ -1,0 +1,39 @@
+{
+  "featureId": "m3-collapse-shared-schema",
+  "reviewedAt": "2026-04-18T15:10:39Z",
+  "commitId": "777902a49e684cd98a80389c610fc3e8c1c10c11",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The refactor removes shared-schema.ts and alignment runtime tests, but it does not actually derive tool schemas from runtime schemas and the new compile-time checks are vacuous, so core feature requirements are not fully satisfied.",
+    "issues": [
+      {
+        "file": "src/tools/schemas.ts",
+        "line": 38,
+        "severity": "blocking",
+        "description": "Tool argument schemas remain manually duplicated instead of being derived from runtime schemas via .omit/.pick/.extend as required. For example, FlowPlanApplyArgsShape and worker/reviewer shapes are handwritten (lines 38-183), and runtime schema exports are only imported as types (lines 4-9), leaving schema drift risk unresolved."
+      },
+      {
+        "file": "tests/schema-equivalence.test-d.ts",
+        "line": 17,
+        "severity": "blocking",
+        "description": "The new type-level checks are tautological and do not validate tool/runtime equivalence: each assertion compares z.input<typeof XSchema> against a type alias that is defined from the same schema (see src/runtime/schema.ts lines 280-286). This cannot catch divergence after deleting tests/schema-alignment.test.ts."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure does not explicitly guard against vacuous compile-time assertions, allowing a 'followedProcedure: true' handoff even when schema-equivalence checks cannot detect drift.",
+      "evidence": "tests/schema-equivalence.test-d.ts:17-40 compared with src/runtime/schema.ts:280-286"
+    },
+    {
+      "area": "conventions",
+      "observation": "Shared conventions do not call out that bare z.custom<T>() performs no runtime validation, which enabled permissive tool-boundary schemas during this refactor.",
+      "evidence": "src/tools/schemas.ts:82-83,97,102,108,119-121,133,141,152,169; reproduction command returned true for invalid value: bun -e 'import { tool } from \"@opencode-ai/plugin\"; const z = tool.schema; console.log(z.object({status:z.custom<\"ok\"|\"needs_input\">()}).safeParse({status:\"bogus\"}).success);'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: while file consolidation happened, the implementation misses the required runtime-schema-derived tool schema construction and the replacement compile-time checks are not meaningful alignment checks."
+}

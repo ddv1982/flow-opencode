@@ -1,0 +1,98 @@
+{
+  "milestone": "schema-unification",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 4,
+    "passed": 1,
+    "failed": 3,
+    "failedFeatures": [
+      "m3-collapse-shared-schema",
+      "m3-single-parse-boundary",
+      "m3-schema-regression-gate"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m3-collapse-shared-schema",
+      "severity": "blocking",
+      "description": "Tool argument schemas in src/tools/schemas.ts remain manually duplicated instead of being derived from runtime schemas via .omit/.pick/.extend, leaving drift risk and missing the feature contract."
+    },
+    {
+      "featureId": "m3-collapse-shared-schema",
+      "severity": "blocking",
+      "description": "The replacement compile-time schema-equivalence assertions are tautological because they compare schema inputs to aliases derived from those same schemas, so they cannot detect divergence."
+    },
+    {
+      "featureId": "m3-single-parse-boundary",
+      "severity": "blocking",
+      "description": "completeRun widened its input type and casts to WorkerResult, so the transition no longer accepts a strongly typed WorkerResult boundary as required."
+    },
+    {
+      "featureId": "m3-single-parse-boundary",
+      "severity": "blocking",
+      "description": "WorkerResultArgsSchema allows missing outcome while completeRun dereferences worker.outcome.kind on non-ok paths, creating a runtime throw path instead of a structured validation envelope."
+    },
+    {
+      "featureId": "m3-schema-regression-gate",
+      "severity": "blocking",
+      "description": "Recorded bundle-size evidence shows dist/index.js at 993402 bytes, exceeding the required schema milestone gate threshold of <= 990000."
+    },
+    {
+      "featureId": "m3-schema-regression-gate",
+      "severity": "blocking",
+      "description": "No bun run lint execution was recorded in the feature's gate verification evidence, leaving the regression-gate lint requirement unverified."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": ".factory/skills/core-worker/SKILL.md",
+      "suggestion": "Add explicit guidance that compile-time equivalence assertions must compare independently defined runtime/tool types (not aliases derived from the same schema constants), with a concrete anti-pattern/example.",
+      "evidence": "m3-collapse-shared-schema passed handoff while tests/schema-equivalence.test-d.ts used tautological checks that could not catch schema drift.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add a schema-boundary convention that z.custom<T>() should not be used for runtime-constrained literals/enums at tool boundaries unless paired with explicit runtime refinement, because it does not validate values by default.",
+      "evidence": "m3-collapse-shared-schema review found permissive z.custom<T>() usage in src/tools/schemas.ts that could accept invalid literals at parse boundaries.",
+      "isSystemic": false
+    },
+    {
+      "target": ".factory/skills/core-worker/SKILL.md",
+      "suggestion": "Clarify verification expectations for validation-only/regression-gate features: when full-suite commands are mandatory versus when scoped/targeted checks are acceptable.",
+      "evidence": "m3-single-parse-boundary and m3-schema-regression-gate both reported process mismatches between strict skill requirements and observed scoped-validation practice.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Require feature verificationSteps and expectedBehavior command requirements to be reconciled with mission-level validation requirements before feature assignment (for example lint/deadcode expectations and SessionSchema.parse search scope).",
+      "evidence": "m3-single-parse-boundary and m3-schema-regression-gate showed conflicting expectations between feature text and mission guidance, causing avoidable ambiguity during validation.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "core-worker red-first test authoring requirement is unsuitable for verification-only gate features.",
+      "reason": "duplicate of the broader skill-alignment recommendation already captured under suggestedGuidanceUpdates for .factory/skills/core-worker/SKILL.md."
+    }
+  ],
+  "previousRound": null
+}
