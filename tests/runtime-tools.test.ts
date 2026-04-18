@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -1170,5 +1170,92 @@ describe("runtime tools and recovery", () => {
 		expect(reset.value.execution.lastValidationRun).toHaveLength(1);
 		expect(reset.value.artifacts).toHaveLength(1);
 		expect(reset.value.notes).toHaveLength(1);
+	});
+
+	test("every Flow tool emits non-empty metadata and still returns a string", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const metadata = mock(() => {});
+		const context = {
+			...toolContext(worktree),
+			metadata,
+			client: { app: { log: () => {} } },
+		};
+
+		const seededResponse = await tools.flow_plan_start.execute(
+			{ goal: "Build a workflow plugin" },
+			context,
+		);
+		const seededSession = JSON.parse(seededResponse).session as { id: string };
+		const currentSessionId = seededSession.id;
+
+		const toolArgs: Record<string, unknown> = {
+			flow_status: {},
+			flow_history: {},
+			flow_history_show: { sessionId: currentSessionId },
+			flow_session_activate: { sessionId: currentSessionId },
+			flow_plan_start: { goal: "Build a workflow plugin" },
+			flow_auto_prepare: { argumentString: "resume" },
+			flow_reset_session: {},
+			flow_plan_apply: { plan: samplePlan() },
+			flow_plan_approve: {},
+			flow_plan_select_features: { featureIds: ["setup-runtime"] },
+			flow_run_start: {},
+			flow_run_complete_feature: {
+				contractVersion: "1",
+				status: "needs_input",
+				summary: "Need a follow-up plan.",
+				artifactsChanged: [],
+				validationRun: [],
+				decisions: [],
+				nextStep: "Replan the work.",
+				outcome: { kind: "replan_required" },
+				featureResult: {
+					featureId: "setup-runtime",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "No blocking review findings.",
+					blockingFindings: [],
+				},
+			},
+			flow_review_record_feature: {
+				scope: "feature",
+				featureId: "setup-runtime",
+				status: "approved",
+				summary: "Looks good.",
+			},
+			flow_review_record_final: {
+				scope: "final",
+				status: "approved",
+				summary: "Looks good.",
+			},
+			flow_reset_feature: { featureId: "setup-runtime" },
+		};
+
+		for (const toolName of Object.keys(tools)) {
+			const tool = tools[toolName];
+			if (!tool) {
+				throw new Error(`Missing tool definition for ${toolName}`);
+			}
+			const response = await tool.execute(toolArgs[toolName], context);
+
+			expect(typeof response).toBe("string");
+			expect(metadata).toHaveBeenCalled();
+
+			const latestCallEntry = metadata.mock.calls.at(-1) as
+				| [unknown, ...unknown[]]
+				| undefined;
+			const latestCall = latestCallEntry?.[0] as
+				| { title?: unknown; metadata?: unknown }
+				| undefined;
+
+			expect(typeof latestCall?.title).toBe("string");
+			expect((latestCall?.title as string).trim().length).toBeGreaterThan(0);
+			expect(latestCall?.metadata).toBeObject();
+			expect(Array.isArray(latestCall?.metadata)).toBe(false);
+
+			metadata.mockClear();
+		}
 	});
 });

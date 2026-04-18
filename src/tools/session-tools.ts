@@ -33,6 +33,7 @@ import {
 	FlowSessionActivateArgsShape,
 	FlowStatusArgsSchema,
 	FlowStatusArgsShape,
+	type ToolContext,
 } from "./schemas";
 
 export function createSessionTools() {
@@ -40,10 +41,22 @@ export function createSessionTools() {
 		flow_status: tool({
 			description: "Show the active Flow session summary",
 			args: FlowStatusArgsShape,
-			execute: withParsedArgs(FlowStatusArgsSchema, async (_input, context) => {
-				const session = await loadSession(resolveSessionRoot(context));
-				return toJson(summarizeSession(session));
-			}),
+			execute: withParsedArgs(
+				FlowStatusArgsSchema,
+				async (_input, context: ToolContext) => {
+					const session = await loadSession(resolveSessionRoot(context));
+					context.metadata?.({
+						title: "Flow status",
+						metadata: {
+							sessionId: session?.id ?? null,
+							status: session?.status ?? "missing",
+							approval: session?.approval ?? null,
+							activeFeatureId: session?.execution.activeFeatureId ?? null,
+						},
+					});
+					return toJson(summarizeSession(session));
+				},
+			),
 		}),
 
 		flow_history: tool({
@@ -52,10 +65,18 @@ export function createSessionTools() {
 			args: FlowHistoryArgsShape,
 			execute: withParsedArgs(
 				FlowHistoryArgsSchema,
-				async (_input, context) => {
+				async (_input, context: ToolContext) => {
 					const history = await listSessionHistory(resolveSessionRoot(context));
 					const activeCount = history.activeSessionId ? 1 : 0;
 					const totalCount = history.sessions.length + history.archived.length;
+					context.metadata?.({
+						title: "Flow history",
+						metadata: {
+							totalCount,
+							activeCount,
+							archivedCount: history.archived.length,
+						},
+					});
 					const resumableStoredSession = history.sessions.find(
 						(session) => session.status !== "completed",
 					);
@@ -88,11 +109,19 @@ export function createSessionTools() {
 			args: FlowHistoryShowArgsShape,
 			execute: withParsedArgs(
 				FlowHistoryShowArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
 					const found = await loadStoredSession(
 						resolveSessionRoot(context),
 						input.sessionId,
 					);
+					context.metadata?.({
+						title: `Show session ${input.sessionId}`,
+						metadata: {
+							sessionId: input.sessionId,
+							source: found?.source ?? null,
+							active: found?.active ?? false,
+						},
+					});
 
 					if (!found) {
 						return toJson({
@@ -134,11 +163,17 @@ export function createSessionTools() {
 			args: FlowSessionActivateArgsShape,
 			execute: withParsedArgs(
 				FlowSessionActivateArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
 					const session = await activateSession(
 						resolveSessionRoot(context),
 						input.sessionId,
 					);
+					context.metadata?.({
+						title: `Activate ${input.sessionId}`,
+						metadata: {
+							sessionId: input.sessionId,
+						},
+					});
 
 					if (!session) {
 						return toJson({
@@ -163,7 +198,7 @@ export function createSessionTools() {
 			args: FlowPlanStartArgsShape,
 			execute: withParsedArgs(
 				FlowPlanStartArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
 					const sessionRoot = resolveSessionRoot(context);
 					const existing = await loadSession(sessionRoot);
 
@@ -235,6 +270,13 @@ export function createSessionTools() {
 
 					const session = await saveSessionState(sessionRoot, base);
 					await syncSessionArtifacts(sessionRoot, session);
+					context.metadata?.({
+						title: `Plan: ${session.goal}`,
+						metadata: {
+							sessionId: session.id,
+							goal: session.goal,
+						},
+					});
 					return toJson({
 						status: "ok",
 						summary: `Planning session ready for goal: ${session.goal}`,
@@ -249,12 +291,25 @@ export function createSessionTools() {
 			args: FlowAutoPrepareArgsShape,
 			execute: withParsedArgs(
 				FlowAutoPrepareArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
 					const trimmed = (input.argumentString ?? "").trim();
 					const session = await loadSession(resolveSessionRoot(context));
 					const isResume = trimmed === "" || trimmed === "resume";
 					const resumableSession =
 						session && session.status !== "completed" ? session : null;
+					const mode = isResume
+						? resumableSession
+							? "resume"
+							: "missing_goal"
+						: "start_new_goal";
+					const goal = resumableSession?.goal ?? (trimmed || null);
+					context.metadata?.({
+						title: `Flow auto (${mode})`,
+						metadata: {
+							mode,
+							goal,
+						},
+					});
 
 					if (isResume) {
 						if (!resumableSession) {
@@ -290,18 +345,27 @@ export function createSessionTools() {
 		flow_reset_session: tool({
 			description: "Archive and clear the active Flow session",
 			args: FlowStatusArgsShape,
-			execute: withParsedArgs(FlowStatusArgsSchema, async (_input, context) => {
-				const archived = await archiveSession(resolveSessionRoot(context));
-				return toJson({
-					status: "ok",
-					summary: archived
-						? "Archived and cleared the active Flow session."
-						: "No active Flow session existed.",
-					archivedSessionId: archived?.sessionId ?? null,
-					archivedTo: archived?.archivedTo ?? null,
-					nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
-				});
-			}),
+			execute: withParsedArgs(
+				FlowStatusArgsSchema,
+				async (_input, context: ToolContext) => {
+					const archived = await archiveSession(resolveSessionRoot(context));
+					context.metadata?.({
+						title: "Reset Flow session",
+						metadata: {
+							archivedSessionId: archived?.sessionId ?? null,
+						},
+					});
+					return toJson({
+						status: "ok",
+						summary: archived
+							? "Archived and cleared the active Flow session."
+							: "No active Flow session existed.",
+						archivedSessionId: archived?.sessionId ?? null,
+						archivedTo: archived?.archivedTo ?? null,
+						nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
+					});
+				},
+			),
 		}),
 	};
 }

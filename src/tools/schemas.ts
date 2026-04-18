@@ -13,6 +13,14 @@ import {
 } from "../runtime/schema";
 
 const z = tool.schema;
+export type ToolMetadataPayload = {
+	title: string;
+	metadata: Record<string, unknown>;
+};
+
+export type ToolContext = WorkspaceContext & {
+	metadata?: (payload: ToolMetadataPayload) => void;
+};
 export const featureIdSchema = z
 	.string()
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
@@ -122,5 +130,3 @@ export type FlowRunStartArgs = {
 export type FlowResetFeatureArgs = {
 	featureId: string;
 };
-
-export type ToolContext = WorkspaceContext;

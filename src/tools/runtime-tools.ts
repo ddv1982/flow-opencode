@@ -31,6 +31,7 @@ import {
 	FlowReviewRecordFinalArgsShape,
 	FlowRunStartArgsSchema,
 	FlowRunStartArgsShape,
+	type ToolContext,
 	WorkerResultArgsSchema,
 	WorkerResultArgsShape,
 } from "./schemas";
@@ -59,7 +60,14 @@ export function createRuntimeTools() {
 			args: flowPlanApplyArgsShape,
 			execute: withParsedArgs(
 				FlowPlanApplyArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: "Apply draft plan",
+						metadata: {
+							sessionId: null,
+							featureCount: input.plan.features.length,
+						},
+					});
 					const planning =
 						input.planning === undefined
 							? undefined
@@ -93,7 +101,14 @@ export function createRuntimeTools() {
 			args: FlowPlanApproveArgsShape,
 			execute: withParsedArgs(
 				FlowPlanApproveArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: "Approve plan",
+						metadata: {
+							sessionId: null,
+							approvedCount: parseFeatureIds(input.featureIds).length || null,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) =>
@@ -116,7 +131,14 @@ export function createRuntimeTools() {
 			args: FlowPlanSelectArgsShape,
 			execute: withParsedArgs(
 				FlowPlanSelectArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: "Narrow plan",
+						metadata: {
+							sessionId: null,
+							selectedCount: parseFeatureIds(input.featureIds).length,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) =>
@@ -139,7 +161,15 @@ export function createRuntimeTools() {
 			args: FlowRunStartArgsShape,
 			execute: withParsedArgs(
 				FlowRunStartArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: input.featureId ? `Start ${input.featureId}` : "Start next",
+						metadata: {
+							sessionId: null,
+							featureId: input.featureId ?? null,
+							reason: null,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) => startRun(session, input.featureId),
@@ -176,7 +206,15 @@ export function createRuntimeTools() {
 			args: workerResultArgsShape,
 			execute: withParsedArgs(
 				WorkerResultArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: `Complete ${input.featureResult?.featureId ?? "feature"}`,
+						metadata: {
+							sessionId: null,
+							featureId: input.featureResult?.featureId ?? null,
+							status: input.status,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) => completeRun(session, input as WorkerResult),
@@ -207,7 +245,15 @@ export function createRuntimeTools() {
 			args: flowReviewRecordFeatureArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordFeatureArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: `Reviewer ${input.status} ${input.featureId}`,
+						metadata: {
+							sessionId: null,
+							featureId: input.featureId,
+							status: input.status,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) => recordReviewerDecision(session, input),
@@ -230,7 +276,14 @@ export function createRuntimeTools() {
 			args: flowReviewRecordFinalArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordFinalArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: `Final reviewer ${input.status}`,
+						metadata: {
+							sessionId: null,
+							status: input.status,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) => recordReviewerDecision(session, input),
@@ -252,7 +305,14 @@ export function createRuntimeTools() {
 			args: FlowResetFeatureArgsShape,
 			execute: withParsedArgs(
 				FlowResetFeatureArgsSchema,
-				async (input, context) => {
+				async (input, context: ToolContext) => {
+					context.metadata?.({
+						title: `Reset ${input.featureId}`,
+						metadata: {
+							sessionId: null,
+							featureId: input.featureId,
+						},
+					});
 					return withPersistedTransition(
 						context,
 						(session) => resetFeature(session, input.featureId),
