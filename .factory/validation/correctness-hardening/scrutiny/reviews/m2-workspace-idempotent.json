@@ -1,0 +1,21 @@
+{
+  "featureId": "m2-workspace-idempotent",
+  "reviewedAt": "2026-04-18T13:44:28Z",
+  "commitId": "1ebb1a8fad7aae603b2a7c65ad72c4eed3d78202",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The commit implements an in-process per-worktree `.flow/.gitignore` content cache in `ensureWorkspace` and gates writes so an unchanged, already-prepared worktree does not trigger additional `.gitignore` writes. It also repairs missing required entries (`active`, `sessions/`, `archive/`) while preserving existing non-empty lines and their relative order, and adds focused tests that verify both zero additional writes on the second call and restoration of a missing required entry with custom lines preserved.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission guidance says to prefer canonical barrel imports, but `ensureWorkspace` is not exported from `src/runtime/session.ts`, which caused initial test setup friction in this feature.",
+      "evidence": "AGENTS.md:25 recommends barrel imports; handoff skillFeedback records the initial failure due to importing `ensureWorkspace` from the session barrel (handoff JSON line 103); `src/runtime/session.ts` exports `readActiveSessionId`/`writeActiveSessionId` but not `ensureWorkspace` (lines 22-25)."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature `m2-workspace-idempotent` using the handoff, transcript skeleton, skill file, and commit diff (`1ebb1a8fad7aae603b2a7c65ad72c4eed3d78202`). The implementation matches the feature requirements and validation-contract expectations for idempotent `.gitignore` handling, with no blocking or non-blocking code defects identified in scope."
+}

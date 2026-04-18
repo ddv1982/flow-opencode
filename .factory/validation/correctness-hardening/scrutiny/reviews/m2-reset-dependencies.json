@@ -1,0 +1,15 @@
+{
+  "featureId": "m2-reset-dependencies",
+  "reviewedAt": "2026-04-18T13:43:36Z",
+  "commitId": "791af06",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature delivers dedicated resetFeature coverage matching the described contract: transitive reset through dependsOn/blockedBy, conditional activeFeatureId clearing, conditional last-run projection clearing, singular/plural summary text, and approval-based status derivation. The new tests in tests/reset-dependencies.test.ts are aligned with validation assertions VAL-CORRECT-033 through VAL-CORRECT-037 and no correctness issues were found in scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, commit 791af06 diff, transcript skeleton, and relevant runtime behavior for m2-reset-dependencies. Coverage is complete for the feature requirements and validation-contract assertions, with no blocking or non-blocking issues identified."
+}

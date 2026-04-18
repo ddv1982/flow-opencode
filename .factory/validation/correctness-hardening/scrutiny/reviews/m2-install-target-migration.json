@@ -1,0 +1,33 @@
+{
+  "featureId": "m2-install-target-migration",
+  "reviewedAt": "2026-04-18T13:44:16Z",
+  "commitId": "db742d0",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Installer path targeting behavior in src/installer.ts matches the canonical/legacy migration intent, but test coverage does not fully satisfy the feature requirement to cover uninstall behavior from each location independently.",
+    "issues": [
+      {
+        "file": "tests/install.test.ts",
+        "line": 173,
+        "severity": "blocking",
+        "description": "The uninstall coverage seeds both canonical and legacy files in a single run, but does not test canonical-only and legacy-only uninstall scenarios separately. This misses the explicit requirement to cover uninstall from each location and leaves path-specific reporting/return behavior unverified for single-location installs (see feature description and VAL-CORRECT-021 evidence expectation for two parameterized path runs)."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The feature verification step references a non-existent test file path, which can mislead workers/reviewers about where required coverage should live.",
+      "evidence": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/features.json:1133 specifies `bun test tests/install-target.test.ts`, but no such file exists in repo and this feature's tests are in tests/install.test.ts."
+    },
+    {
+      "area": "skills",
+      "observation": "core-worker procedure requires red-first test confirmation, but this feature handoff reports deviation despite the procedure marking skipped steps as a handoff failure; this suggests an enforcement mismatch between documented procedure and accepted execution flow.",
+      "evidence": "/Users/vriesd/projects/flow-opencode/.factory/skills/core-worker/SKILL.md:20 and :35-37 require ordered procedure with failing tests first; handoff at /Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T13-24-10-885Z__m2-install-target-migration__741aba4e-c70e-48ba-93e2-61fc8ac92e06.json:62-67 records followedProcedure=false with that exact deviation."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Code changes correctly migrate default installs to ~/.config/opencode/plugins/flow.js and preserve legacy in-place installs, but the feature should not pass as-is because uninstall tests do not independently cover canonical-only vs legacy-only seeded homes as required."
+}

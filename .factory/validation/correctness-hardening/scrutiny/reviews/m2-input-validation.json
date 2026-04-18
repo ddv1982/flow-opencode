@@ -1,0 +1,34 @@
+{
+  "featureId": "m2-input-validation",
+  "reviewedAt": "2026-04-18T13:44:37Z",
+  "commitId": "10ab5e9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Tool-boundary validation and adversarial coverage were added for the targeted tools, but the derived path hardening does not fully meet the feature requirement to reject IDs containing '..'.",
+    "issues": [
+      {
+        "file": "src/runtime/paths.ts",
+        "line": 19,
+        "severity": "blocking",
+        "description": "sanitizePathComponent rejects '..' as a full segment/value but still accepts IDs that merely contain '..' (for example 'safe..id' and 'feat..id'). The feature spec requires getSessionPath/getFeatureDocPath to refuse inputs containing '..'. Reproduced by evaluating getSessionPath('/tmp/wt', 'safe..id') and getFeatureDocPath('/tmp/wt', 'safe-session', 'feat..id'), both of which returned paths instead of throwing InvalidFlowPathInputError."
+      },
+      {
+        "file": "tests/path-traversal.test.ts",
+        "line": 115,
+        "severity": "non_blocking",
+        "description": "Adversarial path-builder tests cover '..', traversal, absolute, and separator inputs, but do not include the explicit '..' substring case (for example 'safe..id') required by the feature description's 'containing ..' wording."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker skill requires an explicit red test run before implementation, but this feature was implemented before any recorded failing run. Clarify whether red-first is mandatory or optional for small schema-driven hardening tasks to avoid inconsistent worker behavior.",
+      "evidence": "Handoff skillFeedback reports followedProcedure=false for step 3; transcript skeleton shows new tests run after ApplyPatch edits and no earlier failing invocation of those test files."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: one blocking gap remains in derived path hardening. Inputs containing '..' as a substring are still accepted by path builders, which does not fully satisfy the stated hardening requirement."
+}

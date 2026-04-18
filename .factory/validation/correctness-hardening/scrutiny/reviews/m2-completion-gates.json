@@ -1,0 +1,39 @@
+{
+  "featureId": "m2-completion-gates",
+  "reviewedAt": "2026-04-18T13:45:21Z",
+  "commitId": "a50bc7fadca30bb98b2df9129f99c59278e199d4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds a dedicated parameterized matrix and reviewer-scope tests, but it does not satisfy the mission contract requirement to assert recovery kind semantics, and one of the intended nine rules is not uniquely protected against silent regression.",
+    "issues": [
+      {
+        "file": "tests/completion-gates.test.ts",
+        "line": 288,
+        "severity": "blocking",
+        "description": "The matrix assertions validate `result.recovery?.errorCode` rather than `result.recovery.kind`. This does not meet the stated requirement for VAL-CORRECT-023..031 to assert exact recovery kind (`validation-contract.md:213-255`, `features.json:1157`). Because kind-level behavior is not asserted, refactors that preserve errorCode mapping but alter completion-check kind semantics can slip through."
+      },
+      {
+        "file": "tests/completion-gates.test.ts",
+        "line": 249,
+        "severity": "blocking",
+        "description": "The case labeled `required final review not passing` is not isolated from the earlier optional-final-review guard. In `validateSuccessfulCompletion`, the optional check at `execution-completion-guards.ts:95` runs before the `requireFinalReview` check at line 113, and both map to `failing_final_review`. As written, this test still passes if the dedicated `requireFinalReview` check is removed, so the 9-rule matrix does not fully guarantee that this specific check cannot be silently dropped."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission contracts/specs for completion gates still require asserting `recovery.kind`, but transition recovery currently exposes `errorCode` (no `kind` field).",
+      "evidence": "`validation-contract.md:213-255` and `features.json:1157` require kind assertions; `src/runtime/transitions/shared.ts:13-14` defines `TransitionRecovery` with `errorCode` and no `kind`. The worker handoff explicitly notes they changed expectations from kind to errorCode after red tests."
+    },
+    {
+      "area": "skills",
+      "observation": "Core-worker procedure compliance appears overstated for this run: required orientation doc `user-testing.md` was not read in the transcript skeleton, but handoff marks followedProcedure=true.",
+      "evidence": "`core-worker/SKILL.md:24` requires reading `.factory/library/user-testing.md`; transcript skeleton for session `5c37f985-db3e-4ce5-9de6-575c15e6f591` shows `architecture.md` read and `followedProcedure: true`, with no `user-testing.md` read entry."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: although useful new tests were added, this feature misses the contract-level kind assertion requirement and does not uniquely protect the required-final-review gate from silent regression."
+}

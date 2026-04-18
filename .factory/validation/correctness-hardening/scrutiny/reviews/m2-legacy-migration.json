@@ -1,0 +1,21 @@
+{
+  "featureId": "m2-legacy-migration",
+  "reviewedAt": "2026-04-18T13:44:14Z",
+  "commitId": "87858ef",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature implementation in commit 87858ef matches the requested coverage: tests/legacy-migration.test.ts adds end-to-end migration assertions for legacy .flow/session.json -> .flow/sessions/<id>/session.json with .flow/active + docs generation and legacy artifact cleanup, plus a skip-path case that verifies legacy file bytes and mtime remain unchanged when an active session already exists.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure's strict \"write failing tests first\" step does not cleanly fit test-only coverage features for already-implemented behavior, which can create false \"procedure deviation\" reports.",
+      "evidence": "This feature's scope is only adding tests (features.json m2-legacy-migration), but handoff.skillFeedback marks followedProcedure=false specifically at core-worker step 3; SKILL.md currently requires red-first before implementation for every feature."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. I reviewed the feature record, handoff, transcript skeleton, and commit 87858ef diff. The new tests cover both required migration behaviors (full migration and skip when active exists) and no blocking or non-blocking code issues were identified."
+}

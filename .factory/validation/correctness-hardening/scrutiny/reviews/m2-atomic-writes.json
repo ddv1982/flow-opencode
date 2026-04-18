@@ -1,0 +1,34 @@
+{
+  "featureId": "m2-atomic-writes",
+  "reviewedAt": "2026-04-18T13:44:42Z",
+  "commitId": "ea0700e42c1c202ad3a2393273b82b13c2d75158",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Atomic temp-file+fsync+rename writes for session state and .flow/active are implemented and targeted tests are added, but the in-process lock does not actually serialize full saveSession calls as required.",
+    "issues": [
+      {
+        "file": "src/runtime/session-persistence.ts",
+        "line": 63,
+        "severity": "blocking",
+        "description": "The mutex is scoped to saveSessionState (lines 40-49), but saveSession immediately performs syncSessionArtifacts outside that lock (line 64). Because syncSessionArtifacts calls renderSessionDocs (src/runtime/render.ts lines 38-63, multiple writeFile/rm calls), two concurrent saveSession calls can interleave artifact writes and let an older save overwrite docs from a newer save. This violates the requirement to serialize concurrent saveSession calls on the same worktree."
+      },
+      {
+        "file": "src/runtime/session-workspace.ts",
+        "line": 92,
+        "severity": "non_blocking",
+        "description": "withSessionSaveLock stores previous.then(() => current) in sessionSaveQueues (lines 81-84) but compares the map value to current for cleanup (line 92). That equality is never true because then() returns a distinct promise, so per-worktree queue entries are never deleted after completion (memory leak over long-lived processes/worktrees)."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure does not document that formatter write commands may be blocked in worker mode, which caused explicit adaptation during this run.",
+      "evidence": "Handoff skillFeedback at /Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/handoffs/2026-04-18T13-05-22-194Z__m2-atomic-writes__436f31e6-21e9-4566-a0cd-edef0084df79.json notes: \"The core-worker skill should mention that formatter write commands can be blocked in worker mode, so manual formatting may be necessary.\""
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Failing review: atomic write mechanics are present, but the lock does not cover the full saveSession operation, leaving concurrent doc artifact races possible and violating the feature’s serialization requirement."
+}

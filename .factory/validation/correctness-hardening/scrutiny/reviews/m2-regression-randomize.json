@@ -1,0 +1,21 @@
+{
+  "featureId": "m2-regression-randomize",
+  "reviewedAt": "2026-04-18T13:44:04Z",
+  "commitId": "87858ef",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "This feature is a validation-only regression gate, and the worker transcript/handoff shows the required randomized full-suite runs were executed for `bun test --randomize`, `bun test --randomize --seed=1`, and `bun test --randomize --seed=42`, each reported as passing with 0 failures while the expected M2 regression test files were present and exercised. No code changes were required for this feature, and no blocking implementation defects were identified in scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `core-worker` procedure is still too rigid for validation-only regression-gate features, forcing a documented process deviation even when no code or test authoring is expected.",
+      "evidence": "Handoff `2026-04-18T13-40-14-268Z__m2-regression-randomize__0ec57406-1f59-4bd9-818c-a6b0ef03bc19.json` has `skillFeedback.followedProcedure=false` with deviations at step 3 (write failing tests first) and step 8 (commit), and suggests adding a validation-only path; `.factory/skills/core-worker/SKILL.md` currently mandates both steps for every feature."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. I reviewed the feature metadata, worker transcript skeleton, handoff, and referenced commit. The feature’s randomized-order regression objective is satisfied based on recorded evidence for all three required randomization seeds with green outcomes and inclusion of the M2 regression test files."
+}

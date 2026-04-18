@@ -1,0 +1,28 @@
+{
+  "featureId": "m2-tool-semantics-fixes",
+  "reviewedAt": "2026-04-18T13:45:23Z",
+  "commitId": "0a8a2dab9807e228cba0284bad54d2983d58b0de",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The `flow_plan_start` idempotency change and both `flow_auto_prepare` command semantics are correctly implemented, and transition-level reviewer scope checks were added. However, the tool-surface requirement for rejecting `{scope: \"final\", featureId: set}` is still not reliably enforced because final-review tool parsing drops extra keys before transition validation runs.",
+    "issues": [
+      {
+        "file": "src/tools/schemas.ts",
+        "line": 232,
+        "severity": "blocking",
+        "description": "`FlowReviewRecordFinalArgsSchema` is defined as `z.object(FlowReviewRecordFinalArgsShape)` where the shape has no `featureId` field. With `parseToolArgs` directly calling `schema.parse(...)` (`src/runtime/application/tool-runtime.ts:101`), unexpected keys are stripped before `recordReviewerDecision` is called (`src/tools/runtime-tools.ts:220`). As a result, a `flow_review_record_final` payload that includes `featureId` bypasses the new rejection in `recordReviewerDecision` (`src/runtime/transitions/review-reset.ts:149`), so the VAL-CORRECT-016 tool-surface behavior is not fully met."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The core-worker procedure's tests-first requirement appears mismatched with accepted execution flow and skill feedback reporting.",
+      "evidence": "The transcript skeleton for worker session `6d4220d1-4581-45fd-a023-cf911a59593b` shows two `ApplyPatch` edits before the new test files were added, while the handoff (`.../handoffs/2026-04-18T13-21-10-765Z__m2-tool-semantics-fixes__6d4220d1-4581-45fd-a023-cf911a59593b.json`) records `skillFeedback.followedProcedure: true` despite `.factory/skills/core-worker/SKILL.md` step 3 requiring writing failing tests first."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. Three of the four requested semantic fixes are implemented as expected, but `flow_review_record_final` can still accept payloads containing `featureId` without rejecting them because parsing strips that key before transition validation."
+}

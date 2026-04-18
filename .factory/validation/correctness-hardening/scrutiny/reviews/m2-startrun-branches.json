@@ -1,0 +1,15 @@
+{
+  "featureId": "m2-startrun-branches",
+  "reviewedAt": "2026-04-18T13:43:52Z",
+  "commitId": "4b75993",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature commit adds a single focused test file (`tests/startrun-branches.test.ts`) that covers the four requested `startRun` terminal/no-runnable branches: already-completed session fail path, all-features-completed completion path, no-runnable-feature blocked path, and invalid requested id fail-without-blocking path. Assertions align with the feature description and expected behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill context, and commit diff for `m2-startrun-branches` (commit `4b75993`). Coverage is implemented via targeted tests only, with no runtime changes required, and no blocking or non-blocking defects were identified for this feature scope."
+}
