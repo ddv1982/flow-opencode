@@ -1,0 +1,118 @@
+{
+  "groupId": "fs-inspection",
+  "testedAt": "2026-04-18T18:54:20Z",
+  "isolation": {
+    "surface": "fs-inspection",
+    "repoRoot": "/Users/vriesd/projects/flow-opencode",
+    "mode": "read-only checks from repo root",
+    "allowedWrites": [
+      "flow report JSON",
+      "evidence files under mission evidence directory"
+    ]
+  },
+  "toolsUsed": [
+    "fs-inspection",
+    "rg",
+    "python3",
+    "git",
+    "test"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-PERF-002",
+      "title": "Build externalizes the OpenCode plugin peer dep",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `rg -F -- '--external @opencode-ai/plugin' package.json`",
+          "expected": "At least one match in package.json build script.",
+          "observed": "Match found in scripts.build line; command exit=0."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "perf-and-rendering/fs-inspection/VAL-PERF-002-build-external.txt"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-003",
+      "title": "Build uses syntax + whitespace minification only",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `rg -F -- '--minify-syntax' package.json`",
+          "expected": "Flag is present.",
+          "observed": "Match found; exit=0."
+        },
+        {
+          "action": "Run `rg -F -- '--minify-whitespace' package.json`",
+          "expected": "Flag is present.",
+          "observed": "Match found; exit=0."
+        },
+        {
+          "action": "Run `rg -F -- '--minify-identifiers' package.json`",
+          "expected": "No matches.",
+          "observed": "No matches; exit=1."
+        },
+        {
+          "action": "Run `rg -nF -- ' --minify ' package.json`",
+          "expected": "No matches for bare --minify token.",
+          "observed": "No matches; exit=1."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "perf-and-rendering/fs-inspection/VAL-PERF-003-minify-flags.txt"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-014",
+      "title": "No benchmark regresses by more than 5%",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Parse `bench/BASELINE.md` and `bench/RESULTS.md` (M5 table) and join rows by benchmark name.",
+          "expected": "Each row is delta<=5% or has `explained:` note.",
+          "observed": "12/12 baseline rows found in M5 table; rule satisfied for all rows; no violations."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "perf-and-rendering/fs-inspection/VAL-PERF-014-015-table-parser.json"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-015",
+      "title": "`bench/RESULTS.md` exists, committed, well-formed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `test -f bench/RESULTS.md` and `git ls-files --error-unmatch bench/RESULTS.md`.",
+          "expected": "File exists and is git-tracked.",
+          "observed": "Both checks succeeded with exit=0."
+        },
+        {
+          "action": "Parse baseline/results markdown tables and validate schema/coverage.",
+          "expected": "M5 table has columns benchmark|baseline|after|delta%|notes and >= baseline row count.",
+          "observed": "Required columns present for all rows; M5 row count (12) >= baseline row count (12)."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "perf-and-rendering/fs-inspection/VAL-PERF-015-results-file-tracked.txt",
+          "perf-and-rendering/fs-inspection/VAL-PERF-014-015-table-parser.json"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 4 assertions (VAL-PERF-002, VAL-PERF-003, VAL-PERF-014, VAL-PERF-015): 4 passed, 0 failed, 0 blocked."
+}

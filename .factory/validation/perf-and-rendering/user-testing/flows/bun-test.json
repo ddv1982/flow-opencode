@@ -1,0 +1,310 @@
+{
+  "groupId": "bun-test",
+  "testedAt": "2026-04-18T19:01:26Z",
+  "isolation": {
+    "surface": "bun-test",
+    "milestone": "perf-and-rendering",
+    "repoRoot": "/Users/vriesd/projects/flow-opencode",
+    "missionDir": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02",
+    "allowedWrites": [
+      "flow report JSON",
+      "evidence files under mission evidence directory"
+    ],
+    "evidenceDirectory": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/evidence/perf-and-rendering/bun-test"
+  },
+  "toolsUsed": [
+    "bun-test"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-004",
+      "title": "Concurrent-write safety for session.json under atomic writes + read cache",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/cross-area/concurrent-writes.test.ts`",
+          "expected": "50 randomized interleavings pass with no torn JSON/temp artifacts and cache reads observed",
+          "observed": "Pass line: `concurrent write safety > 50 randomized interleavings of two saveSessionState calls avoid torn JSON and temp artifacts`; summary `1 pass / 0 fail`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-CROSS-004-concurrent-writes.txt"
+        ],
+        "outputSummary": "(pass) concurrent write safety > 50 randomized interleavings of two saveSessionState calls avoid torn JSON and temp artifacts"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-008",
+      "title": "Markdown rendering parity before/after incremental rendering",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/cross-area/markdown-parity.test.ts`",
+          "expected": "10-feature fixture stays byte-identical to golden; mutation rewrites only changed feature doc + index",
+          "observed": "Pass line: `cross-area markdown parity > 10-feature fixture preserves golden bytes and rewrites only the changed feature doc plus index`; summary `1 pass / 0 fail`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-CROSS-008-markdown-parity.txt"
+        ],
+        "outputSummary": "(pass) cross-area markdown parity > 10-feature fixture preserves golden bytes and rewrites only the changed feature doc plus index"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-006",
+      "title": "Idempotent save issues zero doc writes",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-incremental.test.ts`",
+          "expected": "Second save with unchanged session issues zero markdown writes",
+          "observed": "Pass line: `idempotent save issues zero markdown writes on the second call`; summary `6 pass / 0 fail`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-006-007-021-022-render-incremental.txt"
+        ],
+        "outputSummary": "(pass) incremental markdown rendering > idempotent save issues zero markdown writes on the second call"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-007",
+      "title": "Single-feature mutation rewrites only that feature doc + index",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-incremental.test.ts`",
+          "expected": "Exactly two markdown writes on mutation: index.md and changed feature doc",
+          "observed": "Pass line: `single-feature mutation rewrites only index.md and the changed feature doc`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-006-007-021-022-render-incremental.txt"
+        ],
+        "outputSummary": "(pass) incremental markdown rendering > single-feature mutation rewrites only index.md and the changed feature doc"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-008",
+      "title": "Incremental rendering preserves byte-for-byte output",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-snapshot.test.ts`",
+          "expected": "20-feature fixture docs match committed golden bytes",
+          "observed": "Pass line: `render snapshot parity > matches committed bytes for save-session-20-features`; summary `6 pass / 0 fail`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-008-018-019-020-render-snapshot.txt"
+        ],
+        "outputSummary": "(pass) render snapshot parity > matches committed bytes for save-session-20-features"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-009",
+      "title": "`mkdir` not re-issued for a prepared workspace",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/workspace-cache.test.ts`",
+          "expected": "After ensureWorkspace, 10 saves issue at most two mkdir calls",
+          "observed": "Pass line: `workspace mkdir caching > 10 sequential saveSession calls issue at most two mkdir calls after ensureWorkspace`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-009-workspace-cache.txt"
+        ],
+        "outputSummary": "(pass) workspace mkdir caching > 10 sequential saveSession calls issue at most two mkdir calls after ensureWorkspace"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-010",
+      "title": "Session read cache hits on repeated load",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/session-cache.test.ts`",
+          "expected": "Second loadSession reads session.json once total and returns equal data",
+          "observed": "Pass line: `second loadSession with no mutation issues zero additional session.json reads`; summary `3 pass / 0 fail`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-010-011-012-session-cache.txt"
+        ],
+        "outputSummary": "(pass) session read cache > second loadSession with no mutation issues zero additional session.json reads"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-011",
+      "title": "Read cache invalidates on in-process mutation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/session-cache.test.ts`",
+          "expected": "loadSession after saveSession returns mutated state",
+          "observed": "Pass line: `loadSession returns the in-process saveSession mutation`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-010-011-012-session-cache.txt"
+        ],
+        "outputSummary": "(pass) session read cache > loadSession returns the in-process saveSession mutation"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-012",
+      "title": "Read cache invalidates on external mtime/size change",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/session-cache.test.ts`",
+          "expected": "External rewrite + mtime bump invalidates cached snapshot",
+          "observed": "Pass line: `loadSession invalidates cached content after external session.json rewrite and mtime bump`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-010-011-012-session-cache.txt"
+        ],
+        "outputSummary": "(pass) session read cache > loadSession invalidates cached content after external session.json rewrite and mtime bump"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-016",
+      "title": "Full test suite still passes",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test`",
+          "expected": "Full suite exits 0 with no failures",
+          "observed": "Summary shows `230 pass`, `0 fail`, and `EXIT_CODE=0` across 37 files."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-016-full-bun-test.txt"
+        ],
+        "outputSummary": "230 pass / 0 fail; Ran 230 tests across 37 files."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-018",
+      "title": "Empty-plan rendering parity",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-snapshot.test.ts`",
+          "expected": "Empty-plan output is byte-identical to committed golden and emits no feature docs",
+          "observed": "Pass line: `render snapshot parity > matches committed bytes for empty-plan`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-008-018-019-020-render-snapshot.txt"
+        ],
+        "outputSummary": "(pass) render snapshot parity > matches committed bytes for empty-plan"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-019",
+      "title": "Single-feature plan rendering parity",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-snapshot.test.ts`",
+          "expected": "Single-feature index + feature doc are byte-identical to committed goldens",
+          "observed": "Pass line: `render snapshot parity > matches committed bytes for single-feature`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-008-018-019-020-render-snapshot.txt"
+        ],
+        "outputSummary": "(pass) render snapshot parity > matches committed bytes for single-feature"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-020",
+      "title": "All-completed plan renders without active-feature section",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-snapshot.test.ts` and `bun test tests/runtime/render-incremental.test.ts`",
+          "expected": "All-completed output matches golden and omits active-feature section",
+          "observed": "Pass lines: `matches committed bytes for all-completed` and `all-completed plan omits an active feature section in index.md`; both logs `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-008-018-019-020-render-snapshot.txt",
+          "perf-and-rendering/bun-test/VAL-PERF-006-007-021-022-render-incremental.txt"
+        ],
+        "outputSummary": "Golden parity + explicit no-active-section assertion both passed."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-021",
+      "title": "`plan: null` (post-replan) rendering prunes stale feature docs",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-incremental.test.ts`",
+          "expected": "Post-replan sync removes all previously rendered feature docs",
+          "observed": "Pass line: `post-replan sync prunes all stale feature docs when the plan becomes null`; `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-006-007-021-022-render-incremental.txt"
+        ],
+        "outputSummary": "(pass) incremental markdown rendering > post-replan sync prunes all stale feature docs when the plan becomes null"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-022",
+      "title": "Large-plan rendering stability (100 features)",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun test tests/runtime/render-incremental.test.ts` and `bun test tests/runtime/render-snapshot.test.ts`",
+          "expected": "100-feature fixture renders successfully and unchanged second save issues zero markdown writes",
+          "observed": "Pass lines: `hundred-feature fixture renders and second save issues zero markdown writes` and `matches committed bytes for hundred-features`; both logs `EXIT_CODE=0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/bun-test/VAL-PERF-006-007-021-022-render-incremental.txt",
+          "perf-and-rendering/bun-test/VAL-PERF-008-018-019-020-render-snapshot.txt"
+        ],
+        "outputSummary": "hundred-feature parity and zero-write second-save assertions passed."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 15 assertions (VAL-CROSS-004, VAL-CROSS-008, VAL-PERF-006, VAL-PERF-007, VAL-PERF-008, VAL-PERF-009, VAL-PERF-010, VAL-PERF-011, VAL-PERF-012, VAL-PERF-016, VAL-PERF-018, VAL-PERF-019, VAL-PERF-020, VAL-PERF-021, VAL-PERF-022): 15 passed, 0 failed, 0 blocked."
+}

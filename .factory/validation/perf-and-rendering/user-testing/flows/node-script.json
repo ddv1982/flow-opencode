@@ -1,0 +1,117 @@
+{
+  "groupId": "node-script",
+  "testedAt": "2026-04-18T19:07:13.232730Z",
+  "isolation": {
+    "surface": "node-script",
+    "repoRoot": "/Users/vriesd/projects/flow-opencode",
+    "missionDir": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02",
+    "evidenceDir": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02/evidence/perf-and-rendering/node-script",
+    "sideEffects": "Temp directories only"
+  },
+  "toolsUsed": ["node-script"],
+  "assertions": [
+    {
+      "id": "VAL-PERF-005",
+      "title": "Built bundle still loads and exposes the plugin surface",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run Node one-shot smoke script loading dist/index.js with @opencode-ai/plugin shim and invoking config + flow_plan_start + flow_status + flow_history",
+          "expected": "Bundle loads, config hook runs, and three tools execute with valid response shapes",
+          "observed": "Script exited 0; config agents=5, commands=7; tool statuses flow_plan_start=ok, flow_status=planning, flow_history=ok"
+        },
+        {
+          "action": "Check temp worktree Flow artifacts after tool execution",
+          "expected": ".flow/active, session.json, and docs/index.md exist for active session",
+          "observed": "All expected artifacts were present; session directory entries were [\"docs\", \"session.json\"]"
+        }
+      ],
+      "evidence": {
+        "commandOutputs": {
+          "stdout": [
+            "perf-and-rendering/node-script/VAL-PERF-005.stdout.txt"
+          ],
+          "stderr": [
+            "perf-and-rendering/node-script/VAL-PERF-005.stderr.txt"
+          ],
+          "exitCode": "perf-and-rendering/node-script/VAL-PERF-005.exit.txt"
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "title": "Bundle sanity — size, externalization, sourcemap, Node 22+ execution",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run node scripts/cross-area/bundle-sanity.mjs",
+          "expected": "JSON report confirms size <= 700KB, external peer import retained, sourcemap valid, Node >= 22 load success with shim",
+          "observed": "Script exited 0; sizeBytes=452451, hasExternalPeerImport=true, inlinesCreateOpencodeClient=false, sourceMapVersion=3, sourceMapHasMappings=true, nodeMajor=25, shimTagVerified=true"
+        },
+        {
+          "action": "Run supplemental sourcemap/source-reference check script",
+          "expected": "Sourcemap references sources under src/ and bundle sanity invariants hold",
+          "observed": "Script exited 0; hasSourceUnderSrc=true with all invariants satisfied"
+        }
+      ],
+      "evidence": {
+        "commandOutputs": {
+          "stdout": [
+            "perf-and-rendering/node-script/VAL-CROSS-007.bundle-sanity.stdout.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-007.sourcemap-check.stdout.txt"
+          ],
+          "stderr": [
+            "perf-and-rendering/node-script/VAL-CROSS-007.bundle-sanity.stderr.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-007.sourcemap-check.stderr.txt"
+          ],
+          "exitCode": [
+            "perf-and-rendering/node-script/VAL-CROSS-007.bundle-sanity.exit.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-007.sourcemap-check.exit.txt"
+          ]
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-009",
+      "title": "Benchmark gate — saveSession improvement, no >5% regression elsewhere",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run node scripts/cross-area/bench-gate.mjs",
+          "expected": "Gate parser passes for baseline/results benchmark table checks",
+          "observed": "Script exited 0 with message: Bench gate passed for 12 baseline row(s)"
+        },
+        {
+          "action": "Re-run bun run bench and analyze against bench/RESULTS.md",
+          "expected": "Recorded rows include CI, warm save shows >=2x improvement vs M1 cold baseline, and rerun means are within 15% of recorded values",
+          "observed": "Analysis script exited 0; warmImprovementX=4.35; 12/12 rows had CI and rerun deltas <=15%"
+        }
+      ],
+      "evidence": {
+        "commandOutputs": {
+          "stdout": [
+            "perf-and-rendering/node-script/VAL-CROSS-009.bench-gate.stdout.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-009.bench-rerun.stdout.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-009.analysis.stdout.txt"
+          ],
+          "stderr": [
+            "perf-and-rendering/node-script/VAL-CROSS-009.bench-gate.stderr.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-009.bench-rerun.stderr.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-009.analysis.stderr.txt"
+          ],
+          "exitCode": [
+            "perf-and-rendering/node-script/VAL-CROSS-009.bench-gate.exit.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-009.bench-rerun.exit.txt",
+            "perf-and-rendering/node-script/VAL-CROSS-009.analysis.exit.txt"
+          ]
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 3 node-script assertions (VAL-PERF-005, VAL-CROSS-007, VAL-CROSS-009): all passed with captured stdout/stderr/exit-code evidence."
+}

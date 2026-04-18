@@ -1,0 +1,50 @@
+{
+  "milestone": "perf-and-rendering",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 26,
+    "passed": 26,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CROSS-004",
+    "VAL-CROSS-007",
+    "VAL-CROSS-008",
+    "VAL-CROSS-009",
+    "VAL-PERF-001",
+    "VAL-PERF-002",
+    "VAL-PERF-003",
+    "VAL-PERF-004",
+    "VAL-PERF-005",
+    "VAL-PERF-006",
+    "VAL-PERF-007",
+    "VAL-PERF-008",
+    "VAL-PERF-009",
+    "VAL-PERF-010",
+    "VAL-PERF-011",
+    "VAL-PERF-012",
+    "VAL-PERF-013",
+    "VAL-PERF-014",
+    "VAL-PERF-015",
+    "VAL-PERF-016",
+    "VAL-PERF-017",
+    "VAL-PERF-018",
+    "VAL-PERF-019",
+    "VAL-PERF-020",
+    "VAL-PERF-021",
+    "VAL-PERF-022"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "generatedAt": "2026-04-18T19:08:21.398106Z",
+  "flowReports": [
+    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/bun-test.json",
+    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/cli-smoke.json",
+    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/fs-inspection.json",
+    "/Users/vriesd/projects/flow-opencode/.factory/validation/perf-and-rendering/user-testing/flows/node-script.json"
+  ]
+}

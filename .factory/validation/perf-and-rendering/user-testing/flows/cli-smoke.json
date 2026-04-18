@@ -1,0 +1,132 @@
+{
+  "groupId": "cli-smoke",
+  "testedAt": "2026-04-18T18:58:14.703717Z",
+  "isolation": {
+    "surface": "cli-smoke",
+    "milestone": "perf-and-rendering",
+    "repoRoot": "/Users/vriesd/projects/flow-opencode",
+    "missionDir": "/Users/vriesd/.factory/missions/34ec2e58-6360-41eb-aaf2-3aba539ddf02"
+  },
+  "toolsUsed": [
+    "cli-smoke"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-PERF-001",
+      "title": "Bundle size budget enforced",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun run build`",
+          "expected": "Build succeeds (exit code 0)",
+          "observed": "Build succeeded; `Bundled 113 modules` and `EXIT_CODE_BUILD=0`."
+        },
+        {
+          "action": "Run `wc -c dist/index.js`",
+          "expected": "Bundle size is <= 716800 bytes",
+          "observed": "`dist/index.js` size was `452451` bytes (<= 716800)."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/cli-smoke/VAL-PERF-001-build-size.txt"
+        ],
+        "exitCodes": {
+          "bun run build": 0,
+          "wc -c dist/index.js": 0
+        },
+        "outputSummary": "dist/index.js = 452451 bytes"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-004",
+      "title": "Build emits an external sourcemap",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check build script for sourcemap mode",
+          "expected": "`package.json` build script includes `--sourcemap external`",
+          "observed": "`rg` matched `--sourcemap=external` plus inline `--sourcemap external` marker; `EXIT_CODE_RG=0`."
+        },
+        {
+          "action": "Validate emitted map file",
+          "expected": "`dist/index.js.map` exists, is non-empty, and parses with a `mappings` field",
+          "observed": "`test -s` passed; JSON parse succeeded with `HAS_MAPPINGS=true` and `MAPPINGS_LENGTH=287771`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/cli-smoke/VAL-PERF-004-sourcemap.txt"
+        ],
+        "exitCodes": {
+          "rg -F -- '--sourcemap external' package.json": 0,
+          "test -s dist/index.js.map": 0,
+          "node map-parse": 0
+        },
+        "outputSummary": "HAS_MAPPINGS=true"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-013",
+      "title": "Warm `saveSession` for a 20-feature plan is \u2265 2\u00d7 faster than baseline",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect `bench/RESULTS.md` warm saveSession row",
+          "expected": "Row exists and indicates warm-path mean meeting <= 1.0 ms gate",
+          "observed": "Row found: `warm saveSession cycle | 777.70 \u00b5s avg | 777.70 \u00b5s avg ...`; <= 1.0 ms."
+        },
+        {
+          "action": "Run `bun run bench` and inspect warm saveSession output",
+          "expected": "Bench exits 0 and reports warm saveSession timing consistent with gate",
+          "observed": "`EXIT_CODE_BENCH=0`; warm line reported `842.35 \u00b5s/iter` for `warm saveSession cycle | 20-feature plan (unchanged)` (<= 1.0 ms)."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/cli-smoke/VAL-PERF-013-bench-summary.txt",
+          "perf-and-rendering/cli-smoke/VAL-PERF-013-bench-full.txt"
+        ],
+        "exitCodes": {
+          "rg -n ... bench/RESULTS.md": 0,
+          "bun run bench": 0
+        },
+        "outputSummary": "warm saveSession cycle | 20-feature plan (unchanged): 842.35 \u00b5s/iter"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PERF-017",
+      "title": "`bun run check` passes cleanly",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `bun run check`",
+          "expected": "Command exits 0 and sub-steps complete without error diagnostics",
+          "observed": "`EXIT_CODE_CHECK=0`; output includes `230 pass`, `0 fail`, build and lint completion lines."
+        },
+        {
+          "action": "Scan output for fatal error signatures",
+          "expected": "No `error TS`, `FAIL`, or runtime error markers",
+          "observed": "No matches for `error TS`, `FAIL`, or `Error:` in captured check log."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "perf-and-rendering/cli-smoke/VAL-PERF-017-check-summary.txt",
+          "perf-and-rendering/cli-smoke/VAL-PERF-017-check.txt"
+        ],
+        "exitCodes": {
+          "bun run check": 0
+        },
+        "outputSummary": "230 pass / 0 fail; Bundled 113 modules; Checked 90 files in 64ms. No fixes applied."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 4 assertions (VAL-PERF-001, VAL-PERF-004, VAL-PERF-013, VAL-PERF-017): 4 passed, 0 failed, 0 blocked."
+}
