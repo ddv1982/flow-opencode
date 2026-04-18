@@ -1,5 +1,5 @@
 import { featureWouldReachCompletion } from "../domain";
-import type { Session, WorkerResult, WorkerResultArgs } from "../schema";
+import type { Session, WorkerResult } from "../schema";
 import { nowIso } from "../time";
 import { validateSuccessfulCompletion } from "./execution-completion-guards";
 import { recordWorkerResult } from "./execution-completion-recording";
@@ -60,20 +60,17 @@ function finalizeIncompleteCompletion(
 
 export function completeRun(
 	session: Session,
-	worker: WorkerResultArgs | WorkerResult | Record<string, unknown>,
+	worker: WorkerResult,
 ): TransitionResult<Session> {
-	const typedWorker = worker as WorkerResult;
 	if (!session.plan) {
 		return fail("There is no active plan to apply the worker result to.");
 	}
 	if (!session.execution.activeFeatureId) {
 		return fail("There is no active feature to complete.");
 	}
-	if (
-		typedWorker.featureResult.featureId !== session.execution.activeFeatureId
-	) {
+	if (worker.featureResult.featureId !== session.execution.activeFeatureId) {
 		return fail(
-			`Worker result feature '${typedWorker.featureResult.featureId}' does not match active feature '${session.execution.activeFeatureId}'.`,
+			`Worker result feature '${worker.featureResult.featureId}' does not match active feature '${session.execution.activeFeatureId}'.`,
 		);
 	}
 
@@ -86,12 +83,12 @@ export function completeRun(
 	const recordedAt = nowIso();
 	const wasFinalFeature = featureWouldReachCompletion(plan, featureId);
 
-	recordWorkerResult(next, featureId, typedWorker, recordedAt);
+	recordWorkerResult(next, featureId, worker, recordedAt);
 
-	if (typedWorker.status === "ok") {
+	if (worker.status === "ok") {
 		const validation = validateSuccessfulCompletion(
 			session,
-			typedWorker,
+			worker,
 			featureId,
 			wasFinalFeature,
 		);
@@ -99,10 +96,10 @@ export function completeRun(
 			return fail(validation.message, validation.recovery, next);
 		}
 
-		return finalizeSuccessfulCompletion(next, featureId, typedWorker.summary);
+		return finalizeSuccessfulCompletion(next, featureId, worker.summary);
 	}
 
 	return succeed(
-		finalizeIncompleteCompletion(next, featureId, typedWorker.outcome.kind),
+		finalizeIncompleteCompletion(next, featureId, worker.outcome.kind),
 	);
 }

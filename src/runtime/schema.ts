@@ -109,7 +109,7 @@ export const FeatureResultSchema = z.object({
 	followUps: z.array(FollowUpSchema).optional(),
 });
 
-const WorkerResultBaseSchema = z.object({
+export const WorkerResultBaseSchema = z.object({
 	contractVersion: z.literal("1"),
 	summary: z.string().min(1),
 	artifactsChanged: z.array(ArtifactSchema).default([]),
@@ -148,6 +148,16 @@ export const WorkerResultSchema = z.discriminatedUnion("status", [
 		),
 	}),
 ]);
+
+export const WorkerResultOkArgsSchema = WorkerResultBaseSchema.extend({
+	status: z.literal("ok"),
+	outcome: OutcomeSchema.optional(),
+});
+
+export const WorkerResultNeedsInputArgsSchema = WorkerResultBaseSchema.extend({
+	status: z.literal("needs_input"),
+	outcome: OutcomeSchema,
+});
 
 export const FeatureIdSchema = z
 	.string()
@@ -204,10 +214,10 @@ export const PlanArgsSchema = PlanSchema.omit({
 
 export const PlanningContextArgsSchema = PlanningContextSchema.partial();
 
-export const WorkerResultArgsSchema = WorkerResultBaseSchema.extend({
-	status: WorkerStatusSchema,
-	outcome: OutcomeSchema.optional(),
-});
+export const WorkerResultArgsSchema = z.discriminatedUnion("status", [
+	WorkerResultOkArgsSchema,
+	WorkerResultNeedsInputArgsSchema,
+]);
 
 export const FlowReviewRecordFeatureArgsSchema = ReviewerDecisionSchema.extend({
 	scope: z.literal("feature"),
@@ -216,9 +226,11 @@ export const FlowReviewRecordFeatureArgsSchema = ReviewerDecisionSchema.extend({
 
 export const FlowReviewRecordFinalArgsSchema = ReviewerDecisionSchema.omit({
 	featureId: true,
-}).extend({
-	scope: z.literal("final"),
-});
+})
+	.extend({
+		scope: z.literal("final"),
+	})
+	.strict();
 
 export const ExecutionHistoryEntrySchema = z.object({
 	featureId: z.string().min(1),

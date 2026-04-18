@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { WorkerResult } from "../src/runtime/schema";
 import { createSession, saveSession } from "../src/runtime/session";
 import {
 	applyPlan,
@@ -51,7 +52,7 @@ describe("runtime completion and contract guards", () => {
 		expect(reviewed.ok).toBe(true);
 		if (!reviewed.ok) return;
 
-		const completed = completeRun(reviewed.value, {
+		const problematicOkPayload = {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
@@ -67,7 +68,10 @@ describe("runtime completion and contract guards", () => {
 			reviewIterations: 1,
 			decisions: [],
 			nextStep: "Create a refined plan.",
-			outcome: { kind: "replan_required", needsHuman: false },
+			outcome: {
+				kind: "replan_required",
+				needsHuman: false,
+			} as WorkerResult["outcome"],
 			featureResult: {
 				featureId: "setup-runtime",
 				verificationStatus: "passed",
@@ -77,7 +81,9 @@ describe("runtime completion and contract guards", () => {
 				summary: "Looks correct.",
 				blockingFindings: [],
 			},
-		});
+		} as unknown as WorkerResult;
+
+		const completed = completeRun(reviewed.value, problematicOkPayload);
 
 		expect(completed.ok).toBe(false);
 		if (completed.ok) return;
@@ -785,7 +791,7 @@ describe("runtime completion and contract guards", () => {
 				summary: "Looks good.",
 				blockingFindings: [],
 			},
-		};
+		} satisfies WorkerResult;
 
 		const parsed = completeRun(reviewed.value, payload);
 
@@ -856,7 +862,7 @@ describe("runtime completion and contract guards", () => {
 				summary: "Final approval still pending.",
 				blockingFindings: [{ summary: "Awaiting operator sign-off." }],
 			},
-		};
+		} satisfies WorkerResult;
 
 		const result = completeRun(reviewed.value, payload);
 		expect(result.ok).toBe(true);

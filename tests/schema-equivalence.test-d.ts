@@ -1,18 +1,52 @@
 import type { z } from "zod";
 import type {
-	FlowReviewRecordFeatureArgs,
-	FlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgs,
-	FlowReviewRecordFinalArgsSchema,
 	PlanArgs,
 	PlanArgsSchema,
 	PlanningContextArgs,
 	PlanningContextArgsSchema,
 	ReviewerDecision,
-	WorkerResultArgs,
 	WorkerResultArgsSchema,
 } from "../src/runtime/schema";
+import type {
+	FlowPlanApplyArgsSchema,
+	FlowReviewRecordFeatureArgsSchema,
+	FlowReviewRecordFinalArgsSchema,
+} from "../src/tools/schemas";
 import type { Equal, Expect } from "../src/types/typecheck";
+
+type ExpectedFlowPlanApplyArgs = {
+	plan: PlanArgs;
+	planning?: PlanningContextArgs | undefined;
+};
+
+type ExpectedFeatureReviewRecordArgs = {
+	scope: "feature";
+	featureId: string;
+	status: "approved" | "needs_fix" | "blocked";
+	summary: string;
+	blockingFindings?: { summary: string }[] | undefined;
+	followUps?:
+		| {
+				summary: string;
+				severity?: string | undefined;
+		  }[]
+		| undefined;
+	suggestedValidation?: string[] | undefined;
+};
+
+type ExpectedFinalReviewRecordArgs = {
+	scope: "final";
+	status: "approved" | "needs_fix" | "blocked";
+	summary: string;
+	blockingFindings?: { summary: string }[] | undefined;
+	followUps?:
+		| {
+				summary: string;
+				severity?: string | undefined;
+		  }[]
+		| undefined;
+	suggestedValidation?: string[] | undefined;
+};
 
 export type _planArgsMatchesPlan = Expect<
 	Equal<z.input<typeof PlanArgsSchema>, PlanArgs>
@@ -22,21 +56,36 @@ export type _planningContextArgsMatchesPlanningContext = Expect<
 	Equal<z.input<typeof PlanningContextArgsSchema>, PlanningContextArgs>
 >;
 
-export type _workerResultArgsMatchesWorkerResult = Expect<
-	Equal<z.input<typeof WorkerResultArgsSchema>, WorkerResultArgs>
+export type _flowPlanApplyArgsMatchExpected = Expect<
+	Equal<z.input<typeof FlowPlanApplyArgsSchema>, ExpectedFlowPlanApplyArgs>
 >;
 
-export type _featureReviewArgsMatchReviewerDecision = Expect<
+export type _workerResultArgsIncludesReplanWithoutRequiredOutcomeOmission =
+	Expect<
+		Equal<
+			Extract<
+				z.input<typeof WorkerResultArgsSchema>,
+				{ status: "needs_input" }
+			>["outcome"]["kind"],
+			| "completed"
+			| "replan_required"
+			| "blocked_external"
+			| "needs_operator_input"
+			| "contract_error"
+		>
+	>;
+
+export type _featureReviewArgsMatchExpected = Expect<
 	Equal<
 		z.input<typeof FlowReviewRecordFeatureArgsSchema>,
-		FlowReviewRecordFeatureArgs
+		ExpectedFeatureReviewRecordArgs
 	>
 >;
 
-export type _finalReviewArgsMatchReviewerDecision = Expect<
+export type _finalReviewArgsMatchExpected = Expect<
 	Equal<
 		z.input<typeof FlowReviewRecordFinalArgsSchema>,
-		FlowReviewRecordFinalArgs
+		ExpectedFinalReviewRecordArgs
 	>
 >;
 

@@ -510,6 +510,53 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.summary).toContain("validation failed");
 	});
 
+	test("tool rejects non-ok worker payloads missing outcome at parse time", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		await saveSession(worktree, started.value.session);
+
+		const response = await tools.flow_run_complete_feature.execute(
+			{
+				contractVersion: "1",
+				status: "needs_input",
+				summary: "Need a new plan.",
+				artifactsChanged: [],
+				validationRun: [],
+				decisions: [],
+				nextStep: "Replan the work.",
+				outcome: undefined,
+				featureResult: {
+					featureId: "setup-runtime",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "No review yet.",
+					blockingFindings: [],
+				},
+			},
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("outcome");
+		expect(parsed.summary).not.toContain("Cannot read properties");
+	});
+
 	test("tool returns machine-readable recovery details for missing final reviewer approval", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();

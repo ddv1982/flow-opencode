@@ -1,11 +1,13 @@
 import { tool } from "@opencode-ai/plugin";
 import type { WorkspaceContext } from "../runtime/application";
 import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN } from "../runtime/primitives";
-import type {
-	Plan,
-	PlanningContext,
-	FlowReviewRecordFeatureArgs as RuntimeFlowReviewRecordFeatureArgs,
-	FlowReviewRecordFinalArgs as RuntimeFlowReviewRecordFinalArgs,
+import type { PlanArgs, PlanningContextArgs } from "../runtime/schema";
+import {
+	PlanArgsSchema,
+	PlanningContextArgsSchema,
+	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
+	FlowReviewRecordFinalArgsSchema as RuntimeFlowReviewRecordFinalArgsSchema,
+	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
 } from "../runtime/schema";
 
 const z = tool.schema;
@@ -34,37 +36,10 @@ export const FlowPlanStartArgsShape = {
 	goal: z.string().trim().min(1).optional(),
 	repoProfile: z.array(z.string().min(1)).optional(),
 };
-export const FlowPlanApplyArgsShape = {
-	plan: z.object({
-		summary: z.string().min(1),
-		overview: z.string().min(1),
-		requirements: z.array(z.string().min(1)).default([]),
-		architectureDecisions: z.array(z.string().min(1)).default([]),
-		features: z
-			.array(
-				z.object({
-					id: featureIdSchema,
-					title: z.string().min(1),
-					summary: z.string().min(1),
-					fileTargets: z.array(z.string().min(1)).default([]),
-					verification: z.array(z.string().min(1)).default([]),
-					dependsOn: z.array(z.string().min(1)).optional(),
-					blockedBy: z.array(z.string().min(1)).optional(),
-				}),
-			)
-			.min(1),
-		goalMode: z.string().min(1).optional(),
-		decompositionPolicy: z.string().min(1).optional(),
-		completionPolicy: z
-			.object({
-				minCompletedFeatures: z.number().int().positive().optional(),
-				requireFinalReview: z.boolean().optional(),
-			})
-			.optional(),
-		notes: z.array(z.string().min(1)).optional(),
-	}),
-	planning: z.custom<Partial<PlanningContext>>().optional(),
-};
+export const FlowPlanApplyArgsSchema = z.object({
+	plan: PlanArgsSchema.strict(),
+	planning: PlanningContextArgsSchema.strict().optional(),
+});
 export const FlowPlanApproveArgsShape = {
 	featureIds: z.array(featureIdSchema).optional(),
 };
@@ -78,9 +53,51 @@ export const FlowResetFeatureArgsShape = {
 	featureId: featureIdSchema,
 };
 
+export const WorkerResultArgsSchema = RuntimeWorkerResultArgsSchema;
+export const FlowReviewRecordFeatureArgsSchema =
+	RuntimeFlowReviewRecordFeatureArgsSchema;
+export const FlowReviewRecordFinalArgsSchema =
+	RuntimeFlowReviewRecordFinalArgsSchema;
+
+export const FlowPlanApplyArgsShape = FlowPlanApplyArgsSchema.shape;
+export const FlowReviewRecordFeatureArgsShape = {
+	scope: z.literal("feature"),
+	featureId: featureIdSchema,
+	status: z.enum(["approved", "needs_fix", "blocked"]),
+	summary: z.string().min(1),
+	blockingFindings: z
+		.array(z.object({ summary: z.string().min(1) }))
+		.default([]),
+	followUps: z
+		.array(
+			z.object({
+				summary: z.string().min(1),
+				severity: z.string().min(1).optional(),
+			}),
+		)
+		.default([]),
+	suggestedValidation: z.array(z.string().min(1)).default([]),
+} satisfies Readonly<Record<string, unknown>>;
+export const FlowReviewRecordFinalArgsShape = {
+	scope: z.literal("final"),
+	status: z.enum(["approved", "needs_fix", "blocked"]),
+	summary: z.string().min(1),
+	blockingFindings: z
+		.array(z.object({ summary: z.string().min(1) }))
+		.default([]),
+	followUps: z
+		.array(
+			z.object({
+				summary: z.string().min(1),
+				severity: z.string().min(1).optional(),
+			}),
+		)
+		.default([]),
+	suggestedValidation: z.array(z.string().min(1)).default([]),
+} satisfies Readonly<Record<string, unknown>>;
 export const WorkerResultArgsShape = {
-	contractVersion: z.custom<"1">(),
-	status: z.custom<"ok" | "needs_input">(),
+	contractVersion: z.literal("1"),
+	status: z.enum(["ok", "needs_input"]),
 	summary: z.string().min(1),
 	artifactsChanged: z
 		.array(
@@ -94,18 +111,24 @@ export const WorkerResultArgsShape = {
 		.array(
 			z.object({
 				command: z.string().min(1),
-				status: z.custom<"passed" | "failed" | "not_run" | "blocked">(),
+				status: z.enum(["passed", "failed", "failed_existing", "partial"]),
 				summary: z.string().min(1),
 			}),
 		)
 		.default([]),
-	validationScope: z.custom<"targeted" | "broad">().optional(),
+	validationScope: z.enum(["targeted", "broad"]).optional(),
 	reviewIterations: z.number().int().nonnegative().optional(),
 	decisions: z.array(z.object({ summary: z.string().min(1) })).default([]),
 	nextStep: z.string().min(1),
 	outcome: z
 		.object({
-			kind: z.custom<string>(),
+			kind: z.enum([
+				"completed",
+				"replan_required",
+				"blocked_external",
+				"needs_operator_input",
+				"contract_error",
+			]),
 			category: z.string().min(1).optional(),
 			summary: z.string().min(1).optional(),
 			resolutionHint: z.string().min(1).optional(),
@@ -117,7 +140,7 @@ export const WorkerResultArgsShape = {
 	featureResult: z.object({
 		featureId: featureIdSchema,
 		verificationStatus: z
-			.custom<"passed" | "failed" | "not_run" | "blocked">()
+			.enum(["passed", "partial", "failed", "not_recorded"])
 			.optional(),
 		notes: z.array(z.object({ note: z.string().min(1) })).optional(),
 		followUps: z
@@ -130,7 +153,7 @@ export const WorkerResultArgsShape = {
 			.optional(),
 	}),
 	featureReview: z.object({
-		status: z.custom<"passed" | "failed">(),
+		status: z.enum(["passed", "failed", "needs_followup"]),
 		summary: z.string().min(1),
 		blockingFindings: z
 			.array(z.object({ summary: z.string().min(1) }))
@@ -138,49 +161,14 @@ export const WorkerResultArgsShape = {
 	}),
 	finalReview: z
 		.object({
-			status: z.custom<"passed" | "failed">(),
+			status: z.enum(["passed", "failed", "needs_followup"]),
 			summary: z.string().min(1),
 			blockingFindings: z
 				.array(z.object({ summary: z.string().min(1) }))
 				.default([]),
 		})
 		.optional(),
-};
-export const FlowReviewRecordFeatureArgsShape = {
-	scope: z.literal("feature"),
-	featureId: featureIdSchema,
-	status: z.custom<RuntimeFlowReviewRecordFeatureArgs["status"]>(),
-	summary: z.string().min(1),
-	blockingFindings: z
-		.array(z.object({ summary: z.string().min(1) }))
-		.default([]),
-	followUps: z
-		.array(
-			z.object({
-				summary: z.string().min(1),
-				severity: z.string().min(1).optional(),
-			}),
-		)
-		.default([]),
-	suggestedValidation: z.array(z.string().min(1)).default([]),
-};
-export const FlowReviewRecordFinalArgsShape = {
-	scope: z.literal("final"),
-	status: z.custom<RuntimeFlowReviewRecordFinalArgs["status"]>(),
-	summary: z.string().min(1),
-	blockingFindings: z
-		.array(z.object({ summary: z.string().min(1) }))
-		.default([]),
-	followUps: z
-		.array(
-			z.object({
-				summary: z.string().min(1),
-				severity: z.string().min(1).optional(),
-			}),
-		)
-		.default([]),
-	suggestedValidation: z.array(z.string().min(1)).default([]),
-};
+} satisfies Readonly<Record<string, unknown>>;
 
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
 export const FlowHistoryArgsSchema = z.object(FlowHistoryArgsShape);
@@ -190,18 +178,10 @@ export const FlowSessionActivateArgsSchema = z.object(
 );
 export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
 export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
-export const FlowPlanApplyArgsSchema = z.object(FlowPlanApplyArgsShape);
 export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
 export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
 export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
-export const WorkerResultArgsSchema = z.object(WorkerResultArgsShape);
-export const FlowReviewRecordFeatureArgsSchema = z.object(
-	FlowReviewRecordFeatureArgsShape,
-);
-export const FlowReviewRecordFinalArgsSchema = z
-	.object(FlowReviewRecordFinalArgsShape)
-	.strict();
 
 export type FlowHistoryShowArgs = {
 	sessionId: string;
@@ -215,14 +195,9 @@ export type FlowAutoPrepareArgs = {
 	argumentString?: string;
 };
 
-export type FlowPlanStartArgs = {
-	goal?: string;
-	repoProfile?: string[];
-};
-
 export type FlowPlanApplyArgs = {
-	plan: Plan;
-	planning?: Partial<PlanningContext>;
+	plan: PlanArgs;
+	planning?: PlanningContextArgs;
 };
 
 export type FlowPlanApproveArgs = {
