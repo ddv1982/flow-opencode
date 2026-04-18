@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+
+const repoRoot = resolve(import.meta.dir, "..", "..");
 
 const scriptPath = join(
 	import.meta.dir,
@@ -39,7 +41,7 @@ function runPackInvariants(
 
 	return Bun.spawn({
 		cmd: ["node", scriptPath],
-		cwd: "/Users/vriesd/projects/flow-opencode",
+		cwd: repoRoot,
 		env: {
 			...process.env,
 			FLOW_PACK_INVARIANTS_PACK_JSON_PATH: packJsonPath,
@@ -77,7 +79,7 @@ describe("pack invariants script", () => {
 					files: expectedPaths.map((path) => ({ path })),
 				},
 			],
-			readFileSync("/Users/vriesd/projects/flow-opencode/CHANGELOG.md", "utf8"),
+			readFileSync(resolve(repoRoot, "CHANGELOG.md"), "utf8"),
 		);
 
 		expect(await process.exited).toBe(0);

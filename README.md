@@ -38,8 +38,6 @@ By default, both install flows place the plugin at:
 ~/.config/opencode/plugins/flow.js
 ```
 
-If you already have a legacy install at `~/.opencode/plugins/flow.js`, Flow keeps using that location until you remove or migrate it.
-
 ### Uninstall
 
 From the repo:

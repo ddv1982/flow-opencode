@@ -1,5 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { createConfigHook } from "./config";
+import { resolveSessionRoot } from "./runtime/application";
 import { loadSession } from "./runtime/session";
 import { createTools } from "./tools";
 import type { ToolContext } from "./tools/schemas";
@@ -31,9 +32,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 				context: ToolContext,
 				output: { context?: string[]; prompt?: string },
 			) => {
-				const session = await loadSession(
-					context.directory ?? context.worktree ?? process.cwd(),
-				);
+				const session = await loadSession(resolveSessionRoot(context));
 				if (!session) {
 					return;
 				}

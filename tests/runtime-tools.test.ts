@@ -1249,6 +1249,7 @@ describe("runtime tools and recovery", () => {
 			if (!tool) {
 				throw new Error(`Missing tool definition for ${toolName}`);
 			}
+			metadata.mockClear();
 			const response = await tool.execute(toolArgs[toolName], context);
 
 			expect(typeof response).toBe("string");
@@ -1265,8 +1266,6 @@ describe("runtime tools and recovery", () => {
 			expect((latestCall?.title as string).trim().length).toBeGreaterThan(0);
 			expect(latestCall?.metadata).toBeObject();
 			expect(Array.isArray(latestCall?.metadata)).toBe(false);
-
-			metadata.mockClear();
 		}
 	});
 
@@ -1298,8 +1297,11 @@ describe("runtime tools and recovery", () => {
 			status: "running",
 		});
 
+		const nestedDirectory = join(worktree, "src", "subdir");
+		await mkdir(nestedDirectory, { recursive: true });
+
 		const output: { context: string[]; prompt?: string } = { context: [] };
-		await hook({}, toolContext(worktree), output);
+		await hook({}, toolContext(worktree, nestedDirectory), output);
 
 		const joined = output.context.join("\n");
 		expect(joined).toContain("demo-goal");

@@ -72,7 +72,9 @@ export async function importBuiltPlugin(): Promise<PluginFactory> {
 	);
 
 	const entryPath = join(projectRoot, "dist", "index.js");
-	const module = (await import(`file://${entryPath}`)) as {
+	const module = (await import(
+		`file://${entryPath}?t=${Date.now()}-${Math.random()}`
+	)) as {
 		default: PluginFactory;
 	};
 	return module.default;

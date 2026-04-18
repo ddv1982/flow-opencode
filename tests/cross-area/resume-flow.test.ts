@@ -75,6 +75,8 @@ describe("cross-area resume flow", () => {
 		);
 		const afterReload = JSON.parse(await reloadedStatus.execute({}, context));
 
+		expect(reloadedPlugin).not.toBe(plugin);
+		expect(reloadedTools).not.toBe(tools);
 		expect(resumed).toMatchObject({
 			status: "ok",
 			mode: "resume",

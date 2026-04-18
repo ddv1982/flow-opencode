@@ -13,12 +13,13 @@
 	"scripts": {
 		"build": "python3 -c \"import subprocess, sys; sys.exit(subprocess.run(['bun','build','--target=node','--outdir=./dist','--entry-naming=index.js','--external=@opencode-ai/plugin','--minify-syntax','--minify-whitespace','--sourcemap=external','./src/index.ts']).returncode)\" # --external @opencode-ai/plugin --sourcemap external",
 		"bench": "bun run ./bench/index.ts",
+		"bench:smoke": "bun run ./bench/index.ts -- --filter transition-reducer --warmup 0 --iterations 3",
 		"deadcode": "knip --include files,dependencies",
 		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"test": "bun test",
 		"test:ci": "bun test --randomize",
 		"typecheck": "tsc --noEmit",
-		"check": "bun run typecheck && bun run deadcode && bun run test && bun run build && bun run lint",
+		"check": "bun run typecheck && bun run deadcode && bun run test && bun run build && bun run lint && bun run bench:smoke",
 		"install:opencode": "bun run ./src/install-opencode.ts",
 		"uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
 	},
