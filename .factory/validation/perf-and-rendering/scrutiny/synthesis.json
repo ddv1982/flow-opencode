@@ -1,6 +1,6 @@
 {
   "milestone": "perf-and-rendering",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,79 +20,45 @@
     }
   },
   "reviewsSummary": {
-    "total": 5,
-    "passed": 2,
-    "failed": 3,
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
     "failedFeatures": [
-      "m5-incremental-renderer",
-      "m5-read-cache-mkdir",
-      "m5-bundle-optimization"
+      "m5-scrutiny-fixes"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "m5-incremental-renderer",
+      "featureId": "m5-scrutiny-fixes",
       "severity": "blocking",
-      "description": "src/runtime/render.ts rewrites timestamps.updatedAt to createdAt for render comparison, causing stale/incorrect markdown metadata and breaking rendering correctness."
+      "description": "Commit-isolated verification failed: src/runtime/session.ts re-exports cache helper symbols that are not exported by src/runtime/session-workspace.ts, producing TS2305 failures and a runtime ReferenceError in bundle sanity."
     },
     {
-      "featureId": "m5-incremental-renderer",
+      "featureId": "m5-scrutiny-fixes",
       "severity": "blocking",
-      "description": "tests/runtime/render-snapshot.test.ts normalizes timestamps before comparison, so byte-identical parity is not actually enforced for VAL-PERF-008."
+      "description": "m5-read-cache-mkdir contract remains unresolved in committed code: tests/runtime/workspace-cache.test.ts still asserts mkdir call count equals 30 instead of enforcing the required <= 2 threshold."
     },
     {
-      "featureId": "m5-incremental-renderer",
+      "featureId": "m5-scrutiny-fixes",
       "severity": "blocking",
-      "description": "tests/cross-area/markdown-parity.test.ts also normalizes timestamps, weakening VAL-CROSS-008 byte-level parity verification."
-    },
-    {
-      "featureId": "m5-read-cache-mkdir",
-      "severity": "blocking",
-      "description": "Prepared-workspace mkdir optimization is not implemented to contract: mkdir calls still scale with save count due to repeated calls in saveSession/render paths."
-    },
-    {
-      "featureId": "m5-read-cache-mkdir",
-      "severity": "blocking",
-      "description": "tests/runtime/workspace-cache.test.ts asserts an incorrect mkdir threshold (30) instead of the required <= 2, so the contract behavior is not validated."
-    },
-    {
-      "featureId": "m5-bundle-optimization",
-      "severity": "blocking",
-      "description": "scripts/cross-area/bundle-sanity.mjs creates a mocked @opencode-ai/plugin package but imports repo dist/index.js without resolver wiring, so Node resolves the real repo dependency instead of the mock shim."
+      "description": "m5-bundle-optimization mock-peer validation remains unresolved in committed code: scripts/cross-area/bundle-sanity.mjs imports repo dist/index.js directly without resolver wiring that guarantees use of the created @opencode-ai/plugin shim."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "core-worker skill",
-      "suggestion": "Add an explicit assertion-evidence check: when contract language requires byte-identical parity or exact thresholds, tests must use literal byte/threshold assertions (no normalization or broadened thresholds).",
-      "evidence": "m5-incremental-renderer and m5-read-cache-mkdir both reported followedProcedure=true while introducing weakened validations (normalized markdown parity and mkdir threshold 30 vs <=2).",
+      "suggestion": "Require verification evidence to be captured against the committed SHA in an isolated clean state (or equivalent) before declaring feature completion.",
+      "evidence": "Feature m5-scrutiny-fixes reported completion while post-commit working tree remained dirty and commit 415b90e fails isolated typecheck/runtime smoke.",
       "isSystemic": true
     },
     {
-      "target": "core-worker skill",
-      "suggestion": "For M5-tagged features, require explicit bench execution evidence in handoff command logs (including bun run bench when the feature contract references benchmark gates).",
-      "evidence": "m5-bundle-optimization handoff omitted bun run bench despite M5 skill guidance requiring full benchmark execution and results alignment checks.",
-      "isSystemic": false
-    },
-    {
-      "target": "core-worker skill",
-      "suggestion": "Document exact peer-dependency shim wiring for dist bundle smoke tests (e.g., resolver setup / NODE_PATH / cwd strategy) so mocked peer loading is actually validated.",
-      "evidence": "m5-bundle-optimization smoke checks created local @opencode-ai/plugin stubs but imported dist from repo path, allowing resolution from repo node_modules instead of mock host shims.",
+      "target": "AGENTS.md / mission guidance",
+      "suggestion": "Strengthen enforcement language that implementation features must not leave required functional changes uncommitted when handing off completion.",
+      "evidence": "The fix commit omits required session-workspace helper exports while dependent imports were committed, allowing an incomplete and broken isolated commit to pass local non-isolated verification.",
       "isSystemic": true
-    },
-    {
-      "target": "core-worker skill",
-      "suggestion": "Add a verification-only feature pattern (including acceptable empty-commit handoff expectations) for gate features that intentionally ship no code diff.",
-      "evidence": "m5-perf-gate succeeded as a validation-only feature with an empty commit, but this workflow is not clearly documented in the current procedure.",
-      "isSystemic": false
     }
   ],
-  "rejectedObservations": [
-    {
-      "observation": "VAL-CROSS-008 fixture path mismatch in validation-contract.md versus current fixture layout.",
-      "reason": "out_of_scope_for_shared_state: this is a mission-contract content correction, not a services.yaml/library operational update."
-    }
-  ],
-  "previousRound": null
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/perf-and-rendering/scrutiny/synthesis.round1.json"
 }
