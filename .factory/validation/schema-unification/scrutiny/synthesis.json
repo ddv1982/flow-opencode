@@ -1,7 +1,7 @@
 {
   "milestone": "schema-unification",
-  "round": 2,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,35 +21,26 @@
   },
   "reviewsSummary": {
     "total": 1,
-    "passed": 0,
-    "failed": 1,
-    "failedFeatures": [
-      "m3-scrutiny-fixes"
-    ]
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "m3-scrutiny-fixes",
-      "severity": "blocking",
-      "description": "Bundle-size gate remains unresolved: recorded and current evidence report dist/index.js at 994583 bytes, which exceeds the schema milestone threshold of <= 990000 bytes."
-    },
-    {
-      "featureId": "m3-scrutiny-fixes",
-      "severity": "blocking",
-      "description": "Tool-schema de-duplication remains incomplete: src/tools/schemas.ts still contains manually redeclared tool arg shapes and src/tools/runtime-tools.ts still includes a duplicated flow_plan_apply args declaration instead of consuming fully runtime-derived schemas."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [
+  "suggestedGuidanceUpdates": [
     {
-      "observation": "Shared architecture docs should define additional coupling rules for OpenCode tool({ args }) declarations and runtime-derived schemas.",
-      "reason": "already-documented: .factory/library/architecture.md already states that tool-arg schemas are derived from runtime schemas; current issue is implementation drift, not missing shared-state documentation."
+      "target": "validation-contract.md",
+      "suggestion": "Update VAL-SCHEMA-003 wording so it explicitly permits `.shape`-based derivation for OpenCode raw args where required, instead of implying only `.omit/.pick/.extend` as valid derivation evidence.",
+      "evidence": "m3-scrutiny-fixes-round2 review confirmed the accepted fix uses runtime-derived `.shape` objects for tool({ args }) compatibility; current contract wording can misclassify this valid pattern.",
+      "isSystemic": false
     },
     {
-      "observation": "core-worker verification should treat bun run check as sufficient evidence instead of explicit deadcode/build entries.",
-      "reason": "duplicate: this process-gap recommendation was already captured in round 1 guidance updates for the core-worker skill."
+      "target": ".factory/skills/core-worker/SKILL.md",
+      "suggestion": "Clarify mission-knowledge file lookup precedence to prefer repo-local `.factory/library/*` before user-home `~/.factory/library/*` paths.",
+      "evidence": "m3-scrutiny-fixes-round2 transcript skeleton recorded a failed read at `/Users/vriesd/.factory/library/user-testing.md` while the repo-local file existed at `/Users/vriesd/projects/flow-opencode/.factory/library/user-testing.md`.",
+      "isSystemic": false
     }
   ],
-  "previousRound": ".factory/validation/schema-unification/scrutiny/synthesis.round1.json"
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/schema-unification/scrutiny/synthesis.round2.json"
 }
