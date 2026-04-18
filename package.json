@@ -44,7 +44,8 @@
 	},
 	"knip": {
 		"ignore": [
-			"src/runtime/shared-schema.ts"
+			"src/types/typecheck.ts",
+			"tests/schema-equivalence.test-d.ts"
 		]
 	}
 }

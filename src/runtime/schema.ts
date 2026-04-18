@@ -149,8 +149,12 @@ export const WorkerResultSchema = z.discriminatedUnion("status", [
 	}),
 ]);
 
+export const FeatureIdSchema = z
+	.string()
+	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
+
 export const FeatureSchema = z.object({
-	id: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
+	id: FeatureIdSchema,
 	title: z.string().min(1),
 	summary: z.string().min(1),
 	status: FeatureStatusSchema.default("pending"),
@@ -188,6 +192,32 @@ export const PlanningContextSchema = z.object({
 	repoProfile: z.array(z.string().min(1)).default([]),
 	research: z.array(z.string().min(1)).default([]),
 	implementationApproach: ImplementationApproachSchema.optional(),
+});
+
+export const PlanArgsSchema = PlanSchema.omit({
+	goalMode: true,
+	decompositionPolicy: true,
+}).extend({
+	goalMode: GoalModeSchema.optional(),
+	decompositionPolicy: DecompositionPolicySchema.optional(),
+});
+
+export const PlanningContextArgsSchema = PlanningContextSchema.partial();
+
+export const WorkerResultArgsSchema = WorkerResultBaseSchema.extend({
+	status: WorkerStatusSchema,
+	outcome: OutcomeSchema.optional(),
+});
+
+export const FlowReviewRecordFeatureArgsSchema = ReviewerDecisionSchema.extend({
+	scope: z.literal("feature"),
+	featureId: FeatureIdSchema,
+});
+
+export const FlowReviewRecordFinalArgsSchema = ReviewerDecisionSchema.omit({
+	featureId: true,
+}).extend({
+	scope: z.literal("final"),
 });
 
 export const ExecutionHistoryEntrySchema = z.object({
@@ -240,7 +270,17 @@ export const SessionSchema = z.object({
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;
 export type Feature = z.infer<typeof FeatureSchema>;
+export type FlowReviewRecordFeatureArgs = z.input<
+	typeof FlowReviewRecordFeatureArgsSchema
+>;
+export type FlowReviewRecordFinalArgs = z.input<
+	typeof FlowReviewRecordFinalArgsSchema
+>;
 export type Plan = z.infer<typeof PlanSchema>;
+export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
+export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
+export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type WorkerResult = z.infer<typeof WorkerResultSchema>;
+export type WorkerResultArgs = z.input<typeof WorkerResultArgsSchema>;

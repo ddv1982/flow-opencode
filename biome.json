@@ -18,16 +18,5 @@
 			"recommended": true
 		}
 	},
-	"overrides": [
-		{
-			"includes": ["src/runtime/shared-schema.ts"],
-			"linter": {
-				"rules": {
-					"suspicious": {
-						"noExplicitAny": "off"
-					}
-				}
-			}
-		}
-	]
+	"overrides": []
 }
