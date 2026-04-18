@@ -1,0 +1,28 @@
+{
+  "featureId": "m2-scrutiny-fixes-round2",
+  "reviewedAt": "2026-04-18T14:11:19Z",
+  "commitId": "9f8b1a33793e9731fe4b4d4c3bbef76462e69a47",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The round-2 test update fixed the prior overlap with the missing-final-review case, but VAL-CORRECT-031 is still not isolated to the requireFinalReview-specific guard. The case is now subsumed by the earlier generic failing_final_review guard.",
+    "issues": [
+      {
+        "file": "tests/completion-gates.test.ts",
+        "line": 249,
+        "severity": "blocking",
+        "description": "The updated \"required final review not passing\" case now provides a failing finalReview, but that condition is already consumed by the earlier generic guard at src/runtime/transitions/execution-completion-guards.ts:91-96 (`worker.finalReview && !isReviewPassing(worker.finalReview)`), before the requireFinalReview-specific guard at lines 110-113. As a result, this test still does not uniquely exercise the requireFinalReview path: removing the dedicated requireFinalReview guard would keep this case green. This leaves VAL-CORRECT-031 isolation unresolved."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Current contract phrasing for VAL-CORRECT-031 verifies output shape but not branch isolation, which allows redundant matrix cases to satisfy the assertion even when the requireFinalReview-specific guard is unproven.",
+      "evidence": "validation-contract.md:252-253 requires failing_final_review + reset command; runtime has two failing_final_review checks (src/runtime/transitions/execution-completion-guards.ts:91-96 and 110-113), and both VAL-CORRECT-028 (tests/completion-gates.test.ts:210-225) and VAL-CORRECT-031 (249-268) satisfy the earlier generic check."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/correctness-hardening/scrutiny/reviews/m2-scrutiny-fixes.json",
+  "summary": "Fail. The fix corrected the previous missing-finalReview overlap but still does not isolate VAL-CORRECT-031 to the requireFinalReview-specific runtime guard, so the original isolation objective remains unmet."
+}

@@ -1,0 +1,48 @@
+{
+  "milestone": "correctness-hardening",
+  "round": 2,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "m2-scrutiny-fixes"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m2-scrutiny-fixes",
+      "severity": "blocking",
+      "description": "VAL-CORRECT-031 isolation is still not enforced: the completion-gate matrix case duplicates the missing-final-review path, so requireFinalReview-specific guard behavior can regress without test failure, and expectations diverge from the contract."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "validation-contract.md",
+      "suggestion": "Align VAL-CORRECT-031 contract wording, runtime expectation, and completion-gate tests so the assertion uniquely validates requireFinalReview behavior.",
+      "evidence": "The new m2-scrutiny-fixes review found contract/test divergence: contract expects failing_final_review + reset command while tests currently assert missing_final_review_payload + /flow-status.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/correctness-hardening/scrutiny/synthesis.round1.json"
+}
