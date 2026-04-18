@@ -36,9 +36,7 @@ export function cloneSamplePlan(): Plan {
 	return structuredClone(samplePlan);
 }
 
-export function createSampleSession(
-	goal = "Build a workflow plugin",
-): Session {
+export function createSampleSession(goal = "Build a workflow plugin"): Session {
 	return createSession(goal);
 }
 

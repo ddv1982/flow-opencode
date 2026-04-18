@@ -11,7 +11,7 @@
 		"build": "bun build ./src/index.ts --outfile ./dist/index.js --target node",
 		"bench": "bun run ./bench/index.ts",
 		"deadcode": "knip --include files,dependencies",
-		"lint": "bunx biome check . --files-ignore-unknown=true --vcs-use-ignore-file=true",
+		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"test": "bun test",
 		"test:ci": "bun test --randomize",
 		"typecheck": "tsc --noEmit",

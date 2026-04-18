@@ -1,6 +1,14 @@
 import { bench } from "mitata";
-import { PlanSchema, SessionSchema, WorkerResultSchema } from "../src/runtime/schema";
-import { createApprovedSession, createPlan, createWorkerResult } from "./fixtures";
+import {
+	PlanSchema,
+	SessionSchema,
+	WorkerResultSchema,
+} from "../src/runtime/schema";
+import {
+	createApprovedSession,
+	createPlan,
+	createWorkerResult,
+} from "./fixtures";
 
 const session = createApprovedSession(20);
 const plan = createPlan(20);

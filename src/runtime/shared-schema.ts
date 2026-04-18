@@ -14,7 +14,7 @@ import {
 	REVIEW_SCOPES,
 } from "./primitives";
 
-// biome-ignore lint/suspicious/noExplicitAny: schema-factory type erasure is required here so the shared builder can model both runtime and tool schema factories
+// Biome disables noExplicitAny for this file because M3 will unify the schema layer and remove this temporary type-erasure bridge.
 type SchemaApi = {
 	string: () => {
 		min: (length: number) => any;
@@ -58,7 +58,10 @@ const FEATURE_STATUSES = [
 	"blocked",
 ] as const;
 
-export function buildSharedSchemas(schema: SchemaApi, options: SharedSchemaBuildOptions) {
+export function buildSharedSchemas(
+	schema: SchemaApi,
+	options: SharedSchemaBuildOptions,
+) {
 	const featureIdSchema = schema
 		.string()
 		.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);

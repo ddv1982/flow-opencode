@@ -10,7 +10,9 @@ describe("shared test fixtures", () => {
 
 	test("canonical plan and session literals are only defined in tests/fixtures.ts", async () => {
 		const testFiles = Array.from(
-			new Bun.Glob("tests/**/*.ts").scanSync("/Users/vriesd/projects/flow-opencode"),
+			new Bun.Glob("tests/**/*.ts").scanSync(
+				"/Users/vriesd/projects/flow-opencode",
+			),
 		).filter(
 			(file) =>
 				file !== "tests/fixtures.ts" &&
@@ -25,7 +27,9 @@ describe("shared test fixtures", () => {
 			).text();
 			expect(contents).not.toContain("function samplePlan()");
 			expect(contents).not.toContain("const samplePlan =");
-			expect(contents).not.toContain('summary: "Implement a small workflow feature set."');
+			expect(contents).not.toContain(
+				'summary: "Implement a small workflow feature set."',
+			);
 			expect(contents).not.toContain(
 				'overview: "Create one setup feature and one execution feature."',
 			);

@@ -6,10 +6,10 @@ import { getActiveSessionPath } from "../src/runtime/paths";
 import { createTools } from "../src/tools";
 import type { ToolContext } from "../src/tools/schemas";
 import {
-	createSampleSession,
-	cloneSamplePlan,
 	samplePlan as canonicalSamplePlan,
 	sampleSession as canonicalSampleSession,
+	cloneSamplePlan,
+	createSampleSession,
 } from "./fixtures";
 
 export type TestToolContext = Partial<ToolContext> & {
@@ -59,7 +59,9 @@ export function samplePlan() {
 }
 
 export function sampleSession(goal?: string) {
-	return goal === undefined ? structuredClone(canonicalSampleSession) : createSampleSession(goal);
+	return goal === undefined
+		? structuredClone(canonicalSampleSession)
+		: createSampleSession(goal);
 }
 
 export { canonicalSamplePlan, canonicalSampleSession };

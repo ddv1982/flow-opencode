@@ -1,8 +1,21 @@
 import { bench } from "mitata";
-import { applyPlan, approvePlan, completeRun, recordReviewerDecision, startRun } from "../src/runtime/transitions";
-import { createApprovedSession, createPlan, createSession, createWorkerResult } from "./fixtures";
+import {
+	applyPlan,
+	approvePlan,
+	completeRun,
+	recordReviewerDecision,
+	startRun,
+} from "../src/runtime/transitions";
+import {
+	createApprovedSession,
+	createPlan,
+	createSession,
+	createWorkerResult,
+} from "./fixtures";
 
-function assertOk<T>(result: { ok: true; value: T } | { ok: false; message: string }): T {
+function assertOk<T>(
+	result: { ok: true; value: T } | { ok: false; message: string },
+): T {
 	if (!result.ok) {
 		throw new Error(result.message);
 	}

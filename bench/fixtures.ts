@@ -10,7 +10,9 @@ import {
 
 const FIXED_CREATED_AT = "2026-01-01T00:00:00.000Z";
 
-function assertOk<T>(result: { ok: true; value: T } | { ok: false; message: string }): T {
+function assertOk<T>(
+	result: { ok: true; value: T } | { ok: false; message: string },
+): T {
 	if (!result.ok) {
 		throw new Error(result.message);
 	}
@@ -41,7 +43,8 @@ export function createPlan(featureCount: number): Plan {
 	const features = Array.from({ length: featureCount }, (_, index) => {
 		const featureNumber = index + 1;
 		const id = `feature-${featureNumber}`;
-		const previousId = featureNumber > 1 ? `feature-${featureNumber - 1}` : undefined;
+		const previousId =
+			featureNumber > 1 ? `feature-${featureNumber - 1}` : undefined;
 
 		return createFeature(id, previousId ? { dependsOn: [previousId] } : {});
 	});
@@ -50,7 +53,9 @@ export function createPlan(featureCount: number): Plan {
 		summary: `Plan with ${featureCount} feature${featureCount === 1 ? "" : "s"}.`,
 		overview: "Benchmark fixture plan.",
 		requirements: ["Keep benchmark fixtures deterministic."],
-		architectureDecisions: ["Use canonical runtime transitions to shape sessions."],
+		architectureDecisions: [
+			"Use canonical runtime transitions to shape sessions.",
+		],
 		features,
 		goalMode: "implementation",
 		decompositionPolicy: "atomic_feature",
@@ -59,13 +64,22 @@ export function createPlan(featureCount: number): Plan {
 
 export { createSession };
 
-export function createWorkerResult(featureId: string, summary = `Completed ${featureId}.`): WorkerResult {
+export function createWorkerResult(
+	featureId: string,
+	summary = `Completed ${featureId}.`,
+): WorkerResult {
 	return {
 		contractVersion: "1",
 		status: "ok",
 		summary,
 		artifactsChanged: [{ path: `src/${featureId}.ts`, kind: "modified" }],
-		validationRun: [{ command: "bun test", status: "passed", summary: "Targeted tests passed." }],
+		validationRun: [
+			{
+				command: "bun test",
+				status: "passed",
+				summary: "Targeted tests passed.",
+			},
+		],
 		validationScope: "targeted",
 		reviewIterations: 1,
 		decisions: [{ summary: "Ship the implementation." }],
@@ -99,7 +113,10 @@ export function createApprovedSession(featureCount: number): Session {
 	return assertOk(approvePlan(applied));
 }
 
-export function completeNextFeature(session: Session, summary?: string): Session {
+export function completeNextFeature(
+	session: Session,
+	summary?: string,
+): Session {
 	const started = assertOk(startRun(session)).session;
 	const featureId = started.execution.activeFeatureId;
 
@@ -124,7 +141,7 @@ export function completeNextFeature(session: Session, summary?: string): Session
 			? {
 					...entry,
 					reviewerDecision: reviewed.execution.lastReviewerDecision,
-			  }
+				}
 			: entry,
 	);
 
@@ -161,7 +178,7 @@ export function createCompletedSession(featureCount: number): Session {
 					? {
 							...entry,
 							reviewerDecision: reviewed.execution.lastReviewerDecision,
-					  }
+						}
 					: entry,
 			);
 

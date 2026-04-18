@@ -94,9 +94,11 @@ function sampleWorkerResult(): WorkerPayloadLike {
 describe("schema alignment", () => {
 	test("plan payloads stay aligned between runtime and tool schemas", () => {
 		const schemas = getToolSchemas();
+		const [firstFeature] = cloneSamplePlan().features;
+		expect(firstFeature).toBeDefined();
 		const validPlan = {
 			...cloneSamplePlan(),
-			features: [cloneSamplePlan().features[0]!],
+			features: firstFeature ? [firstFeature] : [],
 		};
 
 		expect(PlanSchema.safeParse(validPlan).success).toBe(true);

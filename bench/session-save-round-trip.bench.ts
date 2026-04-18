@@ -1,11 +1,13 @@
-import { bench } from "mitata";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { bench } from "mitata";
 import { loadSession, saveSession } from "../src/runtime/session";
 import { createApprovedSession } from "./fixtures";
 
-function withTempDir<T>(run: (worktree: string) => Promise<T>): () => Promise<T> {
+function withTempDir<T>(
+	run: (worktree: string) => Promise<T>,
+): () => Promise<T> {
 	return async () => {
 		const worktree = mkdtempSync(join(tmpdir(), "flow-bench-roundtrip-"));
 

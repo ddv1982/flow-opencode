@@ -50,11 +50,11 @@ export function createRuntimeTools() {
 					const planning =
 						input.planning === undefined
 							? undefined
-							: Object.fromEntries(
+							: (Object.fromEntries(
 									Object.entries(input.planning).filter(
 										([, value]) => value !== undefined,
 									),
-								) as FlowPlanApplyArgs["planning"];
+								) as FlowPlanApplyArgs["planning"]);
 					return withPersistedTransition(
 						context,
 						(session) => applyPlan(session, input.plan, planning),

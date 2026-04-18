@@ -17,7 +17,7 @@ import {
 	FINAL_REVIEW_SCOPE,
 	VALIDATION_SCOPES,
 } from "../runtime/primitives";
-import type { PlanningContext, Plan } from "../runtime/schema";
+import type { Plan, PlanningContext } from "../runtime/schema";
 
 const z = tool.schema;
 export const featureIdSchema = z
@@ -71,26 +71,32 @@ export const WorkerResultArgsShape = {
 	contractVersion: z.literal("1"),
 	status: z.enum(WORKER_STATUSES),
 	summary: z.string().min(1),
-	artifactsChanged: z.array(
-		z.object({
-			path: z.string().min(1),
-			kind: z.string().min(1).optional(),
-		}),
-	).default([]),
-	validationRun: z.array(
-		z.object({
-			command: z.string().min(1),
-			status: z.enum(VALIDATION_STATUSES),
-			summary: z.string().min(1),
-		}),
-	).default([]),
+	artifactsChanged: z
+		.array(
+			z.object({
+				path: z.string().min(1),
+				kind: z.string().min(1).optional(),
+			}),
+		)
+		.default([]),
+	validationRun: z
+		.array(
+			z.object({
+				command: z.string().min(1),
+				status: z.enum(VALIDATION_STATUSES),
+				summary: z.string().min(1),
+			}),
+		)
+		.default([]),
 	validationScope: z.enum(VALIDATION_SCOPES).optional(),
 	reviewIterations: z.number().int().nonnegative().optional(),
-	decisions: z.array(
-		z.object({
-			summary: z.string().min(1),
-		}),
-	).default([]),
+	decisions: z
+		.array(
+			z.object({
+				summary: z.string().min(1),
+			}),
+		)
+		.default([]),
 	nextStep: z.string().min(1),
 	outcome: z
 		.object({

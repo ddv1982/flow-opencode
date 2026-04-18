@@ -1,18 +1,28 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
+import {
+	createApprovedSession,
+	createCompletedSession,
+	createMidExecutionSession,
+	createPlan,
+	createSession,
+} from "../bench/fixtures";
 import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import { saveSession } from "../src/runtime/session";
-import { createApprovedSession, createCompletedSession, createMidExecutionSession, createSession, createPlan } from "../bench/fixtures";
 import { applyPlan } from "../src/runtime/transitions";
 import { createTempDirRegistry } from "./runtime-test-helpers";
 
-const { makeTempDir, cleanupTempDirs } = createTempDirRegistry("flow-render-fixtures-");
+const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
+	"flow-render-fixtures-",
+);
 
 afterEach(() => {
 	cleanupTempDirs();
 });
 
-function assertOk<T>(result: { ok: true; value: T } | { ok: false; message: string }): T {
+function assertOk<T>(
+	result: { ok: true; value: T } | { ok: false; message: string },
+): T {
 	if (!result.ok) {
 		throw new Error(result.message);
 	}
@@ -26,14 +36,23 @@ type FixtureSpec = {
 	featureIds: string[];
 };
 
-async function renderFixture(worktree: string, session: FixtureSpec["session"]) {
+async function renderFixture(
+	worktree: string,
+	session: FixtureSpec["session"],
+) {
 	const saved = await saveSession(worktree, session);
 	const index = await readFile(getIndexDocPath(worktree, saved.id), "utf8");
 	const featureDocs = await Promise.all(
-		(saved.plan?.features ?? []).map(async (feature) => [
-			feature.id,
-			await readFile(getFeatureDocPath(worktree, saved.id, feature.id), "utf8"),
-		] as const),
+		(saved.plan?.features ?? []).map(
+			async (feature) =>
+				[
+					feature.id,
+					await readFile(
+						getFeatureDocPath(worktree, saved.id, feature.id),
+						"utf8",
+					),
+				] as const,
+		),
 	);
 
 	return { saved, index, featureDocs: new Map(featureDocs) };
@@ -87,22 +106,34 @@ describe("render fixtures", () => {
 		{
 			name: "mid-execution-10-features",
 			session: createMidExecutionSession(10),
-			featureIds: Array.from({ length: 10 }, (_, index) => `feature-${index + 1}`),
+			featureIds: Array.from(
+				{ length: 10 },
+				(_, index) => `feature-${index + 1}`,
+			),
 		},
 		{
 			name: "save-session-20-features",
 			session: createApprovedSession(20),
-			featureIds: Array.from({ length: 20 }, (_, index) => `feature-${index + 1}`),
+			featureIds: Array.from(
+				{ length: 20 },
+				(_, index) => `feature-${index + 1}`,
+			),
 		},
 		{
 			name: "all-completed",
 			session: createCompletedSession(5),
-			featureIds: Array.from({ length: 5 }, (_, index) => `feature-${index + 1}`),
+			featureIds: Array.from(
+				{ length: 5 },
+				(_, index) => `feature-${index + 1}`,
+			),
 		},
 		{
 			name: "hundred-features",
 			session: createApprovedSession(100),
-			featureIds: Array.from({ length: 100 }, (_, index) => `feature-${index + 1}`),
+			featureIds: Array.from(
+				{ length: 100 },
+				(_, index) => `feature-${index + 1}`,
+			),
 		},
 	] satisfies FixtureSpec[];
 
@@ -111,14 +142,18 @@ describe("render fixtures", () => {
 			const worktree = makeTempDir();
 			const rendered = await renderFixture(worktree, fixture.session);
 			const fixtureRoot = `/Users/vriesd/projects/flow-opencode/tests/__fixtures__/render/${fixture.name}`;
-			const actualFeatureFiles = await readdir(`${fixtureRoot}/features`).catch(() => []);
+			const actualFeatureFiles = await readdir(`${fixtureRoot}/features`).catch(
+				() => [],
+			);
 
 			const expectedIndex = await readFile(`${fixtureRoot}/index.md`, "utf8");
 			expect(normalizeMarkdown(rendered.index)).toBe(
 				normalizeMarkdown(expectedIndex),
 			);
 
-			expect([...rendered.featureDocs.keys()].sort()).toEqual([...fixture.featureIds].sort());
+			expect([...rendered.featureDocs.keys()].sort()).toEqual(
+				[...fixture.featureIds].sort(),
+			);
 			expect(actualFeatureFiles.sort()).toEqual(
 				fixture.featureIds.map((featureId) => `${featureId}.md`).sort(),
 			);
