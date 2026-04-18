@@ -51,7 +51,8 @@
 			"tests/schema-equivalence.test-d.ts",
 			"scripts/cross-area/bundle-sanity.mjs",
 			"scripts/cross-area/bench-gate.mjs",
-			"scripts/cross-area/pack-invariants.mjs"
+			"scripts/cross-area/pack-invariants.mjs",
+			"scripts/cross-area/cold-start-budget.mjs"
 		]
 	}
 }
