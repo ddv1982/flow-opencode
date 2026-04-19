@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.5] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.5 restores reliable curl-based uninstall behavior from release artifacts by making uninstall idempotent and user-friendly when no plugin file is present.
+
+### Fixed
+
+- Fixed `uninstall.sh` from release downloads to always succeed cleanly when Flow is already absent.
+- Added an explicit informational message when no plugin file is found at canonical or legacy install paths.
+
 ## [1.0.4] - 2026-04-19
 
 ### Highlights
