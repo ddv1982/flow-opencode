@@ -147,6 +147,22 @@ describe("runtime transitions", () => {
 		await expect(loadSession(worktree)).rejects.toThrow();
 	});
 
+	test("rejects persisted session data with duplicate keys", async () => {
+		const worktree = makeTempDir();
+		const sessionId = "duplicate-session";
+		mkdirSync(join(worktree, ".flow", "sessions", sessionId), {
+			recursive: true,
+		});
+		await writeFile(getActiveSessionPath(worktree), `${sessionId}\n`, "utf8");
+		await writeFile(
+			getSessionPath(worktree, sessionId),
+			'{"id":"a","id":"b"}',
+			"utf8",
+		);
+
+		await expect(loadSession(worktree)).rejects.toThrow("Duplicate JSON key");
+	});
+
 	test("saveSession refreshes updatedAt while preserving createdAt", async () => {
 		const worktree = makeTempDir();
 		const created = createSession("Build a workflow plugin");

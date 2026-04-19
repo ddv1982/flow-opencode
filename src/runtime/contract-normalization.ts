@@ -270,6 +270,10 @@ function parseJsonObject(raw: string, label: string): ParseResult {
 	}
 }
 
+export function parseStrictJsonObject(raw: string, label: string): ParseResult {
+	return parseJsonObject(raw, label);
+}
+
 function normalizeStringList(value: unknown): string[] | undefined {
 	if (value === undefined) {
 		return undefined;

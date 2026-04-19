@@ -8,6 +8,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { parseStrictJsonObject } from "./contract-normalization";
 import {
 	getActiveSessionPath,
 	getArchiveDir,
@@ -129,7 +130,11 @@ export async function readSessionFromPath(
 	}
 
 	const raw = await readFile(sessionPath, "utf8");
-	const parsed = SessionSchema.parse(JSON.parse(raw));
+	const object = parseStrictJsonObject(raw, "Session file");
+	if (!object.ok) {
+		throw new Error(object.error);
+	}
+	const parsed = SessionSchema.parse(object.value);
 	sessionReadCache.set(sessionPath, {
 		key: cacheKey,
 		session: parsed,
@@ -296,7 +301,11 @@ export async function migrateLegacySessionIfNeeded(
 		throw error;
 	}
 
-	const session = SessionSchema.parse(JSON.parse(raw));
+	const object = parseStrictJsonObject(raw, "Legacy session file");
+	if (!object.ok) {
+		throw new Error(object.error);
+	}
+	const session = SessionSchema.parse(object.value);
 	await ensureWorkspace(worktree);
 	await writeSessionFile(worktree, session);
 	await renderSessionDocs(worktree, session);

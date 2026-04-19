@@ -97,4 +97,14 @@ describe("legacy session migration", () => {
 		expect(Buffer.compare(afterBytes, beforeBytes)).toBe(0);
 		expect(afterStat.mtimeMs).toBe(beforeStat.mtimeMs);
 	});
+
+	test("loadSession rejects malformed legacy session data with duplicate keys", async () => {
+		const worktree = makeTempDir();
+		const legacySessionPath = getLegacySessionPath(worktree);
+
+		mkdirSync(join(worktree, ".flow"), { recursive: true });
+		await writeFile(legacySessionPath, '{"id":"a","id":"b"}', "utf8");
+
+		await expect(loadSession(worktree)).rejects.toThrow("Duplicate JSON key");
+	});
 });

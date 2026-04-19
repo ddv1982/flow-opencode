@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.2] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.2 extends strict malformed-JSON hardening to persisted session loading and legacy session migration. Session files now reject duplicate keys and other malformed object shapes consistently before runtime schema validation.
+
+### Changed
+
+- Reused the strict JSON object parser for persisted `.flow` session loading and legacy session migration.
+- Added regression tests covering duplicate-key failures in active and legacy session JSON.
+- Reduced remaining production malformed-JSON exposure to local tooling/script parse sites rather than runtime session ingestion.
+
 ## [1.0.1] - 2026-04-19
 
 ### Highlights
