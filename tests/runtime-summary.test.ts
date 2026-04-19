@@ -9,7 +9,12 @@ import {
 } from "../src/runtime/constants";
 import { getIndexDocPath } from "../src/runtime/paths";
 import { createSession, saveSession } from "../src/runtime/session";
-import { deriveNextCommand, summarizeSession } from "../src/runtime/summary";
+import {
+	deriveNextCommand,
+	explainSessionState,
+	renderSessionStatusSummary,
+	summarizeSession,
+} from "../src/runtime/summary";
 import {
 	applyPlan,
 	approvePlan,
@@ -214,6 +219,70 @@ describe("runtime summary", () => {
 			status: "missing",
 			summary: "No active Flow session found.",
 		});
+	});
+
+	test("explainSessionState reports how to start when no session exists", () => {
+		expect(explainSessionState(null)).toEqual({
+			category: "no_session",
+			status: "missing",
+			summary: "No active Flow session exists for this workspace.",
+			nextStep: "Start a new Flow session with /flow-plan <goal>.",
+			nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
+		});
+	});
+
+	test("explainSessionState surfaces a decision gate recommendation", () => {
+		const session = createSession("Choose a path");
+		session.plan = samplePlan();
+		session.planning.decisionLog.push({
+			question: "Should Flow pause for approval?",
+			decisionMode: "recommend_confirm",
+			decisionDomain: "architecture",
+			options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
+			recommendation: "Pause and ask before changing the architecture.",
+			rationale: ["The architecture choice affects multiple files."],
+		});
+
+		expect(explainSessionState(session)).toEqual({
+			category: "decision_gate",
+			status: "recommend_confirm",
+			summary: "Should Flow pause for approval?",
+			nextStep: "Pause and ask before changing the architecture.",
+			nextCommand: FLOW_PLAN_COMMAND,
+		});
+	});
+
+	test("renderSessionStatusSummary creates a canonical human-readable status string", () => {
+		const running = buildSummaryFixtureSessions().running;
+
+		expect(renderSessionStatusSummary(running)).toBe(
+			[
+				"Flow running: Flow is focused on feature 'setup-runtime'.",
+				"Goal: Build a workflow plugin",
+				"Active feature: setup-runtime — Create runtime helpers (in_progress)",
+				"Progress: 0/2 completed",
+				"Next: Continue the active feature through validation and review.",
+				"Command: /flow-run",
+			].join("\n"),
+		);
+	});
+
+	test("renderSessionStatusSummary can override the rendered command for history views", () => {
+		const planning = buildSummaryFixtureSessions().planning;
+
+		expect(
+			renderSessionStatusSummary(planning, {
+				nextCommand: "/flow-session activate test-session",
+			}),
+		).toBe(
+			[
+				"Flow planning: Flow has a draft plan that still needs the next planning step.",
+				"Goal: Build a workflow plugin",
+				"Progress: 0/2 completed",
+				"Next: Review or refine the draft plan, then approve it when ready.",
+				"Command: /flow-session activate test-session",
+			].join("\n"),
+		);
 	});
 
 	test("summarizeSession preserves the default planning/running/blocked/completed payloads", () => {
@@ -514,13 +583,24 @@ describe("runtime summary", () => {
 			);
 			const parsed = JSON.parse(response);
 
-			const expected =
+			const expectedSessionSummary =
 				session.status === "completed"
 					? summarizeSession(null)
 					: summarizeSession(session);
-			expect(normalizeSummaryFixture(parsed)).toEqual(
-				normalizeSummaryFixture(expected),
+			const expectedGuidance =
+				session.status === "completed"
+					? explainSessionState(null)
+					: explainSessionState(session);
+			const {
+				guidance: parsedGuidance,
+				operatorSummary: parsedOperatorSummary,
+				...parsedBase
+			} = parsed;
+			expect(normalizeSummaryFixture(parsedBase)).toEqual(
+				normalizeSummaryFixture(expectedSessionSummary),
 			);
+			expect(parsedGuidance).toEqual(expectedGuidance);
+			expect(typeof parsedOperatorSummary).toBe("string");
 		}
 	});
 

@@ -4,12 +4,15 @@ import { applyFlowConfig, createConfigHook } from "../src/config";
 import FlowPlugin from "../src/index";
 import {
 	FLOW_AUTO_AGENT_PROMPT,
+	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../src/prompts/agents";
 import {
 	FLOW_AUTO_COMMAND_TEMPLATE,
+	FLOW_DOCTOR_COMMAND_TEMPLATE,
 	FLOW_RUN_COMMAND_TEMPLATE,
+	FLOW_STATUS_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
 import {
 	FLOW_REVIEWER_CONTRACT,
@@ -154,6 +157,7 @@ describe("applyFlowConfig", () => {
 	test("createTools preserves the expected ordered tool surface", () => {
 		expect(Object.keys(createTools({}))).toEqual([
 			"flow_status",
+			"flow_doctor",
 			"flow_history",
 			"flow_history_show",
 			"flow_session_activate",
@@ -187,6 +191,7 @@ describe("applyFlowConfig", () => {
 		expect(config.command?.["flow-run"]).toBeDefined();
 		expect(config.command?.["flow-auto"]).toBeDefined();
 		expect(config.command?.["flow-status"]).toBeDefined();
+		expect(config.command?.["flow-doctor"]).toBeDefined();
 		expect(config.command?.["flow-history"]).toBeDefined();
 		expect(config.command?.["flow-session"]).toBeDefined();
 		expect(config.command?.["flow-reset"]).toBeDefined();
@@ -200,11 +205,12 @@ describe("applyFlowConfig", () => {
 		expect(tools.flow_review_record_final.description).toContain("Record");
 	});
 
-	test("routes status, history, session activation, and reset through the control agent", () => {
+	test("routes status, doctor, history, session activation, and reset through the control agent", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
 		expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
+		expect(config.command?.["flow-doctor"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-history"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-session"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-reset"]?.agent).toBe("flow-control");
@@ -243,6 +249,7 @@ describe("applyFlowConfig", () => {
 			agent: "existing",
 		});
 		expect(config.agent?.["flow-control"]).toBeDefined();
+		expect(config.command?.["flow-doctor"]).toBeDefined();
 		expect(config.command?.["flow-history"]).toBeDefined();
 		expect(config.command?.["flow-session"]).toBeDefined();
 		expect(config.command?.["flow-reset"]).toBeDefined();
@@ -310,7 +317,23 @@ describe("applyFlowConfig", () => {
 		const { schemas } = getToolSchemas();
 
 		expect(schemas.flow_status.safeParse({}).success).toBe(true);
+		expect(schemas.flow_status.safeParse({ view: "compact" }).success).toBe(
+			true,
+		);
+		expect(schemas.flow_status.safeParse({ view: "detailed" }).success).toBe(
+			true,
+		);
+		expect(schemas.flow_status.safeParse({ view: "bad" }).success).toBe(false);
 		expect(schemas.flow_status.safeParse({ extra: true }).success).toBe(true);
+		expect(schemas.flow_doctor.safeParse({}).success).toBe(true);
+		expect(schemas.flow_doctor.safeParse({ view: "compact" }).success).toBe(
+			true,
+		);
+		expect(schemas.flow_doctor.safeParse({ view: "detailed" }).success).toBe(
+			true,
+		);
+		expect(schemas.flow_doctor.safeParse({ view: "bad" }).success).toBe(false);
+		expect(schemas.flow_doctor.safeParse({ extra: true }).success).toBe(true);
 		expect(schemas.flow_history.safeParse({}).success).toBe(true);
 		expect(schemas.flow_history.safeParse({ extra: true }).success).toBe(true);
 		expect(
@@ -724,6 +747,37 @@ describe("applyFlowConfig", () => {
 		]);
 	});
 
+	test("status command template leads with runtime guidance before raw session details", () => {
+		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("guidance.summary");
+		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("guidance.nextStep");
+		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("guidance.nextCommand");
+		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("compact view");
+		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("detailed view");
+		expectInOrder(FLOW_STATUS_COMMAND_TEMPLATE, [
+			"Arguments: $ARGUMENTS",
+			"If the arguments are empty, call `flow_status` with compact view.",
+			"If the arguments start with `detail`, `detailed`, `full`, or `json`, call `flow_status` with detailed view.",
+			"Lead with `guidance.summary`",
+			"Then report `guidance.nextStep` and `guidance.nextCommand`",
+			"Use the broader session summary and active feature details as supporting context",
+		]);
+	});
+
+	test("doctor command template prefers compact output and allows detailed inspection", () => {
+		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain("compact view");
+		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain("detailed view");
+		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain(
+			"Lead with the operator summary.",
+		);
+		expectInOrder(FLOW_DOCTOR_COMMAND_TEMPLATE, [
+			"Arguments: $ARGUMENTS",
+			"If the arguments are empty, call `flow_doctor` with compact view.",
+			"If the arguments start with `detail`, `detailed`, `full`, or `json`, call `flow_doctor` with detailed view.",
+			"Lead with the operator summary.",
+			"Then summarize any warnings or failures with the recommended remediation.",
+		]);
+	});
+
 	test("run command template requires final completion gating for the last feature", () => {
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_final");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
@@ -753,8 +807,15 @@ describe("applyFlowConfig", () => {
 
 	test("flow prompts and command templates avoid Flow-managed compaction guidance", () => {
 		expectNoFlowManagedCompaction(FLOW_AUTO_AGENT_PROMPT);
+		expect(FLOW_CONTROL_AGENT_PROMPT).toContain(
+			"prefer compact flow_status output unless the user explicitly asks for detail/raw/json",
+		);
+		expect(FLOW_CONTROL_AGENT_PROMPT).toContain(
+			"prefer compact flow_doctor output unless the user explicitly asks for detail/raw/json",
+		);
 		expectNoFlowManagedCompaction(FLOW_WORKER_AGENT_PROMPT);
 		expectNoFlowManagedCompaction(FLOW_AUTO_COMMAND_TEMPLATE);
+		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain("flow_doctor");
 		expectNoFlowManagedCompaction(FLOW_RUN_COMMAND_TEMPLATE);
 	});
 });

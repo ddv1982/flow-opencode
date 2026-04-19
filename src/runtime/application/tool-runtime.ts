@@ -35,6 +35,10 @@ export function toJson(value: unknown): string {
 	return JSON.stringify(value, null, 2);
 }
 
+export function toCompactJson(value: unknown): string {
+	return JSON.stringify(value);
+}
+
 function asWritableRootCandidate(rawPath: string | undefined): string | null {
 	const path = rawPath?.trim();
 	if (!path) {

@@ -61,7 +61,29 @@ Arguments: $ARGUMENTS`;
 
 export const FLOW_STATUS_COMMAND_TEMPLATE = `Inspect the active Flow session.
 
-Call \`flow_status\`, render the runtime result clearly, and stop.`;
+Arguments: $ARGUMENTS
+
+Behavior:
+- If the arguments are empty, call \`flow_status\` with compact view.
+- If the arguments start with \`detail\`, \`detailed\`, \`full\`, or \`json\`, call \`flow_status\` with detailed view.
+- Otherwise explain the valid forms briefly.
+- Lead with \`guidance.summary\` when guidance is present, especially for blocked, paused, or decision-gated sessions.
+- Then report \`guidance.nextStep\` and \`guidance.nextCommand\` so the operator can act without reading raw session state.
+- Use the broader session summary and active feature details as supporting context, not the opening line.
+- If no active session exists, say that clearly and point to the recommended start command.
+- Stop after the status summary.`;
+
+export const FLOW_DOCTOR_COMMAND_TEMPLATE = `Check Flow readiness for the current workspace.
+
+Arguments: $ARGUMENTS
+
+Behavior:
+- If the arguments are empty, call \`flow_doctor\` with compact view.
+- If the arguments start with \`detail\`, \`detailed\`, \`full\`, or \`json\`, call \`flow_doctor\` with detailed view.
+- Otherwise explain the valid forms briefly.
+- Lead with the operator summary.
+- Then summarize any warnings or failures with the recommended remediation.
+- Stop after the doctor summary.`;
 
 export const FLOW_HISTORY_COMMAND_TEMPLATE = `Inspect stored Flow session history.
 

@@ -1,5 +1,5 @@
 /**
- * Session tool boundary: history/lookup/activation tool registrations only.
+ * Session tool boundary: status/doctor/history/lookup/activation tool registrations only.
  * Keep response envelopes in responses.ts and next-command routing in
  * next-command-policy.ts.
  */
@@ -14,7 +14,10 @@ import {
 } from "../../runtime/session";
 import { summarizeSession } from "../../runtime/summary";
 import { withParsedArgs } from "../parsed-tool";
+import type { FlowDoctorArgs } from "../schemas";
 import {
+	FlowDoctorArgsSchema,
+	FlowDoctorArgsShape,
 	FlowHistoryArgsSchema,
 	FlowHistoryArgsShape,
 	FlowHistoryShowArgsSchema,
@@ -25,6 +28,7 @@ import {
 	FlowStatusArgsShape,
 	type ToolContext,
 } from "../schemas";
+import { buildDoctorReport } from "./doctor";
 import {
 	nextCommandForHistory,
 	nextCommandForMissingStoredSession,
@@ -57,15 +61,31 @@ export function createHistorySessionTools() {
 			args: FlowStatusArgsShape,
 			execute: withParsedArgs(
 				FlowStatusArgsSchema,
-				async (_input, context: ToolContext) => {
+				async (input, context: ToolContext) => {
 					const session = await loadSession(resolveToolSessionRoot(context));
 					recordToolMetadata(context, "Flow status", {
 						sessionId: session?.id ?? null,
 						status: session?.status ?? "missing",
 						approval: session?.approval ?? null,
 						activeFeatureId: session?.execution.activeFeatureId ?? null,
+						view: input.view ?? "detailed",
 					});
-					return statusResponse(session);
+					return statusResponse(session, input);
+				},
+			),
+		}),
+
+		flow_doctor: tool({
+			description:
+				"Run non-destructive readiness checks for Flow in the current workspace",
+			args: FlowDoctorArgsShape,
+			execute: withParsedArgs(
+				FlowDoctorArgsSchema,
+				async (input: FlowDoctorArgs, context: ToolContext) => {
+					recordToolMetadata(context, "Flow doctor", {
+						view: input.view ?? "detailed",
+					});
+					return buildDoctorReport(context, input);
 				},
 			),
 		}),

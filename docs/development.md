@@ -68,6 +68,7 @@ Flow is built around a small set of responsibilities:
 ## Current Runtime Tools
 
 - `flow_status`
+- `flow_doctor`
 - `flow_history`
 - `flow_history_show`
 - `flow_auto_prepare`

@@ -25,11 +25,17 @@ export type ToolMetadataPayload = {
 export type ToolContext = WorkspaceContext & {
 	metadata?: (payload: ToolMetadataPayload) => void;
 };
+export const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
 export const featureIdSchema = z
 	.string()
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
 
-export const FlowStatusArgsShape = {};
+export const FlowStatusArgsShape = {
+	view: FlowStatusViewSchema.optional(),
+};
+export const FlowDoctorArgsShape = {
+	view: FlowStatusViewSchema.optional(),
+};
 export const FlowHistoryArgsShape = {};
 export const FlowHistoryShowArgsShape = {
 	sessionId: z
@@ -94,6 +100,7 @@ export const WorkerResultArgsShape = {
 } satisfies Readonly<Record<string, unknown>>;
 
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
+export const FlowDoctorArgsSchema = z.object(FlowDoctorArgsShape);
 export const FlowHistoryArgsSchema = z.object(FlowHistoryArgsShape);
 export const FlowHistoryShowArgsSchema = z.object(FlowHistoryShowArgsShape);
 export const FlowSessionActivateArgsSchema = z.object(
@@ -122,6 +129,14 @@ export type FlowSessionCloseArgs = {
 
 export type FlowAutoPrepareArgs = {
 	argumentString?: string;
+};
+
+export type FlowStatusArgs = {
+	view?: "compact" | "detailed" | undefined;
+};
+
+export type FlowDoctorArgs = {
+	view?: "compact" | "detailed" | undefined;
 };
 
 export type FlowPlanApplyArgs = {

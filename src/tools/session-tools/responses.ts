@@ -2,26 +2,42 @@
  * Session tool boundary: JSON response envelope assembly only.
  * Do not add next-command routing or activation/resume policy here.
  */
-import { toJson } from "../../runtime/application";
+import { toCompactJson, toJson } from "../../runtime/application";
 import type { Session } from "../../runtime/schema";
 import type {
 	closeSession,
 	listSessionHistory,
 	loadStoredSession,
 } from "../../runtime/session";
-import { summarizeSession } from "../../runtime/summary";
+import {
+	explainSessionState,
+	renderSessionStatusSummary,
+	summarizeSession,
+} from "../../runtime/summary";
+import type { FlowStatusArgs } from "../schemas";
 import type { AutoPrepareMode } from "./next-command-policy";
 
 type SessionHistory = Awaited<ReturnType<typeof listSessionHistory>>;
 type StoredSessionRecord = Awaited<ReturnType<typeof loadStoredSession>>;
 type CompletedSessionRecord = Awaited<ReturnType<typeof closeSession>>;
 
-export function missingGoalResponse(summary: string, nextCommand: string) {
-	return toJson({
-		status: "missing_goal",
-		summary,
+function storedSessionGuidance(
+	found: NonNullable<StoredSessionRecord>,
+	nextCommand: string,
+) {
+	const guidance = explainSessionState(found.session);
+	if (found.active || found.session.status === "completed") {
+		return { ...guidance, nextCommand };
+	}
+	return {
+		...guidance,
+		nextStep: "Activate this session to continue it in the current worktree.",
 		nextCommand,
-	});
+	};
+}
+
+export function missingGoalResponse(summary: string, nextCommand: string) {
+	return toJson({ status: "missing_goal", summary, nextCommand });
 }
 
 export function missingStoredSessionResponse(
@@ -39,7 +55,6 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 	const activeCount = history.active ? 1 : 0;
 	const totalCount =
 		activeCount + history.stored.length + history.completed.length;
-
 	if (totalCount === 0) {
 		return {
 			payload: toJson({
@@ -56,7 +71,6 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 			},
 		};
 	}
-
 	return {
 		payload: toJson({
 			status: "ok",
@@ -79,7 +93,10 @@ export function storedSessionResponse(
 	nextCommand: string,
 ) {
 	const summarizedSession = summarizeSession(found.session).session;
-
+	const guidance = storedSessionGuidance(found, nextCommand);
+	const historySession = found.active
+		? summarizedSession
+		: { ...summarizedSession, nextCommand };
 	return toJson({
 		status: "ok",
 		summary: `Showing ${found.source} Flow session '${sessionId}'.`,
@@ -89,15 +106,39 @@ export function storedSessionResponse(
 		completedPath: found.completedPath ?? null,
 		completedAt: found.completedAt ?? null,
 		closure: found.session.closure ?? null,
-		session: found.active
-			? summarizedSession
-			: { ...summarizedSession, nextCommand },
+		session: historySession,
+		guidance,
+		operatorSummary: renderSessionStatusSummary(found.session, {
+			nextCommand: guidance.nextCommand,
+			nextStep: guidance.nextStep,
+		}),
 		nextCommand,
 	});
 }
 
-export function statusResponse(session?: Session | null) {
-	return toJson(summarizeSession(session ?? null));
+export function statusResponse(
+	session?: Session | null,
+	args: FlowStatusArgs = {},
+) {
+	const normalizedSession = session ?? null;
+	const guidance = explainSessionState(normalizedSession);
+	const operatorSummary = renderSessionStatusSummary(normalizedSession);
+	const view = args.view ?? "detailed";
+	if (view === "compact") {
+		const summary = summarizeSession(normalizedSession);
+		return toCompactJson({
+			status: summary.status,
+			summary: summary.summary,
+			guidance,
+			operatorSummary,
+			nextCommand: guidance.nextCommand,
+		});
+	}
+	return toJson({
+		...summarizeSession(normalizedSession),
+		guidance,
+		operatorSummary,
+	});
 }
 
 export function autoPrepareResponse(
@@ -117,7 +158,6 @@ export function autoPrepareResponse(
 			metadata: { mode, goal },
 		};
 	}
-
 	if (mode === "resume" && goal) {
 		return {
 			payload: toJson({
@@ -130,7 +170,6 @@ export function autoPrepareResponse(
 			metadata: { mode, goal },
 		};
 	}
-
 	return {
 		payload: toJson({
 			status: "ok",

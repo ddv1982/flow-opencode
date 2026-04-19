@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveInstallTarget } from "../src/installer";
 import {
 	FLOW_HISTORY_COMMAND,
 	FLOW_PLAN_WITH_GOAL_COMMAND,
@@ -52,6 +53,29 @@ function toolContext(worktree: string, directory?: string) {
 	>[1];
 }
 
+async function installDoctorPluginFixture(homeDir: string) {
+	const canonicalInstallPath = resolveInstallTarget({ homeDir });
+	await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
+		recursive: true,
+	});
+	await writeFile(canonicalInstallPath, "// flow plugin");
+	return canonicalInstallPath;
+}
+
+async function withHomeEnv<T>(
+	homeDir: string,
+	run: () => Promise<T>,
+): Promise<T> {
+	const originalHome = process.env.HOME;
+	process.env.HOME = homeDir;
+
+	try {
+		return await run();
+	} finally {
+		process.env.HOME = originalHome;
+	}
+}
+
 describe("runtime tools and recovery", () => {
 	test("flow_status returns a machine-readable missing-session summary", async () => {
 		const worktree = makeTempDir();
@@ -61,6 +85,151 @@ describe("runtime tools and recovery", () => {
 
 		expect(parsed.status).toBe("missing");
 		expect(parsed.summary).toBe("No active Flow session found.");
+		expect(parsed.guidance).toEqual({
+			category: "no_session",
+			status: "missing",
+			summary: "No active Flow session exists for this workspace.",
+			nextStep: "Start a new Flow session with /flow-plan <goal>.",
+			nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
+		});
+		expect(parsed.operatorSummary).toBe(
+			[
+				"Flow missing: No active Flow session exists for this workspace.",
+				"Next: Start a new Flow session with /flow-plan <goal>.",
+				"Command: /flow-plan <goal>",
+			].join("\n"),
+		);
+	});
+
+	test("flow_status supports a compact view for easier operator scanning", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const response = await tools.flow_status.execute(
+			{ view: "compact" },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("missing");
+		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+		expect(parsed.operatorSummary).toBe(
+			[
+				"Flow missing: No active Flow session exists for this workspace.",
+				"Next: Start a new Flow session with /flow-plan <goal>.",
+				"Command: /flow-plan <goal>",
+			].join("\n"),
+		);
+		expect(parsed.session).toBeUndefined();
+		expect(response.includes("\n")).toBe(false);
+	});
+
+	test("flow_doctor reports install, config, workspace, and session readiness without mutating session state", async () => {
+		const worktree = makeTempDir();
+		const homeDir = makeTempDir();
+		await installDoctorPluginFixture(homeDir);
+
+		await withHomeEnv(homeDir, async () => {
+			const tools = createTestTools();
+			const response = await tools.flow_doctor.execute(
+				{},
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+
+			expect(parsed.status).toBe("ok");
+			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+			expect(parsed.workspaceRoot).toBe(worktree);
+			expect(parsed.session).toBeNull();
+			expect(parsed.operatorSummary).toBe(
+				[
+					"Flow doctor ok: No blocking readiness issues found.",
+					"Next: Start a new Flow session with /flow-plan <goal>.",
+					"Command: /flow-plan <goal>",
+				].join("\n"),
+			);
+
+			expect(parsed.checks).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						id: "install",
+						status: "pass",
+					}),
+					expect.objectContaining({
+						id: "config",
+						status: "pass",
+					}),
+					expect.objectContaining({
+						id: "workspace",
+						status: "pass",
+					}),
+					expect.objectContaining({
+						id: "session_artifacts",
+						status: "skip",
+					}),
+					expect.objectContaining({
+						id: "guidance",
+						status: "skip",
+					}),
+				]),
+			);
+		});
+	});
+
+	test("flow_doctor supports a compact view for easier operator scanning", async () => {
+		const worktree = makeTempDir();
+		const homeDir = makeTempDir();
+		await withHomeEnv(homeDir, async () => {
+			const tools = createTestTools();
+			const response = await tools.flow_doctor.execute(
+				{ view: "compact" },
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+
+			expect(parsed.status).toBe("warn");
+			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+			expect(parsed.operatorSummary).toContain(
+				"Flow doctor warn: The canonical Flow plugin file was not found",
+			);
+			expect(parsed.operatorSummary).toContain(
+				"Fix: Run `bun run install:opencode` from the Flow repo or reinstall the latest release if OpenCode cannot load Flow.",
+			);
+			expect(parsed.operatorSummary).toContain(
+				"Then: Start a new Flow session with /flow-plan <goal>.",
+			);
+			expect(parsed.operatorSummary).toContain("Command: /flow-plan <goal>");
+			expect(parsed.checks).toBeUndefined();
+			expect(parsed.session).toBeUndefined();
+			expect(parsed.issues).toEqual([
+				expect.objectContaining({
+					id: "install",
+					status: "warn",
+				}),
+			]);
+			expect(response.includes("\n")).toBe(false);
+		});
+	});
+
+	test("flow_doctor warns when the canonical install path is missing", async () => {
+		const worktree = makeTempDir();
+		const homeDir = makeTempDir();
+		await withHomeEnv(homeDir, async () => {
+			const tools = createTestTools();
+			const response = await tools.flow_doctor.execute(
+				{},
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+			const installCheck = parsed.checks.find(
+				(check: { id: string }) => check.id === "install",
+			);
+
+			expect(parsed.status).toBe("warn");
+			expect(installCheck?.status).toBe("warn");
+			expect(String(installCheck?.remediation)).toContain(
+				"bun run install:opencode",
+			);
+		});
 	});
 
 	test("flow_history returns a machine-readable missing-history summary", async () => {
@@ -92,12 +261,51 @@ describe("runtime tools and recovery", () => {
 		const statusParsed = JSON.parse(statusResponse);
 		expect(statusParsed.status).toBe("missing");
 
+		const doctorResponse = await tools.flow_doctor.execute(
+			undefined as never,
+			toolContext(worktree),
+		);
+		const doctorParsed = JSON.parse(doctorResponse);
+		expect(typeof doctorParsed.status).toBe("string");
+
 		const historyResponse = await tools.flow_history.execute(
 			undefined as never,
 			toolContext(worktree),
 		);
 		const historyParsed = JSON.parse(historyResponse);
 		expect(historyParsed.status).toBe("missing");
+	});
+
+	test("flow_doctor reports missing rendered docs for an active session", async () => {
+		const worktree = makeTempDir();
+		const homeDir = makeTempDir();
+		await installDoctorPluginFixture(homeDir);
+
+		await withHomeEnv(homeDir, async () => {
+			const saved = await saveSession(
+				worktree,
+				createSession("Doctor fixture"),
+			);
+			await rm(getIndexDocPath(worktree, saved.id), { force: true });
+
+			const tools = createTestTools();
+			const response = await tools.flow_doctor.execute(
+				{},
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+			const artifactCheck = parsed.checks.find(
+				(check: { id: string }) => check.id === "session_artifacts",
+			);
+
+			expect(parsed.status).toBe("fail");
+			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+			expect(artifactCheck?.status).toBe("fail");
+			expect(artifactCheck?.details.indexDocReadable).toBe(false);
+			expect(parsed.operatorSummary).toContain(
+				"Flow doctor fail: Flow found an active session, but one or more persisted session artifacts are missing.",
+			);
+		});
 	});
 
 	test("flow_session_close requires an explicit closure kind", async () => {
@@ -209,6 +417,18 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.session.nextCommand).toBe(
 			flowSessionActivateCommand(first.id),
 		);
+		expect(parsed.guidance.nextCommand).toBe(
+			flowSessionActivateCommand(first.id),
+		);
+		expect(parsed.operatorSummary).toBe(
+			[
+				"Flow planning: Flow needs a draft plan before execution can begin.",
+				"Goal: First goal",
+				"Progress: 0/0 completed",
+				"Next: Activate this session to continue it in the current worktree.",
+				`Command: ${flowSessionActivateCommand(first.id)}`,
+			].join("\n"),
+		);
 		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
 		expect(await activeSessionId(worktree)).toBe(second.id);
 	});
@@ -237,6 +457,16 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.session.id).toBe(saved.id);
 		expect(parsed.session.goal).toBe("Completed goal");
 		expect(parsed.session.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+		expect(parsed.guidance.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+		expect(parsed.operatorSummary).toBe(
+			[
+				"Flow completed: Completed the Flow session.",
+				"Goal: Completed goal",
+				"Progress: 0/0 completed",
+				"Next: Start a new goal when you are ready for more work.",
+				"Command: /flow-plan <goal>",
+			].join("\n"),
+		);
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 

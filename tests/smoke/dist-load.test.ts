@@ -13,6 +13,7 @@ type TestTool = {
 };
 type FlowToolName =
 	| "flow_status"
+	| "flow_doctor"
 	| "flow_history"
 	| "flow_history_show"
 	| "flow_session_activate"
@@ -35,7 +36,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, seven commands, sixteen tools, and callable executors", async () => {
+	test("dist bundle exposes five agents, eight commands, seventeen tools, and callable executors", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -55,8 +56,8 @@ describe("built dist smoke load", () => {
 		);
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(7);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(16);
+		expect(Object.keys(config.command ?? {})).toHaveLength(8);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -71,6 +72,7 @@ describe("built dist smoke load", () => {
 
 		const toolArgs: Record<FlowToolName, unknown> = {
 			flow_status: {},
+			flow_doctor: {},
 			flow_history: {},
 			flow_history_show: { sessionId },
 			flow_session_activate: { sessionId },

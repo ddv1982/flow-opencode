@@ -10,6 +10,7 @@ export {
 	parseToolArgs,
 	persistTransition,
 	resolveSessionRoot,
+	toCompactJson,
 	toJson,
 	withPersistedTransition,
 	withSession,

@@ -60,6 +60,9 @@ describe("transition consolidation", () => {
 				]),
 		);
 		expect(Object.keys(sessionToolModuleCounts)).toEqual([
+			"doctor-checks.ts",
+			"doctor-config.ts",
+			"doctor.ts",
 			"history-tools.ts",
 			"lifecycle-tools.ts",
 			"next-command-policy.ts",
@@ -100,9 +103,10 @@ describe("transition consolidation", () => {
 
 		expect(historyTools).toContain("export function createHistorySessionTools");
 		expect(historyTools).toContain(
-			"Session tool boundary: history/lookup/activation tool registrations only.",
+			"Session tool boundary: status/doctor/history/lookup/activation tool registrations only.",
 		);
 		expect(historyTools).toContain("flow_status");
+		expect(historyTools).toContain("flow_doctor");
 		expect(historyTools).toContain("flow_history");
 		expect(historyTools).toContain("flow_history_show");
 		expect(historyTools).toContain("flow_session_activate");

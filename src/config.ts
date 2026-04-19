@@ -11,6 +11,7 @@ import {
 } from "./prompts/agents";
 import {
 	FLOW_AUTO_COMMAND_TEMPLATE,
+	FLOW_DOCTOR_COMMAND_TEMPLATE,
 	FLOW_HISTORY_COMMAND_TEMPLATE,
 	FLOW_PLAN_COMMAND_TEMPLATE,
 	FLOW_RESET_COMMAND_TEMPLATE,
@@ -101,6 +102,11 @@ const FLOW_COMMANDS = {
 		description: "Inspect the active Flow session",
 		agent: "flow-control",
 		template: FLOW_STATUS_COMMAND_TEMPLATE,
+	},
+	"flow-doctor": {
+		description: "Check Flow readiness for the current workspace",
+		agent: "flow-control",
+		template: FLOW_DOCTOR_COMMAND_TEMPLATE,
 	},
 	"flow-history": {
 		description: "Inspect stored Flow session history",

@@ -25,7 +25,7 @@ function makeTempDir(): string {
 function runPackInvariants(
 	packJson: unknown,
 	changelogText: string,
-	packageVersion = "1.0.9",
+	packageVersion = "1.0.10",
 ) {
 	const directory = makeTempDir();
 	const packJsonPath = join(directory, "pack.json");
@@ -120,11 +120,11 @@ describe("pack invariants script", () => {
 				},
 			],
 			"## [1.2.3] - 2026-04-18\n",
-			"1.0.9",
+			"1.0.10",
 		);
 		expect(await process.exited).toBe(1);
 		expect(await new Response(process.stderr).text()).toContain(
-			"package.json version 1.0.9 does not match top CHANGELOG version 1.2.3",
+			"package.json version 1.0.10 does not match top CHANGELOG version 1.2.3",
 		);
 	});
 });

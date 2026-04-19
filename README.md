@@ -100,6 +100,7 @@ If you are upgrading from an older release:
 1. `/flow-auto Add a workflow plugin for OpenCode`
 2. Let Flow detect the stack, persist planning context, research when needed, then plan, execute, validate, review, and continue until complete or blocked
 3. Use `/flow-status` at any time to inspect progress
+4. Use `/flow-status detail` if you want the fuller structured view
 
 ### Resume behavior
 
@@ -107,6 +108,27 @@ If you are upgrading from an older release:
 - `/flow-auto resume` is the explicit equivalent
 - if no active session exists, Flow asks for a goal
 - completed sessions are not resumable
+
+### Readiness check
+
+Run `/flow-doctor` when you want a non-destructive readiness check for:
+
+- canonical install health
+- command/agent injection health
+- workspace writability
+- active session artifact health
+- the current blocker and recommended next step
+
+Use `/flow-doctor detail` if you want the fuller structured view.
+
+### What `/flow-status` and `/flow-doctor` show
+
+Both commands are designed to be easy to scan.
+
+- they lead with the current situation in plain language
+- they tell you the next recommended step
+- they show the most relevant next command to run
+- they still include structured details underneath for deeper inspection
 
 ## Commands
 
@@ -120,7 +142,8 @@ Flow adds these slash commands to OpenCode:
 | `/flow-run [feature-id]` | Execute exactly one approved feature |
 | `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
 | `/flow-auto resume` | Resume the active autonomous session |
-| `/flow-status` | Show the current session summary |
+| `/flow-status [detail]` | Show the current session summary; default is compact, `detail` shows the fuller structured view |
+| `/flow-doctor [detail]` | Run non-destructive Flow readiness checks; default is compact, `detail` shows the fuller structured view |
 | `/flow-history` | Show active, stored, and completed session history |
 | `/flow-history show <session-id>` | Show a specific active, stored, or completed session |
 | `/flow-session activate <id>` | Switch the active session |
