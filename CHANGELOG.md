@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.4] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.4 cleans up the deterministic planning-context release by restoring the changelog structure and simplifying the new planning-context tool implementation. This keeps the 1.0.3 feature behavior intact while tightening release metadata and runtime-tool maintainability.
+
+### Changed
+
+- Restored the missing markdown heading structure for the 1.0.2 changelog entry.
+- Simplified `flow_plan_context_record` by removing the redundant raw-input cast and consolidating schema imports.
+- Revalidated the full release suite after the cleanup.
+
 ## [1.0.3] - 2026-04-19
 
 ### Highlights
@@ -17,7 +29,7 @@ Flow 1.0.3 adds deterministic planning context capture before planning, includin
 - Restricted explicit decision gating to `/flow-auto`, where unresolved meaningful decisions now stop with options, rationale, and a recommended path.
 - Updated `README.md` prose and Mermaid workflow diagram to document deterministic planning context, research triggers, and `/flow-auto` decision pauses.
 
-[1.0.2] - 2026-04-19
+## [1.0.2] - 2026-04-19
 
 ### Highlights
 

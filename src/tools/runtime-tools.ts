@@ -10,8 +10,10 @@ import {
 	normalizeReviewerDecision,
 	normalizeWorkerResult,
 } from "../runtime/contract-normalization";
-import type { WorkerResult } from "../runtime/schema";
-import { PlanningContextArgsSchema } from "../runtime/schema";
+import {
+	PlanningContextArgsSchema,
+	type WorkerResult,
+} from "../runtime/schema";
 import { summarizeSession } from "../runtime/summary";
 import {
 	applyPlan,
@@ -93,23 +95,7 @@ export function createRuntimeTools() {
 				PlanningContextArgsSchema.shape as any,
 			execute: withParsedArgs(
 				PlanningContextArgsSchema,
-				async (rawInput, context: ToolContext) => {
-					const input = rawInput as {
-						repoProfile?: string[];
-						research?: string[];
-						implementationApproach?: {
-							chosenDirection: string;
-							keyConstraints?: string[];
-							validationSignals?: string[];
-							sources?: string[];
-						};
-						decisionLog?: Array<{
-							question: string;
-							options: Array<{ label: string; tradeoffs?: string[] }>;
-							recommendation: string;
-							rationale?: string[];
-						}>;
-					};
+				async (input, context: ToolContext) => {
 					context.metadata?.({
 						title: "Record planning context",
 						metadata: {
