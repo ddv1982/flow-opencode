@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.8] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.8 finishes the session-storage redesign around explicit `active/`, `stored/`, and `completed/` directories. This release removes the old pointer-file model, aligns runtime/tool/test terminology with the new completed-history behavior, and simplifies completed-session storage logic so the filesystem layout, runtime behavior, and docs all say the same thing.
+
+### Changed
+
+- Replaced the old `.flow/active` pointer plus `.flow/sessions/` and `.flow/archive/` layout with directory-based `.flow/active/<session-id>/`, `.flow/stored/<session-id>/`, and `.flow/completed/<session-id>-<timestamp>/`.
+- Updated session persistence, activation, history lookup, render syncing, and control-tool payloads to use `stored` and `completed` terminology consistently.
+- Centralized completed-session naming, collision handling, and lookup logic in a shared runtime storage helper to reduce duplication and layering drift.
+
+### Removed
+
+- Removed the active-session pointer-file model from runtime persistence.
+- Removed the remaining archive-oriented runtime/test terminology in favor of completed-session wording.
+- Removed the redundant whitespace-only goal regression file after folding that coverage into the path-traversal suite.
+
 ## [1.0.7] - 2026-04-19
 
 ### Highlights

@@ -3,6 +3,7 @@ import { mkdirSync, statSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { join } from "node:path";
 import {
+	getCompletedSessionPath,
 	getFeatureDocPath,
 	getFlowDir,
 	getSessionPath,
@@ -39,7 +40,7 @@ describe("path traversal hardening", () => {
 		).mockImplementation(async () => {
 			throw new Error("should not read sessions");
 		});
-		const archivedLookupSpy = spyOn(
+		const lookupSpy = spyOn(
 			sessionHistory,
 			"loadStoredSession",
 		).mockImplementation(async () => {
@@ -62,7 +63,7 @@ describe("path traversal hardening", () => {
 			expect(parsed.summary).toContain("sessionId");
 		}
 
-		expect(archivedLookupSpy).not.toHaveBeenCalled();
+		expect(lookupSpy).not.toHaveBeenCalled();
 		expect(sessionReadSpy).not.toHaveBeenCalled();
 	});
 
@@ -126,6 +127,9 @@ describe("path traversal hardening", () => {
 			expect(() => getSessionPath(worktree, sessionId)).toThrow(
 				InvalidFlowPathInputError,
 			);
+			expect(() => getSessionPath(worktree, sessionId, "stored")).toThrow(
+				InvalidFlowPathInputError,
+			);
 		}
 
 		for (const featureId of [
@@ -144,20 +148,41 @@ describe("path traversal hardening", () => {
 			).toThrow(InvalidFlowPathInputError);
 		}
 
-		const validSessionPath = getSessionPath(worktree, "safe-session");
+		const validActiveSessionPath = getSessionPath(worktree, "safe-session");
+		const validStoredSessionPath = getSessionPath(
+			worktree,
+			"safe-session",
+			"stored",
+		);
+		const validCompletedSessionPath = getCompletedSessionPath(
+			worktree,
+			"safe-session-20260419T120000.000",
+		);
 		const validFeaturePath = getFeatureDocPath(
 			worktree,
 			"safe-session",
 			"safe-feature",
 		);
-		expect(validSessionPath).toBe(
-			join(worktree, ".flow", "sessions", "safe-session", "session.json"),
+		expect(validActiveSessionPath).toBe(
+			join(worktree, ".flow", "active", "safe-session", "session.json"),
+		);
+		expect(validStoredSessionPath).toBe(
+			join(worktree, ".flow", "stored", "safe-session", "session.json"),
+		);
+		expect(validCompletedSessionPath).toBe(
+			join(
+				worktree,
+				".flow",
+				"completed",
+				"safe-session-20260419T120000.000",
+				"session.json",
+			),
 		);
 		expect(validFeaturePath).toBe(
 			join(
 				worktree,
 				".flow",
-				"sessions",
+				"active",
 				"safe-session",
 				"docs",
 				"features",
@@ -166,13 +191,13 @@ describe("path traversal hardening", () => {
 		);
 
 		expect(getSessionPath(worktree, "dot.dot")).toBe(
-			join(worktree, ".flow", "sessions", "dot.dot", "session.json"),
+			join(worktree, ".flow", "active", "dot.dot", "session.json"),
 		);
 		expect(getFeatureDocPath(worktree, "safe-session", "dot.dot")).toBe(
 			join(
 				worktree,
 				".flow",
-				"sessions",
+				"active",
 				"safe-session",
 				"docs",
 				"features",
@@ -184,9 +209,9 @@ describe("path traversal hardening", () => {
 	test("flow_plan_start rejects whitespace-only goals before creating a session directory", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const sessionsDir = join(worktree, ".flow", "sessions");
-		mkdirSync(sessionsDir, { recursive: true });
-		const before = await fsPromises.readdir(sessionsDir);
+		const activeDir = join(worktree, ".flow", "active");
+		mkdirSync(activeDir, { recursive: true });
+		const before = await fsPromises.readdir(activeDir);
 
 		for (const goal of [" ", "\t", "\n\t "]) {
 			const response = await tools.flow_plan_start.execute(
@@ -198,6 +223,6 @@ describe("path traversal hardening", () => {
 			expect(parsed.summary).toContain("goal");
 		}
 
-		expect(await fsPromises.readdir(sessionsDir)).toEqual(before);
+		expect(await fsPromises.readdir(activeDir)).toEqual(before);
 	});
 });

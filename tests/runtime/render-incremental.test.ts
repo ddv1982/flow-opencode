@@ -8,6 +8,7 @@ import {
 import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
 import {
 	createSession,
+	loadStoredSession,
 	saveSession,
 	syncSessionArtifacts,
 } from "../../src/runtime/session";
@@ -90,7 +91,7 @@ describe("incremental markdown rendering", () => {
 		const worktree = makeTempDir();
 		const session = createApprovedSession(5);
 		const saved = await saveSession(worktree, session);
-		const featuresDir = `${worktree}/.flow/sessions/${saved.id}/docs/features`;
+		const featuresDir = `${worktree}/.flow/active/${saved.id}/docs/features`;
 
 		expect((await readdir(featuresDir)).length).toBe(5);
 
@@ -103,7 +104,14 @@ describe("incremental markdown rendering", () => {
 		const worktree = makeTempDir();
 		const session = createCompletedSession(5);
 		const saved = await saveSession(worktree, session);
-		const index = await readFile(getIndexDocPath(worktree, saved.id), "utf8");
+		const stored = await loadStoredSession(worktree, saved.id);
+		if (!stored?.completedPath) {
+			throw new Error("Expected completed session lookup.");
+		}
+		const index = await readFile(
+			`${worktree}/${stored.completedPath}/docs/index.md`,
+			"utf8",
+		);
 
 		expect(index).not.toContain("## Active Feature");
 		expect(index).toContain("- active feature: none");
@@ -134,7 +142,7 @@ describe("incremental markdown rendering", () => {
 		const worktree = makeTempDir();
 		const session = createApprovedSession(100);
 		const saved = await saveSession(worktree, session);
-		const featuresDir = `${worktree}/.flow/sessions/${saved.id}/docs/features`;
+		const featuresDir = `${worktree}/.flow/active/${saved.id}/docs/features`;
 
 		expect((await readdir(featuresDir)).length).toBe(100);
 

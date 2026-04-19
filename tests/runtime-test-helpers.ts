@@ -1,8 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getActiveSessionPath } from "../src/runtime/paths";
+import { readActiveSessionId } from "../src/runtime/session";
 import { createTools } from "../src/tools";
 import type { ToolContext } from "../src/tools/schemas";
 import {
@@ -51,7 +50,11 @@ export function createTempDirRegistry(prefix = "flow-opencode-") {
 }
 
 export async function activeSessionId(worktree: string): Promise<string> {
-	return (await readFile(getActiveSessionPath(worktree), "utf8")).trim();
+	const sessionId = await readActiveSessionId(worktree);
+	if (!sessionId) {
+		throw new Error("No active session found.");
+	}
+	return sessionId;
 }
 
 export function samplePlan() {

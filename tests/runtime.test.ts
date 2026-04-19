@@ -3,7 +3,6 @@ import { mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-	getActiveSessionPath,
 	getFeatureDocPath,
 	getIndexDocPath,
 	getSessionPath,
@@ -78,7 +77,7 @@ describe("runtime transitions", () => {
 		expect(indexDoc).toContain("goal: Build a workflow plugin");
 	});
 
-	test("stores active and historical sessions under .flow/sessions", async () => {
+	test("stores active sessions under .flow/active and parked sessions under .flow/stored", async () => {
 		const worktree = makeTempDir();
 		const first = await saveSession(worktree, createSession("First goal"));
 
@@ -94,7 +93,7 @@ describe("runtime transitions", () => {
 
 		expect(await activeSessionId(worktree)).toBe(second.id);
 		await expect(
-			readFile(getSessionPath(worktree, first.id), "utf8"),
+			readFile(getSessionPath(worktree, first.id, "stored"), "utf8"),
 		).resolves.toContain('"goal": "First goal"');
 		await expect(
 			readFile(getSessionPath(worktree, second.id), "utf8"),
@@ -107,10 +106,9 @@ describe("runtime transitions", () => {
 	test("rejects malformed persisted session data", async () => {
 		const worktree = makeTempDir();
 		const sessionId = "malformed-session";
-		mkdirSync(join(worktree, ".flow", "sessions", sessionId), {
+		mkdirSync(join(worktree, ".flow", "active", sessionId), {
 			recursive: true,
 		});
-		await writeFile(getActiveSessionPath(worktree), `${sessionId}\n`, "utf8");
 		await writeFile(
 			getSessionPath(worktree, sessionId),
 			"{not valid json",
@@ -123,10 +121,9 @@ describe("runtime transitions", () => {
 	test("rejects persisted session data with duplicate keys", async () => {
 		const worktree = makeTempDir();
 		const sessionId = "duplicate-session";
-		mkdirSync(join(worktree, ".flow", "sessions", sessionId), {
+		mkdirSync(join(worktree, ".flow", "active", sessionId), {
 			recursive: true,
 		});
-		await writeFile(getActiveSessionPath(worktree), `${sessionId}\n`, "utf8");
 		await writeFile(
 			getSessionPath(worktree, sessionId),
 			'{"id":"a","id":"b"}',
@@ -878,7 +875,10 @@ describe("runtime transitions", () => {
 			'"goal": "Build a workflow plugin"',
 		);
 		await expect(
-			readFile(join(directory, ".flow", "active"), "utf8"),
+			readFile(
+				join(directory, ".flow", "active", parsed.session.id, "session.json"),
+				"utf8",
+			),
 		).resolves.toContain(parsed.session.id);
 	});
 
@@ -898,7 +898,10 @@ describe("runtime transitions", () => {
 			'"goal": "Build a workflow plugin"',
 		);
 		await expect(
-			readFile(join(directory, ".flow", "active"), "utf8"),
+			readFile(
+				join(directory, ".flow", "active", parsed.session.id, "session.json"),
+				"utf8",
+			),
 		).resolves.toContain(parsed.session.id);
 	});
 

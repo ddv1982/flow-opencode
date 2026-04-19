@@ -153,7 +153,7 @@ describe("cross-area autonomous flow", () => {
 		const sessionPath = join(
 			worktree,
 			".flow",
-			"sessions",
+			"active",
 			sessionId,
 			"session.json",
 		);

@@ -1,12 +1,24 @@
-import { getSessionPath } from "./paths";
-import { renderSessionDocs } from "./render";
+import { rename } from "node:fs/promises";
+import {
+	getActiveSessionDir,
+	getSessionPath,
+	getStoredSessionDir,
+} from "./paths";
+import { renderSessionDocs, renderSessionDocsAtDir } from "./render";
 import type { Session } from "./schema";
 import {
+	allocateCompletedSessionLocation,
+	completedTimestampForSession,
+	findNewestCompletedSession,
+	moveSessionDirToCompleted,
+} from "./session-completed-storage";
+import {
+	findStoredSessionDir,
 	readSessionFromPath,
 	resolveActiveSessionId,
 	withSessionSaveLock,
-	writeActiveSessionId,
 	writeSessionFile,
+	writeSessionFileAtDir,
 } from "./session-workspace";
 import { nowIso } from "./util";
 
@@ -20,6 +32,69 @@ function refreshUpdatedAt(session: Session): Session {
 	};
 }
 
+async function persistCompletedSession(
+	worktree: string,
+	session: Session,
+	includeArtifacts: boolean,
+): Promise<void> {
+	const completedAt = completedTimestampForSession(session);
+	const activeSessionId = await resolveActiveSessionId(worktree);
+	if (activeSessionId === session.id) {
+		const activeDir = getActiveSessionDir(worktree, session.id);
+		await writeSessionFileAtDir(activeDir, session);
+		if (includeArtifacts) {
+			await renderSessionDocsAtDir(activeDir, session);
+		}
+
+		const moved = await moveSessionDirToCompleted(
+			worktree,
+			session.id,
+			activeDir,
+			completedAt,
+		);
+		if (!moved) {
+			return;
+		}
+		return;
+	}
+
+	const location = await allocateCompletedSessionLocation(
+		worktree,
+		session.id,
+		completedAt,
+	);
+	await writeSessionFileAtDir(location.completedDir, session);
+	if (includeArtifacts) {
+		await renderSessionDocsAtDir(location.completedDir, session);
+	}
+}
+
+async function persistOpenSession(
+	worktree: string,
+	session: Session,
+	includeArtifacts: boolean,
+): Promise<void> {
+	const activeSessionId = await resolveActiveSessionId(worktree);
+	if (activeSessionId && activeSessionId !== session.id) {
+		await rename(
+			getActiveSessionDir(worktree, activeSessionId),
+			getStoredSessionDir(worktree, activeSessionId),
+		);
+	}
+
+	if (activeSessionId !== session.id) {
+		const storedDir = await findStoredSessionDir(worktree, session.id);
+		if (storedDir) {
+			await rename(storedDir, getActiveSessionDir(worktree, session.id));
+		}
+	}
+
+	await writeSessionFile(worktree, session, "active");
+	if (includeArtifacts) {
+		await renderSessionDocs(worktree, session, "active");
+	}
+}
+
 export async function loadSession(worktree: string): Promise<Session | null> {
 	const sessionId = await resolveActiveSessionId(worktree);
 	if (!sessionId) {
@@ -27,7 +102,9 @@ export async function loadSession(worktree: string): Promise<Session | null> {
 	}
 
 	try {
-		return await readSessionFromPath(getSessionPath(worktree, sessionId));
+		return await readSessionFromPath(
+			getSessionPath(worktree, sessionId, "active"),
+		);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
 			return null;
@@ -43,8 +120,11 @@ export async function saveSessionState(
 ): Promise<Session> {
 	return withSessionSaveLock(worktree, async () => {
 		const normalized = refreshUpdatedAt(session);
-		await writeSessionFile(worktree, normalized);
-		await writeActiveSessionId(worktree, normalized.id);
+		if (normalized.status === "completed") {
+			await persistCompletedSession(worktree, normalized, false);
+		} else {
+			await persistOpenSession(worktree, normalized, false);
+		}
 		return normalized;
 	});
 }
@@ -53,7 +133,16 @@ export async function syncSessionArtifacts(
 	worktree: string,
 	session: Session,
 ): Promise<void> {
-	await renderSessionDocs(worktree, session);
+	if (session.status === "completed") {
+		const completed = await findNewestCompletedSession(worktree, session.id);
+		if (completed) {
+			await renderSessionDocsAtDir(completed.completedDir, session);
+			return;
+		}
+		return;
+	}
+
+	await renderSessionDocs(worktree, session, "active");
 }
 
 export async function saveSession(
@@ -62,9 +151,11 @@ export async function saveSession(
 ): Promise<Session> {
 	return withSessionSaveLock(worktree, async () => {
 		const normalized = refreshUpdatedAt(session);
-		await writeSessionFile(worktree, normalized);
-		await writeActiveSessionId(worktree, normalized.id);
-		await syncSessionArtifacts(worktree, normalized);
+		if (normalized.status === "completed") {
+			await persistCompletedSession(worktree, normalized, true);
+		} else {
+			await persistOpenSession(worktree, normalized, true);
+		}
 		return normalized;
 	});
 }

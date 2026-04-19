@@ -44,14 +44,14 @@ describe("workspace idempotency", () => {
 		await ensureWorkspace(worktree);
 		await writeFile(
 			gitignorePath,
-			"# local overrides\n/my-temp\nactive\nsessions/\n",
+			"# local overrides\n/my-temp\nactive/\nstored/\n",
 			"utf8",
 		);
 
 		await ensureWorkspace(worktree);
 
 		await expect(readFile(gitignorePath, "utf8")).resolves.toBe(
-			"# local overrides\n/my-temp\nactive\nsessions/\narchive/\n",
+			"# local overrides\n/my-temp\nactive/\nstored/\ncompleted/\n",
 		);
 	});
 });

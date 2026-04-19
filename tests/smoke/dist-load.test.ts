@@ -148,12 +148,13 @@ describe("built dist smoke load", () => {
 		);
 		expect(typeof historyResponse.status).toBe("string");
 		if (
-			historyResponse.status === "ok" &&
-			historyResponse.history.sessions.length > 0
+			(historyResponse.status === "ok" && historyResponse.history.active) ||
+			historyResponse.history.stored.length > 0
 		) {
-			expect(historyResponse.history.sessions[0].id).toBe(
-				planStartResponse.session.id,
-			);
+			expect(
+				historyResponse.history.active?.id ??
+					historyResponse.history.stored[0]?.id,
+			).toBe(planStartResponse.session.id);
 		}
 	});
 });

@@ -71,8 +71,7 @@ export function createHistorySessionTools() {
 		}),
 
 		flow_history: tool({
-			description:
-				"Show stored Flow session history across active and archived runs",
+			description: "Show active, stored, and completed Flow session history",
 			args: FlowHistoryArgsShape,
 			execute: withParsedArgs(
 				FlowHistoryArgsSchema,
@@ -91,7 +90,8 @@ export function createHistorySessionTools() {
 		}),
 
 		flow_history_show: tool({
-			description: "Show a specific stored Flow session by id",
+			description:
+				"Show a specific active, stored, or completed Flow session by id",
 			args: FlowHistoryShowArgsShape,
 			execute: withParsedArgs(
 				FlowHistoryShowArgsSchema,

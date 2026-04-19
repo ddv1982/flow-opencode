@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessionSchema } from "../../src/runtime/schema";
+import { loadStoredSession } from "../../src/runtime/session";
 import {
 	cleanupManagedTempDirs,
 	createToolContext,
@@ -517,39 +518,26 @@ describe("cross-area manual flow", () => {
 		).toEqual(expectedEnvelopeSnapshot);
 
 		const sessionId = planStart.session.id as string;
-		const sessionPath = join(
-			worktree,
-			".flow",
-			"sessions",
-			sessionId,
-			"session.json",
-		);
+		const stored = await loadStoredSession(worktree, sessionId);
+		if (!stored?.completedPath) {
+			throw new Error("Expected completed session lookup.");
+		}
+		const sessionPath = join(worktree, stored.completedPath, "session.json");
 		const rawSession = JSON.parse(await readFile(sessionPath, "utf8"));
 		const parsedSession = SessionSchema.parse(rawSession);
 		expect(parsedSession.id).toBe(sessionId);
 		expect(parsedSession.status).toBe("completed");
 		expect(parsedSession.timestamps.completedAt).toBeString();
 
-		const activePointer = await readFile(
-			join(worktree, ".flow", "active"),
-			"utf8",
-		);
-		expect(activePointer.trim()).toBe(sessionId);
+		expect(stored.source).toBe("completed");
+		expect(stored.active).toBe(false);
 
 		const indexDoc = await readFile(
-			join(worktree, ".flow", "sessions", sessionId, "docs", "index.md"),
+			join(worktree, stored.completedPath, "docs", "index.md"),
 			"utf8",
 		);
 		const featureDoc = await readFile(
-			join(
-				worktree,
-				".flow",
-				"sessions",
-				sessionId,
-				"docs",
-				"features",
-				"dist-smoke.md",
-			),
+			join(worktree, stored.completedPath, "docs", "features", "dist-smoke.md"),
 			"utf8",
 		);
 		expect(indexDoc).toContain("Ship the dist smoke workflow");

@@ -502,8 +502,12 @@ describe("runtime summary", () => {
 			);
 			const parsed = JSON.parse(response);
 
+			const expected =
+				session.status === "completed"
+					? summarizeSession(null)
+					: summarizeSession(session);
 			expect(normalizeSummaryFixture(parsed)).toEqual(
-				normalizeSummaryFixture(summarizeSession(session)),
+				normalizeSummaryFixture(expected),
 			);
 		}
 	});

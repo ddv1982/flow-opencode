@@ -1,12 +1,12 @@
 export type {
-	ArchivedSessionHistoryEntry,
+	CompletedSessionHistoryEntry,
 	SessionHistoryEntry,
 	StoredSessionLookup,
 } from "./session-history";
 export { listSessionHistory, loadStoredSession } from "./session-history";
 export {
 	activateSession,
-	archiveSession,
+	completeSession,
 	createSession,
 	deleteSession,
 	deleteSessionArtifacts,
@@ -19,13 +19,12 @@ export {
 	syncSessionArtifacts,
 } from "./session-persistence";
 export {
-	clearPreparedSessionDir,
-	ensureSessionDirPrepared,
-	ensureSessionDocsPrepared,
-	ensureSessionFeaturesDocsPrepared,
 	ensureWorkspace,
+	findStoredSessionDir,
 	readActiveSessionId,
 	resetSessionWorkspaceFsForTests,
+	resolveActiveSessionId,
 	setSessionWorkspaceFsForTests,
-	writeActiveSessionId,
+	writeSessionFile,
+	writeSessionFileAtDir,
 } from "./session-workspace";

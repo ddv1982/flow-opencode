@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	FLOW_HISTORY_COMMAND,
@@ -7,7 +7,7 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowSessionActivateCommand,
 } from "../src/runtime/constants";
-import { getArchiveDir, getIndexDocPath } from "../src/runtime/paths";
+import { getIndexDocPath } from "../src/runtime/paths";
 import {
 	createSession,
 	deleteSession,
@@ -75,8 +75,9 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.status).toBe("missing");
 		expect(parsed.summary).toBe("No Flow session history found.");
 		expect(parsed.history.activeSessionId).toBeNull();
-		expect(parsed.history.sessions).toEqual([]);
-		expect(parsed.history.archived).toEqual([]);
+		expect(parsed.history.active).toBeNull();
+		expect(parsed.history.stored).toEqual([]);
+		expect(parsed.history.completed).toEqual([]);
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
@@ -127,11 +128,14 @@ describe("runtime tools and recovery", () => {
 
 		expect(parsed.status).toBe("ok");
 		await expect(
-			readFile(join(directory, ".flow", "active"), "utf8"),
+			readFile(
+				join(directory, ".flow", "active", parsed.session.id, "session.json"),
+				"utf8",
+			),
 		).resolves.toContain(parsed.session.id);
 	});
 
-	test("flow_history lists active and archived session runs", async () => {
+	test("flow_history lists stored and completed session runs", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const first = await saveSession(worktree, createSession("First goal"));
@@ -142,12 +146,12 @@ describe("runtime tools and recovery", () => {
 			toolContext(worktree),
 		);
 		const resetParsed = JSON.parse(resetResponse);
-		expect(resetParsed.archivedSessionId).toBe(second.id);
-		expect(resetParsed.archivedTo).toMatch(
-			new RegExp(`^\\.flow/archive/${second.id}-`),
+		expect(resetParsed.completedSessionId).toBe(second.id);
+		expect(resetParsed.completedTo).toMatch(
+			new RegExp(`^\\.flow/completed/${second.id}-`),
 		);
 		await expect(
-			readFile(join(worktree, resetParsed.archivedTo, "session.json"), "utf8"),
+			readFile(join(worktree, resetParsed.completedTo, "session.json"), "utf8"),
 		).resolves.toContain('"goal": "Second goal"');
 
 		const response = await tools.flow_history.execute(
@@ -159,26 +163,26 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toContain("2 Flow session entries");
 		expect(parsed.history.activeSessionId).toBeNull();
-		expect(parsed.history.sessions).toHaveLength(1);
-		expect(parsed.history.sessions[0]).toMatchObject({
+		expect(parsed.history.active).toBeNull();
+		expect(parsed.history.stored).toHaveLength(1);
+		expect(parsed.history.stored[0]).toMatchObject({
 			id: first.id,
 			goal: "First goal",
 			active: false,
-			path: `.flow/sessions/${first.id}`,
+			path: `.flow/stored/${first.id}`,
 		});
-		expect(parsed.history.archived).toHaveLength(1);
-		expect(parsed.history.archived[0]).toMatchObject({
+		expect(parsed.history.completed).toHaveLength(1);
+		expect(parsed.history.completed[0]).toMatchObject({
 			id: second.id,
 			goal: "Second goal",
 			active: false,
-			archivePath: resetParsed.archivedTo,
+			completedPath: resetParsed.completedTo,
 		});
-		expect(parsed.history.archived[0].path).toBe(resetParsed.archivedTo);
+		expect(parsed.history.completed[0].path).toBe(resetParsed.completedTo);
 		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
-		expect(getArchiveDir(worktree)).toContain(".flow/archive");
 	});
 
-	test("flow_history_show returns active stored session details by id", async () => {
+	test("flow_history_show returns stored session details by id", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const first = await saveSession(worktree, createSession("First goal"));
@@ -191,10 +195,10 @@ describe("runtime tools and recovery", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ok");
-		expect(parsed.source).toBe("sessions");
+		expect(parsed.source).toBe("stored");
 		expect(parsed.active).toBe(false);
-		expect(parsed.path).toBe(`.flow/sessions/${first.id}`);
-		expect(parsed.archivePath).toBeNull();
+		expect(parsed.path).toBe(`.flow/stored/${first.id}`);
+		expect(parsed.completedPath).toBeNull();
 		expect(parsed.session.id).toBe(first.id);
 		expect(parsed.session.goal).toBe("First goal");
 		expect(parsed.session.nextCommand).toBe(
@@ -204,10 +208,10 @@ describe("runtime tools and recovery", () => {
 		expect(await activeSessionId(worktree)).toBe(second.id);
 	});
 
-	test("flow_history_show returns archived session details by id", async () => {
+	test("flow_history_show returns completed session details by id", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const saved = await saveSession(worktree, createSession("Archived goal"));
+		const saved = await saveSession(worktree, createSession("Completed goal"));
 
 		const resetResponse = await tools.flow_reset_session.execute(
 			{},
@@ -221,12 +225,12 @@ describe("runtime tools and recovery", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ok");
-		expect(parsed.source).toBe("archive");
+		expect(parsed.source).toBe("completed");
 		expect(parsed.active).toBe(false);
-		expect(parsed.path).toBe(resetParsed.archivedTo);
-		expect(parsed.archivePath).toBe(resetParsed.archivedTo);
+		expect(parsed.path).toBe(resetParsed.completedTo);
+		expect(parsed.completedPath).toBe(resetParsed.completedTo);
 		expect(parsed.session.id).toBe(saved.id);
-		expect(parsed.session.goal).toBe("Archived goal");
+		expect(parsed.session.goal).toBe("Completed goal");
 		expect(parsed.session.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 		expect(parsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 	});
@@ -252,13 +256,13 @@ describe("runtime tools and recovery", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ok");
-		expect(parsed.source).toBe("sessions");
+		expect(parsed.source).toBe("completed");
 		expect(parsed.session.status).toBe("completed");
 		expect(parsed.session.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
-	test("flow_session_activate switches the active session pointer", async () => {
+	test("flow_session_activate switches the active session directory", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const first = await saveSession(worktree, createSession("First goal"));
@@ -301,7 +305,7 @@ describe("runtime tools and recovery", () => {
 		expect(activateParsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 	});
 
-	test("flow_reset_session archives the active session and clears the active pointer", async () => {
+	test("flow_reset_session completes the active session and clears the active pointer", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const saved = await saveSession(
@@ -317,19 +321,19 @@ describe("runtime tools and recovery", () => {
 
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toBe(
-			"Archived and cleared the active Flow session.",
+			"Completed and cleared the active Flow session.",
 		);
-		expect(parsed.archivedSessionId).toBe(saved.id);
-		expect(parsed.archivedTo).toMatch(
-			new RegExp(`^\\.flow/archive/${saved.id}-`),
+		expect(parsed.completedSessionId).toBe(saved.id);
+		expect(parsed.completedTo).toMatch(
+			new RegExp(`^\\.flow/completed/${saved.id}-`),
 		);
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 		expect(await loadSession(worktree)).toBeNull();
 		await expect(
-			readFile(join(worktree, parsed.archivedTo, "session.json"), "utf8"),
+			readFile(join(worktree, parsed.completedTo, "session.json"), "utf8"),
 		).resolves.toContain('"goal": "Build a workflow plugin"');
 		await expect(
-			readFile(join(worktree, parsed.archivedTo, "docs", "index.md"), "utf8"),
+			readFile(join(worktree, parsed.completedTo, "docs", "index.md"), "utf8"),
 		).resolves.toContain("# Flow Session");
 	});
 
@@ -469,8 +473,8 @@ describe("runtime tools and recovery", () => {
 		);
 		const parsed = JSON.parse(response);
 
-		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain("already completed");
+		expect(parsed.status).toBe("missing_session");
+		expect(parsed.summary).toContain("No active Flow");
 	});
 
 	test("tool rejects the old nested worker payload shape", async () => {
@@ -1287,12 +1291,9 @@ describe("runtime tools and recovery", () => {
 		}
 
 		const session = sampleSession("demo-goal");
-		await mkdir(join(worktree, ".flow"), { recursive: true });
-		await writeFile(
-			join(worktree, ".flow", "active"),
-			`${session.id}\n`,
-			"utf8",
-		);
+		await mkdir(join(worktree, ".flow", "active", session.id), {
+			recursive: true,
+		});
 		await saveSession(worktree, {
 			...session,
 			status: "running",

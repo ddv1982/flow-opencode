@@ -82,7 +82,7 @@ If you are upgrading from an older release:
    ```
 
 2. If you still have a plugin at `~/.opencode/plugins/flow.js`, remove it manually.
-3. If you still have old `.flow/session.json` workspace state, treat it as deprecated state and start from the current `.flow/sessions/<session-id>/session.json` layout.
+3. If you still have old `.flow/session.json` workspace state, treat it as deprecated state and start from the current `.flow/active/<session-id>/`, `.flow/stored/<session-id>/`, and `.flow/completed/<session-id>-<timestamp>/` layout.
 
 ## Quick Start
 
@@ -125,7 +125,7 @@ Flow adds these slash commands to OpenCode:
 | `/flow-history show <session-id>` | Show a specific stored session |
 | `/flow-session activate <id>` | Switch the active session |
 | `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
-| `/flow-reset session` | Archive the active session and clear it |
+| `/flow-reset session` | Close the active session into completed history and clear it |
 
 ## How Flow Works
 
@@ -172,21 +172,21 @@ Flow keeps one active session per worktree.
 Main session state:
 
 ```text
-.flow/active
-.flow/sessions/<session-id>/session.json
+.flow/active/<session-id>/session.json
+.flow/stored/<session-id>/session.json
 ```
 
 Readable docs:
 
 ```text
-.flow/sessions/<session-id>/docs/index.md
-.flow/sessions/<session-id>/docs/features/<feature-id>.md
+.flow/active/<session-id>/docs/index.md
+.flow/active/<session-id>/docs/features/<feature-id>.md
 ```
 
-Archived sessions live under:
+Closed session history lives under:
 
 ```text
-.flow/archive/
+.flow/completed/
 ```
 
 ## Completion gates

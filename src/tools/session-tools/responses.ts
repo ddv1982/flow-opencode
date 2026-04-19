@@ -5,7 +5,7 @@
 import { toJson } from "../../runtime/application";
 import type { Session } from "../../runtime/schema";
 import type {
-	archiveSession,
+	completeSession,
 	listSessionHistory,
 	loadStoredSession,
 } from "../../runtime/session";
@@ -14,7 +14,7 @@ import type { AutoPrepareMode } from "./next-command-policy";
 
 type SessionHistory = Awaited<ReturnType<typeof listSessionHistory>>;
 type StoredSessionRecord = Awaited<ReturnType<typeof loadStoredSession>>;
-type ArchivedSessionRecord = Awaited<ReturnType<typeof archiveSession>>;
+type CompletedSessionRecord = Awaited<ReturnType<typeof completeSession>>;
 
 export function missingGoalResponse(summary: string, nextCommand: string) {
 	return toJson({
@@ -36,8 +36,9 @@ export function missingStoredSessionResponse(
 }
 
 export function historyResponse(history: SessionHistory, nextCommand: string) {
-	const activeCount = history.activeSessionId ? 1 : 0;
-	const totalCount = history.sessions.length + history.archived.length;
+	const activeCount = history.active ? 1 : 0;
+	const totalCount =
+		activeCount + history.stored.length + history.completed.length;
 
 	if (totalCount === 0) {
 		return {
@@ -50,7 +51,8 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 			metadata: {
 				totalCount,
 				activeCount,
-				archivedCount: history.archived.length,
+				storedCount: history.stored.length,
+				completedCount: history.completed.length,
 			},
 		};
 	}
@@ -58,14 +60,15 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 	return {
 		payload: toJson({
 			status: "ok",
-			summary: `Found ${totalCount} Flow session ${totalCount === 1 ? "entry" : "entries"} (${activeCount} active, ${history.archived.length} archived).`,
+			summary: `Found ${totalCount} Flow session ${totalCount === 1 ? "entry" : "entries"} (${activeCount} active, ${history.stored.length} stored, ${history.completed.length} completed).`,
 			history,
 			nextCommand,
 		}),
 		metadata: {
 			totalCount,
 			activeCount,
-			archivedCount: history.archived.length,
+			storedCount: history.stored.length,
+			completedCount: history.completed.length,
 		},
 	};
 }
@@ -79,12 +82,12 @@ export function storedSessionResponse(
 
 	return toJson({
 		status: "ok",
-		summary: `Showing ${found.source === "archive" ? "archived" : "stored"} Flow session '${sessionId}'.`,
+		summary: `Showing ${found.source} Flow session '${sessionId}'.`,
 		source: found.source,
 		active: found.active,
 		path: found.path,
-		archivePath: found.archivePath ?? null,
-		archivedAt: found.archivedAt ?? null,
+		completedPath: found.completedPath ?? null,
+		completedAt: found.completedAt ?? null,
 		session: found.active
 			? summarizedSession
 			: { ...summarizedSession, nextCommand },
@@ -140,16 +143,16 @@ export function autoPrepareResponse(
 }
 
 export function resetSessionResponse(
-	archived: ArchivedSessionRecord,
+	completed: CompletedSessionRecord,
 	nextCommand: string,
 ) {
 	return toJson({
 		status: "ok",
-		summary: archived
-			? "Archived and cleared the active Flow session."
+		summary: completed
+			? "Completed and cleared the active Flow session."
 			: "No active Flow session existed.",
-		archivedSessionId: archived?.sessionId ?? null,
-		archivedTo: archived?.archivedTo ?? null,
+		completedSessionId: completed?.sessionId ?? null,
+		completedTo: completed?.completedTo ?? null,
 		nextCommand,
 	});
 }

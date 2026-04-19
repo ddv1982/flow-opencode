@@ -44,10 +44,10 @@ Flow is built around a small set of responsibilities:
 
 1. A plugin `config` hook injects commands and agents.
 2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers.
-3. Session state is stored under `.flow/sessions/<session-id>/session.json` with `.flow/active` pointing at the current run.
+3. Session state is stored under `.flow/active/<session-id>/session.json`, with inactive resumable sessions under `.flow/stored/<session-id>/` and closed history under `.flow/completed/<session-id>-<timestamp>/`.
 4. Domain transitions remain authoritative for workflow state changes.
 5. Prompted agents call runtime tools instead of mutating state directly.
-6. Readable markdown docs are rendered beside each saved session under `.flow/sessions/<session-id>/docs/`.
+6. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
 ## Current Agent Roles
 

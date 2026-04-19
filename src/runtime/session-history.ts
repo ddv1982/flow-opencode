@@ -1,12 +1,20 @@
 import { readdir } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { relative } from "node:path";
 import {
-	getArchiveDir,
-	getSessionDir,
+	getActiveSessionDir,
+	getCompletedSessionDir,
+	getCompletedSessionPath,
+	getCompletedSessionsDir,
 	getSessionPath,
-	getSessionsDir,
+	getStoredSessionDir,
+	getStoredSessionsDir,
 } from "./paths";
 import type { Session } from "./schema";
+import {
+	compareCompletedDescending,
+	findNewestCompletedSession,
+	parseCompletedDirectoryName,
+} from "./session-completed-storage";
 import {
 	ensureWorkspace,
 	readActiveSessionId,
@@ -26,18 +34,18 @@ export type SessionHistoryEntry = {
 	error?: string;
 };
 
-export type ArchivedSessionHistoryEntry = SessionHistoryEntry & {
-	archivePath: string;
-	archivedAt: string | null;
+export type CompletedSessionHistoryEntry = SessionHistoryEntry & {
+	completedPath: string;
+	completedAt: string | null;
 };
 
 export type StoredSessionLookup = {
 	session: Session;
-	source: "sessions" | "archive";
+	source: "active" | "stored" | "completed";
 	active: boolean;
 	path: string;
-	archivePath?: string;
-	archivedAt?: string | null;
+	completedPath?: string;
+	completedAt?: string | null;
 };
 
 function compareIsoDescending(
@@ -47,32 +55,10 @@ function compareIsoDescending(
 	return (right ?? "").localeCompare(left ?? "");
 }
 
-function compareArchiveDescending(
-	left: string | null,
-	right: string | null,
-): number {
-	const normalize = (value: string | null): [string, number] => {
-		if (!value) return ["", -1];
-		const match = value.match(/^(.*?)(?:-(\d+))?$/);
-		return [
-			match?.[1] ?? value,
-			match?.[2] ? Number.parseInt(match[2], 10) : 0,
-		];
-	};
-
-	const [rightBase, rightSuffix] = normalize(right);
-	const [leftBase, leftSuffix] = normalize(left);
-	const baseComparison = rightBase.localeCompare(leftBase);
-	if (baseComparison !== 0) {
-		return baseComparison;
-	}
-
-	return rightSuffix - leftSuffix;
-}
-
 function toHistoryEntry(
 	worktree: string,
 	session: Session,
+	path: string,
 	activeSessionId: string | null,
 ): SessionHistoryEntry {
 	return {
@@ -84,7 +70,7 @@ function toHistoryEntry(
 		updatedAt: session.timestamps.updatedAt,
 		completedAt: session.timestamps.completedAt,
 		active: session.id === activeSessionId,
-		path: relative(worktree, getSessionDir(worktree, session.id)),
+		path: relative(worktree, path),
 	};
 }
 
@@ -109,46 +95,6 @@ function toInvalidHistoryEntry(
 	};
 }
 
-function parseArchiveDirectoryName(directoryName: string): {
-	sessionId: string;
-	archivedAt: string | null;
-} {
-	const match = directoryName.match(
-		/^(.*)-(\d{8}T\d{6}\.\d{3}(?:-\d+)?|\d{8}T?\d{6}|\d{14})$/,
-	);
-	if (!match) {
-		return { sessionId: directoryName, archivedAt: null };
-	}
-
-	return {
-		sessionId: match[1] ?? directoryName,
-		archivedAt: match[2] ?? null,
-	};
-}
-
-async function findArchivedSessionDirectory(
-	worktree: string,
-	sessionId: string,
-): Promise<{ archiveDir: string; archivedAt: string | null } | null> {
-	const archiveRoot = getArchiveDir(worktree);
-	const matches: Array<{ archiveDir: string; archivedAt: string | null }> = [];
-
-	for (const entry of await readdir(archiveRoot, { withFileTypes: true })) {
-		if (!entry.isDirectory()) continue;
-		const parsed = parseArchiveDirectoryName(entry.name);
-		if (parsed.sessionId !== sessionId) continue;
-		matches.push({
-			archiveDir: join(archiveRoot, entry.name),
-			archivedAt: parsed.archivedAt,
-		});
-	}
-
-	matches.sort((left, right) =>
-		compareArchiveDescending(left.archivedAt, right.archivedAt),
-	);
-	return matches[0] ?? null;
-}
-
 export async function loadStoredSession(
 	worktree: string,
 	sessionId: string,
@@ -156,16 +102,27 @@ export async function loadStoredSession(
 	await ensureWorkspace(worktree);
 
 	const activeSessionId = await readActiveSessionId(worktree);
-
-	try {
+	if (activeSessionId === sessionId) {
 		const session = await readSessionFromPath(
-			getSessionPath(worktree, sessionId),
+			getSessionPath(worktree, sessionId, "active"),
 		);
 		return {
 			session,
-			source: "sessions",
-			active: sessionId === activeSessionId,
-			path: relative(worktree, getSessionDir(worktree, sessionId)),
+			source: "active",
+			active: true,
+			path: relative(worktree, getActiveSessionDir(worktree, sessionId)),
+		};
+	}
+
+	try {
+		const session = await readSessionFromPath(
+			getSessionPath(worktree, sessionId, "stored"),
+		);
+		return {
+			session,
+			source: "stored",
+			active: false,
+			path: relative(worktree, getStoredSessionDir(worktree, sessionId)),
 		};
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -173,90 +130,127 @@ export async function loadStoredSession(
 		}
 	}
 
-	const archived = await findArchivedSessionDirectory(worktree, sessionId);
-	if (!archived) {
+	const completed = await findNewestCompletedSession(worktree, sessionId);
+	if (!completed) {
 		return null;
 	}
 
 	const session = await readSessionFromPath(
-		join(archived.archiveDir, "session.json"),
+		getCompletedSessionPath(worktree, completed.completedDirName),
 	);
 	return {
 		session,
-		source: "archive",
+		source: "completed",
 		active: false,
-		path: relative(worktree, archived.archiveDir),
-		archivePath: relative(worktree, archived.archiveDir),
-		archivedAt: archived.archivedAt,
+		path: completed.completedTo,
+		completedPath: completed.completedTo,
+		completedAt: completed.completedAt,
 	};
 }
 
 export async function listSessionHistory(worktree: string): Promise<{
 	activeSessionId: string | null;
-	sessions: SessionHistoryEntry[];
-	archived: ArchivedSessionHistoryEntry[];
+	active: SessionHistoryEntry | null;
+	stored: SessionHistoryEntry[];
+	completed: CompletedSessionHistoryEntry[];
 }> {
 	await ensureWorkspace(worktree);
 
 	const activeSessionId = await readActiveSessionId(worktree);
-	const sessionsRoot = getSessionsDir(worktree);
-	const archiveRoot = getArchiveDir(worktree);
+	let active: SessionHistoryEntry | null = null;
+	if (activeSessionId) {
+		try {
+			const session = await readSessionFromPath(
+				getSessionPath(worktree, activeSessionId, "active"),
+			);
+			active = toHistoryEntry(
+				worktree,
+				session,
+				getActiveSessionDir(worktree, activeSessionId),
+				activeSessionId,
+			);
+		} catch (error) {
+			active = toInvalidHistoryEntry(
+				worktree,
+				activeSessionId,
+				getActiveSessionDir(worktree, activeSessionId),
+				error,
+				activeSessionId,
+			);
+		}
+	}
 
-	const sessions: SessionHistoryEntry[] = [];
-	for (const entry of await readdir(sessionsRoot, { withFileTypes: true })) {
+	const storedRoot = getStoredSessionsDir(worktree);
+	const completedRoot = getCompletedSessionsDir(worktree);
+
+	const stored: SessionHistoryEntry[] = [];
+	for (const entry of await readdir(storedRoot, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
 		const sessionId = entry.name;
-		const sessionPath = getSessionPath(worktree, sessionId);
 		try {
-			const session = await readSessionFromPath(sessionPath);
-			sessions.push(toHistoryEntry(worktree, session, activeSessionId));
+			const session = await readSessionFromPath(
+				getSessionPath(worktree, sessionId, "stored"),
+			);
+			stored.push(
+				toHistoryEntry(
+					worktree,
+					session,
+					getStoredSessionDir(worktree, sessionId),
+					activeSessionId,
+				),
+			);
 		} catch (error) {
-			sessions.push(
+			stored.push(
 				toInvalidHistoryEntry(
 					worktree,
 					sessionId,
-					getSessionDir(worktree, sessionId),
+					getStoredSessionDir(worktree, sessionId),
 					error,
 					activeSessionId,
 				),
 			);
 		}
 	}
-	sessions.sort((left, right) =>
+	stored.sort((left, right) =>
 		compareIsoDescending(left.updatedAt, right.updatedAt),
 	);
 
-	const archived: ArchivedSessionHistoryEntry[] = [];
-	for (const entry of await readdir(archiveRoot, { withFileTypes: true })) {
+	const completed: CompletedSessionHistoryEntry[] = [];
+	for (const entry of await readdir(completedRoot, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
-		const archiveDir = join(archiveRoot, entry.name);
-		const { sessionId, archivedAt } = parseArchiveDirectoryName(entry.name);
+		const completedDir = getCompletedSessionDir(worktree, entry.name);
+		const parsed = parseCompletedDirectoryName(entry.name);
 		try {
 			const session = await readSessionFromPath(
-				join(archiveDir, "session.json"),
+				getCompletedSessionPath(worktree, entry.name),
 			);
-			archived.push({
-				...toHistoryEntry(worktree, session, null),
-				path: relative(worktree, archiveDir),
-				archivePath: relative(worktree, archiveDir),
-				archivedAt,
+			completed.push({
+				...toHistoryEntry(worktree, session, completedDir, null),
+				completedPath: relative(worktree, completedDir),
+				completedAt: parsed.completedAt,
 				active: false,
 			});
 		} catch (error) {
-			archived.push({
-				...toInvalidHistoryEntry(worktree, sessionId, archiveDir, error, null),
-				archivePath: relative(worktree, archiveDir),
-				archivedAt,
+			completed.push({
+				...toInvalidHistoryEntry(
+					worktree,
+					parsed.sessionId,
+					completedDir,
+					error,
+					null,
+				),
+				completedPath: relative(worktree, completedDir),
+				completedAt: parsed.completedAt,
 				active: false,
 			});
 		}
 	}
-	archived.sort((left, right) =>
-		compareArchiveDescending(
-			left.archivedAt ?? left.updatedAt,
-			right.archivedAt ?? right.updatedAt,
+	completed.sort((left, right) =>
+		compareCompletedDescending(
+			left.completedAt ?? left.updatedAt,
+			right.completedAt ?? right.updatedAt,
 		),
 	);
 
-	return { activeSessionId, sessions, archived };
+	return { activeSessionId, active, stored, completed };
 }

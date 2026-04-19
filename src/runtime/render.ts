@@ -1,23 +1,29 @@
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import {
 	getDocsDir,
-	getFeatureDocPath,
-	getFeaturesDocsDir,
-	getIndexDocPath,
+	getDocsDirFromSessionDir,
+	getFeatureDocPathFromSessionDir,
+	getFeaturesDocsDirFromSessionDir,
+	getIndexDocPathFromSessionDir,
+	getSessionDir,
+	type LiveSessionLocation,
 } from "./paths";
 import { renderFeatureDoc } from "./render-feature-sections";
 import { renderIndexDoc } from "./render-index-sections";
 import type { Session } from "./schema";
-import {
-	ensureSessionDirPrepared,
-	ensureSessionDocsPrepared,
-	ensureSessionFeaturesDocsPrepared,
-} from "./session";
 
 type RenderedDoc = {
 	path: string;
 	content: string;
 };
+const preparedFeaturesDocsDirs = new Set<string>();
 
 function createContentHash(input: string): string {
 	let hash = 2166136261;
@@ -48,12 +54,30 @@ async function writeDocIfChanged(doc: RenderedDoc): Promise<boolean> {
 	return true;
 }
 
+async function ensureSessionDocDirs(sessionDir: string): Promise<void> {
+	const featuresDir = getFeaturesDocsDirFromSessionDir(sessionDir);
+	if (preparedFeaturesDocsDirs.has(featuresDir)) {
+		try {
+			await stat(featuresDir);
+			return;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				preparedFeaturesDocsDirs.delete(featuresDir);
+			} else {
+				throw error;
+			}
+		}
+	}
+
+	await mkdir(featuresDir, { recursive: true });
+	preparedFeaturesDocsDirs.add(featuresDir);
+}
+
 async function pruneFeatureDocs(
-	worktree: string,
-	sessionId: string,
+	sessionDir: string,
 	activeFeatureIds: Set<string>,
 ): Promise<void> {
-	const featuresDir = getFeaturesDocsDir(worktree, sessionId);
+	const featuresDir = getFeaturesDocsDirFromSessionDir(sessionDir);
 
 	try {
 		const entries = await readdir(featuresDir, { withFileTypes: true });
@@ -62,9 +86,15 @@ async function pruneFeatureDocs(
 				.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
 				.filter((entry) => !activeFeatureIds.has(entry.name.slice(0, -3)))
 				.map((entry) =>
-					rm(getFeatureDocPath(worktree, sessionId, entry.name.slice(0, -3)), {
-						force: true,
-					}),
+					rm(
+						getFeatureDocPathFromSessionDir(
+							sessionDir,
+							entry.name.slice(0, -3),
+						),
+						{
+							force: true,
+						},
+					),
 				),
 		);
 	} catch (error) {
@@ -74,40 +104,60 @@ async function pruneFeatureDocs(
 	}
 }
 
-export async function renderSessionDocs(
-	worktree: string,
+export async function renderSessionDocsAtDir(
+	sessionDir: string,
 	session: Session,
 ): Promise<void> {
-	const sessionId = session.id;
-	const renderSession = session;
-	const features = renderSession.plan?.features ?? [];
+	const features = session.plan?.features ?? [];
 
-	await ensureSessionDirPrepared(worktree, sessionId);
-	await ensureSessionDocsPrepared(worktree, sessionId);
-	await ensureSessionFeaturesDocsPrepared(worktree, sessionId);
+	await ensureSessionDocDirs(sessionDir);
 	await writeDocIfChanged({
-		path: getIndexDocPath(worktree, sessionId),
-		content: renderIndexDoc(renderSession),
+		path: getIndexDocPathFromSessionDir(sessionDir),
+		content: renderIndexDoc(session),
 	});
 
 	await Promise.all(
 		features.map((feature) =>
 			writeDocIfChanged({
-				path: getFeatureDocPath(worktree, sessionId, feature.id),
-				content: renderFeatureDoc(renderSession, feature),
+				path: getFeatureDocPathFromSessionDir(sessionDir, feature.id),
+				content: renderFeatureDoc(session, feature),
 			}),
 		),
 	);
 	await pruneFeatureDocs(
-		worktree,
-		sessionId,
+		sessionDir,
 		new Set(features.map((feature) => feature.id)),
 	);
+}
+
+export async function renderSessionDocs(
+	worktree: string,
+	session: Session,
+	location: LiveSessionLocation = "active",
+): Promise<void> {
+	await renderSessionDocsAtDir(
+		getSessionDir(worktree, session.id, location),
+		session,
+	);
+}
+
+export async function deleteSessionDocsAtDir(
+	sessionDir: string,
+): Promise<void> {
+	preparedFeaturesDocsDirs.delete(getFeaturesDocsDirFromSessionDir(sessionDir));
+	await rm(getDocsDirFromSessionDir(sessionDir), {
+		recursive: true,
+		force: true,
+	});
 }
 
 export async function deleteSessionDocs(
 	worktree: string,
 	sessionId: string,
+	location: LiveSessionLocation = "active",
 ): Promise<void> {
-	await rm(getDocsDir(worktree, sessionId), { recursive: true, force: true });
+	await rm(getDocsDir(worktree, sessionId, location), {
+		recursive: true,
+		force: true,
+	});
 }

@@ -1,59 +1,59 @@
 {
-	"name": "opencode-plugin-flow",
-	"version": "1.0.7",
-	"description": "Stateful planning and execution workflow plugin for OpenCode",
-	"type": "module",
-	"main": "dist/index.js",
-	"files": [
-		"dist",
-		"LICENSE",
-		"README.md",
-		"CHANGELOG.md"
-	],
-	"scripts": {
-		"build": "python3 -c \"import subprocess, sys; sys.exit(subprocess.run(['bun','build','--target=node','--outdir=./dist','--entry-naming=index.js','--external=@opencode-ai/plugin','--minify-syntax','--minify-whitespace','--sourcemap=external','./src/index.ts']).returncode)\" # --external @opencode-ai/plugin --sourcemap external",
-		"bench": "bun run ./bench/index.ts",
-		"bench:smoke": "bun run ./bench/index.ts -- --filter transition-reducer --warmup 0 --iterations 3",
-		"deadcode": "knip --include files,dependencies",
-		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
-		"test": "bun test",
-		"test:ci": "bun test --randomize",
-		"typecheck": "tsc --noEmit",
-		"check": "bun run typecheck && bun run deadcode && bun run build && bun run test && bun run lint && bun run bench:smoke",
-		"install:opencode": "bun run ./src/install-opencode.ts",
-		"uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
-	},
-	"keywords": [
-		"opencode",
-		"plugin",
-		"workflow",
-		"planning",
-		"execution"
-	],
-	"author": "Douwe de Vries",
-	"license": "MIT",
-	"peerDependencies": {
-		"@opencode-ai/plugin": "^1.3.10"
-	},
-	"dependencies": {
-		"zod": "^4.3.6"
-	},
-	"devDependencies": {
-		"@opencode-ai/plugin": "^1.3.10",
-		"@biomejs/biome": "^2.2.6",
-		"bun-types": "latest",
-		"knip": "^5.63.1",
-		"mitata": "^1.0.34",
-		"typescript": "^6.0.2"
-	},
-	"knip": {
-		"ignore": [
-			"src/types/typecheck.ts",
-			"tests/schema-equivalence.test-d.ts",
-			"scripts/cross-area/bundle-sanity.mjs",
-			"scripts/cross-area/bench-gate.mjs",
-			"scripts/cross-area/pack-invariants.mjs",
-			"scripts/cross-area/cold-start-budget.mjs"
-		]
-	}
+  "name": "opencode-plugin-flow",
+  "version": "1.0.8",
+  "description": "Stateful planning and execution workflow plugin for OpenCode",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "python3 -c \"import subprocess, sys; sys.exit(subprocess.run(['bun','build','--target=node','--outdir=./dist','--entry-naming=index.js','--external=@opencode-ai/plugin','--minify-syntax','--minify-whitespace','--sourcemap=external','./src/index.ts']).returncode)\" # --external @opencode-ai/plugin --sourcemap external",
+    "bench": "bun run ./bench/index.ts",
+    "bench:smoke": "bun run ./bench/index.ts -- --filter transition-reducer --warmup 0 --iterations 3",
+    "deadcode": "knip --include files,dependencies",
+    "lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
+    "test": "bun test",
+    "test:ci": "bun test --randomize",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run deadcode && bun run build && bun run test && bun run lint && bun run bench:smoke",
+    "install:opencode": "bun run ./src/install-opencode.ts",
+    "uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "workflow",
+    "planning",
+    "execution"
+  ],
+  "author": "Douwe de Vries",
+  "license": "MIT",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "^1.3.10"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.3.10",
+    "@biomejs/biome": "^2.2.6",
+    "bun-types": "latest",
+    "knip": "^5.63.1",
+    "mitata": "^1.0.34",
+    "typescript": "^6.0.2"
+  },
+  "knip": {
+    "ignore": [
+      "src/types/typecheck.ts",
+      "tests/schema-equivalence.test-d.ts",
+      "scripts/cross-area/bundle-sanity.mjs",
+      "scripts/cross-area/bench-gate.mjs",
+      "scripts/cross-area/pack-invariants.mjs",
+      "scripts/cross-area/cold-start-budget.mjs"
+    ]
+  }
 }

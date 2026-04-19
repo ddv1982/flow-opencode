@@ -91,7 +91,7 @@ describe("cross-area resume flow", () => {
 		const sessionPath = join(
 			worktree,
 			".flow",
-			"sessions",
+			"active",
 			planStart.session.id,
 			"session.json",
 		);

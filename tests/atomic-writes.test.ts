@@ -2,9 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { open, readdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import {
-	getActiveSessionPath,
 	getFeatureDocPath,
-	getFlowDir,
 	getIndexDocPath,
 	getSessionDir,
 	getSessionPath,
@@ -13,11 +11,9 @@ import { renderFeatureDoc } from "../src/runtime/render-feature-sections";
 import { renderIndexDoc } from "../src/runtime/render-index-sections";
 import { SessionSchema } from "../src/runtime/schema";
 import {
-	readActiveSessionId,
 	resetSessionWorkspaceFsForTests,
 	saveSession,
 	setSessionWorkspaceFsForTests,
-	writeActiveSessionId,
 } from "../src/runtime/session";
 import { createTempDirRegistry, sampleSession } from "./runtime-test-helpers";
 
@@ -31,7 +27,7 @@ afterEach(async () => {
 });
 
 describe("atomic writes", () => {
-	test("saveSession atomically replaces session.json", async () => {
+	test("saveSession atomically replaces the active session.json", async () => {
 		const worktree = makeTempDir();
 		const session = sampleSession("Atomic replacement");
 
@@ -76,40 +72,6 @@ describe("atomic writes", () => {
 		const currentBytes = await readFile(sessionPath);
 		expect(Buffer.compare(currentBytes, originalBytes)).toBe(0);
 		expect(calls).toBeGreaterThanOrEqual(1);
-	});
-
-	test("writeActiveSessionId writes .flow/active atomically", async () => {
-		const worktree = makeTempDir();
-
-		await writeActiveSessionId(worktree, "session-a");
-
-		const flowDir = getFlowDir(worktree);
-		const entries = (await readdir(flowDir)).sort();
-		const active = await readFile(getActiveSessionPath(worktree), "utf8");
-
-		expect(active).toBe("session-a\n");
-		expect(entries.includes("active")).toBe(true);
-		expect(entries.some((entry) => entry.includes(".tmp"))).toBe(false);
-	});
-
-	test("writeActiveSessionId rename failure preserves prior contents", async () => {
-		const worktree = makeTempDir();
-		await writeActiveSessionId(worktree, "session-a");
-		const activePath = getActiveSessionPath(worktree);
-
-		setSessionWorkspaceFsForTests({
-			rename: async (from, to) => {
-				if (to === activePath) {
-					throw new Error("active rename failed");
-				}
-				return originalRename(from, to);
-			},
-		});
-
-		await expect(writeActiveSessionId(worktree, "session-b")).rejects.toThrow(
-			"active rename failed",
-		);
-		await expect(readActiveSessionId(worktree)).resolves.toBe("session-a");
 	});
 
 	test("16 concurrent saveSession calls resolve without corruption", async () => {
@@ -187,7 +149,7 @@ describe("atomic writes", () => {
 		}
 	});
 
-	test("atomic writer fsyncs temp files before rename", async () => {
+	test("atomic writer fsyncs temp session files before rename", async () => {
 		const worktree = makeTempDir();
 		const syncs: string[] = [];
 
@@ -204,18 +166,13 @@ describe("atomic writes", () => {
 		});
 
 		await saveSession(worktree, sampleSession("Fsync verification"));
-		await writeActiveSessionId(worktree, "fsync-active");
 
-		expect(syncs.some((path) => path.includes(join(".flow", "sessions")))).toBe(
+		expect(syncs.some((path) => path.includes(join(".flow", "active")))).toBe(
 			true,
 		);
-		expect(sincsHasActive(syncs)).toBe(true);
+		expect(syncs.some((path) => path.endsWith("session.json.tmp"))).toBe(true);
 	});
 });
-
-function sincsHasActive(syncs: string[]): boolean {
-	return syncs.some((path) => path.endsWith(join(".flow", "active.tmp")));
-}
 
 function renderSessionDocsForAssertion(
 	session: (typeof SessionSchema)["_output"],

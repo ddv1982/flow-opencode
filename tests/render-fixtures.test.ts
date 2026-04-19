@@ -9,7 +9,7 @@ import {
 	createSession,
 } from "../bench/fixtures";
 import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
-import { saveSession } from "../src/runtime/session";
+import { loadStoredSession, saveSession } from "../src/runtime/session";
 import { applyPlan } from "../src/runtime/transitions";
 import { setNowIsoOverride } from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";
@@ -55,14 +55,30 @@ async function renderFixture(
 	session: ReturnType<FixtureSpec["createSession"]>,
 ) {
 	const saved = await saveSession(worktree, session);
-	const index = await readFile(getIndexDocPath(worktree, saved.id), "utf8");
+	const stored =
+		session.status === "completed"
+			? await loadStoredSession(worktree, saved.id)
+			: null;
+	const indexPath =
+		stored?.source === "completed" && stored.completedPath
+			? path.join(worktree, stored.completedPath, "docs", "index.md")
+			: getIndexDocPath(worktree, saved.id);
+	const index = await readFile(indexPath, "utf8");
 	const featureDocs = await Promise.all(
 		(saved.plan?.features ?? []).map(
 			async (feature) =>
 				[
 					feature.id,
 					await readFile(
-						getFeatureDocPath(worktree, saved.id, feature.id),
+						stored?.source === "completed" && stored.completedPath
+							? path.join(
+									worktree,
+									stored.completedPath,
+									"docs",
+									"features",
+									`${feature.id}.md`,
+								)
+							: getFeatureDocPath(worktree, saved.id, feature.id),
 						"utf8",
 					),
 				] as const,

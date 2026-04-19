@@ -1,6 +1,7 @@
 import {
 	mkdir,
 	open,
+	readdir,
 	readFile,
 	rename,
 	rm,
@@ -10,22 +11,21 @@ import {
 import { join } from "node:path";
 import { parseStrictJsonObject } from "./json/strict-object";
 import {
-	getActiveSessionPath,
-	getArchiveDir,
+	getActiveSessionsDir,
+	getCompletedSessionsDir,
 	getFlowDir,
 	getSessionDir,
-	getSessionPath,
-	getSessionsDir,
+	getSessionPathFromDir,
+	getStoredSessionsDir,
+	type LiveSessionLocation,
 } from "./paths";
 import { type Session, SessionSchema } from "./schema";
 
-const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
+const FLOW_GITIGNORE_ENTRIES = ["active/", "stored/", "completed/"] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();
 const preparedWorkspaceGitignoreCache = new Map<string, string>();
 const preparedWorkspaceRoots = new Set<string>();
 const preparedSessionDirs = new Set<string>();
-const preparedDocsDirs = new Set<string>();
-const preparedFeaturesDocsDirs = new Set<string>();
 const sessionReadCache = new Map<
 	string,
 	{
@@ -43,10 +43,6 @@ const sessionWorkspaceFs: SessionWorkspaceFs = {
 	open,
 	rename,
 };
-
-function getPreparedSessionDirKey(worktree: string, sessionId: string): string {
-	return `${worktree}::${sessionId}`;
-}
 
 async function writeFileAtomically(
 	targetPath: string,
@@ -70,6 +66,21 @@ async function writeFileAtomically(
 		await sessionWorkspaceFs.rename(tempPath, targetPath);
 	} catch (error) {
 		await rm(tempPath, { force: true });
+		throw error;
+	}
+}
+
+async function listDirectoryNames(root: string): Promise<string[]> {
+	try {
+		const entries = await readdir(root, { withFileTypes: true });
+		return entries
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => entry.name);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return [];
+		}
+
 		throw error;
 	}
 }
@@ -142,8 +153,9 @@ export async function readSessionFromPath(
 export async function ensureWorkspace(worktree: string): Promise<void> {
 	const flowDir = getFlowDir(worktree);
 	if (!preparedWorkspaceRoots.has(worktree)) {
-		await mkdir(getSessionsDir(worktree), { recursive: true });
-		await mkdir(getArchiveDir(worktree), { recursive: true });
+		await mkdir(getActiveSessionsDir(worktree), { recursive: true });
+		await mkdir(getStoredSessionsDir(worktree), { recursive: true });
+		await mkdir(getCompletedSessionsDir(worktree), { recursive: true });
 		preparedWorkspaceRoots.add(worktree);
 	}
 
@@ -184,40 +196,40 @@ export async function ensureWorkspace(worktree: string): Promise<void> {
 export async function readActiveSessionId(
 	worktree: string,
 ): Promise<string | null> {
-	try {
-		const raw = await readFile(getActiveSessionPath(worktree), "utf8");
-		const value = raw.trim();
-		return value || null;
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return null;
-		}
-
-		throw error;
+	const sessionIds = await listDirectoryNames(getActiveSessionsDir(worktree));
+	if (sessionIds.length === 0) {
+		return null;
 	}
-}
-
-export async function writeActiveSessionId(
-	worktree: string,
-	sessionId: string | null,
-): Promise<void> {
-	await ensureWorkspace(worktree);
-
-	if (!sessionId) {
-		await rm(getActiveSessionPath(worktree), { force: true });
-		return;
+	if (sessionIds.length > 1) {
+		throw new Error(
+			`Expected exactly one active Flow session directory, found ${sessionIds.length}.`,
+		);
 	}
 
-	await writeFileAtomically(getActiveSessionPath(worktree), `${sessionId}\n`);
+	return sessionIds[0] ?? null;
 }
 
-export async function writeSessionFile(
-	worktree: string,
+export async function writeSessionFileAtDir(
+	sessionDir: string,
 	session: Session,
 ): Promise<void> {
-	await ensureWorkspace(worktree);
-	const sessionPath = getSessionPath(worktree, session.id);
-	await ensureSessionDirPrepared(worktree, session.id);
+	if (preparedSessionDirs.has(sessionDir)) {
+		try {
+			await stat(sessionDir);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				preparedSessionDirs.delete(sessionDir);
+			} else {
+				throw error;
+			}
+		}
+	}
+
+	if (!preparedSessionDirs.has(sessionDir)) {
+		await mkdir(sessionDir, { recursive: true });
+		preparedSessionDirs.add(sessionDir);
+	}
+	const sessionPath = getSessionPathFromDir(sessionDir);
 	await writeFileAtomically(
 		sessionPath,
 		`${JSON.stringify(session, null, 2)}\n`,
@@ -225,57 +237,33 @@ export async function writeSessionFile(
 	sessionReadCache.delete(sessionPath);
 }
 
-export async function ensureSessionDirPrepared(
+export async function writeSessionFile(
 	worktree: string,
-	sessionId: string,
+	session: Session,
+	location: LiveSessionLocation = "active",
 ): Promise<void> {
-	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
-	if (preparedSessionDirs.has(cacheKey)) {
-		return;
-	}
-
-	await mkdir(getSessionDir(worktree, sessionId), { recursive: true });
-	preparedSessionDirs.add(cacheKey);
+	await ensureWorkspace(worktree);
+	await writeSessionFileAtDir(
+		getSessionDir(worktree, session.id, location),
+		session,
+	);
 }
 
-export function clearPreparedSessionDir(
+export async function findStoredSessionDir(
 	worktree: string,
 	sessionId: string,
-): void {
-	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
-	preparedSessionDirs.delete(cacheKey);
-	preparedDocsDirs.delete(cacheKey);
-	preparedFeaturesDocsDirs.delete(cacheKey);
-}
+): Promise<string | null> {
+	const sessionDir = getSessionDir(worktree, sessionId, "stored");
+	try {
+		const details = await stat(sessionDir);
+		return details.isDirectory() ? sessionDir : null;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return null;
+		}
 
-export async function ensureSessionDocsPrepared(
-	worktree: string,
-	sessionId: string,
-): Promise<void> {
-	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
-	if (preparedDocsDirs.has(cacheKey)) {
-		return;
+		throw error;
 	}
-
-	await mkdir(join(getSessionDir(worktree, sessionId), "docs"), {
-		recursive: true,
-	});
-	preparedDocsDirs.add(cacheKey);
-}
-
-export async function ensureSessionFeaturesDocsPrepared(
-	worktree: string,
-	sessionId: string,
-): Promise<void> {
-	const cacheKey = getPreparedSessionDirKey(worktree, sessionId);
-	if (preparedFeaturesDocsDirs.has(cacheKey)) {
-		return;
-	}
-
-	await mkdir(join(getSessionDir(worktree, sessionId), "docs", "features"), {
-		recursive: true,
-	});
-	preparedFeaturesDocsDirs.add(cacheKey);
 }
 
 export async function resolveActiveSessionId(

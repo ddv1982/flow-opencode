@@ -32,7 +32,7 @@ export function nextCommandForMissingStoredSession() {
 }
 
 export function nextCommandForHistory(history: SessionHistory) {
-	const resumableStoredSession = history.sessions.find(
+	const resumableStoredSession = history.stored.find(
 		(session) => session.status !== "completed",
 	);
 
@@ -49,10 +49,10 @@ export function nextCommandForStoredSession(
 	sessionId: string,
 	found: StoredSessionRecord,
 ) {
-	if (found.active) {
+	if (found.source === "active") {
 		return FLOW_STATUS_COMMAND;
 	}
-	if (found.source === "sessions" && found.session.status !== "completed") {
+	if (found.source === "stored" && found.session.status !== "completed") {
 		return flowSessionActivateCommand(sessionId);
 	}
 	return found.session.status === "completed"

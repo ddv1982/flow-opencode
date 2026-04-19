@@ -1,21 +1,37 @@
 import { randomUUID } from "node:crypto";
 import { rename, rm } from "node:fs/promises";
-import { join, relative } from "node:path";
 import {
-	getArchiveDir,
+	getActiveSessionDir,
 	getReviewsDir,
-	getSessionDir,
 	getSessionPath,
+	getStoredSessionDir,
 } from "./paths";
 import { deleteSessionDocs } from "./render";
 import { type PlanningContext, type Session, SessionSchema } from "./schema";
 import {
-	clearPreparedSessionDir,
+	moveSessionDirToCompleted,
+	pathExists,
+} from "./session-completed-storage";
+import {
 	readSessionFromPath,
 	resolveActiveSessionId,
-	writeActiveSessionId,
 } from "./session-workspace";
-import { archiveTimestampNow, nowIso } from "./util";
+import { completedTimestampNow, nowIso } from "./util";
+
+async function moveActiveSessionToCompleted(
+	worktree: string,
+	sessionId: string,
+): Promise<{ sessionId: string; completedTo: string } | null> {
+	const location = await moveSessionDirToCompleted(
+		worktree,
+		sessionId,
+		getActiveSessionDir(worktree, sessionId),
+		completedTimestampNow(),
+	);
+	return location
+		? { sessionId: location.sessionId, completedTo: location.completedTo }
+		: null;
+}
 
 export async function deleteSessionState(worktree: string): Promise<void> {
 	const sessionId = await resolveActiveSessionId(worktree);
@@ -32,8 +48,8 @@ export async function deleteSessionArtifacts(worktree: string): Promise<void> {
 		return;
 	}
 
-	await deleteSessionDocs(worktree, sessionId);
-	await rm(getReviewsDir(worktree, sessionId), {
+	await deleteSessionDocs(worktree, sessionId, "active");
+	await rm(getReviewsDir(worktree, sessionId, "active"), {
 		recursive: true,
 		force: true,
 	});
@@ -45,77 +61,46 @@ export async function deleteSession(worktree: string): Promise<void> {
 		return;
 	}
 
-	await rm(getSessionDir(worktree, sessionId), {
+	await rm(getActiveSessionDir(worktree, sessionId), {
 		recursive: true,
 		force: true,
 	});
-	clearPreparedSessionDir(worktree, sessionId);
-	await writeActiveSessionId(worktree, null);
 }
 
-export async function archiveSession(
+export async function completeSession(
 	worktree: string,
-): Promise<{ sessionId: string; archivedTo: string } | null> {
+): Promise<{ sessionId: string; completedTo: string } | null> {
 	const sessionId = await resolveActiveSessionId(worktree);
 	if (!sessionId) {
 		return null;
 	}
 
-	const sourceDir = getSessionDir(worktree, sessionId);
-	let archivedDir: string | null = null;
-
-	for (let attempt = 0; ; attempt += 1) {
-		const timestamp = archiveTimestampNow();
-		const suffix = attempt === 0 ? "" : `-${attempt}`;
-		const candidate = join(
-			getArchiveDir(worktree),
-			`${sessionId}-${timestamp}${suffix}`,
-		);
-
-		try {
-			await rename(sourceDir, candidate);
-			archivedDir = candidate;
-			break;
-		} catch (error) {
-			const code = (error as NodeJS.ErrnoException).code;
-			if (code === "ENOENT") {
-				await writeActiveSessionId(worktree, null);
-				return null;
-			}
-
-			if (code === "EEXIST" || code === "ENOTEMPTY") {
-				continue;
-			}
-
-			throw error;
-		}
-	}
-
-	await writeActiveSessionId(worktree, null);
-	clearPreparedSessionDir(worktree, sessionId);
-	return {
-		sessionId,
-		archivedTo: relative(worktree, archivedDir),
-	};
+	return moveActiveSessionToCompleted(worktree, sessionId);
 }
 
 export async function activateSession(
 	worktree: string,
 	sessionId: string,
 ): Promise<Session | null> {
-	try {
-		const session = await readSessionFromPath(
-			getSessionPath(worktree, sessionId),
-		);
-		await writeActiveSessionId(worktree, sessionId);
-		return session;
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return null;
-		}
-
-		throw error;
+	const activeSessionId = await resolveActiveSessionId(worktree);
+	if (activeSessionId === sessionId) {
+		return readSessionFromPath(getSessionPath(worktree, sessionId, "active"));
 	}
+
+	const storedDir = getStoredSessionDir(worktree, sessionId);
+	if (!(await pathExists(storedDir))) {
+		return null;
+	}
+
+	if (activeSessionId) {
+		await rename(
+			getActiveSessionDir(worktree, activeSessionId),
+			getStoredSessionDir(worktree, activeSessionId),
+		);
+	}
+
+	await rename(storedDir, getActiveSessionDir(worktree, sessionId));
+	return readSessionFromPath(getSessionPath(worktree, sessionId, "active"));
 }
 
 export function createSession(

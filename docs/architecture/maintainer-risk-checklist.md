@@ -33,7 +33,7 @@ If you change any of these:
 
 then verify:
 
-- archive history still sorts and loads correctly
+- completed history still sorts and loads correctly
 - session summaries and rendered docs still match expectations
 
 Recommended checks:

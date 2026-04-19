@@ -6,7 +6,7 @@ export const samplePlan: Plan = {
 	overview: "Create one setup feature and one execution feature.",
 	requirements: ["Keep state durable", "Keep commands concise"],
 	architectureDecisions: [
-		"Persist session history under .flow/sessions/<id>",
+		"Persist active/stored session history under .flow/",
 		"Run one feature per worker invocation",
 	],
 	features: [
