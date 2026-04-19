@@ -15,23 +15,9 @@ import {
 import {
 	readSessionFromPath,
 	resolveActiveSessionId,
+	writeSessionFileAtDir,
 } from "./session-workspace";
 import { completedTimestampNow, nowIso } from "./util";
-
-async function moveActiveSessionToCompleted(
-	worktree: string,
-	sessionId: string,
-): Promise<{ sessionId: string; completedTo: string } | null> {
-	const location = await moveSessionDirToCompleted(
-		worktree,
-		sessionId,
-		getActiveSessionDir(worktree, sessionId),
-		completedTimestampNow(),
-	);
-	return location
-		? { sessionId: location.sessionId, completedTo: location.completedTo }
-		: null;
-}
 
 export async function deleteSessionState(worktree: string): Promise<void> {
 	const sessionId = await resolveActiveSessionId(worktree);
@@ -67,15 +53,76 @@ export async function deleteSession(worktree: string): Promise<void> {
 	});
 }
 
-export async function completeSession(
+type ClosedSessionResult = {
+	sessionId: string;
+	completedTo: string;
+	closureKind: NonNullable<Session["closure"]>["kind"];
+};
+
+export async function closeSession(
 	worktree: string,
-): Promise<{ sessionId: string; completedTo: string } | null> {
+	kind: NonNullable<Session["closure"]>["kind"],
+	summary?: string,
+): Promise<ClosedSessionResult | null> {
 	const sessionId = await resolveActiveSessionId(worktree);
 	if (!sessionId) {
 		return null;
 	}
 
-	return moveActiveSessionToCompleted(worktree, sessionId);
+	const session = await readSessionFromPath(
+		getSessionPath(worktree, sessionId, "active"),
+	);
+	const recordedAt = nowIso();
+	const closedSession: Session = SessionSchema.parse({
+		...session,
+		status: "completed",
+		closure: {
+			kind,
+			summary:
+				summary ??
+				(kind === "completed"
+					? "Completed the Flow session."
+					: kind === "deferred"
+						? "Deferred the Flow session for later."
+						: "Abandoned the Flow session."),
+			recordedAt,
+		},
+		execution: {
+			...session.execution,
+			activeFeatureId: null,
+			lastSummary:
+				summary ??
+				(kind === "completed"
+					? "Completed the Flow session."
+					: kind === "deferred"
+						? "Deferred the Flow session."
+						: "Abandoned the Flow session."),
+			lastOutcomeKind:
+				session.execution.lastOutcomeKind ??
+				(kind === "completed" ? "completed" : "needs_input"),
+		},
+		timestamps: {
+			...session.timestamps,
+			updatedAt: recordedAt,
+			completedAt: session.timestamps.completedAt ?? recordedAt,
+		},
+	});
+
+	const activeDir = getActiveSessionDir(worktree, sessionId);
+	await writeSessionFileAtDir(activeDir, closedSession);
+	const moved = await moveSessionDirToCompleted(
+		worktree,
+		sessionId,
+		activeDir,
+		completedTimestampNow(),
+	);
+	return moved
+		? {
+				sessionId: moved.sessionId,
+				completedTo: moved.completedTo,
+				closureKind: kind,
+			}
+		: null;
 }
 
 export async function activateSession(
@@ -120,6 +167,7 @@ export function createSession(
 			research: planning?.research ?? [],
 			implementationApproach: planning?.implementationApproach,
 			decisionLog: planning?.decisionLog ?? [],
+			replanLog: planning?.replanLog ?? [],
 		},
 		plan: null,
 		execution: {
@@ -134,6 +182,7 @@ export function createSession(
 			lastValidationRun: [],
 			history: [],
 		},
+		closure: null,
 		notes: [],
 		artifacts: [],
 		timestamps: {

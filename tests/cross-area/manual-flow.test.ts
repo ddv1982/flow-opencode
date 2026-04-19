@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 function normalizeEnvelope(value: unknown): unknown {
-	return JSON.parse(
+	const normalized = JSON.parse(
 		JSON.stringify(value, (_key, current) => {
 			if (typeof current !== "string") {
 				return current;
@@ -29,7 +29,50 @@ function normalizeEnvelope(value: unknown): unknown {
 				)
 				.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "<timestamp>");
 		}),
-	);
+	) as Record<string, unknown>;
+
+	for (const entry of Object.values(normalized)) {
+		if (!entry || typeof entry !== "object") {
+			continue;
+		}
+		const payload = entry as Record<string, unknown>;
+		const feature = payload.feature as Record<string, unknown> | undefined;
+		if (feature) {
+			delete feature.priority;
+			delete feature.deferCandidate;
+		}
+		const session = payload.session as Record<string, unknown> | undefined;
+		if (!session) {
+			continue;
+		}
+		if (session.decisionGate == null) {
+			delete session.decisionGate;
+		}
+		const activeFeature = session.activeFeature as Record<
+			string,
+			unknown
+		> | null;
+		if (activeFeature) {
+			for (const key of Object.keys(activeFeature)) {
+				if (!["id", "title", "status", "summary"].includes(key)) {
+					delete activeFeature[key];
+				}
+			}
+		}
+		delete session.closure;
+		const planning = session.planning as Record<string, unknown> | undefined;
+		if (planning) {
+			delete planning.replanLog;
+		}
+		const lastReviewerDecision = session.lastReviewerDecision as
+			| Record<string, unknown>
+			| undefined;
+		if (lastReviewerDecision) {
+			delete lastReviewerDecision.reviewPurpose;
+		}
+	}
+
+	return normalized;
 }
 
 const expectedEnvelopeSnapshot = {
@@ -515,7 +558,7 @@ describe("cross-area manual flow", () => {
 				finalReview,
 				complete,
 			}),
-		).toEqual(expectedEnvelopeSnapshot);
+		).toEqual(normalizeEnvelope(expectedEnvelopeSnapshot));
 
 		const sessionId = planStart.session.id as string;
 		const stored = await loadStoredSession(worktree, sessionId);

@@ -1,14 +1,22 @@
 import { z } from "zod";
 import {
+	CLOSURE_KINDS,
+	DECISION_DOMAINS,
+	DECISION_MODES,
 	DECOMPOSITION_POLICIES,
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
+	FEATURE_PRIORITIES,
 	GOAL_MODES,
 	NEEDS_INPUT_OUTCOME_KINDS,
 	OUTCOME_KINDS,
+	PRIORITY_MODES,
+	REPLAN_REASONS,
+	REVIEW_PURPOSES,
 	REVIEW_SCOPES,
 	REVIEW_STATUSES,
 	REVIEWER_DECISION_STATUSES,
+	STOP_RULES,
 	VALIDATION_SCOPES,
 	VALIDATION_STATUSES,
 	VERIFICATION_STATUSES,
@@ -20,6 +28,16 @@ function isNeedsInputOutcomeKind(
 ): value is (typeof NEEDS_INPUT_OUTCOME_KINDS)[number] {
 	return NEEDS_INPUT_OUTCOME_KINDS.includes(
 		value as (typeof NEEDS_INPUT_OUTCOME_KINDS)[number],
+	);
+}
+
+function hasStructuredReplanReason(value: {
+	replanReason?: string | undefined;
+	failedAssumption?: string | undefined;
+	recommendedAdjustment?: string | undefined;
+}): boolean {
+	return Boolean(
+		value.replanReason && value.failedAssumption && value.recommendedAdjustment,
 	);
 }
 
@@ -83,6 +101,7 @@ export const ReviewerDecisionSchema = z.object({
 		.string()
 		.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE)
 		.optional(),
+	reviewPurpose: z.enum(REVIEW_PURPOSES).optional(),
 	status: z.enum(REVIEWER_DECISION_STATUSES),
 	summary: z.string().min(1),
 	blockingFindings: z.array(ReviewFindingSchema).default([]),
@@ -98,6 +117,9 @@ export const OutcomeSchema = z.object({
 	retryable: z.boolean().optional(),
 	autoResolvable: z.boolean().optional(),
 	needsHuman: z.boolean().optional(),
+	replanReason: z.enum(REPLAN_REASONS).optional(),
+	failedAssumption: z.string().min(1).optional(),
+	recommendedAdjustment: z.string().min(1).optional(),
 });
 
 export const FeatureResultSchema = z.object({
@@ -121,31 +143,46 @@ export const WorkerResultBaseSchema = z.object({
 	finalReview: ReviewSchema.optional(),
 });
 
-export const WorkerResultSchema = z.discriminatedUnion("status", [
-	WorkerResultBaseSchema.extend({
-		status: z.literal("ok"),
-		outcome: z
-			.object({
-				kind: z.literal("completed"),
-				category: z.string().min(1).optional(),
-				summary: z.string().min(1).optional(),
-				resolutionHint: z.string().min(1).optional(),
-				retryable: z.boolean().optional(),
-				autoResolvable: z.boolean().optional(),
-				needsHuman: z.boolean().optional(),
-			})
-			.optional(),
-	}),
-	WorkerResultBaseSchema.extend({
-		status: z.literal("needs_input"),
-		outcome: OutcomeSchema.refine(
-			(value) => isNeedsInputOutcomeKind(value.kind),
-			{
-				message: "needs_input outcomes must not use 'completed'.",
-			},
-		),
-	}),
-]);
+export const WorkerResultSchema = z
+	.discriminatedUnion("status", [
+		WorkerResultBaseSchema.extend({
+			status: z.literal("ok"),
+			outcome: z
+				.object({
+					kind: z.literal("completed"),
+					category: z.string().min(1).optional(),
+					summary: z.string().min(1).optional(),
+					resolutionHint: z.string().min(1).optional(),
+					retryable: z.boolean().optional(),
+					autoResolvable: z.boolean().optional(),
+					needsHuman: z.boolean().optional(),
+				})
+				.optional(),
+		}),
+		WorkerResultBaseSchema.extend({
+			status: z.literal("needs_input"),
+			outcome: OutcomeSchema.refine(
+				(value) => isNeedsInputOutcomeKind(value.kind),
+				{
+					message: "needs_input outcomes must not use 'completed'.",
+				},
+			),
+		}),
+	])
+	.superRefine((value, context) => {
+		if (
+			value.status === "needs_input" &&
+			value.outcome.kind === "replan_required" &&
+			!hasStructuredReplanReason(value.outcome)
+		) {
+			context.addIssue({
+				code: z.ZodIssueCode.custom,
+				message:
+					"replan_required outcomes must include replanReason, failedAssumption, and recommendedAdjustment.",
+				path: ["outcome"],
+			});
+		}
+	});
 
 export const WorkerResultOkArgsSchema = WorkerResultBaseSchema.extend({
 	status: z.literal("ok"),
@@ -166,6 +203,8 @@ export const FeatureSchema = z.object({
 	title: z.string().min(1),
 	summary: z.string().min(1),
 	status: FeatureStatusSchema.default("pending"),
+	priority: z.enum(FEATURE_PRIORITIES).optional(),
+	deferCandidate: z.boolean().optional(),
 	fileTargets: z.array(z.string().min(1)).default([]),
 	verification: z.array(z.string().min(1)).default([]),
 	dependsOn: z.array(z.string().min(1)).optional(),
@@ -186,6 +225,8 @@ export const PlanningDecisionOptionSchema = z.object({
 
 export const PlanningDecisionSchema = z.object({
 	question: z.string().min(1),
+	decisionMode: z.enum(DECISION_MODES).default("recommend_confirm"),
+	decisionDomain: z.enum(DECISION_DOMAINS).default("architecture"),
 	options: z.array(PlanningDecisionOptionSchema).min(1),
 	recommendation: z.string().min(1),
 	rationale: z.array(z.string().min(1)).default([]),
@@ -193,6 +234,27 @@ export const PlanningDecisionSchema = z.object({
 
 export const CompletionPolicySchema = z.object({
 	minCompletedFeatures: z.number().int().positive().optional(),
+});
+
+export const DeliveryPolicySchema = z.object({
+	priorityMode: z.enum(PRIORITY_MODES).default("balanced"),
+	stopRule: z.enum(STOP_RULES).default("ship_when_clean"),
+	deferAllowed: z.boolean().default(false),
+});
+
+export const ReplanRecordSchema = z.object({
+	featureId: FeatureIdSchema.nullable().optional(),
+	reason: z.enum(REPLAN_REASONS),
+	summary: z.string().min(1),
+	failedAssumption: z.string().min(1),
+	recommendedAdjustment: z.string().min(1),
+	recordedAt: z.string().min(1),
+});
+
+export const ClosureSchema = z.object({
+	kind: z.enum(CLOSURE_KINDS),
+	summary: z.string().min(1),
+	recordedAt: z.string().min(1),
 });
 
 export const PlanSchema = z.object({
@@ -204,6 +266,7 @@ export const PlanSchema = z.object({
 	goalMode: GoalModeSchema.default("implementation"),
 	decompositionPolicy: DecompositionPolicySchema.default("atomic_feature"),
 	completionPolicy: CompletionPolicySchema.optional(),
+	deliveryPolicy: DeliveryPolicySchema.optional(),
 	notes: z.array(z.string().min(1)).optional(),
 });
 
@@ -212,6 +275,7 @@ export const PlanningContextSchema = z.object({
 	research: z.array(z.string().min(1)).default([]),
 	implementationApproach: ImplementationApproachSchema.optional(),
 	decisionLog: z.array(PlanningDecisionSchema).default([]),
+	replanLog: z.array(ReplanRecordSchema).default([]),
 });
 
 export const PlanArgsSchema = PlanSchema.omit({
@@ -224,10 +288,25 @@ export const PlanArgsSchema = PlanSchema.omit({
 
 export const PlanningContextArgsSchema = PlanningContextSchema.partial();
 
-export const WorkerResultArgsSchema = z.discriminatedUnion("status", [
-	WorkerResultOkArgsSchema,
-	WorkerResultNeedsInputArgsSchema,
-]);
+export const WorkerResultArgsSchema = z
+	.discriminatedUnion("status", [
+		WorkerResultOkArgsSchema,
+		WorkerResultNeedsInputArgsSchema,
+	])
+	.superRefine((value, context) => {
+		if (
+			value.status === "needs_input" &&
+			value.outcome.kind === "replan_required" &&
+			!hasStructuredReplanReason(value.outcome)
+		) {
+			context.addIssue({
+				code: z.ZodIssueCode.custom,
+				message:
+					"replan_required outcomes must include replanReason, failedAssumption, and recommendedAdjustment.",
+				path: ["outcome"],
+			});
+		}
+	});
 
 export const FlowReviewRecordFeatureArgsSchema = ReviewerDecisionSchema.extend({
 	scope: z.literal("feature"),
@@ -254,6 +333,7 @@ export const ExecutionHistoryEntrySchema = z.object({
 	artifactsChanged: z.array(ArtifactSchema).default([]),
 	decisions: z.array(DecisionSchema).default([]),
 	featureResult: FeatureResultSchema.optional(),
+	replanRecord: ReplanRecordSchema.optional(),
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
 	featureReview: ReviewSchema.optional(),
 	finalReview: ReviewSchema.optional(),
@@ -279,6 +359,7 @@ export const SessionSchema = z.object({
 		lastValidationRun: z.array(ValidationRunSchema).default([]),
 		history: z.array(ExecutionHistoryEntrySchema).default([]),
 	}),
+	closure: ClosureSchema.nullable().default(null),
 	notes: z.array(z.string().min(1)).default([]),
 	artifacts: z.array(ArtifactSchema).default([]),
 	timestamps: z.object({

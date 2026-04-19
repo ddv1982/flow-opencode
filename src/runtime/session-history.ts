@@ -25,6 +25,12 @@ export type SessionHistoryEntry = {
 	id: string;
 	goal: string | null;
 	status: string;
+	closureKind: Session["closure"] extends infer Closure
+		? Closure extends { kind: infer Kind }
+			? Kind | null
+			: null
+		: null;
+	closureSummary: string | null;
 	approval: string | null;
 	createdAt: string | null;
 	updatedAt: string | null;
@@ -65,6 +71,8 @@ function toHistoryEntry(
 		id: session.id,
 		goal: session.goal,
 		status: session.status,
+		closureKind: session.closure?.kind ?? null,
+		closureSummary: session.closure?.summary ?? null,
 		approval: session.approval,
 		createdAt: session.timestamps.createdAt,
 		updatedAt: session.timestamps.updatedAt,
@@ -85,6 +93,8 @@ function toInvalidHistoryEntry(
 		id,
 		goal: null,
 		status: "invalid",
+		closureKind: null,
+		closureSummary: null,
 		approval: null,
 		createdAt: null,
 		updatedAt: null,

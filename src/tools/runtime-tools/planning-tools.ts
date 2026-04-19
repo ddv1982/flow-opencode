@@ -64,6 +64,8 @@ export function createPlanningRuntimeTools() {
 										session.planning.implementationApproach,
 									decisionLog:
 										nextPlanning.decisionLog ?? session.planning.decisionLog,
+									replanLog:
+										nextPlanning.replanLog ?? session.planning.replanLog,
 								},
 							}),
 						{

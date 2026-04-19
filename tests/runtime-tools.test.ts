@@ -98,14 +98,19 @@ describe("runtime tools and recovery", () => {
 		);
 		const historyParsed = JSON.parse(historyResponse);
 		expect(historyParsed.status).toBe("missing");
+	});
 
-		const resetResponse = await tools.flow_reset_session.execute(
+	test("flow_session_close requires an explicit closure kind", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const response = await tools.flow_session_close.execute(
 			undefined as never,
 			toolContext(worktree),
 		);
-		const resetParsed = JSON.parse(resetResponse);
-		expect(resetParsed.status).toBe("ok");
-		expect(resetParsed.summary).toBe("No active Flow session existed.");
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("error");
+		expect(String(parsed.summary)).toContain("kind");
 	});
 
 	test("flow_plan_start accepts an OpenCode-like context payload and persists under directory", async () => {
@@ -141,8 +146,8 @@ describe("runtime tools and recovery", () => {
 		const first = await saveSession(worktree, createSession("First goal"));
 		const second = await saveSession(worktree, createSession("Second goal"));
 
-		const resetResponse = await tools.flow_reset_session.execute(
-			{},
+		const resetResponse = await tools.flow_session_close.execute(
+			{ kind: "completed" },
 			toolContext(worktree),
 		);
 		const resetParsed = JSON.parse(resetResponse);
@@ -213,8 +218,8 @@ describe("runtime tools and recovery", () => {
 		const tools = createTestTools();
 		const saved = await saveSession(worktree, createSession("Completed goal"));
 
-		const resetResponse = await tools.flow_reset_session.execute(
-			{},
+		const resetResponse = await tools.flow_session_close.execute(
+			{ kind: "completed" },
 			toolContext(worktree),
 		);
 		const resetParsed = JSON.parse(resetResponse);
@@ -231,8 +236,8 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.completedPath).toBe(resetParsed.completedTo);
 		expect(parsed.session.id).toBe(saved.id);
 		expect(parsed.session.goal).toBe("Completed goal");
-		expect(parsed.session.nextCommand).toBe(FLOW_HISTORY_COMMAND);
-		expect(parsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
+		expect(parsed.session.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
 	test("flow_history_show does not suggest activation for completed stored sessions", async () => {
@@ -305,7 +310,7 @@ describe("runtime tools and recovery", () => {
 		expect(activateParsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 	});
 
-	test("flow_reset_session completes the active session and clears the active pointer", async () => {
+	test("flow_session_close completes the active session and clears the active pointer", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const saved = await saveSession(
@@ -313,17 +318,16 @@ describe("runtime tools and recovery", () => {
 			createSession("Build a workflow plugin"),
 		);
 
-		const response = await tools.flow_reset_session.execute(
-			{},
+		const response = await tools.flow_session_close.execute(
+			{ kind: "completed" },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ok");
-		expect(parsed.summary).toBe(
-			"Completed and cleared the active Flow session.",
-		);
+		expect(parsed.summary).toBe("Closed the active Flow session as completed.");
 		expect(parsed.completedSessionId).toBe(saved.id);
+		expect(parsed.closureKind).toBe("completed");
 		expect(parsed.completedTo).toMatch(
 			new RegExp(`^\\.flow/completed/${saved.id}-`),
 		);
@@ -335,6 +339,38 @@ describe("runtime tools and recovery", () => {
 		await expect(
 			readFile(join(worktree, parsed.completedTo, "docs", "index.md"), "utf8"),
 		).resolves.toContain("# Flow Session");
+	});
+
+	test("flow_session_close can defer the active session with explicit closure metadata", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const saved = await saveSession(
+			worktree,
+			createSession("Defer a workflow plugin"),
+		);
+
+		const response = await tools.flow_session_close.execute(
+			{
+				kind: "deferred",
+				summary: "Deferred until the API contract is stable.",
+			},
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.closureKind).toBe("deferred");
+		expect(parsed.completedSessionId).toBe(saved.id);
+		const persisted = JSON.parse(
+			await readFile(
+				join(worktree, parsed.completedTo, "session.json"),
+				"utf8",
+			),
+		);
+		expect(persisted.closure).toMatchObject({
+			kind: "deferred",
+			summary: "Deferred until the API contract is stable.",
+		});
 	});
 
 	test("tools return machine-readable missing-session responses for plan, review, and reset operations", async () => {
@@ -1209,7 +1245,7 @@ describe("runtime tools and recovery", () => {
 			flow_session_activate: { sessionId: currentSessionId },
 			flow_plan_start: { goal: "Build a workflow plugin" },
 			flow_auto_prepare: { argumentString: "resume" },
-			flow_reset_session: {},
+			flow_session_close: { kind: "completed" },
 			flow_plan_apply: { plan: samplePlan() },
 			flow_plan_approve: {},
 			flow_plan_select_features: { featureIds: ["setup-runtime"] },
@@ -1222,7 +1258,14 @@ describe("runtime tools and recovery", () => {
 				validationRun: [],
 				decisions: [],
 				nextStep: "Replan the work.",
-				outcome: { kind: "replan_required" },
+				outcome: {
+					kind: "replan_required",
+					replanReason: "plan_too_broad",
+					failedAssumption:
+						"The current feature was small enough to finish in one pass.",
+					recommendedAdjustment:
+						"Split the work into a smaller follow-up plan.",
+				},
 				featureResult: {
 					featureId: "setup-runtime",
 				},

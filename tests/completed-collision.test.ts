@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { getCompletedSessionsDir } from "../src/runtime/paths";
 import {
-	completeSession,
+	closeSession,
 	createSession,
 	loadStoredSession,
 	saveSession,
@@ -31,18 +31,18 @@ describe("completed timestamp handling", () => {
 		expect(nowIsoSpy).toHaveBeenCalled();
 	});
 
-	test("completeSession retries with numeric suffixes when a timestamp collides", async () => {
+	test("closeSession retries with numeric suffixes when a timestamp collides", async () => {
 		const worktree = makeTempDir();
 		const session = createSession("Completed collisions");
 
 		spyOn(time, "nowIso").mockReturnValue("2025-04-05T19:42:13.482Z");
 
 		await saveSession(worktree, session);
-		const first = await completeSession(worktree);
+		const first = await closeSession(worktree, "completed");
 		expect(first).not.toBeNull();
 
 		await saveSession(worktree, session);
-		const second = await completeSession(worktree);
+		const second = await closeSession(worktree, "completed");
 		expect(second).not.toBeNull();
 
 		expect(first?.completedTo).toBe(
@@ -70,14 +70,14 @@ describe("completed timestamp handling", () => {
 			...session,
 			goal: "Older completed copy",
 		});
-		const firstCompleted = await completeSession(worktree);
+		const firstCompleted = await closeSession(worktree, "completed");
 		expect(firstCompleted).not.toBeNull();
 
 		await saveSession(worktree, {
 			...session,
 			goal: "Newer completed copy",
 		});
-		const secondCompleted = await completeSession(worktree);
+		const secondCompleted = await closeSession(worktree, "completed");
 		expect(secondCompleted).not.toBeNull();
 
 		const loaded = await loadStoredSession(worktree, session.id);

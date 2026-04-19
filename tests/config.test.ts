@@ -159,7 +159,7 @@ describe("applyFlowConfig", () => {
 			"flow_session_activate",
 			"flow_plan_start",
 			"flow_auto_prepare",
-			"flow_reset_session",
+			"flow_session_close",
 			"flow_plan_context_record",
 			"flow_plan_apply",
 			"flow_plan_approve",
@@ -418,10 +418,12 @@ describe("applyFlowConfig", () => {
 			}).success,
 		).toBe(false);
 
-		expect(schemas.flow_reset_session.safeParse({}).success).toBe(true);
 		expect(
-			schemas.flow_reset_session.safeParse({ anything: true }).success,
+			schemas.flow_session_close.safeParse({ kind: "completed" }).success,
 		).toBe(true);
+		expect(
+			schemas.flow_session_close.safeParse({ anything: true }).success,
+		).toBe(false);
 		expect(
 			schemas.flow_reset_feature.safeParse({ featureId: "setup-runtime" })
 				.success,

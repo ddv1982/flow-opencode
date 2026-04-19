@@ -108,12 +108,12 @@ const FLOW_COMMANDS = {
 		template: FLOW_HISTORY_COMMAND_TEMPLATE,
 	},
 	"flow-session": {
-		description: "Activate a stored Flow session",
+		description: "Activate or close a Flow session",
 		agent: "flow-control",
 		template: FLOW_SESSION_COMMAND_TEMPLATE,
 	},
 	"flow-reset": {
-		description: "Reset a Flow feature or clear the active session",
+		description: "Reset a Flow feature",
 		agent: "flow-control",
 		template: FLOW_RESET_COMMAND_TEMPLATE,
 	},

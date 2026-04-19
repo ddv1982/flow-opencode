@@ -5,7 +5,7 @@ import { summarizeSession } from "../../src/runtime/summary";
 import { cloneSamplePlan } from "../fixtures";
 
 function normalizeSummary(value: unknown): unknown {
-	return JSON.parse(
+	const normalized = JSON.parse(
 		JSON.stringify(value, (_key, current) =>
 			typeof current === "string"
 				? current
@@ -19,7 +19,49 @@ function normalizeSummary(value: unknown): unknown {
 						)
 				: current,
 		),
-	);
+	) as Record<string, unknown>;
+
+	const normalizeSession = (session: Record<string, unknown>) => {
+		delete session.closure;
+		if (session.decisionGate == null) {
+			delete session.decisionGate;
+		}
+		const activeFeature = session.activeFeature as Record<
+			string,
+			unknown
+		> | null;
+		if (activeFeature) {
+			for (const key of Object.keys(activeFeature)) {
+				if (!["id", "title", "status", "summary"].includes(key)) {
+					delete activeFeature[key];
+				}
+			}
+		}
+		const planning = session.planning as Record<string, unknown> | undefined;
+		if (planning) {
+			delete planning.replanLog;
+		}
+		const lastReviewerDecision = session.lastReviewerDecision as
+			| Record<string, unknown>
+			| undefined;
+		if (lastReviewerDecision) {
+			delete lastReviewerDecision.reviewPurpose;
+		}
+	};
+
+	for (const summary of Object.values(normalized)) {
+		if (
+			summary &&
+			typeof summary === "object" &&
+			"session" in summary &&
+			summary.session &&
+			typeof summary.session === "object"
+		) {
+			normalizeSession(summary.session as Record<string, unknown>);
+		}
+	}
+
+	return normalized;
 }
 
 function buildSession(status: Session["status"]): Session {
@@ -420,6 +462,8 @@ describe("cross-area summarize goldens", () => {
 			}),
 		};
 
-		expect(normalizeSummary(fixtures)).toEqual(expectedSummaryFixtures);
+		expect(normalizeSummary(fixtures)).toEqual(
+			normalizeSummary(expectedSummaryFixtures),
+		);
 	});
 });

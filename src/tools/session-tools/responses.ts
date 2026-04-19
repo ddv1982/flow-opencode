@@ -5,7 +5,7 @@
 import { toJson } from "../../runtime/application";
 import type { Session } from "../../runtime/schema";
 import type {
-	completeSession,
+	closeSession,
 	listSessionHistory,
 	loadStoredSession,
 } from "../../runtime/session";
@@ -14,7 +14,7 @@ import type { AutoPrepareMode } from "./next-command-policy";
 
 type SessionHistory = Awaited<ReturnType<typeof listSessionHistory>>;
 type StoredSessionRecord = Awaited<ReturnType<typeof loadStoredSession>>;
-type CompletedSessionRecord = Awaited<ReturnType<typeof completeSession>>;
+type CompletedSessionRecord = Awaited<ReturnType<typeof closeSession>>;
 
 export function missingGoalResponse(summary: string, nextCommand: string) {
 	return toJson({
@@ -88,6 +88,7 @@ export function storedSessionResponse(
 		path: found.path,
 		completedPath: found.completedPath ?? null,
 		completedAt: found.completedAt ?? null,
+		closure: found.session.closure ?? null,
 		session: found.active
 			? summarizedSession
 			: { ...summarizedSession, nextCommand },
@@ -142,17 +143,18 @@ export function autoPrepareResponse(
 	};
 }
 
-export function resetSessionResponse(
+export function closeSessionResponse(
 	completed: CompletedSessionRecord,
 	nextCommand: string,
 ) {
 	return toJson({
 		status: "ok",
 		summary: completed
-			? "Completed and cleared the active Flow session."
+			? `Closed the active Flow session as ${completed.closureKind}.`
 			: "No active Flow session existed.",
 		completedSessionId: completed?.sessionId ?? null,
 		completedTo: completed?.completedTo ?? null,
+		closureKind: completed?.closureKind ?? null,
 		nextCommand,
 	});
 }

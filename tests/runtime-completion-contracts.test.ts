@@ -29,6 +29,37 @@ afterEach(() => {
 });
 
 describe("runtime completion and contract guards", () => {
+	test("rejects replan_required outcomes without structured replan fields", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_run_complete_feature.execute(
+			{
+				contractVersion: "1",
+				status: "needs_input",
+				summary: "Need a new plan.",
+				artifactsChanged: [],
+				validationRun: [],
+				decisions: [],
+				nextStep: "Replan the work.",
+				outcome: {
+					kind: "replan_required",
+				},
+				featureResult: {
+					featureId: "setup-runtime",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "No blocking findings.",
+					blockingFindings: [],
+				},
+			},
+			toolContext(makeTempDir()),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("error");
+		expect(String(parsed.summary)).toContain("replan_required outcomes");
+	});
+
 	test("rejects inconsistent ok status with replan outcome", () => {
 		const session = createSession("Build a workflow plugin");
 		const applied = applyPlan(session, samplePlan());
@@ -70,6 +101,10 @@ describe("runtime completion and contract guards", () => {
 			nextStep: "Create a refined plan.",
 			outcome: {
 				kind: "replan_required",
+				replanReason: "plan_too_broad",
+				failedAssumption:
+					"The current feature was small enough to finish in one pass.",
+				recommendedAdjustment: "Split the work into a smaller follow-up plan.",
 				needsHuman: false,
 			} as WorkerResult["outcome"],
 			featureResult: {

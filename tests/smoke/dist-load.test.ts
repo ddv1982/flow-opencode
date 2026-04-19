@@ -18,7 +18,7 @@ type FlowToolName =
 	| "flow_session_activate"
 	| "flow_plan_start"
 	| "flow_auto_prepare"
-	| "flow_reset_session"
+	| "flow_session_close"
 	| "flow_plan_context_record"
 	| "flow_plan_apply"
 	| "flow_plan_approve"
@@ -76,7 +76,7 @@ describe("built dist smoke load", () => {
 			flow_session_activate: { sessionId },
 			flow_plan_start: { goal: "Optimize the Flow bundle" },
 			flow_auto_prepare: { argumentString: "resume" },
-			flow_reset_session: {},
+			flow_session_close: { kind: "completed" },
 			flow_plan_context_record: { repoProfile: ["TypeScript"] },
 			flow_plan_apply: {
 				plan: {
@@ -104,7 +104,14 @@ describe("built dist smoke load", () => {
 				validationRun: [],
 				decisions: [],
 				nextStep: "Replan before completion.",
-				outcome: { kind: "replan_required" },
+				outcome: {
+					kind: "replan_required",
+					replanReason: "plan_too_broad",
+					failedAssumption:
+						"The current feature was small enough to finish in one pass.",
+					recommendedAdjustment:
+						"Split the work into a smaller follow-up plan.",
+				},
 				featureResult: { featureId: "dist-smoke" },
 				featureReview: {
 					status: "passed",

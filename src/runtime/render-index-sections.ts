@@ -1,4 +1,8 @@
-import { summarizeCompletion } from "./domain";
+import {
+	activeDecisionGate,
+	decisionRequiresPause,
+	summarizeCompletion,
+} from "./domain";
 import {
 	bulletList,
 	formatFollowUpLines,
@@ -35,7 +39,21 @@ function maybeDecisionLogSection(session: Session): string {
 	return `## Decision Log\n\n${bulletList(
 		decisions.map(
 			(decision) =>
-				`${toInlineText(decision.question)} | recommended: ${toInlineText(decision.recommendation)} | options: ${decision.options.map((option) => toInlineText(option.label)).join(", ")}`,
+				`${decision.decisionDomain} | ${decision.decisionMode} | pause: ${decisionRequiresPause(decision.decisionMode) ? "yes" : "no"} | ${toInlineText(decision.question)} | recommended: ${toInlineText(decision.recommendation)} | options: ${decision.options.map((option) => toInlineText(option.label)).join(", ")}`,
+		),
+	)}`;
+}
+
+function maybeReplanLogSection(session: Session): string {
+	const replans = session.planning.replanLog;
+	if (replans.length === 0) {
+		return "";
+	}
+
+	return `## Replan Log\n\n${bulletList(
+		replans.map(
+			(replan) =>
+				`${replan.recordedAt} | ${replan.reason} | ${toInlineText(replan.summary)} | failed assumption: ${toInlineText(replan.failedAssumption)} | adjust: ${toInlineText(replan.recommendedAdjustment)}`,
 		),
 	)}`;
 }
@@ -82,17 +100,27 @@ function renderFeatureResultDetails(
 
 function renderIndexSummarySection(session: Session): string {
 	const reviewerDecision = session.execution.lastReviewerDecision;
+	const decisionGate = activeDecisionGate(session);
+	const summaryLines = [
+		`- session id: ${session.id}`,
+		`- goal: ${toInlineText(session.goal)}`,
+		`- status: ${session.status}`,
+		`- closure: ${session.closure ? `${session.closure.kind} | ${toInlineText(session.closure.summary)}` : "open"}`,
+		`- approval: ${session.approval}`,
+		`- next command: ${deriveNextCommand(session)}`,
+		`- next step: ${session.execution.lastNextStep ? toInlineText(session.execution.lastNextStep) : "none"}`,
+		...(decisionGate
+			? [
+					`- decision gate: ${decisionGate.status} | ${decisionGate.domain} | ${toInlineText(decisionGate.question)}`,
+				]
+			: []),
+		`- reviewer decision: ${reviewerDecision ? `${reviewerDecision.scope} | ${reviewerDecision.reviewPurpose ?? "inferred"} | ${reviewerDecision.status} | ${toInlineText(reviewerDecision.summary)}` : "none"}`,
+		`- created: ${session.timestamps.createdAt}`,
+	];
 
 	return `## Summary
 
-- session id: ${session.id}
-- goal: ${toInlineText(session.goal)}
-- status: ${session.status}
-- approval: ${session.approval}
-- next command: ${deriveNextCommand(session)}
-- next step: ${session.execution.lastNextStep ? toInlineText(session.execution.lastNextStep) : "none"}
-- reviewer decision: ${reviewerDecision ? `${reviewerDecision.scope} | ${reviewerDecision.status} | ${toInlineText(reviewerDecision.summary)}` : "none"}
-- created: ${session.timestamps.createdAt}`;
+${summaryLines.join("\n")}`;
 }
 
 function renderPlanSection(session: Session, features: Feature[]): string {
@@ -117,6 +145,15 @@ function renderPlanSection(session: Session, features: Feature[]): string {
 			`- completion target: ${completion.targetCompletedFeatures}/${completion.totalFeatures} features`,
 		);
 		planLines.push(
+			`- stop rule: ${plan?.deliveryPolicy?.stopRule ?? "ship_when_clean"}`,
+		);
+		planLines.push(
+			`- priority mode: ${plan?.deliveryPolicy?.priorityMode ?? "balanced"}`,
+		);
+		planLines.push(
+			`- defer allowed: ${plan?.deliveryPolicy?.deferAllowed ? "yes" : "no"}`,
+		);
+		planLines.push(
 			`- pending allowed at completion: ${completion.canCompleteWithPendingFeatures ? "yes" : "no"}`,
 		);
 		planLines.push(
@@ -134,6 +171,7 @@ ${planLines.join("\n")}`,
 		maybeSection("Research", session.planning.research),
 		maybeApproachSection(session),
 		maybeDecisionLogSection(session),
+		maybeReplanLogSection(session),
 	]).trimEnd();
 }
 

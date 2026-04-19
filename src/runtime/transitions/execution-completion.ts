@@ -1,31 +1,26 @@
-import { featureWouldReachCompletion } from "../domain";
+import {
+	featureWouldReachCompletion,
+	sessionCompletionReached,
+} from "../domain";
 import type { Feature, Session, WorkerResult } from "../schema";
 import { nowIso } from "../util";
 import type { CompletionRecoveryKind } from "./recovery";
 import { buildCompletionRecovery } from "./recovery";
 import { fail, succeed, type TransitionResult } from "./shared";
 
-function completionThresholdReached(
-	features: Feature[],
-	plan: NonNullable<Session["plan"]>,
-): boolean {
-	const completedCount = features.filter(
-		(feature) => feature.status === "completed",
-	).length;
-	const minimum = plan.completionPolicy?.minCompletedFeatures;
-
-	return minimum !== undefined
-		? completedCount >= minimum
-		: completedCount === features.length;
-}
-
 export function markSessionCompleted(
 	session: Session,
 	summary: string,
 ): Session {
+	const recordedAt = nowIso();
 	return {
 		...session,
 		status: "completed",
+		closure: {
+			kind: "completed",
+			summary,
+			recordedAt,
+		},
 		execution: {
 			...session.execution,
 			activeFeatureId: null,
@@ -34,7 +29,7 @@ export function markSessionCompleted(
 		},
 		timestamps: {
 			...session.timestamps,
-			completedAt: nowIso(),
+			completedAt: recordedAt,
 		},
 	};
 }
@@ -184,6 +179,7 @@ function recordWorkerResult(
 	recordedAt: string,
 ): Session {
 	const outcomeKind = inferWorkerOutcomeKind(worker);
+	const replanRecord = buildReplanRecord(featureId, worker, recordedAt);
 
 	return {
 		...session,
@@ -212,6 +208,7 @@ function recordWorkerResult(
 					artifactsChanged: worker.artifactsChanged,
 					decisions: worker.decisions,
 					featureResult: worker.featureResult,
+					replanRecord: replanRecord ?? undefined,
 					reviewerDecision: session.execution.lastReviewerDecision,
 					featureReview: worker.featureReview,
 					finalReview: worker.finalReview,
@@ -245,16 +242,43 @@ function finalizeSuccessfulCompletion(
 	};
 
 	return succeed(
-		completionThresholdReached(nextPlan.features, nextPlan)
+		sessionCompletionReached(nextPlan, nextPlan.features)
 			? markSessionCompleted(nextSession, summary)
 			: { ...nextSession, status: "ready" },
 	);
+}
+
+function buildReplanRecord(
+	featureId: string,
+	worker: WorkerResult,
+	recordedAt: string,
+) {
+	if (worker.outcome?.kind !== "replan_required") {
+		return null;
+	}
+	if (
+		!worker.outcome.replanReason ||
+		!worker.outcome.failedAssumption ||
+		!worker.outcome.recommendedAdjustment
+	) {
+		return null;
+	}
+
+	return {
+		featureId,
+		reason: worker.outcome.replanReason,
+		summary: worker.outcome.summary ?? worker.summary,
+		failedAssumption: worker.outcome.failedAssumption,
+		recommendedAdjustment: worker.outcome.recommendedAdjustment,
+		recordedAt,
+	};
 }
 
 function finalizeIncompleteCompletion(
 	next: Session,
 	featureId: string,
 	outcomeKind: WorkerOutcomeKind,
+	replanRecord: Session["planning"]["replanLog"][number] | null,
 ): Session {
 	const plan = next.plan;
 	if (!plan) {
@@ -267,6 +291,12 @@ function finalizeIncompleteCompletion(
 			plan: null,
 			status: "planning",
 			approval: "pending",
+			planning: {
+				...next.planning,
+				replanLog: replanRecord
+					? [...next.planning.replanLog, replanRecord]
+					: next.planning.replanLog,
+			},
 			execution: {
 				...next.execution,
 				activeFeatureId: null,
@@ -323,11 +353,13 @@ export function completeExecutionRun(
 		return finalizeSuccessfulCompletion(next, featureId, worker.summary);
 	}
 
+	const replanRecord = buildReplanRecord(featureId, worker, recordedAt);
 	return succeed(
 		finalizeIncompleteCompletion(
 			recordWorkerResult(session, featureId, worker, recordedAt),
 			featureId,
 			worker.outcome.kind,
+			replanRecord,
 		),
 	);
 }

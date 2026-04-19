@@ -5,7 +5,7 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowResetFeatureCommand,
 } from "./constants";
-import { summarizeCompletion } from "./domain";
+import { activeDecisionGate, summarizeCompletion } from "./domain";
 import type { Feature, Session } from "./schema";
 
 function summarizeFeature(feature: Feature): string {
@@ -29,6 +29,7 @@ export function summarizeSession(session: Session | null) {
 			(feature) => feature.id === session.execution.activeFeatureId,
 		) ?? null;
 	const completion = summarizeCompletion(session);
+	const decisionGate = activeDecisionGate(session);
 
 	return {
 		status: session.status,
@@ -44,7 +45,14 @@ export function summarizeSession(session: Session | null) {
 			planSummary: session.plan?.summary ?? null,
 			planOverview: session.plan?.overview ?? null,
 			completion,
-			activeFeature,
+			activeFeature: activeFeature
+				? {
+						id: activeFeature.id,
+						title: activeFeature.title,
+						status: activeFeature.status,
+						summary: activeFeature.summary,
+					}
+				: null,
 			featureProgress: {
 				completed: completedCount,
 				total: features.length,
@@ -57,7 +65,9 @@ export function summarizeSession(session: Session | null) {
 			})),
 			notes: session.notes,
 			artifacts: session.artifacts,
+			closure: session.closure,
 			planning: session.planning,
+			decisionGate,
 			lastOutcome: session.execution.lastOutcome,
 			lastNextStep: session.execution.lastNextStep,
 			lastFeatureResult: session.execution.lastFeatureResult,

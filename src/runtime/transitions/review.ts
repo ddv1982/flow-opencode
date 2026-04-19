@@ -1,9 +1,11 @@
+import { reviewerPurposeForScope } from "../domain";
 import type { Feature, ReviewerDecision, Session } from "../schema";
 import { fail, succeed, type TransitionResult } from "./shared";
 
 type FeatureScopeReviewerDecision = ReviewerDecision & { scope: "feature" };
 type RecordReviewerDecisionInput = {
 	scope: string;
+	reviewPurpose?: string | undefined;
 	status: string;
 	summary: string;
 	featureId?: string | undefined;
@@ -129,6 +131,7 @@ export function resetFeature(
 		...session,
 		plan: nextPlan,
 		status: session.approval === "approved" ? "ready" : "planning",
+		closure: null,
 		execution: nextExecution,
 		timestamps: {
 			...session.timestamps,
@@ -177,9 +180,28 @@ export function recordReviewerDecision(
 			`Reviewer decision validation failed: status: Invalid enum value. Expected 'approved' | 'needs_fix' | 'blocked', received '${input.status}'.`,
 		);
 	}
+	if (
+		input.scope === "feature" &&
+		input.reviewPurpose !== undefined &&
+		input.reviewPurpose !== "execution_gate"
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewPurpose: Feature reviewer decisions must use execution_gate.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewPurpose !== undefined &&
+		input.reviewPurpose !== "completion_gate"
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewPurpose: Final reviewer decisions must use completion_gate.",
+		);
+	}
 
 	const decision: ReviewerDecision = {
 		scope: input.scope,
+		reviewPurpose: reviewerPurposeForScope(input.scope),
 		status: input.status,
 		summary: input.summary,
 		blockingFindings: input.blockingFindings ?? [],

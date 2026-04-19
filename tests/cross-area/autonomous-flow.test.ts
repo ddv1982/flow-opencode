@@ -135,6 +135,11 @@ describe("cross-area autonomous flow", () => {
 						retryable: true,
 						autoResolvable: true,
 						needsHuman: false,
+						replanReason: "plan_too_broad",
+						failedAssumption:
+							"The current feature was small enough to finish in one pass.",
+						recommendedAdjustment:
+							"Split the work into a smaller follow-up plan.",
 					},
 					featureResult: { featureId: "recover-autonomous" },
 					featureReview: {

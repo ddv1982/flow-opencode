@@ -1,6 +1,10 @@
 import { tool } from "@opencode-ai/plugin";
 import type { WorkspaceContext } from "../runtime/application";
-import { FEATURE_ID_MESSAGE, FEATURE_ID_PATTERN } from "../runtime/constants";
+import {
+	CLOSURE_KINDS,
+	FEATURE_ID_MESSAGE,
+	FEATURE_ID_PATTERN,
+} from "../runtime/constants";
 import type { PlanArgs, PlanningContextArgs } from "../runtime/schema";
 import {
 	OutcomeSchema,
@@ -38,6 +42,10 @@ export const FlowSessionActivateArgsShape = {
 		.string()
 		.min(1)
 		.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case"),
+};
+export const FlowSessionCloseArgsShape = {
+	kind: z.enum(CLOSURE_KINDS),
+	summary: z.string().trim().min(1).optional(),
 };
 export const FlowAutoPrepareArgsShape = {
 	argumentString: z.string().optional(),
@@ -91,6 +99,7 @@ export const FlowHistoryShowArgsSchema = z.object(FlowHistoryShowArgsShape);
 export const FlowSessionActivateArgsSchema = z.object(
 	FlowSessionActivateArgsShape,
 );
+export const FlowSessionCloseArgsSchema = z.object(FlowSessionCloseArgsShape);
 export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
 export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
 export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
@@ -104,6 +113,11 @@ export type FlowHistoryShowArgs = {
 
 export type FlowSessionActivateArgs = {
 	sessionId: string;
+};
+
+export type FlowSessionCloseArgs = {
+	kind: (typeof CLOSURE_KINDS)[number];
+	summary?: string;
 };
 
 export type FlowAutoPrepareArgs = {

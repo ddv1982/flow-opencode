@@ -22,6 +22,7 @@ type ExpectedFlowPlanApplyArgs = {
 type ExpectedFeatureReviewRecordArgs = {
 	scope: "feature";
 	featureId: string;
+	reviewPurpose?: "execution_gate" | "completion_gate" | undefined;
 	status: "approved" | "needs_fix" | "blocked";
 	summary: string;
 	blockingFindings?: { summary: string }[] | undefined;
@@ -36,6 +37,7 @@ type ExpectedFeatureReviewRecordArgs = {
 
 type ExpectedFinalReviewRecordArgs = {
 	scope: "final";
+	reviewPurpose?: "execution_gate" | "completion_gate" | undefined;
 	status: "approved" | "needs_fix" | "blocked";
 	summary: string;
 	blockingFindings?: { summary: string }[] | undefined;

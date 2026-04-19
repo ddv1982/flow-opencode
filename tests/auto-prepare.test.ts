@@ -58,6 +58,8 @@ describe("flow_auto_prepare semantics", () => {
 					{
 						question:
 							"How should autonomous mode handle unresolved architecture choices?",
+						decisionMode: "recommend_confirm",
+						decisionDomain: "architecture",
 						options: [
 							{ label: "Pause and ask", tradeoffs: ["safer", "slower"] },
 							{ label: "Auto-guess", tradeoffs: ["faster", "riskier"] },
@@ -73,5 +75,9 @@ describe("flow_auto_prepare semantics", () => {
 
 		expect(parsed.status).toBe("ok");
 		expect(parsed.session.planning.decisionLog).toHaveLength(1);
+		expect(parsed.session.planning.decisionLog[0]).toMatchObject({
+			decisionMode: "recommend_confirm",
+			decisionDomain: "architecture",
+		});
 	});
 });

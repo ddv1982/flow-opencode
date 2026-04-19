@@ -5,6 +5,7 @@
 - session id: render-empty-plan
 - goal: Empty plan fixture
 - status: planning
+- closure: open
 - approval: pending
 - next command: /flow-plan <goal>
 - next step: none

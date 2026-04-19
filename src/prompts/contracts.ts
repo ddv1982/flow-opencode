@@ -4,16 +4,18 @@ export const FLOW_PLAN_CONTRACT = `Persist a plan with:
 - overview: string
 - requirements: string[]
 - architectureDecisions: string[]
-- features: { id, title, summary, fileTargets: string[], verification: string[], dependsOn?: string[], blockedBy?: string[] }[]
+- features: { id, title, summary, priority?: critical | important | nice_to_have, deferCandidate?: boolean, fileTargets: string[], verification: string[], dependsOn?: string[], blockedBy?: string[] }[]
 - goalMode?: implementation | review | review_and_fix
 - decompositionPolicy?: atomic_feature | iterative_refinement | open_ended
 - completionPolicy?: { minCompletedFeatures?: number }
+- deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean }
 - notes?: string[]
 
 Optional context:
 - repoProfile?: string[]
 - research?: string[]
-- implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }`;
+- implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }
+- decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]`;
 
 export const FLOW_WORKER_CONTRACT = `Return exactly one JSON object that matches the worker result payload below, with no markdown fences, commentary, or trailing text:
 
@@ -26,7 +28,7 @@ export const FLOW_WORKER_CONTRACT = `Return exactly one JSON object that matches
 - nextStep: string
 - reviewIterations?: number
 - validationScope?: targeted | broad
-- outcome?: { kind, category?, summary?, resolutionHint?, retryable?, autoResolvable?, needsHuman? }
+- outcome?: { kind, category?, summary?, resolutionHint?, retryable?, autoResolvable?, needsHuman?, replanReason?, failedAssumption?, recommendedAdjustment? }
 - featureResult: { featureId, verificationStatus?: passed | partial | failed | not_recorded, notes?: { note }[], followUps?: { summary, severity? }[] }
 - featureReview: { status: passed | failed | needs_followup, summary, blockingFindings: { summary }[] }
 - finalReview?: same shape as featureReview
@@ -34,6 +36,7 @@ export const FLOW_WORKER_CONTRACT = `Return exactly one JSON object that matches
 Status rules:
 - if status is ok, outcome must be omitted or use kind: completed
 - if status is needs_input, outcome.kind must be replan_required | blocked_external | needs_operator_input | contract_error
+- if outcome.kind is replan_required, include replanReason, failedAssumption, and recommendedAdjustment
 - never return status: ok with a non-completion outcome
 - never return status: ok until targeted validation is complete and featureReview has no blocking findings
 - when the active feature is the final completion path for the session, run broad validation, include finalReview, and use validationScope: broad
@@ -43,6 +46,7 @@ export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that match
 
 - scope: feature | final
 - featureId?: string
+- reviewPurpose?: execution_gate | completion_gate
 - status: approved | needs_fix | blocked
 - summary: string
 - blockingFindings: { summary }[]
@@ -53,5 +57,6 @@ Reviewer rules:
 - return approved only when the current feature is clean enough to advance
 - return needs_fix when implementation should continue on the same feature
 - return blocked only for real external blockers or required human decisions
-- for scope: feature, include the active featureId
+- for scope: feature, include the active featureId and use reviewPurpose execution_gate
+- for scope: final, use reviewPurpose completion_gate
 - do not implement fixes yourself; only review and report findings`;

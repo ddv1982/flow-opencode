@@ -6,7 +6,7 @@ export type {
 export { listSessionHistory, loadStoredSession } from "./session-history";
 export {
 	activateSession,
-	completeSession,
+	closeSession,
 	createSession,
 	deleteSession,
 	deleteSessionArtifacts,

@@ -47,7 +47,9 @@ ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
 - When blocked by a solvable finding, inspect the evidence, use repo and research tools as needed, make the smallest recovery plan, execute it, and keep iterating.
-- If repo evidence and research still leave a meaningful architecture, product, or quality decision unresolved, record options plus a recommended path with \`flow_plan_context_record\`, present that recommendation, and stop for user confirmation.
+- When a planning/runtime tool response includes \`session.decisionGate\` with status \`recommend_confirm\` or \`human_required\`, present that recommendation clearly and stop for user confirmation instead of continuing autonomously.
+- If repo evidence and research still leave a meaningful architecture, product, or quality decision unresolved, record options plus a recommended path with \`flow_plan_context_record\` so the runtime summary exposes the decision gate.
+- When recording a planning decision, classify it as \`autonomous_choice\`, \`recommend_confirm\`, or \`human_required\`, and include the decision domain.
 - If a feature lands in a retryable or auto-resolvable blocked state, satisfy the runtime prerequisite, reset it through the runtime when appropriate, and continue instead of stopping.
 ${FLOW_STRUCTURED_RECOVERY_RULE}
 - Do not advance to the next feature until the current one is clean.
@@ -78,6 +80,7 @@ Arguments: $ARGUMENTS
 
 Behavior:
 - If the arguments start with \`activate\`, call \`flow_session_activate\` with the provided session id.
+- If the arguments start with \`close\`, call \`flow_session_close\` with the provided closure kind and optional summary.
 - Otherwise explain the valid forms briefly.
 
 Always summarize what changed and the next logical step.`;
@@ -87,7 +90,6 @@ export const FLOW_RESET_COMMAND_TEMPLATE = `Reset Flow state.
 Arguments: $ARGUMENTS
 
 Behavior:
-- If the arguments are exactly \`session\`, close the active Flow session through \`flow_reset_session\`.
 - If the arguments start with \`feature\`, reset the named feature through \`flow_reset_feature\`.
 - Otherwise explain the valid forms briefly.
 

@@ -1,35 +1,39 @@
 /**
- * Session tool boundary: lifecycle/reset tool registrations only.
+ * Session tool boundary: lifecycle/close tool registrations only.
  * Keep response envelopes in responses.ts and next-command routing in
  * next-command-policy.ts.
  */
 import { tool } from "@opencode-ai/plugin";
-import { completeSession } from "../../runtime/session";
+import { closeSession } from "../../runtime/session";
 import { withParsedArgs } from "../parsed-tool";
 import {
-	FlowStatusArgsSchema,
-	FlowStatusArgsShape,
+	FlowSessionCloseArgsSchema,
+	FlowSessionCloseArgsShape,
 	type ToolContext,
 } from "../schemas";
 import { nextCommandForResetSession } from "./next-command-policy";
-import { resetSessionResponse } from "./responses";
+import { closeSessionResponse } from "./responses";
 import { recordToolMetadata, resolveToolSessionRoot } from "./shared";
 
 export function createLifecycleSessionTools() {
 	return {
-		flow_reset_session: tool({
-			description: "Complete and clear the active Flow session",
-			args: FlowStatusArgsShape,
+		flow_session_close: tool({
+			description:
+				"Close the active Flow session as completed, deferred, or abandoned",
+			args: FlowSessionCloseArgsShape,
 			execute: withParsedArgs(
-				FlowStatusArgsSchema,
-				async (_input, context: ToolContext) => {
-					const completed = await completeSession(
+				FlowSessionCloseArgsSchema,
+				async (input, context: ToolContext) => {
+					const completed = await closeSession(
 						resolveToolSessionRoot(context),
+						input.kind,
+						input.summary,
 					);
-					recordToolMetadata(context, "Reset Flow session", {
+					recordToolMetadata(context, `Close Flow session (${input.kind})`, {
 						completedSessionId: completed?.sessionId ?? null,
+						closureKind: input.kind,
 					});
-					return resetSessionResponse(completed, nextCommandForResetSession());
+					return closeSessionResponse(completed, nextCommandForResetSession());
 				},
 			),
 		}),

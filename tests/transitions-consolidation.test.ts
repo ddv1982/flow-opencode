@@ -108,7 +108,7 @@ describe("transition consolidation", () => {
 		expect(historyTools).toContain("flow_session_activate");
 		expect(historyTools).not.toContain("flow_plan_start");
 		expect(historyTools).not.toContain("flow_auto_prepare");
-		expect(historyTools).not.toContain("flow_reset_session");
+		expect(historyTools).not.toContain("flow_session_close");
 
 		expect(planningTools).toContain(
 			"export function createPlanningSessionTools",
@@ -120,15 +120,15 @@ describe("transition consolidation", () => {
 		expect(planningTools).toContain("flow_auto_prepare");
 		expect(planningTools).not.toContain("flow_status");
 		expect(planningTools).not.toContain("flow_history");
-		expect(planningTools).not.toContain("flow_reset_session");
+		expect(planningTools).not.toContain("flow_session_close");
 
 		expect(lifecycleTools).toContain(
 			"export function createLifecycleSessionTools",
 		);
 		expect(lifecycleTools).toContain(
-			"Session tool boundary: lifecycle/reset tool registrations only.",
+			"Session tool boundary: lifecycle/close tool registrations only.",
 		);
-		expect(lifecycleTools).toContain("flow_reset_session");
+		expect(lifecycleTools).toContain("flow_session_close");
 		expect(lifecycleTools).not.toContain("flow_status");
 		expect(lifecycleTools).not.toContain("flow_plan_start");
 		expect(lifecycleTools).not.toContain("flow_history");
@@ -136,7 +136,7 @@ describe("transition consolidation", () => {
 		expect(responseTools).toContain("export function historyResponse");
 		expect(responseTools).toContain("export function storedSessionResponse");
 		expect(responseTools).toContain("export function autoPrepareResponse");
-		expect(responseTools).toContain("export function resetSessionResponse");
+		expect(responseTools).toContain("export function closeSessionResponse");
 		expect(responseTools).toContain(
 			"Session tool boundary: JSON response envelope assembly only.",
 		);
@@ -173,7 +173,7 @@ describe("transition consolidation", () => {
 		expect(sharedTools).not.toContain("missingStoredSessionResponse");
 		expect(sharedTools).not.toContain("flow_status");
 		expect(sharedTools).not.toContain("flow_plan_start");
-		expect(sharedTools).not.toContain("flow_reset_session");
+		expect(sharedTools).not.toContain("flow_session_close");
 	});
 
 	test("transition index exposes the stable public transition surface", () => {

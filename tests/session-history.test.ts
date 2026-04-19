@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
-	completeSession,
+	closeSession,
 	createSession,
 	listSessionHistory,
 	saveSession,
@@ -25,11 +25,11 @@ describe("session history completed parsing", () => {
 			.mockReturnValueOnce("20250405T194213.482")
 			.mockReturnValueOnce("20250405T194213.483");
 		await saveSession(worktree, first);
-		const olderCompleted = await completeSession(worktree);
+		const olderCompleted = await closeSession(worktree, "completed");
 		expect(olderCompleted).not.toBeNull();
 
 		await saveSession(worktree, second);
-		const newerCompleted = await completeSession(worktree);
+		const newerCompleted = await closeSession(worktree, "completed");
 		expect(newerCompleted).not.toBeNull();
 
 		const history = await listSessionHistory(worktree);

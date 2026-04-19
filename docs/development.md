@@ -45,7 +45,7 @@ Flow is built around a small set of responsibilities:
 1. A plugin `config` hook injects commands and agents.
 2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers.
 3. Session state is stored under `.flow/active/<session-id>/session.json`, with inactive resumable sessions under `.flow/stored/<session-id>/` and closed history under `.flow/completed/<session-id>-<timestamp>/`.
-4. Domain transitions remain authoritative for workflow state changes.
+4. Domain transitions and runtime policy helpers remain authoritative for workflow state changes.
 5. Prompted agents call runtime tools instead of mutating state directly.
 6. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
@@ -61,9 +61,9 @@ Flow is built around a small set of responsibilities:
 
 - `flow-planner` reads the repo and creates a compact execution-ready plan
 - `flow-worker` executes exactly one approved feature
-- `flow-reviewer` reviews feature-level or final cross-feature state
+- `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`)
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
-- `flow-control` handles status/history/session/reset requests only
+- `flow-control` handles status/history/session/feature-reset requests only
 
 ## Current Runtime Tools
 
@@ -81,7 +81,7 @@ Flow is built around a small set of responsibilities:
 - `flow_review_record_final`
 - `flow_session_activate`
 - `flow_reset_feature`
-- `flow_reset_session`
+- `flow_session_close`
 
 ## Recovery Model
 
@@ -109,6 +109,17 @@ Examples:
 - missing validation scope or evidence reports `validation_rerun_required`
 - missing final review payload reports `completion_payload_rebuild_required`
 - failing review or validation can point directly to `flow_reset_feature`
+
+## Workflow Semantics
+
+Flow now persists a few higher-level concepts directly in runtime state:
+
+- planning decisions can be classified as `autonomous_choice`, `recommend_confirm`, or `human_required`
+- runtime summaries expose the latest blocking planning decision as `decisionGate`
+- planning decisions also carry a domain such as `architecture`, `product`, `quality`, `scope`, or `delivery`
+- plans can declare a `deliveryPolicy` so completion can be driven by a clean finish, a core-work finish, or a threshold
+- `replan_required` outcomes must carry a structured reason, failed assumption, and recommended adjustment
+- closed sessions carry an explicit closure kind: `completed`, `deferred`, or `abandoned`
 
 ## Performance Direction
 

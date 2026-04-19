@@ -189,13 +189,22 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
 				}
 			: summary.session.planning;
 
+	const normalizedSession = {
+		...summary.session,
+		id: "<session-id>",
+		closure: summary.session.closure
+			? { ...summary.session.closure, recordedAt: "<closure-recorded-at>" }
+			: null,
+		planning,
+	} as Record<string, unknown>;
+
+	if (!summary.session.decisionGate) {
+		delete normalizedSession.decisionGate;
+	}
+
 	return {
 		...summary,
-		session: {
-			...summary.session,
-			id: "<session-id>",
-			planning,
-		},
+		session: normalizedSession,
 	};
 }
 
@@ -222,6 +231,7 @@ describe("runtime summary", () => {
 	            "activeFeature": null,
 	            "approval": "approved",
 	            "artifacts": [],
+	            "closure": null,
 	            "completion": {
 	              "activeFeatureTriggersSessionCompletion": false,
 	              "canCompleteWithPendingFeatures": false,
@@ -300,6 +310,11 @@ describe("runtime summary", () => {
 	            "activeFeature": null,
 	            "approval": "approved",
 	            "artifacts": [],
+	            "closure": {
+	              "kind": "completed",
+	              "recordedAt": "<closure-recorded-at>",
+	              "summary": "Completed runtime setup.",
+	            },
 	            "completion": {
 	              "activeFeatureTriggersSessionCompletion": false,
 	              "canCompleteWithPendingFeatures": false,
@@ -337,6 +352,7 @@ describe("runtime summary", () => {
 	            "lastReviewerDecision": {
 	              "blockingFindings": [],
 	              "followUps": [],
+	              "reviewPurpose": "completion_gate",
 	              "scope": "final",
 	              "status": "approved",
 	              "suggestedValidation": [],
@@ -367,6 +383,7 @@ describe("runtime summary", () => {
 	            "activeFeature": null,
 	            "approval": "pending",
 	            "artifacts": [],
+	            "closure": null,
 	            "completion": {
 	              "activeFeatureTriggersSessionCompletion": false,
 	              "canCompleteWithPendingFeatures": false,
@@ -421,19 +438,14 @@ describe("runtime summary", () => {
 	        "running": {
 	          "session": {
 	            "activeFeature": {
-	              "fileTargets": [
-	                "src/runtime/session.ts",
-	              ],
 	              "id": "setup-runtime",
 	              "status": "in_progress",
 	              "summary": "Add runtime helper files and state persistence.",
 	              "title": "Create runtime helpers",
-	              "verification": [
-	                "bun test",
-	              ],
 	            },
 	            "approval": "approved",
 	            "artifacts": [],
+	            "closure": null,
 	            "completion": {
 	              "activeFeatureTriggersSessionCompletion": false,
 	              "canCompleteWithPendingFeatures": false,
@@ -554,6 +566,41 @@ describe("runtime summary", () => {
 			"active feature triggers session completion: yes",
 		);
 		expect(indexDoc).not.toContain("final review required");
+	});
+
+	test("summarizeSession exposes a runtime decisionGate for blocking planning decisions", () => {
+		const session = createSession("Build a workflow plugin");
+		session.planning.decisionLog = [
+			{
+				question: "Should Flow ship a minimal cut or wait for full parity?",
+				decisionMode: "autonomous_choice",
+				decisionDomain: "delivery",
+				options: [{ label: "Ship minimal", tradeoffs: ["faster"] }],
+				recommendation: "Ship minimal",
+				rationale: ["A safe default exists."],
+			},
+			{
+				question: "Should Flow rewrite the API surface now?",
+				decisionMode: "recommend_confirm",
+				decisionDomain: "architecture",
+				options: [
+					{ label: "Rewrite now", tradeoffs: ["cleaner"] },
+					{ label: "Defer", tradeoffs: ["safer"] },
+				],
+				recommendation: "Defer",
+				rationale: ["A breaking rewrite needs confirmation."],
+			},
+		];
+
+		const summary = summarizeSession(session);
+
+		expect(summary.session?.decisionGate).toEqual({
+			status: "recommend_confirm",
+			domain: "architecture",
+			question: "Should Flow rewrite the API surface now?",
+			recommendation: "Defer",
+			rationale: ["A breaking rewrite needs confirmation."],
+		});
 	});
 
 	test("deriveNextCommand covers planning, runnable, blocked-human, and completed branches", () => {

@@ -58,4 +58,32 @@ describe("recordReviewerDecision scope validation", () => {
 		if (result.ok) return;
 		expect(result.message).toContain("featureId");
 	});
+
+	test("infers execution_gate reviewPurpose for feature scope", () => {
+		const result = recordReviewerDecision(startedSession(), {
+			scope: "feature",
+			featureId: "setup-runtime",
+			status: "approved",
+			summary: "Looks good.",
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.execution.lastReviewerDecision?.reviewPurpose).toBe(
+			"execution_gate",
+		);
+	});
+
+	test("rejects mismatched reviewPurpose for final scope", () => {
+		const result = recordReviewerDecision(startedSession(), {
+			scope: "final",
+			reviewPurpose: "execution_gate",
+			status: "approved",
+			summary: "Final review looks good.",
+		});
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.message).toContain("reviewPurpose");
+	});
 });

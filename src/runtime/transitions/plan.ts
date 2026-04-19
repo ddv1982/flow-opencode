@@ -15,6 +15,8 @@ type ApplyPlanInput = Omit<PlanInput, "features"> & {
 				title?: string;
 				summary?: string;
 				status?: PlanInput["features"][number]["status"];
+				priority?: PlanInput["features"][number]["priority"];
+				deferCandidate?: PlanInput["features"][number]["deferCandidate"];
 				fileTargets?: readonly string[] | undefined;
 				verification?: readonly string[] | undefined;
 				dependsOn?: readonly string[] | undefined;
@@ -47,6 +49,8 @@ function normalizePlan(planInput: ApplyPlanInput): Plan {
 			...(feature.dependsOn ? { dependsOn: [...feature.dependsOn] } : {}),
 			...(feature.blockedBy ? { blockedBy: [...feature.blockedBy] } : {}),
 			status: "pending",
+			priority: feature.priority ?? "important",
+			deferCandidate: feature.deferCandidate ?? false,
 		})),
 	};
 }
@@ -210,6 +214,7 @@ export function applyPlan(
 		plan,
 		status: "planning",
 		approval: "pending",
+		closure: null,
 		timestamps: {
 			...session.timestamps,
 			approvedAt: null,
@@ -223,6 +228,7 @@ export function applyPlan(
 				planning?.implementationApproach ??
 				session.planning.implementationApproach,
 			decisionLog: planning?.decisionLog ?? session.planning.decisionLog,
+			replanLog: planning?.replanLog ?? session.planning.replanLog,
 		},
 		execution: {
 			...session.execution,

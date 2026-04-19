@@ -5,6 +5,7 @@
 - session id: bench-session-10
 - goal: Benchmark 10-feature session
 - status: running
+- closure: open
 - approval: approved
 - next command: /flow-run
 - next step: Record reviewer approval.
@@ -18,6 +19,9 @@
 - progress: 3/10 completed
 - active feature: feature-4
 - completion target: 10/10 features
+- stop rule: ship_when_clean
+- priority mode: balanced
+- defer allowed: no
 - pending allowed at completion: no
 - active feature triggers session completion: no
 

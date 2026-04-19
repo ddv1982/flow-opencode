@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.9] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.9 turns the new workflow semantics into explicit runtime behavior. This release adds a runtime `decisionGate`, requires structured replan reasons, makes session close outcomes explicit through `flow_session_close`, and updates Flow’s prompts, summaries, and docs to match the stricter workflow model.
+
+### Added
+
+- Added runtime-owned decision-gate derivation so blocking planning decisions are surfaced in session summaries as `decisionGate`.
+- Added structured replan metadata requirements: `replanReason`, `failedAssumption`, and `recommendedAdjustment`.
+- Added explicit session closure metadata for `completed`, `deferred`, and `abandoned` outcomes.
+
+### Changed
+
+- Replaced the old session-close flow with explicit `flow_session_close` semantics and made the closure kind required.
+- Updated runtime summaries, rendered session docs, and reviewer records to expose decision gates, closure state, and review purpose more clearly.
+- Updated planner/auto contracts and README/development docs to describe runtime-backed decision taxonomy, delivery policy, and active/stored/completed history behavior.
+
 ## [1.0.8] - 2026-04-19
 
 ### Highlights

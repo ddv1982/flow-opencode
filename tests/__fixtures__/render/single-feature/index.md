@@ -5,6 +5,7 @@
 - session id: render-single-feature
 - goal: Single feature fixture
 - status: planning
+- closure: open
 - approval: pending
 - next command: /flow-plan
 - next step: none
@@ -18,6 +19,9 @@
 - progress: 0/1 completed
 - active feature: none
 - completion target: 1/1 features
+- stop rule: ship_when_clean
+- priority mode: balanced
+- defer allowed: no
 - pending allowed at completion: no
 - active feature triggers session completion: no
 

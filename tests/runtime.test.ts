@@ -960,7 +960,14 @@ describe("runtime transitions", () => {
 			reviewIterations: 0,
 			decisions: [{ summary: "Feature is too broad after inspection." }],
 			nextStep: "Create a refined plan.",
-			outcome: { kind: "replan_required", needsHuman: false },
+			outcome: {
+				kind: "replan_required",
+				needsHuman: false,
+				replanReason: "plan_too_broad",
+				failedAssumption:
+					"The current feature was small enough to finish in one pass.",
+				recommendedAdjustment: "Split the work into a smaller follow-up plan.",
+			},
 			featureResult: {
 				featureId: "setup-runtime",
 				verificationStatus: "not_recorded",
@@ -1008,7 +1015,14 @@ describe("runtime transitions", () => {
 			reviewIterations: 0,
 			decisions: [{ summary: "Feature is too broad after inspection." }],
 			nextStep: "Create a refined plan.",
-			outcome: { kind: "replan_required", needsHuman: false },
+			outcome: {
+				kind: "replan_required",
+				needsHuman: false,
+				replanReason: "plan_too_broad",
+				failedAssumption:
+					"The current feature was small enough to finish in one pass.",
+				recommendedAdjustment: "Split the work into a smaller follow-up plan.",
+			},
 			featureResult: {
 				featureId: "setup-runtime",
 				verificationStatus: "not_recorded",

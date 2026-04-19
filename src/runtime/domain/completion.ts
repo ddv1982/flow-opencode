@@ -1,12 +1,8 @@
 import type { Plan, Session } from "../schema";
-
-function completedFeatureCount(features: Plan["features"]): number {
-	return features.filter((feature) => feature.status === "completed").length;
-}
-
-function targetCompletedFeatureCount(plan: Plan): number {
-	return plan.completionPolicy?.minCompletedFeatures ?? plan.features.length;
-}
+import {
+	completedFeatureCount,
+	targetCompletedFeatureCount,
+} from "./workflow-policy";
 
 export function featureWouldReachCompletion(
 	plan: Plan,

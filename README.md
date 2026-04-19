@@ -121,19 +121,27 @@ Flow adds these slash commands to OpenCode:
 | `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
 | `/flow-auto resume` | Resume the active autonomous session |
 | `/flow-status` | Show the current session summary |
-| `/flow-history` | Show stored session history |
-| `/flow-history show <session-id>` | Show a specific stored session |
+| `/flow-history` | Show active, stored, and completed session history |
+| `/flow-history show <session-id>` | Show a specific active, stored, or completed session |
 | `/flow-session activate <id>` | Switch the active session |
+| `/flow-session close <completed|deferred|abandoned>` | Close the active session with an explicit outcome |
 | `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
-| `/flow-reset session` | Close the active session into completed history and clear it |
 
 ## How Flow Works
 
-Before Flow drafts or refreshes a plan, it first inspects repo evidence to detect the stack and persist planning context such as repo profile, research notes, implementation approach, and any recorded decision notes.
+Before Flow drafts or refreshes a plan, it first inspects repo evidence to detect the stack and persist planning context such as repo profile, research notes, implementation approach, recorded decision notes, and replan history.
 
 Flow researches only when local repo evidence is insufficient to produce a high-confidence plan or recommendation, or when external grounding would materially improve a meaningful technical decision.
 
-`/flow-plan` uses that context to draft a plan, but it does not hard-stop on decision gates. `/flow-auto` uses the same context, and if a meaningful decision still remains after repo evidence and research, it pauses with options, tradeoffs, and a recommended path before continuing.
+`/flow-plan` uses that context to draft a plan, but it does not hard-stop on decision gates. `/flow-auto` uses the same context, and if a meaningful decision still remains after repo evidence and research, it records the decision as one of:
+
+- `autonomous_choice` — Flow may continue on its own
+- `recommend_confirm` — Flow presents a recommendation and pauses for confirmation
+- `human_required` — Flow must stop for a human decision
+
+That decision is surfaced back through the runtime session summary as a `decisionGate`, so autonomous continuation can key off runtime state instead of only prompt wording.
+
+Plans can also carry an explicit delivery policy so Flow knows whether it should ship only when everything is clean, ship when core work is done, or ship when a declared threshold is met.
 
 ```mermaid
 flowchart TD
@@ -200,6 +208,12 @@ Closed session history lives under:
 ```text
 .flow/completed/
 ```
+
+Completed history can contain different closure outcomes in session metadata:
+
+- `completed`
+- `deferred`
+- `abandoned`
 
 ## Completion gates
 

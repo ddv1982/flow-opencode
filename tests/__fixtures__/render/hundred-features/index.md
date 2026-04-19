@@ -5,6 +5,7 @@
 - session id: bench-session-100
 - goal: Benchmark 100-feature session
 - status: ready
+- closure: open
 - approval: approved
 - next command: /flow-run
 - next step: none
@@ -18,6 +19,9 @@
 - progress: 0/100 completed
 - active feature: none
 - completion target: 100/100 features
+- stop rule: ship_when_clean
+- priority mode: balanced
+- defer allowed: no
 - pending allowed at completion: no
 - active feature triggers session completion: no
 

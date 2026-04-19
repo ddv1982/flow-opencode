@@ -7,8 +7,8 @@ export const FLOW_AUTO_RESUME_COMMAND = "/flow-auto resume";
 export const FLOW_STATUS_COMMAND = "/flow-status";
 export const FLOW_HISTORY_COMMAND = "/flow-history";
 export const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
-export const FLOW_RESET_SESSION_COMMAND = "/flow-reset session";
 export const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
+export const FLOW_SESSION_CLOSE_COMMAND = "/flow-session close";
 
 export const CANONICAL_RUNTIME_TOOL_NAMES = [
 	"flow_review_record_feature",
@@ -44,12 +44,49 @@ export const DECOMPOSITION_POLICIES = [
 	"iterative_refinement",
 	"open_ended",
 ] as const;
+export const DECISION_MODES = [
+	"autonomous_choice",
+	"recommend_confirm",
+	"human_required",
+] as const;
+export const DECISION_DOMAINS = [
+	"architecture",
+	"product",
+	"quality",
+	"scope",
+	"delivery",
+] as const;
+export const FEATURE_PRIORITIES = [
+	"critical",
+	"important",
+	"nice_to_have",
+] as const;
+export const PRIORITY_MODES = [
+	"strict_scope",
+	"balanced",
+	"quality_first",
+] as const;
+export const STOP_RULES = [
+	"ship_when_clean",
+	"ship_when_core_done",
+	"ship_when_threshold_met",
+] as const;
+export const REVIEW_PURPOSES = ["execution_gate", "completion_gate"] as const;
 export const WORKER_STATUSES = ["ok", "needs_input"] as const;
 export const REVIEWER_DECISION_STATUSES = [
 	"approved",
 	"needs_fix",
 	"blocked",
 ] as const;
+export const REPLAN_REASONS = [
+	"plan_too_broad",
+	"hidden_dependency",
+	"product_ambiguity",
+	"validation_mismatch",
+	"implementation_complexity",
+	"review_disagreement",
+] as const;
+export const CLOSURE_KINDS = ["completed", "deferred", "abandoned"] as const;
 export const OUTCOME_KINDS = [
 	"completed",
 	"replan_required",
