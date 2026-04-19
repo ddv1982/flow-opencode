@@ -7,7 +7,7 @@ export const FLOW_PLAN_CONTRACT = `Persist a plan with:
 - features: { id, title, summary, fileTargets: string[], verification: string[], dependsOn?: string[], blockedBy?: string[] }[]
 - goalMode?: implementation | review | review_and_fix
 - decompositionPolicy?: atomic_feature | iterative_refinement | open_ended
-- completionPolicy?: { minCompletedFeatures?: number, requireFinalReview?: boolean }
+- completionPolicy?: { minCompletedFeatures?: number }
 - notes?: string[]
 
 Optional context:
@@ -15,7 +15,7 @@ Optional context:
 - research?: string[]
 - implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }`;
 
-export const FLOW_WORKER_CONTRACT = `Return exactly one raw JSON object for the worker result payload with no markdown fences, commentary, or trailing text:
+export const FLOW_WORKER_CONTRACT = `Return exactly one JSON object that matches the worker result payload below, with no markdown fences, commentary, or trailing text:
 
 - contractVersion: "1"
 - status: ok | needs_input
@@ -39,7 +39,7 @@ Status rules:
 - when the active feature is the final completion path for the session, run broad validation, include finalReview, and use validationScope: broad
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending`;
 
-export const FLOW_REVIEWER_CONTRACT = `Return exactly one raw JSON object for the reviewer result payload with no markdown fences, commentary, or trailing text:
+export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that matches the reviewer result payload below, with no markdown fences, commentary, or trailing text:
 
 - scope: feature | final
 - featureId?: string

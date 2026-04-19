@@ -11,7 +11,6 @@ import { deleteSessionDocs } from "./render";
 import { type PlanningContext, type Session, SessionSchema } from "./schema";
 import {
 	clearPreparedSessionDir,
-	migrateLegacySessionIfNeeded,
 	readSessionFromPath,
 	resolveActiveSessionId,
 	writeActiveSessionId,
@@ -104,8 +103,6 @@ export async function activateSession(
 	worktree: string,
 	sessionId: string,
 ): Promise<Session | null> {
-	await migrateLegacySessionIfNeeded(worktree);
-
 	try {
 		const session = await readSessionFromPath(
 			getSessionPath(worktree, sessionId),

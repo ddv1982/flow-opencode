@@ -161,7 +161,6 @@ describe("cross-area install lifecycle", () => {
 			"plugins",
 			"flow.js",
 		);
-		const legacyPath = join(homeDir, ".opencode", "plugins", "flow.js");
 
 		const {
 			exitCode: installExitCode,
@@ -176,7 +175,6 @@ describe("cross-area install lifecycle", () => {
 		expect(installStderr).toBe("");
 		expect(installStdout).toContain(canonicalPath);
 		expect(await readFile(canonicalPath, "utf8")).toBe(pluginBody);
-		await expect(readFile(legacyPath, "utf8")).rejects.toThrow();
 
 		const pluginModule = await importInstalledPlugin(canonicalPath);
 		const worktree = makeTempDir("flow-install-worktree-");
@@ -208,49 +206,5 @@ describe("cross-area install lifecycle", () => {
 		expect(uninstallStderr).toBe("");
 		expect(uninstallStdout).toContain(canonicalPath);
 		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
-	});
-
-	test("release scripts preserve and remove a legacy pre-existing install path", async () => {
-		const tempRoot = makeTempDir("flow-install-legacy-");
-		const homeDir = join(tempRoot, "home");
-		const binDir = join(tempRoot, "bin");
-		const legacyPath = join(homeDir, ".opencode", "plugins", "flow.js");
-		const canonicalPath = join(
-			homeDir,
-			".config",
-			"opencode",
-			"plugins",
-			"flow.js",
-		);
-		mkdirSync(dirname(legacyPath), { recursive: true });
-		mkdirSync(binDir, { recursive: true });
-		writeFileSync(legacyPath, "legacy");
-
-		const distPluginPath = join(
-			import.meta.dir,
-			"..",
-			"..",
-			"dist",
-			"index.js",
-		);
-		const pluginBody = await readFile(distPluginPath, "utf8");
-		writeCurlStub(binDir, pluginBody);
-
-		const installScript = copyScriptToTemp("release-install.sh", tempRoot);
-		const uninstallScript = copyScriptToTemp("release-uninstall.sh", tempRoot);
-
-		const installResult = await runScript(installScript, homeDir, binDir);
-		if (installResult.exitCode !== 0) {
-			throw new Error(`legacy install stderr: ${installResult.stderr}`);
-		}
-		expect(installResult.exitCode).toBe(0);
-		expect(installResult.stdout).toContain(legacyPath);
-		expect(await readFile(legacyPath, "utf8")).toBe(pluginBody);
-		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
-
-		const uninstallResult = await runScript(uninstallScript, homeDir, binDir);
-		expect(uninstallResult.exitCode).toBe(0);
-		expect(uninstallResult.stdout).toContain(legacyPath);
-		await expect(readFile(legacyPath, "utf8")).rejects.toThrow();
 	});
 });

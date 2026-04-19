@@ -60,11 +60,29 @@ If you ever need to copy the file yourself, build first and then copy `dist/inde
 
 ## Migration / Upgrade
 
-Flow now treats `~/.config/opencode/plugins/flow.js` as the canonical install path.
+Flow is now canonical-only.
 
-- New installs go to `~/.config/opencode/plugins/flow.js`
-- Existing legacy installs at `~/.opencode/plugins/flow.js` are preserved in place for compatibility
-- `bun run uninstall:opencode` and the release uninstall script remove Flow from either location
+- Installs go to `~/.config/opencode/plugins/flow.js`
+- Uninstall removes Flow from `~/.config/opencode/plugins/flow.js`
+- Legacy installs at `~/.opencode/plugins/flow.js` are no longer managed automatically
+- Legacy `.flow/session.json` state is no longer auto-migrated into the current session-history layout
+
+If you are upgrading from an older release:
+
+1. Reinstall Flow to the canonical path:
+
+   ```bash
+   bun run install:opencode
+   ```
+
+   or
+
+   ```bash
+   curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
+   ```
+
+2. If you still have a plugin at `~/.opencode/plugins/flow.js`, remove it manually.
+3. If you still have old `.flow/session.json` workspace state, treat it as deprecated state and start from the current `.flow/sessions/<session-id>/session.json` layout.
 
 ## Quick Start
 

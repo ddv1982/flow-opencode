@@ -13,21 +13,18 @@ import { samplePlan } from "./runtime-test-helpers";
 function createStartedSession(options?: {
 	finalFeature?: boolean;
 	reviewerDecision?: Session["execution"]["lastReviewerDecision"];
-	requireFinalReview?: boolean;
 }): {
 	session: Session;
 	featureId: string;
 	wasFinalFeature: boolean;
 } {
 	const finalFeature = options?.finalFeature ?? false;
-	const requireFinalReview = options?.requireFinalReview ?? false;
 	const basePlan = samplePlan();
 	const plan = finalFeature
 		? {
 				...basePlan,
 				completionPolicy: {
 					minCompletedFeatures: 1,
-					...(requireFinalReview ? { requireFinalReview: true } : {}),
 				},
 				features: [basePlan.features[0]],
 			}
@@ -248,7 +245,6 @@ describe("completion gates", () => {
 			setup: () =>
 				createStartedSession({
 					finalFeature: true,
-					requireFinalReview: true,
 					reviewerDecision: approvedFinalDecision(),
 				}),
 			worker: (featureId: string) =>

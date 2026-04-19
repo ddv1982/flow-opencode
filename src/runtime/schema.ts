@@ -193,7 +193,6 @@ export const PlanningDecisionSchema = z.object({
 
 export const CompletionPolicySchema = z.object({
 	minCompletedFeatures: z.number().int().positive().optional(),
-	requireFinalReview: z.boolean().optional(),
 });
 
 export const PlanSchema = z.object({

@@ -8,7 +8,6 @@ import {
 	INSTALL_USAGE,
 	installBuiltPlugin,
 	resolveInstallTarget,
-	resolveInstallTargets,
 	runInstallCommand,
 	runUninstallCommand,
 	shouldShowHelp,
@@ -21,19 +20,6 @@ function makeTempDir(): string {
 	const dir = mkdtempSync(join(tmpdir(), "flow-opencode-install-"));
 	tempDirs.push(dir);
 	return dir;
-}
-
-function getInstallTargets(homeDir: string): {
-	canonicalPath: string;
-	legacyPath: string;
-} {
-	const [canonicalPath, legacyPath] = resolveInstallTargets({ homeDir });
-
-	if (!canonicalPath || !legacyPath) {
-		throw new Error("Expected canonical and legacy install targets.");
-	}
-
-	return { canonicalPath, legacyPath };
 }
 
 async function writeBuiltPlugin(
@@ -73,15 +59,6 @@ describe("installer", () => {
 		);
 	});
 
-	test("resolveInstallTargets returns canonical and legacy OpenCode plugin directories", () => {
-		const homeDir = "/tmp/flow-home";
-
-		expect(resolveInstallTargets({ homeDir })).toEqual([
-			join(homeDir, ".config", "opencode", "plugins", FLOW_PLUGIN_FILENAME),
-			join(homeDir, ".opencode", "plugins", FLOW_PLUGIN_FILENAME),
-		]);
-	});
-
 	test("installBuiltPlugin creates directories and copies the built artifact", async () => {
 		const sourceRoot = makeTempDir();
 		const targetRoot = makeTempDir();
@@ -111,7 +88,7 @@ describe("installer", () => {
 		const homeDir = makeTempDir();
 		const logs: string[] = [];
 		let buildCalls = 0;
-		const { canonicalPath, legacyPath } = getInstallTargets(homeDir);
+		const canonicalPath = resolveInstallTarget({ homeDir });
 
 		await writeBuiltPlugin(cwd, "global-install\n");
 
@@ -129,33 +106,7 @@ describe("installer", () => {
 		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
 			"global-install\n",
 		);
-		await expect(readFile(legacyPath, "utf8")).rejects.toThrow();
 		expect(logs).toEqual([`Installed Flow plugin to ${canonicalPath}`]);
-	});
-
-	test("runInstallCommand preserves a legacy install path in place", async () => {
-		const cwd = makeTempDir();
-		const homeDir = makeTempDir();
-		const logs: string[] = [];
-		const { canonicalPath, legacyPath } = getInstallTargets(homeDir);
-
-		await writeBuiltPlugin(cwd, "legacy-install\n");
-		await mkdir(join(legacyPath, ".."), { recursive: true });
-		await writeFile(legacyPath, "old-legacy-install\n", "utf8");
-
-		const installedPath = await runInstallCommand([], {
-			cwd,
-			homeDir,
-			build: async () => {},
-			logger: (message) => logs.push(message),
-		});
-
-		expect(installedPath).toBe(legacyPath);
-		await expect(readFile(legacyPath, "utf8")).resolves.toBe(
-			"legacy-install\n",
-		);
-		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
-		expect(logs).toEqual([`Installed Flow plugin to ${legacyPath}`]);
 	});
 
 	test("installBuiltPlugin reports a clear error when the build artifact is missing", async () => {
@@ -170,74 +121,21 @@ describe("installer", () => {
 		).rejects.toThrow("Run `bun run build` first");
 	});
 
-	test.each([
-		{
-			name: "canonical-only",
-			seed: ({ canonicalPath }: ReturnType<typeof getInstallTargets>) => [
-				canonicalPath,
-			],
-			expectedRemoved: ({
-				canonicalPath,
-			}: ReturnType<typeof getInstallTargets>) => [canonicalPath],
-			expectedReturn: ({
-				canonicalPath,
-			}: ReturnType<typeof getInstallTargets>) => canonicalPath,
-		},
-		{
-			name: "legacy-only",
-			seed: ({ legacyPath }: ReturnType<typeof getInstallTargets>) => [
-				legacyPath,
-			],
-			expectedRemoved: ({
-				legacyPath,
-			}: ReturnType<typeof getInstallTargets>) => [legacyPath],
-			expectedReturn: ({ legacyPath }: ReturnType<typeof getInstallTargets>) =>
-				legacyPath,
-		},
-		{
-			name: "canonical and legacy",
-			seed: ({
-				canonicalPath,
-				legacyPath,
-			}: ReturnType<typeof getInstallTargets>) => [canonicalPath, legacyPath],
-			expectedRemoved: ({
-				canonicalPath,
-				legacyPath,
-			}: ReturnType<typeof getInstallTargets>) => [canonicalPath, legacyPath],
-			expectedReturn: ({
-				canonicalPath,
-			}: ReturnType<typeof getInstallTargets>) => canonicalPath,
-		},
-	])("runUninstallCommand removes installed plugin files for $name homes", async ({
-		seed,
-		expectedRemoved,
-		expectedReturn,
-	}) => {
+	test("runUninstallCommand removes the installed canonical plugin file", async () => {
 		const homeDir = makeTempDir();
-		const targets = getInstallTargets(homeDir);
 		const logs: string[] = [];
-		const seededPaths = seed(targets);
-
-		for (const path of seededPaths) {
-			await mkdir(join(path, ".."), { recursive: true });
-			await writeFile(path, "installed\n", "utf8");
-		}
+		const canonicalPath = resolveInstallTarget({ homeDir });
+		await mkdir(join(canonicalPath, ".."), { recursive: true });
+		await writeFile(canonicalPath, "installed\n", "utf8");
 
 		const removedPath = await runUninstallCommand([], {
 			homeDir,
 			logger: (message) => logs.push(message),
 		});
 
-		for (const path of seededPaths) {
-			await expect(readFile(path, "utf8")).rejects.toThrow();
-		}
-
-		expect(removedPath).toBe(expectedReturn(targets));
-		expect(logs).toEqual(
-			expectedRemoved(targets).map(
-				(path) => `Removed Flow plugin from ${path}`,
-			),
-		);
+		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
+		expect(removedPath).toBe(canonicalPath);
+		expect(logs).toEqual([`Removed Flow plugin from ${canonicalPath}`]);
 	});
 
 	test("runUninstallCommand accepts help and ignores missing files", async () => {

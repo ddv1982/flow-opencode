@@ -24,7 +24,6 @@ export function summarizeCompletion(session: Session): {
 	targetCompletedFeatures: number;
 	totalFeatures: number;
 	canCompleteWithPendingFeatures: boolean;
-	requiresFinalReview: boolean;
 	activeFeatureTriggersSessionCompletion: boolean;
 	remainingBeyondTarget: number;
 } | null {
@@ -43,7 +42,6 @@ export function summarizeCompletion(session: Session): {
 		targetCompletedFeatures,
 		totalFeatures,
 		canCompleteWithPendingFeatures: targetCompletedFeatures < totalFeatures,
-		requiresFinalReview: Boolean(plan.completionPolicy?.requireFinalReview),
 		activeFeatureTriggersSessionCompletion: activeFeatureId
 			? featureWouldReachCompletion(plan, activeFeatureId)
 			: false,

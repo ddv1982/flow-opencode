@@ -19,7 +19,6 @@
 - active feature: feature-4
 - completion target: 10/10 features
 - pending allowed at completion: no
-- final review required: no
 - active feature triggers session completion: no
 
 ## Requirements

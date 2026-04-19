@@ -107,201 +107,6 @@ describe("runtime tools and recovery", () => {
 		expect(resetParsed.summary).toBe("No active Flow session existed.");
 	});
 
-	test("flow_review_record_feature_from_raw normalizes feature id from runtime state", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
-		expect(applied.ok).toBe(true);
-		if (!applied.ok) return;
-		const approved = approvePlan(applied.value);
-		expect(approved.ok).toBe(true);
-		if (!approved.ok) return;
-		const started = startRun(approved.value);
-		expect(started.ok).toBe(true);
-		if (!started.ok) return;
-		await saveSession(worktree, started.value.session);
-
-		const response = await tools.flow_review_record_feature_from_raw.execute(
-			{
-				raw: JSON.stringify({
-					scope: "feature",
-					featureId: "wrong-id",
-					status: "approved",
-					summary: "Looks good.",
-					blockingFindings: [],
-				}),
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("ok");
-		expect(parsed.session.lastReviewerDecision.featureId).toBe("setup-runtime");
-	});
-
-	test("flow_review_record_feature_from_raw rejects malformed raw payloads", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
-		expect(applied.ok).toBe(true);
-		if (!applied.ok) return;
-		const approved = approvePlan(applied.value);
-		expect(approved.ok).toBe(true);
-		if (!approved.ok) return;
-		const started = startRun(approved.value);
-		expect(started.ok).toBe(true);
-		if (!started.ok) return;
-		await saveSession(worktree, started.value.session);
-
-		const response = await tools.flow_review_record_feature_from_raw.execute(
-			{ raw: '{"status":"approved","summary":"ok"} trailing' },
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("error");
-		expect(parsed.recovery.errorCode).toBe("trailing_text");
-	});
-
-	test("flow_review_record_feature_from_raw rejects duplicate-key payloads", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
-		expect(applied.ok).toBe(true);
-		if (!applied.ok) return;
-		const approved = approvePlan(applied.value);
-		expect(approved.ok).toBe(true);
-		if (!approved.ok) return;
-		const started = startRun(approved.value);
-		expect(started.ok).toBe(true);
-		if (!started.ok) return;
-		await saveSession(worktree, started.value.session);
-
-		const response = await tools.flow_review_record_feature_from_raw.execute(
-			{
-				raw: '{"status":"approved","status":"blocked","summary":"ok"}',
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("error");
-		expect(parsed.recovery.errorCode).toBe("duplicate_json_key");
-	});
-
-	test("flow_run_complete_feature_from_raw normalizes worker feature id from runtime state", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
-		expect(applied.ok).toBe(true);
-		if (!applied.ok) return;
-		const approved = approvePlan(applied.value);
-		expect(approved.ok).toBe(true);
-		if (!approved.ok) return;
-		const started = startRun(approved.value);
-		expect(started.ok).toBe(true);
-		if (!started.ok) return;
-		const reviewed = recordReviewerDecision(started.value.session, {
-			scope: "feature",
-			featureId: "setup-runtime",
-			status: "approved",
-			summary: "Looks good.",
-		});
-		expect(reviewed.ok).toBe(true);
-		if (!reviewed.ok) return;
-		await saveSession(worktree, reviewed.value);
-
-		const response = await tools.flow_run_complete_feature_from_raw.execute(
-			{
-				raw: JSON.stringify({
-					contractVersion: "1",
-					status: "ok",
-					summary: "Completed runtime setup.",
-					artifactsChanged: [],
-					validationRun: [
-						{
-							command: "bun test",
-							status: "passed",
-							summary: "Runtime tests passed.",
-						},
-					],
-					validationScope: "targeted",
-					reviewIterations: 1,
-					decisions: [],
-					nextStep: "Continue.",
-					outcome: { kind: "completed" },
-					featureResult: {
-						featureId: "wrong-id",
-						verificationStatus: "passed",
-					},
-					featureReview: {
-						status: "passed",
-						summary: "Looks correct.",
-						blockingFindings: [],
-					},
-				}),
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("ok");
-		expect(parsed.session.lastFeatureResult.featureId).toBe("setup-runtime");
-	});
-
-	test("flow_run_complete_feature_from_raw reports schema validation failures", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
-		expect(applied.ok).toBe(true);
-		if (!applied.ok) return;
-		const approved = approvePlan(applied.value);
-		expect(approved.ok).toBe(true);
-		if (!approved.ok) return;
-		const started = startRun(approved.value);
-		expect(started.ok).toBe(true);
-		if (!started.ok) return;
-		await saveSession(worktree, started.value.session);
-
-		const response = await tools.flow_run_complete_feature_from_raw.execute(
-			{
-				raw: JSON.stringify({
-					contractVersion: "1",
-					status: "bad",
-					summary: "Completed runtime setup.",
-					artifactsChanged: [],
-					validationRun: [
-						{
-							command: "bun test",
-							status: "passed",
-							summary: "Runtime tests passed.",
-						},
-					],
-					decisions: [],
-					nextStep: "Continue.",
-					featureResult: {
-						featureId: "setup-runtime",
-					},
-					featureReview: {
-						status: "passed",
-						summary: "Looks correct.",
-						blockingFindings: [],
-					},
-				}),
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("error");
-		expect(parsed.recovery.errorCode).toBe("schema_validation_failed");
-	});
-
 	test("flow_plan_start accepts an OpenCode-like context payload and persists under directory", async () => {
 		const directory = makeTempDir();
 		const tools = createTestTools();
@@ -771,7 +576,6 @@ describe("runtime tools and recovery", () => {
 			...samplePlan(),
 			completionPolicy: {
 				minCompletedFeatures: 1,
-				requireFinalReview: true,
 			},
 			features: [samplePlan().features[0]],
 		};
@@ -1118,7 +922,6 @@ describe("runtime tools and recovery", () => {
 			...samplePlan(),
 			completionPolicy: {
 				minCompletedFeatures: 1,
-				requireFinalReview: true,
 			},
 			features: [samplePlan().features[0]],
 		};
@@ -1425,51 +1228,16 @@ describe("runtime tools and recovery", () => {
 					blockingFindings: [],
 				},
 			},
-			flow_run_complete_feature_from_raw: {
-				raw: JSON.stringify({
-					contractVersion: "1",
-					status: "needs_input",
-					summary: "Need a follow-up plan.",
-					artifactsChanged: [],
-					validationRun: [],
-					decisions: [],
-					nextStep: "Replan the work.",
-					outcome: { kind: "replan_required" },
-					featureResult: {
-						featureId: "setup-runtime",
-					},
-					featureReview: {
-						status: "passed",
-						summary: "No blocking review findings.",
-						blockingFindings: [],
-					},
-				}),
-			},
 			flow_review_record_feature: {
 				scope: "feature",
 				featureId: "setup-runtime",
 				status: "approved",
 				summary: "Looks good.",
 			},
-			flow_review_record_feature_from_raw: {
-				raw: JSON.stringify({
-					scope: "feature",
-					status: "approved",
-					summary: "Looks good.",
-					blockingFindings: [],
-				}),
-			},
 			flow_review_record_final: {
 				scope: "final",
 				status: "approved",
 				summary: "Looks good.",
-			},
-			flow_review_record_final_from_raw: {
-				raw: JSON.stringify({
-					scope: "final",
-					status: "approved",
-					summary: "Looks good.",
-				}),
 			},
 			flow_reset_feature: { featureId: "setup-runtime" },
 		};

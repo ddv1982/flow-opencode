@@ -28,8 +28,8 @@ Arguments: $ARGUMENTS
 Behavior:
 - Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
-- Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature_from_raw\`.
-- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final_from_raw\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature_from_raw\`. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including \`completionPolicy.minCompletedFeatures\` even if other plan features remain pending.
+- Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\`.
+- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including \`completionPolicy.minCompletedFeatures\` even if other plan features remain pending.
 - End with a compact summary of changes, validation evidence, and the runtime next step.`;
 
 export const FLOW_AUTO_COMMAND_TEMPLATE = `Run Flow autonomously.

@@ -1,15 +1,6 @@
-import {
-	type FlowReviewRecordFeatureArgs,
-	FlowReviewRecordFeatureArgsSchema,
-	type FlowReviewRecordFinalArgs,
-	FlowReviewRecordFinalArgsSchema,
-	type WorkerResultArgs,
-	WorkerResultArgsSchema,
-} from "./schema";
-
 type JsonObject = Record<string, unknown>;
 
-type ParseErrorKind =
+export type StrictJsonObjectParseErrorKind =
 	| "empty_payload"
 	| "invalid_json_syntax"
 	| "duplicate_json_key"
@@ -17,9 +8,13 @@ type ParseErrorKind =
 	| "trailing_text"
 	| "schema_validation_failed";
 
-type ParseResult =
+export type StrictJsonObjectParseResult =
 	| { ok: true; value: JsonObject }
-	| { ok: false; error: string; kind: ParseErrorKind };
+	| {
+			ok: false;
+			error: string;
+			kind: StrictJsonObjectParseErrorKind;
+	  };
 
 function isWhitespace(char: string | undefined): boolean {
 	return char === " " || char === "\n" || char === "\r" || char === "\t";
@@ -70,7 +65,7 @@ function scanJsonValue(
 	start: number,
 ):
 	| { ok: true; end: number }
-	| { ok: false; error: string; kind: ParseErrorKind } {
+	| { ok: false; error: string; kind: StrictJsonObjectParseErrorKind } {
 	const index = skipWhitespace(input, start);
 	const char = input[index];
 
@@ -137,7 +132,7 @@ function scanJsonObject(
 	start: number,
 ):
 	| { ok: true; end: number }
-	| { ok: false; error: string; kind: ParseErrorKind } {
+	| { ok: false; error: string; kind: StrictJsonObjectParseErrorKind } {
 	if (input[start] !== "{") {
 		return {
 			ok: false,
@@ -206,7 +201,10 @@ function scanJsonObject(
 	};
 }
 
-function parseJsonObject(raw: string, label: string): ParseResult {
+export function parseStrictJsonObject(
+	raw: string,
+	label: string,
+): StrictJsonObjectParseResult {
 	if (raw.trim().length === 0) {
 		return {
 			ok: false,
@@ -268,120 +266,4 @@ function parseJsonObject(raw: string, label: string): ParseResult {
 			kind: "invalid_json_syntax",
 		};
 	}
-}
-
-export function parseStrictJsonObject(raw: string, label: string): ParseResult {
-	return parseJsonObject(raw, label);
-}
-
-function normalizeStringList(value: unknown): string[] | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	return Array.isArray(value)
-		? value.filter((item): item is string => typeof item === "string")
-		: undefined;
-}
-
-function normalizeObjectList(value: unknown): unknown[] | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	return Array.isArray(value)
-		? value.filter(
-				(item) =>
-					item !== null && typeof item === "object" && !Array.isArray(item),
-			)
-		: undefined;
-}
-
-export function normalizeReviewerDecision(
-	raw: string,
-	scope: "feature" | "final",
-	activeFeatureId?: string,
-):
-	| { ok: true; value: FlowReviewRecordFeatureArgs | FlowReviewRecordFinalArgs }
-	| { ok: false; error: string; kind: ParseErrorKind } {
-	const parsed = parseJsonObject(raw, "Reviewer");
-	if (!parsed.ok) {
-		return parsed;
-	}
-
-	const normalized = {
-		scope,
-		status: parsed.value.status,
-		summary: parsed.value.summary,
-		blockingFindings: normalizeObjectList(parsed.value.blockingFindings),
-		followUps: normalizeObjectList(parsed.value.followUps),
-		suggestedValidation: normalizeStringList(parsed.value.suggestedValidation),
-		...(scope === "feature" ? { featureId: activeFeatureId } : {}),
-	};
-
-	const schema =
-		scope === "feature"
-			? FlowReviewRecordFeatureArgsSchema
-			: FlowReviewRecordFinalArgsSchema;
-	const result = schema.safeParse(normalized);
-	if (!result.success) {
-		const issue = result.error.issues[0];
-		const path = issue?.path?.length ? issue.path.join(".") : "args";
-		return {
-			ok: false,
-			error: `Reviewer payload failed normalization: ${path}: ${issue?.message ?? "Invalid value."}`,
-			kind: "schema_validation_failed",
-		};
-	}
-
-	return { ok: true, value: result.data };
-}
-
-export function normalizeWorkerResult(
-	raw: string,
-	activeFeatureId?: string,
-):
-	| { ok: true; value: WorkerResultArgs }
-	| { ok: false; error: string; kind: ParseErrorKind } {
-	const parsed = parseJsonObject(raw, "Worker");
-	if (!parsed.ok) {
-		return parsed;
-	}
-
-	const featureResult =
-		parsed.value.featureResult &&
-		typeof parsed.value.featureResult === "object" &&
-		!Array.isArray(parsed.value.featureResult)
-			? {
-					...(parsed.value.featureResult as JsonObject),
-					...(activeFeatureId ? { featureId: activeFeatureId } : {}),
-				}
-			: parsed.value.featureResult;
-
-	const normalized = {
-		contractVersion: parsed.value.contractVersion,
-		status: parsed.value.status,
-		summary: parsed.value.summary,
-		artifactsChanged: normalizeObjectList(parsed.value.artifactsChanged),
-		validationRun: normalizeObjectList(parsed.value.validationRun),
-		validationScope: parsed.value.validationScope,
-		reviewIterations: parsed.value.reviewIterations,
-		decisions: normalizeObjectList(parsed.value.decisions),
-		nextStep: parsed.value.nextStep,
-		outcome: parsed.value.outcome,
-		featureResult,
-		featureReview: parsed.value.featureReview,
-		finalReview: parsed.value.finalReview,
-	};
-
-	const result = WorkerResultArgsSchema.safeParse(normalized);
-	if (!result.success) {
-		const issue = result.error.issues[0];
-		const path = issue?.path?.length ? issue.path.join(".") : "args";
-		return {
-			ok: false,
-			error: `Worker payload failed normalization: ${path}: ${issue?.message ?? "Invalid value."}`,
-			kind: "schema_validation_failed",
-		};
-	}
-
-	return { ok: true, value: result.data };
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 
@@ -28,9 +29,17 @@ function loadPackJson(repoRoot) {
 		return readJson(overridePath);
 	}
 
+	const npmCacheDir =
+		process.env.npm_config_cache ?? path.join(tmpdir(), "flow-npm-cache");
+	mkdirSync(npmCacheDir, { recursive: true });
+
 	const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
 		cwd: repoRoot,
 		encoding: "utf8",
+		env: {
+			...process.env,
+			npm_config_cache: npmCacheDir,
+		},
 	});
 	return JSON.parse(output);
 }

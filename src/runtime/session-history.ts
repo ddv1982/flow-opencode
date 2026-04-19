@@ -9,7 +9,6 @@ import {
 import type { Session } from "./schema";
 import {
 	ensureWorkspace,
-	migrateLegacySessionIfNeeded,
 	readActiveSessionId,
 	readSessionFromPath,
 } from "./session-workspace";
@@ -154,7 +153,6 @@ export async function loadStoredSession(
 	worktree: string,
 	sessionId: string,
 ): Promise<StoredSessionLookup | null> {
-	await migrateLegacySessionIfNeeded(worktree);
 	await ensureWorkspace(worktree);
 
 	const activeSessionId = await readActiveSessionId(worktree);
@@ -198,7 +196,6 @@ export async function listSessionHistory(worktree: string): Promise<{
 	sessions: SessionHistoryEntry[];
 	archived: ArchivedSessionHistoryEntry[];
 }> {
-	await migrateLegacySessionIfNeeded(worktree);
 	await ensureWorkspace(worktree);
 
 	const activeSessionId = await readActiveSessionId(worktree);

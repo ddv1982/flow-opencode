@@ -96,7 +96,6 @@ describe("runtime completion and contract guards", () => {
 			...samplePlan(),
 			completionPolicy: {
 				minCompletedFeatures: 1,
-				requireFinalReview: true,
 			},
 			features: [samplePlan().features[0]],
 		};
@@ -333,7 +332,6 @@ describe("runtime completion and contract guards", () => {
 			...samplePlan(),
 			completionPolicy: {
 				minCompletedFeatures: 1,
-				requireFinalReview: true,
 			},
 			features: [samplePlan().features[0]],
 		};
@@ -479,7 +477,6 @@ describe("runtime completion and contract guards", () => {
 			...samplePlan(),
 			completionPolicy: {
 				minCompletedFeatures: 1,
-				requireFinalReview: true,
 			},
 			features: [samplePlan().features[0]],
 		};

@@ -25,11 +25,8 @@ type FlowToolName =
 	| "flow_plan_select_features"
 	| "flow_run_start"
 	| "flow_run_complete_feature"
-	| "flow_run_complete_feature_from_raw"
 	| "flow_review_record_feature"
-	| "flow_review_record_feature_from_raw"
 	| "flow_review_record_final"
-	| "flow_review_record_final_from_raw"
 	| "flow_reset_feature";
 type FlowSmokeTools = Record<FlowToolName, TestTool>;
 
@@ -38,7 +35,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, seven commands, nineteen tools, and callable executors", async () => {
+	test("dist bundle exposes five agents, seven commands, sixteen tools, and callable executors", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -59,7 +56,7 @@ describe("built dist smoke load", () => {
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
 		expect(Object.keys(config.command ?? {})).toHaveLength(7);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(16);
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -115,48 +112,16 @@ describe("built dist smoke load", () => {
 					blockingFindings: [],
 				},
 			},
-			flow_run_complete_feature_from_raw: {
-				raw: JSON.stringify({
-					contractVersion: "1",
-					status: "needs_input",
-					summary: "Need to replan smoke coverage.",
-					artifactsChanged: [],
-					validationRun: [],
-					decisions: [],
-					nextStep: "Replan before completion.",
-					outcome: { kind: "replan_required" },
-					featureResult: { featureId: "dist-smoke" },
-					featureReview: {
-						status: "passed",
-						summary: "No blocking review findings.",
-						blockingFindings: [],
-					},
-				}),
-			},
 			flow_review_record_feature: {
 				scope: "feature",
 				featureId: "dist-smoke",
 				status: "approved",
 				summary: "Looks good.",
 			},
-			flow_review_record_feature_from_raw: {
-				raw: JSON.stringify({
-					scope: "feature",
-					status: "approved",
-					summary: "Looks good.",
-				}),
-			},
 			flow_review_record_final: {
 				scope: "final",
 				status: "approved",
 				summary: "Looks good.",
-			},
-			flow_review_record_final_from_raw: {
-				raw: JSON.stringify({
-					scope: "final",
-					status: "approved",
-					summary: "Looks good.",
-				}),
 			},
 			flow_reset_feature: { featureId: "dist-smoke" },
 		};

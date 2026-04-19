@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.7] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.7 simplifies the plugin around a canonical-only runtime and install surface. This release removes deprecated raw-wrapper guidance, deletes the unused `requireFinalReview` knob, tightens prompt/runtime parity coverage, clarifies session-tool ownership boundaries, and drops legacy install/session-migration compatibility paths in favor of the current canonical layouts.
+
+### Changed
+
+- Simplified Flow's canonical tool guidance, runtime boundaries, and session-tool module structure with stronger guardrails and protocol-parity coverage.
+- Removed the legacy `requireFinalReview` completion-policy field while keeping final review enforced by the final completion path.
+- Updated README, maintainer docs, and migration notes to reflect the current canonical-only behavior and risk checklist.
+
+### Removed
+
+- Removed legacy raw-wrapper guidance and the unused contract-normalization seam.
+- Removed legacy install-path compatibility; Flow now installs and uninstalls only at `~/.config/opencode/plugins/flow.js`.
+- Removed legacy `.flow/session.json` auto-migration support; Flow now expects the current session-history layout only.
+
 ## [1.0.5] - 2026-04-19
 
 ### Highlights

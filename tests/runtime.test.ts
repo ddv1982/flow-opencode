@@ -6,7 +6,6 @@ import {
 	getActiveSessionPath,
 	getFeatureDocPath,
 	getIndexDocPath,
-	getLegacySessionPath,
 	getSessionPath,
 } from "../src/runtime/paths";
 import {
@@ -103,32 +102,6 @@ describe("runtime transitions", () => {
 		await expect(
 			readFile(getIndexDocPath(worktree, second.id), "utf8"),
 		).resolves.toContain("goal: Second goal");
-	});
-
-	test("migrates a legacy .flow/session.json into the session-history layout", async () => {
-		const worktree = makeTempDir();
-		const legacy = createSession("Legacy goal");
-
-		mkdirSync(join(worktree, ".flow"), { recursive: true });
-		await writeFile(
-			getLegacySessionPath(worktree),
-			`${JSON.stringify(legacy, null, 2)}\n`,
-			"utf8",
-		);
-
-		const loaded = await loadSession(worktree);
-
-		expect(loaded?.id).toBe(legacy.id);
-		expect(await activeSessionId(worktree)).toBe(legacy.id);
-		await expect(
-			readFile(getLegacySessionPath(worktree), "utf8"),
-		).rejects.toThrow();
-		await expect(
-			readFile(getSessionPath(worktree, legacy.id), "utf8"),
-		).resolves.toContain('"goal": "Legacy goal"');
-		await expect(
-			readFile(getIndexDocPath(worktree, legacy.id), "utf8"),
-		).resolves.toContain("goal: Legacy goal");
 	});
 
 	test("rejects malformed persisted session data", async () => {

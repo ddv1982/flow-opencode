@@ -10,6 +10,17 @@ export const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
 export const FLOW_RESET_SESSION_COMMAND = "/flow-reset session";
 export const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
 
+export const CANONICAL_RUNTIME_TOOL_NAMES = [
+	"flow_review_record_feature",
+	"flow_review_record_final",
+	"flow_run_complete_feature",
+	"flow_reset_feature",
+] as const;
+
+export type CanonicalRuntimeToolName =
+	(typeof CANONICAL_RUNTIME_TOOL_NAMES)[number];
+export type RuntimeToolName = CanonicalRuntimeToolName;
+
 export const VALIDATION_STATUSES = [
 	"passed",
 	"failed",

@@ -166,12 +166,9 @@ describe("applyFlowConfig", () => {
 			"flow_plan_select_features",
 			"flow_run_start",
 			"flow_run_complete_feature",
-			"flow_review_record_feature",
-			"flow_review_record_feature_from_raw",
-			"flow_review_record_final",
-			"flow_review_record_final_from_raw",
-			"flow_run_complete_feature_from_raw",
 			"flow_reset_feature",
+			"flow_review_record_feature",
+			"flow_review_record_final",
 		]);
 	});
 
@@ -195,18 +192,12 @@ describe("applyFlowConfig", () => {
 		expect(config.command?.["flow-reset"]).toBeDefined();
 	});
 
-	test("marks direct persistence tools as low-level internal descriptions", () => {
+	test("marks canonical persistence tools as explicit action descriptions", () => {
 		const tools = createTools({});
 
-		expect(tools.flow_run_complete_feature.description).toContain(
-			"Low-level/internal",
-		);
-		expect(tools.flow_review_record_feature.description).toContain(
-			"Low-level/internal",
-		);
-		expect(tools.flow_review_record_final.description).toContain(
-			"Low-level/internal",
-		);
+		expect(tools.flow_run_complete_feature.description).toContain("Persist");
+		expect(tools.flow_review_record_feature.description).toContain("Record");
+		expect(tools.flow_review_record_final.description).toContain("Record");
 	});
 
 	test("routes status, history, session activation, and reset through the control agent", () => {
@@ -593,8 +584,10 @@ describe("applyFlowConfig", () => {
 
 	test("worker contract requires clean review before ok completion", () => {
 		expect(FLOW_WORKER_CONTRACT).toContain(
-			"Return exactly one raw JSON object for the worker result payload with no markdown fences, commentary, or trailing text",
+			"Return exactly one JSON object that matches the worker result payload below, with no markdown fences, commentary, or trailing text",
 		);
+		expect(FLOW_WORKER_CONTRACT).not.toContain("raw JSON object");
+		expect(FLOW_WORKER_CONTRACT).not.toContain("_from_raw");
 		expect(FLOW_WORKER_CONTRACT).toContain(
 			"never return status: ok until targeted validation is complete and featureReview has no blocking findings",
 		);
@@ -617,12 +610,16 @@ describe("applyFlowConfig", () => {
 		);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
+		expect(FLOW_WORKER_AGENT_PROMPT).not.toContain("_from_raw");
 	});
 
 	test("reviewer contract and prompt require explicit approval gating", () => {
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
-			"Return exactly one raw JSON object for the reviewer result payload with no markdown fences, commentary, or trailing text",
+			"Return exactly one JSON object that matches the reviewer result payload below, with no markdown fences, commentary, or trailing text",
 		);
+		expect(FLOW_REVIEWER_CONTRACT).not.toContain("raw JSON object");
+		expect(FLOW_REVIEWER_CONTRACT).not.toContain("_from_raw");
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"status: approved | needs_fix | blocked",
 		);
@@ -662,13 +659,13 @@ describe("applyFlowConfig", () => {
 			"Use the flow-reviewer stage as the approval gate",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"Persist every reviewer decision through flow_review_record_feature_from_raw or flow_review_record_final_from_raw",
+			"Persist every reviewer decision through flow_review_record_feature or flow_review_record_final",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If the reviewer returns needs_fix",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"If flow_run_complete_feature_from_raw fails, inspect the runtime error and any structured recovery metadata",
+			"If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If a feature lands in a blocked state with a retryable or auto-resolvable outcome",
@@ -677,8 +674,9 @@ describe("applyFlowConfig", () => {
 			"satisfy `recovery.prerequisite` first",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"Only call `recovery.nextRuntimeTool` when it is present",
+			"Only call canonical `recovery.nextRuntimeTool` values when they are present",
 		);
+		expect(FLOW_AUTO_AGENT_PROMPT).not.toContain("_from_raw");
 	});
 
 	test("auto command template requires final cross-feature review before completion", () => {
@@ -725,9 +723,7 @@ describe("applyFlowConfig", () => {
 	});
 
 	test("run command template requires final completion gating for the last feature", () => {
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"flow_review_record_final_from_raw",
-		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_final");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
 	});
@@ -735,11 +731,22 @@ describe("applyFlowConfig", () => {
 	test("run command template keeps final completion gating after feature review approval", () => {
 		expectInOrder(FLOW_RUN_COMMAND_TEMPLATE, [
 			"run targeted validation",
-			"obtain reviewer approval through `flow_review_record_feature_from_raw`",
+			"obtain reviewer approval through `flow_review_record_feature`",
 			"On the final completion path, run broad validation",
-			"obtain final approval through `flow_review_record_final_from_raw`",
-			"persist the result through `flow_run_complete_feature_from_raw`",
+			"obtain final approval through `flow_review_record_final`",
+			"persist the result through `flow_run_complete_feature`",
 		]);
+	});
+
+	test("public tool surface excludes raw wrapper compatibility shims", () => {
+		const tools = createTools({});
+
+		expect("flow_review_record_feature_from_raw" in tools).toBe(false);
+		expect("flow_review_record_final_from_raw" in tools).toBe(false);
+		expect("flow_run_complete_feature_from_raw" in tools).toBe(false);
+		expect(Object.keys(tools).some((name) => name.includes("_from_raw"))).toBe(
+			false,
+		);
 	});
 
 	test("flow prompts and command templates avoid Flow-managed compaction guidance", () => {

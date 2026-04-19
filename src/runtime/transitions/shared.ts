@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import type { CanonicalRuntimeToolName } from "../constants";
 import type { Feature, Session } from "../schema";
 
 export { validateSuccessfulCompletion } from "./execution";
@@ -33,11 +34,7 @@ export type TransitionRecovery = {
 		| "targeted_validation_result"
 		| "broad_validation_result";
 	nextCommand: string;
-	nextRuntimeTool?:
-		| "flow_review_record_feature"
-		| "flow_review_record_final"
-		| "flow_run_complete_feature"
-		| "flow_reset_feature";
+	nextRuntimeTool?: CanonicalRuntimeToolName;
 	nextRuntimeArgs?: Record<string, unknown>;
 	retryable?: boolean;
 	autoResolvable?: boolean;

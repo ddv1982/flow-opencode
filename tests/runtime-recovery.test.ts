@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CANONICAL_RUNTIME_TOOL_NAMES } from "../src/runtime/constants";
 import type { CompletionRecoveryKind } from "../src/runtime/transitions/recovery";
 import { buildCompletionRecovery } from "../src/runtime/transitions/recovery";
 
@@ -134,6 +135,35 @@ describe("runtime recovery policy mapping", () => {
 			expect(() =>
 				buildCompletionRecovery("setup-runtime", true, kind),
 			).not.toThrow();
+		}
+	});
+
+	test("emits only canonical runtime tool recovery guidance", () => {
+		const allKinds: CompletionRecoveryKind[] = [
+			"missing_validation",
+			"failing_validation",
+			"missing_reviewer_decision",
+			"missing_validation_scope",
+			"failing_feature_review",
+			"missing_final_review",
+			"failing_final_review",
+		];
+
+		for (const kind of allKinds) {
+			for (const isFinalPath of [false, true] as const) {
+				const recovery = buildCompletionRecovery(
+					"setup-runtime",
+					isFinalPath,
+					kind,
+				);
+
+				if (recovery.nextRuntimeTool) {
+					expect(CANONICAL_RUNTIME_TOOL_NAMES).toContain(
+						recovery.nextRuntimeTool,
+					);
+					expect(recovery.nextRuntimeTool).not.toContain("_from_raw");
+				}
+			}
 		}
 	});
 });

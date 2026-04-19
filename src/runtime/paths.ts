@@ -100,11 +100,3 @@ export function getFeatureDocPath(
 		join(featuresDir, `${sanitizePathComponent("feature", featureId)}.md`),
 	);
 }
-
-export function getLegacySessionPath(worktree: string): string {
-	return join(getFlowDir(worktree), "session.json");
-}
-
-export function getLegacyDocsDir(worktree: string): string {
-	return join(getFlowDir(worktree), "docs");
-}

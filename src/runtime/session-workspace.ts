@@ -8,18 +8,15 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { parseStrictJsonObject } from "./contract-normalization";
+import { parseStrictJsonObject } from "./json/strict-object";
 import {
 	getActiveSessionPath,
 	getArchiveDir,
 	getFlowDir,
-	getLegacyDocsDir,
-	getLegacySessionPath,
 	getSessionDir,
 	getSessionPath,
 	getSessionsDir,
 } from "./paths";
-import { renderSessionDocs } from "./render";
 import { type Session, SessionSchema } from "./schema";
 
 const FLOW_GITIGNORE_ENTRIES = ["active", "sessions/", "archive/"] as const;
@@ -281,42 +278,8 @@ export async function ensureSessionFeaturesDocsPrepared(
 	preparedFeaturesDocsDirs.add(cacheKey);
 }
 
-export async function migrateLegacySessionIfNeeded(
-	worktree: string,
-): Promise<void> {
-	if (await readActiveSessionId(worktree)) {
-		return;
-	}
-
-	const legacySessionPath = getLegacySessionPath(worktree);
-	let raw: string;
-
-	try {
-		raw = await readFile(legacySessionPath, "utf8");
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return;
-		}
-
-		throw error;
-	}
-
-	const object = parseStrictJsonObject(raw, "Legacy session file");
-	if (!object.ok) {
-		throw new Error(object.error);
-	}
-	const session = SessionSchema.parse(object.value);
-	await ensureWorkspace(worktree);
-	await writeSessionFile(worktree, session);
-	await renderSessionDocs(worktree, session);
-	await writeActiveSessionId(worktree, session.id);
-	await rm(legacySessionPath, { force: true });
-	await rm(getLegacyDocsDir(worktree), { recursive: true, force: true });
-}
-
 export async function resolveActiveSessionId(
 	worktree: string,
 ): Promise<string | null> {
-	await migrateLegacySessionIfNeeded(worktree);
 	return readActiveSessionId(worktree);
 }

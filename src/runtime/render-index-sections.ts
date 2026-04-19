@@ -120,9 +120,6 @@ function renderPlanSection(session: Session, features: Feature[]): string {
 			`- pending allowed at completion: ${completion.canCompleteWithPendingFeatures ? "yes" : "no"}`,
 		);
 		planLines.push(
-			`- final review required: ${completion.requiresFinalReview ? "yes" : "no"}`,
-		);
-		planLines.push(
 			`- active feature triggers session completion: ${completion.activeFeatureTriggersSessionCompletion ? "yes" : "no"}`,
 		);
 	}

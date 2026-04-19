@@ -69,13 +69,13 @@ Execution flow:
 4. Run targeted validation.
 5. Review the changed files.
 6. If review finds blocking issues, fix them, rerun targeted validation, and review again. Repeat until review passes or a real blocker remains.
-7. On the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final_from_raw. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending.
-8. Otherwise ask flow-reviewer to review the feature and persist the raw reviewer output with flow_review_record_feature_from_raw.
+7. On the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending.
+8. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature.
 9. Return one worker result matching:
 
 ${FLOW_WORKER_CONTRACT}
 
-10. Persist the raw worker output with flow_run_complete_feature_from_raw only after the feature is clean, reviewer-approved, or truly blocked.
+10. Persist the worker result with flow_run_complete_feature only after the feature is clean, reviewer-approved, or truly blocked.
 11. End with a compact summary of what changed, validation evidence, how many review/fix iterations were needed, and the runtime's next step.`;
 
 export const FLOW_AUTO_AGENT_PROMPT = `You are the autonomous Flow coordinator.
@@ -109,11 +109,11 @@ Autonomous loop:
 5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, and rationale with flow_plan_context_record, present that recommendation, and stop for user confirmation.
 6. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
 7. Use flow-worker to implement the current feature and run targeted validation.
-8. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature_from_raw before deciding what happens next.
+8. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature before deciding what happens next.
 9. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
-10. Persist an approved feature result with flow_run_complete_feature_from_raw. If flow_run_complete_feature_from_raw fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated runtime action when one is provided.
+10. Persist an approved feature result with flow_run_complete_feature. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
 11. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
-12. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final_from_raw, and keep fixing/revalidating until the final review passes. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending.
+12. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final, and keep fixing/revalidating until the final review passes. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending.
 13. Only then allow final completion.
 14. Repeat until the session is complete or blocked.
 
