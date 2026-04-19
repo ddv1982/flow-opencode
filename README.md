@@ -80,7 +80,7 @@ Flow now treats `~/.config/opencode/plugins/flow.js` as the canonical install pa
 ### Autonomous flow
 
 1. `/flow-auto Add a workflow plugin for OpenCode`
-2. Let Flow plan, execute, validate, review, and continue until complete or blocked
+2. Let Flow detect the stack, persist planning context, research when needed, then plan, execute, validate, review, and continue until complete or blocked
 3. Use `/flow-status` at any time to inspect progress
 
 ### Resume behavior
@@ -111,26 +111,40 @@ Flow adds these slash commands to OpenCode:
 
 ## How Flow Works
 
+Before Flow drafts or refreshes a plan, it first inspects repo evidence to detect the stack and persist planning context such as repo profile, research notes, implementation approach, and any recorded decision notes.
+
+Flow researches only when local repo evidence is insufficient to produce a high-confidence plan or recommendation, or when external grounding would materially improve a meaningful technical decision.
+
+`/flow-plan` uses that context to draft a plan, but it does not hard-stop on decision gates. `/flow-auto` uses the same context, and if a meaningful decision still remains after repo evidence and research, it pauses with options, tradeoffs, and a recommended path before continuing.
+
 ```mermaid
 flowchart TD
     A[Goal] --> B{Start mode}
     B -->|Manual| C["/flow-plan"]
     B -->|Autonomous| D["/flow-auto"]
-
-    C --> E[Draft plan]
+    C --> E[Detect stack]
     D --> E
-    E --> F[Approve plan]
-    F --> G[Choose next approved feature]
-    G --> H[flow-worker executes + validates]
-    H --> I[flow-reviewer reviews]
-    I -->|needs_fix| H
-    I -->|blocked| J[Stop or reset/replan]
-    I -->|approved| K{More features?}
-    K -->|Yes| G
-    K -->|No| L[Broad final validation]
-    L --> M[Final review]
-    M -->|needs_fix| H
-    M -->|approved| N[Session complete]
+    E --> F[Persist planning context]
+    F --> G{Need research?}
+    G -->|yes| H[Research + persist]
+    G -->|no| I{Mode}
+    H --> I
+    I -->|flow-plan| J[Draft plan]
+    I -->|flow-auto| K{Need decision?}
+    K -->|yes| L[Show options + recommendation]
+    K -->|no| J
+    J --> M[Approve plan]
+    M --> N[Choose next approved feature]
+    N --> O[flow-worker executes + validates]
+    O --> P[flow-reviewer reviews]
+    P -->|needs_fix| O
+    P -->|blocked| Q[Stop or reset/replan]
+    P -->|approved| R{More features?}
+    R -->|Yes| N
+    R -->|No| S[Broad final validation]
+    S --> T[Final review]
+    T -->|needs_fix| O
+    T -->|approved| U[Session complete]
 ```
 
 ## Storage

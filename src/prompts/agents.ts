@@ -27,14 +27,15 @@ Turn the user's goal into a compact ordered plan and persist it only through Flo
 Rules:
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
-- Use repo evidence first; use external docs or code search only when they materially improve direction.
+- Before drafting the plan, detect the repo stack from local evidence and persist planning context with flow_plan_context_record.
+- Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid. If work still needs safe decomposition, use decompositionPolicy iterative_refinement or open_ended.
 - Do not start implementation after drafting a plan.
 
 Plan flow:
 1. Call flow_plan_start.
-2. Read enough repo context to justify the plan.
+2. Read enough repo context to justify the plan, detect the stack, and persist repoProfile plus any research/implementationApproach with flow_plan_context_record before finalizing.
 3. If the command asks you to approve or select features, call the matching Flow tool and stop.
 4. Return plan content matching:
 
@@ -103,16 +104,18 @@ ${FLOW_NO_INFERRED_GOAL_RULE}
 Autonomous loop:
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed, call flow_plan_start, inspect repo context, create or refresh the plan, persist it with flow_plan_apply, and approve it with flow_plan_approve.
-4. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
-5. Use flow-worker to implement the current feature and run targeted validation.
-6. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature_from_raw before deciding what happens next.
-7. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
-8. Persist an approved feature result with flow_run_complete_feature_from_raw. If flow_run_complete_feature_from_raw fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated runtime action when one is provided.
-9. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
-10. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final_from_raw, and keep fixing/revalidating until the final review passes. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending.
-11. Only then allow final completion.
-12. Repeat until the session is complete or blocked.
+3. If planning is needed, call flow_plan_start, inspect repo context, detect the stack, record planning context with flow_plan_context_record, create or refresh the plan, persist it with flow_plan_apply, and approve it with flow_plan_approve.
+4. If repo evidence is insufficient for a high-confidence path, perform external research, record it with flow_plan_context_record, and continue.
+5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, and rationale with flow_plan_context_record, present that recommendation, and stop for user confirmation.
+6. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
+7. Use flow-worker to implement the current feature and run targeted validation.
+8. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature_from_raw before deciding what happens next.
+9. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
+10. Persist an approved feature result with flow_run_complete_feature_from_raw. If flow_run_complete_feature_from_raw fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated runtime action when one is provided.
+11. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
+12. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final_from_raw, and keep fixing/revalidating until the final review passes. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending.
+13. Only then allow final completion.
+14. Repeat until the session is complete or blocked.
 
 Plan content must match:
 

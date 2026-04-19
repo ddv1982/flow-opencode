@@ -18,7 +18,7 @@ Behavior:
 - If the arguments start with \`approve\`, approve the current draft plan. Extra tokens are feature ids to keep before approval.
 - If the arguments start with \`select\`, narrow the current draft plan to the listed feature ids without approving it.
 - Otherwise treat the full argument string as the planning goal and create or refresh a draft plan.
-- For planning, call \`flow_plan_start\` first, read the repo before finalizing, use external research only when it materially improves direction, persist the draft through \`flow_plan_apply\`, and end with a concise draft summary plus the next approval step.
+- For planning, call \`flow_plan_start\` first, detect the stack from repo evidence, persist planning context through \`flow_plan_context_record\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\`, and end with a concise draft summary plus the next approval step.
 Do not start implementation from this command.`;
 
 export const FLOW_RUN_COMMAND_TEMPLATE = `Execute one approved Flow feature.
@@ -42,11 +42,12 @@ ${FLOW_COORDINATOR_BOUNDARY_RULE}
 - If the argument string is empty or \`resume\`, resume the active session only.
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
-- Plan or refresh only when the runtime says planning is needed, approve that plan, then keep work on the current feature until it is clean or truly blocked.
+- Plan or refresh only when the runtime says planning is needed, detect stack context first, record it with \`flow_plan_context_record\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
 - When blocked by a solvable finding, inspect the evidence, use repo and research tools as needed, make the smallest recovery plan, execute it, and keep iterating.
+- If repo evidence and research still leave a meaningful architecture, product, or quality decision unresolved, record options plus a recommended path with \`flow_plan_context_record\`, present that recommendation, and stop for user confirmation.
 - If a feature lands in a retryable or auto-resolvable blocked state, satisfy the runtime prerequisite, reset it through the runtime when appropriate, and continue instead of stopping.
 ${FLOW_STRUCTURED_RECOVERY_RULE}
 - Do not advance to the next feature until the current one is clean.

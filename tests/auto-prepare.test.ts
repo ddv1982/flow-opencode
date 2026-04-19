@@ -40,4 +40,38 @@ describe("flow_auto_prepare semantics", () => {
 		expect(parsed.nextCommand).toBe("/flow-auto <goal>");
 		expect(String(parsed.summary)).toContain("goal");
 	});
+
+	test("planning context schema accepts a decision log payload", async () => {
+		const tools = createTestTools();
+		const worktree = makeTempDir();
+		await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, {
+			worktree,
+		} as never);
+
+		const response = await tools.flow_plan_context_record.execute(
+			{
+				repoProfile: ["TypeScript", "Bun"],
+				research: [
+					"Confirm Bun plugin packaging docs if local evidence is unclear.",
+				],
+				decisionLog: [
+					{
+						question:
+							"How should autonomous mode handle unresolved architecture choices?",
+						options: [
+							{ label: "Pause and ask", tradeoffs: ["safer", "slower"] },
+							{ label: "Auto-guess", tradeoffs: ["faster", "riskier"] },
+						],
+						recommendation: "Pause and ask",
+						rationale: ["Preserves user intent for meaningful decisions."],
+					},
+				],
+			},
+			{ worktree } as never,
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.session.planning.decisionLog).toHaveLength(1);
+	});
 });

@@ -1,6 +1,23 @@
 # Changelog
 
-## [1.0.2] - 2026-04-19
+## [1.0.3] - 2026-04-19
+
+### Highlights
+
+Flow 1.0.3 adds deterministic planning context capture before planning, including repo-profile persistence, optional research notes, and decision logging. Autonomous mode now pauses on meaningful unresolved decisions with a recommended path, and the README workflow docs/diagram now reflect that behavior.
+
+### Added
+
+- Added `flow_plan_context_record` to persist repo profile, research, implementation approach, and planning decision logs into the active session.
+- Added planning decision schemas and decision-log rendering in Flow session summaries.
+
+### Changed
+
+- Updated planner and autonomous prompts to detect stack context first and research only when local repo evidence is insufficient for a high-confidence path.
+- Restricted explicit decision gating to `/flow-auto`, where unresolved meaningful decisions now stop with options, rationale, and a recommended path.
+- Updated `README.md` prose and Mermaid workflow diagram to document deterministic planning context, research triggers, and `/flow-auto` decision pauses.
+
+[1.0.2] - 2026-04-19
 
 ### Highlights
 

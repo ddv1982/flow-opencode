@@ -11,6 +11,7 @@ import {
 	normalizeWorkerResult,
 } from "../runtime/contract-normalization";
 import type { WorkerResult } from "../runtime/schema";
+import { PlanningContextArgsSchema } from "../runtime/schema";
 import { summarizeSession } from "../runtime/summary";
 import {
 	applyPlan,
@@ -21,6 +22,7 @@ import {
 	selectPlanFeatures,
 	startRun,
 } from "../runtime/transitions";
+import { succeed } from "../runtime/transitions/shared";
 import { withParsedArgs } from "./parsed-tool";
 import {
 	FlowPlanApplyArgsSchema,
@@ -83,6 +85,73 @@ function toReviewerDecisionInput(
 
 export function createRuntimeTools() {
 	return {
+		flow_plan_context_record: tool({
+			description:
+				"Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session",
+			args:
+				// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against bundled plugin Zod while this shape comes from runtime schema.
+				PlanningContextArgsSchema.shape as any,
+			execute: withParsedArgs(
+				PlanningContextArgsSchema,
+				async (rawInput, context: ToolContext) => {
+					const input = rawInput as {
+						repoProfile?: string[];
+						research?: string[];
+						implementationApproach?: {
+							chosenDirection: string;
+							keyConstraints?: string[];
+							validationSignals?: string[];
+							sources?: string[];
+						};
+						decisionLog?: Array<{
+							question: string;
+							options: Array<{ label: string; tradeoffs?: string[] }>;
+							recommendation: string;
+							rationale?: string[];
+						}>;
+					};
+					context.metadata?.({
+						title: "Record planning context",
+						metadata: {
+							sessionId: null,
+							repoProfileCount: input.repoProfile?.length ?? 0,
+							researchCount: input.research?.length ?? 0,
+							decisionCount: input.decisionLog?.length ?? 0,
+						},
+					});
+					const planning = Object.fromEntries(
+						Object.entries(input).filter(([, value]) => value !== undefined),
+					) as Parameters<typeof applyPlan>[2];
+					const nextPlanning = planning ?? {};
+					return withPersistedTransition(
+						context,
+						(session) =>
+							succeed({
+								...session,
+								planning: {
+									repoProfile:
+										nextPlanning.repoProfile ?? session.planning.repoProfile,
+									research: nextPlanning.research ?? session.planning.research,
+									implementationApproach:
+										nextPlanning.implementationApproach ??
+										session.planning.implementationApproach,
+									decisionLog:
+										nextPlanning.decisionLog ?? session.planning.decisionLog,
+								},
+							}),
+						{
+							getSession: (value) => value,
+							onSuccess: (saved) => ({
+								status: "ok",
+								summary: "Planning context recorded.",
+								session: summarizeSession(saved).session,
+							}),
+						},
+					);
+				},
+			),
+		}),
+
 		flow_plan_apply: tool({
 			description: "Persist a Flow draft plan into the active session",
 			args: flowPlanApplyArgsShape,

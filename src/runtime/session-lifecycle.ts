@@ -137,6 +137,7 @@ export function createSession(
 			repoProfile: planning?.repoProfile ?? [],
 			research: planning?.research ?? [],
 			implementationApproach: planning?.implementationApproach,
+			decisionLog: planning?.decisionLog ?? [],
 		},
 		plan: null,
 		execution: {

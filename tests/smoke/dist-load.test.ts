@@ -19,6 +19,7 @@ type FlowToolName =
 	| "flow_plan_start"
 	| "flow_auto_prepare"
 	| "flow_reset_session"
+	| "flow_plan_context_record"
 	| "flow_plan_apply"
 	| "flow_plan_approve"
 	| "flow_plan_select_features"
@@ -37,7 +38,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, seven commands, eighteen tools, and callable executors", async () => {
+	test("dist bundle exposes five agents, seven commands, nineteen tools, and callable executors", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -58,7 +59,7 @@ describe("built dist smoke load", () => {
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
 		expect(Object.keys(config.command ?? {})).toHaveLength(7);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -79,6 +80,7 @@ describe("built dist smoke load", () => {
 			flow_plan_start: { goal: "Optimize the Flow bundle" },
 			flow_auto_prepare: { argumentString: "resume" },
 			flow_reset_session: {},
+			flow_plan_context_record: { repoProfile: ["TypeScript"] },
 			flow_plan_apply: {
 				plan: {
 					summary: "Build the smoke path.",

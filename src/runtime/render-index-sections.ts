@@ -26,6 +26,20 @@ function maybeApproachSection(session: Session): string {
 	]).trimEnd();
 }
 
+function maybeDecisionLogSection(session: Session): string {
+	const decisions = session.planning.decisionLog;
+	if (decisions.length === 0) {
+		return "";
+	}
+
+	return `## Decision Log\n\n${bulletList(
+		decisions.map(
+			(decision) =>
+				`${toInlineText(decision.question)} | recommended: ${toInlineText(decision.recommendation)} | options: ${decision.options.map((option) => toInlineText(option.label)).join(", ")}`,
+		),
+	)}`;
+}
+
 function formatFeatureLine(feature: Feature): string {
 	return `- ${feature.id} | ${feature.status} | ${toInlineText(feature.title)}`;
 }
@@ -122,6 +136,7 @@ ${planLines.join("\n")}`,
 		maybeSection("Repo Profile", session.planning.repoProfile),
 		maybeSection("Research", session.planning.research),
 		maybeApproachSection(session),
+		maybeDecisionLogSection(session),
 	]).trimEnd();
 }
 

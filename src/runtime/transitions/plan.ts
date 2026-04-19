@@ -222,6 +222,7 @@ export function applyPlan(
 			implementationApproach:
 				planning?.implementationApproach ??
 				session.planning.implementationApproach,
+			decisionLog: planning?.decisionLog ?? session.planning.decisionLog,
 		},
 		execution: {
 			...session.execution,

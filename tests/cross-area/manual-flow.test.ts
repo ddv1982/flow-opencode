@@ -85,7 +85,7 @@ const expectedEnvelopeSnapshot = {
 			planOverview:
 				"Validate plan, run, review, and completion via built code.",
 			planSummary: "Run a single smoke feature through the dist bundle.",
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "completed",
 		},
 		status: "ok",
@@ -143,7 +143,7 @@ const expectedEnvelopeSnapshot = {
 			planOverview:
 				"Validate plan, run, review, and completion via built code.",
 			planSummary: "Run a single smoke feature through the dist bundle.",
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "running",
 		},
 		status: "ok",
@@ -200,7 +200,7 @@ const expectedEnvelopeSnapshot = {
 			planOverview:
 				"Validate plan, run, review, and completion via built code.",
 			planSummary: "Run a single smoke feature through the dist bundle.",
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "running",
 		},
 		status: "ok",
@@ -243,7 +243,7 @@ const expectedEnvelopeSnapshot = {
 			planOverview:
 				"Validate plan, run, review, and completion via built code.",
 			planSummary: "Run a single smoke feature through the dist bundle.",
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "planning",
 		},
 		status: "ok",
@@ -286,7 +286,7 @@ const expectedEnvelopeSnapshot = {
 			planOverview:
 				"Validate plan, run, review, and completion via built code.",
 			planSummary: "Run a single smoke feature through the dist bundle.",
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "ready",
 		},
 		status: "ok",
@@ -313,7 +313,7 @@ const expectedEnvelopeSnapshot = {
 			notes: [],
 			planOverview: null,
 			planSummary: null,
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "planning",
 		},
 		status: "ok",
@@ -371,7 +371,7 @@ const expectedEnvelopeSnapshot = {
 			planOverview:
 				"Validate plan, run, review, and completion via built code.",
 			planSummary: "Run a single smoke feature through the dist bundle.",
-			planning: { repoProfile: [], research: [] },
+			planning: { repoProfile: [], research: [], decisionLog: [] },
 			status: "running",
 		},
 		status: "ok",

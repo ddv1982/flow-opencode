@@ -179,6 +179,18 @@ export const ImplementationApproachSchema = z.object({
 	sources: z.array(z.string().min(1)).default([]),
 });
 
+export const PlanningDecisionOptionSchema = z.object({
+	label: z.string().min(1),
+	tradeoffs: z.array(z.string().min(1)).default([]),
+});
+
+export const PlanningDecisionSchema = z.object({
+	question: z.string().min(1),
+	options: z.array(PlanningDecisionOptionSchema).min(1),
+	recommendation: z.string().min(1),
+	rationale: z.array(z.string().min(1)).default([]),
+});
+
 export const CompletionPolicySchema = z.object({
 	minCompletedFeatures: z.number().int().positive().optional(),
 	requireFinalReview: z.boolean().optional(),
@@ -200,6 +212,7 @@ export const PlanningContextSchema = z.object({
 	repoProfile: z.array(z.string().min(1)).default([]),
 	research: z.array(z.string().min(1)).default([]),
 	implementationApproach: ImplementationApproachSchema.optional(),
+	decisionLog: z.array(PlanningDecisionSchema).default([]),
 });
 
 export const PlanArgsSchema = PlanSchema.omit({
