@@ -137,29 +137,41 @@ Flow researches only when local repo evidence is insufficient to produce a high-
 
 ```mermaid
 flowchart TD
-    A[Goal] --> B{Start mode}
+    A[Goal or resume request] --> B{Start mode}
     B -->|Manual| C["/flow-plan"]
     B -->|Autonomous| D["/flow-auto"]
+
     C --> E[Detect stack]
-    D --> E
+    D --> D1{Resume-only input?}
+    D1 -->|yes + active session| N
+    D1 -->|yes + no active session| D2[Ask for a goal]
+    D1 -->|no, new goal| E
+
     E --> F[Persist planning context]
     F --> G{Need research?}
     G -->|yes| H[Research + persist]
     G -->|no| I{Mode}
     H --> I
-    I -->|flow-plan| J[Draft plan]
-    I -->|flow-auto| K{Need decision?}
-    K -->|yes| L[Show options + recommendation]
+
+    I -->|flow-plan| J[Draft or refresh plan]
+    I -->|flow-auto| K{Need human decision?}
+    K -->|yes| L[Show options, tradeoffs, and recommendation]
     K -->|no| J
+
     J --> M[Approve plan]
     M --> N[Choose next approved feature]
-    N --> O[flow-worker executes + validates]
+    N --> O[flow-worker executes + targeted validation]
     O --> P[flow-reviewer reviews]
     P -->|needs_fix| O
-    P -->|blocked| Q[Stop or reset/replan]
-    P -->|approved| R{More features?}
-    R -->|Yes| N
-    R -->|No| S[Broad final validation]
+    P -->|blocked/retryable| Q[Reset, recover, or replan]
+    P -->|approved| R{Session completion policy satisfied?}
+
+    Q -->|reset/retry| N
+    Q -->|replan required| J
+    Q -->|hard blocker| X[Stop blocked]
+
+    R -->|no| N
+    R -->|yes| S[Broad final validation]
     S --> T[Final review]
     T -->|needs_fix| O
     T -->|approved| U[Session complete]
