@@ -14,13 +14,18 @@ If you change any of these:
 then verify:
 
 - prompts still reference canonical tool names only
+- runtime policy/schema remains the normative owner of workflow semantics
+- prompt/doc expression surfaces stay derived from runtime-owned policy
 - public tool registration still matches the intended canonical tool surface
 - recovery metadata still emits canonical runtime tool names only
+- runtime semantic invariant IDs stay aligned with the runtime-owned policy surface
 - payload shape changes stay aligned across prompt contracts, tool args, and runtime schemas
+- docs tool lists stay aligned with the registered tool surface
+- canonical docs sections mirror only known semantic invariant IDs through explicit `[semantic-invariant]` markers
 
 Recommended checks:
 
-- `bun test tests/protocol-parity.test.ts tests/config.test.ts`
+- `bun test tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts tests/recovery-hint-parity.test.ts tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/config.test.ts`
 
 ## Session persistence / migration / history
 

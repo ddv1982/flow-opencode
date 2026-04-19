@@ -1,3 +1,5 @@
+// Flow runtime transition owner: completion gating and recovery prerequisites remain normative here.
+
 import {
 	featureWouldReachCompletion,
 	sessionCompletionReached,

@@ -8,6 +8,8 @@ import {
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_RUN_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
+import { FLOW_CONTRACT_INVARIANT_IDS } from "../src/prompts/contracts";
+import { FLOW_FRAGMENT_INVARIANT_IDS } from "../src/prompts/fragments";
 import {
 	CANONICAL_RUNTIME_TOOL_NAMES,
 	type CanonicalRuntimeToolName,
@@ -15,6 +17,10 @@ import {
 import type { CompletionRecoveryKind } from "../src/runtime/transitions/recovery";
 import { buildCompletionRecovery } from "../src/runtime/transitions/recovery";
 import { createTools } from "../src/tools";
+import {
+	expectDistinctIds,
+	expectKnownInvariantIds,
+} from "./cross-area/semantic-parity-helpers";
 
 const PROMPT_SURFACES = [
 	FLOW_WORKER_AGENT_PROMPT,
@@ -47,6 +53,30 @@ describe("protocol parity", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_run_complete_feature");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_run_complete_feature");
+	});
+
+	test("prompt expression invariant references stay known and distinct", () => {
+		const allIds = [
+			...FLOW_CONTRACT_INVARIANT_IDS,
+			...FLOW_FRAGMENT_INVARIANT_IDS,
+		];
+		expectKnownInvariantIds(allIds);
+		expectDistinctIds(FLOW_CONTRACT_INVARIANT_IDS);
+		expectDistinctIds(FLOW_FRAGMENT_INVARIANT_IDS);
+	});
+
+	test("contracts and fragments cover the expected semantic invariants", () => {
+		expect(FLOW_CONTRACT_INVARIANT_IDS).toEqual([
+			"completion.gates.required_order",
+			"completion.policy.min_completed_features",
+			"review.scope.payload_binding",
+		]);
+		expect(FLOW_FRAGMENT_INVARIANT_IDS).toEqual([
+			"completion.policy.min_completed_features",
+			"decision_gate.planning_surface.binding",
+			"recovery.next_action.binding",
+			"tools.canonical_surface.no_raw_wrappers",
+		]);
 	});
 
 	test("recovery guidance emits canonical runtime tools only", () => {

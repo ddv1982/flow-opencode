@@ -1,3 +1,5 @@
+// Flow runtime policy owner: workflow completion targets and decision-gate semantics remain normative here.
+
 import type { Feature, Plan, ReviewerDecision, Session } from "../schema";
 
 export function reviewerPurposeForScope(

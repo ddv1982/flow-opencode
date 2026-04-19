@@ -1,3 +1,5 @@
+// Flow runtime schema owner: session, plan, review, and worker payload strictness remains normative here.
+
 import { z } from "zod";
 import {
 	CLOSURE_KINDS,

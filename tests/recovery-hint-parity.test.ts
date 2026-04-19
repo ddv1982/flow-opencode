@@ -1,3 +1,6 @@
+// Must-keep UX copy assertions: this suite protects operator-facing resolutionHint phrasing.
+// Semantic next-action binding is additionally covered by runtime semantic invariants and may migrate there without removing this UX-copy guard.
+
 import { describe, expect, test } from "bun:test";
 import {
 	buildCompletionRecovery,

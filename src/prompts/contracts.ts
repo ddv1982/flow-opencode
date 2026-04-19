@@ -1,3 +1,14 @@
+// Flow prompt-expression source: runtime policy, transitions, and schema remain the normative owner of workflow semantics.
+// Keep these contracts aligned with runtime invariants; do not introduce conflicting policy here.
+
+import type { SemanticInvariantId } from "../runtime/domain/semantic-invariants";
+
+export const FLOW_CONTRACT_INVARIANT_IDS = [
+	"completion.gates.required_order",
+	"completion.policy.min_completed_features",
+	"review.scope.payload_binding",
+] as const satisfies readonly SemanticInvariantId[];
+
 export const FLOW_PLAN_CONTRACT = `Persist a plan with:
 
 - summary: string

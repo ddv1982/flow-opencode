@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.0.11] - 2026-04-20
+
+### Highlights
+
+Flow 1.0.11 hardens the new runtime-first simplification work so semantic parity is verified by executable contracts instead of fragile wording checks. This release adds a runtime-owned semantic invariant registry, explicit docs parity markers, stronger protocol/docs parity tests, and supporting architecture artifacts for bridge ownership and strictness.
+
+### Added
+
+- Added `src/runtime/domain/semantic-invariants.ts` as the runtime-owned registry for stable semantic invariant IDs, expectation constants, and owner references.
+- Added `tests/runtime/semantic-invariants.test.ts` to verify completion-gate order, completion-policy thresholds, decision-gate surfacing, review-scope payload binding, recovery next-action metadata, and canonical tool-surface invariants.
+- Added `tests/docs-semantic-parity.test.ts` and `tests/docs-tool-parity.test.ts` to keep canonical docs and runtime tool surfaces aligned.
+- Added architecture references for invariant ownership and rollout planning in `docs/architecture/invariant-matrix.md`, `docs/architecture/strictness-contract.md`, `docs/architecture/semantic-invariant-equivalence-matrix.md`, `docs/architecture/bridge-hotspots.md`, `docs/architecture/bridge-seam-owners.md`, and `docs/architecture/surface-matrix.md`.
+
+### Changed
+
+- Made runtime/domain, runtime/transitions, and runtime/schema the explicit normative owners of Flow workflow semantics, while prompt/contracts/docs now reference runtime-owned invariant IDs instead of re-owning policy.
+- Replaced brittle semantic wording checks with runtime-derived invariant coverage and explicit `[semantic-invariant]` markers in the canonical architecture docs.
+- Strengthened maintainer/release guidance and phase checklists so semantic parity, docs parity, and bridge strictness are part of the blocking verification path.
+
+### Fixed
+
+- Fixed the remaining semantic-parity drift risk by verifying invariant owner file/symbol references directly from the runtime catalog.
+- Fixed the docs semantic-parity gate so it now requires the full runtime-owned invariant catalog, including `tools.canonical_surface.no_raw_wrappers`.
+- Reduced false positives in owner-resolution checks by allowing more legitimate declaration/export forms instead of only narrow declaration regex matches.
+
 ## [1.0.10] - 2026-04-19
 
 ### Highlights

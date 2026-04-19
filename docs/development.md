@@ -82,6 +82,7 @@ Flow is built around a small set of responsibilities:
 - `flow_review_record_final`
 - `flow_session_activate`
 - `flow_reset_feature`
+- `flow_plan_context_record`
 - `flow_session_close`
 
 ## Recovery Model

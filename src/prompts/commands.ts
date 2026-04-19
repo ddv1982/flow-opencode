@@ -1,3 +1,6 @@
+// Flow prompt-expression surface: runtime policy, transitions, and schema remain the normative owner of workflow semantics.
+// Command templates should reference canonical runtime-owned behavior instead of restating policy law.
+
 import {
 	FLOW_COORDINATOR_BOUNDARY_RULE,
 	FLOW_COORDINATOR_ROLE_ROUTING_RULE,
@@ -29,7 +32,7 @@ Behavior:
 - Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
 - Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\`.
-- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`. Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including \`completionPolicy.minCompletedFeatures\` even if other plan features remain pending.
+- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`.
 - End with a compact summary of changes, validation evidence, and the runtime next step.`;
 
 export const FLOW_AUTO_COMMAND_TEMPLATE = `Run Flow autonomously.

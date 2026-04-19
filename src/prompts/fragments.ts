@@ -1,3 +1,15 @@
+// Flow prompt-expression source: runtime policy, transitions, and schema remain the normative owner of workflow semantics.
+// Fragments compose prompt wording only; they must not redefine runtime-owned workflow behavior.
+
+import type { SemanticInvariantId } from "../runtime/domain/semantic-invariants";
+
+export const FLOW_FRAGMENT_INVARIANT_IDS = [
+	"completion.policy.min_completed_features",
+	"decision_gate.planning_surface.binding",
+	"recovery.next_action.binding",
+	"tools.canonical_surface.no_raw_wrappers",
+] as const satisfies readonly SemanticInvariantId[];
+
 export const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE =
 	"- Treat Flow runtime tools as authoritative.";
 export const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE =
