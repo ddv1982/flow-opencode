@@ -90,7 +90,7 @@ If you are upgrading from an older release:
 
 1. `/flow-plan Add a workflow plugin for OpenCode`
 2. Review the proposed features
-3. `/flow-plan approve`
+3. `/flow-plan approve` if Flow did not already auto-approve a safe lite draft
 4. `/flow-run`
 5. Repeat `/flow-run` until complete
 6. `/flow-status`
@@ -199,8 +199,10 @@ flowchart TD
     K -->|yes| L[Show options, tradeoffs, and recommendation]
     K -->|no| J
 
-    J --> M[Approve plan]
-    M --> N[Choose next approved feature]
+    J --> M{Lite auto-approved?}
+    M -->|yes| N
+    M -->|no| M2[Approve plan]
+    M2 --> N[Choose next approved feature]
     N --> O[flow-worker executes + targeted validation]
     O --> P[flow-reviewer reviews]
     P -->|needs_fix| O
@@ -260,15 +262,20 @@ Flow will not mark a feature complete unless it has:
 - exactly one active feature
 - recorded validation evidence
 - passing validation for that completion path
-- a recorded reviewer decision
-- an approved reviewer decision for the current scope
 - a passing `featureReview`
+
+In standard and strict flows, Flow also requires a recorded reviewer decision for the current scope.
+
+In the lite lane, Flow can accept an in-band passing review payload during completion, so tiny tasks do not always need a separately persisted reviewer decision before the feature finishes.
 
 Flow will not mark the whole session complete unless it also has:
 
 - broad validation for the repo
-- a final reviewer decision
 - a passing `finalReview`
+
+In standard and strict flows, Flow also requires a recorded final reviewer decision.
+
+In the lite lane, Flow can accept an in-band passing final review payload when the completion path already carries the required broad validation and final review evidence.
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
