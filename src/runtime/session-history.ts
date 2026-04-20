@@ -15,11 +15,7 @@ import {
 	findNewestCompletedSession,
 	parseCompletedDirectoryName,
 } from "./session-completed-storage";
-import {
-	ensureWorkspace,
-	readActiveSessionId,
-	readSessionFromPath,
-} from "./session-workspace";
+import { readActiveSessionId, readSessionFromPath } from "./session-workspace";
 
 export type SessionHistoryEntry = {
 	id: string;
@@ -105,12 +101,24 @@ function toInvalidHistoryEntry(
 	};
 }
 
+async function readDirectoryEntries(
+	root: string,
+): Promise<Array<{ isDirectory(): boolean; name: string }>> {
+	try {
+		return await readdir(root, { withFileTypes: true });
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return [];
+		}
+
+		throw error;
+	}
+}
+
 export async function loadStoredSession(
 	worktree: string,
 	sessionId: string,
 ): Promise<StoredSessionLookup | null> {
-	await ensureWorkspace(worktree);
-
 	const activeSessionId = await readActiveSessionId(worktree);
 	if (activeSessionId === sessionId) {
 		const session = await readSessionFromPath(
@@ -164,8 +172,6 @@ export async function listSessionHistory(worktree: string): Promise<{
 	stored: SessionHistoryEntry[];
 	completed: CompletedSessionHistoryEntry[];
 }> {
-	await ensureWorkspace(worktree);
-
 	const activeSessionId = await readActiveSessionId(worktree);
 	let active: SessionHistoryEntry | null = null;
 	if (activeSessionId) {
@@ -194,7 +200,7 @@ export async function listSessionHistory(worktree: string): Promise<{
 	const completedRoot = getCompletedSessionsDir(worktree);
 
 	const stored: SessionHistoryEntry[] = [];
-	for (const entry of await readdir(storedRoot, { withFileTypes: true })) {
+	for (const entry of await readDirectoryEntries(storedRoot)) {
 		if (!entry.isDirectory()) continue;
 		const sessionId = entry.name;
 		try {
@@ -226,7 +232,7 @@ export async function listSessionHistory(worktree: string): Promise<{
 	);
 
 	const completed: CompletedSessionHistoryEntry[] = [];
-	for (const entry of await readdir(completedRoot, { withFileTypes: true })) {
+	for (const entry of await readDirectoryEntries(completedRoot)) {
 		if (!entry.isDirectory()) continue;
 		const completedDir = getCompletedSessionDir(worktree, entry.name);
 		const parsed = parseCompletedDirectoryName(entry.name);

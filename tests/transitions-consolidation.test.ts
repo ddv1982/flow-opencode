@@ -168,7 +168,13 @@ describe("transition consolidation", () => {
 		expect(nextCommandPolicy).toContain("FLOW_STATUS_COMMAND");
 		expect(nextCommandPolicy).not.toContain("tool({");
 
-		expect(sharedTools).toContain("export function resolveToolSessionRoot");
+		expect(sharedTools).toContain("export function inspectToolWorkspace");
+		expect(sharedTools).toContain(
+			"export function resolveReadableToolSessionRoot",
+		);
+		expect(sharedTools).toContain(
+			"export function resolveMutableToolSessionRoot",
+		);
 		expect(sharedTools).toContain("export function recordToolMetadata");
 		expect(sharedTools).toContain(
 			"Session tool boundary: tiny shared helpers only.",

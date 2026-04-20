@@ -20,6 +20,10 @@ import {
 	type LiveSessionLocation,
 } from "./paths";
 import { type Session, SessionSchema } from "./schema";
+import {
+	assertMutableWorkspaceRoot,
+	type MutableWorkspaceRoot,
+} from "./workspace-root";
 
 const FLOW_GITIGNORE_ENTRIES = ["active/", "stored/", "completed/"] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();
@@ -102,7 +106,7 @@ export function resetSessionWorkspaceFsForTests(): void {
 }
 
 export async function withSessionSaveLock<T>(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	task: () => Promise<T>,
 ): Promise<T> {
 	const previous = sessionSaveQueues.get(worktree) ?? Promise.resolve();
@@ -150,7 +154,9 @@ export async function readSessionFromPath(
 	return parsed;
 }
 
-export async function ensureWorkspace(worktree: string): Promise<void> {
+async function ensureWorkspaceAtRoot(
+	worktree: MutableWorkspaceRoot,
+): Promise<void> {
 	const flowDir = getFlowDir(worktree);
 	if (!preparedWorkspaceRoots.has(worktree)) {
 		await mkdir(getActiveSessionsDir(worktree), { recursive: true });
@@ -191,6 +197,10 @@ export async function ensureWorkspace(worktree: string): Promise<void> {
 	}
 
 	preparedWorkspaceGitignoreCache.set(gitignorePath, nextContents);
+}
+
+export async function ensureWorkspace(worktree: string): Promise<void> {
+	await ensureWorkspaceAtRoot(assertMutableWorkspaceRoot(worktree));
 }
 
 export async function readActiveSessionId(
@@ -242,15 +252,16 @@ export async function writeSessionFile(
 	session: Session,
 	location: LiveSessionLocation = "active",
 ): Promise<void> {
-	await ensureWorkspace(worktree);
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	await ensureWorkspaceAtRoot(mutableWorktree);
 	await writeSessionFileAtDir(
-		getSessionDir(worktree, session.id, location),
+		getSessionDir(mutableWorktree, session.id, location),
 		session,
 	);
 }
 
 export async function findStoredSessionDir(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	sessionId: string,
 ): Promise<string | null> {
 	const sessionDir = getSessionDir(worktree, sessionId, "stored");

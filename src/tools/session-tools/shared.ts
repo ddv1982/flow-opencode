@@ -3,11 +3,23 @@
  * Keep response assembly in responses.ts and routing policy in
  * next-command-policy.ts.
  */
-import { resolveSessionRoot } from "../../runtime/application";
+import {
+	inspectWorkspaceContext,
+	resolveMutableSessionRoot,
+	resolveReadableSessionRoot,
+} from "../../runtime/application";
 import type { ToolContext } from "../schemas";
 
-export function resolveToolSessionRoot(context: ToolContext) {
-	return resolveSessionRoot(context);
+export function inspectToolWorkspace(context: ToolContext) {
+	return inspectWorkspaceContext(context);
+}
+
+export function resolveReadableToolSessionRoot(context: ToolContext) {
+	return resolveReadableSessionRoot(context).root;
+}
+
+export function resolveMutableToolSessionRoot(context: ToolContext) {
+	return resolveMutableSessionRoot(context).root;
 }
 
 export function recordToolMetadata(

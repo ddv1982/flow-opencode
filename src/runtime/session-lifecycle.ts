@@ -18,36 +18,40 @@ import {
 	writeSessionFileAtDir,
 } from "./session-workspace";
 import { completedTimestampNow, nowIso } from "./util";
+import { assertMutableWorkspaceRoot } from "./workspace-root";
 
 export async function deleteSessionState(worktree: string): Promise<void> {
-	const sessionId = await resolveActiveSessionId(worktree);
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	const sessionId = await resolveActiveSessionId(mutableWorktree);
 	if (!sessionId) {
 		return;
 	}
 
-	await rm(getSessionPath(worktree, sessionId), { force: true });
+	await rm(getSessionPath(mutableWorktree, sessionId), { force: true });
 }
 
 export async function deleteSessionArtifacts(worktree: string): Promise<void> {
-	const sessionId = await resolveActiveSessionId(worktree);
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	const sessionId = await resolveActiveSessionId(mutableWorktree);
 	if (!sessionId) {
 		return;
 	}
 
-	await deleteSessionDocs(worktree, sessionId, "active");
-	await rm(getReviewsDir(worktree, sessionId, "active"), {
+	await deleteSessionDocs(mutableWorktree, sessionId, "active");
+	await rm(getReviewsDir(mutableWorktree, sessionId, "active"), {
 		recursive: true,
 		force: true,
 	});
 }
 
 export async function deleteSession(worktree: string): Promise<void> {
-	const sessionId = await resolveActiveSessionId(worktree);
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	const sessionId = await resolveActiveSessionId(mutableWorktree);
 	if (!sessionId) {
 		return;
 	}
 
-	await rm(getActiveSessionDir(worktree, sessionId), {
+	await rm(getActiveSessionDir(mutableWorktree, sessionId), {
 		recursive: true,
 		force: true,
 	});
@@ -64,13 +68,14 @@ export async function closeSession(
 	kind: NonNullable<Session["closure"]>["kind"],
 	summary?: string,
 ): Promise<ClosedSessionResult | null> {
-	const sessionId = await resolveActiveSessionId(worktree);
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	const sessionId = await resolveActiveSessionId(mutableWorktree);
 	if (!sessionId) {
 		return null;
 	}
 
 	const session = await readSessionFromPath(
-		getSessionPath(worktree, sessionId, "active"),
+		getSessionPath(mutableWorktree, sessionId, "active"),
 	);
 	const recordedAt = nowIso();
 	const closedSession: Session = SessionSchema.parse({
@@ -108,10 +113,10 @@ export async function closeSession(
 		},
 	});
 
-	const activeDir = getActiveSessionDir(worktree, sessionId);
+	const activeDir = getActiveSessionDir(mutableWorktree, sessionId);
 	await writeSessionFileAtDir(activeDir, closedSession);
 	const moved = await moveSessionDirToCompleted(
-		worktree,
+		mutableWorktree,
 		sessionId,
 		activeDir,
 		completedTimestampNow(),
@@ -129,25 +134,30 @@ export async function activateSession(
 	worktree: string,
 	sessionId: string,
 ): Promise<Session | null> {
-	const activeSessionId = await resolveActiveSessionId(worktree);
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	const activeSessionId = await resolveActiveSessionId(mutableWorktree);
 	if (activeSessionId === sessionId) {
-		return readSessionFromPath(getSessionPath(worktree, sessionId, "active"));
+		return readSessionFromPath(
+			getSessionPath(mutableWorktree, sessionId, "active"),
+		);
 	}
 
-	const storedDir = getStoredSessionDir(worktree, sessionId);
+	const storedDir = getStoredSessionDir(mutableWorktree, sessionId);
 	if (!(await pathExists(storedDir))) {
 		return null;
 	}
 
 	if (activeSessionId) {
 		await rename(
-			getActiveSessionDir(worktree, activeSessionId),
-			getStoredSessionDir(worktree, activeSessionId),
+			getActiveSessionDir(mutableWorktree, activeSessionId),
+			getStoredSessionDir(mutableWorktree, activeSessionId),
 		);
 	}
 
-	await rename(storedDir, getActiveSessionDir(worktree, sessionId));
-	return readSessionFromPath(getSessionPath(worktree, sessionId, "active"));
+	await rename(storedDir, getActiveSessionDir(mutableWorktree, sessionId));
+	return readSessionFromPath(
+		getSessionPath(mutableWorktree, sessionId, "active"),
+	);
 }
 
 export function createSession(

@@ -21,6 +21,10 @@ import {
 	writeSessionFileAtDir,
 } from "./session-workspace";
 import { nowIso } from "./util";
+import {
+	assertMutableWorkspaceRoot,
+	type MutableWorkspaceRoot,
+} from "./workspace-root";
 
 function refreshUpdatedAt(session: Session): Session {
 	return {
@@ -33,7 +37,7 @@ function refreshUpdatedAt(session: Session): Session {
 }
 
 async function persistCompletedSession(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	session: Session,
 	includeArtifacts: boolean,
 ): Promise<void> {
@@ -70,7 +74,7 @@ async function persistCompletedSession(
 }
 
 async function persistOpenSession(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	session: Session,
 	includeArtifacts: boolean,
 ): Promise<void> {
@@ -118,12 +122,13 @@ export async function saveSessionState(
 	worktree: string,
 	session: Session,
 ): Promise<Session> {
-	return withSessionSaveLock(worktree, async () => {
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	return withSessionSaveLock(mutableWorktree, async () => {
 		const normalized = refreshUpdatedAt(session);
 		if (normalized.status === "completed") {
-			await persistCompletedSession(worktree, normalized, false);
+			await persistCompletedSession(mutableWorktree, normalized, false);
 		} else {
-			await persistOpenSession(worktree, normalized, false);
+			await persistOpenSession(mutableWorktree, normalized, false);
 		}
 		return normalized;
 	});
@@ -133,8 +138,12 @@ export async function syncSessionArtifacts(
 	worktree: string,
 	session: Session,
 ): Promise<void> {
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
 	if (session.status === "completed") {
-		const completed = await findNewestCompletedSession(worktree, session.id);
+		const completed = await findNewestCompletedSession(
+			mutableWorktree,
+			session.id,
+		);
 		if (completed) {
 			await renderSessionDocsAtDir(completed.completedDir, session);
 			return;
@@ -142,19 +151,20 @@ export async function syncSessionArtifacts(
 		return;
 	}
 
-	await renderSessionDocs(worktree, session, "active");
+	await renderSessionDocs(mutableWorktree, session, "active");
 }
 
 export async function saveSession(
 	worktree: string,
 	session: Session,
 ): Promise<Session> {
-	return withSessionSaveLock(worktree, async () => {
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	return withSessionSaveLock(mutableWorktree, async () => {
 		const normalized = refreshUpdatedAt(session);
 		if (normalized.status === "completed") {
-			await persistCompletedSession(worktree, normalized, true);
+			await persistCompletedSession(mutableWorktree, normalized, true);
 		} else {
-			await persistOpenSession(worktree, normalized, true);
+			await persistOpenSession(mutableWorktree, normalized, true);
 		}
 		return normalized;
 	});

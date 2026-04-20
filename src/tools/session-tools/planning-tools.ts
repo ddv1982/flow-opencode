@@ -25,7 +25,11 @@ import {
 	nextCommandForMissingGoal,
 } from "./next-command-policy";
 import { autoPrepareResponse, missingGoalResponse } from "./responses";
-import { recordToolMetadata, resolveToolSessionRoot } from "./shared";
+import {
+	recordToolMetadata,
+	resolveMutableToolSessionRoot,
+	resolveReadableToolSessionRoot,
+} from "./shared";
 
 function buildPlannedSession(
 	existing: Awaited<ReturnType<typeof loadSession>>,
@@ -56,7 +60,7 @@ export function createPlanningSessionTools() {
 			execute: withParsedArgs(
 				FlowPlanStartArgsSchema,
 				async (input, context: ToolContext) => {
-					const sessionRoot = resolveToolSessionRoot(context);
+					const sessionRoot = resolveMutableToolSessionRoot(context);
 					const existing = await loadSession(sessionRoot);
 
 					if (!input.goal && !existing) {
@@ -100,7 +104,7 @@ export function createPlanningSessionTools() {
 				async (input, context: ToolContext) => {
 					const navigation = autoPreparePolicy(
 						input.argumentString,
-						await loadSession(resolveToolSessionRoot(context)),
+						await loadSession(resolveReadableToolSessionRoot(context)),
 					);
 					const response = autoPrepareResponse(
 						navigation.mode,

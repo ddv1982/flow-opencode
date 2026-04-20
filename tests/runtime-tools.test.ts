@@ -99,6 +99,14 @@ describe("runtime tools and recovery", () => {
 				"Command: /flow-plan <goal>",
 			].join("\n"),
 		);
+		expect(parsed.workspaceRoot).toBe(worktree);
+		expect(parsed.workspace).toEqual(
+			expect.objectContaining({
+				root: worktree,
+				source: "worktree",
+				mutationAllowed: true,
+			}),
+		);
 	});
 
 	test("flow_status supports a compact view for easier operator scanning", async () => {
@@ -119,6 +127,7 @@ describe("runtime tools and recovery", () => {
 				"Command: /flow-plan <goal>",
 			].join("\n"),
 		);
+		expect(parsed.workspaceRoot).toBe(worktree);
 		expect(parsed.session).toBeUndefined();
 		expect(response.includes("\n")).toBe(false);
 	});
@@ -346,6 +355,107 @@ describe("runtime tools and recovery", () => {
 				"utf8",
 			),
 		).resolves.toContain(parsed.session.id);
+	});
+
+	test("flow_plan_start blocks suspicious mutable roots under home dot-directories", async () => {
+		const fakeHome = makeTempDir();
+		const suspiciousRoot = join(fakeHome, ".factory");
+		const tools = createTestTools();
+
+		await withHomeEnv(fakeHome, async () => {
+			const response = await tools.flow_plan_start.execute(
+				{ goal: "Keep Flow inside the repo" },
+				toolContext("/", suspiciousRoot),
+			);
+			const parsed = JSON.parse(response);
+
+			expect(parsed.status).toBe("error");
+			expect(String(parsed.summary)).toContain(
+				"Flow blocked mutable workspace root",
+			);
+			expect(parsed.workspaceRoot).toBe(suspiciousRoot);
+			expect(parsed.workspace).toEqual(
+				expect.objectContaining({
+					root: suspiciousRoot,
+					source: "directory",
+					mutationAllowed: false,
+				}),
+			);
+			expect(String(parsed.remediation)).toContain(
+				"FLOW_TRUSTED_WORKSPACE_ROOTS",
+			);
+		});
+	});
+
+	test("flow_run_start blocks suspicious mutable roots even if session files exist there", async () => {
+		const fakeHome = makeTempDir();
+		const suspiciousRoot = join(fakeHome, ".factory");
+		const tools = createTestTools();
+
+		await withHomeEnv(fakeHome, async () => {
+			process.env.FLOW_TRUSTED_WORKSPACE_ROOTS = suspiciousRoot;
+			await saveSession(
+				suspiciousRoot,
+				sampleSession("Suspicious root fixture"),
+			);
+			delete process.env.FLOW_TRUSTED_WORKSPACE_ROOTS;
+
+			const response = await tools.flow_run_start.execute(
+				{},
+				toolContext("/", suspiciousRoot),
+			);
+			const parsed = JSON.parse(response);
+
+			expect(parsed.status).toBe("error");
+			expect(String(parsed.summary)).toContain(
+				"Flow blocked mutable workspace root",
+			);
+			expect(parsed.workspaceRoot).toBe(suspiciousRoot);
+			expect(parsed.workspace).toEqual(
+				expect.objectContaining({
+					root: suspiciousRoot,
+					source: "directory",
+					mutationAllowed: false,
+				}),
+			);
+		});
+	});
+
+	test("flow_doctor surfaces suspicious workspace roots and skips artifact inspection there", async () => {
+		const fakeHome = makeTempDir();
+		const suspiciousRoot = join(fakeHome, ".factory");
+		const homeDir = makeTempDir();
+		await installDoctorPluginFixture(homeDir);
+
+		await withHomeEnv(fakeHome, async () => {
+			const tools = createTestTools();
+			const response = await tools.flow_doctor.execute(
+				{},
+				toolContext("/", suspiciousRoot),
+			);
+			const parsed = JSON.parse(response);
+			const workspaceCheck = parsed.checks.find(
+				(check: { id: string }) => check.id === "workspace",
+			);
+			const sessionArtifactCheck = parsed.checks.find(
+				(check: { id: string }) => check.id === "session_artifacts",
+			);
+
+			expect(parsed.status).toBe("fail");
+			expect(parsed.workspaceRoot).toBe(suspiciousRoot);
+			expect(parsed.workspace).toEqual(
+				expect.objectContaining({
+					root: suspiciousRoot,
+					source: "directory",
+					mutationAllowed: false,
+				}),
+			);
+			expect(workspaceCheck?.status).toBe("fail");
+			expect(String(workspaceCheck?.summary)).toContain(
+				"Flow blocked mutable workspace root",
+			);
+			expect(sessionArtifactCheck?.status).toBe("skip");
+		});
 	});
 
 	test("flow_history lists stored and completed session runs", async () => {

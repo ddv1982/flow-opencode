@@ -27,11 +27,17 @@ type MutableConfig = {
 	command?: Record<string, unknown>;
 };
 
+type FlowPermissionConfig = {
+	edit?: string;
+	bash?: string;
+	external_directory?: string;
+};
+
 type FlowAgentConfig = {
 	mode: "primary";
 	description: string;
 	prompt: string;
-	permission?: typeof FLOW_READ_ONLY_PERMISSION;
+	permission?: FlowPermissionConfig;
 	tools?: typeof FLOW_READ_ONLY_TOOLS;
 };
 
@@ -64,12 +70,18 @@ const FLOW_AGENTS = {
 		description:
 			"Execute one approved Flow feature with focused validation and review.",
 		prompt: FLOW_WORKER_AGENT_PROMPT,
+		permission: {
+			external_directory: "deny",
+		},
 	},
 	"flow-auto": {
 		mode: "primary",
 		description:
 			"Coordinate Flow planning, execution, review, and recovery autonomously.",
 		prompt: FLOW_AUTO_AGENT_PROMPT,
+		permission: {
+			external_directory: "deny",
+		},
 	},
 	"flow-reviewer": createReadOnlyPrimaryAgent(
 		"Review Flow work and decide whether it may advance.",

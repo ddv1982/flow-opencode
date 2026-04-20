@@ -213,6 +213,13 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
 	};
 }
 
+function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
+	const { workspace, workspaceRoot, ...rest } = summary;
+	void workspace;
+	void workspaceRoot;
+	return normalizeSummaryFixture(rest as ReturnType<typeof summarizeSession>);
+}
+
 describe("runtime summary", () => {
 	test("summarizeSession reports missing state when no session exists", () => {
 		expect(summarizeSession(null)).toEqual({
@@ -596,7 +603,7 @@ describe("runtime summary", () => {
 				operatorSummary: parsedOperatorSummary,
 				...parsedBase
 			} = parsed;
-			expect(normalizeSummaryFixture(parsedBase)).toEqual(
+			expect(normalizeFlowStatusFixture(parsedBase)).toEqual(
 				normalizeSummaryFixture(expectedSessionSummary),
 			);
 			expect(parsedGuidance).toEqual(expectedGuidance);

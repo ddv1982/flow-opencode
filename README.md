@@ -115,9 +115,11 @@ Run `/flow-doctor` when you want a non-destructive readiness check for:
 
 - canonical install health
 - command/agent injection health
-- workspace writability
+- workspace writability and whether Flow trusts the resolved workspace root for mutation
 - active session artifact health
 - the current blocker and recommended next step
+
+Flow treats the resolved project/worktree as a hard boundary for session writes. By default it refuses to mutate session state in suspicious roots such as `~`, `~/.config/...`, or `~/.factory/...`. If you intentionally need a nonstandard root, allowlist the exact absolute path with `FLOW_TRUSTED_WORKSPACE_ROOTS`. This variable accepts one or more exact absolute paths separated by your platform path delimiter (`:` on macOS/Linux, `;` on Windows).
 
 Use `/flow-doctor detail` if you want the fuller structured view.
 
@@ -210,7 +212,9 @@ flowchart TD
 
 ## Storage
 
-Flow keeps one active session per worktree.
+Flow keeps one active session per worktree and writes session state only inside the intended project/worktree root.
+
+Read-only inspection commands such as `/flow-status`, `/flow-history`, and `/flow-doctor` can still report what Flow sees, but mutating commands refuse suspicious roots unless the exact absolute path is trusted with `FLOW_TRUSTED_WORKSPACE_ROOTS` (single path or path-delimited list of exact roots).
 
 Main session state:
 

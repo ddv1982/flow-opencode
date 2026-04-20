@@ -13,7 +13,7 @@ import {
 } from "../schemas";
 import { nextCommandForResetSession } from "./next-command-policy";
 import { closeSessionResponse } from "./responses";
-import { recordToolMetadata, resolveToolSessionRoot } from "./shared";
+import { recordToolMetadata, resolveMutableToolSessionRoot } from "./shared";
 
 export function createLifecycleSessionTools() {
 	return {
@@ -25,7 +25,7 @@ export function createLifecycleSessionTools() {
 				FlowSessionCloseArgsSchema,
 				async (input, context: ToolContext) => {
 					const completed = await closeSession(
-						resolveToolSessionRoot(context),
+						resolveMutableToolSessionRoot(context),
 						input.kind,
 						input.summary,
 					);

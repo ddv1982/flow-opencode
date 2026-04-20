@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.12] - 2026-04-20
+
+### Highlights
+
+Flow 1.0.12 hardens workspace safety so Flow can no longer silently create or mutate session state in unrelated directories such as home-level dot-config trees. This release adds explicit mutable-workspace root validation, keeps history/status-style reads non-mutating, denies external-directory access for the mutating agents, and surfaces the resolved workspace root plus rejection reasons in operator-facing tooling.
+
+### Added
+
+- Added `src/runtime/workspace-root.ts` as the shared owner for mutable workspace-root normalization, trusted-root inspection, and explicit rejection errors.
+- Added runtime regression coverage in `tests/workspace-root-guard.test.ts` for direct session-layer writes, trusted suspicious roots, and read-only history behavior on empty workspaces.
+- Added helper coverage for multi-root `FLOW_TRUSTED_WORKSPACE_ROOTS` configuration using the platform path delimiter.
+
+### Changed
+
+- Split Flow workspace resolution into read-only vs mutating paths so status/doctor/history remain readable while mutating actions require an intentional project root.
+- Hardened the runtime/session write surface so `saveSession`, `saveSessionState`, `syncSessionArtifacts`, workspace setup, activation, closure, and delete flows all validate mutable roots instead of trusting arbitrary strings.
+- Updated `flow_status` and `flow_doctor` payloads to report the resolved workspace root, its source, whether mutation is allowed, and the concrete rejection reason when Flow blocks a root.
+- Denied `external_directory` access for `flow-worker` and `flow-auto` as defense-in-depth at the OpenCode agent permission layer.
+- Clarified README guidance for exact trusted-root overrides, including multiple roots via `FLOW_TRUSTED_WORKSPACE_ROOTS`.
+
+### Fixed
+
+- Fixed the accidental ability for Flow to persist `.flow/` state under suspicious roots such as `~/.factory` unless the exact path is explicitly trusted.
+- Fixed history and stored-session inspection so read-only commands no longer create `.flow/` directories as a side effect on otherwise empty workspaces.
+- Fixed the remaining gap where lower-level runtime session helpers could bypass the tool-layer workspace safety checks.
+
 ## [1.0.11] - 2026-04-20
 
 ### Highlights

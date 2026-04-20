@@ -40,7 +40,12 @@ import {
 	statusResponse,
 	storedSessionResponse,
 } from "./responses";
-import { recordToolMetadata, resolveToolSessionRoot } from "./shared";
+import {
+	inspectToolWorkspace,
+	recordToolMetadata,
+	resolveMutableToolSessionRoot,
+	resolveReadableToolSessionRoot,
+} from "./shared";
 
 function recordSessionLookupMetadata(
 	context: ToolContext,
@@ -62,15 +67,19 @@ export function createHistorySessionTools() {
 			execute: withParsedArgs(
 				FlowStatusArgsSchema,
 				async (input, context: ToolContext) => {
-					const session = await loadSession(resolveToolSessionRoot(context));
+					const sessionRoot = resolveReadableToolSessionRoot(context);
+					const session = await loadSession(sessionRoot);
+					const workspace = inspectToolWorkspace(context);
 					recordToolMetadata(context, "Flow status", {
 						sessionId: session?.id ?? null,
 						status: session?.status ?? "missing",
 						approval: session?.approval ?? null,
 						activeFeatureId: session?.execution.activeFeatureId ?? null,
 						view: input.view ?? "detailed",
+						workspaceRoot: workspace.root,
+						workspaceMutationAllowed: workspace.mutationAllowed,
 					});
-					return statusResponse(session, input);
+					return statusResponse(session, input, workspace);
 				},
 			),
 		}),
@@ -97,7 +106,7 @@ export function createHistorySessionTools() {
 				FlowHistoryArgsSchema,
 				async (_input, context: ToolContext) => {
 					const history = await listSessionHistory(
-						resolveToolSessionRoot(context),
+						resolveReadableToolSessionRoot(context),
 					);
 					const response = historyResponse(
 						history,
@@ -117,7 +126,7 @@ export function createHistorySessionTools() {
 				FlowHistoryShowArgsSchema,
 				async (input, context: ToolContext) => {
 					const found = await loadStoredSession(
-						resolveToolSessionRoot(context),
+						resolveReadableToolSessionRoot(context),
 						input.sessionId,
 					);
 					recordSessionLookupMetadata(context, input.sessionId, found);
@@ -145,7 +154,7 @@ export function createHistorySessionTools() {
 				FlowSessionActivateArgsSchema,
 				async (input, context: ToolContext) => {
 					const session = await activateSession(
-						resolveToolSessionRoot(context),
+						resolveMutableToolSessionRoot(context),
 						input.sessionId,
 					);
 					recordToolMetadata(context, `Activate ${input.sessionId}`, {

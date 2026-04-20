@@ -2,7 +2,11 @@
  * Session tool boundary: JSON response envelope assembly only.
  * Do not add next-command routing or activation/resume policy here.
  */
-import { toCompactJson, toJson } from "../../runtime/application";
+import {
+	toCompactJson,
+	toJson,
+	type WorkspaceContextSummary,
+} from "../../runtime/application";
 import type { Session } from "../../runtime/schema";
 import type {
 	closeSession,
@@ -55,6 +59,12 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 	const activeCount = history.active ? 1 : 0;
 	const totalCount =
 		activeCount + history.stored.length + history.completed.length;
+	const metadata = {
+		totalCount,
+		activeCount,
+		storedCount: history.stored.length,
+		completedCount: history.completed.length,
+	};
 	if (totalCount === 0) {
 		return {
 			payload: toJson({
@@ -63,12 +73,7 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 				history,
 				nextCommand,
 			}),
-			metadata: {
-				totalCount,
-				activeCount,
-				storedCount: history.stored.length,
-				completedCount: history.completed.length,
-			},
+			metadata,
 		};
 	}
 	return {
@@ -78,12 +83,7 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 			history,
 			nextCommand,
 		}),
-		metadata: {
-			totalCount,
-			activeCount,
-			storedCount: history.stored.length,
-			completedCount: history.completed.length,
-		},
+		metadata,
 	};
 }
 
@@ -119,11 +119,13 @@ export function storedSessionResponse(
 export function statusResponse(
 	session?: Session | null,
 	args: FlowStatusArgs = {},
+	workspace?: WorkspaceContextSummary,
 ) {
 	const normalizedSession = session ?? null;
 	const guidance = explainSessionState(normalizedSession);
 	const operatorSummary = renderSessionStatusSummary(normalizedSession);
 	const view = args.view ?? "detailed";
+	const workspaceRoot = workspace?.root ?? null;
 	if (view === "compact") {
 		const summary = summarizeSession(normalizedSession);
 		return toCompactJson({
@@ -132,12 +134,16 @@ export function statusResponse(
 			guidance,
 			operatorSummary,
 			nextCommand: guidance.nextCommand,
+			workspaceRoot,
+			workspace: workspace ?? null,
 		});
 	}
 	return toJson({
 		...summarizeSession(normalizedSession),
 		guidance,
 		operatorSummary,
+		workspaceRoot,
+		workspace: workspace ?? null,
 	});
 }
 
@@ -146,38 +152,32 @@ export function autoPrepareResponse(
 	goal: string | null,
 	nextCommand: string,
 ) {
-	if (mode === "missing_goal") {
-		return {
-			payload: toJson({
-				status: "missing_goal",
-				mode: "missing_goal",
-				summary:
-					"No active Flow session exists. Provide a goal to start a new autonomous run.",
-				nextCommand,
-			}),
-			metadata: { mode, goal },
-		};
-	}
-	if (mode === "resume" && goal) {
-		return {
-			payload: toJson({
-				status: "ok",
-				mode: "resume",
-				goal,
-				summary: `Resuming active Flow goal: ${goal}`,
-				nextCommand,
-			}),
-			metadata: { mode, goal },
-		};
-	}
+	const payload =
+		mode === "missing_goal"
+			? {
+					status: "missing_goal" as const,
+					mode: "missing_goal" as const,
+					summary:
+						"No active Flow session exists. Provide a goal to start a new autonomous run.",
+					nextCommand,
+				}
+			: mode === "resume" && goal
+				? {
+						status: "ok" as const,
+						mode: "resume" as const,
+						goal,
+						summary: `Resuming active Flow goal: ${goal}`,
+						nextCommand,
+					}
+				: {
+						status: "ok" as const,
+						mode: "start_new_goal" as const,
+						goal,
+						summary: `Starting a new autonomous Flow goal: ${goal}`,
+						nextCommand,
+					};
 	return {
-		payload: toJson({
-			status: "ok",
-			mode: "start_new_goal",
-			goal,
-			summary: `Starting a new autonomous Flow goal: ${goal}`,
-			nextCommand,
-		}),
+		payload: toJson(payload),
 		metadata: { mode, goal },
 	};
 }

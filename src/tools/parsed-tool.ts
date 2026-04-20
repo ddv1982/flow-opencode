@@ -1,4 +1,9 @@
-import { parseToolArgs } from "../runtime/application";
+import {
+	errorResponse,
+	InvalidFlowWorkspaceRootError,
+	parseToolArgs,
+	toJson,
+} from "../runtime/application";
 import type { ToolContext } from "./schemas";
 
 type ParseSchema<T> = {
@@ -15,6 +20,20 @@ export function withParsedArgs<T>(
 			return parsed.response;
 		}
 
-		return run(parsed.value, context);
+		try {
+			return await run(parsed.value, context);
+		} catch (error) {
+			if (error instanceof InvalidFlowWorkspaceRootError) {
+				return toJson(
+					errorResponse(error.summary, {
+						workspaceRoot: error.details.root,
+						workspace: error.details,
+						remediation: error.remediation,
+					}),
+				);
+			}
+
+			throw error;
+		}
 	};
 }

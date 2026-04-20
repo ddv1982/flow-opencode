@@ -1,4 +1,3 @@
-import { parse, resolve } from "node:path";
 import { errorResponse } from "../errors";
 import type { Session } from "../schema";
 import {
@@ -7,6 +6,11 @@ import {
 	syncSessionArtifacts,
 } from "../session";
 import type { TransitionResult } from "../transitions";
+import {
+	InvalidFlowWorkspaceRootError,
+	inspectMutableWorkspaceRoot,
+	normalizeWorkspaceRoot,
+} from "../workspace-root";
 
 export type WorkspaceContext = {
 	worktree?: string;
@@ -14,9 +18,31 @@ export type WorkspaceContext = {
 };
 
 export type RuntimeToolResponse = Record<string, unknown>;
+export type SessionRootSource = "worktree" | "directory" | "cwd";
+export type SessionRootMode = "read" | "mutate";
+export type ResolvedSessionRoot = {
+	root: string;
+	source: SessionRootSource;
+	mode: SessionRootMode;
+	trusted: boolean;
+	usedFallback: boolean;
+};
+export type WorkspaceContextSummary = {
+	root: string | null;
+	source: SessionRootSource | null;
+	trusted: boolean;
+	mutationAllowed: boolean;
+	usedFallback: boolean;
+	rejectionReason: string | null;
+};
 
 type ParseSchema<T> = {
 	parse: (input: unknown) => T;
+};
+
+type SessionRootCandidate = {
+	root: string;
+	source: SessionRootSource;
 };
 
 export interface SessionRuntimePort {
@@ -39,40 +65,173 @@ export function toCompactJson(value: unknown): string {
 	return JSON.stringify(value);
 }
 
-function asWritableRootCandidate(rawPath: string | undefined): string | null {
-	const path = rawPath?.trim();
-	if (!path) {
+function asSessionRootCandidate(
+	rawPath: string | undefined,
+	source: SessionRootSource,
+): SessionRootCandidate | null {
+	const root = normalizeWorkspaceRoot(rawPath);
+	if (!root) {
 		return null;
 	}
 
-	const normalized = resolve(path);
-	if (parse(normalized).root === normalized) {
-		return null;
-	}
-
-	return normalized;
+	return { root, source };
 }
 
-export function resolveSessionRoot(context: WorkspaceContext): string {
-	const candidateWorktree = asWritableRootCandidate(context.worktree);
-	const candidateDirectory = asWritableRootCandidate(context.directory);
-	const candidateCwd = asWritableRootCandidate(process.cwd());
-
+function candidateFromContext(
+	context: WorkspaceContext,
+	mode: SessionRootMode,
+): SessionRootCandidate | null {
+	const candidateWorktree = asSessionRootCandidate(
+		context.worktree,
+		"worktree",
+	);
+	const candidateDirectory = asSessionRootCandidate(
+		context.directory,
+		"directory",
+	);
 	if (candidateWorktree) {
 		return candidateWorktree;
 	}
-
 	if (candidateDirectory) {
 		return candidateDirectory;
 	}
-
-	if (candidateCwd) {
-		return candidateCwd;
+	if (mode === "mutate") {
+		return null;
 	}
 
-	throw new Error(
-		"Flow tool context is missing a writable workspace root (worktree or directory).",
-	);
+	return asSessionRootCandidate(process.cwd(), "cwd");
+}
+
+function mutableRootMissingError(): InvalidFlowWorkspaceRootError {
+	return new InvalidFlowWorkspaceRootError({
+		summary:
+			"Flow could not resolve a mutable workspace root from tool context. Provide a non-root worktree or directory.",
+		remediation:
+			"Run Flow from an actual project/worktree directory so it can manage .flow state there.",
+		details: {
+			root: null,
+			source: null,
+			trusted: false,
+			mutationAllowed: false,
+			usedFallback: false,
+			rejectionReason:
+				"Missing non-root worktree/directory context for a mutating Flow action.",
+		},
+	});
+}
+
+function resolveCandidate(
+	context: WorkspaceContext,
+	mode: SessionRootMode,
+): ResolvedSessionRoot {
+	const candidate = candidateFromContext(context, mode);
+	if (!candidate) {
+		if (mode === "mutate") {
+			throw mutableRootMissingError();
+		}
+		throw new Error(
+			"Flow tool context is missing a readable workspace root (worktree, directory, or cwd).",
+		);
+	}
+
+	if (mode === "read") {
+		return {
+			root: candidate.root,
+			source: candidate.source,
+			mode,
+			trusted: false,
+			usedFallback: candidate.source === "cwd",
+		};
+	}
+
+	const rootCheck = inspectMutableWorkspaceRoot(candidate.root);
+	if (rootCheck.rejectionReason) {
+		throw new InvalidFlowWorkspaceRootError({
+			summary: `Flow blocked mutable workspace root '${candidate.root}' from ${candidate.source}: ${rootCheck.rejectionReason}`,
+			remediation: `Trust this exact path intentionally by setting FLOW_TRUSTED_WORKSPACE_ROOTS=${candidate.root} before running Flow.`,
+			details: {
+				root: candidate.root,
+				source: candidate.source,
+				trusted: rootCheck.trusted,
+				mutationAllowed: false,
+				usedFallback: false,
+				rejectionReason: rootCheck.rejectionReason,
+			},
+		});
+	}
+
+	return {
+		root: candidate.root,
+		source: candidate.source,
+		mode,
+		trusted: rootCheck.trusted,
+		usedFallback: false,
+	};
+}
+
+export function resolveReadableSessionRoot(
+	context: WorkspaceContext,
+): ResolvedSessionRoot {
+	return resolveCandidate(context, "read");
+}
+
+export function resolveMutableSessionRoot(
+	context: WorkspaceContext,
+): ResolvedSessionRoot {
+	return resolveCandidate(context, "mutate");
+}
+
+export function inspectWorkspaceContext(
+	context: WorkspaceContext,
+): WorkspaceContextSummary {
+	let readRoot: ResolvedSessionRoot | null = null;
+	try {
+		readRoot = resolveReadableSessionRoot(context);
+	} catch {
+		return {
+			root: null,
+			source: null,
+			trusted: false,
+			mutationAllowed: false,
+			usedFallback: false,
+			rejectionReason:
+				"Flow could not resolve a readable workspace root from worktree, directory, or cwd.",
+		};
+	}
+
+	try {
+		const mutable = resolveMutableSessionRoot(context);
+		return {
+			root: mutable.root,
+			source: mutable.source,
+			trusted: mutable.trusted,
+			mutationAllowed: true,
+			usedFallback: readRoot.usedFallback,
+			rejectionReason: null,
+		};
+	} catch (error) {
+		if (error instanceof InvalidFlowWorkspaceRootError) {
+			const source =
+				error.details.source === "worktree" ||
+				error.details.source === "directory" ||
+				error.details.source === "cwd"
+					? error.details.source
+					: readRoot.source;
+			return {
+				root: error.details.root ?? readRoot.root,
+				source,
+				trusted: error.details.trusted,
+				mutationAllowed: false,
+				usedFallback: readRoot.usedFallback,
+				rejectionReason: error.details.rejectionReason,
+			};
+		}
+		throw error;
+	}
+}
+
+export function resolveSessionRoot(context: WorkspaceContext): string {
+	return resolveReadableSessionRoot(context).root;
 }
 
 export function missingSessionResponse(
@@ -117,7 +276,9 @@ export async function withSession(
 	missingResponse: RuntimeToolResponse = missingSessionResponse(),
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<string> {
-	const session = await runtime.loadSession(resolveSessionRoot(context));
+	const session = await runtime.loadSession(
+		resolveReadableSessionRoot(context).root,
+	);
 	if (!session) {
 		return toJson(missingResponse);
 	}
@@ -136,7 +297,7 @@ export async function persistTransition<T>(
 	options: { syncArtifacts?: boolean } = { syncArtifacts: true },
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<string> {
-	const worktree = resolveSessionRoot(context);
+	const worktree = resolveMutableSessionRoot(context).root;
 
 	if (!result.ok) {
 		if (result.session) {

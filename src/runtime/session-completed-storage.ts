@@ -3,6 +3,7 @@ import { relative } from "node:path";
 import { getCompletedSessionDir, getCompletedSessionsDir } from "./paths";
 import type { Session } from "./schema";
 import { toCompletedTimestamp } from "./util";
+import type { MutableWorkspaceRoot } from "./workspace-root";
 
 export type CompletedSessionLocation = {
 	sessionId: string;
@@ -96,7 +97,7 @@ export function buildCompletedSessionLocation(
 }
 
 export async function allocateCompletedSessionLocation(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	sessionId: string,
 	completedAt: string,
 ): Promise<CompletedSessionLocation> {
@@ -119,7 +120,7 @@ export async function allocateCompletedSessionLocation(
 }
 
 export async function moveSessionDirToCompleted(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	sessionId: string,
 	sourceDir: string,
 	completedAt: string,
@@ -160,7 +161,17 @@ export async function findNewestCompletedSession(
 	const completedRoot = getCompletedSessionsDir(worktree);
 	const matches: CompletedSessionLocation[] = [];
 
-	for (const entry of await readdir(completedRoot, { withFileTypes: true })) {
+	let entries: Array<{ isDirectory(): boolean; name: string }>;
+	try {
+		entries = await readdir(completedRoot, { withFileTypes: true });
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return null;
+		}
+		throw error;
+	}
+
+	for (const entry of entries) {
 		if (!entry.isDirectory()) continue;
 		const parsed = parseCompletedDirectoryName(entry.name);
 		if (parsed.sessionId !== sessionId) continue;

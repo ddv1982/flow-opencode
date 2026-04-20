@@ -18,6 +18,10 @@ import {
 import { renderFeatureDoc } from "./render-feature-sections";
 import { renderIndexDoc } from "./render-index-sections";
 import type { Session } from "./schema";
+import {
+	assertMutableWorkspaceRoot,
+	type MutableWorkspaceRoot,
+} from "./workspace-root";
 
 type RenderedDoc = {
 	path: string;
@@ -130,14 +134,26 @@ export async function renderSessionDocsAtDir(
 	);
 }
 
-export async function renderSessionDocs(
-	worktree: string,
+async function renderSessionDocsAtRoot(
+	worktree: MutableWorkspaceRoot,
 	session: Session,
 	location: LiveSessionLocation = "active",
 ): Promise<void> {
 	await renderSessionDocsAtDir(
 		getSessionDir(worktree, session.id, location),
 		session,
+	);
+}
+
+export async function renderSessionDocs(
+	worktree: string,
+	session: Session,
+	location: LiveSessionLocation = "active",
+): Promise<void> {
+	await renderSessionDocsAtRoot(
+		assertMutableWorkspaceRoot(worktree),
+		session,
+		location,
 	);
 }
 
@@ -152,7 +168,7 @@ export async function deleteSessionDocsAtDir(
 }
 
 export async function deleteSessionDocs(
-	worktree: string,
+	worktree: MutableWorkspaceRoot,
 	sessionId: string,
 	location: LiveSessionLocation = "active",
 ): Promise<void> {

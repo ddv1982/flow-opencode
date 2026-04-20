@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolveInstallTarget } from "../../installer";
+import type { ResolvedSessionRoot } from "../../runtime/application";
 import { getActiveSessionPath, getIndexDocPath } from "../../runtime/paths";
 import type { Session } from "../../runtime/schema";
 import type { SessionGuidance } from "../../runtime/summary";
@@ -52,16 +53,22 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 }
 
 export async function buildWorkspaceCheck(
-	workspaceRoot: string,
+	workspace: ResolvedSessionRoot,
 ): Promise<DoctorCheck> {
-	await access(workspaceRoot, constants.W_OK);
+	await access(workspace.root, constants.W_OK);
 	return {
 		id: "workspace",
 		label: "Writable workspace root",
 		status: "pass",
-		summary: `Flow can resolve and write to the current workspace root: ${workspaceRoot}.`,
+		summary: workspace.trusted
+			? `Flow can resolve and write to the trusted workspace root: ${workspace.root}.`
+			: `Flow can resolve and write to the current workspace root: ${workspace.root}.`,
 		remediation: null,
-		details: { workspaceRoot },
+		details: {
+			workspaceRoot: workspace.root,
+			workspaceSource: workspace.source,
+			trusted: workspace.trusted,
+		},
 	};
 }
 

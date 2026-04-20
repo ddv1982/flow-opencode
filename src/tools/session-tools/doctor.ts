@@ -1,4 +1,10 @@
-import { toCompactJson, toJson } from "../../runtime/application";
+import {
+	InvalidFlowWorkspaceRootError,
+	inspectWorkspaceContext,
+	resolveMutableSessionRoot,
+	toCompactJson,
+	toJson,
+} from "../../runtime/application";
 import { loadSession } from "../../runtime/session";
 import { explainSessionState, summarizeSession } from "../../runtime/summary";
 import type { FlowDoctorArgs, ToolContext } from "../schemas";
@@ -11,7 +17,6 @@ import {
 	summarizeDoctorChecks,
 } from "./doctor-checks";
 import { buildConfigCheck } from "./doctor-config";
-import { resolveToolSessionRoot } from "./shared";
 
 function renderDoctorSummary(
 	status: "ok" | "warn" | "fail",
@@ -46,24 +51,47 @@ export async function buildDoctorReport(
 ): Promise<string> {
 	const installCheck = await buildInstallCheck();
 	const configCheck = buildConfigCheck();
+	const workspace = inspectWorkspaceContext(context);
 
 	let workspaceRoot: string | null = null;
 	let workspaceCheck: DoctorCheck;
 
 	try {
-		workspaceRoot = resolveToolSessionRoot(context);
-		workspaceCheck = await buildWorkspaceCheck(workspaceRoot);
+		const mutableWorkspace = resolveMutableSessionRoot(context);
+		workspaceRoot = mutableWorkspace.root;
+		workspaceCheck = await buildWorkspaceCheck(mutableWorkspace);
 	} catch (error) {
+		const workspaceDetails =
+			error instanceof InvalidFlowWorkspaceRootError
+				? {
+						workspaceRoot: error.details.root,
+						workspaceSource: error.details.source,
+						trusted: error.details.trusted,
+						rejectionReason: error.details.rejectionReason,
+					}
+				: workspace.root
+					? {
+							workspaceRoot: workspace.root,
+							workspaceSource: workspace.source,
+							trusted: workspace.trusted,
+							rejectionReason: workspace.rejectionReason,
+						}
+					: null;
 		workspaceCheck = {
 			id: "workspace",
 			label: "Writable workspace root",
 			status: "fail",
 			summary:
-				error instanceof Error
-					? error.message
-					: "Flow could not resolve a writable workspace root.",
+				error instanceof InvalidFlowWorkspaceRootError
+					? error.summary
+					: error instanceof Error
+						? error.message
+						: "Flow could not resolve a writable workspace root.",
 			remediation:
-				"Run Flow from a writable project or worktree directory so it can manage .flow state.",
+				error instanceof InvalidFlowWorkspaceRootError
+					? error.remediation
+					: "Run Flow from a writable project or worktree directory so it can manage .flow state.",
+			...(workspaceDetails ? { details: workspaceDetails } : {}),
 		};
 	}
 
@@ -98,6 +126,8 @@ export async function buildDoctorReport(
 			guidance: sessionGuidance,
 			operatorSummary,
 			nextCommand: sessionGuidance.nextCommand,
+			workspaceRoot: workspace.root,
+			workspace,
 			issues: checks
 				.filter((check) => check.status === "warn" || check.status === "fail")
 				.map((check) => ({
@@ -113,7 +143,8 @@ export async function buildDoctorReport(
 	return toJson({
 		status: overall.status,
 		summary: overall.summary,
-		workspaceRoot,
+		workspaceRoot: workspace.root,
+		workspace,
 		checks,
 		session: sessionSummary.session ?? null,
 		guidance: sessionGuidance,
