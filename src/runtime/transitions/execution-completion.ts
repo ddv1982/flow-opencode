@@ -5,6 +5,7 @@ import {
 	sessionCompletionReached,
 } from "../domain";
 import type { Feature, Session, WorkerResult } from "../schema";
+import { deriveExecutionLane } from "../session-operator-state";
 import { nowIso } from "../util";
 import type { CompletionRecoveryKind } from "./recovery";
 import { buildCompletionRecovery } from "./recovery";
@@ -49,9 +50,20 @@ export type WorkerOutcomeKind = NonNullable<WorkerResult["outcome"]>["kind"];
 
 function hasApprovedReviewerDecision(
 	session: Session,
+	worker: WorkerResult,
 	featureId: string,
 	wasFinalFeature: boolean,
 ): boolean {
+	const inlineLiteReviewSatisfied =
+		deriveExecutionLane(session).lane === "lite" &&
+		(wasFinalFeature
+			? worker.validationScope === "broad" &&
+				isReviewPassing(worker.finalReview)
+			: isReviewPassing(worker.featureReview));
+	if (inlineLiteReviewSatisfied) {
+		return true;
+	}
+
 	const decision = session.execution.lastReviewerDecision;
 	if (!decision || decision.status !== "approved") {
 		return false;
@@ -118,7 +130,12 @@ export function validateSuccessfulCompletion(
 			message:
 				"Worker result cannot complete without a recorded approved reviewer decision.",
 			failing: () =>
-				!hasApprovedReviewerDecision(session, featureId, wasFinalFeature),
+				!hasApprovedReviewerDecision(
+					session,
+					worker,
+					featureId,
+					wasFinalFeature,
+				),
 		},
 		{
 			kind: "missing_validation_scope",
@@ -279,6 +296,7 @@ function buildReplanRecord(
 function finalizeIncompleteCompletion(
 	next: Session,
 	featureId: string,
+	worker: WorkerResult,
 	outcomeKind: WorkerOutcomeKind,
 	replanRecord: Session["planning"]["replanLog"][number] | null,
 ): Session {
@@ -306,6 +324,29 @@ function finalizeIncompleteCompletion(
 			timestamps: {
 				...next.timestamps,
 				approvedAt: null,
+			},
+		};
+	}
+
+	const liteRetryReady =
+		deriveExecutionLane(next).lane === "lite" &&
+		!worker.outcome?.needsHuman &&
+		(worker.outcome?.retryable || worker.outcome?.autoResolvable);
+	if (liteRetryReady) {
+		return {
+			...next,
+			status: "ready",
+			plan: {
+				...plan,
+				features: plan.features.map((feature) =>
+					feature.id === featureId
+						? { ...feature, status: "pending" }
+						: feature,
+				),
+			},
+			execution: {
+				...next.execution,
+				activeFeatureId: null,
 			},
 		};
 	}
@@ -360,6 +401,7 @@ export function completeExecutionRun(
 		finalizeIncompleteCompletion(
 			recordWorkerResult(session, featureId, worker, recordedAt),
 			featureId,
+			worker,
 			worker.outcome.kind,
 			replanRecord,
 		),

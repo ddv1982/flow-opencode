@@ -97,11 +97,9 @@ describe("cross-area autonomous flow", () => {
 			),
 		);
 		expect(blocked.status).toBe("ok");
-		expect(blocked.session.status).toBe("blocked");
+		expect(blocked.session.status).toBe("ready");
 		expect(blocked.session.lastOutcome.retryable).toBe(true);
-		expect(blocked.session.nextCommand).toBe(
-			"/flow-reset feature recover-autonomous",
-		);
+		expect(blocked.session.nextCommand).toBe("/flow-run");
 
 		const reset = JSON.parse(
 			await flowResetFeature.execute(

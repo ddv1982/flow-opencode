@@ -22,6 +22,7 @@ Behavior:
 - If the arguments start with \`select\`, narrow the current draft plan to the listed feature ids without approving it.
 - Otherwise treat the full argument string as the planning goal and create or refresh a draft plan.
 - For planning, call \`flow_plan_start\` first, detect the stack from repo evidence, persist planning context through \`flow_plan_context_record\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\`, and end with a concise draft summary plus the next approval step.
+- If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
 Do not start implementation from this command.`;
 
 export const FLOW_RUN_COMMAND_TEMPLATE = `Execute one approved Flow feature.
@@ -32,6 +33,8 @@ Behavior:
 - Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
 - Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\`.
+- In the lite lane, if the runtime session is small enough and the worker result already contains the required passing review payload, you may persist completion without a separate \`flow_review_record_feature\` or \`flow_review_record_final\` step.
+- In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
 - On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`.
 - End with a compact summary of changes, validation evidence, and the runtime next step.`;
 
@@ -97,6 +100,7 @@ Behavior:
 - If the arguments start with \`show\`, call \`flow_history_show\` with the provided session id.
 - Otherwise explain the valid forms briefly.
 
+When the response includes phase/lane/blocker/reason fields, lead with them before the detailed session history.
 Always summarize what you found and the next logical step.`;
 
 export const FLOW_SESSION_COMMAND_TEMPLATE = `Manage the active Flow session pointer.

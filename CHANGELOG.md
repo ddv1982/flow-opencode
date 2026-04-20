@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.0.13] - 2026-04-21
+
+### Highlights
+
+Flow 1.0.13 consolidates the runtime architecture around clearer engine, action, and presentation boundaries while also making small tasks less ceremonial. This release adds runtime-owned read/mutation/workspace action families, splits low-level operator derivation from higher-level session view models, centralizes doctor/status/history presentation in the runtime application layer, and introduces adaptive lite/standard/strict execution guidance with real lite-lane behavior reductions.
+
+### Added
+
+- Added `src/runtime/application/session-engine.ts` as the shared runtime engine for read, mutation, and workspace action execution.
+- Added runtime-owned action catalogs for mutation, read, and workspace flows in `src/runtime/application/session-actions.ts`, `src/runtime/application/session-read-actions.ts`, and `src/runtime/application/session-workspace-actions.ts`.
+- Added runtime-owned doctor and presenter modules in `src/runtime/application/doctor-checks.ts`, `src/runtime/application/doctor-report.ts`, `src/runtime/application/session-presenters.ts`, and `src/runtime/application/operator-presenters.ts`.
+- Added `src/runtime/session-operator-state.ts` to own low-level lane, blocker, and next-command derivation.
+- Added `tests/session-engine.test.ts` to verify the named action families and centralized engine boundaries directly.
+
+### Changed
+
+- Introduced adaptive rigor with runtime-owned `lite`, `standard`, and `strict` lanes plus shared operator fields such as `phase`, `blocker`, `reason`, `nextStep`, and `nextCommand`.
+- Reduced lite-lane ceremony by auto-approving simple draft plans, accepting in-band final review payloads where appropriate, and returning retryable non-human blockers directly to `ready`.
+- Moved status, history, auto-prepare, activation, closure, and doctor reporting onto runtime-owned presenters and action dispatch instead of tool-local orchestration.
+- Split high-level session view-model derivation from lower-level operator-state derivation so runtime semantics are easier to maintain and extend.
+- Consolidated tiny dispatch-only modules back into the paired action-family modules to reduce glue-file sprawl without reintroducing ambiguous ownership.
+
+### Removed
+
+- Removed obsolete tool-layer response and doctor helper files from `src/tools/session-tools/` now that runtime application presenters own those responsibilities.
+- Removed the standalone dispatch-only runtime application files after folding that logic into the corresponding action modules.
+
+### Fixed
+
+- Fixed the remaining mismatch where session-oriented tools still owned their own response/report assembly instead of using runtime-owned presenters.
+- Fixed the last architecture drift where operator/status derivation and session view-model derivation were mixed in one place without a clean boundary.
+- Reduced the risk of future semantic drift by keeping tool adapters thin and routing runtime behavior through a smaller number of authoritative modules.
+
 ## [1.0.12] - 2026-04-20
 
 ### Highlights

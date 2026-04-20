@@ -13,7 +13,7 @@ import {
 	toInlineText,
 } from "./render-sections-shared";
 import type { Feature, Session } from "./schema";
-import { deriveNextCommand } from "./summary";
+import { deriveNextCommand } from "./session-operator-state";
 
 function maybeApproachSection(session: Session): string {
 	const approach = session.planning.implementationApproach;

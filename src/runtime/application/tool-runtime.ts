@@ -1,23 +1,28 @@
 import { errorResponse } from "../errors";
 import type { Session } from "../schema";
-import {
-	loadSession,
-	saveSessionState,
-	syncSessionArtifacts,
-} from "../session";
 import type { TransitionResult } from "../transitions";
 import {
 	InvalidFlowWorkspaceRootError,
 	inspectMutableWorkspaceRoot,
 	normalizeWorkspaceRoot,
 } from "../workspace-root";
+import type { SessionMutationActionName } from "./session-actions";
+import {
+	DEFAULT_SESSION_RUNTIME_PORT,
+	executeSessionMutationAtRoot,
+	persistTransitionAtRoot,
+	type RuntimeToolResponse,
+	runSessionMutationActionAtRoot,
+	type SessionMutationAction,
+	type SessionMutationResult,
+	type SessionRuntimePort,
+} from "./session-engine";
 
 export type WorkspaceContext = {
 	worktree?: string;
 	directory?: string;
 };
 
-export type RuntimeToolResponse = Record<string, unknown>;
 export type SessionRootSource = "worktree" | "directory" | "cwd";
 export type SessionRootMode = "read" | "mutate";
 export type ResolvedSessionRoot = {
@@ -35,7 +40,6 @@ export type WorkspaceContextSummary = {
 	usedFallback: boolean;
 	rejectionReason: string | null;
 };
-
 type ParseSchema<T> = {
 	parse: (input: unknown) => T;
 };
@@ -43,18 +47,6 @@ type ParseSchema<T> = {
 type SessionRootCandidate = {
 	root: string;
 	source: SessionRootSource;
-};
-
-export interface SessionRuntimePort {
-	loadSession: (worktree: string) => Promise<Session | null>;
-	saveSessionState: (worktree: string, session: Session) => Promise<Session>;
-	syncSessionArtifacts: (worktree: string, session: Session) => Promise<void>;
-}
-
-export const DEFAULT_SESSION_RUNTIME_PORT: SessionRuntimePort = {
-	loadSession,
-	saveSessionState,
-	syncSessionArtifacts,
 };
 
 export function toJson(value: unknown): string {
@@ -288,6 +280,7 @@ export async function withSession(
 
 export async function persistTransition<T>(
 	context: WorkspaceContext,
+	actionName: SessionMutationActionName,
 	result: TransitionResult<T>,
 	getSession: (value: T) => Session,
 	onSuccess: (saved: Session, value: T) => RuntimeToolResponse,
@@ -297,58 +290,89 @@ export async function persistTransition<T>(
 	options: { syncArtifacts?: boolean } = { syncArtifacts: true },
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<string> {
-	const worktree = resolveMutableSessionRoot(context).root;
-
-	if (!result.ok) {
-		if (result.session) {
-			const saved = await runtime.saveSessionState(worktree, result.session);
-			if (options.syncArtifacts) {
-				await runtime.syncSessionArtifacts(worktree, saved);
-			}
-		}
-
-		return toJson(onError(result));
-	}
-
-	const saved = await runtime.saveSessionState(
-		worktree,
-		getSession(result.value),
+	return toJson(
+		await persistTransitionAtRoot(
+			actionName,
+			resolveMutableSessionRoot(context).root,
+			result,
+			getSession,
+			onSuccess,
+			onError,
+			options,
+			runtime,
+		),
 	);
-	if (options.syncArtifacts) {
-		await runtime.syncSessionArtifacts(worktree, saved);
-	}
-	return toJson(onSuccess(saved, result.value));
+}
+
+export async function executeSessionMutation<T>(
+	context: WorkspaceContext,
+	action: SessionMutationAction<T>,
+	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
+): Promise<string> {
+	return toJson(
+		await executeSessionMutationAtRoot(
+			resolveMutableSessionRoot(context).root,
+			action,
+			runtime,
+		),
+	);
+}
+
+export async function runSessionMutationAction<T>(
+	context: WorkspaceContext,
+	action: SessionMutationAction<T>,
+	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
+): Promise<SessionMutationResult<T>> {
+	return runSessionMutationActionAtRoot(
+		resolveMutableSessionRoot(context).root,
+		action,
+		runtime,
+	);
 }
 
 export async function withPersistedTransition<T>(
 	context: WorkspaceContext,
 	runTransition: (session: Session) => TransitionResult<T>,
-	options: {
-		getSession: (value: T) => Session;
-		onSuccess: (saved: Session, value: T) => RuntimeToolResponse;
-		missingResponse?: RuntimeToolResponse;
-		onError?: (
-			result: Extract<TransitionResult<T>, { ok: false }>,
-		) => RuntimeToolResponse;
-		syncArtifacts?: boolean;
-	},
+	options:
+		| SessionMutationAction<T>
+		| {
+				actionName: SessionMutationActionName;
+				getSession: (value: T) => Session;
+				onSuccess: (saved: Session, value: T) => RuntimeToolResponse;
+				missingResponse?: RuntimeToolResponse;
+				onError?: (
+					result: Extract<TransitionResult<T>, { ok: false }>,
+				) => RuntimeToolResponse;
+				syncArtifacts?: boolean;
+		  },
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<string> {
-	const syncArtifacts = options.syncArtifacts ?? true;
+	if ("name" in options && "run" in options) {
+		return executeSessionMutation(
+			context,
+			{
+				...options,
+				run: runTransition,
+			},
+			runtime,
+		);
+	}
 
-	return withSession(
+	return executeSessionMutation(
 		context,
-		async (session) =>
-			persistTransition(
-				context,
-				runTransition(session),
-				options.getSession,
-				options.onSuccess,
-				options.onError,
-				{ syncArtifacts },
-				runtime,
-			),
-		options.missingResponse ?? missingSessionResponse(),
+		{
+			name: options.actionName,
+			run: runTransition,
+			getSession: options.getSession,
+			onSuccess: options.onSuccess,
+			...(options.missingResponse
+				? { missingResponse: options.missingResponse }
+				: {}),
+			...(options.onError ? { onError: options.onError } : {}),
+			...(options.syncArtifacts !== undefined
+				? { syncArtifacts: options.syncArtifacts }
+				: {}),
+		},
 		runtime,
 	);
 }

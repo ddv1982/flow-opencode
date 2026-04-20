@@ -757,6 +757,11 @@ describe("runtime transitions", () => {
 
 		expect(parsed.status).toBe("missing_goal");
 		expect(parsed.mode).toBe("missing_goal");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
+		expect(parsed.blocker).toBe(
+			"No active Flow session exists for this workspace.",
+		);
 		expect(parsed.nextCommand).toBe("/flow-auto <goal>");
 	});
 
@@ -774,6 +779,8 @@ describe("runtime transitions", () => {
 		expect(parsed.status).toBe("ok");
 		expect(parsed.mode).toBe("resume");
 		expect(parsed.goal).toBe("Build a workflow plugin");
+		expect(parsed.phase).toBe("planning");
+		expect(parsed.lane).toBe("lite");
 	});
 
 	test("flow_auto_prepare does not resume a completed session", async () => {
@@ -793,6 +800,8 @@ describe("runtime transitions", () => {
 
 		expect(parsed.status).toBe("missing_goal");
 		expect(parsed.mode).toBe("missing_goal");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
 		expect(parsed.nextCommand).toBe("/flow-auto <goal>");
 	});
 
@@ -808,6 +817,8 @@ describe("runtime transitions", () => {
 
 		expect(parsed.status).toBe("missing_goal");
 		expect(parsed.mode).toBe("missing_goal");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
 	});
 
 	test("flow_auto_prepare classifies explicit goals as start_new_goal", async () => {
@@ -823,6 +834,12 @@ describe("runtime transitions", () => {
 		expect(parsed.status).toBe("ok");
 		expect(parsed.mode).toBe("start_new_goal");
 		expect(parsed.goal).toBe("Improve Flow recovery behavior");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
+		expect(parsed.blocker).toBeNull();
+		expect(parsed.reason).toBe(
+			"A new explicit goal was provided, so Flow should start a fresh session for it.",
+		);
 	});
 
 	test("flow_auto_prepare classification is read-only when worktree resolves to root", async () => {
@@ -1200,6 +1217,68 @@ describe("runtime transitions", () => {
 		);
 		expect(indexDoc).toContain(
 			"next step: Ask the operator to provide API credentials.",
+		);
+	});
+
+	test("lite retryable non-human blockers return the session to ready without a manual reset", () => {
+		const session = createSession("Ship a tiny fix");
+		const liteFeature = samplePlan().features[0];
+		if (!liteFeature) {
+			throw new Error("Missing lite feature fixture.");
+		}
+		const plan = {
+			...samplePlan(),
+			features: [liteFeature],
+		};
+
+		const applied = applyPlan(session, plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const retried = completeRun(started.value.session, {
+			contractVersion: "1",
+			status: "needs_input",
+			summary: "A tiny retryable issue was found.",
+			artifactsChanged: [],
+			validationRun: [],
+			validationScope: "targeted",
+			reviewIterations: 0,
+			decisions: [{ summary: "The tiny fix needs one more pass." }],
+			nextStep: "Retry the tiny fix.",
+			outcome: {
+				kind: "blocked_external",
+				summary: "The tiny fix can be retried immediately.",
+				retryable: true,
+				autoResolvable: true,
+				needsHuman: false,
+			},
+			featureResult: {
+				featureId: liteFeature.id,
+				verificationStatus: "not_recorded",
+			},
+			featureReview: {
+				status: "needs_followup",
+				summary: "Retry with a smaller adjustment.",
+				blockingFindings: [],
+			},
+		});
+
+		expect(retried.ok).toBe(true);
+		if (!retried.ok) return;
+
+		expect(retried.value.status).toBe("ready");
+		expect(retried.value.execution.activeFeatureId).toBeNull();
+		expect(retried.value.plan?.features[0]?.status).toBe("pending");
+		expect(summarizeSession(retried.value).session?.nextCommand).toBe(
+			"/flow-run",
 		);
 	});
 });

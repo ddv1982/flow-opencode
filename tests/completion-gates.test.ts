@@ -176,6 +176,58 @@ describe("completion gates", () => {
 			expectedErrorCode: "missing_feature_reviewer_decision",
 		},
 		{
+			name: "lite lane can use in-band final review instead of a separate reviewer decision",
+			setup: () => {
+				const basePlan = samplePlan();
+				const liteFeature = basePlan.features[0];
+				if (!liteFeature) {
+					throw new Error("Missing lite feature fixture.");
+				}
+
+				const applied = applyPlan(createSession("Ship a tiny fix"), {
+					...basePlan,
+					features: [liteFeature],
+				});
+				expect(applied.ok).toBe(true);
+				if (!applied.ok) {
+					throw new Error("Expected plan apply to succeed in test setup.");
+				}
+
+				const approved = approvePlan(applied.value);
+				expect(approved.ok).toBe(true);
+				if (!approved.ok) {
+					throw new Error("Expected plan approval to succeed in test setup.");
+				}
+
+				const started = startRun(approved.value);
+				expect(started.ok).toBe(true);
+				if (!started.ok) {
+					throw new Error("Expected run start to succeed in test setup.");
+				}
+
+				const featureId = started.value.session.execution.activeFeatureId;
+				if (!featureId) {
+					throw new Error("Expected an active feature in test setup.");
+				}
+
+				return {
+					session: started.value.session,
+					featureId,
+					wasFinalFeature: true,
+				};
+			},
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					validationScope: "broad",
+					finalReview: {
+						status: "passed",
+						summary: "Final review looks good.",
+						blockingFindings: [],
+					},
+				}),
+			expectedOk: true,
+		},
+		{
 			name: "missing targeted validation scope on non-final feature",
 			setup: () =>
 				createStartedSession({
@@ -261,11 +313,12 @@ describe("completion gates", () => {
 			expectedErrorCode: "failing_final_review",
 			expectedNextCommand: "/flow-reset feature setup-runtime",
 		},
-	])("returns $expectedErrorCode for $name", ({
+	])("validates $name", ({
 		setup,
 		worker,
 		expectedErrorCode,
 		expectedNextCommand,
+		expectedOk,
 	}) => {
 		const { session, featureId, wasFinalFeature } = setup();
 		const result = validateSuccessfulCompletion(
@@ -275,7 +328,7 @@ describe("completion gates", () => {
 			wasFinalFeature,
 		);
 
-		expect(result.ok).toBe(false);
+		expect(result.ok).toBe(expectedOk ?? false);
 		if (result.ok) {
 			return;
 		}

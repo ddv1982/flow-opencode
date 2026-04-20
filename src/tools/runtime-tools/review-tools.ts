@@ -1,7 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
-import { withPersistedTransition } from "../../runtime/application";
-import { summarizeSession } from "../../runtime/summary";
-import { recordReviewerDecision } from "../../runtime/transitions";
+import { executeDispatchedSessionMutation } from "../../runtime/application";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowReviewRecordFeatureArgsSchema,
@@ -30,17 +28,10 @@ export function createReviewRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return withPersistedTransition(
+					return executeDispatchedSessionMutation(
 						context,
-						(session) => recordReviewerDecision(session, input),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: "Reviewer decision recorded.",
-								session: summarizeSession(saved).session,
-							}),
-						},
+						"record_feature_review",
+						{ decision: input },
 					);
 				},
 			),
@@ -60,17 +51,10 @@ export function createReviewRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return withPersistedTransition(
+					return executeDispatchedSessionMutation(
 						context,
-						(session) => recordReviewerDecision(session, input),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: "Reviewer decision recorded.",
-								session: summarizeSession(saved).session,
-							}),
-						},
+						"record_final_review",
+						{ decision: input },
 					);
 				},
 			),

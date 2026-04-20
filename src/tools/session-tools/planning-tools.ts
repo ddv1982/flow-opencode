@@ -4,14 +4,11 @@
  * next-command-policy.ts.
  */
 import { tool } from "@opencode-ai/plugin";
-import { toJson } from "../../runtime/application";
 import {
-	createSession,
-	loadSession,
-	saveSessionState,
-	syncSessionArtifacts,
-} from "../../runtime/session";
-import { summarizeSession } from "../../runtime/summary";
+	autoPrepareResponse,
+	executeDispatchedSessionWorkspaceAction,
+	runDispatchedSessionReadAction,
+} from "../../runtime/application";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowAutoPrepareArgsSchema,
@@ -24,33 +21,7 @@ import {
 	autoPreparePolicy,
 	nextCommandForMissingGoal,
 } from "./next-command-policy";
-import { autoPrepareResponse, missingGoalResponse } from "./responses";
-import {
-	recordToolMetadata,
-	resolveMutableToolSessionRoot,
-	resolveReadableToolSessionRoot,
-} from "./shared";
-
-function buildPlannedSession(
-	existing: Awaited<ReturnType<typeof loadSession>>,
-	goal: string,
-	repoProfile?: string[],
-) {
-	const planningOptions = repoProfile ? { repoProfile } : undefined;
-	const isNewGoal = Boolean(existing && goal !== existing.goal);
-
-	if (!existing || existing.status === "completed" || isNewGoal) {
-		return createSession(goal, planningOptions);
-	}
-
-	return {
-		...existing,
-		planning: {
-			...existing.planning,
-			repoProfile: repoProfile ?? existing.planning.repoProfile,
-		},
-	};
-}
+import { recordToolMetadata } from "./shared";
 
 export function createPlanningSessionTools() {
 	return {
@@ -60,38 +31,19 @@ export function createPlanningSessionTools() {
 			execute: withParsedArgs(
 				FlowPlanStartArgsSchema,
 				async (input, context: ToolContext) => {
-					const sessionRoot = resolveMutableToolSessionRoot(context);
-					const existing = await loadSession(sessionRoot);
-
-					if (!input.goal && !existing) {
-						return missingGoalResponse(
-							"Provide a goal to create a new Flow plan.",
-							nextCommandForMissingGoal(),
-						);
-					}
-
-					const goal = input.goal ?? existing?.goal;
-					if (!goal) {
-						return missingGoalResponse(
-							"Provide a goal to create a new Flow plan.",
-							nextCommandForMissingGoal(),
-						);
-					}
-
-					const session = await saveSessionState(
-						sessionRoot,
-						buildPlannedSession(existing, goal, input.repoProfile),
+					recordToolMetadata(context, "Plan session start", {
+						goal: input.goal ?? null,
+						repoProfileCount: input.repoProfile?.length ?? 0,
+					});
+					return executeDispatchedSessionWorkspaceAction(
+						context,
+						"plan_start",
+						{
+							...(input.goal ? { goal: input.goal } : {}),
+							...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
+							missingGoalNextCommand: nextCommandForMissingGoal(),
+						},
 					);
-					await syncSessionArtifacts(sessionRoot, session);
-					recordToolMetadata(context, `Plan: ${session.goal}`, {
-						sessionId: session.id,
-						goal: session.goal,
-					});
-					return toJson({
-						status: "ok",
-						summary: `Planning session ready for goal: ${session.goal}`,
-						session: summarizeSession(session).session,
-					});
 				},
 			),
 		}),
@@ -102,14 +54,22 @@ export function createPlanningSessionTools() {
 			execute: withParsedArgs(
 				FlowAutoPrepareArgsSchema,
 				async (input, context: ToolContext) => {
+					const resumableSession = (
+						await runDispatchedSessionReadAction(
+							context,
+							"load_resumable_session",
+							undefined,
+						)
+					).value;
 					const navigation = autoPreparePolicy(
 						input.argumentString,
-						await loadSession(resolveReadableToolSessionRoot(context)),
+						resumableSession,
 					);
 					const response = autoPrepareResponse(
 						navigation.mode,
 						navigation.goal,
 						navigation.nextCommand,
+						resumableSession,
 					);
 					recordToolMetadata(context, `Flow auto (${response.metadata.mode})`, {
 						mode: response.metadata.mode,

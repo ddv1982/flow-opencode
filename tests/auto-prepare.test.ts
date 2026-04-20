@@ -23,6 +23,8 @@ describe("flow_auto_prepare semantics", () => {
 			expect(parsed.status).toBe("ok");
 			expect(parsed.mode).toBe("resume");
 			expect(parsed.goal).toBe("Build a workflow plugin");
+			expect(parsed.phase).toBe("planning");
+			expect(parsed.lane).toBe("lite");
 			expect(parsed.nextCommand).toBe("/flow-auto resume");
 		}
 	});
@@ -37,6 +39,8 @@ describe("flow_auto_prepare semantics", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("missing_goal");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
 		expect(parsed.nextCommand).toBe("/flow-auto <goal>");
 		expect(String(parsed.summary)).toContain("goal");
 	});

@@ -45,7 +45,8 @@ Plan flow:
 ${FLOW_PLAN_CONTRACT}
 
 5. Persist it with flow_plan_apply.
-6. End with a compact draft summary: goal, overview, ordered features, next approval step.
+6. If flow_plan_apply auto-approves a lite-lane draft, end with the next execution step instead of an approval reminder.
+7. Otherwise end with a compact draft summary: goal, overview, ordered features, next approval step.
 
 If the goal is missing or underspecified, ask one short clarifying question.`;
 
@@ -72,14 +73,16 @@ Execution flow:
 4. Run targeted validation.
 5. Review the changed files.
 6. If review finds blocking issues, fix them, rerun targeted validation, and review again. Repeat until review passes or a real blocker remains.
-7. On the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final.
-8. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature.
-9. Return one worker result matching:
+7. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing review payload, you may skip the separate reviewer-persistence hop.
+8. In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.
+9. Otherwise, on the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final.
+10. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature.
+11. Return one worker result matching:
 
 ${FLOW_WORKER_CONTRACT}
 
-10. Persist the worker result with flow_run_complete_feature only after the feature is clean, reviewer-approved, or truly blocked.
-11. End with a compact summary of what changed, validation evidence, how many review/fix iterations were needed, and the runtime's next step.`;
+12. Persist the worker result with flow_run_complete_feature only after the feature is clean, reviewer-approved, or truly blocked.
+13. End with a compact summary of what changed, validation evidence, how many review/fix iterations were needed, and the runtime's next step.`;
 
 export const FLOW_AUTO_AGENT_PROMPT = `You are the autonomous Flow coordinator.
 

@@ -575,6 +575,68 @@ describe("runtime completion and contract guards", () => {
 		expect(completed.value.status).toBe("completed");
 	});
 
+	test("allows lite-lane final completion without a separately recorded reviewer decision", () => {
+		const session = createSession("Ship a tiny fix");
+		const liteFeature = samplePlan().features[0];
+		if (!liteFeature) {
+			throw new Error("Missing lite feature fixture.");
+		}
+		const plan = {
+			...samplePlan(),
+			features: [liteFeature],
+		};
+
+		const applied = applyPlan(session, plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const completed = completeRun(started.value.session, {
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed tiny fix.",
+			artifactsChanged: [],
+			validationRun: [
+				{
+					command: "bun test",
+					status: "passed",
+					summary: "Tiny fix tests passed.",
+				},
+			],
+			validationScope: "broad",
+			reviewIterations: 1,
+			decisions: [],
+			nextStep: "Session should complete.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: liteFeature.id,
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Looks good.",
+				blockingFindings: [],
+			},
+			finalReview: {
+				status: "passed",
+				summary: "Final review looks good.",
+				blockingFindings: [],
+			},
+		});
+
+		expect(completed.ok).toBe(true);
+		if (!completed.ok) return;
+
+		expect(completed.value.status).toBe("completed");
+	});
+
 	test("requires broad validation before final session completion", () => {
 		const session = createSession("Build a workflow plugin");
 		const plan = {
@@ -1051,10 +1113,12 @@ describe("runtime completion and contract guards", () => {
 		expect(Object.keys(planApplyParsed)).toEqual([
 			"status",
 			"summary",
+			"autoApproved",
 			"session",
 		]);
 		expect(planApplyParsed.status).toBe("ok");
 		expect(planApplyParsed.summary).toBe("Draft plan saved.");
+		expect(planApplyParsed.autoApproved).toBe(false);
 		expect(planApplyParsed.session.goal).toBe("Build a workflow plugin");
 	});
 });

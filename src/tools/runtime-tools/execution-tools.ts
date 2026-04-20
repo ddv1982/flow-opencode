@@ -1,13 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
-import {
-	errorResponse,
-	missingSessionResponse,
-	withPersistedTransition,
-} from "../../runtime/application";
-import { FLOW_PLAN_WITH_GOAL_COMMAND } from "../../runtime/constants";
+import { executeDispatchedSessionMutation } from "../../runtime/application";
 import type { WorkerResult } from "../../runtime/schema";
-import { summarizeSession } from "../../runtime/summary";
-import { completeRun, resetFeature, startRun } from "../../runtime/transitions";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowResetFeatureArgsSchema,
@@ -33,33 +26,9 @@ export function createExecutionRuntimeTools() {
 							reason: null,
 						},
 					});
-					return withPersistedTransition(
-						context,
-						(session) => startRun(session, input.featureId),
-						{
-							getSession: (value) => value.session,
-							onSuccess: (saved, value) => {
-								const summary = summarizeSession(saved);
-
-								return {
-									status:
-										value.reason === "complete"
-											? "complete"
-											: value.feature
-												? "ok"
-												: "blocked",
-									summary: summary.summary,
-									session: summary.session,
-									feature: value.feature,
-									reason: value.reason,
-								};
-							},
-							missingResponse: missingSessionResponse(
-								"No active Flow session exists.",
-								FLOW_PLAN_WITH_GOAL_COMMAND,
-							),
-						},
-					);
+					return executeDispatchedSessionMutation(context, "start_run", {
+						...(input.featureId ? { featureId: input.featureId } : {}),
+					});
 				},
 			),
 		}),
@@ -78,26 +47,9 @@ export function createExecutionRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return withPersistedTransition(
-						context,
-						(session) => completeRun(session, input as WorkerResult),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => {
-								const summary = summarizeSession(saved);
-
-								return {
-									status: "ok",
-									summary: summary.summary,
-									session: summary.session,
-								};
-							},
-							onError: (failure) =>
-								errorResponse(failure.message, {
-									recovery: failure.recovery,
-								}),
-						},
-					);
+					return executeDispatchedSessionMutation(context, "complete_run", {
+						worker: input as WorkerResult,
+					});
 				},
 			),
 		}),
@@ -117,18 +69,9 @@ export function createExecutionRuntimeTools() {
 							featureId: input.featureId,
 						},
 					});
-					return withPersistedTransition(
-						context,
-						(session) => resetFeature(session, input.featureId),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: `Reset feature '${input.featureId}'.`,
-								session: summarizeSession(saved).session,
-							}),
-						},
-					);
+					return executeDispatchedSessionMutation(context, "reset_feature", {
+						featureId: input.featureId,
+					});
 				},
 			),
 		}),

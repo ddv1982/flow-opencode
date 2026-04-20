@@ -1,53 +1,29 @@
+import { deriveSessionViewModel } from "../summary";
+import { InvalidFlowWorkspaceRootError } from "../workspace-root";
 import {
-	InvalidFlowWorkspaceRootError,
-	inspectWorkspaceContext,
-	resolveMutableSessionRoot,
-	toCompactJson,
-	toJson,
-} from "../../runtime/application";
-import { loadSession } from "../../runtime/session";
-import { explainSessionState, summarizeSession } from "../../runtime/summary";
-import type { FlowDoctorArgs, ToolContext } from "../schemas";
-import type { DoctorCheck } from "./doctor-checks";
-import {
+	buildConfigCheck,
 	buildGuidanceCheck,
 	buildInstallCheck,
 	buildSessionArtifactsCheck,
 	buildWorkspaceCheck,
+	type DoctorCheck,
 	summarizeDoctorChecks,
 } from "./doctor-checks";
-import { buildConfigCheck } from "./doctor-config";
+import { renderDoctorSummary } from "./operator-presenters";
+import { runDispatchedSessionReadAction } from "./session-read-actions";
+import {
+	inspectWorkspaceContext,
+	resolveMutableSessionRoot,
+	toCompactJson,
+	toJson,
+	type WorkspaceContext,
+} from "./tool-runtime";
 
-function renderDoctorSummary(
-	status: "ok" | "warn" | "fail",
-	checks: DoctorCheck[],
-	nextStep: string,
-	nextCommand: string,
-) {
-	const firstIssue =
-		checks.find((check) => check.status === "fail") ??
-		checks.find((check) => check.status === "warn");
-
-	if (!firstIssue) {
-		return [
-			"Flow doctor ok: No blocking readiness issues found.",
-			`Next: ${nextStep}`,
-			`Command: ${nextCommand}`,
-		].join("\n");
-	}
-
-	const lines = [`Flow doctor ${status}: ${firstIssue.summary}`];
-	if (firstIssue.remediation) {
-		lines.push(`Fix: ${firstIssue.remediation}`);
-	}
-	lines.push(`Then: ${nextStep}`);
-	lines.push(`Command: ${nextCommand}`);
-	return lines.join("\n");
-}
+type FlowDoctorView = "detailed" | "compact";
 
 export async function buildDoctorReport(
-	context: ToolContext,
-	args: FlowDoctorArgs = {},
+	context: WorkspaceContext,
+	args: { view?: FlowDoctorView } = {},
 ): Promise<string> {
 	const installCheck = await buildInstallCheck();
 	const configCheck = buildConfigCheck();
@@ -60,7 +36,7 @@ export async function buildDoctorReport(
 		const mutableWorkspace = resolveMutableSessionRoot(context);
 		workspaceRoot = mutableWorkspace.root;
 		workspaceCheck = await buildWorkspaceCheck(mutableWorkspace);
-	} catch (error) {
+	} catch (error: unknown) {
 		const workspaceDetails =
 			error instanceof InvalidFlowWorkspaceRootError
 				? {
@@ -95,9 +71,18 @@ export async function buildDoctorReport(
 		};
 	}
 
-	const session = workspaceRoot ? await loadSession(workspaceRoot) : null;
-	const sessionSummary = summarizeSession(session);
-	const sessionGuidance = explainSessionState(session);
+	const session = workspaceRoot
+		? (
+				await runDispatchedSessionReadAction(
+					{ worktree: workspaceRoot },
+					"load_status_session",
+					undefined,
+				)
+			).value
+		: null;
+	const sessionViewModel = deriveSessionViewModel(session);
+	const sessionSummary = sessionViewModel.session;
+	const sessionGuidance = sessionViewModel.guidance;
 	const sessionArtifactsCheck = await buildSessionArtifactsCheck(
 		workspaceRoot,
 		session,
@@ -115,6 +100,7 @@ export async function buildDoctorReport(
 	const operatorSummary = renderDoctorSummary(
 		overall.status,
 		checks,
+		sessionGuidance,
 		sessionGuidance.nextStep,
 		sessionGuidance.nextCommand,
 	);
@@ -123,6 +109,10 @@ export async function buildDoctorReport(
 		return toCompactJson({
 			status: overall.status,
 			summary: overall.summary,
+			phase: sessionGuidance.phase,
+			lane: sessionGuidance.lane,
+			blocker: sessionGuidance.blocker,
+			reason: sessionGuidance.reason,
 			guidance: sessionGuidance,
 			operatorSummary,
 			nextCommand: sessionGuidance.nextCommand,
@@ -143,10 +133,14 @@ export async function buildDoctorReport(
 	return toJson({
 		status: overall.status,
 		summary: overall.summary,
+		phase: sessionGuidance.phase,
+		lane: sessionGuidance.lane,
+		blocker: sessionGuidance.blocker,
+		reason: sessionGuidance.reason,
 		workspaceRoot: workspace.root,
 		workspace,
 		checks,
-		session: sessionSummary.session ?? null,
+		session: sessionSummary,
 		guidance: sessionGuidance,
 		operatorSummary,
 		nextCommand: sessionGuidance.nextCommand,

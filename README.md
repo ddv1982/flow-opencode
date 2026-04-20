@@ -128,9 +128,17 @@ Use `/flow-doctor detail` if you want the fuller structured view.
 Both commands are designed to be easy to scan.
 
 - they lead with the current situation in plain language
+- they surface the current phase and the selected Flow lane (`lite`, `standard`, or `strict`)
+- they tell you why Flow chose that lane and what blocker, if any, is active
 - they tell you the next recommended step
 - they show the most relevant next command to run
 - they still include structured details underneath for deeper inspection
+
+That same operator model is now used beyond `/flow-status` and `/flow-doctor`; resumability and session inspection surfaces such as `/flow-history show` and `/flow-auto` preparation responses also expose phase/lane/blocker/reason fields.
+
+In the **lite** lane, Flow can auto-approve a safe single-feature draft plan so small tasks can move directly into execution without a separate approval hop.
+In the **lite** lane, Flow can also accept an in-band passing review payload during completion, so tiny tasks do not always need a separate persisted reviewer-decision step before finishing.
+In the **lite** lane, retryable non-human execution failures can return the feature directly to `ready`/`pending`, avoiding a separate manual reset step before rerunning.
 
 ## Commands
 

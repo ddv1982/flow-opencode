@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { renderSessionStatusSummary } from "../src/runtime/application";
 import {
 	FLOW_PLAN_COMMAND,
 	FLOW_PLAN_WITH_GOAL_COMMAND,
@@ -12,7 +13,6 @@ import { createSession, saveSession } from "../src/runtime/session";
 import {
 	deriveNextCommand,
 	explainSessionState,
-	renderSessionStatusSummary,
 	summarizeSession,
 } from "../src/runtime/summary";
 import {
@@ -206,6 +206,7 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
 	if (!summary.session.decisionGate) {
 		delete normalizedSession.decisionGate;
 	}
+	delete normalizedSession.operator;
 
 	return {
 		...summary,
@@ -214,9 +215,14 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
 }
 
 function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
-	const { workspace, workspaceRoot, ...rest } = summary;
+	const { workspace, workspaceRoot, phase, lane, blocker, reason, ...rest } =
+		summary;
 	void workspace;
 	void workspaceRoot;
+	void phase;
+	void lane;
+	void blocker;
+	void reason;
 	return normalizeSummaryFixture(rest as ReturnType<typeof summarizeSession>);
 }
 
@@ -233,6 +239,12 @@ describe("runtime summary", () => {
 			category: "no_session",
 			status: "missing",
 			summary: "No active Flow session exists for this workspace.",
+			phase: "idle",
+			lane: "lite",
+			laneReason:
+				"Flow can stay in the lite lane until a non-trivial plan or risk signal appears.",
+			blocker: "No active Flow session exists for this workspace.",
+			reason: "Flow has not started a tracked session for this workspace yet.",
 			nextStep: "Start a new Flow session with /flow-plan <goal>.",
 			nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 		});
@@ -254,6 +266,13 @@ describe("runtime summary", () => {
 			category: "decision_gate",
 			status: "recommend_confirm",
 			summary: "Should Flow pause for approval?",
+			phase: "decision",
+			lane: "strict",
+			laneReason:
+				"Flow detected elevated coordination or recovery risk, so the strict lane is the safest fit.",
+			blocker: "Should Flow pause for approval?",
+			reason:
+				"A meaningful planning decision is still open, so Flow should pause before continuing execution.",
 			nextStep: "Pause and ask before changing the architecture.",
 			nextCommand: FLOW_PLAN_COMMAND,
 		});
@@ -268,6 +287,9 @@ describe("runtime summary", () => {
 				"Goal: Build a workflow plugin",
 				"Active feature: setup-runtime — Create runtime helpers (in_progress)",
 				"Progress: 0/2 completed",
+				"Phase: executing",
+				"Lane: standard",
+				"Reason: An approved feature is active, so Flow should stay in execution.",
 				"Next: Continue the active feature through validation and review.",
 				"Command: /flow-run",
 			].join("\n"),
@@ -286,10 +308,49 @@ describe("runtime summary", () => {
 				"Flow planning: Flow has a draft plan that still needs the next planning step.",
 				"Goal: Build a workflow plugin",
 				"Progress: 0/2 completed",
+				"Phase: planning",
+				"Lane: standard",
+				"Reason: Planning is still active because execution is gated on reviewing or approving the draft plan.",
+				"Blocker: The draft plan is not approved yet.",
 				"Next: Review or refine the draft plan, then approve it when ready.",
 				"Command: /flow-session activate test-session",
 			].join("\n"),
 		);
+	});
+
+	test("summarizeSession exposes a runtime-owned operator model", () => {
+		const running = buildSummaryFixtureSessions().running;
+		const summary = summarizeSession(running);
+
+		expect(summary.session?.operator).toEqual({
+			phase: "executing",
+			lane: "standard",
+			laneReason:
+				"This session has multi-step work but no elevated risk signals, so the standard lane fits best.",
+			blocker: null,
+			reason:
+				"An approved feature is active, so Flow should stay in execution.",
+			nextStep: "Continue the active feature through validation and review.",
+			nextCommand: FLOW_RUN_COMMAND,
+		});
+	});
+
+	test("lane selection uses lite for tiny work and strict for elevated coordination risk", () => {
+		const firstFeature = samplePlan().features[0];
+		if (!firstFeature) {
+			throw new Error("Missing first feature in sample plan.");
+		}
+		const liteSession = createSession("Ship a tiny fix");
+		liteSession.plan = {
+			...samplePlan(),
+			features: [firstFeature],
+		};
+		const liteGuidance = explainSessionState(liteSession);
+		expect(liteGuidance.lane).toBe("lite");
+
+		const blocked = buildSummaryFixtureSessions().blocked;
+		const strictGuidance = explainSessionState(blocked);
+		expect(strictGuidance.lane).toBe("strict");
 	});
 
 	test("summarizeSession preserves the default planning/running/blocked/completed payloads", () => {

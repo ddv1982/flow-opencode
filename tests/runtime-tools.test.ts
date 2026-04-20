@@ -5,6 +5,7 @@ import { resolveInstallTarget } from "../src/installer";
 import {
 	FLOW_HISTORY_COMMAND,
 	FLOW_PLAN_WITH_GOAL_COMMAND,
+	FLOW_RUN_COMMAND,
 	FLOW_STATUS_COMMAND,
 	flowSessionActivateCommand,
 } from "../src/runtime/constants";
@@ -89,12 +90,22 @@ describe("runtime tools and recovery", () => {
 			category: "no_session",
 			status: "missing",
 			summary: "No active Flow session exists for this workspace.",
+			phase: "idle",
+			lane: "lite",
+			laneReason:
+				"Flow can stay in the lite lane until a non-trivial plan or risk signal appears.",
+			blocker: "No active Flow session exists for this workspace.",
+			reason: "Flow has not started a tracked session for this workspace yet.",
 			nextStep: "Start a new Flow session with /flow-plan <goal>.",
 			nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 		});
 		expect(parsed.operatorSummary).toBe(
 			[
 				"Flow missing: No active Flow session exists for this workspace.",
+				"Phase: idle",
+				"Lane: lite",
+				"Reason: Flow has not started a tracked session for this workspace yet.",
+				"Blocker: No active Flow session exists for this workspace.",
 				"Next: Start a new Flow session with /flow-plan <goal>.",
 				"Command: /flow-plan <goal>",
 			].join("\n"),
@@ -123,6 +134,10 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.operatorSummary).toBe(
 			[
 				"Flow missing: No active Flow session exists for this workspace.",
+				"Phase: idle",
+				"Lane: lite",
+				"Reason: Flow has not started a tracked session for this workspace yet.",
+				"Blocker: No active Flow session exists for this workspace.",
 				"Next: Start a new Flow session with /flow-plan <goal>.",
 				"Command: /flow-plan <goal>",
 			].join("\n"),
@@ -149,13 +164,21 @@ describe("runtime tools and recovery", () => {
 			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 			expect(parsed.workspaceRoot).toBe(worktree);
 			expect(parsed.session).toBeNull();
-			expect(parsed.operatorSummary).toBe(
-				[
-					"Flow doctor ok: No blocking readiness issues found.",
-					"Next: Start a new Flow session with /flow-plan <goal>.",
-					"Command: /flow-plan <goal>",
-				].join("\n"),
+			expect(parsed.operatorSummary).toContain(
+				"Flow doctor ok: No blocking readiness issues found.",
 			);
+			expect(parsed.operatorSummary).toContain("Phase: idle");
+			expect(parsed.operatorSummary).toContain("Lane: lite");
+			expect(parsed.operatorSummary).toContain(
+				"Reason: Flow has not started a tracked session for this workspace yet.",
+			);
+			expect(parsed.operatorSummary).toContain(
+				"Blocker: No active Flow session exists for this workspace.",
+			);
+			expect(parsed.operatorSummary).toContain(
+				"Next: Start a new Flow session with /flow-plan <goal>.",
+			);
+			expect(parsed.operatorSummary).toContain("Command: /flow-plan <goal>");
 
 			expect(parsed.checks).toEqual(
 				expect.arrayContaining([
@@ -252,6 +275,11 @@ describe("runtime tools and recovery", () => {
 
 		expect(parsed.status).toBe("missing");
 		expect(parsed.summary).toBe("No Flow session history found.");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
+		expect(parsed.blocker).toBe(
+			"No active Flow session exists for this workspace.",
+		);
 		expect(parsed.history.activeSessionId).toBeNull();
 		expect(parsed.history.active).toBeNull();
 		expect(parsed.history.stored).toEqual([]);
@@ -357,6 +385,67 @@ describe("runtime tools and recovery", () => {
 		).resolves.toContain(parsed.session.id);
 	});
 
+	test("flow_plan_apply auto-approves lite single-feature drafts", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const liteFeature = samplePlan().features[0];
+		if (!liteFeature) {
+			throw new Error("Missing lite feature fixture.");
+		}
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Ship a tiny fix" },
+			toolContext(worktree),
+		);
+		const response = await tools.flow_plan_apply.execute(
+			{
+				plan: {
+					...samplePlan(),
+					features: [liteFeature],
+				},
+			},
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+		const session = await loadSession(worktree);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.autoApproved).toBe(true);
+		expect(parsed.summary).toBe(
+			"Lite draft plan saved and auto-approved so execution can start immediately.",
+		);
+		expect(parsed.session.approval).toBe("approved");
+		expect(parsed.session.status).toBe("ready");
+		expect(parsed.session.operator.lane).toBe("lite");
+		expect(session?.approval).toBe("approved");
+		expect(session?.status).toBe("ready");
+	});
+
+	test("flow_plan_apply keeps standard multi-feature drafts pending approval", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Build a workflow plugin" },
+			toolContext(worktree),
+		);
+		const response = await tools.flow_plan_apply.execute(
+			{ plan: samplePlan() },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+		const session = await loadSession(worktree);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.autoApproved).toBe(false);
+		expect(parsed.summary).toBe("Draft plan saved.");
+		expect(parsed.session.approval).toBe("pending");
+		expect(parsed.session.status).toBe("planning");
+		expect(parsed.session.operator.lane).toBe("standard");
+		expect(session?.approval).toBe("pending");
+		expect(session?.status).toBe("planning");
+	});
+
 	test("flow_plan_start blocks suspicious mutable roots under home dot-directories", async () => {
 		const fakeHome = makeTempDir();
 		const suspiciousRoot = join(fakeHome, ".factory");
@@ -419,6 +508,73 @@ describe("runtime tools and recovery", () => {
 				}),
 			);
 		});
+	});
+
+	test("lite retryable non-human completion returns the session to ready without a manual reset", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const liteFeature = samplePlan().features[0];
+		if (!liteFeature) {
+			throw new Error("Missing lite feature fixture.");
+		}
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Ship a tiny fix" },
+			toolContext(worktree),
+		);
+		await tools.flow_plan_apply.execute(
+			{
+				plan: {
+					...samplePlan(),
+					features: [liteFeature],
+				},
+			},
+			toolContext(worktree),
+		);
+
+		const startResponse = await tools.flow_run_start.execute(
+			{},
+			toolContext(worktree),
+		);
+		const started = JSON.parse(startResponse);
+		expect(started.status).toBe("ok");
+
+		const completeResponse = await tools.flow_run_complete_feature.execute(
+			{
+				contractVersion: "1",
+				status: "needs_input",
+				summary: "A tiny retryable issue was found.",
+				artifactsChanged: [],
+				validationRun: [],
+				validationScope: "targeted",
+				reviewIterations: 0,
+				decisions: [{ summary: "The tiny fix needs one more pass." }],
+				nextStep: "Retry the tiny fix.",
+				outcome: {
+					kind: "blocked_external",
+					summary: "The tiny fix can be retried immediately.",
+					retryable: true,
+					autoResolvable: true,
+					needsHuman: false,
+				},
+				featureResult: {
+					featureId: liteFeature.id,
+					verificationStatus: "not_recorded",
+				},
+				featureReview: {
+					status: "needs_followup",
+					summary: "Retry with a smaller adjustment.",
+					blockingFindings: [],
+				},
+			},
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(completeResponse);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.session.status).toBe("ready");
+		expect(parsed.session.operator.lane).toBe("lite");
+		expect(parsed.session.nextCommand).toBe(FLOW_RUN_COMMAND);
 	});
 
 	test("flow_doctor surfaces suspicious workspace roots and skips artifact inspection there", async () => {
@@ -522,6 +678,12 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.active).toBe(false);
 		expect(parsed.path).toBe(`.flow/stored/${first.id}`);
 		expect(parsed.completedPath).toBeNull();
+		expect(parsed.phase).toBe("planning");
+		expect(parsed.lane).toBe("lite");
+		expect(parsed.blocker).toBe("No draft plan exists yet.");
+		expect(parsed.reason).toBe(
+			"Planning is still active because Flow does not have an execution-ready draft plan yet.",
+		);
 		expect(parsed.session.id).toBe(first.id);
 		expect(parsed.session.goal).toBe("First goal");
 		expect(parsed.session.nextCommand).toBe(
@@ -535,6 +697,10 @@ describe("runtime tools and recovery", () => {
 				"Flow planning: Flow needs a draft plan before execution can begin.",
 				"Goal: First goal",
 				"Progress: 0/0 completed",
+				"Phase: planning",
+				"Lane: lite",
+				"Reason: Planning is still active because Flow does not have an execution-ready draft plan yet.",
+				"Blocker: No draft plan exists yet.",
 				"Next: Activate this session to continue it in the current worktree.",
 				`Command: ${flowSessionActivateCommand(first.id)}`,
 			].join("\n"),
@@ -564,6 +730,12 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.active).toBe(false);
 		expect(parsed.path).toBe(resetParsed.completedTo);
 		expect(parsed.completedPath).toBe(resetParsed.completedTo);
+		expect(parsed.phase).toBe("completed");
+		expect(parsed.lane).toBe("lite");
+		expect(parsed.blocker).toBeNull();
+		expect(parsed.reason).toBe(
+			"The active session is complete, so Flow is no longer holding execution state for it.",
+		);
 		expect(parsed.session.id).toBe(saved.id);
 		expect(parsed.session.goal).toBe("Completed goal");
 		expect(parsed.session.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
@@ -573,6 +745,9 @@ describe("runtime tools and recovery", () => {
 				"Flow completed: Completed the Flow session.",
 				"Goal: Completed goal",
 				"Progress: 0/0 completed",
+				"Phase: completed",
+				"Lane: lite",
+				"Reason: The active session is complete, so Flow is no longer holding execution state for it.",
 				"Next: Start a new goal when you are ready for more work.",
 				"Command: /flow-plan <goal>",
 			].join("\n"),
@@ -623,6 +798,8 @@ describe("runtime tools and recovery", () => {
 
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toBe("Activated Flow session: First goal");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
 		expect(parsed.session.id).toBe(first.id);
 		expect(parsed.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(await activeSessionId(worktree)).toBe(first.id);
@@ -666,6 +843,8 @@ describe("runtime tools and recovery", () => {
 
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toBe("Closed the active Flow session as completed.");
+		expect(parsed.phase).toBe("idle");
+		expect(parsed.lane).toBe("lite");
 		expect(parsed.completedSessionId).toBe(saved.id);
 		expect(parsed.closureKind).toBe("completed");
 		expect(parsed.completedTo).toMatch(
@@ -1413,6 +1592,74 @@ describe("runtime tools and recovery", () => {
 		if (completed.ok) return;
 
 		expect(completed.message).toContain("recorded approved reviewer decision");
+	});
+
+	test("lite lane completion can succeed without a separately recorded reviewer approval", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = createSession("Ship a tiny fix");
+		const liteFeature = samplePlan().features[0];
+		if (!liteFeature) {
+			throw new Error("Missing lite feature fixture.");
+		}
+		const plan = {
+			...samplePlan(),
+			features: [liteFeature],
+		};
+
+		const applied = applyPlan(session, plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		await saveSession(worktree, started.value.session);
+
+		const response = await tools.flow_run_complete_feature.execute(
+			{
+				contractVersion: "1",
+				status: "ok",
+				summary: "Completed tiny fix.",
+				artifactsChanged: [],
+				validationRun: [
+					{
+						command: "bun test",
+						status: "passed",
+						summary: "Tiny fix tests passed.",
+					},
+				],
+				validationScope: "broad",
+				reviewIterations: 1,
+				decisions: [],
+				nextStep: "Session should complete.",
+				outcome: { kind: "completed" },
+				featureResult: {
+					featureId: liteFeature.id,
+					verificationStatus: "passed",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "Looks good.",
+					blockingFindings: [],
+				},
+				finalReview: {
+					status: "passed",
+					summary: "Final review looks good.",
+					blockingFindings: [],
+				},
+			},
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.session.status).toBe("completed");
+		expect(parsed.session.operator.lane).toBe("lite");
 	});
 
 	test("records reviewer decisions for the active feature", () => {

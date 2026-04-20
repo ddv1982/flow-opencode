@@ -60,14 +60,10 @@ describe("transition consolidation", () => {
 				]),
 		);
 		expect(Object.keys(sessionToolModuleCounts)).toEqual([
-			"doctor-checks.ts",
-			"doctor-config.ts",
-			"doctor.ts",
 			"history-tools.ts",
 			"lifecycle-tools.ts",
 			"next-command-policy.ts",
 			"planning-tools.ts",
-			"responses.ts",
 			"shared.ts",
 		]);
 		for (const count of Object.values(sessionToolModuleCounts)) {
@@ -90,10 +86,6 @@ describe("transition consolidation", () => {
 		);
 		const nextCommandPolicy = readFileSync(
 			join(sessionToolsDir, "next-command-policy.ts"),
-			"utf8",
-		);
-		const responseTools = readFileSync(
-			join(sessionToolsDir, "responses.ts"),
 			"utf8",
 		);
 		const sharedTools = readFileSync(
@@ -136,21 +128,6 @@ describe("transition consolidation", () => {
 		expect(lifecycleTools).not.toContain("flow_status");
 		expect(lifecycleTools).not.toContain("flow_plan_start");
 		expect(lifecycleTools).not.toContain("flow_history");
-
-		expect(responseTools).toContain("export function historyResponse");
-		expect(responseTools).toContain("export function storedSessionResponse");
-		expect(responseTools).toContain("export function autoPrepareResponse");
-		expect(responseTools).toContain("export function closeSessionResponse");
-		expect(responseTools).toContain(
-			"Session tool boundary: JSON response envelope assembly only.",
-		);
-		expect(responseTools).not.toContain("tool({");
-		expect(responseTools).not.toContain("flowSessionActivateCommand");
-		expect(responseTools).not.toContain("FLOW_AUTO_RESUME_COMMAND");
-		expect(responseTools).not.toContain("FLOW_AUTO_WITH_GOAL_COMMAND");
-		expect(responseTools).not.toContain("FLOW_HISTORY_COMMAND");
-		expect(responseTools).not.toContain("FLOW_PLAN_WITH_GOAL_COMMAND");
-		expect(responseTools).not.toContain("FLOW_STATUS_COMMAND");
 
 		expect(nextCommandPolicy).toContain(
 			"export function nextCommandForHistory",
@@ -216,7 +193,9 @@ describe("transition consolidation", () => {
 
 				const contents = readFileSync(fullPath, "utf8");
 				if (
-					/session-(lifecycle|persistence|workspace|history)/.test(contents)
+					/from\s+["'][^"']*session-(lifecycle|persistence|workspace|history)["']/.test(
+						contents,
+					)
 				) {
 					directSessionImports.push(fullPath.replace(`${repoRoot}/`, ""));
 				}

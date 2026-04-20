@@ -1,17 +1,11 @@
 import { tool } from "@opencode-ai/plugin";
 import {
-	missingSessionResponse,
-	withPersistedTransition,
+	executeDispatchedSessionMutation,
+	runDispatchedSessionMutationAction,
+	toJson,
 } from "../../runtime/application";
-import { FLOW_PLAN_WITH_GOAL_COMMAND } from "../../runtime/constants";
-import { PlanningContextArgsSchema } from "../../runtime/schema";
+import { PlanningContextArgsSchema, type Session } from "../../runtime/schema";
 import { summarizeSession } from "../../runtime/summary";
-import {
-	applyPlan,
-	approvePlan,
-	selectPlanFeatures,
-} from "../../runtime/transitions";
-import { succeed } from "../../runtime/transitions/shared";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowPlanApplyArgsSchema,
@@ -48,34 +42,11 @@ export function createPlanningRuntimeTools() {
 					});
 					const planning = Object.fromEntries(
 						Object.entries(input).filter(([, value]) => value !== undefined),
-					) as Parameters<typeof applyPlan>[2];
-					const nextPlanning = planning ?? {};
-					return withPersistedTransition(
+					);
+					return executeDispatchedSessionMutation(
 						context,
-						(session) =>
-							succeed({
-								...session,
-								planning: {
-									repoProfile:
-										nextPlanning.repoProfile ?? session.planning.repoProfile,
-									research: nextPlanning.research ?? session.planning.research,
-									implementationApproach:
-										nextPlanning.implementationApproach ??
-										session.planning.implementationApproach,
-									decisionLog:
-										nextPlanning.decisionLog ?? session.planning.decisionLog,
-									replanLog:
-										nextPlanning.replanLog ?? session.planning.replanLog,
-								},
-							}),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: "Planning context recorded.",
-								session: summarizeSession(saved).session,
-							}),
-						},
+						"record_planning_context",
+						planning,
 					);
 				},
 			),
@@ -101,23 +72,29 @@ export function createPlanningRuntimeTools() {
 									Object.entries(input.planning).filter(
 										([, value]) => value !== undefined,
 									),
-								) as Parameters<typeof applyPlan>[2]);
-					return withPersistedTransition(
+								) as Partial<Session["planning"]>);
+					const appliedResult = await runDispatchedSessionMutationAction(
 						context,
-						(session) => applyPlan(session, { ...input.plan }, planning),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: "Draft plan saved.",
-								session: summarizeSession(saved).session,
-							}),
-							missingResponse: missingSessionResponse(
-								"No active Flow planning session exists.",
-								FLOW_PLAN_WITH_GOAL_COMMAND,
-							),
-						},
+						"apply_plan",
+						planning === undefined
+							? { plan: input.plan }
+							: { plan: input.plan, planning },
 					);
+					if (appliedResult.kind !== "success") {
+						return toJson(appliedResult.response);
+					}
+
+					const summary = summarizeSession(appliedResult.savedSession);
+					if (summary.session?.operator.lane === "lite") {
+						const approvedResult = await runDispatchedSessionMutationAction(
+							context,
+							"auto_approve_lite_plan",
+							undefined,
+						);
+						return toJson(approvedResult.response);
+					}
+
+					return toJson(appliedResult.response);
 				},
 			),
 		}),
@@ -135,19 +112,9 @@ export function createPlanningRuntimeTools() {
 							approvedCount: parseFeatureIds(input.featureIds).length || null,
 						},
 					});
-					return withPersistedTransition(
-						context,
-						(session) =>
-							approvePlan(session, parseFeatureIds(input.featureIds)),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: "Plan approved.",
-								session: summarizeSession(saved).session,
-							}),
-						},
-					);
+					return executeDispatchedSessionMutation(context, "approve_plan", {
+						featureIds: parseFeatureIds(input.featureIds),
+					});
 				},
 			),
 		}),
@@ -165,18 +132,10 @@ export function createPlanningRuntimeTools() {
 							selectedCount: parseFeatureIds(input.featureIds).length,
 						},
 					});
-					return withPersistedTransition(
+					return executeDispatchedSessionMutation(
 						context,
-						(session) =>
-							selectPlanFeatures(session, parseFeatureIds(input.featureIds)),
-						{
-							getSession: (value) => value,
-							onSuccess: (saved) => ({
-								status: "ok",
-								summary: "Draft plan narrowed.",
-								session: summarizeSession(saved).session,
-							}),
-						},
+						"select_plan_features",
+						{ featureIds: parseFeatureIds(input.featureIds) },
 					);
 				},
 			),

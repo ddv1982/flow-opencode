@@ -41,6 +41,7 @@ function normalizeSummary(value: unknown): unknown {
 		if (planning) {
 			delete planning.replanLog;
 		}
+		delete session.operator;
 		const lastReviewerDecision = session.lastReviewerDecision as
 			| Record<string, unknown>
 			| undefined;

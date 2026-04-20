@@ -4,15 +4,16 @@
  * next-command-policy.ts.
  */
 import { tool } from "@opencode-ai/plugin";
-import { toJson } from "../../runtime/application";
-import { FLOW_STATUS_COMMAND } from "../../runtime/constants";
 import {
-	activateSession,
-	listSessionHistory,
-	loadSession,
-	loadStoredSession,
-} from "../../runtime/session";
-import { summarizeSession } from "../../runtime/summary";
+	buildDoctorReport,
+	executeDispatchedSessionWorkspaceAction,
+	historyResponse,
+	missingStoredSessionResponse,
+	runDispatchedSessionReadAction,
+	statusResponse,
+	storedSessionResponse,
+} from "../../runtime/application";
+import { FLOW_STATUS_COMMAND } from "../../runtime/constants";
 import { withParsedArgs } from "../parsed-tool";
 import type { FlowDoctorArgs } from "../schemas";
 import {
@@ -28,29 +29,19 @@ import {
 	FlowStatusArgsShape,
 	type ToolContext,
 } from "../schemas";
-import { buildDoctorReport } from "./doctor";
 import {
 	nextCommandForHistory,
 	nextCommandForMissingStoredSession,
 	nextCommandForStoredSession,
 } from "./next-command-policy";
-import {
-	historyResponse,
-	missingStoredSessionResponse,
-	statusResponse,
-	storedSessionResponse,
-} from "./responses";
-import {
-	inspectToolWorkspace,
-	recordToolMetadata,
-	resolveMutableToolSessionRoot,
-	resolveReadableToolSessionRoot,
-} from "./shared";
+import { inspectToolWorkspace, recordToolMetadata } from "./shared";
 
 function recordSessionLookupMetadata(
 	context: ToolContext,
 	sessionId: string,
-	found: Awaited<ReturnType<typeof loadStoredSession>>,
+	found: Awaited<
+		ReturnType<typeof runDispatchedSessionReadAction<"load_history_session">>
+	>["value"],
 ) {
 	recordToolMetadata(context, `Show session ${sessionId}`, {
 		sessionId,
@@ -67,8 +58,13 @@ export function createHistorySessionTools() {
 			execute: withParsedArgs(
 				FlowStatusArgsSchema,
 				async (input, context: ToolContext) => {
-					const sessionRoot = resolveReadableToolSessionRoot(context);
-					const session = await loadSession(sessionRoot);
+					const session = (
+						await runDispatchedSessionReadAction(
+							context,
+							"load_status_session",
+							undefined,
+						)
+					).value;
 					const workspace = inspectToolWorkspace(context);
 					recordToolMetadata(context, "Flow status", {
 						sessionId: session?.id ?? null,
@@ -79,7 +75,7 @@ export function createHistorySessionTools() {
 						workspaceRoot: workspace.root,
 						workspaceMutationAllowed: workspace.mutationAllowed,
 					});
-					return statusResponse(session, input, workspace);
+					return statusResponse(session, input.view ?? "detailed", workspace);
 				},
 			),
 		}),
@@ -94,7 +90,10 @@ export function createHistorySessionTools() {
 					recordToolMetadata(context, "Flow doctor", {
 						view: input.view ?? "detailed",
 					});
-					return buildDoctorReport(context, input);
+					return buildDoctorReport(
+						context,
+						input.view ? { view: input.view } : {},
+					);
 				},
 			),
 		}),
@@ -105,9 +104,13 @@ export function createHistorySessionTools() {
 			execute: withParsedArgs(
 				FlowHistoryArgsSchema,
 				async (_input, context: ToolContext) => {
-					const history = await listSessionHistory(
-						resolveReadableToolSessionRoot(context),
-					);
+					const history = (
+						await runDispatchedSessionReadAction(
+							context,
+							"list_session_history",
+							undefined,
+						)
+					).value;
 					const response = historyResponse(
 						history,
 						nextCommandForHistory(history),
@@ -125,10 +128,13 @@ export function createHistorySessionTools() {
 			execute: withParsedArgs(
 				FlowHistoryShowArgsSchema,
 				async (input, context: ToolContext) => {
-					const found = await loadStoredSession(
-						resolveReadableToolSessionRoot(context),
-						input.sessionId,
-					);
+					const found = (
+						await runDispatchedSessionReadAction(
+							context,
+							"load_history_session",
+							{ sessionId: input.sessionId },
+						)
+					).value;
 					recordSessionLookupMetadata(context, input.sessionId, found);
 
 					if (!found) {
@@ -153,27 +159,18 @@ export function createHistorySessionTools() {
 			execute: withParsedArgs(
 				FlowSessionActivateArgsSchema,
 				async (input, context: ToolContext) => {
-					const session = await activateSession(
-						resolveMutableToolSessionRoot(context),
-						input.sessionId,
-					);
 					recordToolMetadata(context, `Activate ${input.sessionId}`, {
 						sessionId: input.sessionId,
 					});
-
-					if (!session) {
-						return missingStoredSessionResponse(
-							input.sessionId,
-							nextCommandForMissingStoredSession(),
-						);
-					}
-
-					return toJson({
-						status: "ok",
-						summary: `Activated Flow session: ${session.goal}`,
-						session: summarizeSession(session).session,
-						nextCommand: FLOW_STATUS_COMMAND,
-					});
+					return executeDispatchedSessionWorkspaceAction(
+						context,
+						"activate_session",
+						{
+							sessionId: input.sessionId,
+							nextCommand: FLOW_STATUS_COMMAND,
+							missingNextCommand: nextCommandForMissingStoredSession(),
+						},
+					);
 				},
 			),
 		}),

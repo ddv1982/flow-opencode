@@ -1,29 +1,23 @@
-/**
- * Session tool boundary: JSON response envelope assembly only.
- * Do not add next-command routing or activation/resume policy here.
- */
-import {
-	toCompactJson,
-	toJson,
-	type WorkspaceContextSummary,
-} from "../../runtime/application";
-import type { Session } from "../../runtime/schema";
+import type { Session } from "../schema";
 import type {
 	closeSession,
 	listSessionHistory,
 	loadStoredSession,
-} from "../../runtime/session";
+} from "../session";
+import { deriveSessionOperatorState } from "../session-operator-state";
+import { deriveSessionViewModel, explainSessionState } from "../summary";
+import { renderSessionStatusSummary } from "./operator-presenters";
 import {
-	explainSessionState,
-	renderSessionStatusSummary,
-	summarizeSession,
-} from "../../runtime/summary";
-import type { FlowStatusArgs } from "../schemas";
-import type { AutoPrepareMode } from "./next-command-policy";
+	toCompactJson,
+	toJson,
+	type WorkspaceContextSummary,
+} from "./tool-runtime";
 
 type SessionHistory = Awaited<ReturnType<typeof listSessionHistory>>;
 type StoredSessionRecord = Awaited<ReturnType<typeof loadStoredSession>>;
 type CompletedSessionRecord = Awaited<ReturnType<typeof closeSession>>;
+type StatusView = "detailed" | "compact";
+type AutoPrepareMode = "resume" | "missing_goal" | "start_new_goal";
 
 function storedSessionGuidance(
 	found: NonNullable<StoredSessionRecord>,
@@ -40,17 +34,19 @@ function storedSessionGuidance(
 	};
 }
 
-export function missingGoalResponse(summary: string, nextCommand: string) {
-	return toJson({ status: "missing_goal", summary, nextCommand });
-}
-
 export function missingStoredSessionResponse(
 	sessionId: string,
 	nextCommand: string,
 ) {
+	const operator = deriveSessionOperatorState(null);
 	return toJson({
 		status: "missing_session",
 		summary: `No stored Flow session exists for id '${sessionId}'.`,
+		operator,
+		phase: operator.phase,
+		lane: operator.lane,
+		blocker: operator.blocker,
+		reason: operator.reason,
 		nextCommand,
 	});
 }
@@ -66,10 +62,17 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 		completedCount: history.completed.length,
 	};
 	if (totalCount === 0) {
+		const guidance = explainSessionState(null);
+		const operator = deriveSessionOperatorState(null);
 		return {
 			payload: toJson({
 				status: "missing",
 				summary: "No Flow session history found.",
+				operator,
+				phase: guidance.phase,
+				lane: guidance.lane,
+				blocker: guidance.blocker,
+				reason: guidance.reason,
 				history,
 				nextCommand,
 			}),
@@ -92,8 +95,10 @@ export function storedSessionResponse(
 	found: NonNullable<StoredSessionRecord>,
 	nextCommand: string,
 ) {
-	const summarizedSession = summarizeSession(found.session).session;
+	const viewModel = deriveSessionViewModel(found.session);
+	const summarizedSession = viewModel.session;
 	const guidance = storedSessionGuidance(found, nextCommand);
+	const operator = deriveSessionOperatorState(found.session);
 	const historySession = found.active
 		? summarizedSession
 		: { ...summarizedSession, nextCommand };
@@ -106,6 +111,11 @@ export function storedSessionResponse(
 		completedPath: found.completedPath ?? null,
 		completedAt: found.completedAt ?? null,
 		closure: found.session.closure ?? null,
+		operator,
+		phase: guidance.phase,
+		lane: guidance.lane,
+		blocker: guidance.blocker,
+		reason: guidance.reason,
 		session: historySession,
 		guidance,
 		operatorSummary: renderSessionStatusSummary(found.session, {
@@ -117,20 +127,23 @@ export function storedSessionResponse(
 }
 
 export function statusResponse(
-	session?: Session | null,
-	args: FlowStatusArgs = {},
+	session: Session | null | undefined,
+	view: StatusView = "detailed",
 	workspace?: WorkspaceContextSummary,
 ) {
+	const viewModel = deriveSessionViewModel(session ?? null);
 	const normalizedSession = session ?? null;
-	const guidance = explainSessionState(normalizedSession);
+	const guidance = viewModel.guidance;
 	const operatorSummary = renderSessionStatusSummary(normalizedSession);
-	const view = args.view ?? "detailed";
 	const workspaceRoot = workspace?.root ?? null;
 	if (view === "compact") {
-		const summary = summarizeSession(normalizedSession);
 		return toCompactJson({
-			status: summary.status,
-			summary: summary.summary,
+			status: viewModel.status,
+			summary: viewModel.summary,
+			phase: guidance.phase,
+			lane: guidance.lane,
+			blocker: guidance.blocker,
+			reason: guidance.reason,
 			guidance,
 			operatorSummary,
 			nextCommand: guidance.nextCommand,
@@ -139,7 +152,13 @@ export function statusResponse(
 		});
 	}
 	return toJson({
-		...summarizeSession(normalizedSession),
+		status: viewModel.status,
+		summary: viewModel.summary,
+		...(viewModel.session ? { session: viewModel.session } : {}),
+		phase: guidance.phase,
+		lane: guidance.lane,
+		blocker: guidance.blocker,
+		reason: guidance.reason,
 		guidance,
 		operatorSummary,
 		workspaceRoot,
@@ -151,7 +170,22 @@ export function autoPrepareResponse(
 	mode: AutoPrepareMode,
 	goal: string | null,
 	nextCommand: string,
+	session?: Session | null,
 ) {
+	const guidance =
+		mode === "resume" && session
+			? explainSessionState(session)
+			: mode === "missing_goal"
+				? explainSessionState(null)
+				: {
+						...explainSessionState(null),
+						summary: `Flow should start a new autonomous goal: ${goal}`,
+						blocker: null,
+						reason:
+							"A new explicit goal was provided, so Flow should start a fresh session for it.",
+						nextStep: "Start the new autonomous goal.",
+						nextCommand,
+					};
 	const payload =
 		mode === "missing_goal"
 			? {
@@ -159,6 +193,10 @@ export function autoPrepareResponse(
 					mode: "missing_goal" as const,
 					summary:
 						"No active Flow session exists. Provide a goal to start a new autonomous run.",
+					phase: guidance.phase,
+					lane: guidance.lane,
+					blocker: guidance.blocker,
+					reason: guidance.reason,
 					nextCommand,
 				}
 			: mode === "resume" && goal
@@ -167,6 +205,10 @@ export function autoPrepareResponse(
 						mode: "resume" as const,
 						goal,
 						summary: `Resuming active Flow goal: ${goal}`,
+						phase: guidance.phase,
+						lane: guidance.lane,
+						blocker: guidance.blocker,
+						reason: guidance.reason,
 						nextCommand,
 					}
 				: {
@@ -174,11 +216,19 @@ export function autoPrepareResponse(
 						mode: "start_new_goal" as const,
 						goal,
 						summary: `Starting a new autonomous Flow goal: ${goal}`,
+						phase: guidance.phase,
+						lane: guidance.lane,
+						blocker: guidance.blocker,
+						reason: guidance.reason,
 						nextCommand,
 					};
 	return {
 		payload: toJson(payload),
-		metadata: { mode, goal },
+		metadata: {
+			mode,
+			goal,
+			operator: deriveSessionOperatorState(session ?? null),
+		},
 	};
 }
 
@@ -186,11 +236,17 @@ export function closeSessionResponse(
 	completed: CompletedSessionRecord,
 	nextCommand: string,
 ) {
+	const operator = deriveSessionOperatorState(null);
 	return toJson({
 		status: "ok",
 		summary: completed
 			? `Closed the active Flow session as ${completed.closureKind}.`
 			: "No active Flow session existed.",
+		operator,
+		phase: operator.phase,
+		lane: operator.lane,
+		blocker: operator.blocker,
+		reason: operator.reason,
 		completedSessionId: completed?.sessionId ?? null,
 		completedTo: completed?.completedTo ?? null,
 		closureKind: completed?.closureKind ?? null,
