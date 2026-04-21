@@ -1,58 +1,46 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` adds a strict planning-and-execution workflow to OpenCode.
+`opencode-plugin-flow` adds a planning-and-execution workflow to OpenCode that adapts from small one-shot tasks to reviewed multi-feature delivery.
 
-Flow turns a goal into a tracked session, breaks the work into features, executes one feature at a time, and requires validation plus reviewer approval before work can advance.
+## What Flow does
 
-## TL;DR
+- Turns a goal into a **tracked session** with a plan of features, stored on disk.
+- Executes **one feature at a time** with validation and review checks.
+- **Scales automatically**: small tasks run nearly one-shot; larger work picks up a plan, reviewer sign-off, and a broad final check — without you having to configure anything.
 
-Flow is for work you want to run with:
-
-- a visible plan
-- one feature at a time
-- explicit validation and review gates
-- resumable state on disk
-
-If you just want a fast one-shot coding prompt, Flow is probably too much process.
-
-## Why use Flow
+## When to use it
 
 Use Flow when you want:
 
-- a durable session stored in `.flow/`
-- a reviewed plan before execution
-- one-feature-at-a-time execution
-- validation evidence before completion
-- reviewer-gated progression
-- broad final validation before the whole session finishes
+- a visible plan before code changes happen
+- one feature at a time, with validation evidence recorded
+- reviewer-gated progression for bigger work
+- resumable session state you can come back to
 
-## When not to use Flow
+## When to skip it
 
-Flow is probably the wrong fit when you want:
+Flow is the wrong fit when you want:
 
-- a fast one-shot coding prompt
+- a disposable one-off prompt with zero workflow overhead
 - loosely structured brainstorming
-- multi-feature implementation without review gates
-- disposable experiments you do not want persisted under `.flow/`
+- experiments you don't want persisted on disk
 
 ## Install
 
-Choose one install path:
-
-### Local repo
+### From this repo
 
 ```bash
 bun install
 bun run install:opencode
 ```
 
-### Latest GitHub release
+### From the latest GitHub release
 
 ```bash
 curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
 ```
 
-By default, both install flows place the plugin at:
+Both install paths place the plugin at:
 
 ```text
 ~/.config/opencode/plugins/flow.js
@@ -66,267 +54,202 @@ From the repo:
 bun run uninstall:opencode
 ```
 
-From the latest GitHub release:
+From the latest release:
 
 ```bash
 curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uninstall.sh | bash
 ```
 
-### Manual fallback
-
-If you ever need to copy the file yourself, build first and then copy `dist/index.js` into one of OpenCode's documented local plugin directories:
-
-- `~/.config/opencode/plugins/`
-
-## Migration / Upgrade
-
-Flow is now canonical-only.
-
-- Installs go to `~/.config/opencode/plugins/flow.js`
-- Uninstall removes Flow from `~/.config/opencode/plugins/flow.js`
-- Legacy installs at `~/.opencode/plugins/flow.js` are no longer managed automatically
-- Legacy `.flow/session.json` state is no longer auto-migrated into the current session-history layout
-
-If you are upgrading from an older release:
-
-1. Reinstall Flow to the canonical path:
-
-   ```bash
-   bun run install:opencode
-   ```
-
-   or
-
-   ```bash
-   curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
-   ```
-
-2. If you still have a plugin at `~/.opencode/plugins/flow.js`, remove it manually.
-3. If you still have old `.flow/session.json` workspace state, treat it as deprecated state and start from the current `.flow/active/<session-id>/`, `.flow/stored/<session-id>/`, and `.flow/completed/<session-id>-<timestamp>/` layout.
-
 ## Quick Start
 
-### Manual flow
+### One command (recommended)
+
+```
+/flow-auto Add a workflow plugin for OpenCode
+```
+
+Flow will inspect the repo, draft a plan, execute one feature at a time, validate, review, and continue until the work is done or something genuinely blocks it.
+
+For a small task, this can finish in a single autonomous pass — Flow's **lite lane** skips ceremony it doesn't need.
+
+### Manual, step by step
 
 1. `/flow-plan Add a workflow plugin for OpenCode`
 2. Review the proposed features
-3. `/flow-plan approve` if Flow did not already auto-approve a safe lite draft
-4. `/flow-run`
-5. Repeat `/flow-run` until complete
-6. `/flow-status`
+3. `/flow-plan approve` (Flow may already have auto-approved a safe lite plan)
+4. `/flow-run` — runs exactly one approved feature
+5. Repeat `/flow-run` until the session is complete
+6. `/flow-status` at any point to see where you are
 
-### Autonomous flow
+### Resume
 
-1. `/flow-auto Add a workflow plugin for OpenCode`
-2. Let Flow inspect the repo, plan the work, execute one feature at a time, validate, review, and continue until complete or blocked
-3. Use `/flow-status` at any time to inspect progress
-4. Use `/flow-status detail` if you want the fuller structured view
+- `/flow-auto` with no arguments resumes the active session
+- `/flow-auto resume` is the explicit form
+- If there's no active session, Flow asks for a goal instead of inventing one
+- Completed sessions are not resumable — start a new one
 
-### Resume behavior
+## Core concepts
 
-- `/flow-auto` with no argument is resume-only
-- `/flow-auto resume` is the explicit equivalent
-- if no active session exists, Flow asks for a goal
-- completed sessions are not resumable
+### Sessions and features
 
-### Readiness check
+A **session** represents one goal. It contains a plan made of **features**, each with its own state (`pending`, `in_progress`, `completed`, `blocked`). You can have **one active session per project/worktree** at a time.
 
-Run `/flow-doctor` when you want a non-destructive readiness check for:
+### Lanes (chosen automatically)
 
-- canonical install health
-- command/agent injection health
-- workspace writability and whether Flow trusts the resolved workspace root for mutation
-- active session artifact health
-- the current blocker and recommended next step
+Flow picks one of three lanes based on the shape of the work — you never set this yourself.
 
-Flow treats the resolved project/worktree as a hard boundary for session writes. By default it refuses to mutate session state in suspicious roots such as `~`, `~/.config/...`, or `~/.factory/...`. If you intentionally need a nonstandard root, allowlist the exact absolute path with `FLOW_TRUSTED_WORKSPACE_ROOTS`.
+- **lite** — tiny, low-risk work (single feature, no research, no decisions). Flow can auto-approve the draft plan, skip the separate reviewer step, and retry recoverable errors without stopping.
+- **standard** — the normal multi-feature path. Planning, execution, review, and validation all run, one gate at a time.
+- **strict** — triggered when a plan carries decision gates needing a human call, replan history, custom completion thresholds, or a non-default goal mode. Everything is fully gated.
 
-Use `/flow-doctor detail` if you want the fuller structured view.
+### Validation and review
 
-### Operator model
+Before a feature can be marked complete, Flow requires:
 
-`/flow-status` and `/flow-doctor` are designed to be easy to scan:
+- **validation**: recorded evidence that what was built actually works (e.g. tests, type checks, targeted runs)
+- **review**: an approval of the change (`featureReview` for a single feature, `finalReview` before the whole session closes)
 
-- plain-language summary first
-- current phase and lane (`lite`, `standard`, `strict`)
-- blocker/reason when present
-- next recommended step
-- next command to run
-- structured details underneath when you need them
+In the lite lane, these gates are still enforced but can be satisfied in the same step the worker finishes. In standard and strict lanes, the reviewer decision has to be recorded as its own step.
 
-That same operator model is now used beyond `/flow-status` and `/flow-doctor`; resumability and session inspection surfaces such as `/flow-history show` and `/flow-auto` preparation responses also expose phase/lane/blocker/reason fields.
+### Decision gates
 
-In the **lite** lane, Flow can:
+When planning hits an ambiguous choice, Flow classifies it:
 
-- auto-approve a safe single-feature draft plan
-- accept an in-band passing review payload during completion
-- return retryable non-human execution failures directly to `ready`/`pending`
+- `autonomous_choice` — Flow picks and moves on
+- `recommend_confirm` — Flow recommends an option and waits for you to confirm
+- `human_required` — Flow stops and asks you
+
+This is why `/flow-auto` can run for long stretches without wandering off: it pauses on things that genuinely need a human.
+
+### Completion and closing a session
+
+A plan has a **delivery policy** that decides when the session is "done":
+
+- `ship_when_clean` — every planned feature must pass
+- `ship_when_core_done` — critical features must pass; nice-to-haves can be deferred
+- `ship_when_threshold_met` — a minimum number of features must pass
+
+Sessions close with an explicit outcome via `/flow-session close`:
+
+- **completed** — the work shipped
+- **deferred** — paused for now, may resume later
+- **abandoned** — don't come back to this one
+
+### Goal modes
+
+A plan isn't limited to building features. Flow supports:
+
+- `implementation` — build something new (the default)
+- `review` — audit existing code without changing it
+- `review_and_fix` — audit, then apply the fixes
+
+### Recovery
+
+When something recoverable goes wrong (a flaky test, a missing prerequisite, a validation rerun), Flow attaches structured recovery metadata and retries — you don't have to manually reset. It only stops for real blockers (external dependency, human-required decision, hard failure).
 
 ## Commands
-
-Flow adds these slash commands to OpenCode.
-
-### Command families
-
-- **Planning:** `/flow-plan`
-- **Execution:** `/flow-run`, `/flow-auto`
-- **Inspection:** `/flow-status`, `/flow-doctor`, `/flow-history`
-- **Session control:** `/flow-session`, `/flow-reset`
-
-That split is intentional:
-- planning and execution stay separate
-- autonomous execution still keeps review and recovery gates
-- inspection and session-control commands stay in the safer control lane
-
-### Command reference
 
 | Command | Purpose |
 | --- | --- |
 | `/flow-plan <goal>` | Create or refresh a draft plan |
-| `/flow-plan select <feature-id...>` | Keep only selected features in the draft |
-| `/flow-plan approve [feature-id...]` | Approve the current draft plan |
+| `/flow-plan select <feature-id>...` | Keep only the selected features in the draft |
+| `/flow-plan approve [feature-id]...` | Approve the current draft plan |
 | `/flow-run [feature-id]` | Execute exactly one approved feature |
 | `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
 | `/flow-auto resume` | Resume the active autonomous session |
-| `/flow-status [detail]` | Show the current session summary; default is compact, `detail` shows the fuller structured view |
-| `/flow-doctor [detail]` | Run non-destructive Flow readiness checks; default is compact, `detail` shows the fuller structured view |
-| `/flow-history` | Show active, stored, and completed session history |
-| `/flow-history show <session-id>` | Show a specific active, stored, or completed session |
+| `/flow-status [detail]` | Current session summary (compact by default) |
+| `/flow-doctor [detail]` | Non-destructive readiness check |
+| `/flow-history` | List active, stored, and completed sessions |
+| `/flow-history show <session-id>` | Inspect a specific session |
 | `/flow-session activate <id>` | Switch the active session |
-| `/flow-session close <completed|deferred|abandoned>` | Close the active session with an explicit outcome |
-| `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
+| `/flow-session close <completed\|deferred\|abandoned>` | Close the active session |
+| `/flow-reset feature <id>` | Reset a feature (and dependents) to pending |
 
-### Which command should I use?
+Which one do I want?
 
-- starting or reshaping work → `/flow-plan`
-- executing one approved feature → `/flow-run`
-- letting Flow coordinate end to end → `/flow-auto`
-- checking what Flow thinks is happening → `/flow-status`
-- diagnosing readiness or workspace issues → `/flow-doctor`
-- browsing prior sessions → `/flow-history`
-- switching/closing/resetting session state → `/flow-session`, `/flow-reset`
+- Starting or reshaping work → `/flow-plan`
+- Running one approved feature → `/flow-run`
+- Hands-off end-to-end → `/flow-auto`
+- "Where are we?" → `/flow-status`
+- "Why is Flow stuck?" → `/flow-doctor`
+- Browsing past sessions → `/flow-history`
 
-## How Flow works
+## How a session runs
 
-At a high level:
-
-1. inspect repo evidence
-2. persist planning context
-3. draft/approve a plan
-4. execute one feature
-5. validate and review
-6. recover, replan, or continue
-7. require broad validation plus final review before session completion
-
-Flow researches only when local repo evidence is not enough for a high-confidence plan or recommendation. If a meaningful decision still remains, Flow can either continue autonomously, recommend a path and pause, or stop for a human decision.
+1. **Inspect** the repo for evidence (stack, conventions, existing code).
+2. **Plan** — draft a compact feature list, with decisions recorded.
+3. **Approve** the plan (auto in lite lane, explicit otherwise).
+4. **Execute** one feature with targeted validation.
+5. **Review** the result against the feature's acceptance.
+6. **Continue, recover, or replan** — until the delivery policy is satisfied and a broad final check plus final review pass. Then the session completes.
 
 ```mermaid
 flowchart TD
-    A[Goal or resume request] --> B{Start mode}
-    B -->|Manual| C["/flow-plan"]
-    B -->|Autonomous| D["/flow-auto"]
-
-    C --> E[Detect stack]
-    D --> D1{Resume-only input?}
-    D1 -->|yes + active session| N
-    D1 -->|yes + no active session| D2[Ask for a goal]
-    D1 -->|no, new goal| E
-
-    E --> F[Persist planning context]
-    F --> G{Need research?}
-    G -->|yes| H[Research + persist]
-    G -->|no| I{Mode}
-    H --> I
-
-    I -->|flow-plan| J[Draft or refresh plan]
-    I -->|flow-auto| K{Need human decision?}
-    K -->|yes| L[Show options, tradeoffs, and recommendation]
-    K -->|no| J
-
-    J --> M{Lite auto-approved?}
-    M -->|yes| N
-    M -->|no| M2[Approve plan]
-    M2 --> N[Choose next approved feature]
-    N --> O[flow-worker executes + targeted validation]
-    O --> P[flow-reviewer reviews]
-    P -->|needs_fix| O
-    P -->|blocked/retryable| Q[Reset, recover, or replan]
-    P -->|approved| R{Session completion policy satisfied?}
-
-    Q -->|reset/retry| N
-    Q -->|replan required| J
-    Q -->|hard blocker| X[Stop blocked]
-
-    R -->|no| N
-    R -->|yes| S[Broad final validation]
-    S --> T[Final review]
-    T -->|needs_fix| O
-    T -->|approved| U[Session complete]
+    A[Goal] --> B[Plan]
+    B --> C[Approve]
+    C --> D[Run one feature]
+    D --> E[Validate]
+    E --> F[Review]
+    F -->|needs fix| D
+    F -->|retryable error| D
+    F -->|blocker| X[Stop]
+    F -->|approved| G{More features needed?}
+    G -->|yes| D
+    G -->|no| H[Broad final check + final review]
+    H --> I[Session complete]
 ```
 
 ## Storage
 
-Flow keeps one active session per worktree and writes session state only inside the intended project/worktree root.
-
-Read-only inspection commands such as `/flow-status`, `/flow-history`, and `/flow-doctor` can still report what Flow sees, but mutating commands refuse suspicious roots unless the exact absolute path is trusted with `FLOW_TRUSTED_WORKSPACE_ROOTS` (single path or path-delimited list of exact roots).
-
-Main session state:
+Flow writes state only inside the worktree it's running in:
 
 ```text
 .flow/active/<session-id>/session.json
 .flow/stored/<session-id>/session.json
+.flow/completed/<session-id>-<timestamp>/
 ```
 
-Readable docs:
+Readable markdown for each session lives alongside it:
 
 ```text
 .flow/active/<session-id>/docs/index.md
 .flow/active/<session-id>/docs/features/<feature-id>.md
 ```
 
-Closed session history lives under:
+There is exactly one active session per worktree. Switching with `/flow-session activate <id>` moves the current active session to `stored/` and brings the requested one in.
 
-```text
-.flow/completed/
+### Workspace safety
+
+Flow refuses to write session state in your home directory or under any top-level dot-folder under `$HOME` (for example `~/.config` or `~/.factory`). Read-only commands (`/flow-status`, `/flow-doctor`, `/flow-history`) still work everywhere; only mutations are blocked.
+
+If you intentionally need a nonstandard root, allowlist the **exact** absolute path(s) via:
+
+```bash
+export FLOW_TRUSTED_WORKSPACE_ROOTS=/abs/path/one:/abs/path/two
 ```
 
-Completed history can contain different closure outcomes in session metadata:
+## Readiness check
 
-- `completed`
-- `deferred`
-- `abandoned`
+Run `/flow-doctor` when something looks off. It reports:
 
-## Completion gates
+- plugin install health at `~/.config/opencode/plugins/flow.js`
+- command and agent injection health
+- workspace writability and whether the current root is trusted
+- active session artifact health
+- the current blocker and the recommended next step
 
-Flow is intentionally strict.
+Use `/flow-doctor detail` for the fuller structured view.
 
-Flow will not mark a feature complete unless it has:
+## Upgrading
 
-- an approved plan
-- exactly one active feature
-- recorded validation evidence
-- passing validation for that completion path
-- a passing `featureReview`
+If you're coming from an older release that installed under `~/.opencode/plugins/` or used a flat `.flow/session.json`, see [`docs/migration/`](docs/migration/) for the steps. Legacy paths are no longer auto-migrated.
 
-In standard and strict flows, Flow also requires a recorded reviewer decision for the current scope.
-
-In the lite lane, Flow can accept an in-band passing review payload during completion, so tiny tasks do not always need a separately persisted reviewer decision before the feature finishes.
-
-Flow will not mark the whole session complete unless it also has:
-
-- broad validation for the repo
-- a passing `finalReview`
-
-In standard and strict flows, Flow also requires a recorded final reviewer decision.
-
-In the lite lane, Flow can accept an in-band passing final review payload when the completion path already carries the required broad validation and final review evidence.
-
-See [CHANGELOG.md](CHANGELOG.md) for release notes.
+Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Contributing
 
-If you want to work on the plugin itself, see the [Development Guide](docs/development.md).
+Working on the plugin itself? See the [Development Guide](docs/development.md).
 
 ## License
 
-This project is licensed under the MIT License. See `LICENSE` for the full text.
+MIT. See [`LICENSE`](LICENSE) for the full text.
