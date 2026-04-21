@@ -2,6 +2,12 @@
 
 Scope: `src/tools/schemas.ts`, `src/tools/runtime-tools/shared.ts`, `src/tools/runtime-tools/planning-tools.ts`, `src/tools/runtime-tools/execution-tools.ts`.
 
+## Current state
+
+- The bridge no longer carries explicit `as any` / `as WorkerResult` arg-shape casts in the scoped files.
+- `zod` is pinned to `4.1.8` in this repo to stay aligned with `@opencode-ai/plugin@1.3.10`, which also bundles `zod@4.1.8`.
+- Treat that version alignment as part of the bridge contract. If you change either `zod` or `@opencode-ai/plugin`, rerun the bridge verification suite before accepting the change.
+
 ## What counts as **no relaxation of strictness**
 
 A change is strictness-preserving only if **all** clauses hold:
@@ -16,7 +22,7 @@ A change is strictness-preserving only if **all** clauses hold:
 
 3. **No new boundary unsafes.**
    - Do not introduce new `any`, `as any`, `unknown as`, or equivalent bridge casts in scoped files.
-   - Existing scoped casts are technical debt and may only be reduced or replaced with stricter adapters.
+   - If a schema-compatibility problem reappears, solve it by dependency alignment first; only add an explicit bridge adapter as a last resort.
 
 4. **Raw compatibility behavior stays explicit and tested.**
    - Top-level worker payload is accepted; deprecated nested `result` payload is rejected.
@@ -40,6 +46,7 @@ Bridge changes must preserve these runtime-owned semantic IDs:
 
 Required checks:
 
+- `bun run check:dependency-contract`
 - `bun test tests/config.test.ts`
 - `bun test tests/runtime-tools.test.ts`
 - `bun test tests/runtime-completion-contracts.test.ts`
@@ -51,5 +58,6 @@ Required checks:
 Required quick audit:
 
 - `rg -n "as any|as WorkerResult|unknown as" src/tools/schemas.ts src/tools/runtime-tools/shared.ts src/tools/runtime-tools/planning-tools.ts src/tools/runtime-tools/execution-tools.ts`
+- `bun pm ls zod`
 
-Pass condition: no new boundary cast points unless paired with new/updated seam tests and an explicit seam-owner sign-off.
+Pass condition: no new boundary cast points, and `zod` remains intentionally aligned with the plugin SDK unless a reviewed compatibility change says otherwise.

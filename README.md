@@ -4,7 +4,7 @@
 
 Flow turns a goal into a tracked session, breaks the work into features, executes one feature at a time, and requires validation plus reviewer approval before work can advance.
 
-## What Flow Is Good For
+## Why use Flow
 
 Use Flow when you want:
 
@@ -14,6 +14,15 @@ Use Flow when you want:
 - validation evidence before completion
 - reviewer-gated progression
 - broad final validation before the whole session finishes
+
+## When not to use Flow
+
+Flow is probably the wrong fit when you want:
+
+- a fast one-shot coding prompt
+- loosely structured brainstorming
+- multi-feature implementation without review gates
+- disposable experiments you do not want persisted under `.flow/`
 
 ## Install
 
@@ -98,7 +107,7 @@ If you are upgrading from an older release:
 ### Autonomous flow
 
 1. `/flow-auto Add a workflow plugin for OpenCode`
-2. Let Flow detect the stack, persist planning context, research when needed, then plan, execute, validate, review, and continue until complete or blocked
+2. Let Flow detect the stack, persist planning context, research only when needed, then plan, execute, validate, review, and continue until complete or blocked
 3. Use `/flow-status` at any time to inspect progress
 4. Use `/flow-status detail` if you want the fuller structured view
 
@@ -123,26 +132,42 @@ Flow treats the resolved project/worktree as a hard boundary for session writes.
 
 Use `/flow-doctor detail` if you want the fuller structured view.
 
-### What `/flow-status` and `/flow-doctor` show
+### Operator model
 
-Both commands are designed to be easy to scan.
+`/flow-status` and `/flow-doctor` are designed to be easy to scan:
 
-- they lead with the current situation in plain language
-- they surface the current phase and the selected Flow lane (`lite`, `standard`, or `strict`)
-- they tell you why Flow chose that lane and what blocker, if any, is active
-- they tell you the next recommended step
-- they show the most relevant next command to run
-- they still include structured details underneath for deeper inspection
+- plain-language summary first
+- current phase and lane (`lite`, `standard`, `strict`)
+- blocker/reason when present
+- next recommended step
+- next command to run
+- structured details underneath when you need them
 
 That same operator model is now used beyond `/flow-status` and `/flow-doctor`; resumability and session inspection surfaces such as `/flow-history show` and `/flow-auto` preparation responses also expose phase/lane/blocker/reason fields.
 
-In the **lite** lane, Flow can auto-approve a safe single-feature draft plan so small tasks can move directly into execution without a separate approval hop.
-In the **lite** lane, Flow can also accept an in-band passing review payload during completion, so tiny tasks do not always need a separate persisted reviewer-decision step before finishing.
-In the **lite** lane, retryable non-human execution failures can return the feature directly to `ready`/`pending`, avoiding a separate manual reset step before rerunning.
+In the **lite** lane, Flow can:
+
+- auto-approve a safe single-feature draft plan
+- accept an in-band passing review payload during completion
+- return retryable non-human execution failures directly to `ready`/`pending`
 
 ## Commands
 
-Flow adds these slash commands to OpenCode:
+Flow adds these slash commands to OpenCode.
+
+### Command families
+
+- **Planning:** `/flow-plan`
+- **Execution:** `/flow-run`, `/flow-auto`
+- **Inspection:** `/flow-status`, `/flow-doctor`, `/flow-history`
+- **Session control:** `/flow-session`, `/flow-reset`
+
+That split is intentional:
+- planning and execution stay separate
+- autonomous execution still keeps review and recovery gates
+- inspection and session-control commands stay in the safer control lane
+
+### Command reference
 
 | Command | Purpose |
 | --- | --- |
@@ -160,13 +185,31 @@ Flow adds these slash commands to OpenCode:
 | `/flow-session close <completed|deferred|abandoned>` | Close the active session with an explicit outcome |
 | `/flow-reset feature <id>` | Reset a feature and dependents back to pending |
 
+### Which command should I use?
+
+- starting or reshaping work → `/flow-plan`
+- executing one approved feature → `/flow-run`
+- letting Flow coordinate end to end → `/flow-auto`
+- checking what Flow thinks is happening → `/flow-status`
+- diagnosing readiness or workspace issues → `/flow-doctor`
+- browsing prior sessions → `/flow-history`
+- switching/closing/resetting session state → `/flow-session`, `/flow-reset`
+
 ## How Flow Works
 
-Before Flow drafts or refreshes a plan, it first inspects repo evidence to detect the stack and persist planning context such as repo profile, research notes, implementation approach, recorded decision notes, and replan history.
+At a high level:
 
-Flow researches only when local repo evidence is insufficient to produce a high-confidence plan or recommendation, or when external grounding would materially improve a meaningful technical decision.
+1. inspect repo evidence
+2. persist planning context
+3. draft/approve a plan
+4. execute one feature
+5. validate and review
+6. recover, replan, or continue
+7. require broad validation plus final review before session completion
 
-`/flow-plan` uses that context to draft a plan, but it does not hard-stop on decision gates. `/flow-auto` uses the same context, and if a meaningful decision still remains after repo evidence and research, it records the decision as one of:
+Flow researches only when local repo evidence is not enough for a high-confidence plan or recommendation.
+
+`/flow-plan` uses the planning context to draft a plan. `/flow-auto` uses the same context, and if a meaningful decision still remains after repo evidence and research, it records the decision as one of:
 
 - `autonomous_choice` — Flow may continue on its own
 - `recommend_confirm` — Flow presents a recommendation and pauses for confirmation

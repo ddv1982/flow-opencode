@@ -87,6 +87,12 @@ export type SessionWorkspaceResult<T, Name extends string = string> = {
 	response: RuntimeToolResponse;
 };
 
+type RuntimeAction<Name extends string, T, Port> = {
+	name: Name;
+	run: (worktree: string, runtime: Port) => Promise<T>;
+	onSuccess: (value: T) => RuntimeToolResponse;
+};
+
 export const DEFAULT_SESSION_RUNTIME_PORT: SessionRuntimePort = {
 	loadSession,
 	saveSessionState,
@@ -108,13 +114,33 @@ export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort
 		closeSession,
 	};
 
+function actionSuccessResult<T, Name extends string>(
+	actionName: Name,
+	value: T,
+	response: RuntimeToolResponse,
+) {
+	return {
+		actionName,
+		value,
+		response,
+	};
+}
+
+async function runRuntimeActionAtRoot<T, Name extends string, Port>(
+	worktree: string,
+	action: RuntimeAction<Name, T, Port>,
+	runtime: Port,
+) {
+	const value = await action.run(worktree, runtime);
+	return actionSuccessResult(action.name, value, action.onSuccess(value));
+}
+
 export async function executeSessionReadActionAtRoot<T, Name extends string>(
 	worktree: string,
 	action: SessionReadAction<T, Name>,
 	runtime: SessionReadRuntimePort = DEFAULT_SESSION_READ_RUNTIME_PORT,
 ): Promise<RuntimeToolResponse> {
-	const executed = await runSessionReadActionAtRoot(worktree, action, runtime);
-	return executed.response;
+	return (await runSessionReadActionAtRoot(worktree, action, runtime)).response;
 }
 
 export async function runSessionReadActionAtRoot<T, Name extends string>(
@@ -122,12 +148,7 @@ export async function runSessionReadActionAtRoot<T, Name extends string>(
 	action: SessionReadAction<T, Name>,
 	runtime: SessionReadRuntimePort = DEFAULT_SESSION_READ_RUNTIME_PORT,
 ): Promise<SessionReadResult<T, Name>> {
-	const value = await action.run(worktree, runtime);
-	return {
-		actionName: action.name,
-		value,
-		response: action.onSuccess(value),
-	};
+	return runRuntimeActionAtRoot(worktree, action, runtime);
 }
 
 export async function executeSessionWorkspaceActionAtRoot<
@@ -138,12 +159,8 @@ export async function executeSessionWorkspaceActionAtRoot<
 	action: SessionWorkspaceAction<T, Name>,
 	runtime: SessionWorkspaceRuntimePort = DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 ): Promise<RuntimeToolResponse> {
-	const executed = await runSessionWorkspaceActionAtRoot(
-		worktree,
-		action,
-		runtime,
-	);
-	return executed.response;
+	return (await runSessionWorkspaceActionAtRoot(worktree, action, runtime))
+		.response;
 }
 
 export async function runSessionWorkspaceActionAtRoot<T, Name extends string>(
@@ -151,12 +168,7 @@ export async function runSessionWorkspaceActionAtRoot<T, Name extends string>(
 	action: SessionWorkspaceAction<T, Name>,
 	runtime: SessionWorkspaceRuntimePort = DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 ): Promise<SessionWorkspaceResult<T, Name>> {
-	const value = await action.run(worktree, runtime);
-	return {
-		actionName: action.name,
-		value,
-		response: action.onSuccess(value),
-	};
+	return runRuntimeActionAtRoot(worktree, action, runtime);
 }
 
 export async function persistTransitionAtRoot<T, Name extends string>(
@@ -171,17 +183,18 @@ export async function persistTransitionAtRoot<T, Name extends string>(
 	options: { syncArtifacts?: boolean } = { syncArtifacts: true },
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<RuntimeToolResponse> {
-	const executed = await executeTransitionAtRoot(
-		actionName,
-		worktree,
-		result,
-		getSession,
-		onSuccess,
-		onError,
-		options,
-		runtime,
-	);
-	return executed.response;
+	return (
+		await executeTransitionAtRoot(
+			actionName,
+			worktree,
+			result,
+			getSession,
+			onSuccess,
+			onError,
+			options,
+			runtime,
+		)
+	).response;
 }
 
 export async function executeTransitionAtRoot<T, Name extends string>(
@@ -240,12 +253,8 @@ export async function executeSessionMutationAtRoot<T, Name extends string>(
 	action: SessionMutationAction<T, Name>,
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<RuntimeToolResponse> {
-	const executed = await runSessionMutationActionAtRoot(
-		worktree,
-		action,
-		runtime,
-	);
-	return executed.response;
+	return (await runSessionMutationActionAtRoot(worktree, action, runtime))
+		.response;
 }
 
 export async function runSessionMutationActionAtRoot<T, Name extends string>(

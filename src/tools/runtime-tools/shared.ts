@@ -8,33 +8,20 @@ import {
 	WorkerResultArgsShape,
 } from "../schemas";
 
-export const flowPlanApplyArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	FlowPlanApplyArgsSchema.shape as any;
+export const flowPlanApplyArgsShape = FlowPlanApplyArgsSchema.shape;
 
-export const flowPlanApproveArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	FlowPlanApproveArgsShape as any;
+export const flowPlanApproveArgsShape = FlowPlanApproveArgsShape;
 
-export const flowPlanSelectArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	FlowPlanSelectArgsShape as any;
+export const flowPlanSelectArgsShape = FlowPlanSelectArgsShape;
 
-export const flowRunStartArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	FlowRunStartArgsShape as any;
+export const flowRunStartArgsShape = FlowRunStartArgsShape;
 
-export const workerResultArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	WorkerResultArgsShape as any;
+export const workerResultArgsShape = WorkerResultArgsShape;
 
 export const flowReviewRecordFeatureArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	FlowReviewRecordFeatureArgsShape as any;
+	FlowReviewRecordFeatureArgsShape;
 
-export const flowReviewRecordFinalArgsShape =
-	// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-	FlowReviewRecordFinalArgsShape as any;
+export const flowReviewRecordFinalArgsShape = FlowReviewRecordFinalArgsShape;
 
 export function parseFeatureIds(raw?: string[]): string[] {
 	return (raw ?? []).map((value) => value.trim()).filter(Boolean);

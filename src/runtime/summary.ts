@@ -80,8 +80,106 @@ export type SessionViewModel = {
 	operator: SessionOperatorState;
 };
 
+const NO_ACTIVE_SESSION_SUMMARY = "No active Flow session found.";
+const NO_ACTIVE_SESSION_GUIDANCE_SUMMARY =
+	"No active Flow session exists for this workspace.";
+
+type SummarizedFeature = SummarizedSessionDetails["features"][number];
+type SummarizedActiveFeature = SummarizedSessionDetails["activeFeature"];
+
 function summarizeFeature(feature: Feature): string {
 	return `${feature.id} (${feature.status}): ${feature.title}`;
+}
+
+function projectFeature(feature: Feature): SummarizedFeature {
+	return {
+		id: feature.id,
+		title: feature.title,
+		status: feature.status,
+		summary: feature.summary,
+	};
+}
+
+function projectActiveFeature(
+	feature: Feature | null,
+): SummarizedActiveFeature {
+	return feature ? projectFeature(feature) : null;
+}
+
+function sessionFeatures(session: Session): Feature[] {
+	return session.plan?.features ?? [];
+}
+
+function activeFeatureForSession(
+	session: Session,
+	features: Feature[] = sessionFeatures(session),
+): Feature | null {
+	return (
+		features.find(
+			(feature) => feature.id === session.execution.activeFeatureId,
+		) ?? null
+	);
+}
+
+function missingSessionGuidance(
+	operator: SessionOperatorState,
+): SessionGuidance {
+	return {
+		category: "no_session",
+		status: "missing",
+		summary: NO_ACTIVE_SESSION_GUIDANCE_SUMMARY,
+		...operator,
+	};
+}
+
+function sessionSummaryText(session: Session): string {
+	return (
+		session.execution.lastSummary ??
+		session.plan?.summary ??
+		"Flow session is initialized."
+	);
+}
+
+function buildSessionDetails(
+	session: Session,
+	operator: SessionOperatorState,
+): SummarizedSessionDetails {
+	const features = sessionFeatures(session);
+	const completion = summarizeCompletion(session);
+	const decisionGate = activeDecisionGate(session);
+
+	return {
+		id: session.id,
+		goal: session.goal,
+		approval: session.approval,
+		status: session.status,
+		planSummary: session.plan?.summary ?? null,
+		planOverview: session.plan?.overview ?? null,
+		completion,
+		activeFeature: projectActiveFeature(
+			activeFeatureForSession(session, features),
+		),
+		featureProgress: {
+			completed: features.filter((feature) => feature.status === "completed")
+				.length,
+			total: features.length,
+		},
+		features: features.map(projectFeature),
+		notes: session.notes,
+		artifacts: session.artifacts,
+		closure: session.closure,
+		planning: session.planning,
+		decisionGate,
+		lastOutcome: session.execution.lastOutcome,
+		lastNextStep: session.execution.lastNextStep,
+		lastFeatureResult: session.execution.lastFeatureResult,
+		lastReviewerDecision: session.execution.lastReviewerDecision,
+		lastValidationRun: session.execution.lastValidationRun,
+		lastOutcomeKind: session.execution.lastOutcomeKind,
+		nextCommand: deriveNextCommand(session),
+		operator,
+		featureLines: features.map(summarizeFeature),
+	};
 }
 
 function buildSessionGuidance(
@@ -89,12 +187,7 @@ function buildSessionGuidance(
 	operator: SessionOperatorState,
 ): SessionGuidance {
 	if (!session) {
-		return {
-			category: "no_session",
-			status: "missing",
-			summary: "No active Flow session exists for this workspace.",
-			...operator,
-		};
+		return missingSessionGuidance(operator);
 	}
 
 	const decisionGate = activeDecisionGate(session);
@@ -136,9 +229,7 @@ function buildSessionGuidance(
 	}
 
 	if (session.status === "ready" || session.status === "running") {
-		const activeFeature = session.plan?.features.find(
-			(feature) => feature.id === session.execution.activeFeatureId,
-		);
+		const activeFeature = activeFeatureForSession(session);
 
 		return {
 			category: "execution",
@@ -168,72 +259,19 @@ export function deriveSessionViewModel(
 		const operator = deriveSessionOperatorState(null);
 		return {
 			status: "missing",
-			summary: "No active Flow session found.",
+			summary: NO_ACTIVE_SESSION_SUMMARY,
 			session: null,
-			guidance: buildSessionGuidance(null, operator),
+			guidance: missingSessionGuidance(operator),
 			operator,
 		};
 	}
 
-	const features = session.plan?.features ?? [];
-	const completedCount = features.filter(
-		(feature) => feature.status === "completed",
-	).length;
-	const activeFeature =
-		features.find(
-			(feature) => feature.id === session.execution.activeFeatureId,
-		) ?? null;
-	const completion = summarizeCompletion(session);
-	const decisionGate = activeDecisionGate(session);
 	const operator = deriveSessionOperatorState(session);
 
 	return {
 		status: session.status,
-		summary:
-			session.execution.lastSummary ??
-			session.plan?.summary ??
-			"Flow session is initialized.",
-		session: {
-			id: session.id,
-			goal: session.goal,
-			approval: session.approval,
-			status: session.status,
-			planSummary: session.plan?.summary ?? null,
-			planOverview: session.plan?.overview ?? null,
-			completion,
-			activeFeature: activeFeature
-				? {
-						id: activeFeature.id,
-						title: activeFeature.title,
-						status: activeFeature.status,
-						summary: activeFeature.summary,
-					}
-				: null,
-			featureProgress: {
-				completed: completedCount,
-				total: features.length,
-			},
-			features: features.map((feature) => ({
-				id: feature.id,
-				title: feature.title,
-				status: feature.status,
-				summary: feature.summary,
-			})),
-			notes: session.notes,
-			artifacts: session.artifacts,
-			closure: session.closure,
-			planning: session.planning,
-			decisionGate,
-			lastOutcome: session.execution.lastOutcome,
-			lastNextStep: session.execution.lastNextStep,
-			lastFeatureResult: session.execution.lastFeatureResult,
-			lastReviewerDecision: session.execution.lastReviewerDecision,
-			lastValidationRun: session.execution.lastValidationRun,
-			lastOutcomeKind: session.execution.lastOutcomeKind,
-			nextCommand: deriveNextCommand(session),
-			operator,
-			featureLines: features.map(summarizeFeature),
-		},
+		summary: sessionSummaryText(session),
+		session: buildSessionDetails(session, operator),
 		guidance: buildSessionGuidance(session, operator),
 		operator,
 	};

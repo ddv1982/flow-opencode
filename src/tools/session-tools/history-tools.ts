@@ -1,7 +1,7 @@
 /**
  * Session tool boundary: status/doctor/history/lookup/activation tool registrations only.
- * Keep response envelopes in responses.ts and next-command routing in
- * next-command-policy.ts.
+ * Keep runtime response shaping in the runtime/application boundary and
+ * next-command routing in next-command-policy.ts.
  */
 import { tool } from "@opencode-ai/plugin";
 import {

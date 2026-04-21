@@ -49,6 +49,9 @@ type SessionRootCandidate = {
 	source: SessionRootSource;
 };
 
+const READABLE_ROOT_MISSING_REASON =
+	"Flow could not resolve a readable workspace root from worktree, directory, or cwd.";
+
 export function toJson(value: unknown): string {
 	return JSON.stringify(value, null, 2);
 }
@@ -69,29 +72,28 @@ function asSessionRootCandidate(
 	return { root, source };
 }
 
+function contextCandidates(
+	context: WorkspaceContext,
+	includeCwdFallback: boolean,
+): SessionRootCandidate[] {
+	const candidates = [
+		asSessionRootCandidate(context.worktree, "worktree"),
+		asSessionRootCandidate(context.directory, "directory"),
+		...(includeCwdFallback
+			? [asSessionRootCandidate(process.cwd(), "cwd")]
+			: []),
+	];
+
+	return candidates.filter(
+		(candidate): candidate is SessionRootCandidate => candidate !== null,
+	);
+}
+
 function candidateFromContext(
 	context: WorkspaceContext,
 	mode: SessionRootMode,
 ): SessionRootCandidate | null {
-	const candidateWorktree = asSessionRootCandidate(
-		context.worktree,
-		"worktree",
-	);
-	const candidateDirectory = asSessionRootCandidate(
-		context.directory,
-		"directory",
-	);
-	if (candidateWorktree) {
-		return candidateWorktree;
-	}
-	if (candidateDirectory) {
-		return candidateDirectory;
-	}
-	if (mode === "mutate") {
-		return null;
-	}
-
-	return asSessionRootCandidate(process.cwd(), "cwd");
+	return contextCandidates(context, mode === "read").at(0) ?? null;
 }
 
 function mutableRootMissingError(): InvalidFlowWorkspaceRootError {
@@ -112,18 +114,35 @@ function mutableRootMissingError(): InvalidFlowWorkspaceRootError {
 	});
 }
 
+function readableRootMissingError(): Error {
+	return new Error(READABLE_ROOT_MISSING_REASON);
+}
+
+function workspaceSummaryFromRoot(
+	root: string | null,
+	source: SessionRootSource | null,
+	overrides: Partial<WorkspaceContextSummary>,
+): WorkspaceContextSummary {
+	return {
+		root,
+		source,
+		trusted: false,
+		mutationAllowed: false,
+		usedFallback: false,
+		rejectionReason: null,
+		...overrides,
+	};
+}
+
 function resolveCandidate(
 	context: WorkspaceContext,
 	mode: SessionRootMode,
 ): ResolvedSessionRoot {
 	const candidate = candidateFromContext(context, mode);
 	if (!candidate) {
-		if (mode === "mutate") {
-			throw mutableRootMissingError();
-		}
-		throw new Error(
-			"Flow tool context is missing a readable workspace root (worktree, directory, or cwd).",
-		);
+		throw mode === "mutate"
+			? mutableRootMissingError()
+			: readableRootMissingError();
 	}
 
 	if (mode === "read") {
@@ -180,27 +199,18 @@ export function inspectWorkspaceContext(
 	try {
 		readRoot = resolveReadableSessionRoot(context);
 	} catch {
-		return {
-			root: null,
-			source: null,
-			trusted: false,
-			mutationAllowed: false,
-			usedFallback: false,
-			rejectionReason:
-				"Flow could not resolve a readable workspace root from worktree, directory, or cwd.",
-		};
+		return workspaceSummaryFromRoot(null, null, {
+			rejectionReason: READABLE_ROOT_MISSING_REASON,
+		});
 	}
 
 	try {
 		const mutable = resolveMutableSessionRoot(context);
-		return {
-			root: mutable.root,
-			source: mutable.source,
+		return workspaceSummaryFromRoot(mutable.root, mutable.source, {
 			trusted: mutable.trusted,
 			mutationAllowed: true,
 			usedFallback: readRoot.usedFallback,
-			rejectionReason: null,
-		};
+		});
 	} catch (error) {
 		if (error instanceof InvalidFlowWorkspaceRootError) {
 			const source =
@@ -209,14 +219,15 @@ export function inspectWorkspaceContext(
 				error.details.source === "cwd"
 					? error.details.source
 					: readRoot.source;
-			return {
-				root: error.details.root ?? readRoot.root,
+			return workspaceSummaryFromRoot(
+				error.details.root ?? readRoot.root,
 				source,
-				trusted: error.details.trusted,
-				mutationAllowed: false,
-				usedFallback: readRoot.usedFallback,
-				rejectionReason: error.details.rejectionReason,
-			};
+				{
+					trusted: error.details.trusted,
+					usedFallback: readRoot.usedFallback,
+					rejectionReason: error.details.rejectionReason,
+				},
+			);
 		}
 		throw error;
 	}

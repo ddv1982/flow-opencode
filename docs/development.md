@@ -4,7 +4,7 @@ This file is for contributors working on the plugin itself.
 
 If you are trying to use Flow inside OpenCode, start with the top-level `README.md` instead.
 
-## Local Development
+## Local workflow
 
 Install dependencies and run the full local check:
 
@@ -23,7 +23,7 @@ Useful scripts:
 - `bun run install:opencode`
 - `bun run uninstall:opencode`
 
-## Important Source Files
+## Source map
 
 - `src/index.ts` — plugin entrypoint
 - `src/installer.ts` — local OpenCode plugin installer
@@ -38,9 +38,9 @@ Useful scripts:
 - `src/prompts/agents.ts` — agent instructions
 - `src/prompts/commands.ts` — slash-command templates
 
-## Architecture in One View
+## Architecture in one view
 
-Flow is built around a small set of responsibilities:
+Flow is built around a few stable responsibilities:
 
 1. A plugin `config` hook injects commands and agents.
 2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers.
@@ -49,7 +49,7 @@ Flow is built around a small set of responsibilities:
 5. Prompted agents call runtime tools instead of mutating state directly.
 6. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
-## Current Agent Roles
+## Current agent roles
 
 - `flow-planner`
 - `flow-worker`
@@ -85,7 +85,22 @@ Flow is built around a small set of responsibilities:
 - `flow_plan_context_record`
 - `flow_session_close`
 
-## Recovery Model
+Current surface counts are intentional at the moment:
+
+- 5 agents
+- 8 commands
+- 17 tools
+
+Treat that shape as deliberate, not accidental duplication. Simplify it only when a concrete operator or maintenance win is clear enough to justify migration cost.
+
+## Maintainer rules
+
+- Runtime owns workflow semantics; prompts and docs describe them.
+- Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed compatibility change is intentional.
+- Preserve direct `tool(...)` arg-shape compatibility at the SDK boundary.
+- Prefer deletion over new helper layers.
+
+## Recovery model
 
 Retryable runtime failures can include structured recovery metadata alongside the error summary.
 
@@ -112,7 +127,7 @@ Examples:
 - missing final review payload reports `completion_payload_rebuild_required`
 - failing review or validation can point directly to `flow_reset_feature`
 
-## Workflow Semantics
+## Workflow semantics
 
 Flow now persists a few higher-level concepts directly in runtime state:
 
@@ -123,7 +138,7 @@ Flow now persists a few higher-level concepts directly in runtime state:
 - `replan_required` outcomes must carry a structured reason, failed assumption, and recommended adjustment
 - closed sessions carry an explicit closure kind: `completed`, `deferred`, or `abandoned`
 
-## Performance Direction
+## Performance direction
 
 Keep Flow prompts narrow and stable. Prefer platform-native efficiency controls before adding plugin-specific machinery:
 
@@ -132,7 +147,7 @@ Keep Flow prompts narrow and stable. Prefer platform-native efficiency controls 
 - treat `experimental.session.compacting` as optional escalation only if there is real evidence of Flow state loss
 - avoid introducing Flow-owned compaction or measurement plumbing unless a concrete failure mode justifies it
 
-## Tool Schema Note
+## Tool schema note
 
 OpenCode plugin tools expect `args` to be provided as a raw Zod shape, not a top-level schema object.
 

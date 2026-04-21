@@ -1,7 +1,7 @@
 /**
  * Session tool boundary: tiny shared helpers only.
- * Keep response assembly in responses.ts and routing policy in
- * next-command-policy.ts.
+ * Keep response shaping in the runtime/application boundary and routing
+ * policy in next-command-policy.ts.
  */
 import {
 	inspectWorkspaceContext,

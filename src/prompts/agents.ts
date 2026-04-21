@@ -38,7 +38,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 
 Plan flow:
 1. Call flow_plan_start.
-2. Read enough repo context to justify the plan, detect the stack, and persist repoProfile plus any research/implementationApproach with flow_plan_context_record before finalizing.
+2. Read enough repo context to justify the plan, detect the stack, and persist repoProfile plus any research/implementationApproach with flow_plan_context_record.
 3. If the command asks you to approve or select features, call the matching Flow tool and stop.
 4. Return plan content matching:
 

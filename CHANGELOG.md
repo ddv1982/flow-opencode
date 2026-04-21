@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.0.14] - 2026-04-21
+
+### Highlights
+
+Flow 1.0.14 focuses on durability after the recent runtime simplification work. This release removes the last SDK/runtime arg-shape bridge helper by aligning the `zod` contract with the plugin SDK, adds executable dependency and completion-lane guardrails, compresses redundant architecture/governance docs, and simplifies the main runtime hotspots without changing the operator-facing surface.
+
+### Added
+
+- Added `scripts/cross-area/dependency-contract.mjs` plus `tests/cross-area/dependency-contract.test.ts` to verify that the repo and `@opencode-ai/plugin` still share the same effective `zod` contract.
+- Added `scripts/cross-area/check-completion-lane.mjs` and the `bun run check:completion-lane` package script so completion-path edits have an explicit protected verification lane.
+- Added a documented completion-path protection rule for `src/runtime/transitions/execution-completion.ts`, including a file-level warning and maintainer guidance in `docs/architecture/maintainer-risk-checklist.md`.
+- Added a stricter dependency-alignment check to `tests/config.test.ts` so SDK/runtime shape compatibility is guarded by CI instead of maintainer memory alone.
+
+### Changed
+
+- Pinned `zod` to `4.1.8` to align with `@opencode-ai/plugin@1.3.10` and remove the remaining direct tool-arg bridge helper from the runtime tool surface.
+- Simplified the runtime application hotspots in `src/runtime/application/session-actions.ts`, `src/runtime/application/session-engine.ts`, and `src/runtime/application/tool-runtime.ts` by deleting duplicated response, dispatch, and workspace-root plumbing.
+- Simplified `src/runtime/summary.ts` and `src/runtime/transitions/execution-completion.ts` by centralizing repeated projection and completion-path shaping logic while preserving runtime semantics.
+- Clarified the public product surface in the README and development guide without shrinking the current 5-agent / 8-command / 17-tool surface.
+- Reframed `docs/migration/v2-tool-contract.md` as the current canonical tool-contract reference instead of a lingering migration note.
+
+### Removed
+
+- Removed the last explicit SDK/runtime arg-shape bridge helper and the scattered direct bridge casts that existed around the runtime tool surface.
+- Removed redundant architecture-history documents that were no longer the canonical source of maintainer guidance:
+  - `docs/architecture/bridge-hotspots.md`
+  - `docs/architecture/bridge-seam-owners.md`
+  - `docs/architecture/semantic-invariant-equivalence-matrix.md`
+  - `docs/architecture/surface-matrix.md`
+
+### Fixed
+
+- Fixed the residual risk that future dependency bumps could silently reintroduce the `zod` seam without an executable check.
+- Fixed stale maintainer guidance that still referenced non-existent response-shaping files after the runtime/application consolidation.
+- Reduced the chance that future completion-path edits can land without running the highest-signal contract and runtime suites first.
+
 ## [1.0.13] - 2026-04-21
 
 ### Highlights

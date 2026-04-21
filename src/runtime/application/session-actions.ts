@@ -8,7 +8,7 @@ import type {
 	FlowReviewRecordFinalArgs,
 	PlanArgs,
 	Session,
-	WorkerResult,
+	WorkerResultArgs,
 } from "../schema";
 import { summarizeSession } from "../summary";
 import {
@@ -67,7 +67,7 @@ export type SessionMutationPayloadMap = {
 		featureId?: string;
 	};
 	complete_run: {
-		worker: WorkerResult;
+		worker: WorkerResultArgs;
 	};
 	reset_feature: {
 		featureId: string;
@@ -103,6 +103,24 @@ type SessionMutationActionHandlerMap = {
 	) => SessionMutationAction<SessionMutationValueMap[Name]>;
 };
 
+const MISSING_PLANNING_SESSION_RESPONSE = {
+	status: "missing_session",
+	summary: "No active Flow planning session exists.",
+	nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
+} as const;
+
+function summarizedSession(saved: Session) {
+	return summarizeSession(saved).session;
+}
+
+function okWithSession(saved: Session, summary: string) {
+	return {
+		status: "ok" as const,
+		summary,
+		session: summarizedSession(saved),
+	};
+}
+
 export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 	{
 		record_planning_context(nextPlanning) {
@@ -126,11 +144,8 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 					return succeed(updated);
 				},
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: "Planning context recorded.",
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) =>
+					okWithSession(saved, "Planning context recorded."),
 			};
 		},
 
@@ -143,13 +158,9 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 					status: "ok",
 					summary: "Draft plan saved.",
 					autoApproved: false,
-					session: summarizeSession(saved).session,
+					session: summarizedSession(saved),
 				}),
-				missingResponse: {
-					status: "missing_session",
-					summary: "No active Flow planning session exists.",
-					nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
-				},
+				missingResponse: MISSING_PLANNING_SESSION_RESPONSE,
 			};
 		},
 
@@ -163,13 +174,9 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 					summary:
 						"Lite draft plan saved and auto-approved so execution can start immediately.",
 					autoApproved: true,
-					session: summarizeSession(saved).session,
+					session: summarizedSession(saved),
 				}),
-				missingResponse: {
-					status: "missing_session",
-					summary: "No active Flow planning session exists.",
-					nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
-				},
+				missingResponse: MISSING_PLANNING_SESSION_RESPONSE,
 			};
 		},
 
@@ -178,11 +185,7 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "approve_plan",
 				run: (session) => approvePlan(session, featureIds),
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: "Plan approved.",
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) => okWithSession(saved, "Plan approved."),
 			};
 		},
 
@@ -191,11 +194,7 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "select_plan_features",
 				run: (session) => selectPlanFeatures(session, featureIds),
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: "Draft plan narrowed.",
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) => okWithSession(saved, "Draft plan narrowed."),
 			};
 		},
 
@@ -232,11 +231,14 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "complete_run",
 				run: (session) => completeRun(session, worker),
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: summarizeSession(saved).summary,
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) => {
+					const summary = summarizeSession(saved);
+					return {
+						status: "ok" as const,
+						summary: summary.summary,
+						session: summary.session,
+					};
+				},
 				onError: (failure) => ({
 					status: "error",
 					summary: failure.message,
@@ -250,11 +252,8 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "reset_feature",
 				run: (session) => resetFeature(session, featureId),
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: `Reset feature '${featureId}'.`,
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) =>
+					okWithSession(saved, `Reset feature '${featureId}'.`),
 			};
 		},
 
@@ -275,11 +274,8 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "record_feature_review",
 				run: (session) => recordReviewerDecision(session, normalized),
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: "Reviewer decision recorded.",
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) =>
+					okWithSession(saved, "Reviewer decision recorded."),
 			};
 		},
 
@@ -299,11 +295,8 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "record_final_review",
 				run: (session) => recordReviewerDecision(session, normalized),
 				getSession: (value) => value,
-				onSuccess: (saved) => ({
-					status: "ok",
-					summary: "Reviewer decision recorded.",
-					session: summarizeSession(saved).session,
-				}),
+				onSuccess: (saved) =>
+					okWithSession(saved, "Reviewer decision recorded."),
 			};
 		},
 	};

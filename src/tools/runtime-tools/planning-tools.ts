@@ -25,9 +25,7 @@ export function createPlanningRuntimeTools() {
 		flow_plan_context_record: tool({
 			description:
 				"Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session",
-			args:
-				// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against bundled plugin Zod while this shape comes from runtime schema.
-				PlanningContextArgsSchema.shape as any,
+			args: PlanningContextArgsSchema.shape,
 			execute: withParsedArgs(
 				PlanningContextArgsSchema,
 				async (input, context: ToolContext) => {

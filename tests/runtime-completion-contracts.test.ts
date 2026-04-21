@@ -227,6 +227,7 @@ describe("runtime completion and contract guards", () => {
 								id: "../escape",
 								title: "Bad feature id",
 								summary: "Should be rejected.",
+								status: "pending",
 								fileTargets: [],
 								verification: [],
 							},

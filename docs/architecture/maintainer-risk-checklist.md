@@ -2,6 +2,43 @@
 
 Use this checklist before merging changes in Flow's higher-risk areas.
 
+## Dependency alignment
+
+If you change either of these:
+
+- `package.json` dependency on `zod`
+- `@opencode-ai/plugin`
+
+then verify:
+
+- Flow and the plugin SDK still share a compatible `zod` contract
+- tool arg shapes still assign directly into `tool(...)` without bridge helpers
+- no nested dual-`zod` type mismatch has reintroduced cast pressure at the SDK/runtime boundary
+
+Recommended checks:
+
+- `bun pm ls zod`
+- `bun run check:dependency-contract`
+- `bun test tests/config.test.ts tests/runtime-tools.test.ts tests/runtime-completion-contracts.test.ts tests/schema-equivalence.test-d.ts`
+- `bun run typecheck`
+
+## Completion-path protection lane
+
+If you change:
+
+- `src/runtime/transitions/execution-completion.ts`
+
+then treat it as a protected subsystem and verify:
+
+- completion gate order stays unchanged unless the tests and migration notes change with it
+- lite-lane success and retry behavior stays explicit
+- blocked vs ready vs planning transitions remain deliberate
+- recovery metadata still points to the same canonical next actions
+
+Required checks:
+
+- `bun run check:completion-lane`
+
 ## Prompt / tool / runtime parity
 
 If you change any of these:
@@ -50,8 +87,8 @@ Recommended checks:
 
 When adding session-facing behavior:
 
-- tool registration and runtime calls -> `history-tools.ts` / `planning-tools.ts` / `lifecycle-tools.ts`
-- JSON response shaping -> `responses.ts`
+- tool registration -> `history-tools.ts` / `planning-tools.ts` / `lifecycle-tools.ts`
+- runtime mutation/read/workspace routing and JSON response shaping -> `src/runtime/application/session-actions.ts` / `session-read-actions.ts` / `session-workspace-actions.ts` / `session-engine.ts`
 - next-command / navigation policy -> `next-command-policy.ts`
 - tiny cross-cutting helpers -> `shared.ts`
 

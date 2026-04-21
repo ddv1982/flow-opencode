@@ -1,6 +1,6 @@
-# Flow v2 Tool Contract Migration
+# Flow canonical tool contract
 
-Flow v2 is canonical-first.
+This document describes the current canonical worker/reviewer completion surface.
 
 ## Canonical tools
 
@@ -11,7 +11,7 @@ Flow v2 is canonical-first.
 
 ## Removed raw-wrapper tools
 
-These compatibility shims were part of the v2 migration and are now removed from the active tool surface:
+These compatibility shims are no longer part of the active tool surface:
 
 - `flow_review_record_feature_from_raw`
 - `flow_review_record_final_from_raw`

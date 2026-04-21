@@ -1,4 +1,4 @@
-import type { Feature, Session, WorkerResult } from "../schema";
+import type { Feature, Session, WorkerResultArgs } from "../schema";
 import {
 	completeExecutionRun,
 	markSessionCompleted,
@@ -25,7 +25,7 @@ export function startRun(
 
 export function completeRun(
 	session: Session,
-	worker: WorkerResult,
+	worker: WorkerResultArgs,
 ): TransitionResult<Session> {
 	if (!session.plan) {
 		return fail("There is no active plan to apply the worker result to.");

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
 import { applyFlowConfig, createConfigHook } from "../src/config";
 import FlowPlugin from "../src/index";
@@ -99,6 +102,12 @@ function expectNoFlowManagedCompaction(content: string) {
 	expect(normalized).not.toContain("compaction");
 	expect(normalized).not.toContain("token accounting");
 	expect(normalized).not.toContain("token measurement");
+}
+
+async function readJson(relativePath: string) {
+	return JSON.parse(
+		await readFile(join(import.meta.dir, "..", relativePath), "utf8"),
+	) as Record<string, unknown>;
 }
 
 describe("applyFlowConfig", () => {
@@ -318,6 +327,29 @@ describe("applyFlowConfig", () => {
 
 			expect(name.length).toBeGreaterThan(0);
 		}
+	});
+
+	test("pins zod to the plugin SDK's effective zod contract", async () => {
+		const projectPackage = await readJson("package.json");
+		const pluginPackage = await readJson(
+			"node_modules/@opencode-ai/plugin/package.json",
+		);
+		const rootZodPackage = await readJson("node_modules/zod/package.json");
+		const nestedPluginZodPath =
+			"node_modules/@opencode-ai/plugin/node_modules/zod/package.json";
+		const pluginZodPackage = await readJson(
+			existsSync(join(import.meta.dir, "..", nestedPluginZodPath))
+				? nestedPluginZodPath
+				: "node_modules/zod/package.json",
+		);
+
+		expect(projectPackage.dependencies).toMatchObject({
+			zod: rootZodPackage.version,
+		});
+		expect(pluginPackage.dependencies).toMatchObject({
+			zod: pluginZodPackage.version,
+		});
+		expect(rootZodPackage.version).toBe(pluginZodPackage.version);
 	});
 
 	test("non-worker tool schemas accept representative valid payloads and reject invalid ones", () => {

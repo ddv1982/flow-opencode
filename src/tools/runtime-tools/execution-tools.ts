@@ -1,9 +1,9 @@
 import { tool } from "@opencode-ai/plugin";
 import { executeDispatchedSessionMutation } from "../../runtime/application";
-import type { WorkerResult } from "../../runtime/schema";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowResetFeatureArgsSchema,
+	FlowResetFeatureArgsShape,
 	FlowRunStartArgsSchema,
 	type ToolContext,
 	WorkerResultArgsSchema,
@@ -48,7 +48,7 @@ export function createExecutionRuntimeTools() {
 						},
 					});
 					return executeDispatchedSessionMutation(context, "complete_run", {
-						worker: input as WorkerResult,
+						worker: input,
 					});
 				},
 			),
@@ -56,9 +56,7 @@ export function createExecutionRuntimeTools() {
 
 		flow_reset_feature: tool({
 			description: "Reset a Flow feature to pending",
-			args:
-				// biome-ignore lint/suspicious/noExplicitAny: tool() is typed against the plugin's bundled Zod types while these shapes are sourced from the repo/runtime copy.
-				FlowResetFeatureArgsSchema.shape as any,
+			args: FlowResetFeatureArgsShape,
 			execute: withParsedArgs(
 				FlowResetFeatureArgsSchema,
 				async (input, context: ToolContext) => {
