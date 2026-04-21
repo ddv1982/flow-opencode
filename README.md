@@ -4,6 +4,17 @@
 
 Flow turns a goal into a tracked session, breaks the work into features, executes one feature at a time, and requires validation plus reviewer approval before work can advance.
 
+## TL;DR
+
+Flow is for work you want to run with:
+
+- a visible plan
+- one feature at a time
+- explicit validation and review gates
+- resumable state on disk
+
+If you just want a fast one-shot coding prompt, Flow is probably too much process.
+
 ## Why use Flow
 
 Use Flow when you want:
@@ -107,7 +118,7 @@ If you are upgrading from an older release:
 ### Autonomous flow
 
 1. `/flow-auto Add a workflow plugin for OpenCode`
-2. Let Flow detect the stack, persist planning context, research only when needed, then plan, execute, validate, review, and continue until complete or blocked
+2. Let Flow inspect the repo, plan the work, execute one feature at a time, validate, review, and continue until complete or blocked
 3. Use `/flow-status` at any time to inspect progress
 4. Use `/flow-status detail` if you want the fuller structured view
 
@@ -128,7 +139,7 @@ Run `/flow-doctor` when you want a non-destructive readiness check for:
 - active session artifact health
 - the current blocker and recommended next step
 
-Flow treats the resolved project/worktree as a hard boundary for session writes. By default it refuses to mutate session state in suspicious roots such as `~`, `~/.config/...`, or `~/.factory/...`. If you intentionally need a nonstandard root, allowlist the exact absolute path with `FLOW_TRUSTED_WORKSPACE_ROOTS`. This variable accepts one or more exact absolute paths separated by your platform path delimiter (`:` on macOS/Linux, `;` on Windows).
+Flow treats the resolved project/worktree as a hard boundary for session writes. By default it refuses to mutate session state in suspicious roots such as `~`, `~/.config/...`, or `~/.factory/...`. If you intentionally need a nonstandard root, allowlist the exact absolute path with `FLOW_TRUSTED_WORKSPACE_ROOTS`.
 
 Use `/flow-doctor detail` if you want the fuller structured view.
 
@@ -195,7 +206,7 @@ That split is intentional:
 - browsing prior sessions → `/flow-history`
 - switching/closing/resetting session state → `/flow-session`, `/flow-reset`
 
-## How Flow Works
+## How Flow works
 
 At a high level:
 
@@ -207,17 +218,7 @@ At a high level:
 6. recover, replan, or continue
 7. require broad validation plus final review before session completion
 
-Flow researches only when local repo evidence is not enough for a high-confidence plan or recommendation.
-
-`/flow-plan` uses the planning context to draft a plan. `/flow-auto` uses the same context, and if a meaningful decision still remains after repo evidence and research, it records the decision as one of:
-
-- `autonomous_choice` — Flow may continue on its own
-- `recommend_confirm` — Flow presents a recommendation and pauses for confirmation
-- `human_required` — Flow must stop for a human decision
-
-That decision is surfaced back through the runtime session summary as a `decisionGate`, so autonomous continuation can key off runtime state instead of only prompt wording.
-
-Plans can also carry an explicit delivery policy so Flow knows whether it should ship only when everything is clean, ship when core work is done, or ship when a declared threshold is met.
+Flow researches only when local repo evidence is not enough for a high-confidence plan or recommendation. If a meaningful decision still remains, Flow can either continue autonomously, recommend a path and pause, or stop for a human decision.
 
 ```mermaid
 flowchart TD
