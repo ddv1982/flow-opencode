@@ -1,0 +1,61 @@
+[
+	{
+		"id": "worker-contract-replan-required-structure",
+		"title": "Worker contract requires structured fields for replan_required outcomes",
+		"category": "recovery",
+		"surface": "worker_contract",
+		"risk": "high",
+		"sourcePaths": [
+			"src/prompts/contracts.ts",
+			"tests/runtime-completion-contracts.test.ts"
+		],
+		"expectedSnippets": [
+			"if outcome.kind is replan_required, include replanReason, failedAssumption, and recommendedAdjustment",
+			"status is needs_input"
+		],
+		"forbiddenSnippets": ["replan_required can omit recommendedAdjustment"]
+	},
+	{
+		"id": "worker-contract-final-review-required",
+		"title": "Worker contract requires broad validation and finalReview on the final completion path",
+		"category": "completion-gating",
+		"surface": "worker_contract",
+		"risk": "high",
+		"sourcePaths": [
+			"src/prompts/contracts.ts",
+			"tests/runtime-completion-contracts.test.ts"
+		],
+		"expectedSnippets": [
+			"run broad validation, include finalReview, and use validationScope: broad",
+			"completionPolicy.minCompletedFeatures"
+		],
+		"forbiddenSnippets": ["targeted validation is enough for final completion"]
+	},
+	{
+		"id": "reviewer-contract-needs-fix-gate",
+		"title": "Reviewer contract preserves needs_fix as the same-feature continuation gate",
+		"category": "review-gating",
+		"surface": "reviewer_contract",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/contracts.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"status: approved | needs_fix | blocked",
+			"return needs_fix when implementation should continue on the same feature"
+		],
+		"forbiddenSnippets": ["reviewer implements fixes directly"]
+	},
+	{
+		"id": "plan-contract-planning-context-separation",
+		"title": "Plan contract keeps planning context separate from the persisted plan payload",
+		"category": "planning-evidence",
+		"surface": "plan_contract",
+		"risk": "medium",
+		"sourcePaths": ["src/prompts/contracts.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Record planning context separately via flow_plan_context_record",
+			"planning.packageManagerAmbiguous?: true",
+			"Output examples:"
+		],
+		"forbiddenSnippets": ["Record planning context inside `plan`"]
+	}
+]

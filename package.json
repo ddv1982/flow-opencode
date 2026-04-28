@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-flow",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "Stateful planning and execution workflow plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,7 @@
     "bench:smoke": "bun run ./bench/index.ts -- --filter transition-reducer --warmup 0 --iterations 3",
     "check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
     "check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
+    "report:prompt-eval": "bun run ./scripts/cross-area/prompt-eval-summary.ts",
     "deadcode": "knip --include files,dependencies",
     "lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
     "test": "bun test",
