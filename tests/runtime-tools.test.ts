@@ -1646,7 +1646,10 @@ describe("runtime tools and recovery", () => {
 		expect(completed.ok).toBe(false);
 		if (completed.ok) return;
 
-		expect(completed.message).toContain("recorded approved reviewer decision");
+		expect(completed.recovery?.errorCode).toBe(
+			"missing_feature_reviewer_decision",
+		);
+		expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
 	});
 
 	test("lite lane completion can succeed without a separately recorded reviewer approval", async () => {

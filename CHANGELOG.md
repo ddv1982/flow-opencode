@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.0.17] - 2026-04-28
+
+### Highlights
+
+Flow 1.0.17 focuses on maintainability rather than new behavior. This release thins the OpenCode tool-schema adapter, moves lite-lane plan auto-approval into the runtime application layer, splits completion-path logic into smaller runtime-owned modules, and converts completion recovery mapping into a descriptor-driven policy while keeping the public tool surface and runtime semantics intact.
+
+### Added
+
+- Added focused completion-path modules under `src/runtime/transitions/` for normalization, validation, and finalization so the protected completion lane is easier to inspect and maintain.
+- Added explicit post-refactor verification coverage for the changed runtime/application, completion, recovery, and tool-adapter seams.
+
+### Changed
+
+- Simplified `src/tools/schemas.ts` by removing dead manual tool-arg type exports while preserving the SDK-facing arg-shape surface and the raw-vs-runtime worker schema distinction.
+- Moved lite-lane draft-plan auto-approval from tool-layer orchestration into `src/runtime/application/session-actions.ts`, keeping the outward `autoApproved` contract unchanged.
+- Split `src/runtime/transitions/execution-completion.ts` into smaller normalization, validation, and finalization modules while preserving completion gate ordering, failure-path persistence, and lite-lane behavior.
+- Reworked `src/runtime/transitions/recovery.ts` around a descriptor-driven completion recovery mapping while preserving canonical recovery metadata, error codes, and resolution hints.
+- Reduced wording-coupled test assertions where they were locking prose instead of behavior, while preserving semantic contract checks.
+
+### Removed
+
+- Removed dead session-tool root helper exports from `src/tools/session-tools/shared.ts`.
+- Removed redundant manual tool-arg type exports from `src/tools/schemas.ts` that were no longer used by the runtime tool surface.
+
+### Fixed
+
+- Preserved the runtime-owned lite auto-approval behavior without requiring a second tool-layer mutation branch.
+- Kept completion-path recovery and validation semantics green after the completion module split and recovery refactor.
+- Kept the generated dist surface stable at five agents, eight commands, and seventeen tools.
+
 ## [1.0.16] - 2026-04-28
 
 ### Highlights
