@@ -63,6 +63,9 @@ function normalizeEnvelope(value: unknown): unknown {
 		const planning = session.planning as Record<string, unknown> | undefined;
 		if (planning) {
 			delete planning.replanLog;
+			if (planning.packageManagerAmbiguous === false) {
+				delete planning.packageManagerAmbiguous;
+			}
 		}
 		delete session.operator;
 		const lastReviewerDecision = session.lastReviewerDecision as

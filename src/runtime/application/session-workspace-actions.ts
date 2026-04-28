@@ -1,8 +1,9 @@
 import { FLOW_PLAN_WITH_GOAL_COMMAND, FLOW_STATUS_COMMAND } from "../constants";
-import type { Session } from "../schema";
+import type { PlanningContext, Session } from "../schema";
 import { type closeSession, createSession } from "../session";
 import { deriveSessionOperatorState } from "../session-operator-state";
 import { summarizeSession } from "../summary";
+import { detectPackageManager } from "./package-manager";
 import {
 	DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 	executeSessionWorkspaceActionAtRoot,
@@ -31,20 +32,24 @@ type PlannedSessionResult =
 function buildPlannedSession(
 	existing: Session | null,
 	goal: string,
-	repoProfile?: string[],
+	planning?: Partial<PlanningContext>,
 ) {
-	const planningOptions = repoProfile ? { repoProfile } : undefined;
 	const isNewGoal = Boolean(existing && goal !== existing.goal);
 
 	if (!existing || existing.status === "completed" || isNewGoal) {
-		return createSession(goal, planningOptions);
+		return createSession(goal, planning);
 	}
 
 	return {
 		...existing,
 		planning: {
 			...existing.planning,
-			repoProfile: repoProfile ?? existing.planning.repoProfile,
+			repoProfile: planning?.repoProfile ?? existing.planning.repoProfile,
+			packageManager:
+				planning?.packageManager ?? existing.planning.packageManager,
+			packageManagerAmbiguous:
+				planning?.packageManagerAmbiguous ??
+				existing.planning.packageManagerAmbiguous,
 		},
 	};
 }
@@ -62,6 +67,7 @@ export type SessionWorkspacePayloadMap = {
 	plan_start: {
 		goal?: string;
 		repoProfile?: string[];
+		directory?: string;
 		missingGoalNextCommand?: string;
 	};
 	activate_session: {
@@ -90,11 +96,15 @@ type SessionWorkspaceActionHandlerMap = {
 
 export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap =
 	{
-		plan_start({ goal, repoProfile, missingGoalNextCommand }) {
+		plan_start({ goal, repoProfile, directory, missingGoalNextCommand }) {
 			return {
 				name: "plan_start",
 				run: async (worktree, runtime) => {
 					const existing = await runtime.loadSession(worktree);
+					const packageManagerDetection = await detectPackageManager(
+						worktree,
+						directory,
+					);
 					if (!goal && !existing) {
 						return {
 							status: "missing_goal",
@@ -114,7 +124,15 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 
 					const session = await runtime.saveSessionState(
 						worktree,
-						buildPlannedSession(existing, resolvedGoal, repoProfile),
+						buildPlannedSession(existing, resolvedGoal, {
+							...(repoProfile ? { repoProfile } : {}),
+							...(packageManagerDetection.packageManager
+								? {
+										packageManager: packageManagerDetection.packageManager,
+									}
+								: {}),
+							packageManagerAmbiguous: packageManagerDetection.ambiguous,
+						}),
 					);
 					await runtime.syncSessionArtifacts(worktree, session);
 					return { status: "ok", session };

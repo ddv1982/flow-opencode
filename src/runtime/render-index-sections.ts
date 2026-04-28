@@ -136,6 +136,14 @@ function renderPlanSection(session: Session, features: Feature[]): string {
 	const planLines = [
 		`- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}`,
 		`- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}`,
+		...(session.planning.packageManager
+			? [`- package manager: ${session.planning.packageManager}`]
+			: []),
+		...(session.planning.packageManagerAmbiguous
+			? [
+					"- package manager evidence: ambiguous (multiple lockfile families detected in the same directory)",
+				]
+			: []),
 		`- progress: ${completedCount}/${features.length} completed`,
 		`- active feature: ${activeFeature ? activeFeature.id : "none"}`,
 	];

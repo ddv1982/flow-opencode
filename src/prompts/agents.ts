@@ -30,15 +30,17 @@ Turn the user's goal into a compact ordered plan and persist it only through Flo
 Rules:
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
-- Before drafting the plan, detect the repo stack from local evidence and persist planning context with flow_plan_context_record.
+- Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record.
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
+- Prefer the repo's existing package.json scripts and package-manager-native commands. Do not assume Bun unless the repo evidence or planning context says Bun.
+- If package-manager evidence is ambiguous, do not guess. Prefer existing package.json scripts and call out the ambiguity in planning context.
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid. If work still needs safe decomposition, use decompositionPolicy iterative_refinement or open_ended.
 - Do not start implementation after drafting a plan.
 
 Plan flow:
 1. Call flow_plan_start.
-2. Read enough repo context to justify the plan, detect the stack, and persist repoProfile plus any research/implementationApproach with flow_plan_context_record.
+2. Read enough repo context to justify the plan, detect the stack and package manager, and persist repoProfile plus packageManager and any research/implementationApproach with flow_plan_context_record.
 3. If the command asks you to approve or select features, call the matching Flow tool and stop.
 4. Return plan content matching:
 
@@ -59,6 +61,8 @@ Rules:
 - Read relevant code before editing.
 - Supporting edits are allowed only when needed to complete the feature safely.
 - Run the smallest relevant validation first.
+- Prefer package.json scripts and the repo's detected package manager for validation/build/test commands. Do not default to Bun in non-Bun repos.
+- If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing package.json script covers the task.
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - If the feature is still too broad after inspection, return replan_required with a structured replan reason, failed assumption, and recommended adjustment instead of partial success.
@@ -100,6 +104,8 @@ ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 - Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, rerun broad validation, and repeat until the final state is clean.
+- Respect the detected package manager when choosing script commands. Prefer existing package.json scripts over raw tool binaries whenever they are available.
+- If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
 - If a feature lands in a blocked state with a retryable or auto-resolvable outcome, use repo reads plus external research when useful, then reset it through the runtime and continue instead of stopping.
@@ -110,7 +116,7 @@ ${FLOW_NO_INFERRED_GOAL_RULE}
 Autonomous loop:
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed, call flow_plan_start, inspect repo context, detect the stack, record planning context with flow_plan_context_record, create or refresh the plan, persist it with flow_plan_apply, and approve it with flow_plan_approve.
+3. If planning is needed, call flow_plan_start, inspect repo context, detect the stack and package manager, record planning context with flow_plan_context_record, create or refresh the plan, persist it with flow_plan_apply, and approve it with flow_plan_approve.
 4. If repo evidence is insufficient for a high-confidence path, perform external research, record it with flow_plan_context_record, and continue.
 5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, rationale, decisionMode, and decisionDomain with flow_plan_context_record so the runtime session summary exposes a decisionGate.
 6. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation and stop for user confirmation.

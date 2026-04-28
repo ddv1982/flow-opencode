@@ -46,6 +46,8 @@ Both install paths place the plugin at:
 ~/.config/opencode/plugins/flow.js
 ```
 
+The source-install path for this plugin repo is Bun-based. That does **not** mean Flow expects Bun in the project you point it at.
+
 ### Uninstall
 
 From the repo:
@@ -69,6 +71,12 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 ```
 
 Flow will inspect the repo, draft a plan, execute one feature at a time, validate, review, and continue until the work is done or something genuinely blocks it.
+
+When it finds package-manager evidence, Flow should prefer the target repo's existing `package.json` scripts and native package-manager commands (`npm`, `pnpm`, `yarn`, or `bun`) instead of assuming Bun.
+
+In monorepos, Flow now starts from the current working subdirectory and walks upward to the Flow workspace root, so package-local lockfiles or `package.json#packageManager` entries can override root-level defaults.
+
+If one directory contains conflicting lockfile families and there is no explicit `package.json#packageManager`, Flow now treats that package-manager evidence as ambiguous instead of guessing. In that case it should prefer existing `package.json` scripts and surface the ambiguity in planning context.
 
 For a small task, this can finish in a single autonomous pass — Flow's **lite lane** skips ceremony it doesn't need.
 

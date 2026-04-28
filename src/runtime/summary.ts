@@ -32,6 +32,18 @@ export type SessionGuidance = {
 	nextCommand: string;
 };
 
+type SummarizedPlanning = Pick<
+	Session["planning"],
+	| "repoProfile"
+	| "research"
+	| "implementationApproach"
+	| "decisionLog"
+	| "replanLog"
+> & {
+	packageManager?: Session["planning"]["packageManager"];
+	packageManagerAmbiguous?: true;
+};
+
 export type SummarizedSessionDetails = {
 	id: string;
 	goal: string;
@@ -59,7 +71,7 @@ export type SummarizedSessionDetails = {
 	notes: Session["notes"];
 	artifacts: Session["artifacts"];
 	closure: Session["closure"];
-	planning: Session["planning"];
+	planning: SummarizedPlanning;
 	decisionGate: ReturnType<typeof activeDecisionGate>;
 	lastOutcome: Session["execution"]["lastOutcome"];
 	lastNextStep: Session["execution"]["lastNextStep"];
@@ -108,6 +120,22 @@ function projectActiveFeature(
 
 function sessionFeatures(session: Session): Feature[] {
 	return session.plan?.features ?? [];
+}
+
+function summarizePlanning(session: Session): SummarizedPlanning {
+	return {
+		repoProfile: session.planning.repoProfile,
+		research: session.planning.research,
+		implementationApproach: session.planning.implementationApproach,
+		decisionLog: session.planning.decisionLog,
+		replanLog: session.planning.replanLog,
+		...(session.planning.packageManager
+			? { packageManager: session.planning.packageManager }
+			: {}),
+		...(session.planning.packageManagerAmbiguous
+			? { packageManagerAmbiguous: true as const }
+			: {}),
+	};
 }
 
 function activeFeatureForSession(
@@ -168,7 +196,7 @@ function buildSessionDetails(
 		notes: session.notes,
 		artifacts: session.artifacts,
 		closure: session.closure,
-		planning: session.planning,
+		planning: summarizePlanning(session),
 		decisionGate,
 		lastOutcome: session.execution.lastOutcome,
 		lastNextStep: session.execution.lastNextStep,

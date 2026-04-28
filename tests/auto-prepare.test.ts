@@ -55,6 +55,7 @@ describe("flow_auto_prepare semantics", () => {
 		const response = await tools.flow_plan_context_record.execute(
 			{
 				repoProfile: ["TypeScript", "Bun"],
+				packageManager: "bun",
 				research: [
 					"Confirm Bun plugin packaging docs if local evidence is unclear.",
 				],
@@ -78,6 +79,7 @@ describe("flow_auto_prepare semantics", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ok");
+		expect(parsed.session.planning.packageManager).toBe("bun");
 		expect(parsed.session.planning.decisionLog).toHaveLength(1);
 		expect(parsed.session.planning.decisionLog[0]).toMatchObject({
 			decisionMode: "recommend_confirm",

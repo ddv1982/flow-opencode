@@ -59,6 +59,7 @@ export const SessionStatusSchema = z.enum([
 export const ApprovalStatusSchema = z.enum(["pending", "approved"]);
 export const GoalModeSchema = z.enum(GOAL_MODES);
 export const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
+export const PackageManagerSchema = z.enum(["npm", "pnpm", "yarn", "bun"]);
 export const ValidationStatusSchema = z.enum(VALIDATION_STATUSES);
 export const WorkerStatusSchema = z.enum(WORKER_STATUSES);
 export const OutcomeKindSchema = z.enum(OUTCOME_KINDS);
@@ -274,6 +275,8 @@ export const PlanSchema = z.object({
 
 export const PlanningContextSchema = z.object({
 	repoProfile: z.array(z.string().min(1)).default([]),
+	packageManager: PackageManagerSchema.optional(),
+	packageManagerAmbiguous: z.boolean().default(false),
 	research: z.array(z.string().min(1)).default([]),
 	implementationApproach: ImplementationApproachSchema.optional(),
 	decisionLog: z.array(PlanningDecisionSchema).default([]),
@@ -386,6 +389,7 @@ export type PlanInput = z.input<typeof PlanSchema>;
 export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
 export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
+export type PackageManager = z.infer<typeof PackageManagerSchema>;
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
 export type ReviewerDecisionInput = z.input<typeof ReviewerDecisionSchema>;
 export type Session = z.infer<typeof SessionSchema>;

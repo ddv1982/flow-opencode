@@ -174,6 +174,8 @@ export function createSession(
 		approval: "pending",
 		planning: {
 			repoProfile: planning?.repoProfile ?? [],
+			packageManager: planning?.packageManager,
+			packageManagerAmbiguous: planning?.packageManagerAmbiguous ?? false,
 			research: planning?.research ?? [],
 			implementationApproach: planning?.implementationApproach,
 			decisionLog: planning?.decisionLog ?? [],

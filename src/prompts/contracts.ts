@@ -22,8 +22,9 @@ export const FLOW_PLAN_CONTRACT = `Persist a plan with:
 - deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean }
 - notes?: string[]
 
-Optional context:
+Optional planning context (record this separately via flow_plan_context_record or flow_plan_apply({ plan, planning: ... }), not inside plan):
 - repoProfile?: string[]
+- packageManager?: npm | pnpm | yarn | bun
 - research?: string[]
 - implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }
 - decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]`;

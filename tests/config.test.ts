@@ -396,6 +396,7 @@ describe("applyFlowConfig", () => {
 		expect(
 			schemas.flow_plan_context_record.safeParse({
 				repoProfile: ["TypeScript"],
+				packageManager: "pnpm",
 				research: ["Check docs if local evidence is insufficient."],
 				decisionLog: [
 					{
@@ -677,6 +678,9 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"Do not default to Bun in non-Bun repos.",
+		);
 		expect(FLOW_WORKER_AGENT_PROMPT).not.toContain("_from_raw");
 	});
 
@@ -713,6 +717,9 @@ describe("applyFlowConfig", () => {
 			"Call flow_auto_prepare with the raw command argument string before planning or repo inspection",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_plan_context_record");
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"Respect the detected package manager when choosing script commands",
+		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"meaningful architecture, product, or quality decision still remains",
 		);
@@ -760,6 +767,9 @@ describe("applyFlowConfig", () => {
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"record it with `flow_plan_context_record`",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"package-manager-native commands instead of assuming Bun",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("final cross-feature review");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
