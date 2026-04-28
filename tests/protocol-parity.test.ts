@@ -55,6 +55,27 @@ describe("protocol parity", () => {
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_run_complete_feature");
 	});
 
+	test("prompt surfaces preserve lite-lane, reviewer-persistence, final-path, and recovery/replan semantics", () => {
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"In the lite lane, if the runtime session is small enough",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"on the final completion path, run broad validation",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"If the runtime routes back into planning because the feature needs decomposition",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"On the final completion path, run broad validation",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("In the lite lane");
+	});
+
 	test("prompt expression invariant references stay known and distinct", () => {
 		const allIds = [
 			...FLOW_CONTRACT_INVARIANT_IDS,

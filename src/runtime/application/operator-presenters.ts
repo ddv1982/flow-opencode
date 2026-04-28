@@ -30,6 +30,7 @@ export function renderSessionStatusSummary(
 
 	lines.push(`Phase: ${viewModel.guidance.phase}`);
 	lines.push(`Lane: ${viewModel.guidance.lane}`);
+	lines.push(`Lane reason: ${viewModel.guidance.laneReason}`);
 	lines.push(`Reason: ${viewModel.guidance.reason}`);
 	if (viewModel.guidance.blocker) {
 		lines.push(`Blocker: ${viewModel.guidance.blocker}`);
@@ -58,6 +59,7 @@ export function renderDoctorSummary(
 			"Flow doctor ok: No blocking readiness issues found.",
 			`Phase: ${guidance.phase}`,
 			`Lane: ${guidance.lane}`,
+			`Lane reason: ${guidance.laneReason}`,
 			`Reason: ${guidance.reason}`,
 			...(guidance.blocker ? [`Blocker: ${guidance.blocker}`] : []),
 			`Next: ${nextStep}`,
@@ -71,6 +73,7 @@ export function renderDoctorSummary(
 	}
 	lines.push(`Phase: ${guidance.phase}`);
 	lines.push(`Lane: ${guidance.lane}`);
+	lines.push(`Lane reason: ${guidance.laneReason}`);
 	lines.push(`Reason: ${guidance.reason}`);
 	if (guidance.blocker) {
 		lines.push(`Blocker: ${guidance.blocker}`);

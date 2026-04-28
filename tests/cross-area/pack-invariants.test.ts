@@ -25,7 +25,7 @@ function makeTempDir(): string {
 function runPackInvariants(
 	packJson: unknown,
 	changelogText: string,
-	packageVersion = "1.0.17",
+	packageVersion = "1.0.18",
 ) {
 	const directory = makeTempDir();
 	const packJsonPath = join(directory, "pack.json");

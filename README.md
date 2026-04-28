@@ -157,7 +157,7 @@ When something recoverable goes wrong (a flaky test, a missing prerequisite, a v
 | `/flow-run [feature-id]` | Execute exactly one approved feature |
 | `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
 | `/flow-auto resume` | Resume the active autonomous session |
-| `/flow-status [detail]` | Current session summary (compact by default) |
+| `/flow-status [detail]` | Current session summary (compact by default, including lane + laneReason) |
 | `/flow-doctor [detail]` | Non-destructive readiness check |
 | `/flow-history` | List active, stored, and completed sessions |
 | `/flow-history show <session-id>` | Inspect a specific session |
@@ -182,6 +182,8 @@ Which one do I want?
 4. **Execute** one feature with targeted validation.
 5. **Review** the result against the feature's acceptance.
 6. **Continue, recover, or replan** — until the delivery policy is satisfied and a broad final check plus final review pass. Then the session completes.
+
+> Note: Runtime-level parallel feature execution is intentionally deferred; Flow continues to execute one feature at a time.
 
 ```mermaid
 flowchart TD

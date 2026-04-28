@@ -1,134 +1,124 @@
 ---
 name: core-worker
-description: General-purpose implementation worker for all TypeScript/Bun features in the opencode-plugin-flow mission. Handles code changes, test authoring, benchmarking, and build verification.
+description: General-purpose implementation worker for TypeScript/Bun features in the flow mission. Supports implementation, test-only/coverage, validation-only, and release/integration tracks.
 ---
 
 # Core Worker
 
-NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the WORK PROCEDURE for implementing a single feature in the opencode-plugin-flow overhaul mission.
+Startup and cleanup are handled by `worker-base`. This skill defines the required worker procedure for one feature.
 
-## When to Use This Skill
+## Required Orientation (must be visible in transcript)
 
-Every feature in this mission uses this skill. Features span: tsconfig/lint tooling, test fixtures and benchmarks, atomic fs writes, input validation, state-machine refactors, schema consolidation, incremental rendering, bundle optimization, OpenCode integration hooks, and release artifacts.
+Read these once per session before feature work:
 
-## Required Skills
+- `mission.md`
+- `AGENTS.md`
+- `.factory/library/architecture.md`
+- `.factory/library/environment.md`
+- `.factory/library/user-testing.md`
 
-None. All work is performed with the tools available to this worker (Read, Edit, Create, Grep, Glob, Execute, Task). No browser, no TUI, no external agents.
+Then read your feature entry in `features.json` (`description`, `preconditions`, `expectedBehavior`, `verificationSteps`, `fulfills`) and each referenced assertion in `validation-contract.md`.
 
-## Work Procedure
+If a precondition is missing, return to orchestrator immediately.
 
-Follow this procedure in order for EVERY feature. Skipping steps is a handoff failure.
+## Workstream Classification (choose exactly one)
 
-### 1. Orient
+Classify the feature before editing and state the classification in your handoff summary.
 
-- Read `mission.md`, `AGENTS.md`, `.factory/library/architecture.md`, and `.factory/library/user-testing.md` once per session.
-- Read your feature's entry in `features.json` — `description`, `preconditions`, `expectedBehavior`, `verificationSteps`, `fulfills`.
-- For each assertion ID in `fulfills`, read the matching entry in `validation-contract.md`. Understand exactly what pass/fail means.
-- `git status` and `git log --oneline -5` to understand recent mission work.
+1. **Implementation** — behavior/code changes that require new or updated tests plus implementation edits.
+2. **Test-only / coverage / tooling** — tests or tooling config are the deliverable; no behavior-changing implementation edits.
+3. **Validation-only** — evidence collection / contract verification with no implementation changes.
+4. **Release / integration** — packaging, install/uninstall, release docs/scripts, or cross-environment integration proof.
 
-### 2. Investigate
+## Procedure
 
-- Read the existing source files you'll change (use `Read`, `Grep`, `Glob`).
-- If the feature depends on artifacts from earlier milestones (e.g. `bench/BASELINE.md`, `tests/__fixtures__/render/`), verify they exist. If a precondition isn't met, return to orchestrator immediately — do not improvise.
-- For refactoring features: list every call site of the symbol/file you're about to change.
+### 1) Investigate
 
-### 3. Write failing tests FIRST
+- Inspect only files needed for this feature.
+- For refactors, enumerate call sites first.
+- Confirm mission boundaries (no writes outside permitted test/worktree paths).
 
-- For every behavior in `expectedBehavior` that is observable via code, author a test BEFORE implementing.
-- Use `tests/fixtures.ts` canonical fixtures (once introduced in M1). Do not duplicate fixtures inline.
-- Run `bun test <new-file>` and confirm the new tests fail for the right reason (red). Do not continue to implementation until you have confirmed red.
-- For each added test file, track the list of cases for the handoff's `tests.added`.
+### 2) Execute by workstream
 
-**Exception — test-only / coverage / tooling features:** Some features add only test coverage for an existing implementation (e.g., m2-completion-gates, m2-startrun-branches), or are pure tooling/configuration changes (e.g., m1-tsconfig-strict, m1-biome-adoption). For these, the tests themselves ARE the deliverable — running them once they exist and confirming they pass is sufficient. Set `skillFeedback.followedProcedure: true` and note in `salientSummary` that the feature is test-only or tooling-only (not behavior-changing). Do NOT skip test authoring; do confirm they exercise the contract assertions in `fulfills`.
+#### A. Implementation
 
-**Auditability:** When you set `followedProcedure: true`, your handoff transcript must show evidence of: (a) reading mission.md/AGENTS.md/library docs, (b) running each verification command listed in your feature's `verificationSteps`, (c) the test files you added/updated existing in the working tree at commit time. Inconsistency between transcript and `followedProcedure: true` will be caught by scrutiny.
+- Write failing tests first for observable behaviors.
+- Confirm red for the right reason.
+- Implement minimal code to pass.
+- Re-run targeted tests; then required verification matrix.
 
-### 4. Implement
+#### B. Test-only / coverage / tooling
 
-- Make minimal changes to pass the new tests.
-- For TypeScript, maintain the strict-flag cleanliness introduced in M1. Do not add `ts-ignore` / `ts-expect-error`.
-- For refactors, preserve public symbol names and signatures unless the feature explicitly permits changes.
-- Use the central `runtime/constants.ts` and `runtime/errors.ts` (post-M3) for user-facing strings — do not hard-code.
-- Zod schemas stay at module top level. Never construct schemas inside functions.
+- Author/adjust tests or config directly.
+- No red/green requirement when tests/config are the deliverable, but evidence must show assertions in `fulfills` are exercised.
+- Run required verification matrix for this workstream.
 
-### 5. Verify (running every command, recording each in the handoff)
+#### C. Validation-only
 
-Run each of these and record `commandsRun` entries:
+- Do not modify source/behavior code.
+- Run only the validation commands required by assigned assertions.
+- Record command evidence with outcomes and blockers.
 
-1. `bun run typecheck` — must exit 0.
-2. `bun test` — must pass with 0 fail. If the feature adds tests, confirm new cases pass.
-3. `bun run lint` (after M1) — must exit 0.
-4. `bun run deadcode` — must exit 0. No new unused exports.
-5. `bun run build` — must produce a valid bundle.
-6. For features that touch performance-sensitive code: `bun run bench -- --filter <relevant>` and spot-check no > 5% regression vs `bench/BASELINE.md`.
-7. For M5 features: `bun run bench` fully + update `bench/RESULTS.md`.
+#### D. Release / integration
 
-For each command, the handoff's `verification.commandsRun` entry includes `command`, `exitCode`, and a 1-sentence `observation` (e.g. "131/131 pass in 210 ms"). Exit codes reported without observation are a handoff failure.
+- Make only release/integration scoped edits.
+- Prefer deterministic smoke checks with temp HOME/worktree overrides.
+- Record install/package/integration evidence explicitly.
 
-### 6. Black-box smoke check
+### 3) Verification evidence rules (all workstreams)
 
-- For features that affect the plugin surface, load the freshly-built `dist/index.js` in a Node VM with a mocked `ctx` and invoke at least one of the affected tools against a temp worktree. Record this under `verification.interactiveChecks` with the sequence of calls and the end-to-end outcome.
-- For features that DON'T affect the plugin surface (e.g. tsconfig, Biome, bench infra), write `interactiveChecks: []` — do not fabricate checks.
+Every handoff must include `verification.commandsRun[]` entries with:
 
-### 7. Assertion coverage check
+- `command`
+- `exitCode`
+- one-sentence `observation`
 
-- Re-read each assertion in your feature's `fulfills`. Confirm that the evidence you produced (tests, command output, file inspections) would satisfy the assertion's `Evidence` section literally.
-- If any assertion is not fully satisfied, either complete it or list it in `whatWasLeftUndone` — never claim the feature done with an unsatisfied `fulfills` entry.
+Exit code alone is insufficient.
 
-### 8. Commit and hand off
+#### Baseline command policy
 
-- Commit your implementation and test changes together with a concise message referencing the feature id (e.g. `m2-atomic-writes: ship atomic session writes + in-process lock`).
-- Never leave uncommitted implementation changes.
-- Never leave orphaned processes (bench runners, watch-mode tests, etc.). If a command you ran spawned a child, kill it by PID.
+- Prefer `bun run check` as the default aggregate proof when available.
+- Expand to sub-checks when needed for scoped evidence, failure triage, or assertion-specific requirements.
 
-## Example Handoff
+Required verification matrix by workstream:
 
-```json
-{
-  "salientSummary": "Implemented atomic session writes + in-process lock for m2-atomic-writes. Added tests/atomic-writes.test.ts (5 cases); all pass under bun test. Injected rename-failure test confirms original bytes intact; 16-way concurrent saveSession resolves to one deterministic winner. bun run check exits 0.",
-  "whatWasImplemented": "Added temp-file + fsync + rename atomic-write helper in src/runtime/session-workspace.ts. Refactored saveSessionState and writeActiveSessionId to use it. Introduced a per-worktree in-process Mutex (src/runtime/util.ts) serializing concurrent saveSession calls with last-writer-wins semantics. Added tests/atomic-writes.test.ts covering successful atomic replacement, mid-rename failure, .flow/active atomic write, and 16-way concurrency.",
-  "whatWasLeftUndone": "",
-  "verification": {
-    "commandsRun": [
-      {"command": "bun run typecheck", "exitCode": 0, "observation": "no diagnostics"},
-      {"command": "bun test tests/atomic-writes.test.ts", "exitCode": 0, "observation": "5/5 pass in 42 ms"},
-      {"command": "bun test", "exitCode": 0, "observation": "146/146 pass in 230 ms (was 131 before feature)"},
-      {"command": "bun run lint", "exitCode": 0, "observation": "Checked 42 file(s), 0 warnings, 0 errors"},
-      {"command": "bun run deadcode", "exitCode": 0, "observation": "No issues found"},
-      {"command": "bun run build", "exitCode": 0, "observation": "Bundled 194 modules in 13ms, 0.99 MB"}
-    ],
-    "interactiveChecks": [
-      {
-        "action": "Loaded dist/index.js in Node VM; invoked flow_plan_start then flow_status against a temp worktree.",
-        "observed": "Both tools returned the expected JSON envelope; session.json created atomically (no .tmp leftover in readdir)."
-      }
-    ]
-  },
-  "tests": {
-    "added": [
-      {
-        "file": "tests/atomic-writes.test.ts",
-        "cases": [
-          {"name": "saveSession atomically replaces session.json", "verifies": "target file contains new JSON; no sibling .tmp* remains after success"},
-          {"name": "saveSession mid-rename failure leaves original intact", "verifies": "original session.json bytes byte-for-byte unchanged after injected rename throw"},
-          {"name": "writeActiveSessionId atomic success + failure paths", "verifies": "exactly one file at .flow/active on success; prior contents unchanged on injected failure"},
-          {"name": "16-way concurrent saveSession resolves deterministically", "verifies": "final session.json parses through SessionSchema; payload equals one of the 16 caller inputs; no .tmp artifacts"}
-        ]
-      }
-    ]
-  },
-  "discoveredIssues": []
-}
-```
+- **Implementation** — targeted red/green evidence for changed behavior, then `bun run check` unless the feature contract explicitly narrows or replaces part of the matrix.
+- **Test-only / coverage / tooling** — the specific test/config proof required by `fulfills`, plus `bun run check` when the changed files participate in the normal repo validation surface.
+- **Validation-only** — only the assertion-required commands and inspections; do not fabricate implementation-oriented checks.
+- **Release / integration** — `bun run build`, the relevant install/package/smoke proof, and `bun run check` unless the assertion defines a narrower release-only evidence set.
 
-## When to Return to Orchestrator
+Allowed expanded sub-checks:
 
-Return control to the orchestrator — do NOT attempt fixes yourself — when:
+- `bun run typecheck`
+- `bun test` (or targeted `bun test <file>`)
+- `bun run lint`
+- `bun run deadcode`
+- `bun run build`
+- `bun run bench` (only when required by the assertion/feature)
+- `bun run format_check` (preferred formatter-only check)
 
-- A precondition for your feature is unmet (e.g. `bench/BASELINE.md` missing when M5 requires it).
-- Your work would violate a mission boundary (e.g. writing to the real `~/.opencode/`).
-- Requirements are ambiguous or contradictory across mission.md, AGENTS.md, the feature description, and the fulfilled assertions.
-- An unrelated pre-existing bug is blocking your feature — log it under `discoveredIssues` with severity and suggestedFix.
-- A skipped verification step (lint, typecheck, test) cannot be run in the environment (e.g. `bunx biome` unavailable).
-- Benchmarks show a > 5% regression you cannot explain or fix within the feature's scope.
-- A required dependency or devDependency is missing and adding it would violate the "lean runtime deps" constraint (return to orchestrator to get approval before adding).
+#### Safety-gated / portability commands
+
+If a direct command is blocked by worker safety policy or platform variance:
+
+1. Use the canonical safe alias from `.factory/services.yaml` first.
+2. If you must bypass the alias mechanism, use the equivalent approved formatter fallback directly:
+   `node_modules/.bin/biome check <repo-root> --formatter-enabled=true --linter-enabled=false --enforce-assist=false --files-ignore-unknown=true --vcs-use-ignore-file=true`
+3. Record the blocker and fallback in evidence; do not claim skipped commands as passed.
+
+### 4) Assertion coverage check
+
+Re-read each `fulfills` assertion and confirm evidence satisfies it literally. If not, list the gap in `whatWasLeftUndone`.
+
+### 5) Commit and handoff hygiene
+
+- Keep implementation + tests together when code changed.
+- No orphaned watch/bench processes.
+- Never claim `followedProcedure: true` unless transcript evidence matches this procedure.
+
+## Return to orchestrator when
+
+- Preconditions are unmet.
+- Requirements conflict across mission docs.
+- Needed command cannot be executed and no approved fallback exists.
+- A blocker is outside feature scope (dependency/policy/external system).

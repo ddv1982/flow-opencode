@@ -26,6 +26,15 @@ None. No API keys, no network requests, no databases.
 
 - `@opencode-ai/plugin` is a peer dependency. It must be externalized from the build (`--external @opencode-ai/plugin`, post-M5) and resolved by the OpenCode host at plugin load time. For smoke tests that load `dist/index.js` under plain Node, provide a mocked stub via `NODE_PATH` or `--experimental-vm-modules`.
 
+## Worker orientation and portability
+
+- Worker orientation must include this file (`.factory/library/environment.md`) before feature execution.
+- Prefer command aliases from `.factory/services.yaml` instead of ad-hoc shell variants for portability and safety-policy compatibility.
+- For formatter-only read checks, use `bun run format_check` (service alias) first.
+- The alias resolves to a Biome `check` invocation with formatter enabled, linter disabled, and assist enforcement disabled so the result stays formatter-only.
+- If a safety-gated environment blocks the alias mechanism itself, use the equivalent direct command:
+  `node_modules/.bin/biome check <repo-root> --formatter-enabled=true --linter-enabled=false --enforce-assist=false --files-ignore-unknown=true --vcs-use-ignore-file=true`.
+
 ## Dev Dependencies
 
 - `@opencode-ai/plugin` (also listed under devDependencies for TS types during build/typecheck).

@@ -215,13 +215,22 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
 }
 
 function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
-	const { workspace, workspaceRoot, phase, lane, blocker, reason, ...rest } =
-		summary;
+	const {
+		workspace,
+		workspaceRoot,
+		phase,
+		lane,
+		laneReason,
+		blocker,
+		reason,
+		...rest
+	} = summary;
 	void workspace;
 	void workspaceRoot;
 	void phase;
 	void lane;
 	void blocker;
+	void laneReason;
 	void reason;
 	return normalizeSummaryFixture(rest as ReturnType<typeof summarizeSession>);
 }
@@ -289,6 +298,7 @@ describe("runtime summary", () => {
 				"Progress: 0/2 completed",
 				"Phase: executing",
 				"Lane: standard",
+				"Lane reason: This session has multi-step work but no elevated risk signals, so the standard lane fits best.",
 				"Reason: An approved feature is active, so Flow should stay in execution.",
 				"Next: Continue the active feature through validation and review.",
 				"Command: /flow-run",
@@ -310,6 +320,7 @@ describe("runtime summary", () => {
 				"Progress: 0/2 completed",
 				"Phase: planning",
 				"Lane: standard",
+				"Lane reason: This session has multi-step work but no elevated risk signals, so the standard lane fits best.",
 				"Reason: Planning is still active because execution is gated on reviewing or approving the draft plan.",
 				"Blocker: The draft plan is not approved yet.",
 				"Next: Review or refine the draft plan, then approve it when ready.",

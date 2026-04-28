@@ -133,10 +133,15 @@ Flow now persists a few higher-level concepts directly in runtime state:
 
 - planning decisions can be classified as `autonomous_choice`, `recommend_confirm`, or `human_required`
 - runtime summaries expose the latest blocking planning decision as `decisionGate`
+- runtime status/doctor outputs and concrete session-detail payloads include `laneReason` so lane selection is auditable in both structured payloads and operator summaries
 - planning decisions also carry a domain such as `architecture`, `product`, `quality`, `scope`, or `delivery`
 - plans can declare a `deliveryPolicy` so completion can be driven by a clean finish, a core-work finish, or a threshold
 - `replan_required` outcomes must carry a structured reason, failed assumption, and recommended adjustment
 - closed sessions carry an explicit closure kind: `completed`, `deferred`, or `abandoned`
+
+## Deferred runtime parallelism
+
+True runtime-level parallel feature execution is intentionally deferred. Current behavior remains single-feature-at-a-time execution with improved lane and recovery visibility.
 
 ## Performance direction
 
