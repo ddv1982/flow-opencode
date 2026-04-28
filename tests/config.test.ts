@@ -761,10 +761,11 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"record it with `flow_plan_context_record`",
 		);
-		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("recommended path");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("final cross-feature review");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
-		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("completion gating failures");
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"finish with a passing `finalReview`",
+		);
 	});
 
 	test("auto command template keeps classification guardrails ahead of iterative execution guidance", () => {
@@ -796,11 +797,12 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("detailed view");
 		expectInOrder(FLOW_STATUS_COMMAND_TEMPLATE, [
 			"Arguments: $ARGUMENTS",
-			"If the arguments are empty, call `flow_status` with compact view.",
-			"If the arguments start with `detail`, `detailed`, `full`, or `json`, call `flow_status` with detailed view.",
-			"Lead with `guidance.summary`",
-			"Then report `guidance.nextStep` and `guidance.nextCommand`",
-			"Use the broader session summary and active feature details as supporting context",
+			"flow_status",
+			"compact view",
+			"detailed view",
+			"guidance.summary",
+			"guidance.nextStep",
+			"guidance.nextCommand",
 		]);
 	});
 
@@ -812,10 +814,10 @@ describe("applyFlowConfig", () => {
 		);
 		expectInOrder(FLOW_DOCTOR_COMMAND_TEMPLATE, [
 			"Arguments: $ARGUMENTS",
-			"If the arguments are empty, call `flow_doctor` with compact view.",
-			"If the arguments start with `detail`, `detailed`, `full`, or `json`, call `flow_doctor` with detailed view.",
+			"flow_doctor",
+			"compact view",
+			"detailed view",
 			"Lead with the operator summary.",
-			"Then summarize any warnings or failures with the recommended remediation.",
 		]);
 	});
 

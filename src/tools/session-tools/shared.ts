@@ -6,8 +6,6 @@
 import {
 	executeDispatchedSessionWorkspaceAction,
 	inspectWorkspaceContext,
-	resolveMutableSessionRoot,
-	resolveReadableSessionRoot,
 	runDispatchedSessionReadAction,
 	type SessionReadActionName,
 	type SessionReadPayloadMap,
@@ -20,14 +18,6 @@ import type { ToolContext } from "../schemas";
 
 export function inspectToolWorkspace(context: ToolContext) {
 	return inspectWorkspaceContext(context);
-}
-
-export function resolveReadableToolSessionRoot(context: ToolContext) {
-	return resolveReadableSessionRoot(context).root;
-}
-
-export function resolveMutableToolSessionRoot(context: ToolContext) {
-	return resolveMutableSessionRoot(context).root;
 }
 
 export function recordToolMetadata(

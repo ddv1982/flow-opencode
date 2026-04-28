@@ -14,12 +14,16 @@ describe("transition consolidation", () => {
 			.sort();
 
 		expect(files).toContain("execution.ts");
+		expect(files).toContain("execution-completion.ts");
+		expect(files).toContain("execution-completion-normalization.ts");
+		expect(files).toContain("execution-completion-validation.ts");
+		expect(files).toContain("execution-completion-finalization.ts");
 		expect(files).toContain("index.ts");
 		expect(files).toContain("plan.ts");
 		expect(files).toContain("recovery.ts");
 		expect(files).toContain("review.ts");
 		expect(files).toContain("shared.ts");
-		expect(files.length).toBeLessThanOrEqual(8);
+		expect(files.length).toBeLessThanOrEqual(11);
 	});
 
 	test("transition and tool hotspots stay within maintainability caps", () => {
@@ -146,12 +150,6 @@ describe("transition consolidation", () => {
 		expect(nextCommandPolicy).not.toContain("tool({");
 
 		expect(sharedTools).toContain("export function inspectToolWorkspace");
-		expect(sharedTools).toContain(
-			"export function resolveReadableToolSessionRoot",
-		);
-		expect(sharedTools).toContain(
-			"export function resolveMutableToolSessionRoot",
-		);
 		expect(sharedTools).toContain("export function recordToolMetadata");
 		expect(sharedTools).toContain(
 			"Session tool boundary: tiny shared helpers only.",

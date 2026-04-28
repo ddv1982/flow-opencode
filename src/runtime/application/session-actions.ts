@@ -82,7 +82,10 @@ export type SessionMutationPayloadMap = {
 
 export type SessionMutationValueMap = {
 	record_planning_context: Session;
-	apply_plan: Session;
+	apply_plan: {
+		session: Session;
+		autoApproved: boolean;
+	};
 	approve_plan: Session;
 	auto_approve_lite_plan: Session;
 	select_plan_features: Session;
@@ -152,12 +155,24 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 		apply_plan({ plan, planning }) {
 			return {
 				name: "apply_plan",
-				run: (session) => applyPlan(session, { ...plan }, planning),
-				getSession: (value) => value,
-				onSuccess: (saved) => ({
+				run: (session) => {
+					const applied = applyPlan(session, { ...plan }, planning);
+					if (!applied.ok) return applied;
+					const lane = summarizeSession(applied.value).session?.operator.lane;
+					if (lane === "lite") {
+						const approved = approvePlan(applied.value);
+						if (!approved.ok) return approved;
+						return succeed({ session: approved.value, autoApproved: true });
+					}
+					return succeed({ session: applied.value, autoApproved: false });
+				},
+				getSession: (value) => value.session,
+				onSuccess: (saved, value) => ({
 					status: "ok",
-					summary: "Draft plan saved.",
-					autoApproved: false,
+					summary: value.autoApproved
+						? "Lite draft plan saved and auto-approved so execution can start immediately."
+						: "Draft plan saved.",
+					autoApproved: value.autoApproved,
 					session: summarizedSession(saved),
 				}),
 				missingResponse: MISSING_PLANNING_SESSION_RESPONSE,

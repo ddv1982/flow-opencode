@@ -1,7 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
 import { toJson } from "../../runtime/application";
 import { PlanningContextArgsSchema, type Session } from "../../runtime/schema";
-import { summarizeSession } from "../../runtime/summary";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowPlanApplyArgsSchema,
@@ -76,20 +75,6 @@ export function createPlanningRuntimeTools() {
 							? { plan: input.plan }
 							: { plan: input.plan, planning },
 					);
-					if (appliedResult.kind !== "success") {
-						return toJson(appliedResult.response);
-					}
-
-					const summary = summarizeSession(appliedResult.savedSession);
-					if (summary.session?.operator.lane === "lite") {
-						const approvedResult = await runGuardedSessionMutationAction(
-							context,
-							"auto_approve_lite_plan",
-							undefined,
-						);
-						return toJson(approvedResult.response);
-					}
-
 					return toJson(appliedResult.response);
 				},
 			),

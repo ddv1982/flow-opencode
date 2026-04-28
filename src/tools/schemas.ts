@@ -5,7 +5,6 @@ import {
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
 } from "../runtime/constants";
-import type { PlanArgs, PlanningContextArgs } from "../runtime/schema";
 import {
 	OutcomeSchema,
 	PlanArgsSchema,
@@ -121,49 +120,3 @@ export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
 export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
 export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
-
-export type FlowHistoryShowArgs = {
-	sessionId: string;
-};
-
-export type FlowSessionActivateArgs = {
-	sessionId: string;
-};
-
-export type FlowSessionCloseArgs = {
-	kind: (typeof CLOSURE_KINDS)[number];
-	summary?: string;
-};
-
-export type FlowAutoPrepareArgs = {
-	argumentString?: string;
-};
-
-export type FlowStatusArgs = {
-	view?: "compact" | "detailed" | undefined;
-};
-
-export type FlowDoctorArgs = {
-	view?: "compact" | "detailed" | undefined;
-};
-
-export type FlowPlanApplyArgs = {
-	plan: PlanArgs;
-	planning?: PlanningContextArgs;
-};
-
-export type FlowPlanApproveArgs = {
-	featureIds?: string[];
-};
-
-export type FlowPlanSelectArgs = {
-	featureIds: string[];
-};
-
-export type FlowRunStartArgs = {
-	featureId?: string;
-};
-
-export type FlowResetFeatureArgs = {
-	featureId: string;
-};

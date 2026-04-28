@@ -13,7 +13,6 @@ import {
 } from "../../runtime/application";
 import { FLOW_STATUS_COMMAND } from "../../runtime/constants";
 import { withParsedArgs } from "../parsed-tool";
-import type { FlowDoctorArgs } from "../schemas";
 import {
 	FlowDoctorArgsSchema,
 	FlowDoctorArgsShape,
@@ -87,7 +86,7 @@ export function createHistorySessionTools() {
 			args: FlowDoctorArgsShape,
 			execute: withParsedArgs(
 				FlowDoctorArgsSchema,
-				async (input: FlowDoctorArgs, context: ToolContext) => {
+				async (input, context: ToolContext) => {
 					recordToolMetadata(context, "Flow doctor", {
 						view: input.view ?? "detailed",
 					});
