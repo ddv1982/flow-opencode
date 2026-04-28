@@ -223,6 +223,11 @@ export function applyPlan(
 		notes: [],
 		planning: {
 			repoProfile: planning?.repoProfile ?? session.planning.repoProfile,
+			packageManager:
+				planning?.packageManager ?? session.planning.packageManager,
+			packageManagerAmbiguous:
+				planning?.packageManagerAmbiguous ??
+				session.planning.packageManagerAmbiguous,
 			research: planning?.research ?? session.planning.research,
 			implementationApproach:
 				planning?.implementationApproach ??

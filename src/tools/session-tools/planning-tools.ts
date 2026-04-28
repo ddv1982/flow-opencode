@@ -38,6 +38,7 @@ export function createPlanningSessionTools() {
 					return executeToolWorkspaceAction(context, "plan_start", {
 						...(input.goal ? { goal: input.goal } : {}),
 						...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
+						...(context.directory ? { directory: context.directory } : {}),
 						missingGoalNextCommand: nextCommandForMissingGoal(),
 					});
 				},

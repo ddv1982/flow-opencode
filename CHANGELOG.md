@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.19] - 2026-04-28
+
+### Highlights
+
+Flow 1.0.19 makes package-manager detection safer and more repo-aware. This release teaches Flow to detect package-manager evidence from the active subdirectory upward in monorepos, refuses to guess when one directory contains conflicting lockfile families, and records that ambiguity explicitly so execution can stay on known package scripts instead of drifting into Bun-by-default behavior.
+
+### Added
+
+- Added a dedicated runtime package-manager detector that walks from the active tool directory up to the Flow workspace root.
+- Added explicit planning-state tracking for ambiguous package-manager evidence so Flow can record uncertainty instead of silently guessing.
+- Added regression coverage for monorepo subpackage detection, relative tool directories, root fallback behavior, outside-root rejection, and ambiguous same-directory lockfiles.
+
+### Changed
+
+- Changed `flow_plan_start` to persist the nearest detected package manager for the active package scope instead of always using workspace-root evidence.
+- Updated planner, worker, and autonomous coordinator guidance to prefer existing `package.json` scripts and avoid guessing manager-specific commands when package-manager evidence is ambiguous.
+- Updated README and development guidance to explain monorepo-aware detection and the new ambiguity-safe behavior.
+
+### Fixed
+
+- Fixed the remaining root bias where monorepo subpackages could inherit the workspace-root package manager even when package-local evidence existed.
+- Fixed the relative-directory resolution bug so package-manager detection now resolves relative tool directories against the Flow workspace root instead of `process.cwd()`.
+- Fixed the safety gap where conflicting lockfile families in the same directory previously forced an arbitrary precedence-based guess.
+
 ## [1.0.18] - 2026-04-28
 
 ### Highlights

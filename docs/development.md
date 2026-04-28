@@ -4,6 +4,12 @@ This file is for contributors working on the plugin itself.
 
 If you are trying to use Flow inside OpenCode, start with the top-level `README.md` instead.
 
+This repo's maintainer workflow is intentionally Bun-first. That is separate from Flow's behavior in a target project, where Flow should follow the project's detected package manager and existing package.json scripts instead of assuming Bun.
+
+For monorepos, package-manager detection starts from the current tool `directory` and walks upward to the mutable Flow workspace root, so subpackage-local evidence can override root-level defaults.
+
+If one directory has conflicting lockfile families and no explicit `package.json#packageManager`, runtime records the package-manager evidence as ambiguous instead of guessing. Prompts should then prefer existing package.json scripts over manager-specific commands.
+
 ## Local workflow
 
 Install dependencies and run the full local check:
