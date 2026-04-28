@@ -1,0 +1,43 @@
+[
+	{
+		"id": "planner-agent-package-manager-ambiguity",
+		"title": "Planner agent prompt requires recording package-manager ambiguity instead of guessing",
+		"category": "planning-evidence",
+		"surface": "planner_agent_prompt",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/agents.ts", "src/prompts/contracts.ts"],
+		"expectedSnippets": [
+			"If package-manager evidence is ambiguous, do not guess.",
+			"flow_plan_context_record",
+			"Broad goals are valid."
+		],
+		"forbiddenSnippets": ["guess a package manager despite ambiguous evidence"]
+	},
+	{
+		"id": "worker-prompt-retryable-blocker-recovery",
+		"title": "Worker prompt keeps retryable blockers in the current feature loop until recovery or real blockage",
+		"category": "recovery",
+		"surface": "worker_agent_prompt",
+		"risk": "medium",
+		"sourcePaths": ["src/prompts/agents.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Repeat until review passes or a real blocker remains.",
+			"retryable non-human blockers may return the feature directly to ready/pending"
+		],
+		"forbiddenSnippets": ["stop after the first review failure"]
+	},
+	{
+		"id": "reviewer-agent-no-write-and-needs-fix-gate",
+		"title": "Reviewer agent prompt stays read-only and keeps needs_fix as the execution gate",
+		"category": "review-gating",
+		"surface": "reviewer_agent_prompt",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/agents.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Do not write code.",
+			"Return needs_fix when the current feature should continue",
+			"Review only for correctness"
+		],
+		"forbiddenSnippets": ["reviewer applies code fixes directly"]
+	}
+]

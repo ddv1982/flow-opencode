@@ -1,0 +1,107 @@
+[
+	{
+		"id": "adaptive-package-manager-ambiguity",
+		"title": "Adaptive system context warns when package-manager evidence is ambiguous",
+		"category": "planning-evidence",
+		"surface": "adaptive_system_context",
+		"risk": "medium",
+		"sourcePaths": [
+			"tests/package-manager-detection.test.ts",
+			"docs/development.md"
+		],
+		"expectedSnippets": [
+			"package manager evidence is ambiguous",
+			"prefer existing package.json scripts"
+		],
+		"forbiddenSnippets": [
+			"Treat Flow runtime tools as authoritative for workflow state."
+		]
+	},
+	{
+		"id": "adaptive-decision-gate",
+		"title": "Adaptive system context surfaces a blocking planning decision gate",
+		"category": "decision-gating",
+		"surface": "adaptive_system_context",
+		"risk": "high",
+		"sourcePaths": [
+			"tests/runtime-summary.test.ts",
+			"docs/architecture/invariant-matrix.md"
+		],
+		"expectedSnippets": [
+			"decision gate active: recommend_confirm | architecture",
+			"recommendation: \"Defer\""
+		],
+		"forbiddenSnippets": ["decision gate active: autonomous_choice"]
+	},
+	{
+		"id": "adaptive-retryable-outcome",
+		"title": "Adaptive system context surfaces retryable recovery guidance",
+		"category": "recovery",
+		"surface": "adaptive_system_context",
+		"risk": "high",
+		"sourcePaths": ["tests/runtime-tools.test.ts", "docs/development.md"],
+		"expectedSnippets": [
+			"latest outcome is retryable or auto-resolvable",
+			"canonical runtime actions"
+		],
+		"forbiddenSnippets": ["latest reviewer decision: approved"]
+	},
+	{
+		"id": "adaptive-reviewer-needs-fix",
+		"title": "Adaptive system context surfaces the latest non-approved reviewer decision",
+		"category": "review-gating",
+		"surface": "adaptive_system_context",
+		"risk": "high",
+		"sourcePaths": ["tests/runtime-tools.test.ts", "src/prompts/agents.ts"],
+		"expectedSnippets": [
+			"latest reviewer decision: needs_fix",
+			"Need another fix pass."
+		],
+		"forbiddenSnippets": ["latest reviewer decision: approved"]
+	},
+	{
+		"id": "blocked-human",
+		"title": "Adaptive system context keeps blocked-human sessions in status flow",
+		"category": "recovery",
+		"surface": "adaptive_system_context",
+		"risk": "high",
+		"sourcePaths": [
+			"tests/runtime-summary.test.ts",
+			"src/runtime/session-operator-state.ts"
+		],
+		"expectedSnippets": [
+			"- phase: blocked",
+			"- next command: \"/flow-status\""
+		],
+		"forbiddenSnippets": ["/flow-reset feature"]
+	},
+	{
+		"id": "nonretryable-outcome",
+		"title": "Adaptive system context does not suggest retry loop text for nonretryable blockers",
+		"category": "recovery",
+		"surface": "adaptive_system_context",
+		"risk": "medium",
+		"sourcePaths": [
+			"src/runtime/session-operator-state.ts",
+			"src/prompt-system-context.ts"
+		],
+		"expectedSnippets": [
+			"- phase: blocked",
+			"- next command: \"/flow-status\""
+		],
+		"forbiddenSnippets": ["latest outcome is retryable or auto-resolvable"]
+	},
+	{
+		"id": "approved-reviewer-clean-state",
+		"title": "Adaptive system context omits reviewer-warning line when latest reviewer decision is approved",
+		"category": "review-gating",
+		"surface": "adaptive_system_context",
+		"risk": "medium",
+		"sourcePaths": [
+			"src/prompt-system-context.ts",
+			"tests/runtime-tools.test.ts"
+		],
+		"expectedSnippets": ["- phase: executing", "- next command: \"/flow-run\""],
+		"forbiddenSnippets": ["latest reviewer decision:"]
+	}
+]

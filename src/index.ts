@@ -1,7 +1,12 @@
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Hooks, Plugin } from "@opencode-ai/plugin";
 import { createConfigHook } from "./config";
+import {
+	buildFlowAdaptiveSystemContext,
+	FLOW_RUNTIME_CONTEXT_MARKER,
+} from "./prompt-system-context";
 import { resolveSessionRoot } from "./runtime/application";
 import { loadSession } from "./runtime/session";
+import { applyFlowToolDefinitionGuidance } from "./tool-definition-guidance";
 import { createTools } from "./tools";
 import type { ToolContext } from "./tools/schemas";
 
@@ -17,6 +22,50 @@ type PluginLogContext = {
 	};
 };
 
+const flowToolDefinitionHook: NonNullable<Hooks["tool.definition"]> = async (
+	input,
+	output,
+) => {
+	applyFlowToolDefinitionGuidance(input.toolID, output);
+};
+
+function createFlowSystemTransformHook(
+	ctx: Pick<Parameters<Plugin>[0], "worktree" | "directory">,
+): NonNullable<Hooks["experimental.chat.system.transform"]> {
+	return async (_input, output) => {
+		if (
+			output.system.some((entry) =>
+				entry.startsWith(FLOW_RUNTIME_CONTEXT_MARKER),
+			)
+		) {
+			return;
+		}
+
+		const session = await loadPluginSession(ctx);
+		const context = buildFlowAdaptiveSystemContext(session);
+		if (context.length === 0) {
+			return;
+		}
+
+		output.system = [...output.system, ...context];
+	};
+}
+
+async function loadPluginSession(
+	ctx: Pick<Parameters<Plugin>[0], "worktree" | "directory">,
+): Promise<Awaited<ReturnType<typeof loadSession>>> {
+	try {
+		return await loadSession(
+			resolveSessionRoot({
+				worktree: ctx.worktree,
+				directory: ctx.directory,
+			}),
+		);
+	} catch {
+		return null;
+	}
+}
+
 const FlowPlugin: Plugin = async (ctx) => {
 	(ctx as PluginLogContext).client?.app?.log?.({
 		level: "info",
@@ -27,6 +76,8 @@ const FlowPlugin: Plugin = async (ctx) => {
 		config: createConfigHook(ctx),
 		tool: createTools(ctx),
 		hooks: {
+			"tool.definition": flowToolDefinitionHook,
+			"experimental.chat.system.transform": createFlowSystemTransformHook(ctx),
 			"experimental.session.compacting": async (
 				_input: unknown,
 				context: ToolContext,

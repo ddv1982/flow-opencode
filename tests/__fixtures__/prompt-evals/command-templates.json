@@ -1,0 +1,84 @@
+[
+	{
+		"id": "missing-goal-no-session",
+		"title": "Auto command template forbids inferring a goal when no session exists",
+		"category": "command-entry",
+		"surface": "auto_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "src/prompts/fragments.ts"],
+		"expectedSnippets": [
+			"Do not derive, infer, or invent a new goal from repository inspection",
+			"Call `flow_auto_prepare` first"
+		],
+		"forbiddenSnippets": ["infer a goal from repository inspection"]
+	},
+	{
+		"id": "resume-only-no-active-session",
+		"title": "Auto command template keeps resume-only behavior explicit when no active session exists",
+		"category": "command-entry",
+		"surface": "auto_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"resume the active session only",
+			"If no active session exists, stop and request a goal"
+		],
+		"forbiddenSnippets": ["resume can create a new goal"]
+	},
+	{
+		"id": "decision-gate-human-required",
+		"title": "Auto command template stops on recommend_confirm or human_required decision gates",
+		"category": "decision-gating",
+		"surface": "auto_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"status `recommend_confirm` or `human_required`",
+			"present that recommendation clearly and stop"
+		],
+		"forbiddenSnippets": ["continue autonomously after human_required"]
+	},
+	{
+		"id": "final-review-required",
+		"title": "Auto command template requires final review workflow before completion",
+		"category": "completion-gating",
+		"surface": "auto_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Before final completion, run broad repo validation",
+			"finish with a passing `finalReview`"
+		],
+		"forbiddenSnippets": ["skip final cross-feature review"]
+	},
+	{
+		"id": "threshold-completion-min-completed-features",
+		"title": "Final completion path explicitly includes completionPolicy.minCompletedFeatures",
+		"category": "completion-gating",
+		"surface": "auto_command_template",
+		"risk": "high",
+		"sourcePaths": [
+			"src/prompts/fragments.ts",
+			"src/runtime/domain/workflow-policy.ts"
+		],
+		"expectedSnippets": [
+			"completionPolicy.minCompletedFeatures",
+			"even when other plan features remain pending"
+		],
+		"forbiddenSnippets": ["all plan features must be completed"]
+	},
+	{
+		"id": "plan-command-approve-or-select-routing",
+		"title": "Plan command template preserves approve/select routing before treating arguments as a new goal",
+		"category": "command-entry",
+		"surface": "plan_command_template",
+		"risk": "medium",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"If the arguments start with `approve`",
+			"If the arguments start with `select`",
+			"Otherwise treat the full argument string as the planning goal"
+		],
+		"forbiddenSnippets": ["treat approve or select as a new planning goal"]
+	}
+]

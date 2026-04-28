@@ -39,6 +39,7 @@ jobs:
             relevant:
               - 'src/**'
               - 'tests/**'
+              - 'scripts/**'
               - '.github/workflows/**'
               - 'package.json'
               - 'bun.lock'
@@ -73,6 +74,19 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Generate prompt eval summary
+        run: bun run report:prompt-eval
+
+      - name: Upload prompt eval summary artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-eval-summary
+          path: |
+            prompt-exports/prompt-eval-summary.json
+            prompt-exports/prompt-eval-summary.txt
+          if-no-files-found: error
 
       - name: Run typecheck, tests, and build
         run: bun run check

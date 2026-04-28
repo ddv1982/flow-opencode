@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.21] - 2026-04-29
+
+Improve prompt-system reliability with adaptive context and first-party eval coverage
+
+Flow 1.0.21 turns the recent prompt work into a first-party, CI-visible release surface. This release adds adaptive system-context injection grounded in persisted runtime state, expands prompt coverage across command, prompt, and contract surfaces, splits the eval corpus into maintainable first-party fixtures, and publishes a reusable prompt-eval coverage summary artifact for CI validation and inspection.
+
+Constraint: Runtime semantics, completion gates, and recovery behavior remain runtime-owned rather than moving into prompt-only logic
+Constraint: Prompt evals must stay first-party and must not depend on `.factory` artifacts
+Rejected: Add a model-graded prompt harness in this release | higher complexity before the static corpus and coverage model fully matured
+Confidence: high
+Scope-risk: moderate
+Directive: Expand corpus coverage before adding materially more prompt complexity, and keep any new eval fixtures grouped by surface under `tests/__fixtures__/prompt-evals/`
+Tested: `bun run report:prompt-eval`; `bun run typecheck`; `bun run build`; `bun run lint`; `bun test tests/prompt-eval-corpus.test.ts tests/config.test.ts tests/runtime-tools.test.ts`
+Not-tested: Live GitHub Actions artifact upload path in GitHub-hosted CI
+
 ## [1.0.20] - 2026-04-28
 
 ### Highlights
