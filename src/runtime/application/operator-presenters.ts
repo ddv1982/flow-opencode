@@ -8,17 +8,19 @@ export function renderSessionStatusSummary(
 ): string {
 	const viewModel = deriveSessionViewModel(session);
 	const lines = [
-		`Flow ${viewModel.guidance.status}: ${viewModel.guidance.summary}`,
+		`Flow: ${viewModel.guidance.summary}`,
+		`Next: ${options?.nextStep ?? viewModel.guidance.nextStep}`,
+		`Command: ${options?.nextCommand ?? viewModel.guidance.nextCommand}`,
 	];
 
-	if (viewModel.session?.goal) {
-		lines.push(`Goal: ${viewModel.session.goal}`);
+	if (viewModel.guidance.blocker) {
+		lines.splice(1, 0, `Blocker: ${viewModel.guidance.blocker}`);
 	}
 
 	if (viewModel.session?.activeFeature) {
 		const activeFeature = viewModel.session.activeFeature;
 		lines.push(
-			`Active feature: ${activeFeature.id} — ${activeFeature.title} (${activeFeature.status})`,
+			`Working on: ${activeFeature.id} — ${activeFeature.title} (${activeFeature.status})`,
 		);
 	}
 
@@ -28,17 +30,9 @@ export function renderSessionStatusSummary(
 		);
 	}
 
-	lines.push(`Phase: ${viewModel.guidance.phase}`);
-	lines.push(`Lane: ${viewModel.guidance.lane}`);
-	lines.push(`Lane reason: ${viewModel.guidance.laneReason}`);
-	lines.push(`Reason: ${viewModel.guidance.reason}`);
-	if (viewModel.guidance.blocker) {
-		lines.push(`Blocker: ${viewModel.guidance.blocker}`);
+	if (viewModel.session?.goal) {
+		lines.push(`Goal: ${viewModel.session.goal}`);
 	}
-	lines.push(`Next: ${options?.nextStep ?? viewModel.guidance.nextStep}`);
-	lines.push(
-		`Command: ${options?.nextCommand ?? viewModel.guidance.nextCommand}`,
-	);
 
 	return lines.join("\n");
 }
@@ -56,11 +50,7 @@ export function renderDoctorSummary(
 
 	if (!firstIssue) {
 		return [
-			"Flow doctor ok: No blocking readiness issues found.",
-			`Phase: ${guidance.phase}`,
-			`Lane: ${guidance.lane}`,
-			`Lane reason: ${guidance.laneReason}`,
-			`Reason: ${guidance.reason}`,
+			"Flow doctor: Ready.",
 			...(guidance.blocker ? [`Blocker: ${guidance.blocker}`] : []),
 			`Next: ${nextStep}`,
 			`Command: ${nextCommand}`,
@@ -71,14 +61,10 @@ export function renderDoctorSummary(
 	if (firstIssue.remediation) {
 		lines.push(`Fix: ${firstIssue.remediation}`);
 	}
-	lines.push(`Phase: ${guidance.phase}`);
-	lines.push(`Lane: ${guidance.lane}`);
-	lines.push(`Lane reason: ${guidance.laneReason}`);
-	lines.push(`Reason: ${guidance.reason}`);
 	if (guidance.blocker) {
 		lines.push(`Blocker: ${guidance.blocker}`);
 	}
-	lines.push(`Then: ${nextStep}`);
+	lines.push(`Next: ${nextStep}`);
 	lines.push(`Command: ${nextCommand}`);
 	return lines.join("\n");
 }

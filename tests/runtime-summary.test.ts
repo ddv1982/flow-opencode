@@ -292,16 +292,12 @@ describe("runtime summary", () => {
 
 		expect(renderSessionStatusSummary(running)).toBe(
 			[
-				"Flow running: Flow is focused on feature 'setup-runtime'.",
-				"Goal: Build a workflow plugin",
-				"Active feature: setup-runtime — Create runtime helpers (in_progress)",
-				"Progress: 0/2 completed",
-				"Phase: executing",
-				"Lane: standard",
-				"Lane reason: This session has multi-step work but no elevated risk signals, so the standard lane fits best.",
-				"Reason: An approved feature is active, so Flow should stay in execution.",
+				"Flow: Flow is focused on feature 'setup-runtime'.",
 				"Next: Continue the active feature through validation and review.",
 				"Command: /flow-run",
+				"Working on: setup-runtime — Create runtime helpers (in_progress)",
+				"Progress: 0/2 completed",
+				"Goal: Build a workflow plugin",
 			].join("\n"),
 		);
 	});
@@ -315,16 +311,12 @@ describe("runtime summary", () => {
 			}),
 		).toBe(
 			[
-				"Flow planning: Flow has a draft plan that still needs the next planning step.",
-				"Goal: Build a workflow plugin",
-				"Progress: 0/2 completed",
-				"Phase: planning",
-				"Lane: standard",
-				"Lane reason: This session has multi-step work but no elevated risk signals, so the standard lane fits best.",
-				"Reason: Planning is still active because execution is gated on reviewing or approving the draft plan.",
+				"Flow: Flow has a draft plan that still needs the next planning step.",
 				"Blocker: The draft plan is not approved yet.",
 				"Next: Review or refine the draft plan, then approve it when ready.",
 				"Command: /flow-session activate test-session",
+				"Progress: 0/2 completed",
+				"Goal: Build a workflow plugin",
 			].join("\n"),
 		);
 	});

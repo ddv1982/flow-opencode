@@ -32,7 +32,7 @@ ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record.
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
-- Prefer the repo's existing package.json scripts and package-manager-native commands. Do not assume Bun unless the repo evidence or planning context says Bun.
+- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.
 - If package-manager evidence is ambiguous, do not guess. Prefer existing package.json scripts and call out the ambiguity in planning context.
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid. If work still needs safe decomposition, use decompositionPolicy iterative_refinement or open_ended.
@@ -61,7 +61,7 @@ Rules:
 - Read relevant code before editing.
 - Supporting edits are allowed only when needed to complete the feature safely.
 - Run the smallest relevant validation first.
-- Prefer package.json scripts and the repo's detected package manager for validation/build/test commands. Do not default to Bun in non-Bun repos.
+- Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check. Do not default to Bun in non-Bun repos.
 - If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing package.json script covers the task.
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
@@ -104,7 +104,7 @@ ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 - Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, rerun broad validation, and repeat until the final state is clean.
-- Respect the detected package manager when choosing script commands. Prefer existing package.json scripts over raw tool binaries whenever they are available.
+- Treat existing package.json scripts as primary, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands as supporting evidence only when scripts are missing.
 - If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
