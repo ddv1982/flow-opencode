@@ -4,11 +4,11 @@ This file is for contributors working on the plugin itself.
 
 If you are trying to use Flow inside OpenCode, start with the top-level `README.md` instead.
 
-This repo's maintainer workflow is intentionally Bun-first. That is separate from Flow's behavior in a target project, where Flow should follow the project's detected package manager and existing package.json scripts instead of assuming Bun.
+This repo's maintainer workflow is intentionally Bun-first. In target projects, Flow is script-first: existing package.json scripts are the primary contract, and package-manager detection is supporting evidence.
 
 For monorepos, package-manager detection starts from the current tool `directory` and walks upward to the mutable Flow workspace root, so subpackage-local evidence can override root-level defaults.
 
-If one directory has conflicting lockfile families and no explicit `package.json#packageManager`, runtime records the package-manager evidence as ambiguous instead of guessing. Prompts should then prefer existing package.json scripts over manager-specific commands.
+If one directory has conflicting lockfile families and no explicit `package.json#packageManager`, runtime records package-manager evidence as ambiguous instead of guessing. In that case prompts should continue on existing package.json scripts instead of manager-specific guesses.
 
 ## Local workflow
 
@@ -91,13 +91,7 @@ Flow is built around a few stable responsibilities:
 - `flow_plan_context_record`
 - `flow_session_close`
 
-Current surface counts are intentional at the moment:
-
-- 5 agents
-- 8 commands
-- 17 tools
-
-Treat that shape as deliberate, not accidental duplication. Simplify it only when a concrete operator or maintenance win is clear enough to justify migration cost.
+Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
 
 ## Maintainer rules
 
@@ -139,7 +133,7 @@ Flow now persists a few higher-level concepts directly in runtime state:
 
 - planning decisions can be classified as `autonomous_choice`, `recommend_confirm`, or `human_required`
 - runtime summaries expose the latest blocking planning decision as `decisionGate`
-- runtime status/doctor outputs and concrete session-detail payloads include `laneReason` so lane selection is auditable in both structured payloads and operator summaries
+- runtime status/doctor structured payloads and detailed views include `laneReason` so lane selection remains auditable without overloading compact operator summaries
 - planning decisions also carry a domain such as `architecture`, `product`, `quality`, `scope`, or `delivery`
 - plans can declare a `deliveryPolicy` so completion can be driven by a clean finish, a core-work finish, or a threshold
 - `replan_required` outcomes must carry a structured reason, failed assumption, and recommended adjustment

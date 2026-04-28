@@ -718,7 +718,7 @@ describe("applyFlowConfig", () => {
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_plan_context_record");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"Respect the detected package manager when choosing script commands",
+			"Treat existing package.json scripts as primary",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"meaningful architecture, product, or quality decision still remains",
@@ -769,7 +769,7 @@ describe("applyFlowConfig", () => {
 			"record it with `flow_plan_context_record`",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"package-manager-native commands instead of assuming Bun",
+			"package-manager detection as supporting evidence instead of assuming Bun",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("final cross-feature review");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
@@ -800,7 +800,7 @@ describe("applyFlowConfig", () => {
 	});
 
 	test("status command template leads with runtime guidance before raw session details", () => {
-		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("guidance.summary");
+		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("what Flow is doing now");
 		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("guidance.nextStep");
 		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("guidance.nextCommand");
 		expect(FLOW_STATUS_COMMAND_TEMPLATE).toContain("compact view");
@@ -810,7 +810,7 @@ describe("applyFlowConfig", () => {
 			"flow_status",
 			"compact view",
 			"detailed view",
-			"guidance.summary",
+			"what Flow is doing now",
 			"guidance.nextStep",
 			"guidance.nextCommand",
 		]);
@@ -820,14 +820,14 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain("compact view");
 		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain("detailed view");
 		expect(FLOW_DOCTOR_COMMAND_TEMPLATE).toContain(
-			"Lead with the operator summary.",
+			"Lead with the action summary",
 		);
 		expectInOrder(FLOW_DOCTOR_COMMAND_TEMPLATE, [
 			"Arguments: $ARGUMENTS",
 			"flow_doctor",
 			"compact view",
 			"detailed view",
-			"Lead with the operator summary.",
+			"Lead with the action summary",
 		]);
 	});
 

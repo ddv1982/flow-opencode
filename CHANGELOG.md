@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.0.20] - 2026-04-28
+
+### Highlights
+
+Flow 1.0.20 preserves the plugin’s strong autonomous core while reducing how much workflow machinery users have to think about. This release makes compact status and doctor summaries more action-oriented, clarifies that repo scripts are the primary execution contract, trims prompt-law duplication where runtime already owns semantics, and relaxes a small amount of architecture-coupled test friction without weakening safety or completion guarantees.
+
+### Added
+
+- Added compact operator-summary guidance that prioritizes current action, blocker, next step, and next command over workflow taxonomy.
+- Added stronger script-first prompt coverage so planner, worker, and autonomous coordinator paths treat `package.json` scripts as the primary execution contract.
+- Added explicit prompt/schema reminders that planning-only context such as package-manager ambiguity belongs in `planning`, not inside `plan`.
+
+### Changed
+
+- Changed compact status and doctor output to emphasize what Flow is doing now and what the operator should do next, while keeping richer runtime detail in structured and detailed views.
+- Changed planner/worker/auto wording to invoke existing package scripts through the detected package manager or repo convention before falling back to raw manager-specific commands.
+- Trimmed prompt-law and contract duplication where runtime already enforces completion, recovery, and gating semantics.
+- Relaxed a subset of wording- and partition-coupled tests so future maintenance can focus more on behavior and invariants than on exact prose or file ownership narratives.
+
+### Fixed
+
+- Fixed the remaining prompt ambiguity around script-first behavior so autonomous execution no longer implies that package-manager-native commands should outrank existing scripts.
+- Fixed documentation drift introduced by compact operator summaries by clarifying that lane/laneReason detail remains available in structured and detailed views.
+- Fixed lite-lane parity coverage regressions introduced during simplification by restoring targeted prompt assertions for lite-lane completion and retry guidance.
+
 ## [1.0.19] - 2026-04-28
 
 ### Highlights

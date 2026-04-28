@@ -72,7 +72,7 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 
 Flow will inspect the repo, draft a plan, execute one feature at a time, validate, review, and continue until the work is done or something genuinely blocks it.
 
-When it finds package-manager evidence, Flow should prefer the target repo's existing `package.json` scripts and native package-manager commands (`npm`, `pnpm`, `yarn`, or `bun`) instead of assuming Bun.
+Flow treats the target repo's existing `package.json` scripts as the primary execution contract. Package-manager detection (`npm`, `pnpm`, `yarn`, `bun`) is supporting evidence, not a guessing engine.
 
 In monorepos, Flow now starts from the current working subdirectory and walks upward to the Flow workspace root, so package-local lockfiles or `package.json#packageManager` entries can override root-level defaults.
 
@@ -83,6 +83,8 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
 ### Manual, step by step
 
 1. `/flow-plan Add a workflow plugin for OpenCode`
+   - narrow a draft with `/flow-plan select <feature-id>...`
+   - approve the current draft with `/flow-plan approve [feature-id]...`
 2. Review the proposed features
 3. `/flow-plan approve` (Flow may already have auto-approved a safe lite plan)
 4. `/flow-run` — runs exactly one approved feature
@@ -155,32 +157,16 @@ A plan isn't limited to building features. Flow supports:
 
 When something recoverable goes wrong (a flaky test, a missing prerequisite, a validation rerun), Flow attaches structured recovery metadata and retries — you don't have to manually reset. It only stops for real blockers (external dependency, human-required decision, hard failure).
 
-## Commands
+## Commands (by intent)
 
-| Command | Purpose |
-| --- | --- |
-| `/flow-plan <goal>` | Create or refresh a draft plan |
-| `/flow-plan select <feature-id>...` | Keep only the selected features in the draft |
-| `/flow-plan approve [feature-id]...` | Approve the current draft plan |
-| `/flow-run [feature-id]` | Execute exactly one approved feature |
-| `/flow-auto <goal>` | Plan and execute autonomously from a new goal |
-| `/flow-auto resume` | Resume the active autonomous session |
-| `/flow-status [detail]` | Current session summary (compact by default, including lane + laneReason) |
-| `/flow-doctor [detail]` | Non-destructive readiness check |
-| `/flow-history` | List active, stored, and completed sessions |
-| `/flow-history show <session-id>` | Inspect a specific session |
-| `/flow-session activate <id>` | Switch the active session |
-| `/flow-session close <completed\|deferred\|abandoned>` | Close the active session |
-| `/flow-reset feature <id>` | Reset a feature (and dependents) to pending |
-
-Which one do I want?
-
-- Starting or reshaping work → `/flow-plan`
-- Running one approved feature → `/flow-run`
-- Hands-off end-to-end → `/flow-auto`
-- "Where are we?" → `/flow-status`
-- "Why is Flow stuck?" → `/flow-doctor`
-- Browsing past sessions → `/flow-history`
+- Start or reshape work → `/flow-plan <goal>`
+- Run one approved feature → `/flow-run [feature-id]`
+- Run autonomously end-to-end → `/flow-auto <goal>` or `/flow-auto resume`
+- See what Flow is doing and what to run next → `/flow-status [detail]`
+- Diagnose readiness/blockers → `/flow-doctor [detail]`
+- Browse sessions → `/flow-history` / `/flow-history show <session-id>`
+- Switch or close the active session → `/flow-session activate <id>` / `/flow-session close <completed|deferred|abandoned>`
+- Reset a feature → `/flow-reset feature <id>`
 
 ## How a session runs
 

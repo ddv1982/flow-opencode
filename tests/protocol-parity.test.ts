@@ -42,7 +42,7 @@ describe("protocol parity", () => {
 		expect(toolNames.some((name) => name.includes("_from_raw"))).toBe(false);
 	});
 
-	test("prompts and command templates stay canonical-only", () => {
+	test("prompts and command templates stay canonical-only and script-first", () => {
 		for (const surface of PROMPT_SURFACES) {
 			expect(surface).not.toContain("_from_raw");
 			expect(surface).not.toContain("deprecated raw-wrapper tools");
@@ -53,11 +53,16 @@ describe("protocol parity", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_run_complete_feature");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_run_complete_feature");
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("package.json scripts");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("package.json scripts first");
 	});
 
 	test("prompt surfaces preserve lite-lane, reviewer-persistence, final-path, and recovery/replan semantics", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"In the lite lane, if the runtime session is small enough",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"retryable non-human blockers may return the feature directly to ready/pending",
 		);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
@@ -73,7 +78,9 @@ describe("protocol parity", () => {
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"On the final completion path, run broad validation",
 		);
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("In the lite lane");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"In the lite lane, if the runtime session is small enough",
+		);
 	});
 
 	test("prompt expression invariant references stay known and distinct", () => {

@@ -107,11 +107,8 @@ describe("runtime tools and recovery", () => {
 		});
 		expect(parsed.operatorSummary).toBe(
 			[
-				"Flow missing: No active Flow session exists for this workspace.",
-				"Phase: idle",
-				"Lane: lite",
-				"Lane reason: Flow can stay in the lite lane until a non-trivial plan or risk signal appears.",
-				"Reason: Flow has not started a tracked session for this workspace yet.",
+				"Flow: No active Flow session exists for this workspace.",
+
 				"Blocker: No active Flow session exists for this workspace.",
 				"Next: Start a new Flow session with /flow-plan <goal>.",
 				"Command: /flow-plan <goal>",
@@ -140,11 +137,8 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 		expect(parsed.operatorSummary).toBe(
 			[
-				"Flow missing: No active Flow session exists for this workspace.",
-				"Phase: idle",
-				"Lane: lite",
-				"Lane reason: Flow can stay in the lite lane until a non-trivial plan or risk signal appears.",
-				"Reason: Flow has not started a tracked session for this workspace yet.",
+				"Flow: No active Flow session exists for this workspace.",
+
 				"Blocker: No active Flow session exists for this workspace.",
 				"Next: Start a new Flow session with /flow-plan <goal>.",
 				"Command: /flow-plan <goal>",
@@ -172,14 +166,7 @@ describe("runtime tools and recovery", () => {
 			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 			expect(parsed.workspaceRoot).toBe(worktree);
 			expect(parsed.session).toBeNull();
-			expect(parsed.operatorSummary).toContain(
-				"Flow doctor ok: No blocking readiness issues found.",
-			);
-			expect(parsed.operatorSummary).toContain("Phase: idle");
-			expect(parsed.operatorSummary).toContain("Lane: lite");
-			expect(parsed.operatorSummary).toContain(
-				"Reason: Flow has not started a tracked session for this workspace yet.",
-			);
+			expect(parsed.operatorSummary).toContain("Flow doctor: Ready.");
 			expect(parsed.operatorSummary).toContain(
 				"Blocker: No active Flow session exists for this workspace.",
 			);
@@ -235,7 +222,7 @@ describe("runtime tools and recovery", () => {
 				"Fix: Run `bun run install:opencode` from the Flow repo or reinstall the latest release if OpenCode cannot load Flow.",
 			);
 			expect(parsed.operatorSummary).toContain(
-				"Then: Start a new Flow session with /flow-plan <goal>.",
+				"Next: Start a new Flow session with /flow-plan <goal>.",
 			);
 			expect(parsed.operatorSummary).toContain("Command: /flow-plan <goal>");
 			expect(parsed.checks).toBeUndefined();
@@ -751,16 +738,12 @@ describe("runtime tools and recovery", () => {
 		);
 		expect(parsed.operatorSummary).toBe(
 			[
-				"Flow planning: Flow needs a draft plan before execution can begin.",
-				"Goal: First goal",
-				"Progress: 0/0 completed",
-				"Phase: planning",
-				"Lane: lite",
-				"Lane reason: Flow can stay in the lite lane until a non-trivial plan or risk signal appears.",
-				"Reason: Planning is still active because Flow does not have an execution-ready draft plan yet.",
+				"Flow: Flow needs a draft plan before execution can begin.",
 				"Blocker: No draft plan exists yet.",
 				"Next: Activate this session to continue it in the current worktree.",
 				`Command: ${flowSessionActivateCommand(first.id)}`,
+				"Progress: 0/0 completed",
+				"Goal: First goal",
 			].join("\n"),
 		);
 		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
@@ -800,15 +783,11 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.guidance.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 		expect(parsed.operatorSummary).toBe(
 			[
-				"Flow completed: Completed the Flow session.",
-				"Goal: Completed goal",
-				"Progress: 0/0 completed",
-				"Phase: completed",
-				"Lane: lite",
-				"Lane reason: Flow can stay in the lite lane until a non-trivial plan or risk signal appears.",
-				"Reason: The active session is complete, so Flow is no longer holding execution state for it.",
+				"Flow: Completed the Flow session.",
 				"Next: Start a new goal when you are ready for more work.",
 				"Command: /flow-plan <goal>",
+				"Progress: 0/0 completed",
+				"Goal: Completed goal",
 			].join("\n"),
 		);
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
