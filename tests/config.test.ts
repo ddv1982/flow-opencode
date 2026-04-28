@@ -237,12 +237,14 @@ describe("applyFlowConfig", () => {
 		expect(config.agent?.["flow-reviewer"]?.permission?.bash).toBe("deny");
 		expect(config.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
 		expect(config.agent?.["flow-control"]?.permission?.bash).toBe("deny");
-		expect(config.agent?.["flow-worker"]?.permission?.external_directory).toBe(
-			"deny",
-		);
-		expect(config.agent?.["flow-auto"]?.permission?.external_directory).toBe(
-			"deny",
-		);
+		expect(
+			config.agent?.["flow-worker"]?.permission?.external_directory,
+		).toBeUndefined();
+		expect(config.agent?.["flow-worker"]?.permission).toBeUndefined();
+		expect(
+			config.agent?.["flow-auto"]?.permission?.external_directory,
+		).toBeUndefined();
+		expect(config.agent?.["flow-auto"]?.permission).toBeUndefined();
 	});
 
 	test("createConfigHook is async and preserves unrelated config entries", async () => {

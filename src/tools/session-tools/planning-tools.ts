@@ -4,11 +4,7 @@
  * next-command routing in next-command-policy.ts.
  */
 import { tool } from "@opencode-ai/plugin";
-import {
-	autoPrepareResponse,
-	executeDispatchedSessionWorkspaceAction,
-	runDispatchedSessionReadAction,
-} from "../../runtime/application";
+import { autoPrepareResponse } from "../../runtime/application";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowAutoPrepareArgsSchema,
@@ -21,7 +17,11 @@ import {
 	autoPreparePolicy,
 	nextCommandForMissingGoal,
 } from "./next-command-policy";
-import { recordToolMetadata } from "./shared";
+import {
+	executeToolWorkspaceAction,
+	readToolSessionValue,
+	recordToolMetadata,
+} from "./shared";
 
 export function createPlanningSessionTools() {
 	return {
@@ -35,15 +35,11 @@ export function createPlanningSessionTools() {
 						goal: input.goal ?? null,
 						repoProfileCount: input.repoProfile?.length ?? 0,
 					});
-					return executeDispatchedSessionWorkspaceAction(
-						context,
-						"plan_start",
-						{
-							...(input.goal ? { goal: input.goal } : {}),
-							...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
-							missingGoalNextCommand: nextCommandForMissingGoal(),
-						},
-					);
+					return executeToolWorkspaceAction(context, "plan_start", {
+						...(input.goal ? { goal: input.goal } : {}),
+						...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
+						missingGoalNextCommand: nextCommandForMissingGoal(),
+					});
 				},
 			),
 		}),
@@ -54,13 +50,11 @@ export function createPlanningSessionTools() {
 			execute: withParsedArgs(
 				FlowAutoPrepareArgsSchema,
 				async (input, context: ToolContext) => {
-					const resumableSession = (
-						await runDispatchedSessionReadAction(
-							context,
-							"load_resumable_session",
-							undefined,
-						)
-					).value;
+					const resumableSession = await readToolSessionValue(
+						context,
+						"load_resumable_session",
+						undefined,
+					);
 					const navigation = autoPreparePolicy(
 						input.argumentString,
 						resumableSession,

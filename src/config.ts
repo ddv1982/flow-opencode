@@ -70,18 +70,12 @@ const FLOW_AGENTS = {
 		description:
 			"Execute one approved Flow feature with focused validation and review.",
 		prompt: FLOW_WORKER_AGENT_PROMPT,
-		permission: {
-			external_directory: "deny",
-		},
 	},
 	"flow-auto": {
 		mode: "primary",
 		description:
 			"Coordinate Flow planning, execution, review, and recovery autonomously.",
 		prompt: FLOW_AUTO_AGENT_PROMPT,
-		permission: {
-			external_directory: "deny",
-		},
 	},
 	"flow-reviewer": createReadOnlyPrimaryAgent(
 		"Review Flow work and decide whether it may advance.",

@@ -4,7 +4,7 @@
  * next-command routing in next-command-policy.ts.
  */
 import { tool } from "@opencode-ai/plugin";
-import { executeDispatchedSessionWorkspaceAction } from "../../runtime/application";
+
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowSessionCloseArgsSchema,
@@ -12,7 +12,7 @@ import {
 	type ToolContext,
 } from "../schemas";
 import { nextCommandForResetSession } from "./next-command-policy";
-import { recordToolMetadata } from "./shared";
+import { executeToolWorkspaceAction, recordToolMetadata } from "./shared";
 
 export function createLifecycleSessionTools() {
 	return {
@@ -26,15 +26,11 @@ export function createLifecycleSessionTools() {
 					recordToolMetadata(context, `Close Flow session (${input.kind})`, {
 						closureKind: input.kind,
 					});
-					return executeDispatchedSessionWorkspaceAction(
-						context,
-						"close_session",
-						{
-							kind: input.kind,
-							...(input.summary ? { summary: input.summary } : {}),
-							nextCommand: nextCommandForResetSession(),
-						},
-					);
+					return executeToolWorkspaceAction(context, "close_session", {
+						kind: input.kind,
+						...(input.summary ? { summary: input.summary } : {}),
+						nextCommand: nextCommandForResetSession(),
+					});
 				},
 			),
 		}),

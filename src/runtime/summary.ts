@@ -190,66 +190,61 @@ function buildSessionGuidance(
 		return missingSessionGuidance(operator);
 	}
 
-	const decisionGate = activeDecisionGate(session);
-	if (decisionGate) {
-		return {
-			category: "decision_gate",
-			status: decisionGate.status,
-			summary: decisionGate.question,
-			...operator,
-		};
+	switch (operator.phase) {
+		case "decision": {
+			const decisionGate = activeDecisionGate(session);
+			return {
+				category: "decision_gate",
+				status: decisionGate?.status ?? session.status,
+				summary: decisionGate?.question ?? operator.blocker ?? session.status,
+				...operator,
+			};
+		}
+		case "planning": {
+			const hasPlan = Boolean(session.plan);
+			return {
+				category: "planning",
+				status: session.status,
+				summary: hasPlan
+					? "Flow has a draft plan that still needs the next planning step."
+					: "Flow needs a draft plan before execution can begin.",
+				...operator,
+			};
+		}
+		case "blocked":
+			return {
+				category: "blocked",
+				status: session.status,
+				summary:
+					operator.blocker ??
+					"Flow is blocked and needs recovery before it can continue.",
+				...operator,
+			};
+		case "ready":
+		case "executing": {
+			const activeFeature = activeFeatureForSession(session);
+			return {
+				category: "execution",
+				status: session.status,
+				summary: activeFeature
+					? `Flow is focused on feature '${activeFeature.id}'.`
+					: "Flow is ready to continue execution.",
+				...operator,
+			};
+		}
+		case "completed":
+			return {
+				category: "completed",
+				status: session.status,
+				summary:
+					session.closure?.summary ??
+					session.execution.lastSummary ??
+					"Flow has completed the active session.",
+				...operator,
+			};
+		default:
+			return missingSessionGuidance(operator);
 	}
-
-	if (session.status === "planning") {
-		const hasPlan = Boolean(session.plan);
-		return {
-			category: "planning",
-			status: session.status,
-			summary: hasPlan
-				? "Flow has a draft plan that still needs the next planning step."
-				: "Flow needs a draft plan before execution can begin.",
-			...operator,
-		};
-	}
-
-	if (session.status === "blocked") {
-		const outcome = session.execution.lastOutcome;
-		const reviewerDecision = session.execution.lastReviewerDecision;
-
-		return {
-			category: "blocked",
-			status: session.status,
-			summary:
-				outcome?.summary ??
-				reviewerDecision?.summary ??
-				session.execution.lastSummary ??
-				"Flow is blocked and needs recovery before it can continue.",
-			...operator,
-		};
-	}
-
-	if (session.status === "ready" || session.status === "running") {
-		const activeFeature = activeFeatureForSession(session);
-
-		return {
-			category: "execution",
-			status: session.status,
-			summary: activeFeature
-				? `Flow is focused on feature '${activeFeature.id}'.`
-				: "Flow is ready to continue execution.",
-			...operator,
-		};
-	}
-
-	return {
-		category: "completed",
-		status: session.status,
-		summary:
-			session.closure?.summary ??
-			session.execution.lastSummary ??
-			"Flow has completed the active session.",
-		...operator,
-	};
 }
 
 export function deriveSessionViewModel(

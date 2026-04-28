@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.15] - 2026-04-28
+
+### Highlights
+
+Flow 1.0.15 restores the default external-directory permission prompt for mutating agents without weakening Flow's mutable workspace-root guard. This release removes the over-broad OpenCode permission override that had turned cross-project access into a hard deny, while also trimming duplication in runtime guidance derivation and session-tool wrapper plumbing.
+
+### Changed
+
+- Removed the explicit `external_directory: "deny"` override from `flow-worker` and `flow-auto` so OpenCode host/default permission prompting can apply again when work legitimately reaches outside the current project.
+- Simplified `src/runtime/summary.ts` by routing guidance shaping more directly through `deriveSessionOperatorState(...)` instead of re-deriving the same major phase branches locally.
+- Consolidated repeated session-tool read/workspace dispatch boilerplate into narrow helpers in `src/tools/session-tools/shared.ts`, with follow-on cleanup in the history, planning, and lifecycle tool registrations.
+
+### Fixed
+
+- Fixed the regression where recent workspace-safety hardening suppressed the preferred ask-for-permission behavior for external-directory access by forcing a hard deny at the agent config layer.
+- Preserved the mutable-root safety boundary enforced by `src/runtime/workspace-root.ts` and `src/runtime/application/tool-runtime.ts`, so suspicious roots like home-level dot-directories still cannot silently host Flow state.
+
 ## [1.0.14] - 2026-04-21
 
 ### Highlights
