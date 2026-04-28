@@ -22,10 +22,14 @@ function makeTempDir(): string {
 	return dir;
 }
 
+const currentPackageVersion = JSON.parse(
+	readFileSync(resolve(repoRoot, "package.json"), "utf8"),
+).version as string;
+
 function runPackInvariants(
 	packJson: unknown,
 	changelogText: string,
-	packageVersion = "1.0.20",
+	packageVersion = currentPackageVersion,
 ) {
 	const directory = makeTempDir();
 	const packJsonPath = join(directory, "pack.json");
