@@ -15,6 +15,7 @@ import {
 	type SessionWorkspaceActionName,
 	type SessionWorkspacePayloadMap,
 } from "../../runtime/application";
+import { ensureMutableWorkspacePermission } from "../mutable-workspace-permission";
 import type { ToolContext } from "../schemas";
 
 export function inspectToolWorkspace(context: ToolContext) {
@@ -52,5 +53,6 @@ export async function executeToolWorkspaceAction<
 	name: Name,
 	payload: SessionWorkspacePayloadMap[Name],
 ): Promise<string> {
+	await ensureMutableWorkspacePermission(context);
 	return executeDispatchedSessionWorkspaceAction(context, name, payload);
 }

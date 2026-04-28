@@ -72,19 +72,45 @@ describe("resolveMutableSessionRoot", () => {
 		}
 	});
 
-	test("rejects mutable roots under home dot-directories by default", () => {
+	test("allows mutable roots under hidden home directories", () => {
 		const originalHome = process.env.HOME;
 		const fakeHome = mkdtempSync(join(tmpdir(), "flow-home-"));
-		const suspiciousRoot = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".factory");
 
 		process.env.HOME = fakeHome;
 		try {
-			expect(() =>
-				resolveMutableSessionRoot({ directory: suspiciousRoot }),
-			).toThrow(InvalidFlowWorkspaceRootError);
-			expect(inspectWorkspaceContext({ directory: suspiciousRoot })).toEqual(
+			expect(
+				resolveMutableSessionRoot({ directory: hiddenWorkspace }),
+			).toMatchObject({
+				root: hiddenWorkspace,
+				source: "directory",
+				trusted: false,
+			});
+			expect(inspectWorkspaceContext({ directory: hiddenWorkspace })).toEqual(
 				expect.objectContaining({
-					root: suspiciousRoot,
+					root: hiddenWorkspace,
+					source: "directory",
+					mutationAllowed: true,
+				}),
+			);
+		} finally {
+			process.env.HOME = originalHome;
+			rmSync(fakeHome, { recursive: true, maxRetries: 3 });
+		}
+	});
+
+	test("rejects using $HOME itself as a mutable workspace root", () => {
+		const originalHome = process.env.HOME;
+		const fakeHome = mkdtempSync(join(tmpdir(), "flow-home-"));
+
+		process.env.HOME = fakeHome;
+		try {
+			expect(() => resolveMutableSessionRoot({ directory: fakeHome })).toThrow(
+				InvalidFlowWorkspaceRootError,
+			);
+			expect(inspectWorkspaceContext({ directory: fakeHome })).toEqual(
+				expect.objectContaining({
+					root: fakeHome,
 					source: "directory",
 					mutationAllowed: false,
 				}),
@@ -95,38 +121,7 @@ describe("resolveMutableSessionRoot", () => {
 		}
 	});
 
-	test("allows a suspicious mutable root only when explicitly trusted", () => {
-		const originalHome = process.env.HOME;
-		const originalTrusted = process.env.FLOW_TRUSTED_WORKSPACE_ROOTS;
-		const fakeHome = mkdtempSync(join(tmpdir(), "flow-home-"));
-		const suspiciousRoot = join(fakeHome, ".factory");
-
-		process.env.HOME = fakeHome;
-		process.env.FLOW_TRUSTED_WORKSPACE_ROOTS = suspiciousRoot;
-		try {
-			expect(
-				resolveMutableSessionRoot({ directory: suspiciousRoot }),
-			).toMatchObject({
-				root: suspiciousRoot,
-				source: "directory",
-				trusted: true,
-			});
-			expect(inspectWorkspaceContext({ directory: suspiciousRoot })).toEqual(
-				expect.objectContaining({
-					root: suspiciousRoot,
-					source: "directory",
-					trusted: true,
-					mutationAllowed: true,
-				}),
-			);
-		} finally {
-			process.env.HOME = originalHome;
-			process.env.FLOW_TRUSTED_WORKSPACE_ROOTS = originalTrusted;
-			rmSync(fakeHome, { recursive: true, maxRetries: 3 });
-		}
-	});
-
-	test("supports multiple trusted roots via the platform path delimiter", () => {
+	test("trusted roots metadata still resolves when multiple paths are configured", () => {
 		const originalHome = process.env.HOME;
 		const originalTrusted = process.env.FLOW_TRUSTED_WORKSPACE_ROOTS;
 		const fakeHome = mkdtempSync(join(tmpdir(), "flow-home-"));

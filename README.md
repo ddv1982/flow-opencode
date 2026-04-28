@@ -220,13 +220,11 @@ There is exactly one active session per worktree. Switching with `/flow-session 
 
 ### Workspace safety
 
-Flow refuses to write session state in your home directory or under any top-level dot-folder under `$HOME` (for example `~/.config` or `~/.factory`). Read-only commands (`/flow-status`, `/flow-doctor`, `/flow-history`) still work everywhere; only mutations are blocked.
+Flow refuses to write session state in your home directory itself (`$HOME`) or at filesystem roots.
 
-If you intentionally need a nonstandard root, allowlist the **exact** absolute path(s) via:
+If the effective mutable workspace root is a hidden directory other than `.flow` (for example `~/.factory`), Flow asks for approval before it writes its own `.flow/**` state there. That approval can be granted once or remembered by OpenCode for the rest of the session.
 
-```bash
-export FLOW_TRUSTED_WORKSPACE_ROOTS=/abs/path/one:/abs/path/two
-```
+If the normal project/worktree root is in use, hidden directories that merely exist inside the project do not change where Flow writes state: it still uses the workspace-local `.flow/**` subtree at the root.
 
 ## Readiness check
 

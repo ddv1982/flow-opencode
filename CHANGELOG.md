@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.16] - 2026-04-28
+
+### Highlights
+
+Flow 1.0.16 tightens hidden-workspace permission behavior so only Flow's own `.flow` state stays auto-allowed. When the effective mutable workspace root is some other hidden directory such as `.factory`, `.claude`, or `.codex`, Flow now asks for permission before writing `.flow/**` there while still leaving normal project-root `.flow` behavior unchanged.
+
+### Added
+
+- Added a shared mutable-workspace permission gate in `src/tools/mutable-workspace-permission.ts` so mutating Flow tools consistently request approval before writing `.flow/**` under hidden workspace roots other than `.flow`.
+- Added targeted runtime-tool coverage for the three key behaviors: hidden workspace roots prompt, normal project roots with hidden subdirectories do not prompt, and `.flow` itself remains auto-allowed.
+
+### Changed
+
+- Routed mutating runtime and session tool entrypoints through the new permission gate instead of silently allowing all hidden workspace roots.
+- Updated workspace-safety documentation to explain when Flow prompts for hidden workspace roots versus when it continues writing to the normal project-root `.flow/**` subtree.
+- Clarified mutable-root remediation text so `$HOME` rejection explains that Flow needs a real project/worktree subdirectory rather than suggesting a trusted-root override.
+
+### Fixed
+
+- Fixed the remaining mismatch where hidden directories such as `.factory`, `.claude`, or `.codex` could still become mutable Flow roots without an approval prompt.
+- Preserved the normal no-prompt path for the standard project-root `.flow/**` state directory and the existing hard block on `$HOME` itself as a mutable root.
+
 ## [1.0.15] - 2026-04-28
 
 ### Highlights

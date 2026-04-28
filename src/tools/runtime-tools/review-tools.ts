@@ -1,5 +1,4 @@
 import { tool } from "@opencode-ai/plugin";
-import { executeDispatchedSessionMutation } from "../../runtime/application";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowReviewRecordFeatureArgsSchema,
@@ -7,6 +6,7 @@ import {
 	type ToolContext,
 } from "../schemas";
 import {
+	executeGuardedSessionMutation,
 	flowReviewRecordFeatureArgsShape,
 	flowReviewRecordFinalArgsShape,
 } from "./shared";
@@ -28,7 +28,7 @@ export function createReviewRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return executeDispatchedSessionMutation(
+					return executeGuardedSessionMutation(
 						context,
 						"record_feature_review",
 						{ decision: input },
@@ -51,11 +51,9 @@ export function createReviewRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return executeDispatchedSessionMutation(
-						context,
-						"record_final_review",
-						{ decision: input },
-					);
+					return executeGuardedSessionMutation(context, "record_final_review", {
+						decision: input,
+					});
 				},
 			),
 		}),

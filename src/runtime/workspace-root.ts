@@ -92,13 +92,6 @@ function suspiciousWorkspaceReason(root: string): string | null {
 		return null;
 	}
 
-	const firstSegment = rel
-		.split(/[/\\]+/)
-		.find((segment) => segment.length > 0);
-	if (firstSegment?.startsWith(".")) {
-		return `Flow blocks mutable workspace roots under '${normalizedHome}' whose top-level directory starts with '.'.`;
-	}
-
 	return null;
 }
 
@@ -119,7 +112,7 @@ export function inspectMutableWorkspaceRoot(
 	return {
 		root,
 		trusted,
-		rejectionReason: trusted ? null : suspiciousWorkspaceReason(root),
+		rejectionReason: suspiciousWorkspaceReason(root),
 	};
 }
 
@@ -137,7 +130,7 @@ export function assertMutableWorkspaceRoot(
 	throw new InvalidFlowWorkspaceRootError({
 		summary: `Flow blocked mutable workspace root ${rootLabel}: ${details.rejectionReason ?? "missing or root-like path."}`,
 		remediation: details.root
-			? `Trust this exact path intentionally by setting ${TRUSTED_WORKSPACE_ROOTS_ENV}=${details.root} before running Flow.`
+			? "Choose a project/worktree subdirectory instead of using $HOME directly so Flow can manage .flow state there."
 			: "Provide a non-root project/worktree directory so Flow can manage .flow state there.",
 		details,
 	});
