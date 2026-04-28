@@ -48,8 +48,14 @@ afterEach(() => {
 	cleanupTempDirs();
 });
 
-function toolContext(worktree: string, directory?: string) {
-	return (directory ? { worktree, directory } : { worktree }) as Parameters<
+function toolContext(
+	worktree: string,
+	directory?: string,
+	extra?: Record<string, unknown>,
+) {
+	return (
+		directory ? { worktree, directory, ...extra } : { worktree, ...extra }
+	) as Parameters<
 		ReturnType<typeof createTestTools>["flow_status"]["execute"]
 	>[1];
 }
@@ -446,67 +452,57 @@ describe("runtime tools and recovery", () => {
 		expect(session?.status).toBe("planning");
 	});
 
-	test("flow_plan_start blocks suspicious mutable roots under home dot-directories", async () => {
+	test("flow_plan_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
-		const suspiciousRoot = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".factory");
+		const ask = mock(async () => {});
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
+			await mkdir(hiddenWorkspace, { recursive: true });
 			const response = await tools.flow_plan_start.execute(
 				{ goal: "Keep Flow inside the repo" },
-				toolContext("/", suspiciousRoot),
+				toolContext("/", hiddenWorkspace, { ask }),
 			);
 			const parsed = JSON.parse(response);
 
-			expect(parsed.status).toBe("error");
-			expect(String(parsed.summary)).toContain(
-				"Flow blocked mutable workspace root",
-			);
-			expect(parsed.workspaceRoot).toBe(suspiciousRoot);
-			expect(parsed.workspace).toEqual(
-				expect.objectContaining({
-					root: suspiciousRoot,
-					source: "directory",
-					mutationAllowed: false,
+			expect(parsed.status).toBe("ok");
+			expect(parsed.session.goal).toBe("Keep Flow inside the repo");
+			expect(ask).toHaveBeenCalledTimes(1);
+			expect(ask).toHaveBeenCalledWith({
+				permission: "edit",
+				patterns: [join(hiddenWorkspace, ".flow", "**")],
+				always: [join(hiddenWorkspace, ".flow", "**")],
+				metadata: expect.objectContaining({
+					workspaceRoot: hiddenWorkspace,
+					workspaceSource: "directory",
 				}),
-			);
-			expect(String(parsed.remediation)).toContain(
-				"FLOW_TRUSTED_WORKSPACE_ROOTS",
-			);
+			});
 		});
 	});
 
-	test("flow_run_start blocks suspicious mutable roots even if session files exist there", async () => {
+	test("flow_run_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
-		const suspiciousRoot = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".factory");
+		const ask = mock(async () => {});
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
-			process.env.FLOW_TRUSTED_WORKSPACE_ROOTS = suspiciousRoot;
 			await saveSession(
-				suspiciousRoot,
-				sampleSession("Suspicious root fixture"),
+				hiddenWorkspace,
+				sampleSession("Hidden workspace fixture"),
 			);
-			delete process.env.FLOW_TRUSTED_WORKSPACE_ROOTS;
 
 			const response = await tools.flow_run_start.execute(
 				{},
-				toolContext("/", suspiciousRoot),
+				toolContext("/", hiddenWorkspace, { ask }),
 			);
 			const parsed = JSON.parse(response);
 
-			expect(parsed.status).toBe("error");
-			expect(String(parsed.summary)).toContain(
+			expect(String(parsed.summary)).not.toContain(
 				"Flow blocked mutable workspace root",
 			);
-			expect(parsed.workspaceRoot).toBe(suspiciousRoot);
-			expect(parsed.workspace).toEqual(
-				expect.objectContaining({
-					root: suspiciousRoot,
-					source: "directory",
-					mutationAllowed: false,
-				}),
-			);
+			expect(ask).toHaveBeenCalledTimes(1);
 		});
 	});
 
@@ -577,40 +573,99 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.session.nextCommand).toBe(FLOW_RUN_COMMAND);
 	});
 
-	test("flow_doctor surfaces suspicious workspace roots and skips artifact inspection there", async () => {
+	test("flow_doctor accepts hidden home workspace roots", async () => {
 		const fakeHome = makeTempDir();
-		const suspiciousRoot = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".factory");
 		const homeDir = makeTempDir();
 		await installDoctorPluginFixture(homeDir);
 
 		await withHomeEnv(fakeHome, async () => {
+			await mkdir(hiddenWorkspace, { recursive: true });
 			const tools = createTestTools();
 			const response = await tools.flow_doctor.execute(
 				{},
-				toolContext("/", suspiciousRoot),
+				toolContext("/", hiddenWorkspace),
 			);
 			const parsed = JSON.parse(response);
 			const workspaceCheck = parsed.checks.find(
 				(check: { id: string }) => check.id === "workspace",
 			);
-			const sessionArtifactCheck = parsed.checks.find(
-				(check: { id: string }) => check.id === "session_artifacts",
-			);
 
-			expect(parsed.status).toBe("fail");
-			expect(parsed.workspaceRoot).toBe(suspiciousRoot);
+			expect(parsed.workspaceRoot).toBe(hiddenWorkspace);
 			expect(parsed.workspace).toEqual(
 				expect.objectContaining({
-					root: suspiciousRoot,
+					root: hiddenWorkspace,
+					source: "directory",
+					mutationAllowed: true,
+				}),
+			);
+			expect(workspaceCheck?.status).toBe("pass");
+		});
+	});
+
+	test("flow_plan_start at a normal project root does not ask just because hidden dirs exist inside it", async () => {
+		const worktree = makeTempDir();
+		const hiddenChild = join(worktree, ".factory");
+		const ask = mock(async () => {});
+		const tools = createTestTools();
+
+		await mkdir(hiddenChild, { recursive: true });
+		const response = await tools.flow_plan_start.execute(
+			{ goal: "Use project root state" },
+			toolContext(worktree, hiddenChild, { ask }),
+		);
+		const parsed = JSON.parse(response);
+		const saved = await loadSession(worktree);
+
+		expect(parsed.status).toBe("ok");
+		expect(saved?.goal).toBe("Use project root state");
+		expect(saved?.id).toBe(parsed.session.id);
+		expect(ask).not.toHaveBeenCalled();
+	});
+
+	test("flow_plan_start does not ask when the mutable workspace root is .flow itself", async () => {
+		const worktree = makeTempDir();
+		const flowRoot = join(worktree, ".flow");
+		const ask = mock(async () => {});
+		const tools = createTestTools();
+
+		await mkdir(flowRoot, { recursive: true });
+		const response = await tools.flow_plan_start.execute(
+			{ goal: "Use flow root directly" },
+			toolContext("/", flowRoot, { ask }),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(ask).not.toHaveBeenCalled();
+	});
+
+	test("flow_plan_start still rejects using $HOME itself as the mutable workspace root", async () => {
+		const fakeHome = makeTempDir();
+		const tools = createTestTools();
+
+		await withHomeEnv(fakeHome, async () => {
+			const response = await tools.flow_plan_start.execute(
+				{ goal: "Keep Flow out of home root" },
+				toolContext("/", fakeHome),
+			);
+			const parsed = JSON.parse(response);
+
+			expect(parsed.status).toBe("error");
+			expect(String(parsed.summary)).toContain(
+				"Flow blocked mutable workspace root",
+			);
+			expect(parsed.workspaceRoot).toBe(fakeHome);
+			expect(parsed.workspace).toEqual(
+				expect.objectContaining({
+					root: fakeHome,
 					source: "directory",
 					mutationAllowed: false,
 				}),
 			);
-			expect(workspaceCheck?.status).toBe("fail");
-			expect(String(workspaceCheck?.summary)).toContain(
-				"Flow blocked mutable workspace root",
+			expect(String(parsed.remediation)).toContain(
+				"Choose a project/worktree subdirectory instead of using $HOME directly",
 			);
-			expect(sessionArtifactCheck?.status).toBe("skip");
 		});
 	});
 

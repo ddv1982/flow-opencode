@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { errorResponse } from "../errors";
 import type { Session } from "../schema";
 import type { TransitionResult } from "../transitions";
@@ -159,7 +161,10 @@ function resolveCandidate(
 	if (rootCheck.rejectionReason) {
 		throw new InvalidFlowWorkspaceRootError({
 			summary: `Flow blocked mutable workspace root '${candidate.root}' from ${candidate.source}: ${rootCheck.rejectionReason}`,
-			remediation: `Trust this exact path intentionally by setting FLOW_TRUSTED_WORKSPACE_ROOTS=${candidate.root} before running Flow.`,
+			remediation:
+				candidate.root === resolve(process.env.HOME ?? homedir())
+					? "Choose a project/worktree subdirectory instead of using $HOME directly so Flow can manage .flow state there."
+					: `Trust this exact path intentionally by setting FLOW_TRUSTED_WORKSPACE_ROOTS=${candidate.root} before running Flow.`,
 			details: {
 				root: candidate.root,
 				source: candidate.source,

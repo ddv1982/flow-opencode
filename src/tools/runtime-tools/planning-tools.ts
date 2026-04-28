@@ -1,9 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
-import {
-	executeDispatchedSessionMutation,
-	runDispatchedSessionMutationAction,
-	toJson,
-} from "../../runtime/application";
+import { toJson } from "../../runtime/application";
 import { PlanningContextArgsSchema, type Session } from "../../runtime/schema";
 import { summarizeSession } from "../../runtime/summary";
 import { withParsedArgs } from "../parsed-tool";
@@ -14,10 +10,12 @@ import {
 	type ToolContext,
 } from "../schemas";
 import {
+	executeGuardedSessionMutation,
 	flowPlanApplyArgsShape,
 	flowPlanApproveArgsShape,
 	flowPlanSelectArgsShape,
 	parseFeatureIds,
+	runGuardedSessionMutationAction,
 } from "./shared";
 
 export function createPlanningRuntimeTools() {
@@ -41,7 +39,7 @@ export function createPlanningRuntimeTools() {
 					const planning = Object.fromEntries(
 						Object.entries(input).filter(([, value]) => value !== undefined),
 					);
-					return executeDispatchedSessionMutation(
+					return executeGuardedSessionMutation(
 						context,
 						"record_planning_context",
 						planning,
@@ -71,7 +69,7 @@ export function createPlanningRuntimeTools() {
 										([, value]) => value !== undefined,
 									),
 								) as Partial<Session["planning"]>);
-					const appliedResult = await runDispatchedSessionMutationAction(
+					const appliedResult = await runGuardedSessionMutationAction(
 						context,
 						"apply_plan",
 						planning === undefined
@@ -84,7 +82,7 @@ export function createPlanningRuntimeTools() {
 
 					const summary = summarizeSession(appliedResult.savedSession);
 					if (summary.session?.operator.lane === "lite") {
-						const approvedResult = await runDispatchedSessionMutationAction(
+						const approvedResult = await runGuardedSessionMutationAction(
 							context,
 							"auto_approve_lite_plan",
 							undefined,
@@ -110,7 +108,7 @@ export function createPlanningRuntimeTools() {
 							approvedCount: parseFeatureIds(input.featureIds).length || null,
 						},
 					});
-					return executeDispatchedSessionMutation(context, "approve_plan", {
+					return executeGuardedSessionMutation(context, "approve_plan", {
 						featureIds: parseFeatureIds(input.featureIds),
 					});
 				},
@@ -130,7 +128,7 @@ export function createPlanningRuntimeTools() {
 							selectedCount: parseFeatureIds(input.featureIds).length,
 						},
 					});
-					return executeDispatchedSessionMutation(
+					return executeGuardedSessionMutation(
 						context,
 						"select_plan_features",
 						{ featureIds: parseFeatureIds(input.featureIds) },

@@ -3,7 +3,6 @@ import { existsSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { InvalidFlowWorkspaceRootError } from "../src/runtime/application";
 import {
 	closeSession,
 	createSession,
@@ -35,51 +34,54 @@ afterEach(() => {
 });
 
 describe("workspace root guards", () => {
-	test("saveSession rejects suspicious mutable roots under home dot-directories", async () => {
+	test("saveSession allows mutable roots under hidden home directories", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
-		const suspiciousRoot = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".factory");
 
 		try {
 			await withHomeEnv(fakeHome, async () => {
-				await expect(
-					saveSession(suspiciousRoot, createSession("Guard suspicious root")),
-				).rejects.toThrow(InvalidFlowWorkspaceRootError);
-			});
-		} finally {
-			rmSync(fakeHome, { recursive: true, force: true });
-		}
-	});
-
-	test("ensureWorkspace rejects suspicious mutable roots under home dot-directories", async () => {
-		const fakeHome = await makeTempDir("flow-home-");
-		const suspiciousRoot = join(fakeHome, ".factory");
-
-		try {
-			await withHomeEnv(fakeHome, async () => {
-				await expect(ensureWorkspace(suspiciousRoot)).rejects.toThrow(
-					InvalidFlowWorkspaceRootError,
+				const saved = await saveSession(
+					hiddenWorkspace,
+					createSession("Guard hidden home workspace"),
 				);
+				expect(saved.goal).toBe("Guard hidden home workspace");
+				expect(
+					existsSync(join(hiddenWorkspace, ".flow", "active", saved.id)),
+				).toBe(true);
 			});
 		} finally {
 			rmSync(fakeHome, { recursive: true, force: true });
 		}
 	});
 
-	test("trusted suspicious roots remain usable for direct runtime session writes", async () => {
+	test("ensureWorkspace allows mutable roots under hidden home directories", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
-		const suspiciousRoot = join(fakeHome, ".factory");
-		process.env.FLOW_TRUSTED_WORKSPACE_ROOTS = suspiciousRoot;
+		const hiddenWorkspace = join(fakeHome, ".factory");
 
 		try {
 			await withHomeEnv(fakeHome, async () => {
-				await mkdir(suspiciousRoot, { recursive: true });
+				await ensureWorkspace(hiddenWorkspace);
+				expect(existsSync(join(hiddenWorkspace, ".flow"))).toBe(true);
+			});
+		} finally {
+			rmSync(fakeHome, { recursive: true, force: true });
+		}
+	});
+
+	test("hidden home workspaces remain usable for direct runtime session writes", async () => {
+		const fakeHome = await makeTempDir("flow-home-");
+		const hiddenWorkspace = join(fakeHome, ".factory");
+
+		try {
+			await withHomeEnv(fakeHome, async () => {
+				await mkdir(hiddenWorkspace, { recursive: true });
 				const session = await saveSession(
-					suspiciousRoot,
-					createSession("Trusted suspicious root"),
+					hiddenWorkspace,
+					createSession("Hidden home workspace"),
 				);
-				const closed = await closeSession(suspiciousRoot, "completed");
+				const closed = await closeSession(hiddenWorkspace, "completed");
 
-				expect(session.goal).toBe("Trusted suspicious root");
+				expect(session.goal).toBe("Hidden home workspace");
 				expect(closed?.sessionId).toBe(session.id);
 			});
 		} finally {

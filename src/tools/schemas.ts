@@ -22,8 +22,16 @@ export type ToolMetadataPayload = {
 	metadata: Record<string, unknown>;
 };
 
+export type ToolPermissionAskInput = {
+	permission: string;
+	patterns: string[];
+	always: string[];
+	metadata: Record<string, unknown>;
+};
+
 export type ToolContext = WorkspaceContext & {
 	metadata?: (payload: ToolMetadataPayload) => void;
+	ask?: (input: ToolPermissionAskInput) => Promise<void>;
 };
 export const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
 export const featureIdSchema = z

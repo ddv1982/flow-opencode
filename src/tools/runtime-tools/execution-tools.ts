@@ -1,5 +1,4 @@
 import { tool } from "@opencode-ai/plugin";
-import { executeDispatchedSessionMutation } from "../../runtime/application";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowResetFeatureArgsSchema,
@@ -8,7 +7,11 @@ import {
 	type ToolContext,
 	WorkerResultArgsSchema,
 } from "../schemas";
-import { flowRunStartArgsShape, workerResultArgsShape } from "./shared";
+import {
+	executeGuardedSessionMutation,
+	flowRunStartArgsShape,
+	workerResultArgsShape,
+} from "./shared";
 
 export function createExecutionRuntimeTools() {
 	return {
@@ -26,7 +29,7 @@ export function createExecutionRuntimeTools() {
 							reason: null,
 						},
 					});
-					return executeDispatchedSessionMutation(context, "start_run", {
+					return executeGuardedSessionMutation(context, "start_run", {
 						...(input.featureId ? { featureId: input.featureId } : {}),
 					});
 				},
@@ -47,7 +50,7 @@ export function createExecutionRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return executeDispatchedSessionMutation(context, "complete_run", {
+					return executeGuardedSessionMutation(context, "complete_run", {
 						worker: input,
 					});
 				},
@@ -67,7 +70,7 @@ export function createExecutionRuntimeTools() {
 							featureId: input.featureId,
 						},
 					});
-					return executeDispatchedSessionMutation(context, "reset_feature", {
+					return executeGuardedSessionMutation(context, "reset_feature", {
 						featureId: input.featureId,
 					});
 				},
