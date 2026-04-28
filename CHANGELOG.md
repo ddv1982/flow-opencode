@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.0.18] - 2026-04-28
+
+### Highlights
+
+Flow 1.0.18 improves subagent efficiency without expanding the runtime role model. This release teaches workers to classify feature workstreams up front, normalizes validator-safe command evidence around `bun run check` and `bun run format_check`, surfaces lane-selection reasons more consistently in operator-facing outputs, and documents that true runtime-level parallel feature execution remains intentionally deferred.
+
+### Added
+
+- Added explicit `core-worker` workstream classes for implementation, test-only/coverage/tooling, validation-only, and release/integration work.
+- Added a required worker orientation reference to `.factory/library/environment.md` alongside the existing architecture and validation guidance.
+- Added stronger protocol-parity coverage for lite-lane semantics, reviewer-persistence requirements, final-completion-path guidance, and recovery/replan expectations.
+
+### Changed
+
+- Normalized worker verification guidance so `bun run check` is the default aggregate proof, with clearer workstream-specific expectations for when scoped sub-checks should be expanded.
+- Updated the shared formatter-safe validation alias to use a Biome check command with formatter enabled, linter disabled, and assist enforcement disabled.
+- Exposed `laneReason` more consistently in operator-facing runtime summaries and concrete session-detail payloads.
+- Clarified maintainer and README guidance around lane visibility, validator-safe commands, and the intentional deferral of runtime-level parallel feature execution.
+
+### Fixed
+
+- Fixed the worker-procedure mismatch that had been forcing implementation, test-only, validation-only, and release/integration work through the same overly rigid checklist.
+- Fixed ambiguity around formatter-only validation guidance by aligning the shared alias, environment notes, and validator docs on one canonical command surface.
+- Fixed small release-surface/documentation inconsistencies uncovered during the final review pass.
+
 ## [1.0.17] - 2026-04-28
 
 ### Highlights

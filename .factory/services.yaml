@@ -7,7 +7,7 @@ commands:
   bench_smoke: bun run bench:smoke
   build: bun run build
   lint: bun run lint
-  format_check: bunx biome format --check .
+  format_check: node_modules/.bin/biome check . --formatter-enabled=true --linter-enabled=false --enforce-assist=false --files-ignore-unknown=true --vcs-use-ignore-file=true
   deadcode: bun run deadcode
   check: bun run check
 

@@ -42,7 +42,7 @@ Reducing to 3 concurrent validators is acceptable if the machine reports <8 GB f
 - `bun run bench -- --filter <suite>` may still print additional benchmark groups depending on harness behavior. For assertion-level validation, parse and assert only the contract-required benchmark rows (for example, transition reducer rows for `VAL-TRANS-014`).
 - Some assertions reference artifacts produced by earlier milestones (e.g. `bench/BASELINE.md`, `tests/__fixtures__/render/`). If a validator is asked to verify an M5 assertion before M1/M3 has landed, return with a clear blocker — the precondition isn't met.
 - Biome 2.x removed the `--check` flag from `format`. The correct read-only invocation is `bunx biome format .` (which writes nothing unless `--write` is passed).
-- If mission-worker safety gating blocks `biome format` commands, use this equivalent formatter-only check command instead: `node_modules/.bin/biome check <repo-root> --formatter-enabled=true --linter-enabled=false --files-ignore-unknown=true --vcs-use-ignore-file=true`.
+- If mission-worker safety gating blocks `biome format` commands, use this equivalent formatter-only check command instead: `node_modules/.bin/biome check <repo-root> --formatter-enabled=true --linter-enabled=false --enforce-assist=false --files-ignore-unknown=true --vcs-use-ignore-file=true`.
 - Format scope is constrained by `biome.json` `files.includes` (currently excludes `.factory/`, `dist/`, `node_modules/`, and `bun.lock`).
 - In this repo, `bun test --filter "<test name>"` may still execute the full test file. Treat `--filter` as best-effort and collect evidence from explicit file-targeted runs when assertion scope must be narrow.
 - For temp-HOME install smoke imports, remember the built bundle externalizes `@opencode-ai/plugin`. If importing the installed plugin directly, provide that peer dependency from the isolated environment (or use a shim) so the smoke import resolves.
@@ -55,10 +55,23 @@ Reducing to 3 concurrent validators is acceptable if the machine reports <8 GB f
 - Do not modify source files, package metadata, or mission files while validating.
 - Prefer deterministic commands (`rg`, `node -e`, `test`, `git ls-files`) and include raw command output snippets in evidence.
 
+## Safe validation command surface
+
+Use shared command aliases from `.factory/services.yaml` whenever possible:
+
+- `bun run check`
+- `bun run typecheck`
+- `bun run lint`
+- `bun run deadcode`
+- `bun run build`
+- `bun run format_check`
+
+`bun run check` is the default aggregate proof. Expand into sub-checks only when assertion-scoped evidence requires it. Use `bun run format_check` for formatter-only evidence when `biome format` is unavailable or safety-gated.
+
 ## Flow Validator Guidance: cli-smoke
 
 - Scope: command-based behavior checks for `bun` scripts used by foundations assertions.
-- Run only required foundations commands (`bun run typecheck`, `bun run lint`, `bunx biome format .`, `bun run bench` where required by assertion, `bun run check`) and any command explicitly needed to collect assertion evidence.
+- Run only required foundations commands (`bun run typecheck`, `bun run lint`, `bun run format_check`, `bun run bench` where required by assertion, `bun run check`) and any command explicitly needed to collect assertion evidence.
 - Do not run installer/uninstaller commands against the real HOME; use temp HOME overrides when needed.
 - Capture exit code and key stdout/stderr lines for each asserted command.
 
