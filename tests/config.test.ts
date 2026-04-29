@@ -820,6 +820,14 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"keep process/reporting issues in process_gap",
 		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"if flow_audit_write_report succeeds, the final audit output should use the returned normalized report object",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"artifact paths returned by flow_audit_write_report are persistence metadata",
+		);
+		const contractTail = FLOW_AUDIT_CONTRACT.toLowerCase();
+		expect(contractTail).not.toContain("include the returned artifact paths");
 	});
 
 	test("worker prompt requires iterative review and fix loops", () => {
@@ -864,10 +872,22 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("You are the Flow auditor.");
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("Map the major repo surfaces");
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"The only permitted write from this surface is `flow_audit_write_report`",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"Do not claim full_audit unless every major discovered surface is directly reviewed",
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"use the returned normalized `report` object as the final output",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"Do not include `reportDir`, `jsonPath`, or `markdownPath`",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).not.toContain(
+			"Include the returned artifact paths in your final summary.",
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.",
@@ -957,7 +977,10 @@ describe("applyFlowConfig", () => {
 			"Treat this command as a dedicated audit surface",
 		);
 		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
-			"Stay read-only; do not start Flow runtime planning or execution tools.",
+			"Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"The only permitted write from this command is `flow_audit_write_report`",
 		);
 		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
 			"only use achievedDepth: full_audit when every major discovered surface is directly reviewed",
@@ -967,6 +990,15 @@ describe("applyFlowConfig", () => {
 		);
 		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
 			"status: not_run explicitly in the audit output",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"use the returned normalized `report` object as the final audit output.",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"Do not include `reportDir`, `jsonPath`, or `markdownPath` in the final audit object.",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).not.toContain(
+			"Include the returned artifact paths in your final summary.",
 		);
 	});
 

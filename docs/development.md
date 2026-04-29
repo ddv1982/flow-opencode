@@ -70,7 +70,7 @@ Flow is built around a few stable responsibilities:
 - `flow-worker` executes exactly one approved feature
 - `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`)
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
-- `flow-auditor` performs read-only audits with explicit scope/coverage accounting and calibrated claim strength
+- `flow-auditor` performs read-only audits with explicit scope/coverage accounting and calibrated claim strength; its only sanctioned write is audit artifact export through `flow_audit_write_report`
 - `flow-control` handles status/history/session/feature-reset requests only
 
 Audit work should stay separate from normal feature execution. Prefer the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
@@ -81,7 +81,7 @@ Audit work should stay separate from normal feature execution. Prefer the dedica
 
 and may only claim `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
 
-When an audit should leave a durable artifact, the auditor should persist it through `flow_audit_write_report`. That tool normalizes the coverage sections from `discoveredSurfaces`, writes JSON plus Markdown under `.flow/audits/`, and rejects unsupported `full_audit` claims.
+When an audit should leave a durable artifact, the auditor should persist it through `flow_audit_write_report`. That tool is the only sanctioned write from the audit surface: call it with the completed audit report object, let it normalize the coverage sections from `discoveredSurfaces`, then use the returned normalized `report` object as the final audit output. It writes JSON plus Markdown under `.flow/audits/`, rejects unsupported `full_audit` claims, and returns artifact paths as persistence metadata rather than audit-report fields.
 
 ## Current Runtime Tools
 

@@ -7,12 +7,14 @@
 		"risk": "high",
 		"sourcePaths": ["src/prompts/agents.ts", "src/prompts/contracts.ts"],
 		"expectedSnippets": [
+			"The only permitted write from this surface is `flow_audit_write_report`",
 			"Do not claim full_audit unless every major discovered surface is directly reviewed",
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
 			"downgrade achievedDepth"
 		],
 		"forbiddenSnippets": [
-			"claim full_audit after spot-checking only a subset of surfaces"
+			"claim full_audit after spot-checking only a subset of surfaces",
+			"Include the returned artifact paths in your final summary."
 		]
 	},
 	{
@@ -41,9 +43,14 @@
 		"expectedSnippets": [
 			"Treat this command as a dedicated audit surface, not as Flow planning or feature execution.",
 			"If coverage is incomplete, downgrade achievedDepth honestly and explain the gap.",
-			"persist the final audit through flow_audit_write_report"
+			"The only permitted write from this command is `flow_audit_write_report`",
+			"use the returned normalized `report` object as the final audit output.",
+			"Do not include `reportDir`, `jsonPath`, or `markdownPath` in the final audit object."
 		],
-		"forbiddenSnippets": ["start Flow execution to complete an audit"]
+		"forbiddenSnippets": [
+			"start Flow execution to complete an audit",
+			"Include the returned artifact paths in your final summary."
+		]
 	},
 	{
 		"id": "audit-contract-reviewed-unreviewed-surfaces",
@@ -55,7 +62,8 @@
 		"expectedSnippets": [
 			"discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]",
 			"coverageRubric: { fullAuditEligible: boolean, directlyReviewedCategories: string[], spotCheckedCategories: string[], unreviewedCategories: string[], blockingReasons: string[] }",
-			"discoveredSurfaces is the canonical coverage ledger"
+			"discoveredSurfaces is the canonical coverage ledger",
+			"artifact paths returned by flow_audit_write_report are persistence metadata"
 		],
 		"forbiddenSnippets": ["omit unreviewed surfaces from the audit report"]
 	}
