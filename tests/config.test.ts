@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
+import { getAuditSurfaceState } from "../src/audit/enabled";
 import { FLOW_AUDITOR_AGENT_PROMPT } from "../src/audit/prompts/agents";
 import {
 	FLOW_AUDIT_COMMAND_TEMPLATE,
@@ -152,16 +153,30 @@ function asJson(value: unknown) {
 }
 
 describe("applyFlowConfig", () => {
-	const originalAuditEnv = process.env.FLOW_ENABLE_AUDIT_SURFACE;
+	const AUDIT_ENV_KEYS = [
+		"FLOW_ENABLE_AUDIT_SURFACE",
+		"FLOW_ENABLE_AUDIT_CONFIG",
+		"FLOW_ENABLE_AUDIT_TOOLS",
+		"FLOW_ENABLE_AUDIT_GUIDANCE",
+	] as const;
+	const originalAuditEnv = Object.fromEntries(
+		AUDIT_ENV_KEYS.map((key) => [key, process.env[key]]),
+	) as Record<(typeof AUDIT_ENV_KEYS)[number], string | undefined>;
 	beforeEach(() => {
+		for (const key of AUDIT_ENV_KEYS) {
+			delete process.env[key];
+		}
 		process.env.FLOW_ENABLE_AUDIT_SURFACE = "1";
 	});
 	afterEach(() => {
-		if (originalAuditEnv === undefined) {
-			delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
-			return;
+		for (const key of AUDIT_ENV_KEYS) {
+			const value = originalAuditEnv[key];
+			if (value === undefined) {
+				delete process.env[key];
+				continue;
+			}
+			process.env[key] = value;
 		}
-		process.env.FLOW_ENABLE_AUDIT_SURFACE = originalAuditEnv;
 	});
 	test("plugin entrypoint returns Flow config and tool hooks", async () => {
 		const appLog = {
@@ -302,6 +317,55 @@ describe("applyFlowConfig", () => {
 		expect(config.command?.["flow-audits"]).toBeUndefined();
 		expect(config.agent?.["flow-planner"]).toBeDefined();
 		expect(config.command?.["flow-plan"]).toBeDefined();
+	});
+
+	test("supports config-only audit diagnostics without enabling audit tools", () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		process.env.FLOW_ENABLE_AUDIT_CONFIG = "1";
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+		expect(config.agent?.["flow-auditor"]).toBeDefined();
+		expect(config.command?.["flow-audit"]).toBeDefined();
+		expect(Object.keys(createTools({}))).not.toContain("flow_audit_compare");
+	});
+
+	test("supports tools-only audit diagnostics without enabling audit config", () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		process.env.FLOW_ENABLE_AUDIT_TOOLS = "1";
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+		expect(config.agent?.["flow-auditor"]).toBeUndefined();
+		expect(config.command?.["flow-audit"]).toBeUndefined();
+		expect(Object.keys(createTools({}))).toContain("flow_audit_compare");
+	});
+
+	test("parses master and diagnostic audit env gates predictably", () => {
+		for (const key of AUDIT_ENV_KEYS) {
+			delete process.env[key];
+		}
+		expect(getAuditSurfaceState()).toEqual({
+			all: false,
+			config: false,
+			tools: false,
+			guidance: false,
+			any: false,
+		});
+		process.env.FLOW_ENABLE_AUDIT_GUIDANCE = "yes";
+		expect(getAuditSurfaceState()).toEqual({
+			all: false,
+			config: false,
+			tools: false,
+			guidance: true,
+			any: true,
+		});
+		process.env.FLOW_ENABLE_AUDIT_SURFACE = "true";
+		expect(getAuditSurfaceState()).toEqual({
+			all: true,
+			config: true,
+			tools: true,
+			guidance: true,
+			any: true,
+		});
 	});
 
 	test("marks canonical persistence tools as explicit action descriptions", () => {
@@ -1246,6 +1310,62 @@ describe("applyFlowConfig", () => {
 		expect(output.description).toContain("broad validation plus final review");
 		expect(output.description).toContain("## Avoid when");
 		expect(output.description).toContain("## Returns");
+	});
+
+	test("tool definition hook keeps audit guidance disabled by default", async () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		const plugin = (await FlowPlugin({
+			worktree: "/tmp/flow-plugin-test",
+		} as unknown as Parameters<typeof FlowPlugin>[0])) as typeof FlowPlugin &
+			FlowPluginHooks;
+		const hook = plugin.hooks?.["tool.definition"] as
+			| ((
+					input: { toolID: string },
+					output: { description: string; parameters: unknown },
+			  ) => Promise<void>)
+			| undefined;
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing tool.definition hook");
+		}
+
+		const output = {
+			description: "Compare two persisted Flow audit reports",
+			parameters: {},
+		};
+		await hook({ toolID: "flow_audit_compare" }, output);
+		expect(output.description).toBe("Compare two persisted Flow audit reports");
+	});
+
+	test("tool definition hook enriches audit guidance when the diagnostic guidance gate is enabled", async () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		process.env.FLOW_ENABLE_AUDIT_GUIDANCE = "1";
+		const plugin = (await FlowPlugin({
+			worktree: "/tmp/flow-plugin-test",
+		} as unknown as Parameters<typeof FlowPlugin>[0])) as typeof FlowPlugin &
+			FlowPluginHooks;
+		const hook = plugin.hooks?.["tool.definition"] as
+			| ((
+					input: { toolID: string },
+					output: { description: string; parameters: unknown },
+			  ) => Promise<void>)
+			| undefined;
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing tool.definition hook");
+		}
+
+		const output = {
+			description: "Compare two persisted Flow audit reports",
+			parameters: {},
+		};
+		await hook({ toolID: "flow_audit_compare" }, output);
+		expect(output.description).toContain("## Use when");
+		expect(output.description).toContain(
+			"coverage, findings, and validation posture",
+		);
 	});
 
 	test("tool definition hook enriches the audit report export tool with persistence guidance", async () => {

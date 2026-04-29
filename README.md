@@ -101,11 +101,21 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
 ### Audit existing code (opt-in)
 
 Audit surfaces are disabled by default to keep ordinary plugin installs stable.
-Enable them explicitly with:
+Enable the full audit lane with:
 
 ```bash
 export FLOW_ENABLE_AUDIT_SURFACE=1
 ```
+
+For host-stability diagnosis, you can also re-enable audit sub-surfaces independently:
+
+```bash
+export FLOW_ENABLE_AUDIT_CONFIG=1
+export FLOW_ENABLE_AUDIT_TOOLS=1
+export FLOW_ENABLE_AUDIT_GUIDANCE=1
+```
+
+Those diagnostic flags are meant for bisecting host/plugin instability. They can expose partial audit behavior and are not the normal user-facing setup.
 
 Then use the dedicated audit lane when you want a read-only findings report instead of feature execution.
 
@@ -189,8 +199,8 @@ When something recoverable goes wrong (a flaky test, a missing prerequisite, a v
 - Start or reshape work → `/flow-plan <goal>`
 - Run one approved feature → `/flow-run [feature-id]`
 - Run autonomously end-to-end → `/flow-auto <goal>` or `/flow-auto resume`
-- Run a read-only repo audit (requires `FLOW_ENABLE_AUDIT_SURFACE=1`) → `/flow-audit <goal>`
-- Browse or compare saved audit reports (requires `FLOW_ENABLE_AUDIT_SURFACE=1`) → `/flow-audits` / `/flow-audits show <report-id|latest>` / `/flow-audits compare <left> <right>`
+- Run a read-only repo audit (requires `FLOW_ENABLE_AUDIT_SURFACE=1` or diagnostic config gating) → `/flow-audit <goal>`
+- Browse or compare saved audit reports (requires audit config and audit tools) → `/flow-audits` / `/flow-audits show <report-id|latest>` / `/flow-audits compare <left> <right>`
 - See what Flow is doing and what to run next → `/flow-status [detail]`
 - Diagnose readiness/blockers → `/flow-doctor [detail]`
 - Browse sessions → `/flow-history` / `/flow-history show <session-id>`

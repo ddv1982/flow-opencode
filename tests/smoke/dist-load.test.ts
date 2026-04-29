@@ -35,19 +35,32 @@ type FlowToolName =
 	| "flow_reset_feature";
 type FlowSmokeTools = Record<FlowToolName, TestTool>;
 
-const ORIGINAL_AUDIT_ENV = process.env.FLOW_ENABLE_AUDIT_SURFACE;
+const AUDIT_ENV_KEYS = [
+	"FLOW_ENABLE_AUDIT_SURFACE",
+	"FLOW_ENABLE_AUDIT_CONFIG",
+	"FLOW_ENABLE_AUDIT_TOOLS",
+	"FLOW_ENABLE_AUDIT_GUIDANCE",
+] as const;
+const ORIGINAL_AUDIT_ENV = Object.fromEntries(
+	AUDIT_ENV_KEYS.map((key) => [key, process.env[key]]),
+) as Record<(typeof AUDIT_ENV_KEYS)[number], string | undefined>;
 
 afterEach(() => {
 	cleanupManagedTempDirs();
-	if (ORIGINAL_AUDIT_ENV === undefined) {
-		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
-	} else {
-		process.env.FLOW_ENABLE_AUDIT_SURFACE = ORIGINAL_AUDIT_ENV;
+	for (const key of AUDIT_ENV_KEYS) {
+		const value = ORIGINAL_AUDIT_ENV[key];
+		if (value === undefined) {
+			delete process.env[key];
+			continue;
+		}
+		process.env[key] = value;
 	}
 });
 
 beforeEach(() => {
-	delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+	for (const key of AUDIT_ENV_KEYS) {
+		delete process.env[key];
+	}
 });
 
 describe("built dist smoke load", () => {
@@ -180,6 +193,53 @@ describe("built dist smoke load", () => {
 					historyResponse.history.stored[0]?.id,
 			).toBe(planStartResponse.session.id);
 		}
+	});
+
+	test("dist bundle exposes config-only audit diagnostics when FLOW_ENABLE_AUDIT_CONFIG is enabled", async () => {
+		process.env.FLOW_ENABLE_AUDIT_CONFIG = "1";
+		const pluginFactory = await importBuiltPlugin();
+		const worktree = makeManagedTempDir("flow-dist-worktree-audit-config-");
+		const plugin = (await pluginFactory({
+			worktree,
+		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
+
+		const config = {
+			agent: {},
+			command: {},
+		} as Record<string, Record<string, unknown>>;
+		await plugin.config?.(
+			config as Parameters<NonNullable<typeof plugin.config>>[0],
+		);
+
+		expect(Object.keys(config.agent ?? {})).toHaveLength(6);
+		expect(Object.keys(config.command ?? {})).toHaveLength(10);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
+		expect(plugin.tool?.flow_audit_write_report).toBeUndefined();
+	});
+
+	test("dist bundle exposes tools-only audit diagnostics when FLOW_ENABLE_AUDIT_TOOLS is enabled", async () => {
+		process.env.FLOW_ENABLE_AUDIT_TOOLS = "1";
+		const pluginFactory = await importBuiltPlugin();
+		const worktree = makeManagedTempDir("flow-dist-worktree-audit-tools-");
+		const plugin = (await pluginFactory({
+			worktree,
+		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
+
+		const config = {
+			agent: {},
+			command: {},
+		} as Record<string, Record<string, unknown>>;
+		await plugin.config?.(
+			config as Parameters<NonNullable<typeof plugin.config>>[0],
+		);
+
+		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
+		expect(Object.keys(config.command ?? {})).toHaveLength(8);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(21);
+		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
+		expect(plugin.tool?.flow_audit_history).toBeDefined();
+		expect(plugin.tool?.flow_audit_show).toBeDefined();
+		expect(plugin.tool?.flow_audit_compare).toBeDefined();
 	});
 
 	test("dist bundle exposes audit surface when FLOW_ENABLE_AUDIT_SURFACE is enabled", async () => {

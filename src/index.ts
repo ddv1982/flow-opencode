@@ -1,5 +1,5 @@
 import type { Hooks, Plugin } from "@opencode-ai/plugin";
-import { isAuditSurfaceEnabled } from "./audit/enabled";
+import { isAuditGuidanceEnabled } from "./audit/enabled";
 import { applyFlowAuditToolDefinitionGuidance } from "./audit/tool-definition-guidance";
 import { createConfigHook } from "./config";
 import {
@@ -32,7 +32,7 @@ const flowToolDefinitionHook: NonNullable<Hooks["tool.definition"]> = async (
 		return;
 	}
 	applyFlowToolDefinitionGuidance(input.toolID, output);
-	if (isAuditSurfaceEnabled()) {
+	if (isAuditGuidanceEnabled()) {
 		applyFlowAuditToolDefinitionGuidance(input.toolID, output);
 	}
 };
