@@ -13,13 +13,11 @@ type TestTool = {
 };
 type FlowToolName =
 	| "flow_audit_write_report"
-	| "flow_audit_compare"
+	| "flow_audit_reports"
 	| "flow_status"
 	| "flow_doctor"
 	| "flow_history"
-	| "flow_audit_history"
 	| "flow_history_show"
-	| "flow_audit_show"
 	| "flow_session_activate"
 	| "flow_plan_start"
 	| "flow_auto_prepare"
@@ -235,11 +233,9 @@ describe("built dist smoke load", () => {
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
 		expect(Object.keys(config.command ?? {})).toHaveLength(8);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(21);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
 		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
-		expect(plugin.tool?.flow_audit_history).toBeDefined();
-		expect(plugin.tool?.flow_audit_show).toBeDefined();
-		expect(plugin.tool?.flow_audit_compare).toBeDefined();
+		expect(plugin.tool?.flow_audit_reports).toBeDefined();
 	});
 
 	test("dist bundle exposes audit surface when FLOW_ENABLE_AUDIT_SURFACE is enabled", async () => {
@@ -260,10 +256,8 @@ describe("built dist smoke load", () => {
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(6);
 		expect(Object.keys(config.command ?? {})).toHaveLength(10);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(21);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
 		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
-		expect(plugin.tool?.flow_audit_history).toBeDefined();
-		expect(plugin.tool?.flow_audit_show).toBeDefined();
-		expect(plugin.tool?.flow_audit_compare).toBeDefined();
+		expect(plugin.tool?.flow_audit_reports).toBeDefined();
 	});
 });

@@ -13,14 +13,14 @@ const FLOW_AUDIT_TOOL_DESCRIPTION_GUIDANCE: Record<string, string> = {
 
 ## Returns
 - Persists a normalized audit artifact bundle and returns the report directory plus JSON/Markdown paths.`,
-	flow_audit_compare: `## Use when
-- Use to compare two persisted audit reports and summarize what changed in coverage, findings, and validation posture.
+	flow_audit_reports: `## Use when
+- Use to inspect saved audit reports by listing history, showing one report, or comparing two persisted audit reports.
 
 ## Avoid when
-- Do not use for ad hoc text diffs or when one side is not a saved Flow audit artifact.
+- Do not use for ad hoc text diffs or when an action is missing the required report ids.
 
 ## Returns
-- Returns a structured comparison payload or a clear missing-report response.`,
+- Returns the matching saved-audit history, report, or comparison payload for the requested action.`,
 };
 
 export function applyFlowAuditToolDefinitionGuidance(
