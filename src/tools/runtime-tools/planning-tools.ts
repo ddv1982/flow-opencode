@@ -1,16 +1,22 @@
 import { tool } from "@opencode-ai/plugin";
 import { toJson } from "../../runtime/application";
-import { PlanningContextArgsSchema, type Session } from "../../runtime/schema";
-import { withParsedArgs } from "../parsed-tool";
+import {
+	PlanArgsSchema,
+	PlanningContextArgsSchema,
+	type Session,
+} from "../../runtime/schema";
+import { withJsonTransportArgs, withParsedArgs } from "../parsed-tool";
 import {
 	FlowPlanApplyArgsSchema,
+	FlowPlanApplyJsonArgsShape,
 	FlowPlanApproveArgsSchema,
+	FlowPlanContextRecordArgsSchema,
+	FlowPlanContextRecordArgsShape,
 	FlowPlanSelectArgsSchema,
 	type ToolContext,
 } from "../schemas";
 import {
 	executeGuardedSessionMutation,
-	flowPlanApplyArgsShape,
 	flowPlanApproveArgsShape,
 	flowPlanSelectArgsShape,
 	parseFeatureIds,
@@ -21,10 +27,15 @@ export function createPlanningRuntimeTools() {
 	return {
 		flow_plan_context_record: tool({
 			description:
-				"Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session",
-			args: PlanningContextArgsSchema.shape,
-			execute: withParsedArgs(
-				PlanningContextArgsSchema,
+				"Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session from a JSON payload",
+			args: FlowPlanContextRecordArgsShape,
+			execute: withJsonTransportArgs(
+				{
+					transportSchema: FlowPlanContextRecordArgsSchema,
+					field: "planningJson",
+					payloadSchema: PlanningContextArgsSchema,
+					legacySchema: PlanningContextArgsSchema,
+				},
 				async (input, context: ToolContext) => {
 					context.metadata?.({
 						title: "Record planning context",
@@ -48,10 +59,32 @@ export function createPlanningRuntimeTools() {
 		}),
 
 		flow_plan_apply: tool({
-			description: "Persist a Flow draft plan into the active session",
-			args: flowPlanApplyArgsShape,
-			execute: withParsedArgs(
-				FlowPlanApplyArgsSchema,
+			description:
+				"Persist a Flow draft plan into the active session from a JSON payload",
+			args: FlowPlanApplyJsonArgsShape,
+			execute: withJsonTransportArgs(
+				{
+					transportSchema: FlowPlanApplyArgsSchema,
+					field: "planJson",
+					payloadSchema: {
+						parse: (input: unknown) =>
+							tool.schema
+								.object({
+									plan: PlanArgsSchema.strict(),
+									planning: PlanningContextArgsSchema.strict().optional(),
+								})
+								.parse(input),
+					},
+					legacySchema: {
+						parse: (input: unknown) =>
+							tool.schema
+								.object({
+									plan: PlanArgsSchema.strict(),
+									planning: PlanningContextArgsSchema.strict().optional(),
+								})
+								.parse(input),
+					},
+				},
 				async (input, context: ToolContext) => {
 					context.metadata?.({
 						title: "Apply draft plan",

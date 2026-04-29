@@ -21,8 +21,11 @@ export type TestToolDefinition = {
 	execute: (args: unknown, context: TestToolContext) => Promise<string>;
 };
 
-export type TestTools = ReturnType<typeof createTools> &
-	Record<string, TestToolDefinition>;
+type ToolSurface = ReturnType<typeof createTools>;
+
+export type TestTools = {
+	[K in keyof ToolSurface]: TestToolDefinition;
+} & Record<string, TestToolDefinition>;
 
 export function createTestTools(): TestTools {
 	return createTools({}) as unknown as TestTools;

@@ -8,11 +8,7 @@ import {
 	FEATURE_ID_PATTERN,
 } from "../runtime/constants";
 import {
-	AuditReportBaseSchema,
-	AuditReportSchema,
 	OutcomeSchema,
-	PlanArgsSchema,
-	PlanningContextArgsSchema,
 	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
 	FlowReviewRecordFinalArgsSchema as RuntimeFlowReviewRecordFinalArgsSchema,
 	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
@@ -81,9 +77,25 @@ export const FlowSessionCloseArgsShape = {
 	kind: z.enum(CLOSURE_KINDS),
 	summary: z.string().trim().min(1).optional(),
 };
-export const FlowAuditWriteReportArgsSchema = z.object({
-	report: z.union([AuditReportBaseSchema.strict(), AuditReportSchema]),
-});
+const jsonPayloadSchema = z.string().trim().min(1);
+export const FlowAuditWriteReportArgsShape = {
+	reportJson: jsonPayloadSchema,
+};
+export const FlowPlanContextRecordArgsShape = {
+	planningJson: jsonPayloadSchema,
+};
+export const FlowPlanApplyJsonArgsShape = {
+	planJson: jsonPayloadSchema,
+};
+export const FlowRunCompleteFeatureArgsShape = {
+	workerJson: jsonPayloadSchema,
+};
+export const FlowReviewRecordFeatureJsonArgsShape = {
+	decisionJson: jsonPayloadSchema,
+};
+export const FlowReviewRecordFinalJsonArgsShape = {
+	decisionJson: jsonPayloadSchema,
+};
 export const FlowAutoPrepareArgsShape = {
 	argumentString: z.string().optional(),
 };
@@ -91,10 +103,10 @@ export const FlowPlanStartArgsShape = {
 	goal: z.string().trim().min(1).optional(),
 	repoProfile: z.array(z.string().min(1)).optional(),
 };
-export const FlowPlanApplyArgsSchema = z.object({
-	plan: PlanArgsSchema.strict(),
-	planning: PlanningContextArgsSchema.strict().optional(),
-});
+export const FlowPlanContextRecordArgsSchema = z.object(
+	FlowPlanContextRecordArgsShape,
+);
+export const FlowPlanApplyArgsSchema = z.object(FlowPlanApplyJsonArgsShape);
 export const FlowPlanApproveArgsShape = {
 	featureIds: z.array(featureIdSchema).optional(),
 };
@@ -141,11 +153,21 @@ export const FlowSessionActivateArgsSchema = z.object(
 	FlowSessionActivateArgsShape,
 );
 export const FlowSessionCloseArgsSchema = z.object(FlowSessionCloseArgsShape);
-export const FlowAuditWriteReportArgsShape =
-	FlowAuditWriteReportArgsSchema.shape;
+export const FlowAuditWriteReportArgsSchema = z.object(
+	FlowAuditWriteReportArgsShape,
+);
 export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
 export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
 export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
 export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
 export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
+export const FlowRunCompleteFeatureArgsSchema = z.object(
+	FlowRunCompleteFeatureArgsShape,
+);
+export const FlowReviewRecordFeatureJsonArgsSchema = z.object(
+	FlowReviewRecordFeatureJsonArgsShape,
+);
+export const FlowReviewRecordFinalJsonArgsSchema = z.object(
+	FlowReviewRecordFinalJsonArgsShape,
+);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);

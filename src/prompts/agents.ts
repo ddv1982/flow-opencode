@@ -103,7 +103,7 @@ export const FLOW_PLANNER_AGENT_PROMPT = renderPromptSections([
 		title: "Rules",
 		body: `${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
-- Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record.
+- Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record, encoding that object into \`planningJson\`.
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
 - Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.
 - If package-manager evidence is ambiguous, do not guess. Prefer existing package.json scripts and call out the ambiguity in planning context.
@@ -115,13 +115,13 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 		title: "Workflow",
 		body: `Plan flow:
 1. Call flow_plan_start.
-2. Read enough repo context to justify the plan, detect the stack and package manager, and persist repoProfile plus packageManager and any research/implementationApproach with flow_plan_context_record.
+2. Read enough repo context to justify the plan, detect the stack and package manager, and persist repoProfile plus packageManager and any research/implementationApproach with flow_plan_context_record, encoding that object into \`planningJson\`.
 3. If the command asks you to approve or select features, call the matching Flow tool and stop.
 4. Return plan content matching:
 
 ${FLOW_PLAN_CONTRACT}
 
-5. Persist it with flow_plan_apply.
+5. Persist it with flow_plan_apply, encoding the { plan, planning? } payload into \`planJson\`.
 6. If flow_plan_apply auto-approves a lite-lane draft, end with the next execution step instead of an approval reminder.
 7. Otherwise end with a compact draft summary: goal, overview, ordered features, next approval step.
 
@@ -168,13 +168,13 @@ ${FLOW_FINAL_COMPLETION_PATH_RULE}`,
 6. If review finds blocking issues, fix them, rerun targeted validation, and review again. Repeat until review passes or a real blocker remains.
 7. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing review payload, you may skip the separate reviewer-persistence hop.
 8. In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.
-9. Otherwise, on the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final.
-10. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature.
+9. Otherwise, on the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final, encoding the reviewer decision into \`decisionJson\`.
+10. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature, encoding the reviewer decision into \`decisionJson\`.
 11. Return one worker result matching:
 
 ${FLOW_WORKER_CONTRACT}
 
-12. Persist the worker result with flow_run_complete_feature only after the feature is clean, reviewer-approved, or truly blocked.
+12. Persist the worker result with flow_run_complete_feature only after the feature is clean, reviewer-approved, or truly blocked, encoding the worker result into \`workerJson\`.
 13. End with a compact summary of what changed, validation evidence, how many review/fix iterations were needed, and the runtime's next step.`,
 	},
 	{
@@ -219,17 +219,17 @@ ${FLOW_NO_INFERRED_GOAL_RULE}`,
 		body: `Autonomous loop:
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed, call flow_plan_start, inspect repo context, detect the stack and package manager, record planning context with flow_plan_context_record, create or refresh the plan, persist it with flow_plan_apply, and approve it with flow_plan_approve.
-4. If repo evidence is insufficient for a high-confidence path, perform external research, record it with flow_plan_context_record, and continue.
-5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, rationale, decisionMode, and decisionDomain with flow_plan_context_record so the runtime session summary exposes a decisionGate.
+3. If planning is needed, call flow_plan_start, inspect repo context, detect the stack and package manager, record planning context with flow_plan_context_record using \`planningJson\`, create or refresh the plan, persist it with flow_plan_apply using \`planJson\`, and approve it with flow_plan_approve.
+4. If repo evidence is insufficient for a high-confidence path, perform external research, record it with flow_plan_context_record using \`planningJson\`, and continue.
+5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, rationale, decisionMode, and decisionDomain with flow_plan_context_record using \`planningJson\` so the runtime session summary exposes a decisionGate.
 6. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation and stop for user confirmation.
 7. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
 8. Use flow-worker to implement the current feature and run targeted validation.
-9. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature before deciding what happens next.
+9. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature using \`decisionJson\` before deciding what happens next.
 10. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
-11. Persist an approved feature result with flow_run_complete_feature. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
+11. Persist an approved feature result with flow_run_complete_feature using \`workerJson\`. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
 12. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
-13. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final, and keep fixing/revalidating until the final review passes.
+13. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final using \`decisionJson\`, and keep fixing/revalidating until the final review passes.
 14. Only then allow final completion.
 15. Repeat until the session is complete or blocked.
 
@@ -317,7 +317,7 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 
 ${FLOW_AUDIT_CONTRACT}
 
-8. When a mutable workspace is available, call \`flow_audit_write_report\` with the completed audit report so Flow emits normalized JSON and Markdown audit artifacts.
+8. When a mutable workspace is available, call \`flow_audit_write_report\` with the completed audit report encoded into \`reportJson\` so Flow emits normalized JSON and Markdown audit artifacts.
 9. If that write succeeds, use the returned normalized \`report\` object as the final output. Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit JSON.`,
 	},
 	{

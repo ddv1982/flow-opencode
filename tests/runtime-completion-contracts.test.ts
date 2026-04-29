@@ -33,24 +33,26 @@ describe("runtime completion and contract guards", () => {
 		const tools = createTestTools();
 		const response = await tools.flow_run_complete_feature.execute(
 			{
-				contractVersion: "1",
-				status: "needs_input",
-				summary: "Need a new plan.",
-				artifactsChanged: [],
-				validationRun: [],
-				decisions: [],
-				nextStep: "Replan the work.",
-				outcome: {
-					kind: "replan_required",
-				},
-				featureResult: {
-					featureId: "setup-runtime",
-				},
-				featureReview: {
-					status: "passed",
-					summary: "No blocking findings.",
-					blockingFindings: [],
-				},
+				workerJson: JSON.stringify({
+					contractVersion: "1",
+					status: "needs_input",
+					summary: "Need a new plan.",
+					artifactsChanged: [],
+					validationRun: [],
+					decisions: [],
+					nextStep: "Replan the work.",
+					outcome: {
+						kind: "replan_required",
+					},
+					featureResult: {
+						featureId: "setup-runtime",
+					},
+					featureReview: {
+						status: "passed",
+						summary: "No blocking findings.",
+						blockingFindings: [],
+					},
+				}),
 			},
 			toolContext(makeTempDir()),
 		);
@@ -214,27 +216,28 @@ describe("runtime completion and contract guards", () => {
 	});
 
 	test("rejects unsafe feature ids during plan apply", () => {
-		const session = createSession("Build a workflow plugin");
 		const runtimeTools = createTestTools();
 
 		return expect(
 			runtimeTools.flow_plan_apply.execute(
 				{
-					plan: {
-						...samplePlan(),
-						features: [
-							{
-								id: "../escape",
-								title: "Bad feature id",
-								summary: "Should be rejected.",
-								status: "pending",
-								fileTargets: [],
-								verification: [],
-							},
-						],
-					},
+					planJson: JSON.stringify({
+						plan: {
+							...samplePlan(),
+							features: [
+								{
+									id: "../escape",
+									title: "Bad feature id",
+									summary: "Should be rejected.",
+									status: "pending",
+									fileTargets: [],
+									verification: [],
+								},
+							],
+						},
+					}),
 				},
-				toolContext(session.id),
+				toolContext(makeTempDir()),
 			),
 		).resolves.toContain("Feature ids must be lowercase kebab-case");
 	});
@@ -808,32 +811,34 @@ describe("runtime completion and contract guards", () => {
 		await saveSession(worktree, reviewed.value);
 		const response = await tools.flow_run_complete_feature.execute(
 			{
-				contractVersion: "1",
-				status: "ok",
-				summary: "Completed runtime setup.",
-				artifactsChanged: [],
-				validationRun: [
-					{
-						command: "bun test",
-						status: "passed",
-						summary: "Runtime tests passed.",
+				workerJson: JSON.stringify({
+					contractVersion: "1",
+					status: "ok",
+					summary: "Completed runtime setup.",
+					artifactsChanged: [],
+					validationRun: [
+						{
+							command: "bun test",
+							status: "passed",
+							summary: "Runtime tests passed.",
+						},
+					],
+					validationScope: "targeted",
+					reviewIterations: 1,
+					decisions: [],
+					nextStep: "Run the next feature.",
+					outcome: { kind: "completed" },
+					featureResult: {
+						featureId: "setup-runtime",
+						verificationStatus: "passed",
 					},
-				],
-				validationScope: "targeted",
-				reviewIterations: 1,
-				decisions: [],
-				nextStep: "Run the next feature.",
-				outcome: { kind: "completed" },
-				featureResult: {
-					featureId: "setup-runtime",
-					verificationStatus: "passed",
-				},
-				featureReview: {
-					status: "passed",
-					summary: "Looks good.",
-					blockingFindings: [],
-				},
-				finalReview: undefined,
+					featureReview: {
+						status: "passed",
+						summary: "Looks good.",
+						blockingFindings: [],
+					},
+					finalReview: undefined,
+				}),
 			},
 			toolContext(worktree),
 		);
@@ -1032,12 +1037,14 @@ describe("runtime completion and contract guards", () => {
 
 		const response = await tools.flow_review_record_final.execute(
 			{
-				scope: "final",
-				status: "approved",
-				summary: "Final state looks good.",
-				blockingFindings: [],
-				followUps: [],
-				suggestedValidation: ["bun run check"],
+				decisionJson: JSON.stringify({
+					scope: "final",
+					status: "approved",
+					summary: "Final state looks good.",
+					blockingFindings: [],
+					followUps: [],
+					suggestedValidation: ["bun run check"],
+				}),
 			},
 			toolContext(worktree),
 		);
@@ -1107,7 +1114,7 @@ describe("runtime completion and contract guards", () => {
 		expect(planStartParsed.session.goal).toBe("Build a workflow plugin");
 
 		const planApplyResponse = await tools.flow_plan_apply.execute(
-			{ plan: samplePlan(), planning: undefined },
+			{ planJson: JSON.stringify({ plan: samplePlan() }) },
 			toolContext(worktree),
 		);
 		const planApplyParsed = JSON.parse(planApplyResponse);

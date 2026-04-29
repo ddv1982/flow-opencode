@@ -185,6 +185,8 @@ This plugin uses two validation layers:
 - SDK-facing tool `args` stay as raw shapes for OpenCode compatibility
 - stricter runtime validation happens later through schemas such as `WorkerResultSchema`
 
+For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, `flow_review_record_final`, and `flow_audit_write_report`), keep the SDK-facing shape thin by transporting the real object as a JSON string field (`planningJson`, `planJson`, `workerJson`, `decisionJson`, or `reportJson`) and validating the decoded object at runtime. This keeps the global tool schema surface small enough for ordinary OpenCode requests. Any legacy direct-object compatibility at the `execute(...)` boundary is for internal direct callers and tests only; OpenCode itself will see and validate the thin wrapper schema.
+
 ## Testing
 
 The test suite covers:
