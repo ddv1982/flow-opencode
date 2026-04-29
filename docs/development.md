@@ -106,7 +106,7 @@ Default (core) surface:
 - `flow_reset_feature`
 
 Audit surface is opt-in via `FLOW_ENABLE_AUDIT_SURFACE=1` and adds:
-`flow_audit_history`, `flow_audit_show`, `flow_audit_compare`, `flow_audit_write_report`.
+`flow_audit_reports`, `flow_audit_write_report`.
 
 For diagnostic reintroduction, the surface can be split across:
 - `FLOW_ENABLE_AUDIT_CONFIG=1` → inject audit agent/commands only

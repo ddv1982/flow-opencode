@@ -85,11 +85,7 @@ function toolContext(
 }
 
 function requireAuditTool<
-	Name extends
-		| "flow_audit_history"
-		| "flow_audit_compare"
-		| "flow_audit_write_report"
-		| "flow_audit_show",
+	Name extends "flow_audit_reports" | "flow_audit_write_report",
 >(tools: ReturnType<typeof createTestTools>, name: Name) {
 	const tool = tools[name];
 	if (!tool) {
@@ -320,13 +316,13 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
-	test("flow_audit_history returns a machine-readable missing-audit summary", async () => {
+	test("flow_audit_reports returns a machine-readable missing-audit summary", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const response = await requireAuditTool(
 			tools,
-			"flow_audit_history",
-		).execute({}, toolContext(worktree));
+			"flow_audit_reports",
+		).execute({ action: "history" }, toolContext(worktree));
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("missing_audit");
@@ -334,14 +330,15 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.nextCommand).toBe(FLOW_AUDIT_COMMAND);
 	});
 
-	test("flow_audit_compare reports missing ids clearly when saved audits are absent", async () => {
+	test("flow_audit_reports reports missing ids clearly when saved audits are absent", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const response = await requireAuditTool(
 			tools,
-			"flow_audit_compare",
+			"flow_audit_reports",
 		).execute(
 			{
+				action: "compare",
 				leftReportId: "latest",
 				rightReportId: "latest",
 			},
@@ -437,7 +434,7 @@ describe("runtime tools and recovery", () => {
 		);
 	});
 
-	test("flow_audit_history lists saved audit artifacts and points to the latest report", async () => {
+	test("flow_audit_reports lists saved audit artifacts and points to the latest report", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		await requireAuditTool(tools, "flow_audit_write_report").execute(
@@ -470,8 +467,8 @@ describe("runtime tools and recovery", () => {
 
 		const response = await requireAuditTool(
 			tools,
-			"flow_audit_history",
-		).execute({}, toolContext(worktree));
+			"flow_audit_reports",
+		).execute({ action: "history" }, toolContext(worktree));
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.history.latest.reportId).toBeDefined();
@@ -479,7 +476,7 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.nextCommand).toBe(`${FLOW_AUDITS_COMMAND} show latest`);
 	});
 
-	test("flow_audit_show returns a saved audit report by id", async () => {
+	test("flow_audit_reports returns a saved audit report by id", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const writeResponse = await requireAuditTool(
@@ -518,29 +515,29 @@ describe("runtime tools and recovery", () => {
 			throw new Error("Missing report id from written audit report path.");
 		}
 
-		const response = await requireAuditTool(tools, "flow_audit_show").execute(
-			{ reportId },
-			toolContext(worktree),
-		);
+		const response = await requireAuditTool(
+			tools,
+			"flow_audit_reports",
+		).execute({ action: "show", reportId }, toolContext(worktree));
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.reportId).toBe(reportId);
 		expect(parsed.report.achievedDepth).toBe("deep_audit");
 	});
 
-	test("flow_audit_show reports missing ids clearly", async () => {
+	test("flow_audit_reports reports missing ids clearly", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const response = await requireAuditTool(tools, "flow_audit_show").execute(
-			{ reportId: "latest" },
-			toolContext(worktree),
-		);
+		const response = await requireAuditTool(
+			tools,
+			"flow_audit_reports",
+		).execute({ action: "show", reportId: "latest" }, toolContext(worktree));
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("missing_audit");
 		expect(parsed.nextCommand).toBe(FLOW_AUDITS_COMMAND);
 	});
 
-	test("flow_audit_compare summarizes coverage and finding deltas between saved audits", async () => {
+	test("flow_audit_reports summarizes coverage and finding deltas between saved audits", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const first = JSON.parse(
@@ -638,9 +635,10 @@ describe("runtime tools and recovery", () => {
 
 		const response = await requireAuditTool(
 			tools,
-			"flow_audit_compare",
+			"flow_audit_reports",
 		).execute(
 			{
+				action: "compare",
 				leftReportId: basename(first.reportDir),
 				rightReportId: basename(second.reportDir),
 			},
@@ -2323,10 +2321,8 @@ describe("runtime tools and recovery", () => {
 			},
 			flow_status: {},
 			flow_history: {},
-			flow_audit_history: {},
-			flow_audit_compare: { leftReportId: "latest", rightReportId: "latest" },
+			flow_audit_reports: { action: "history" },
 			flow_history_show: { sessionId: currentSessionId },
-			flow_audit_show: { reportId: "latest" },
 			flow_session_activate: { sessionId: currentSessionId },
 			flow_plan_start: { goal: "Build a workflow plugin" },
 			flow_auto_prepare: { argumentString: "resume" },

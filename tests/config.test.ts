@@ -10,6 +10,7 @@ import {
 	FLOW_AUDITS_COMMAND_TEMPLATE,
 } from "../src/audit/prompts/commands";
 import { FLOW_AUDIT_CONTRACT } from "../src/audit/prompts/contracts";
+import { FlowAuditReportsArgsSchema } from "../src/audit/tools/schemas";
 import { applyFlowConfig, createConfigHook } from "../src/config";
 import FlowPlugin from "../src/index";
 import {
@@ -79,9 +80,7 @@ type ToolSchemaName =
 	| "flow_doctor"
 	| "flow_history"
 	| "flow_history_show"
-	| "flow_audit_history"
-	| "flow_audit_show"
-	| "flow_audit_compare"
+	| "flow_audit_reports"
 	| "flow_audit_write_report"
 	| "flow_session_activate"
 	| "flow_session_close"
@@ -238,9 +237,7 @@ describe("applyFlowConfig", () => {
 	test("createTools preserves the expected ordered tool surface", () => {
 		expect(Object.keys(createTools({}))).toEqual([
 			"flow_audit_write_report",
-			"flow_audit_history",
-			"flow_audit_show",
-			"flow_audit_compare",
+			"flow_audit_reports",
 			"flow_status",
 			"flow_doctor",
 			"flow_history",
@@ -326,7 +323,7 @@ describe("applyFlowConfig", () => {
 		applyFlowConfig(config);
 		expect(config.agent?.["flow-auditor"]).toBeDefined();
 		expect(config.command?.["flow-audit"]).toBeDefined();
-		expect(Object.keys(createTools({}))).not.toContain("flow_audit_compare");
+		expect(Object.keys(createTools({}))).not.toContain("flow_audit_reports");
 	});
 
 	test("supports tools-only audit diagnostics without enabling audit config", () => {
@@ -336,7 +333,7 @@ describe("applyFlowConfig", () => {
 		applyFlowConfig(config);
 		expect(config.agent?.["flow-auditor"]).toBeUndefined();
 		expect(config.command?.["flow-audit"]).toBeUndefined();
-		expect(Object.keys(createTools({}))).toContain("flow_audit_compare");
+		expect(Object.keys(createTools({}))).toContain("flow_audit_reports");
 	});
 
 	test("parses master and diagnostic audit env gates predictably", () => {
@@ -571,23 +568,55 @@ describe("applyFlowConfig", () => {
 		expect(schemas.flow_doctor.safeParse({ extra: true }).success).toBe(true);
 		expect(schemas.flow_history.safeParse({}).success).toBe(true);
 		expect(schemas.flow_history.safeParse({ extra: true }).success).toBe(true);
-		expect(schemas.flow_audit_history.safeParse({}).success).toBe(true);
 		expect(
-			schemas.flow_audit_show.safeParse({ reportId: "latest" }).success,
+			schemas.flow_audit_reports.safeParse({ action: "history" }).success,
 		).toBe(true);
 		expect(
-			schemas.flow_audit_show.safeParse({ reportId: "../bad" }).success,
+			schemas.flow_audit_reports.safeParse({
+				action: "show",
+				reportId: "latest",
+			}).success,
+		).toBe(true);
+		expect(
+			schemas.flow_audit_reports.safeParse({
+				action: "show",
+				reportId: "../bad",
+			}).success,
 		).toBe(false);
 		expect(
-			schemas.flow_audit_compare.safeParse({
+			schemas.flow_audit_reports.safeParse({
+				action: "show",
+			}).success,
+		).toBe(true);
+		expect(
+			FlowAuditReportsArgsSchema.safeParse({
+				action: "show",
+			}).success,
+		).toBe(false);
+		expect(
+			schemas.flow_audit_reports.safeParse({
+				action: "compare",
 				leftReportId: "latest",
 				rightReportId: "20260429T123456.789",
 			}).success,
 		).toBe(true);
 		expect(
-			schemas.flow_audit_compare.safeParse({
+			schemas.flow_audit_reports.safeParse({
+				action: "compare",
 				leftReportId: "../bad",
 				rightReportId: "latest",
+			}).success,
+		).toBe(false);
+		expect(
+			schemas.flow_audit_reports.safeParse({
+				action: "compare",
+				leftReportId: "latest",
+			}).success,
+		).toBe(true);
+		expect(
+			FlowAuditReportsArgsSchema.safeParse({
+				action: "compare",
+				leftReportId: "latest",
 			}).success,
 		).toBe(false);
 		expect(
@@ -1162,9 +1191,14 @@ describe("applyFlowConfig", () => {
 	});
 
 	test("audits command template supports listing, showing, and comparing saved audits", () => {
-		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_history");
-		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_show");
-		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_compare");
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_reports");
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain('{ action: "history" }');
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain(
+			'{ action: "show", reportId }',
+		);
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain(
+			'{ action: "compare", leftReportId, rightReportId }',
+		);
 		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain(
 			"Use `latest` to show the most recently persisted audit artifact.",
 		);
@@ -1334,7 +1368,7 @@ describe("applyFlowConfig", () => {
 			description: "Compare two persisted Flow audit reports",
 			parameters: {},
 		};
-		await hook({ toolID: "flow_audit_compare" }, output);
+		await hook({ toolID: "flow_audit_reports" }, output);
 		expect(output.description).toBe("Compare two persisted Flow audit reports");
 	});
 
@@ -1361,10 +1395,10 @@ describe("applyFlowConfig", () => {
 			description: "Compare two persisted Flow audit reports",
 			parameters: {},
 		};
-		await hook({ toolID: "flow_audit_compare" }, output);
+		await hook({ toolID: "flow_audit_reports" }, output);
 		expect(output.description).toContain("## Use when");
 		expect(output.description).toContain(
-			"coverage, findings, and validation posture",
+			"listing history, showing one report, or comparing two persisted audit reports",
 		);
 	});
 
@@ -1420,10 +1454,10 @@ describe("applyFlowConfig", () => {
 			description: "Compare two persisted Flow audit reports",
 			parameters: {},
 		};
-		await hook({ toolID: "flow_audit_compare" }, output);
+		await hook({ toolID: "flow_audit_reports" }, output);
 		expect(output.description).toContain("## Use when");
 		expect(output.description).toContain(
-			"coverage, findings, and validation posture",
+			"listing history, showing one report, or comparing two persisted audit reports",
 		);
 		expect(output.description).toContain("## Avoid when");
 		expect(output.description).toContain("## Returns");

@@ -65,9 +65,9 @@ export const FLOW_AUDITS_COMMAND_TEMPLATE = `Inspect saved Flow audit reports.
 Arguments: $ARGUMENTS
 
 Behavior:
-- If the arguments are empty, call \`flow_audit_history\`, render the runtime result clearly, and stop.
-- If the arguments start with \`show\`, call \`flow_audit_show\` with the provided report id. Use \`latest\` to show the most recently persisted audit artifact.
-- If the arguments start with \`compare\`, call \`flow_audit_compare\` with two report ids. \`latest\` is valid on either side.
+- If the arguments are empty, call \`flow_audit_reports\` with \`{ action: "history" }\`, render the runtime result clearly, and stop.
+- If the arguments start with \`show\`, call \`flow_audit_reports\` with \`{ action: "show", reportId }\`. Use \`latest\` to show the most recently persisted audit artifact.
+- If the arguments start with \`compare\`, call \`flow_audit_reports\` with \`{ action: "compare", leftReportId, rightReportId }\`. \`latest\` is valid on either side.
 - Otherwise explain the valid forms briefly.
 
 Lead with the saved audit summary, achieved depth, coverage blockers, or comparison deltas before detailed findings.
