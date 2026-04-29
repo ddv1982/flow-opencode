@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.33] - 2026-04-30
+
+Make Flow audits always available while shrinking the GPT-5.5 audit-history payload
+
+Flow 1.0.33 finishes the audit-surface stabilization work. `flow_audit_reports` now uses a thin `requestJson` transport so OpenCode sends a much smaller provider-facing schema to OpenAI, while the runtime still keeps strict validation and legacy direct-object fallback for internal callers. This release also removes the obsolete audit env-gating and makes `/flow-audit` and `/flow-audits` available by default, updates the control/audit prompts to use the new wrapper contract, and cleans up docs/tests to match the always-on audit surface.
+
+Constraint: Preserve audit behavior and internal direct-call compatibility while shrinking the provider-facing tool contract and removing obsolete audit env-gate complexity
+Constraint: Keep zod aligned with the plugin SDK's effective contract while changing only the audit surface that reproduced GPT-5.5 instability
+Rejected: Keep the audit env gates and only update docs | would leave the fixed audit surface hidden behind obsolete setup and preserve avoidable runtime/config complexity
+Rejected: Split `flow_audit_reports` into multiple new public tools immediately | the thin wrapper solved the GPT-5.5 failure with a smaller blast radius and preserved the existing command UX
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep heavy provider-facing tool inputs on thin JSON-string transports and do not reintroduce raw multiplexed audit schemas or env-gated audit defaults without fresh host evidence
+Tested: `bun run check`; `bun test tests/config.test.ts tests/runtime-tools.test.ts tests/smoke/dist-load.test.ts tests/docs-tool-parity.test.ts tests/protocol-parity.test.ts tests/cross-area/install-lifecycle.test.ts tests/cross-area/manual-flow.test.ts tests/cross-area/resume-flow.test.ts tests/cross-area/dependency-contract.test.ts tests/cross-area/pack-invariants.test.ts tests/cross-area/next-command-coverage.test.ts`; live no-env OpenCode `gpt-5.5` runs for `/flow-audits`, `/flow-audits show latest`, `/flow-audits compare latest latest`, `/flow-audits compare latest <older>`, `/flow-audits compare <older> latest`, `/flow-audits compare <reportA> <reportB>`, and `/flow-audit quick smoke audit; do not persist if no findings`; live no-env `gpt-5.4` controls for `/flow-audits show latest` and `/flow-audit quick smoke audit; do not persist if no findings`
+Not-tested: Long-running full-surface broad persisted GPT-5.5 audits on a repository with real active Flow session state; live GitHub-hosted `release.yml` run for tag `v1.0.33` before push
+
 ## [1.0.32] - 2026-04-29
 
 Flatten the /flow-audit command text so the direct OpenAI path avoids markup-heavy prompts

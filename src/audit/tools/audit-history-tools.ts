@@ -3,12 +3,13 @@
  */
 import { tool } from "@opencode-ai/plugin";
 import { errorResponse, toJson } from "../../runtime/application";
-import { withParsedArgs } from "../../tools/parsed-tool";
+import { withJsonTransportArgs } from "../../tools/parsed-tool";
 import type { ToolContext } from "../../tools/schemas";
 import { recordToolMetadata } from "../../tools/session-tools/shared";
 import {
 	FlowAuditReportsArgsSchema,
-	FlowAuditReportsArgsShape,
+	FlowAuditReportsTransportArgsSchema,
+	FlowAuditReportsTransportArgsShape,
 } from "./schemas";
 
 export function createAuditHistorySessionTools() {
@@ -16,9 +17,14 @@ export function createAuditHistorySessionTools() {
 		flow_audit_reports: tool({
 			description:
 				"Inspect saved Flow audit reports by listing history, showing one report, or comparing two reports",
-			args: FlowAuditReportsArgsShape,
-			execute: withParsedArgs(
-				FlowAuditReportsArgsSchema,
+			args: FlowAuditReportsTransportArgsShape,
+			execute: withJsonTransportArgs(
+				{
+					transportSchema: FlowAuditReportsTransportArgsSchema,
+					field: "requestJson",
+					payloadSchema: FlowAuditReportsArgsSchema,
+					legacySchema: FlowAuditReportsArgsSchema,
+				},
 				async (input, context: ToolContext) => {
 					const application = await import("../application");
 					switch (input.action) {

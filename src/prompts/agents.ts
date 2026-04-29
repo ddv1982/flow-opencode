@@ -280,7 +280,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - For doctor requests, prefer compact flow_doctor output unless the user explicitly asks for detail/raw/json; lead with the operator summary, then summarize any warnings or failures plus the recommended remediation clearly, and stop.
 - For history requests, call flow_history or flow_history_show, summarize the result clearly, and stop.
 - For audit requests, follow the command template precisely, stay read-only, and use audit tools only as directed by that template.
-- For audit history requests, call flow_audit_reports with the matching action (history, show, or compare), summarize the result clearly, and stop.
+- For audit history requests, call flow_audit_reports with requestJson containing the matching action payload (history, show, or compare), summarize the result clearly, and stop.
 - For session activation requests, call flow_session_activate, summarize the result clearly, and stop.
 - For reset requests, call flow_reset_feature. For session close requests, call flow_session_close, summarize what changed, and stop.
 - If a request is invalid, explain the valid command forms briefly and stop.`,

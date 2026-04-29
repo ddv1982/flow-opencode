@@ -6,6 +6,7 @@ const auditReportIdSchema = z
 	.string()
 	.min(1)
 	.regex(AUDIT_REPORT_ID_PATTERN, AUDIT_REPORT_ID_MESSAGE);
+const jsonPayloadSchema = z.string().trim().min(1);
 
 export const FlowAuditReportsActionSchema = z.enum([
 	"history",
@@ -18,7 +19,9 @@ export const FlowAuditReportsArgsShape = {
 	leftReportId: auditReportIdSchema.optional(),
 	rightReportId: auditReportIdSchema.optional(),
 };
-const jsonPayloadSchema = z.string().trim().min(1);
+export const FlowAuditReportsTransportArgsShape = {
+	requestJson: jsonPayloadSchema,
+};
 export const FlowAuditWriteReportArgsShape = {
 	reportJson: jsonPayloadSchema,
 };
@@ -53,6 +56,9 @@ export const FlowAuditReportsArgsSchema = z
 			}
 		}
 	});
+export const FlowAuditReportsTransportArgsSchema = z.object(
+	FlowAuditReportsTransportArgsShape,
+);
 export const FlowAuditWriteReportArgsSchema = z.object(
 	FlowAuditWriteReportArgsShape,
 );

@@ -1,5 +1,4 @@
 import { applyFlowAuditConfig } from "./audit/config";
-import { isAuditConfigEnabled } from "./audit/enabled";
 import {
 	FLOW_READ_ONLY_PERMISSION,
 	FLOW_READ_ONLY_TOOLS,
@@ -169,9 +168,7 @@ export function applyFlowCoreConfig(config: MutableConfig): void {
 
 export function applyFlowConfig(config: MutableConfig): void {
 	applyFlowCoreConfig(config);
-	if (isAuditConfigEnabled()) {
-		applyFlowAuditConfig(config);
-	}
+	applyFlowAuditConfig(config);
 }
 
 export function createConfigHook(_ctx: unknown) {
