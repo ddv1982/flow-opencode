@@ -34,11 +34,16 @@ export {
 	DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 } from "./session-engine";
 export {
+	auditComparisonResponse,
+	auditHistoryResponse,
 	autoPrepareResponse,
 	closeSessionResponse,
 	historyResponse,
+	missingAuditComparisonResponse,
+	missingAuditReportResponse,
 	missingStoredSessionResponse,
 	statusResponse,
+	storedAuditReportResponse,
 	storedSessionResponse,
 } from "./session-presenters";
 export type {

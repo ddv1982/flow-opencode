@@ -60,6 +60,7 @@ Flow is built around a few stable responsibilities:
 - `flow-planner`
 - `flow-worker`
 - `flow-auto`
+- `flow-auditor`
 - `flow-reviewer`
 - `flow-control`
 
@@ -69,7 +70,18 @@ Flow is built around a few stable responsibilities:
 - `flow-worker` executes exactly one approved feature
 - `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`)
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
+- `flow-auditor` performs read-only audits with explicit scope/coverage accounting and calibrated claim strength
 - `flow-control` handles status/history/session/feature-reset requests only
+
+Audit work should stay separate from normal feature execution. Prefer the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
+
+- `broad_audit`
+- `deep_audit`
+- `full_audit`
+
+and may only claim `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
+
+When an audit should leave a durable artifact, the auditor should persist it through `flow_audit_write_report`. That tool normalizes the coverage sections from `discoveredSurfaces`, writes JSON plus Markdown under `.flow/audits/`, and rejects unsupported `full_audit` claims.
 
 ## Current Runtime Tools
 
@@ -77,6 +89,10 @@ Flow is built around a few stable responsibilities:
 - `flow_doctor`
 - `flow_history`
 - `flow_history_show`
+- `flow_audit_history`
+- `flow_audit_show`
+- `flow_audit_compare`
+- `flow_audit_write_report`
 - `flow_auto_prepare`
 - `flow_plan_start`
 - `flow_plan_apply`

@@ -6,6 +6,7 @@ import { tool } from "@opencode-ai/plugin";
 import { applyFlowConfig, createConfigHook } from "../src/config";
 import FlowPlugin from "../src/index";
 import {
+	FLOW_AUDITOR_AGENT_PROMPT,
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
@@ -13,6 +14,8 @@ import {
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../src/prompts/agents";
 import {
+	FLOW_AUDIT_COMMAND_TEMPLATE,
+	FLOW_AUDITS_COMMAND_TEMPLATE,
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_DOCTOR_COMMAND_TEMPLATE,
 	FLOW_PLAN_COMMAND_TEMPLATE,
@@ -20,6 +23,7 @@ import {
 	FLOW_STATUS_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
 import {
+	FLOW_AUDIT_CONTRACT,
 	FLOW_REVIEWER_CONTRACT,
 	FLOW_WORKER_CONTRACT,
 } from "../src/prompts/contracts";
@@ -178,6 +182,10 @@ describe("applyFlowConfig", () => {
 
 	test("createTools preserves the expected ordered tool surface", () => {
 		expect(Object.keys(createTools({}))).toEqual([
+			"flow_audit_write_report",
+			"flow_audit_history",
+			"flow_audit_show",
+			"flow_audit_compare",
 			"flow_status",
 			"flow_doctor",
 			"flow_history",
@@ -207,12 +215,15 @@ describe("applyFlowConfig", () => {
 		expect(config.agent?.["flow-planner"]).toBeDefined();
 		expect(config.agent?.["flow-worker"]).toBeDefined();
 		expect(config.agent?.["flow-auto"]).toBeDefined();
+		expect(config.agent?.["flow-auditor"]).toBeDefined();
 		expect(config.agent?.["flow-reviewer"]).toBeDefined();
 		expect(config.agent?.["flow-control"]).toBeDefined();
 		expect(config.command?.["flow-plan"]).toBeDefined();
 		expect(config.command?.["flow-run"]).toBeDefined();
 		expect(config.command?.["flow-auto"]).toBeDefined();
+		expect(config.command?.["flow-audit"]).toBeDefined();
 		expect(config.command?.["flow-status"]).toBeDefined();
+		expect(config.command?.["flow-audits"]).toBeDefined();
 		expect(config.command?.["flow-doctor"]).toBeDefined();
 		expect(config.command?.["flow-history"]).toBeDefined();
 		expect(config.command?.["flow-session"]).toBeDefined();
@@ -232,6 +243,7 @@ describe("applyFlowConfig", () => {
 		applyFlowConfig(config);
 
 		expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
+		expect(config.command?.["flow-audits"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-doctor"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-history"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-session"]?.agent).toBe("flow-control");
@@ -242,6 +254,11 @@ describe("applyFlowConfig", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
+		expect(config.agent?.["flow-auditor"]?.tools?.edit).toBe(false);
+		expect(config.agent?.["flow-auditor"]?.tools?.write).toBe(false);
+		expect(config.agent?.["flow-auditor"]?.tools?.bash).toBe(false);
+		expect(config.agent?.["flow-auditor"]?.permission?.edit).toBe("deny");
+		expect(config.agent?.["flow-auditor"]?.permission?.bash).toBe("deny");
 		expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.tools?.write).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.tools?.bash).toBe(false);
@@ -280,9 +297,11 @@ describe("applyFlowConfig", () => {
 		});
 		expect(config.agent?.["flow-control"]).toBeDefined();
 		expect(config.command?.["flow-doctor"]).toBeDefined();
+		expect(config.command?.["flow-audits"]).toBeDefined();
 		expect(config.command?.["flow-history"]).toBeDefined();
 		expect(config.command?.["flow-session"]).toBeDefined();
 		expect(config.command?.["flow-reset"]).toBeDefined();
+		expect(config.command?.["flow-audit"]).toBeDefined();
 	});
 
 	test("injects fresh config objects instead of sharing mutable references across calls", () => {
@@ -297,6 +316,9 @@ describe("applyFlowConfig", () => {
 		);
 		expect(first.agent?.["flow-reviewer"]).not.toBe(
 			second.agent?.["flow-reviewer"],
+		);
+		expect(first.agent?.["flow-auditor"]).not.toBe(
+			second.agent?.["flow-auditor"],
 		);
 		expect(first.agent?.["flow-planner"]?.tools).not.toBe(
 			second.agent?.["flow-planner"]?.tools,
@@ -389,6 +411,109 @@ describe("applyFlowConfig", () => {
 		expect(schemas.flow_doctor.safeParse({ extra: true }).success).toBe(true);
 		expect(schemas.flow_history.safeParse({}).success).toBe(true);
 		expect(schemas.flow_history.safeParse({ extra: true }).success).toBe(true);
+		expect(schemas.flow_audit_history.safeParse({}).success).toBe(true);
+		expect(
+			schemas.flow_audit_show.safeParse({ reportId: "latest" }).success,
+		).toBe(true);
+		expect(
+			schemas.flow_audit_show.safeParse({ reportId: "../bad" }).success,
+		).toBe(false);
+		expect(
+			schemas.flow_audit_compare.safeParse({
+				leftReportId: "latest",
+				rightReportId: "20260429T123456.789",
+			}).success,
+		).toBe(true);
+		expect(
+			schemas.flow_audit_compare.safeParse({
+				leftReportId: "../bad",
+				rightReportId: "latest",
+			}).success,
+		).toBe(false);
+		expect(
+			schemas.flow_audit_write_report.safeParse({
+				report: {
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Reviewed the main surfaces directly.",
+					overallVerdict: "Useful deep audit.",
+					discoveredSurfaces: [
+						{
+							name: "prompt surfaces",
+							category: "source_runtime",
+							reviewStatus: "directly_reviewed",
+							evidence: ["src/prompts/agents.ts:1-100"],
+						},
+					],
+					validationRun: [
+						{
+							command: "bun run check",
+							status: "not_run",
+							summary: "The auditor stayed read-only.",
+						},
+					],
+					findings: [],
+				},
+			}).success,
+		).toBe(true);
+		expect(
+			schemas.flow_audit_write_report.safeParse({
+				report: {
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Normalized report payload.",
+					overallVerdict: "Accepted.",
+					discoveredSurfaces: [
+						{
+							name: "prompt surfaces",
+							category: "source_runtime",
+							reviewStatus: "directly_reviewed",
+							evidence: ["src/prompts/agents.ts:1-100"],
+						},
+					],
+					coverageSummary: {
+						discoveredSurfaceCount: 1,
+						reviewedSurfaceCount: 1,
+						unreviewedSurfaceCount: 0,
+					},
+					reviewedSurfaces: [
+						{
+							name: "prompt surfaces",
+							evidence: ["src/prompts/agents.ts:1-100"],
+						},
+					],
+					unreviewedSurfaces: [],
+					coverageRubric: {
+						fullAuditEligible: true,
+						directlyReviewedCategories: ["source_runtime"],
+						spotCheckedCategories: [],
+						unreviewedCategories: [],
+						blockingReasons: [],
+					},
+					validationRun: [
+						{
+							command: "bun run check",
+							status: "not_run",
+							summary: "Read-only audit.",
+						},
+					],
+					findings: [],
+				},
+			}).success,
+		).toBe(true);
+		expect(
+			schemas.flow_audit_write_report.safeParse({
+				report: {
+					requestedDepth: "full_audit",
+					achievedDepth: "full_audit",
+					repoSummary: "Missing discovered surfaces.",
+					overallVerdict: "Invalid.",
+					discoveredSurfaces: [],
+					validationRun: [],
+					findings: [],
+				},
+			}).success,
+		).toBe(false);
 		expect(
 			schemas.flow_history_show.safeParse({ sessionId: "abc123" }).success,
 		).toBe(true);
@@ -677,6 +802,26 @@ describe("applyFlowConfig", () => {
 		);
 	});
 
+	test("audit contract requires calibrated depth claims and explicit coverage accounting", () => {
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"requestedDepth: broad_audit | deep_audit | full_audit",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"achievedDepth: broad_audit | deep_audit | full_audit",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain("reviewedSurfaces");
+		expect(FLOW_AUDIT_CONTRACT).toContain("unreviewedSurfaces");
+		expect(FLOW_AUDIT_CONTRACT).toContain("coverageSummary");
+		expect(FLOW_AUDIT_CONTRACT).toContain("discoveredSurfaces");
+		expect(FLOW_AUDIT_CONTRACT).toContain("coverageRubric");
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"achievedDepth can be full_audit only when every major surface discovered during repo mapping is directly reviewed",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"keep process/reporting issues in process_gap",
+		);
+	});
+
 	test("worker prompt requires iterative review and fix loops", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"Do not complete a feature while review findings remain",
@@ -712,6 +857,23 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Do not write code");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
 			"Return needs_fix when the current feature should continue",
+		);
+	});
+
+	test("auditor prompt requires explicit coverage accounting and claim calibration", () => {
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("You are the Flow auditor.");
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("Map the major repo surfaces");
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"Do not claim full_audit unless every major discovered surface is directly reviewed",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"Maintain discoveredSurfaces as the canonical coverage ledger",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			'<example name="downgrade-unsupported-full-audit">',
 		);
 	});
 
@@ -790,6 +952,39 @@ describe("applyFlowConfig", () => {
 		);
 	});
 
+	test("audit command template keeps audit work read-only and downgrades unsupported full-review claims", () => {
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"Treat this command as a dedicated audit surface",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"Stay read-only; do not start Flow runtime planning or execution tools.",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"only use achievedDepth: full_audit when every major discovered surface is directly reviewed",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.",
+		);
+		expect(FLOW_AUDIT_COMMAND_TEMPLATE).toContain(
+			"status: not_run explicitly in the audit output",
+		);
+	});
+
+	test("audits command template supports listing, showing, and comparing saved audits", () => {
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_history");
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_show");
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain("flow_audit_compare");
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain(
+			"Use `latest` to show the most recently persisted audit artifact.",
+		);
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain(
+			"`latest` is valid on either side.",
+		);
+		expect(FLOW_AUDITS_COMMAND_TEMPLATE).toContain(
+			"coverage blockers, or comparison deltas",
+		);
+	});
+
 	test("auto command template keeps classification guardrails ahead of iterative execution guidance", () => {
 		expectInOrder(FLOW_AUTO_COMMAND_TEMPLATE, [
 			"Treat this command as a coordinator entrypoint",
@@ -818,7 +1013,7 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("<raw-arguments>");
 	});
 
-	test("planner, worker, auto, and reviewer prompts use structured sections with examples", () => {
+	test("planner, worker, auto, auditor, and reviewer prompts use structured sections with examples", () => {
 		expectStructuredSections(FLOW_PLANNER_AGENT_PROMPT, [
 			"Role",
 			"Objective",
@@ -849,6 +1044,16 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			'<example name="decision-gate-stop">',
 		);
+		expectStructuredSections(FLOW_AUDITOR_AGENT_PROMPT, [
+			"Role",
+			"Objective",
+			"Rules",
+			"Workflow",
+			"Examples",
+		]);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			'<example name="finding-taxonomy">',
+		);
 		expectStructuredSections(FLOW_REVIEWER_AGENT_PROMPT, [
 			"Role",
 			"Objective",
@@ -864,11 +1069,12 @@ describe("applyFlowConfig", () => {
 		]);
 	});
 
-	test("plan, run, and auto command templates normalize raw arguments into a stable task frame", () => {
+	test("plan, run, auto, and audit command templates normalize raw arguments into a stable task frame", () => {
 		for (const template of [
 			FLOW_PLAN_COMMAND_TEMPLATE,
 			FLOW_RUN_COMMAND_TEMPLATE,
 			FLOW_AUTO_COMMAND_TEMPLATE,
+			FLOW_AUDIT_COMMAND_TEMPLATE,
 		]) {
 			expectStructuredSections(template, [
 				"Objective",
@@ -911,6 +1117,67 @@ describe("applyFlowConfig", () => {
 			"Use only after the required validation for the current path is complete",
 		);
 		expect(output.description).toContain("broad validation plus final review");
+		expect(output.description).toContain("## Avoid when");
+		expect(output.description).toContain("## Returns");
+	});
+
+	test("tool definition hook enriches the audit report export tool with persistence guidance", async () => {
+		const plugin = (await FlowPlugin({
+			worktree: "/tmp/flow-plugin-test",
+		} as unknown as Parameters<typeof FlowPlugin>[0])) as typeof FlowPlugin &
+			FlowPluginHooks;
+		const hook = plugin.hooks?.["tool.definition"] as
+			| ((
+					input: { toolID: string },
+					output: { description: string; parameters: unknown },
+			  ) => Promise<void>)
+			| undefined;
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing tool.definition hook");
+		}
+
+		const output = {
+			description:
+				"Persist a normalized Flow audit report as JSON and Markdown artifacts",
+			parameters: {},
+		};
+		await hook({ toolID: "flow_audit_write_report" }, output);
+		expect(output.description).toContain("## Use when");
+		expect(output.description).toContain(
+			"normalized JSON and Markdown audit artifacts",
+		);
+		expect(output.description).toContain("## Avoid when");
+		expect(output.description).toContain("## Returns");
+	});
+
+	test("tool definition hook enriches the audit compare tool with diff guidance", async () => {
+		const plugin = (await FlowPlugin({
+			worktree: "/tmp/flow-plugin-test",
+		} as unknown as Parameters<typeof FlowPlugin>[0])) as typeof FlowPlugin &
+			FlowPluginHooks;
+		const hook = plugin.hooks?.["tool.definition"] as
+			| ((
+					input: { toolID: string },
+					output: { description: string; parameters: unknown },
+			  ) => Promise<void>)
+			| undefined;
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing tool.definition hook");
+		}
+
+		const output = {
+			description: "Compare two persisted Flow audit reports",
+			parameters: {},
+		};
+		await hook({ toolID: "flow_audit_compare" }, output);
+		expect(output.description).toContain("## Use when");
+		expect(output.description).toContain(
+			"coverage, findings, and validation posture",
+		);
 		expect(output.description).toContain("## Avoid when");
 		expect(output.description).toContain("## Returns");
 	});

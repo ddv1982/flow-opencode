@@ -3,6 +3,7 @@ import {
 	FLOW_READ_ONLY_TOOLS,
 } from "./config-shared";
 import {
+	FLOW_AUDITOR_AGENT_PROMPT,
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
@@ -10,6 +11,8 @@ import {
 	FLOW_WORKER_AGENT_PROMPT,
 } from "./prompts/agents";
 import {
+	FLOW_AUDIT_COMMAND_TEMPLATE,
+	FLOW_AUDITS_COMMAND_TEMPLATE,
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_DOCTOR_COMMAND_TEMPLATE,
 	FLOW_HISTORY_COMMAND_TEMPLATE,
@@ -77,6 +80,10 @@ const FLOW_AGENTS = {
 			"Coordinate Flow planning, execution, review, and recovery autonomously.",
 		prompt: FLOW_AUTO_AGENT_PROMPT,
 	},
+	"flow-auditor": createReadOnlyPrimaryAgent(
+		"Perform calibrated read-only repository audits with explicit coverage accounting.",
+		FLOW_AUDITOR_AGENT_PROMPT,
+	),
 	"flow-reviewer": createReadOnlyPrimaryAgent(
 		"Review Flow work and decide whether it may advance.",
 		FLOW_REVIEWER_AGENT_PROMPT,
@@ -104,10 +111,22 @@ const FLOW_COMMANDS = {
 		agent: "flow-auto",
 		template: FLOW_AUTO_COMMAND_TEMPLATE,
 	},
+	"flow-audit": {
+		description:
+			"Run a read-only repository audit with calibrated depth claims",
+		agent: "flow-auditor",
+		template: FLOW_AUDIT_COMMAND_TEMPLATE,
+	},
 	"flow-status": {
 		description: "Inspect the active Flow session",
 		agent: "flow-control",
 		template: FLOW_STATUS_COMMAND_TEMPLATE,
+	},
+	"flow-audits": {
+		description:
+			"Inspect or compare saved Flow audit report history and details",
+		agent: "flow-control",
+		template: FLOW_AUDITS_COMMAND_TEMPLATE,
 	},
 	"flow-doctor": {
 		description: "Check Flow readiness for the current workspace",

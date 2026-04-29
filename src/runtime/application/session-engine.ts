@@ -3,11 +3,15 @@ import type { Session } from "../schema";
 import {
 	activateSession,
 	closeSession,
+	compareAuditReports,
+	listAuditReports,
 	listSessionHistory,
+	loadAuditReport,
 	loadSession,
 	loadStoredSession,
 	saveSessionState,
 	syncSessionArtifacts,
+	writeAuditReport,
 } from "../session";
 import type { TransitionResult } from "../transitions";
 
@@ -23,11 +27,15 @@ export interface SessionReadRuntimePort {
 	loadSession: (worktree: string) => Promise<Session | null>;
 	listSessionHistory: typeof listSessionHistory;
 	loadStoredSession: typeof loadStoredSession;
+	listAuditReports: typeof listAuditReports;
+	loadAuditReport: typeof loadAuditReport;
+	compareAuditReports: typeof compareAuditReports;
 }
 
 export interface SessionWorkspaceRuntimePort extends SessionRuntimePort {
 	activateSession: typeof activateSession;
 	closeSession: typeof closeSession;
+	writeAuditReport: typeof writeAuditReport;
 }
 
 export type SessionMutationAction<T, Name extends string = string> = {
@@ -103,6 +111,9 @@ export const DEFAULT_SESSION_READ_RUNTIME_PORT: SessionReadRuntimePort = {
 	loadSession,
 	listSessionHistory,
 	loadStoredSession,
+	listAuditReports,
+	loadAuditReport,
+	compareAuditReports,
 };
 
 export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort =
@@ -112,6 +123,7 @@ export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort
 		syncSessionArtifacts,
 		activateSession,
 		closeSession,
+		writeAuditReport,
 	};
 
 function actionSuccessResult<T, Name extends string>(

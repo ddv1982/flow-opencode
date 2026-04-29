@@ -2,15 +2,18 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { buildFlowAdaptiveSystemContext } from "../src/prompt-system-context";
 import {
+	FLOW_AUDITOR_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../src/prompts/agents";
 import {
+	FLOW_AUDIT_COMMAND_TEMPLATE,
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_PLAN_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
 import {
+	FLOW_AUDIT_CONTRACT,
 	FLOW_PLAN_CONTRACT,
 	FLOW_REVIEWER_CONTRACT,
 	FLOW_WORKER_CONTRACT,
@@ -39,7 +42,11 @@ export type PromptEvalCaseId =
 	| "worker-prompt-retryable-blocker-recovery"
 	| "reviewer-agent-no-write-and-needs-fix-gate"
 	| "plan-command-approve-or-select-routing"
-	| "plan-contract-planning-context-separation";
+	| "plan-contract-planning-context-separation"
+	| "auditor-agent-full-audit-claim-calibration"
+	| "auditor-agent-finding-taxonomy"
+	| "audit-command-downgrades-incomplete-full-review"
+	| "audit-contract-reviewed-unreviewed-surfaces";
 
 export type PromptEvalCategory =
 	| "command-entry"
@@ -47,7 +54,10 @@ export type PromptEvalCategory =
 	| "decision-gating"
 	| "completion-gating"
 	| "recovery"
-	| "review-gating";
+	| "review-gating"
+	| "claim-calibration"
+	| "finding-taxonomy"
+	| "audit-coverage";
 
 export type PromptEvalSurface =
 	| "adaptive_system_context"
@@ -58,7 +68,10 @@ export type PromptEvalSurface =
 	| "reviewer_contract"
 	| "reviewer_agent_prompt"
 	| "plan_command_template"
-	| "plan_contract";
+	| "plan_contract"
+	| "auditor_agent_prompt"
+	| "audit_command_template"
+	| "audit_contract";
 
 export type PromptEvalRisk = "medium" | "high";
 
@@ -108,6 +121,10 @@ export const PROMPT_EVAL_CASE_IDS = [
 	"reviewer-agent-no-write-and-needs-fix-gate",
 	"plan-command-approve-or-select-routing",
 	"plan-contract-planning-context-separation",
+	"auditor-agent-full-audit-claim-calibration",
+	"auditor-agent-finding-taxonomy",
+	"audit-command-downgrades-incomplete-full-review",
+	"audit-contract-reviewed-unreviewed-surfaces",
 ] as const satisfies readonly PromptEvalCaseId[];
 
 const KNOWN_CASE_IDS = new Set<PromptEvalCaseId>(PROMPT_EVAL_CASE_IDS);
@@ -405,6 +422,12 @@ export function renderPromptEvalCase(item: PromptEvalCase): string {
 			return FLOW_PLAN_COMMAND_TEMPLATE;
 		case "plan_contract":
 			return FLOW_PLAN_CONTRACT;
+		case "auditor_agent_prompt":
+			return FLOW_AUDITOR_AGENT_PROMPT;
+		case "audit_command_template":
+			return FLOW_AUDIT_COMMAND_TEMPLATE;
+		case "audit_contract":
+			return FLOW_AUDIT_CONTRACT;
 		default:
 			throw new Error(`Unhandled prompt eval surface: ${String(item.surface)}`);
 	}

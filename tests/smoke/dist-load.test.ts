@@ -12,10 +12,14 @@ type TestTool = {
 	execute: (args: unknown, context: unknown) => Promise<string>;
 };
 type FlowToolName =
+	| "flow_audit_write_report"
+	| "flow_audit_compare"
 	| "flow_status"
 	| "flow_doctor"
 	| "flow_history"
+	| "flow_audit_history"
 	| "flow_history_show"
+	| "flow_audit_show"
 	| "flow_session_activate"
 	| "flow_plan_start"
 	| "flow_auto_prepare"
@@ -36,7 +40,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, eight commands, seventeen tools, and callable executors", async () => {
+	test("dist bundle exposes six agents, ten commands, twenty-one tools, and callable executors", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -55,9 +59,9 @@ describe("built dist smoke load", () => {
 			config as Parameters<NonNullable<typeof plugin.config>>[0],
 		);
 
-		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(8);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
+		expect(Object.keys(config.agent ?? {})).toHaveLength(6);
+		expect(Object.keys(config.command ?? {})).toHaveLength(10);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(21);
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -71,10 +75,37 @@ describe("built dist smoke load", () => {
 		const sessionId = planStartResponse.session.id as string;
 
 		const toolArgs: Record<FlowToolName, unknown> = {
+			flow_audit_write_report: {
+				report: {
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Reviewed the bundled plugin surfaces directly.",
+					overallVerdict: "Deep audit completed.",
+					discoveredSurfaces: [
+						{
+							name: "dist bundle surface",
+							category: "tooling",
+							reviewStatus: "directly_reviewed",
+							evidence: ["dist/index.js"],
+						},
+					],
+					validationRun: [
+						{
+							command: "bun test tests/smoke/dist-load.test.ts",
+							status: "not_run",
+							summary: "The smoke tool only persists the report payload.",
+						},
+					],
+					findings: [],
+				},
+			},
 			flow_status: {},
 			flow_doctor: {},
 			flow_history: {},
+			flow_audit_history: {},
+			flow_audit_compare: { leftReportId: "latest", rightReportId: "latest" },
 			flow_history_show: { sessionId },
+			flow_audit_show: { reportId: "latest" },
 			flow_session_activate: { sessionId },
 			flow_plan_start: { goal: "Optimize the Flow bundle" },
 			flow_auto_prepare: { argumentString: "resume" },
