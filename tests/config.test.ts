@@ -292,7 +292,6 @@ describe("applyFlowConfig", () => {
 		expect(config.agent?.["flow-planner"]).toBeDefined();
 		expect(config.agent?.["flow-worker"]).toBeDefined();
 		expect(config.agent?.["flow-auto"]).toBeDefined();
-		expect(config.agent?.["flow-auditor"]).toBeDefined();
 		expect(config.agent?.["flow-reviewer"]).toBeDefined();
 		expect(config.agent?.["flow-control"]).toBeDefined();
 		expect(config.command?.["flow-plan"]).toBeDefined();
@@ -311,7 +310,6 @@ describe("applyFlowConfig", () => {
 		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
-		expect(config.agent?.["flow-auditor"]).toBeUndefined();
 		expect(config.command?.["flow-audit"]).toBeUndefined();
 		expect(config.command?.["flow-audits"]).toBeUndefined();
 		expect(config.agent?.["flow-planner"]).toBeDefined();
@@ -323,7 +321,6 @@ describe("applyFlowConfig", () => {
 		process.env.FLOW_ENABLE_AUDIT_CONFIG = "1";
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
-		expect(config.agent?.["flow-auditor"]).toBeDefined();
 		expect(config.command?.["flow-audit"]).toBeDefined();
 		expect(Object.keys(createTools({}))).not.toContain("flow_audit_reports");
 	});
@@ -333,7 +330,6 @@ describe("applyFlowConfig", () => {
 		process.env.FLOW_ENABLE_AUDIT_TOOLS = "1";
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
-		expect(config.agent?.["flow-auditor"]).toBeUndefined();
 		expect(config.command?.["flow-audit"]).toBeUndefined();
 		expect(Object.keys(createTools({}))).toContain("flow_audit_reports");
 	});
@@ -411,8 +407,9 @@ describe("applyFlowConfig", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
-		expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
+		expect(config.command?.["flow-audit"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-audits"]?.agent).toBe("flow-control");
+		expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-doctor"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-history"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-session"]?.agent).toBe("flow-control");
@@ -423,11 +420,6 @@ describe("applyFlowConfig", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
-		expect(config.agent?.["flow-auditor"]?.tools?.edit).toBe(false);
-		expect(config.agent?.["flow-auditor"]?.tools?.write).toBe(false);
-		expect(config.agent?.["flow-auditor"]?.tools?.bash).toBe(false);
-		expect(config.agent?.["flow-auditor"]?.permission?.edit).toBe("deny");
-		expect(config.agent?.["flow-auditor"]?.permission?.bash).toBe("deny");
 		expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.tools?.write).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.tools?.bash).toBe(false);
@@ -485,9 +477,6 @@ describe("applyFlowConfig", () => {
 		);
 		expect(first.agent?.["flow-reviewer"]).not.toBe(
 			second.agent?.["flow-reviewer"],
-		);
-		expect(first.agent?.["flow-auditor"]).not.toBe(
-			second.agent?.["flow-auditor"],
 		);
 		expect(first.agent?.["flow-planner"]?.tools).not.toBe(
 			second.agent?.["flow-planner"]?.tools,
