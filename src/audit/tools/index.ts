@@ -1,9 +1,12 @@
 import { createAuditHistorySessionTools } from "./audit-history-tools";
 import { createAuditSessionTools } from "./audit-tools";
 
-export function createAuditTools() {
+export function createAuditTools(options: {
+	reportsTool: boolean;
+	writeTool: boolean;
+}) {
 	return {
-		...createAuditSessionTools(),
-		...createAuditHistorySessionTools(),
+		...(options.writeTool ? createAuditSessionTools() : {}),
+		...(options.reportsTool ? createAuditHistorySessionTools() : {}),
 	};
 }

@@ -112,6 +112,8 @@ For host-stability diagnosis, you can also re-enable audit sub-surfaces independ
 ```bash
 export FLOW_ENABLE_AUDIT_CONFIG=1
 export FLOW_ENABLE_AUDIT_TOOLS=1
+export FLOW_ENABLE_AUDIT_REPORTS_TOOL=1
+export FLOW_ENABLE_AUDIT_WRITE_TOOL=1
 export FLOW_ENABLE_AUDIT_GUIDANCE=1
 ```
 

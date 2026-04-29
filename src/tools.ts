@@ -38,17 +38,24 @@ export function createTools(ctx: unknown) {
 	const audit = getAuditSurfaceState();
 	logPluginEvent(pluginContext, {
 		level: "info",
-		message: audit.tools
-			? audit.all
+		message: !audit.tools
+			? "Creating Flow tool surface (core only)."
+			: audit.all
 				? "Creating Flow tool surface (core + audit)."
-				: "Creating Flow tool surface (core + diagnostic audit tools)."
-			: "Creating Flow tool surface (core only).",
+				: audit.reportsTool && audit.writeTool
+					? "Creating Flow tool surface (core + diagnostic audit tools)."
+					: audit.reportsTool
+						? "Creating Flow tool surface (core + diagnostic audit reports tool)."
+						: "Creating Flow tool surface (core + diagnostic audit write tool).",
 	});
 	if (!audit.tools) {
 		return createCoreTools();
 	}
 	return {
-		...createAuditTools(),
+		...createAuditTools({
+			reportsTool: audit.reportsTool,
+			writeTool: audit.writeTool,
+		}),
 		...createCoreTools(),
 	};
 }
