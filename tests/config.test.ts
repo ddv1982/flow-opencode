@@ -156,6 +156,8 @@ describe("applyFlowConfig", () => {
 		"FLOW_ENABLE_AUDIT_SURFACE",
 		"FLOW_ENABLE_AUDIT_CONFIG",
 		"FLOW_ENABLE_AUDIT_TOOLS",
+		"FLOW_ENABLE_AUDIT_REPORTS_TOOL",
+		"FLOW_ENABLE_AUDIT_WRITE_TOOL",
 		"FLOW_ENABLE_AUDIT_GUIDANCE",
 	] as const;
 	const originalAuditEnv = Object.fromEntries(
@@ -336,6 +338,22 @@ describe("applyFlowConfig", () => {
 		expect(Object.keys(createTools({}))).toContain("flow_audit_reports");
 	});
 
+	test("supports reports-only audit diagnostics", () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		process.env.FLOW_ENABLE_AUDIT_REPORTS_TOOL = "1";
+		const tools = Object.keys(createTools({}));
+		expect(tools).toContain("flow_audit_reports");
+		expect(tools).not.toContain("flow_audit_write_report");
+	});
+
+	test("supports write-only audit diagnostics", () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		process.env.FLOW_ENABLE_AUDIT_WRITE_TOOL = "1";
+		const tools = Object.keys(createTools({}));
+		expect(tools).toContain("flow_audit_write_report");
+		expect(tools).not.toContain("flow_audit_reports");
+	});
+
 	test("parses master and diagnostic audit env gates predictably", () => {
 		for (const key of AUDIT_ENV_KEYS) {
 			delete process.env[key];
@@ -344,6 +362,8 @@ describe("applyFlowConfig", () => {
 			all: false,
 			config: false,
 			tools: false,
+			reportsTool: false,
+			writeTool: false,
 			guidance: false,
 			any: false,
 		});
@@ -352,6 +372,18 @@ describe("applyFlowConfig", () => {
 			all: false,
 			config: false,
 			tools: false,
+			reportsTool: false,
+			writeTool: false,
+			guidance: true,
+			any: true,
+		});
+		process.env.FLOW_ENABLE_AUDIT_REPORTS_TOOL = "1";
+		expect(getAuditSurfaceState()).toEqual({
+			all: false,
+			config: false,
+			tools: true,
+			reportsTool: true,
+			writeTool: false,
 			guidance: true,
 			any: true,
 		});
@@ -360,6 +392,8 @@ describe("applyFlowConfig", () => {
 			all: true,
 			config: true,
 			tools: true,
+			reportsTool: true,
+			writeTool: true,
 			guidance: true,
 			any: true,
 		});

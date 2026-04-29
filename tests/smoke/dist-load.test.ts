@@ -37,6 +37,8 @@ const AUDIT_ENV_KEYS = [
 	"FLOW_ENABLE_AUDIT_SURFACE",
 	"FLOW_ENABLE_AUDIT_CONFIG",
 	"FLOW_ENABLE_AUDIT_TOOLS",
+	"FLOW_ENABLE_AUDIT_REPORTS_TOOL",
+	"FLOW_ENABLE_AUDIT_WRITE_TOOL",
 	"FLOW_ENABLE_AUDIT_GUIDANCE",
 ] as const;
 const ORIGINAL_AUDIT_ENV = Object.fromEntries(
@@ -236,6 +238,32 @@ describe("built dist smoke load", () => {
 		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
 		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
 		expect(plugin.tool?.flow_audit_reports).toBeDefined();
+	});
+
+	test("dist bundle exposes reports-only audit diagnostics when FLOW_ENABLE_AUDIT_REPORTS_TOOL is enabled", async () => {
+		process.env.FLOW_ENABLE_AUDIT_REPORTS_TOOL = "1";
+		const pluginFactory = await importBuiltPlugin();
+		const worktree = makeManagedTempDir("flow-dist-worktree-audit-reports-");
+		const plugin = (await pluginFactory({
+			worktree,
+		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
+
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
+		expect(plugin.tool?.flow_audit_reports).toBeDefined();
+		expect(plugin.tool?.flow_audit_write_report).toBeUndefined();
+	});
+
+	test("dist bundle exposes write-only audit diagnostics when FLOW_ENABLE_AUDIT_WRITE_TOOL is enabled", async () => {
+		process.env.FLOW_ENABLE_AUDIT_WRITE_TOOL = "1";
+		const pluginFactory = await importBuiltPlugin();
+		const worktree = makeManagedTempDir("flow-dist-worktree-audit-write-");
+		const plugin = (await pluginFactory({
+			worktree,
+		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
+
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
+		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
+		expect(plugin.tool?.flow_audit_reports).toBeUndefined();
 	});
 
 	test("dist bundle exposes audit surface when FLOW_ENABLE_AUDIT_SURFACE is enabled", async () => {
