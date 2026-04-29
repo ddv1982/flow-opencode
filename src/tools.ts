@@ -1,4 +1,3 @@
-import { getAuditSurfaceState } from "./audit/enabled";
 import { createAuditTools } from "./audit/tools";
 import { createRuntimeTools } from "./tools/runtime-tools";
 import { createSessionTools } from "./tools/session-tools";
@@ -35,26 +34,14 @@ export function createCoreTools() {
 
 export function createTools(ctx: unknown) {
 	const pluginContext = ctx as PluginLogContext;
-	const audit = getAuditSurfaceState();
 	logPluginEvent(pluginContext, {
 		level: "info",
-		message: !audit.tools
-			? "Creating Flow tool surface (core only)."
-			: audit.all
-				? "Creating Flow tool surface (core + audit)."
-				: audit.reportsTool && audit.writeTool
-					? "Creating Flow tool surface (core + diagnostic audit tools)."
-					: audit.reportsTool
-						? "Creating Flow tool surface (core + diagnostic audit reports tool)."
-						: "Creating Flow tool surface (core + diagnostic audit write tool).",
+		message: "Creating Flow tool surface (core + audit).",
 	});
-	if (!audit.tools) {
-		return createCoreTools();
-	}
 	return {
 		...createAuditTools({
-			reportsTool: audit.reportsTool,
-			writeTool: audit.writeTool,
+			reportsTool: true,
+			writeTool: true,
 		}),
 		...createCoreTools(),
 	};

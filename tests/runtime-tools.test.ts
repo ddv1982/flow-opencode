@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
@@ -37,19 +37,6 @@ import {
 } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
-const originalAuditEnv = process.env.FLOW_ENABLE_AUDIT_SURFACE;
-
-beforeEach(() => {
-	process.env.FLOW_ENABLE_AUDIT_SURFACE = "1";
-});
-
-afterEach(() => {
-	if (originalAuditEnv === undefined) {
-		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
-	} else {
-		process.env.FLOW_ENABLE_AUDIT_SURFACE = originalAuditEnv;
-	}
-});
 
 type FlowPluginWithHooks = {
 	hooks?: {
@@ -92,6 +79,10 @@ function requireAuditTool<
 		throw new Error(`Missing required audit tool: ${name}`);
 	}
 	return tool;
+}
+
+function asJson(value: unknown) {
+	return JSON.stringify(value);
 }
 
 async function installDoctorPluginFixture(homeDir: string) {
@@ -322,7 +313,10 @@ describe("runtime tools and recovery", () => {
 		const response = await requireAuditTool(
 			tools,
 			"flow_audit_reports",
-		).execute({ action: "history" }, toolContext(worktree));
+		).execute(
+			{ requestJson: asJson({ action: "history" }) },
+			toolContext(worktree),
+		);
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("missing_audit");
@@ -338,9 +332,11 @@ describe("runtime tools and recovery", () => {
 			"flow_audit_reports",
 		).execute(
 			{
-				action: "compare",
-				leftReportId: "latest",
-				rightReportId: "latest",
+				requestJson: asJson({
+					action: "compare",
+					leftReportId: "latest",
+					rightReportId: "latest",
+				}),
 			},
 			toolContext(worktree),
 		);
@@ -349,6 +345,19 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.status).toBe("missing_audit");
 		expect(parsed.missingReportIds).toEqual(["latest"]);
 		expect(parsed.nextCommand).toBe(FLOW_AUDIT_COMMAND);
+	});
+
+	test("flow_audit_reports still accepts legacy direct-object args for internal callers", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const response = await requireAuditTool(
+			tools,
+			"flow_audit_reports",
+		).execute({ action: "history" }, toolContext(worktree));
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("missing_audit");
+		expect(parsed.summary).toBe("No saved Flow audit reports found.");
 	});
 
 	test("no-arg tools accept undefined args", async () => {
@@ -468,7 +477,10 @@ describe("runtime tools and recovery", () => {
 		const response = await requireAuditTool(
 			tools,
 			"flow_audit_reports",
-		).execute({ action: "history" }, toolContext(worktree));
+		).execute(
+			{ requestJson: asJson({ action: "history" }) },
+			toolContext(worktree),
+		);
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.history.latest.reportId).toBeDefined();
@@ -518,7 +530,10 @@ describe("runtime tools and recovery", () => {
 		const response = await requireAuditTool(
 			tools,
 			"flow_audit_reports",
-		).execute({ action: "show", reportId }, toolContext(worktree));
+		).execute(
+			{ requestJson: asJson({ action: "show", reportId }) },
+			toolContext(worktree),
+		);
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.reportId).toBe(reportId);
@@ -531,7 +546,10 @@ describe("runtime tools and recovery", () => {
 		const response = await requireAuditTool(
 			tools,
 			"flow_audit_reports",
-		).execute({ action: "show", reportId: "latest" }, toolContext(worktree));
+		).execute(
+			{ requestJson: asJson({ action: "show", reportId: "latest" }) },
+			toolContext(worktree),
+		);
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("missing_audit");
 		expect(parsed.nextCommand).toBe(FLOW_AUDITS_COMMAND);
@@ -638,9 +656,11 @@ describe("runtime tools and recovery", () => {
 			"flow_audit_reports",
 		).execute(
 			{
-				action: "compare",
-				leftReportId: basename(first.reportDir),
-				rightReportId: basename(second.reportDir),
+				requestJson: asJson({
+					action: "compare",
+					leftReportId: basename(first.reportDir),
+					rightReportId: basename(second.reportDir),
+				}),
 			},
 			toolContext(worktree),
 		);
@@ -2321,7 +2341,9 @@ describe("runtime tools and recovery", () => {
 			},
 			flow_status: {},
 			flow_history: {},
-			flow_audit_reports: { action: "history" },
+			flow_audit_reports: {
+				requestJson: JSON.stringify({ action: "history" }),
+			},
 			flow_history_show: { sessionId: currentSessionId },
 			flow_session_activate: { sessionId: currentSessionId },
 			flow_plan_start: { goal: "Build a workflow plugin" },

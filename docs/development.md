@@ -71,7 +71,7 @@ Flow is built around a few stable responsibilities:
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
 - `flow-control` handles status/history/session/reset requests and the audit command surface; audit writes are still limited to `flow_audit_write_report`
 
-Audit work should stay separate from normal feature execution and is opt-in. Enable the full audit lane with `FLOW_ENABLE_AUDIT_SURFACE=1`, then use the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” For host-stability diagnosis, you can also re-enable audit sub-surfaces independently with `FLOW_ENABLE_AUDIT_CONFIG=1`, `FLOW_ENABLE_AUDIT_TOOLS=1`, `FLOW_ENABLE_AUDIT_REPORTS_TOOL=1`, `FLOW_ENABLE_AUDIT_WRITE_TOOL=1`, and `FLOW_ENABLE_AUDIT_GUIDANCE=1`; those are diagnostic flags and may intentionally expose only partial audit behavior. The auditor must distinguish:
+Audit work should stay separate from normal feature execution and is always available through the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
 
 - `broad_audit`
 - `deep_audit`
@@ -103,15 +103,9 @@ Default (core) surface:
 - `flow_session_close`
 - `flow_reset_feature`
 
-Audit surface is opt-in via `FLOW_ENABLE_AUDIT_SURFACE=1` and adds:
-`flow_audit_reports`, `flow_audit_write_report`.
-
-For diagnostic reintroduction, the surface can be split across:
-- `FLOW_ENABLE_AUDIT_CONFIG=1` → inject audit agent/commands only
-- `FLOW_ENABLE_AUDIT_TOOLS=1` → inject both audit tools
-- `FLOW_ENABLE_AUDIT_REPORTS_TOOL=1` → inject only the saved-audit read tool
-- `FLOW_ENABLE_AUDIT_WRITE_TOOL=1` → inject only the audit artifact write tool
-- `FLOW_ENABLE_AUDIT_GUIDANCE=1` → inject audit-specific tool-definition guidance only
+Audit-specific runtime tools available by default:
+- `flow_audit_reports`
+- `flow_audit_write_report`
 
 Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
 
@@ -191,7 +185,7 @@ This plugin uses two validation layers:
 - SDK-facing tool `args` stay as raw shapes for OpenCode compatibility
 - stricter runtime validation happens later through schemas such as `WorkerResultSchema`
 
-For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, `flow_review_record_final`, and `flow_audit_write_report`), keep the SDK-facing shape thin by transporting the real object as a JSON string field (`planningJson`, `planJson`, `workerJson`, `decisionJson`, or `reportJson`) and validating the decoded object at runtime. This keeps the global tool schema surface small enough for ordinary OpenCode requests. Any legacy direct-object compatibility at the `execute(...)` boundary is for internal direct callers and tests only; OpenCode itself will see and validate the thin wrapper schema.
+For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, `flow_review_record_final`, `flow_audit_reports`, and `flow_audit_write_report`), keep the SDK-facing shape thin by transporting the real object as a JSON string field (`planningJson`, `planJson`, `workerJson`, `decisionJson`, `requestJson`, or `reportJson`) and validating the decoded object at runtime. This keeps the global tool schema surface small enough for ordinary OpenCode requests. Any legacy direct-object compatibility at the `execute(...)` boundary is for internal direct callers and tests only; OpenCode itself will see and validate the thin wrapper schema.
 
 ## Testing
 

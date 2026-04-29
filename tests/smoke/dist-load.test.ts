@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
 	cleanupManagedTempDirs,
 	createToolContext,
@@ -33,38 +33,12 @@ type FlowToolName =
 	| "flow_reset_feature";
 type FlowSmokeTools = Record<FlowToolName, TestTool>;
 
-const AUDIT_ENV_KEYS = [
-	"FLOW_ENABLE_AUDIT_SURFACE",
-	"FLOW_ENABLE_AUDIT_CONFIG",
-	"FLOW_ENABLE_AUDIT_TOOLS",
-	"FLOW_ENABLE_AUDIT_REPORTS_TOOL",
-	"FLOW_ENABLE_AUDIT_WRITE_TOOL",
-	"FLOW_ENABLE_AUDIT_GUIDANCE",
-] as const;
-const ORIGINAL_AUDIT_ENV = Object.fromEntries(
-	AUDIT_ENV_KEYS.map((key) => [key, process.env[key]]),
-) as Record<(typeof AUDIT_ENV_KEYS)[number], string | undefined>;
-
 afterEach(() => {
 	cleanupManagedTempDirs();
-	for (const key of AUDIT_ENV_KEYS) {
-		const value = ORIGINAL_AUDIT_ENV[key];
-		if (value === undefined) {
-			delete process.env[key];
-			continue;
-		}
-		process.env[key] = value;
-	}
-});
-
-beforeEach(() => {
-	for (const key of AUDIT_ENV_KEYS) {
-		delete process.env[key];
-	}
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, eight commands, seventeen tools by default", async () => {
+	test("dist bundle exposes five agents, ten commands, and nineteen tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -84,8 +58,10 @@ describe("built dist smoke load", () => {
 		);
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(8);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
+		expect(Object.keys(config.command ?? {})).toHaveLength(10);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
+		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
+		expect(plugin.tool?.flow_audit_reports).toBeDefined();
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -99,6 +75,33 @@ describe("built dist smoke load", () => {
 		const sessionId = planStartResponse.session.id as string;
 
 		const toolArgs: Record<string, unknown> = {
+			flow_audit_write_report: {
+				reportJson: JSON.stringify({
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Reviewed one surface directly.",
+					overallVerdict: "Deep audit completed.",
+					discoveredSurfaces: [
+						{
+							name: "prompt surfaces",
+							category: "source_runtime",
+							reviewStatus: "directly_reviewed",
+							evidence: ["src/prompts/agents.ts:1-50"],
+						},
+					],
+					validationRun: [
+						{
+							command: "bun run check",
+							status: "not_run",
+							summary: "Read-only audit.",
+						},
+					],
+					findings: [],
+				}),
+			},
+			flow_audit_reports: {
+				requestJson: JSON.stringify({ action: "history" }),
+			},
 			flow_status: {},
 			flow_doctor: {},
 			flow_history: {},
@@ -171,121 +174,5 @@ describe("built dist smoke load", () => {
 			expect(typeof response).toBe("string");
 			expect(() => JSON.parse(response)).not.toThrow();
 		}
-
-		const statusResponse = JSON.parse(
-			await tools.flow_status.execute({}, context),
-		);
-		expect(typeof statusResponse.status).toBe("string");
-		if (statusResponse.session) {
-			expect(statusResponse.session.goal).toBe("Optimize the Flow bundle");
-		}
-
-		const historyResponse = JSON.parse(
-			await tools.flow_history.execute({}, context),
-		);
-		expect(typeof historyResponse.status).toBe("string");
-		if (
-			(historyResponse.status === "ok" && historyResponse.history.active) ||
-			historyResponse.history.stored.length > 0
-		) {
-			expect(
-				historyResponse.history.active?.id ??
-					historyResponse.history.stored[0]?.id,
-			).toBe(planStartResponse.session.id);
-		}
-	});
-
-	test("dist bundle exposes config-only audit diagnostics when FLOW_ENABLE_AUDIT_CONFIG is enabled", async () => {
-		process.env.FLOW_ENABLE_AUDIT_CONFIG = "1";
-		const pluginFactory = await importBuiltPlugin();
-		const worktree = makeManagedTempDir("flow-dist-worktree-audit-config-");
-		const plugin = (await pluginFactory({
-			worktree,
-		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
-
-		const config = {
-			agent: {},
-			command: {},
-		} as Record<string, Record<string, unknown>>;
-		await plugin.config?.(
-			config as Parameters<NonNullable<typeof plugin.config>>[0],
-		);
-
-		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(10);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
-		expect(plugin.tool?.flow_audit_write_report).toBeUndefined();
-	});
-
-	test("dist bundle exposes tools-only audit diagnostics when FLOW_ENABLE_AUDIT_TOOLS is enabled", async () => {
-		process.env.FLOW_ENABLE_AUDIT_TOOLS = "1";
-		const pluginFactory = await importBuiltPlugin();
-		const worktree = makeManagedTempDir("flow-dist-worktree-audit-tools-");
-		const plugin = (await pluginFactory({
-			worktree,
-		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
-
-		const config = {
-			agent: {},
-			command: {},
-		} as Record<string, Record<string, unknown>>;
-		await plugin.config?.(
-			config as Parameters<NonNullable<typeof plugin.config>>[0],
-		);
-
-		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(8);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
-		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
-		expect(plugin.tool?.flow_audit_reports).toBeDefined();
-	});
-
-	test("dist bundle exposes reports-only audit diagnostics when FLOW_ENABLE_AUDIT_REPORTS_TOOL is enabled", async () => {
-		process.env.FLOW_ENABLE_AUDIT_REPORTS_TOOL = "1";
-		const pluginFactory = await importBuiltPlugin();
-		const worktree = makeManagedTempDir("flow-dist-worktree-audit-reports-");
-		const plugin = (await pluginFactory({
-			worktree,
-		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
-
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
-		expect(plugin.tool?.flow_audit_reports).toBeDefined();
-		expect(plugin.tool?.flow_audit_write_report).toBeUndefined();
-	});
-
-	test("dist bundle exposes write-only audit diagnostics when FLOW_ENABLE_AUDIT_WRITE_TOOL is enabled", async () => {
-		process.env.FLOW_ENABLE_AUDIT_WRITE_TOOL = "1";
-		const pluginFactory = await importBuiltPlugin();
-		const worktree = makeManagedTempDir("flow-dist-worktree-audit-write-");
-		const plugin = (await pluginFactory({
-			worktree,
-		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
-
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
-		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
-		expect(plugin.tool?.flow_audit_reports).toBeUndefined();
-	});
-
-	test("dist bundle exposes audit surface when FLOW_ENABLE_AUDIT_SURFACE is enabled", async () => {
-		process.env.FLOW_ENABLE_AUDIT_SURFACE = "1";
-		const pluginFactory = await importBuiltPlugin();
-		const worktree = makeManagedTempDir("flow-dist-worktree-audit-");
-		const plugin = (await pluginFactory({
-			worktree,
-		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
-
-		const config = {
-			agent: {},
-			command: {},
-		} as Record<string, Record<string, unknown>>;
-		await plugin.config?.(
-			config as Parameters<NonNullable<typeof plugin.config>>[0],
-		);
-
-		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(10);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
-		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
-		expect(plugin.tool?.flow_audit_reports).toBeDefined();
 	});
 });

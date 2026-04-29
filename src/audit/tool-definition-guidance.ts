@@ -15,6 +15,7 @@ const FLOW_AUDIT_TOOL_DESCRIPTION_GUIDANCE: Record<string, string> = {
 - Persists a normalized audit artifact bundle and returns the report directory plus JSON/Markdown paths.`,
 	flow_audit_reports: `## Use when
 - Use to inspect saved audit reports by listing history, showing one report, or comparing two persisted audit reports.
+- Provide the action payload as the JSON string field \`requestJson\`.
 
 ## Avoid when
 - Do not use for ad hoc text diffs or when an action is missing the required report ids.
