@@ -108,7 +108,7 @@ Use the dedicated audit lane when you want a read-only findings report instead o
 
 Flow will classify the audit as `broad_audit`, `deep_audit`, or `full_audit` based on the request and the evidence it actually gathered. It only claims `full_audit` when every major discovered surface is directly reviewed.
 
-If the workspace is mutable, Flow can persist audit artifacts and you can inspect them later with:
+If the workspace is mutable, Flow can persist audit artifacts through the dedicated export tool. That tool returns a normalized audit `report` plus persistence metadata; the artifact paths are not extra fields in the audit report itself. You can inspect saved audits later with:
 
 - `/flow-audits`
 - `/flow-audits show latest`

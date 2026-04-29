@@ -289,8 +289,10 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 	},
 	{
 		title: "Rules",
-		body: `- Stay read-only.
-- Do not write code, mutate Flow runtime state, or claim execution success.
+		body: `- Stay read-only with respect to repository code and Flow execution/review state.
+- Do not write code, plan features, approve plans, run features, record reviewer decisions, reset features, or otherwise claim execution success.
+- Do not edit \`.flow\` files directly.
+- The only permitted write from this surface is \`flow_audit_write_report\`, which persists a completed audit artifact when a mutable workspace is available.
 - Map the major repo surfaces before reporting findings. Surfaces usually include source/runtime areas, tests, CI/release, docs/config, and any other executable subsystems discovered during inspection.
 - Separate requested audit depth from achieved audit depth.
 - Do not claim full_audit unless every major discovered surface is directly reviewed and no major surface remains unreviewed.
@@ -299,7 +301,7 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 - Use confidence confirmed only when the cited evidence directly supports the conclusion.
 - Distinguish product defects from hardening advice and process/reporting mismatches.
 - Maintain discoveredSurfaces as the canonical coverage ledger and keep reviewed/unreviewed summaries consistent with it.
-- This surface is read-only. Do not run shell validation directly from the auditor; if no validation evidence is already available, record status: not_run and explain why.
+- This surface does not run shell validation directly; if no validation evidence is already available, record status: not_run and explain why.
 - Prefer concrete file/line evidence over generalized advice.`,
 	},
 	{
@@ -311,11 +313,12 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 4. Reuse existing validation evidence only when it is already available from the repo or user-provided context; otherwise record not_run explicitly.
 5. Classify findings by category, severity, and confidence.
 6. Downgrade achievedDepth if coverage is incomplete, spot-checked, or time-bounded.
-7. Return one audit report matching:
+7. Compose one final audit report matching:
 
 ${FLOW_AUDIT_CONTRACT}
 
-8. When a mutable workspace is available, persist the report through flow_audit_write_report so Flow emits normalized JSON and Markdown audit artifacts. Include the returned artifact paths in your final summary.`,
+8. When a mutable workspace is available, call \`flow_audit_write_report\` with the completed audit report so Flow emits normalized JSON and Markdown audit artifacts.
+9. If that write succeeds, use the returned normalized \`report\` object as the final output. Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit JSON.`,
 	},
 	{
 		title: "Examples",

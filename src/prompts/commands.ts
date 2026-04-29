@@ -175,7 +175,8 @@ export const FLOW_AUDIT_COMMAND_TEMPLATE = renderPromptSections([
 	{
 		title: "Behavior",
 		body: `- Treat this command as a dedicated audit surface, not as Flow planning or feature execution.
-- Stay read-only; do not start Flow runtime planning or execution tools.
+- Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.
+- The only permitted write from this command is \`flow_audit_write_report\` to persist a completed audit artifact when the workspace is mutable.
 - If the arguments ask for a full or exhaustive review, treat requestedDepth as full_audit.
 - If the arguments ask for a deep or in-depth review, treat requestedDepth as deep_audit.
 - Otherwise default requestedDepth to broad_audit.
@@ -186,8 +187,10 @@ export const FLOW_AUDIT_COMMAND_TEMPLATE = renderPromptSections([
 - If coverage is incomplete, downgrade achievedDepth honestly and explain the gap.
 - Treat discoveredSurfaces as the canonical coverage ledger; reviewed/unreviewed summaries and coverage rubric must remain consistent with it.
 - Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.
-- This command is read-only. Do not execute shell validation directly from the audit surface; if no validation evidence is already available, record status: not_run explicitly in the audit output.
-- When the workspace is mutable, persist the final audit through flow_audit_write_report so Flow emits normalized JSON and Markdown artifacts and recomputes the coverage rubric from discoveredSurfaces.
+- This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the audit output.
+- When the workspace is mutable, pass the completed audit report to \`flow_audit_write_report\` so Flow emits normalized JSON and Markdown artifacts and recomputes the coverage rubric from discoveredSurfaces.
+- If that write succeeds, use the returned normalized \`report\` object as the final audit output.
+- Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit object.
 - End with one audit report that matches the audit contract from the flow-auditor prompt.`,
 	},
 	{
