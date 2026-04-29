@@ -73,7 +73,7 @@ Flow is built around a few stable responsibilities:
 - `flow-auditor` performs read-only audits with explicit scope/coverage accounting and calibrated claim strength; its only sanctioned write is audit artifact export through `flow_audit_write_report`
 - `flow-control` handles status/history/session/feature-reset requests only
 
-Audit work should stay separate from normal feature execution and is opt-in. Enable audit surfaces with `FLOW_ENABLE_AUDIT_SURFACE=1`, then use the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
+Audit work should stay separate from normal feature execution and is opt-in. Enable the full audit lane with `FLOW_ENABLE_AUDIT_SURFACE=1`, then use the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” For host-stability diagnosis, you can also re-enable audit sub-surfaces independently with `FLOW_ENABLE_AUDIT_CONFIG=1`, `FLOW_ENABLE_AUDIT_TOOLS=1`, and `FLOW_ENABLE_AUDIT_GUIDANCE=1`; those are diagnostic flags and may intentionally expose only partial audit behavior. The auditor must distinguish:
 
 - `broad_audit`
 - `deep_audit`
@@ -107,6 +107,11 @@ Default (core) surface:
 
 Audit surface is opt-in via `FLOW_ENABLE_AUDIT_SURFACE=1` and adds:
 `flow_audit_history`, `flow_audit_show`, `flow_audit_compare`, `flow_audit_write_report`.
+
+For diagnostic reintroduction, the surface can be split across:
+- `FLOW_ENABLE_AUDIT_CONFIG=1` → inject audit agent/commands only
+- `FLOW_ENABLE_AUDIT_TOOLS=1` → inject audit tools only
+- `FLOW_ENABLE_AUDIT_GUIDANCE=1` → inject audit-specific tool-definition guidance only
 
 Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
 
