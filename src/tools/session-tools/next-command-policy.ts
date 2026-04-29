@@ -3,30 +3,19 @@
  * Do not register tools or assemble JSON response envelopes here.
  */
 import {
-	FLOW_AUDIT_COMMAND,
-	FLOW_AUDITS_COMMAND,
 	FLOW_AUTO_RESUME_COMMAND,
 	FLOW_AUTO_WITH_GOAL_COMMAND,
 	FLOW_HISTORY_COMMAND,
 	FLOW_PLAN_WITH_GOAL_COMMAND,
 	FLOW_STATUS_COMMAND,
-	flowAuditsCompareCommand,
 	flowSessionActivateCommand,
 } from "../../runtime/constants";
 import type { Session } from "../../runtime/schema";
 import type {
-	compareAuditReports,
-	listAuditReports,
 	listSessionHistory,
-	loadAuditReport,
 	loadStoredSession,
 } from "../../runtime/session";
 
-type AuditHistory = Awaited<ReturnType<typeof listAuditReports>>;
-type AuditComparisonLookup = Awaited<ReturnType<typeof compareAuditReports>>;
-type StoredAuditRecord = NonNullable<
-	Awaited<ReturnType<typeof loadAuditReport>>
->;
 type SessionHistory = Awaited<ReturnType<typeof listSessionHistory>>;
 type StoredSessionRecord = NonNullable<
 	Awaited<ReturnType<typeof loadStoredSession>>
@@ -40,10 +29,6 @@ export function nextCommandForMissingGoal() {
 
 export function nextCommandForMissingStoredSession() {
 	return FLOW_HISTORY_COMMAND;
-}
-
-export function nextCommandForMissingAuditReport() {
-	return FLOW_AUDITS_COMMAND;
 }
 
 export function nextCommandForHistory(history: SessionHistory) {
@@ -73,39 +58,6 @@ export function nextCommandForStoredSession(
 	return found.session.status === "completed"
 		? FLOW_PLAN_WITH_GOAL_COMMAND
 		: FLOW_HISTORY_COMMAND;
-}
-
-export function nextCommandForAuditHistory(history: AuditHistory) {
-	return history.latest
-		? `${FLOW_AUDITS_COMMAND} show latest`
-		: FLOW_AUDIT_COMMAND;
-}
-
-export function nextCommandForStoredAudit(
-	requestedReportId: string,
-	found: StoredAuditRecord,
-) {
-	if (found.report.achievedDepth === "full_audit") {
-		return FLOW_AUDIT_COMMAND;
-	}
-	return requestedReportId === "latest"
-		? FLOW_AUDIT_COMMAND
-		: flowAuditsCompareCommand(requestedReportId, "latest");
-}
-
-export function nextCommandForAuditComparison(
-	comparison: AuditComparisonLookup,
-) {
-	if (comparison.comparison) {
-		return `${FLOW_AUDITS_COMMAND} show ${comparison.comparison.right.reportId}`;
-	}
-	if (comparison.left && !comparison.right) {
-		return `${FLOW_AUDITS_COMMAND} show ${comparison.left.reportId}`;
-	}
-	if (!comparison.left && comparison.right) {
-		return `${FLOW_AUDITS_COMMAND} show ${comparison.right.reportId}`;
-	}
-	return FLOW_AUDIT_COMMAND;
 }
 
 export function autoPreparePolicy(

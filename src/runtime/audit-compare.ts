@@ -1,6 +1,6 @@
+import type { AuditReport } from "../audit/schema";
 import type { StoredAuditReport } from "./audit-history";
 import { loadAuditReport } from "./audit-history";
-import type { AuditReport } from "./schema";
 
 type AuditDepthComparison = {
 	requestedChanged: boolean;

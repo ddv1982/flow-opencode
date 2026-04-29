@@ -1,19 +1,19 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
+import { FLOW_AUDITOR_AGENT_PROMPT } from "../src/audit/prompts/agents";
+import { FLOW_AUDIT_COMMAND_TEMPLATE } from "../src/audit/prompts/commands";
+import { FLOW_AUDIT_CONTRACT } from "../src/audit/prompts/contracts";
 import { buildFlowAdaptiveSystemContext } from "../src/prompt-system-context";
 import {
-	FLOW_AUDITOR_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../src/prompts/agents";
 import {
-	FLOW_AUDIT_COMMAND_TEMPLATE,
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_PLAN_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
 import {
-	FLOW_AUDIT_CONTRACT,
 	FLOW_PLAN_CONTRACT,
 	FLOW_REVIEWER_CONTRACT,
 	FLOW_WORKER_CONTRACT,

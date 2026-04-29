@@ -1,9 +1,10 @@
+import { applyFlowAuditConfig } from "./audit/config";
+import { isAuditSurfaceEnabled } from "./audit/enabled";
 import {
 	FLOW_READ_ONLY_PERMISSION,
 	FLOW_READ_ONLY_TOOLS,
 } from "./config-shared";
 import {
-	FLOW_AUDITOR_AGENT_PROMPT,
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
@@ -11,8 +12,6 @@ import {
 	FLOW_WORKER_AGENT_PROMPT,
 } from "./prompts/agents";
 import {
-	FLOW_AUDIT_COMMAND_TEMPLATE,
-	FLOW_AUDITS_COMMAND_TEMPLATE,
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_DOCTOR_COMMAND_TEMPLATE,
 	FLOW_HISTORY_COMMAND_TEMPLATE,
@@ -24,8 +23,6 @@ import {
 } from "./prompts/commands";
 
 type MutableConfig = {
-	// OpenCode config merging is intentionally flexible. Keep this boundary broad and
-	// clone our injected entries defensively instead of over-constraining caller-owned config.
 	agent?: Record<string, unknown>;
 	command?: Record<string, unknown>;
 };
@@ -63,7 +60,7 @@ function createReadOnlyPrimaryAgent(
 	};
 }
 
-const FLOW_AGENTS = {
+const FLOW_CORE_AGENTS = {
 	"flow-planner": createReadOnlyPrimaryAgent(
 		"Create and refine compact Flow plans grounded in repo evidence.",
 		FLOW_PLANNER_AGENT_PROMPT,
@@ -80,10 +77,6 @@ const FLOW_AGENTS = {
 			"Coordinate Flow planning, execution, review, and recovery autonomously.",
 		prompt: FLOW_AUTO_AGENT_PROMPT,
 	},
-	"flow-auditor": createReadOnlyPrimaryAgent(
-		"Perform calibrated read-only repository audits with explicit coverage accounting.",
-		FLOW_AUDITOR_AGENT_PROMPT,
-	),
 	"flow-reviewer": createReadOnlyPrimaryAgent(
 		"Review Flow work and decide whether it may advance.",
 		FLOW_REVIEWER_AGENT_PROMPT,
@@ -94,7 +87,7 @@ const FLOW_AGENTS = {
 	),
 } satisfies Record<string, FlowAgentConfig>;
 
-const FLOW_COMMANDS = {
+const FLOW_CORE_COMMANDS = {
 	"flow-plan": {
 		description: "Create, update, select, or approve a Flow plan",
 		agent: "flow-planner",
@@ -111,22 +104,10 @@ const FLOW_COMMANDS = {
 		agent: "flow-auto",
 		template: FLOW_AUTO_COMMAND_TEMPLATE,
 	},
-	"flow-audit": {
-		description:
-			"Run a read-only repository audit with calibrated depth claims",
-		agent: "flow-auditor",
-		template: FLOW_AUDIT_COMMAND_TEMPLATE,
-	},
 	"flow-status": {
 		description: "Inspect the active Flow session",
 		agent: "flow-control",
 		template: FLOW_STATUS_COMMAND_TEMPLATE,
-	},
-	"flow-audits": {
-		description:
-			"Inspect or compare saved Flow audit report history and details",
-		agent: "flow-control",
-		template: FLOW_AUDITS_COMMAND_TEMPLATE,
 	},
 	"flow-doctor": {
 		description: "Check Flow readiness for the current workspace",
@@ -158,29 +139,39 @@ function cloneAgentConfig(agent: FlowAgentConfig) {
 	};
 }
 
-export function applyFlowConfig(config: MutableConfig): void {
-	const clonedAgents = Object.fromEntries(
-		Object.entries(FLOW_AGENTS).map(([name, agent]) => [
+export function createFlowCoreConfigEntries() {
+	const agent = Object.fromEntries(
+		Object.entries(FLOW_CORE_AGENTS).map(([name, item]) => [
 			name,
-			cloneAgentConfig(agent),
+			cloneAgentConfig(item),
 		]),
 	);
-	const clonedCommands = Object.fromEntries(
-		Object.entries(FLOW_COMMANDS).map(([name, command]) => [
+	const command = Object.fromEntries(
+		Object.entries(FLOW_CORE_COMMANDS).map(([name, item]) => [
 			name,
-			{ ...command },
+			{ ...item },
 		]),
 	);
+	return { agent, command };
+}
 
+export function applyFlowCoreConfig(config: MutableConfig): void {
+	const entries = createFlowCoreConfigEntries();
 	config.agent = {
 		...(config.agent ?? {}),
-		...clonedAgents,
+		...entries.agent,
 	};
-
 	config.command = {
 		...(config.command ?? {}),
-		...clonedCommands,
+		...entries.command,
 	};
+}
+
+export function applyFlowConfig(config: MutableConfig): void {
+	applyFlowCoreConfig(config);
+	if (isAuditSurfaceEnabled()) {
+		applyFlowAuditConfig(config);
+	}
 }
 
 export function createConfigHook(_ctx: unknown) {

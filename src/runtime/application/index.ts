@@ -34,16 +34,11 @@ export {
 	DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 } from "./session-engine";
 export {
-	auditComparisonResponse,
-	auditHistoryResponse,
 	autoPrepareResponse,
 	closeSessionResponse,
 	historyResponse,
-	missingAuditComparisonResponse,
-	missingAuditReportResponse,
 	missingStoredSessionResponse,
 	statusResponse,
-	storedAuditReportResponse,
 	storedSessionResponse,
 } from "./session-presenters";
 export type {
@@ -68,26 +63,28 @@ export {
 	runDispatchedSessionWorkspaceAction,
 	SESSION_WORKSPACE_ACTION_NAMES,
 } from "./session-workspace-actions";
+export {
+	errorResponse,
+	executeSessionMutation,
+	missingSessionResponse,
+	parseToolArgs,
+	persistTransition,
+	runSessionMutationAction,
+	withPersistedTransition,
+	withSession,
+} from "./tool-runtime";
 export type {
 	ResolvedSessionRoot,
 	SessionRootMode,
 	SessionRootSource,
 	WorkspaceContext,
 	WorkspaceContextSummary,
-} from "./tool-runtime";
+} from "./workspace-runtime";
 export {
-	errorResponse,
-	executeSessionMutation,
 	inspectWorkspaceContext,
-	missingSessionResponse,
-	parseToolArgs,
-	persistTransition,
 	resolveMutableSessionRoot,
 	resolveReadableSessionRoot,
 	resolveSessionRoot,
-	runSessionMutationAction,
 	toCompactJson,
 	toJson,
-	withPersistedTransition,
-	withSession,
-} from "./tool-runtime";
+} from "./workspace-runtime";

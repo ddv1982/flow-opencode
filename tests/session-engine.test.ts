@@ -246,15 +246,6 @@ describe("session engine boundary", () => {
 				loadStoredSession: async () => {
 					throw new Error("should not load stored session");
 				},
-				listAuditReports: async () => {
-					throw new Error("should not list audits");
-				},
-				loadAuditReport: async () => {
-					throw new Error("should not load audit report");
-				},
-				compareAuditReports: async () => {
-					throw new Error("should not compare audit reports");
-				},
 			},
 		);
 
@@ -277,79 +268,12 @@ describe("session engine boundary", () => {
 				loadStoredSession: async () => {
 					throw new Error("should not load stored session");
 				},
-				listAuditReports: async () => {
-					throw new Error("should not list audits");
-				},
-				loadAuditReport: async () => {
-					throw new Error("should not load audit report");
-				},
-				compareAuditReports: async () => {
-					throw new Error("should not compare audit reports");
-				},
 			},
 		);
 
 		expect(response).toEqual({
 			status: "ok",
 			session: baseSession,
-		});
-	});
-
-	test("runs named audit comparison reads through the central runtime path", async () => {
-		const result = await runDispatchedSessionReadAction(
-			{ worktree: "/tmp/project" },
-			"compare_audit_reports",
-			{
-				leftReportId: "left-audit",
-				rightReportId: "right-audit",
-			},
-			{
-				loadSession: async () => {
-					throw new Error("should not load session");
-				},
-				listSessionHistory: async () => {
-					throw new Error("should not list history");
-				},
-				loadStoredSession: async () => {
-					throw new Error("should not load stored session");
-				},
-				listAuditReports: async () => {
-					throw new Error("should not list audits");
-				},
-				loadAuditReport: async () => {
-					throw new Error("should not load audit");
-				},
-				compareAuditReports: async (
-					_worktree,
-					leftReportId,
-					rightReportId,
-				) => ({
-					leftReportId,
-					rightReportId,
-					left: null,
-					right: null,
-					comparison: null,
-				}),
-			},
-		);
-
-		expect(result.actionName).toBe("compare_audit_reports");
-		expect(result.value).toEqual({
-			leftReportId: "left-audit",
-			rightReportId: "right-audit",
-			left: null,
-			right: null,
-			comparison: null,
-		});
-		expect(result.response).toEqual({
-			status: "missing_audit",
-			comparison: {
-				leftReportId: "left-audit",
-				rightReportId: "right-audit",
-				left: null,
-				right: null,
-				comparison: null,
-			},
 		});
 	});
 
@@ -366,12 +290,6 @@ describe("session engine boundary", () => {
 				syncSessionArtifacts: async () => undefined,
 				activateSession: async () => session,
 				closeSession: async () => null,
-				writeAuditReport: async () => ({
-					reportDir: "/tmp/project/.flow/audits/demo",
-					jsonPath: "/tmp/project/.flow/audits/demo/report.json",
-					markdownPath: "/tmp/project/.flow/audits/demo/report.md",
-					report: {} as never,
-				}),
 			},
 		);
 
@@ -396,81 +314,11 @@ describe("session engine boundary", () => {
 					completedTo: ".flow/completed/session-1",
 					closureKind: "completed",
 				}),
-				writeAuditReport: async () => ({
-					reportDir: "/tmp/project/.flow/audits/demo",
-					jsonPath: "/tmp/project/.flow/audits/demo/report.json",
-					markdownPath: "/tmp/project/.flow/audits/demo/report.md",
-					report: {} as never,
-				}),
 			},
 		);
 
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.completedSessionId).toBe("session-1");
-	});
-
-	test("writes audit reports through the dispatched workspace path", async () => {
-		const result = await runDispatchedSessionWorkspaceAction(
-			{ worktree: "/tmp/project" },
-			"write_audit_report",
-			{
-				report: {
-					requestedDepth: "deep_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Reviewed one surface directly.",
-					overallVerdict: "Deep audit completed.",
-					discoveredSurfaces: [
-						{
-							name: "prompt surfaces",
-							category: "source_runtime",
-							reviewStatus: "directly_reviewed",
-							evidence: ["src/prompts/agents.ts:1-50"],
-						},
-					],
-					validationRun: [
-						{
-							command: "bun run check",
-							status: "not_run",
-							summary: "Read-only audit.",
-						},
-					],
-					findings: [],
-				},
-			},
-			{
-				loadSession: async () => null,
-				saveSessionState: async () => {
-					throw new Error("should not save session state");
-				},
-				syncSessionArtifacts: async () => undefined,
-				activateSession: async () => null,
-				closeSession: async () => null,
-				writeAuditReport: async () => ({
-					reportDir: "/tmp/project/.flow/audits/demo",
-					jsonPath: "/tmp/project/.flow/audits/demo/report.json",
-					markdownPath: "/tmp/project/.flow/audits/demo/report.md",
-					report: {
-						requestedDepth: "deep_audit",
-						achievedDepth: "deep_audit",
-					} as never,
-				}),
-			},
-		);
-
-		expect(result.actionName).toBe("write_audit_report");
-		expect(result.value.reportDir).toBe("/tmp/project/.flow/audits/demo");
-		expect(result.response).toEqual({
-			status: "ok",
-			summary: "Persisted Flow audit report artifacts.",
-			reportDir: "/tmp/project/.flow/audits/demo",
-			jsonPath: "/tmp/project/.flow/audits/demo/report.json",
-			markdownPath: "/tmp/project/.flow/audits/demo/report.md",
-			report: {
-				requestedDepth: "deep_audit",
-				achievedDepth: "deep_audit",
-			},
-			nextCommand: "/flow-audit",
-		});
 	});
 });

@@ -32,7 +32,7 @@ import {
 import {
 	resolveMutableSessionRoot,
 	type WorkspaceContext,
-} from "./tool-runtime";
+} from "./workspace-runtime";
 
 export const SESSION_MUTATION_ACTION_NAMES = [
 	"record_planning_context",

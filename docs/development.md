@@ -60,7 +60,7 @@ Flow is built around a few stable responsibilities:
 - `flow-planner`
 - `flow-worker`
 - `flow-auto`
-- `flow-auditor`
+- `flow-auditor` *(opt-in via `FLOW_ENABLE_AUDIT_SURFACE=1`)*
 - `flow-reviewer`
 - `flow-control`
 
@@ -73,7 +73,7 @@ Flow is built around a few stable responsibilities:
 - `flow-auditor` performs read-only audits with explicit scope/coverage accounting and calibrated claim strength; its only sanctioned write is audit artifact export through `flow_audit_write_report`
 - `flow-control` handles status/history/session/feature-reset requests only
 
-Audit work should stay separate from normal feature execution. Prefer the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
+Audit work should stay separate from normal feature execution and is opt-in. Enable audit surfaces with `FLOW_ENABLE_AUDIT_SURFACE=1`, then use the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
 
 - `broad_audit`
 - `deep_audit`
@@ -85,27 +85,28 @@ When an audit should leave a durable artifact, the auditor should persist it thr
 
 ## Current Runtime Tools
 
+Default (core) surface:
+
 - `flow_status`
 - `flow_doctor`
 - `flow_history`
 - `flow_history_show`
-- `flow_audit_history`
-- `flow_audit_show`
-- `flow_audit_compare`
-- `flow_audit_write_report`
 - `flow_auto_prepare`
 - `flow_plan_start`
 - `flow_plan_apply`
 - `flow_plan_approve`
 - `flow_plan_select_features`
+- `flow_plan_context_record`
 - `flow_run_start`
 - `flow_run_complete_feature`
 - `flow_review_record_feature`
 - `flow_review_record_final`
 - `flow_session_activate`
-- `flow_reset_feature`
-- `flow_plan_context_record`
 - `flow_session_close`
+- `flow_reset_feature`
+
+Audit surface is opt-in via `FLOW_ENABLE_AUDIT_SURFACE=1` and adds:
+`flow_audit_history`, `flow_audit_show`, `flow_audit_compare`, `flow_audit_write_report`.
 
 Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
 

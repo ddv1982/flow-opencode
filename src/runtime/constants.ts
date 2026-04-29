@@ -4,11 +4,9 @@ export const FLOW_RUN_COMMAND = "/flow-run";
 export const FLOW_AUTO_COMMAND = "/flow-auto";
 export const FLOW_AUTO_WITH_GOAL_COMMAND = "/flow-auto <goal>";
 export const FLOW_AUTO_RESUME_COMMAND = "/flow-auto resume";
-export const FLOW_AUDIT_COMMAND = "/flow-audit";
 export const FLOW_STATUS_COMMAND = "/flow-status";
 export const FLOW_DOCTOR_COMMAND = "/flow-doctor";
 export const FLOW_HISTORY_COMMAND = "/flow-history";
-export const FLOW_AUDITS_COMMAND = "/flow-audits";
 export const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
 export const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
 export const FLOW_SESSION_CLOSE_COMMAND = "/flow-session close";
@@ -106,48 +104,7 @@ export const NEEDS_INPUT_OUTCOME_KINDS = [
 
 export const FEATURE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const FEATURE_ID_MESSAGE = "Feature ids must be lowercase kebab-case";
-export const AUDIT_REPORT_ID_PATTERN =
-	/^(latest|(?!\.{1,2}$)(?!.*\.\.)[A-Za-z0-9._-]+)$/;
-export const AUDIT_REPORT_ID_MESSAGE =
-	"Audit report ids must be 'latest' or a safe timestamp-like id";
-
 export const VALIDATION_SCOPES = ["targeted", "broad"] as const;
-export const AUDIT_DEPTHS = [
-	"broad_audit",
-	"deep_audit",
-	"full_audit",
-] as const;
-export const AUDIT_SURFACE_CATEGORIES = [
-	"source_runtime",
-	"tests",
-	"ci_release",
-	"docs_config",
-	"tooling",
-	"other",
-] as const;
-export const AUDIT_SURFACE_REVIEW_STATUSES = [
-	"directly_reviewed",
-	"spot_checked",
-	"unreviewed",
-] as const;
-export const AUDIT_FINDING_CATEGORIES = [
-	"confirmed_defect",
-	"likely_risk",
-	"hardening_opportunity",
-	"process_gap",
-] as const;
-export const AUDIT_FINDING_CONFIDENCE = [
-	"confirmed",
-	"likely",
-	"speculative",
-] as const;
-export const AUDIT_VALIDATION_STATUSES = [
-	"passed",
-	"failed",
-	"partial",
-	"not_run",
-] as const;
-
 export const FEATURE_REVIEW_SCOPE = "feature";
 export const FINAL_REVIEW_SCOPE = "final";
 export const REVIEW_SCOPES = [
@@ -161,11 +118,4 @@ export function flowResetFeatureCommand(featureId: string): string {
 
 export function flowSessionActivateCommand(sessionId: string): string {
 	return `${FLOW_SESSION_ACTIVATE_COMMAND} ${sessionId}`;
-}
-
-export function flowAuditsCompareCommand(
-	leftReportId: string,
-	rightReportId: string,
-): string {
-	return `${FLOW_AUDITS_COMMAND} compare ${leftReportId} ${rightReportId}`;
 }

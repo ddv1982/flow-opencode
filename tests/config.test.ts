@@ -1,12 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
+import { FLOW_AUDITOR_AGENT_PROMPT } from "../src/audit/prompts/agents";
+import {
+	FLOW_AUDIT_COMMAND_TEMPLATE,
+	FLOW_AUDITS_COMMAND_TEMPLATE,
+} from "../src/audit/prompts/commands";
+import { FLOW_AUDIT_CONTRACT } from "../src/audit/prompts/contracts";
 import { applyFlowConfig, createConfigHook } from "../src/config";
 import FlowPlugin from "../src/index";
 import {
-	FLOW_AUDITOR_AGENT_PROMPT,
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
@@ -14,8 +19,6 @@ import {
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../src/prompts/agents";
 import {
-	FLOW_AUDIT_COMMAND_TEMPLATE,
-	FLOW_AUDITS_COMMAND_TEMPLATE,
 	FLOW_AUTO_COMMAND_TEMPLATE,
 	FLOW_DOCTOR_COMMAND_TEMPLATE,
 	FLOW_PLAN_COMMAND_TEMPLATE,
@@ -23,7 +26,6 @@ import {
 	FLOW_STATUS_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
 import {
-	FLOW_AUDIT_CONTRACT,
 	FLOW_REVIEWER_CONTRACT,
 	FLOW_WORKER_CONTRACT,
 } from "../src/prompts/contracts";
@@ -71,8 +73,31 @@ type FlowPluginHooks = {
 	hooks?: Record<string, unknown>;
 };
 
+type ToolSchemaName =
+	| "flow_status"
+	| "flow_doctor"
+	| "flow_history"
+	| "flow_history_show"
+	| "flow_audit_history"
+	| "flow_audit_show"
+	| "flow_audit_compare"
+	| "flow_audit_write_report"
+	| "flow_session_activate"
+	| "flow_session_close"
+	| "flow_plan_start"
+	| "flow_auto_prepare"
+	| "flow_plan_context_record"
+	| "flow_plan_apply"
+	| "flow_plan_approve"
+	| "flow_plan_select_features"
+	| "flow_run_start"
+	| "flow_run_complete_feature"
+	| "flow_reset_feature"
+	| "flow_review_record_feature"
+	| "flow_review_record_final";
+
 type ToolSchemas = Record<
-	keyof ReturnType<typeof createTools>,
+	ToolSchemaName,
 	ReturnType<typeof tool.schema.object>
 >;
 
@@ -127,6 +152,17 @@ function asJson(value: unknown) {
 }
 
 describe("applyFlowConfig", () => {
+	const originalAuditEnv = process.env.FLOW_ENABLE_AUDIT_SURFACE;
+	beforeEach(() => {
+		process.env.FLOW_ENABLE_AUDIT_SURFACE = "1";
+	});
+	afterEach(() => {
+		if (originalAuditEnv === undefined) {
+			delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+			return;
+		}
+		process.env.FLOW_ENABLE_AUDIT_SURFACE = originalAuditEnv;
+	});
 	test("plugin entrypoint returns Flow config and tool hooks", async () => {
 		const appLog = {
 			log: () => undefined,
@@ -210,6 +246,29 @@ describe("applyFlowConfig", () => {
 		]);
 	});
 
+	test("defaults to a core-only tool surface when audit opt-in is not set", () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		expect(Object.keys(createTools({}))).toEqual([
+			"flow_status",
+			"flow_doctor",
+			"flow_history",
+			"flow_history_show",
+			"flow_session_activate",
+			"flow_plan_start",
+			"flow_auto_prepare",
+			"flow_session_close",
+			"flow_plan_context_record",
+			"flow_plan_apply",
+			"flow_plan_approve",
+			"flow_plan_select_features",
+			"flow_run_start",
+			"flow_run_complete_feature",
+			"flow_reset_feature",
+			"flow_review_record_feature",
+			"flow_review_record_final",
+		]);
+	});
+
 	test("injects commands and agents", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
@@ -232,6 +291,17 @@ describe("applyFlowConfig", () => {
 		expect(config.command?.["flow-history"]).toBeDefined();
 		expect(config.command?.["flow-session"]).toBeDefined();
 		expect(config.command?.["flow-reset"]).toBeDefined();
+	});
+
+	test("defaults to core-only config when audit opt-in is not set", () => {
+		delete process.env.FLOW_ENABLE_AUDIT_SURFACE;
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+		expect(config.agent?.["flow-auditor"]).toBeUndefined();
+		expect(config.command?.["flow-audit"]).toBeUndefined();
+		expect(config.command?.["flow-audits"]).toBeUndefined();
+		expect(config.agent?.["flow-planner"]).toBeDefined();
+		expect(config.command?.["flow-plan"]).toBeDefined();
 	});
 
 	test("marks canonical persistence tools as explicit action descriptions", () => {

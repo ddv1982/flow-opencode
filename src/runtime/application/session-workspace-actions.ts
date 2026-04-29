@@ -1,9 +1,5 @@
-import {
-	FLOW_AUDIT_COMMAND,
-	FLOW_PLAN_WITH_GOAL_COMMAND,
-	FLOW_STATUS_COMMAND,
-} from "../constants";
-import type { AuditReportArgs, PlanningContext, Session } from "../schema";
+import { FLOW_PLAN_WITH_GOAL_COMMAND, FLOW_STATUS_COMMAND } from "../constants";
+import type { PlanningContext, Session } from "../schema";
 import { type closeSession, createSession } from "../session";
 import { deriveSessionOperatorState } from "../session-operator-state";
 import { summarizeSession } from "../summary";
@@ -19,7 +15,7 @@ import {
 import {
 	resolveMutableSessionRoot,
 	type WorkspaceContext,
-} from "./tool-runtime";
+} from "./workspace-runtime";
 
 type ClosedSessionResult = Awaited<ReturnType<typeof closeSession>>;
 
@@ -62,7 +58,6 @@ export const SESSION_WORKSPACE_ACTION_NAMES = [
 	"plan_start",
 	"activate_session",
 	"close_session",
-	"write_audit_report",
 ] as const;
 
 export type SessionWorkspaceActionName =
@@ -85,19 +80,12 @@ export type SessionWorkspacePayloadMap = {
 		summary?: string;
 		nextCommand?: string;
 	};
-	write_audit_report: {
-		report: AuditReportArgs;
-		nextCommand?: string;
-	};
 };
 
 export type SessionWorkspaceValueMap = {
 	plan_start: PlannedSessionResult;
 	activate_session: Session | null;
 	close_session: ClosedSessionResult;
-	write_audit_report: Awaited<
-		ReturnType<SessionWorkspaceRuntimePort["writeAuditReport"]>
-	>;
 };
 
 type SessionWorkspaceActionHandlerMap = {
@@ -222,22 +210,6 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 						nextCommand: nextCommand ?? FLOW_PLAN_WITH_GOAL_COMMAND,
 					};
 				},
-			};
-		},
-
-		write_audit_report({ report, nextCommand }) {
-			return {
-				name: "write_audit_report",
-				run: (worktree, runtime) => runtime.writeAuditReport(worktree, report),
-				onSuccess: (value) => ({
-					status: "ok",
-					summary: "Persisted Flow audit report artifacts.",
-					reportDir: value.reportDir,
-					jsonPath: value.jsonPath,
-					markdownPath: value.markdownPath,
-					report: value.report,
-					nextCommand: nextCommand ?? FLOW_AUDIT_COMMAND,
-				}),
 			};
 		},
 	};

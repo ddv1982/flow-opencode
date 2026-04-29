@@ -1,20 +1,21 @@
 /**
- * Session tool boundary: audit artifact export only.
- * Keep persistence and normalization in runtime/application.
+ * Audit tool boundary: audit artifact export only.
  */
 import { tool } from "@opencode-ai/plugin";
+import { ensureMutableWorkspacePermission } from "../../tools/mutable-workspace-permission";
+import { withJsonTransportArgs } from "../../tools/parsed-tool";
+import type { ToolContext } from "../../tools/schemas";
+import { recordToolMetadata } from "../../tools/session-tools/shared";
+import { executeDispatchedAuditWorkspaceAction } from "../application";
 import {
 	type AuditReportArgs,
 	AuditReportBaseSchema,
 	AuditReportSchema,
-} from "../../runtime/schema";
-import { withJsonTransportArgs } from "../parsed-tool";
+} from "../schema";
 import {
 	FlowAuditWriteReportArgsSchema,
 	FlowAuditWriteReportArgsShape,
-	type ToolContext,
-} from "../schemas";
-import { executeToolWorkspaceAction, recordToolMetadata } from "./shared";
+} from "./schemas";
 
 export function createAuditSessionTools() {
 	return {
@@ -51,9 +52,12 @@ export function createAuditSessionTools() {
 						discoveredSurfaceCount: report.discoveredSurfaces.length,
 						findingCount: report.findings?.length ?? 0,
 					});
-					return executeToolWorkspaceAction(context, "write_audit_report", {
-						report,
-					});
+					await ensureMutableWorkspacePermission(context);
+					return executeDispatchedAuditWorkspaceAction(
+						context,
+						"write_audit_report",
+						{ report },
+					);
 				},
 			),
 		}),

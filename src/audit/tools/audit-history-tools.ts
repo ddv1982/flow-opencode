@@ -1,17 +1,22 @@
 /**
- * Session tool boundary: saved audit browsing only.
- * Keep response shaping in the runtime/application boundary and
- * next-command routing in next-command-policy.ts.
+ * Audit tool boundary: saved audit browsing only.
  */
 import { tool } from "@opencode-ai/plugin";
+import { withParsedArgs } from "../../tools/parsed-tool";
+import type { ToolContext } from "../../tools/schemas";
+import { recordToolMetadata } from "../../tools/session-tools/shared";
 import {
 	auditComparisonResponse,
 	auditHistoryResponse,
 	missingAuditComparisonResponse,
 	missingAuditReportResponse,
+	nextCommandForAuditComparison,
+	nextCommandForAuditHistory,
+	nextCommandForMissingAuditReport,
+	nextCommandForStoredAudit,
+	runDispatchedAuditReadAction,
 	storedAuditReportResponse,
-} from "../../runtime/application";
-import { withParsedArgs } from "../parsed-tool";
+} from "../application";
 import {
 	FlowAuditCompareArgsSchema,
 	FlowAuditCompareArgsShape,
@@ -19,15 +24,7 @@ import {
 	FlowAuditHistoryArgsShape,
 	FlowAuditShowArgsSchema,
 	FlowAuditShowArgsShape,
-	type ToolContext,
-} from "../schemas";
-import {
-	nextCommandForAuditComparison,
-	nextCommandForAuditHistory,
-	nextCommandForMissingAuditReport,
-	nextCommandForStoredAudit,
-} from "./next-command-policy";
-import { readToolSessionValue, recordToolMetadata } from "./shared";
+} from "./schemas";
 
 export function createAuditHistorySessionTools() {
 	return {
@@ -37,11 +34,13 @@ export function createAuditHistorySessionTools() {
 			execute: withParsedArgs(
 				FlowAuditHistoryArgsSchema,
 				async (_input, context: ToolContext) => {
-					const history = await readToolSessionValue(
-						context,
-						"list_audit_reports",
-						undefined,
-					);
+					const history = (
+						await runDispatchedAuditReadAction(
+							context,
+							"list_audit_reports",
+							undefined,
+						)
+					).value;
 					const response = auditHistoryResponse(
 						history,
 						nextCommandForAuditHistory(history),
@@ -51,30 +50,27 @@ export function createAuditHistorySessionTools() {
 				},
 			),
 		}),
-
 		flow_audit_show: tool({
 			description: "Show a specific saved Flow audit report by id",
 			args: FlowAuditShowArgsShape,
 			execute: withParsedArgs(
 				FlowAuditShowArgsSchema,
 				async (input, context: ToolContext) => {
-					const found = await readToolSessionValue(
-						context,
-						"load_audit_report",
-						{ reportId: input.reportId },
-					);
+					const found = (
+						await runDispatchedAuditReadAction(context, "load_audit_report", {
+							reportId: input.reportId,
+						})
+					).value;
 					recordToolMetadata(context, `Show audit ${input.reportId}`, {
 						reportId: input.reportId,
 						found: Boolean(found),
 					});
-
 					if (!found) {
 						return missingAuditReportResponse(
 							input.reportId,
 							nextCommandForMissingAuditReport(),
 						);
 					}
-
 					return storedAuditReportResponse(
 						input.reportId,
 						found,
@@ -83,21 +79,22 @@ export function createAuditHistorySessionTools() {
 				},
 			),
 		}),
-
 		flow_audit_compare: tool({
 			description: "Compare two saved Flow audit reports by id",
 			args: FlowAuditCompareArgsShape,
 			execute: withParsedArgs(
 				FlowAuditCompareArgsSchema,
 				async (input, context: ToolContext) => {
-					const comparison = await readToolSessionValue(
-						context,
-						"compare_audit_reports",
-						{
-							leftReportId: input.leftReportId,
-							rightReportId: input.rightReportId,
-						},
-					);
+					const comparison = (
+						await runDispatchedAuditReadAction(
+							context,
+							"compare_audit_reports",
+							{
+								leftReportId: input.leftReportId,
+								rightReportId: input.rightReportId,
+							},
+						)
+					).value;
 					recordToolMetadata(
 						context,
 						`Compare audits ${input.leftReportId} and ${input.rightReportId}`,

@@ -1,8 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getFlowDir } from "./paths";
-import type { AuditReport, AuditReportArgs, AuditSurface } from "./schema";
-import { AuditReportSchema } from "./schema";
+import { getAuditsDir } from "../audit/paths";
+import type {
+	AuditReport,
+	AuditReportArgs,
+	AuditSurface,
+} from "../audit/schema";
+import { AuditReportSchema } from "../audit/schema";
 import { pathExists } from "./session-completed-storage";
 import { completedTimestampNow } from "./util";
 import { assertMutableWorkspaceRoot } from "./workspace-root";
@@ -209,7 +213,7 @@ export async function writeAuditReport(
 ): Promise<WrittenAuditReport> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
 	const report = normalizeAuditReport(input);
-	const reportsDir = join(getFlowDir(mutableWorktree), "audits");
+	const reportsDir = getAuditsDir(mutableWorktree);
 	const reportDir = await allocateAuditReportDir(reportsDir);
 	await mkdir(reportDir, { recursive: true });
 	const jsonPath = join(reportDir, "report.json");
