@@ -44,7 +44,7 @@ export const FLOW_AUDIT_COMMAND_TEMPLATE = renderPromptSections([
 - When the workspace is mutable, pass the completed audit report encoded into \`reportJson\` to \`flow_audit_write_report\`.
 - If that write succeeds, use the returned normalized \`report\` object as the final audit output.
 - Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit object.
-- End with one audit report that matches the audit contract from the flow-auditor prompt.`,
+- End with one audit report that matches the audit contract for this audit surface.`,
 	},
 	{
 		title: "Task input",

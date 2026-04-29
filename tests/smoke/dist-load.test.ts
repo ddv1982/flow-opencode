@@ -211,7 +211,7 @@ describe("built dist smoke load", () => {
 			config as Parameters<NonNullable<typeof plugin.config>>[0],
 		);
 
-		expect(Object.keys(config.agent ?? {})).toHaveLength(6);
+		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
 		expect(Object.keys(config.command ?? {})).toHaveLength(10);
 		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
 		expect(plugin.tool?.flow_audit_write_report).toBeUndefined();
@@ -282,7 +282,7 @@ describe("built dist smoke load", () => {
 			config as Parameters<NonNullable<typeof plugin.config>>[0],
 		);
 
-		expect(Object.keys(config.agent ?? {})).toHaveLength(6);
+		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
 		expect(Object.keys(config.command ?? {})).toHaveLength(10);
 		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
 		expect(plugin.tool?.flow_audit_write_report).toBeDefined();

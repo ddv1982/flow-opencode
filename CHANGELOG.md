@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.31] - 2026-04-29
+
+Route /flow-audit through the stable control-agent path instead of a dedicated audit agent
+
+Flow 1.0.31 removes the remaining dedicated primary-agent path from `/flow-audit`. The audit command still uses the same audit command template, tools, and structured contract, but it now runs through the existing `flow-control` agent rather than a separate `flow-auditor` agent. This keeps the audit behavior intact while eliminating one more OpenCode-specific command/agent surface that could diverge on the direct OpenAI provider path.
+
+Constraint: Preserve the audit command behavior and read-only guarantees while removing the extra primary-agent surface from the audit path
+Constraint: Keep zod aligned with the plugin SDK's effective contract and avoid adding runtime complexity while isolating a provider-specific failure mode
+Rejected: Keep the dedicated flow-auditor path and continue trimming only prompt text | left an extra OpenCode primary-agent path in place even after prompt-surface reduction
+Rejected: Merge audit into the normal execution lane | would blur the audit/execution boundary instead of removing only the unstable surface
+Confidence: medium
+Scope-risk: narrow
+Reversibility: clean
+Directive: Prefer reusing stable agent surfaces for specialized commands when a separate primary-agent path is not buying real capability
+Tested: `bun run build && bun test tests/config.test.ts tests/smoke/dist-load.test.ts tests/prompt-eval-corpus.test.ts tests/docs-tool-parity.test.ts`; `bun run check`
+Not-tested: Actual OpenCode direct OpenAI host behavior on the user's machine after routing `/flow-audit` through `flow-control`; live GitHub-hosted `release.yml` run for tag `v1.0.31` before push
+
 ## [1.0.30] - 2026-04-29
 
 Trim the audit prompt surface so direct OpenAI audit requests stay within provider limits

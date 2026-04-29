@@ -60,7 +60,6 @@ Flow is built around a few stable responsibilities:
 - `flow-planner`
 - `flow-worker`
 - `flow-auto`
-- `flow-auditor` *(opt-in via `FLOW_ENABLE_AUDIT_SURFACE=1`)*
 - `flow-reviewer`
 - `flow-control`
 
@@ -70,8 +69,7 @@ Flow is built around a few stable responsibilities:
 - `flow-worker` executes exactly one approved feature
 - `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`)
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
-- `flow-auditor` performs read-only audits with explicit scope/coverage accounting and calibrated claim strength; its only sanctioned write is audit artifact export through `flow_audit_write_report`
-- `flow-control` handles status/history/session/feature-reset requests only
+- `flow-control` handles status/history/session/reset requests and the audit command surface; audit writes are still limited to `flow_audit_write_report`
 
 Audit work should stay separate from normal feature execution and is opt-in. Enable the full audit lane with `FLOW_ENABLE_AUDIT_SURFACE=1`, then use the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” For host-stability diagnosis, you can also re-enable audit sub-surfaces independently with `FLOW_ENABLE_AUDIT_CONFIG=1`, `FLOW_ENABLE_AUDIT_TOOLS=1`, `FLOW_ENABLE_AUDIT_REPORTS_TOOL=1`, `FLOW_ENABLE_AUDIT_WRITE_TOOL=1`, and `FLOW_ENABLE_AUDIT_GUIDANCE=1`; those are diagnostic flags and may intentionally expose only partial audit behavior. The auditor must distinguish:
 
