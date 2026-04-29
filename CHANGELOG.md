@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.26] - 2026-04-29
+
+Keep Flow stable by making the audit lane an explicit opt-in surface
+
+Flow 1.0.26 finishes the audit-lane stability correction. This release extracts audit behavior into a dedicated boundary, removes audit agents, commands, tools, and audit-specific guidance from the default plugin surface, keeps ordinary Flow behavior on the smaller core-only path, and preserves the full audit lane behind the explicit `FLOW_ENABLE_AUDIT_SURFACE=1` opt-in. It also tightens host-safety behavior so the plugin’s system and compacting hooks no-op when no usable workspace context exists.
+
+Constraint: The default OpenCode plugin surface had to shrink materially without removing the audit feature entirely
+Constraint: Keep zod aligned with the plugin SDK's effective contract and preserve existing Flow core behavior while moving audit behind an opt-in gate
+Rejected: Leave audit enabled by default and only trim prompt text | insufficient to reduce the host-visible global surface that was destabilizing OpenCode
+Rejected: Remove audit entirely | the feature remains useful when explicitly enabled
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep audit opt-in unless real host-side evidence shows the default Flow surface can safely absorb that extra global footprint again
+Tested: `bun run check`; `bun test tests/runtime-tools.test.ts tests/smoke/dist-load.test.ts tests/cross-area/install-lifecycle.test.ts`; `bun test tests/cross-area/manual-flow.test.ts tests/cross-area/autonomous-flow.test.ts tests/cross-area/resume-flow.test.ts`; `bun test tests/protocol-parity.test.ts tests/package-manager-detection.test.ts tests/runtime-summary.test.ts`; `bun test tests/docs-tool-parity.test.ts tests/transitions-consolidation.test.ts tests/prompt-eval-corpus.test.ts`; `bun test tests/runtime/render-snapshot.test.ts tests/runtime/render-incremental.test.ts`; `bun test tests/cross-area/module-scope-schemas.test.ts tests/helpers.test.ts tests/workspace-root-guard.test.ts`; `bun run report:prompt-eval`; direct source/dist/plugin hook gate inspections
+Not-tested: Actual OpenCode host behavior on the user’s machine with this build installed; live GitHub-hosted `release.yml` run for tag `v1.0.26` before push
+
 ## [1.0.25] - 2026-04-29
 
 Shrink the global Flow tool surface so ordinary OpenCode requests stay stable
