@@ -2,6 +2,7 @@
 // Keep these prompts as role-specific guidance layers that reference canonical policy rather than redefining it.
 
 import {
+	FLOW_AUDIT_CONTRACT,
 	FLOW_PLAN_CONTRACT,
 	FLOW_PLAN_CONTRACT_COMPACT,
 	FLOW_REVIEWER_CONTRACT,
@@ -71,6 +72,21 @@ const FLOW_REVIEWER_EXAMPLES = renderExampleBlocks([
 	{
 		name: "needs-fix",
 		body: `- Return needs_fix when the same feature should continue through another fix/validate/review iteration.`,
+	},
+]);
+
+const FLOW_AUDITOR_EXAMPLES = renderExampleBlocks([
+	{
+		name: "downgrade-unsupported-full-audit",
+		body: `- If the user asks for a full audit but one or more major repo surfaces were only spot-checked, set requestedDepth to full_audit and downgrade achievedDepth to deep_audit or broad_audit.
+- Explain the downgrade in coverageSummary and list the unreviewed surfaces explicitly.`,
+	},
+	{
+		name: "finding-taxonomy",
+		body: `- Put directly confirmed bugs in confirmed_defect.
+- Put partially inferred concerns in likely_risk.
+- Put advisory hardening items in hardening_opportunity.
+- Put CI/docs/process mismatches in process_gap.`,
 	},
 ]);
 
@@ -262,6 +278,51 @@ ${FLOW_REVIEWER_CONTRACT}`,
 	},
 ]);
 
+export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
+	{
+		title: "Role",
+		body: `You are the Flow auditor.`,
+	},
+	{
+		title: "Objective",
+		body: `Produce an evidence-backed repository audit with calibrated claim strength, explicit coverage accounting, and actionable findings.`,
+	},
+	{
+		title: "Rules",
+		body: `- Stay read-only.
+- Do not write code, mutate Flow runtime state, or claim execution success.
+- Map the major repo surfaces before reporting findings. Surfaces usually include source/runtime areas, tests, CI/release, docs/config, and any other executable subsystems discovered during inspection.
+- Separate requested audit depth from achieved audit depth.
+- Do not claim full_audit unless every major discovered surface is directly reviewed and no major surface remains unreviewed.
+- If coverage is incomplete, explicitly downgrade achievedDepth and explain why.
+- Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.
+- Use confidence confirmed only when the cited evidence directly supports the conclusion.
+- Distinguish product defects from hardening advice and process/reporting mismatches.
+- Maintain discoveredSurfaces as the canonical coverage ledger and keep reviewed/unreviewed summaries consistent with it.
+- This surface is read-only. Do not run shell validation directly from the auditor; if no validation evidence is already available, record status: not_run and explain why.
+- Prefer concrete file/line evidence over generalized advice.`,
+	},
+	{
+		title: "Workflow",
+		body: `Audit flow:
+1. Read enough repo structure to enumerate the major surfaces you need to inspect.
+2. Determine requestedDepth from the user's ask, then decide what evidence is required to honestly reach broad_audit, deep_audit, or full_audit.
+3. Inspect each major surface deliberately and keep a running list of reviewed and unreviewed surfaces.
+4. Reuse existing validation evidence only when it is already available from the repo or user-provided context; otherwise record not_run explicitly.
+5. Classify findings by category, severity, and confidence.
+6. Downgrade achievedDepth if coverage is incomplete, spot-checked, or time-bounded.
+7. Return one audit report matching:
+
+${FLOW_AUDIT_CONTRACT}
+
+8. When a mutable workspace is available, persist the report through flow_audit_write_report so Flow emits normalized JSON and Markdown audit artifacts. Include the returned artifact paths in your final summary.`,
+	},
+	{
+		title: "Examples",
+		body: FLOW_AUDITOR_EXAMPLES,
+	},
+]);
+
 export const FLOW_CONTROL_AGENT_PROMPT = renderPromptSections([
 	{
 		title: "Role",
@@ -279,6 +340,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - For status requests, prefer compact flow_status output unless the user explicitly asks for detail/raw/json; lead with the runtime guidance summary/next step when present, then add only the supporting session details needed for clarity, and stop.
 - For doctor requests, prefer compact flow_doctor output unless the user explicitly asks for detail/raw/json; lead with the operator summary, then summarize any warnings or failures plus the recommended remediation clearly, and stop.
 - For history requests, call flow_history or flow_history_show, summarize the result clearly, and stop.
+- For audit history requests, call flow_audit_history, flow_audit_show, or flow_audit_compare, summarize the result clearly, and stop.
 - For session activation requests, call flow_session_activate, summarize the result clearly, and stop.
 - For reset requests, call flow_reset_feature. For session close requests, call flow_session_close, summarize what changed, and stop.
 - If a request is invalid, explain the valid command forms briefly and stop.`,

@@ -1,11 +1,15 @@
 import { tool } from "@opencode-ai/plugin";
 import type { WorkspaceContext } from "../runtime/application";
 import {
+	AUDIT_REPORT_ID_MESSAGE,
+	AUDIT_REPORT_ID_PATTERN,
 	CLOSURE_KINDS,
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
 } from "../runtime/constants";
 import {
+	AuditReportBaseSchema,
+	AuditReportSchema,
 	OutcomeSchema,
 	PlanArgsSchema,
 	PlanningContextArgsSchema,
@@ -44,11 +48,28 @@ export const FlowDoctorArgsShape = {
 	view: FlowStatusViewSchema.optional(),
 };
 export const FlowHistoryArgsShape = {};
+export const FlowAuditHistoryArgsShape = {};
 export const FlowHistoryShowArgsShape = {
 	sessionId: z
 		.string()
 		.min(1)
 		.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case"),
+};
+export const FlowAuditShowArgsShape = {
+	reportId: z
+		.string()
+		.min(1)
+		.regex(AUDIT_REPORT_ID_PATTERN, AUDIT_REPORT_ID_MESSAGE),
+};
+export const FlowAuditCompareArgsShape = {
+	leftReportId: z
+		.string()
+		.min(1)
+		.regex(AUDIT_REPORT_ID_PATTERN, AUDIT_REPORT_ID_MESSAGE),
+	rightReportId: z
+		.string()
+		.min(1)
+		.regex(AUDIT_REPORT_ID_PATTERN, AUDIT_REPORT_ID_MESSAGE),
 };
 export const FlowSessionActivateArgsShape = {
 	sessionId: z
@@ -60,6 +81,9 @@ export const FlowSessionCloseArgsShape = {
 	kind: z.enum(CLOSURE_KINDS),
 	summary: z.string().trim().min(1).optional(),
 };
+export const FlowAuditWriteReportArgsSchema = z.object({
+	report: z.union([AuditReportBaseSchema.strict(), AuditReportSchema]),
+});
 export const FlowAutoPrepareArgsShape = {
 	argumentString: z.string().optional(),
 };
@@ -109,11 +133,16 @@ export const WorkerResultArgsShape = {
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
 export const FlowDoctorArgsSchema = z.object(FlowDoctorArgsShape);
 export const FlowHistoryArgsSchema = z.object(FlowHistoryArgsShape);
+export const FlowAuditHistoryArgsSchema = z.object(FlowAuditHistoryArgsShape);
 export const FlowHistoryShowArgsSchema = z.object(FlowHistoryShowArgsShape);
+export const FlowAuditShowArgsSchema = z.object(FlowAuditShowArgsShape);
+export const FlowAuditCompareArgsSchema = z.object(FlowAuditCompareArgsShape);
 export const FlowSessionActivateArgsSchema = z.object(
 	FlowSessionActivateArgsShape,
 );
 export const FlowSessionCloseArgsSchema = z.object(FlowSessionCloseArgsShape);
+export const FlowAuditWriteReportArgsShape =
+	FlowAuditWriteReportArgsSchema.shape;
 export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
 export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
 export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);

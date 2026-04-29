@@ -3,7 +3,10 @@ import { join, relative } from "node:path";
 export class InvalidFlowPathInputError extends Error {
 	readonly code = "INVALID_FLOW_PATH_INPUT";
 
-	constructor(kind: "session" | "feature" | "completed", value: string) {
+	constructor(
+		kind: "session" | "feature" | "completed" | "audit",
+		value: string,
+	) {
 		super(`Invalid ${kind} id '${value}'.`);
 		this.name = "InvalidFlowPathInputError";
 	}
@@ -12,7 +15,7 @@ export class InvalidFlowPathInputError extends Error {
 export type LiveSessionLocation = "active" | "stored";
 
 function sanitizePathComponent(
-	kind: "session" | "feature" | "completed",
+	kind: "session" | "feature" | "completed" | "audit",
 	value: string,
 ): string {
 	if (
@@ -58,6 +61,10 @@ export function getStoredSessionsDir(worktree: string): string {
 
 export function getCompletedSessionsDir(worktree: string): string {
 	return join(getFlowDir(worktree), "completed");
+}
+
+export function getAuditsDir(worktree: string): string {
+	return join(getFlowDir(worktree), "audits");
 }
 
 function getLiveSessionsDir(
@@ -106,6 +113,14 @@ export function getCompletedSessionDir(
 	);
 }
 
+export function getAuditReportDir(worktree: string, reportId: string): string {
+	const auditsRoot = getAuditsDir(worktree);
+	return assertDescendant(
+		auditsRoot,
+		join(auditsRoot, sanitizePathComponent("audit", reportId)),
+	);
+}
+
 export function getSessionPath(
 	worktree: string,
 	sessionId: string,
@@ -135,6 +150,28 @@ export function getCompletedSessionPath(
 	return getSessionPathFromDir(
 		getCompletedSessionDir(worktree, completedDirName),
 	);
+}
+
+export function getAuditReportJsonPath(
+	worktree: string,
+	reportId: string,
+): string {
+	return join(getAuditReportDir(worktree, reportId), "report.json");
+}
+
+export function getAuditReportMarkdownPath(
+	worktree: string,
+	reportId: string,
+): string {
+	return join(getAuditReportDir(worktree, reportId), "report.md");
+}
+
+export function getLatestAuditReportJsonPath(worktree: string): string {
+	return join(getAuditsDir(worktree), "latest.json");
+}
+
+export function getLatestAuditReportMarkdownPath(worktree: string): string {
+	return join(getAuditsDir(worktree), "latest.md");
 }
 
 export function getSessionPathFromDir(sessionDir: string): string {
