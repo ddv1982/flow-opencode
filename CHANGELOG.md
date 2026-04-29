@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.30] - 2026-04-29
+
+Trim the audit prompt surface so direct OpenAI audit requests stay within provider limits
+
+Flow 1.0.30 targets the remaining `/flow-audit` instability on the direct OpenAI provider path. The prior releases reduced audit tool registration pressure, but the full audit agent still expanded into a very large command + agent + contract prompt surface. This release removes the large embedded audit-contract examples, trims duplicated audit guidance across the auditor prompt and audit command template, and keeps the tested audit contract semantics while materially shrinking the prompt payload seen by OpenCode when `/flow-audit` is invoked.
+
+Constraint: Preserve the existing audit semantics and tested contract phrases while materially shrinking the direct OpenAI audit prompt surface
+Constraint: Keep zod aligned with the plugin SDK's effective contract and avoid introducing new runtime or tool complexity while debugging a provider-specific request failure
+Rejected: Keep the oversized embedded audit examples and continue bisecting only tool/config surfaces | the direct OpenAI failure occurs at audit invocation time and the prompt payload was still substantially larger than other Flow surfaces
+Rejected: Replace the audit contract with a looser summary-only prompt | would reduce size by weakening the structured audit guarantees instead of preserving them
+Confidence: medium
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep future audit prompt additions compact; if a new audit requirement needs long examples, prefer test fixtures and docs over embedding large examples into the provider-facing prompt surface
+Tested: `bun test tests/config.test.ts tests/prompt-eval-corpus.test.ts`; `bun run check`
+Not-tested: Actual OpenCode direct OpenAI host behavior on the user's machine after the audit prompt trim; live GitHub-hosted `release.yml` run for tag `v1.0.30` before push
+
 ## [1.0.29] - 2026-04-29
 
 Split the audit-tool gate so host instability can be isolated to one remaining tool

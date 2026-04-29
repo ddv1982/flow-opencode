@@ -18,10 +18,6 @@ const FLOW_AUDIT_COMMAND_EXAMPLES = renderExampleBlocks([
 		name: "full-audit-request-with-downgrade",
 		body: `If the user asks for a full review, set requestedDepth to full_audit, but downgrade achievedDepth whenever any major surface remains unreviewed or only spot-checked.`,
 	},
-	{
-		name: "findings-taxonomy",
-		body: `Separate confirmed defects from likely risks, hardening opportunities, and process gaps instead of mixing them into one flat findings list.`,
-	},
 ]);
 
 export const FLOW_AUDIT_COMMAND_TEMPLATE = renderPromptSections([
@@ -37,15 +33,15 @@ export const FLOW_AUDIT_COMMAND_TEMPLATE = renderPromptSections([
 - If the arguments ask for a full or exhaustive review, treat requestedDepth as full_audit.
 - If the arguments ask for a deep or in-depth review, treat requestedDepth as deep_audit.
 - Otherwise default requestedDepth to broad_audit.
-- Map the repo's major surfaces first, then inspect them subsystem by subsystem.
+- Map the repo's major surfaces first.
 - For broad_audit, inspect representative hotspots across every major surface.
 - For deep_audit, inspect every major surface with direct evidence and note any spot-checked or skipped areas explicitly.
 - For full_audit, only use achievedDepth: full_audit when every major discovered surface is directly reviewed and no major surface remains unreviewed.
 - If coverage is incomplete, downgrade achievedDepth honestly and explain the gap.
-- Treat discoveredSurfaces as the canonical coverage ledger; reviewed/unreviewed summaries and coverage rubric must remain consistent with it.
+- Treat discoveredSurfaces as the canonical coverage ledger.
 - Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the audit output.
-- When the workspace is mutable, pass the completed audit report encoded into \`reportJson\` to \`flow_audit_write_report\` so Flow emits normalized JSON and Markdown artifacts and recomputes the coverage rubric from discoveredSurfaces.
+- When the workspace is mutable, pass the completed audit report encoded into \`reportJson\` to \`flow_audit_write_report\`.
 - If that write succeeds, use the returned normalized \`report\` object as the final audit output.
 - Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit object.
 - End with one audit report that matches the audit contract from the flow-auditor prompt.`,
