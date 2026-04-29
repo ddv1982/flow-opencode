@@ -98,6 +98,24 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
 - If there's no active session, Flow asks for a goal instead of inventing one
 - Completed sessions are not resumable — start a new one
 
+### Audit existing code
+
+Use the dedicated audit lane when you want a read-only findings report instead of feature execution.
+
+```text
+/flow-audit Review this repository for correctness and release risks
+```
+
+Flow will classify the audit as `broad_audit`, `deep_audit`, or `full_audit` based on the request and the evidence it actually gathered. It only claims `full_audit` when every major discovered surface is directly reviewed.
+
+If the workspace is mutable, Flow can persist audit artifacts and you can inspect them later with:
+
+- `/flow-audits`
+- `/flow-audits show latest`
+- `/flow-audits compare <left-report-id> <right-report-id>`
+
+Saved audit comparisons report whether a change was matched by an exact key or by a heuristic rename/retitle pairing, so the diff stays readable without pretending heuristic matches are exact.
+
 ## Core concepts
 
 ### Sessions and features
@@ -153,6 +171,8 @@ A plan isn't limited to building features. Flow supports:
 - `review` — audit existing code without changing it
 - `review_and_fix` — audit, then apply the fixes
 
+For user-facing audit work, prefer the dedicated `/flow-audit` command over routing audits through the normal execution lane.
+
 ### Recovery
 
 When something recoverable goes wrong (a flaky test, a missing prerequisite, a validation rerun), Flow attaches structured recovery metadata and retries — you don't have to manually reset. It only stops for real blockers (external dependency, human-required decision, hard failure).
@@ -162,6 +182,8 @@ When something recoverable goes wrong (a flaky test, a missing prerequisite, a v
 - Start or reshape work → `/flow-plan <goal>`
 - Run one approved feature → `/flow-run [feature-id]`
 - Run autonomously end-to-end → `/flow-auto <goal>` or `/flow-auto resume`
+- Run a read-only repo audit → `/flow-audit <goal>`
+- Browse or compare saved audit reports → `/flow-audits` / `/flow-audits show <report-id|latest>` / `/flow-audits compare <left> <right>`
 - See what Flow is doing and what to run next → `/flow-status [detail]`
 - Diagnose readiness/blockers → `/flow-doctor [detail]`
 - Browse sessions → `/flow-history` / `/flow-history show <session-id>`
@@ -203,6 +225,10 @@ Flow writes state only inside the worktree it's running in:
 .flow/active/<session-id>/session.json
 .flow/stored/<session-id>/session.json
 .flow/completed/<session-id>-<timestamp>/
+.flow/audits/<report-id>/report.json
+.flow/audits/<report-id>/report.md
+.flow/audits/latest.json
+.flow/audits/latest.md
 ```
 
 Readable markdown for each session lives alongside it:
@@ -212,6 +238,7 @@ Readable markdown for each session lives alongside it:
 .flow/active/<session-id>/docs/features/<feature-id>.md
 ```
 
+Audit artifacts are separate from session execution state. They are written only when the audit lane persists a finalized report.
 There is exactly one active session per worktree. Switching with `/flow-session activate <id>` moves the current active session to `stored/` and brings the requested one in.
 
 ### Workspace safety
