@@ -98,9 +98,16 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
 - If there's no active session, Flow asks for a goal instead of inventing one
 - Completed sessions are not resumable — start a new one
 
-### Audit existing code
+### Audit existing code (opt-in)
 
-Use the dedicated audit lane when you want a read-only findings report instead of feature execution.
+Audit surfaces are disabled by default to keep ordinary plugin installs stable.
+Enable them explicitly with:
+
+```bash
+export FLOW_ENABLE_AUDIT_SURFACE=1
+```
+
+Then use the dedicated audit lane when you want a read-only findings report instead of feature execution.
 
 ```text
 /flow-audit Review this repository for correctness and release risks
@@ -182,8 +189,8 @@ When something recoverable goes wrong (a flaky test, a missing prerequisite, a v
 - Start or reshape work → `/flow-plan <goal>`
 - Run one approved feature → `/flow-run [feature-id]`
 - Run autonomously end-to-end → `/flow-auto <goal>` or `/flow-auto resume`
-- Run a read-only repo audit → `/flow-audit <goal>`
-- Browse or compare saved audit reports → `/flow-audits` / `/flow-audits show <report-id|latest>` / `/flow-audits compare <left> <right>`
+- Run a read-only repo audit (requires `FLOW_ENABLE_AUDIT_SURFACE=1`) → `/flow-audit <goal>`
+- Browse or compare saved audit reports (requires `FLOW_ENABLE_AUDIT_SURFACE=1`) → `/flow-audits` / `/flow-audits show <report-id|latest>` / `/flow-audits compare <left> <right>`
 - See what Flow is doing and what to run next → `/flow-status [detail]`
 - Diagnose readiness/blockers → `/flow-doctor [detail]`
 - Browse sessions → `/flow-history` / `/flow-history show <session-id>`

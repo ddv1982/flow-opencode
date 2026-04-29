@@ -17,7 +17,7 @@ import {
 	toCompactJson,
 	toJson,
 	type WorkspaceContext,
-} from "./tool-runtime";
+} from "./workspace-runtime";
 
 type FlowDoctorView = "detailed" | "compact";
 

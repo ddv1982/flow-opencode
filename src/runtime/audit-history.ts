@@ -3,8 +3,8 @@ import {
 	getAuditReportJsonPath,
 	getAuditsDir,
 	getLatestAuditReportJsonPath,
-} from "./paths";
-import { type AuditReport, AuditReportSchema } from "./schema";
+} from "../audit/paths";
+import { type AuditReport, AuditReportSchema } from "../audit/schema";
 
 export type StoredAuditReport = {
 	reportId: string;

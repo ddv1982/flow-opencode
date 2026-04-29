@@ -6,7 +6,7 @@ import { resolveInstallTarget } from "../../installer";
 import { getActiveSessionPath, getIndexDocPath } from "../paths";
 import type { Session } from "../schema";
 import type { SessionGuidance } from "../summary";
-import type { ResolvedSessionRoot } from "./tool-runtime";
+import type { ResolvedSessionRoot } from "./workspace-runtime";
 
 export type DoctorCheckStatus = "pass" | "warn" | "fail" | "skip";
 

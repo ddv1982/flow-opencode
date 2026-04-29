@@ -1,4 +1,6 @@
 import type { Hooks, Plugin } from "@opencode-ai/plugin";
+import { isAuditSurfaceEnabled } from "./audit/enabled";
+import { applyFlowAuditToolDefinitionGuidance } from "./audit/tool-definition-guidance";
 import { createConfigHook } from "./config";
 import {
 	buildFlowAdaptiveSystemContext,
@@ -26,13 +28,22 @@ const flowToolDefinitionHook: NonNullable<Hooks["tool.definition"]> = async (
 	input,
 	output,
 ) => {
+	if (!input.toolID.startsWith("flow_")) {
+		return;
+	}
 	applyFlowToolDefinitionGuidance(input.toolID, output);
+	if (isAuditSurfaceEnabled()) {
+		applyFlowAuditToolDefinitionGuidance(input.toolID, output);
+	}
 };
 
 function createFlowSystemTransformHook(
 	ctx: Pick<Parameters<Plugin>[0], "worktree" | "directory">,
 ): NonNullable<Hooks["experimental.chat.system.transform"]> {
 	return async (_input, output) => {
+		if (!ctx.worktree && !ctx.directory) {
+			return;
+		}
 		if (
 			output.system.some((entry) =>
 				entry.startsWith(FLOW_RUNTIME_CONTEXT_MARKER),
@@ -83,6 +94,9 @@ const FlowPlugin: Plugin = async (ctx) => {
 				context: ToolContext,
 				output: { context?: string[]; prompt?: string },
 			) => {
+				if (!context.worktree && !context.directory) {
+					return;
+				}
 				const session = await loadSession(resolveSessionRoot(context));
 				if (!session) {
 					return;

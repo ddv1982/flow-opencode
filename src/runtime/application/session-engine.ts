@@ -3,15 +3,11 @@ import type { Session } from "../schema";
 import {
 	activateSession,
 	closeSession,
-	compareAuditReports,
-	listAuditReports,
 	listSessionHistory,
-	loadAuditReport,
 	loadSession,
 	loadStoredSession,
 	saveSessionState,
 	syncSessionArtifacts,
-	writeAuditReport,
 } from "../session";
 import type { TransitionResult } from "../transitions";
 
@@ -27,15 +23,11 @@ export interface SessionReadRuntimePort {
 	loadSession: (worktree: string) => Promise<Session | null>;
 	listSessionHistory: typeof listSessionHistory;
 	loadStoredSession: typeof loadStoredSession;
-	listAuditReports: typeof listAuditReports;
-	loadAuditReport: typeof loadAuditReport;
-	compareAuditReports: typeof compareAuditReports;
 }
 
 export interface SessionWorkspaceRuntimePort extends SessionRuntimePort {
 	activateSession: typeof activateSession;
 	closeSession: typeof closeSession;
-	writeAuditReport: typeof writeAuditReport;
 }
 
 export type SessionMutationAction<T, Name extends string = string> = {
@@ -51,11 +43,7 @@ export type SessionMutationAction<T, Name extends string = string> = {
 };
 
 export type SessionMutationResult<T, Name extends string = string> =
-	| {
-			kind: "missing";
-			actionName: Name;
-			response: RuntimeToolResponse;
-	  }
+	| { kind: "missing"; actionName: Name; response: RuntimeToolResponse }
 	| {
 			kind: "success";
 			actionName: Name;
@@ -111,9 +99,6 @@ export const DEFAULT_SESSION_READ_RUNTIME_PORT: SessionReadRuntimePort = {
 	loadSession,
 	listSessionHistory,
 	loadStoredSession,
-	listAuditReports,
-	loadAuditReport,
-	compareAuditReports,
 };
 
 export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort =
@@ -123,7 +108,6 @@ export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort
 		syncSessionArtifacts,
 		activateSession,
 		closeSession,
-		writeAuditReport,
 	};
 
 function actionSuccessResult<T, Name extends string>(
@@ -131,11 +115,7 @@ function actionSuccessResult<T, Name extends string>(
 	value: T,
 	response: RuntimeToolResponse,
 ) {
-	return {
-		actionName,
-		value,
-		response,
-	};
+	return { actionName, value, response };
 }
 
 async function runRuntimeActionAtRoot<T, Name extends string, Port>(
@@ -224,9 +204,8 @@ export async function executeTransitionAtRoot<T, Name extends string>(
 	if (!result.ok) {
 		if (result.session) {
 			const saved = await runtime.saveSessionState(worktree, result.session);
-			if (options.syncArtifacts) {
+			if (options.syncArtifacts)
 				await runtime.syncSessionArtifacts(worktree, saved);
-			}
 			return {
 				kind: "failure",
 				actionName,
@@ -235,7 +214,6 @@ export async function executeTransitionAtRoot<T, Name extends string>(
 				savedSession: saved,
 			};
 		}
-
 		return {
 			kind: "failure",
 			actionName,
@@ -248,9 +226,8 @@ export async function executeTransitionAtRoot<T, Name extends string>(
 		worktree,
 		getSession(result.value),
 	);
-	if (options.syncArtifacts) {
+	if (options.syncArtifacts)
 		await runtime.syncSessionArtifacts(worktree, saved);
-	}
 	return {
 		kind: "success",
 		actionName,

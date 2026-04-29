@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { AuditReportSchema } from "../src/audit/schema";
 import { compareStoredAuditReports } from "../src/runtime/audit-compare";
 import {
 	normalizeAuditReport,
 	writeAuditReport,
 } from "../src/runtime/audit-report";
-import { AuditReportSchema } from "../src/runtime/schema";
 import { setNowIsoOverride } from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";
 
