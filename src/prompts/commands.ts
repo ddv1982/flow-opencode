@@ -77,7 +77,7 @@ export const FLOW_PLAN_COMMAND_TEMPLATE = renderPromptSections([
 		body: `- If the arguments start with \`approve\`, approve the current draft plan. Extra tokens are feature ids to keep before approval.
 - If the arguments start with \`select\`, narrow the current draft plan to the listed feature ids without approving it.
 - Otherwise treat the full argument string as the planning goal and create or refresh a draft plan.
-- For planning, call \`flow_plan_start\` first, detect the stack and package manager from repo evidence, persist planning context through \`flow_plan_context_record\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\`, and end with a concise draft summary plus the next approval step.
+- For planning, call \`flow_plan_start\` first, detect the stack and package manager from repo evidence, persist planning context through \`flow_plan_context_record\` using \`planningJson\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\` using \`planJson\`, and end with a concise draft summary plus the next approval step.
 - Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.
 - If package-manager evidence is ambiguous, record that ambiguity and avoid guessing a manager-specific command when existing scripts cover the task.
 - If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
@@ -104,12 +104,12 @@ export const FLOW_RUN_COMMAND_TEMPLATE = renderPromptSections([
 		title: "Behavior",
 		body: `- Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
-- Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\`.
+- Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using \`decisionJson\`.
 - Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check.
 - If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing script covers the task.
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing review payload, you may persist completion without a separate \`flow_review_record_feature\` or \`flow_review_record_final\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
-- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\`.
+- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\` using \`decisionJson\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\` using \`workerJson\`.
 - End with a compact summary of changes, validation evidence, and the runtime next step.`,
 	},
 	{
@@ -138,7 +138,7 @@ ${FLOW_COORDINATOR_BOUNDARY_RULE}
 - If the argument string is empty or \`resume\`, resume the active session only.
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
-- Plan or refresh only when the runtime says planning is needed, detect stack and package-manager context first, record it with \`flow_plan_context_record\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
+- Plan or refresh only when the runtime says planning is needed, detect stack and package-manager context first, record it with \`flow_plan_context_record\` using \`planningJson\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
 - Treat existing package.json scripts as primary and invoke them through the detected package manager or the repo's established script-running convention. Treat package-manager detection as supporting evidence instead of assuming Bun.
 - If package-manager evidence is ambiguous, surface that ambiguity and keep execution on explicit scripts rather than guessing a manager-specific command.
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
@@ -146,7 +146,7 @@ ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
 - When blocked by a solvable finding, inspect the evidence, use repo and research tools as needed, make the smallest recovery plan, execute it, and keep iterating.
 - When a planning/runtime tool response includes \`session.decisionGate\` with status \`recommend_confirm\` or \`human_required\`, present that recommendation clearly and stop for user confirmation instead of continuing autonomously.
-- If repo evidence and research still leave a meaningful architecture, product, or quality decision unresolved, record options plus a recommended path with \`flow_plan_context_record\` so the runtime summary exposes the decision gate.
+- If repo evidence and research still leave a meaningful architecture, product, or quality decision unresolved, record options plus a recommended path with \`flow_plan_context_record\` using \`planningJson\` so the runtime summary exposes the decision gate.
 - When recording a planning decision, classify it as \`autonomous_choice\`, \`recommend_confirm\`, or \`human_required\`, and include the decision domain.
 - If a feature lands in a retryable or auto-resolvable blocked state, satisfy the runtime prerequisite, reset it through the runtime when appropriate, and continue instead of stopping.
 ${FLOW_STRUCTURED_RECOVERY_RULE}
@@ -188,7 +188,7 @@ export const FLOW_AUDIT_COMMAND_TEMPLATE = renderPromptSections([
 - Treat discoveredSurfaces as the canonical coverage ledger; reviewed/unreviewed summaries and coverage rubric must remain consistent with it.
 - Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the audit output.
-- When the workspace is mutable, pass the completed audit report to \`flow_audit_write_report\` so Flow emits normalized JSON and Markdown artifacts and recomputes the coverage rubric from discoveredSurfaces.
+- When the workspace is mutable, pass the completed audit report encoded into \`reportJson\` to \`flow_audit_write_report\` so Flow emits normalized JSON and Markdown artifacts and recomputes the coverage rubric from discoveredSurfaces.
 - If that write succeeds, use the returned normalized \`report\` object as the final audit output.
 - Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit object.
 - End with one audit report that matches the audit contract from the flow-auditor prompt.`,

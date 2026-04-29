@@ -21,7 +21,7 @@ describe("flow_plan_start idempotency", () => {
 			worktree,
 		} as never);
 		await tools.flow_plan_apply.execute(
-			{ plan: samplePlan(), planning: undefined },
+			{ planJson: JSON.stringify({ plan: samplePlan() }) },
 			{ worktree } as never,
 		);
 		await tools.flow_plan_approve.execute({}, { worktree } as never);

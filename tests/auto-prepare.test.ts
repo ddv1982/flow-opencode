@@ -54,25 +54,27 @@ describe("flow_auto_prepare semantics", () => {
 
 		const response = await tools.flow_plan_context_record.execute(
 			{
-				repoProfile: ["TypeScript", "Bun"],
-				packageManager: "bun",
-				research: [
-					"Confirm Bun plugin packaging docs if local evidence is unclear.",
-				],
-				decisionLog: [
-					{
-						question:
-							"How should autonomous mode handle unresolved architecture choices?",
-						decisionMode: "recommend_confirm",
-						decisionDomain: "architecture",
-						options: [
-							{ label: "Pause and ask", tradeoffs: ["safer", "slower"] },
-							{ label: "Auto-guess", tradeoffs: ["faster", "riskier"] },
-						],
-						recommendation: "Pause and ask",
-						rationale: ["Preserves user intent for meaningful decisions."],
-					},
-				],
+				planningJson: JSON.stringify({
+					repoProfile: ["TypeScript", "Bun"],
+					packageManager: "bun",
+					research: [
+						"Confirm Bun plugin packaging docs if local evidence is unclear.",
+					],
+					decisionLog: [
+						{
+							question:
+								"How should autonomous mode handle unresolved architecture choices?",
+							decisionMode: "recommend_confirm",
+							decisionDomain: "architecture",
+							options: [
+								{ label: "Pause and ask", tradeoffs: ["safer", "slower"] },
+								{ label: "Auto-guess", tradeoffs: ["faster", "riskier"] },
+							],
+							recommendation: "Pause and ask",
+							rationale: ["Preserves user intent for meaningful decisions."],
+						},
+					],
+				}),
 			},
 			{ worktree } as never,
 		);

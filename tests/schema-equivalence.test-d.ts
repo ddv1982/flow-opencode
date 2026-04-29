@@ -9,45 +9,21 @@ import type {
 } from "../src/runtime/schema";
 import type {
 	FlowPlanApplyArgsSchema,
-	FlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgsSchema,
+	FlowReviewRecordFeatureJsonArgsSchema,
+	FlowReviewRecordFinalJsonArgsSchema,
 } from "../src/tools/schemas";
 import type { Equal, Expect } from "../src/types/typecheck";
 
 type ExpectedFlowPlanApplyArgs = {
-	plan: PlanArgs;
-	planning?: PlanningContextArgs | undefined;
+	planJson: string;
 };
 
 type ExpectedFeatureReviewRecordArgs = {
-	scope: "feature";
-	featureId: string;
-	reviewPurpose?: "execution_gate" | "completion_gate" | undefined;
-	status: "approved" | "needs_fix" | "blocked";
-	summary: string;
-	blockingFindings?: { summary: string }[] | undefined;
-	followUps?:
-		| {
-				summary: string;
-				severity?: string | undefined;
-		  }[]
-		| undefined;
-	suggestedValidation?: string[] | undefined;
+	decisionJson: string;
 };
 
 type ExpectedFinalReviewRecordArgs = {
-	scope: "final";
-	reviewPurpose?: "execution_gate" | "completion_gate" | undefined;
-	status: "approved" | "needs_fix" | "blocked";
-	summary: string;
-	blockingFindings?: { summary: string }[] | undefined;
-	followUps?:
-		| {
-				summary: string;
-				severity?: string | undefined;
-		  }[]
-		| undefined;
-	suggestedValidation?: string[] | undefined;
+	decisionJson: string;
 };
 
 export type _planArgsMatchesPlan = Expect<
@@ -79,14 +55,14 @@ export type _workerResultArgsIncludesReplanWithoutRequiredOutcomeOmission =
 
 export type _featureReviewArgsMatchExpected = Expect<
 	Equal<
-		z.input<typeof FlowReviewRecordFeatureArgsSchema>,
+		z.input<typeof FlowReviewRecordFeatureJsonArgsSchema>,
 		ExpectedFeatureReviewRecordArgs
 	>
 >;
 
 export type _finalReviewArgsMatchExpected = Expect<
 	Equal<
-		z.input<typeof FlowReviewRecordFinalArgsSchema>,
+		z.input<typeof FlowReviewRecordFinalJsonArgsSchema>,
 		ExpectedFinalReviewRecordArgs
 	>
 >;

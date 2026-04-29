@@ -122,6 +122,10 @@ async function readJson(relativePath: string) {
 	) as Record<string, unknown>;
 }
 
+function asJson(value: unknown) {
+	return JSON.stringify(value);
+}
+
 describe("applyFlowConfig", () => {
 	test("plugin entrypoint returns Flow config and tool hooks", async () => {
 		const appLog = {
@@ -365,6 +369,28 @@ describe("applyFlowConfig", () => {
 		}
 	});
 
+	test("keeps the global Flow tool schema surface within a bounded budget", () => {
+		const { tools } = getToolSchemas();
+		const schemaSizes = Object.fromEntries(
+			Object.entries(tools).map(([name, definition]) => [
+				name,
+				JSON.stringify(tool.schema.object(definition.args)).length,
+			]),
+		);
+		const totalSize = Object.values(schemaSizes).reduce(
+			(total, size) => total + size,
+			0,
+		);
+
+		expect(totalSize).toBeLessThan(30000);
+		expect(schemaSizes.flow_audit_write_report).toBeLessThan(500);
+		expect(schemaSizes.flow_plan_apply).toBeLessThan(500);
+		expect(schemaSizes.flow_plan_context_record).toBeLessThan(500);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(500);
+		expect(schemaSizes.flow_review_record_feature).toBeLessThan(500);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(500);
+	});
+
 	test("pins zod to the plugin SDK's effective zod contract", async () => {
 		const projectPackage = await readJson("package.json");
 		const pluginPackage = await readJson(
@@ -432,7 +458,7 @@ describe("applyFlowConfig", () => {
 		).toBe(false);
 		expect(
 			schemas.flow_audit_write_report.safeParse({
-				report: {
+				reportJson: asJson({
 					requestedDepth: "deep_audit",
 					achievedDepth: "deep_audit",
 					repoSummary: "Reviewed the main surfaces directly.",
@@ -453,12 +479,12 @@ describe("applyFlowConfig", () => {
 						},
 					],
 					findings: [],
-				},
+				}),
 			}).success,
 		).toBe(true);
 		expect(
 			schemas.flow_audit_write_report.safeParse({
-				report: {
+				reportJson: asJson({
 					requestedDepth: "deep_audit",
 					achievedDepth: "deep_audit",
 					repoSummary: "Normalized report payload.",
@@ -498,12 +524,12 @@ describe("applyFlowConfig", () => {
 						},
 					],
 					findings: [],
-				},
+				}),
 			}).success,
 		).toBe(true);
 		expect(
 			schemas.flow_audit_write_report.safeParse({
-				report: {
+				reportJson: asJson({
 					requestedDepth: "full_audit",
 					achievedDepth: "full_audit",
 					repoSummary: "Missing discovered surfaces.",
@@ -511,9 +537,9 @@ describe("applyFlowConfig", () => {
 					discoveredSurfaces: [],
 					validationRun: [],
 					findings: [],
-				},
+				}),
 			}).success,
-		).toBe(false);
+		).toBe(true);
 		expect(
 			schemas.flow_history_show.safeParse({ sessionId: "abc123" }).success,
 		).toBe(true);
@@ -532,41 +558,46 @@ describe("applyFlowConfig", () => {
 		);
 		expect(
 			schemas.flow_plan_context_record.safeParse({
-				repoProfile: ["TypeScript"],
-				packageManager: "pnpm",
-				research: ["Check docs if local evidence is insufficient."],
-				decisionLog: [
-					{
-						question: "Which path should auto mode recommend?",
-						options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
-						recommendation: "Pause and ask",
-						rationale: ["Keeps human control on meaningful decisions."],
-					},
-				],
+				planningJson: asJson({
+					repoProfile: ["TypeScript"],
+					packageManager: "pnpm",
+					research: ["Check docs if local evidence is insufficient."],
+					decisionLog: [
+						{
+							question: "Which path should auto mode recommend?",
+							options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
+							recommendation: "Pause and ask",
+							rationale: ["Keeps human control on meaningful decisions."],
+						},
+					],
+				}),
 			}).success,
 		).toBe(true);
 
 		expect(
 			schemas.flow_plan_apply.safeParse({
-				plan: {
-					summary: "Implement a workflow.",
-					overview: "Create one feature.",
-					features: [
-						{
-							id: "setup-runtime",
-							title: "Create runtime helpers",
-							summary: "Add runtime helpers.",
-							fileTargets: ["src/runtime/session.ts"],
-							verification: ["bun test"],
-						},
-					],
-				},
+				planJson: asJson({
+					plan: {
+						summary: "Implement a workflow.",
+						overview: "Create one feature.",
+						features: [
+							{
+								id: "setup-runtime",
+								title: "Create runtime helpers",
+								summary: "Add runtime helpers.",
+								fileTargets: ["src/runtime/session.ts"],
+								verification: ["bun test"],
+							},
+						],
+					},
+				}),
 			}).success,
 		).toBe(true);
 		expect(
-			schemas.flow_plan_apply.safeParse({ plan: { summary: "Missing fields" } })
-				.success,
-		).toBe(false);
+			schemas.flow_plan_apply.safeParse({
+				planJson: asJson({ plan: { summary: "Missing fields" } }),
+			}).success,
+		).toBe(true);
 
 		expect(
 			schemas.flow_plan_approve.safeParse({ featureIds: ["setup-runtime"] })
@@ -592,33 +623,27 @@ describe("applyFlowConfig", () => {
 
 		expect(
 			schemas.flow_review_record_feature.safeParse({
-				scope: "feature",
-				featureId: "setup-runtime",
-				status: "approved",
-				summary: "Looks good.",
+				decisionJson: asJson({
+					scope: "feature",
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Looks good.",
+				}),
 			}).success,
 		).toBe(true);
-		expect(
-			schemas.flow_review_record_feature.safeParse({
-				scope: "feature",
-				status: "approved",
-				summary: "Missing id.",
-			}).success,
-		).toBe(false);
+		expect(schemas.flow_review_record_feature.safeParse({}).success).toBe(
+			false,
+		);
 		expect(
 			schemas.flow_review_record_final.safeParse({
-				scope: "final",
-				status: "approved",
-				summary: "Looks good.",
+				decisionJson: asJson({
+					scope: "final",
+					status: "approved",
+					summary: "Looks good.",
+				}),
 			}).success,
 		).toBe(true);
-		expect(
-			schemas.flow_review_record_final.safeParse({
-				scope: "bad",
-				summary: "Nope.",
-				status: "approved",
-			}).success,
-		).toBe(false);
+		expect(schemas.flow_review_record_final.safeParse({}).success).toBe(false);
 
 		expect(
 			schemas.flow_session_close.safeParse({ kind: "completed" }).success,
@@ -636,30 +661,32 @@ describe("applyFlowConfig", () => {
 		).toBe(false);
 	});
 
-	test("worker tool raw args accept the documented top-level payload and reject the old nested shape", () => {
+	test("worker tool raw args accept the documented JSON wrapper payload and reject the old nested shape", () => {
 		const { schemas } = getToolSchemas();
 		const schema = schemas.flow_run_complete_feature;
 
 		const validPayload = {
-			contractVersion: "1",
-			status: "ok",
-			summary: "Completed runtime setup.",
-			artifactsChanged: [],
-			validationRun: [],
-			validationScope: "targeted",
-			reviewIterations: 1,
-			decisions: [],
-			nextStep: "Run the next feature.",
-			outcome: { kind: "completed" },
-			featureResult: {
-				featureId: "setup-runtime",
-				verificationStatus: "passed",
-			},
-			featureReview: {
-				status: "passed",
-				summary: "Looks good.",
-				blockingFindings: [],
-			},
+			workerJson: asJson({
+				contractVersion: "1",
+				status: "ok",
+				summary: "Completed runtime setup.",
+				artifactsChanged: [],
+				validationRun: [],
+				validationScope: "targeted",
+				reviewIterations: 1,
+				decisions: [],
+				nextStep: "Run the next feature.",
+				outcome: { kind: "completed" },
+				featureResult: {
+					featureId: "setup-runtime",
+					verificationStatus: "passed",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "Looks good.",
+					blockingFindings: [],
+				},
+			}),
 		};
 
 		const invalidNestedPayload = {
@@ -717,14 +744,18 @@ describe("applyFlowConfig", () => {
 			},
 		};
 
-		expect(rawSchema.safeParse(validCompletion).success).toBe(true);
+		expect(
+			rawSchema.safeParse({ workerJson: asJson(validCompletion) }).success,
+		).toBe(true);
 		expect(WorkerResultSchema.safeParse(validCompletion).success).toBe(true);
 
-		expect(rawSchema.safeParse(invalidCrossField).success).toBe(true);
+		expect(
+			rawSchema.safeParse({ workerJson: asJson(invalidCrossField) }).success,
+		).toBe(true);
 		expect(WorkerResultSchema.safeParse(invalidCrossField).success).toBe(false);
 	});
 
-	test("worker tool raw schema rejects invalid feature ids in featureResult", () => {
+	test("worker tool raw schema accepts the JSON wrapper while runtime schema rejects invalid feature ids", () => {
 		const { schemas } = getToolSchemas();
 		const rawSchema = schemas.flow_run_complete_feature;
 
@@ -747,7 +778,9 @@ describe("applyFlowConfig", () => {
 			},
 		};
 
-		expect(rawSchema.safeParse(invalidFeatureId).success).toBe(false);
+		expect(
+			rawSchema.safeParse({ workerJson: asJson(invalidFeatureId) }).success,
+		).toBe(true);
 		expect(WorkerResultSchema.safeParse(invalidFeatureId).success).toBe(false);
 	});
 
@@ -755,32 +788,24 @@ describe("applyFlowConfig", () => {
 		const { schemas } = getToolSchemas();
 
 		const validPlan = {
-			plan: {
-				summary: "Implement a workflow.",
-				overview: "Create one feature.",
-				features: [
-					{
-						id: "setup-runtime",
-						title: "Create runtime helpers",
-						summary: "Add runtime helpers.",
-						fileTargets: ["src/runtime/session.ts"],
-						verification: ["bun test"],
-					},
-				],
-			},
+			planJson: asJson({
+				plan: {
+					summary: "Implement a workflow.",
+					overview: "Create one feature.",
+					features: [
+						{
+							id: "setup-runtime",
+							title: "Create runtime helpers",
+							summary: "Add runtime helpers.",
+							fileTargets: ["src/runtime/session.ts"],
+							verification: ["bun test"],
+						},
+					],
+				},
+			}),
 		};
 
-		const invalidPlan = {
-			plan: {
-				...validPlan.plan,
-				features: [
-					{
-						...validPlan.plan.features[0],
-						id: "Bad Id",
-					},
-				],
-			},
-		};
+		const invalidPlan = {};
 
 		expect(schemas.flow_plan_apply.safeParse(validPlan).success).toBe(true);
 		expect(schemas.flow_plan_apply.safeParse(invalidPlan).success).toBe(false);

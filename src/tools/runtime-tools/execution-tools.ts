@@ -1,17 +1,15 @@
 import { tool } from "@opencode-ai/plugin";
-import { withParsedArgs } from "../parsed-tool";
+import { withJsonTransportArgs, withParsedArgs } from "../parsed-tool";
 import {
 	FlowResetFeatureArgsSchema,
 	FlowResetFeatureArgsShape,
+	FlowRunCompleteFeatureArgsSchema,
+	FlowRunCompleteFeatureArgsShape,
 	FlowRunStartArgsSchema,
 	type ToolContext,
 	WorkerResultArgsSchema,
 } from "../schemas";
-import {
-	executeGuardedSessionMutation,
-	flowRunStartArgsShape,
-	workerResultArgsShape,
-} from "./shared";
+import { executeGuardedSessionMutation, flowRunStartArgsShape } from "./shared";
 
 export function createExecutionRuntimeTools() {
 	return {
@@ -37,10 +35,16 @@ export function createExecutionRuntimeTools() {
 		}),
 
 		flow_run_complete_feature: tool({
-			description: "Persist an already-validated Flow feature execution result",
-			args: workerResultArgsShape,
-			execute: withParsedArgs(
-				WorkerResultArgsSchema,
+			description:
+				"Persist an already-validated Flow feature execution result from a JSON payload",
+			args: FlowRunCompleteFeatureArgsShape,
+			execute: withJsonTransportArgs(
+				{
+					transportSchema: FlowRunCompleteFeatureArgsSchema,
+					field: "workerJson",
+					payloadSchema: WorkerResultArgsSchema,
+					legacySchema: WorkerResultArgsSchema,
+				},
 				async (input, context: ToolContext) => {
 					context.metadata?.({
 						title: `Complete ${input.featureResult?.featureId ?? "feature"}`,

@@ -934,7 +934,7 @@ describe("runtime transitions", () => {
 		expect(before).toContain("summary: No plan yet.");
 
 		await tools.flow_plan_apply.execute(
-			{ plan: samplePlan(), planning: undefined },
+			{ planJson: JSON.stringify({ plan: samplePlan() }) },
 			toolContext(worktree),
 		);
 		const afterApply = await readFile(

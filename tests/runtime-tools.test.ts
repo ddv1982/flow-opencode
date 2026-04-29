@@ -353,7 +353,7 @@ describe("runtime tools and recovery", () => {
 		const tools = createTestTools();
 		const response = await tools.flow_audit_write_report.execute(
 			{
-				report: {
+				reportJson: JSON.stringify({
 					requestedDepth: "full_audit",
 					achievedDepth: "deep_audit",
 					repoSummary: "Reviewed the prompt surfaces directly.",
@@ -382,7 +382,7 @@ describe("runtime tools and recovery", () => {
 						},
 					],
 					findings: [],
-				},
+				}),
 			},
 			toolContext(worktree),
 		);
@@ -750,10 +750,12 @@ describe("runtime tools and recovery", () => {
 		);
 		const response = await tools.flow_plan_apply.execute(
 			{
-				plan: {
-					...samplePlan(),
-					features: [liteFeature],
-				},
+				planJson: JSON.stringify({
+					plan: {
+						...samplePlan(),
+						features: [liteFeature],
+					},
+				}),
 			},
 			toolContext(worktree),
 		);
@@ -781,7 +783,7 @@ describe("runtime tools and recovery", () => {
 			toolContext(worktree),
 		);
 		const response = await tools.flow_plan_apply.execute(
-			{ plan: samplePlan() },
+			{ planJson: JSON.stringify({ plan: samplePlan() }) },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -1519,6 +1521,37 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.summary).toContain("Tool argument validation failed");
 		expect(parsed.summary).toContain("outcome");
 		expect(parsed.summary).not.toContain("Cannot read properties");
+	});
+
+	test("tool rejects malformed JSON-string worker payloads on the production wrapper path", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const response = await tools.flow_run_complete_feature.execute(
+			{ workerJson: '{"contractVersion":"1",' },
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("workerJson");
+		expect(parsed.summary).toContain("JSON string payload");
+	});
+
+	test("tool rejects duplicate keys inside JSON-string worker payloads", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const response = await tools.flow_run_complete_feature.execute(
+			{
+				workerJson:
+					'{"contractVersion":"1","status":"needs_input","status":"ok","summary":"Bad payload.","artifactsChanged":[],"validationRun":[],"decisions":[],"nextStep":"Stop.","outcome":{"kind":"completed"},"featureResult":{"featureId":"setup-runtime"},"featureReview":{"status":"passed","summary":"Looks good.","blockingFindings":[]}}',
+			},
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("workerJson");
+		expect(parsed.summary).toContain("JSON string payload");
 	});
 
 	test("tool returns machine-readable recovery details for missing final reviewer approval", async () => {
