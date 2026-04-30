@@ -166,7 +166,7 @@ At a high level, Flow does this:
 3. **Execute** one feature at a time.
 4. **Validate** the result with recorded evidence.
 5. **Review** the result before advancing.
-6. **Continue, recover, or replan** until the session is complete.
+6. **Continue, recover, or replan** until the session is complete. Final completion uses broad final validation plus the runtime-owned final review policy (currently a detailed cross-feature review by default).
 
 > Note: Runtime-level parallel feature execution is intentionally deferred; Flow continues to execute one feature at a time.
 
@@ -182,7 +182,7 @@ flowchart TD
     F -->|blocker| X[Stop]
     F -->|approved| G{More features needed?}
     G -->|yes| D
-    G -->|no| H[Broad final validation + policy-owned final review]
+    G -->|no| H[Broad final validation + policy-owned final review<br/>detailed by default]
     H --> I[Session complete]
 ```
 
