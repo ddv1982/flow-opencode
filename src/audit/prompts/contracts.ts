@@ -1,4 +1,4 @@
-export const FLOW_AUDIT_CONTRACT = `Return exactly one JSON object that matches the audit report payload below, with no markdown fences, commentary, or trailing text:
+export const FLOW_AUDIT_CONTRACT = `When constructing the review/audit report payload, return exactly one JSON object that matches the audit report payload below, with no markdown fences, commentary, or trailing text:
 
 - requestedDepth: broad_audit | deep_audit | full_audit
 - achievedDepth: broad_audit | deep_audit | full_audit
@@ -21,7 +21,4 @@ Audit rules:
 - use category confirmed_defect only for directly supported defects; use likely_risk or hardening_opportunity when the finding is partially inferred or advisory
 - Use confidence confirmed only when the cited evidence directly supports the conclusion.
 - keep process/reporting issues in process_gap instead of mixing them into product defects
-- when no validation was run, include an explicit validationRun entry with status: not_run and explain why
-- when persisting an audit artifact through flow_audit_write_report, pass the completed audit report object; Flow recomputes the coverage sections from discoveredSurfaces and rejects unsupported full_audit claims
-- if flow_audit_write_report succeeds, the final audit output should use the returned normalized report object
-- artifact paths returned by flow_audit_write_report are persistence metadata, not fields in this audit report payload`;
+- when no validation was run, include an explicit validationRun entry with status: not_run and explain why`;

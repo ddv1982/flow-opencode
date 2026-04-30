@@ -5,7 +5,11 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowResetFeatureCommand,
 } from "./constants";
-import { activeDecisionGate } from "./domain";
+import {
+	activeDecisionGate,
+	featureWouldReachCompletion,
+	finalReviewPolicyForPlan,
+} from "./domain";
 import type { Session } from "./schema";
 
 export type SessionOperatorState = {
@@ -160,6 +164,17 @@ export function deriveSessionOperatorState(
 		const activeFeature = session.plan?.features.find(
 			(feature) => feature.id === session.execution.activeFeatureId,
 		);
+		const activeFeatureIsFinalPath = Boolean(
+			session.plan &&
+				activeFeature &&
+				featureWouldReachCompletion(session.plan, activeFeature.id),
+		);
+		const finalReviewPolicy = finalReviewPolicyForPlan(session.plan);
+		const defaultExecutionNextStep = activeFeature
+			? activeFeatureIsFinalPath
+				? `Continue the active feature through broad validation and the ${finalReviewPolicy === "detailed" ? "detailed final cross-feature review" : "broad final review"}.`
+				: "Continue the active feature through validation and review."
+			: "Run the next approved feature.";
 		return {
 			phase: session.status === "running" ? "executing" : "ready",
 			lane: lane.lane,
@@ -168,11 +183,7 @@ export function deriveSessionOperatorState(
 			reason: activeFeature
 				? "An approved feature is active, so Flow should stay in execution."
 				: "Planning is approved and Flow can run the next feature.",
-			nextStep:
-				session.execution.lastNextStep ??
-				(activeFeature
-					? "Continue the active feature through validation and review."
-					: "Run the next approved feature."),
+			nextStep: session.execution.lastNextStep ?? defaultExecutionNextStep,
 			nextCommand,
 		};
 	}

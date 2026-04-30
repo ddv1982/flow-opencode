@@ -1,4 +1,8 @@
-import { activeDecisionGate, summarizeCompletion } from "./domain";
+import {
+	activeDecisionGate,
+	finalReviewPolicyForPlan,
+	summarizeCompletion,
+} from "./domain";
 import type { Feature, Session } from "./schema";
 import {
 	deriveNextCommand,
@@ -52,6 +56,11 @@ export type SummarizedSessionDetails = {
 	planSummary: string | null;
 	planOverview: string | null;
 	completion: ReturnType<typeof summarizeCompletion>;
+	finalReviewPolicy:
+		| NonNullable<
+				NonNullable<Session["plan"]>["deliveryPolicy"]
+		  >["finalReviewPolicy"]
+		| null;
 	activeFeature: {
 		id: string;
 		title: string;
@@ -184,6 +193,9 @@ function buildSessionDetails(
 		planSummary: session.plan?.summary ?? null,
 		planOverview: session.plan?.overview ?? null,
 		completion,
+		finalReviewPolicy: session.plan
+			? finalReviewPolicyForPlan(session.plan)
+			: null,
 		activeFeature: projectActiveFeature(
 			activeFeatureForSession(session, features),
 		),

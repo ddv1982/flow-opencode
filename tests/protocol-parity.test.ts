@@ -67,7 +67,10 @@ describe("protocol parity", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"on the final completion path, run broad validation",
+			"On the final completion path, run broad validation",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"deliveryPolicy.finalReviewPolicy",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata",
@@ -77,6 +80,9 @@ describe("protocol parity", () => {
 		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"On the final completion path, run broad validation",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy",
 		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"In the lite lane, if the runtime session is small enough",

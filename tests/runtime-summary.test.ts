@@ -66,7 +66,7 @@ function buildSummaryFixtureSessions() {
 			contractVersion: "1",
 			status: "needs_input",
 			summary: "Waiting on an operator decision.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [],
 			validationScope: "targeted",
 			reviewIterations: 0,
@@ -122,6 +122,27 @@ function buildSummaryFixtureSessions() {
 					).session,
 					{
 						scope: "final",
+						reviewDepth: "detailed",
+						reviewedSurfaces: [
+							"changed_files",
+							"shared_surfaces",
+							"validation_evidence",
+						],
+						evidenceSummary:
+							"Checked final cross-feature integration and validation evidence.",
+						validationAssessment:
+							"Validation coverage and cross-feature interactions were reviewed.",
+						evidenceRefs: {
+							changedArtifacts: ["src/runtime/session.ts"],
+							validationCommands: ["bun test"],
+						},
+						integrationChecks: [
+							"Reviewed integration points across the active feature boundary.",
+						],
+						regressionChecks: [
+							"Checked for regressions in shared surfaces and validation evidence.",
+						],
+						remainingGaps: [],
 						status: "approved",
 						summary: "Final review looks good.",
 					},
@@ -131,7 +152,7 @@ function buildSummaryFixtureSessions() {
 				contractVersion: "1",
 				status: "ok",
 				summary: "Completed runtime setup.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
 					{
 						command: "bun test",
@@ -154,6 +175,27 @@ function buildSummaryFixtureSessions() {
 					blockingFindings: [],
 				},
 				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "passed",
 					summary: "Repo-wide validation is clean.",
 					blockingFindings: [],
@@ -223,8 +265,10 @@ function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 		laneReason,
 		blocker,
 		reason,
+		finalReviewPolicy,
 		...rest
 	} = summary;
+	void finalReviewPolicy;
 	void workspace;
 	void workspaceRoot;
 	void phase;
@@ -297,9 +341,52 @@ describe("runtime summary", () => {
 				"Command: /flow-run",
 				"Working on: setup-runtime — Create runtime helpers (in_progress)",
 				"Progress: 0/2 completed",
+				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
 		);
+	});
+
+	test("runtime summary exposes the runtime-owned final review policy and final-path guidance", () => {
+		const thresholdPlan = {
+			...samplePlan(),
+			completionPolicy: {
+				minCompletedFeatures: 1,
+			},
+		};
+		const running = assertOk(
+			startRun(
+				assertOk(
+					approvePlan(
+						assertOk(
+							applyPlan(
+								createSession("Build a workflow plugin"),
+								thresholdPlan,
+							),
+						),
+					),
+				),
+			),
+		).session;
+		const summary = summarizeSession(running);
+
+		expect(summary.session?.finalReviewPolicy).toBe("detailed");
+		expect(explainSessionState(running).nextStep).toBe(
+			"Continue the active feature through broad validation and the detailed final cross-feature review.",
+		);
+	});
+
+	test("applyPlan preserves explicit final review policy overrides", () => {
+		const applied = assertOk(
+			applyPlan(createSession("Build a workflow plugin"), {
+				...samplePlan(),
+				deliveryPolicy: {
+					finalReviewPolicy: "broad",
+				},
+			}),
+		);
+
+		expect(summarizeSession(applied).session?.finalReviewPolicy).toBe("broad");
 	});
 
 	test("renderSessionStatusSummary can override the rendered command for history views", () => {
@@ -316,6 +403,7 @@ describe("runtime summary", () => {
 				"Next: Review or refine the draft plan, then approve it when ready.",
 				"Command: /flow-session activate test-session",
 				"Progress: 0/2 completed",
+				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
 		);
@@ -370,7 +458,11 @@ describe("runtime summary", () => {
 	          "session": {
 	            "activeFeature": null,
 	            "approval": "approved",
-	            "artifacts": [],
+	            "artifacts": [
+	              {
+	                "path": "src/runtime/session.ts",
+	              },
+	            ],
 	            "closure": null,
 	            "completion": {
 	              "activeFeatureTriggersSessionCompletion": false,
@@ -402,6 +494,7 @@ describe("runtime summary", () => {
 	                "title": "Implement execution flow",
 	              },
 	            ],
+	            "finalReviewPolicy": "detailed",
 	            "goal": "Build a workflow plugin",
 	            "id": "<session-id>",
 	            "lastFeatureResult": {
@@ -449,7 +542,11 @@ describe("runtime summary", () => {
 	          "session": {
 	            "activeFeature": null,
 	            "approval": "approved",
-	            "artifacts": [],
+	            "artifacts": [
+	              {
+	                "path": "src/runtime/session.ts",
+	              },
+	            ],
 	            "closure": {
 	              "kind": "completed",
 	              "recordedAt": "<closure-recorded-at>",
@@ -478,6 +575,7 @@ describe("runtime summary", () => {
 	                "title": "Create runtime helpers",
 	              },
 	            ],
+	            "finalReviewPolicy": "detailed",
 	            "goal": "Build a workflow plugin",
 	            "id": "<session-id>",
 	            "lastFeatureResult": {
@@ -491,12 +589,35 @@ describe("runtime summary", () => {
 	            "lastOutcomeKind": "completed",
 	            "lastReviewerDecision": {
 	              "blockingFindings": [],
+	              "evidenceRefs": {
+	                "changedArtifacts": [
+	                  "src/runtime/session.ts",
+	                ],
+	                "validationCommands": [
+	                  "bun test",
+	                ],
+	              },
+	              "evidenceSummary": "Checked final cross-feature integration and validation evidence.",
 	              "followUps": [],
+	              "integrationChecks": [
+	                "Reviewed integration points across the active feature boundary.",
+	              ],
+	              "regressionChecks": [
+	                "Checked for regressions in shared surfaces and validation evidence.",
+	              ],
+	              "remainingGaps": [],
+	              "reviewDepth": "detailed",
 	              "reviewPurpose": "completion_gate",
+	              "reviewedSurfaces": [
+	                "changed_files",
+	                "shared_surfaces",
+	                "validation_evidence",
+	              ],
 	              "scope": "final",
 	              "status": "approved",
 	              "suggestedValidation": [],
 	              "summary": "Final review looks good.",
+	              "validationAssessment": "Validation coverage and cross-feature interactions were reviewed.",
 	            },
 	            "lastValidationRun": [
 	              {
@@ -554,6 +675,7 @@ describe("runtime summary", () => {
 	                "title": "Implement execution flow",
 	              },
 	            ],
+	            "finalReviewPolicy": "detailed",
 	            "goal": "Build a workflow plugin",
 	            "id": "<session-id>",
 	            "lastFeatureResult": null,
@@ -616,6 +738,7 @@ describe("runtime summary", () => {
 	                "title": "Implement execution flow",
 	              },
 	            ],
+	            "finalReviewPolicy": "detailed",
 	            "goal": "Build a workflow plugin",
 	            "id": "<session-id>",
 	            "lastFeatureResult": null,
@@ -814,7 +937,7 @@ describe("runtime summary", () => {
 			contractVersion: "1",
 			status: "needs_input",
 			summary: "Validation exposed a recoverable repo issue.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",

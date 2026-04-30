@@ -67,19 +67,18 @@ Flow is built around a few stable responsibilities:
 
 - `flow-planner` reads the repo and creates a compact execution-ready plan
 - `flow-worker` executes exactly one approved feature
-- `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`)
+- `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`); the final gate follows the runtime-owned final review policy (`detailed` cross-feature by default, `broad` when explicitly configured)
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
-- `flow-control` handles status/history/session/reset requests and the audit command surface; audit writes are still limited to `flow_audit_write_report`
+- `flow-control` handles status/history/session/reset requests and the review command surface
 
-Audit work should stay separate from normal feature execution and is always available through the dedicated `flow-audit` command when the user asks for a repo review, codebase audit, findings report, or an explicit “full review.” The auditor must distinguish:
+Read-only review work should stay separate from normal feature execution and is available through the dedicated `flow-review` command when the user asks for a repo review, codebase audit, findings report, or an explicit exhaustive review. User-facing review depth maps to internal audit rigor:
 
-- `broad_audit`
-- `deep_audit`
-- `full_audit`
+- `default` => `broad_audit`
+- `detailed` => `deep_audit`
+- `exhaustive` => `full_audit`
 
-and may only claim `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
+Flow may only claim achieved `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
 
-When an audit should leave a durable artifact, the auditor should persist it through `flow_audit_write_report`. That tool is the only sanctioned write from the audit surface: call it with the completed audit report object, let it normalize the coverage sections from `discoveredSurfaces`, then use the returned normalized `report` object as the final audit output. It writes JSON plus Markdown under `.flow/audits/`, rejects unsupported `full_audit` claims, and returns artifact paths as persistence metadata rather than audit-report fields.
 
 ## Current Runtime Tools
 
@@ -103,9 +102,6 @@ Default (core) surface:
 - `flow_session_close`
 - `flow_reset_feature`
 
-Audit-specific runtime tools available by default:
-- `flow_audit_reports`
-- `flow_audit_write_report`
 
 Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
 
@@ -185,7 +181,7 @@ This plugin uses two validation layers:
 - SDK-facing tool `args` stay as raw shapes for OpenCode compatibility
 - stricter runtime validation happens later through schemas such as `WorkerResultSchema`
 
-For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, `flow_review_record_final`, `flow_audit_reports`, and `flow_audit_write_report`), keep the SDK-facing shape thin by transporting the real object as a JSON string field (`planningJson`, `planJson`, `workerJson`, `decisionJson`, `requestJson`, or `reportJson`) and validating the decoded object at runtime. This keeps the global tool schema surface small enough for ordinary OpenCode requests. Any legacy direct-object compatibility at the `execute(...)` boundary is for internal direct callers and tests only; OpenCode itself will see and validate the thin wrapper schema.
+For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, and `flow_review_record_final`), keep the SDK-facing shape thin by transporting the real object as a JSON string field (`planningJson`, `planJson`, `workerJson`, or `decisionJson`) and validating the decoded object at runtime. This keeps the global tool schema surface small enough for ordinary OpenCode requests. Any legacy direct-object compatibility at the `execute(...)` boundary is for internal direct callers and tests only; OpenCode itself will see and validate the thin wrapper schema.
 
 ## Testing
 

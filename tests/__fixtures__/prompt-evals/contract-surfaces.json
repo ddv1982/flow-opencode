@@ -26,7 +26,7 @@
 			"tests/runtime-completion-contracts.test.ts"
 		],
 		"expectedSnippets": [
-			"run broad validation, include finalReview, and use validationScope: broad",
+			"run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
 			"completionPolicy.minCompletedFeatures"
 		],
 		"forbiddenSnippets": ["targeted validation is enough for final completion"]
@@ -40,7 +40,9 @@
 		"sourcePaths": ["src/prompts/contracts.ts", "tests/config.test.ts"],
 		"expectedSnippets": [
 			"status: approved | needs_fix | blocked",
-			"return needs_fix when implementation should continue on the same feature"
+			"return needs_fix when implementation should continue on the same feature",
+			"include reviewDepth matching deliveryPolicy.finalReviewPolicy",
+			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving"
 		],
 		"forbiddenSnippets": ["reviewer implements fixes directly"]
 	},

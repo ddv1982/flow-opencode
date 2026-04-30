@@ -6,7 +6,7 @@
 
 - Turns a goal into a **tracked session** with a plan of features, stored on disk.
 - Executes **one feature at a time** with validation and review checks.
-- **Scales automatically**: small tasks run nearly one-shot; larger work picks up a plan, reviewer sign-off, and a broad final check — without you having to configure anything.
+- **Scales automatically**: small tasks run nearly one-shot; larger work picks up a plan, reviewer sign-off, broad final validation, and the runtime-owned final review policy (currently detailed by default) — without you having to coordinate every step.
 
 ## When to use it
 
@@ -98,23 +98,21 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
 - If there's no active session, Flow asks for a goal instead of inventing one
 - Completed sessions are not resumable — start a new one
 
-### Audit existing code
+### Review existing code (read-only)
 
-Audit is available by default. Use the dedicated audit lane when you want a read-only findings report instead of feature execution.
+Review is available by default. Use the dedicated review lane when you want a read-only findings report instead of feature execution.
 
 ```text
-/flow-audit Review this repository for correctness and release risks
+/flow-review Review this repository for correctness and release risks
 ```
 
-Flow will classify the audit as `broad_audit`, `deep_audit`, or `full_audit` based on the request and the evidence it actually gathered. It only claims `full_audit` when every major discovered surface is directly reviewed.
+User-facing review depth maps to internal rigor:
 
-If the workspace is mutable, Flow can persist audit artifacts through the dedicated export tool. That tool returns a normalized audit `report` plus persistence metadata; the artifact paths are not extra fields in the audit report itself. You can inspect saved audits later with:
+- `default` => `broad_audit`
+- `detailed` => `deep_audit`
+- `exhaustive` => `full_audit`
 
-- `/flow-audits`
-- `/flow-audits show latest`
-- `/flow-audits compare <left-report-id> <right-report-id>`
-
-Saved audit comparisons report whether a change was matched by an exact key or by a heuristic rename/retitle pairing, so the diff stays readable without pretending heuristic matches are exact.
+Flow only claims achieved `full_audit` when every major discovered surface is directly reviewed.
 
 ## Core concepts
 
@@ -135,7 +133,7 @@ Flow picks one of three lanes based on the shape of the work — you never set t
 Before a feature can be marked complete, Flow requires:
 
 - **validation**: recorded evidence that what was built actually works (e.g. tests, type checks, targeted runs)
-- **review**: an approval of the change (`featureReview` for a single feature, `finalReview` before the whole session closes)
+- **review**: an approval of the change (`featureReview` for a single feature, `finalReview` for the runtime-owned final review policy before the whole session closes; default is a detailed cross-feature review, but plans may opt into `broad`)
 
 In the lite lane, these gates are still enforced but can be satisfied in the same step the worker finishes. In standard and strict lanes, the reviewer decision has to be recorded as its own step.
 
@@ -171,7 +169,7 @@ A plan isn't limited to building features. Flow supports:
 - `review` — audit existing code without changing it
 - `review_and_fix` — audit, then apply the fixes
 
-For user-facing audit work, prefer the dedicated `/flow-audit` command over routing audits through the normal execution lane.
+For user-facing read-only review work, prefer the dedicated `/flow-review` command over routing reviews through the normal execution lane.
 
 ### Recovery
 
@@ -182,8 +180,7 @@ When something recoverable goes wrong (a flaky test, a missing prerequisite, a v
 - Start or reshape work → `/flow-plan <goal>`
 - Run one approved feature → `/flow-run [feature-id]`
 - Run autonomously end-to-end → `/flow-auto <goal>` or `/flow-auto resume`
-- Run a read-only repo audit → `/flow-audit <goal>`
-- Browse or compare saved audit reports (requires audit config and audit tools) → `/flow-audits` / `/flow-audits show <report-id|latest>` / `/flow-audits compare <left> <right>`
+- Run a read-only repo review → `/flow-review <goal>`
 - See what Flow is doing and what to run next → `/flow-status [detail]`
 - Diagnose readiness/blockers → `/flow-doctor [detail]`
 - Browse sessions → `/flow-history` / `/flow-history show <session-id>`
@@ -197,7 +194,7 @@ When something recoverable goes wrong (a flaky test, a missing prerequisite, a v
 3. **Approve** the plan (auto in lite lane, explicit otherwise).
 4. **Execute** one feature with targeted validation.
 5. **Review** the result against the feature's acceptance.
-6. **Continue, recover, or replan** — until the delivery policy is satisfied and a broad final check plus final review pass. Then the session completes.
+6. **Continue, recover, or replan** — until the delivery policy is satisfied and broad final validation plus the runtime-owned final review policy pass. Then the session completes.
 
 > Note: Runtime-level parallel feature execution is intentionally deferred; Flow continues to execute one feature at a time.
 
@@ -213,7 +210,7 @@ flowchart TD
     F -->|blocker| X[Stop]
     F -->|approved| G{More features needed?}
     G -->|yes| D
-    G -->|no| H[Broad final check + final review]
+    G -->|no| H[Broad final validation + policy-owned final review]
     H --> I[Session complete]
 ```
 

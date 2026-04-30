@@ -72,9 +72,41 @@ function approvedReviewerDecision(
 	scope: ReviewerDecision["scope"],
 	featureId?: string,
 ): ReviewerDecision {
+	if (scope === "final") {
+		return {
+			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
+			status: "approved",
+			summary: "Approved.",
+			blockingFindings: [],
+			followUps: [],
+			suggestedValidation: [],
+		};
+	}
+
 	return {
-		scope,
-		...(featureId ? { featureId } : {}),
+		scope: "feature",
+		featureId: featureId ?? "setup-runtime",
 		status: "approved",
 		summary: "Approved.",
 		blockingFindings: [],
@@ -257,13 +289,34 @@ describe("runtime semantic invariants", () => {
 		};
 		const worker: WorkerResult = {
 			...createBaseWorker(featureId),
-			validationScope: "targeted",
+			validationScope: "broad",
 			featureReview: {
 				status: "passed",
 				summary: "Feature review passed.",
 				blockingFindings: [],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "failed",
 				summary: "Final review failed.",
 				blockingFindings: [{ summary: "Fix final review." }],
@@ -297,11 +350,11 @@ describe("runtime semantic invariants", () => {
 		expect(SEMANTIC_COMPLETION_GATE_ORDER.final).toEqual([
 			"missing_validation",
 			"failing_validation",
-			"missing_reviewer_decision",
+			"missing_validation_scope",
 			"failing_feature_review",
 			"failing_final_review",
-			"missing_validation_scope",
 			"missing_final_review",
+			"missing_reviewer_decision",
 		]);
 	});
 
@@ -388,10 +441,60 @@ describe("runtime semantic invariants", () => {
 			FlowReviewRecordFinalArgsSchema.safeParse({
 				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalScope,
 				featureId: "setup-runtime",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "approved",
 				summary: "Approved.",
 			}).success,
 		).toBe(false);
+
+		expect(
+			FlowReviewRecordFinalArgsSchema.safeParse({
+				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalScope,
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Approved.",
+			}).success,
+		).toBe(true);
 		expect(SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalRejectsFeatureId).toBe(true);
 	});
 

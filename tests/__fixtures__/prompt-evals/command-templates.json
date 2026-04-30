@@ -47,6 +47,7 @@
 		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
 		"expectedSnippets": [
 			"Before final completion, run broad repo validation",
+			"deliveryPolicy.finalReviewPolicy",
 			"finish with a passing `finalReview`"
 		],
 		"forbiddenSnippets": ["skip final cross-feature review"]

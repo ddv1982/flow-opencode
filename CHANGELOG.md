@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.34] - 2026-04-30
+
+Replace the audit-heavy review lane with one clear `/flow-review` surface and make final approval evidence real
+
+Flow 1.0.34 removes the separate audit/report-history product story and replaces it with one user-facing read-only review command. `/flow-review` is now the only review surface Flow exposes, the old saved-audit plumbing and compatibility aliases are gone, and the docs/prompts/status copy now describe review depth directly instead of a parallel audit subsystem. This release also hardens completion: final review policy is runtime-owned, `flow-auto` defaults its final completion gate to a detailed cross-feature review, final reviewer decisions and worker payloads carry explicit depth, typed reviewed surfaces, and artifact-backed evidence refs, and completion rejects claimed coverage that is not grounded in the current run’s changed artifacts and validation commands.
+
+Constraint: Simplify the review UX without weakening the final completion gate or reintroducing prompt-only review semantics
+Constraint: Keep zod aligned with the plugin SDK's effective contract while strengthening final-review validation through existing thin JSON tool boundaries
+Rejected: Keep separate `/flow-reviews` or legacy `/flow-audit` surfaces for saved-history browsing | they added user-facing complexity without serving the primary product goal of “review now and show the result”
+Rejected: Enforce a hard two-phase finalization flow that blocks recording final approval until matching worker evidence is already persisted | stronger in theory, but it reduces workflow flexibility and requires a larger sequencing redesign than this release needs
+Confidence: high
+Scope-risk: broad
+Reversibility: messy
+Directive: Keep the public review surface singular and keep final-review rigor runtime-owned; do not reintroduce hidden report-history UX or prompt-only final-review depth claims without fresh evidence
+Tested: `bun run check`
+Not-tested: Live GitHub-hosted `release.yml` run for tag `v1.0.34` before push; real OpenCode end-to-end sessions exercising both `broad` and `detailed` final-review policies after this release
+
 ## [1.0.33] - 2026-04-30
 
 Make Flow audits always available while shrinking the GPT-5.5 audit-history payload

@@ -72,6 +72,18 @@ export const STOP_RULES = [
 	"ship_when_core_done",
 	"ship_when_threshold_met",
 ] as const;
+export const FINAL_REVIEW_POLICIES = ["broad", "detailed"] as const;
+export const FINAL_REVIEW_SURFACES = [
+	"changed_files",
+	"integration_points",
+	"shared_surfaces",
+	"validation_evidence",
+	"tests",
+	"operator_surfaces",
+	"docs_and_prompts",
+	"tooling_and_config",
+	"release_surface",
+] as const;
 export const REVIEW_PURPOSES = ["execution_gate", "completion_gate"] as const;
 export const WORKER_STATUSES = ["ok", "needs_input"] as const;
 export const REVIEWER_DECISION_STATUSES = [

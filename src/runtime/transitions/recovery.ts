@@ -119,7 +119,7 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 			recovery: {
 				errorCode: "missing_final_reviewer_decision",
 				resolutionHint:
-					"The active feature is on the session's final completion path. Record a final reviewer approval, then rerun the current Flow feature to persist final completion.",
+					"The active feature is on the session's final completion path. Record the final reviewer approval required by deliveryPolicy.finalReviewPolicy, then rerun the current Flow feature to persist final completion.",
 				recoveryStage: "record_review",
 				prerequisite: "reviewer_result_required",
 				requiredArtifact: "final_reviewer_decision",
@@ -190,7 +190,7 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 		recovery: {
 			errorCode: "missing_final_review_payload",
 			resolutionHint:
-				"The active feature is on the session's final completion path. Run the final cross-feature review, include a passing finalReview in the worker result, and rerun the current Flow feature.",
+				"The active feature is on the session's final completion path. Run the final review required by deliveryPolicy.finalReviewPolicy, include a passing finalReview in the worker result, and rerun the current Flow feature.",
 			recoveryStage: "retry_completion",
 			prerequisite: "completion_payload_rebuild_required",
 			requiredArtifact: "final_review_payload",
@@ -204,7 +204,7 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 		recovery: {
 			errorCode: "failing_final_review",
 			resolutionHint:
-				"Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview.",
+				"Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview that matches deliveryPolicy.finalReviewPolicy.",
 			recoveryStage: "reset_feature",
 			prerequisite: "feature_reset_required",
 			retryable: true,

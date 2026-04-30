@@ -2,6 +2,12 @@
 
 import type { Feature, Plan, ReviewerDecision, Session } from "../schema";
 
+export function finalReviewPolicyForPlan(
+	plan: Plan | null | undefined,
+): NonNullable<NonNullable<Plan["deliveryPolicy"]>["finalReviewPolicy"]> {
+	return plan?.deliveryPolicy?.finalReviewPolicy ?? "detailed";
+}
+
 export function reviewerPurposeForScope(
 	scope: ReviewerDecision["scope"],
 ): NonNullable<ReviewerDecision["reviewPurpose"]> {

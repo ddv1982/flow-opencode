@@ -1,6 +1,42 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+let builtDistReady = false;
+
+function ensureBuiltDist(projectRoot: string): void {
+	if (builtDistReady) {
+		return;
+	}
+
+	const result = Bun.spawnSync(
+		[
+			"bun",
+			"build",
+			"--target=node",
+			"--outdir=./dist",
+			"--entry-naming=index.js",
+			"--external=@opencode-ai/plugin",
+			"--minify-syntax",
+			"--minify-whitespace",
+			"--sourcemap=external",
+			"./src/index.ts",
+		],
+		{
+			cwd: projectRoot,
+			stderr: "pipe",
+			stdout: "pipe",
+		},
+	);
+	if (result.exitCode !== 0) {
+		throw new Error(
+			`Failed to build dist bundle for test import: ${result.stderr.toString() || result.stdout.toString()}`,
+		);
+	}
+
+	builtDistReady = true;
+}
+
 import type { ToolContext } from "../../src/tools/schemas";
 
 type PluginFactory = typeof import("../../src/index").default;
@@ -33,6 +69,7 @@ export function cleanupManagedTempDirs(): void {
 
 export async function importBuiltPlugin(): Promise<PluginFactory> {
 	const projectRoot = join(import.meta.dir, "..", "..");
+	ensureBuiltDist(projectRoot);
 	const packageDir = makeManagedTempDir("flow-dist-package-");
 	writeFileSync(
 		join(packageDir, "package.json"),

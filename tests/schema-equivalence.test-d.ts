@@ -78,6 +78,7 @@ export type _reviewerDecisionFeatureSliceStaysAligned =
 export type _reviewerDecisionFinalSliceStaysAligned =
 	Extract<ReviewerDecision, { scope: "final" }> extends {
 		scope: "final";
+		reviewDepth: "broad" | "detailed";
 		featureId?: string | undefined;
 	}
 		? true

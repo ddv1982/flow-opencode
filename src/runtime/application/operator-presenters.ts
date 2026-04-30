@@ -30,6 +30,10 @@ export function renderSessionStatusSummary(
 		);
 	}
 
+	if (viewModel.session?.finalReviewPolicy) {
+		lines.push(`Final review policy: ${viewModel.session.finalReviewPolicy}`);
+	}
+
 	if (viewModel.session?.goal) {
 		lines.push(`Goal: ${viewModel.session.goal}`);
 	}

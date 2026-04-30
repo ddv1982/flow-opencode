@@ -9,13 +9,14 @@ import {
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
 	FEATURE_PRIORITIES,
+	FINAL_REVIEW_POLICIES,
+	FINAL_REVIEW_SURFACES,
 	GOAL_MODES,
 	NEEDS_INPUT_OUTCOME_KINDS,
 	OUTCOME_KINDS,
 	PRIORITY_MODES,
 	REPLAN_REASONS,
 	REVIEW_PURPOSES,
-	REVIEW_SCOPES,
 	REVIEW_STATUSES,
 	REVIEWER_DECISION_STATUSES,
 	STOP_RULES,
@@ -92,18 +93,36 @@ export const ReviewFindingSchema = z.object({
 	summary: z.string().min(1),
 });
 
+export const ReviewDepthSchema = z.enum(FINAL_REVIEW_POLICIES);
+export const ReviewSurfaceSchema = z.enum(FINAL_REVIEW_SURFACES);
+export const FinalReviewEvidenceRefsSchema = z
+	.object({
+		changedArtifacts: z.array(z.string().min(1)).default([]),
+		validationCommands: z.array(z.string().min(1)).default([]),
+	})
+	.strict()
+	.default({ changedArtifacts: [], validationCommands: [] });
+
 export const ReviewSchema = z.object({
 	status: z.enum(REVIEW_STATUSES),
 	summary: z.string().min(1),
 	blockingFindings: z.array(ReviewFindingSchema).default([]),
 });
 
-export const ReviewerDecisionSchema = z.object({
-	scope: z.enum(REVIEW_SCOPES),
-	featureId: z
-		.string()
-		.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE)
-		.optional(),
+export const FinalReviewSchema = ReviewSchema.extend({
+	reviewDepth: ReviewDepthSchema,
+	reviewedSurfaces: z.array(ReviewSurfaceSchema).default([]),
+	evidenceSummary: z.string().min(1).optional(),
+	validationAssessment: z.string().min(1).optional(),
+	evidenceRefs: FinalReviewEvidenceRefsSchema,
+	integrationChecks: z.array(z.string().min(1)).default([]),
+	regressionChecks: z.array(z.string().min(1)).default([]),
+	remainingGaps: z.array(z.string().min(1)).default([]),
+});
+
+export const FeatureReviewerDecisionSchema = z.object({
+	scope: z.literal("feature"),
+	featureId: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
 	reviewPurpose: z.enum(REVIEW_PURPOSES).optional(),
 	status: z.enum(REVIEWER_DECISION_STATUSES),
 	summary: z.string().min(1),
@@ -111,6 +130,31 @@ export const ReviewerDecisionSchema = z.object({
 	followUps: z.array(FollowUpSchema).default([]),
 	suggestedValidation: z.array(z.string().min(1)).default([]),
 });
+
+export const FinalReviewerDecisionSchema = z
+	.object({
+		scope: z.literal("final"),
+		reviewPurpose: z.enum(REVIEW_PURPOSES).optional(),
+		reviewDepth: ReviewDepthSchema,
+		status: z.enum(REVIEWER_DECISION_STATUSES),
+		summary: z.string().min(1),
+		blockingFindings: z.array(ReviewFindingSchema).default([]),
+		followUps: z.array(FollowUpSchema).default([]),
+		suggestedValidation: z.array(z.string().min(1)).default([]),
+		reviewedSurfaces: z.array(ReviewSurfaceSchema).default([]),
+		evidenceSummary: z.string().min(1).optional(),
+		validationAssessment: z.string().min(1).optional(),
+		evidenceRefs: FinalReviewEvidenceRefsSchema,
+		integrationChecks: z.array(z.string().min(1)).default([]),
+		regressionChecks: z.array(z.string().min(1)).default([]),
+		remainingGaps: z.array(z.string().min(1)).default([]),
+	})
+	.strict();
+
+export const ReviewerDecisionSchema = z.discriminatedUnion("scope", [
+	FeatureReviewerDecisionSchema,
+	FinalReviewerDecisionSchema,
+]);
 
 export const OutcomeSchema = z.object({
 	kind: OutcomeKindSchema,
@@ -143,7 +187,7 @@ export const WorkerResultBaseSchema = z.object({
 	nextStep: z.string().min(1),
 	featureResult: FeatureResultSchema,
 	featureReview: ReviewSchema,
-	finalReview: ReviewSchema.optional(),
+	finalReview: FinalReviewSchema.optional(),
 });
 
 export const WorkerResultSchema = z
@@ -243,6 +287,7 @@ export const DeliveryPolicySchema = z.object({
 	priorityMode: z.enum(PRIORITY_MODES).default("balanced"),
 	stopRule: z.enum(STOP_RULES).default("ship_when_clean"),
 	deferAllowed: z.boolean().default(false),
+	finalReviewPolicy: z.enum(FINAL_REVIEW_POLICIES).default("detailed"),
 });
 
 export const ReplanRecordSchema = z.object({
@@ -313,18 +358,9 @@ export const WorkerResultArgsSchema = z
 		}
 	});
 
-export const FlowReviewRecordFeatureArgsSchema = ReviewerDecisionSchema.extend({
-	scope: z.literal("feature"),
-	featureId: FeatureIdSchema,
-});
+export const FlowReviewRecordFeatureArgsSchema = FeatureReviewerDecisionSchema;
 
-export const FlowReviewRecordFinalArgsSchema = ReviewerDecisionSchema.omit({
-	featureId: true,
-})
-	.extend({
-		scope: z.literal("final"),
-	})
-	.strict();
+export const FlowReviewRecordFinalArgsSchema = FinalReviewerDecisionSchema;
 
 export const ExecutionHistoryEntrySchema = z.object({
 	featureId: z.string().min(1),
@@ -341,7 +377,7 @@ export const ExecutionHistoryEntrySchema = z.object({
 	replanRecord: ReplanRecordSchema.optional(),
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
 	featureReview: ReviewSchema.optional(),
-	finalReview: ReviewSchema.optional(),
+	finalReview: FinalReviewSchema.optional(),
 });
 
 export const SessionSchema = z.object({

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { FLOW_AUDITOR_AGENT_PROMPT } from "../src/audit/prompts/agents";
-import { FLOW_AUDIT_COMMAND_TEMPLATE } from "../src/audit/prompts/commands";
+import { FLOW_REVIEW_COMMAND_TEMPLATE } from "../src/audit/prompts/commands";
 import { FLOW_AUDIT_CONTRACT } from "../src/audit/prompts/contracts";
 import { buildFlowAdaptiveSystemContext } from "../src/prompt-system-context";
 import {
@@ -425,7 +425,7 @@ export function renderPromptEvalCase(item: PromptEvalCase): string {
 		case "auditor_agent_prompt":
 			return FLOW_AUDITOR_AGENT_PROMPT;
 		case "audit_command_template":
-			return FLOW_AUDIT_COMMAND_TEMPLATE;
+			return FLOW_REVIEW_COMMAND_TEMPLATE;
 		case "audit_contract":
 			return FLOW_AUDIT_CONTRACT;
 		default:

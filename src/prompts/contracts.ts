@@ -20,7 +20,7 @@ const FLOW_PLAN_CONTRACT_BASE = `Persist a plan with:
 - goalMode?: implementation | review | review_and_fix
 - decompositionPolicy?: atomic_feature | iterative_refinement | open_ended
 - completionPolicy?: { minCompletedFeatures?: number }
-- deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean }
+- deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean, finalReviewPolicy?: broad | detailed }
 - notes?: string[]
 
 Record planning context separately via flow_plan_context_record or flow_plan_apply({ plan, planning: ... }) when needed — not inside \`plan\`.
@@ -67,7 +67,7 @@ const FLOW_WORKER_CONTRACT_BASE = `Return exactly one JSON object that matches t
 - outcome?: { kind, category?, summary?, resolutionHint?, retryable?, autoResolvable?, needsHuman?, replanReason?, failedAssumption?, recommendedAdjustment? }
 - featureResult: { featureId, verificationStatus?: passed | partial | failed | not_recorded, notes?: { note }[], followUps?: { summary, severity? }[] }
 - featureReview: { status: passed | failed | needs_followup, summary, blockingFindings: { summary }[] }
-- finalReview?: same shape as featureReview
+- finalReview?: { status: passed | failed | needs_followup, reviewDepth: broad | detailed, reviewedSurfaces?: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface [], evidenceSummary?: string, validationAssessment?: string, evidenceRefs: { changedArtifacts: string[], validationCommands: string[] }, integrationChecks?: string[], regressionChecks?: string[], remainingGaps?: string[], summary, blockingFindings: { summary }[] }
 
 Status rules:
 - if status is ok, outcome must be omitted or use kind: completed
@@ -75,7 +75,11 @@ Status rules:
 - if outcome.kind is replan_required, include replanReason, failedAssumption, and recommendedAdjustment
 - never return status: ok with a non-completion outcome
 - never return status: ok until targeted validation is complete and featureReview has no blocking findings
-- when the active feature is the final completion path for the session, run broad validation, include finalReview, and use validationScope: broad
+- when the active feature is the final completion path for the session, run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), set finalReview.reviewDepth to match deliveryPolicy.finalReviewPolicy, and use validationScope: broad
+- finalReview must always include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
+- finalReview.evidenceRefs.changedArtifacts must reference actual artifactsChanged paths, and finalReview.evidenceRefs.validationCommands must reference actual validationRun commands from the current run
+- finalReview.reviewedSurfaces must cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
+- when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending`;
 
 export const FLOW_WORKER_CONTRACT = `${FLOW_WORKER_CONTRACT_BASE}
@@ -100,6 +104,14 @@ export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that match
 - scope: feature | final
 - featureId?: string
 - reviewPurpose?: execution_gate | completion_gate
+- reviewDepth?: broad | detailed
+- reviewedSurfaces?: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface []
+- evidenceSummary?: string
+- validationAssessment?: string
+- evidenceRefs?: { changedArtifacts: string[], validationCommands: string[] }
+- integrationChecks?: string[]
+- regressionChecks?: string[]
+- remainingGaps?: string[]
 - status: approved | needs_fix | blocked
 - summary: string
 - blockingFindings: { summary }[]
@@ -112,6 +124,12 @@ Reviewer rules:
 - return blocked only for real external blockers or required human decisions
 - for scope: feature, include the active featureId and use reviewPurpose execution_gate
 - for scope: final, use reviewPurpose completion_gate
+- for scope: final, include reviewDepth matching deliveryPolicy.finalReviewPolicy
+- for scope: final, include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
+- for scope: final, set evidenceRefs.changedArtifacts to actual changed artifact paths you reviewed and evidenceRefs.validationCommands to actual validation commands you relied on
+- for scope: final, cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
+- for scope: final, when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface
+- for scope: final, perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving
 - do not implement fixes yourself; only review and report findings
 
 Output examples:

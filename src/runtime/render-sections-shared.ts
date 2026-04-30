@@ -76,6 +76,19 @@ export function renderReviewBlock(
 		| {
 				status: string;
 				summary: string;
+				reviewDepth?: string | undefined;
+				reviewedSurfaces?: string[] | undefined;
+				evidenceSummary?: string | undefined;
+				validationAssessment?: string | undefined;
+				evidenceRefs?:
+					| {
+							changedArtifacts: string[];
+							validationCommands: string[];
+					  }
+					| undefined;
+				integrationChecks?: string[] | undefined;
+				regressionChecks?: string[] | undefined;
+				remainingGaps?: string[] | undefined;
 				blockingFindings: Array<{ summary: string }>;
 		  }
 		| undefined,
@@ -86,6 +99,45 @@ export function renderReviewBlock(
 
 	const lines = [
 		`- status: ${review.status}`,
+		...(review.reviewDepth ? [`- review depth: ${review.reviewDepth}`] : []),
+		...(review.reviewedSurfaces && review.reviewedSurfaces.length > 0
+			? [
+					`- reviewed surfaces: ${review.reviewedSurfaces.map(toInlineText).join(", ")}`,
+				]
+			: []),
+		...(review.evidenceSummary
+			? [`- evidence: ${toInlineText(review.evidenceSummary)}`]
+			: []),
+		...(review.validationAssessment
+			? [
+					`- validation assessment: ${toInlineText(review.validationAssessment)}`,
+				]
+			: []),
+		...(review.evidenceRefs && review.evidenceRefs.changedArtifacts.length > 0
+			? [
+					`- evidence changed artifacts: ${review.evidenceRefs.changedArtifacts.map(toInlineText).join(", ")}`,
+				]
+			: []),
+		...(review.evidenceRefs && review.evidenceRefs.validationCommands.length > 0
+			? [
+					`- evidence validation commands: ${review.evidenceRefs.validationCommands.map(toInlineText).join(", ")}`,
+				]
+			: []),
+		...(review.integrationChecks && review.integrationChecks.length > 0
+			? [
+					`- integration checks: ${review.integrationChecks.map(toInlineText).join(", ")}`,
+				]
+			: []),
+		...(review.regressionChecks && review.regressionChecks.length > 0
+			? [
+					`- regression checks: ${review.regressionChecks.map(toInlineText).join(", ")}`,
+				]
+			: []),
+		...(review.remainingGaps && review.remainingGaps.length > 0
+			? [
+					`- remaining gaps: ${review.remainingGaps.map(toInlineText).join(", ")}`,
+				]
+			: []),
 		`- summary: ${toInlineText(review.summary)}`,
 		...(review.blockingFindings.length > 0
 			? [bulletList(review.blockingFindings.map((item) => item.summary))]

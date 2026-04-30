@@ -59,6 +59,9 @@ export function createReviewRuntimeTools() {
 						metadata: {
 							sessionId: null,
 							status: input.status,
+							reviewDepth: input.reviewDepth,
+							reviewedSurfaces: input.reviewedSurfaces,
+							evidenceSummary: input.evidenceSummary,
 						},
 					});
 					return executeGuardedSessionMutation(context, "record_final_review", {

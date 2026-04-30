@@ -1,4 +1,3 @@
-import { createAuditTools } from "./audit/tools";
 import { createRuntimeTools } from "./tools/runtime-tools";
 import { createSessionTools } from "./tools/session-tools";
 
@@ -36,13 +35,9 @@ export function createTools(ctx: unknown) {
 	const pluginContext = ctx as PluginLogContext;
 	logPluginEvent(pluginContext, {
 		level: "info",
-		message: "Creating Flow tool surface (core + audit).",
+		message: "Creating Flow tool surface.",
 	});
 	return {
-		...createAuditTools({
-			reportsTool: true,
-			writeTool: true,
-		}),
 		...createCoreTools(),
 	};
 }

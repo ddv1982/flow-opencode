@@ -39,6 +39,15 @@ function normalizePlan(planInput: ApplyPlanInput): Plan {
 		goalMode: planInput.goalMode ?? "implementation",
 		decompositionPolicy: planInput.decompositionPolicy ?? "atomic_feature",
 		completionPolicy: planInput.completionPolicy,
+		deliveryPolicy: planInput.deliveryPolicy
+			? {
+					priorityMode: planInput.deliveryPolicy.priorityMode ?? "balanced",
+					stopRule: planInput.deliveryPolicy.stopRule ?? "ship_when_clean",
+					deferAllowed: planInput.deliveryPolicy.deferAllowed ?? false,
+					finalReviewPolicy:
+						planInput.deliveryPolicy.finalReviewPolicy ?? "detailed",
+				}
+			: undefined,
 		notes: planInput.notes ? [...planInput.notes] : undefined,
 		features: features.map((feature) => ({
 			id: feature.id ?? "",

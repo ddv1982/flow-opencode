@@ -159,6 +159,9 @@ function renderPlanSection(session: Session, features: Feature[]): string {
 			`- priority mode: ${plan?.deliveryPolicy?.priorityMode ?? "balanced"}`,
 		);
 		planLines.push(
+			`- final review policy: ${plan?.deliveryPolicy?.finalReviewPolicy ?? "detailed"}`,
+		);
+		planLines.push(
 			`- defer allowed: ${plan?.deliveryPolicy?.deferAllowed ? "yes" : "no"}`,
 		);
 		planLines.push(

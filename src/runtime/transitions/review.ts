@@ -1,14 +1,32 @@
-import { reviewerPurposeForScope } from "../domain";
+import { FINAL_REVIEW_SURFACES } from "../constants";
+import { finalReviewPolicyForPlan, reviewerPurposeForScope } from "../domain";
 import type { Feature, ReviewerDecision, Session } from "../schema";
 import { fail, succeed, type TransitionResult } from "./shared";
 
-type FeatureScopeReviewerDecision = ReviewerDecision & { scope: "feature" };
+type FeatureScopeReviewerDecision = Extract<
+	ReviewerDecision,
+	{ scope: "feature" }
+>;
+type FinalScopeReviewerDecision = Extract<ReviewerDecision, { scope: "final" }>;
 type RecordReviewerDecisionInput = {
 	scope: string;
 	reviewPurpose?: string | undefined;
 	status: string;
 	summary: string;
 	featureId?: string | undefined;
+	reviewDepth?: string | undefined;
+	reviewedSurfaces?: string[] | undefined;
+	evidenceSummary?: string | undefined;
+	validationAssessment?: string | undefined;
+	evidenceRefs?:
+		| {
+				changedArtifacts?: string[] | undefined;
+				validationCommands?: string[] | undefined;
+		  }
+		| undefined;
+	integrationChecks?: string[] | undefined;
+	regressionChecks?: string[] | undefined;
+	remainingGaps?: string[] | undefined;
 	blockingFindings?: ReviewerDecision["blockingFindings"];
 	followUps?: ReviewerDecision["followUps"];
 	suggestedValidation?: ReviewerDecision["suggestedValidation"];
@@ -198,17 +216,176 @@ export function recordReviewerDecision(
 			"Reviewer decision validation failed: reviewPurpose: Final reviewer decisions must use completion_gate.",
 		);
 	}
-
-	const decision: ReviewerDecision = {
-		scope: input.scope,
-		reviewPurpose: reviewerPurposeForScope(input.scope),
-		status: input.status,
-		summary: input.summary,
-		blockingFindings: input.blockingFindings ?? [],
-		followUps: input.followUps ?? [],
-		suggestedValidation: input.suggestedValidation ?? [],
-		...(input.featureId !== undefined ? { featureId: input.featureId } : {}),
+	if (input.scope === "final" && input.reviewDepth === undefined) {
+		return fail(
+			"Reviewer decision validation failed: reviewDepth: Final reviewer decisions must include a reviewDepth.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewDepth !== "broad" &&
+		input.reviewDepth !== "detailed"
+	) {
+		return fail(
+			`Reviewer decision validation failed: reviewDepth: Invalid enum value. Expected 'broad' | 'detailed', received '${input.reviewDepth}'.`,
+		);
+	}
+	if (input.scope === "feature" && input.reviewDepth !== undefined) {
+		return fail(
+			"Reviewer decision validation failed: reviewDepth: Feature reviewer decisions must not include a reviewDepth.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		session.plan &&
+		input.reviewDepth !== finalReviewPolicyForPlan(session.plan)
+	) {
+		return fail(
+			`Reviewer decision validation failed: reviewDepth: Final reviewer decisions must match deliveryPolicy.finalReviewPolicy (${finalReviewPolicyForPlan(session.plan)}).`,
+		);
+	}
+	if (
+		input.scope === "final" &&
+		(!input.reviewedSurfaces || input.reviewedSurfaces.length === 0)
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewedSurfaces: Final reviewer decisions must list reviewedSurfaces.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		(!input.evidenceSummary || input.evidenceSummary.trim() === "")
+	) {
+		return fail(
+			"Reviewer decision validation failed: evidenceSummary: Final reviewer decisions must include an evidenceSummary.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		(!input.validationAssessment || input.validationAssessment.trim() === "")
+	) {
+		return fail(
+			"Reviewer decision validation failed: validationAssessment: Final reviewer decisions must include a validationAssessment.",
+		);
+	}
+	if (input.scope === "final" && !input.evidenceRefs) {
+		return fail(
+			"Reviewer decision validation failed: evidenceRefs: Final reviewer decisions must include evidenceRefs.",
+		);
+	}
+	const finalReviewedSurfaces = input.reviewedSurfaces ?? [];
+	const finalEvidenceRefs = {
+		changedArtifacts: input.evidenceRefs?.changedArtifacts ?? [],
+		validationCommands: input.evidenceRefs?.validationCommands ?? [],
 	};
+	if (
+		input.scope === "final" &&
+		finalReviewedSurfaces.some(
+			(surface) =>
+				!FINAL_REVIEW_SURFACES.includes(
+					surface as (typeof FINAL_REVIEW_SURFACES)[number],
+				),
+		)
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewedSurfaces: Final reviewer decisions must only use known reviewedSurfaces.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewDepth === "detailed" &&
+		finalReviewedSurfaces.length < 2
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must cover at least two reviewedSurfaces.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewDepth === "detailed" &&
+		!finalReviewedSurfaces.includes("validation_evidence")
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must include validation_evidence.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewDepth === "detailed" &&
+		![
+			"integration_points",
+			"shared_surfaces",
+			"tooling_and_config",
+			"release_surface",
+		].some((surface) => finalReviewedSurfaces.includes(surface))
+	) {
+		return fail(
+			"Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must include a cross-feature surface.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewDepth === "detailed" &&
+		(!input.integrationChecks || input.integrationChecks.length === 0)
+	) {
+		return fail(
+			"Reviewer decision validation failed: integrationChecks: Detailed final reviewer decisions must include integrationChecks.",
+		);
+	}
+	if (
+		input.scope === "final" &&
+		input.reviewDepth === "detailed" &&
+		(!input.regressionChecks || input.regressionChecks.length === 0)
+	) {
+		return fail(
+			"Reviewer decision validation failed: regressionChecks: Detailed final reviewer decisions must include regressionChecks.",
+		);
+	}
+	const finalReviewDepth = input.reviewDepth as
+		| FinalScopeReviewerDecision["reviewDepth"]
+		| undefined;
+	const featureReviewerId = input.featureId ?? "";
+	const decision: ReviewerDecision =
+		input.scope === "final"
+			? {
+					scope: "final",
+					reviewPurpose: reviewerPurposeForScope("final"),
+					reviewDepth:
+						finalReviewDepth as FinalScopeReviewerDecision["reviewDepth"],
+					status: input.status,
+					summary: input.summary,
+					blockingFindings: input.blockingFindings ?? [],
+					followUps: input.followUps ?? [],
+					suggestedValidation: input.suggestedValidation ?? [],
+					reviewedSurfaces:
+						finalReviewedSurfaces as FinalScopeReviewerDecision["reviewedSurfaces"],
+					...(input.evidenceSummary
+						? { evidenceSummary: input.evidenceSummary }
+						: {}),
+					...(input.validationAssessment
+						? { validationAssessment: input.validationAssessment }
+						: {}),
+					evidenceRefs: {
+						changedArtifacts: finalEvidenceRefs.changedArtifacts,
+						validationCommands: finalEvidenceRefs.validationCommands,
+					},
+					integrationChecks: (input.integrationChecks ??
+						[]) as FinalScopeReviewerDecision["integrationChecks"],
+					regressionChecks: (input.regressionChecks ??
+						[]) as FinalScopeReviewerDecision["regressionChecks"],
+					remainingGaps: (input.remainingGaps ??
+						[]) as FinalScopeReviewerDecision["remainingGaps"],
+				}
+			: {
+					scope: "feature",
+					featureId: featureReviewerId,
+					reviewPurpose: reviewerPurposeForScope("feature"),
+					status: input.status,
+					summary: input.summary,
+					blockingFindings: input.blockingFindings ?? [],
+					followUps: input.followUps ?? [],
+					suggestedValidation: input.suggestedValidation ?? [],
+				};
 
 	if (isFeatureScopeReviewerDecision(decision)) {
 		const validation = validateFeatureScopeReviewerDecision(session, decision);
