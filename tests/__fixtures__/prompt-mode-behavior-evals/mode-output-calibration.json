@@ -1,0 +1,397 @@
+[
+	{
+		"id": "plan-goal-records-context-and-stops",
+		"mode": "flow-plan",
+		"title": "Plan mode records repo context and stops before implementation",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "I will call flow_plan_start, inspect repo evidence for stack and package manager, then call flow_plan_context_record with planningJson and call flow_plan_apply with planJson. I will not implement code from this command. Next step: approve the draft plan or select feature ids before running work.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_plan_start",
+			"flow_plan_context_record",
+			"flow_plan_apply"
+		],
+		"forbiddenToolMentions": [
+			"flow_run_start",
+			"flow_auto_prepare",
+			"flow_review_record_feature"
+		],
+		"requiredResponseSnippets": [
+			"repo evidence",
+			"package manager",
+			"planningJson",
+			"planJson",
+			"not implement"
+		],
+		"forbiddenResponseSnippets": [
+			"I changed",
+			"I edited",
+			"implementation is complete"
+		],
+		"nextStepSnippets": ["approve the draft plan", "select feature ids"]
+	},
+	{
+		"id": "plan-bad-starts-implementation",
+		"mode": "flow-plan",
+		"title": "Plan mode regression starts execution instead of stopping at draft plan",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "I skipped planning and called flow_run_start immediately. I edited src/prompts/commands.ts and implementation is complete. Next step: run the next feature.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_plan_start",
+			"flow_plan_context_record",
+			"flow_plan_apply"
+		],
+		"forbiddenToolMentions": ["flow_run_start"],
+		"requiredResponseSnippets": ["planningJson", "planJson", "not implement"],
+		"forbiddenResponseSnippets": ["I edited", "implementation is complete"],
+		"nextStepSnippets": ["approve the draft plan", "select feature ids"],
+		"expectedFailures": [
+			"required_tool_sequence",
+			"forbidden_tool_absent",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "auto-missing-goal-stops-after-prepare",
+		"mode": "flow-auto",
+		"title": "Auto mode calls prepare first and stops when runtime reports missing goal",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "First call flow_auto_prepare with the raw argument string. The runtime returned missing_goal, so I will not inspect the repository and will not infer a goal. Next step: ask for a concrete goal before planning or execution.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_run_start",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": [
+			"raw argument string",
+			"missing_goal",
+			"not infer a goal"
+		],
+		"forbiddenResponseSnippets": [
+			"inferred goal",
+			"created a plan anyway",
+			"continued autonomously"
+		],
+		"nextStepSnippets": ["ask for a concrete goal", "request a goal"]
+	},
+	{
+		"id": "auto-bad-infers-goal-after-missing-goal",
+		"mode": "flow-auto",
+		"title": "Auto mode regression invents work after missing goal",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "flow_auto_prepare returned missing_goal, but I inferred goal from repository inspection, called flow_plan_start, and continued autonomously with a cleanup plan. Next step: run implementation.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_run_start",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": ["not infer a goal", "stop"],
+		"forbiddenResponseSnippets": ["inferred goal", "continued autonomously"],
+		"nextStepSnippets": ["ask for a concrete goal", "request a goal"],
+		"expectedFailures": [
+			"forbidden_tool_absent",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "worker-validates-reviews-and-persists-clean-feature",
+		"mode": "flow-worker",
+		"title": "Worker mode validates, reviews, and persists only a clean feature result",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "I called flow_run_start, read the target code before editing, ran targeted validation with bun test tests/config.test.ts, reviewed the changed files, and blockingFindings is empty. I then called flow_review_record_feature with decisionJson and flow_run_complete_feature with workerJson. Next step: follow the runtime next step for the next feature or final completion.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_run_start",
+			"flow_review_record_feature",
+			"flow_run_complete_feature"
+		],
+		"forbiddenToolMentions": ["flow_plan_apply", "flow_reset_feature"],
+		"requiredResponseSnippets": [
+			"read the target code",
+			"targeted validation",
+			"reviewed the changed files",
+			"blockingFindings is empty",
+			"decisionJson",
+			"workerJson"
+		],
+		"forbiddenResponseSnippets": [
+			"skipped validation",
+			"review later",
+			"advance despite blocking findings"
+		],
+		"nextStepSnippets": ["runtime next step", "final completion"]
+	},
+	{
+		"id": "worker-bad-completes-without-validation",
+		"mode": "flow-worker",
+		"title": "Worker mode regression completes without validation or review evidence",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "I called flow_run_start and flow_run_complete_feature. I skipped validation and review later because the edit looked safe. Next step: continue to the next feature.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_run_start",
+			"flow_review_record_feature",
+			"flow_run_complete_feature"
+		],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"targeted validation",
+			"reviewed the changed files",
+			"blockingFindings is empty",
+			"decisionJson",
+			"workerJson"
+		],
+		"forbiddenResponseSnippets": ["skipped validation", "review later"],
+		"nextStepSnippets": ["runtime next step", "final completion"],
+		"expectedFailures": [
+			"required_tool_sequence",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "run-one-feature-review-gated",
+		"mode": "flow-run",
+		"title": "Run command executes one feature and records reviewer approval before completion",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_run_start first, passing the argument only as a feature id when it is non-empty. Implement exactly one feature, run targeted validation, review the changed files, fix review findings, then call flow_review_record_feature with decisionJson before completing. End with changes, validation evidence, and the runtime next step.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_run_start", "flow_review_record_feature"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_auto_prepare",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": [
+			"exactly one feature",
+			"targeted validation",
+			"review the changed files",
+			"fix review findings",
+			"decisionJson"
+		],
+		"forbiddenResponseSnippets": [
+			"execute every approved feature",
+			"skip review",
+			"skip validation"
+		],
+		"nextStepSnippets": ["runtime next step", "validation evidence"]
+	},
+	{
+		"id": "run-bad-executes-every-feature",
+		"mode": "flow-run",
+		"title": "Run command regression executes the whole approved plan without review gating",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "I called flow_run_start and decided to execute every approved feature in the plan. I will skip validation and skip review until the end because this is faster. Next step: mark the whole session complete.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_run_start", "flow_review_record_feature"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_auto_prepare",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": [
+			"exactly one feature",
+			"targeted validation",
+			"review the changed files",
+			"decisionJson"
+		],
+		"forbiddenResponseSnippets": [
+			"execute every approved feature",
+			"skip review",
+			"skip validation"
+		],
+		"nextStepSnippets": ["runtime next step", "validation evidence"],
+		"expectedFailures": [
+			"required_tool_sequence",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "reviewer-needs-fix-on-missing-validation",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode returns needs_fix when validation evidence is missing",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"prompt-evals\",\"reviewPurpose\":\"execution_gate\",\"status\":\"needs_fix\",\"summary\":\"Validation evidence is missing, so execution should not advance.\",\"blockingFindings\":[{\"summary\":\"No targeted validation command was recorded.\"}],\"suggestedValidation\":[\"bun test tests/prompt-behavior-eval.test.ts\"]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"validation evidence is missing",
+			"blockingFindings",
+			"suggestedValidation"
+		],
+		"forbiddenResponseSnippets": [
+			"status\\\":\\\"approved",
+			"I fixed",
+			"I edited"
+		],
+		"nextStepSnippets": [
+			"bun test tests/prompt-behavior-eval.test.ts",
+			"targeted validation"
+		]
+	},
+	{
+		"id": "reviewer-bad-approves-without-validation",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode regression approves despite missing validation",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"prompt-evals\",\"status\":\"approved\",\"summary\":\"No validation was run, but this is fine to advance.\",\"blockingFindings\":[]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"validation evidence is missing",
+			"blockingFindings",
+			"suggestedValidation"
+		],
+		"forbiddenResponseSnippets": ["status\\\":\\\"approved", "fine to advance"],
+		"nextStepSnippets": ["targeted validation", "suggestedValidation"],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "control-status-is-read-only",
+		"mode": "flow-control",
+		"title": "Control mode status request is read-only and stops after summary",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts"
+		],
+		"modelOutput": "For a status request, call flow_status with compact view, summarize current state, blocker, guidance.nextStep, and guidance.nextCommand. Do not plan, approve, run, or continue workflow execution. Stop after the status summary.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_status"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_run_start",
+			"flow_auto_prepare",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": [
+			"compact view",
+			"guidance.nextStep",
+			"guidance.nextCommand",
+			"Stop after the status summary"
+		],
+		"forbiddenResponseSnippets": ["start implementation", "approve the plan"],
+		"nextStepSnippets": ["guidance.nextCommand", "recommended start command"]
+	},
+	{
+		"id": "control-bad-starts-work-from-status",
+		"mode": "flow-control",
+		"title": "Control mode regression starts workflow execution from status",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts"
+		],
+		"modelOutput": "For status, I called flow_status, then flow_run_start to continue workflow execution and start implementation. Next step: complete the active feature.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_status"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_run_start",
+			"flow_auto_prepare",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": [
+			"compact view",
+			"guidance.nextStep",
+			"guidance.nextCommand",
+			"Stop after the status summary"
+		],
+		"forbiddenResponseSnippets": ["start implementation"],
+		"nextStepSnippets": ["guidance.nextCommand", "recommended start command"],
+		"expectedFailures": [
+			"forbidden_tool_absent",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	}
+]

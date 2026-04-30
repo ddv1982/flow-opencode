@@ -1,0 +1,32 @@
+[
+	{
+		"id": "flow-worker-clean-feature",
+		"mode": "flow-worker",
+		"title": "Flow worker completes one feature only after validation and review",
+		"origin": "captured",
+		"capturedFrom": "Codex manual providerless capture from flow-worker-clean-feature.prompt.md on 2026-05-01; no model API used.",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_run_start for the active feature, read the target code before editing, complete only the requested eval-harness change, and run targeted validation. I reviewed the changed files and blockingFindings is empty. I recorded the reviewer decision with flow_review_record_feature using decisionJson, then persisted the result with flow_run_complete_feature using workerJson. Next step: follow the runtime next step toward the next feature or final completion.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_run_start",
+			"flow_review_record_feature",
+			"flow_run_complete_feature"
+		],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"targeted validation",
+			"reviewed the changed files",
+			"blockingFindings is empty",
+			"decisionJson",
+			"workerJson"
+		],
+		"forbiddenResponseSnippets": ["skipped validation", "review later"],
+		"nextStepSnippets": ["runtime next step", "final completion"]
+	}
+]

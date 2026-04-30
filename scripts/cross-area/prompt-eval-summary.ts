@@ -8,6 +8,10 @@ import {
 	buildPromptEvalCoverageSummary,
 	readPromptEvalCorpus,
 } from "../../tests/prompt-eval-helpers";
+import {
+	buildPromptModeBehaviorEvalSummary,
+	readPromptModeBehaviorEvalCorpus,
+} from "../../tests/prompt-mode-behavior-eval-helpers";
 
 async function main() {
 	const repoRoot = resolve(import.meta.dir, "..", "..");
@@ -18,14 +22,20 @@ async function main() {
 	const promptBehaviorSummary = buildPromptBehaviorEvalSummary(
 		readPromptBehaviorEvalCorpus(),
 	);
+	const promptModeBehaviorSummary = buildPromptModeBehaviorEvalSummary(
+		readPromptModeBehaviorEvalCorpus(),
+	);
 	const report = [
 		promptSurfaceSummary.report,
 		"",
 		promptBehaviorSummary.report,
+		"",
+		promptModeBehaviorSummary.report,
 	].join("\n");
 	const summary = {
 		promptSurfaces: promptSurfaceSummary,
 		promptBehavior: promptBehaviorSummary,
+		promptModeBehavior: promptModeBehaviorSummary,
 		report,
 	};
 
@@ -43,6 +53,11 @@ async function main() {
 	await writeFile(
 		join(outputDir, "prompt-behavior-eval-summary.md"),
 		`${promptBehaviorSummary.markdownReport}\n`,
+		"utf8",
+	);
+	await writeFile(
+		join(outputDir, "prompt-mode-behavior-eval-summary.md"),
+		`${promptModeBehaviorSummary.markdownReport}\n`,
 		"utf8",
 	);
 

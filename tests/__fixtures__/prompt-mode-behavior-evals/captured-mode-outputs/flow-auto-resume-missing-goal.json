@@ -1,0 +1,26 @@
+[
+	{
+		"id": "flow-auto-resume-missing-goal",
+		"mode": "flow-auto",
+		"title": "Flow auto resume stops when no active session supplies a goal",
+		"origin": "captured",
+		"capturedFrom": "Codex manual providerless capture from flow-auto-resume-missing-goal.prompt.md on 2026-05-01; no model API used.",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare with the raw argument string resume before any planning or repository inspection. The runtime reports missing_goal because there is no active resumable session, so do not infer a goal and stop. Next step: ask for a concrete goal or request a goal before planning or execution.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_run_start",
+			"flow_plan_apply"
+		],
+		"requiredResponseSnippets": ["missing_goal", "not infer a goal"],
+		"forbiddenResponseSnippets": ["inferred goal", "continued autonomously"],
+		"nextStepSnippets": ["ask for a concrete goal", "request a goal"]
+	}
+]

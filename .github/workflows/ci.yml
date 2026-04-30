@@ -87,6 +87,8 @@ jobs:
           path: |
             prompt-exports/prompt-eval-summary.json
             prompt-exports/prompt-eval-summary.txt
+            prompt-exports/prompt-behavior-eval-summary.md
+            prompt-exports/prompt-mode-behavior-eval-summary.md
           if-no-files-found: error
 
       - name: Run typecheck, tests, and build

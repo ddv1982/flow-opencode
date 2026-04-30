@@ -237,6 +237,8 @@ Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
 Working on the plugin itself? See the [Development Guide](docs/development.md).
 
+Prompt behavior is treated as a tested product surface. The maintainer workflow includes providerless prompt captures and behavior evals for review, planning, execution, control, and auto-resume modes, so prompt changes can be checked without calling a model API or requiring an API key.
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE) for the full text.

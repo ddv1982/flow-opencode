@@ -26,6 +26,11 @@ Useful scripts:
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
+- `bun run report:prompt-eval`
+- `bun run eval:review-capture`
+- `bun run eval:review-capture:check`
+- `bun run eval:prompt-capture`
+- `bun run eval:prompt-capture:check`
 - `bun run install:opencode`
 - `bun run uninstall:opencode`
 
@@ -43,6 +48,7 @@ Useful scripts:
 - `src/runtime/render.ts` — derived markdown rendering
 - `src/prompts/agents.ts` — agent instructions
 - `src/prompts/commands.ts` — slash-command templates
+- `src/prompts/mode-contracts.ts` — canonical prompt-mode boundaries used by prompts, tests, and capture tooling
 
 ## Architecture in one view
 
@@ -79,6 +85,33 @@ Read-only repo review stays separate from feature execution and is exposed throu
 
 `/flow-review` now returns a renderer-backed human report by default; the structured review ledger remains an internal contract behind `flow_review_render`.
 Flow may only claim achieved `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
+
+## Prompt quality and evals
+
+Prompt behavior is part of the product contract. Keep mode boundaries in `src/prompts/mode-contracts.ts` and use that file as the canonical source for:
+
+- which prompt surfaces exist
+- which source files define each mode
+- which runtime and repository mutations are allowed
+- which Flow tools are expected or forbidden
+- what each mode must do before stopping
+
+Providerless evals protect this contract without calling a model API:
+
+- `bun run eval:review-capture:check` validates `/flow-review` capture scenarios.
+- `bun run eval:prompt-capture:check` validates prompt-mode capture scenarios for planner, worker, auto, reviewer, run, and control behavior.
+- `bun run report:prompt-eval` writes the combined prompt-eval summary artifacts.
+
+To refresh manual prompt captures:
+
+1. Run `bun run eval:prompt-capture` to export capture prompts.
+2. Fill a capture JSON with the observed model/plugin output.
+3. Run `bun run eval:prompt-capture -- --score <capture-file.json>`.
+4. Promote calibrated outputs with `bun run eval:prompt-capture -- --promote <capture-file.json>`.
+
+The scorer accepts structured tool intent (`toolCalls`, `actualToolCalls`, `plannedToolCalls`, `toolPlan`, or `willCallTools`) when available and falls back to affirmative prose matching otherwise. Keep structured tool-call evidence when possible; it is less brittle than text-only assertions.
+
+Do not add model-provider credentials to this path. These checks are intentionally offline so prompt quality stays testable in CI and local development.
 
 ## Current Runtime Tools
 
