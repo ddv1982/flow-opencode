@@ -112,6 +112,14 @@ User-facing review depth maps to internal rigor:
 - `detailed` => `deep_audit`
 - `exhaustive` => `full_audit`
 
+Examples:
+
+```text
+/flow-review detailed Review this repository for correctness, integration risks, and release issues
+/flow-review detailed Review this codebase for architectural issues, test gaps, and likely regressions
+/flow-review exhaustive Review this repository before release and identify all major risks
+```
+
 Flow only claims achieved `full_audit` when every major discovered surface is directly reviewed.
 
 ## Core concepts
