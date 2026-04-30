@@ -56,6 +56,17 @@ const FLOW_TOOL_DESCRIPTION_GUIDANCE: Record<string, string> = {
 
 ## Returns
 - Returns the canonical runtime response for the final approval gate.`,
+	flow_review_render: `## Use when
+- Use after you have a complete structured review ledger and want a deterministic human-readable report.
+- Provide the full ledger as the JSON string field \`reviewJson\`.
+- Use \`view: human\` for the default user-facing report, \`structured\` for raw JSON, or \`both\` to append structured details after the readable report.
+
+## Avoid when
+- Do not use before the review findings and coverage ledger are complete.
+- Do not handcraft the final prose when this renderer can produce the deterministic report for you.
+
+## Returns
+- Returns a rendered review report string, not a Flow runtime session mutation response.`,
 	flow_plan_context_record: `## Use when
 - Use to persist repo profile, research findings, implementation approach, or planning decisions that justify the plan.
 - Provide the planning-context object as the JSON string field \`planningJson\`.

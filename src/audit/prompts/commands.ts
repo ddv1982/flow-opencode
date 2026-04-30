@@ -1,9 +1,9 @@
 import { FLOW_AUDIT_CONTRACT } from "./contracts";
 
-export const FLOW_REVIEW_COMMAND_TEMPLATE = `Objective: Run a read-only Flow review and present calibrated findings with explicit coverage accounting.
+export const FLOW_REVIEW_COMMAND_TEMPLATE = `Objective: Run a read-only Flow review and present calibrated findings with explicit coverage accounting and a readable conclusion.
 
 Behavior:
-- Treat this command as the preferred deep read-only review surface, not as Flow planning or feature execution.
+- Treat this command as the preferred dedicated read-only review surface, not as Flow planning or feature execution.
 - Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.
 - If the arguments ask for an exhaustive or full review, treat requestedDepth as full_audit.
 - If the arguments ask for a detailed, deep, or in-depth review, treat requestedDepth as deep_audit.
@@ -16,7 +16,10 @@ Behavior:
 - Treat discoveredSurfaces as the canonical coverage ledger.
 - Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the review output.
-- End with one review report matching this payload contract:
+- Build the structured audit ledger described below, then call flow_review_render to render it.
+- Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.
+- Return the renderer's report field verbatim as your final answer.
+- Use this ledger contract for internal consistency and renderer input:
 
 ${FLOW_AUDIT_CONTRACT}
 

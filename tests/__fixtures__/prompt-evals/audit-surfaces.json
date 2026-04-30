@@ -12,6 +12,7 @@
 		"expectedSnippets": [
 			"Do not claim full_audit unless every major discovered surface is directly reviewed",
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
+			"Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.",
 			"downgrade achievedDepth"
 		],
 		"forbiddenSnippets": [
@@ -46,8 +47,9 @@
 		"risk": "high",
 		"sourcePaths": ["src/audit/prompts/commands.ts", "tests/config.test.ts"],
 		"expectedSnippets": [
-			"Treat this command as the preferred deep read-only review surface, not as Flow planning or feature execution.",
+			"Treat this command as the preferred dedicated read-only review surface, not as Flow planning or feature execution.",
 			"If coverage is incomplete, downgrade achievedDepth honestly and explain the gap.",
+			"Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.",
 			"Depth labels for users:"
 		],
 		"forbiddenSnippets": [
@@ -65,6 +67,7 @@
 		"expectedSnippets": [
 			"discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]",
 			"coverageRubric: { fullAuditEligible: boolean, directlyReviewedCategories: string[], spotCheckedCategories: string[], unreviewedCategories: string[], blockingReasons: string[] }",
+			"Begin with these sections in order: Conclusion, Top findings, Recommended next actions, Coverage notes.",
 			"discoveredSurfaces is the canonical coverage ledger"
 		],
 		"forbiddenSnippets": ["omit unreviewed surfaces from the audit report"]

@@ -88,7 +88,8 @@ type ToolSchemaName =
 	| "flow_run_complete_feature"
 	| "flow_reset_feature"
 	| "flow_review_record_feature"
-	| "flow_review_record_final";
+	| "flow_review_record_final"
+	| "flow_review_render";
 
 type ToolSchemas = Record<
 	ToolSchemaName,
@@ -222,6 +223,7 @@ describe("applyFlowConfig", () => {
 			"flow_reset_feature",
 			"flow_review_record_feature",
 			"flow_review_record_final",
+			"flow_review_render",
 		]);
 	});
 	test("injects commands and agents", () => {
@@ -588,6 +590,35 @@ describe("applyFlowConfig", () => {
 		expect(
 			schemas.flow_reset_feature.safeParse({ featureId: "Bad Id" }).success,
 		).toBe(false);
+		expect(
+			schemas.flow_review_render.safeParse({
+				reviewJson: asJson({
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Repo summary.",
+					overallVerdict: "Overall verdict.",
+					discoveredSurfaces: [],
+					coverageSummary: {
+						discoveredSurfaceCount: 0,
+						reviewedSurfaceCount: 0,
+						unreviewedSurfaceCount: 0,
+					},
+					reviewedSurfaces: [],
+					unreviewedSurfaces: [],
+					coverageRubric: {
+						fullAuditEligible: false,
+						directlyReviewedCategories: [],
+						spotCheckedCategories: [],
+						unreviewedCategories: [],
+						blockingReasons: [],
+					},
+					validationRun: [],
+					findings: [],
+				}),
+				view: "both",
+			}).success,
+		).toBe(true);
+		expect(schemas.flow_review_render.safeParse({}).success).toBe(false);
 	});
 
 	test("worker tool raw args accept the documented JSON wrapper payload and reject the old nested shape", () => {
@@ -768,7 +799,7 @@ describe("applyFlowConfig", () => {
 		);
 	});
 
-	test("audit contract requires calibrated depth claims and explicit coverage accounting", () => {
+	test("audit contract requires calibrated depth claims, explicit coverage accounting, and a human-first final review", () => {
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"requestedDepth: broad_audit | deep_audit | full_audit",
 		);
@@ -780,6 +811,15 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUDIT_CONTRACT).toContain("coverageSummary");
 		expect(FLOW_AUDIT_CONTRACT).toContain("discoveredSurfaces");
 		expect(FLOW_AUDIT_CONTRACT).toContain("coverageRubric");
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"Default to a human-readable markdown review, not raw JSON.",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"Begin with these sections in order: Conclusion, Top findings, Recommended next actions, Coverage notes.",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"Only include the full structured ledger as JSON when the user explicitly asks for raw/json/structured details.",
+		);
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"achievedDepth can be full_audit only when every major surface discovered during repo mapping is directly reviewed",
 		);
@@ -834,7 +874,7 @@ describe("applyFlowConfig", () => {
 		);
 	});
 
-	test("auditor prompt requires explicit coverage accounting and claim calibration", () => {
+	test("auditor prompt requires explicit coverage accounting, claim calibration, and a readable conclusion", () => {
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("You are the Flow auditor.");
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("Map the major repo surfaces");
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
@@ -844,10 +884,13 @@ describe("applyFlowConfig", () => {
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
-			"Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.",
+			"Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.",
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
-			'<example name="downgrade-unsupported-full-audit">',
+			"Present the final answer as a human-readable review first",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			'<example name="human-readable-conclusion">',
 		);
 	});
 
@@ -931,9 +974,9 @@ describe("applyFlowConfig", () => {
 		);
 	});
 
-	test("review command template keeps read-only review behavior with calibrated depth mapping", () => {
+	test("review command template keeps read-only review behavior with calibrated depth mapping and a readable default output", () => {
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"preferred deep read-only review surface",
+			"preferred dedicated read-only review surface",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("default => broad_audit");
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("detailed => deep_audit");
@@ -942,10 +985,13 @@ describe("applyFlowConfig", () => {
 			"Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"only use achievedDepth: full_audit when every major discovered surface is directly reviewed",
+			"Use flow_review_render with view: human by default",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.",
+			"Return the renderer's report field verbatim as your final answer.",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			"only use achievedDepth: full_audit when every major discovered surface is directly reviewed",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"status: not_run explicitly in the review output",
