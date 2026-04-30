@@ -98,6 +98,7 @@ Default (core) surface:
 - `flow_run_complete_feature`
 - `flow_review_record_feature`
 - `flow_review_record_final`
+- `flow_review_render`
 - `flow_session_activate`
 - `flow_session_close`
 - `flow_reset_feature`

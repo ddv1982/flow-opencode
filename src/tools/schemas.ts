@@ -74,6 +74,10 @@ export const FlowReviewRecordFeatureJsonArgsShape = {
 export const FlowReviewRecordFinalJsonArgsShape = {
 	decisionJson: jsonPayloadSchema,
 };
+export const FlowReviewRenderArgsShape = {
+	reviewJson: jsonPayloadSchema,
+	view: z.enum(["human", "structured", "both"]).optional(),
+};
 export const FlowAutoPrepareArgsShape = {
 	argumentString: z.string().optional(),
 };
@@ -142,4 +146,5 @@ export const FlowReviewRecordFeatureJsonArgsSchema = z.object(
 export const FlowReviewRecordFinalJsonArgsSchema = z.object(
 	FlowReviewRecordFinalJsonArgsShape,
 );
+export const FlowReviewRenderArgsSchema = z.object(FlowReviewRenderArgsShape);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);

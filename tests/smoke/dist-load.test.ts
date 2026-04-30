@@ -28,6 +28,7 @@ type FlowToolName =
 	| "flow_run_complete_feature"
 	| "flow_review_record_feature"
 	| "flow_review_record_final"
+	| "flow_review_render"
 	| "flow_reset_feature";
 type FlowSmokeTools = Record<FlowToolName, TestTool>;
 
@@ -36,7 +37,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, nine commands, and seventeen tools by default", async () => {
+	test("dist bundle exposes five agents, nine commands, and eighteen tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -57,7 +58,7 @@ describe("built dist smoke load", () => {
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
 		expect(Object.keys(config.command ?? {})).toHaveLength(9);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -153,6 +154,31 @@ describe("built dist smoke load", () => {
 				remainingGaps: [],
 				status: "approved",
 				summary: "Looks good.",
+			},
+			flow_review_render: {
+				reviewJson: JSON.stringify({
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Dist smoke review.",
+					overallVerdict: "Looks coherent.",
+					discoveredSurfaces: [],
+					coverageSummary: {
+						discoveredSurfaceCount: 0,
+						reviewedSurfaceCount: 0,
+						unreviewedSurfaceCount: 0,
+					},
+					reviewedSurfaces: [],
+					unreviewedSurfaces: [],
+					coverageRubric: {
+						fullAuditEligible: false,
+						directlyReviewedCategories: [],
+						spotCheckedCategories: [],
+						unreviewedCategories: [],
+						blockingReasons: [],
+					},
+					validationRun: [],
+					findings: [],
+				}),
 			},
 			flow_reset_feature: { featureId: "dist-smoke" },
 		} satisfies Record<string, unknown>;

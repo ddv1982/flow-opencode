@@ -1477,6 +1477,83 @@ describe("runtime tools and recovery", () => {
 		expect(persisted?.notes).toEqual(["Runtime wiring is complete."]);
 	});
 
+	test("flow_review_render returns a deterministic human-readable report by default", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_review_render.execute(
+			{
+				reviewJson: JSON.stringify({
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary:
+						"csv-align has a shared Rust backend and web/desktop frontends.",
+					overallVerdict:
+						"Architecture looks coherent, but one user-visible defect remains.",
+					discoveredSurfaces: [
+						{
+							name: "Backend runtime",
+							category: "source_runtime",
+							reviewStatus: "directly_reviewed",
+							evidence: ["src/main.rs:10-37"],
+						},
+					],
+					coverageSummary: {
+						discoveredSurfaceCount: 1,
+						reviewedSurfaceCount: 1,
+						unreviewedSurfaceCount: 0,
+						notes: ["Detailed review achieved; no shell validation was run."],
+					},
+					reviewedSurfaces: [
+						{ name: "Backend runtime", evidence: ["src/main.rs:10-37"] },
+					],
+					unreviewedSurfaces: [],
+					coverageRubric: {
+						fullAuditEligible: false,
+						directlyReviewedCategories: ["source_runtime"],
+						spotCheckedCategories: [],
+						unreviewedCategories: [],
+						blockingReasons: ["Validation commands were not executed."],
+					},
+					validationRun: [
+						{
+							command: "cargo test",
+							status: "not_run",
+							summary: "Not run during this read-only review.",
+						},
+					],
+					findings: [
+						{
+							title: "Decimal-rounding contract mismatch",
+							category: "confirmed_defect",
+							confidence: "confirmed",
+							severity: "medium",
+							evidence: [
+								"frontend/src/components/NormalizationPanel.tsx:107-110",
+								"src/comparison/value_compare.rs:156-203",
+							],
+							impact:
+								"Users can get false matches from misleading decimal-place semantics.",
+							remediation:
+								"Make backend rounding match the UI contract or rename the UI behavior.",
+						},
+					],
+					nextSteps: [
+						"Fix the decimal-rounding contract first.",
+						"Run validation once the fix is in place.",
+					],
+				}),
+			},
+			toolContext(makeTempDir()),
+		);
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("ok");
+		expect(parsed.view).toBe("human");
+		expect(parsed.report).toContain("## Conclusion");
+		expect(parsed.report).toContain("## Top findings");
+		expect(parsed.report).toContain("## Recommended next actions");
+		expect(parsed.report).toContain("## Coverage notes");
+		expect(parsed.report).toContain("Decimal-rounding contract mismatch");
+	});
+
 	test("tool returns machine-readable recovery details for missing broad validation", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
@@ -2192,6 +2269,31 @@ describe("runtime tools and recovery", () => {
 				remainingGaps: [],
 				status: "approved",
 				summary: "Looks good.",
+			},
+			flow_review_render: {
+				reviewJson: JSON.stringify({
+					requestedDepth: "deep_audit",
+					achievedDepth: "deep_audit",
+					repoSummary: "Repo summary.",
+					overallVerdict: "Looks coherent.",
+					discoveredSurfaces: [],
+					coverageSummary: {
+						discoveredSurfaceCount: 0,
+						reviewedSurfaceCount: 0,
+						unreviewedSurfaceCount: 0,
+					},
+					reviewedSurfaces: [],
+					unreviewedSurfaces: [],
+					coverageRubric: {
+						fullAuditEligible: false,
+						directlyReviewedCategories: [],
+						spotCheckedCategories: [],
+						unreviewedCategories: [],
+						blockingReasons: [],
+					},
+					validationRun: [],
+					findings: [],
+				}),
 			},
 			flow_reset_feature: { featureId: "setup-runtime" },
 		};
