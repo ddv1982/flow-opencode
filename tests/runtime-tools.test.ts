@@ -1579,8 +1579,104 @@ describe("runtime tools and recovery", () => {
 		);
 		expect(parsed.report).toContain("Achieved depth: broad review");
 		expect(parsed.report).toContain(
-			"Achieved depth was downgraded from full_audit because not every discovered surface was directly reviewed.",
+			"Achieved depth was downgraded from full_audit because not every discovered surface was directly reviewed with evidence.",
 		);
+	});
+
+	test("flow_review_render rejects directly reviewed surfaces without evidence", async () => {
+		const tools = createTestTools();
+		const report = sampleReviewReport({
+			requestedDepth: "full_audit",
+			achievedDepth: "full_audit",
+			discoveredSurfaces: [
+				reviewSurface({
+					reviewStatus: "directly_reviewed",
+					evidence: undefined,
+				}),
+			],
+		});
+
+		const response = await tools.flow_review_render.execute(
+			{ reviewJson: JSON.stringify(report) },
+			toolContext(makeTempDir()),
+		);
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Review report validation failed");
+		expect(parsed.summary).toContain(
+			"Directly reviewed surfaces require at least one evidence reference.",
+		);
+	});
+
+	test("flow_review_render rejects findings without evidence", async () => {
+		const tools = createTestTools();
+		const report = sampleReviewReport({
+			discoveredSurfaces: [reviewSurface()],
+			findings: [reviewFinding({ evidence: [] })],
+		});
+
+		const response = await tools.flow_review_render.execute(
+			{ reviewJson: JSON.stringify(report) },
+			toolContext(makeTempDir()),
+		);
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Review report validation failed");
+		expect(parsed.summary).toContain("findings");
+		expect(parsed.summary).toContain("evidence");
+	});
+
+	test("flow_review_render rejects semantically inconsistent finding taxonomy", async () => {
+		const tools = createTestTools();
+		const invalidReports = [
+			{
+				report: sampleReviewReport({
+					discoveredSurfaces: [reviewSurface()],
+					findings: [
+						reviewFinding({
+							category: "confirmed_defect",
+							confidence: "likely",
+						}),
+					],
+				}),
+				message: "Confirmed defects require confidence: confirmed",
+			},
+			{
+				report: sampleReviewReport({
+					discoveredSurfaces: [reviewSurface()],
+					findings: [
+						reviewFinding({
+							category: "hardening_opportunity",
+							severity: "high",
+						}),
+					],
+				}),
+				message: "Hardening opportunities cannot use high severity",
+			},
+			{
+				report: sampleReviewReport({
+					discoveredSurfaces: [reviewSurface()],
+					findings: [
+						reviewFinding({
+							confidence: "speculative",
+							severity: "high",
+						}),
+					],
+				}),
+				message: "High-severity findings cannot be speculative",
+			},
+		];
+
+		for (const invalidReport of invalidReports) {
+			const response = await tools.flow_review_render.execute(
+				{ reviewJson: JSON.stringify(invalidReport.report) },
+				toolContext(makeTempDir()),
+			);
+			const parsed = JSON.parse(response);
+			expect(parsed.status).toBe("error");
+			expect(parsed.summary).toContain("Review report validation failed");
+			expect(parsed.summary).toContain(invalidReport.message);
+		}
 	});
 
 	test("flow_review_render synthesizes an explicit not_run validation note when no validation evidence is recorded", async () => {
@@ -1683,7 +1779,7 @@ describe("runtime tools and recovery", () => {
 				reviewFinding({
 					title: "Desktop mode has a broader-than-necessary trust boundary",
 					category: "confirmed_defect",
-					confidence: "likely",
+					confidence: "confirmed",
 					severity: "medium",
 					evidence: [
 						"src-tauri/tauri.conf.json:10-11 sets app.security.csp to null.",

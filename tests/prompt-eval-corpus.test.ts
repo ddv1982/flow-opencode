@@ -79,6 +79,12 @@ describe("prompt eval corpus", () => {
 				"reviewer_contract",
 				"reviewer_agent_prompt",
 				"plan_command_template",
+				"run_command_template",
+				"status_command_template",
+				"doctor_command_template",
+				"history_command_template",
+				"session_command_template",
+				"reset_command_template",
 				"plan_contract",
 				"auditor_agent_prompt",
 				"audit_command_template",
@@ -90,22 +96,24 @@ describe("prompt eval corpus", () => {
 
 	test("corpus emits a readable coverage summary", () => {
 		const summary = buildPromptEvalCoverageSummary(readPromptEvalCorpus());
-		expect(summary.totalCases).toBe(24);
+		expect(summary.totalCases).toBe(30);
 		expect(summary.byCategory).toEqual({
 			"audit-coverage": 1,
 			"claim-calibration": 2,
-			"command-entry": 3,
+			"command-entry": 7,
 			"completion-gating": 3,
 			"decision-gating": 2,
 			"finding-taxonomy": 1,
 			"planning-evidence": 3,
-			recovery: 5,
-			"review-gating": 4,
+			recovery: 6,
+			"review-gating": 5,
 		});
-		expect(summary.byRisk).toEqual({ high: 17, medium: 7 });
-		expect(summary.report).toContain("Prompt eval corpus coverage: 24 cases");
+		expect(summary.byRisk).toEqual({ high: 20, medium: 10 });
+		expect(summary.report).toContain("Prompt eval corpus coverage: 30 cases");
 		expect(summary.report).toContain("audit_contract=1");
+		expect(summary.report).toContain("run_command_template=1");
+		expect(summary.report).toContain("reset_command_template=1");
 		expect(summary.report).toContain("plan_contract=1");
-		expect(summary.report).toContain("review-gating=4");
+		expect(summary.report).toContain("review-gating=5");
 	});
 });

@@ -812,7 +812,10 @@ describe("applyFlowConfig", () => {
 			"achievedDepth can be full_audit only when every major surface discovered during repo mapping is directly reviewed",
 		);
 		expect(FLOW_AUDIT_CONTRACT).toContain(
-			"category: confirmed_defect | risk | process_gap",
+			"category: confirmed_defect | risk | hardening_opportunity | process_gap",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"trace at least one concrete invariant or failure path",
 		);
 		const contractTail = FLOW_AUDIT_CONTRACT.toLowerCase();
 		expect(contractTail).not.toContain("include the returned artifact paths");

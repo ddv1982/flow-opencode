@@ -11,7 +11,13 @@ import {
 } from "../src/prompts/agents";
 import {
 	FLOW_AUTO_COMMAND_TEMPLATE,
+	FLOW_DOCTOR_COMMAND_TEMPLATE,
+	FLOW_HISTORY_COMMAND_TEMPLATE,
 	FLOW_PLAN_COMMAND_TEMPLATE,
+	FLOW_RESET_COMMAND_TEMPLATE,
+	FLOW_RUN_COMMAND_TEMPLATE,
+	FLOW_SESSION_COMMAND_TEMPLATE,
+	FLOW_STATUS_COMMAND_TEMPLATE,
 } from "../src/prompts/commands";
 import {
 	FLOW_PLAN_CONTRACT,
@@ -42,6 +48,12 @@ export type PromptEvalCaseId =
 	| "worker-prompt-retryable-blocker-recovery"
 	| "reviewer-agent-no-write-and-needs-fix-gate"
 	| "plan-command-approve-or-select-routing"
+	| "run-command-one-feature-review-gate"
+	| "status-command-read-only-summary"
+	| "doctor-command-readiness-only"
+	| "history-command-read-only-history"
+	| "session-command-pointer-only"
+	| "reset-command-feature-only"
 	| "plan-contract-planning-context-separation"
 	| "auditor-agent-full-audit-claim-calibration"
 	| "auditor-agent-finding-taxonomy"
@@ -68,6 +80,12 @@ export type PromptEvalSurface =
 	| "reviewer_contract"
 	| "reviewer_agent_prompt"
 	| "plan_command_template"
+	| "run_command_template"
+	| "status_command_template"
+	| "doctor_command_template"
+	| "history_command_template"
+	| "session_command_template"
+	| "reset_command_template"
 	| "plan_contract"
 	| "auditor_agent_prompt"
 	| "audit_command_template"
@@ -120,6 +138,12 @@ export const PROMPT_EVAL_CASE_IDS = [
 	"worker-prompt-retryable-blocker-recovery",
 	"reviewer-agent-no-write-and-needs-fix-gate",
 	"plan-command-approve-or-select-routing",
+	"run-command-one-feature-review-gate",
+	"status-command-read-only-summary",
+	"doctor-command-readiness-only",
+	"history-command-read-only-history",
+	"session-command-pointer-only",
+	"reset-command-feature-only",
 	"plan-contract-planning-context-separation",
 	"auditor-agent-full-audit-claim-calibration",
 	"auditor-agent-finding-taxonomy",
@@ -420,6 +444,18 @@ export function renderPromptEvalCase(item: PromptEvalCase): string {
 			return FLOW_REVIEWER_AGENT_PROMPT;
 		case "plan_command_template":
 			return FLOW_PLAN_COMMAND_TEMPLATE;
+		case "run_command_template":
+			return FLOW_RUN_COMMAND_TEMPLATE;
+		case "status_command_template":
+			return FLOW_STATUS_COMMAND_TEMPLATE;
+		case "doctor_command_template":
+			return FLOW_DOCTOR_COMMAND_TEMPLATE;
+		case "history_command_template":
+			return FLOW_HISTORY_COMMAND_TEMPLATE;
+		case "session_command_template":
+			return FLOW_SESSION_COMMAND_TEMPLATE;
+		case "reset_command_template":
+			return FLOW_RESET_COMMAND_TEMPLATE;
 		case "plan_contract":
 			return FLOW_PLAN_CONTRACT;
 		case "auditor_agent_prompt":

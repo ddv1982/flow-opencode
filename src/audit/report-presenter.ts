@@ -5,6 +5,7 @@ export type ReviewRenderView = "human" | "structured" | "both";
 const FINDING_CATEGORY_ORDER = [
 	"confirmed_defect",
 	"risk",
+	"hardening_opportunity",
 	"process_gap",
 ] as const;
 
@@ -29,6 +30,8 @@ function findingCategoryLabel(
 			return "confirmed defect";
 		case "risk":
 			return "risk";
+		case "hardening_opportunity":
+			return "hardening opportunity";
 		case "process_gap":
 			return "process gap";
 	}
@@ -82,6 +85,9 @@ function releaseRecommendation(report: ReviewReport): string {
 		}
 		return `No confirmed release blocker was proven in this review, but '${topFinding.title}' is a material risk to address next.`;
 	}
+	if (topFinding.category === "hardening_opportunity") {
+		return `No product defect was confirmed here, but '${topFinding.title}' is a useful hardening opportunity to consider next.`;
+	}
 	return `No product defect was confirmed here, but '${topFinding.title}' should be cleaned up to reduce maintenance risk.`;
 }
 
@@ -97,6 +103,8 @@ function normalizedImpactLabel(
 			return "Impact";
 		case "risk":
 			return "Risk";
+		case "hardening_opportunity":
+			return "Opportunity";
 		case "process_gap":
 			return "Follow-up";
 	}
@@ -116,6 +124,12 @@ function normalizedRemediation(
 
 function bulletLines(items: string[], limit = items.length): string[] {
 	return items.slice(0, limit).map((item) => `- ${item}`);
+}
+
+function surfaceHasEvidence(
+	surface: ReviewReport["discoveredSurfaces"][number],
+): boolean {
+	return (surface.evidence?.length ?? 0) > 0;
 }
 
 function renderConclusion(report: ReviewReport): string[] {
@@ -202,7 +216,8 @@ function renderCoverageNotes(report: ReviewReport): string[] {
 	const fullAuditEligible =
 		report.discoveredSurfaces.length > 0 &&
 		spotChecked.length === 0 &&
-		unreviewed.length === 0;
+		unreviewed.length === 0 &&
+		directlyReviewed.every(surfaceHasEvidence);
 	return [
 		"## Coverage notes",
 		`- Coverage: ${directlyReviewed.length} directly reviewed, ${spotChecked.length} spot-checked, ${unreviewed.length} unreviewed surfaces.`,

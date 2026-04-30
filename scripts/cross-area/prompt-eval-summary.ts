@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
+	buildPromptBehaviorEvalSummary,
+	readPromptBehaviorEvalCorpus,
+} from "../../tests/prompt-behavior-eval-helpers";
+import {
 	buildPromptEvalCoverageSummary,
 	readPromptEvalCorpus,
 } from "../../tests/prompt-eval-helpers";
@@ -8,7 +12,22 @@ import {
 async function main() {
 	const repoRoot = resolve(import.meta.dir, "..", "..");
 	const outputDir = join(repoRoot, "prompt-exports");
-	const summary = buildPromptEvalCoverageSummary(readPromptEvalCorpus());
+	const promptSurfaceSummary = buildPromptEvalCoverageSummary(
+		readPromptEvalCorpus(),
+	);
+	const promptBehaviorSummary = buildPromptBehaviorEvalSummary(
+		readPromptBehaviorEvalCorpus(),
+	);
+	const report = [
+		promptSurfaceSummary.report,
+		"",
+		promptBehaviorSummary.report,
+	].join("\n");
+	const summary = {
+		promptSurfaces: promptSurfaceSummary,
+		promptBehavior: promptBehaviorSummary,
+		report,
+	};
 
 	await mkdir(outputDir, { recursive: true });
 	await writeFile(
@@ -18,11 +37,16 @@ async function main() {
 	);
 	await writeFile(
 		join(outputDir, "prompt-eval-summary.txt"),
-		`${summary.report}\n`,
+		`${report}\n`,
+		"utf8",
+	);
+	await writeFile(
+		join(outputDir, "prompt-behavior-eval-summary.md"),
+		`${promptBehaviorSummary.markdownReport}\n`,
 		"utf8",
 	);
 
-	console.log(summary.report);
+	console.log(report);
 }
 
 await main();

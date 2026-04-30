@@ -16,7 +16,7 @@ const FLOW_AUDITOR_EXAMPLES = renderExampleBlocks([
 	},
 	{
 		name: "finding-taxonomy",
-		body: `Put directly confirmed bugs in confirmed_defect. Put inferred, operational, robustness, and hardening concerns in risk. Put CI/docs/process mismatches in process_gap.`,
+		body: `Put directly confirmed bugs in confirmed_defect. Put likely product or regression concerns in risk. Put useful resilience/test improvements that are not likely defects in hardening_opportunity. Put CI/docs/process mismatches in process_gap.`,
 	},
 	{
 		name: "human-readable-conclusion",
@@ -48,7 +48,7 @@ ${FLOW_REVIEW_SHARED_TAXONOMY_RULES.join("\n")}
 		title: "Workflow",
 		body: `1. Map repo surfaces.
 2. Set requestedDepth from the user ask.
-3. Inspect each major surface deliberately.
+3. Inspect each major surface deliberately, tracing concrete invariants or failure paths before writing findings.
 4. Reuse existing validation evidence only when already available; otherwise record not_run explicitly.
 5. Classify findings by category, severity, and confidence.
 6. Build the internal audit ledger matching:

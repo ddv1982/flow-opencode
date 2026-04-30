@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.37] - 2026-04-30
+
+Turn Flow review quality into a measurable offline regression loop
+
+Flow 1.0.37 strengthens `/flow-review` from a well-worded prompt into a prompt-quality system. The review lane now carries sharper evidence rules, an explicit `hardening_opportunity` taxonomy for useful non-blocking improvements, stricter schema and normalization guards around full-audit claims, deterministic behavior evals for calibrated versus overconfident outputs, captured real-output fixtures, prompt snapshots, and providerless review-capture packets that can score structured model/plugin output without calling a model API or requiring credentials. The prompt eval report now includes behavior-eval artifacts so prompt changes can be reviewed as testable product surfaces instead of prose-only edits.
+
+Constraint: Improve review output quality and regression detection without adding provider-specific API calls, credentials, or new dependencies
+Constraint: Keep `/flow-review` read-only and renderer-backed while making requested depth, achieved depth, coverage evidence, and validation honesty mechanically checkable
+Rejected: Add a direct OpenAI live-eval harness | it would introduce credentials and provider lock-in for a workflow that can be captured and scored offline through the actual plugin surface
+Rejected: Continue tuning prompt wording without captured-output fixtures | prompt quality would remain subjective and regressions would only be noticed after disappointing real reviews
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: When review output disappoints, capture the structured ledger and promote it into the behavior fixture corpus; keep prompt contracts, schemas, renderer ordering, and eval fixtures aligned when changing review semantics
+Tested: `bun run check`; `bun run eval:review-capture:check`; `bun test tests/review-prompt-capture.test.ts tests/prompt-behavior-eval.test.ts`; `bun run typecheck`; `bun run lint`; `bun run report:prompt-eval`
+Not-tested: Live GitHub-hosted `release.yml` run for tag `v1.0.37` before push; fully automated live model-in-the-loop evals by design; manual plugin-surface captures from multiple external repositories
+
 ## [1.0.36] - 2026-04-30
 
 Simplify the Flow review lane and tighten the user-facing docs without weakening runtime execution gates

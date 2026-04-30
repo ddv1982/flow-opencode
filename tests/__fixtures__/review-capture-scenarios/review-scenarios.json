@@ -1,0 +1,13 @@
+[
+	{
+		"id": "flow-review-codebase-architecture-structured",
+		"title": "Flow review codebase architecture and regression audit",
+		"arguments": "exhaustive Review this codebase for architectural issues, test gaps, and likely regressions. Return raw/structured JSON for eval scoring.",
+		"outputView": "structured",
+		"fileMap": "flow-opencode\n├── src\n│   ├── audit\n│   │   ├── prompts\n│   │   │   ├── agents.ts +\n│   │   │   ├── commands.ts +\n│   │   │   ├── contracts.ts +\n│   │   │   └── fragments.ts +\n│   │   ├── report-normalizer.ts +\n│   │   ├── report-presenter.ts +\n│   │   └── report-schema.ts +\n│   ├── runtime\n│   │   ├── application\n│   │   │   ├── session-engine.ts +\n│   │   │   ├── session-actions.ts +\n│   │   │   ├── session-read-actions.ts +\n│   │   │   └── tool-runtime.ts +\n│   │   ├── domain\n│   │   │   ├── completion.ts +\n│   │   │   ├── final-review-coverage.ts +\n│   │   │   └── workflow-policy.ts +\n│   │   ├── transitions\n│   │   │   ├── execution.ts +\n│   │   │   ├── plan.ts +\n│   │   │   ├── recovery.ts +\n│   │   │   └── review.ts +\n│   │   ├── schema.ts +\n│   │   ├── session-persistence.ts +\n│   │   └── session.ts +\n│   └── tools\n│       ├── runtime-tools.ts +\n│       ├── session-tools.ts +\n│       └── schemas.ts +\n├── tests\n│   ├── prompt-behavior-eval.test.ts +\n│   ├── prompt-eval-corpus.test.ts +\n│   ├── runtime-tools.test.ts +\n│   ├── runtime.test.ts +\n│   └── session-engine.test.ts +\n├── scripts\n│   └── cross-area\n│       └── prompt-eval-summary.ts +\n├── docs\n│   └── architecture\n│       ├── invariant-matrix.md\n│       └── strictness-contract.md\n├── package.json\n└── tsconfig.json",
+		"notes": [
+			"This scenario intentionally asks for structured output so captured reports can be scored offline.",
+			"Run it through the plugin/model surface you want to evaluate, not through a direct API harness."
+		]
+	}
+]

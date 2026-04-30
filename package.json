@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-flow",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "description": "Stateful planning and execution workflow plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -17,12 +17,14 @@
     "check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
     "check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
     "report:prompt-eval": "bun run ./scripts/cross-area/prompt-eval-summary.ts",
+    "eval:review-capture": "bun run ./scripts/cross-area/review-prompt-capture.ts",
+    "eval:review-capture:check": "bun run ./scripts/cross-area/review-prompt-capture.ts -- --check",
     "deadcode": "knip --include files,dependencies",
     "lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
     "test": "bun test",
     "test:ci": "bun test --randomize",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run check:dependency-contract && bun run deadcode && bun run build && bun run test && bun run lint && bun run bench:smoke",
+    "check": "bun run typecheck && bun run eval:review-capture:check && bun run check:dependency-contract && bun run deadcode && bun run build && bun run test && bun run lint && bun run bench:smoke",
     "install:opencode": "bun run ./src/install-opencode.ts",
     "uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
   },

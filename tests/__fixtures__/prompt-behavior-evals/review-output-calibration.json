@@ -1,0 +1,212 @@
+[
+	{
+		"id": "review-full-depth-downgrades-spot-check",
+		"title": "Exhaustive request is downgraded when a major surface is only spot-checked",
+		"sourcePaths": [
+			"src/audit/prompts/contracts.ts",
+			"src/audit/report-normalizer.ts",
+			"src/audit/report-presenter.ts"
+		],
+		"minPassingScore": 8,
+		"modelOutput": {
+			"requestedDepth": "full_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Flow plugin with runtime state, prompt contracts, renderer, tests, CI, docs, and release tooling.",
+			"overallVerdict": "No blocking defect was proven, but release readiness depends on validation and one frontend surface was spot-checked rather than exhaustively reviewed.",
+			"discoveredSurfaces": [
+				{
+					"name": "Audit prompt contracts",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/audit/prompts/contracts.ts:1"]
+				},
+				{
+					"name": "Review report normalization and presentation",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": [
+						"src/audit/report-normalizer.ts:1",
+						"src/audit/report-presenter.ts:1"
+					]
+				},
+				{
+					"name": "Frontend presentational surfaces",
+					"category": "source_runtime",
+					"reviewStatus": "spot_checked",
+					"reason": "Representative files were sampled but every component was not directly reviewed."
+				}
+			],
+			"coverageNotes": [
+				"User requested exhaustive/full review, but achievedDepth is deep_audit because frontend presentational surfaces were spot-checked rather than every discovered surface being directly reviewed with evidence."
+			],
+			"validationRun": [
+				{
+					"command": "bun test && bun run typecheck && bun run lint",
+					"status": "not_run",
+					"summary": "Not run during this read-only audit; readiness depends on a later validation run or fresh CI evidence."
+				}
+			],
+			"findings": [
+				{
+					"title": "Spot-checked frontend surface prevents full-audit readiness claim",
+					"category": "process_gap",
+					"confidence": "confirmed",
+					"severity": "medium",
+					"evidence": ["src/audit/prompts/contracts.ts:1"],
+					"impact": "The review can still be useful, but claiming exhaustive coverage would overstate the evidence gathered.",
+					"remediation": "Keep achievedDepth at deep_audit and list the spot-checked surface until every frontend file is directly reviewed."
+				}
+			],
+			"nextSteps": [
+				"Run validation or attach fresh CI evidence before release readiness claims.",
+				"Directly review the frontend presentational surface if full_audit output is required."
+			]
+		}
+	},
+	{
+		"id": "review-overclaims-full-depth",
+		"title": "Overclaimed full audit output is scored down",
+		"sourcePaths": [
+			"src/audit/prompts/contracts.ts",
+			"src/audit/report-normalizer.ts"
+		],
+		"minPassingScore": 8,
+		"expectedFailures": [
+			"depth_calibrated",
+			"coverage_accounted",
+			"validation_accounted",
+			"actionable_next_steps"
+		],
+		"modelOutput": {
+			"requestedDepth": "full_audit",
+			"achievedDepth": "full_audit",
+			"repoSummary": "Flow plugin repository.",
+			"overallVerdict": "Looks good.",
+			"discoveredSurfaces": [
+				{
+					"name": "Runtime",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["runtime files"]
+				},
+				{
+					"name": "Tests",
+					"category": "tests",
+					"reviewStatus": "spot_checked"
+				}
+			],
+			"coverageNotes": ["Reviewed the important parts."],
+			"validationRun": [],
+			"findings": [
+				{
+					"title": "General maintainability concern",
+					"category": "risk",
+					"confidence": "likely",
+					"severity": "medium",
+					"evidence": ["src/audit/prompts/contracts.ts:1"],
+					"impact": "Could be harder to maintain.",
+					"remediation": "Clarify ownership."
+				}
+			],
+			"nextSteps": []
+		}
+	},
+	{
+		"id": "review-confirmed-defect-grounded",
+		"title": "Confirmed defect output is accepted when evidence and validation support it",
+		"sourcePaths": [
+			"src/audit/report-schema.ts",
+			"src/audit/report-presenter.ts"
+		],
+		"minPassingScore": 8,
+		"modelOutput": {
+			"requestedDepth": "deep_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Audit renderer and schema enforce structured review reports.",
+			"overallVerdict": "A schema/presenter mismatch is confirmed and should block release until fixed.",
+			"discoveredSurfaces": [
+				{
+					"name": "Review schema",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/audit/report-schema.ts:1"]
+				},
+				{
+					"name": "Review presenter",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/audit/report-presenter.ts:1"]
+				}
+			],
+			"coverageNotes": [
+				"Every discovered audit-rendering surface in this focused review was directly reviewed with file references."
+			],
+			"validationRun": [
+				{
+					"command": "bun test tests/runtime-tools.test.ts",
+					"status": "failed",
+					"summary": "Failed on review renderer schema validation before the schema/presenter mismatch is fixed."
+				}
+			],
+			"findings": [
+				{
+					"title": "Renderer accepts a category that the schema rejects",
+					"category": "confirmed_defect",
+					"confidence": "confirmed",
+					"severity": "high",
+					"evidence": [
+						"src/audit/report-schema.ts:1",
+						"src/audit/report-presenter.ts:1",
+						"package.json:1"
+					],
+					"impact": "A valid-looking review ledger can fail tool validation and prevent the review from rendering.",
+					"remediation": "Keep finding categories aligned between the schema and presenter before adding prompt taxonomy entries."
+				}
+			],
+			"nextSteps": [
+				"Align schema and presenter category handling.",
+				"Add a regression test that renders each supported finding category."
+			]
+		}
+	},
+	{
+		"id": "review-ungrounded-output-rejected",
+		"title": "Ungrounded finding output is rejected before it can look authoritative",
+		"sourcePaths": [
+			"src/audit/report-schema.ts",
+			"src/audit/prompts/contracts.ts"
+		],
+		"minPassingScore": 8,
+		"expectedFailures": ["schema_valid"],
+		"modelOutput": {
+			"requestedDepth": "deep_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Flow plugin repository.",
+			"overallVerdict": "Many serious problems likely exist.",
+			"discoveredSurfaces": [
+				{
+					"name": "Runtime",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed"
+				}
+			],
+			"validationRun": [
+				{
+					"command": "bun test",
+					"status": "not_run",
+					"summary": "Not run."
+				}
+			],
+			"findings": [
+				{
+					"title": "Possible hidden bug",
+					"category": "confirmed_defect",
+					"confidence": "speculative",
+					"severity": "high",
+					"evidence": [],
+					"impact": "Could break users."
+				}
+			]
+		}
+	}
+]

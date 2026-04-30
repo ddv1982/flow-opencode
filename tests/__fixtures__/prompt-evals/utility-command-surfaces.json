@@ -1,0 +1,91 @@
+[
+	{
+		"id": "run-command-one-feature-review-gate",
+		"title": "Run command executes one feature and requires validation plus feature review",
+		"category": "review-gating",
+		"surface": "run_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Execute one approved Flow feature.",
+			"Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings",
+			"obtain reviewer approval through `flow_review_record_feature`"
+		],
+		"forbiddenSnippets": ["execute every approved feature"]
+	},
+	{
+		"id": "status-command-read-only-summary",
+		"title": "Status command stays read-only and leads with current state and next command",
+		"category": "command-entry",
+		"surface": "status_command_template",
+		"risk": "medium",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Inspect the active Flow session.",
+			"call `flow_status` with compact view",
+			"Lead with what Flow is doing now (or what is blocked)",
+			"Stop after the status summary."
+		],
+		"forbiddenSnippets": ["start implementation"]
+	},
+	{
+		"id": "doctor-command-readiness-only",
+		"title": "Doctor command reports readiness without mutating the session",
+		"category": "command-entry",
+		"surface": "doctor_command_template",
+		"risk": "medium",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Check Flow readiness for the current workspace.",
+			"call `flow_doctor` with compact view",
+			"Lead with the action summary: readiness, blocker (if any), and exact next command.",
+			"Stop after the doctor summary."
+		],
+		"forbiddenSnippets": ["fix readiness automatically"]
+	},
+	{
+		"id": "history-command-read-only-history",
+		"title": "History command reads stored sessions and reports the next logical step",
+		"category": "command-entry",
+		"surface": "history_command_template",
+		"risk": "medium",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Inspect stored Flow session history.",
+			"call `flow_history`",
+			"call `flow_history_show` with the provided session id",
+			"Always summarize what you found and the next logical step."
+		],
+		"forbiddenSnippets": ["activate the newest session automatically"]
+	},
+	{
+		"id": "session-command-pointer-only",
+		"title": "Session command limits mutation to explicit active pointer management",
+		"category": "command-entry",
+		"surface": "session_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Manage the active Flow session pointer.",
+			"If the arguments start with `activate`, call `flow_session_activate`",
+			"If the arguments start with `close`, call `flow_session_close`",
+			"Otherwise explain the valid forms briefly."
+		],
+		"forbiddenSnippets": ["delete stored sessions"]
+	},
+	{
+		"id": "reset-command-feature-only",
+		"title": "Reset command scopes reset behavior to explicit feature resets",
+		"category": "recovery",
+		"surface": "reset_command_template",
+		"risk": "high",
+		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"expectedSnippets": [
+			"Reset Flow state.",
+			"If the arguments start with `feature`, reset the named feature through `flow_reset_feature`.",
+			"Otherwise explain the valid forms briefly.",
+			"Always summarize what changed and the next logical step."
+		],
+		"forbiddenSnippets": ["reset the entire workspace"]
+	}
+]

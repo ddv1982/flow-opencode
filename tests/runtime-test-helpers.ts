@@ -78,7 +78,7 @@ export function reviewSurface(
 		name: "Surface",
 		category: "source_runtime",
 		reviewStatus: "directly_reviewed",
-		evidence: [],
+		evidence: ["src/runtime/session.ts:1"],
 		...overrides,
 	};
 }
@@ -101,7 +101,7 @@ export function reviewFinding(
 		title: "Finding",
 		category: "risk",
 		confidence: "likely",
-		evidence: [],
+		evidence: ["src/runtime/session.ts:1"],
 		impact: "Finding impact.",
 		...overrides,
 	};

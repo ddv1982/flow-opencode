@@ -12,7 +12,8 @@
 		"expectedSnippets": [
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
 			"Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.",
-			"downgrade achievedDepth"
+			"downgrade achievedDepth",
+			"trace at least one concrete invariant or failure path"
 		],
 		"forbiddenSnippets": [
 			"claim full_audit after spot-checking only a subset of surfaces",
@@ -30,9 +31,9 @@
 			"src/audit/prompts/contracts.ts"
 		],
 		"expectedSnippets": [
-			"confirmed_defect, risk, process_gap",
-			"Distinguish product defects from non-confirmed risks and process/reporting mismatches.",
-			"Keep findings taxonomy explicit: confirmed_defect, risk, process_gap."
+			"confirmed_defect, risk, hardening_opportunity, process_gap",
+			"Separate confirmed defects, likely risks, hardening opportunities, and process/reporting gaps instead of flattening them into generic advice.",
+			"Keep findings taxonomy explicit: confirmed_defect, risk, hardening_opportunity, process_gap."
 		],
 		"forbiddenSnippets": [
 			"flatten all findings into a single undifferentiated list"
@@ -47,6 +48,7 @@
 		"sourcePaths": ["src/audit/prompts/commands.ts", "tests/config.test.ts"],
 		"expectedSnippets": [
 			"Treat this command as the preferred dedicated read-only review surface, not as Flow planning or feature execution.",
+			"For full_audit, directly review every discovered major surface",
 			"Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.",
 			"Depth labels for users:"
 		],
@@ -65,6 +67,7 @@
 		"expectedSnippets": [
 			"discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]",
 			"coverageNotes?: string[]",
+			"findings: { title: string, category: confirmed_defect | risk | hardening_opportunity | process_gap",
 			"Begin with these sections in order: Conclusion, Top findings, Recommended next actions, Coverage notes.",
 			"discoveredSurfaces is the canonical coverage ledger for standalone review coverage"
 		],

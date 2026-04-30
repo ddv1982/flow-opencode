@@ -1,5 +1,17 @@
 import type { ReviewReport } from "./report-schema";
 
+type ReviewSurface = ReviewReport["discoveredSurfaces"][number];
+
+function hasSurfaceEvidence(surface: ReviewSurface): boolean {
+	return (surface.evidence?.length ?? 0) > 0;
+}
+
+function isDirectlyReviewedWithEvidence(surface: ReviewSurface): boolean {
+	return (
+		surface.reviewStatus === "directly_reviewed" && hasSurfaceEvidence(surface)
+	);
+}
+
 function normalizedAchievedDepth(
 	report: ReviewReport,
 ): Pick<ReviewReport, "achievedDepth" | "coverageNotes"> {
@@ -30,9 +42,7 @@ function normalizedAchievedDepth(
 	}
 	const allDirectlyReviewed =
 		report.discoveredSurfaces.length > 0 &&
-		report.discoveredSurfaces.every(
-			(surface) => surface.reviewStatus === "directly_reviewed",
-		);
+		report.discoveredSurfaces.every(isDirectlyReviewedWithEvidence);
 	if (allDirectlyReviewed) {
 		return {
 			achievedDepth: report.achievedDepth,
@@ -40,13 +50,13 @@ function normalizedAchievedDepth(
 		};
 	}
 	const hasDirectCoverage = report.discoveredSurfaces.some(
-		(surface) => surface.reviewStatus === "directly_reviewed",
+		isDirectlyReviewedWithEvidence,
 	);
 	return {
 		achievedDepth: hasDirectCoverage ? "deep_audit" : "broad_audit",
 		coverageNotes: [
 			...(report.coverageNotes ?? []),
-			"Achieved depth was downgraded from full_audit because not every discovered surface was directly reviewed.",
+			"Achieved depth was downgraded from full_audit because not every discovered surface was directly reviewed with evidence.",
 		],
 	};
 }

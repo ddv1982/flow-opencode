@@ -13,9 +13,11 @@ ${FLOW_REVIEW_SHARED_RULES}
 - If the arguments ask for an exhaustive or full review, treat requestedDepth as full_audit.
 - If the arguments ask for a detailed, deep, or in-depth review, treat requestedDepth as deep_audit.
 - Otherwise default requestedDepth to broad_audit.
-- Map the repo's major surfaces first.
+- Map the repo's major surfaces first: source/runtime boundaries, state/persistence, tool/API entrypoints, tests, CI/release, docs/config, and supporting tooling.
 - For broad_audit, inspect representative hotspots across every major surface.
 - For deep_audit, inspect every major surface with direct evidence and note any spot-checked or skipped areas explicitly.
+- For full_audit, directly review every discovered major surface, cite evidence for each directly_reviewed surface, and downgrade achievedDepth when any surface is only spot-checked or skipped.
+- Trace concrete invariants and failure paths before writing findings; favor specific regression mechanisms over generic architecture advice.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the review output.
 ${FLOW_REVIEW_SHARED_RENDER_RULES.join("\n")}
 - Use this ledger contract for internal consistency and renderer input:
