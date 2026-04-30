@@ -9,13 +9,14 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   workflow-lint:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Lint workflow syntax
         run: |
@@ -28,12 +29,12 @@ jobs:
       run_ci: ${{ steps.change_flags.outputs.run_ci }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Detect CI-relevant changes
         if: github.event_name != 'workflow_dispatch'
         id: change_filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             relevant:
@@ -65,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -80,7 +81,7 @@ jobs:
 
       - name: Upload prompt eval summary artifact
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: prompt-eval-summary
           path: |
