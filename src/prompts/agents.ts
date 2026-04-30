@@ -13,10 +13,19 @@ import {
 	FLOW_COORDINATOR_BOUNDARY_RULE,
 	FLOW_COORDINATOR_ROLE_ROUTING_RULE,
 	FLOW_FEATURE_REVIEW_APPROVAL_RULE,
+	FLOW_FINAL_COMPLETION_AUTO_STEP_RULE,
 	FLOW_FINAL_COMPLETION_PATH_RULE,
+	FLOW_FINAL_COMPLETION_REVIEW_RULE,
+	FLOW_FINAL_COMPLETION_WORKER_STEP_RULE,
 	FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE,
 	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
+	FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE,
+	FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE,
+	FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE,
+	FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE,
+	FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE,
+	FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE,
 	FLOW_PERSIST_REVIEWER_DECISIONS_RULE,
 	FLOW_RESOLVE_RUNTIME_ERRORS_RULE,
 	FLOW_RESUME_ONLY_RULE,
@@ -89,8 +98,8 @@ export const FLOW_PLANNER_AGENT_PROMPT = renderPromptSections([
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record, encoding that object into \`planningJson\`.
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
-- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.
-- If package-manager evidence is ambiguous, do not guess. Prefer existing package.json scripts and call out the ambiguity in planning context.
+${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
+${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid. If work still needs safe decomposition, use decompositionPolicy iterative_refinement or open_ended.
 - Do not start implementation after drafting a plan.`,
@@ -132,8 +141,8 @@ export const FLOW_WORKER_AGENT_PROMPT = renderPromptSections([
 - Read relevant code before editing.
 - Supporting edits are allowed only when needed to complete the feature safely.
 - Run the smallest relevant validation first.
-- Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check. Do not default to Bun in non-Bun repos.
-- If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing package.json script covers the task.
+${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
+${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - If the feature is still too broad after inspection, return replan_required with a structured replan reason, failed assumption, and recommended adjustment instead of partial success.
@@ -152,7 +161,7 @@ ${FLOW_FINAL_COMPLETION_PATH_RULE}`,
 6. If review finds blocking issues, fix them, rerun targeted validation, and review again. Repeat until review passes or a real blocker remains.
 7. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing feature-level review payload for a non-final feature, you may skip the separate reviewer-persistence hop.
 8. In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.
-9. On the final completion path, run broad validation, ask flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), and persist that approval with flow_review_record_final, encoding the reviewer decision into \`decisionJson\`.
+9. ${FLOW_FINAL_COMPLETION_WORKER_STEP_RULE}
 10. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature, encoding the reviewer decision into \`decisionJson\`.
 11. Return one worker result matching:
 
@@ -188,9 +197,9 @@ ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
-- Before declaring the whole session complete, run broad repo validation, perform the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), fix any findings, rerun broad validation, and repeat until the final state is clean.
-- Treat existing package.json scripts as primary, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands as supporting evidence only when scripts are missing.
-- If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.
+${FLOW_FINAL_COMPLETION_REVIEW_RULE}
+${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
+${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
 - If a feature lands in a blocked state with a retryable or auto-resolvable outcome, use repo reads plus external research when useful, then reset it through the runtime and continue instead of stopping.
@@ -213,7 +222,7 @@ ${FLOW_NO_INFERRED_GOAL_RULE}`,
 10. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
 11. Persist an approved feature result with flow_run_complete_feature using \`workerJson\`. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
 12. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
-13. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), persist it with flow_review_record_final using \`decisionJson\`, and keep fixing/revalidating until the final review passes.
+13. ${FLOW_FINAL_COMPLETION_AUTO_STEP_RULE}
 14. Only then allow final completion.
 15. Repeat until the session is complete or blocked.
 

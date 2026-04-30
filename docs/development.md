@@ -71,14 +71,14 @@ Flow is built around a few stable responsibilities:
 - `flow-auto` coordinates planning, execution, review, recovery, and continuation
 - `flow-control` handles status/history/session/reset requests and the review command surface
 
-Read-only review work should stay separate from normal feature execution and is available through the dedicated `flow-review` command when the user asks for a repo review, codebase audit, findings report, or an explicit exhaustive review. User-facing review depth maps to internal audit rigor:
+Read-only repo review stays separate from feature execution and is exposed through `/flow-review` on `flow-control`. User-facing depth tokens map to internal rigor:
 
 - `default` => `broad_audit`
 - `detailed` => `deep_audit`
 - `exhaustive` => `full_audit`
 
+`/flow-review` now returns a renderer-backed human report by default; the structured review ledger remains an internal contract behind `flow_review_render`.
 Flow may only claim achieved `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
-
 
 ## Current Runtime Tools
 

@@ -22,8 +22,7 @@ const ValidationStatusSchema = z.enum([
 ]);
 const FindingCategorySchema = z.enum([
 	"confirmed_defect",
-	"likely_risk",
-	"hardening_opportunity",
+	"risk",
 	"process_gap",
 ]);
 const FindingConfidenceSchema = z.enum(["confirmed", "likely", "speculative"]);
@@ -36,39 +35,6 @@ export const ReviewDiscoveredSurfaceSchema = z
 		reviewStatus: SurfaceReviewStatusSchema,
 		evidence: z.array(z.string().min(1)).optional(),
 		reason: z.string().min(1).optional(),
-	})
-	.strict();
-
-export const ReviewCoverageSummarySchema = z
-	.object({
-		discoveredSurfaceCount: z.number().int().nonnegative(),
-		reviewedSurfaceCount: z.number().int().nonnegative(),
-		unreviewedSurfaceCount: z.number().int().nonnegative(),
-		notes: z.array(z.string().min(1)).optional(),
-	})
-	.strict();
-
-export const ReviewReviewedSurfaceSchema = z
-	.object({
-		name: z.string().min(1),
-		evidence: z.array(z.string().min(1)),
-	})
-	.strict();
-
-export const ReviewUnreviewedSurfaceSchema = z
-	.object({
-		name: z.string().min(1),
-		reason: z.string().min(1),
-	})
-	.strict();
-
-export const ReviewCoverageRubricSchema = z
-	.object({
-		fullAuditEligible: z.boolean(),
-		directlyReviewedCategories: z.array(z.string().min(1)),
-		spotCheckedCategories: z.array(z.string().min(1)),
-		unreviewedCategories: z.array(z.string().min(1)),
-		blockingReasons: z.array(z.string().min(1)),
 	})
 	.strict();
 
@@ -99,10 +65,7 @@ export const ReviewReportSchema = z
 		repoSummary: z.string().min(1),
 		overallVerdict: z.string().min(1),
 		discoveredSurfaces: z.array(ReviewDiscoveredSurfaceSchema),
-		coverageSummary: ReviewCoverageSummarySchema,
-		reviewedSurfaces: z.array(ReviewReviewedSurfaceSchema),
-		unreviewedSurfaces: z.array(ReviewUnreviewedSurfaceSchema),
-		coverageRubric: ReviewCoverageRubricSchema,
+		coverageNotes: z.array(z.string().min(1)).optional(),
 		validationRun: z.array(ReviewValidationRunSchema),
 		findings: z.array(ReviewFindingSchema),
 		nextSteps: z.array(z.string().min(1)).optional(),

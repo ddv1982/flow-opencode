@@ -598,20 +598,7 @@ describe("applyFlowConfig", () => {
 					repoSummary: "Repo summary.",
 					overallVerdict: "Overall verdict.",
 					discoveredSurfaces: [],
-					coverageSummary: {
-						discoveredSurfaceCount: 0,
-						reviewedSurfaceCount: 0,
-						unreviewedSurfaceCount: 0,
-					},
-					reviewedSurfaces: [],
-					unreviewedSurfaces: [],
-					coverageRubric: {
-						fullAuditEligible: false,
-						directlyReviewedCategories: [],
-						spotCheckedCategories: [],
-						unreviewedCategories: [],
-						blockingReasons: [],
-					},
+					coverageNotes: [],
 					validationRun: [],
 					findings: [],
 				}),
@@ -806,11 +793,12 @@ describe("applyFlowConfig", () => {
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"achievedDepth: broad_audit | deep_audit | full_audit",
 		);
-		expect(FLOW_AUDIT_CONTRACT).toContain("reviewedSurfaces");
-		expect(FLOW_AUDIT_CONTRACT).toContain("unreviewedSurfaces");
-		expect(FLOW_AUDIT_CONTRACT).toContain("coverageSummary");
 		expect(FLOW_AUDIT_CONTRACT).toContain("discoveredSurfaces");
-		expect(FLOW_AUDIT_CONTRACT).toContain("coverageRubric");
+		expect(FLOW_AUDIT_CONTRACT).toContain("coverageNotes");
+		expect(FLOW_AUDIT_CONTRACT).not.toContain("reviewedSurfaces");
+		expect(FLOW_AUDIT_CONTRACT).not.toContain("unreviewedSurfaces");
+		expect(FLOW_AUDIT_CONTRACT).not.toContain("coverageSummary");
+		expect(FLOW_AUDIT_CONTRACT).not.toContain("coverageRubric");
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"Default to a human-readable markdown review, not raw JSON.",
 		);
@@ -824,7 +812,7 @@ describe("applyFlowConfig", () => {
 			"achievedDepth can be full_audit only when every major surface discovered during repo mapping is directly reviewed",
 		);
 		expect(FLOW_AUDIT_CONTRACT).toContain(
-			"keep process/reporting issues in process_gap",
+			"category: confirmed_defect | risk | process_gap",
 		);
 		const contractTail = FLOW_AUDIT_CONTRACT.toLowerCase();
 		expect(contractTail).not.toContain("include the returned artifact paths");
@@ -877,9 +865,6 @@ describe("applyFlowConfig", () => {
 	test("auditor prompt requires explicit coverage accounting, claim calibration, and a readable conclusion", () => {
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("You are the Flow auditor.");
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("Map the major repo surfaces");
-		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
-			"Do not claim full_audit unless every major discovered surface is directly reviewed",
-		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
 		);
@@ -989,9 +974,6 @@ describe("applyFlowConfig", () => {
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"Return the renderer's report field verbatim as your final answer.",
-		);
-		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"only use achievedDepth: full_audit when every major discovered surface is directly reviewed",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"status: not_run explicitly in the review output",

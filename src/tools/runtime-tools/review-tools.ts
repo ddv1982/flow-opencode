@@ -1,4 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
+import { normalizeReviewReport } from "../../audit/report-normalizer";
 import {
 	type ReviewRenderView,
 	renderReviewReport,
@@ -110,24 +111,25 @@ export function createReviewRuntimeTools() {
 					if (!parsedReport.ok) {
 						return parsedReport.response;
 					}
+					const normalizedReport = normalizeReviewReport(parsedReport.value);
 					const view = (input.view ?? "human") as ReviewRenderView;
 					context.metadata?.({
-						title: `Rendered ${parsedReport.value.achievedDepth}`,
+						title: `Rendered ${normalizedReport.achievedDepth}`,
 						metadata: {
-							requestedDepth: parsedReport.value.requestedDepth,
-							achievedDepth: parsedReport.value.achievedDepth,
+							requestedDepth: normalizedReport.requestedDepth,
+							achievedDepth: normalizedReport.achievedDepth,
 							view,
-							findings: parsedReport.value.findings.length,
+							findings: normalizedReport.findings.length,
 						},
 					});
 					return toJson({
 						status: "ok",
 						summary: "Rendered review report.",
 						view,
-						requestedDepth: parsedReport.value.requestedDepth,
-						achievedDepth: parsedReport.value.achievedDepth,
-						findingsCount: parsedReport.value.findings.length,
-						report: renderReviewReport(parsedReport.value, view),
+						requestedDepth: normalizedReport.requestedDepth,
+						achievedDepth: normalizedReport.achievedDepth,
+						findingsCount: normalizedReport.findings.length,
+						report: renderReviewReport(normalizedReport, view),
 					});
 				},
 			),

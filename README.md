@@ -1,12 +1,14 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` adds a planning-and-execution workflow to OpenCode that adapts from small one-shot tasks to reviewed multi-feature delivery.
+`opencode-plugin-flow` adds a stateful planning-and-execution workflow to OpenCode. It is designed for work that should be planned, validated, reviewed, and resumable rather than handled as a disposable one-shot prompt.
 
 ## What Flow does
 
-- Turns a goal into a **tracked session** with a plan of features, stored on disk.
-- Executes **one feature at a time** with validation and review checks.
-- **Scales automatically**: small tasks run nearly one-shot; larger work picks up a plan, reviewer sign-off, broad final validation, and the runtime-owned final review policy (currently detailed by default) — without you having to coordinate every step.
+- Turns a goal into a **tracked session** with a visible plan.
+- Executes **one feature at a time** instead of changing many things at once.
+- Records **validation evidence** and **review approvals** before it advances.
+- Lets you **resume** work later from on-disk session state.
+- Adapts automatically: small work stays light, larger work gets more structure and gating.
 
 ## When to use it
 
@@ -23,7 +25,7 @@ Flow is the wrong fit when you want:
 
 - a disposable one-off prompt with zero workflow overhead
 - loosely structured brainstorming
-- experiments you don't want persisted on disk
+- experiments you do not want persisted on disk
 
 ## Install
 
@@ -64,21 +66,35 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 
 ## Quick Start
 
-### One command (recommended)
+### Most people start with one of these
 
-```
+```text
 /flow-auto Add a workflow plugin for OpenCode
 ```
 
+```text
+/flow-plan Add a workflow plugin for OpenCode
+```
+
+```text
+/flow-review Review this repository for correctness and release risks
+```
+
+- Use **`/flow-auto`** when you want Flow to drive the work end to end.
+- Use **`/flow-plan`** when you want to inspect or shape the plan before execution.
+- Use **`/flow-review`** when you want a read-only findings report instead of code changes.
+
+### `/flow-auto` (recommended)
+
 Flow will inspect the repo, draft a plan, execute one feature at a time, validate, review, and continue until the work is done or something genuinely blocks it.
+
+For small tasks, this can finish in a single pass. For larger work, Flow adds the extra planning, validation, and review gates it needs.
 
 Flow treats the target repo's existing `package.json` scripts as the primary execution contract. Package-manager detection (`npm`, `pnpm`, `yarn`, `bun`) is supporting evidence, not a guessing engine.
 
-In monorepos, Flow now starts from the current working subdirectory and walks upward to the Flow workspace root, so package-local lockfiles or `package.json#packageManager` entries can override root-level defaults.
+In monorepos, Flow starts from the current working subdirectory and walks upward to the Flow workspace root, so package-local lockfiles or `package.json#packageManager` entries can override root-level defaults.
 
-If one directory contains conflicting lockfile families and there is no explicit `package.json#packageManager`, Flow now treats that package-manager evidence as ambiguous instead of guessing. In that case it should prefer existing `package.json` scripts and surface the ambiguity in planning context.
-
-For a small task, this can finish in a single autonomous pass — Flow's **lite lane** skips ceremony it doesn't need.
+If one directory contains conflicting lockfile families and there is no explicit `package.json#packageManager`, Flow treats that evidence as ambiguous instead of guessing. In that case it prefers existing `package.json` scripts and surfaces the ambiguity in planning context.
 
 ### Manual, step by step
 
@@ -86,8 +102,8 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
    - narrow a draft with `/flow-plan select <feature-id>...`
    - approve the current draft with `/flow-plan approve [feature-id]...`
 2. Review the proposed features
-3. `/flow-plan approve` (Flow may already have auto-approved a safe lite plan)
-4. `/flow-run` — runs exactly one approved feature
+3. `/flow-plan approve` (Flow may already have auto-approved a safe small plan)
+4. `/flow-run` to execute exactly one approved feature
 5. Repeat `/flow-run` until the session is complete
 6. `/flow-status` at any point to see where you are
 
@@ -100,17 +116,24 @@ For a small task, this can finish in a single autonomous pass — Flow's **lite 
 
 ### Review existing code (read-only)
 
-Review is available by default. Use the dedicated review lane when you want a read-only findings report instead of feature execution.
+Use `/flow-review` when you want a read-only findings report instead of feature execution.
 
 ```text
 /flow-review Review this repository for correctness and release risks
 ```
 
-User-facing review depth maps to internal rigor:
+By default, `/flow-review` returns a human-readable report with:
 
-- `default` => `broad_audit`
-- `detailed` => `deep_audit`
-- `exhaustive` => `full_audit`
+- Conclusion
+- Top findings
+- Recommended next actions
+- Coverage notes
+
+Review depth options:
+
+- `default` — broad review across the major repo surfaces
+- `detailed` — deeper review with direct evidence across the major repo surfaces
+- `exhaustive` — highest review strength; only claimed when coverage actually supports it
 
 Examples:
 
@@ -120,89 +143,30 @@ Examples:
 /flow-review exhaustive Review this repository before release and identify all major risks
 ```
 
-Flow only claims achieved `full_audit` when every major discovered surface is directly reviewed.
+Flow will only claim the strongest achieved review depth when the inspected coverage actually supports it.
 
-## Core concepts
-
-### Sessions and features
-
-A **session** represents one goal. It contains a plan made of **features**, each with its own state (`pending`, `in_progress`, `completed`, `blocked`). You can have **one active session per project/worktree** at a time.
-
-### Lanes (chosen automatically)
-
-Flow picks one of three lanes based on the shape of the work — you never set this yourself.
-
-- **lite** — tiny, low-risk work (single feature, no research, no decisions). Flow can auto-approve the draft plan, skip the separate reviewer step, and retry recoverable errors without stopping.
-- **standard** — the normal multi-feature path. Planning, execution, review, and validation all run, one gate at a time.
-- **strict** — triggered when a plan carries decision gates needing a human call, replan history, custom completion thresholds, or a non-default goal mode. Everything is fully gated.
-
-### Validation and review
-
-Before a feature can be marked complete, Flow requires:
-
-- **validation**: recorded evidence that what was built actually works (e.g. tests, type checks, targeted runs)
-- **review**: an approval of the change (`featureReview` for a single feature, `finalReview` for the runtime-owned final review policy before the whole session closes; default is a detailed cross-feature review, but plans may opt into `broad`)
-
-In the lite lane, these gates are still enforced but can be satisfied in the same step the worker finishes. In standard and strict lanes, the reviewer decision has to be recorded as its own step.
-
-### Decision gates
-
-When planning hits an ambiguous choice, Flow classifies it:
-
-- `autonomous_choice` — Flow picks and moves on
-- `recommend_confirm` — Flow recommends an option and waits for you to confirm
-- `human_required` — Flow stops and asks you
-
-This is why `/flow-auto` can run for long stretches without wandering off: it pauses on things that genuinely need a human.
-
-### Completion and closing a session
-
-A plan has a **delivery policy** that decides when the session is "done":
-
-- `ship_when_clean` — every planned feature must pass
-- `ship_when_core_done` — critical features must pass; nice-to-haves can be deferred
-- `ship_when_threshold_met` — a minimum number of features must pass
-
-Sessions close with an explicit outcome via `/flow-session close`:
-
-- **completed** — the work shipped
-- **deferred** — paused for now, may resume later
-- **abandoned** — don't come back to this one
-
-### Goal modes
-
-A plan isn't limited to building features. Flow supports:
-
-- `implementation` — build something new (the default)
-- `review` — audit existing code without changing it
-- `review_and_fix` — audit, then apply the fixes
-
-For user-facing read-only review work, prefer the dedicated `/flow-review` command over routing reviews through the normal execution lane.
-
-### Recovery
-
-When something recoverable goes wrong (a flaky test, a missing prerequisite, a validation rerun), Flow attaches structured recovery metadata and retries — you don't have to manually reset. It only stops for real blockers (external dependency, human-required decision, hard failure).
-
-## Commands (by intent)
+## The commands most people use
 
 - Start or reshape work → `/flow-plan <goal>`
 - Run one approved feature → `/flow-run [feature-id]`
-- Run autonomously end-to-end → `/flow-auto <goal>` or `/flow-auto resume`
+- Run autonomously end to end → `/flow-auto <goal>` or `/flow-auto resume`
 - Run a read-only repo review → `/flow-review <goal>`
 - See what Flow is doing and what to run next → `/flow-status [detail]`
-- Diagnose readiness/blockers → `/flow-doctor [detail]`
+- Diagnose readiness or blockers → `/flow-doctor [detail]`
 - Browse sessions → `/flow-history` / `/flow-history show <session-id>`
 - Switch or close the active session → `/flow-session activate <id>` / `/flow-session close <completed|deferred|abandoned>`
 - Reset a feature → `/flow-reset feature <id>`
 
-## How a session runs
+## How Flow works
 
-1. **Inspect** the repo for evidence (stack, conventions, existing code).
-2. **Plan** — draft a compact feature list, with decisions recorded.
-3. **Approve** the plan (auto in lite lane, explicit otherwise).
-4. **Execute** one feature with targeted validation.
-5. **Review** the result against the feature's acceptance.
-6. **Continue, recover, or replan** — until the delivery policy is satisfied and broad final validation plus the runtime-owned final review policy pass. Then the session completes.
+At a high level, Flow does this:
+
+1. **Inspect** the repo for evidence.
+2. **Plan** the work into one or more features.
+3. **Execute** one feature at a time.
+4. **Validate** the result with recorded evidence.
+5. **Review** the result before advancing.
+6. **Continue, recover, or replan** until the session is complete.
 
 > Note: Runtime-level parallel feature execution is intentionally deferred; Flow continues to execute one feature at a time.
 
@@ -222,7 +186,7 @@ flowchart TD
     H --> I[Session complete]
 ```
 
-## Storage
+## Session state on disk
 
 Flow writes state only inside the worktree it's running in:
 
@@ -230,10 +194,6 @@ Flow writes state only inside the worktree it's running in:
 .flow/active/<session-id>/session.json
 .flow/stored/<session-id>/session.json
 .flow/completed/<session-id>-<timestamp>/
-.flow/audits/<report-id>/report.json
-.flow/audits/<report-id>/report.md
-.flow/audits/latest.json
-.flow/audits/latest.md
 ```
 
 Readable markdown for each session lives alongside it:
@@ -243,7 +203,8 @@ Readable markdown for each session lives alongside it:
 .flow/active/<session-id>/docs/features/<feature-id>.md
 ```
 
-Audit artifacts are separate from session execution state. They are written only when the audit lane persists a finalized report.
+Read-only `/flow-review` reports are returned directly to the caller. Flow does not maintain a separate persisted review-history tree.
+
 There is exactly one active session per worktree. Switching with `/flow-session activate <id>` moves the current active session to `stored/` and brings the requested one in.
 
 ### Workspace safety

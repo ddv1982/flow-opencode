@@ -9,8 +9,14 @@ import {
 import {
 	FLOW_COORDINATOR_BOUNDARY_RULE,
 	FLOW_COORDINATOR_ROLE_ROUTING_RULE,
+	FLOW_FINAL_COMPLETION_COMMAND_RULE,
 	FLOW_FINAL_COMPLETION_REVIEW_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
+	FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE,
+	FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE,
+	FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE,
+	FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE,
+	FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE,
 	FLOW_PERSIST_REVIEWER_DECISIONS_RULE,
 	FLOW_RESOLVE_RUNTIME_ERRORS_RULE,
 	FLOW_RESUME_ONLY_RULE,
@@ -67,7 +73,7 @@ export const FLOW_PLAN_COMMAND_TEMPLATE = renderPromptSections([
 - If the arguments start with \`select\`, narrow the current draft plan to the listed feature ids without approving it.
 - Otherwise treat the full argument string as the planning goal and create or refresh a draft plan.
 - For planning, call \`flow_plan_start\` first, detect the stack and package manager from repo evidence, persist planning context through \`flow_plan_context_record\` using \`planningJson\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\` using \`planJson\`, and end with a concise draft summary plus the next approval step.
-- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.
+${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 - If package-manager evidence is ambiguous, record that ambiguity and avoid guessing a manager-specific command when existing scripts cover the task.
 - If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
 Do not start implementation from this command.`,
@@ -94,11 +100,11 @@ export const FLOW_RUN_COMMAND_TEMPLATE = renderPromptSections([
 		body: `- Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
 - Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using \`decisionJson\`.
-- Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check.
-- If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing script covers the task.
+${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
+${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
-- On the final completion path, run broad validation, obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) through \`flow_review_record_final\` using \`decisionJson\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\` using \`workerJson\`.
+${FLOW_FINAL_COMPLETION_COMMAND_RULE}
 - End with a compact summary of changes, validation evidence, and the runtime next step.`,
 	},
 	{
@@ -128,8 +134,8 @@ ${FLOW_COORDINATOR_BOUNDARY_RULE}
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
 - Plan or refresh only when the runtime says planning is needed, detect stack and package-manager context first, record it with \`flow_plan_context_record\` using \`planningJson\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
-- Treat existing package.json scripts as primary and invoke them through the detected package manager or the repo's established script-running convention. Treat package-manager detection as supporting evidence instead of assuming Bun.
-- If package-manager evidence is ambiguous, surface that ambiguity and keep execution on explicit scripts rather than guessing a manager-specific command.
+${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
+${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}

@@ -3,6 +3,11 @@ import {
 	renderPromptSections,
 } from "../../prompts/format";
 import { FLOW_AUDIT_CONTRACT } from "./contracts";
+import {
+	FLOW_REVIEW_SHARED_RULES,
+	FLOW_REVIEW_SHARED_TAXONOMY_RULES,
+	FLOW_REVIEW_SHARED_VALIDATION_RULE,
+} from "./fragments";
 
 const FLOW_AUDITOR_EXAMPLES = renderExampleBlocks([
 	{
@@ -11,7 +16,7 @@ const FLOW_AUDITOR_EXAMPLES = renderExampleBlocks([
 	},
 	{
 		name: "finding-taxonomy",
-		body: `Put directly confirmed bugs in confirmed_defect. Put partially inferred concerns in likely_risk. Put advisory hardening items in hardening_opportunity. Put CI/docs/process mismatches in process_gap.`,
+		body: `Put directly confirmed bugs in confirmed_defect. Put inferred, operational, robustness, and hardening concerns in risk. Put CI/docs/process mismatches in process_gap.`,
 	},
 	{
 		name: "human-readable-conclusion",
@@ -31,17 +36,12 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 	{
 		title: "Rules",
 		body: `- Stay read-only with respect to repository code and Flow execution/review state.
+- Map the major repo surfaces before reporting findings.
+${FLOW_REVIEW_SHARED_RULES}
 - Do not write code, plan features, approve plans, run features, record reviewer decisions, reset features, or otherwise claim execution success.
 - Do not edit \`.flow\` files directly.
-- Map the major repo surfaces before reporting findings.
-- Do not claim full_audit unless every major discovered surface is directly reviewed and no major surface remains unreviewed.
-- If coverage is incomplete, downgrade achievedDepth and explain why.
-- Separate findings into confirmed_defect, likely_risk, hardening_opportunity, and process_gap.
-- Distinguish product defects from hardening advice and process/reporting mismatches.
-- Maintain discoveredSurfaces as the canonical coverage ledger.
-- This surface does not run shell validation directly; if no validation evidence is already available, record status: not_run and explain why.
-- Prefer concrete file/line evidence over generalized advice.
-- Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.
+${FLOW_REVIEW_SHARED_VALIDATION_RULE}
+${FLOW_REVIEW_SHARED_TAXONOMY_RULES.join("\n")}
 - Do not dump the full structured ledger unless the user explicitly asks for raw or JSON output.`,
 	},
 	{

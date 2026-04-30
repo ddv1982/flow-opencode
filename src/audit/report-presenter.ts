@@ -4,8 +4,7 @@ export type ReviewRenderView = "human" | "structured" | "both";
 
 const FINDING_CATEGORY_ORDER = [
 	"confirmed_defect",
-	"likely_risk",
-	"hardening_opportunity",
+	"risk",
 	"process_gap",
 ] as const;
 
@@ -28,10 +27,8 @@ function findingCategoryLabel(
 	switch (category) {
 		case "confirmed_defect":
 			return "confirmed defect";
-		case "likely_risk":
-			return "likely risk";
-		case "hardening_opportunity":
-			return "hardening opportunity";
+		case "risk":
+			return "risk";
 		case "process_gap":
 			return "process gap";
 	}
@@ -41,6 +38,12 @@ function severityLabel(
 	severity: ReviewReport["findings"][number]["severity"],
 ): string | null {
 	return severity ? `${severity} severity` : null;
+}
+
+function confidenceLabel(
+	confidence: ReviewReport["findings"][number]["confidence"],
+): string {
+	return `confidence: ${confidence}`;
 }
 
 function sortFindings(report: ReviewReport): ReviewReport["findings"] {
@@ -73,10 +76,42 @@ function releaseRecommendation(report: ReviewReport): string {
 	if (topFinding.category === "confirmed_defect") {
 		return `Not ready to ship until '${topFinding.title}' is addressed.`;
 	}
-	if (topFinding.severity === "high" || topFinding.severity === "medium") {
-		return `Usable with caveats, but '${topFinding.title}' should be addressed before release.`;
+	if (topFinding.category === "risk") {
+		if (topFinding.severity === "high") {
+			return `No confirmed defect was proven here, but '${topFinding.title}' should be addressed before release if this path matters operationally.`;
+		}
+		return `No confirmed release blocker was proven in this review, but '${topFinding.title}' is a material risk to address next.`;
 	}
-	return `No obvious release blocker was confirmed, but '${topFinding.title}' should be addressed next.`;
+	return `No product defect was confirmed here, but '${topFinding.title}' should be cleaned up to reduce maintenance risk.`;
+}
+
+function normalizedOverallVerdict(report: ReviewReport): string {
+	return report.overallVerdict;
+}
+
+function normalizedImpactLabel(
+	category: ReviewReport["findings"][number]["category"],
+): string {
+	switch (category) {
+		case "confirmed_defect":
+			return "Impact";
+		case "risk":
+			return "Risk";
+		case "process_gap":
+			return "Follow-up";
+	}
+}
+
+function normalizedImpactText(
+	finding: ReviewReport["findings"][number],
+): string {
+	return finding.impact;
+}
+
+function normalizedRemediation(
+	finding: ReviewReport["findings"][number],
+): string | null {
+	return finding.remediation ?? null;
 }
 
 function bulletLines(items: string[], limit = items.length): string[] {
@@ -89,10 +124,12 @@ function renderConclusion(report: ReviewReport): string[] {
 		"## Conclusion",
 		`- Requested depth: ${depthLabel(report.requestedDepth)}`,
 		`- Achieved depth: ${depthLabel(report.achievedDepth)}`,
-		`- Overall verdict: ${report.overallVerdict}`,
+		`- Overall verdict: ${normalizedOverallVerdict(report)}`,
 		...(topFinding
-			? [`- Highest-priority issue: ${topFinding.title}`]
-			: [`- Highest-priority issue: none identified at this review depth`]),
+			? [
+					`- Highest-priority finding: ${topFinding.title} (${findingCategoryLabel(topFinding.category)})`,
+				]
+			: [`- Highest-priority finding: none identified at this review depth`]),
 		`- Recommendation: ${releaseRecommendation(report)}`,
 	];
 }
@@ -109,14 +146,15 @@ function renderFindings(report: ReviewReport): string[] {
 			const labels = [
 				severityLabel(finding.severity),
 				findingCategoryLabel(finding.category),
+				confidenceLabel(finding.confidence),
 			]
 				.filter(Boolean)
 				.join(" · ");
 			return [
 				`### ${index + 1}. ${finding.title}${labels ? ` — ${labels}` : ""}`,
-				`- Impact: ${finding.impact}`,
-				...(finding.remediation
-					? [`- Recommendation: ${finding.remediation}`]
+				`- ${normalizedImpactLabel(finding.category)}: ${normalizedImpactText(finding)}`,
+				...(normalizedRemediation(finding)
+					? [`- Recommendation: ${normalizedRemediation(finding)}`]
 					: []),
 				"- Evidence:",
 				...bulletLines(finding.evidence, 3),
@@ -145,18 +183,37 @@ function renderNextSteps(report: ReviewReport): string[] {
 }
 
 function renderCoverageNotes(report: ReviewReport): string[] {
-	const notes = report.coverageSummary.notes ?? [];
-	const unreviewed = report.unreviewedSurfaces.map(
-		(surface) => `${surface.name}: ${surface.reason}`,
+	const notes = report.coverageNotes ?? [];
+	const directlyReviewed = report.discoveredSurfaces.filter(
+		(surface) => surface.reviewStatus === "directly_reviewed",
 	);
-	const validationNotes = report.validationRun.map(
-		(entry) => `${entry.command} — ${entry.status}: ${entry.summary}`,
+	const spotChecked = report.discoveredSurfaces.filter(
+		(surface) => surface.reviewStatus === "spot_checked",
 	);
+	const unreviewed = report.discoveredSurfaces
+		.filter((surface) => surface.reviewStatus === "unreviewed")
+		.map((surface) => `${surface.name}: ${surface.reason ?? "not reviewed"}`);
+	const validationNotes =
+		report.validationRun.length > 0
+			? report.validationRun.map(
+					(entry) => `${entry.command} — ${entry.status}: ${entry.summary}`,
+				)
+			: ["not_run: no validation evidence was recorded for this review."];
+	const fullAuditEligible =
+		report.discoveredSurfaces.length > 0 &&
+		spotChecked.length === 0 &&
+		unreviewed.length === 0;
 	return [
 		"## Coverage notes",
-		`- Coverage: ${report.coverageSummary.reviewedSurfaceCount}/${report.coverageSummary.discoveredSurfaceCount} discovered surfaces reviewed; ${report.coverageSummary.unreviewedSurfaceCount} unreviewed.`,
-		`- Full audit eligible: ${report.coverageRubric.fullAuditEligible ? "yes" : "no"}`,
+		`- Coverage: ${directlyReviewed.length} directly reviewed, ${spotChecked.length} spot-checked, ${unreviewed.length} unreviewed surfaces.`,
+		`- Full audit eligible: ${fullAuditEligible ? "yes" : "no"}`,
 		...(notes.length > 0 ? bulletLines(notes) : []),
+		...(spotChecked.length > 0
+			? [
+					"- Spot-checked surfaces:",
+					...bulletLines(spotChecked.map((surface) => surface.name)),
+				]
+			: []),
 		...(unreviewed.length > 0
 			? ["- Unreviewed surfaces:", ...bulletLines(unreviewed)]
 			: []),

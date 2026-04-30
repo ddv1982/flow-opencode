@@ -42,3 +42,22 @@ export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
 	"- Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.";
 export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =
 	"- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.";
+
+export const FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE =
+	"- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.";
+export const FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE =
+	"- If package-manager evidence is ambiguous, do not guess. Prefer existing package.json scripts and call out the ambiguity in planning context.";
+export const FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE =
+	"- Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check. Do not default to Bun in non-Bun repos.";
+export const FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE =
+	"- If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing package.json script covers the task.";
+export const FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE =
+	"- Treat existing package.json scripts as primary and invoke them through the detected package manager or the repo's established script-running convention. Treat package-manager detection as supporting evidence instead of assuming Bun.";
+export const FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE =
+	"- If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.";
+export const FLOW_FINAL_COMPLETION_COMMAND_RULE =
+	"- On the final completion path, run broad validation, obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) through `flow_review_record_final` using `decisionJson`, include a passing `finalReview`, and only then persist the result through `flow_run_complete_feature` using `workerJson`.";
+export const FLOW_FINAL_COMPLETION_WORKER_STEP_RULE =
+	"On the final completion path, run broad validation, ask flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), and persist that approval with flow_review_record_final, encoding the reviewer decision into `decisionJson`.";
+export const FLOW_FINAL_COMPLETION_AUTO_STEP_RULE =
+	"On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), persist it with flow_review_record_final using `decisionJson`, and keep fixing/revalidating until the final review passes.";
