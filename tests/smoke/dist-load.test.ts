@@ -12,8 +12,6 @@ type TestTool = {
 	execute: (args: unknown, context: unknown) => Promise<string>;
 };
 type FlowToolName =
-	| "flow_audit_write_report"
-	| "flow_audit_reports"
 	| "flow_status"
 	| "flow_doctor"
 	| "flow_history"
@@ -38,7 +36,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, ten commands, and nineteen tools by default", async () => {
+	test("dist bundle exposes five agents, nine commands, and seventeen tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -58,10 +56,8 @@ describe("built dist smoke load", () => {
 		);
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
-		expect(Object.keys(config.command ?? {})).toHaveLength(10);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(19);
-		expect(plugin.tool?.flow_audit_write_report).toBeDefined();
-		expect(plugin.tool?.flow_audit_reports).toBeDefined();
+		expect(Object.keys(config.command ?? {})).toHaveLength(9);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(17);
 
 		const context = createToolContext(worktree);
 		const planStartResponse = JSON.parse(
@@ -75,33 +71,6 @@ describe("built dist smoke load", () => {
 		const sessionId = planStartResponse.session.id as string;
 
 		const toolArgs: Record<string, unknown> = {
-			flow_audit_write_report: {
-				reportJson: JSON.stringify({
-					requestedDepth: "deep_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Reviewed one surface directly.",
-					overallVerdict: "Deep audit completed.",
-					discoveredSurfaces: [
-						{
-							name: "prompt surfaces",
-							category: "source_runtime",
-							reviewStatus: "directly_reviewed",
-							evidence: ["src/prompts/agents.ts:1-50"],
-						},
-					],
-					validationRun: [
-						{
-							command: "bun run check",
-							status: "not_run",
-							summary: "Read-only audit.",
-						},
-					],
-					findings: [],
-				}),
-			},
-			flow_audit_reports: {
-				requestJson: JSON.stringify({ action: "history" }),
-			},
 			flow_status: {},
 			flow_doctor: {},
 			flow_history: {},
@@ -160,6 +129,28 @@ describe("built dist smoke load", () => {
 			},
 			flow_review_record_final: {
 				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+					"release_surface",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["dist/index.js"],
+					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "approved",
 				summary: "Looks good.",
 			},

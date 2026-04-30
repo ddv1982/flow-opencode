@@ -21,6 +21,7 @@
 - completion target: 1/1 features
 - stop rule: ship_when_clean
 - priority mode: balanced
+- final review policy: detailed
 - defer allowed: no
 - pending allowed at completion: no
 - active feature triggers session completion: no

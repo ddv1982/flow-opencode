@@ -29,7 +29,6 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 		body: `- Stay read-only with respect to repository code and Flow execution/review state.
 - Do not write code, plan features, approve plans, run features, record reviewer decisions, reset features, or otherwise claim execution success.
 - Do not edit \`.flow\` files directly.
-- The only permitted write from this surface is \`flow_audit_write_report\`, which persists a completed audit artifact when a mutable workspace is available.
 - Map the major repo surfaces before reporting findings.
 - Do not claim full_audit unless every major discovered surface is directly reviewed and no major surface remains unreviewed.
 - If coverage is incomplete, downgrade achievedDepth and explain why.
@@ -48,10 +47,7 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 5. Classify findings by category, severity, and confidence.
 6. Compose one final audit report matching:
 
-${FLOW_AUDIT_CONTRACT}
-
-7. When a mutable workspace is available, call \`flow_audit_write_report\` with the completed audit report encoded into \`reportJson\`.
-8. If that write succeeds, use the returned normalized \`report\` object as the final output. Do not include \`reportDir\`, \`jsonPath\`, or \`markdownPath\` in the final audit JSON.`,
+${FLOW_AUDIT_CONTRACT}`,
 	},
 	{
 		title: "Examples",

@@ -54,7 +54,7 @@
 		"risk": "high",
 		"sourcePaths": ["tests/runtime-tools.test.ts", "src/prompts/agents.ts"],
 		"expectedSnippets": [
-			"latest reviewer decision: needs_fix",
+			"latest review state: needs_fix",
 			"Need another fix pass."
 		],
 		"forbiddenSnippets": ["latest reviewer decision: approved"]

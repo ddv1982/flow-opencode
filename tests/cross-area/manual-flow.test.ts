@@ -68,6 +68,7 @@ function normalizeEnvelope(value: unknown): unknown {
 			}
 		}
 		delete session.operator;
+		delete session.finalReviewPolicy;
 		const lastReviewerDecision = session.lastReviewerDecision as
 			| Record<string, unknown>
 			| undefined;
@@ -116,6 +117,28 @@ const expectedEnvelopeSnapshot = {
 				blockingFindings: [],
 				followUps: [],
 				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+					"release_surface",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["dist/index.js"],
+					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "approved",
 				suggestedValidation: [],
 				summary: "Final review approved.",
@@ -235,6 +258,28 @@ const expectedEnvelopeSnapshot = {
 				blockingFindings: [],
 				followUps: [],
 				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+					"release_surface",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["dist/index.js"],
+					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "approved",
 				suggestedValidation: [],
 				summary: "Final review approved.",
@@ -463,6 +508,28 @@ describe("cross-area manual flow", () => {
 			await flowReviewRecordFinal.execute(
 				{
 					scope: "final",
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+						"release_surface",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["dist/index.js"],
+						validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "approved",
 					summary: "Final review approved.",
 				},
@@ -498,6 +565,28 @@ describe("cross-area manual flow", () => {
 						blockingFindings: [],
 					},
 					finalReview: {
+						reviewDepth: "detailed",
+						reviewedSurfaces: [
+							"changed_files",
+							"shared_surfaces",
+							"validation_evidence",
+							"release_surface",
+						],
+						evidenceSummary:
+							"Checked final cross-feature integration and validation evidence.",
+						validationAssessment:
+							"Validation coverage and cross-feature interactions were reviewed.",
+						evidenceRefs: {
+							changedArtifacts: ["dist/index.js"],
+							validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+						},
+						integrationChecks: [
+							"Reviewed integration points across the active feature boundary.",
+						],
+						regressionChecks: [
+							"Checked for regressions in shared surfaces and validation evidence.",
+						],
+						remainingGaps: [],
 						status: "passed",
 						summary: "Final review is clean.",
 						blockingFindings: [],

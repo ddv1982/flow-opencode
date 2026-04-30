@@ -1,5 +1,11 @@
 export { featureWouldReachCompletion, summarizeCompletion } from "./completion";
 export {
+	describeFinalReviewCoverageFailure,
+	type FinalReviewCoverageTarget,
+	type FinalReviewSurface,
+	finalReviewDepthMatchesPolicy,
+} from "./final-review-coverage";
+export {
 	SEMANTIC_COMPLETION_GATE_ORDER,
 	SEMANTIC_COMPLETION_POLICY_EXPECTATIONS,
 	SEMANTIC_DECISION_GATE_EXPECTATIONS,
@@ -17,6 +23,7 @@ export {
 	activeDecisionGate,
 	completedFeatureCount,
 	decisionRequiresPause,
+	finalReviewPolicyForPlan,
 	reviewerPurposeForScope,
 	sessionCompletionReached,
 	targetCompletedFeatureCount,

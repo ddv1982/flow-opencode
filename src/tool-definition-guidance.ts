@@ -30,7 +30,7 @@ const FLOW_TOOL_DESCRIPTION_GUIDANCE: Record<string, string> = {
 ## Returns
 - Returns the canonical runtime response describing the active feature or why nothing is runnable.`,
 	flow_run_complete_feature: `## Use when
-- Use only after the required validation for the current path is complete: targeted validation plus feature review for normal features, or broad validation plus final review for the completion path.
+- Use only after the required validation for the current path is complete: targeted validation plus feature review for normal features, or broad validation plus the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) for the completion path.
 - Provide the full worker result as the JSON string field \`workerJson\`.
 
 ## Avoid when
@@ -48,11 +48,11 @@ const FLOW_TOOL_DESCRIPTION_GUIDANCE: Record<string, string> = {
 ## Returns
 - Returns the canonical runtime response for the feature-level approval gate.`,
 	flow_review_record_final: `## Use when
-- Use to persist the final cross-feature reviewer decision on the final completion path.
+- Use to persist the final reviewer decision required by deliveryPolicy.finalReviewPolicy on the final completion path.
 - Provide the full reviewer decision as the JSON string field \`decisionJson\`.
 
 ## Avoid when
-- Do not use for normal feature reviews or before broad final validation is complete.
+- Do not use for normal feature reviews or before broad final validation and the runtime-owned final review required by deliveryPolicy.finalReviewPolicy are complete.
 
 ## Returns
 - Returns the canonical runtime response for the final approval gate.`,

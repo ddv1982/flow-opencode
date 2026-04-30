@@ -157,11 +157,11 @@ export const SEMANTIC_COMPLETION_GATE_ORDER = {
 	final: [
 		"missing_validation",
 		"failing_validation",
-		"missing_reviewer_decision",
+		"missing_validation_scope",
 		"failing_feature_review",
 		"failing_final_review",
-		"missing_validation_scope",
 		"missing_final_review",
+		"missing_reviewer_decision",
 	],
 } as const satisfies {
 	feature: readonly CompletionRecoveryKind[];

@@ -96,9 +96,9 @@ export const FLOW_RUN_COMMAND_TEMPLATE = renderPromptSections([
 - Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using \`decisionJson\`.
 - Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check.
 - If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing script covers the task.
-- In the lite lane, if the runtime session is small enough and the worker result already contains the required passing review payload, you may persist completion without a separate \`flow_review_record_feature\` or \`flow_review_record_final\` step.
+- In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
-- On the final completion path, run broad validation, obtain final approval through \`flow_review_record_final\` using \`decisionJson\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\` using \`workerJson\`.
+- On the final completion path, run broad validation, obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) through \`flow_review_record_final\` using \`decisionJson\`, include a passing \`finalReview\`, and only then persist the result through \`flow_run_complete_feature\` using \`workerJson\`.
 - End with a compact summary of changes, validation evidence, and the runtime next step.`,
 	},
 	{

@@ -143,6 +143,7 @@ export function statusResponse(
 		return toCompactJson({
 			status: viewModel.status,
 			summary: viewModel.summary,
+			finalReviewPolicy: viewModel.session?.finalReviewPolicy ?? null,
 			phase: guidance.phase,
 			lane: guidance.lane,
 			laneReason: guidance.laneReason,
@@ -158,6 +159,7 @@ export function statusResponse(
 	return toJson({
 		status: viewModel.status,
 		summary: viewModel.summary,
+		finalReviewPolicy: viewModel.session?.finalReviewPolicy ?? null,
 		...(viewModel.session ? { session: viewModel.session } : {}),
 		phase: guidance.phase,
 		lane: guidance.lane,

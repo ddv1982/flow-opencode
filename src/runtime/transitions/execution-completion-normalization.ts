@@ -9,6 +9,36 @@ export type NormalizedReview = Omit<
 	>;
 };
 
+export type NormalizedFinalReview = Omit<
+	NonNullable<WorkerResultArgs["finalReview"]>,
+	| "blockingFindings"
+	| "reviewedSurfaces"
+	| "evidenceRefs"
+	| "integrationChecks"
+	| "regressionChecks"
+	| "remainingGaps"
+> & {
+	blockingFindings: NonNullable<
+		NonNullable<WorkerResultArgs["finalReview"]>["blockingFindings"]
+	>;
+	reviewedSurfaces: NonNullable<
+		NonNullable<WorkerResultArgs["finalReview"]>["reviewedSurfaces"]
+	>;
+	evidenceRefs: {
+		changedArtifacts: string[];
+		validationCommands: string[];
+	};
+	integrationChecks: NonNullable<
+		NonNullable<WorkerResultArgs["finalReview"]>["integrationChecks"]
+	>;
+	regressionChecks: NonNullable<
+		NonNullable<WorkerResultArgs["finalReview"]>["regressionChecks"]
+	>;
+	remainingGaps: NonNullable<
+		NonNullable<WorkerResultArgs["finalReview"]>["remainingGaps"]
+	>;
+};
+
 export type NormalizedWorkerResultBase = Omit<
 	WorkerResultArgs,
 	| "artifactsChanged"
@@ -21,7 +51,7 @@ export type NormalizedWorkerResultBase = Omit<
 	validationRun: NonNullable<WorkerResultArgs["validationRun"]>;
 	decisions: NonNullable<WorkerResultArgs["decisions"]>;
 	featureReview: NormalizedReview;
-	finalReview: NormalizedReview | undefined;
+	finalReview: NormalizedFinalReview | undefined;
 };
 
 export type NormalizedWorkerResultOk = NormalizedWorkerResultBase & {
@@ -52,6 +82,23 @@ function normalizeReview(
 	};
 }
 
+function normalizeFinalReview(
+	review: NonNullable<WorkerResultArgs["finalReview"]>,
+): NormalizedFinalReview {
+	return {
+		...review,
+		blockingFindings: review.blockingFindings ?? [],
+		reviewedSurfaces: review.reviewedSurfaces ?? [],
+		evidenceRefs: {
+			changedArtifacts: review.evidenceRefs?.changedArtifacts ?? [],
+			validationCommands: review.evidenceRefs?.validationCommands ?? [],
+		},
+		integrationChecks: review.integrationChecks ?? [],
+		regressionChecks: review.regressionChecks ?? [],
+		remainingGaps: review.remainingGaps ?? [],
+	};
+}
+
 export function normalizeWorkerResult(
 	worker: WorkerResultArgs,
 ): NormalizedWorkerResult {
@@ -62,7 +109,7 @@ export function normalizeWorkerResult(
 		decisions: worker.decisions ?? [],
 		featureReview: normalizeReview(worker.featureReview),
 		finalReview: worker.finalReview
-			? normalizeReview(worker.finalReview)
+			? normalizeFinalReview(worker.finalReview)
 			: undefined,
 	};
 }

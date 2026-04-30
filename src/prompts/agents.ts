@@ -150,9 +150,9 @@ ${FLOW_FINAL_COMPLETION_PATH_RULE}`,
 4. Run targeted validation.
 5. Review the changed files.
 6. If review finds blocking issues, fix them, rerun targeted validation, and review again. Repeat until review passes or a real blocker remains.
-7. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing review payload, you may skip the separate reviewer-persistence hop.
+7. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing feature-level review payload for a non-final feature, you may skip the separate reviewer-persistence hop.
 8. In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.
-9. Otherwise, on the final completion path, run broad validation, ask flow-reviewer for a final review, and persist that approval with flow_review_record_final, encoding the reviewer decision into \`decisionJson\`.
+9. On the final completion path, run broad validation, ask flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), and persist that approval with flow_review_record_final, encoding the reviewer decision into \`decisionJson\`.
 10. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature, encoding the reviewer decision into \`decisionJson\`.
 11. Return one worker result matching:
 
@@ -188,7 +188,7 @@ ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
-- Before declaring the whole session complete, run broad repo validation, review cross-feature impact, fix any findings, rerun broad validation, and repeat until the final state is clean.
+- Before declaring the whole session complete, run broad repo validation, perform the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), fix any findings, rerun broad validation, and repeat until the final state is clean.
 - Treat existing package.json scripts as primary, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands as supporting evidence only when scripts are missing.
 - If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
@@ -213,7 +213,7 @@ ${FLOW_NO_INFERRED_GOAL_RULE}`,
 10. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
 11. Persist an approved feature result with flow_run_complete_feature using \`workerJson\`. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
 12. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
-13. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final cross-feature review, persist it with flow_review_record_final using \`decisionJson\`, and keep fixing/revalidating until the final review passes.
+13. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), persist it with flow_review_record_final using \`decisionJson\`, and keep fixing/revalidating until the final review passes.
 14. Only then allow final completion.
 15. Repeat until the session is complete or blocked.
 
@@ -248,7 +248,8 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 - Focus on actionable findings.
 - Return approved only when the work is clean enough to advance.
 - Return needs_fix when the current feature should continue through another fix/validate/review iteration.
-- Return blocked only for a real external blocker or a required human product decision.`,
+- Return blocked only for a real external blocker or a required human product decision.
+- For scope: final, set reviewDepth to match deliveryPolicy.finalReviewPolicy and perform the corresponding cross-feature review before approving.`,
 	},
 	{
 		title: "Output contract",
@@ -279,8 +280,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - For status requests, prefer compact flow_status output unless the user explicitly asks for detail/raw/json; lead with the runtime guidance summary/next step when present, then add only the supporting session details needed for clarity, and stop.
 - For doctor requests, prefer compact flow_doctor output unless the user explicitly asks for detail/raw/json; lead with the operator summary, then summarize any warnings or failures plus the recommended remediation clearly, and stop.
 - For history requests, call flow_history or flow_history_show, summarize the result clearly, and stop.
-- For audit requests, follow the command template precisely, stay read-only, and use audit tools only as directed by that template.
-- For audit history requests, call flow_audit_reports with requestJson containing the matching action payload (history, show, or compare), summarize the result clearly, and stop.
+- For audit requests, follow the command template precisely and stay read-only.
 - For session activation requests, call flow_session_activate, summarize the result clearly, and stop.
 - For reset requests, call flow_reset_feature. For session close requests, call flow_session_close, summarize what changed, and stop.
 - If a request is invalid, explain the valid command forms briefly and stop.`,

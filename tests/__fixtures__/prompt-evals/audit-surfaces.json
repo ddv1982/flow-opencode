@@ -5,9 +5,11 @@
 		"category": "claim-calibration",
 		"surface": "auditor_agent_prompt",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/agents.ts", "src/prompts/contracts.ts"],
+		"sourcePaths": [
+			"src/audit/prompts/agents.ts",
+			"src/audit/prompts/contracts.ts"
+		],
 		"expectedSnippets": [
-			"The only permitted write from this surface is `flow_audit_write_report`",
 			"Do not claim full_audit unless every major discovered surface is directly reviewed",
 			"Maintain discoveredSurfaces as the canonical coverage ledger",
 			"downgrade achievedDepth"
@@ -23,7 +25,10 @@
 		"category": "finding-taxonomy",
 		"surface": "auditor_agent_prompt",
 		"risk": "medium",
-		"sourcePaths": ["src/prompts/agents.ts", "src/prompts/contracts.ts"],
+		"sourcePaths": [
+			"src/audit/prompts/agents.ts",
+			"src/audit/prompts/contracts.ts"
+		],
 		"expectedSnippets": [
 			"confirmed_defect, likely_risk, hardening_opportunity, and process_gap",
 			"Use confidence confirmed only when the cited evidence directly supports the conclusion.",
@@ -35,17 +40,15 @@
 	},
 	{
 		"id": "audit-command-downgrades-incomplete-full-review",
-		"title": "Audit command downgrades unsupported full-review claims and stays outside the execution runtime",
+		"title": "Review command downgrades unsupported exhaustive claims and stays outside the execution runtime",
 		"category": "claim-calibration",
 		"surface": "audit_command_template",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"sourcePaths": ["src/audit/prompts/commands.ts", "tests/config.test.ts"],
 		"expectedSnippets": [
-			"Treat this command as a dedicated audit surface, not as Flow planning or feature execution.",
+			"Treat this command as the preferred deep read-only review surface, not as Flow planning or feature execution.",
 			"If coverage is incomplete, downgrade achievedDepth honestly and explain the gap.",
-			"The only permitted write from this command is `flow_audit_write_report`",
-			"use the returned normalized `report` object as the final audit output.",
-			"Do not include `reportDir`, `jsonPath`, or `markdownPath` in the final audit object."
+			"Depth labels for users:"
 		],
 		"forbiddenSnippets": [
 			"start Flow execution to complete an audit",
@@ -58,12 +61,11 @@
 		"category": "audit-coverage",
 		"surface": "audit_contract",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/contracts.ts", "tests/config.test.ts"],
+		"sourcePaths": ["src/audit/prompts/contracts.ts", "tests/config.test.ts"],
 		"expectedSnippets": [
 			"discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]",
 			"coverageRubric: { fullAuditEligible: boolean, directlyReviewedCategories: string[], spotCheckedCategories: string[], unreviewedCategories: string[], blockingReasons: string[] }",
-			"discoveredSurfaces is the canonical coverage ledger",
-			"artifact paths returned by flow_audit_write_report are persistence metadata"
+			"discoveredSurfaces is the canonical coverage ledger"
 		],
 		"forbiddenSnippets": ["omit unreviewed surfaces from the audit report"]
 	}

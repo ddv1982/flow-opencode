@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { WorkerResult } from "../src/runtime/schema";
+import { SessionSchema, type WorkerResult } from "../src/runtime/schema";
 import { createSession, saveSession } from "../src/runtime/session";
 import {
 	applyPlan,
@@ -37,7 +37,7 @@ describe("runtime completion and contract guards", () => {
 					contractVersion: "1",
 					status: "needs_input",
 					summary: "Need a new plan.",
-					artifactsChanged: [],
+					artifactsChanged: [{ path: "src/runtime/session.ts" }],
 					validationRun: [],
 					decisions: [],
 					nextStep: "Replan the work.",
@@ -89,7 +89,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -127,7 +127,7 @@ describe("runtime completion and contract guards", () => {
 		expect(completed.message).toContain("validation failed");
 	});
 
-	test("final-path reviewer failures return final recovery metadata even without final payload fields", () => {
+	test("final-path validation-scope failures return final recovery metadata before reviewer approval", () => {
 		const session = createSession("Build a workflow plugin");
 		const plan = {
 			...samplePlan(),
@@ -153,7 +153,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -180,13 +180,11 @@ describe("runtime completion and contract guards", () => {
 		expect(completed.ok).toBe(false);
 		if (completed.ok) return;
 
-		expect(completed.recovery?.errorCode).toBe(
-			"missing_final_reviewer_decision",
-		);
-		expect(completed.recovery?.recoveryStage).toBe("record_review");
-		expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
+		expect(completed.recovery?.errorCode).toBe("missing_broad_validation");
+		expect(completed.recovery?.recoveryStage).toBe("rerun_validation");
+		expect(completed.recovery?.prerequisite).toBe("validation_rerun_required");
 		expect(completed.recovery?.requiredArtifact).toBe(
-			"final_reviewer_decision",
+			"broad_validation_result",
 		);
 		expect(completed.recovery?.nextCommand).toBe("/flow-status");
 		expect(completed.recovery?.nextRuntimeTool).toBeUndefined();
@@ -269,7 +267,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -315,6 +313,27 @@ describe("runtime completion and contract guards", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -325,7 +344,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -388,13 +407,13 @@ describe("runtime completion and contract guards", () => {
 		if (!started.ok) return;
 
 		// Intentionally skip reviewer decision and use the wrong validation scope so
-		// multiple guard checks could fail. The first failing rule should remain
-		// missing_reviewer_decision.
+		// multiple guard checks could fail. Broad final validation should block
+		// completion before reviewer approval is requested.
 		const completed = completeRun(started.value.session, {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -421,10 +440,8 @@ describe("runtime completion and contract guards", () => {
 		expect(completed.ok).toBe(false);
 		if (completed.ok) return;
 
-		expect(completed.recovery?.errorCode).toBe(
-			"missing_final_reviewer_decision",
-		);
-		expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
+		expect(completed.recovery?.errorCode).toBe("missing_broad_validation");
+		expect(completed.recovery?.prerequisite).toBe("validation_rerun_required");
 	});
 
 	test("retains failure-path projections when completion guard rejects an ok result", () => {
@@ -534,6 +551,27 @@ describe("runtime completion and contract guards", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -544,7 +582,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -567,6 +605,27 @@ describe("runtime completion and contract guards", () => {
 				blockingFindings: [],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "passed",
 				summary: "Repo-wide validation is clean.",
 				blockingFindings: [],
@@ -577,6 +636,137 @@ describe("runtime completion and contract guards", () => {
 		if (!completed.ok) return;
 
 		expect(completed.value.status).toBe("completed");
+	});
+
+	test("defaults missing evidenceRefs when parsing persisted final review records", () => {
+		const session = createSession("Build a workflow plugin");
+		const plan = {
+			...samplePlan(),
+			completionPolicy: {
+				minCompletedFeatures: 1,
+			},
+			features: [samplePlan().features[0]],
+		};
+
+		const applied = applyPlan(session, plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const reviewed = recordReviewerDecision(started.value.session, {
+			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
+			status: "approved",
+			summary: "Final review looks good.",
+		});
+		expect(reviewed.ok).toBe(true);
+		if (!reviewed.ok) return;
+
+		const completed = completeRun(reviewed.value, {
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed runtime setup.",
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [
+				{
+					command: "bun test",
+					status: "passed",
+					summary: "Runtime tests passed.",
+				},
+			],
+			validationScope: "broad",
+			reviewIterations: 1,
+			decisions: [],
+			nextStep: "Session should complete.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: "setup-runtime",
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Looks good.",
+				blockingFindings: [],
+			},
+			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
+				status: "passed",
+				summary: "Final review looks good.",
+				blockingFindings: [],
+			},
+		});
+		expect(completed.ok).toBe(true);
+		if (!completed.ok) return;
+
+		const legacySession = JSON.parse(JSON.stringify(completed.value));
+		legacySession.execution.lastReviewerDecision.evidenceRefs = undefined;
+		legacySession.execution.history.at(-1).reviewerDecision.evidenceRefs =
+			undefined;
+		legacySession.execution.history.at(-1).finalReview.evidenceRefs = undefined;
+
+		const parsed = SessionSchema.safeParse(legacySession);
+		expect(parsed.success).toBe(true);
+		if (!parsed.success) return;
+		expect(parsed.data.execution.lastReviewerDecision?.scope).toBe("final");
+		if (parsed.data.execution.lastReviewerDecision?.scope === "final") {
+			expect(parsed.data.execution.lastReviewerDecision.evidenceRefs).toEqual({
+				changedArtifacts: [],
+				validationCommands: [],
+			});
+		}
+		expect(
+			parsed.data.execution.history.at(-1)?.finalReview?.evidenceRefs,
+		).toEqual({
+			changedArtifacts: [],
+			validationCommands: [],
+		});
 	});
 
 	test("allows lite-lane final completion without a separately recorded reviewer decision", () => {
@@ -606,7 +796,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed tiny fix.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -629,6 +819,27 @@ describe("runtime completion and contract guards", () => {
 				blockingFindings: [],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "passed",
 				summary: "Final review looks good.",
 				blockingFindings: [],
@@ -665,6 +876,27 @@ describe("runtime completion and contract guards", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -675,7 +907,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -698,6 +930,27 @@ describe("runtime completion and contract guards", () => {
 				blockingFindings: [],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "passed",
 				summary: "Feature review is clean.",
 				blockingFindings: [],
@@ -733,6 +986,27 @@ describe("runtime completion and contract guards", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -743,7 +1017,7 @@ describe("runtime completion and contract guards", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -766,6 +1040,27 @@ describe("runtime completion and contract guards", () => {
 				blockingFindings: [],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "passed",
 				summary: "Repo-wide validation is clean.",
 				blockingFindings: [],
@@ -815,7 +1110,7 @@ describe("runtime completion and contract guards", () => {
 					contractVersion: "1",
 					status: "ok",
 					summary: "Completed runtime setup.",
-					artifactsChanged: [],
+					artifactsChanged: [{ path: "src/runtime/session.ts" }],
 					validationRun: [
 						{
 							command: "bun test",
@@ -959,6 +1254,27 @@ describe("runtime completion and contract guards", () => {
 				blockingFindings: [{ summary: "Release timing not approved." }],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "needs_followup",
 				summary: "Final approval still pending.",
 				blockingFindings: [{ summary: "Awaiting operator sign-off." }],
@@ -1039,6 +1355,27 @@ describe("runtime completion and contract guards", () => {
 			{
 				decisionJson: JSON.stringify({
 					scope: "final",
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "approved",
 					summary: "Final state looks good.",
 					blockingFindings: [],
@@ -1079,6 +1416,27 @@ describe("runtime completion and contract guards", () => {
 			{
 				scope: "final",
 				featureId: "some-feature",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "approved",
 				summary: "Final state looks good.",
 				blockingFindings: [],

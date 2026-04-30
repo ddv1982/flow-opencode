@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
-import {
-	FLOW_AUDIT_COMMAND,
-	FLOW_AUDITS_COMMAND,
-} from "../src/audit/constants";
+import { join } from "node:path";
 import { resolveInstallTarget } from "../src/installer";
 import {
 	FLOW_HISTORY_COMMAND,
@@ -59,6 +55,16 @@ afterEach(() => {
 	cleanupTempDirs();
 });
 
+function assertOk<T>(
+	result: { ok: true; value: T } | { ok: false; message: string },
+): T {
+	if (!result.ok) {
+		throw new Error(result.message);
+	}
+
+	return result.value;
+}
+
 function toolContext(
 	worktree: string,
 	directory?: string,
@@ -69,20 +75,6 @@ function toolContext(
 	) as Parameters<
 		ReturnType<typeof createTestTools>["flow_status"]["execute"]
 	>[1];
-}
-
-function requireAuditTool<
-	Name extends "flow_audit_reports" | "flow_audit_write_report",
->(tools: ReturnType<typeof createTestTools>, name: Name) {
-	const tool = tools[name];
-	if (!tool) {
-		throw new Error(`Missing required audit tool: ${name}`);
-	}
-	return tool;
-}
-
-function asJson(value: unknown) {
-	return JSON.stringify(value);
 }
 
 async function installDoctorPluginFixture(homeDir: string) {
@@ -172,6 +164,34 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.workspaceRoot).toBe(worktree);
 		expect(parsed.session).toBeUndefined();
 		expect(response.includes("\n")).toBe(false);
+	});
+
+	test("flow_status exposes the runtime-owned final review policy for active sessions", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = assertOk(
+			approvePlan(
+				assertOk(
+					applyPlan(createSession("Build a workflow plugin"), samplePlan()),
+				),
+			),
+		);
+		await saveSession(worktree, session);
+
+		const detailed = JSON.parse(
+			await tools.flow_status.execute({}, toolContext(worktree)),
+		);
+		expect(detailed.finalReviewPolicy).toBe("detailed");
+		expect(detailed.session.finalReviewPolicy).toBe("detailed");
+		expect(detailed.operatorSummary).toContain("Final review policy: detailed");
+
+		const compact = JSON.parse(
+			await tools.flow_status.execute(
+				{ view: "compact" },
+				toolContext(worktree),
+			),
+		);
+		expect(compact.finalReviewPolicy).toBe("detailed");
 	});
 
 	test("flow_doctor reports install, config, workspace, and session readiness without mutating session state", async () => {
@@ -307,59 +327,6 @@ describe("runtime tools and recovery", () => {
 		expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 	});
 
-	test("flow_audit_reports returns a machine-readable missing-audit summary", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute(
-			{ requestJson: asJson({ action: "history" }) },
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("missing_audit");
-		expect(parsed.summary).toBe("No saved Flow audit reports found.");
-		expect(parsed.nextCommand).toBe(FLOW_AUDIT_COMMAND);
-	});
-
-	test("flow_audit_reports reports missing ids clearly when saved audits are absent", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute(
-			{
-				requestJson: asJson({
-					action: "compare",
-					leftReportId: "latest",
-					rightReportId: "latest",
-				}),
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("missing_audit");
-		expect(parsed.missingReportIds).toEqual(["latest"]);
-		expect(parsed.nextCommand).toBe(FLOW_AUDIT_COMMAND);
-	});
-
-	test("flow_audit_reports still accepts legacy direct-object args for internal callers", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute({ action: "history" }, toolContext(worktree));
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("missing_audit");
-		expect(parsed.summary).toBe("No saved Flow audit reports found.");
-	});
-
 	test("no-arg tools accept undefined args", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
@@ -384,343 +351,6 @@ describe("runtime tools and recovery", () => {
 		);
 		const historyParsed = JSON.parse(historyResponse);
 		expect(historyParsed.status).toBe("missing");
-	});
-
-	test("flow_audit_write_report persists normalized audit artifacts under .flow/audits", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_write_report",
-		).execute(
-			{
-				reportJson: JSON.stringify({
-					requestedDepth: "full_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Reviewed the prompt surfaces directly.",
-					overallVerdict:
-						"Deep audit completed with a documented coverage gap.",
-					discoveredSurfaces: [
-						{
-							name: "prompt surfaces",
-							category: "source_runtime",
-							reviewStatus: "directly_reviewed",
-							evidence: ["src/prompts/agents.ts:1-100"],
-						},
-						{
-							name: "runtime tool tests",
-							category: "tests",
-							reviewStatus: "unreviewed",
-							reason: "Deferred to a follow-up audit pass.",
-							evidence: [],
-						},
-					],
-					validationRun: [
-						{
-							command: "bun run check",
-							status: "not_run",
-							summary: "The audit surface stayed read-only.",
-						},
-					],
-					findings: [],
-				}),
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("ok");
-		expect(parsed.summary).toBe("Persisted Flow audit report artifacts.");
-		expect(String(parsed.reportDir)).toContain(
-			join(worktree, ".flow", "audits"),
-		);
-		expect(parsed.report.coverageRubric.fullAuditEligible).toBe(false);
-		await expect(readFile(parsed.jsonPath, "utf8")).resolves.toContain(
-			'"unreviewedSurfaceCount": 1',
-		);
-		await expect(readFile(parsed.markdownPath, "utf8")).resolves.toContain(
-			"# Flow Audit Report",
-		);
-	});
-
-	test("flow_audit_reports lists saved audit artifacts and points to the latest report", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		await requireAuditTool(tools, "flow_audit_write_report").execute(
-			{
-				report: {
-					requestedDepth: "deep_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Reviewed one surface directly.",
-					overallVerdict: "Deep audit completed.",
-					discoveredSurfaces: [
-						{
-							name: "prompt surfaces",
-							category: "source_runtime",
-							reviewStatus: "directly_reviewed",
-							evidence: ["src/prompts/agents.ts:1-50"],
-						},
-					],
-					validationRun: [
-						{
-							command: "bun run check",
-							status: "not_run",
-							summary: "Read-only audit.",
-						},
-					],
-					findings: [],
-				},
-			},
-			toolContext(worktree),
-		);
-
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute(
-			{ requestJson: asJson({ action: "history" }) },
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("ok");
-		expect(parsed.history.latest.reportId).toBeDefined();
-		expect(parsed.history.reports.length).toBeGreaterThan(0);
-		expect(parsed.nextCommand).toBe(`${FLOW_AUDITS_COMMAND} show latest`);
-	});
-
-	test("flow_audit_reports returns a saved audit report by id", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const writeResponse = await requireAuditTool(
-			tools,
-			"flow_audit_write_report",
-		).execute(
-			{
-				report: {
-					requestedDepth: "deep_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Reviewed one surface directly.",
-					overallVerdict: "Deep audit completed.",
-					discoveredSurfaces: [
-						{
-							name: "prompt surfaces",
-							category: "source_runtime",
-							reviewStatus: "directly_reviewed",
-							evidence: ["src/prompts/agents.ts:1-50"],
-						},
-					],
-					validationRun: [
-						{
-							command: "bun run check",
-							status: "not_run",
-							summary: "Read-only audit.",
-						},
-					],
-					findings: [],
-				},
-			},
-			toolContext(worktree),
-		);
-		const written = JSON.parse(writeResponse);
-		const reportId = basename(String(written.reportDir));
-		if (!reportId) {
-			throw new Error("Missing report id from written audit report path.");
-		}
-
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute(
-			{ requestJson: asJson({ action: "show", reportId }) },
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("ok");
-		expect(parsed.reportId).toBe(reportId);
-		expect(parsed.report.achievedDepth).toBe("deep_audit");
-	});
-
-	test("flow_audit_reports reports missing ids clearly", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute(
-			{ requestJson: asJson({ action: "show", reportId: "latest" }) },
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("missing_audit");
-		expect(parsed.nextCommand).toBe(FLOW_AUDITS_COMMAND);
-	});
-
-	test("flow_audit_reports summarizes coverage and finding deltas between saved audits", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const first = JSON.parse(
-			await requireAuditTool(tools, "flow_audit_write_report").execute(
-				{
-					report: {
-						requestedDepth: "full_audit",
-						achievedDepth: "deep_audit",
-						repoSummary: "Initial audit pass.",
-						overallVerdict: "One area still unreviewed.",
-						discoveredSurfaces: [
-							{
-								name: "prompt surfaces",
-								category: "source_runtime",
-								reviewStatus: "directly_reviewed",
-								evidence: ["src/prompts/agents.ts:1-50"],
-							},
-							{
-								name: "runtime tests",
-								category: "tests",
-								reviewStatus: "unreviewed",
-								reason: "Deferred.",
-								evidence: [],
-							},
-						],
-						validationRun: [
-							{
-								command: "bun run check",
-								status: "not_run",
-								summary: "Read-only audit.",
-							},
-						],
-						findings: [
-							{
-								title: "Coverage incomplete",
-								category: "process_gap",
-								confidence: "confirmed",
-								severity: "medium",
-								evidence: ["src/prompts/contracts.ts:1-80"],
-								impact: "Cannot claim full coverage.",
-							},
-						],
-					},
-				},
-				toolContext(worktree),
-			),
-		);
-		const second = JSON.parse(
-			await requireAuditTool(tools, "flow_audit_write_report").execute(
-				{
-					report: {
-						requestedDepth: "full_audit",
-						achievedDepth: "full_audit",
-						repoSummary: "Follow-up audit pass.",
-						overallVerdict: "Coverage completed.",
-						discoveredSurfaces: [
-							{
-								name: "agent prompt surfaces",
-								category: "source_runtime",
-								reviewStatus: "directly_reviewed",
-								evidence: [
-									"src/prompts/agents.ts:1-50",
-									"src/prompts/commands.ts:1-80",
-								],
-							},
-							{
-								name: "runtime tests",
-								category: "tests",
-								reviewStatus: "directly_reviewed",
-								evidence: ["tests/runtime-tools.test.ts:1-200"],
-							},
-						],
-						validationRun: [
-							{
-								command: "bun run check",
-								status: "passed",
-								summary: "Checks passed.",
-							},
-						],
-						findings: [
-							{
-								title: "Coverage gap still visible",
-								category: "process_gap",
-								confidence: "confirmed",
-								severity: "medium",
-								evidence: ["src/prompts/contracts.ts:1-80"],
-								impact: "Cannot claim full coverage.",
-							},
-						],
-					},
-				},
-				toolContext(worktree),
-			),
-		);
-
-		const response = await requireAuditTool(
-			tools,
-			"flow_audit_reports",
-		).execute(
-			{
-				requestJson: asJson({
-					action: "compare",
-					leftReportId: basename(first.reportDir),
-					rightReportId: basename(second.reportDir),
-				}),
-			},
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("ok");
-		expect(parsed.leftReportId).toBe(basename(first.reportDir));
-		expect(parsed.rightReportId).toBe(basename(second.reportDir));
-		expect(parsed.comparison.depth.achievedChanged).toBe(true);
-		expect(parsed.comparison.coverage.fullAuditEligibleChanged).toBe(true);
-		expect(parsed.comparison.surfaces.added).toEqual([]);
-		expect(parsed.comparison.surfaces.removed).toEqual([]);
-		expect(parsed.comparison.surfaces.changed).toHaveLength(2);
-		expect(parsed.comparison.surfaces.changed).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					name: "prompt surfaces",
-					fieldChanges: expect.arrayContaining(["name", "evidence"]),
-					matchStrategy: "heuristic_match",
-					matchReason: expect.stringContaining(
-						"shared category 'source_runtime'",
-					),
-				}),
-				expect.objectContaining({
-					name: "runtime tests",
-					fieldChanges: expect.arrayContaining([
-						"reviewStatus",
-						"evidence",
-						"reason",
-					]),
-				}),
-			]),
-		);
-		expect(parsed.comparison.findings.added).toEqual([]);
-		expect(parsed.comparison.findings.removed).toEqual([]);
-		expect(parsed.comparison.findings.changed).toHaveLength(1);
-		expect(parsed.comparison.findings.changed).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					key: "process_gap:Coverage incomplete",
-					fieldChanges: expect.arrayContaining(["title"]),
-					matchStrategy: "heuristic_match",
-					matchReason: expect.stringContaining("identical impact"),
-					right: expect.objectContaining({
-						title: "Coverage gap still visible",
-					}),
-				}),
-			]),
-		);
-		expect(parsed.comparison.validation.changed).toEqual([
-			expect.objectContaining({
-				command: "bun run check",
-				fieldChanges: ["status", "summary"],
-				matchStrategy: "exact_key",
-				matchReason: expect.stringContaining("identical validation command"),
-			}),
-		]);
-		expect(parsed.nextCommand).toBe(
-			`${FLOW_AUDITS_COMMAND} show ${basename(second.reportDir)}`,
-		);
 	});
 
 	test("flow_doctor reports missing rendered docs for an active session", async () => {
@@ -946,7 +576,7 @@ describe("runtime tools and recovery", () => {
 				contractVersion: "1",
 				status: "needs_input",
 				summary: "A tiny retryable issue was found.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [],
 				validationScope: "targeted",
 				reviewIterations: 0,
@@ -1377,7 +1007,32 @@ describe("runtime tools and recovery", () => {
 			],
 			[
 				"flow_review_record_final",
-				{ scope: "final", status: "approved", summary: "Looks good." },
+				{
+					scope: "final",
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
+					status: "approved",
+					summary: "Looks good.",
+				},
 				"missing_session",
 				undefined,
 			],
@@ -1435,6 +1090,27 @@ describe("runtime tools and recovery", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -1445,7 +1121,7 @@ describe("runtime tools and recovery", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -1468,6 +1144,27 @@ describe("runtime tools and recovery", () => {
 				blockingFindings: [],
 			},
 			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "passed",
 				summary: "Repo-wide validation is clean.",
 				blockingFindings: [],
@@ -1511,7 +1208,7 @@ describe("runtime tools and recovery", () => {
 				result: {
 					status: "ok",
 					summary: "Completed runtime setup.",
-					artifactsChanged: [],
+					artifactsChanged: [{ path: "src/runtime/session.ts" }],
 					validationRun: [],
 					decisions: [],
 					nextStep: "Run the next feature.",
@@ -1558,7 +1255,7 @@ describe("runtime tools and recovery", () => {
 				contractVersion: "1",
 				status: "needs_input",
 				summary: "Need a new plan.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [],
 				decisions: [],
 				nextStep: "Replan the work.",
@@ -1643,7 +1340,7 @@ describe("runtime tools and recovery", () => {
 				contractVersion: "1",
 				status: "ok",
 				summary: "Completed runtime setup.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
 					{
 						command: "bun test",
@@ -1666,6 +1363,27 @@ describe("runtime tools and recovery", () => {
 					blockingFindings: [],
 				},
 				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "passed",
 					summary: "Repo-wide validation is clean.",
 					blockingFindings: [],
@@ -1785,6 +1503,27 @@ describe("runtime tools and recovery", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -1797,7 +1536,7 @@ describe("runtime tools and recovery", () => {
 				contractVersion: "1",
 				status: "ok",
 				summary: "Completed runtime setup.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
 					{
 						command: "bun test",
@@ -1820,6 +1559,27 @@ describe("runtime tools and recovery", () => {
 					blockingFindings: [],
 				},
 				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "passed",
 					summary: "Repo-wide validation is clean.",
 					blockingFindings: [],
@@ -1857,7 +1617,7 @@ describe("runtime tools and recovery", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -1923,7 +1683,7 @@ describe("runtime tools and recovery", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -1985,6 +1745,27 @@ describe("runtime tools and recovery", () => {
 
 		const reviewed = recordReviewerDecision(started.value.session, {
 			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
 		});
@@ -1995,7 +1776,7 @@ describe("runtime tools and recovery", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -2050,7 +1831,7 @@ describe("runtime tools and recovery", () => {
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed runtime setup.",
-			artifactsChanged: [],
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
 					command: "bun test",
@@ -2114,7 +1895,7 @@ describe("runtime tools and recovery", () => {
 				contractVersion: "1",
 				status: "ok",
 				summary: "Completed tiny fix.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
 					{
 						command: "bun test",
@@ -2137,6 +1918,27 @@ describe("runtime tools and recovery", () => {
 					blockingFindings: [],
 				},
 				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "passed",
 					summary: "Final review looks good.",
 					blockingFindings: [],
@@ -2180,7 +1982,15 @@ describe("runtime tools and recovery", () => {
 		expect(reviewed.value.execution.lastReviewerDecision?.status).toBe(
 			"needs_fix",
 		);
-		expect(reviewed.value.execution.lastReviewerDecision?.featureId).toBe(
+		expect(reviewed.value.execution.lastReviewerDecision?.scope).toBe(
+			"feature",
+		);
+		if (reviewed.value.execution.lastReviewerDecision?.scope !== "feature") {
+			throw new Error(
+				"Expected feature-scoped reviewer decision in test setup.",
+			);
+		}
+		expect(reviewed.value.execution.lastReviewerDecision.featureId).toBe(
 			"setup-runtime",
 		);
 	});
@@ -2315,35 +2125,8 @@ describe("runtime tools and recovery", () => {
 		const currentSessionId = seededSession.id;
 
 		const toolArgs: Record<string, unknown> = {
-			flow_audit_write_report: {
-				report: {
-					requestedDepth: "deep_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Reviewed one surface directly.",
-					overallVerdict: "Deep audit completed.",
-					discoveredSurfaces: [
-						{
-							name: "prompt surfaces",
-							category: "source_runtime",
-							reviewStatus: "directly_reviewed",
-							evidence: ["src/prompts/agents.ts:1-50"],
-						},
-					],
-					validationRun: [
-						{
-							command: "bun run check",
-							status: "not_run",
-							summary: "The audit remained read-only.",
-						},
-					],
-					findings: [],
-				},
-			},
 			flow_status: {},
 			flow_history: {},
-			flow_audit_reports: {
-				requestJson: JSON.stringify({ action: "history" }),
-			},
 			flow_history_show: { sessionId: currentSessionId },
 			flow_session_activate: { sessionId: currentSessionId },
 			flow_plan_start: { goal: "Build a workflow plugin" },
@@ -2357,7 +2140,7 @@ describe("runtime tools and recovery", () => {
 				contractVersion: "1",
 				status: "needs_input",
 				summary: "Need a follow-up plan.",
-				artifactsChanged: [],
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [],
 				decisions: [],
 				nextStep: "Replan the work.",
@@ -2386,6 +2169,27 @@ describe("runtime tools and recovery", () => {
 			},
 			flow_review_record_final: {
 				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
 				status: "approved",
 				summary: "Looks good.",
 			},
@@ -2522,7 +2326,7 @@ describe("runtime tools and recovery", () => {
 			"decision gate active: recommend_confirm | architecture",
 		);
 		expect(joined).toContain('recommendation: "Defer"');
-		expect(joined).toContain("latest reviewer decision: needs_fix");
+		expect(joined).toContain("latest review state: needs_fix");
 		expect(joined).toContain("latest outcome is retryable or auto-resolvable");
 	});
 

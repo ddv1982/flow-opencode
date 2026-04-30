@@ -304,6 +304,21 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				scope: "final" as const,
 				status: decision.status,
 				summary: decision.summary,
+				reviewDepth: decision.reviewDepth,
+				reviewedSurfaces: decision.reviewedSurfaces ?? [],
+				...(decision.evidenceSummary
+					? { evidenceSummary: decision.evidenceSummary }
+					: {}),
+				...(decision.validationAssessment
+					? { validationAssessment: decision.validationAssessment }
+					: {}),
+				evidenceRefs: {
+					changedArtifacts: decision.evidenceRefs?.changedArtifacts ?? [],
+					validationCommands: decision.evidenceRefs?.validationCommands ?? [],
+				},
+				integrationChecks: decision.integrationChecks ?? [],
+				regressionChecks: decision.regressionChecks ?? [],
+				remainingGaps: decision.remainingGaps ?? [],
 				blockingFindings: decision.blockingFindings ?? [],
 				followUps: decision.followUps ?? [],
 				suggestedValidation: decision.suggestedValidation ?? [],

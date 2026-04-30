@@ -165,6 +165,27 @@ export function createCompletedSession(featureCount: number): Session {
 			const reviewed = assertOk(
 				recordReviewerDecision(started, {
 					scope: "final",
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: [`src/${featureId}.ts`],
+						validationCommands: ["bun test"],
+					},
+					integrationChecks: [
+						"Reviewed integration points across the active feature boundary.",
+					],
+					regressionChecks: [
+						"Checked for regressions in shared surfaces and validation evidence.",
+					],
+					remainingGaps: [],
 					status: "approved",
 					summary: "Approved final review.",
 					blockingFindings: [],
@@ -187,6 +208,27 @@ export function createCompletedSession(featureCount: number): Session {
 					...createWorkerResult(featureId),
 					validationScope: "broad",
 					finalReview: {
+						reviewDepth: "detailed",
+						reviewedSurfaces: [
+							"changed_files",
+							"shared_surfaces",
+							"validation_evidence",
+						],
+						evidenceSummary:
+							"Checked final cross-feature integration and validation evidence.",
+						validationAssessment:
+							"Validation coverage and cross-feature interactions were reviewed.",
+						evidenceRefs: {
+							changedArtifacts: [`src/${featureId}.ts`],
+							validationCommands: ["bun test"],
+						},
+						integrationChecks: [
+							"Reviewed integration points across the active feature boundary.",
+						],
+						regressionChecks: [
+							"Checked for regressions in shared surfaces and validation evidence.",
+						],
+						remainingGaps: [],
 						status: "passed",
 						summary: "Final review passed.",
 						blockingFindings: [],

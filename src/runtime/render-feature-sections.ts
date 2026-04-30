@@ -46,8 +46,55 @@ function renderFeatureHistory(session: Session, feature: Feature): string {
 						"Reviewer Decision",
 						[
 							`scope: ${entry.reviewerDecision.scope}`,
-							...(entry.reviewerDecision.featureId
+							...(entry.reviewerDecision.scope === "feature"
 								? [`feature id: ${entry.reviewerDecision.featureId}`]
+								: []),
+							...(entry.reviewerDecision.scope === "final"
+								? [
+										`review depth: ${entry.reviewerDecision.reviewDepth}`,
+										...(entry.reviewerDecision.reviewedSurfaces.length > 0
+											? [
+													`reviewed surfaces: ${entry.reviewerDecision.reviewedSurfaces.map(toInlineText).join(", ")}`,
+												]
+											: []),
+										...(entry.reviewerDecision.evidenceSummary
+											? [
+													`evidence: ${toInlineText(entry.reviewerDecision.evidenceSummary)}`,
+												]
+											: []),
+										...(entry.reviewerDecision.validationAssessment
+											? [
+													`validation assessment: ${toInlineText(entry.reviewerDecision.validationAssessment)}`,
+												]
+											: []),
+										...(entry.reviewerDecision.evidenceRefs.changedArtifacts
+											.length > 0
+											? [
+													`evidence changed artifacts: ${entry.reviewerDecision.evidenceRefs.changedArtifacts.map(toInlineText).join(", ")}`,
+												]
+											: []),
+										...(entry.reviewerDecision.evidenceRefs.validationCommands
+											.length > 0
+											? [
+													`evidence validation commands: ${entry.reviewerDecision.evidenceRefs.validationCommands.map(toInlineText).join(", ")}`,
+												]
+											: []),
+										...(entry.reviewerDecision.integrationChecks.length > 0
+											? [
+													`integration checks: ${entry.reviewerDecision.integrationChecks.map(toInlineText).join(", ")}`,
+												]
+											: []),
+										...(entry.reviewerDecision.regressionChecks.length > 0
+											? [
+													`regression checks: ${entry.reviewerDecision.regressionChecks.map(toInlineText).join(", ")}`,
+												]
+											: []),
+										...(entry.reviewerDecision.remainingGaps.length > 0
+											? [
+													`remaining gaps: ${entry.reviewerDecision.remainingGaps.map(toInlineText).join(", ")}`,
+												]
+											: []),
+									]
 								: []),
 							`status: ${entry.reviewerDecision.status}`,
 							`summary: ${entry.reviewerDecision.summary}`,

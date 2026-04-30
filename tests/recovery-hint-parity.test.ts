@@ -26,7 +26,7 @@ const cases: Array<[CompletionRecoveryKind, boolean, string]> = [
 	[
 		"missing_reviewer_decision",
 		true,
-		"The active feature is on the session's final completion path. Record a final reviewer approval, then rerun the current Flow feature to persist final completion.",
+		"The active feature is on the session's final completion path. Record the final reviewer approval required by deliveryPolicy.finalReviewPolicy, then rerun the current Flow feature to persist final completion.",
 	],
 	[
 		"missing_validation_scope",
@@ -41,7 +41,7 @@ const cases: Array<[CompletionRecoveryKind, boolean, string]> = [
 	[
 		"missing_final_review",
 		true,
-		"The active feature is on the session's final completion path. Run the final cross-feature review, include a passing finalReview in the worker result, and rerun the current Flow feature.",
+		"The active feature is on the session's final completion path. Run the final review required by deliveryPolicy.finalReviewPolicy, include a passing finalReview in the worker result, and rerun the current Flow feature.",
 	],
 	[
 		"failing_feature_review",
@@ -51,7 +51,7 @@ const cases: Array<[CompletionRecoveryKind, boolean, string]> = [
 	[
 		"failing_final_review",
 		true,
-		"Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview.",
+		"Fix the final review findings, rerun broad validation, and rerun the current Flow feature with a passing finalReview that matches deliveryPolicy.finalReviewPolicy.",
 	],
 ];
 
