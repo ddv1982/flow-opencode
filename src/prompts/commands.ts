@@ -12,6 +12,8 @@ import {
 	FLOW_FINAL_COMPLETION_COMMAND_RULE,
 	FLOW_FINAL_COMPLETION_REVIEW_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
+	FLOW_OPERATOR_PROGRESS_CHECKPOINTS,
+	FLOW_OPERATOR_PROGRESS_RULE,
 	FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE,
 	FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE,
 	FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE,
@@ -76,6 +78,7 @@ export const FLOW_PLAN_COMMAND_TEMPLATE = renderPromptSections([
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 - If package-manager evidence is ambiguous, record that ambiguity and avoid guessing a manager-specific command when existing scripts cover the task.
 - If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
+${FLOW_OPERATOR_PROGRESS_RULE}
 Do not start implementation from this command.`,
 	},
 	{
@@ -105,6 +108,7 @@ ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
 ${FLOW_FINAL_COMPLETION_COMMAND_RULE}
+${FLOW_OPERATOR_PROGRESS_RULE}
 - End with a compact summary of changes, validation evidence, and the runtime next step.`,
 	},
 	{
@@ -148,6 +152,8 @@ ${FLOW_STRUCTURED_RECOVERY_RULE}
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_RUNTIME_STATE_TRANSITION_RULE}
+${FLOW_OPERATOR_PROGRESS_RULE}
+${FLOW_OPERATOR_PROGRESS_CHECKPOINTS}
 - End with the latest runtime summary.`,
 	},
 	{

@@ -20,6 +20,8 @@ import {
 	FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE,
 	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
+	FLOW_OPERATOR_PROGRESS_CHECKPOINTS,
+	FLOW_OPERATOR_PROGRESS_RULE,
 	FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE,
 	FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE,
 	FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE,
@@ -100,6 +102,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
+${FLOW_OPERATOR_PROGRESS_RULE}
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid. If work still needs safe decomposition, use decompositionPolicy iterative_refinement or open_ended.
 - Do not start implementation after drafting a plan.`,
@@ -146,6 +149,7 @@ ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - If the feature is still too broad after inspection, return replan_required with a structured replan reason, failed assumption, and recommended adjustment instead of partial success.
+${FLOW_OPERATOR_PROGRESS_RULE}
 ${FLOW_REVIEW_FINDINGS_LOOP_RULE}
 ${FLOW_FEATURE_REVIEW_APPROVAL_RULE}
 ${FLOW_FINAL_COMPLETION_PATH_RULE}`,
@@ -190,7 +194,7 @@ export const FLOW_AUTO_AGENT_PROMPT = renderPromptSections([
 		body: `${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 ${FLOW_COORDINATOR_BOUNDARY_RULE}
-- Prefer compact progress summaries.
+${FLOW_OPERATOR_PROGRESS_RULE}
 - Auto-approve plans when autonomy is clearly requested.
 - Stop only for completion, a real external blocker, or a human product decision.
 ${FLOW_RESUME_ONLY_RULE}
@@ -225,6 +229,8 @@ ${FLOW_NO_INFERRED_GOAL_RULE}`,
 13. ${FLOW_FINAL_COMPLETION_AUTO_STEP_RULE}
 14. Only then allow final completion.
 15. Repeat until the session is complete or blocked.
+
+${FLOW_OPERATOR_PROGRESS_CHECKPOINTS}
 
 Plan content must match:
 
@@ -289,6 +295,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - For status requests, prefer compact flow_status output unless the user explicitly asks for detail/raw/json; lead with the runtime guidance summary/next step when present, then add only the supporting session details needed for clarity, and stop.
 - For doctor requests, prefer compact flow_doctor output unless the user explicitly asks for detail/raw/json; lead with the operator summary, then summarize any warnings or failures plus the recommended remediation clearly, and stop.
 - For history requests, call flow_history or flow_history_show, summarize the result clearly, and stop.
+- For session/reset/history operations that take more than one step, give one concise progress update before the runtime call and one outcome summary after it; do not narrate every minor detail.
 - For audit requests, follow the command template precisely, stay read-only, and use flow_review_render for the final rendered report.
 - For session activation requests, call flow_session_activate, summarize the result clearly, and stop.
 - For reset requests, call flow_reset_feature. For session close requests, call flow_session_close, summarize what changed, and stop.

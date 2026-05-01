@@ -17,7 +17,7 @@ import {
 describe("prompt mode behavior eval corpus", () => {
 	test("mode behavior fixtures are first-party and cover non-review modes", async () => {
 		const corpus = readPromptModeBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(18);
+		expect(corpus).toHaveLength(21);
 		expect(corpus.filter((item) => item.origin === "captured")).toHaveLength(6);
 		expect(new Set(corpus.map((item) => item.mode))).toEqual(
 			new Set(FLOW_PROMPT_MODE_CAPTURE_MODES),
@@ -169,14 +169,14 @@ describe("prompt mode behavior eval corpus", () => {
 			readPromptModeBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(18);
-		expect(summary.passingCases).toBe(12);
-		expect(summary.failingCases).toBe(6);
-		expect(summary.expectationSatisfiedCases).toBe(18);
+		expect(summary.totalCases).toBe(21);
+		expect(summary.passingCases).toBe(14);
+		expect(summary.failingCases).toBe(7);
+		expect(summary.expectationSatisfiedCases).toBe(21);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(4.67, 2);
+		expect(summary.averageScore).toBeCloseTo(4.76, 2);
 		expect(summary.report).toContain(
-			"Prompt mode behavior eval corpus: 18 cases",
+			"Prompt mode behavior eval corpus: 21 cases",
 		);
 		expect(summary.report).toContain(
 			"plan-goal-records-context-and-stops: 6/6 (quality-pass); mode=flow-plan; expectation=satisfied",
@@ -186,6 +186,12 @@ describe("prompt mode behavior eval corpus", () => {
 		);
 		expect(summary.report).toContain(
 			"control-bad-starts-work-from-status: 2/6 (quality-fail); mode=flow-control; expectation=satisfied; failed=forbidden_tool_absent,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
+		);
+		expect(summary.report).toContain(
+			"auto-progress-across-phase-boundaries: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"worker-bad-progress-inside-workerjson: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",
 		);
 		expect(summary.markdownReport).toContain(
 			"| reviewer-needs-fix-on-missing-validation | flow-reviewer | calibration | 6/6 | quality-pass | satisfied | — |",

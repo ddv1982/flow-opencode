@@ -42,6 +42,16 @@ export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
 	"- Persist every reviewer decision through flow_review_record_feature or flow_review_record_final before deciding whether to continue, fix, block, or complete.";
 export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =
 	"- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.";
+export const FLOW_OPERATOR_PROGRESS_RULE =
+	"- Keep the user informed with concise operator progress updates at phase boundaries this mode owns: say the current phase, the immediate action, and why it matters in one short sentence before starting a major phase; after each phase, summarize the outcome/evidence and next step. Progress updates are assistant prose only; never include progress narration inside `workerJson`, `decisionJson`, reviewer decisions, or `finalReview` fields. Do not dump raw tool JSON or narrate every minor file read/tool call.";
+export const FLOW_OPERATOR_PROGRESS_CHECKPOINTS = `Operator progress checkpoints:
+- Start: classify the request or active session state.
+- Planning: summarize the repo evidence being gathered and the plan/approval outcome.
+- Execution: name the active feature and the implementation focus before edits.
+- Validation: state the validation command or evidence target before running it, then report pass/fail.
+- Review: state whether feature or final review is happening, then report approval/fix/blocker outcome.
+- Recovery/reset: explain the blocker, prerequisite, canonical runtime action, and retry plan.
+- Finalization: summarize completion status, remaining risk, and the runtime next step.`;
 
 export const FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE =
 	"- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.";

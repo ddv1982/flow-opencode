@@ -27,6 +27,7 @@ import {
 	FLOW_REVIEWER_CONTRACT,
 	FLOW_WORKER_CONTRACT,
 } from "../src/prompts/contracts";
+import { FLOW_MODE_CONTRACTS } from "../src/prompts/mode-contracts";
 import { WorkerResultSchema } from "../src/runtime/schema";
 import { createTools } from "../src/tools";
 
@@ -1085,6 +1086,51 @@ describe("applyFlowConfig", () => {
 			expect(template).toContain("- Constraints");
 			expect(template).toContain("- Done when");
 		}
+	});
+
+	test("operator-facing prompts require concise phase-boundary progress", () => {
+		const progressSnippet =
+			"Keep the user informed with concise operator progress updates at phase boundaries";
+		const checkpointsSnippet = "Operator progress checkpoints:";
+
+		for (const prompt of [
+			FLOW_PLANNER_AGENT_PROMPT,
+			FLOW_WORKER_AGENT_PROMPT,
+			FLOW_AUTO_AGENT_PROMPT,
+			FLOW_PLAN_COMMAND_TEMPLATE,
+			FLOW_RUN_COMMAND_TEMPLATE,
+			FLOW_AUTO_COMMAND_TEMPLATE,
+		]) {
+			expect(prompt).toContain(progressSnippet);
+			expect(prompt).toContain("Do not dump raw tool JSON");
+			expect(prompt).toContain(
+				"Progress updates are assistant prose only; never include progress narration inside `workerJson`, `decisionJson`, reviewer decisions, or `finalReview` fields.",
+			);
+		}
+
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			"concise read-only progress updates while mapping repository surfaces, inspecting evidence, calibrating coverage depth, and rendering the final report",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			"Do not announce Flow planning, execution, validation runs, recovery/reset, or workflow finalization from this read-only command",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).not.toContain(progressSnippet);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).not.toContain(progressSnippet);
+
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(checkpointsSnippet);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(checkpointsSnippet);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("Planning:");
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("Validation:");
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("Recovery/reset:");
+		expect(FLOW_CONTROL_AGENT_PROMPT).toContain(
+			"give one concise progress update before the runtime call and one outcome summary after it",
+		);
+		expect(FLOW_MODE_CONTRACTS["flow-auto"].requiredBehavior).toContain(
+			"Emit concise phase-boundary progress across planning, execution, validation, review, recovery, and finalization.",
+		);
+		expect(FLOW_MODE_CONTRACTS["flow-review"].requiredBehavior).toContain(
+			"Emit concise phase-boundary progress while mapping surfaces, inspecting evidence, and rendering the report.",
+		);
 	});
 
 	test("audit command template wraps untrusted arguments in a tagged frame", () => {

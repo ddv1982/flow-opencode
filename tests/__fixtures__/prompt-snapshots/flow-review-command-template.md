@@ -15,6 +15,7 @@ Behavior:
 - For full_audit, directly review every discovered major surface, cite evidence for each directly_reviewed surface, and downgrade achievedDepth when any surface is only spot-checked or skipped.
 - Trace concrete invariants and failure paths before writing findings; favor specific regression mechanisms over generic architecture advice.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the review output.
+- For long reviews, keep the user informed with concise read-only progress updates while mapping repository surfaces, inspecting evidence, calibrating coverage depth, and rendering the final report. Do not announce Flow planning, execution, validation runs, recovery/reset, or workflow finalization from this read-only command; do not dump raw tool JSON or narrate every minor file read/tool call.
 - Build the structured audit ledger described below, then call flow_review_render to render it.
 - Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.
 - Return the renderer's report field verbatim as your final answer.

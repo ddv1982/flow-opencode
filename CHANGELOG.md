@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.41] - 2026-05-01
+
+Make Flow's long-running modes narrate their work without adding noise
+
+Flow 1.0.41 turns operator feedback into an explicit prompt contract across the main workflow surfaces. `/flow-auto`, `/flow-run`, `/flow-plan`, flow-planner, and flow-worker now require concise phase-boundary progress updates before and after planning, execution, validation, review, recovery/reset, and finalization. The autonomous coordinator also carries a concrete checkpoint list so users can see what phase Flow is in, what action is happening next, why it matters, and what evidence came out of the phase.
+
+The same expectation is now reflected in mode contracts and the read-only `/flow-review` surface: longer reviews should announce mapping, evidence inspection, and rendering phases, while control/history/reset operations should provide one before/after update when they perform multi-step runtime work. The reviewer JSON contract remains intentionally strict so machine-readable approval decisions do not get polluted with user-facing narration.
+
+Constraint: Improve user-visible workflow transparency without weakening runtime-owned state transitions or strict reviewer JSON output
+Constraint: Keep feedback concise enough for OpenCode users to understand progress without flooding the transcript with raw tool JSON or minor file-read narration
+Rejected: Add a new runtime event-streaming API | prompt-level phase guidance solves the immediate UX gap without expanding the public tool surface
+Rejected: Apply progress prose to flow-reviewer output | reviewer decisions must remain exact JSON for downstream runtime gates
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep future prompt/mode changes aligned with the shared operator-progress contract so new workflow surfaces explain phase, action, evidence, and next step consistently
+Tested: `bun run check`; `bun test --randomize` (seed `2415184663`); `node ./scripts/cross-area/pack-invariants.mjs`; `node ./scripts/cross-area/bench-gate.mjs`; `node ./scripts/cross-area/cold-start-budget.mjs`; targeted prompt/config snapshot and capture checks
+Not-tested: Live OpenCode transcript behavior before pushing tag v1.0.41
+
 ## [1.0.40] - 2026-05-01
 
 Close review-found correctness and release hardening gaps before the next publish

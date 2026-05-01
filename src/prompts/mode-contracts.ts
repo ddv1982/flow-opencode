@@ -85,6 +85,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Normalize untrusted arguments into planning intent.",
 			"Record repo/package-manager context before persisting a plan.",
 			"Stop at draft summary, approval, or auto-approved next execution step.",
+			"Emit concise phase-boundary progress before and after planning work.",
 		],
 		stopCondition:
 			"Plan is drafted/applied/approved as requested; no implementation starts from this mode.",
@@ -118,6 +119,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Call flow_auto_prepare before planning or repo inspection.",
 			"Stop on missing goal or human decision gates.",
 			"Keep one feature active until clean, blocked, or replanned.",
+			"Emit concise phase-boundary progress across planning, execution, validation, review, recovery, and finalization.",
 		],
 		stopCondition:
 			"Session completes, reaches a real blocker, or exposes a human decision gate.",
@@ -150,6 +152,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Execute exactly one approved feature.",
 			"Run targeted validation before claiming success.",
 			"Persist reviewer approval before advancing when required.",
+			"Emit concise phase-boundary progress across execution, validation, review, and completion.",
 		],
 		stopCondition:
 			"One feature is cleanly completed, blocked, or there is no runnable feature.",
@@ -182,6 +185,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Treat the active feature as the sole execution target.",
 			"Validate and self-review changed files before success.",
 			"Return structured replan/blocker data instead of partial success.",
+			"Emit concise phase-boundary progress across execution, validation, review, and completion.",
 		],
 		stopCondition:
 			"Worker result is persisted only after clean validation/review or a true blocker.",
@@ -249,6 +253,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Never plan, approve, run, or continue workflow execution.",
 			"Mutate runtime state only for explicit control commands.",
 			"Stop after rendering the requested status/control result.",
+			"For multi-step control operations, emit one progress update before the runtime call and one outcome summary after it.",
 		],
 		stopCondition:
 			"Requested control operation is summarized; no workflow advances.",
@@ -285,6 +290,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Stay read-only with respect to repository code and Flow state.",
 			"Maintain discoveredSurfaces as the canonical coverage ledger.",
 			"Downgrade achievedDepth when coverage does not support full_audit.",
+			"Emit concise phase-boundary progress while mapping surfaces, inspecting evidence, and rendering the report.",
 		],
 		stopCondition:
 			"Rendered human/structured audit report is returned from flow_review_render.",
