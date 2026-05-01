@@ -10,23 +10,36 @@ describe("biome adoption", () => {
 		};
 
 		expect(manifest.scripts?.lint).toContain("biome check");
+		expect(manifest.scripts?.build).toContain("--drop=console");
+		expect(manifest.scripts?.check).toContain("bun run check:release-hygiene");
 		expect(manifest.scripts?.check).toContain("bun run lint");
 	});
 
-	test("biome.json enables the formatter and recommended linter rules", async () => {
+	test("biome.json enables formatter, recommended lint, and source no-console release hygiene", async () => {
 		const config = JSON.parse(
 			await readFile(new URL("../biome.json", import.meta.url), "utf8"),
 		) as {
 			formatter?: { enabled?: boolean };
 			linter?: {
 				enabled?: boolean;
-				rules?: { recommended?: boolean; nursery?: unknown };
+				rules?: {
+					recommended?: boolean;
+					nursery?: unknown;
+					suspicious?: { noConsole?: unknown };
+				};
 			};
+			overrides?: { includes?: string[]; linter?: { rules?: unknown } }[];
 		};
 
 		expect(config.formatter?.enabled).toBe(true);
 		expect(config.linter?.enabled).toBe(true);
 		expect(config.linter?.rules?.recommended).toBe(true);
+		expect(config.linter?.rules?.suspicious?.noConsole).toBe("error");
 		expect(config.linter?.rules?.nursery).toBeUndefined();
+		expect(
+			config.overrides?.some((override) =>
+				override.includes?.includes("scripts/**"),
+			),
+		).toBe(true);
 	});
 });

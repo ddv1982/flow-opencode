@@ -65,10 +65,18 @@ export function resolveInstallTarget({
 	return join(homeDir, ...CANONICAL_OPENCODE_PLUGIN_DIRECTORY, filename);
 }
 
+export function writeStdoutLine(message: string): void {
+	process.stdout.write(`${message}\n`);
+}
+
+export function writeStderrLine(message: string): void {
+	process.stderr.write(`${message}\n`);
+}
+
 export async function installBuiltPlugin({
 	sourceFile,
 	destinationFile,
-	logger = console.log,
+	logger = writeStdoutLine,
 }: InstallBuiltPluginOptions): Promise<string> {
 	await assertSourceFileExists(sourceFile);
 	await mkdir(dirname(destinationFile), { recursive: true });
@@ -85,7 +93,7 @@ export async function runInstallCommand(
 		build = buildPlugin,
 		cwd = process.cwd(),
 		homeDir,
-		logger = console.log,
+		logger = writeStdoutLine,
 		sourceFile,
 	}: InstallCommandDependencies = {},
 ): Promise<string | undefined> {
@@ -116,7 +124,7 @@ export async function runUninstallCommand(
 	argv: string[],
 	{
 		homeDir,
-		logger = console.log,
+		logger = writeStdoutLine,
 	}: Pick<InstallCommandDependencies, "homeDir" | "logger"> = {},
 ): Promise<string | undefined> {
 	if (shouldShowHelp(argv, UNINSTALL_USAGE)) {

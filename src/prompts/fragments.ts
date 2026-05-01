@@ -53,6 +53,11 @@ export const FLOW_OPERATOR_PROGRESS_CHECKPOINTS = `Operator progress checkpoints
 - Recovery/reset: explain the blocker, prerequisite, canonical runtime action, and retry plan.
 - Finalization: summarize completion status, remaining risk, and the runtime next step.`;
 
+export const FLOW_ENGINEERING_QUALITY_RULE =
+	"- Apply the repo's coding guidelines before completion: prefer deletion/reuse over new layers, keep diffs small, use existing scripts and utilities, avoid debug-only console calls or debugger statements in release-bound source, and add or update tests for behavior changes.";
+export const FLOW_RELEASE_HYGIENE_REVIEW_RULE =
+	"- Treat release hygiene as a review gate: do not approve work that leaves console calls, debugger statements, or undocumented debug-only instrumentation in release-bound source or build artifacts.";
+
 export const FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE =
 	"- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.";
 export const FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE =

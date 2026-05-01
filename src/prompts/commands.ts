@@ -9,6 +9,7 @@ import {
 import {
 	FLOW_COORDINATOR_BOUNDARY_RULE,
 	FLOW_COORDINATOR_ROLE_ROUTING_RULE,
+	FLOW_ENGINEERING_QUALITY_RULE,
 	FLOW_FINAL_COMPLETION_COMMAND_RULE,
 	FLOW_FINAL_COMPLETION_REVIEW_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
@@ -20,6 +21,7 @@ import {
 	FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE,
 	FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE,
 	FLOW_PERSIST_REVIEWER_DECISIONS_RULE,
+	FLOW_RELEASE_HYGIENE_REVIEW_RULE,
 	FLOW_RESOLVE_RUNTIME_ERRORS_RULE,
 	FLOW_RESUME_ONLY_RULE,
 	FLOW_RUNTIME_STATE_TRANSITION_RULE,
@@ -77,6 +79,7 @@ export const FLOW_PLAN_COMMAND_TEMPLATE = renderPromptSections([
 - For planning, call \`flow_plan_start\` first, detect the stack and package manager from repo evidence, persist planning context through \`flow_plan_context_record\` using \`planningJson\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\` using \`planJson\`, and end with a concise draft summary plus the next approval step.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 - If package-manager evidence is ambiguous, record that ambiguity and avoid guessing a manager-specific command when existing scripts cover the task.
+${FLOW_ENGINEERING_QUALITY_RULE}
 - If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
 ${FLOW_OPERATOR_PROGRESS_RULE}
 Do not start implementation from this command.`,
@@ -105,6 +108,7 @@ export const FLOW_RUN_COMMAND_TEMPLATE = renderPromptSections([
 - Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using \`decisionJson\`.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
+${FLOW_ENGINEERING_QUALITY_RULE}
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
 ${FLOW_FINAL_COMPLETION_COMMAND_RULE}
@@ -140,6 +144,7 @@ ${FLOW_NO_INFERRED_GOAL_RULE}
 - Plan or refresh only when the runtime says planning is needed, detect stack and package-manager context first, record it with \`flow_plan_context_record\` using \`planningJson\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
+${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
@@ -151,6 +156,7 @@ ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
 ${FLOW_STRUCTURED_RECOVERY_RULE}
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
+${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
 ${FLOW_RUNTIME_STATE_TRANSITION_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 ${FLOW_OPERATOR_PROGRESS_CHECKPOINTS}

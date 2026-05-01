@@ -12,6 +12,7 @@ import { renderExampleBlocks, renderPromptSections } from "./format";
 import {
 	FLOW_COORDINATOR_BOUNDARY_RULE,
 	FLOW_COORDINATOR_ROLE_ROUTING_RULE,
+	FLOW_ENGINEERING_QUALITY_RULE,
 	FLOW_FEATURE_REVIEW_APPROVAL_RULE,
 	FLOW_FINAL_COMPLETION_AUTO_STEP_RULE,
 	FLOW_FINAL_COMPLETION_PATH_RULE,
@@ -29,6 +30,7 @@ import {
 	FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE,
 	FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE,
 	FLOW_PERSIST_REVIEWER_DECISIONS_RULE,
+	FLOW_RELEASE_HYGIENE_REVIEW_RULE,
 	FLOW_RESOLVE_RUNTIME_ERRORS_RULE,
 	FLOW_RESUME_ONLY_RULE,
 	FLOW_REVIEW_FINDINGS_LOOP_RULE,
@@ -102,6 +104,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
+${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid. If work still needs safe decomposition, use decompositionPolicy iterative_refinement or open_ended.
@@ -146,6 +149,7 @@ export const FLOW_WORKER_AGENT_PROMPT = renderPromptSections([
 - Run the smallest relevant validation first.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
+${FLOW_ENGINEERING_QUALITY_RULE}
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - If the feature is still too broad after inspection, return replan_required with a structured replan reason, failed assumption, and recommended adjustment instead of partial success.
@@ -204,6 +208,7 @@ ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
+${FLOW_ENGINEERING_QUALITY_RULE}
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
 - If a feature lands in a blocked state with a retryable or auto-resolvable outcome, use repo reads plus external research when useful, then reset it through the runtime and continue instead of stopping.
@@ -260,6 +265,7 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 		body: `- Do not write code.
 - Do not edit .flow files.
 - Review only for correctness, regressions, maintainability, security, and missing validation.
+${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
 - Focus on actionable findings.
 - Return approved only when the work is clean enough to advance.
 - Return needs_fix when the current feature should continue through another fix/validate/review iteration.
