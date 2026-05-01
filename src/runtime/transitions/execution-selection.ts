@@ -1,3 +1,4 @@
+import { completionPolicyTargetError } from "../domain";
 import type { Feature, Session } from "../schema";
 import { fail, succeed, type TransitionResult } from "./shared";
 
@@ -156,6 +157,10 @@ export function startRun(
 	}
 	if (!session.plan || session.approval !== "approved") {
 		return fail("There is no approved plan to run.");
+	}
+	const completionPolicyError = completionPolicyTargetError(session.plan);
+	if (completionPolicyError) {
+		return fail(completionPolicyError);
 	}
 	if (session.execution.activeFeatureId) {
 		return fail(

@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import {
 	mkdir,
 	open,
@@ -52,7 +53,7 @@ async function writeFileAtomically(
 	targetPath: string,
 	contents: string,
 ): Promise<void> {
-	const tempPath = `${targetPath}.tmp`;
+	const tempPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`;
 	const fileHandle = await sessionWorkspaceFs.open(tempPath, "w");
 
 	try {
@@ -134,14 +135,13 @@ export async function withSessionSaveLock<T>(
 export async function readSessionFromPath(
 	sessionPath: string,
 ): Promise<Session> {
-	const { mtimeMs, size } = await stat(sessionPath);
-	const cacheKey = `${mtimeMs}:${size}`;
+	const raw = await readFile(sessionPath, "utf8");
+	const cacheKey = createHash("sha256").update(raw).digest("hex");
 	const cached = sessionReadCache.get(sessionPath);
 	if (cached?.key === cacheKey) {
 		return cached.session;
 	}
 
-	const raw = await readFile(sessionPath, "utf8");
 	const object = parseStrictJsonObject(raw, "Session file");
 	if (!object.ok) {
 		throw new Error(object.error);

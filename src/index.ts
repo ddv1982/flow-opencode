@@ -57,16 +57,16 @@ function createFlowSystemTransformHook(
 	};
 }
 
-async function loadPluginSession(
-	ctx: Pick<Parameters<Plugin>[0], "worktree" | "directory">,
-): Promise<Awaited<ReturnType<typeof loadSession>>> {
+async function loadPluginSession(ctx: {
+	worktree?: string;
+	directory?: string;
+}): Promise<Awaited<ReturnType<typeof loadSession>>> {
 	try {
-		return await loadSession(
-			resolveSessionRoot({
-				worktree: ctx.worktree,
-				directory: ctx.directory,
-			}),
-		);
+		const rootContext = {
+			...(ctx.worktree ? { worktree: ctx.worktree } : {}),
+			...(ctx.directory ? { directory: ctx.directory } : {}),
+		};
+		return await loadSession(resolveSessionRoot(rootContext));
 	} catch {
 		return null;
 	}
@@ -92,7 +92,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 				if (!context.worktree && !context.directory) {
 					return;
 				}
-				const session = await loadSession(resolveSessionRoot(context));
+				const session = await loadPluginSession(context);
 				if (!session) {
 					return;
 				}

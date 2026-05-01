@@ -1,3 +1,4 @@
+import { completionPolicyTargetError } from "../domain";
 import type { Plan, PlanInput, PlanningContext, Session } from "../schema";
 import { nowIso } from "../util";
 import { clearExecution, fail, succeed, type TransitionResult } from "./shared";
@@ -217,6 +218,10 @@ export function applyPlan(
 	if (planGraphError) {
 		return fail(planGraphError);
 	}
+	const completionPolicyError = completionPolicyTargetError(plan);
+	if (completionPolicyError) {
+		return fail(completionPolicyError);
+	}
 
 	const next: Session = {
 		...session,
@@ -279,6 +284,10 @@ export function approvePlan(
 		}
 
 		next.plan.features = subset.value;
+		const completionPolicyError = completionPolicyTargetError(next.plan);
+		if (completionPolicyError) {
+			return fail(completionPolicyError);
+		}
 	}
 
 	return succeed({
@@ -321,6 +330,10 @@ export function selectPlanFeatures(
 	}
 
 	next.plan.features = subset.value;
+	const completionPolicyError = completionPolicyTargetError(next.plan);
+	if (completionPolicyError) {
+		return fail(completionPolicyError);
+	}
 	return succeed({
 		...clearExecution(next),
 		approval: "pending",

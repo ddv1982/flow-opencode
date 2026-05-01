@@ -1,3 +1,4 @@
+import { fullAuditRequiredCategories } from "./report-normalizer";
 import type { ReviewReport } from "./report-schema";
 
 export type ReviewRenderView = "human" | "structured" | "both";
@@ -209,19 +210,35 @@ function renderCoverageNotes(report: ReviewReport): string[] {
 		.map((surface) => `${surface.name}: ${surface.reason ?? "not reviewed"}`);
 	const validationNotes =
 		report.validationRun.length > 0
-			? report.validationRun.map(
-					(entry) => `${entry.command} — ${entry.status}: ${entry.summary}`,
+			? report.validationRun.map((entry) =>
+					entry.command === "not_run" && entry.status === "not_run"
+						? `not_run: ${entry.summary}`
+						: `${entry.command} — ${entry.status}: ${entry.summary}`,
 				)
 			: ["not_run: no validation evidence was recorded for this review."];
+	const directlyReviewedCategories = new Set(
+		directlyReviewed
+			.filter(surfaceHasEvidence)
+			.map((surface) => surface.category),
+	);
+	const missingFullAuditCategories = fullAuditRequiredCategories().filter(
+		(category) => !directlyReviewedCategories.has(category),
+	);
 	const fullAuditEligible =
 		report.discoveredSurfaces.length > 0 &&
 		spotChecked.length === 0 &&
 		unreviewed.length === 0 &&
-		directlyReviewed.every(surfaceHasEvidence);
+		directlyReviewed.every(surfaceHasEvidence) &&
+		missingFullAuditCategories.length === 0;
 	return [
 		"## Coverage notes",
 		`- Coverage: ${directlyReviewed.length} directly reviewed, ${spotChecked.length} spot-checked, ${unreviewed.length} unreviewed surfaces.`,
 		`- Full audit eligible: ${fullAuditEligible ? "yes" : "no"}`,
+		...(missingFullAuditCategories.length > 0
+			? [
+					`- Missing full-audit major categories: ${missingFullAuditCategories.join(", ")}.`,
+				]
+			: []),
 		...(notes.length > 0 ? bulletLines(notes) : []),
 		...(spotChecked.length > 0
 			? [

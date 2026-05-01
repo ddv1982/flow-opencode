@@ -18,6 +18,15 @@ function thresholdTarget(plan: Plan): number {
 	return plan.completionPolicy?.minCompletedFeatures ?? plan.features.length;
 }
 
+export function completionPolicyTargetError(plan: Plan): string | null {
+	const target = plan.completionPolicy?.minCompletedFeatures;
+	if (target === undefined || target <= plan.features.length) {
+		return null;
+	}
+
+	return `Plan validation failed: completionPolicy.minCompletedFeatures (${target}) cannot exceed the plan feature count (${plan.features.length}).`;
+}
+
 function coreFeatureTarget(plan: Plan): number {
 	const coreFeatures = plan.features.filter(
 		(feature) => feature.priority !== "nice_to_have" && !feature.deferCandidate,

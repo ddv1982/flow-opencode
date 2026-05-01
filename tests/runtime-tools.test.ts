@@ -9,7 +9,11 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowSessionActivateCommand,
 } from "../src/runtime/constants";
-import { getIndexDocPath } from "../src/runtime/paths";
+import {
+	getIndexDocPath,
+	getSessionPath,
+	getStoredSessionDir,
+} from "../src/runtime/paths";
 import {
 	createSession,
 	deleteSession,
@@ -507,6 +511,97 @@ describe("runtime tools and recovery", () => {
 		expect(session?.status).toBe("planning");
 	});
 
+	test("flow_plan_apply rejects completion thresholds above feature count", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Reject impossible completion threshold" },
+			toolContext(worktree),
+		);
+		const response = await tools.flow_plan_apply.execute(
+			{
+				planJson: JSON.stringify({
+					plan: {
+						...samplePlan(),
+						completionPolicy: { minCompletedFeatures: 99 },
+					},
+				}),
+			},
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain(
+			"completionPolicy.minCompletedFeatures (99) cannot exceed the plan feature count (2)",
+		);
+	});
+
+	test("flow_plan_select_features rejects subsets that make completion thresholds impossible", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Reject impossible narrowed threshold" },
+			toolContext(worktree),
+		);
+		await tools.flow_plan_apply.execute(
+			{
+				planJson: JSON.stringify({
+					plan: {
+						...samplePlan(),
+						completionPolicy: { minCompletedFeatures: 2 },
+					},
+				}),
+			},
+			toolContext(worktree),
+		);
+
+		const response = await tools.flow_plan_select_features.execute(
+			{ featureIds: ["setup-runtime"] },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain(
+			"completionPolicy.minCompletedFeatures (2) cannot exceed the plan feature count (1)",
+		);
+	});
+
+	test("flow_plan_approve rejects selected subsets that make completion thresholds impossible", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Reject impossible approval threshold" },
+			toolContext(worktree),
+		);
+		await tools.flow_plan_apply.execute(
+			{
+				planJson: JSON.stringify({
+					plan: {
+						...samplePlan(),
+						completionPolicy: { minCompletedFeatures: 2 },
+					},
+				}),
+			},
+			toolContext(worktree),
+		);
+
+		const response = await tools.flow_plan_approve.execute(
+			{ featureIds: ["setup-runtime"] },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain(
+			"completionPolicy.minCompletedFeatures (2) cannot exceed the plan feature count (1)",
+		);
+	});
+
 	test("flow_plan_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".factory");
@@ -814,6 +909,47 @@ describe("runtime tools and recovery", () => {
 		);
 		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
 		expect(await activeSessionId(worktree)).toBe(second.id);
+	});
+
+	test("flow_history_show falls back to stored copy when active session file is missing", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = await saveSession(
+			worktree,
+			createSession("Recoverable goal"),
+		);
+		await mkdir(getStoredSessionDir(worktree, session.id), { recursive: true });
+		await writeFile(
+			getSessionPath(worktree, session.id, "stored"),
+			`${JSON.stringify(session, null, 2)}\n`,
+			"utf8",
+		);
+		await rm(getSessionPath(worktree, session.id, "active"));
+
+		const response = await tools.flow_history_show.execute(
+			{ sessionId: session.id },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.source).toBe("stored");
+		expect(parsed.active).toBe(false);
+		expect(parsed.session.goal).toBe("Recoverable goal");
+	});
+
+	test("flow_history_show surfaces active session read errors when no fallback exists", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = await saveSession(worktree, createSession("Broken active"));
+		await rm(getSessionPath(worktree, session.id, "active"));
+
+		await expect(
+			tools.flow_history_show.execute(
+				{ sessionId: session.id },
+				toolContext(worktree),
+			),
+		).rejects.toThrow("ENOENT");
 	});
 
 	test("flow_history_show returns completed session details by id", async () => {
@@ -1579,7 +1715,7 @@ describe("runtime tools and recovery", () => {
 		);
 		expect(parsed.report).toContain("Achieved depth: broad review");
 		expect(parsed.report).toContain(
-			"Achieved depth was downgraded from full_audit because not every discovered surface was directly reviewed with evidence.",
+			"Achieved depth was downgraded from full_audit because these major surface categories were not directly reviewed with evidence:",
 		);
 	});
 
@@ -1696,8 +1832,73 @@ describe("runtime tools and recovery", () => {
 		);
 		expect(parsed.report).toContain("- Validation status:");
 		expect(parsed.report).toContain(
-			"- not_run: no validation evidence was recorded for this review.",
+			"- not_run: No validation evidence was recorded for this review.",
 		);
+	});
+
+	test("flow_review_render includes synthesized not_run validation in structured output", async () => {
+		const tools = createTestTools();
+		const parsed = await renderReview(
+			tools,
+			sampleReviewReport({
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				validationRun: [],
+			}),
+			"structured",
+		);
+		const structured = JSON.parse(parsed.report);
+
+		expect(structured.validationRun).toEqual([
+			{
+				command: "not_run",
+				status: "not_run",
+				summary: "No validation evidence was recorded for this review.",
+			},
+		]);
+	});
+
+	test("flow_review_render requires all major categories before full_audit remains eligible", async () => {
+		const tools = createTestTools();
+		const parsed = await renderReview(
+			tools,
+			sampleReviewReport({
+				requestedDepth: "full_audit",
+				achievedDepth: "full_audit",
+				discoveredSurfaces: [
+					reviewSurface({
+						name: "Runtime",
+						category: "source_runtime",
+						evidence: ["src/runtime/session.ts:1"],
+					}),
+					reviewSurface({
+						name: "Tests",
+						category: "tests",
+						evidence: ["tests/runtime-tools.test.ts:1"],
+					}),
+					reviewSurface({
+						name: "CI",
+						category: "ci_release",
+						evidence: [".github/workflows/ci.yml:1"],
+					}),
+					reviewSurface({
+						name: "Docs",
+						category: "docs_config",
+						evidence: ["README.md:1"],
+					}),
+					reviewSurface({
+						name: "Tooling",
+						category: "tooling",
+						evidence: ["package.json:1"],
+					}),
+				],
+				validationRun: [],
+			}),
+		);
+
+		expect(parsed.report).toContain("Achieved depth: exhaustive review");
+		expect(parsed.report).toContain("- Full audit eligible: yes");
+		expect(parsed.report).not.toContain("Missing full-audit major categories");
 	});
 
 	test("flow_review_render preserves reviewer-authored risk wording while keeping risk recommendations", async () => {

@@ -1,4 +1,5 @@
 import {
+	completionPolicyTargetError,
 	featureWouldReachCompletion,
 	sessionCompletionReached,
 } from "../domain";
@@ -68,6 +69,10 @@ function finalizeSuccessfulCompletion(
 	const plan = next.plan;
 	if (!plan) {
 		return fail("There is no active plan to complete.");
+	}
+	const completionPolicyError = completionPolicyTargetError(plan);
+	if (completionPolicyError) {
+		return fail(completionPolicyError);
 	}
 
 	const nextPlan = {

@@ -55,7 +55,6 @@ describe("prompt behavior eval corpus", () => {
 		).toEqual([
 			"depth_calibrated",
 			"coverage_accounted",
-			"validation_accounted",
 			"actionable_next_steps",
 		]);
 
@@ -69,7 +68,6 @@ describe("prompt behavior eval corpus", () => {
 		).toEqual([
 			"depth_calibrated",
 			"coverage_accounted",
-			"validation_accounted",
 			"finding_grounded",
 			"actionable_next_steps",
 		]);
@@ -102,7 +100,7 @@ describe("prompt behavior eval corpus", () => {
 		expect(summary.failingCases).toBe(3);
 		expect(summary.expectationSatisfiedCases).toBe(6);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(5.17, 2);
+		expect(summary.averageScore).toBeCloseTo(5.5, 2);
 		expect(summary.report).toContain("Prompt behavior eval corpus: 6 cases");
 		expect(summary.report).toContain(
 			"review-full-depth-downgrades-spot-check: 8/8 (quality-pass); expectation=satisfied",
@@ -111,7 +109,7 @@ describe("prompt behavior eval corpus", () => {
 			"review-ungrounded-output-rejected: 0/8 (quality-fail); expectation=satisfied; failed=schema_valid",
 		);
 		expect(summary.report).toContain(
-			"captured-review-overconfident-validation-gap: 3/8 (quality-fail); expectation=satisfied; failed=depth_calibrated,coverage_accounted,validation_accounted,finding_grounded,actionable_next_steps",
+			"captured-review-overconfident-validation-gap: 4/8 (quality-fail); expectation=satisfied; failed=depth_calibrated,coverage_accounted,finding_grounded,actionable_next_steps",
 		);
 		expect(summary.markdownReport).toContain(
 			"| captured-review-csv-memory-risk-calibrated | captured | 8/8 | quality-pass | satisfied | — |",

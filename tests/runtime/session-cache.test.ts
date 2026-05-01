@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
-import { readFile, utimes, writeFile } from "node:fs/promises";
+import { readFile, stat, utimes, writeFile } from "node:fs/promises";
 import { getSessionPath } from "../../src/runtime/paths";
 import {
 	loadSession,
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe("session read cache", () => {
-	test("second loadSession with no mutation issues zero additional session.json reads", async () => {
+	test("second loadSession revalidates session.json bytes before using cached parse", async () => {
 		const worktree = makeTempDir();
 		const session = await saveSession(worktree, sampleSession("Cache fixture"));
 		const sessionPath = getSessionPath(worktree, session.id);
@@ -33,7 +33,7 @@ describe("session read cache", () => {
 		).length;
 
 		expect(first).toEqual(second);
-		expect(sessionReads).toBe(1);
+		expect(sessionReads).toBe(2);
 	});
 
 	test("loadSession returns the in-process saveSession mutation", async () => {
@@ -83,5 +83,30 @@ describe("session read cache", () => {
 		expect(loaded?.goal).toBe("Externally rewritten session");
 		expect(loaded?.notes).toEqual(["external-writer"]);
 		expect(loaded).toEqual(onDisk);
+	});
+
+	test("loadSession invalidates cached content after same-size same-mtime external rewrite", async () => {
+		const worktree = makeTempDir();
+		const session = await saveSession(
+			worktree,
+			sampleSession("External same-size A"),
+		);
+		const sessionPath = getSessionPath(worktree, session.id);
+		const beforeStat = await stat(sessionPath);
+
+		await loadSession(worktree);
+
+		const raw = await readFile(sessionPath, "utf8");
+		const rewritten = raw.replace(
+			"External same-size A",
+			"External same-size B",
+		);
+		expect(rewritten.length).toBe(raw.length);
+		await writeFile(sessionPath, rewritten, "utf8");
+		await utimes(sessionPath, beforeStat.atime, beforeStat.mtime);
+
+		const loaded = await loadSession(worktree);
+
+		expect(loaded?.goal).toBe("External same-size B");
 	});
 });

@@ -40,8 +40,13 @@ jobs:
             relevant:
               - 'src/**'
               - 'tests/**'
+              - 'bench/**'
+              - 'docs/**'
               - 'scripts/**'
               - '.github/workflows/**'
+              - 'README.md'
+              - 'CHANGELOG.md'
+              - 'biome.json'
               - 'package.json'
               - 'bun.lock'
               - 'tsconfig.json'
@@ -67,6 +72,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2

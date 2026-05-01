@@ -74,4 +74,6 @@ Depth labels for users:
 - detailed => deep_audit
 - exhaustive => full_audit (only when coverage actually supports it)
 
-User arguments: $ARGUMENTS
+<raw-arguments>
+$ARGUMENTS
+</raw-arguments>

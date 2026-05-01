@@ -5,6 +5,7 @@ import {
 	cpSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -26,6 +27,7 @@ function makeTempDir(prefix: string): string {
 function copyScriptToTemp(scriptName: string, tempRoot: string): string {
 	const sourcePath = join(import.meta.dir, "..", "..", "scripts", scriptName);
 	const destinationPath = join(tempRoot, scriptName);
+	mkdirSync(tempRoot, { recursive: true });
 	copyFileSync(sourcePath, destinationPath);
 	chmodSync(destinationPath, 0o755);
 	return destinationPath;
@@ -35,6 +37,7 @@ async function runScript(
 	scriptPath: string,
 	homeDir: string,
 	binDir: string,
+	extraEnv: Record<string, string> = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 	const spawned = Bun.spawn({
 		cmd: ["bash", scriptPath],
@@ -42,6 +45,7 @@ async function runScript(
 			...process.env,
 			HOME: homeDir,
 			PATH: `${binDir}:${process.env.PATH ?? ""}`,
+			...extraEnv,
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -97,28 +101,38 @@ async function importInstalledPlugin(
 
 function writeCurlStub(tempRoot: string, body: string): string {
 	const stubPath = join(tempRoot, "curl");
+	const bodyPath = join(tempRoot, "curl-body.txt");
+	writeFileSync(bodyPath, body);
 	writeFileSync(
 		stubPath,
 		[
-			"#!/usr/bin/python3",
-			"# -*- coding: utf-8 -*-",
-			"import pathlib",
-			"import sys",
-			"",
-			"args = sys.argv[1:]",
-			"output_path = None",
-			"index = 0",
-			"while index < len(args):",
-			"    if args[index] == '-o' and index + 1 < len(args):",
-			"        output_path = args[index + 1]",
-			"        index += 2",
-			"        continue",
-			"    index += 1",
-			"",
-			"if output_path is None:",
-			"    raise SystemExit('curl stub expected -o <path>')",
-			"",
-			`pathlib.Path(output_path).write_text(${JSON.stringify(body)}, encoding='utf-8')`,
+			"#!/usr/bin/env bash",
+			"set -euo pipefail",
+			"output_path=''",
+			"url=''",
+			"while [[ $# -gt 0 ]]; do",
+			'  case "$1" in',
+			"    -o)",
+			'      output_path="$2"',
+			"      shift 2",
+			"      ;;",
+			"    -*)",
+			"      shift",
+			"      ;;",
+			"    *)",
+			'      url="$1"',
+			"      shift",
+			"      ;;",
+			"  esac",
+			"done",
+			'if [[ -z "$output_path" ]]; then',
+			"  echo 'curl stub expected -o <path>' >&2",
+			"  exit 1",
+			"fi",
+			`cp ${JSON.stringify(bodyPath)} "$output_path"`,
+			'if [[ -n "$' + '{CURL_ARGS_PATH:-}" ]]; then',
+			'  printf \'%s\\n\' "$url" > "$CURL_ARGS_PATH"',
+			"fi",
 		].join("\n"),
 		{ mode: 0o755 },
 	);
@@ -151,8 +165,20 @@ describe("cross-area install lifecycle", () => {
 		);
 		const pluginBody = await readFile(distPluginPath, "utf8");
 		writeCurlStub(binDir, pluginBody);
+		const curlArgsPath = join(tempRoot, "curl-url.txt");
 
 		const installScript = copyScriptToTemp("release-install.sh", tempRoot);
+		const generatedInstallScript = copyScriptToTemp(
+			"release-install.sh",
+			join(tempRoot, "generated"),
+		);
+		writeFileSync(
+			generatedInstallScript,
+			readFileSync(generatedInstallScript, "utf8").replaceAll(
+				"__FLOW_RELEASE_TAG__",
+				"v9.9.9",
+			),
+		);
 		const uninstallScript = copyScriptToTemp("release-uninstall.sh", tempRoot);
 		const canonicalPath = join(
 			homeDir,
@@ -175,6 +201,16 @@ describe("cross-area install lifecycle", () => {
 		expect(installStderr).toBe("");
 		expect(installStdout).toContain(canonicalPath);
 		expect(await readFile(canonicalPath, "utf8")).toBe(pluginBody);
+
+		const { exitCode: pinnedInstallExitCode, stderr: pinnedInstallStderr } =
+			await runScript(generatedInstallScript, homeDir, binDir, {
+				CURL_ARGS_PATH: curlArgsPath,
+			});
+		expect(pinnedInstallExitCode).toBe(0);
+		expect(pinnedInstallStderr).toBe("");
+		expect(await readFile(curlArgsPath, "utf8")).toBe(
+			"https://github.com/ddv1982/flow-opencode/releases/download/v9.9.9/flow.js\n",
+		);
 
 		const pluginModule = await importInstalledPlugin(canonicalPath);
 		const worktree = makeTempDir("flow-install-worktree-");

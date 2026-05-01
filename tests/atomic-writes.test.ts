@@ -170,7 +170,7 @@ describe("atomic writes", () => {
 		expect(syncs.some((path) => path.includes(join(".flow", "active")))).toBe(
 			true,
 		);
-		expect(syncs.some((path) => path.endsWith("session.json.tmp"))).toBe(true);
+		expect(syncs.some((path) => path.endsWith(".tmp"))).toBe(true);
 	});
 });
 

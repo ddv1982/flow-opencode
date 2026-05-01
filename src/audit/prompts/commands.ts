@@ -1,3 +1,4 @@
+import { renderTaggedBlock } from "../../prompts/format";
 import { FLOW_AUDIT_CONTRACT } from "./contracts";
 import {
 	FLOW_REVIEW_SHARED_RENDER_RULES,
@@ -34,4 +35,4 @@ Depth labels for users:
 - detailed => deep_audit
 - exhaustive => full_audit (only when coverage actually supports it)
 
-User arguments: $ARGUMENTS`;
+${renderTaggedBlock("raw-arguments", "$ARGUMENTS")}`;

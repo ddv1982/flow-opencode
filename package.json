@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-flow",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "description": "Stateful planning and execution workflow plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "python3 -c \"import subprocess, sys; sys.exit(subprocess.run(['bun','build','--target=node','--outdir=./dist','--entry-naming=index.js','--external=@opencode-ai/plugin','--minify-syntax','--minify-whitespace','--sourcemap=external','./src/index.ts']).returncode)\" # --external @opencode-ai/plugin --sourcemap external",
+    "build": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --minify-syntax --minify-whitespace --sourcemap=external ./src/index.ts",
     "bench": "bun run ./bench/index.ts",
     "bench:smoke": "bun run ./bench/index.ts -- --filter transition-reducer --warmup 0 --iterations 3",
     "check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
@@ -26,7 +26,7 @@
     "test": "bun test",
     "test:ci": "bun test --randomize",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run deadcode && bun run build && bun run test && bun run lint && bun run bench:smoke",
+    "check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run deadcode && bun run build && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke",
     "install:opencode": "bun run ./src/install-opencode.ts",
     "uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
   },
@@ -57,7 +57,6 @@
     "ignore": [
       "src/types/typecheck.ts",
       "tests/schema-equivalence.test-d.ts",
-      "scripts/cross-area/bundle-sanity.mjs",
       "scripts/cross-area/bench-gate.mjs",
       "scripts/cross-area/pack-invariants.mjs",
       "scripts/cross-area/cold-start-budget.mjs"

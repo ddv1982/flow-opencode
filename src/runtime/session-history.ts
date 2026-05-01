@@ -120,16 +120,23 @@ export async function loadStoredSession(
 	sessionId: string,
 ): Promise<StoredSessionLookup | null> {
 	const activeSessionId = await readActiveSessionId(worktree);
+	let activeReadError: unknown;
 	if (activeSessionId === sessionId) {
-		const session = await readSessionFromPath(
-			getSessionPath(worktree, sessionId, "active"),
-		);
-		return {
-			session,
-			source: "active",
-			active: true,
-			path: relative(worktree, getActiveSessionDir(worktree, sessionId)),
-		};
+		try {
+			const session = await readSessionFromPath(
+				getSessionPath(worktree, sessionId, "active"),
+			);
+			return {
+				session,
+				source: "active",
+				active: true,
+				path: relative(worktree, getActiveSessionDir(worktree, sessionId)),
+			};
+		} catch (error) {
+			// A stale active pointer or corrupt active session should not hide a
+			// recoverable stored/completed copy with the same id.
+			activeReadError = error;
+		}
 	}
 
 	try {
@@ -150,6 +157,9 @@ export async function loadStoredSession(
 
 	const completed = await findNewestCompletedSession(worktree, sessionId);
 	if (!completed) {
+		if (activeReadError) {
+			throw activeReadError;
+		}
 		return null;
 	}
 

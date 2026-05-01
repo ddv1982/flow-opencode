@@ -22,6 +22,7 @@ export {
 export {
 	activeDecisionGate,
 	completedFeatureCount,
+	completionPolicyTargetError,
 	decisionRequiresPause,
 	finalReviewPolicyForPlan,
 	reviewerPurposeForScope,

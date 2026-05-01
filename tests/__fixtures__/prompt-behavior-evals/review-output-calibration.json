@@ -74,7 +74,6 @@
 		"expectedFailures": [
 			"depth_calibrated",
 			"coverage_accounted",
-			"validation_accounted",
 			"actionable_next_steps"
 		],
 		"modelOutput": {

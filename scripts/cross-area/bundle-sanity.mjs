@@ -94,7 +94,14 @@ async function main() {
 		if (toolResults.status.session?.goal !== "Bundle sanity") {
 			throw new Error("flow_status did not expose the expected session goal.");
 		}
-		if ((toolResults.history.history?.sessions ?? []).length < 1) {
+		const historyEntries = [
+			toolResults.history.history?.active,
+			...(toolResults.history.history?.stored ?? []),
+			...(toolResults.history.history?.completed ?? []),
+		].filter(Boolean);
+		if (
+			!historyEntries.some((entry) => entry.goal === "Bundle sanity")
+		) {
 			throw new Error("flow_history did not report the stored session.");
 		}
 		if (plugin.tool.flow_status.__shimTag !== "flow-bundle-sanity-shim-v1") {
@@ -128,8 +135,18 @@ async function main() {
 		if (report.sourceMapVersion !== 3 || !report.sourceMapHasMappings) {
 			throw new Error("Source map is not valid v3 JSON with mappings.");
 		}
-		if (report.configAgents !== 5 || report.configCommands !== 7 || report.toolCount !== 15) {
-			throw new Error("Plugin surface shape is incorrect after build.");
+		if (
+			report.configAgents !== 5 ||
+			report.configCommands !== 9 ||
+			report.toolCount !== 18
+		) {
+			throw new Error(
+				`Plugin surface shape is incorrect after build: ${JSON.stringify({
+					agents: report.configAgents,
+					commands: report.configCommands,
+					tools: report.toolCount,
+				})}`,
+			);
 		}
 		if (report.nodeMajor < 22) {
 			throw new Error(`Node major version ${report.nodeMajor} is below the required 22.`);
