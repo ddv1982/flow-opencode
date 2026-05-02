@@ -113,6 +113,10 @@ The runtime-owned semantic invariant catalog is mirrored here for maintainer ori
 - [semantic-invariant] recovery.next_action.binding
 - [semantic-invariant] tools.canonical_surface.no_raw_wrappers
 
+## Test organization
+
+Broad runtime tests should stay small and behavior-specific. Add new coverage to the narrowest matching suite (`tests/runtime-*.test.ts`, `tests/runtime/**`, or `tests/config/**`) before expanding catch-all files.
+
 ## If you touch X, run Y
 
 Prefer the narrowest useful check first, then run `bun run check` before release or cross-surface merges.
@@ -121,11 +125,11 @@ Prefer the narrowest useful check first, then run `bun run check` before release
 | --- | --- |
 | `zod`, `@opencode-ai/plugin`, or tool arg compatibility | `bun pm ls zod`; `bun run check:dependency-contract`; `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`; `bun run typecheck` |
 | Completion/finalization transitions | `bun run gate:completion-lane`; `bun test tests/runtime/final-completion-gates.test.ts tests/runtime/final-review-contracts.test.ts tests/completion-gates.test.ts` |
-| Runtime transitions or schema | `bun test tests/runtime.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts` |
+| Runtime transitions or schema | `bun test tests/runtime.test.ts tests/runtime-replanning.test.ts tests/runtime-actionable-metadata.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts` |
 | Prompt text or prompt-mode contracts | `bun run eval:prompt-capture:check`; `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts` |
 | `/flow-review` audit prompt or renderer | `bun run eval:review-capture:check`; `bun test tests/review-prompt-capture.test.ts tests/prompt-behavior-eval.test.ts` |
 | Tool registration or tool schemas | `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime-tools-metadata.test.ts tests/docs-tool-parity.test.ts`; `bun run typecheck` |
-| Session paths, persistence, history, or migration | `bun test tests/runtime.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/runtime-summary.test.ts tests/workspace-root-guard.test.ts` |
+| Session paths, persistence, history, or migration | `bun test tests/runtime-session-persistence.test.ts tests/runtime-tool-persistence.test.ts tests/runtime-execution-history.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/runtime-summary.test.ts tests/workspace-root-guard.test.ts` |
 | Install/uninstall or package release surface | `bun run build`; `bun run check:release-hygiene`; `bun run check:pack-invariants`; `bun test tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts` |
 | Performance-sensitive save/render/schema paths | `bun run bench:smoke` |
 | Any cross-surface release candidate | `bun run check` |

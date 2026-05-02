@@ -38,7 +38,7 @@ Read first:
 Required checks:
 
 - `bun run gate:completion-lane`
-- `bun test tests/runtime.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/transitions-consolidation.test.ts`
+- `bun test tests/runtime.test.ts tests/runtime-replanning.test.ts tests/runtime-actionable-metadata.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/transitions-consolidation.test.ts`
 
 Do not:
 
@@ -101,7 +101,7 @@ Read first:
 
 Required checks:
 
-- `bun test tests/runtime.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/workspace-root-guard.test.ts tests/path-traversal.test.ts`
+- `bun test tests/runtime-session-persistence.test.ts tests/runtime-tool-persistence.test.ts tests/runtime-execution-history.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/workspace-root-guard.test.ts tests/path-traversal.test.ts`
 
 Do not:
 
@@ -152,6 +152,27 @@ Required checks:
 Do not:
 
 - Add repeated parse/normalize steps on hot save/render/schema paths without measurement.
+
+## Test organization
+
+Risk: medium
+
+Read first:
+
+- `tests/runtime.test.ts`
+- `tests/runtime-*.test.ts`
+- `tests/runtime/`
+- `tests/config/`
+
+Required checks:
+
+- Run the focused suite you add or move coverage into.
+- Run the old broad suite plus the new focused suite when splitting tests.
+
+Do not:
+
+- Add unrelated behavior to broad catch-all files when a focused suite exists.
+- Split tests by implementation module when the review concern is behavioral contract ownership.
 
 ## Documentation and historical evidence
 
