@@ -84,6 +84,7 @@ export const FLOW_MODE_CONTRACTS = {
 		requiredBehavior: [
 			"Normalize untrusted arguments into planning intent.",
 			"Record repo/package-manager context before persisting a plan.",
+			"Record stackProfile and standardsProfile before persisting a plan.",
 			"Plan work against the repo coding guidelines, release hygiene, and expected test coverage.",
 			"Stop at draft summary, approval, or auto-approved next execution step.",
 			"Emit concise phase-boundary progress before and after planning work.",
@@ -119,6 +120,7 @@ export const FLOW_MODE_CONTRACTS = {
 		requiredBehavior: [
 			"Call flow_auto_prepare before planning or repo inspection.",
 			"Stop on missing goal or human decision gates.",
+			"Record and apply the runtime-owned stack and standards profile.",
 			"Apply coding guidelines, release hygiene, and tests before completion.",
 			"Keep one feature active until clean, blocked, or replanned.",
 			"Emit concise phase-boundary progress across planning, execution, validation, review, recovery, and finalization.",
@@ -153,6 +155,7 @@ export const FLOW_MODE_CONTRACTS = {
 		requiredBehavior: [
 			"Execute exactly one approved feature.",
 			"Run targeted validation before claiming success.",
+			"Apply the stored stack and standards profile before editing.",
 			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
 			"Persist reviewer approval before advancing when required.",
 			"Emit concise phase-boundary progress across execution, validation, review, and completion.",
@@ -186,6 +189,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		requiredBehavior: [
 			"Treat the active feature as the sole execution target.",
+			"Apply the stored stack and standards profile before editing.",
 			"Validate and self-review changed files before success.",
 			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
 			"Return structured replan/blocker data instead of partial success.",
@@ -216,6 +220,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		requiredBehavior: [
 			"Review only; do not implement fixes.",
+			"Gate approval against the stored stack and standards profile.",
 			"Treat release hygiene, preserved observability, and missing test coverage as review concerns.",
 			"Approve only when blocking findings are empty.",
 			"Return needs_fix for same-feature repair loops.",

@@ -187,6 +187,8 @@ export function createSession(
 			repoProfile: planning?.repoProfile ?? [],
 			packageManager: planning?.packageManager,
 			packageManagerAmbiguous: planning?.packageManagerAmbiguous ?? false,
+			stackProfile: planning?.stackProfile,
+			standardsProfile: planning?.standardsProfile,
 			research: planning?.research ?? [],
 			implementationApproach: planning?.implementationApproach,
 			decisionLog: planning?.decisionLog ?? [],

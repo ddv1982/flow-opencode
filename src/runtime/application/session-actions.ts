@@ -137,6 +137,11 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 							packageManagerAmbiguous:
 								nextPlanning.packageManagerAmbiguous ??
 								session.planning.packageManagerAmbiguous,
+							stackProfile:
+								nextPlanning.stackProfile ?? session.planning.stackProfile,
+							standardsProfile:
+								nextPlanning.standardsProfile ??
+								session.planning.standardsProfile,
 							research: nextPlanning.research ?? session.planning.research,
 							implementationApproach:
 								nextPlanning.implementationApproach ??

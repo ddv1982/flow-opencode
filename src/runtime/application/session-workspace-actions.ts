@@ -12,6 +12,7 @@ import {
 	type SessionWorkspaceResult,
 	type SessionWorkspaceRuntimePort,
 } from "./session-engine";
+import { detectStackAndStandardsProfile } from "./stack-standards-profile";
 import {
 	resolveMutableSessionRoot,
 	type WorkspaceContext,
@@ -50,6 +51,9 @@ function buildPlannedSession(
 			packageManagerAmbiguous:
 				planning?.packageManagerAmbiguous ??
 				existing.planning.packageManagerAmbiguous,
+			stackProfile: planning?.stackProfile ?? existing.planning.stackProfile,
+			standardsProfile:
+				planning?.standardsProfile ?? existing.planning.standardsProfile,
 		},
 	};
 }
@@ -101,10 +105,6 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 				name: "plan_start",
 				run: async (worktree, runtime) => {
 					const existing = await runtime.loadSession(worktree);
-					const packageManagerDetection = await detectPackageManager(
-						worktree,
-						directory,
-					);
 					if (!goal && !existing) {
 						return {
 							status: "missing_goal",
@@ -122,6 +122,16 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 						};
 					}
 
+					const packageManagerDetection = await detectPackageManager(
+						worktree,
+						directory,
+					);
+					const detectedProfiles = await detectStackAndStandardsProfile(
+						worktree,
+						directory,
+						packageManagerDetection,
+					);
+
 					const session = await runtime.saveSessionState(
 						worktree,
 						buildPlannedSession(existing, resolvedGoal, {
@@ -132,6 +142,7 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 									}
 								: {}),
 							packageManagerAmbiguous: packageManagerDetection.ambiguous,
+							...detectedProfiles,
 						}),
 					);
 					await runtime.syncSessionArtifacts(worktree, session);

@@ -257,7 +257,7 @@ describe("prompt and command config contracts", () => {
 			"Call `flow_auto_prepare` first",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"record it with `flow_plan_context_record`",
+			"record stackProfile and standardsProfile with `flow_plan_context_record`",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"package-manager detection as supporting evidence instead of assuming Bun",

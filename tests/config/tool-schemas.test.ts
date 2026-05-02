@@ -115,6 +115,53 @@ describe("tool schema config contracts", () => {
 				planningJson: asJson({
 					repoProfile: ["TypeScript"],
 					packageManager: "pnpm",
+					stackProfile: {
+						languages: [
+							{
+								name: "TypeScript",
+								evidenceRefs: ["tsconfig.json"],
+								confidence: "high",
+							},
+						],
+						frameworks: [],
+						runtimes: [],
+						packageManagers: [
+							{
+								name: "pnpm",
+								evidenceRefs: ["package.json"],
+								confidence: "high",
+							},
+						],
+						tools: [],
+					},
+					standardsProfile: {
+						localGuidelines: [
+							{
+								title: "AGENTS.md",
+								sourceType: "local",
+								reference: "AGENTS.md",
+								confidence: "high",
+							},
+						],
+						externalGuidance: [],
+						rules: [
+							{
+								summary: "Prefer existing package scripts.",
+								sourceRefs: ["package.json"],
+								priority: "local",
+							},
+						],
+						gaps: [
+							{
+								stackItem: "React",
+								reason: "No local accessibility guidance was detected.",
+								suggestedResearch: [
+									"official React accessibility documentation",
+								],
+							},
+						],
+						precedence: ["local repo guidance before external standards"],
+					},
 					research: ["Check docs if local evidence is insufficient."],
 					decisionLog: [
 						{

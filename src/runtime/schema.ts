@@ -62,6 +62,60 @@ export const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
 export const PackageManagerSchema = z.enum(["npm", "pnpm", "yarn", "bun"]);
 export const ValidationStatusSchema = z.enum(VALIDATION_STATUSES);
 export const OutcomeKindSchema = z.enum(OUTCOME_KINDS);
+export const EvidenceConfidenceSchema = z.enum(["low", "medium", "high"]);
+
+export const StackProfileEntrySchema = z
+	.object({
+		name: z.string().min(1),
+		evidenceRefs: z.array(z.string().min(1)).default([]),
+		confidence: EvidenceConfidenceSchema.default("medium"),
+	})
+	.strict();
+
+export const StackProfileSchema = z
+	.object({
+		languages: z.array(StackProfileEntrySchema).default([]),
+		frameworks: z.array(StackProfileEntrySchema).default([]),
+		runtimes: z.array(StackProfileEntrySchema).default([]),
+		packageManagers: z.array(StackProfileEntrySchema).default([]),
+		tools: z.array(StackProfileEntrySchema).default([]),
+	})
+	.strict();
+
+export const StandardsSourceSchema = z
+	.object({
+		title: z.string().min(1),
+		sourceType: z.enum(["local", "official", "external"]),
+		reference: z.string().min(1),
+		confidence: EvidenceConfidenceSchema.default("medium"),
+	})
+	.strict();
+
+export const StandardsRuleSchema = z
+	.object({
+		summary: z.string().min(1),
+		sourceRefs: z.array(z.string().min(1)).default([]),
+		priority: z.enum(["user", "local", "official", "external"]),
+	})
+	.strict();
+
+export const StandardsGapSchema = z
+	.object({
+		stackItem: z.string().min(1),
+		reason: z.string().min(1),
+		suggestedResearch: z.array(z.string().min(1)).default([]),
+	})
+	.strict();
+
+export const StandardsProfileSchema = z
+	.object({
+		localGuidelines: z.array(StandardsSourceSchema).default([]),
+		externalGuidance: z.array(StandardsSourceSchema).default([]),
+		rules: z.array(StandardsRuleSchema).default([]),
+		gaps: z.array(StandardsGapSchema).default([]),
+		precedence: z.array(z.string().min(1)).default([]),
+	})
+	.strict();
 
 export const ArtifactSchema = z.object({
 	path: z.string().min(1),
@@ -320,6 +374,8 @@ export const PlanningContextSchema = z.object({
 	repoProfile: z.array(z.string().min(1)).default([]),
 	packageManager: PackageManagerSchema.optional(),
 	packageManagerAmbiguous: z.boolean().default(false),
+	stackProfile: StackProfileSchema.optional(),
+	standardsProfile: StandardsProfileSchema.optional(),
 	research: z.array(z.string().min(1)).default([]),
 	implementationApproach: ImplementationApproachSchema.optional(),
 	decisionLog: z.array(PlanningDecisionSchema).default([]),
@@ -422,6 +478,8 @@ export type PlanInput = z.input<typeof PlanSchema>;
 export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
 export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
+export type StackProfile = z.infer<typeof StackProfileSchema>;
+export type StandardsProfile = z.infer<typeof StandardsProfileSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
 export type Session = z.infer<typeof SessionSchema>;

@@ -36,6 +36,7 @@ import {
 	FLOW_REVIEW_FINDINGS_LOOP_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
+	FLOW_STACK_STANDARDS_PROFILE_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
 	FLOW_TASK_HANDOFF_RULE,
 	FLOW_WORKER_REVIEW_TASK_RULE,
@@ -103,6 +104,8 @@ export const FLOW_PLANNER_AGENT_PROMPT = renderPromptSections([
 		body: `${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record, encoding that object into \`planningJson\`.
+- Detect local standards/guideline sources and persist stackProfile plus standardsProfile. Use Ref/MCP or webfetch for official docs and Exa/websearch only for bounded gaps in the detected stack.
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
 - Use repo evidence first; do external research only when repo evidence is insufficient for a high-confidence path or when external grounding materially improves a recommendation.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
@@ -116,7 +119,7 @@ ${FLOW_OPERATOR_PROGRESS_RULE}
 		title: "Workflow",
 		body: `Plan flow:
 1. Call flow_plan_start.
-2. Read enough repo context to justify the plan, detect the stack and package manager, and persist repoProfile plus packageManager and any research/implementationApproach with flow_plan_context_record, encoding that object into \`planningJson\`.
+2. Read enough repo context to justify the plan, detect the stack/package manager/local standards, and persist repoProfile, packageManager, stackProfile, standardsProfile, and any research/implementationApproach with flow_plan_context_record, encoding that object into \`planningJson\`.
 3. If the command asks you to approve or select features, call the matching Flow tool and stop.
 4. Return plan content matching:
 
@@ -151,6 +154,8 @@ export const FLOW_WORKER_AGENT_PROMPT = renderPromptSections([
 - Run the smallest relevant validation first.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
+- Apply the stored stack and standards profile before editing; refresh planning context only if the feature reveals a previously undetected stack or tooling area.
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - Review changed files for correctness, maintainability, security, and test coverage before claiming success.
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
@@ -212,6 +217,7 @@ ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
@@ -225,7 +231,7 @@ ${FLOW_NO_INFERRED_GOAL_RULE}`,
 		body: `Autonomous loop:
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed, prefer a Task-tool handoff to flow-planner so planning happens in a fresh child context. That planning pass must call flow_plan_start, inspect repo context, detect the stack and package manager, record planning context with flow_plan_context_record using \`planningJson\`, persist the plan with flow_plan_apply using \`planJson\`, and approve it with flow_plan_approve. If Task/subagent handoff is unavailable, perform that same runtime-owned planning flow directly.
+3. If planning is needed, prefer a Task-tool handoff to flow-planner so planning happens in a fresh child context. That planning pass must call flow_plan_start, inspect repo context, detect the stack/package manager/local standards, record stackProfile and standardsProfile with flow_plan_context_record using \`planningJson\`, persist the plan with flow_plan_apply using \`planJson\`, and approve it with flow_plan_approve. If Task/subagent handoff is unavailable, perform that same runtime-owned planning flow directly.
 4. If repo evidence is insufficient for a high-confidence path, perform external research, record it with flow_plan_context_record using \`planningJson\`, and continue.
 5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, rationale, decisionMode, and decisionDomain with flow_plan_context_record using \`planningJson\` so the runtime session summary exposes a decisionGate.
 6. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation and stop for user confirmation.
@@ -269,6 +275,8 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 		body: `- Do not write code.
 - Do not edit .flow files.
 - Review only for correctness, regressions, maintainability, security, and missing validation.
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
+- Gate approval against the stored standards profile; return needs_fix when work conflicts with local or researched standards without a clear rationale.
 ${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
 - Focus on actionable findings.
 - Return approved only when the work is clean enough to advance.

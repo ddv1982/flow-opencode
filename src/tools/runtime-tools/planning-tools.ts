@@ -1,5 +1,9 @@
 import { tool } from "@opencode-ai/plugin";
-import { toJson } from "../../runtime/application";
+import { resolveMutableSessionRoot, toJson } from "../../runtime/application";
+import {
+	type StackStandardsProfileCacheValue,
+	writeStackStandardsProfileCache,
+} from "../../runtime/application/stack-standards-profile";
 import {
 	PlanArgsSchema,
 	PlanningContextArgsSchema,
@@ -22,6 +26,17 @@ import {
 	parseFeatureIds,
 	runGuardedSessionMutationAction,
 } from "./shared";
+
+function stackStandardsProfileCacheValue(
+	planning: Pick<Session["planning"], "stackProfile" | "standardsProfile">,
+): StackStandardsProfileCacheValue {
+	return {
+		...(planning.stackProfile ? { stackProfile: planning.stackProfile } : {}),
+		...(planning.standardsProfile
+			? { standardsProfile: planning.standardsProfile }
+			: {}),
+	};
+}
 
 export function createPlanningRuntimeTools() {
 	return {
@@ -49,11 +64,23 @@ export function createPlanningRuntimeTools() {
 					const planning = Object.fromEntries(
 						Object.entries(input).filter(([, value]) => value !== undefined),
 					);
-					return executeGuardedSessionMutation(
+					const result = await runGuardedSessionMutationAction(
 						context,
 						"record_planning_context",
 						planning,
 					);
+					if (result.kind === "success") {
+						await writeStackStandardsProfileCache(
+							resolveMutableSessionRoot(context).root,
+							context.directory,
+							{
+								packageManager: result.savedSession.planning.packageManager,
+								ambiguous: result.savedSession.planning.packageManagerAmbiguous,
+							},
+							stackStandardsProfileCacheValue(result.savedSession.planning),
+						);
+					}
+					return toJson(result.response);
 				},
 			),
 		}),
@@ -108,6 +135,21 @@ export function createPlanningRuntimeTools() {
 							? { plan: input.plan }
 							: { plan: input.plan, planning },
 					);
+					if (appliedResult.kind === "success") {
+						await writeStackStandardsProfileCache(
+							resolveMutableSessionRoot(context).root,
+							context.directory,
+							{
+								packageManager:
+									appliedResult.savedSession.planning.packageManager,
+								ambiguous:
+									appliedResult.savedSession.planning.packageManagerAmbiguous,
+							},
+							stackStandardsProfileCacheValue(
+								appliedResult.savedSession.planning,
+							),
+						);
+					}
 					return toJson(appliedResult.response);
 				},
 			),

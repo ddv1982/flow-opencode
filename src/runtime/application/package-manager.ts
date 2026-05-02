@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join } from "node:path";
 import type { PackageManager } from "../schema";
+import { candidateWorkspaceDirectories } from "./workspace-boundaries";
 
 const PACKAGE_MANAGER_LOCKFILES: Array<{
 	manager: PackageManager;
@@ -21,7 +22,10 @@ export async function detectPackageManager(
 	workspaceRoot: string,
 	startDirectory?: string,
 ): Promise<PackageManagerDetection> {
-	for (const directory of candidateDirectories(workspaceRoot, startDirectory)) {
+	for (const directory of candidateWorkspaceDirectories(
+		workspaceRoot,
+		startDirectory,
+	)) {
 		const packageManagerFromManifest =
 			await detectPackageManagerFromManifest(directory);
 		if (packageManagerFromManifest) {
@@ -38,54 +42,6 @@ export async function detectPackageManager(
 	}
 
 	return { ambiguous: false };
-}
-
-function candidateDirectories(
-	workspaceRoot: string,
-	startDirectory?: string,
-): string[] {
-	const resolvedRoot = resolve(workspaceRoot);
-	let current = resolveStartDirectory(resolvedRoot, startDirectory);
-	const directories: string[] = [];
-
-	while (true) {
-		directories.push(current);
-		if (current === resolvedRoot) {
-			return directories;
-		}
-
-		const parent = dirname(current);
-		if (parent === current) {
-			return directories;
-		}
-		current = parent;
-	}
-}
-
-function resolveStartDirectory(
-	resolvedRoot: string,
-	startDirectory?: string,
-): string {
-	if (!startDirectory) {
-		return resolvedRoot;
-	}
-
-	const resolvedStart = isAbsolute(startDirectory)
-		? resolve(startDirectory)
-		: resolve(resolvedRoot, startDirectory);
-	return isWithinRoot(resolvedRoot, resolvedStart)
-		? resolvedStart
-		: resolvedRoot;
-}
-
-function isWithinRoot(root: string, candidate: string): boolean {
-	const pathFromRoot = relative(root, candidate);
-	return (
-		pathFromRoot === "" ||
-		(pathFromRoot !== ".." &&
-			!pathFromRoot.startsWith(`..${sep}`) &&
-			!isAbsolute(pathFromRoot))
-	);
 }
 
 async function detectPackageManagerFromManifest(

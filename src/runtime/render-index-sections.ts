@@ -58,6 +58,58 @@ function maybeReplanLogSection(session: Session): string {
 	)}`;
 }
 
+function maybeStackProfileSection(session: Session): string {
+	const profile = session.planning.stackProfile;
+	if (!profile) {
+		return "";
+	}
+
+	const sections: Array<{
+		label: string;
+		entries: Array<{ name: string }>;
+	}> = [
+		{ label: "languages", entries: profile.languages },
+		{ label: "frameworks", entries: profile.frameworks },
+		{ label: "runtimes", entries: profile.runtimes },
+		{ label: "package managers", entries: profile.packageManagers },
+		{ label: "tools", entries: profile.tools },
+	];
+	const lines = sections
+		.map(({ label, entries }) => {
+			const names = entries.map((entry) => entry.name);
+			return names.length > 0 ? `- ${label}: ${names.join(", ")}` : "";
+		})
+		.filter(Boolean);
+
+	return lines.length === 0 ? "" : `## Stack Profile\n\n${lines.join("\n")}`;
+}
+
+function maybeStandardsProfileSection(session: Session): string {
+	const profile = session.planning.standardsProfile;
+	if (!profile) {
+		return "";
+	}
+
+	const lines = [
+		...profile.precedence.map((item) => `- precedence: ${toInlineText(item)}`),
+		...profile.localGuidelines.map(
+			(item) => `- local: ${toInlineText(item.title)} | ${item.reference}`,
+		),
+		...profile.externalGuidance.map(
+			(item) => `- external: ${toInlineText(item.title)} | ${item.reference}`,
+		),
+		...profile.rules.map((item) => `- rule: ${toInlineText(item.summary)}`),
+		...profile.gaps.map(
+			(item) =>
+				`- gap: ${toInlineText(item.stackItem)} | ${toInlineText(item.reason)} | research: ${item.suggestedResearch.map(toInlineText).join(", ")}`,
+		),
+	];
+
+	return lines.length === 0
+		? ""
+		: `## Standards Profile\n\n${lines.join("\n")}`;
+}
+
 function formatFeatureLine(feature: Feature): string {
 	return `- ${feature.id} | ${feature.status} | ${toInlineText(feature.title)}`;
 }
@@ -179,6 +231,8 @@ ${planLines.join("\n")}`,
 		maybeSection("Requirements", plan?.requirements ?? []),
 		maybeSection("Architecture Decisions", plan?.architectureDecisions ?? []),
 		maybeSection("Repo Profile", session.planning.repoProfile),
+		maybeStackProfileSection(session),
+		maybeStandardsProfileSection(session),
 		maybeSection("Research", session.planning.research),
 		maybeApproachSection(session),
 		maybeDecisionLogSection(session),

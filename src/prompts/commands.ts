@@ -28,6 +28,7 @@ import {
 	FLOW_RUNTIME_STATE_TRANSITION_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
+	FLOW_STACK_STANDARDS_PROFILE_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
 	FLOW_TASK_HANDOFF_RULE,
 	FLOW_WORKER_REVIEW_TASK_RULE,
@@ -83,7 +84,8 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - If the arguments start with \`approve\`, approve the current draft plan. Extra tokens are feature ids to keep before approval.
 - If the arguments start with \`select\`, narrow the current draft plan to the listed feature ids without approving it.
 - Otherwise treat the full argument string as the planning goal and create or refresh a draft plan.
-- For planning, call \`flow_plan_start\` first, detect the stack and package manager from repo evidence, persist planning context through \`flow_plan_context_record\` using \`planningJson\`, use external research only when repo evidence is insufficient for a high-confidence path, persist the draft through \`flow_plan_apply\` using \`planJson\`, and end with a concise draft summary plus the next approval step.
+- For planning, call \`flow_plan_start\` first, detect the stack, package manager, and local standards from repo evidence, persist stackProfile and standardsProfile through \`flow_plan_context_record\` using \`planningJson\`, use Ref/MCP or webfetch for official docs and Exa/websearch only for bounded gaps in the detected stack, persist the draft through \`flow_plan_apply\` using \`planJson\`, and end with a concise draft summary plus the next approval step.
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 - If package-manager evidence is ambiguous, record that ambiguity and avoid guessing a manager-specific command when existing scripts cover the task.
 ${FLOW_ENGINEERING_QUALITY_RULE}
@@ -118,6 +120,8 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 ${FLOW_WORKER_REVIEW_TASK_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
+- Apply the stored stack and standards profile before editing; refresh planning context only if execution reveals a previously undetected stack or tooling area.
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
@@ -153,9 +157,10 @@ ${FLOW_COORDINATOR_BOUNDARY_RULE}
 - If the argument string is empty or \`resume\`, resume the active session only.
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
-- Plan or refresh only when the runtime says planning is needed, detect stack and package-manager context first, record it with \`flow_plan_context_record\` using \`planningJson\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
+- Plan or refresh only when the runtime says planning is needed, detect stack/package-manager/local-standards context first, record stackProfile and standardsProfile with \`flow_plan_context_record\` using \`planningJson\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
 ${FLOW_TASK_HANDOFF_RULE}

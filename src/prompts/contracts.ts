@@ -27,6 +27,8 @@ Record planning context separately via flow_plan_context_record or flow_plan_app
 - planning.repoProfile?: string[]
 - planning.packageManager?: npm | pnpm | yarn | bun
 - planning.packageManagerAmbiguous?: true when package-manager evidence conflicts and Flow should avoid guessing
+- planning.stackProfile?: { languages: { name, evidenceRefs, confidence }[], frameworks: { name, evidenceRefs, confidence }[], runtimes: { name, evidenceRefs, confidence }[], packageManagers: { name, evidenceRefs, confidence }[], tools: { name, evidenceRefs, confidence }[] }
+- planning.standardsProfile?: { localGuidelines: { title, sourceType, reference, confidence }[], externalGuidance: { title, sourceType, reference, confidence }[], rules: { summary, sourceRefs, priority }[], gaps: { stackItem, reason, suggestedResearch }[], precedence: string[] }
 - planning.research?: string[]
 - planning.implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }
 - planning.decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]`;

@@ -1,8 +1,46 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { readValidStackStandardsProfileCache } from "../src/runtime/application/stack-standards-profile";
 import { createSession, saveSession } from "../src/runtime/session";
-import { createTempDirRegistry, createTestTools } from "./runtime-test-helpers";
+import {
+	createTempDirRegistry,
+	createTestTools,
+	samplePlan,
+} from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
+
+const sampleStackProfile = {
+	languages: [
+		{ name: "TypeScript", evidenceRefs: ["tsconfig.json"], confidence: "high" },
+	],
+	frameworks: [],
+	runtimes: [],
+	packageManagers: [
+		{ name: "bun", evidenceRefs: ["package.json"], confidence: "high" },
+	],
+	tools: [],
+} as const;
+
+const sampleStandardsProfile = {
+	localGuidelines: [
+		{
+			title: "AGENTS.md",
+			sourceType: "local",
+			reference: "AGENTS.md",
+			confidence: "high",
+		},
+	],
+	externalGuidance: [],
+	rules: [
+		{
+			summary: "Prefer existing package scripts.",
+			sourceRefs: ["package.json"],
+			priority: "local",
+		},
+	],
+	gaps: [],
+	precedence: ["local repo guidance before external standards"],
+} as const;
 
 afterEach(() => {
 	cleanupTempDirs();
@@ -60,6 +98,8 @@ describe("flow_auto_prepare semantics", () => {
 					research: [
 						"Confirm Bun plugin packaging docs if local evidence is unclear.",
 					],
+					stackProfile: sampleStackProfile,
+					standardsProfile: sampleStandardsProfile,
 					decisionLog: [
 						{
 							question:
@@ -87,5 +127,47 @@ describe("flow_auto_prepare semantics", () => {
 			decisionMode: "recommend_confirm",
 			decisionDomain: "architecture",
 		});
+		const cachedProfile = await readValidStackStandardsProfileCache(
+			worktree,
+			undefined,
+			{ packageManager: "bun", ambiguous: false },
+		);
+		expect(cachedProfile?.stackProfile?.languages[0]?.name).toBe("TypeScript");
+		expect(cachedProfile?.standardsProfile?.localGuidelines[0]?.reference).toBe(
+			"AGENTS.md",
+		);
+	});
+
+	test("plan apply writes a strict readable stack standards cache", async () => {
+		const tools = createTestTools();
+		const worktree = makeTempDir();
+		await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, {
+			worktree,
+		} as never);
+
+		const response = await tools.flow_plan_apply.execute(
+			{
+				planJson: JSON.stringify({
+					plan: samplePlan(),
+					planning: {
+						repoProfile: ["TypeScript", "Bun"],
+						packageManager: "bun",
+						stackProfile: sampleStackProfile,
+						standardsProfile: sampleStandardsProfile,
+					},
+				}),
+			},
+			{ worktree } as never,
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		const cachedProfile = await readValidStackStandardsProfileCache(
+			worktree,
+			undefined,
+			{ packageManager: "bun", ambiguous: false },
+		);
+		expect(cachedProfile?.stackProfile?.packageManagers[0]?.name).toBe("bun");
+		expect(cachedProfile).not.toHaveProperty("repoProfile");
 	});
 });

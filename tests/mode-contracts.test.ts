@@ -3,10 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createFlowAuditConfigEntries } from "../src/audit/config";
 import { createFlowCoreConfigEntries } from "../src/config";
-import {
-	FLOW_READ_ONLY_PERMISSION,
-	FLOW_READ_ONLY_TOOLS,
-} from "../src/config-shared";
+import { FLOW_READ_ONLY_PERMISSION } from "../src/config-shared";
 import {
 	FLOW_MODE_CONTRACTS,
 	FLOW_PROMPT_MODE_CAPTURE_MODES,
@@ -179,8 +176,8 @@ describe("flow prompt mode contracts", () => {
 		] as const) {
 			expect(agents[readOnlyAgentName]).toMatchObject({
 				permission: FLOW_READ_ONLY_PERMISSION,
-				tools: FLOW_READ_ONLY_TOOLS,
 			});
+			expect(agents[readOnlyAgentName]).not.toHaveProperty("tools");
 		}
 	});
 

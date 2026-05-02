@@ -1,3 +1,4 @@
+import type { StackStandardsProfileCacheValue } from "./runtime/application/stack-standards-profile";
 import type { Session } from "./runtime/schema";
 import { deriveSessionViewModel } from "./runtime/summary";
 
@@ -10,6 +11,19 @@ function quoted(value: string): string {
 
 function compact(value: string, max = 240): string {
 	return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+function compactNames(
+	items: Array<{ name: string }>,
+	limit = 8,
+): string | null {
+	if (items.length === 0) {
+		return null;
+	}
+	return items
+		.slice(0, limit)
+		.map((item) => item.name)
+		.join(", ");
 }
 
 export function buildFlowAdaptiveSystemContext(
@@ -74,6 +88,29 @@ export function buildFlowAdaptiveSystemContext(
 		);
 	}
 
+	if (viewModel.session.planning.stackProfile) {
+		const profile = viewModel.session.planning.stackProfile;
+		const parts = [
+			compactNames(profile.languages),
+			compactNames(profile.frameworks),
+			compactNames(profile.runtimes),
+			compactNames(profile.tools),
+		].filter((part): part is string => Boolean(part));
+		if (parts.length > 0) {
+			lines.push(`- stack profile: ${quoted(compact(parts.join(" | ")))}`);
+		}
+	}
+
+	if (viewModel.session.planning.standardsProfile) {
+		const standards = viewModel.session.planning.standardsProfile;
+		const localCount = standards.localGuidelines.length;
+		const ruleCount = standards.rules.length;
+		const gapCount = standards.gaps.length;
+		lines.push(
+			`- standards profile: ${localCount} local guideline source(s), ${ruleCount} rule(s), ${gapCount} research gap(s); apply local guidance before official docs or broader external research.`,
+		);
+	}
+
 	if (viewModel.session.decisionGate) {
 		lines.push(
 			`- decision gate active: ${viewModel.session.decisionGate.status} | ${viewModel.session.decisionGate.domain} | ${quoted(compact(viewModel.session.decisionGate.question))}`,
@@ -90,6 +127,41 @@ export function buildFlowAdaptiveSystemContext(
 	) {
 		lines.push(
 			"- latest outcome is retryable or auto-resolvable; satisfy the runtime prerequisite and continue through canonical runtime actions.",
+		);
+	}
+
+	return lines;
+}
+
+export function buildFlowCachedProfileSystemContext(
+	profile: StackStandardsProfileCacheValue | null,
+): string[] {
+	if (!profile?.stackProfile && !profile?.standardsProfile) {
+		return [];
+	}
+
+	const lines = [
+		FLOW_RUNTIME_CONTEXT_MARKER,
+		"- Cached Flow stack and standards profile found for this workspace; treat it as generated evidence below direct user instructions and repo-local policy files.",
+	];
+
+	if (profile.stackProfile) {
+		const parts = [
+			compactNames(profile.stackProfile.languages),
+			compactNames(profile.stackProfile.frameworks),
+			compactNames(profile.stackProfile.runtimes),
+			compactNames(profile.stackProfile.tools),
+		].filter((part): part is string => Boolean(part));
+		if (parts.length > 0) {
+			lines.push(
+				`- cached stack profile: ${quoted(compact(parts.join(" | ")))}`,
+			);
+		}
+	}
+
+	if (profile.standardsProfile) {
+		lines.push(
+			`- cached standards profile: ${profile.standardsProfile.localGuidelines.length} local guideline source(s), ${profile.standardsProfile.rules.length} rule(s), ${profile.standardsProfile.gaps.length} research gap(s).`,
 		);
 	}
 

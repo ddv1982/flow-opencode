@@ -1,8 +1,5 @@
 import { applyFlowAuditConfig } from "./audit/config";
-import {
-	FLOW_READ_ONLY_PERMISSION,
-	FLOW_READ_ONLY_TOOLS,
-} from "./config-shared";
+import { FLOW_READ_ONLY_PERMISSION } from "./config-shared";
 import {
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
@@ -38,7 +35,6 @@ type FlowAgentConfig = {
 	description: string;
 	prompt: string;
 	permission?: FlowPermissionConfig;
-	tools?: typeof FLOW_READ_ONLY_TOOLS;
 };
 
 type FlowCommandConfig = {
@@ -57,7 +53,6 @@ function createReadOnlyPrimaryAgent(
 		description,
 		prompt,
 		permission: FLOW_READ_ONLY_PERMISSION,
-		tools: FLOW_READ_ONLY_TOOLS,
 	};
 }
 
@@ -151,7 +146,6 @@ const FLOW_CORE_COMMANDS = {
 function cloneAgentConfig(agent: FlowAgentConfig) {
 	return {
 		...agent,
-		...(agent.tools ? { tools: { ...agent.tools } } : {}),
 		...(agent.permission
 			? {
 					permission: {

@@ -27,7 +27,12 @@ import {
 	type MutableWorkspaceRoot,
 } from "./workspace-root";
 
-const FLOW_GITIGNORE_ENTRIES = ["active/", "stored/", "completed/"] as const;
+const FLOW_GITIGNORE_ENTRIES = [
+	"active/",
+	"stored/",
+	"completed/",
+	"standards-profile.json",
+] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();
 const preparedWorkspaceGitignoreCache = new Map<string, string>();
 const SESSION_SAVE_LOCK_DIRECTORY_NAME = "session-save.lock";

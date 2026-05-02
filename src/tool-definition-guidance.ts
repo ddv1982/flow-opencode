@@ -68,7 +68,7 @@ const FLOW_TOOL_DESCRIPTION_GUIDANCE: Record<string, string> = {
 ## Returns
 - Returns a rendered review report string, not a Flow runtime session mutation response.`,
 	flow_plan_context_record: `## Use when
-- Use to persist repo profile, research findings, implementation approach, or planning decisions that justify the plan.
+- Use to persist repo profile, stackProfile, standardsProfile, research findings, implementation approach, or planning decisions that justify the plan.
 - Provide the planning-context object as the JSON string field \`planningJson\`.
 
 ## Avoid when

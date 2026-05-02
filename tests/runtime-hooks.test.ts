@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { writeStackStandardsProfileCache } from "../src/runtime/application/stack-standards-profile";
 import { createSession, saveSession } from "../src/runtime/session";
 import { applyPlan, approvePlan, startRun } from "../src/runtime/transitions";
 import {
@@ -74,6 +75,49 @@ describe("runtime hooks", () => {
 			);
 		}
 		running.planning.packageManagerAmbiguous = true;
+		running.planning.stackProfile = {
+			languages: [
+				{
+					name: "TypeScript",
+					evidenceRefs: ["tsconfig.json"],
+					confidence: "high",
+				},
+			],
+			frameworks: [],
+			runtimes: [
+				{ name: "Bun", evidenceRefs: ["bun.lock"], confidence: "high" },
+			],
+			packageManagers: [],
+			tools: [
+				{ name: "Biome", evidenceRefs: ["biome.json"], confidence: "high" },
+			],
+		};
+		running.planning.standardsProfile = {
+			localGuidelines: [
+				{
+					title: "AGENTS.md",
+					sourceType: "local",
+					reference: "AGENTS.md",
+					confidence: "high",
+				},
+			],
+			externalGuidance: [],
+			rules: [
+				{
+					summary: "Prefer existing package scripts.",
+					sourceRefs: ["package.json"],
+					priority: "local",
+				},
+			],
+			gaps: [
+				{
+					stackItem: "React",
+					reason: "No local React standards were detected.",
+					suggestedResearch: ["official React testing documentation"],
+				},
+			],
+			precedence: ["local before external"],
+		};
 		running.planning.decisionLog = [
 			{
 				question: "Should Flow rewrite the API surface now?",
@@ -132,6 +176,8 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("Flow runtime context");
 		expect(joined).toContain('- goal: "demo-goal"');
 		expect(joined).toContain("package manager evidence is ambiguous");
+		expect(joined).toContain("stack profile");
+		expect(joined).toContain("standards profile");
 		expect(joined).toContain(
 			"decision gate active: recommend_confirm | architecture",
 		);
@@ -169,6 +215,71 @@ describe("runtime hooks", () => {
 		expect(output.system).toEqual(["base-system"]);
 	});
 
+	test("experimental.chat.system.transform surfaces a valid cached profile when no active session exists", async () => {
+		const worktree = makeTempDir();
+		const plugin = (await (
+			await import("../src/index")
+		).default({
+			worktree,
+		} as unknown as Parameters<
+			typeof import("../src/index").default
+		>[0])) as FlowPluginWithHooks;
+		const hook = plugin.hooks?.["experimental.chat.system.transform"];
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing experimental.chat.system.transform hook");
+		}
+
+		await writeStackStandardsProfileCache(
+			worktree,
+			undefined,
+			{ ambiguous: false },
+			{
+				stackProfile: {
+					languages: [
+						{
+							name: "TypeScript",
+							evidenceRefs: ["tsconfig.json"],
+							confidence: "high",
+						},
+					],
+					frameworks: [],
+					runtimes: [],
+					packageManagers: [],
+					tools: [],
+				},
+				standardsProfile: {
+					localGuidelines: [],
+					externalGuidance: [],
+					rules: [],
+					gaps: [
+						{
+							stackItem: "TypeScript",
+							reason: "No local TypeScript standards were detected.",
+							suggestedResearch: ["official TypeScript documentation"],
+						},
+					],
+					precedence: [],
+				},
+			},
+		);
+
+		const output = { system: ["base-system"] };
+		await hook(
+			{
+				sessionID: "demo-session",
+				model: { providerID: "test", modelID: "test-model" },
+			},
+			output,
+		);
+
+		const joined = output.system.join("\n");
+		expect(joined).toContain("Cached Flow stack and standards profile");
+		expect(joined).toContain("cached stack profile");
+		expect(joined).toContain("cached standards profile");
+	});
+
 	test("experimental.session.compacting appends goal and execution phase for an active Flow session", async () => {
 		const worktree = makeTempDir();
 		const plugin = (await (
@@ -186,6 +297,33 @@ describe("runtime hooks", () => {
 		}
 
 		const session = sampleSession("demo-goal");
+		session.planning.stackProfile = {
+			languages: [
+				{
+					name: "TypeScript",
+					evidenceRefs: ["tsconfig.json"],
+					confidence: "high",
+				},
+			],
+			frameworks: [],
+			runtimes: [],
+			packageManagers: [],
+			tools: [],
+		};
+		session.planning.standardsProfile = {
+			localGuidelines: [
+				{
+					title: "AGENTS.md",
+					sourceType: "local",
+					reference: "AGENTS.md",
+					confidence: "high",
+				},
+			],
+			externalGuidance: [],
+			rules: [],
+			gaps: [],
+			precedence: ["local before external"],
+		};
 		await mkdir(join(worktree, ".flow", "active", session.id), {
 			recursive: true,
 		});
@@ -203,6 +341,7 @@ describe("runtime hooks", () => {
 		const joined = output.context.join("\n");
 		expect(joined).toContain("demo-goal");
 		expect(joined).toContain("execution");
+		expect(joined).toContain("Flow planning profile");
 		expect(output.prompt).toBeUndefined();
 	});
 

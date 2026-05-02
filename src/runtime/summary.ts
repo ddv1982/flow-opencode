@@ -39,6 +39,8 @@ export type SessionGuidance = {
 type SummarizedPlanning = Pick<
 	Session["planning"],
 	| "repoProfile"
+	| "stackProfile"
+	| "standardsProfile"
 	| "research"
 	| "implementationApproach"
 	| "decisionLog"
@@ -134,6 +136,8 @@ function sessionFeatures(session: Session): Feature[] {
 function summarizePlanning(session: Session): SummarizedPlanning {
 	return {
 		repoProfile: session.planning.repoProfile,
+		stackProfile: session.planning.stackProfile,
+		standardsProfile: session.planning.standardsProfile,
 		research: session.planning.research,
 		implementationApproach: session.planning.implementationApproach,
 		decisionLog: session.planning.decisionLog,

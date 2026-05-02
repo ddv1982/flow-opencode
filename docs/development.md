@@ -153,6 +153,7 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 - Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
 - Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed compatibility change is intentional.
 - Preserve direct `tool(...)` arg-shape compatibility at the SDK boundary.
+- Use permission-only OpenCode agent restrictions; do not reintroduce deprecated boolean `tools` config for read-only Flow agents.
 - Prefer deletion over new helper layers.
 - Keep release-bound source free of debug-only artifacts. Do not leave ad-hoc `console.*` calls or `debugger` statements in `src` or the built release artifact. Inspect existing logging, telemetry, CLI-output, and test patterns before changing `console.*`; remove temporary debug noise, but preserve intentional operator or observability signals with an equivalent replacement that keeps severity, message intent, and key context.
 - Pair behavior changes with targeted tests and run the existing validation scripts before release.
@@ -161,6 +162,8 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 
 Flow treats engineering quality as part of the workflow contract, not just reviewer preference:
 
+- Planning records a runtime-owned stack and standards profile. Local repo guidance and configs outrank official docs, and official docs outrank broader Exa/websearch guidance.
+- Flow caches the generated stack and standards profile in `.flow/standards-profile.json`; the cache is ignored when the workspace, start directory, schema version, package-manager hint, or relevant source-file fingerprint changes, and external guidance expires after 30 days.
 - Prefer deletion and reuse over new abstraction layers.
 - Keep diffs small, reviewable, and reversible.
 - Use existing package scripts and repo utilities before adding new commands.

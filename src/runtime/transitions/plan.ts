@@ -242,6 +242,9 @@ export function applyPlan(
 			packageManagerAmbiguous:
 				planning?.packageManagerAmbiguous ??
 				session.planning.packageManagerAmbiguous,
+			stackProfile: planning?.stackProfile ?? session.planning.stackProfile,
+			standardsProfile:
+				planning?.standardsProfile ?? session.planning.standardsProfile,
 			research: planning?.research ?? session.planning.research,
 			implementationApproach:
 				planning?.implementationApproach ??
