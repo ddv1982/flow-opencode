@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.44] - 2026-05-02
+
+Make dead-code cleanup explicit before the next release
+
+Flow 1.0.44 removes unused internal declarations that had drifted behind the runtime and tool-schema refactors. The cleanup deletes dead command constants, schema/type aliases, path wrappers, transition helpers, render helpers, and a test-only helper type without changing the user-facing Flow commands or runtime behavior.
+
+The configured deadcode gate already had no unused files or dependencies, so this release keeps that gate intact and treats the broader export-level scan as advisory. Only high-confidence in-repository dead declarations were removed; schema barrels and intentionally exported validation surfaces remain in place where the current package structure still relies on them as internal boundaries.
+
+Constraint: Keep the cleanup deletion-only and avoid changing Flow command behavior, package dependencies, or the zod/plugin SDK alignment
+Rejected: Remove every export reported by broad `knip` output | many reports are intentional internal schema/barrel surfaces rather than safely deletable runtime code
+Rejected: Update README command documentation | the documented `/flow-*` commands and behavior did not change
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Treat `bun run deadcode` as the release gate for unused files/dependencies and broad `knip` export output as advisory unless a symbol has no in-repository use or API reason to remain
+Tested: `bun run typecheck`; `bun run deadcode`; `bun test`; `bun run lint`; `bun run build`; targeted README reference search for removed symbols; Oracle review of the cleanup diff
+Not-tested: Live GitHub-hosted `release.yml` run for tag `v1.0.44` before push
+
+
 ## [1.0.43] - 2026-05-02
 
 Make release safety explicit while removing deprecated install heuristics

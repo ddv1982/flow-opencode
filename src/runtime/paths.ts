@@ -124,13 +124,6 @@ export function getActiveSessionPath(
 	return getSessionPath(worktree, sessionId, "active");
 }
 
-export function getStoredSessionPath(
-	worktree: string,
-	sessionId: string,
-): string {
-	return getSessionPath(worktree, sessionId, "stored");
-}
-
 export function getCompletedSessionPath(
 	worktree: string,
 	completedDirName: string,
@@ -152,27 +145,8 @@ export function getDocsDir(
 	return getDocsDirFromSessionDir(getSessionDir(worktree, sessionId, location));
 }
 
-export function getCompletedDocsDir(
-	worktree: string,
-	completedDirName: string,
-): string {
-	return getDocsDirFromSessionDir(
-		getCompletedSessionDir(worktree, completedDirName),
-	);
-}
-
 export function getDocsDirFromSessionDir(sessionDir: string): string {
 	return join(sessionDir, "docs");
-}
-
-export function getFeaturesDocsDir(
-	worktree: string,
-	sessionId: string,
-	location: LiveSessionLocation = "active",
-): string {
-	return getFeaturesDocsDirFromSessionDir(
-		getSessionDir(worktree, sessionId, location),
-	);
 }
 
 export function getFeaturesDocsDirFromSessionDir(sessionDir: string): string {

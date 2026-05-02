@@ -8,7 +8,6 @@ import {
 } from "node:fs/promises";
 import {
 	getDocsDir,
-	getDocsDirFromSessionDir,
 	getFeatureDocPathFromSessionDir,
 	getFeaturesDocsDirFromSessionDir,
 	getIndexDocPathFromSessionDir,
@@ -155,16 +154,6 @@ export async function renderSessionDocs(
 		session,
 		location,
 	);
-}
-
-export async function deleteSessionDocsAtDir(
-	sessionDir: string,
-): Promise<void> {
-	preparedFeaturesDocsDirs.delete(getFeaturesDocsDirFromSessionDir(sessionDir));
-	await rm(getDocsDirFromSessionDir(sessionDir), {
-		recursive: true,
-		force: true,
-	});
 }
 
 export async function deleteSessionDocs(

@@ -6,7 +6,6 @@ import {
 	FEATURE_ID_PATTERN,
 } from "../runtime/constants";
 import {
-	OutcomeSchema,
 	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
 	FlowReviewRecordFinalArgsSchema as RuntimeFlowReviewRecordFinalArgsSchema,
 	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
@@ -112,17 +111,6 @@ export const RuntimeFlowReviewRecordFeatureArgsShape =
 	RuntimeFlowReviewRecordFeatureArgsSchema.shape;
 export const RuntimeFlowReviewRecordFinalArgsShape =
 	RuntimeFlowReviewRecordFinalArgsSchema.shape;
-
-export const FlowPlanApplyArgsShape = FlowPlanApplyArgsSchema.shape;
-export const FlowReviewRecordFeatureArgsShape =
-	RuntimeFlowReviewRecordFeatureArgsShape;
-export const FlowReviewRecordFinalArgsShape =
-	RuntimeFlowReviewRecordFinalArgsShape;
-export const WorkerResultArgsShape = {
-	...RuntimeWorkerResultBaseShape,
-	status: z.enum(["ok", "needs_input"]),
-	outcome: OutcomeSchema.optional(),
-} satisfies Readonly<Record<string, unknown>>;
 
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
 export const FlowDoctorArgsSchema = z.object(FlowDoctorArgsShape);

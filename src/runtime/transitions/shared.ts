@@ -1,6 +1,5 @@
-import { ZodError } from "zod";
 import type { CanonicalRuntimeToolName } from "../constants";
-import type { Feature, Session } from "../schema";
+import type { Session } from "../schema";
 
 export { validateSuccessfulCompletion } from "./execution";
 
@@ -57,16 +56,6 @@ export function succeed<T>(value: T): TransitionResult<T> {
 	return { ok: true, value };
 }
 
-export function formatValidationError(error: unknown): string {
-	if (error instanceof ZodError) {
-		return error.issues
-			.map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-			.join("; ");
-	}
-
-	return error instanceof Error ? error.message : "Unknown validation error";
-}
-
 export function clearExecution(session: Session): Session {
 	return {
 		...session,
@@ -83,8 +72,4 @@ export function clearExecution(session: Session): Session {
 			lastValidationRun: [],
 		},
 	};
-}
-
-export function indexFeatures(features: Feature[]): Map<string, Feature> {
-	return new Map(features.map((feature) => [feature.id, feature]));
 }

@@ -23,7 +23,6 @@ import {
 	VALIDATION_SCOPES,
 	VALIDATION_STATUSES,
 	VERIFICATION_STATUSES,
-	WORKER_STATUSES,
 } from "./constants";
 
 function isNeedsInputOutcomeKind(
@@ -62,7 +61,6 @@ export const GoalModeSchema = z.enum(GOAL_MODES);
 export const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
 export const PackageManagerSchema = z.enum(["npm", "pnpm", "yarn", "bun"]);
 export const ValidationStatusSchema = z.enum(VALIDATION_STATUSES);
-export const WorkerStatusSchema = z.enum(WORKER_STATUSES);
 export const OutcomeKindSchema = z.enum(OUTCOME_KINDS);
 
 export const ArtifactSchema = z.object({
@@ -411,7 +409,6 @@ export const SessionSchema = z.object({
 	}),
 });
 
-export type Artifact = z.infer<typeof ArtifactSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;
 export type Feature = z.infer<typeof FeatureSchema>;
 export type FlowReviewRecordFeatureArgs = z.input<
@@ -427,7 +424,6 @@ export type PlanningContext = z.infer<typeof PlanningContextSchema>;
 export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
-export type ReviewerDecisionInput = z.input<typeof ReviewerDecisionSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type WorkerResult = z.infer<typeof WorkerResultSchema>;
 export type WorkerResultArgs = z.input<typeof WorkerResultArgsSchema>;

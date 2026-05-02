@@ -1,7 +1,4 @@
-import {
-	FLOW_PLAN_WITH_GOAL_COMMAND,
-	flowResetFeatureCommand,
-} from "../constants";
+import { FLOW_PLAN_WITH_GOAL_COMMAND } from "../constants";
 import type {
 	Feature,
 	FlowReviewRecordFeatureArgs,
@@ -383,8 +380,4 @@ export async function runDispatchedSessionMutationAction<
 		dispatchSessionMutationAction(name, payload),
 		runtime,
 	) as Promise<SessionMutationResult<SessionMutationValueMap[Name]>>;
-}
-
-export function resetFeatureRecoveryCommand(featureId: string) {
-	return flowResetFeatureCommand(featureId);
 }

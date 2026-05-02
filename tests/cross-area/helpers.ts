@@ -45,9 +45,6 @@ type ToolExecutor = {
 };
 
 export type BuiltPlugin = Awaited<ReturnType<PluginFactory>>;
-export type BuiltTool = {
-	execute: (args: unknown, context: ToolContext) => Promise<string>;
-};
 export type BuiltToolMap = Record<string, ToolExecutor>;
 
 const tempDirs: string[] = [];
