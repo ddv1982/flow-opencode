@@ -1,10 +1,10 @@
 import {
-	errorResponse,
-	InvalidFlowWorkspaceRootError,
 	parseToolArgs,
 	toJson,
-} from "../runtime/application";
+} from "../runtime/application/workspace-runtime";
+import { errorResponse } from "../runtime/errors";
 import { parseStrictJsonObject } from "../runtime/json/strict-object";
+import { InvalidFlowWorkspaceRootError } from "../runtime/workspace-root";
 import type { ToolContext } from "./schemas";
 
 type ParseSchema<T> = {

@@ -1,9 +1,12 @@
 export { featureWouldReachCompletion, summarizeCompletion } from "./completion";
 export {
+	type DetailedFinalReviewRequirementFailure,
 	describeFinalReviewCoverageFailure,
+	detailedFinalReviewRequirementFailures,
 	type FinalReviewCoverageTarget,
 	type FinalReviewSurface,
 	finalReviewDepthMatchesPolicy,
+	isKnownFinalReviewSurface,
 } from "./final-review-coverage";
 export {
 	SEMANTIC_COMPLETION_GATE_ORDER,

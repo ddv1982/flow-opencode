@@ -8,6 +8,10 @@ import {
 	startRun,
 } from "../src/runtime/transitions";
 import { validateSuccessfulCompletion } from "../src/runtime/transitions/shared";
+import {
+	createApprovedFinalReviewerDecision,
+	createFinalReviewPayload,
+} from "./final-review-fixtures";
 import { samplePlan } from "./runtime-test-helpers";
 
 function createStartedSession(options?: {
@@ -101,35 +105,7 @@ function approvedFinalDecision(): Extract<
 	NonNullable<Session["execution"]["lastReviewerDecision"]>,
 	{ scope: "final" }
 > {
-	return {
-		scope: "final",
-		reviewDepth: "detailed",
-		reviewedSurfaces: [
-			"changed_files",
-			"shared_surfaces",
-			"validation_evidence",
-		],
-		evidenceSummary:
-			"Checked final cross-feature integration and validation evidence.",
-		validationAssessment:
-			"Validation coverage and cross-feature interactions were reviewed.",
-		evidenceRefs: {
-			changedArtifacts: ["src/runtime/session.ts"],
-			validationCommands: ["bun test"],
-		},
-		integrationChecks: [
-			"Reviewed integration points across the active feature boundary.",
-		],
-		regressionChecks: [
-			"Checked for regressions in shared surfaces and validation evidence.",
-		],
-		remainingGaps: [],
-		status: "approved",
-		summary: "Final review looks good.",
-		blockingFindings: [],
-		followUps: [],
-		suggestedValidation: [],
-	};
+	return createApprovedFinalReviewerDecision();
 }
 
 function createWorkerResult(
@@ -249,32 +225,7 @@ describe("completion gates", () => {
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
 					validationScope: "broad",
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-						],
-						evidenceSummary:
-							"Checked final cross-feature integration and validation evidence.",
-						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["src/runtime/session.ts"],
-							validationCommands: ["bun test"],
-						},
-						integrationChecks: [
-							"Reviewed integration points across the active feature boundary.",
-						],
-						regressionChecks: [
-							"Checked for regressions in shared surfaces and validation evidence.",
-						],
-						remainingGaps: [],
-						status: "passed",
-						summary: "Final review looks good.",
-						blockingFindings: [],
-					},
+					finalReview: createFinalReviewPayload(),
 				}),
 			expectedErrorCode: "missing_final_reviewer_decision",
 		},
@@ -313,32 +264,11 @@ describe("completion gates", () => {
 				}),
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-						],
-						evidenceSummary:
-							"Checked final cross-feature integration and validation evidence.",
-						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["src/runtime/session.ts"],
-							validationCommands: ["bun test"],
-						},
-						integrationChecks: [
-							"Reviewed integration points across the active feature boundary.",
-						],
-						regressionChecks: [
-							"Checked for regressions in shared surfaces and validation evidence.",
-						],
-						remainingGaps: [],
+					finalReview: createFinalReviewPayload({
 						status: "failed",
 						summary: "Repo validation failed.",
 						blockingFindings: [{ summary: "Repo-wide issue remains." }],
-					},
+					}),
 				}),
 			expectedErrorCode: "failing_final_review",
 			expectedNextCommand: "/flow-reset feature setup-runtime",
@@ -374,34 +304,13 @@ describe("completion gates", () => {
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
 					validationScope: "broad",
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-						],
-						evidenceSummary:
-							"Checked final cross-feature integration and validation evidence.",
-						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["src/runtime/session.ts"],
-							validationCommands: ["bun test"],
-						},
-						integrationChecks: [
-							"Reviewed integration points across the active feature boundary.",
-						],
-						regressionChecks: [
-							"Checked for regressions in shared surfaces and validation evidence.",
-						],
-						remainingGaps: [],
+					finalReview: createFinalReviewPayload({
 						status: "failed",
 						summary: "Repo-wide validation is blocked.",
 						blockingFindings: [
 							{ summary: "A blocking repo-wide issue remains." },
 						],
-					},
+					}),
 				}),
 			expectedErrorCode: "failing_final_review",
 			expectedNextCommand: "/flow-reset feature setup-runtime",
@@ -420,32 +329,9 @@ describe("completion gates", () => {
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
 					validationScope: "broad",
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-						],
-						evidenceSummary:
-							"Checked final cross-feature integration and validation evidence.",
-						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["src/runtime/session.ts"],
-							validationCommands: ["bun test"],
-						},
-						integrationChecks: [
-							"Reviewed integration points across the active feature boundary.",
-						],
-						regressionChecks: [
-							"Checked for regressions in shared surfaces and validation evidence.",
-						],
-						remainingGaps: [],
-						status: "passed",
+					finalReview: createFinalReviewPayload({
 						summary: "Detailed final review looks good.",
-						blockingFindings: [],
-					},
+					}),
 				}),
 			expectedErrorCode: "failing_final_review",
 			expectedNextCommand: "/flow-reset feature setup-runtime",
@@ -514,32 +400,16 @@ describe("completion gates", () => {
 				createWorkerResult(featureId, {
 					artifactsChanged: [{ path: "./docs/development.md" }],
 					validationScope: "broad",
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-						],
+					finalReview: createFinalReviewPayload({
 						evidenceSummary:
 							"Reviewed final runtime state and validation evidence.",
-						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["src/runtime/session.ts"],
-							validationCommands: ["bun test"],
-						},
 						integrationChecks: [
 							"Checked that prompt-facing guidance still matches runtime behavior.",
 						],
 						regressionChecks: [
 							"Checked that the runtime change does not regress existing review behavior.",
 						],
-						remainingGaps: [],
-						status: "passed",
-						summary: "Final review looks good.",
-						blockingFindings: [],
-					},
+					}),
 				}),
 			expectedErrorCode: "failing_final_review",
 			expectedNextCommand: "/flow-reset feature setup-runtime",
@@ -563,32 +433,16 @@ describe("completion gates", () => {
 				createWorkerResult(featureId, {
 					artifactsChanged: [{ path: "src/runtime/session.test.ts" }],
 					validationScope: "broad",
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-						],
+					finalReview: createFinalReviewPayload({
 						evidenceSummary:
 							"Reviewed runtime changes and validation evidence.",
-						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["src/runtime/session.ts"],
-							validationCommands: ["bun test"],
-						},
 						integrationChecks: [
 							"Checked that final runtime behavior stays coherent.",
 						],
 						regressionChecks: [
 							"Checked that the runtime change does not regress existing review behavior.",
 						],
-						remainingGaps: [],
-						status: "passed",
-						summary: "Final review looks good.",
-						blockingFindings: [],
-					},
+					}),
 				}),
 			expectedErrorCode: "failing_final_review",
 			expectedNextCommand: "/flow-reset feature setup-runtime",
@@ -645,32 +499,9 @@ describe("completion gates", () => {
 			session,
 			createWorkerResult(featureId, {
 				validationScope: "broad",
-				finalReview: {
-					reviewDepth: "detailed",
-					reviewedSurfaces: [
-						"changed_files",
-						"shared_surfaces",
-						"validation_evidence",
-					],
-					evidenceSummary:
-						"Checked final cross-feature integration and validation evidence.",
-					validationAssessment:
-						"Validation coverage and cross-feature interactions were reviewed.",
-					evidenceRefs: {
-						changedArtifacts: ["src/runtime/session.ts"],
-						validationCommands: ["bun test"],
-					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
-					remainingGaps: [],
-					status: "passed",
+				finalReview: createFinalReviewPayload({
 					summary: "Repo-wide validation is clean.",
-					blockingFindings: [],
-				},
+				}),
 			}),
 			featureId,
 			wasFinalFeature,

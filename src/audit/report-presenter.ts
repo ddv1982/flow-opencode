@@ -1,4 +1,4 @@
-import { fullAuditRequiredCategories } from "./report-normalizer";
+import { summarizeReviewCoverage } from "./report-normalizer";
 import type { ReviewReport } from "./report-schema";
 
 export type ReviewRenderView = "human" | "structured" | "both";
@@ -127,12 +127,6 @@ function bulletLines(items: string[], limit = items.length): string[] {
 	return items.slice(0, limit).map((item) => `- ${item}`);
 }
 
-function surfaceHasEvidence(
-	surface: ReviewReport["discoveredSurfaces"][number],
-): boolean {
-	return (surface.evidence?.length ?? 0) > 0;
-}
-
 function renderConclusion(report: ReviewReport): string[] {
 	const topFinding = highestPriorityFinding(report);
 	return [
@@ -199,15 +193,11 @@ function renderNextSteps(report: ReviewReport): string[] {
 
 function renderCoverageNotes(report: ReviewReport): string[] {
 	const notes = report.coverageNotes ?? [];
-	const directlyReviewed = report.discoveredSurfaces.filter(
-		(surface) => surface.reviewStatus === "directly_reviewed",
+	const coverageSummary = summarizeReviewCoverage(report);
+	const { directlyReviewed, spotChecked } = coverageSummary;
+	const unreviewed = coverageSummary.unreviewed.map(
+		(surface) => `${surface.name}: ${surface.reason ?? "not reviewed"}`,
 	);
-	const spotChecked = report.discoveredSurfaces.filter(
-		(surface) => surface.reviewStatus === "spot_checked",
-	);
-	const unreviewed = report.discoveredSurfaces
-		.filter((surface) => surface.reviewStatus === "unreviewed")
-		.map((surface) => `${surface.name}: ${surface.reason ?? "not reviewed"}`);
 	const validationNotes =
 		report.validationRun.length > 0
 			? report.validationRun.map((entry) =>
@@ -216,20 +206,7 @@ function renderCoverageNotes(report: ReviewReport): string[] {
 						: `${entry.command} — ${entry.status}: ${entry.summary}`,
 				)
 			: ["not_run: no validation evidence was recorded for this review."];
-	const directlyReviewedCategories = new Set(
-		directlyReviewed
-			.filter(surfaceHasEvidence)
-			.map((surface) => surface.category),
-	);
-	const missingFullAuditCategories = fullAuditRequiredCategories().filter(
-		(category) => !directlyReviewedCategories.has(category),
-	);
-	const fullAuditEligible =
-		report.discoveredSurfaces.length > 0 &&
-		spotChecked.length === 0 &&
-		unreviewed.length === 0 &&
-		directlyReviewed.every(surfaceHasEvidence) &&
-		missingFullAuditCategories.length === 0;
+	const { missingFullAuditCategories, fullAuditEligible } = coverageSummary;
 	return [
 		"## Coverage notes",
 		`- Coverage: ${directlyReviewed.length} directly reviewed, ${spotChecked.length} spot-checked, ${unreviewed.length} unreviewed surfaces.`,

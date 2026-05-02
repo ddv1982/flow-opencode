@@ -45,7 +45,8 @@ Useful scripts:
 - `src/runtime/schema.ts` — session and contract schemas
 - `src/runtime/transitions/` — domain state transition rules split by lifecycle phase
 - `src/runtime/domain/completion.ts` — shared completion-policy calculations
-- `src/runtime/application/tool-runtime.ts` — application-level tool orchestration helpers
+- `src/runtime/application/session-engine.ts` — root-scoped session mutation orchestration
+- `src/runtime/application/workspace-runtime.ts` — tool-argument parsing and workspace-root adapters
 - `src/runtime/session.ts` — persistence and lifecycle exports
 - `src/runtime/render.ts` — derived markdown rendering
 - `src/prompts/agents.ts` — agent instructions

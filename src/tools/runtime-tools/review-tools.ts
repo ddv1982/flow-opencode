@@ -6,10 +6,10 @@ import {
 } from "../../audit/report-presenter";
 import { ReviewReportSchema } from "../../audit/report-schema";
 import {
-	errorResponse,
 	parseToolArgs,
 	toJson,
-} from "../../runtime/application";
+} from "../../runtime/application/workspace-runtime";
+import { errorResponse } from "../../runtime/errors";
 import { parseStrictJsonObject } from "../../runtime/json/strict-object";
 import { withJsonTransportArgs, withParsedArgs } from "../parsed-tool";
 import {

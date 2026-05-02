@@ -1,5 +1,10 @@
-import { FINAL_REVIEW_SURFACES } from "../constants";
-import { finalReviewPolicyForPlan, reviewerPurposeForScope } from "../domain";
+import {
+	type DetailedFinalReviewRequirementFailure,
+	detailedFinalReviewRequirementFailures,
+	finalReviewPolicyForPlan,
+	isKnownFinalReviewSurface,
+	reviewerPurposeForScope,
+} from "../domain";
 import type { Feature, ReviewerDecision, Session } from "../schema";
 import { fail, succeed, type TransitionResult } from "./shared";
 
@@ -112,6 +117,24 @@ function isFeatureScopeReviewerDecision(
 	decision: ReviewerDecision,
 ): decision is FeatureScopeReviewerDecision {
 	return decision.scope === "feature";
+}
+
+function detailedFinalReviewDecisionFailureMessage(
+	failure: DetailedFinalReviewRequirementFailure,
+): string {
+	if (failure === "too_few_surfaces") {
+		return "Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must cover at least two reviewedSurfaces.";
+	}
+	if (failure === "missing_validation_evidence") {
+		return "Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must include validation_evidence.";
+	}
+	if (failure === "missing_cross_feature_surface") {
+		return "Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must include a cross-feature surface.";
+	}
+	if (failure === "missing_integration_checks") {
+		return "Reviewer decision validation failed: integrationChecks: Detailed final reviewer decisions must include integrationChecks.";
+	}
+	return "Reviewer decision validation failed: regressionChecks: Detailed final reviewer decisions must include regressionChecks.";
 }
 
 export function resetFeature(
@@ -280,66 +303,22 @@ export function recordReviewerDecision(
 	};
 	if (
 		input.scope === "final" &&
-		finalReviewedSurfaces.some(
-			(surface) =>
-				!FINAL_REVIEW_SURFACES.includes(
-					surface as (typeof FINAL_REVIEW_SURFACES)[number],
-				),
-		)
+		finalReviewedSurfaces.some((surface) => !isKnownFinalReviewSurface(surface))
 	) {
 		return fail(
 			"Reviewer decision validation failed: reviewedSurfaces: Final reviewer decisions must only use known reviewedSurfaces.",
 		);
 	}
-	if (
-		input.scope === "final" &&
-		input.reviewDepth === "detailed" &&
-		finalReviewedSurfaces.length < 2
-	) {
-		return fail(
-			"Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must cover at least two reviewedSurfaces.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.reviewDepth === "detailed" &&
-		!finalReviewedSurfaces.includes("validation_evidence")
-	) {
-		return fail(
-			"Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must include validation_evidence.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.reviewDepth === "detailed" &&
-		![
-			"integration_points",
-			"shared_surfaces",
-			"tooling_and_config",
-			"release_surface",
-		].some((surface) => finalReviewedSurfaces.includes(surface))
-	) {
-		return fail(
-			"Reviewer decision validation failed: reviewedSurfaces: Detailed final reviewer decisions must include a cross-feature surface.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.reviewDepth === "detailed" &&
-		(!input.integrationChecks || input.integrationChecks.length === 0)
-	) {
-		return fail(
-			"Reviewer decision validation failed: integrationChecks: Detailed final reviewer decisions must include integrationChecks.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.reviewDepth === "detailed" &&
-		(!input.regressionChecks || input.regressionChecks.length === 0)
-	) {
-		return fail(
-			"Reviewer decision validation failed: regressionChecks: Detailed final reviewer decisions must include regressionChecks.",
-		);
+	if (input.scope === "final") {
+		const [detailedFailure] = detailedFinalReviewRequirementFailures({
+			reviewDepth: input.reviewDepth ?? "",
+			reviewedSurfaces: finalReviewedSurfaces,
+			integrationChecks: input.integrationChecks,
+			regressionChecks: input.regressionChecks,
+		});
+		if (detailedFailure) {
+			return fail(detailedFinalReviewDecisionFailureMessage(detailedFailure));
+		}
 	}
 	const finalReviewDepth = input.reviewDepth as
 		| FinalScopeReviewerDecision["reviewDepth"]

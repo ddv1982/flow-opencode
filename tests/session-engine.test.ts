@@ -6,17 +6,18 @@ import {
 	executeDispatchedSessionMutation,
 	executeDispatchedSessionReadAction,
 	executeDispatchedSessionWorkspaceAction,
-	executeSessionMutation,
-	missingSessionResponse,
 	runDispatchedSessionMutationAction,
 	runDispatchedSessionReadAction,
 	runDispatchedSessionWorkspaceAction,
-	runSessionMutationAction,
 } from "../src/runtime/application";
 import {
 	SESSION_MUTATION_ACTION_HANDLERS,
 	SESSION_MUTATION_ACTION_NAMES,
 } from "../src/runtime/application/session-actions";
+import {
+	executeSessionMutationAtRoot,
+	runSessionMutationActionAtRoot,
+} from "../src/runtime/application/session-engine";
 import {
 	SESSION_READ_ACTION_HANDLERS,
 	SESSION_READ_ACTION_NAMES,
@@ -72,8 +73,8 @@ describe("session engine boundary", () => {
 	});
 
 	test("returns the configured missing-session response before running the action", async () => {
-		const response = await executeSessionMutation(
-			{ worktree: "/tmp/project" },
+		const response = await executeSessionMutationAtRoot(
+			"/tmp/project",
 			{
 				name: "apply_plan",
 				run: () => {
@@ -81,10 +82,11 @@ describe("session engine boundary", () => {
 				},
 				getSession: (value: never) => value,
 				onSuccess: () => ({ status: "ok" }),
-				missingResponse: missingSessionResponse(
-					"No planning session exists.",
-					"/flow-plan <goal>",
-				),
+				missingResponse: {
+					status: "missing_session",
+					summary: "No planning session exists.",
+					nextCommand: "/flow-plan <goal>",
+				},
 			},
 			{
 				loadSession: async () => null,
@@ -97,7 +99,7 @@ describe("session engine boundary", () => {
 			},
 		);
 
-		expect(JSON.parse(response)).toEqual({
+		expect(response).toEqual({
 			status: "missing_session",
 			summary: "No planning session exists.",
 			nextCommand: "/flow-plan <goal>",
@@ -110,8 +112,8 @@ describe("session engine boundary", () => {
 		let saved = false;
 		let synced = false;
 
-		const response = await executeSessionMutation(
-			{ worktree: "/tmp/project" },
+		const response = await executeSessionMutationAtRoot(
+			"/tmp/project",
 			{
 				name: "approve_plan",
 				run: (session) =>
@@ -137,7 +139,7 @@ describe("session engine boundary", () => {
 
 		expect(saved).toBe(true);
 		expect(synced).toBe(true);
-		expect(JSON.parse(response)).toEqual({
+		expect(response).toEqual({
 			status: "ok",
 			summary: "Saved ready",
 		});
@@ -147,8 +149,8 @@ describe("session engine boundary", () => {
 		const baseSession = createSession("Build a workflow plugin");
 		const savedSession = { ...baseSession, status: "ready" as const };
 
-		const result = await runSessionMutationAction(
-			{ worktree: "/tmp/project" },
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
 			{
 				name: "approve_plan",
 				run: (session) =>

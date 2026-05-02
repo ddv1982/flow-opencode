@@ -63,16 +63,6 @@ export {
 	runDispatchedSessionWorkspaceAction,
 	SESSION_WORKSPACE_ACTION_NAMES,
 } from "./session-workspace-actions";
-export {
-	errorResponse,
-	executeSessionMutation,
-	missingSessionResponse,
-	parseToolArgs,
-	persistTransition,
-	runSessionMutationAction,
-	withPersistedTransition,
-	withSession,
-} from "./tool-runtime";
 export type {
 	ResolvedSessionRoot,
 	SessionRootMode,

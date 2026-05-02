@@ -21,15 +21,51 @@ function isDirectlyReviewedWithEvidence(surface: ReviewSurface): boolean {
 	);
 }
 
-function missingFullAuditCategories(report: ReviewReport): SurfaceCategory[] {
-	const directlyReviewedCategories = new Set(
-		report.discoveredSurfaces
-			.filter(isDirectlyReviewedWithEvidence)
-			.map((surface) => surface.category),
+export type ReviewCoverageSummary = {
+	directlyReviewed: ReviewSurface[];
+	directlyReviewedWithEvidence: ReviewSurface[];
+	spotChecked: ReviewSurface[];
+	unreviewed: ReviewSurface[];
+	missingFullAuditCategories: SurfaceCategory[];
+	fullAuditEligible: boolean;
+};
+
+export function summarizeReviewCoverage(
+	report: ReviewReport,
+): ReviewCoverageSummary {
+	const directlyReviewed = report.discoveredSurfaces.filter(
+		(surface) => surface.reviewStatus === "directly_reviewed",
 	);
-	return REQUIRED_FULL_AUDIT_CATEGORIES.filter(
+	const directlyReviewedWithEvidence = directlyReviewed.filter(
+		isDirectlyReviewedWithEvidence,
+	);
+	const spotChecked = report.discoveredSurfaces.filter(
+		(surface) => surface.reviewStatus === "spot_checked",
+	);
+	const unreviewed = report.discoveredSurfaces.filter(
+		(surface) => surface.reviewStatus === "unreviewed",
+	);
+	const directlyReviewedCategories = new Set(
+		directlyReviewedWithEvidence.map((surface) => surface.category),
+	);
+	const missingFullAuditCategories = REQUIRED_FULL_AUDIT_CATEGORIES.filter(
 		(category) => !directlyReviewedCategories.has(category),
 	);
+	const fullAuditEligible =
+		report.discoveredSurfaces.length > 0 &&
+		spotChecked.length === 0 &&
+		unreviewed.length === 0 &&
+		directlyReviewed.every(hasSurfaceEvidence) &&
+		missingFullAuditCategories.length === 0;
+
+	return {
+		directlyReviewed,
+		directlyReviewedWithEvidence,
+		spotChecked,
+		unreviewed,
+		missingFullAuditCategories,
+		fullAuditEligible,
+	};
 }
 
 function validationRunWithExplicitNotRun(
@@ -74,11 +110,11 @@ function normalizedAchievedDepth(
 			coverageNotes: report.coverageNotes,
 		};
 	}
-	const missingCategories = missingFullAuditCategories(report);
+	const coverageSummary = summarizeReviewCoverage(report);
+	const missingCategories = coverageSummary.missingFullAuditCategories;
 	if (missingCategories.length > 0) {
-		const hasDirectCoverage = report.discoveredSurfaces.some(
-			isDirectlyReviewedWithEvidence,
-		);
+		const hasDirectCoverage =
+			coverageSummary.directlyReviewedWithEvidence.length > 0;
 		return {
 			achievedDepth: hasDirectCoverage ? "deep_audit" : "broad_audit",
 			coverageNotes: [
@@ -96,9 +132,8 @@ function normalizedAchievedDepth(
 			coverageNotes: report.coverageNotes,
 		};
 	}
-	const hasDirectCoverage = report.discoveredSurfaces.some(
-		isDirectlyReviewedWithEvidence,
-	);
+	const hasDirectCoverage =
+		summarizeReviewCoverage(report).directlyReviewedWithEvidence.length > 0;
 	return {
 		achievedDepth: hasDirectCoverage ? "deep_audit" : "broad_audit",
 		coverageNotes: [
@@ -116,8 +151,4 @@ export function normalizeReviewReport(report: ReviewReport): ReviewReport {
 		coverageNotes: depthNormalization.coverageNotes,
 		validationRun: validationRunWithExplicitNotRun(report),
 	};
-}
-
-export function fullAuditRequiredCategories(): readonly SurfaceCategory[] {
-	return REQUIRED_FULL_AUDIT_CATEGORIES;
 }

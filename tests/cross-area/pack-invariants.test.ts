@@ -30,6 +30,7 @@ function runPackInvariants(
 	packJson: unknown,
 	changelogText: string,
 	packageVersion = currentPackageVersion,
+	packageJsonOverrides: Record<string, unknown> = {},
 ) {
 	const directory = makeTempDir();
 	const packJsonPath = join(directory, "pack.json");
@@ -40,7 +41,13 @@ function runPackInvariants(
 	writeFileSync(changelogPath, changelogText);
 	writeFileSync(
 		packageJsonPath,
-		JSON.stringify({ name: "opencode-plugin-flow", version: packageVersion }),
+		JSON.stringify({
+			name: "opencode-plugin-flow",
+			version: packageVersion,
+			main: "dist/index.js",
+			exports: { ".": "./dist/index.js" },
+			...packageJsonOverrides,
+		}),
 	);
 
 	return Bun.spawn({
@@ -129,6 +136,23 @@ describe("pack invariants script", () => {
 		expect(await process.exited).toBe(1);
 		expect(await new Response(process.stderr).text()).toContain(
 			"package.json version 1.0.11 does not match top CHANGELOG version 1.2.3",
+		);
+	});
+
+	test("fails when the package public entry surface widens", async () => {
+		const process = runPackInvariants(
+			[
+				{
+					files: expectedPaths.map((path) => ({ path })),
+				},
+			],
+			readFileSync(resolve(repoRoot, "CHANGELOG.md"), "utf8"),
+			currentPackageVersion,
+			{ exports: { ".": "./dist/index.js", "./runtime": "./dist/runtime.js" } },
+		);
+		expect(await process.exited).toBe(1);
+		expect(await new Response(process.stderr).text()).toContain(
+			"package.json exports must expose only the plugin root entry",
 		);
 	});
 });

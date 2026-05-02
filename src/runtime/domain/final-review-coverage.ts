@@ -21,6 +21,18 @@ export type FinalReviewCoverageTarget = {
 	regressionChecks?: string[] | undefined;
 };
 
+export type DetailedFinalReviewRequirementFailure =
+	| "too_few_surfaces"
+	| "missing_validation_evidence"
+	| "missing_cross_feature_surface"
+	| "missing_integration_checks"
+	| "missing_regression_checks";
+
+type DetailedFinalReviewTarget = Pick<
+	FinalReviewCoverageTarget,
+	"reviewDepth" | "reviewedSurfaces" | "integrationChecks" | "regressionChecks"
+>;
+
 type FinalReviewWorkerEvidence = {
 	artifactsChanged: Array<{ path: string }>;
 	validationRun: Array<{ command: string }>;
@@ -41,133 +53,211 @@ function normalizeArtifactPath(path: string): string {
 	return normalized;
 }
 
-function isDocsAndPromptsPath(path: string): boolean {
-	return (
-		path === "README.md" ||
-		path.startsWith("docs/") ||
-		path.startsWith("src/prompts/") ||
-		path.startsWith("src/audit/prompts/")
+type PathRule = {
+	exact?: readonly string[];
+	prefixes?: readonly string[];
+	includes?: readonly string[];
+	suffixes?: readonly string[];
+};
+
+type SurfacePathRule = PathRule & { surface: FinalReviewSurface };
+type AreaPathRule = PathRule & {
+	area: string;
+	surface?: FinalReviewSurface;
+};
+
+const TEST_PATH_SUFFIXES = [
+	".test.ts",
+	".test.tsx",
+	".test.js",
+	".test.jsx",
+	".spec.ts",
+	".spec.tsx",
+	".spec.js",
+	".spec.jsx",
+] as const;
+
+const DETAILED_FINAL_REVIEW_CROSS_FEATURE_SURFACES: readonly FinalReviewSurface[] =
+	[
+		"integration_points",
+		"shared_surfaces",
+		"tooling_and_config",
+		"release_surface",
+	] as const;
+
+export function isKnownFinalReviewSurface(
+	surface: string,
+): surface is FinalReviewSurface {
+	return FINAL_REVIEW_SURFACES.includes(
+		surface as (typeof FINAL_REVIEW_SURFACES)[number],
 	);
+}
+
+export function detailedFinalReviewRequirementFailures(
+	review: DetailedFinalReviewTarget,
+): DetailedFinalReviewRequirementFailure[] {
+	if (review.reviewDepth !== "detailed") {
+		return [];
+	}
+
+	const failures: DetailedFinalReviewRequirementFailure[] = [];
+	const reviewedSurfaceSet = new Set(review.reviewedSurfaces);
+
+	if (review.reviewedSurfaces.length < 2) {
+		failures.push("too_few_surfaces");
+	}
+	if (!reviewedSurfaceSet.has("validation_evidence")) {
+		failures.push("missing_validation_evidence");
+	}
+	if (
+		!DETAILED_FINAL_REVIEW_CROSS_FEATURE_SURFACES.some((surface) =>
+			reviewedSurfaceSet.has(surface),
+		)
+	) {
+		failures.push("missing_cross_feature_surface");
+	}
+	if (!review.integrationChecks?.length) {
+		failures.push("missing_integration_checks");
+	}
+	if (!review.regressionChecks?.length) {
+		failures.push("missing_regression_checks");
+	}
+
+	return failures;
+}
+
+const REVIEW_SURFACE_PATH_RULES: readonly SurfacePathRule[] = [
+	{
+		surface: "docs_and_prompts",
+		exact: ["README.md"],
+		prefixes: ["docs/", "src/prompts/", "src/audit/prompts/"],
+	},
+	{
+		surface: "tooling_and_config",
+		exact: [
+			"src/tools.ts",
+			"src/config.ts",
+			"src/config-shared.ts",
+			"src/tool-definition-guidance.ts",
+			"src/audit/config.ts",
+			"package.json",
+			"bun.lock",
+			"tsconfig.json",
+			"biome.json",
+		],
+		prefixes: [".github/", "scripts/", "src/tools/"],
+	},
+	{
+		surface: "release_surface",
+		exact: [
+			"CHANGELOG.md",
+			".github/workflows/release.yml",
+			"src/install-opencode.ts",
+			"src/uninstall-opencode.ts",
+			"src/installer.ts",
+		],
+		prefixes: ["dist/", "docs/releases/", "scripts/release-"],
+	},
+	{
+		surface: "operator_surfaces",
+		exact: [
+			"src/index.ts",
+			"src/prompt-system-context.ts",
+			"src/prompts/commands.ts",
+			"src/audit/prompts/commands.ts",
+		],
+		prefixes: ["src/runtime/application/", "src/runtime/transitions/"],
+	},
+	{
+		surface: "tests",
+		prefixes: ["tests/", "test/", "spec/"],
+		includes: ["/__tests__/"],
+		suffixes: TEST_PATH_SUFFIXES,
+	},
+];
+
+const SHARED_AREA_PATH_RULES: readonly AreaPathRule[] = [
+	{ area: "runtime", prefixes: ["src/runtime/"] },
+	{ area: "prompts", prefixes: ["src/prompts/"] },
+	{ area: "audit", prefixes: ["src/audit/"] },
+	{ area: "tools", exact: ["src/tools.ts"], prefixes: ["src/tools/"] },
+	{ area: "source", prefixes: ["src/"] },
+	{ area: "tooling", surface: "tooling_and_config" },
+	{ area: "docs", surface: "docs_and_prompts" },
+	{ area: "tests", surface: "tests" },
+	{ area: "release", surface: "release_surface" },
+	{ area: "operator", surface: "operator_surfaces" },
+];
+
+const INTEGRATION_AREA_PATH_RULES: readonly AreaPathRule[] = [
+	{ area: "runtime", prefixes: ["src/runtime/"] },
+	{ area: "prompting", prefixes: ["src/prompts/", "src/audit/prompts/"] },
+	{ area: "tooling", surface: "tooling_and_config" },
+	{ area: "docs", surface: "docs_and_prompts" },
+	{ area: "tests", surface: "tests" },
+	{ area: "release", surface: "release_surface" },
+	{ area: "operator", surface: "operator_surfaces" },
+];
+
+function matchesPathRule(path: string, rule: PathRule): boolean {
+	return Boolean(
+		rule.exact?.includes(path) ||
+			rule.prefixes?.some((prefix) => path.startsWith(prefix)) ||
+			rule.includes?.some((segment) => path.includes(segment)) ||
+			rule.suffixes?.some((suffix) => path.endsWith(suffix)),
+	);
+}
+
+function pathMatchesSurface(
+	path: string,
+	surface: FinalReviewSurface,
+): boolean {
+	return REVIEW_SURFACE_PATH_RULES.some(
+		(rule) => rule.surface === surface && matchesPathRule(path, rule),
+	);
+}
+
+function isDocsAndPromptsPath(path: string): boolean {
+	return pathMatchesSurface(path, "docs_and_prompts");
 }
 
 function isToolingAndConfigPath(path: string): boolean {
-	return (
-		path.startsWith(".github/") ||
-		path.startsWith("scripts/") ||
-		path.startsWith("src/tools/") ||
-		path === "src/tools.ts" ||
-		path === "src/config.ts" ||
-		path === "src/config-shared.ts" ||
-		path === "src/tool-definition-guidance.ts" ||
-		path === "src/audit/config.ts" ||
-		path === "package.json" ||
-		path === "bun.lock" ||
-		path === "tsconfig.json" ||
-		path === "biome.json"
-	);
+	return pathMatchesSurface(path, "tooling_and_config");
 }
 
 function isReleaseSurfacePath(path: string): boolean {
-	return (
-		path === "CHANGELOG.md" ||
-		path.startsWith("dist/") ||
-		path.startsWith("docs/releases/") ||
-		path.startsWith("scripts/release-") ||
-		path === ".github/workflows/release.yml" ||
-		path === "src/install-opencode.ts" ||
-		path === "src/uninstall-opencode.ts" ||
-		path === "src/installer.ts"
-	);
+	return pathMatchesSurface(path, "release_surface");
 }
 
 function isOperatorSurfacePath(path: string): boolean {
-	return (
-		path === "src/index.ts" ||
-		path === "src/prompt-system-context.ts" ||
-		path === "src/prompts/commands.ts" ||
-		path === "src/audit/prompts/commands.ts" ||
-		path.startsWith("src/runtime/application/") ||
-		path.startsWith("src/runtime/transitions/")
-	);
+	return pathMatchesSurface(path, "operator_surfaces");
 }
 
 function isTestPath(path: string): boolean {
-	return (
-		path.startsWith("tests/") ||
-		path.startsWith("test/") ||
-		path.startsWith("spec/") ||
-		path.includes("/__tests__/") ||
-		path.endsWith(".test.ts") ||
-		path.endsWith(".test.tsx") ||
-		path.endsWith(".test.js") ||
-		path.endsWith(".test.jsx") ||
-		path.endsWith(".spec.ts") ||
-		path.endsWith(".spec.tsx") ||
-		path.endsWith(".spec.js") ||
-		path.endsWith(".spec.jsx")
-	);
+	return pathMatchesSurface(path, "tests");
+}
+
+function areaForPath(
+	path: string,
+	rules: readonly AreaPathRule[],
+): string | null {
+	for (const rule of rules) {
+		if (
+			matchesPathRule(path, rule) ||
+			(rule.surface ? pathMatchesSurface(path, rule.surface) : false)
+		) {
+			return rule.area;
+		}
+	}
+	return null;
 }
 
 function sharedAreaForPath(path: string): string | null {
-	if (path.startsWith("src/runtime/")) {
-		return "runtime";
-	}
-	if (path.startsWith("src/prompts/")) {
-		return "prompts";
-	}
-	if (path.startsWith("src/audit/")) {
-		return "audit";
-	}
-	if (path.startsWith("src/tools/") || path === "src/tools.ts") {
-		return "tools";
-	}
-	if (path.startsWith("src/")) {
-		return "source";
-	}
-	if (isToolingAndConfigPath(path)) {
-		return "tooling";
-	}
-	if (isDocsAndPromptsPath(path)) {
-		return "docs";
-	}
-	if (isTestPath(path)) {
-		return "tests";
-	}
-	if (isReleaseSurfacePath(path)) {
-		return "release";
-	}
-	if (isOperatorSurfacePath(path)) {
-		return "operator";
-	}
-	return null;
+	return areaForPath(path, SHARED_AREA_PATH_RULES);
 }
 
 function integrationAreaForPath(path: string): string | null {
-	if (path.startsWith("src/runtime/")) {
-		return "runtime";
-	}
-	if (
-		path.startsWith("src/prompts/") ||
-		path.startsWith("src/audit/prompts/")
-	) {
-		return "prompting";
-	}
-	if (isToolingAndConfigPath(path)) {
-		return "tooling";
-	}
-	if (isDocsAndPromptsPath(path)) {
-		return "docs";
-	}
-	if (isTestPath(path)) {
-		return "tests";
-	}
-	if (isReleaseSurfacePath(path)) {
-		return "release";
-	}
-	if (isOperatorSurfacePath(path)) {
-		return "operator";
-	}
-	return null;
+	return areaForPath(path, INTEGRATION_AREA_PATH_RULES);
 }
 
 function artifactPathsForWorker(worker: FinalReviewWorkerEvidence): string[] {
@@ -323,30 +413,20 @@ function finalReviewCoverageFailureReasons(
 		);
 	}
 
-	if (review.reviewDepth === "detailed") {
-		const reviewedSurfaceSet = new Set(review.reviewedSurfaces);
-		const coversValidationEvidence = reviewedSurfaceSet.has(
-			"validation_evidence",
-		);
-		const coversCrossFeatureSurface = [
-			"integration_points",
-			"shared_surfaces",
-			"tooling_and_config",
-			"release_surface",
-		].some((surface) => reviewedSurfaceSet.has(surface));
-		if (review.reviewedSurfaces.length < 2) {
+	for (const failure of detailedFinalReviewRequirementFailures(review)) {
+		if (failure === "too_few_surfaces") {
 			reasons.push("must cover at least two reviewedSurfaces");
 		}
-		if (!coversValidationEvidence) {
+		if (failure === "missing_validation_evidence") {
 			reasons.push("must include validation_evidence");
 		}
-		if (!coversCrossFeatureSurface) {
+		if (failure === "missing_cross_feature_surface") {
 			reasons.push("must include at least one cross-feature surface");
 		}
-		if (!review.integrationChecks?.length) {
+		if (failure === "missing_integration_checks") {
 			reasons.push("must include integrationChecks");
 		}
-		if (!review.regressionChecks?.length) {
+		if (failure === "missing_regression_checks") {
 			reasons.push("must include regressionChecks");
 		}
 	}
