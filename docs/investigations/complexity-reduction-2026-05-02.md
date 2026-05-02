@@ -150,7 +150,7 @@ No confirmed dead-code removal is recommended: `bun run deadcode` completed succ
 **Conclusion:** The remaining legacy adapter cleanup is complete; the root engine remains tested and runtime tools no longer depend on a stale compatibility barrel.
 
 ### Phase 12 - Public Package Boundary Guard
-> **Historical snapshot note (2026-05-02):** This phase records evidence captured when package version was `1.0.44`. Current package version is `1.0.48`.
+> **Historical snapshot note (2026-05-02):** This phase records evidence captured when package version was `1.0.44`. Current package version is `1.0.49`.
 
 **Hypothesis:** The remaining deep-import compatibility risk can be reduced without restoring the deleted adapter by making the supported package API explicit and guarding it in release checks.
 **Findings:** Added a package `exports` map that exposes only the root plugin entry (`.` -> `./dist/index.js`), extended pack invariants to fail if `main` or `exports` drift, added a regression for accidental public-surface widening, and updated maintainer docs that still referenced the removed `tool-runtime.ts` adapter.
