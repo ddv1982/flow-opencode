@@ -52,7 +52,7 @@ No external fact-gathering required for the initial pass. This investigation is 
 
 - **Do not collapse reviewer-record validation and completion validation into one gate.** `src/runtime/transitions/review.ts:219-341` validates reviewer decision shape at record time; `src/runtime/transitions/execution-completion-validation.ts:36-110` validates a recorded decision and worker finalReview against actual current-run artifacts/validation. The overlap is contract-protective, not purely accidental.
 - **Do not aggressively deduplicate prompt policy wording first.** `src/audit/prompts/fragments.ts:1-22` deliberately shares audit prompt rules into `src/audit/prompts/agents.ts:27-58` and `src/audit/prompts/commands.ts:8-39`, while tests pin exact snippets and snapshots in `tests/config.test.ts:790-823`, `tests/config.test.ts:869-883`, `tests/config.test.ts:966-983`, and `tests/prompt-snapshot.test.ts:17-21`. Main workflow prompts also intentionally mirror runtime final-completion policy from `src/runtime/domain/workflow-policy.ts:5-9` into `src/prompts/fragments.ts:29-78`, `src/prompts/contracts.ts:68-101`, and `src/prompts/mode-contracts.ts:262-302`.
-- **Do not treat `.factory/**` as wholesale dead code.** Evidence supports a mixed status: `git ls-files '.factory/**'` reports 69 tracked files; `biome.json:3-4` explicitly excludes `.factory` from lint/format; package scripts in `package.json:12-31` do not call `.factory`; repo references outside `.factory` are tests using `.factory` as a hidden-workspace sentinel plus prompt-eval assertions that fixtures must not include `.factory` (`tests/helpers.test.ts:78-128`, `tests/workspace-root-guard.test.ts:39-73`, `tests/runtime-tools.test.ts:607-758`, `tests/prompt-eval-corpus.test.ts:27-28`, `tests/prompt-mode-behavior-eval.test.ts:30-31`, `tests/prompt-behavior-eval.test.ts:22-23`). Inference: `.factory/validation/**` reads archival, while `.factory/library/**`, `.factory/services.yaml`, and `.factory/skills/**` remain process/support artifacts outside active package runtime.
+- **Superseded process-artifact note.** This investigation originally found a mixed-status repo-local hidden process tree and therefore deferred broad deletion. A later cleanup retired that tree entirely; do not use this historical finding as current contributor guidance.
 
 #### Dead-code / unused-code findings
 
@@ -88,7 +88,7 @@ No confirmed dead-code removal is recommended: `bun run deadcode` completed succ
 4. **Medium confidence / medium-high risk — extract only limited final-review shape helpers.** Do not merge reviewer-record and completion gates. Share only common final-review field/surface requirement checks where semantics remain identical.
 5. **Medium confidence / medium risk — review `tool-runtime.ts` legacy helpers as public API cleanup, not dead code.** `withSession`, `persistTransition`, and `withPersistedTransition` look unused internally except for barrel export, but removal needs an explicit API/release review.
 6. **Defer or avoid early prompt/session-wrapper dedupe.** Prompt wording is snapshot/eval-pinned, and session action wrappers preserve mutation/read/workspace authority boundaries. Treat both as intentional duplication unless a targeted refactor proves equal behavior and readability.
-7. **Do not classify `.factory/**` as dead code.** It is excluded from lint/package scripts and much of it appears archival/process-oriented, but it is tracked and used as hidden-workspace sentinel material in tests.
+7. **Superseded:** the repo-local hidden process artifact tree was later retired after tests switched to a generic hidden-workspace sentinel.
 
 ## Preventive Measures
 - Keep the ownership rule explicit: runtime/domain owns policy; tools, prompts, docs, and presenters mirror or render it.
@@ -97,7 +97,7 @@ No confirmed dead-code removal is recommended: `bun run deadcode` completed succ
 - Require `bun run deadcode` before claiming dead-code removal.
 - Treat prompt changes as contract changes; run snapshots/evals before claiming simplification.
 - Preserve separate mutation/read/workspace port boundaries unless a generic abstraction keeps permission semantics obvious.
-- Keep `.factory` out of runtime/package/lint assumptions, but review process artifacts before deletion.
+- Keep retired hidden process artifacts out of runtime/package/lint assumptions; if similar artifacts reappear, document current ownership before adding them to source control.
 
 ## Investigation Log Addendum
 
@@ -109,7 +109,7 @@ No confirmed dead-code removal is recommended: `bun run deadcode` completed succ
 
 ### Phase 5 - Verification Spot Checks
 **Hypothesis:** Load-bearing claims in the pair/oracle findings can be verified with direct source reads and one dead-code command.
-**Findings:** Verified the final-review classifier/mapping concentration, reviewer/completion gate distinction, audit coverage re-derivation, repeated fixture string count, `.factory` lint/package-script status, and deadcode command result.
+**Findings:** Verified the final-review classifier/mapping concentration, reviewer/completion gate distinction, audit coverage re-derivation, repeated fixture string count, retired process-artifact lint/package-script status, and deadcode command result.
 **Evidence:** `src/runtime/domain/final-review-coverage.ts:36-274`; `src/runtime/transitions/review.ts:219-341`; `src/runtime/transitions/execution-completion-validation.ts:36-110`; `src/audit/report-normalizer.ts:1-123`; `src/audit/report-presenter.ts:209-252`; `biome.json:1-20`; `package.json:12-31`; `bun run deadcode` exited 0 with `knip --include files,dependencies`; `rg` found 51 matches for `Validation coverage and cross-feature interactions were reviewed.`
 **Conclusion:** Evidence supports complexity reduction, not broad deletion.
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.53] - 2026-05-02
+
+Retire factory artifact lore from the current maintenance surface
+
+Flow 1.0.53 closes the remaining maintainability risk from the repo-local factory artifact cleanup. The release removes the tracked local process artifact tree and its taxonomy document, keeps regenerated local artifacts ignored, and preserves the hidden-workspace permission contract through generic hidden-root tests instead of a named retired directory.
+
+The stale-reference guard is now stricter: the retired factory artifact name may appear only in the policy test and ignore configuration, not in changelog, release, investigation, docs, source, or fixture text. Older historical notes were rewritten to describe the same decisions as retired process-artifact context, so contributors no longer see a deleted artifact tree presented as current project lore.
+
+Constraint: Remove contributor-confusing process artifacts without changing Flow runtime behavior, command names, tool schemas, state paths, dependencies, or public plugin surface
+Constraint: Keep hidden-workspace permission coverage after removing the named retired artifact tree
+Rejected: Preserve the literal retired artifact name in historical markdown | it kept passing the policy but still looked like current institutional lore to contributors
+Rejected: Delete historical release/investigation context wholesale | concise supersession wording keeps the audit trail without reviving a dead surface
+Rejected: Weaken stale-reference policy to avoid release-note failures | the policy now has narrower allowances and explicit generated-artifact handling instead
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Do not reintroduce repo-local process artifact directories as source-controlled workflow truth; if a future hidden workspace example is needed, use generic sentinel names in tests and document the actual current owner
+Tested: `bun test tests/docs-stale-reference-policy.test.ts`; active grep for retired factory references outside the stale-policy test and ignore configuration; `bun run check` including typecheck, eval captures, dependency contract, deadcode, build, release hygiene, pack invariants, completion-lane gate, cold-start budget, bundle sanity, 429 tests, lint, and bench smoke
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.53` before push
+
 ## [1.0.52] - 2026-05-02
 
 Keep the release-note artifact inside the stale-reference policy
@@ -11,7 +31,7 @@ This release keeps the stale-reference guard intact while adding the generated r
 Constraint: Preserve the stale-reference policy while allowing the hosted release workflow's generated changelog excerpt
 Constraint: Do not force-move the already-pushed failed `v1.0.51` tag
 Rejected: Remove stale-reference scanning from `bun test` | the policy is useful and should remain part of the normal release gate
-Rejected: Strip historical retired-path references from the 1.0.51 release notes | those notes accurately describe the maintenance release and should remain auditable
+Rejected: Remove stale-reference scanning from generated release notes | the generated artifact follows the changelog and should stay policy-covered
 Rejected: Force-move `v1.0.51` | the tag was already pushed and failed in hosted release, so fix-forward keeps history explicit
 Confidence: high
 Scope-risk: narrow
@@ -24,13 +44,13 @@ Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.52`
 
 Reduce maintainer contract drift after the framework-complexity review
 
-Flow 1.0.51 is a maintenance release that addresses the main remaining risk from the maintainability review: contributor comprehension and contract drift as the plugin has grown into a small workflow runtime. The release replaces scattered current-truth language with `docs/maintainer-contract.md`, adds contributor and factory taxonomy maps, records the current release posture, and removes stale implementation/migration docs that no longer describe current behavior.
+Flow 1.0.51 is a maintenance release that addresses the main remaining risk from the maintainability review: contributor comprehension and contract drift as the plugin has grown into a small workflow runtime. The release replaces scattered current-truth language with `docs/maintainer-contract.md`, adds contributor and process-orientation maps, records the current release posture, and removes stale implementation/migration docs that no longer describe current behavior.
 
-The test cleanup continues the same direction without weakening coverage. The former `tests/config.test.ts` and `tests/runtime-completion-contracts.test.ts` suites are now split by concern, with successor breadcrumbs at the top of each new file. A new stale-reference policy test allows old paths only in historical artifacts or explicit successor breadcrumbs, so release notes and `.factory` validation evidence stay auditable without leaking retired paths back into current docs or source.
+The test cleanup continues the same direction without weakening coverage. The former `tests/config.test.ts` and `tests/runtime-completion-contracts.test.ts` suites are now split by concern, with successor breadcrumbs at the top of each new file. A new stale-reference policy test allows old paths only in historical artifacts or explicit successor breadcrumbs, so release notes and retired validation evidence stay auditable without leaking retired paths back into current docs or source.
 
 Constraint: Address maintainability and contributor-orientation risk without changing runtime behavior, command names, tool schemas, state paths, dependencies, or public plugin surface
-Constraint: Preserve historical release and validation evidence instead of rewriting old artifacts to look current
-Rejected: Rewrite release notes and `.factory/validation/**` references | those files are historical evidence and should remain auditable as-written
+Constraint: Preserve historical release evidence without letting retired artifact names look current
+Rejected: Keep retired process-artifact names in release notes | those names created more contributor ambiguity than audit value after the artifact tree was removed
 Rejected: Keep `IMPLEMENTATION_PLAN.md` and v2 migration docs with banners | the maintainer contract now owns current behavior, and keeping superseded docs would preserve the ambiguity this release is removing
 Rejected: Split every large test file at once | this release establishes the pattern on the highest-risk contract suites while avoiding unnecessary churn
 Confidence: high
@@ -148,7 +168,7 @@ Constraint: Preserve Flow command behavior and final-completion semantics while 
 Constraint: Keep the public package API to the root plugin entrypoint instead of reintroducing internal runtime export surface
 Rejected: Keep `src/runtime/application/tool-runtime.ts` as a compatibility shim | the package ships a bundled root plugin entrypoint and active internal callers now import owner modules directly
 Rejected: Deduplicate prompt policy wording in this pass | those prompt snippets are intentionally product-facing and pinned by prompt/eval tests
-Rejected: Treat `.factory/**` as package dead code | release checks do not ship it, but repo tests and process artifacts still use parts of the tree as fixtures/support context
+Rejected: Treat repo-local process artifacts as package dead code | release checks do not ship those artifacts, but repo tests and process notes still used parts of that tree as fixtures/support context at the time
 Confidence: high
 Scope-risk: moderate
 Reversibility: clean
@@ -566,7 +586,7 @@ Improve prompt-system reliability with adaptive context and first-party eval cov
 Flow 1.0.21 turns the recent prompt work into a first-party, CI-visible release surface. This release adds adaptive system-context injection grounded in persisted runtime state, expands prompt coverage across command, prompt, and contract surfaces, splits the eval corpus into maintainable first-party fixtures, and publishes a reusable prompt-eval coverage summary artifact for CI validation and inspection.
 
 Constraint: Runtime semantics, completion gates, and recovery behavior remain runtime-owned rather than moving into prompt-only logic
-Constraint: Prompt evals must stay first-party and must not depend on `.factory` artifacts
+Constraint: Prompt evals must stay first-party and must not depend on external process artifacts
 Rejected: Add a model-graded prompt harness in this release | higher complexity before the static corpus and coverage model fully matured
 Confidence: high
 Scope-risk: moderate
@@ -632,7 +652,7 @@ Flow 1.0.18 improves subagent efficiency without expanding the runtime role mode
 ### Added
 
 - Added explicit `core-worker` workstream classes for implementation, test-only/coverage/tooling, validation-only, and release/integration work.
-- Added a required worker orientation reference to `.factory/library/environment.md` alongside the existing architecture and validation guidance.
+- Added a required worker orientation reference alongside the existing architecture and validation guidance. This referred to a repo-local process artifact tree that has since been retired.
 - Added stronger protocol-parity coverage for lite-lane semantics, reviewer-persistence requirements, final-completion-path guidance, and recovery/replan expectations.
 
 ### Changed
@@ -682,7 +702,7 @@ Flow 1.0.17 focuses on maintainability rather than new behavior. This release th
 
 ### Highlights
 
-Flow 1.0.16 tightens hidden-workspace permission behavior so only Flow's own `.flow` state stays auto-allowed. When the effective mutable workspace root is some other hidden directory such as `.factory`, `.claude`, or `.codex`, Flow now asks for permission before writing `.flow/**` there while still leaving normal project-root `.flow` behavior unchanged.
+Flow 1.0.16 tightens hidden-workspace permission behavior so only Flow's own `.flow` state stays auto-allowed. When the effective mutable workspace root is another hidden directory, Flow now asks for permission before writing Flow state there while still leaving normal project-root `.flow` behavior unchanged.
 
 ### Added
 
@@ -697,7 +717,7 @@ Flow 1.0.16 tightens hidden-workspace permission behavior so only Flow's own `.f
 
 ### Fixed
 
-- Fixed the remaining mismatch where hidden directories such as `.factory`, `.claude`, or `.codex` could still become mutable Flow roots without an approval prompt.
+- Fixed the remaining mismatch where hidden directories could still become mutable Flow roots without an approval prompt.
 - Preserved the normal no-prompt path for the standard project-root `.flow/**` state directory and the existing hard block on `$HOME` itself as a mutable root.
 
 ## [1.0.15] - 2026-04-28
@@ -808,7 +828,7 @@ Flow 1.0.12 hardens workspace safety so Flow can no longer silently create or mu
 
 ### Fixed
 
-- Fixed the accidental ability for Flow to persist `.flow/` state under suspicious roots such as `~/.factory` unless the exact path is explicitly trusted.
+- Fixed the accidental ability for Flow to persist state under suspicious hidden roots unless the exact path is explicitly trusted.
 - Fixed history and stored-session inspection so read-only commands no longer create `.flow/` directories as a side effect on otherwise empty workspaces.
 - Fixed the remaining gap where lower-level runtime session helpers could bypass the tool-layer workspace safety checks.
 

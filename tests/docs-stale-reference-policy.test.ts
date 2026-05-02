@@ -28,6 +28,11 @@ const historicalFiles = new Set([
 	"release-notes.md", // Generated from CHANGELOG.md by the hosted release workflow.
 ]);
 
+const factoryReferenceAllowedFiles = new Set([
+	policyTestPath,
+	".gitignore", // Keeps regenerated local process artifacts untracked.
+]);
+
 const successorBreadcrumbFiles = new Set([
 	"tests/config/plugin-surface.test.ts",
 	"tests/config/prompt-contracts.test.ts",
@@ -82,6 +87,10 @@ function scannablePolicyPaths(): string[] {
 	return paths.filter(isScannable);
 }
 
+function factoryReferencePolicyPaths(): string[] {
+	return [...scannablePolicyPaths(), ".gitignore"];
+}
+
 describe("docs stale reference policy", () => {
 	test("retired path references stay confined to historical artifacts or successor breadcrumbs", () => {
 		const violations: string[] = [];
@@ -100,6 +109,17 @@ describe("docs stale reference policy", () => {
 
 			violations.push(`${path}: ${matchedReferences.join(", ")}`);
 		}
+
+		expect(violations).toEqual([]);
+	});
+
+	test("retired factory artifact name stays out of docs and source", () => {
+		const violations = factoryReferencePolicyPaths().filter((path) => {
+			if (factoryReferenceAllowedFiles.has(path)) {
+				return false;
+			}
+			return readFileSync(join(repoRoot, path), "utf8").includes(".factory");
+		});
 
 		expect(violations).toEqual([]);
 	});
