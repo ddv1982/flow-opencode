@@ -769,7 +769,7 @@ describe("runtime completion and contract guards", () => {
 		});
 	});
 
-	test("allows lite-lane final completion without a separately recorded reviewer decision", () => {
+	test("rejects lite-lane final completion without a separately recorded final reviewer decision", () => {
 		const session = createSession("Ship a tiny fix");
 		const liteFeature = samplePlan().features[0];
 		if (!liteFeature) {
@@ -846,10 +846,16 @@ describe("runtime completion and contract guards", () => {
 			},
 		});
 
-		expect(completed.ok).toBe(true);
-		if (!completed.ok) return;
+		expect(completed.ok).toBe(false);
+		if (completed.ok) return;
 
-		expect(completed.value.status).toBe("completed");
+		expect(completed.recovery?.errorCode).toBe(
+			"missing_final_reviewer_decision",
+		);
+		expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
+		expect(completed.recovery?.requiredArtifact).toBe(
+			"final_reviewer_decision",
+		);
 	});
 
 	test("requires broad validation before final session completion", () => {

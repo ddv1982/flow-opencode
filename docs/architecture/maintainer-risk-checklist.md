@@ -81,7 +81,7 @@ then verify:
 Recommended checks:
 
 - `bun test tests/runtime.test.ts tests/session-history.test.ts`
-- `bun test tests/runtime-render-snapshot.test.ts tests/runtime-summary.test.ts`
+- `bun test tests/runtime/render-snapshot.test.ts tests/runtime-summary.test.ts`
 
 ## Session tool placement rules
 

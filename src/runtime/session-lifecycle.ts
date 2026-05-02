@@ -15,6 +15,7 @@ import {
 import {
 	readSessionFromPath,
 	resolveActiveSessionId,
+	withSessionSaveLock,
 	writeSessionFileAtDir,
 } from "./session-workspace";
 import { completedTimestampNow, nowIso } from "./util";
@@ -22,38 +23,44 @@ import { assertMutableWorkspaceRoot } from "./workspace-root";
 
 export async function deleteSessionState(worktree: string): Promise<void> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	const sessionId = await resolveActiveSessionId(mutableWorktree);
-	if (!sessionId) {
-		return;
-	}
+	await withSessionSaveLock(mutableWorktree, async () => {
+		const sessionId = await resolveActiveSessionId(mutableWorktree);
+		if (!sessionId) {
+			return;
+		}
 
-	await rm(getSessionPath(mutableWorktree, sessionId), { force: true });
+		await rm(getSessionPath(mutableWorktree, sessionId), { force: true });
+	});
 }
 
 export async function deleteSessionArtifacts(worktree: string): Promise<void> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	const sessionId = await resolveActiveSessionId(mutableWorktree);
-	if (!sessionId) {
-		return;
-	}
+	await withSessionSaveLock(mutableWorktree, async () => {
+		const sessionId = await resolveActiveSessionId(mutableWorktree);
+		if (!sessionId) {
+			return;
+		}
 
-	await deleteSessionDocs(mutableWorktree, sessionId, "active");
-	await rm(getReviewsDir(mutableWorktree, sessionId, "active"), {
-		recursive: true,
-		force: true,
+		await deleteSessionDocs(mutableWorktree, sessionId, "active");
+		await rm(getReviewsDir(mutableWorktree, sessionId, "active"), {
+			recursive: true,
+			force: true,
+		});
 	});
 }
 
 export async function deleteSession(worktree: string): Promise<void> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	const sessionId = await resolveActiveSessionId(mutableWorktree);
-	if (!sessionId) {
-		return;
-	}
+	await withSessionSaveLock(mutableWorktree, async () => {
+		const sessionId = await resolveActiveSessionId(mutableWorktree);
+		if (!sessionId) {
+			return;
+		}
 
-	await rm(getActiveSessionDir(mutableWorktree, sessionId), {
-		recursive: true,
-		force: true,
+		await rm(getActiveSessionDir(mutableWorktree, sessionId), {
+			recursive: true,
+			force: true,
+		});
 	});
 }
 
@@ -69,65 +76,67 @@ export async function closeSession(
 	summary?: string,
 ): Promise<ClosedSessionResult | null> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	const sessionId = await resolveActiveSessionId(mutableWorktree);
-	if (!sessionId) {
-		return null;
-	}
+	return withSessionSaveLock(mutableWorktree, async () => {
+		const sessionId = await resolveActiveSessionId(mutableWorktree);
+		if (!sessionId) {
+			return null;
+		}
 
-	const session = await readSessionFromPath(
-		getSessionPath(mutableWorktree, sessionId, "active"),
-	);
-	const recordedAt = nowIso();
-	const closedSession: Session = SessionSchema.parse({
-		...session,
-		status: "completed",
-		closure: {
-			kind,
-			summary:
-				summary ??
-				(kind === "completed"
-					? "Completed the Flow session."
-					: kind === "deferred"
-						? "Deferred the Flow session for later."
-						: "Abandoned the Flow session."),
-			recordedAt,
-		},
-		execution: {
-			...session.execution,
-			activeFeatureId: null,
-			lastSummary:
-				summary ??
-				(kind === "completed"
-					? "Completed the Flow session."
-					: kind === "deferred"
-						? "Deferred the Flow session."
-						: "Abandoned the Flow session."),
-			lastOutcomeKind:
-				session.execution.lastOutcomeKind ??
-				(kind === "completed" ? "completed" : "needs_input"),
-		},
-		timestamps: {
-			...session.timestamps,
-			updatedAt: recordedAt,
-			completedAt: session.timestamps.completedAt ?? recordedAt,
-		},
+		const session = await readSessionFromPath(
+			getSessionPath(mutableWorktree, sessionId, "active"),
+		);
+		const recordedAt = nowIso();
+		const closedSession: Session = SessionSchema.parse({
+			...session,
+			status: "completed",
+			closure: {
+				kind,
+				summary:
+					summary ??
+					(kind === "completed"
+						? "Completed the Flow session."
+						: kind === "deferred"
+							? "Deferred the Flow session for later."
+							: "Abandoned the Flow session."),
+				recordedAt,
+			},
+			execution: {
+				...session.execution,
+				activeFeatureId: null,
+				lastSummary:
+					summary ??
+					(kind === "completed"
+						? "Completed the Flow session."
+						: kind === "deferred"
+							? "Deferred the Flow session."
+							: "Abandoned the Flow session."),
+				lastOutcomeKind:
+					session.execution.lastOutcomeKind ??
+					(kind === "completed" ? "completed" : "needs_input"),
+			},
+			timestamps: {
+				...session.timestamps,
+				updatedAt: recordedAt,
+				completedAt: session.timestamps.completedAt ?? recordedAt,
+			},
+		});
+
+		const activeDir = getActiveSessionDir(mutableWorktree, sessionId);
+		await writeSessionFileAtDir(activeDir, closedSession);
+		const moved = await moveSessionDirToCompleted(
+			mutableWorktree,
+			sessionId,
+			activeDir,
+			completedTimestampNow(),
+		);
+		return moved
+			? {
+					sessionId: moved.sessionId,
+					completedTo: moved.completedTo,
+					closureKind: kind,
+				}
+			: null;
 	});
-
-	const activeDir = getActiveSessionDir(mutableWorktree, sessionId);
-	await writeSessionFileAtDir(activeDir, closedSession);
-	const moved = await moveSessionDirToCompleted(
-		mutableWorktree,
-		sessionId,
-		activeDir,
-		completedTimestampNow(),
-	);
-	return moved
-		? {
-				sessionId: moved.sessionId,
-				completedTo: moved.completedTo,
-				closureKind: kind,
-			}
-		: null;
 }
 
 export async function activateSession(
@@ -135,29 +144,31 @@ export async function activateSession(
 	sessionId: string,
 ): Promise<Session | null> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	const activeSessionId = await resolveActiveSessionId(mutableWorktree);
-	if (activeSessionId === sessionId) {
+	return withSessionSaveLock(mutableWorktree, async () => {
+		const activeSessionId = await resolveActiveSessionId(mutableWorktree);
+		if (activeSessionId === sessionId) {
+			return readSessionFromPath(
+				getSessionPath(mutableWorktree, sessionId, "active"),
+			);
+		}
+
+		const storedDir = getStoredSessionDir(mutableWorktree, sessionId);
+		if (!(await pathExists(storedDir))) {
+			return null;
+		}
+
+		if (activeSessionId) {
+			await rename(
+				getActiveSessionDir(mutableWorktree, activeSessionId),
+				getStoredSessionDir(mutableWorktree, activeSessionId),
+			);
+		}
+
+		await rename(storedDir, getActiveSessionDir(mutableWorktree, sessionId));
 		return readSessionFromPath(
 			getSessionPath(mutableWorktree, sessionId, "active"),
 		);
-	}
-
-	const storedDir = getStoredSessionDir(mutableWorktree, sessionId);
-	if (!(await pathExists(storedDir))) {
-		return null;
-	}
-
-	if (activeSessionId) {
-		await rename(
-			getActiveSessionDir(mutableWorktree, activeSessionId),
-			getStoredSessionDir(mutableWorktree, activeSessionId),
-		);
-	}
-
-	await rename(storedDir, getActiveSessionDir(mutableWorktree, sessionId));
-	return readSessionFromPath(
-		getSessionPath(mutableWorktree, sessionId, "active"),
-	);
+	});
 }
 
 export function createSession(

@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-flow",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "description": "Stateful planning and execution workflow plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -17,6 +17,8 @@
     "check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
     "check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
     "check:release-hygiene": "node ./scripts/cross-area/release-hygiene.mjs",
+    "check:pack-invariants": "node ./scripts/cross-area/pack-invariants.mjs",
+    "check:cold-start-budget": "node ./scripts/cross-area/cold-start-budget.mjs",
     "report:prompt-eval": "bun run ./scripts/cross-area/prompt-eval-summary.ts",
     "eval:review-capture": "bun run ./scripts/cross-area/review-prompt-capture.ts",
     "eval:review-capture:check": "bun run ./scripts/cross-area/review-prompt-capture.ts -- --check",
@@ -27,7 +29,7 @@
     "test": "bun test",
     "test:ci": "bun test --randomize",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run deadcode && bun run build && bun run check:release-hygiene && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke",
+    "check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run deadcode && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke",
     "install:opencode": "bun run ./src/install-opencode.ts",
     "uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
   },
@@ -58,9 +60,7 @@
     "ignore": [
       "src/types/typecheck.ts",
       "tests/schema-equivalence.test-d.ts",
-      "scripts/cross-area/bench-gate.mjs",
-      "scripts/cross-area/pack-invariants.mjs",
-      "scripts/cross-area/cold-start-budget.mjs"
+      "scripts/cross-area/bench-gate.mjs"
     ]
   }
 }

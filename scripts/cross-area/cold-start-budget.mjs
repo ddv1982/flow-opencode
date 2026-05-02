@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { performance } from "node:perf_hooks";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -22,40 +29,20 @@ async function importBuiltPlugin(uniqueSuffix) {
 		JSON.stringify({ type: "module" }, null, 2),
 	);
 
+	const bundledEntry = path.join(packageDir, "index.js");
+	copyFileSync(distEntry, bundledEntry);
+
 	const peerDir = path.join(packageDir, "node_modules", "@opencode-ai", "plugin");
-	mkdirSync(peerDir, { recursive: true });
-	writeFileSync(
-		path.join(peerDir, "package.json"),
-		JSON.stringify(
-			{
-				name: "@opencode-ai/plugin",
-				version: "0.0.0-test",
-				type: "module",
-				exports: "./index.js",
-			},
-			null,
-			2,
-		),
-	);
-	writeFileSync(
-		path.join(peerDir, "index.js"),
-		[
-			"export function tool(definition) {",
-			"  return definition;",
-			"}",
-			"tool.schema = {",
-			"  string: (options = {}) => ({ type: 'string', ...options }),",
-			"  number: (options = {}) => ({ type: 'number', ...options }),",
-			"  boolean: (options = {}) => ({ type: 'boolean', ...options }),",
-			"  enum: (values, options = {}) => ({ type: 'enum', values, ...options }),",
-			"  array: (item, options = {}) => ({ type: 'array', item, ...options }),",
-			"  object: (shape, options = {}) => ({ type: 'object', shape, ...options }),",
-			"};",
-		].join("\n"),
-	);
+	cpSync(path.join(projectRoot, "node_modules", "@opencode-ai", "plugin"), peerDir, {
+		recursive: true,
+	});
+	const zodDir = path.join(packageDir, "node_modules", "zod");
+	cpSync(path.join(projectRoot, "node_modules", "zod"), zodDir, {
+		recursive: true,
+	});
 
 	const startedAt = performance.now();
-	await import(`file://${distEntry}?cold-start=${uniqueSuffix}`);
+	await import(`file://${bundledEntry}?cold-start=${uniqueSuffix}`);
 	return performance.now() - startedAt;
 }
 

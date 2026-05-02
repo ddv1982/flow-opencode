@@ -1,9 +1,11 @@
 import { constants } from "node:fs";
-import { access, copyFile, mkdir, rm } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 export const FLOW_PLUGIN_FILENAME = "flow.js";
+export const FLOW_PLUGIN_OWNERSHIP_HEADER =
+	"// Managed by flow-opencode install/uninstall\n";
 const CANONICAL_OPENCODE_PLUGIN_DIRECTORY = [
 	".config",
 	"opencode",
@@ -80,7 +82,19 @@ export async function installBuiltPlugin({
 }: InstallBuiltPluginOptions): Promise<string> {
 	await assertSourceFileExists(sourceFile);
 	await mkdir(dirname(destinationFile), { recursive: true });
-	await copyFile(sourceFile, destinationFile);
+
+	const existing = await readInstalledPluginMarker(destinationFile);
+	if (existing.exists && !existing.managedByFlow) {
+		throw new Error(
+			`Refusing to overwrite existing non-Flow plugin at ${destinationFile}. Remove it manually first.`,
+		);
+	}
+
+	const pluginContent = await readFile(sourceFile, "utf8");
+	const managedContent = pluginContent.startsWith(FLOW_PLUGIN_OWNERSHIP_HEADER)
+		? pluginContent
+		: `${FLOW_PLUGIN_OWNERSHIP_HEADER}${pluginContent}`;
+	await writeFile(destinationFile, managedContent, "utf8");
 
 	logger(`Installed Flow plugin to ${destinationFile}`);
 
@@ -109,10 +123,6 @@ export async function runInstallCommand(
 		: join(cwd, "dist", "index.js");
 	const destinationFile = resolveInstallTarget(homeDir ? { homeDir } : {});
 
-	if (!destinationFile) {
-		return undefined;
-	}
-
 	return installBuiltPlugin({
 		sourceFile: resolvedSourceFile,
 		destinationFile,
@@ -134,7 +144,13 @@ export async function runUninstallCommand(
 
 	const destinationFile = resolveInstallTarget(homeDir ? { homeDir } : {});
 
-	if (await pathExists(destinationFile)) {
+	const existing = await readInstalledPluginMarker(destinationFile);
+	if (existing.exists) {
+		if (!existing.managedByFlow) {
+			throw new Error(
+				`Refusing to remove unowned plugin at ${destinationFile}. Only Flow-managed files can be uninstalled.`,
+			);
+		}
 		await rm(destinationFile, { force: true });
 		logger(`Removed Flow plugin from ${destinationFile}`);
 		return destinationFile;
@@ -153,13 +169,26 @@ async function assertSourceFileExists(sourceFile: string): Promise<void> {
 	}
 }
 
-async function pathExists(target: string): Promise<boolean> {
+async function readInstalledPluginMarker(target: string): Promise<{
+	exists: boolean;
+	managedByFlow: boolean;
+}> {
 	try {
-		await access(target, constants.F_OK);
-		return true;
-	} catch {
-		return false;
+		const content = await readFile(target, "utf8");
+		return {
+			exists: true,
+			managedByFlow: isManagedByFlowPluginContent(content),
+		};
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return { exists: false, managedByFlow: false };
+		}
+		throw error;
 	}
+}
+
+function isManagedByFlowPluginContent(content: string): boolean {
+	return content.startsWith(FLOW_PLUGIN_OWNERSHIP_HEADER);
 }
 
 async function buildPlugin(): Promise<void> {

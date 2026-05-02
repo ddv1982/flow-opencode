@@ -43,9 +43,6 @@ function hasApprovedReviewerDecision(
 	if (executionLane === "lite" && !wasFinalFeature) {
 		return isReviewPassing(worker.featureReview);
 	}
-	if (executionLane === "lite" && wasFinalFeature && worker.finalReview) {
-		return true;
-	}
 
 	const decision = session.execution.lastReviewerDecision;
 	if (!decision || decision.status !== "approved") {
@@ -69,11 +66,6 @@ function finalReviewerDecisionFailureMessage(
 		return hasApprovedReviewerDecision(session, worker, featureId, false)
 			? null
 			: "Worker result cannot complete without a recorded approved reviewer decision.";
-	}
-
-	const executionLane = deriveExecutionLane(session).lane;
-	if (executionLane === "lite" && worker.finalReview) {
-		return null;
 	}
 
 	const decision = session.execution.lastReviewerDecision;

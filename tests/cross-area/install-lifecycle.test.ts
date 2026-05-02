@@ -149,6 +149,39 @@ afterEach(() => {
 });
 
 describe("cross-area install lifecycle", () => {
+	test("release scripts refuse to overwrite or remove unowned flow.js", async () => {
+		const tempRoot = makeTempDir("flow-install-lifecycle-");
+		const homeDir = join(tempRoot, "home");
+		const binDir = join(tempRoot, "bin");
+		mkdirSync(homeDir, { recursive: true });
+		mkdirSync(binDir, { recursive: true });
+
+		writeCurlStub(binDir, "export default 'not-used';\n");
+		const installScript = copyScriptToTemp("release-install.sh", tempRoot);
+		const uninstallScript = copyScriptToTemp("release-uninstall.sh", tempRoot);
+		const canonicalPath = join(
+			homeDir,
+			".config",
+			"opencode",
+			"plugins",
+			"flow.js",
+		);
+		mkdirSync(dirname(canonicalPath), { recursive: true });
+		writeFileSync(canonicalPath, "// third-party plugin\n");
+
+		const installResult = await runScript(installScript, homeDir, binDir);
+		expect(installResult.exitCode).toBe(1);
+		expect(installResult.stderr).toContain(
+			"Refusing to overwrite existing non-Flow plugin",
+		);
+
+		const uninstallResult = await runScript(uninstallScript, homeDir, binDir);
+		expect(uninstallResult.exitCode).toBe(1);
+		expect(uninstallResult.stderr).toContain(
+			"Refusing to remove unowned plugin",
+		);
+	});
+
 	test("release scripts install to canonical path, plugin loads, flow_status reports missing session, and uninstall removes the file", async () => {
 		const tempRoot = makeTempDir("flow-install-lifecycle-");
 		const homeDir = join(tempRoot, "home");
@@ -200,7 +233,13 @@ describe("cross-area install lifecycle", () => {
 		expect(installExitCode).toBe(0);
 		expect(installStderr).toBe("");
 		expect(installStdout).toContain(canonicalPath);
-		expect(await readFile(canonicalPath, "utf8")).toBe(pluginBody);
+		const installedBytes = await readFile(canonicalPath, "utf8");
+		expect(
+			installedBytes.startsWith(
+				"// Managed by flow-opencode install/uninstall\n",
+			),
+		).toBe(true);
+		expect(installedBytes.endsWith(pluginBody)).toBe(true);
 
 		const { exitCode: pinnedInstallExitCode, stderr: pinnedInstallStderr } =
 			await runScript(generatedInstallScript, homeDir, binDir, {

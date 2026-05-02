@@ -2527,7 +2527,7 @@ describe("runtime tools and recovery", () => {
 		expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
 	});
 
-	test("lite lane completion can succeed without a separately recorded reviewer approval", async () => {
+	test("lite lane final completion requires a separately recorded final reviewer approval", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Ship a tiny fix");
@@ -2611,9 +2611,13 @@ describe("runtime tools and recovery", () => {
 		);
 		const parsed = JSON.parse(response);
 
-		expect(parsed.status).toBe("ok");
-		expect(parsed.session.status).toBe("completed");
-		expect(parsed.session.operator.lane).toBe("lite");
+		expect(parsed.status).toBe("error");
+		expect(parsed.recovery.errorCode).toBe("missing_final_reviewer_decision");
+		expect(parsed.recovery.recoveryStage).toBe("record_review");
+		expect(parsed.recovery.prerequisite).toBe("reviewer_result_required");
+		expect(parsed.recovery.requiredArtifact).toBe("final_reviewer_decision");
+		expect(parsed.recovery.nextCommand).toBe(FLOW_STATUS_COMMAND);
+		expect(parsed.recovery.nextRuntimeTool).toBeUndefined();
 	});
 
 	test("records reviewer decisions for the active feature", () => {

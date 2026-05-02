@@ -205,7 +205,8 @@ describe("completion gates", () => {
 			expectedErrorCode: "missing_feature_reviewer_decision",
 		},
 		{
-			name: "lite lane can use in-band final review instead of a separate reviewer decision",
+			name: "lite lane final completion still requires a recorded final reviewer decision",
+			expectedOk: false,
 			setup: () => {
 				const basePlan = samplePlan();
 				const liteFeature = basePlan.features[0];
@@ -275,7 +276,7 @@ describe("completion gates", () => {
 						blockingFindings: [],
 					},
 				}),
-			expectedOk: true,
+			expectedErrorCode: "missing_final_reviewer_decision",
 		},
 		{
 			name: "missing targeted validation scope on non-final feature",

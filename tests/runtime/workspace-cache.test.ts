@@ -27,6 +27,9 @@ describe("workspace mkdir caching", () => {
 			});
 		}
 
-		expect(mkdirSpy.mock.calls.length).toBeLessThanOrEqual(2);
+		const nonLockMkdirCalls = mkdirSpy.mock.calls.filter(
+			([target]) => !String(target).includes("session-save.lock"),
+		);
+		expect(nonLockMkdirCalls.length).toBeLessThanOrEqual(2);
 	});
 });

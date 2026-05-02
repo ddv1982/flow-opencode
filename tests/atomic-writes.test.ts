@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { open, readdir, readFile, rename } from "node:fs/promises";
+import { open, readdir, readFile, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	getFeatureDocPath,
+	getFlowDir,
 	getIndexDocPath,
 	getSessionDir,
 	getSessionPath,
@@ -146,6 +147,19 @@ describe("atomic writes", () => {
 				throw new Error(`Missing rendered feature doc for ${featureId}`);
 			}
 			expect(featureDoc).toBe(expectedFeatureDoc);
+		}
+	});
+
+	test("session save lock releases filesystem lock directory", async () => {
+		const worktree = makeTempDir();
+		await saveSession(worktree, sampleSession("Lock cleanup"));
+
+		const lockDir = join(getFlowDir(worktree), "session-save.lock");
+		try {
+			await stat(lockDir);
+			throw new Error("Expected session save lock directory to be removed.");
+		} catch (error) {
+			expect((error as NodeJS.ErrnoException).code).toBe("ENOENT");
 		}
 	});
 

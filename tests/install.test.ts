@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	FLOW_PLUGIN_FILENAME,
+	FLOW_PLUGIN_OWNERSHIP_HEADER,
 	INSTALL_USAGE,
 	installBuiltPlugin,
 	resolveInstallTarget,
@@ -79,7 +80,9 @@ describe("installer", () => {
 		});
 
 		expect(installedPath).toBe(destinationFile);
-		expect(await readFile(destinationFile, "utf8")).toBe("flow-build\n");
+		expect(await readFile(destinationFile, "utf8")).toBe(
+			`${FLOW_PLUGIN_OWNERSHIP_HEADER}flow-build\n`,
+		);
 		expect(logs).toEqual([`Installed Flow plugin to ${destinationFile}`]);
 	});
 
@@ -104,7 +107,7 @@ describe("installer", () => {
 		expect(buildCalls).toBe(1);
 		expect(installedPath).toBe(canonicalPath);
 		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
-			"global-install\n",
+			`${FLOW_PLUGIN_OWNERSHIP_HEADER}global-install\n`,
 		);
 		expect(logs).toEqual([`Installed Flow plugin to ${canonicalPath}`]);
 	});
@@ -121,12 +124,35 @@ describe("installer", () => {
 		).rejects.toThrow("Run `bun run build` first");
 	});
 
+	test("installBuiltPlugin refuses to overwrite an unowned existing flow.js", async () => {
+		const sourceRoot = makeTempDir();
+		const targetRoot = makeTempDir();
+		const sourceFile = await writeBuiltPlugin(sourceRoot, "flow-build\n");
+		const destinationFile = join(
+			targetRoot,
+			".config",
+			"opencode",
+			"plugins",
+			FLOW_PLUGIN_FILENAME,
+		);
+		await mkdir(join(destinationFile, ".."), { recursive: true });
+		await writeFile(destinationFile, "// someone else\n", "utf8");
+
+		await expect(
+			installBuiltPlugin({ sourceFile, destinationFile }),
+		).rejects.toThrow("Refusing to overwrite existing non-Flow plugin");
+	});
+
 	test("runUninstallCommand removes the installed canonical plugin file", async () => {
 		const homeDir = makeTempDir();
 		const logs: string[] = [];
 		const canonicalPath = resolveInstallTarget({ homeDir });
 		await mkdir(join(canonicalPath, ".."), { recursive: true });
-		await writeFile(canonicalPath, "installed\n", "utf8");
+		await writeFile(
+			canonicalPath,
+			`${FLOW_PLUGIN_OWNERSHIP_HEADER}installed\n`,
+			"utf8",
+		);
 
 		const removedPath = await runUninstallCommand([], {
 			homeDir,
@@ -136,6 +162,17 @@ describe("installer", () => {
 		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
 		expect(removedPath).toBe(canonicalPath);
 		expect(logs).toEqual([`Removed Flow plugin from ${canonicalPath}`]);
+	});
+
+	test("runUninstallCommand refuses to remove unowned files", async () => {
+		const homeDir = makeTempDir();
+		const canonicalPath = resolveInstallTarget({ homeDir });
+		await mkdir(join(canonicalPath, ".."), { recursive: true });
+		await writeFile(canonicalPath, "// not flow managed\n", "utf8");
+
+		await expect(runUninstallCommand([], { homeDir })).rejects.toThrow(
+			"Refusing to remove unowned plugin",
+		);
 	});
 
 	test("runUninstallCommand accepts help and ignores missing files", async () => {

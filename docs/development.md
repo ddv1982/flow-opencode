@@ -8,6 +8,8 @@ This repo's maintainer workflow is intentionally Bun-first. In target projects, 
 
 For monorepos, package-manager detection starts from the current tool `directory` and walks upward to the mutable Flow workspace root, so subpackage-local evidence can override root-level defaults.
 
+`package.json#packageManager` is authoritative when present and takes precedence over conflicting lockfiles in the same directory.
+
 If one directory has conflicting lockfile families and no explicit `package.json#packageManager`, runtime records package-manager evidence as ambiguous instead of guessing. In that case prompts should continue on existing package.json scripts instead of manager-specific guesses.
 
 ## Local workflow
