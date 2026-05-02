@@ -121,4 +121,13 @@ describe("dependency contract script", () => {
 			"Installed root zod 4.1.8 does not match plugin effective zod 4.2.0.",
 		);
 	});
+
+	test("fails when plugin package omits zod dependency", async () => {
+		const process = runDependencyContract({
+			pluginDependencyZod: "",
+		});
+		expect(await process.exited).toBe(1);
+		const stderr = await new Response(process.stderr).text();
+		expect(stderr).toContain("Missing plugin zod dependency in");
+	});
 });

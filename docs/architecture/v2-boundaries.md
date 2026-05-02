@@ -26,6 +26,15 @@ Human-facing prompt text may vary, but it must not introduce new workflow semant
 
 ## Tool contract direction
 
+### Package export/API boundary
+
+The published package exposes a root-only API boundary:
+
+- public API: `opencode-plugin-flow` root entrypoint
+- non-API internals: deep paths under `src/**`, `dist/**`, and runtime internals
+
+Compatibility rule: internal module paths are intentionally non-contractual and may change without deep-import compatibility guarantees.
+
 ### Canonical tools
 
 - `flow_review_record_feature`

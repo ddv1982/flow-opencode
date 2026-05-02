@@ -34,6 +34,10 @@ function fail(lines) {
 	process.exit(1);
 }
 
+function isNonEmptyString(value) {
+	return typeof value === "string" && value.length > 0;
+}
+
 function main() {
 	const packageJsonPath = resolvePathFromEnv(
 		"FLOW_DEPENDENCY_CONTRACT_PACKAGE_JSON_PATH",
@@ -60,19 +64,16 @@ function main() {
 	const pluginInstalledZod = pluginZodPackage.version;
 
 	const errors = [];
-	if (typeof projectDeclaredZod !== "string" || projectDeclaredZod.length === 0) {
+	if (!isNonEmptyString(projectDeclaredZod)) {
 		errors.push(`Missing project zod dependency in ${packageJsonPath}.`);
 	}
-	if (typeof pluginDeclaredZod !== "string" || pluginDeclaredZod.length === 0) {
+	if (!isNonEmptyString(pluginDeclaredZod)) {
 		errors.push(`Missing plugin zod dependency in ${pluginPackageJsonPath}.`);
 	}
-	if (typeof rootInstalledZod !== "string" || rootInstalledZod.length === 0) {
+	if (!isNonEmptyString(rootInstalledZod)) {
 		errors.push(`Missing installed root zod version in ${rootZodPackageJsonPath}.`);
 	}
-	if (
-		typeof pluginInstalledZod !== "string" ||
-		pluginInstalledZod.length === 0
-	) {
+	if (!isNonEmptyString(pluginInstalledZod)) {
 		errors.push(
 			`Missing plugin effective zod version in ${pluginZodPackageJsonPath}.`,
 		);

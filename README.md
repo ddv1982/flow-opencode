@@ -233,6 +233,22 @@ If you're coming from an older release that installed under `~/.opencode/plugins
 
 Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
+## Package API boundary (for consumers)
+
+`opencode-plugin-flow` supports **root-only imports**. Treat only the package root as public API:
+
+```ts
+import flowPlugin from "opencode-plugin-flow";
+```
+
+Deep imports (for example `opencode-plugin-flow/dist/...` or `opencode-plugin-flow/src/...`) are intentionally not exported and are outside compatibility guarantees.
+
+Compatibility implications:
+
+- patch/minor updates may freely move or remove internal files
+- only root entrypoint behavior is part of semver compatibility
+- if you currently deep-import internals, migrate to the root plugin entrypoint
+
 ## Contributing
 
 Working on the plugin itself? See the [Development Guide](docs/development.md).

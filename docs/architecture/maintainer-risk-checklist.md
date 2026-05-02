@@ -37,7 +37,12 @@ then treat it as a protected subsystem and verify:
 
 Required checks:
 
-- `bun run check:completion-lane`
+- `bun run gate:completion-lane` (named completion-lane invariant gate)
+
+Visibility paths:
+
+- Included in `bun run check` via `gate:completion-lane`
+- Runs as a dedicated CI step (`Run completion-lane invariants gate`)
 
 ## Prompt / tool / runtime parity
 
@@ -116,6 +121,17 @@ Prefer:
 Recommended checks:
 
 - `bun run bench:smoke`
+
+## Historical evidence docs hygiene
+
+If you touch investigation or evidence-heavy docs (for example under `docs/investigations/`):
+
+- either refresh embedded version references to current package state
+- or clearly label old values as historical snapshots with capture date/context
+
+Quick check:
+
+- confirm `package.json` version and compare against doc evidence blocks
 
 ## Full release gate
 

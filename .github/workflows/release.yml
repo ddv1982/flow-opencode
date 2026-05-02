@@ -28,24 +28,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run typecheck, tests, and build
-        run: bun run check
-
-      - name: Prepare release assets
+      - name: Validate release tag and changelog evidence
+        shell: bash
         run: |
-          cp dist/index.js flow.js
-          cp scripts/release-install.sh install.sh
-          escaped_tag="$(printf '%s' "${GITHUB_REF_NAME}" | sed -e 's/[\/&]/\\&/g')"
-          sed -i "s/__FLOW_RELEASE_TAG__/${escaped_tag}/g" install.sh
-          cp scripts/release-uninstall.sh uninstall.sh
-          shasum -a 256 flow.js > flow.js.sha256
-
-      - name: Publish GitHub release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
+          set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
+          package_version="$(node -p "require('./package.json').version")"
+
+          if [[ "${tag}" != "v${package_version}" ]]; then
+            echo "Release tag/version mismatch: tag=${tag}, package.json=${package_version}" >&2
+            exit 1
+          fi
+
+          changelog_heading_pattern="^##[[:space:]]+\\[?${version}\\]?([[:space:]]+-[[:space:]].*)?$"
+          if ! grep -Eq "${changelog_heading_pattern}" CHANGELOG.md; then
+            echo "Missing changelog heading for version ${version} in CHANGELOG.md" >&2
+            exit 1
+          fi
 
           awk -v version="$version" '
             BEGIN { in_section = 0 }
@@ -61,18 +61,60 @@ jobs:
           ' CHANGELOG.md > release-notes.md
 
           if [ ! -s release-notes.md ]; then
-            rm -f release-notes.md
+            echo "Changelog section for ${version} is empty; refusing to publish without release-note evidence." >&2
+            exit 1
           fi
 
+          if ! grep -Ev '^[[:space:]]*$|^##[[:space:]]' release-notes.md | grep -q .; then
+            echo "Changelog section for ${version} contains no release-note body; refusing to publish heading-only notes." >&2
+            exit 1
+          fi
+
+      - name: Run typecheck, tests, and build
+        run: bun run check
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp dist/index.js flow.js
+          cp scripts/release-install.sh install.sh
+          escaped_tag="$(printf '%s' "${GITHUB_REF_NAME}" | sed -e 's/[\/&]/\\&/g')"
+          sed -i "s/__FLOW_RELEASE_TAG__/${escaped_tag}/g" install.sh
+          cp scripts/release-uninstall.sh uninstall.sh
+          shasum -a 256 flow.js > flow.js.sha256
+
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "tag=${GITHUB_REF_NAME}"
+            echo "version=${version}"
+            echo "package_version=$(node -p \"require('./package.json').version\")"
+            echo "changelog_heading=$(grep -En \"^##[[:space:]]+\\[?${version}\\]?([[:space:]]+-[[:space:]].*)?$\" CHANGELOG.md | head -n1 | cut -d: -f1)"
+            echo "release_notes_bytes=$(wc -c < release-notes.md | tr -d \" \" )"
+          } > release-evidence.txt
+
+      - name: Upload release evidence artifact
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-evidence-${{ github.ref_name }}
+          path: |
+            release-evidence.txt
+            release-notes.md
+            flow.js.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+
           if gh release view "$tag" >/dev/null 2>&1; then
-            if [ -s release-notes.md ]; then
-              gh release edit "$tag" --notes-file release-notes.md
-            fi
+            gh release edit "$tag" --notes-file release-notes.md
             gh release upload "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --clobber
           else
-            if [ -s release-notes.md ]; then
-              gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes-file release-notes.md
-            else
-              gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes "Release $tag"
-            fi
+            gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes-file release-notes.md
           fi

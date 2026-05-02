@@ -145,6 +145,7 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 ## Maintainer rules
 
 - Runtime owns workflow semantics; prompts and docs describe them.
+- Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
 - Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed compatibility change is intentional.
 - Preserve direct `tool(...)` arg-shape compatibility at the SDK boundary.
 - Prefer deletion over new helper layers.

@@ -35,3 +35,12 @@ These compatibility shims are no longer part of the active tool surface:
 - canonical-only public tool surface
 - runtime recovery metadata emits canonical tool names only
 - prompt guidance no longer references raw-wrapper fallback paths
+
+## Package export boundary
+
+The npm package contract is root-only. Consumers should import from `opencode-plugin-flow` only.
+
+- supported: root package import
+- unsupported: deep imports into `src/**`, `dist/**`, or internal runtime modules
+
+This boundary lets maintainers evolve internal tool/runtime modules without creating accidental semver guarantees for file paths.
