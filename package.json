@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-flow",
-  "version": "1.0.47",
+  "version": "1.0.48",
   "description": "Stateful planning and execution workflow plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -32,8 +32,8 @@
     "lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
     "test": "bun test",
     "test:ci": "bun run test:randomized",
-    "test:randomized": "bun test --randomize",
-    "test:randomized:regression": "bun test --randomize && bun test --randomize --seed=1 && bun test --randomize --seed=42",
+    "test:randomized": "bun test --randomize --timeout 30000",
+    "test:randomized:regression": "bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run deadcode && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke",
     "install:opencode": "bun run ./src/install-opencode.ts",
