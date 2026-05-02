@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.57] - 2026-05-02
+
+Seal Flow review handoffs at prompt and permission boundaries
+
+Flow 1.0.57 hardens the read-only review and fresh-context handoff contracts without adding commands, tools, state paths, dependencies, or public package surface. The autonomous and worker prompts now describe bounded Task-tool handoffs to the planner, worker, and reviewer roles, while the config keeps those handoffs narrow: `flow-auto` may delegate only to the Flow role agents it coordinates, `flow-worker` may delegate only to `flow-reviewer`, and read-only agents explicitly deny Task delegation.
+
+The standalone `/flow-review` prompt now binds its structured ledger to the renderer transport shape directly. It tells the model to call `flow_review_render` with `{ reviewJson: JSON.stringify(ledger), view }` and clarifies that `reviewJson` must be the actual serialized JSON string, not a nested object or the literal pseudo-code text. Prompt contract tests and the committed review snapshot lock that wording so future prompt edits do not reopen the full-codebase review instability.
+
+Constraint: Preserve Flow's existing command/tool/state surface while making fresh-context handoffs and standalone review rendering deterministic
+Constraint: Keep read-only agents read-only across edit, bash, and Task/subagent boundaries
+Rejected: Add a new review transport compatibility path | strict renderer input is deterministic and the bug was missing model-facing prompt guidance
+Rejected: Let read-only agents omit `permission.task` | OpenCode defaults are permissive enough that read-only boundaries should be explicit
+Rejected: Document the renderer transport in README | it is an internal prompt/tool contract, not a user-facing command behavior change
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: When changing Flow role handoffs or JSON-renderer prompts, update config permissions, prompt contracts, and snapshots together; do not rely on omitted permissions or implicit model inference at transport boundaries
+Tested: `bun test tests/config/plugin-surface.test.ts tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/prompt-snapshot.test.ts`; `bun run typecheck`; `bun run lint`; Oracle review found no blocker/regression findings after the edits; `bun run check` including typecheck, prompt capture checks, dependency contract, deadcode, build, release hygiene, pack invariants, completion-lane gate, cold-start budget, bundle sanity, 431 tests across 78 files, lint, and bench smoke
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.57` before push
+
 ## [1.0.56] - 2026-05-02
 
 Make Flow uninstall clear the canonical plugin slot

@@ -37,6 +37,8 @@ import {
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
+	FLOW_TASK_HANDOFF_RULE,
+	FLOW_WORKER_REVIEW_TASK_RULE,
 } from "./fragments";
 
 const FLOW_PLANNER_EXAMPLES = renderExampleBlocks([
@@ -156,6 +158,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 ${FLOW_REVIEW_FINDINGS_LOOP_RULE}
 ${FLOW_FEATURE_REVIEW_APPROVAL_RULE}
+${FLOW_WORKER_REVIEW_TASK_RULE}
 ${FLOW_FINAL_COMPLETION_PATH_RULE}`,
 	},
 	{
@@ -170,7 +173,7 @@ ${FLOW_FINAL_COMPLETION_PATH_RULE}`,
 7. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing feature-level review payload for a non-final feature, you may skip the separate reviewer-persistence hop.
 8. In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.
 9. ${FLOW_FINAL_COMPLETION_WORKER_STEP_RULE}
-10. Otherwise ask flow-reviewer to review the feature and persist that reviewer decision with flow_review_record_feature, encoding the reviewer decision into \`decisionJson\`.
+10. Otherwise ask flow-reviewer to review the feature; when OpenCode Task/subagent handoff is available, do it through the Task tool for an independent review in a fresh child context, then persist that reviewer decision with flow_review_record_feature, encoding the reviewer decision into \`decisionJson\`.
 11. Return one worker result matching:
 
 ${FLOW_WORKER_CONTRACT}
@@ -191,7 +194,7 @@ export const FLOW_AUTO_AGENT_PROMPT = renderPromptSections([
 	},
 	{
 		title: "Objective",
-		body: `Coordinate the full Flow loop end to end using Flow runtime tools and the specialized Flow roles.`,
+		body: `Coordinate the full Flow loop end to end using Flow runtime tools and the specialized Flow roles, preferring fresh-context Task/subagent handoffs where OpenCode supports them.`,
 	},
 	{
 		title: "Rules",
@@ -203,6 +206,7 @@ ${FLOW_OPERATOR_PROGRESS_RULE}
 - Stop only for completion, a real external blocker, or a human product decision.
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_COORDINATOR_ROLE_ROUTING_RULE}
+${FLOW_TASK_HANDOFF_RULE}
 - If a blocker looks solvable from repo evidence, validation output, or external research, investigate, make the smallest credible recovery plan, execute it, and continue.
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
@@ -221,13 +225,13 @@ ${FLOW_NO_INFERRED_GOAL_RULE}`,
 		body: `Autonomous loop:
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed, call flow_plan_start, inspect repo context, detect the stack and package manager, record planning context with flow_plan_context_record using \`planningJson\`, create or refresh the plan, persist it with flow_plan_apply using \`planJson\`, and approve it with flow_plan_approve.
+3. If planning is needed, prefer a Task-tool handoff to flow-planner so planning happens in a fresh child context. That planning pass must call flow_plan_start, inspect repo context, detect the stack and package manager, record planning context with flow_plan_context_record using \`planningJson\`, persist the plan with flow_plan_apply using \`planJson\`, and approve it with flow_plan_approve. If Task/subagent handoff is unavailable, perform that same runtime-owned planning flow directly.
 4. If repo evidence is insufficient for a high-confidence path, perform external research, record it with flow_plan_context_record using \`planningJson\`, and continue.
 5. If a meaningful architecture, product, or quality decision still remains after repo evidence and research, record the options, recommendation, rationale, decisionMode, and decisionDomain with flow_plan_context_record using \`planningJson\` so the runtime session summary exposes a decisionGate.
 6. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation and stop for user confirmation.
 7. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
-8. Use flow-worker to implement the current feature and run targeted validation.
-9. Use flow-reviewer to review the current feature result and persist that decision with flow_review_record_feature using \`decisionJson\` before deciding what happens next.
+8. Prefer a Task-tool handoff to flow-worker with a bounded feature brief so implementation and targeted validation happen in a fresh child context. If Task/subagent handoff is unavailable, keep the same worker-role requirements in the current context.
+9. Prefer a Task-tool handoff to flow-reviewer with the worker result and validation evidence so review happens in a fresh child context, then persist that decision with flow_review_record_feature using \`decisionJson\` before deciding what happens next. If Task/subagent handoff is unavailable, keep the same reviewer gate and persistence requirements in the current context.
 10. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue.
 11. Persist an approved feature result with flow_run_complete_feature using \`workerJson\`. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
 12. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.

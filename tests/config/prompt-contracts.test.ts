@@ -110,6 +110,18 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"Task/subagent handoff is available",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"independent review in a fresh child context",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"Never write .flow files directly.",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"ask flow-reviewer through the Task tool for an independent review in a fresh child context instead of performing the approval gate in the same worker context.",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"Do not default to Bun in non-Bun repos.",
 		);
 		expect(FLOW_WORKER_AGENT_PROMPT).not.toContain("_from_raw");
@@ -172,6 +184,16 @@ describe("prompt and command config contracts", () => {
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_plan_context_record");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"prefer a Task-tool handoff to flow-planner",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"Prefer a Task-tool handoff to flow-worker",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"Prefer a Task-tool handoff to flow-reviewer",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain("fresh child context");
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Treat existing package.json scripts as primary",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
@@ -187,6 +209,9 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("rerun broad validation");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Use the flow-reviewer stage as the approval gate",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"hand bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Persist every reviewer decision through flow_review_record_feature or flow_review_record_final",
@@ -206,10 +231,19 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Only call canonical `recovery.nextRuntimeTool` values when they are present",
 		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"Never write .flow files directly.",
+		);
 		expect(FLOW_AUTO_AGENT_PROMPT).not.toContain("_from_raw");
 	});
 
 	test("auto command template requires final cross-feature review before completion", () => {
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"Treat Flow runtime tools as authoritative.",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"Never write .flow files directly.",
+		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"resume the active session only",
 		);
@@ -229,6 +263,9 @@ describe("prompt and command config contracts", () => {
 			"package-manager detection as supporting evidence instead of assuming Bun",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"flow-planner, implementation to flow-worker, and review to flow-reviewer",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"deliveryPolicy.finalReviewPolicy",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
@@ -246,6 +283,17 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("exhaustive => full_audit");
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			"Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("reviewJson");
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("JSON.stringify(ledger)");
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			"reviewJson must contain the actual serialized JSON string for the ledger",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			'not the literal text "JSON.stringify(ledger)"',
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"Use flow_review_render with view: human by default",
@@ -268,6 +316,9 @@ describe("prompt and command config contracts", () => {
 			"Plan or refresh only when the runtime says planning is needed",
 			"Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.",
 		]);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"hand bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
+		);
 	});
 
 	test("auto command template keeps stable coordinator guidance ahead of untrusted raw arguments", () => {
@@ -516,11 +567,20 @@ describe("prompt and command config contracts", () => {
 	});
 
 	test("run command template requires final completion gating for the last feature", () => {
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"Treat Flow runtime tools as authoritative.",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"Never write .flow files directly.",
+		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_final");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"runtime-owned final approval required by deliveryPolicy.finalReviewPolicy",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"independent review in a fresh child context",
 		);
 	});
 

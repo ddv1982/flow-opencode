@@ -173,6 +173,7 @@ describe("flow prompt mode contracts", () => {
 		}
 
 		for (const readOnlyAgentName of [
+			"flow-planner",
 			"flow-reviewer",
 			"flow-control",
 		] as const) {
@@ -181,5 +182,42 @@ describe("flow prompt mode contracts", () => {
 				tools: FLOW_READ_ONLY_TOOLS,
 			});
 		}
+	});
+
+	test("fresh-context task handoff config stays narrow while read-only agents deny task delegation", () => {
+		const { agent } = createFlowCoreConfigEntries();
+
+		expect(agent["flow-worker"]).toMatchObject({
+			mode: "all",
+			permission: {
+				task: {
+					"*": "deny",
+					"flow-reviewer": "allow",
+				},
+			},
+		});
+		expect(agent["flow-auto"]).toMatchObject({
+			mode: "primary",
+			permission: {
+				task: {
+					"*": "deny",
+					"flow-planner": "allow",
+					"flow-worker": "allow",
+					"flow-reviewer": "allow",
+				},
+			},
+		});
+		expect(agent["flow-planner"]).toMatchObject({ mode: "all" });
+		expect(agent["flow-reviewer"]).toMatchObject({ mode: "all" });
+		expect(agent["flow-control"]).toMatchObject({ mode: "primary" });
+		expect(agent["flow-planner"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+		expect(agent["flow-reviewer"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+		expect(agent["flow-control"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
 	});
 });

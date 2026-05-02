@@ -14,6 +14,7 @@ export type AgentPermission = {
 	edit?: string;
 	bash?: string;
 	external_directory?: string;
+	task?: Record<string, string>;
 };
 
 export type AgentConfigShape = {

@@ -33,14 +33,16 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | Command | Agent | Runtime entrypoint |
 | --- | --- | --- |
 | `/flow-plan` | `flow-planner` | Planning tools: `flow_plan_start`, `flow_plan_context_record`, `flow_plan_apply`, `flow_plan_approve`, `flow_plan_select_features` |
-| `/flow-run` | `flow-worker` | Execution tools: `flow_run_start`, `flow_review_record_feature`, `flow_review_record_final`, `flow_run_complete_feature` |
-| `/flow-auto` | `flow-auto` | Autonomous coordinator starts with `flow_auto_prepare`, then uses planning/execution/review tools as runtime state allows |
+| `/flow-run` | `flow-worker` | Execution tools: `flow_run_start`, `flow_review_record_feature`, `flow_review_record_final`, `flow_run_complete_feature`; where Task/subagent handoff is supported, the worker can ask `flow-reviewer` for an independent fresh-context approval pass before persistence |
+| `/flow-auto` | `flow-auto` | Autonomous coordinator starts with `flow_auto_prepare`, then routes planning/execution/review through `flow-planner`, `flow-worker`, and `flow-reviewer` Task handoffs where supported while runtime tools remain the state authority |
 | `/flow-status` | `flow-control` | `flow_status` |
 | `/flow-doctor` | `flow-control` | `flow_doctor` |
 | `/flow-history` | `flow-control` | `flow_history`, `flow_history_show` |
 | `/flow-session` | `flow-control` | `flow_session_activate`, `flow_session_close` |
 | `/flow-reset` | `flow-control` | `flow_reset_feature` |
 | `/flow-review` | `flow-control` | Read-only audit prompt plus `flow_review_render` |
+
+`flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, and prompts must never edit `.flow` state directly.
 
 ## Tools
 
@@ -86,6 +88,7 @@ Current workspace-local state paths:
 Ownership rules:
 
 - Runtime writes `.flow/**`; prompts and docs must not prescribe alternate state paths.
+- Task/subagent handoffs do not bypass runtime ownership; they still report back through runtime tools instead of mutating `.flow/**` directly.
 - State shape changes require schema, persistence, recovery, and migration/recovery consideration.
 - Rendered docs are derived artifacts, not the source of workflow truth.
 - Read-only `/flow-review` reports are returned to the caller; Flow does not own a persisted review-history tree.

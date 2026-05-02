@@ -64,7 +64,8 @@ Flow is built around a few stable responsibilities:
 3. Session state is stored under `.flow/active/<session-id>/session.json`, with inactive resumable sessions under `.flow/stored/<session-id>/` and closed history under `.flow/completed/<session-id>-<timestamp>/`.
 4. Domain transitions and runtime policy helpers remain authoritative for workflow state changes.
 5. Prompted agents call runtime tools instead of mutating state directly.
-6. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
+6. Coordinators use OpenCode task/subagent handoffs for bounded planning, implementation, and review work when the host supports them, so each role can work in a fresh child context while runtime tools remain the state authority.
+7. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
 ## Current agent roles
 
@@ -77,10 +78,12 @@ Flow is built around a few stable responsibilities:
 ### Role intent
 
 - `flow-planner` reads the repo and creates a compact execution-ready plan
-- `flow-worker` executes exactly one approved feature
+- `flow-worker` executes exactly one approved feature and, where OpenCode Task/subagent handoff is supported, asks `flow-reviewer` through Task for an independent fresh-context approval pass before persistence
 - `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`); the final gate follows the runtime-owned final review policy (`detailed` cross-feature by default, `broad` when explicitly configured)
-- `flow-auto` coordinates planning, execution, review, recovery, and continuation
+- `flow-auto` coordinates planning, execution, review, recovery, and continuation; where OpenCode Task/subagent handoff is supported, it routes planning to `flow-planner`, implementation to `flow-worker`, and approval to `flow-reviewer` in fresh child contexts
 - `flow-control` handles status/history/session/reset requests and the review command surface
+
+Task/subagent handoffs are prompt-level orchestration only. Flow runtime tools remain authoritative for state transitions and persisted session data, and prompts must never edit `.flow` files directly.
 
 Read-only repo review stays separate from feature execution and is exposed through `/flow-review` on `flow-control`. User-facing depth tokens map to internal rigor:
 

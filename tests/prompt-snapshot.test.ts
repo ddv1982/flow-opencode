@@ -29,5 +29,11 @@ describe("prompt snapshots", () => {
 		expect(snapshot).toContain(
 			"Use hardening_opportunity for useful architectural, test, or resilience improvements",
 		);
+		expect(snapshot).toContain(
+			"Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }",
+		);
+		expect(snapshot).toContain(
+			"reviewJson must contain the actual serialized JSON string for the ledger",
+		);
 	});
 });

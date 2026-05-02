@@ -137,25 +137,78 @@ describe("plugin config surface", () => {
 		expect(config.command?.["flow-reset"]?.agent).toBe("flow-control");
 	});
 
-	test("configures flow-reviewer as read-only", () => {
+	test("keeps planner, reviewer, and control agents read-only", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
+		expect(config.agent?.["flow-planner"]?.mode).toBe("all");
+		expect(config.agent?.["flow-planner"]?.tools?.edit).toBe(false);
+		expect(config.agent?.["flow-planner"]?.tools?.write).toBe(false);
+		expect(config.agent?.["flow-planner"]?.tools?.bash).toBe(false);
+		expect(config.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
+		expect(config.agent?.["flow-planner"]?.permission?.bash).toBe("deny");
+		expect(config.agent?.["flow-planner"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+
+		expect(config.agent?.["flow-reviewer"]?.mode).toBe("all");
 		expect(config.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.tools?.write).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.tools?.bash).toBe(false);
 		expect(config.agent?.["flow-reviewer"]?.permission?.edit).toBe("deny");
 		expect(config.agent?.["flow-reviewer"]?.permission?.bash).toBe("deny");
-		expect(config.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
+		expect(config.agent?.["flow-reviewer"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+
+		expect(config.agent?.["flow-control"]?.mode).toBe("primary");
+		expect(config.agent?.["flow-control"]?.tools?.edit).toBe(false);
+		expect(config.agent?.["flow-control"]?.tools?.write).toBe(false);
+		expect(config.agent?.["flow-control"]?.tools?.bash).toBe(false);
+		expect(config.agent?.["flow-control"]?.permission?.edit).toBe("deny");
 		expect(config.agent?.["flow-control"]?.permission?.bash).toBe("deny");
+		expect(config.agent?.["flow-control"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+
 		expect(
 			config.agent?.["flow-worker"]?.permission?.external_directory,
 		).toBeUndefined();
-		expect(config.agent?.["flow-worker"]?.permission).toBeUndefined();
+		expect(config.agent?.["flow-worker"]?.permission?.edit).toBeUndefined();
+		expect(config.agent?.["flow-worker"]?.permission?.bash).toBeUndefined();
 		expect(
 			config.agent?.["flow-auto"]?.permission?.external_directory,
 		).toBeUndefined();
-		expect(config.agent?.["flow-auto"]?.permission).toBeUndefined();
+		expect(config.agent?.["flow-auto"]?.permission?.edit).toBeUndefined();
+		expect(config.agent?.["flow-auto"]?.permission?.bash).toBeUndefined();
+	});
+
+	test("configures task permissions for fresh-context Flow role handoffs", () => {
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+
+		expect(config.agent?.["flow-planner"]?.mode).toBe("all");
+		expect(config.agent?.["flow-worker"]?.mode).toBe("all");
+		expect(config.agent?.["flow-reviewer"]?.mode).toBe("all");
+		expect(config.agent?.["flow-auto"]?.mode).toBe("primary");
+		expect(config.agent?.["flow-worker"]?.permission?.task).toEqual({
+			"*": "deny",
+			"flow-reviewer": "allow",
+		});
+		expect(config.agent?.["flow-auto"]?.permission?.task).toEqual({
+			"*": "deny",
+			"flow-planner": "allow",
+			"flow-worker": "allow",
+			"flow-reviewer": "allow",
+		});
+		expect(config.agent?.["flow-reviewer"]?.permission?.edit).toBe("deny");
+		expect(config.agent?.["flow-reviewer"]?.permission?.bash).toBe("deny");
+		expect(config.agent?.["flow-planner"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+		expect(config.agent?.["flow-reviewer"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
 	});
 
 	test("createConfigHook is async and preserves unrelated config entries", async () => {
@@ -207,6 +260,12 @@ describe("plugin config surface", () => {
 		expect(first.agent?.["flow-planner"]?.permission).not.toBe(
 			second.agent?.["flow-planner"]?.permission,
 		);
+		expect(first.agent?.["flow-worker"]?.permission?.task).not.toBe(
+			second.agent?.["flow-worker"]?.permission?.task,
+		);
+		expect(first.agent?.["flow-auto"]?.permission?.task).not.toBe(
+			second.agent?.["flow-auto"]?.permission?.task,
+		);
 		expect(first.command?.["flow-plan"]).not.toBe(
 			second.command?.["flow-plan"],
 		);
@@ -216,10 +275,28 @@ describe("plugin config surface", () => {
 			throw new Error("Missing flow-planner config in test setup.");
 		}
 
+		const firstWorker = first.agent?.["flow-worker"];
+		if (!firstWorker?.permission?.task) {
+			throw new Error("Missing flow-worker task permissions in test setup.");
+		}
+
+		const firstAuto = first.agent?.["flow-auto"];
+		if (!firstAuto?.permission?.task) {
+			throw new Error("Missing flow-auto task permissions in test setup.");
+		}
+
 		firstPlanner.tools.edit = true;
 		firstPlanner.permission.edit = "allow";
+		firstWorker.permission.task["flow-reviewer"] = "deny";
+		firstAuto.permission.task["flow-worker"] = "deny";
 		expect(second.agent?.["flow-planner"]?.tools?.edit).toBe(false);
 		expect(first.agent?.["flow-reviewer"]?.tools?.edit).toBe(false);
 		expect(second.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
+		expect(
+			second.agent?.["flow-worker"]?.permission?.task?.["flow-reviewer"],
+		).toBe("allow");
+		expect(second.agent?.["flow-auto"]?.permission?.task?.["flow-worker"]).toBe(
+			"allow",
+		);
 	});
 });

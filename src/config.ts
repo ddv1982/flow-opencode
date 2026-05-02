@@ -30,10 +30,11 @@ type FlowPermissionConfig = {
 	edit?: string;
 	bash?: string;
 	external_directory?: string;
+	task?: Record<string, string>;
 };
 
 type FlowAgentConfig = {
-	mode: "primary";
+	mode: "primary" | "all";
 	description: string;
 	prompt: string;
 	permission?: FlowPermissionConfig;
@@ -49,9 +50,10 @@ type FlowCommandConfig = {
 function createReadOnlyPrimaryAgent(
 	description: string,
 	prompt: string,
+	mode: FlowAgentConfig["mode"] = "primary",
 ): FlowAgentConfig {
 	return {
-		mode: "primary",
+		mode,
 		description,
 		prompt,
 		permission: FLOW_READ_ONLY_PERMISSION,
@@ -63,22 +65,38 @@ const FLOW_CORE_AGENTS = {
 	"flow-planner": createReadOnlyPrimaryAgent(
 		"Create and refine compact Flow plans grounded in repo evidence.",
 		FLOW_PLANNER_AGENT_PROMPT,
+		"all",
 	),
 	"flow-worker": {
-		mode: "primary",
+		mode: "all",
 		description:
 			"Execute one approved Flow feature with focused validation and review.",
 		prompt: FLOW_WORKER_AGENT_PROMPT,
+		permission: {
+			task: {
+				"*": "deny",
+				"flow-reviewer": "allow",
+			},
+		},
 	},
 	"flow-auto": {
 		mode: "primary",
 		description:
 			"Coordinate Flow planning, execution, review, and recovery autonomously.",
 		prompt: FLOW_AUTO_AGENT_PROMPT,
+		permission: {
+			task: {
+				"*": "deny",
+				"flow-planner": "allow",
+				"flow-worker": "allow",
+				"flow-reviewer": "allow",
+			},
+		},
 	},
 	"flow-reviewer": createReadOnlyPrimaryAgent(
 		"Review Flow work and decide whether it may advance.",
 		FLOW_REVIEWER_AGENT_PROMPT,
+		"all",
 	),
 	"flow-control": createReadOnlyPrimaryAgent(
 		"Inspect or reset Flow runtime state without executing work.",
@@ -134,7 +152,16 @@ function cloneAgentConfig(agent: FlowAgentConfig) {
 	return {
 		...agent,
 		...(agent.tools ? { tools: { ...agent.tools } } : {}),
-		...(agent.permission ? { permission: { ...agent.permission } } : {}),
+		...(agent.permission
+			? {
+					permission: {
+						...agent.permission,
+						...(agent.permission.task
+							? { task: { ...agent.permission.task } }
+							: {}),
+					},
+				}
+			: {}),
 	};
 }
 
