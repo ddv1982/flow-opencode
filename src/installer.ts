@@ -137,19 +137,18 @@ export async function runUninstallCommand(
 
 	const destinationFile = resolveInstallTarget(homeDir ? { homeDir } : {});
 
-	const existing = await readInstalledPluginMarker(destinationFile);
-	if (existing.exists) {
-		if (!existing.managedByFlow) {
-			throw new Error(
-				`Refusing to remove unowned plugin at ${destinationFile}. Only Flow-managed files can be uninstalled.`,
-			);
+	try {
+		await access(destinationFile, constants.F_OK);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return undefined;
 		}
-		await rm(destinationFile, { force: true });
-		logger(`Removed Flow plugin from ${destinationFile}`);
-		return destinationFile;
+		throw error;
 	}
 
-	return undefined;
+	await rm(destinationFile, { force: true });
+	logger(`Removed Flow plugin from ${destinationFile}`);
+	return destinationFile;
 }
 
 async function assertSourceFileExists(sourceFile: string): Promise<void> {
@@ -160,28 +159,6 @@ async function assertSourceFileExists(sourceFile: string): Promise<void> {
 			`Build artifact not found at ${sourceFile}. Run \`bun run build\` first.`,
 		);
 	}
-}
-
-async function readInstalledPluginMarker(target: string): Promise<{
-	exists: boolean;
-	managedByFlow: boolean;
-}> {
-	try {
-		const content = await readFile(target, "utf8");
-		return {
-			exists: true,
-			managedByFlow: isManagedByFlowPluginContent(content),
-		};
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return { exists: false, managedByFlow: false };
-		}
-		throw error;
-	}
-}
-
-function isManagedByFlowPluginContent(content: string): boolean {
-	return content.startsWith(FLOW_PLUGIN_OWNERSHIP_HEADER);
 }
 
 async function buildPlugin(): Promise<void> {

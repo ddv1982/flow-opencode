@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe("cross-area install lifecycle", () => {
-	test("release scripts overwrite existing flow.js on install but still refuse to remove unowned files", async () => {
+	test("release scripts overwrite existing flow.js on install and remove canonical flow.js on uninstall", async () => {
 		const tempRoot = makeTempDir("flow-install-lifecycle-");
 		const homeDir = join(tempRoot, "home");
 		const binDir = join(tempRoot, "bin");
@@ -177,9 +177,10 @@ describe("cross-area install lifecycle", () => {
 
 		writeFileSync(canonicalPath, "// third-party plugin\n");
 		const uninstallResult = await runScript(uninstallScript, homeDir, binDir);
-		expect(uninstallResult.exitCode).toBe(1);
-		expect(uninstallResult.stderr).toContain(
-			"Refusing to remove unowned plugin",
+		expect(uninstallResult.exitCode).toBe(0);
+		expect(() => readFileSync(canonicalPath, "utf8")).toThrow();
+		expect(uninstallResult.stdout).toContain(
+			`Flow removed from ${canonicalPath}`,
 		);
 	});
 

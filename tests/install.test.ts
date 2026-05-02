@@ -175,15 +175,21 @@ describe("installer", () => {
 		expect(logs).toEqual([`Removed Flow plugin from ${canonicalPath}`]);
 	});
 
-	test("runUninstallCommand refuses to remove unowned files", async () => {
+	test("runUninstallCommand removes an unowned canonical flow.js", async () => {
 		const homeDir = makeTempDir();
+		const logs: string[] = [];
 		const canonicalPath = resolveInstallTarget({ homeDir });
 		await mkdir(join(canonicalPath, ".."), { recursive: true });
 		await writeFile(canonicalPath, "// not flow managed\n", "utf8");
 
-		await expect(runUninstallCommand([], { homeDir })).rejects.toThrow(
-			"Refusing to remove unowned plugin",
-		);
+		const removedPath = await runUninstallCommand([], {
+			homeDir,
+			logger: (message) => logs.push(message),
+		});
+
+		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
+		expect(removedPath).toBe(canonicalPath);
+		expect(logs).toEqual([`Removed Flow plugin from ${canonicalPath}`]);
 	});
 
 	test("runUninstallCommand accepts help and ignores missing files", async () => {
