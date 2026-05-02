@@ -549,7 +549,7 @@ describe("runtime operator tools", () => {
 
 	test("flow_plan_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 		const ask = mock(async () => {});
 		const tools = createTestTools();
 
@@ -578,7 +578,7 @@ describe("runtime operator tools", () => {
 
 	test("flow_run_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 		const ask = mock(async () => {});
 		const tools = createTestTools();
 
@@ -670,7 +670,7 @@ describe("runtime operator tools", () => {
 
 	test("flow_doctor accepts hidden home workspace roots", async () => {
 		const fakeHome = makeTempDir();
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 		const homeDir = makeTempDir();
 		await installDoctorPluginFixture(homeDir);
 
@@ -700,7 +700,7 @@ describe("runtime operator tools", () => {
 
 	test("flow_plan_start at a normal project root does not ask just because hidden dirs exist inside it", async () => {
 		const worktree = makeTempDir();
-		const hiddenChild = join(worktree, ".factory");
+		const hiddenChild = join(worktree, ".hidden-workspace");
 		const ask = mock(async () => {});
 		const tools = createTestTools();
 

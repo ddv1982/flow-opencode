@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	buildPromptBehaviorEvalSummary,
@@ -18,13 +17,9 @@ describe("prompt behavior eval corpus", () => {
 		const fixtureFiles = listPromptBehaviorEvalFixtureFiles();
 		expect(fixtureFiles.length).toBeGreaterThan(1);
 
-		for (const fixtureFile of fixtureFiles) {
-			const raw = await readFile(fixtureFile, "utf8");
-			expect(raw.includes(".factory")).toBe(false);
-		}
-
 		for (const item of corpus) {
 			for (const sourcePath of item.sourcePaths) {
+				expect(sourcePath.startsWith(".")).toBe(false);
 				expect(existsSync(join(import.meta.dir, "..", sourcePath))).toBe(true);
 			}
 		}

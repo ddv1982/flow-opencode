@@ -36,7 +36,7 @@ afterEach(() => {
 describe("workspace root guards", () => {
 	test("saveSession allows mutable roots under hidden home directories", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 
 		try {
 			await withHomeEnv(fakeHome, async () => {
@@ -56,7 +56,7 @@ describe("workspace root guards", () => {
 
 	test("ensureWorkspace allows mutable roots under hidden home directories", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 
 		try {
 			await withHomeEnv(fakeHome, async () => {
@@ -70,7 +70,7 @@ describe("workspace root guards", () => {
 
 	test("hidden home workspaces remain usable for direct runtime session writes", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 
 		try {
 			await withHomeEnv(fakeHome, async () => {

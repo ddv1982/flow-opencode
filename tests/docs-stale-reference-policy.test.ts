@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const repoRoot = join(import.meta.dir, "..");
@@ -15,13 +16,12 @@ const staleReferences = [
 	"v2-tool-contract.md",
 	"tests/config.test.ts",
 	"runtime-completion-contracts.test.ts",
+	"docs/factory-taxonomy.md",
+	"factory-taxonomy.md",
+	".factory",
 ] as const;
 
-const historicalPrefixes = [
-	"docs/releases/",
-	"docs/investigations/",
-	".factory/validation/",
-] as const;
+const historicalPrefixes = ["docs/releases/", "docs/investigations/"] as const;
 
 const historicalFiles = new Set([
 	"CHANGELOG.md",
@@ -62,24 +62,31 @@ function isAllowedHistoricalReferencePath(path: string): boolean {
 	);
 }
 
+function trackedPaths(): string[] {
+	const output = execFileSync("git", ["ls-files"], {
+		cwd: repoRoot,
+		encoding: "utf8",
+	});
+	return output.split("\n").filter((path) => path.length > 0);
+}
+
 function isScannable(path: string): boolean {
-	return (
-		!path.startsWith(".git/") &&
-		!path.startsWith("dist/") &&
-		!path.startsWith("node_modules/") &&
-		scannableExtensions.has(extensionOf(path))
-	);
+	return scannableExtensions.has(extensionOf(path));
+}
+
+function scannablePolicyPaths(): string[] {
+	const paths = trackedPaths();
+	if (existsSync(join(repoRoot, "release-notes.md"))) {
+		paths.push("release-notes.md");
+	}
+	return paths.filter(isScannable);
 }
 
 describe("docs stale reference policy", () => {
 	test("retired path references stay confined to historical artifacts or successor breadcrumbs", () => {
 		const violations: string[] = [];
 
-		for (const path of new Bun.Glob("**/*").scanSync(repoRoot)) {
-			if (!isScannable(path)) {
-				continue;
-			}
-
+		for (const path of scannablePolicyPaths()) {
 			const text = readFileSync(join(repoRoot, path), "utf8");
 			const matchedReferences = staleReferences.filter((reference) =>
 				text.includes(reference),
@@ -95,5 +102,13 @@ describe("docs stale reference policy", () => {
 		}
 
 		expect(violations).toEqual([]);
+	});
+
+	test("retired process artifact tree is not tracked", () => {
+		expect(
+			trackedPaths().filter(
+				(path) => path === ".factory" || path.startsWith(".factory/"),
+			),
+		).toEqual([]);
 	});
 });

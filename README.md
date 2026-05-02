@@ -4,7 +4,7 @@
 
 ## Maintainer truth
 
-For contributors, [`docs/maintainer-contract.md`](docs/maintainer-contract.md) is the short non-historical contract map for current commands, tools, state paths, and high-risk checks. [`docs/contributor-map.md`](docs/contributor-map.md) maps risky areas to files and validation commands. [`docs/factory-taxonomy.md`](docs/factory-taxonomy.md) explains how to treat `.factory/` process artifacts.
+For contributors, [`docs/maintainer-contract.md`](docs/maintainer-contract.md) is the short non-historical contract map for current commands, tools, state paths, and high-risk checks. [`docs/contributor-map.md`](docs/contributor-map.md) maps risky areas to files and validation commands.
 
 ## What Flow does
 
@@ -215,7 +215,7 @@ There is exactly one active session per worktree. Switching with `/flow-session 
 
 Flow refuses to write session state in your home directory itself (`$HOME`) or at filesystem roots.
 
-If the effective mutable workspace root is a hidden directory other than `.flow` (for example `~/.factory`), Flow asks for approval before it writes its own `.flow/**` state there. That approval can be granted once or remembered by OpenCode for the rest of the session.
+If the effective mutable workspace root is a hidden directory other than `.flow` (for example `~/.hidden-workspace`), Flow asks for approval before it writes its own `.flow/**` state there. That approval can be granted once or remembered by OpenCode for the rest of the session.
 
 If the normal project/worktree root is in use, hidden directories that merely exist inside the project do not change where Flow writes state: it still uses the workspace-local `.flow/**` subtree at the root.
 

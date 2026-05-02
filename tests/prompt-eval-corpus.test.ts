@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	buildPromptEvalCoverageSummary,
@@ -20,17 +19,10 @@ describe("prompt eval corpus", () => {
 			.sort();
 		expect(fixtureFiles.length).toBeGreaterThan(0);
 
-		for (const fixtureFile of fixtureFiles) {
-			const raw = await readFile(
-				join(PROMPT_EVAL_FIXTURE_DIR, fixtureFile),
-				"utf8",
-			);
-			expect(raw.includes(".factory")).toBe(false);
-		}
-
 		for (const item of corpus) {
 			for (const sourcePath of item.sourcePaths) {
 				expect(isFirstPartySourcePath(sourcePath)).toBe(true);
+				expect(sourcePath.startsWith(".")).toBe(false);
 				expect(existsSync(join(import.meta.dir, "..", sourcePath))).toBe(true);
 			}
 		}

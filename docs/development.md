@@ -4,7 +4,7 @@ This file is for contributors working on the plugin itself.
 
 If you are trying to use Flow inside OpenCode, start with the top-level `README.md` instead.
 
-Current maintainer contract lives in [`docs/maintainer-contract.md`](maintainer-contract.md). Use [`docs/contributor-map.md`](contributor-map.md) to pick the right source files and checks before touching high-risk areas. Use [`docs/factory-taxonomy.md`](factory-taxonomy.md) before interpreting or changing `.factory/` process artifacts.
+Current maintainer contract lives in [`docs/maintainer-contract.md`](maintainer-contract.md). Use [`docs/contributor-map.md`](contributor-map.md) to pick the right source files and checks before touching high-risk areas.
 
 This repo's maintainer workflow is intentionally Bun-first. In target projects, Flow is script-first: existing package.json scripts are the primary contract, and package-manager detection is supporting evidence.
 

@@ -75,7 +75,7 @@ describe("resolveMutableSessionRoot", () => {
 	test("allows mutable roots under hidden home directories", () => {
 		const originalHome = process.env.HOME;
 		const fakeHome = mkdtempSync(join(tmpdir(), "flow-home-"));
-		const hiddenWorkspace = join(fakeHome, ".factory");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 
 		process.env.HOME = fakeHome;
 		try {
@@ -125,7 +125,7 @@ describe("resolveMutableSessionRoot", () => {
 		const originalHome = process.env.HOME;
 		const originalTrusted = process.env.FLOW_TRUSTED_WORKSPACE_ROOTS;
 		const fakeHome = mkdtempSync(join(tmpdir(), "flow-home-"));
-		const trustedA = join(fakeHome, ".factory");
+		const trustedA = join(fakeHome, ".hidden-workspace");
 		const trustedB = join(fakeHome, ".config", "flow");
 
 		process.env.HOME = fakeHome;

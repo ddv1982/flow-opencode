@@ -24,7 +24,7 @@ Primary ownership map:
 
 ## Historical references
 
-Historical artifacts may mention deleted or renamed files that existed when the artifact was written. This is expected in `CHANGELOG.md`, generated `release-notes.md`, `docs/releases/**`, `docs/investigations/**`, and `.factory/validation/**`. Current behavior and required checks are defined by this maintainer contract, current source files, current tests, and active scripts.
+Historical artifacts may mention deleted or renamed files that existed when the artifact was written. This is expected in `CHANGELOG.md`, generated `release-notes.md`, `docs/releases/**`, and `docs/investigations/**`. Current behavior and required checks are defined by this maintainer contract, current source files, current tests, and active scripts.
 
 ## Commands
 

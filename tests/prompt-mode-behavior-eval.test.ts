@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	FLOW_PROMPT_MODE_CAPTURE_MODES,
@@ -26,16 +25,12 @@ describe("prompt mode behavior eval corpus", () => {
 		const fixtureFiles = listPromptModeBehaviorEvalFixtureFiles();
 		expect(fixtureFiles.length).toBeGreaterThanOrEqual(1);
 
-		for (const fixtureFile of fixtureFiles) {
-			const raw = await readFile(fixtureFile, "utf8");
-			expect(raw.includes(".factory")).toBe(false);
-		}
-
 		for (const item of corpus) {
 			expect(item.sourcePaths).toEqual(
 				expect.arrayContaining(getFlowModeSourcePaths(item.mode)),
 			);
 			for (const sourcePath of item.sourcePaths) {
+				expect(sourcePath.startsWith(".")).toBe(false);
 				expect(existsSync(join(import.meta.dir, "..", sourcePath))).toBe(true);
 			}
 		}
