@@ -11,6 +11,7 @@ For contributors, [`docs/maintainer-contract.md`](docs/maintainer-contract.md) i
 - Turns a goal into a **tracked session** with a visible plan.
 - Executes **one feature at a time** instead of changing many things at once.
 - Records **validation evidence** and **review approvals** before it advances.
+- Records a runtime-owned **stack and standards profile** so planning can prefer local repo guidance before external assumptions.
 - Lets you **resume** work later from on-disk session state.
 - Adapts automatically: small work stays light, larger work gets more structure and gating.
 
@@ -99,6 +100,8 @@ Flow treats the target repo's existing `package.json` scripts as the primary exe
 In monorepos, Flow starts from the current working subdirectory and walks upward to the Flow workspace root, so package-local lockfiles or `package.json#packageManager` entries can override root-level defaults.
 
 If one directory contains conflicting lockfile families and there is no explicit `package.json#packageManager`, Flow treats that evidence as ambiguous instead of guessing. In that case it prefers existing `package.json` scripts and surfaces the ambiguity in planning context.
+
+Planning also records stack and standards evidence from local files such as `package.json`, lockfiles, config files, `AGENTS.md`, and project docs. Local repo guidance and configs outrank official docs, while official docs outrank broader web guidance. When local evidence is incomplete, Flow can record bounded research gaps instead of pretending the standard is known.
 
 ### Manual, step by step
 
@@ -198,6 +201,7 @@ Flow writes state only inside the worktree it's running in:
 .flow/active/<session-id>/session.json
 .flow/stored/<session-id>/session.json
 .flow/completed/<session-id>-<timestamp>/
+.flow/standards-profile.json
 ```
 
 Readable markdown for each session lives alongside it:
@@ -206,6 +210,8 @@ Readable markdown for each session lives alongside it:
 .flow/active/<session-id>/docs/index.md
 .flow/active/<session-id>/docs/features/<feature-id>.md
 ```
+
+`.flow/standards-profile.json` is a cache for planning context, not the session source of truth. Flow ignores it when the workspace, start directory, package-manager hint, schema version, source-file fingerprint, or external-guidance TTL no longer matches.
 
 Read-only `/flow-review` reports are returned directly to the caller. Flow does not maintain a separate persisted review-history tree.
 
@@ -233,7 +239,7 @@ Use `/flow-doctor detail` for the fuller structured view.
 
 ## Upgrading
 
-If you're coming from an older release that installed under `~/.opencode/plugins/` or used a flat `.flow/session.json`, see [`docs/migration/`](docs/migration/) for the steps. Legacy paths are no longer auto-migrated.
+If you're coming from an older release that installed under `~/.opencode/plugins/` or used a flat `.flow/session.json`, legacy paths are no longer auto-migrated. Review the historical notes in [`CHANGELOG.md`](CHANGELOG.md) and [`docs/releases/`](docs/releases/) for the release that introduced the change.
 
 Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
