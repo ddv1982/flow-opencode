@@ -85,12 +85,16 @@ jobs:
           shasum -a 256 flow.js > flow.js.sha256
 
           version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          changelog_heading="$(grep -En "^##[[:space:]]+\\[?${version}\\]?([[:space:]]+-[[:space:]].*)?$" CHANGELOG.md | head -n1 | cut -d: -f1)"
+          release_notes_bytes="$(wc -c < release-notes.md | tr -d " ")"
+
           {
             echo "tag=${GITHUB_REF_NAME}"
             echo "version=${version}"
-            echo "package_version=$(node -p \"require('./package.json').version\")"
-            echo "changelog_heading=$(grep -En \"^##[[:space:]]+\\[?${version}\\]?([[:space:]]+-[[:space:]].*)?$\" CHANGELOG.md | head -n1 | cut -d: -f1)"
-            echo "release_notes_bytes=$(wc -c < release-notes.md | tr -d \" \" )"
+            echo "package_version=${package_version}"
+            echo "changelog_heading=${changelog_heading}"
+            echo "release_notes_bytes=${release_notes_bytes}"
           } > release-evidence.txt
 
       - name: Upload release evidence artifact

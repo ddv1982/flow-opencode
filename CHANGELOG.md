@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.47] - 2026-05-02
+
+Restore hosted release evidence after the guardrail rollout
+
+Flow 1.0.47 is a fix-forward release for the new release-evidence workflow. The `v1.0.46` tag proved the version/changelog guard and full `bun run check` path on GitHub, but asset preparation failed before publication because the evidence writer embedded nested command substitutions directly inside `echo` strings. This release assigns those evidence values before writing the artifact, making the script parse cleanly under actionlint and Bash.
+
+The release keeps the 1.0.46 hardening intact: completion-lane invariants remain a named gate, randomized test scripts remain explicit, hosted randomized regression coverage remains available, and the package API boundary remains root-only. No runtime behavior or dependency versions changed in this fix-forward pass.
+
+Constraint: Fix the hosted release failure without rewriting the already-pushed `v1.0.46` tag or weakening the new release guards
+Constraint: Preserve the release evidence artifact contract while avoiding shell quoting that actionlint cannot parse
+Rejected: Force-move `v1.0.46` | the tag was already pushed and should remain an auditable failed release attempt
+Rejected: Remove release evidence generation | the evidence artifact is the purpose of the hardening and should be repaired, not bypassed
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep workflow shell snippets actionlint-clean; assign complex command substitutions before echoing evidence values
+Tested: `bun run check`; `bun run test:ci`; workflow YAML parse; release guard smoke for `v1.0.47`; hosted `v1.0.46` run proved the tag/changelog guard and `bun run check` before failing in asset preparation
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.47` before push
+
 ## [1.0.46] - 2026-05-02
 
 Make release confidence visible before cutting the next tag
