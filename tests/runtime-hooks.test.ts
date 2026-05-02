@@ -95,7 +95,7 @@ describe("runtime hooks", () => {
 			summary: "Need another fix pass.",
 			blockingFindings: [{ summary: "Missing targeted validation evidence." }],
 			followUps: [],
-			suggestedValidation: ["bun test tests/config.test.ts"],
+			suggestedValidation: ["bun test tests/config/prompt-contracts.test.ts"],
 		};
 		running.execution.lastOutcome = {
 			kind: "contract_error",

@@ -137,7 +137,7 @@
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "I called flow_run_start, read the target code before editing, ran targeted validation with bun test tests/config.test.ts, reviewed the changed files, and blockingFindings is empty. I then called flow_review_record_feature with decisionJson and flow_run_complete_feature with workerJson. Next step: follow the runtime next step for the next feature or final completion.",
+		"modelOutput": "I called flow_run_start, read the target code before editing, ran targeted validation with bun test tests/config/prompt-contracts.test.ts, reviewed the changed files, and blockingFindings is empty. I then called flow_review_record_feature with decisionJson and flow_run_complete_feature with workerJson. Next step: follow the runtime next step for the next feature or final completion.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",

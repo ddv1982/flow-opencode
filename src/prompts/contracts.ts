@@ -42,8 +42,8 @@ ${renderExampleBlocks([
 overview: "Refactor prompt surfaces, add examples, and add prompt-quality tests."
 features:
 - id: "refactor-prompt-surface"
-  fileTargets: ["src/prompts/*", "tests/config.test.ts"]
-  verification: ["bun test tests/config.test.ts"]`,
+  fileTargets: ["src/prompts/*", "tests/config/prompt-contracts.test.ts"]
+  verification: ["bun test tests/config/prompt-contracts.test.ts"]`,
 	},
 	{
 		name: "planning-context-payload",
@@ -89,7 +89,7 @@ Output examples:
 ${renderExampleBlocks([
 	{
 		name: "ok-completed",
-		body: `{"contractVersion":"1","status":"ok","summary":"Completed feature safely.","artifactsChanged":[{"path":"src/prompts/agents.ts"}],"validationRun":[{"command":"bun test tests/config.test.ts","status":"passed","summary":"Prompt contract checks passed."}],"decisions":[{"summary":"Kept runtime-owned semantics unchanged."}],"nextStep":"Ask flow-reviewer to confirm the next feature or final completion path.","reviewIterations":1,"validationScope":"targeted","featureResult":{"featureId":"improve-prompts","verificationStatus":"passed"},"featureReview":{"status":"passed","summary":"No blocking findings.","blockingFindings":[]},"outcome":{"kind":"completed"}}`,
+		body: `{"contractVersion":"1","status":"ok","summary":"Completed feature safely.","artifactsChanged":[{"path":"src/prompts/agents.ts"}],"validationRun":[{"command":"bun test tests/config/prompt-contracts.test.ts","status":"passed","summary":"Prompt contract checks passed."}],"decisions":[{"summary":"Kept runtime-owned semantics unchanged."}],"nextStep":"Ask flow-reviewer to confirm the next feature or final completion path.","reviewIterations":1,"validationScope":"targeted","featureResult":{"featureId":"improve-prompts","verificationStatus":"passed"},"featureReview":{"status":"passed","summary":"No blocking findings.","blockingFindings":[]},"outcome":{"kind":"completed"}}`,
 	},
 	{
 		name: "needs-input-replan",
@@ -142,6 +142,6 @@ ${renderExampleBlocks([
 	},
 	{
 		name: "feature-needs-fix",
-		body: `{"scope":"feature","featureId":"improve-prompts","reviewPurpose":"execution_gate","status":"needs_fix","summary":"The worker output is missing required validation evidence.","blockingFindings":[{"summary":"No targeted validation command was recorded."}],"suggestedValidation":["bun test tests/config.test.ts"]}`,
+		body: `{"scope":"feature","featureId":"improve-prompts","reviewPurpose":"execution_gate","status":"needs_fix","summary":"The worker output is missing required validation evidence.","blockingFindings":[{"summary":"No targeted validation command was recorded."}],"suggestedValidation":["bun test tests/config/prompt-contracts.test.ts"]}`,
 	},
 ])}`;

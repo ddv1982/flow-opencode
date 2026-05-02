@@ -19,7 +19,10 @@
 		"category": "recovery",
 		"surface": "worker_agent_prompt",
 		"risk": "medium",
-		"sourcePaths": ["src/prompts/agents.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/agents.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"Repeat until review passes or a real blocker remains.",
 			"retryable non-human blockers may return the feature directly to ready/pending"
@@ -32,7 +35,10 @@
 		"category": "review-gating",
 		"surface": "reviewer_agent_prompt",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/agents.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/agents.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"Do not write code.",
 			"Return needs_fix when the current feature should continue",

@@ -10,7 +10,7 @@ import {
 const CANONICAL_DOCS = [
 	"docs/architecture/invariant-matrix.md",
 	"docs/architecture/strictness-contract.md",
-	"docs/architecture/v2-boundaries.md",
+	"docs/maintainer-contract.md",
 ] as const;
 
 describe("docs semantic parity", () => {

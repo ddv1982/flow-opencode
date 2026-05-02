@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.51] - 2026-05-02
+
+Reduce maintainer contract drift after the framework-complexity review
+
+Flow 1.0.51 is a maintenance release that addresses the main remaining risk from the maintainability review: contributor comprehension and contract drift as the plugin has grown into a small workflow runtime. The release replaces scattered current-truth language with `docs/maintainer-contract.md`, adds contributor and factory taxonomy maps, records the current release posture, and removes stale implementation/migration docs that no longer describe current behavior.
+
+The test cleanup continues the same direction without weakening coverage. The former `tests/config.test.ts` and `tests/runtime-completion-contracts.test.ts` suites are now split by concern, with successor breadcrumbs at the top of each new file. A new stale-reference policy test allows old paths only in historical artifacts or explicit successor breadcrumbs, so release notes and `.factory` validation evidence stay auditable without leaking retired paths back into current docs or source.
+
+Constraint: Address maintainability and contributor-orientation risk without changing runtime behavior, command names, tool schemas, state paths, dependencies, or public plugin surface
+Constraint: Preserve historical release and validation evidence instead of rewriting old artifacts to look current
+Rejected: Rewrite release notes and `.factory/validation/**` references | those files are historical evidence and should remain auditable as-written
+Rejected: Keep `IMPLEMENTATION_PLAN.md` and v2 migration docs with banners | the maintainer contract now owns current behavior, and keeping superseded docs would preserve the ambiguity this release is removing
+Rejected: Split every large test file at once | this release establishes the pattern on the highest-risk contract suites while avoiding unnecessary churn
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Treat `docs/maintainer-contract.md` as the current contract map; stale retired-path references belong only in historical artifacts or explicit successor breadcrumbs guarded by `tests/docs-stale-reference-policy.test.ts`
+Tested: Existing `tests/config.test.ts` behavior locked before the split with 41 passing tests; split config suites preserved 41 passing tests; targeted docs/prompt/config checks passed; `bun run typecheck`; `bun run lint`; `bun test`; stale-reference scan reviewed remaining historical references; Oracle review found no blockers; `bun run check` including 427 tests, build, deadcode, release hygiene, pack invariants, completion-lane gate, cold-start budget, bundle sanity, and bench smoke
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.51` before push
+
 ## [1.0.50] - 2026-05-02
 
 Make runtime-tool tests easier to review

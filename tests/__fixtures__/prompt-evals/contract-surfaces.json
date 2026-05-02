@@ -7,7 +7,7 @@
 		"risk": "high",
 		"sourcePaths": [
 			"src/prompts/contracts.ts",
-			"tests/runtime-completion-contracts.test.ts"
+			"tests/runtime/worker-result-contracts.test.ts"
 		],
 		"expectedSnippets": [
 			"if outcome.kind is replan_required, include replanReason, failedAssumption, and recommendedAdjustment",
@@ -23,7 +23,8 @@
 		"risk": "high",
 		"sourcePaths": [
 			"src/prompts/contracts.ts",
-			"tests/runtime-completion-contracts.test.ts"
+			"tests/runtime/final-completion-gates.test.ts",
+			"tests/runtime/final-review-contracts.test.ts"
 		],
 		"expectedSnippets": [
 			"run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
@@ -37,7 +38,10 @@
 		"category": "review-gating",
 		"surface": "reviewer_contract",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/contracts.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/contracts.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"status: approved | needs_fix | blocked",
 			"return needs_fix when implementation should continue on the same feature",
@@ -52,7 +56,10 @@
 		"category": "planning-evidence",
 		"surface": "plan_contract",
 		"risk": "medium",
-		"sourcePaths": ["src/prompts/contracts.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/contracts.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"Record planning context separately via flow_plan_context_record",
 			"planning.packageManagerAmbiguous?: true",

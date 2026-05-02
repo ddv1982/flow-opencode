@@ -9,7 +9,10 @@ const result = spawnSync(
 	"bun",
 	[
 		"test",
-		"tests/runtime-completion-contracts.test.ts",
+		"tests/runtime/worker-result-contracts.test.ts",
+		"tests/runtime/final-completion-gates.test.ts",
+		"tests/runtime/final-review-contracts.test.ts",
+		"tests/runtime/plan-and-tool-schema-contracts.test.ts",
 		"tests/completion-gates.test.ts",
 		"tests/runtime/semantic-invariants.test.ts",
 		"tests/runtime-tools.test.ts",

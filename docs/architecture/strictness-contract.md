@@ -47,9 +47,9 @@ Bridge changes must preserve these runtime-owned semantic IDs:
 Required checks:
 
 - `bun run check:dependency-contract`
-- `bun test tests/config.test.ts`
+- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts`
 - `bun test tests/runtime-tools.test.ts`
-- `bun test tests/runtime-completion-contracts.test.ts`
+- `bun test tests/runtime/worker-result-contracts.test.ts tests/runtime/final-completion-gates.test.ts tests/runtime/final-review-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts`
 - `bun test tests/runtime/semantic-invariants.test.ts`
 - `bun test tests/recovery-hint-parity.test.ts`
 - `bun test tests/docs-semantic-parity.test.ts`

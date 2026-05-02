@@ -2,6 +2,10 @@
 
 `opencode-plugin-flow` adds a stateful planning-and-execution workflow to OpenCode. It is designed for work that should be planned, validated, reviewed, and resumable rather than handled as a disposable one-shot prompt.
 
+## Maintainer truth
+
+For contributors, [`docs/maintainer-contract.md`](docs/maintainer-contract.md) is the short non-historical contract map for current commands, tools, state paths, and high-risk checks. [`docs/contributor-map.md`](docs/contributor-map.md) maps risky areas to files and validation commands. [`docs/factory-taxonomy.md`](docs/factory-taxonomy.md) explains how to treat `.factory/` process artifacts.
+
 ## What Flow does
 
 - Turns a goal into a **tracked session** with a visible plan.

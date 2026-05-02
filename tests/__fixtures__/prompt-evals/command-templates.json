@@ -18,7 +18,10 @@
 		"category": "command-entry",
 		"surface": "auto_command_template",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/commands.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"resume the active session only",
 			"If no active session exists, stop and request a goal"
@@ -31,7 +34,10 @@
 		"category": "decision-gating",
 		"surface": "auto_command_template",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/commands.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"status `recommend_confirm` or `human_required`",
 			"present that recommendation clearly and stop"
@@ -44,7 +50,10 @@
 		"category": "completion-gating",
 		"surface": "auto_command_template",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/commands.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"Before final completion, run broad repo validation",
 			"deliveryPolicy.finalReviewPolicy",
@@ -74,7 +83,10 @@
 		"category": "command-entry",
 		"surface": "plan_command_template",
 		"risk": "medium",
-		"sourcePaths": ["src/prompts/commands.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/prompts/commands.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"If the arguments start with `approve`",
 			"If the arguments start with `select`",

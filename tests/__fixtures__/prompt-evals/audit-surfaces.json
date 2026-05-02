@@ -45,7 +45,10 @@
 		"category": "claim-calibration",
 		"surface": "audit_command_template",
 		"risk": "high",
-		"sourcePaths": ["src/audit/prompts/commands.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/audit/prompts/commands.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"Treat this command as the preferred dedicated read-only review surface, not as Flow planning or feature execution.",
 			"For full_audit, directly review every discovered major surface",
@@ -63,7 +66,10 @@
 		"category": "audit-coverage",
 		"surface": "audit_contract",
 		"risk": "high",
-		"sourcePaths": ["src/audit/prompts/contracts.ts", "tests/config.test.ts"],
+		"sourcePaths": [
+			"src/audit/prompts/contracts.ts",
+			"tests/config/prompt-contracts.test.ts"
+		],
 		"expectedSnippets": [
 			"discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]",
 			"coverageNotes?: string[]",

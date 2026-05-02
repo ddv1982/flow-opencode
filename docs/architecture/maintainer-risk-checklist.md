@@ -19,7 +19,7 @@ Recommended checks:
 
 - `bun pm ls zod`
 - `bun run check:dependency-contract`
-- `bun test tests/config.test.ts tests/runtime-tools.test.ts tests/runtime-completion-contracts.test.ts tests/schema-equivalence.test-d.ts`
+- `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`
 - `bun run typecheck`
 
 ## Completion-path protection lane
@@ -67,7 +67,7 @@ then verify:
 
 Recommended checks:
 
-- `bun test tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts tests/recovery-hint-parity.test.ts tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/config.test.ts`
+- `bun test tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts tests/recovery-hint-parity.test.ts tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/prompt-contracts.test.ts`
 
 ## Session persistence / migration / history
 
