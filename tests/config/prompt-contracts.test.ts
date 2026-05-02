@@ -461,8 +461,12 @@ describe("prompt and command config contracts", () => {
 	test("workflow prompts enforce coding guidelines and release hygiene", () => {
 		const qualitySnippet =
 			"Apply the repo's coding guidelines before completion";
+		const observabilityDiscoverySnippet =
+			"inspect existing logging/telemetry/CLI-output patterns";
+		const observabilityReplacementSnippet =
+			"replace intentional operator/observability signals";
 		const releaseHygieneSnippet =
-			"do not approve work that leaves console calls, debugger statements";
+			"do not approve work that leaves raw console calls, debugger statements";
 
 		for (const prompt of [
 			FLOW_PLANNER_AGENT_PROMPT,
@@ -473,18 +477,45 @@ describe("prompt and command config contracts", () => {
 			FLOW_AUTO_COMMAND_TEMPLATE,
 		]) {
 			expect(prompt).toContain(qualitySnippet);
+			expect(prompt).toContain(observabilityDiscoverySnippet);
+			expect(prompt).toContain(observabilityReplacementSnippet);
+			expect(prompt).toContain(
+				"preserving severity, message intent, and key context",
+			);
+			expect(prompt).toContain(
+				"report a blocker instead of inventing a dependency",
+			);
+			expect(prompt).toContain("add or update tests for behavior changes");
 		}
 
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(releaseHygieneSnippet);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
+			"delete intentional operator/observability signals without evidence of an equivalent logger, telemetry, or stdout/stderr replacement",
+		);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
+			"preserving severity, message intent, and key context",
+		);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
+			"do not approve a new logging or telemetry dependency unless it was explicitly approved",
+		);
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
-			"return needs_fix if release-bound source or build artifacts contain console calls, debugger statements",
+			"return needs_fix if release-bound source or build artifacts contain raw console calls, debugger statements",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"intentional operator/observability signal was deleted without evidence of an equivalent logger, telemetry, or stdout/stderr replacement",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"preserving severity, message intent, and key context",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"new logging or telemetry dependency was added without explicit approval",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(releaseHygieneSnippet);
 		expect(FLOW_MODE_CONTRACTS["flow-worker"].requiredBehavior).toContain(
-			"Apply coding guidelines and reject debug-only artifacts before completion.",
+			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
 		);
 		expect(FLOW_MODE_CONTRACTS["flow-reviewer"].requiredBehavior).toContain(
-			"Treat release hygiene and missing test coverage as review concerns.",
+			"Treat release hygiene, preserved observability, and missing test coverage as review concerns.",
 		);
 	});
 

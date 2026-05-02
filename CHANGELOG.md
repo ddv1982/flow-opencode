@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.58] - 2026-05-02
+
+Preserve observability while enforcing release hygiene
+
+Flow 1.0.58 narrows the no-console guidance so cleanup does not silently delete meaningful operator or diagnostic signals. Workflow prompts now tell agents to inspect existing logging, telemetry, and CLI-output patterns before changing `console.*`, classify each occurrence, remove only temporary debug noise, and replace intentional observability with the repo's existing logger, telemetry API, injected logger, or explicit stdout/stderr stream writes while preserving severity, message intent, and key context.
+
+The release also makes the guard reviewable. Reviewer contracts now reject release-bound debug artifacts, deleted observability without an equivalent replacement, and newly invented logging or telemetry dependencies unless that dependency was explicitly approved. Maintainer docs and release-hygiene failures explain the same decision tree, while prompt-contract tests and behavior evals lock worker and reviewer regressions for deleted observability and unapproved dependency invention.
+
+Constraint: Preserve Flow's existing command/tool/state surface while improving prompt guidance for observability-safe console cleanup
+Constraint: Keep release hygiene focused on debug artifacts, not on reducing production operator diagnostics
+Rejected: Keep a delete-only no-console rule | it can lower observability by removing intentional failure and operator signals
+Rejected: Add a logging or telemetry dependency | the right replacement depends on each host repo's existing facilities and no dependency was requested
+Rejected: Weaken the release-hygiene scanner | raw console/debugger artifacts should still fail release-bound checks; the fix belongs in guidance and review contracts
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: When changing console/release-hygiene guidance, preserve the classify-before-edit rule and keep worker/reviewer behavior evals covering both deleted observability and unapproved dependency invention
+Tested: `bun test tests/config/prompt-contracts.test.ts tests/prompt-mode-behavior-eval.test.ts`; `bun run lint`; Oracle review of diff snapshot `2026-05-02/1905` found the remaining test-update and dependency-invention gaps, both fixed; `bun run check` including typecheck, prompt capture checks, dependency contract, deadcode, build, release hygiene, pack invariants, completion-lane gate, cold-start budget, bundle sanity, 431 tests across 78 files, lint, and bench smoke
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.58` before push
+
 ## [1.0.57] - 2026-05-02
 
 Seal Flow review handoffs at prompt and permission boundaries

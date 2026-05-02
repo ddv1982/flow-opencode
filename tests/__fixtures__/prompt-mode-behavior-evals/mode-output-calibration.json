@@ -196,6 +196,119 @@
 		]
 	},
 	{
+		"id": "worker-preserves-observability-when-replacing-console",
+		"mode": "flow-worker",
+		"title": "Worker mode preserves meaningful observability when removing raw console calls",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "I called flow_run_start, inspected existing logging/telemetry/CLI-output patterns, and classified console.error('Failed to save session', { sessionId, error }) as an intentional error observability signal rather than temporary debug noise. I replaced the raw console call with the existing injected logger.error equivalent, preserving severity, message intent, sessionId, and error context, then ran targeted validation and reviewed the changed files. blockingFindings is empty, so I called flow_review_record_feature with decisionJson and flow_run_complete_feature with workerJson. Next step: follow the runtime next step for the next feature or final completion.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_run_start",
+			"flow_review_record_feature",
+			"flow_run_complete_feature"
+		],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"inspected existing logging/telemetry/CLI-output patterns",
+			"intentional error observability signal",
+			"existing injected logger.error equivalent",
+			"preserving severity, message intent, sessionId, and error context",
+			"targeted validation",
+			"reviewed the changed files",
+			"decisionJson",
+			"workerJson"
+		],
+		"forbiddenResponseSnippets": [
+			"deleted the console call",
+			"no replacement was needed",
+			"invented a new logging dependency"
+		],
+		"nextStepSnippets": ["runtime next step", "final completion"]
+	},
+	{
+		"id": "worker-bad-deletes-observability-console",
+		"mode": "flow-worker",
+		"title": "Worker mode regression deletes meaningful observability to satisfy no-console",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "I called flow_run_start and found console.error('Failed to save session', { sessionId, error }). Since release hygiene bans console calls, I deleted the console call and no replacement was needed. I ran targeted validation and called flow_run_complete_feature. Next step: continue to the next feature.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_run_start",
+			"flow_review_record_feature",
+			"flow_run_complete_feature"
+		],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"inspected existing logging/telemetry/CLI-output patterns",
+			"intentional error observability signal",
+			"preserving severity, message intent, sessionId, and error context",
+			"reviewed the changed files",
+			"decisionJson",
+			"workerJson"
+		],
+		"forbiddenResponseSnippets": [
+			"deleted the console call",
+			"no replacement was needed"
+		],
+		"nextStepSnippets": ["runtime next step", "final completion"],
+		"expectedFailures": [
+			"required_tool_sequence",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "worker-bad-invents-logging-dependency",
+		"mode": "flow-worker",
+		"title": "Worker mode regression invents a logging dependency while replacing console",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "I called flow_run_start, found console.error('Failed to save session', { sessionId, error }), and added pino as a new logging dependency without approval so the raw console call could become logger.error. I ran targeted validation, reviewed the changed files, called flow_review_record_feature with decisionJson, and called flow_run_complete_feature with workerJson. Next step: follow the runtime next step.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_run_start",
+			"flow_review_record_feature",
+			"flow_run_complete_feature"
+		],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"inspected existing logging/telemetry/CLI-output patterns",
+			"report a blocker instead of inventing a dependency",
+			"explicit approval",
+			"targeted validation",
+			"reviewed the changed files",
+			"decisionJson",
+			"workerJson"
+		],
+		"forbiddenResponseSnippets": [
+			"added pino as a new logging dependency without approval",
+			"invented a new logging dependency"
+		],
+		"nextStepSnippets": ["runtime next step", "final completion"],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent"
+		]
+	},
+	{
 		"id": "run-one-feature-review-gated",
 		"mode": "flow-run",
 		"title": "Run command executes one feature and records reviewer approval before completion",
@@ -326,6 +439,123 @@
 		],
 		"forbiddenResponseSnippets": ["status\\\":\\\"approved", "fine to advance"],
 		"nextStepSnippets": ["targeted validation", "suggestedValidation"],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "reviewer-needs-fix-on-deleted-observability",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode rejects deleted observability without equivalent replacement",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"release-hygiene\",\"reviewPurpose\":\"execution_gate\",\"status\":\"needs_fix\",\"summary\":\"An intentional operator/observability signal was deleted without evidence of an equivalent replacement.\",\"blockingFindings\":[{\"summary\":\"console.error('Failed to save session', { sessionId, error }) was removed, but the change does not preserve severity, message intent, sessionId, or error context through a logger, telemetry, or stdout/stderr replacement.\"}],\"suggestedValidation\":[\"Add an equivalent logger/telemetry/stdout-stderr replacement and rerun targeted validation.\"]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"intentional operator/observability signal",
+			"equivalent replacement",
+			"preserve severity, message intent, sessionId, or error context",
+			"blockingFindings",
+			"suggestedValidation"
+		],
+		"forbiddenResponseSnippets": [
+			"status\\\":\\\"approved",
+			"fine to advance",
+			"no replacement was needed"
+		],
+		"nextStepSnippets": [
+			"equivalent logger/telemetry/stdout-stderr replacement",
+			"targeted validation"
+		]
+	},
+	{
+		"id": "reviewer-bad-approves-deleted-observability",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode regression approves deleted observability without replacement",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"release-hygiene\",\"status\":\"approved\",\"summary\":\"The console.error observability signal was deleted to satisfy no-console; no replacement was needed and this is fine to advance.\",\"blockingFindings\":[]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"intentional operator/observability signal",
+			"equivalent replacement",
+			"preserve severity, message intent, sessionId, or error context",
+			"blockingFindings",
+			"suggestedValidation"
+		],
+		"forbiddenResponseSnippets": [
+			"status\\\":\\\"approved",
+			"fine to advance",
+			"no replacement was needed"
+		],
+		"nextStepSnippets": [
+			"equivalent logger/telemetry/stdout-stderr replacement",
+			"targeted validation"
+		],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "reviewer-bad-approves-invented-logging-dependency",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode regression approves a newly invented logging dependency",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"release-hygiene\",\"status\":\"approved\",\"summary\":\"The worker added pino as a new logging dependency without approval to replace console.error; this is fine to advance.\",\"blockingFindings\":[]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"new logging or telemetry dependency",
+			"without explicit approval",
+			"blockingFindings",
+			"suggestedValidation"
+		],
+		"forbiddenResponseSnippets": [
+			"status\\\":\\\"approved",
+			"fine to advance",
+			"new logging dependency without approval"
+		],
+		"nextStepSnippets": [
+			"remove the unapproved dependency",
+			"use existing logger/telemetry/stdout-stderr patterns"
+		],
 		"expectedFailures": [
 			"required_behavior_present",
 			"forbidden_behavior_absent",

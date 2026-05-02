@@ -58,9 +58,9 @@ export const FLOW_OPERATOR_PROGRESS_CHECKPOINTS = `Operator progress checkpoints
 - Finalization: summarize completion status, remaining risk, and the runtime next step.`;
 
 export const FLOW_ENGINEERING_QUALITY_RULE =
-	"- Apply the repo's coding guidelines before completion: prefer deletion/reuse over new layers, keep diffs small, use existing scripts and utilities, avoid debug-only console calls or debugger statements in release-bound source, and add or update tests for behavior changes.";
+	"- Apply the repo's coding guidelines before completion: prefer deletion/reuse over new layers, keep diffs small, use existing scripts and utilities, inspect existing logging/telemetry/CLI-output patterns before changing `console.*`, classify each occurrence, remove only temporary debug noise, replace intentional operator/observability signals with the repo's existing logger, telemetry API, injected logger, or explicit stdout/stderr stream writes while preserving severity, message intent, and key context, if no facility exists add the smallest local injected adapter or report a blocker instead of inventing a dependency, and add or update tests for behavior changes.";
 export const FLOW_RELEASE_HYGIENE_REVIEW_RULE =
-	"- Treat release hygiene as a review gate: do not approve work that leaves console calls, debugger statements, or undocumented debug-only instrumentation in release-bound source or build artifacts.";
+	"- Treat release hygiene as a review gate: do not approve work that leaves raw console calls, debugger statements, or undocumented debug-only instrumentation in release-bound source or build artifacts, do not approve changes that delete intentional operator/observability signals without evidence of an equivalent logger, telemetry, or stdout/stderr replacement preserving severity, message intent, and key context, and do not approve a new logging or telemetry dependency unless it was explicitly approved.";
 
 export const FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE =
 	"- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.";

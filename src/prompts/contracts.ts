@@ -122,7 +122,7 @@ Reviewer rules:
 - return approved only when the current feature is clean enough to advance
 - return needs_fix when implementation should continue on the same feature
 - return blocked only for real external blockers or required human decisions
-- treat release hygiene as part of maintainability review: return needs_fix if release-bound source or build artifacts contain console calls, debugger statements, or undocumented debug-only instrumentation
+- treat release hygiene as part of maintainability review: return needs_fix if release-bound source or build artifacts contain raw console calls, debugger statements, or undocumented debug-only instrumentation, if an intentional operator/observability signal was deleted without evidence of an equivalent logger, telemetry, or stdout/stderr replacement preserving severity, message intent, and key context, or if a new logging or telemetry dependency was added without explicit approval
 - for scope: feature, include the active featureId and use reviewPurpose execution_gate
 - for scope: final, use reviewPurpose completion_gate
 - for scope: final, include reviewDepth matching deliveryPolicy.finalReviewPolicy

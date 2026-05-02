@@ -154,7 +154,7 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 - Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed compatibility change is intentional.
 - Preserve direct `tool(...)` arg-shape compatibility at the SDK boundary.
 - Prefer deletion over new helper layers.
-- Keep release-bound source free of debug-only artifacts. Do not leave `console.*` calls or `debugger` statements in `src` or the built release artifact; use injected loggers or explicit stdout/stderr stream writes for intentional operator-facing CLI output.
+- Keep release-bound source free of debug-only artifacts. Do not leave ad-hoc `console.*` calls or `debugger` statements in `src` or the built release artifact. Inspect existing logging, telemetry, CLI-output, and test patterns before changing `console.*`; remove temporary debug noise, but preserve intentional operator or observability signals with an equivalent replacement that keeps severity, message intent, and key context.
 - Pair behavior changes with targeted tests and run the existing validation scripts before release.
 
 ## Coding guidelines and release hygiene
@@ -166,14 +166,23 @@ Flow treats engineering quality as part of the workflow contract, not just revie
 - Use existing package scripts and repo utilities before adding new commands.
 - Validate at the smallest useful scope first, then use broader gates before release.
 - Keep production/release-bound code free of debug-only artifacts (`console.*` and `debugger`).
+- Preserve intentional observability: deleting a meaningful log, diagnostic event, or operator-facing message is only acceptable when an equivalent logger, telemetry, or stdout/stderr replacement remains and preserves severity, message intent, and key context.
 
-The release hygiene gate is enforced in two places:
+When changing `console.*` in release-bound code, use this decision tree:
+
+1. Temporary debug trace or local scratch output: remove it.
+2. CLI/operator output: route it through an injected logger or explicit `process.stdout.write` / `process.stderr.write` adapter.
+3. Application diagnostic signal: use the repo's existing structured logger with a level and contextual fields.
+4. Cross-service or performance diagnostic signal: use the repo's existing telemetry API for spans, events, metrics, or logs.
+5. No existing observability facility: add the smallest local injected adapter needed for the current surface, or report a blocker when an equivalent replacement would require a broader observability decision; do not add a dependency unless the change explicitly approves one.
+
+The release hygiene gate is enforced through these mechanisms:
 
 - `biome.json` enables Biome's `lint/suspicious/noConsole` rule for production source. Biome documents this rule as non-recommended by default, configurable as an error, and intended to keep console debugging out of shipped code.
 - The release build uses Bun's `--drop=console` setting so bundled dependency code cannot reintroduce console calls into `dist/index.js`.
 - `bun run check:release-hygiene` scans `src` and `dist/index.js` after build so release artifacts cannot silently reintroduce `console.*` or `debugger`.
 
-Development-only scripts and tests may still print to stdout/stderr when they are intentionally operator-facing. Release-bound CLI code should make that intent explicit with injectable logger functions or direct `process.stdout.write` / `process.stderr.write` adapters.
+Development-only scripts and tests may still print to stdout/stderr when they are intentionally operator-facing. Release-bound CLI code should make that intent explicit with injectable logger functions or direct `process.stdout.write` / `process.stderr.write` adapters. The goal is to avoid shipping raw debug consoles, not to reduce production observability.
 
 ## Recovery model
 

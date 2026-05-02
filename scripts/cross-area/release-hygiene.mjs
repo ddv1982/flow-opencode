@@ -10,7 +10,7 @@ const FORBIDDEN_PATTERNS = [
 	{
 		label: "console.*",
 		rationale:
-			"Use injected loggers or explicit stdout/stderr stream writes for intentional operator output.",
+			"Remove temporary debug output; replace intentional operator/observability signals with equivalent injected loggers, telemetry, or explicit stdout/stderr stream writes that preserve severity, message intent, and key context.",
 	},
 	{
 		label: "debugger",

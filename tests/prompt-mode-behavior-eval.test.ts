@@ -16,7 +16,7 @@ import {
 describe("prompt mode behavior eval corpus", () => {
 	test("mode behavior fixtures are first-party and cover non-review modes", async () => {
 		const corpus = readPromptModeBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(21);
+		expect(corpus).toHaveLength(27);
 		expect(corpus.filter((item) => item.origin === "captured")).toHaveLength(6);
 		expect(new Set(corpus.map((item) => item.mode))).toEqual(
 			new Set(FLOW_PROMPT_MODE_CAPTURE_MODES),
@@ -44,22 +44,37 @@ describe("prompt mode behavior eval corpus", () => {
 			results.map((result) => [result.id, result]),
 		);
 
+		expect(results).toHaveLength(27);
 		expect(byId["plan-goal-records-context-and-stops"]?.score).toBe(6);
 		expect(byId["auto-missing-goal-stops-after-prepare"]?.score).toBe(6);
 		expect(
 			byId["worker-validates-reviews-and-persists-clean-feature"]?.score,
 		).toBe(6);
+		expect(
+			byId["worker-preserves-observability-when-replacing-console"]?.score,
+		).toBe(6);
 		expect(byId["run-one-feature-review-gated"]?.score).toBe(6);
 		expect(byId["reviewer-needs-fix-on-missing-validation"]?.score).toBe(6);
+		expect(byId["reviewer-needs-fix-on-deleted-observability"]?.score).toBe(6);
 		expect(byId["control-status-is-read-only"]?.score).toBe(6);
 
 		expect(byId["plan-bad-starts-implementation"]?.passed).toBe(false);
 		expect(byId["auto-bad-infers-goal-after-missing-goal"]?.passed).toBe(false);
 		expect(byId["worker-bad-completes-without-validation"]?.passed).toBe(false);
+		expect(byId["worker-bad-deletes-observability-console"]?.passed).toBe(
+			false,
+		);
+		expect(byId["worker-bad-invents-logging-dependency"]?.passed).toBe(false);
 		expect(byId["run-bad-executes-every-feature"]?.passed).toBe(false);
 		expect(byId["reviewer-bad-approves-without-validation"]?.passed).toBe(
 			false,
 		);
+		expect(byId["reviewer-bad-approves-deleted-observability"]?.passed).toBe(
+			false,
+		);
+		expect(
+			byId["reviewer-bad-approves-invented-logging-dependency"]?.passed,
+		).toBe(false);
 		expect(byId["control-bad-starts-work-from-status"]?.passed).toBe(false);
 	});
 
@@ -164,20 +179,38 @@ describe("prompt mode behavior eval corpus", () => {
 			readPromptModeBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(21);
-		expect(summary.passingCases).toBe(14);
-		expect(summary.failingCases).toBe(7);
-		expect(summary.expectationSatisfiedCases).toBe(21);
+		expect(summary.totalCases).toBe(27);
+		expect(summary.passingCases).toBe(16);
+		expect(summary.failingCases).toBe(11);
+		expect(summary.expectationSatisfiedCases).toBe(27);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(4.76, 2);
+		expect(summary.averageScore).toBeCloseTo(4.59, 2);
 		expect(summary.report).toContain(
-			"Prompt mode behavior eval corpus: 21 cases",
+			"Prompt mode behavior eval corpus: 27 cases",
 		);
 		expect(summary.report).toContain(
 			"plan-goal-records-context-and-stops: 6/6 (quality-pass); mode=flow-plan; expectation=satisfied",
 		);
 		expect(summary.report).toContain(
+			"worker-preserves-observability-when-replacing-console: 6/6 (quality-pass); mode=flow-worker; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"worker-bad-deletes-observability-console: 2/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_tool_sequence,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
+		);
+		expect(summary.report).toContain(
+			"worker-bad-invents-logging-dependency: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",
+		);
+		expect(summary.report).toContain(
 			"run-bad-executes-every-feature: 2/6 (quality-fail); mode=flow-run; expectation=satisfied; failed=required_tool_sequence,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
+		);
+		expect(summary.report).toContain(
+			"reviewer-needs-fix-on-deleted-observability: 6/6 (quality-pass); mode=flow-reviewer; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"reviewer-bad-approves-deleted-observability: 3/6 (quality-fail); mode=flow-reviewer; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
+		);
+		expect(summary.report).toContain(
+			"reviewer-bad-approves-invented-logging-dependency: 3/6 (quality-fail); mode=flow-reviewer; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
 		);
 		expect(summary.report).toContain(
 			"control-bad-starts-work-from-status: 2/6 (quality-fail); mode=flow-control; expectation=satisfied; failed=forbidden_tool_absent,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",

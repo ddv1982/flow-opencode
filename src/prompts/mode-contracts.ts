@@ -153,7 +153,7 @@ export const FLOW_MODE_CONTRACTS = {
 		requiredBehavior: [
 			"Execute exactly one approved feature.",
 			"Run targeted validation before claiming success.",
-			"Apply coding guidelines and reject debug-only artifacts before completion.",
+			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
 			"Persist reviewer approval before advancing when required.",
 			"Emit concise phase-boundary progress across execution, validation, review, and completion.",
 		],
@@ -187,7 +187,7 @@ export const FLOW_MODE_CONTRACTS = {
 		requiredBehavior: [
 			"Treat the active feature as the sole execution target.",
 			"Validate and self-review changed files before success.",
-			"Apply coding guidelines and reject debug-only artifacts before completion.",
+			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
 			"Return structured replan/blocker data instead of partial success.",
 			"Emit concise phase-boundary progress across execution, validation, review, and completion.",
 		],
@@ -216,7 +216,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		requiredBehavior: [
 			"Review only; do not implement fixes.",
-			"Treat release hygiene and missing test coverage as review concerns.",
+			"Treat release hygiene, preserved observability, and missing test coverage as review concerns.",
 			"Approve only when blocking findings are empty.",
 			"Return needs_fix for same-feature repair loops.",
 		],

@@ -81,6 +81,9 @@ describe("release hygiene script", () => {
 		expect(await process.exited).toBe(1);
 		const stderr = await new Response(process.stderr).text();
 		expect(stderr).toContain("Release hygiene failed");
+		expect(stderr).toContain(
+			"preserve severity, message intent, and key context",
+		);
 		expect(stderr).toContain("src/debug.ts:2:2 console.*");
 		expect(stderr).toContain("dist/index.js:1:1 debugger");
 	});
