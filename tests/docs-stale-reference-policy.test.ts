@@ -23,7 +23,10 @@ const historicalPrefixes = [
 	".factory/validation/",
 ] as const;
 
-const historicalFiles = new Set(["CHANGELOG.md"]);
+const historicalFiles = new Set([
+	"CHANGELOG.md",
+	"release-notes.md", // Generated from CHANGELOG.md by the hosted release workflow.
+]);
 
 const successorBreadcrumbFiles = new Set([
 	"tests/config/plugin-surface.test.ts",

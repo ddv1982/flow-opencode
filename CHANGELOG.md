@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.52] - 2026-05-02
+
+Keep the release-note artifact inside the stale-reference policy
+
+Flow 1.0.52 is a fix-forward release for the `v1.0.51` hosted release failure. The `v1.0.51` tag correctly validated the package/changelog version evidence, but the release job creates a generated `release-notes.md` file from `CHANGELOG.md` before running `bun run check`. The new stale-reference policy test scanned that generated file and rejected the same historical retired-path references that are intentionally allowed in the changelog.
+
+This release keeps the stale-reference guard intact while adding the generated release-note artifact to the same historical-evidence allowlist as `CHANGELOG.md`. The maintainer contract now names that generated artifact explicitly, so future changes do not accidentally treat hosted release notes as current contract documentation. No runtime behavior, command names, tool schemas, state paths, dependency versions, or public plugin surface changed.
+
+Constraint: Preserve the stale-reference policy while allowing the hosted release workflow's generated changelog excerpt
+Constraint: Do not force-move the already-pushed failed `v1.0.51` tag
+Rejected: Remove stale-reference scanning from `bun test` | the policy is useful and should remain part of the normal release gate
+Rejected: Strip historical retired-path references from the 1.0.51 release notes | those notes accurately describe the maintenance release and should remain auditable
+Rejected: Force-move `v1.0.51` | the tag was already pushed and failed in hosted release, so fix-forward keeps history explicit
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep generated `release-notes.md` aligned with `CHANGELOG.md` in stale-reference policy decisions because the hosted release workflow materializes it before `bun run check`
+Tested: Hosted `v1.0.51` release run failed specifically in `tests/docs-stale-reference-policy.test.ts` against generated `release-notes.md`; `bun test tests/docs-stale-reference-policy.test.ts`; `bun run check` including 427 tests, build, deadcode, release hygiene, pack invariants, completion-lane gate, cold-start budget, bundle sanity, and bench smoke
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.52` before push
+
 ## [1.0.51] - 2026-05-02
 
 Reduce maintainer contract drift after the framework-complexity review
