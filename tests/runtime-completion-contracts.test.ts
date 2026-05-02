@@ -12,17 +12,10 @@ import {
 	createTempDirRegistry,
 	createTestTools,
 	samplePlan,
+	toolContext,
 } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
-
-type ExecuteContext = Parameters<
-	ReturnType<typeof createTestTools>["flow_status"]["execute"]
->[1];
-
-function toolContext(worktree: string): ExecuteContext {
-	return { worktree } as unknown as ExecuteContext;
-}
 
 afterEach(() => {
 	cleanupTempDirs();

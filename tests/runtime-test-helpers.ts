@@ -32,6 +32,14 @@ export function createTestTools(): TestTools {
 	return createTools({}) as unknown as TestTools;
 }
 
+export function toolContext(
+	worktree: string,
+	directory?: string,
+	extra?: Record<string, unknown>,
+): TestToolContext {
+	return directory ? { worktree, directory, ...extra } : { worktree, ...extra };
+}
+
 export function createTempDirRegistry(prefix = "flow-opencode-") {
 	const tempDirs: string[] = [];
 

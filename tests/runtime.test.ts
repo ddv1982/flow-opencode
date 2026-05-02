@@ -30,6 +30,7 @@ import {
 	createTempDirRegistry,
 	createTestTools,
 	samplePlan,
+	toolContext,
 } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
@@ -37,12 +38,6 @@ const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
 afterEach(() => {
 	cleanupTempDirs();
 });
-
-function toolContext(worktree: string, directory?: string) {
-	return (directory ? { worktree, directory } : { worktree }) as Parameters<
-		ReturnType<typeof createTestTools>["flow_status"]["execute"]
-	>[1];
-}
 
 async function activeSessionPath(worktree: string): Promise<string> {
 	return getSessionPath(worktree, await activeSessionId(worktree));

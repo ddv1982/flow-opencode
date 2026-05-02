@@ -13,7 +13,11 @@ import { saveSession } from "../src/runtime/session";
 import * as sessionHistory from "../src/runtime/session-history";
 import * as sessionWorkspace from "../src/runtime/session-workspace";
 import { createSampleSession } from "./fixtures";
-import { createTempDirRegistry, createTestTools } from "./runtime-test-helpers";
+import {
+	createTempDirRegistry,
+	createTestTools,
+	toolContext,
+} from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
 	"flow-path-traversal-",
@@ -23,12 +27,6 @@ afterEach(() => {
 	mock.restore();
 	cleanupTempDirs();
 });
-
-function toolContext(worktree: string) {
-	return { worktree } as Parameters<
-		ReturnType<typeof createTestTools>["flow_status"]["execute"]
-	>[1];
-}
 
 describe("path traversal hardening", () => {
 	test("flow_history_show rejects traversal and absolute session ids without reading session files", async () => {
