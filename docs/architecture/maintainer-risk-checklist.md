@@ -1,137 +1,55 @@
 # Flow Maintainer Risk Checklist
 
-Use this checklist before merging changes in Flow's higher-risk areas.
+Use this as a merge-time checklist for risky changes. It is intentionally not the canonical contract.
 
-## Dependency alignment
+Canonical current-facing maps:
 
-If you change either of these:
+- `docs/maintainer-contract.md` owns commands, tools, state paths, invariants, the surface-expansion freeze, and the compact "if you touch X, run Y" map.
+- `docs/contributor-map.md` owns contributor onboarding risk by area: read-first files, required checks, and "do not" rules.
 
-- `package.json` dependency on `zod`
-- `@opencode-ai/plugin`
+If this checklist conflicts with either file, update this checklist or delete the duplicate guidance. Do not treat this file as a second source of truth.
 
-then verify:
+## Before changing a high-risk area
 
-- Flow and the plugin SDK still share a compatible `zod` contract
-- tool arg shapes still assign directly into `tool(...)` without bridge helpers
-- no nested dual-`zod` type mismatch has reintroduced cast pressure at the SDK/runtime boundary
+1. Identify the touched area in `docs/maintainer-contract.md`.
+2. Read the matching section in `docs/contributor-map.md` before editing.
+3. Run the narrow checks listed there before broad checks.
+4. Run `bun run check` before release, cross-surface merges, or persistence-affecting changes.
+5. Record the risk/alternative in Lore release notes or commit trailers when behavior, contracts, or public surfaces change.
 
-Recommended checks:
+## Surface expansion freeze
 
-- `bun pm ls zod`
-- `bun run check:dependency-contract`
-- `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`
-- `bun run typecheck`
+New commands, tools, prompt contracts, state paths, and runtime modes are frozen by default.
 
-## Completion-path protection lane
+Only add one when the change records an explicit retirement or replacement tradeoff in the release/commit lore. If there is no retirement/replacement story, treat the change as scope expansion and defer it.
 
-If you change:
+## Compatibility hotspots
 
-- `src/runtime/transitions/execution-completion.ts`
+These areas require extra caution because they affect external or cross-surface contracts:
 
-then treat it as a protected subsystem and verify:
-
-- completion gate order stays unchanged unless the tests and migration notes change with it
-- lite-lane success and retry behavior stays explicit
-- blocked vs ready vs planning transitions remain deliberate
-- recovery metadata still points to the same canonical next actions
-
-Required checks:
-
-- `bun run gate:completion-lane` (named completion-lane invariant gate)
-
-Visibility paths:
-
-- Included in `bun run check` via `gate:completion-lane`
-- Runs as a dedicated CI step (`Run completion-lane invariants gate`)
-
-## Prompt / tool / runtime parity
-
-If you change any of these:
-
-- `src/prompts/*`
-- `src/tools/*`
-- `src/runtime/transitions/*`
-- `src/runtime/schema.ts`
-
-then verify:
-
-- prompts still reference canonical tool names only
-- runtime policy/schema remains the normative owner of workflow semantics
-- prompt/doc expression surfaces stay derived from runtime-owned policy
-- public tool registration still matches the intended canonical tool surface
-- recovery metadata still emits canonical runtime tool names only
-- runtime semantic invariant IDs stay aligned with the runtime-owned policy surface
-- payload shape changes stay aligned across prompt contracts, tool args, and runtime schemas
-- docs tool lists stay aligned with the registered tool surface
-- canonical docs sections mirror only known semantic invariant IDs through explicit `[semantic-invariant]` markers
-
-Recommended checks:
-
-- `bun test tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts tests/recovery-hint-parity.test.ts tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/prompt-contracts.test.ts`
-
-## Session persistence / migration / history
-
-If you change any of these:
-
-- `src/runtime/session*.ts`
-- `src/runtime/paths.ts`
-- `src/runtime/schema.ts`
-- install / uninstall flows
-
-then verify:
-
-- completed history still sorts and loads correctly
-- session summaries and rendered docs still match expectations
-
-Recommended checks:
-
-- `bun test tests/runtime.test.ts tests/session-history.test.ts`
-- `bun test tests/runtime/render-snapshot.test.ts tests/runtime-summary.test.ts`
-
-## Session tool placement rules
-
-When adding session-facing behavior:
-
-- tool registration -> `history-tools.ts` / `planning-tools.ts` / `lifecycle-tools.ts`
-- runtime mutation/read/workspace routing and JSON response shaping -> `src/runtime/application/session-actions.ts` / `session-read-actions.ts` / `session-workspace-actions.ts` / `session-engine.ts`
-- next-command / navigation policy -> `next-command-policy.ts`
-- tiny cross-cutting helpers -> `shared.ts`
-
-If the change does not fit cleanly, prefer a new bounded module over growing the existing ones indiscriminately.
-
-Recommended checks:
-
-- `bun test tests/transitions-consolidation.test.ts`
-
-## Performance-sensitive paths
-
-Be conservative in:
-
-- session load/save
-- render/sync
-- transition reducers
-- schema parsing hot paths
-
-Prefer:
-
-- deletion over indirection
-- one parse/reshape step over repeated normalization
-- explicit branching over speculative helper layers on hot paths
-
-Recommended checks:
-
-- `bun run bench:smoke`
+| Area | Canonical map |
+| --- | --- |
+| `zod`, `@opencode-ai/plugin`, or tool argument compatibility | `docs/maintainer-contract.md` dependency/tool rows; `docs/contributor-map.md` runtime schema and tool schema sections |
+| Completion, final review, or recovery transitions | `docs/maintainer-contract.md` completion/runtime rows; `docs/contributor-map.md` runtime transitions section |
+| Prompt text, command templates, or mode contracts | `docs/maintainer-contract.md` prompt rows; `docs/contributor-map.md` prompts section |
+| Session paths, persistence, history, or workspace-root handling | `docs/maintainer-contract.md` state path rows; `docs/contributor-map.md` session persistence section |
+| Install/uninstall, package contents, or release scripts | `docs/maintainer-contract.md` release/package row; `docs/contributor-map.md` config/install/release section |
+| Performance-sensitive save/render/schema paths | `docs/maintainer-contract.md` performance row; `docs/contributor-map.md` performance section |
 
 ## Historical evidence docs hygiene
 
-If you touch investigation or evidence-heavy docs (for example under `docs/investigations/`):
+`docs/releases/**`, `docs/investigations/**`, generated `release-notes.md`, and `CHANGELOG.md` are historical evidence unless explicitly refreshed.
 
-- either refresh embedded version references to current package state
-- or clearly label old values as historical snapshots with capture date/context
+When touching historical or evidence-heavy docs:
 
-Quick check:
+- keep old values labeled as historical snapshots with capture date/context, or re-run the evidence and update it as current
+- do not make old file names, deleted artifacts, or retired plans look like active contracts
+- confirm `package.json` before presenting version-specific statements as current facts
 
-- confirm `package.json` version and compare against doc evidence blocks
+Quick checks:
+
+- `bun test tests/docs-stale-reference-policy.test.ts tests/docs-semantic-parity.test.ts`
+- `bun test tests/docs-tool-parity.test.ts` when command/tool docs change
 
 ## Full release gate
 
