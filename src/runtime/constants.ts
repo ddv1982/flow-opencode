@@ -86,6 +86,12 @@ export const REVIEWER_DECISION_STATUSES = [
 	"needs_fix",
 	"blocked",
 ] as const;
+export const REVIEW_FINDING_CLOSURE_STATUSES = [
+	"closed",
+	"partially_closed",
+	"not_closed",
+	"blocked",
+] as const;
 export const REPLAN_REASONS = [
 	"plan_too_broad",
 	"hidden_dependency",

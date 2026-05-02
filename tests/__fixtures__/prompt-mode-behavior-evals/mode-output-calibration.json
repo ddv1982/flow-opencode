@@ -563,6 +563,144 @@
 		]
 	},
 	{
+		"id": "worker-records-review-finding-closures",
+		"mode": "flow-worker",
+		"title": "Worker mode records review finding closures for review-and-fix work",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "{\"contractVersion\":\"1\",\"status\":\"ok\",\"summary\":\"Closed the review findings with evidence.\",\"artifactsChanged\":[{\"path\":\"src/game/navigation.ts\"}],\"validationRun\":[{\"command\":\"bun test tests/fullFlowSmoke.ts\",\"status\":\"passed\",\"summary\":\"Navigation regression passed.\"}],\"decisions\":[{\"summary\":\"Preserved observability via reportError.\"}],\"reviewFindingClosures\":[{\"findingRef\":\"review: swallowed navigation failure\",\"status\":\"closed\",\"fixRefs\":[\"src/game/navigation.ts:42\"],\"testRefs\":[\"tests/fullFlowSmoke.ts:123\"],\"validationRefs\":[\"bun test tests/fullFlowSmoke.ts\"],\"residualRisk\":\"No known residual risk.\"}],\"nextStep\":\"Ask flow-reviewer to verify the closure ledger and validation evidence.\",\"reviewIterations\":1,\"validationScope\":\"targeted\",\"featureResult\":{\"featureId\":\"fix-review-findings\",\"verificationStatus\":\"passed\"},\"featureReview\":{\"status\":\"passed\",\"summary\":\"No blocking findings.\",\"blockingFindings\":[]},\"outcome\":{\"kind\":\"completed\"}}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"reviewFindingClosures",
+			"findingRef",
+			"fixRefs",
+			"testRefs",
+			"validationRefs",
+			"residualRisk"
+		],
+		"forbiddenResponseSnippets": [
+			"no validation was run",
+			"closure evidence omitted"
+		],
+		"nextStepSnippets": [
+			"flow-reviewer",
+			"closure ledger",
+			"validation evidence"
+		]
+	},
+	{
+		"id": "worker-bad-completes-review-fix-without-closures",
+		"mode": "flow-worker",
+		"title": "Worker mode regression claims review remediation complete without closure ledger",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "{\"contractVersion\":\"1\",\"status\":\"ok\",\"summary\":\"Fixed all review findings.\",\"artifactsChanged\":[{\"path\":\"src/game/navigation.ts\"}],\"validationRun\":[{\"command\":\"bun test\",\"status\":\"passed\",\"summary\":\"Tests passed.\"}],\"decisions\":[{\"summary\":\"All findings are done.\"}],\"nextStep\":\"Advance to the next feature.\",\"validationScope\":\"targeted\",\"featureResult\":{\"featureId\":\"fix-review-findings\",\"verificationStatus\":\"passed\"},\"featureReview\":{\"status\":\"passed\",\"summary\":\"Looks good.\",\"blockingFindings\":[]},\"outcome\":{\"kind\":\"completed\"}}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": ["flow_plan_apply"],
+		"requiredResponseSnippets": [
+			"reviewFindingClosures",
+			"findingRef",
+			"fixRefs",
+			"testRefs",
+			"validationRefs",
+			"residualRisk"
+		],
+		"forbiddenResponseSnippets": [
+			"Advance to the next feature",
+			"Fixed all review findings"
+		],
+		"nextStepSnippets": ["closure ledger", "flow-reviewer"],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
+		"id": "reviewer-needs-fix-on-missing-closure-ledger",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode rejects review-fix work without closure evidence",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"fix-review-findings\",\"reviewPurpose\":\"execution_gate\",\"status\":\"needs_fix\",\"summary\":\"Review remediation cannot advance because reviewFindingClosures are missing.\",\"blockingFindings\":[{\"summary\":\"The worker did not map the original swallowed-navigation finding to fixRefs, testRefs, validationRefs, and residualRisk.\"}],\"suggestedValidation\":[\"Record reviewFindingClosures and rerun targeted validation.\"]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"reviewFindingClosures",
+			"fixRefs",
+			"testRefs",
+			"validationRefs",
+			"residualRisk"
+		],
+		"forbiddenResponseSnippets": [
+			"status\\\":\\\"approved",
+			"fine to advance",
+			"I edited"
+		],
+		"nextStepSnippets": ["Record reviewFindingClosures", "targeted validation"]
+	},
+	{
+		"id": "reviewer-bad-approves-missing-closure-ledger",
+		"mode": "flow-reviewer",
+		"title": "Reviewer mode regression approves review-fix work without closure evidence",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/contracts.ts"
+		],
+		"modelOutput": "{\"scope\":\"feature\",\"featureId\":\"fix-review-findings\",\"status\":\"approved\",\"summary\":\"The worker says all review findings were fixed, so this is fine to advance even without reviewFindingClosures.\",\"blockingFindings\":[]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_run_complete_feature",
+			"flow_plan_apply",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"needs_fix",
+			"reviewFindingClosures",
+			"fixRefs",
+			"testRefs",
+			"validationRefs",
+			"residualRisk"
+		],
+		"forbiddenResponseSnippets": [
+			"status\\\":\\\"approved",
+			"fine to advance",
+			"without reviewFindingClosures"
+		],
+		"nextStepSnippets": ["Record reviewFindingClosures", "targeted validation"],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
 		"id": "control-status-is-read-only",
 		"mode": "flow-control",
 		"title": "Control mode status request is read-only and stops after summary",
@@ -635,7 +773,7 @@
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Phase: start — call flow_auto_prepare to classify the request before repo inspection. Phase: planning — call flow_plan_start, gather repo evidence, and persist planningJson before flow_plan_apply and flow_plan_approve. Phase: execution — call flow_run_start and focus the active feature. Phase: validation — run targeted validation and report pass/fail evidence. Phase: review — call flow_review_record_feature after reviewer approval. Progress updates stay outside workerJson, decisionJson, reviewer decisions, and finalReview fields. Next step: follow the runtime next step.",
+		"modelOutput": "Phase: start \u2014 call flow_auto_prepare to classify the request before repo inspection. Phase: planning \u2014 call flow_plan_start, gather repo evidence, and persist planningJson before flow_plan_apply and flow_plan_approve. Phase: execution \u2014 call flow_run_start and focus the active feature. Phase: validation \u2014 run targeted validation and report pass/fail evidence. Phase: review \u2014 call flow_review_record_feature after reviewer approval. Progress updates stay outside workerJson, decisionJson, reviewer decisions, and finalReview fields. Next step: follow the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_auto_prepare",
@@ -671,7 +809,7 @@
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Phase: execution — call flow_run_start and implement the selected feature. Phase: validation — run targeted validation and summarize the evidence before review. Phase: review — call flow_review_record_feature with decisionJson after approval, then call flow_run_complete_feature with workerJson. Progress updates are assistant prose only and stay outside workerJson, decisionJson, reviewer decisions, and finalReview fields. Next step: report the runtime next step.",
+		"modelOutput": "Phase: execution \u2014 call flow_run_start and implement the selected feature. Phase: validation \u2014 run targeted validation and summarize the evidence before review. Phase: review \u2014 call flow_review_record_feature with decisionJson after approval, then call flow_run_complete_feature with workerJson. Progress updates are assistant prose only and stay outside workerJson, decisionJson, reviewer decisions, and finalReview fields. Next step: report the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",

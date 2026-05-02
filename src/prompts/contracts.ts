@@ -63,6 +63,7 @@ const FLOW_WORKER_CONTRACT_BASE = `Return exactly one JSON object that matches t
 - artifactsChanged: { path, kind? }[]
 - validationRun: { command, status: passed | failed | failed_existing | partial, summary }[]
 - decisions: { summary }[]
+- reviewFindingClosures?: { findingRef, status: closed | partially_closed | not_closed | blocked, fixRefs: string[], testRefs: string[], validationRefs: string[], residualRisk }[]
 - nextStep: string
 - reviewIterations?: number
 - validationScope?: targeted | broad
@@ -82,7 +83,9 @@ Status rules:
 - finalReview.evidenceRefs.changedArtifacts must reference actual artifactsChanged paths, and finalReview.evidenceRefs.validationCommands must reference actual validationRun commands from the current run
 - finalReview.reviewedSurfaces must cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
-- treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending`;
+- treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending
+- for review_and_fix work, include reviewFindingClosures before claiming success; each original finding must have a stable findingRef, status, code fixRefs, testRefs, validationRefs that match validationRun.command values, and residualRisk
+- do not mark a finding closed unless fixRefs, testRefs, and validationRefs all identify concrete evidence; use status: needs_input with partially_closed, not_closed, or blocked closure entries when evidence is incomplete`;
 
 export const FLOW_WORKER_CONTRACT = `${FLOW_WORKER_CONTRACT_BASE}
 
@@ -91,7 +94,7 @@ Output examples:
 ${renderExampleBlocks([
 	{
 		name: "ok-completed",
-		body: `{"contractVersion":"1","status":"ok","summary":"Completed feature safely.","artifactsChanged":[{"path":"src/prompts/agents.ts"}],"validationRun":[{"command":"bun test tests/config/prompt-contracts.test.ts","status":"passed","summary":"Prompt contract checks passed."}],"decisions":[{"summary":"Kept runtime-owned semantics unchanged."}],"nextStep":"Ask flow-reviewer to confirm the next feature or final completion path.","reviewIterations":1,"validationScope":"targeted","featureResult":{"featureId":"improve-prompts","verificationStatus":"passed"},"featureReview":{"status":"passed","summary":"No blocking findings.","blockingFindings":[]},"outcome":{"kind":"completed"}}`,
+		body: `{"contractVersion":"1","status":"ok","summary":"Completed feature safely.","artifactsChanged":[{"path":"src/prompts/agents.ts"}],"validationRun":[{"command":"bun test tests/config/prompt-contracts.test.ts","status":"passed","summary":"Prompt contract checks passed."}],"decisions":[{"summary":"Kept runtime-owned semantics unchanged."}],"reviewFindingClosures":[{"findingRef":"review: prompt contract omitted validation evidence","status":"closed","fixRefs":["src/prompts/contracts.ts"],"testRefs":["tests/config/prompt-contracts.test.ts"],"validationRefs":["bun test tests/config/prompt-contracts.test.ts"],"residualRisk":"No known residual risk."}],"nextStep":"Ask flow-reviewer to confirm the next feature or final completion path.","reviewIterations":1,"validationScope":"targeted","featureResult":{"featureId":"improve-prompts","verificationStatus":"passed"},"featureReview":{"status":"passed","summary":"No blocking findings.","blockingFindings":[]},"outcome":{"kind":"completed"}}`,
 	},
 	{
 		name: "needs-input-replan",
@@ -124,6 +127,7 @@ Reviewer rules:
 - return approved only when the current feature is clean enough to advance
 - return needs_fix when implementation should continue on the same feature
 - return blocked only for real external blockers or required human decisions
+- for review-fix work, return needs_fix when the worker omits reviewFindingClosures, omits any original finding from the closure ledger, marks a finding closed without code/test/validation evidence, or cites validation that was not actually recorded
 - treat release hygiene as part of maintainability review: return needs_fix if release-bound source or build artifacts contain raw console calls, debugger statements, or undocumented debug-only instrumentation, if an intentional operator/observability signal was deleted without evidence of an equivalent logger, telemetry, or stdout/stderr replacement preserving severity, message intent, and key context, or if a new logging or telemetry dependency was added without explicit approval
 - for scope: feature, include the active featureId and use reviewPurpose execution_gate
 - for scope: final, use reviewPurpose completion_gate

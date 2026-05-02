@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.60] - 2026-05-03
+
+Close review findings with runtime evidence
+
+Flow 1.0.60 turns the review-remediation lesson from the Soft Focus investigation into a runtime and prompt contract. Worker results can now carry a `reviewFindingClosures` ledger that maps each reviewed finding to fix references, test references, validation commands, and residual risk. Flow persists that ledger into execution history and renders it in feature docs so review-fix claims are inspectable after the run instead of disappearing into generic decisions.
+
+The completion gate now enforces the ledger for `review_and_fix` sessions. Successful review-fix completion requires closure evidence, requires every closure to be `closed`, requires closed findings to name fix/test/validation evidence, and rejects validation references that were not recorded in the current `validationRun`. Prompt contracts and behavior evals now train workers to produce the ledger and reviewers to reject missing or unsupported closure claims.
+
+The release also clarifies the operator boundary around parked sessions and standalone review. History/show responses label stored non-completed sessions as parked/inactive and warn that direct work outside Flow will not update runtime state, reviewer records, validation records, or completion artifacts. README now documents that `/flow-review` is read-only and that direct Codex/RepoPrompt follow-up fixes bypass Flow runtime records unless remediation proceeds through Flow execution gates. A superseded complexity-reduction investigation note was removed so the current docs do not keep stale maintenance guidance alongside the newer review-remediation contract.
+
+Constraint: Preserve existing command names, tool names, state paths, package API, and dependency versions while adding review-fix evidence accounting
+Constraint: Keep `reviewFindingClosures` additive for ordinary implementation sessions and enforce it only where `goalMode` is `review_and_fix`
+Rejected: Infer exact original-finding coverage from the latest reviewer projection | reviewer decisions can be overwritten by later approval, so exact all-finding matching needs a first-class original-finding store
+Rejected: Allow `partially_closed` or `blocked` closure entries on `status: ok` review-fix completion | successful completion should mean every listed finding is closed; unresolved entries belong in `needs_input` or continued work
+Rejected: Treat stale parked session docs as proof of runtime corruption | the actionable fix is clearer parked-session UX and bypass-boundary documentation
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: When changing review remediation, keep the closure ledger tied to code/test/validation evidence and do not let `review_and_fix` completion pass with unresolved findings
+Tested: `bun run lint`; `bun run typecheck`; `bun run eval:prompt-capture:check`; targeted runtime, prompt, and operator-history tests; Oracle review found one review-fix closure-status gap and minor assertion/parked-flag improvements, all fixed; `bun run test -- --timeout 30000` with 445 passing tests; `bun run build`; `bun run check`
+Not-tested: Live GitHub-hosted `ci.yml` and `release.yml` runs for tag `v1.0.60` before push
+
 ## [1.0.59] - 2026-05-02
 
 Ground Flow planning in cached stack standards evidence

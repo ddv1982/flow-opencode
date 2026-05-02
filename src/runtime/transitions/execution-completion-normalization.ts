@@ -39,17 +39,28 @@ export type NormalizedFinalReview = Omit<
 	>;
 };
 
+export type NormalizedReviewFindingClosure = Omit<
+	NonNullable<WorkerResultArgs["reviewFindingClosures"]>[number],
+	"fixRefs" | "testRefs" | "validationRefs"
+> & {
+	fixRefs: string[];
+	testRefs: string[];
+	validationRefs: string[];
+};
+
 export type NormalizedWorkerResultBase = Omit<
 	WorkerResultArgs,
 	| "artifactsChanged"
 	| "validationRun"
 	| "decisions"
+	| "reviewFindingClosures"
 	| "featureReview"
 	| "finalReview"
 > & {
 	artifactsChanged: NonNullable<WorkerResultArgs["artifactsChanged"]>;
 	validationRun: NonNullable<WorkerResultArgs["validationRun"]>;
 	decisions: NonNullable<WorkerResultArgs["decisions"]>;
+	reviewFindingClosures: NormalizedReviewFindingClosure[];
 	featureReview: NormalizedReview;
 	finalReview: NormalizedFinalReview | undefined;
 };
@@ -99,6 +110,17 @@ function normalizeFinalReview(
 	};
 }
 
+function normalizeReviewFindingClosures(
+	closures: NonNullable<WorkerResultArgs["reviewFindingClosures"]> | undefined,
+): NormalizedReviewFindingClosure[] {
+	return (closures ?? []).map((closure) => ({
+		...closure,
+		fixRefs: closure.fixRefs ?? [],
+		testRefs: closure.testRefs ?? [],
+		validationRefs: closure.validationRefs ?? [],
+	}));
+}
+
 export function normalizeWorkerResult(
 	worker: WorkerResultArgs,
 ): NormalizedWorkerResult {
@@ -107,6 +129,9 @@ export function normalizeWorkerResult(
 		artifactsChanged: worker.artifactsChanged ?? [],
 		validationRun: worker.validationRun ?? [],
 		decisions: worker.decisions ?? [],
+		reviewFindingClosures: normalizeReviewFindingClosures(
+			worker.reviewFindingClosures,
+		),
 		featureReview: normalizeReview(worker.featureReview),
 		finalReview: worker.finalReview
 			? normalizeFinalReview(worker.finalReview)
@@ -184,6 +209,7 @@ export function recordWorkerResult(
 					validationRun: worker.validationRun,
 					artifactsChanged: worker.artifactsChanged,
 					decisions: worker.decisions,
+					reviewFindingClosures: worker.reviewFindingClosures,
 					featureResult: worker.featureResult,
 					replanRecord: replanRecord ?? undefined,
 					reviewerDecision: session.execution.lastReviewerDecision,

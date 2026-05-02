@@ -41,6 +41,19 @@ function renderFeatureHistory(session: Session, feature: Feature): string {
 				entry.decisions.map((item) => item.summary),
 				"####",
 			),
+			maybeTitledList(
+				"Review Finding Closures",
+				entry.reviewFindingClosures.map((item) =>
+					[
+						`${item.status} | ${toInlineText(item.findingRef)}`,
+						`fix: ${item.fixRefs.map(toInlineText).join(", ") || "none"}`,
+						`tests: ${item.testRefs.map(toInlineText).join(", ") || "none"}`,
+						`validation: ${item.validationRefs.map(toInlineText).join(", ") || "none"}`,
+						`residual risk: ${toInlineText(item.residualRisk)}`,
+					].join(" | "),
+				),
+				"####",
+			),
 			entry.reviewerDecision
 				? maybeTitledList(
 						"Reviewer Decision",

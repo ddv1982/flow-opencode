@@ -276,6 +276,16 @@ describe("runtime worker result contracts", () => {
 			validationScope: "broad",
 			reviewIterations: 2,
 			decisions: [{ summary: "Stopped before unsafe completion." }],
+			reviewFindingClosures: [
+				{
+					findingRef: "review: unsafe migration timing",
+					status: "blocked",
+					fixRefs: [],
+					testRefs: [],
+					validationRefs: ["bun test"],
+					residualRisk: "Rollout timing still needs operator approval.",
+				},
+			],
 			nextStep: "Ask the operator to confirm migration timing.",
 			outcome: {
 				kind: "needs_operator_input",
@@ -338,5 +348,9 @@ describe("runtime worker result contracts", () => {
 		expect(result.value.execution.history.at(-1)?.finalReview?.status).toBe(
 			"needs_followup",
 		);
+		expect(
+			result.value.execution.history.at(-1)?.reviewFindingClosures?.[0]
+				?.findingRef,
+		).toBe("review: unsafe migration timing");
 	});
 });

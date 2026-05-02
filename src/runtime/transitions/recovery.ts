@@ -6,6 +6,7 @@ export type CompletionRecoveryKind =
 	| "failing_validation"
 	| "missing_reviewer_decision"
 	| "missing_validation_scope"
+	| "missing_review_closure"
 	| "failing_feature_review"
 	| "missing_final_review"
 	| "failing_final_review";
@@ -171,6 +172,20 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 				retryable: true,
 				autoResolvable: true,
 			},
+		},
+	},
+	missing_review_closure: {
+		mode: "status",
+		recovery: {
+			errorCode: "missing_review_finding_closure",
+			resolutionHint:
+				"Record a reviewFindingClosures ledger that maps each remediated finding to fix, test, validation evidence, and residual risk, then retry completion.",
+			recoveryStage: "retry_completion",
+			prerequisite: "completion_payload_rebuild_required",
+			requiredArtifact: "review_finding_closure_ledger",
+			nextCommand: FLOW_STATUS_COMMAND,
+			retryable: true,
+			autoResolvable: true,
 		},
 	},
 	failing_feature_review: {

@@ -33,6 +33,42 @@ function isValidationPassing(
 	);
 }
 
+function reviewFindingClosureFailureMessage(
+	worker: NormalizedWorkerResult,
+): string | null {
+	if (worker.reviewFindingClosures.length === 0) {
+		return "Worker result cannot complete review-and-fix work without reviewFindingClosures evidence.";
+	}
+
+	const validationCommands = new Set(
+		worker.validationRun.map((item) => item.command),
+	);
+	for (const [index, closure] of worker.reviewFindingClosures.entries()) {
+		const label = `reviewFindingClosures[${index}]`;
+		if (closure.status !== "closed") {
+			return `Worker result cannot complete review-and-fix work while ${label} is '${closure.status}'. Return needs_input or continue fixing until every finding is closed.`;
+		}
+		if (closure.status === "closed") {
+			if (closure.fixRefs.length === 0) {
+				return `Worker result cannot close ${label} without fixRefs evidence.`;
+			}
+			if (closure.testRefs.length === 0) {
+				return `Worker result cannot close ${label} without testRefs evidence.`;
+			}
+			if (closure.validationRefs.length === 0) {
+				return `Worker result cannot close ${label} without validationRefs evidence.`;
+			}
+		}
+		for (const validationRef of closure.validationRefs) {
+			if (!validationCommands.has(validationRef)) {
+				return `Worker result cannot complete because ${label}.validationRefs includes '${validationRef}', which was not recorded in validationRun.`;
+			}
+		}
+	}
+
+	return null;
+}
+
 function hasApprovedReviewerDecision(
 	session: Session,
 	worker: NormalizedWorkerResult,
@@ -151,6 +187,20 @@ export function validateNormalizedSuccessfulCompletion(
 			"Worker result cannot complete the feature because validation did not fully pass.",
 			buildCompletionRecovery(featureId, wasFinalFeature, "failing_validation"),
 		);
+	}
+
+	if (session.plan?.goalMode === "review_and_fix") {
+		const closureFailure = reviewFindingClosureFailureMessage(normalizedWorker);
+		if (closureFailure) {
+			return fail(
+				closureFailure,
+				buildCompletionRecovery(
+					featureId,
+					wasFinalFeature,
+					"missing_review_closure",
+				),
+			);
+		}
 	}
 
 	if (!wasFinalFeature) {

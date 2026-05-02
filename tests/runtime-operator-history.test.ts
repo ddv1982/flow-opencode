@@ -90,6 +90,8 @@ describe("runtime operator history and session lifecycle", () => {
 
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toContain("2 Flow session entries");
+		expect(parsed.summary).toContain("1 stored/1 parked");
+		expect(parsed.warning).toContain("parked/inactive snapshots");
 		expect(parsed.history.activeSessionId).toBeNull();
 		expect(parsed.history.active).toBeNull();
 		expect(parsed.history.stored).toHaveLength(1);
@@ -123,8 +125,14 @@ describe("runtime operator history and session lifecycle", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ok");
+		expect(parsed.summary).toBe(`Showing parked Flow session '${first.id}'.`);
 		expect(parsed.source).toBe("stored");
 		expect(parsed.active).toBe(false);
+		expect(parsed.parked).toBe(true);
+		expect(parsed.warning).toContain("parked/inactive");
+		expect(parsed.warning).toContain(
+			"Direct work outside Flow will not update",
+		);
 		expect(parsed.path).toBe(`.flow/stored/${first.id}`);
 		expect(parsed.completedPath).toBeNull();
 		expect(parsed.phase).toBe("planning");

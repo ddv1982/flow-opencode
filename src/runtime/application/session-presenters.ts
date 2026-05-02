@@ -34,6 +34,14 @@ function storedSessionGuidance(
 	};
 }
 
+function storedSessionInactiveWarning(
+	found: NonNullable<StoredSessionRecord>,
+): string | null {
+	return found.source === "stored" && found.session.status !== "completed"
+		? "Stored session is parked/inactive; activate it before continuing. Direct work outside Flow will not update this session's runtime state, reviewer records, validation records, or completion artifacts."
+		: null;
+}
+
 export function missingStoredSessionResponse(
 	sessionId: string,
 	nextCommand: string,
@@ -56,10 +64,14 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 	const activeCount = history.active ? 1 : 0;
 	const totalCount =
 		activeCount + history.stored.length + history.completed.length;
+	const parkedCount = history.stored.filter(
+		(session) => session.status !== "completed",
+	).length;
 	const metadata = {
 		totalCount,
 		activeCount,
 		storedCount: history.stored.length,
+		parkedCount,
 		completedCount: history.completed.length,
 	};
 	if (totalCount === 0) {
@@ -84,8 +96,14 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 	return {
 		payload: toJson({
 			status: "ok",
-			summary: `Found ${totalCount} Flow session ${totalCount === 1 ? "entry" : "entries"} (${activeCount} active, ${history.stored.length} stored, ${history.completed.length} completed).`,
+			summary: `Found ${totalCount} Flow session ${totalCount === 1 ? "entry" : "entries"} (${activeCount} active, ${history.stored.length} stored/${parkedCount} parked, ${history.completed.length} completed).`,
 			history,
+			...(parkedCount > 0
+				? {
+						warning:
+							"Stored non-completed sessions are parked/inactive snapshots. Activate a stored session before continuing it; direct work outside Flow will not update its runtime records.",
+					}
+				: {}),
 			nextCommand,
 		}),
 		metadata,
@@ -104,11 +122,18 @@ export function storedSessionResponse(
 	const historySession = found.active
 		? summarizedSession
 		: { ...summarizedSession, nextCommand };
+	const inactiveWarning = storedSessionInactiveWarning(found);
 	return toJson({
 		status: "ok",
-		summary: `Showing ${found.source} Flow session '${sessionId}'.`,
+		summary: inactiveWarning
+			? `Showing parked Flow session '${sessionId}'.`
+			: `Showing ${found.source} Flow session '${sessionId}'.`,
 		source: found.source,
 		active: found.active,
+		parked:
+			found.source === "stored" &&
+			!found.active &&
+			found.session.status !== "completed",
 		path: found.path,
 		completedPath: found.completedPath ?? null,
 		completedAt: found.completedAt ?? null,
@@ -121,6 +146,7 @@ export function storedSessionResponse(
 		reason: guidance.reason,
 		session: historySession,
 		guidance,
+		...(inactiveWarning ? { warning: inactiveWarning } : {}),
 		operatorSummary: renderSessionStatusSummary(found.session, {
 			nextCommand: guidance.nextCommand,
 			nextStep: guidance.nextStep,

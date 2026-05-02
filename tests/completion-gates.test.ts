@@ -17,6 +17,7 @@ import { samplePlan } from "./runtime-test-helpers";
 function createStartedSession(options?: {
 	finalFeature?: boolean;
 	finalReviewPolicy?: "broad" | "detailed";
+	goalMode?: "implementation" | "review" | "review_and_fix";
 	reviewerDecision?: Session["execution"]["lastReviewerDecision"];
 }): {
 	session: Session;
@@ -28,6 +29,7 @@ function createStartedSession(options?: {
 	const plan = finalFeature
 		? {
 				...basePlan,
+				...(options?.goalMode ? { goalMode: options.goalMode } : {}),
 				completionPolicy: {
 					minCompletedFeatures: 1,
 				},
@@ -36,7 +38,10 @@ function createStartedSession(options?: {
 					: undefined,
 				features: [basePlan.features[0]],
 			}
-		: basePlan;
+		: {
+				...basePlan,
+				...(options?.goalMode ? { goalMode: options.goalMode } : {}),
+			};
 
 	const applied = applyPlan(createSession("Build a workflow plugin"), plan);
 	expect(applied.ok).toBe(true);
@@ -144,6 +149,22 @@ function createWorkerResult(
 	return result;
 }
 
+function closedReviewFindingClosure(
+	overrides: Partial<
+		NonNullable<WorkerResult["reviewFindingClosures"]>[number]
+	> = {},
+): NonNullable<WorkerResult["reviewFindingClosures"]>[number] {
+	return {
+		findingRef: "review: navigation failure was swallowed",
+		status: "closed",
+		fixRefs: ["src/game/navigation.ts:42"],
+		testRefs: ["tests/fullFlowSmoke.ts:123"],
+		validationRefs: ["bun test"],
+		residualRisk: "No known residual risk.",
+		...overrides,
+	};
+}
+
 describe("completion gates", () => {
 	test.each([
 		{
@@ -179,6 +200,77 @@ describe("completion gates", () => {
 			setup: () => createStartedSession(),
 			worker: (featureId: string) => createWorkerResult(featureId),
 			expectedErrorCode: "missing_feature_reviewer_decision",
+		},
+		{
+			name: "review-and-fix completion missing closure ledger",
+			setup: () =>
+				createStartedSession({
+					goalMode: "review_and_fix",
+					reviewerDecision: approvedFeatureDecision(),
+				}),
+			worker: (featureId: string) => createWorkerResult(featureId),
+			expectedErrorCode: "missing_review_finding_closure",
+		},
+		{
+			name: "review-and-fix closed finding missing fix evidence",
+			setup: () =>
+				createStartedSession({
+					goalMode: "review_and_fix",
+					reviewerDecision: approvedFeatureDecision(),
+				}),
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					reviewFindingClosures: [closedReviewFindingClosure({ fixRefs: [] })],
+				}),
+			expectedErrorCode: "missing_review_finding_closure",
+		},
+		{
+			name: "review-and-fix closure references unrecorded validation",
+			setup: () =>
+				createStartedSession({
+					goalMode: "review_and_fix",
+					reviewerDecision: approvedFeatureDecision(),
+				}),
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					reviewFindingClosures: [
+						closedReviewFindingClosure({
+							validationRefs: ["bun run validate"],
+						}),
+					],
+				}),
+			expectedErrorCode: "missing_review_finding_closure",
+		},
+		{
+			name: "review-and-fix cannot complete with unresolved closure status",
+			setup: () =>
+				createStartedSession({
+					goalMode: "review_and_fix",
+					reviewerDecision: approvedFeatureDecision(),
+				}),
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					reviewFindingClosures: [
+						closedReviewFindingClosure({
+							status: "partially_closed",
+							residualRisk: "Ordering coverage still needs a stronger oracle.",
+						}),
+					],
+				}),
+			expectedErrorCode: "missing_review_finding_closure",
+		},
+		{
+			name: "review-and-fix closure ledger satisfies completion gate",
+			expectedOk: true,
+			setup: () =>
+				createStartedSession({
+					goalMode: "review_and_fix",
+					reviewerDecision: approvedFeatureDecision(),
+				}),
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					reviewFindingClosures: [closedReviewFindingClosure()],
+				}),
 		},
 		{
 			name: "lite lane final completion still requires a recorded final reviewer decision",

@@ -16,6 +16,7 @@ import {
 	OUTCOME_KINDS,
 	PRIORITY_MODES,
 	REPLAN_REASONS,
+	REVIEW_FINDING_CLOSURE_STATUSES,
 	REVIEW_PURPOSES,
 	REVIEW_STATUSES,
 	REVIEWER_DECISION_STATUSES,
@@ -141,6 +142,17 @@ export const FollowUpSchema = z.object({
 	severity: z.string().min(1).optional(),
 });
 
+export const ReviewFindingClosureSchema = z
+	.object({
+		findingRef: z.string().min(1),
+		status: z.enum(REVIEW_FINDING_CLOSURE_STATUSES),
+		fixRefs: z.array(z.string().min(1)).default([]),
+		testRefs: z.array(z.string().min(1)).default([]),
+		validationRefs: z.array(z.string().min(1)).default([]),
+		residualRisk: z.string().min(1),
+	})
+	.strict();
+
 export const ReviewFindingSchema = z.object({
 	summary: z.string().min(1),
 });
@@ -236,6 +248,7 @@ export const WorkerResultBaseSchema = z.object({
 	validationScope: z.enum(VALIDATION_SCOPES).optional(),
 	reviewIterations: z.number().int().nonnegative().optional(),
 	decisions: z.array(DecisionSchema).default([]),
+	reviewFindingClosures: z.array(ReviewFindingClosureSchema).optional(),
 	nextStep: z.string().min(1),
 	featureResult: FeatureResultSchema,
 	featureReview: ReviewSchema,
@@ -427,6 +440,7 @@ export const ExecutionHistoryEntrySchema = z.object({
 	validationRun: z.array(ValidationRunSchema).default([]),
 	artifactsChanged: z.array(ArtifactSchema).default([]),
 	decisions: z.array(DecisionSchema).default([]),
+	reviewFindingClosures: z.array(ReviewFindingClosureSchema).default([]),
 	featureResult: FeatureResultSchema.optional(),
 	replanRecord: ReplanRecordSchema.optional(),
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
