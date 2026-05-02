@@ -124,7 +124,7 @@ describe("installer", () => {
 		).rejects.toThrow("Run `bun run build` first");
 	});
 
-	test("installBuiltPlugin refuses to overwrite an unowned existing flow.js", async () => {
+	test("installBuiltPlugin overwrites an existing flow.js and marks it as Flow-managed", async () => {
 		const sourceRoot = makeTempDir();
 		const targetRoot = makeTempDir();
 		const sourceFile = await writeBuiltPlugin(sourceRoot, "flow-build\n");
@@ -136,11 +136,22 @@ describe("installer", () => {
 			FLOW_PLUGIN_FILENAME,
 		);
 		await mkdir(join(destinationFile, ".."), { recursive: true });
-		await writeFile(destinationFile, "// someone else\n", "utf8");
+		await writeFile(
+			destinationFile,
+			"// stale or third-party flow.js\n",
+			"utf8",
+		);
 
-		await expect(
-			installBuiltPlugin({ sourceFile, destinationFile }),
-		).rejects.toThrow("Refusing to overwrite existing non-Flow plugin");
+		const installedPath = await installBuiltPlugin({
+			sourceFile,
+			destinationFile,
+			logger: () => {},
+		});
+
+		expect(installedPath).toBe(destinationFile);
+		expect(await readFile(destinationFile, "utf8")).toBe(
+			`${FLOW_PLUGIN_OWNERSHIP_HEADER}flow-build\n`,
+		);
 	});
 
 	test("runUninstallCommand removes the installed canonical plugin file", async () => {

@@ -13,17 +13,7 @@ DOWNLOAD_URL="${FLOW_RELEASE_DOWNLOAD_URL:-$DEFAULT_DOWNLOAD_URL}"
 CANONICAL_PLUGIN_PATH="${HOME}/.config/opencode/plugins/flow.js"
 FLOW_OWNERSHIP_HEADER='// Managed by flow-opencode install/uninstall'
 
-is_flow_managed_plugin() {
-  local file="$1"
-  head -n 1 "$file" | grep -Fq "$FLOW_OWNERSHIP_HEADER"
-}
-
 mkdir -p "$(dirname "$CANONICAL_PLUGIN_PATH")"
-if [[ -f "$CANONICAL_PLUGIN_PATH" ]] && ! is_flow_managed_plugin "$CANONICAL_PLUGIN_PATH"; then
-  echo "Refusing to overwrite existing non-Flow plugin at ${CANONICAL_PLUGIN_PATH}. Remove it manually first." >&2
-  exit 1
-fi
-
 download_path="$(mktemp "${CANONICAL_PLUGIN_PATH}.download.XXXXXX")"
 managed_path="$(mktemp "${CANONICAL_PLUGIN_PATH}.managed.XXXXXX")"
 cleanup() {

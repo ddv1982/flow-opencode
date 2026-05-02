@@ -83,13 +83,6 @@ export async function installBuiltPlugin({
 	await assertSourceFileExists(sourceFile);
 	await mkdir(dirname(destinationFile), { recursive: true });
 
-	const existing = await readInstalledPluginMarker(destinationFile);
-	if (existing.exists && !existing.managedByFlow) {
-		throw new Error(
-			`Refusing to overwrite existing non-Flow plugin at ${destinationFile}. Remove it manually first.`,
-		);
-	}
-
 	const pluginContent = await readFile(sourceFile, "utf8");
 	const managedContent = pluginContent.startsWith(FLOW_PLUGIN_OWNERSHIP_HEADER)
 		? pluginContent

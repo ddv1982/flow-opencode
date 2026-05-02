@@ -149,14 +149,14 @@ afterEach(() => {
 });
 
 describe("cross-area install lifecycle", () => {
-	test("release scripts refuse to overwrite or remove unowned flow.js", async () => {
+	test("release scripts overwrite existing flow.js on install but still refuse to remove unowned files", async () => {
 		const tempRoot = makeTempDir("flow-install-lifecycle-");
 		const homeDir = join(tempRoot, "home");
 		const binDir = join(tempRoot, "bin");
 		mkdirSync(homeDir, { recursive: true });
 		mkdirSync(binDir, { recursive: true });
 
-		writeCurlStub(binDir, "export default 'not-used';\n");
+		writeCurlStub(binDir, "export default 'installed-flow';\n");
 		const installScript = copyScriptToTemp("release-install.sh", tempRoot);
 		const uninstallScript = copyScriptToTemp("release-uninstall.sh", tempRoot);
 		const canonicalPath = join(
@@ -170,11 +170,12 @@ describe("cross-area install lifecycle", () => {
 		writeFileSync(canonicalPath, "// third-party plugin\n");
 
 		const installResult = await runScript(installScript, homeDir, binDir);
-		expect(installResult.exitCode).toBe(1);
-		expect(installResult.stderr).toContain(
-			"Refusing to overwrite existing non-Flow plugin",
+		expect(installResult.exitCode).toBe(0);
+		expect(readFileSync(canonicalPath, "utf8")).toBe(
+			"// Managed by flow-opencode install/uninstall\nexport default 'installed-flow';\n",
 		);
 
+		writeFileSync(canonicalPath, "// third-party plugin\n");
 		const uninstallResult = await runScript(uninstallScript, homeDir, binDir);
 		expect(uninstallResult.exitCode).toBe(1);
 		expect(uninstallResult.stderr).toContain(
