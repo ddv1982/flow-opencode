@@ -39,7 +39,7 @@ export const FLOW_RUNTIME_STATE_TRANSITION_RULE =
 export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =
 	"- Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.";
 export const FLOW_TASK_HANDOFF_RULE =
-	"- When OpenCode task/subagent invocation is available, use the Task tool to hand bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer so each role works in a fresh child context and reports back with its artifacts, validation, and blockers. Those handoffs do not replace runtime ownership: persist state changes only through Flow runtime tools and never edit .flow files directly.";
+	"- When OpenCode task/subagent invocation is available, use the Task tool to hand bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer so each role works in a fresh child context and reports back with artifacts, validation, and blockers. Handoffs do not replace runtime ownership: persist state changes only through Flow runtime tools and never edit .flow files directly.";
 export const FLOW_WORKER_REVIEW_TASK_RULE =
 	"- When OpenCode task/subagent invocation is available, ask flow-reviewer through the Task tool for an independent review in a fresh child context instead of performing the approval gate in the same worker context.";
 export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =

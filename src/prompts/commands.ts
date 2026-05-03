@@ -41,7 +41,7 @@ Normalize it into:
 - Constraints
 - Done when
 
-If a field is missing, rely on runtime rules instead of inventing extra scope.`;
+If a field is missing, rely on runtime rules instead of inventing scope.`;
 
 const FLOW_PLAN_COMMAND_EXAMPLES = renderExampleBlocks([
 	{
@@ -50,7 +50,7 @@ const FLOW_PLAN_COMMAND_EXAMPLES = renderExampleBlocks([
 	},
 	{
 		name: "approve-or-select",
-		body: `If the arguments start with approve or select, treat the remaining tokens as feature ids instead of a new planning goal.`,
+		body: `If the arguments start with approve or select, treat remaining tokens as feature ids instead of a new planning goal.`,
 	},
 ]);
 
@@ -64,7 +64,7 @@ const FLOW_RUN_COMMAND_EXAMPLES = renderExampleBlocks([
 const FLOW_AUTO_COMMAND_EXAMPLES = renderExampleBlocks([
 	{
 		name: "resume-only",
-		body: `If the arguments are empty or resume, resume the active session only. If no active session exists, stop and request a goal.`,
+		body: `If arguments are empty or resume, resume the active session only. If no active session exists, stop and request a goal.`,
 	},
 	{
 		name: "decision-gate",

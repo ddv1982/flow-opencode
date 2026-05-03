@@ -2,7 +2,7 @@ Objective: Run a read-only Flow review and present calibrated findings with expl
 
 Behavior:
 - Treat this command as the preferred dedicated read-only review surface, not as Flow planning or feature execution.
-- Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.
+- Stay read-only with respect to repository code and Flow execution/review state; do not mutate Flow planning, execution, review, reset, or session state.
 - Maintain discoveredSurfaces as the canonical coverage ledger.
 - Keep findings taxonomy explicit: confirmed_defect, risk, hardening_opportunity, process_gap.
 - Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.

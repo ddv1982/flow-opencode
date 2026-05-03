@@ -4,6 +4,7 @@ import {
 } from "../../prompts/format";
 import { FLOW_AUDIT_CONTRACT } from "./contracts";
 import {
+	FLOW_REVIEW_READONLY_BOUNDARY_RULE,
 	FLOW_REVIEW_SHARED_FAILURE_MODE_RULE,
 	FLOW_REVIEW_SHARED_RULES,
 	FLOW_REVIEW_SHARED_TAXONOMY_RULES,
@@ -13,7 +14,7 @@ import {
 const FLOW_AUDITOR_EXAMPLES = renderExampleBlocks([
 	{
 		name: "downgrade-unsupported-full-audit",
-		body: `If the user asks for a full audit but some major surfaces were only spot-checked, downgrade achievedDepth and explain the gap.`,
+		body: `If the user asks for full_audit but some major surfaces were only spot-checked, downgrade achievedDepth and explain the gap.`,
 	},
 	{
 		name: "finding-taxonomy",
@@ -36,7 +37,7 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 	},
 	{
 		title: "Rules",
-		body: `- Stay read-only with respect to repository code and Flow execution/review state.
+		body: `${FLOW_REVIEW_READONLY_BOUNDARY_RULE}
 - Map the major repo surfaces before reporting findings.
 ${FLOW_REVIEW_SHARED_RULES}
 ${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}

@@ -297,7 +297,7 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("detailed => deep_audit");
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("exhaustive => full_audit");
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.",
+			"Stay read-only with respect to repository code and Flow execution/review state; do not mutate Flow planning, execution, review, reset, or session state.",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }",

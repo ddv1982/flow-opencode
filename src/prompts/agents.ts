@@ -46,14 +46,13 @@ import {
 const FLOW_PLANNER_EXAMPLES = renderExampleBlocks([
 	{
 		name: "package-manager-ambiguity",
-		body: `- Evidence shows multiple lockfile families.
-- Record planning.packageManagerAmbiguous: true with flow_plan_context_record.
-- Prefer existing package.json scripts instead of guessing raw manager-specific commands.`,
+		body: `- If evidence shows multiple lockfile families, record planning.packageManagerAmbiguous: true with flow_plan_context_record.
+- Prefer existing package.json scripts instead of guessing manager-specific commands.`,
 	},
 	{
 		name: "broad-goal-needs-refinement",
 		body: `- Broad goals are valid.
-- If safe decomposition is still needed, use decompositionPolicy iterative_refinement or open_ended instead of inventing a fake atomic feature.`,
+- If safe decomposition is still needed, use decompositionPolicy iterative_refinement or open_ended rather than forcing a fake atomic feature.`,
 	},
 ]);
 
@@ -61,7 +60,7 @@ const FLOW_WORKER_EXAMPLES = renderExampleBlocks([
 	{
 		name: "clean-feature-completion",
 		body: `- Run the smallest relevant validation first.
-- If review is clean, persist the worker result only after flow_review_record_feature or flow_review_record_final requirements are satisfied.`,
+- If review is clean, persist the worker result only after satisfying flow_review_record_feature or flow_review_record_final requirements.`,
 	},
 	{
 		name: "scope-too-broad",
@@ -87,7 +86,7 @@ const FLOW_REVIEWER_EXAMPLES = renderExampleBlocks([
 	},
 	{
 		name: "needs-fix",
-		body: `- Return needs_fix when the same feature should continue through another fix/validate/review iteration.`,
+		body: `- Return needs_fix when the same feature needs another fix/validate/review iteration.`,
 	},
 ]);
 

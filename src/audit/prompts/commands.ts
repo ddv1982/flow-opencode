@@ -1,6 +1,7 @@
 import { renderTaggedBlock } from "../../prompts/format";
 import { FLOW_AUDIT_CONTRACT } from "./contracts";
 import {
+	FLOW_REVIEW_READONLY_BOUNDARY_RULE,
 	FLOW_REVIEW_SHARED_FAILURE_MODE_RULE,
 	FLOW_REVIEW_SHARED_RENDER_RULES,
 	FLOW_REVIEW_SHARED_RULES,
@@ -10,7 +11,7 @@ export const FLOW_REVIEW_COMMAND_TEMPLATE = `Objective: Run a read-only Flow rev
 
 Behavior:
 - Treat this command as the preferred dedicated read-only review surface, not as Flow planning or feature execution.
-- Stay read-only with respect to repository code and Flow execution/review state; do not start Flow runtime planning, execution, review, reset, or session-mutation tools.
+${FLOW_REVIEW_READONLY_BOUNDARY_RULE}
 ${FLOW_REVIEW_SHARED_RULES}
 ${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}
 - If the arguments ask for an exhaustive or full review, treat requestedDepth as full_audit.
