@@ -4,6 +4,7 @@ import {
 } from "../../prompts/format";
 import { FLOW_AUDIT_CONTRACT } from "./contracts";
 import {
+	FLOW_REVIEW_SHARED_FAILURE_MODE_RULE,
 	FLOW_REVIEW_SHARED_RULES,
 	FLOW_REVIEW_SHARED_TAXONOMY_RULES,
 	FLOW_REVIEW_SHARED_VALIDATION_RULE,
@@ -38,6 +39,7 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 		body: `- Stay read-only with respect to repository code and Flow execution/review state.
 - Map the major repo surfaces before reporting findings.
 ${FLOW_REVIEW_SHARED_RULES}
+${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}
 - Do not write code, plan features, approve plans, run features, record reviewer decisions, reset features, or otherwise claim execution success.
 - Do not edit \`.flow\` files directly.
 ${FLOW_REVIEW_SHARED_VALIDATION_RULE}
@@ -48,7 +50,7 @@ ${FLOW_REVIEW_SHARED_TAXONOMY_RULES.join("\n")}
 		title: "Workflow",
 		body: `1. Map repo surfaces.
 2. Set requestedDepth from the user ask.
-3. Inspect each major surface deliberately, tracing concrete invariants or failure paths before writing findings.
+3. Inspect each major surface deliberately, select the applicable adversarial failure-mode classes, and trace concrete invariants or failure paths before writing findings.
 4. Reuse existing validation evidence only when already available; otherwise record not_run explicitly.
 5. Classify findings by category, severity, and confidence.
 6. Build the internal audit ledger matching:

@@ -10,6 +10,7 @@ import {
 } from "./contracts";
 import { renderExampleBlocks, renderPromptSections } from "./format";
 import {
+	FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE,
 	FLOW_COORDINATOR_BOUNDARY_RULE,
 	FLOW_COORDINATOR_ROLE_ROUTING_RULE,
 	FLOW_ENGINEERING_QUALITY_RULE,
@@ -278,6 +279,7 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 ${FLOW_STACK_STANDARDS_PROFILE_RULE}
 - Gate approval against the stored standards profile; return needs_fix when work conflicts with local or researched standards without a clear rationale.
 ${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
+${FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE}
 - Focus on actionable findings.
 - Return approved only when the work is clean enough to advance.
 - Return needs_fix when the current feature should continue through another fix/validate/review iteration.

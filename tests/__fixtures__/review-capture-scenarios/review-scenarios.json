@@ -9,5 +9,16 @@
 			"This scenario intentionally asks for structured output so captured reports can be scored offline.",
 			"Run it through the plugin/model surface you want to evaluate, not through a direct API harness."
 		]
+	},
+	{
+		"id": "flow-review-adversarial-failure-modes-structured",
+		"title": "Flow review adversarial failure-mode audit",
+		"arguments": "detailed Review this codebase for adversarial failure-mode coverage across lifecycle/reentrancy, async state transitions, persistence recovery, accessibility/interaction semantics where applicable, and test-oracle authenticity. Return raw/structured JSON for eval scoring.",
+		"outputView": "structured",
+		"fileMap": "flow-opencode\n├── src\n│   ├── audit\n│   │   ├── prompts\n│   │   │   ├── commands.ts +\n│   │   │   ├── contracts.ts +\n│   │   │   └── fragments.ts +\n│   │   └── report-schema.ts +\n│   ├── prompts\n│   │   ├── agents.ts +\n│   │   ├── contracts.ts +\n│   │   └── fragments.ts +\n│   └── runtime\n│       ├── transitions\n│       │   ├── execution-completion-validation.ts +\n│       │   └── review.ts +\n│       └── domain\n│           └── final-review-coverage.ts +\n├── tests\n│   ├── prompt-behavior-eval-helpers.ts +\n│   ├── prompt-behavior-eval.test.ts +\n│   ├── review-prompt-capture.test.ts +\n│   └── runtime\n│       └── final-review-contracts.test.ts +\n└── package.json",
+		"notes": [
+			"This scenario is intentionally general: it checks whether the review challenges applicable behavior classes instead of memorizing one project-specific bug.",
+			"Promote returned ledgers that make or miss these checks into prompt-behavior eval fixtures."
+		]
 	}
 ]

@@ -92,6 +92,11 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"trace at least one concrete invariant or failure path",
 		);
+		expect(FLOW_AUDIT_CONTRACT).toContain("adversarial failure-mode classes");
+		expect(FLOW_AUDIT_CONTRACT).toContain("test surface you directly review");
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"normal product path rather than a shortcut-only setup",
+		);
 		const contractTail = FLOW_AUDIT_CONTRACT.toLowerCase();
 		expect(contractTail).not.toContain("include the returned artifact paths");
 	});
@@ -146,9 +151,16 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving",
 		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"adversarial failure-mode classes",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain("test-oracle authenticity");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Do not write code");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
 			"Return needs_fix when the current feature should continue",
+		);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
+			"Review changed behavior through applicable adversarial failure-mode classes",
 		);
 	});
 
@@ -163,6 +175,9 @@ describe("prompt and command config contracts", () => {
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"Present the final answer as a human-readable review first",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"applicable adversarial failure-mode classes",
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			'<example name="human-readable-conclusion">',

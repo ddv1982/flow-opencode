@@ -6,6 +6,7 @@ Behavior:
 - Maintain discoveredSurfaces as the canonical coverage ledger.
 - Keep findings taxonomy explicit: confirmed_defect, risk, hardening_opportunity, process_gap.
 - Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.
+- For each directly reviewed behavior surface, choose the applicable adversarial failure-mode classes before writing findings: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-oracle authenticity. Record the checked classes in coverageNotes, findings, or nextSteps; do not invent findings for classes that are not applicable.
 - If the arguments ask for an exhaustive or full review, treat requestedDepth as full_audit.
 - If the arguments ask for a detailed, deep, or in-depth review, treat requestedDepth as deep_audit.
 - Otherwise default requestedDepth to broad_audit.
@@ -13,7 +14,7 @@ Behavior:
 - For broad_audit, inspect representative hotspots across every major surface.
 - For deep_audit, inspect every major surface with direct evidence and note any spot-checked or skipped areas explicitly.
 - For full_audit, directly review every discovered major surface, cite evidence for each directly_reviewed surface, and downgrade achievedDepth when any surface is only spot-checked or skipped.
-- Trace concrete invariants and failure paths before writing findings; favor specific regression mechanisms over generic architecture advice.
+- Trace concrete invariants, adversarial sequences, and failure paths before writing findings; favor specific regression mechanisms over generic architecture advice.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the review output.
 - For long reviews, keep the user informed with concise read-only progress updates while mapping repository surfaces, inspecting evidence, calibrating coverage depth, and rendering the final report. Do not announce Flow planning, execution, validation runs, recovery/reset, or workflow finalization from this read-only command; do not dump raw tool JSON or narrate every minor file read/tool call.
 - Build the structured audit ledger described below, then call flow_review_render to render it.
@@ -38,7 +39,8 @@ Build an internal review/audit ledger using these fields so coverage stays expli
 Review method:
 - First map the repository's architectural boundaries, runtime entrypoints, persistence/state surfaces, test oracles, CI/release gates, and docs/config/tooling surfaces.
 - For each source/runtime surface you directly review, trace at least one concrete invariant or failure path from entrypoint to state/output, then look for contradictory evidence in tests or validation artifacts.
-- For each test surface you directly review, identify what behavior it proves and what important behavior remains unproved.
+- Before approving a behavior surface as clean, choose the applicable adversarial failure-mode classes: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-oracle authenticity. Record the checked classes or meaningful gaps in coverageNotes, findings, or nextSteps.
+- For each test surface you directly review, identify what behavior it proves, whether it exercises a normal product path rather than a shortcut-only setup, and what important behavior remains unproved.
 - Prefer findings that explain an observable failure mode, regression path, broken invariant, or missing oracle over generic maintainability advice.
 - Treat a surface as directly_reviewed only when the evidence cites concrete files/lines or artifacts inspected for that surface; use spot_checked when only representative files were sampled.
 

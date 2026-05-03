@@ -160,7 +160,7 @@ export function buildReviewCaptureTemplate(
 			title: scenario.title,
 			capturedFrom:
 				"Paste the model/plugin surface, model name, date, and prompt packet path here.",
-			minPassingScore: 8,
+			minPassingScore: 9,
 			modelOutput: {
 				replace: "Paste the structured review ledger JSON here.",
 			},
@@ -226,7 +226,7 @@ export async function scoreReviewCaptureFile(
 	const id = typeof raw.id === "string" ? raw.id : basename(captureFile);
 	const title = typeof raw.title === "string" ? raw.title : id;
 	const minPassingScore =
-		typeof raw.minPassingScore === "number" ? raw.minPassingScore : 8;
+		typeof raw.minPassingScore === "number" ? raw.minPassingScore : 9;
 	const modelOutput =
 		isRecord(raw) && "modelOutput" in raw ? raw.modelOutput : raw;
 	const result = scorePromptBehaviorModelOutput({

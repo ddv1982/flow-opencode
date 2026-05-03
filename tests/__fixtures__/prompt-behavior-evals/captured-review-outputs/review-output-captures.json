@@ -9,7 +9,7 @@
 			"src/audit/report-presenter.ts",
 			"tests/prompt-behavior-eval-helpers.ts"
 		],
-		"minPassingScore": 8,
+		"minPassingScore": 9,
 		"modelOutput": {
 			"requestedDepth": "full_audit",
 			"achievedDepth": "deep_audit",
@@ -48,7 +48,8 @@
 				}
 			],
 			"coverageNotes": [
-				"User requested exhaustive/full review, but achievedDepth is deep_audit because frontend UI components and frontend tests were spot-checked rather than every discovered file being directly reviewed."
+				"User requested exhaustive/full review, but achievedDepth is deep_audit because frontend UI components and frontend tests were spot-checked rather than every discovered file being directly reviewed.",
+				"Failure-mode review covered persistence/session lifetime, repeated upload backpressure, and transport test-oracle authenticity; frontend accessibility and interaction geometry remained spot-checked."
 			],
 			"validationRun": [
 				{
@@ -118,6 +119,7 @@
 			"depth_calibrated",
 			"coverage_accounted",
 			"finding_grounded",
+			"failure_modes_accounted",
 			"actionable_next_steps"
 		],
 		"modelOutput": {

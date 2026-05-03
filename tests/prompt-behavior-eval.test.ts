@@ -11,7 +11,7 @@ import {
 describe("prompt behavior eval corpus", () => {
 	test("behavior eval fixtures stay first-party and do not depend on Flow archives", async () => {
 		const corpus = readPromptBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(6);
+		expect(corpus).toHaveLength(7);
 		expect(corpus.some((item) => item.origin === "captured")).toBe(true);
 
 		const fixtureFiles = listPromptBehaviorEvalFixtureFiles();
@@ -34,13 +34,13 @@ describe("prompt behavior eval corpus", () => {
 		);
 
 		expect(byId["review-full-depth-downgrades-spot-check"]?.passed).toBe(true);
-		expect(byId["review-full-depth-downgrades-spot-check"]?.score).toBe(8);
+		expect(byId["review-full-depth-downgrades-spot-check"]?.score).toBe(9);
 		expect(byId["review-confirmed-defect-grounded"]?.passed).toBe(true);
-		expect(byId["review-confirmed-defect-grounded"]?.score).toBe(8);
+		expect(byId["review-confirmed-defect-grounded"]?.score).toBe(9);
 		expect(byId["captured-review-csv-memory-risk-calibrated"]?.passed).toBe(
 			true,
 		);
-		expect(byId["captured-review-csv-memory-risk-calibrated"]?.score).toBe(8);
+		expect(byId["captured-review-csv-memory-risk-calibrated"]?.score).toBe(9);
 
 		expect(byId["review-overclaims-full-depth"]?.passed).toBe(false);
 		expect(
@@ -50,6 +50,7 @@ describe("prompt behavior eval corpus", () => {
 		).toEqual([
 			"depth_calibrated",
 			"coverage_accounted",
+			"failure_modes_accounted",
 			"actionable_next_steps",
 		]);
 
@@ -64,8 +65,16 @@ describe("prompt behavior eval corpus", () => {
 			"depth_calibrated",
 			"coverage_accounted",
 			"finding_grounded",
+			"failure_modes_accounted",
 			"actionable_next_steps",
 		]);
+
+		expect(byId["review-misses-failure-mode-accounting"]?.passed).toBe(false);
+		expect(
+			byId["review-misses-failure-mode-accounting"]?.criteria
+				.filter((criterion) => !criterion.passed)
+				.map((criterion) => criterion.criterion),
+		).toEqual(["failure_modes_accounted"]);
 
 		expect(byId["review-ungrounded-output-rejected"]?.passed).toBe(false);
 		expect(
@@ -90,24 +99,24 @@ describe("prompt behavior eval corpus", () => {
 			readPromptBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(6);
+		expect(summary.totalCases).toBe(7);
 		expect(summary.passingCases).toBe(3);
-		expect(summary.failingCases).toBe(3);
-		expect(summary.expectationSatisfiedCases).toBe(6);
+		expect(summary.failingCases).toBe(4);
+		expect(summary.expectationSatisfiedCases).toBe(7);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(5.5, 2);
-		expect(summary.report).toContain("Prompt behavior eval corpus: 6 cases");
+		expect(summary.averageScore).toBeCloseTo(6.29, 2);
+		expect(summary.report).toContain("Prompt behavior eval corpus: 7 cases");
 		expect(summary.report).toContain(
-			"review-full-depth-downgrades-spot-check: 8/8 (quality-pass); expectation=satisfied",
+			"review-full-depth-downgrades-spot-check: 9/9 (quality-pass); expectation=satisfied",
 		);
 		expect(summary.report).toContain(
-			"review-ungrounded-output-rejected: 0/8 (quality-fail); expectation=satisfied; failed=schema_valid",
+			"review-ungrounded-output-rejected: 0/9 (quality-fail); expectation=satisfied; failed=schema_valid",
 		);
 		expect(summary.report).toContain(
-			"captured-review-overconfident-validation-gap: 4/8 (quality-fail); expectation=satisfied; failed=depth_calibrated,coverage_accounted,finding_grounded,actionable_next_steps",
+			"captured-review-overconfident-validation-gap: 4/9 (quality-fail); expectation=satisfied; failed=depth_calibrated,coverage_accounted,finding_grounded,failure_modes_accounted,actionable_next_steps",
 		);
 		expect(summary.markdownReport).toContain(
-			"| captured-review-csv-memory-risk-calibrated | captured | 8/8 | quality-pass | satisfied | — |",
+			"| captured-review-csv-memory-risk-calibrated | captured | 9/9 | quality-pass | satisfied | — |",
 		);
 		expect(summary.markdownReport).toContain("## Failed criteria details");
 	});

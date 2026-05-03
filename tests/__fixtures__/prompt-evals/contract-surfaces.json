@@ -46,7 +46,9 @@
 			"status: approved | needs_fix | blocked",
 			"return needs_fix when implementation should continue on the same feature",
 			"include reviewDepth matching deliveryPolicy.finalReviewPolicy",
-			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving"
+			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving",
+			"adversarial failure-mode classes",
+			"test-oracle authenticity"
 		],
 		"forbiddenSnippets": ["reviewer implements fixes directly"]
 	},

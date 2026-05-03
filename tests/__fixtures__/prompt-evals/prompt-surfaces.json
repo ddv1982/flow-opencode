@@ -42,7 +42,9 @@
 		"expectedSnippets": [
 			"Do not write code.",
 			"Return needs_fix when the current feature should continue",
-			"Review only for correctness"
+			"Review only for correctness",
+			"Review changed behavior through applicable adversarial failure-mode classes",
+			"test-oracle authenticity"
 		],
 		"forbiddenSnippets": ["reviewer applies code fixes directly"]
 	}

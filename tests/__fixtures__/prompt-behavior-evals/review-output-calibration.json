@@ -7,7 +7,7 @@
 			"src/audit/report-normalizer.ts",
 			"src/audit/report-presenter.ts"
 		],
-		"minPassingScore": 8,
+		"minPassingScore": 9,
 		"modelOutput": {
 			"requestedDepth": "full_audit",
 			"achievedDepth": "deep_audit",
@@ -37,7 +37,8 @@
 				}
 			],
 			"coverageNotes": [
-				"User requested exhaustive/full review, but achievedDepth is deep_audit because frontend presentational surfaces were spot-checked rather than every discovered surface being directly reviewed with evidence."
+				"User requested exhaustive/full review, but achievedDepth is deep_audit because frontend presentational surfaces were spot-checked rather than every discovered surface being directly reviewed with evidence.",
+				"Failure-mode review was limited by coverage: lifecycle/reentrancy and accessibility behavior on the spot-checked frontend surface need direct review before claiming exhaustive readiness."
 			],
 			"validationRun": [
 				{
@@ -74,6 +75,7 @@
 		"expectedFailures": [
 			"depth_calibrated",
 			"coverage_accounted",
+			"failure_modes_accounted",
 			"actionable_next_steps"
 		],
 		"modelOutput": {
@@ -117,7 +119,7 @@
 			"src/audit/report-schema.ts",
 			"src/audit/report-presenter.ts"
 		],
-		"minPassingScore": 8,
+		"minPassingScore": 9,
 		"modelOutput": {
 			"requestedDepth": "deep_audit",
 			"achievedDepth": "deep_audit",
@@ -138,7 +140,8 @@
 				}
 			],
 			"coverageNotes": [
-				"Every discovered audit-rendering surface in this focused review was directly reviewed with file references."
+				"Every discovered audit-rendering surface in this focused review was directly reviewed with file references.",
+				"Failure-mode check focused on schema/presenter contract drift and validation failure propagation; UI interaction, persistence recovery, and lifecycle reentrancy were outside this focused audit scope."
 			],
 			"validationRun": [
 				{
@@ -165,6 +168,63 @@
 			"nextSteps": [
 				"Align schema and presenter category handling.",
 				"Add a regression test that renders each supported finding category."
+			]
+		}
+	},
+	{
+		"id": "review-misses-failure-mode-accounting",
+		"title": "Otherwise grounded review is scored down when behavior failure modes are not accounted for",
+		"sourcePaths": [
+			"src/audit/prompts/contracts.ts",
+			"tests/prompt-behavior-eval-helpers.ts"
+		],
+		"minPassingScore": 9,
+		"expectedFailures": ["failure_modes_accounted"],
+		"modelOutput": {
+			"requestedDepth": "deep_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Audit prompt contracts and behavior eval helpers were reviewed.",
+			"overallVerdict": "No confirmed blocker was found, and readiness depends on the suggested regression coverage.",
+			"discoveredSurfaces": [
+				{
+					"name": "Audit prompt contract",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/audit/prompts/contracts.ts:1"]
+				},
+				{
+					"name": "Prompt behavior eval helper",
+					"category": "tests",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["tests/prompt-behavior-eval-helpers.ts:245"]
+				}
+			],
+			"coverageNotes": [
+				"Every discovered surface in this focused review was directly reviewed with first-party evidence references."
+			],
+			"validationRun": [
+				{
+					"command": "bun test tests/prompt-behavior-eval.test.ts",
+					"status": "not_run",
+					"summary": "Validation was not run during this read-only audit; run the focused behavior eval test before claiming merge readiness."
+				}
+			],
+			"findings": [
+				{
+					"title": "Review quality should be protected by a behavior fixture",
+					"category": "hardening_opportunity",
+					"confidence": "likely",
+					"severity": "medium",
+					"evidence": [
+						"tests/prompt-behavior-eval-helpers.ts:245",
+						"src/audit/prompts/contracts.ts:13"
+					],
+					"impact": "A polished but shallow review can satisfy structure checks without proving that it challenged the changed behavior.",
+					"remediation": "Add a prompt behavior fixture that scores down reports which omit this review dimension."
+				}
+			],
+			"nextSteps": [
+				"Add the focused behavior fixture and run the prompt behavior eval test."
 			]
 		}
 	},

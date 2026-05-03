@@ -13,7 +13,8 @@ export const FLOW_AUDIT_CONTRACT = `Build an internal review/audit ledger using 
 Review method:
 - First map the repository's architectural boundaries, runtime entrypoints, persistence/state surfaces, test oracles, CI/release gates, and docs/config/tooling surfaces.
 - For each source/runtime surface you directly review, trace at least one concrete invariant or failure path from entrypoint to state/output, then look for contradictory evidence in tests or validation artifacts.
-- For each test surface you directly review, identify what behavior it proves and what important behavior remains unproved.
+- Before approving a behavior surface as clean, choose the applicable adversarial failure-mode classes: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-oracle authenticity. Record the checked classes or meaningful gaps in coverageNotes, findings, or nextSteps.
+- For each test surface you directly review, identify what behavior it proves, whether it exercises a normal product path rather than a shortcut-only setup, and what important behavior remains unproved.
 - Prefer findings that explain an observable failure mode, regression path, broken invariant, or missing oracle over generic maintainability advice.
 - Treat a surface as directly_reviewed only when the evidence cites concrete files/lines or artifacts inspected for that surface; use spot_checked when only representative files were sampled.
 

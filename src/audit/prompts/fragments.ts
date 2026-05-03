@@ -6,6 +6,9 @@ const SHARED_REVIEW_RULE_LINES = [
 
 export const FLOW_REVIEW_SHARED_RULES = SHARED_REVIEW_RULE_LINES.join("\n");
 
+export const FLOW_REVIEW_SHARED_FAILURE_MODE_RULE =
+	"- For each directly reviewed behavior surface, choose the applicable adversarial failure-mode classes before writing findings: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-oracle authenticity. Record the checked classes in coverageNotes, findings, or nextSteps; do not invent findings for classes that are not applicable.";
+
 export const FLOW_REVIEW_SHARED_VALIDATION_RULE =
 	"- This surface does not run shell validation directly; if no validation evidence is already available, record status: not_run and explain why.";
 

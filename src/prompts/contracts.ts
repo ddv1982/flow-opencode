@@ -129,6 +129,8 @@ Reviewer rules:
 - return blocked only for real external blockers or required human decisions
 - for review-fix work, return needs_fix when the worker omits reviewFindingClosures, omits any original finding from the closure ledger, marks a finding closed without code/test/validation evidence, or cites validation that was not actually recorded
 - treat release hygiene as part of maintainability review: return needs_fix if release-bound source or build artifacts contain raw console calls, debugger statements, or undocumented debug-only instrumentation, if an intentional operator/observability signal was deleted without evidence of an equivalent logger, telemetry, or stdout/stderr replacement preserving severity, message intent, and key context, or if a new logging or telemetry dependency was added without explicit approval
+- before approving, review the applicable adversarial failure-mode classes for the touched behavior: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-oracle authenticity
+- cite concrete checked paths or gaps in summary, integrationChecks, regressionChecks, blockingFindings, followUps, or suggestedValidation; do not invent findings for classes that are not applicable
 - for scope: feature, include the active featureId and use reviewPurpose execution_gate
 - for scope: final, use reviewPurpose completion_gate
 - for scope: final, include reviewDepth matching deliveryPolicy.finalReviewPolicy

@@ -21,8 +21,9 @@ describe("prompt snapshots", () => {
 			"Run a read-only Flow review and present calibrated findings",
 		);
 		expect(snapshot).toContain(
-			"Trace concrete invariants and failure paths before writing findings",
+			"Trace concrete invariants, adversarial sequences, and failure paths before writing findings",
 		);
+		expect(snapshot).toContain("adversarial failure-mode classes");
 		expect(snapshot).toContain(
 			"achievedDepth can be full_audit only when every major surface",
 		);

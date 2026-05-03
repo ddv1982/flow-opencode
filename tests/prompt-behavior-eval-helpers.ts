@@ -15,6 +15,7 @@ export type PromptBehaviorCriterion =
 	| "coverage_accounted"
 	| "validation_accounted"
 	| "finding_grounded"
+	| "failure_modes_accounted"
 	| "taxonomy_calibrated"
 	| "actionable_next_steps";
 
@@ -23,6 +24,7 @@ export type PromptBehaviorEvalCaseId =
 	| "review-overclaims-full-depth"
 	| "review-confirmed-defect-grounded"
 	| "review-ungrounded-output-rejected"
+	| "review-misses-failure-mode-accounting"
 	| "captured-review-csv-memory-risk-calibrated"
 	| "captured-review-overconfident-validation-gap";
 
@@ -81,6 +83,7 @@ const KNOWN_BEHAVIOR_CASE_IDS = new Set<PromptBehaviorEvalCaseId>([
 	"review-overclaims-full-depth",
 	"review-confirmed-defect-grounded",
 	"review-ungrounded-output-rejected",
+	"review-misses-failure-mode-accounting",
 	"captured-review-csv-memory-risk-calibrated",
 	"captured-review-overconfident-validation-gap",
 ]);
@@ -208,7 +211,10 @@ function hasSpecificEvidenceReference(reference: string): boolean {
 	return matches.some(isSafeRelativeEvidenceReference);
 }
 
-function includesCaseInsensitive(value: string, patterns: string[]): boolean {
+function includesCaseInsensitive(
+	value: string,
+	patterns: readonly string[],
+): boolean {
 	const normalized = value.toLowerCase();
 	return patterns.some((pattern) => normalized.includes(pattern));
 }
@@ -229,6 +235,63 @@ function requiredSectionsInOrder(rendered: string): boolean {
 		previousIndex = index;
 	}
 	return true;
+}
+
+const FAILURE_MODE_REVIEW_PATTERNS = [
+	"failure-mode",
+	"failure mode",
+	"adversarial",
+	"idempot",
+	"reentr",
+	"double",
+	"race",
+	"event order",
+	"async",
+	"persistence",
+	"recovery",
+	"recover",
+	"backpressure",
+	"hit-test",
+	"z-index",
+	"pointer",
+	"accessib",
+	"aria",
+	"test oracle",
+	"normal product path",
+	"shortcut",
+] as const;
+
+function reportReviewText(report: ReviewReport): string {
+	return [
+		report.repoSummary,
+		report.overallVerdict,
+		...(report.coverageNotes ?? []),
+		...report.discoveredSurfaces.flatMap((surface) => [
+			surface.name,
+			surface.reason ?? "",
+		]),
+		...report.validationRun.map((entry) => entry.summary),
+		...report.findings.flatMap((finding) => [
+			finding.title,
+			finding.impact,
+			finding.remediation ?? "",
+		]),
+		...(report.nextSteps ?? []),
+	].join("\n");
+}
+
+function hasFailureModeAccounting(report: ReviewReport): boolean {
+	const behaviorSurfacePresent = report.discoveredSurfaces.some(
+		(surface) =>
+			surface.category === "source_runtime" || surface.category === "tests",
+	);
+	if (!behaviorSurfacePresent) {
+		return true;
+	}
+	return includesCaseInsensitive(
+		reportReviewText(report),
+		FAILURE_MODE_REVIEW_PATTERNS,
+	);
 }
 
 function isFullAuditEvidenceBacked(report: ReviewReport): boolean {
@@ -303,6 +366,7 @@ function scoreParsedReport(
 		}
 		return true;
 	});
+	const failureModesAccounted = hasFailureModeAccounting(normalizedReport);
 	const actionableNextSteps =
 		(normalizedReport.nextSteps?.length ?? 0) > 0 &&
 		normalizedReport.findings.every((finding) => Boolean(finding.remediation));
@@ -335,6 +399,12 @@ function scoreParsedReport(
 			criterion: "finding_grounded",
 			passed: findingGrounded,
 			summary: "Findings carry concrete first-party evidence references.",
+		},
+		{
+			criterion: "failure_modes_accounted",
+			passed: failureModesAccounted,
+			summary:
+				"Behavior-surface reviews account for applicable adversarial failure-mode classes or explain why they are out of scope.",
 		},
 		{
 			criterion: "taxonomy_calibrated",
@@ -384,7 +454,7 @@ export function scorePromptBehaviorModelOutput(input: {
 		id: input.id,
 		title: input.title,
 		score,
-		maxScore: 8,
+		maxScore: 9,
 		passed: score >= input.minPassingScore,
 		expectedFailures,
 		actualFailures,
@@ -449,7 +519,7 @@ export function buildPromptBehaviorEvalSummary(
 		`Quality-threshold fail: ${failingCases}`,
 		`Expectation checks satisfied: ${expectationSatisfiedCases}`,
 		`Unexpected eval outcomes: ${unexpectedCases}`,
-		`Average rubric score: ${averageScore.toFixed(2)} / 8`,
+		`Average rubric score: ${averageScore.toFixed(2)} / 9`,
 		...resultLines,
 	].join("\n");
 	const markdownReport = [
@@ -460,7 +530,7 @@ export function buildPromptBehaviorEvalSummary(
 		`- Quality-threshold fail: ${failingCases}`,
 		`- Expectation checks satisfied: ${expectationSatisfiedCases}`,
 		`- Unexpected eval outcomes: ${unexpectedCases}`,
-		`- Average rubric score: ${averageScore.toFixed(2)} / 8`,
+		`- Average rubric score: ${averageScore.toFixed(2)} / 9`,
 		"",
 		"| Case | Origin | Score | Quality | Expectation | Failed criteria |",
 		"| --- | --- | ---: | --- | --- | --- |",

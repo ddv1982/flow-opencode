@@ -14,7 +14,7 @@ describe("review prompt capture harness", () => {
 	test("loads providerless capture scenarios", async () => {
 		const scenarios = await readReviewCaptureScenarios();
 
-		expect(scenarios).toHaveLength(1);
+		expect(scenarios).toHaveLength(2);
 		expect(scenarios[0]?.id).toBe(
 			"flow-review-codebase-architecture-structured",
 		);
@@ -42,7 +42,7 @@ describe("review prompt capture harness", () => {
 
 	test("checks capture scenarios without writing prompt exports", async () => {
 		await expect(checkReviewCaptureScenarios()).resolves.toBe(
-			"Review capture scenarios valid: 1",
+			"Review capture scenarios valid: 2",
 		);
 	});
 
@@ -51,7 +51,7 @@ describe("review prompt capture harness", () => {
 		try {
 			const exports = await writeReviewCapturePromptExports({ outputDir });
 
-			expect(exports).toHaveLength(1);
+			expect(exports).toHaveLength(2);
 			const [captureExport] = exports;
 			if (!captureExport) {
 				throw new Error("Expected a review capture export.");
@@ -85,7 +85,7 @@ describe("review prompt capture harness", () => {
 					{
 						id: "manual-capture",
 						title: "Manual capture",
-						minPassingScore: 8,
+						minPassingScore: 9,
 						modelOutput: {
 							requestedDepth: "full_audit",
 							achievedDepth: "deep_audit",
@@ -109,6 +109,7 @@ describe("review prompt capture harness", () => {
 							],
 							coverageNotes: [
 								"Downgraded from full audit because not every test surface was directly reviewed.",
+								"Failure-mode review covered test-oracle authenticity for captured outputs; runtime lifecycle and UI interaction classes were outside this focused prompt-contract capture.",
 							],
 							validationRun: [
 								{
@@ -145,7 +146,7 @@ describe("review prompt capture harness", () => {
 
 			const score = await scoreReviewCaptureFile(capturePath);
 
-			expect(score).toContain("Score: 8/8");
+			expect(score).toContain("Score: 9/9");
 			expect(score).toContain("Quality: quality-pass");
 			expect(score).toContain("Failed criteria: —");
 		} finally {
