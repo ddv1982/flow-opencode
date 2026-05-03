@@ -88,9 +88,9 @@ describe("prompt eval corpus", () => {
 
 	test("corpus emits a readable coverage summary", () => {
 		const summary = buildPromptEvalCoverageSummary(readPromptEvalCorpus());
-		expect(summary.totalCases).toBe(30);
+		expect(summary.totalCases).toBe(31);
 		expect(summary.byCategory).toEqual({
-			"audit-coverage": 1,
+			"audit-coverage": 2,
 			"claim-calibration": 2,
 			"command-entry": 7,
 			"completion-gating": 3,
@@ -100,8 +100,8 @@ describe("prompt eval corpus", () => {
 			recovery: 6,
 			"review-gating": 5,
 		});
-		expect(summary.byRisk).toEqual({ high: 20, medium: 10 });
-		expect(summary.report).toContain("Prompt eval corpus coverage: 30 cases");
+		expect(summary.byRisk).toEqual({ high: 21, medium: 10 });
+		expect(summary.report).toContain("Prompt eval corpus coverage: 31 cases");
 		expect(summary.report).toContain("audit_contract=1");
 		expect(summary.report).toContain("run_command_template=1");
 		expect(summary.report).toContain("reset_command_template=1");

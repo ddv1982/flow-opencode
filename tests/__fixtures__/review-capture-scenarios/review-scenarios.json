@@ -4,21 +4,87 @@
 		"title": "Flow review codebase architecture and regression audit",
 		"arguments": "exhaustive Review this codebase for architectural issues, test gaps, and likely regressions. Return raw/structured JSON for eval scoring.",
 		"outputView": "structured",
-		"fileMap": "flow-opencode\n├── src\n│   ├── audit\n│   │   ├── prompts\n│   │   │   ├── agents.ts +\n│   │   │   ├── commands.ts +\n│   │   │   ├── contracts.ts +\n│   │   │   └── fragments.ts +\n│   │   ├── report-normalizer.ts +\n│   │   ├── report-presenter.ts +\n│   │   └── report-schema.ts +\n│   ├── runtime\n│   │   ├── application\n│   │   │   ├── session-engine.ts +\n│   │   │   ├── session-actions.ts +\n│   │   │   ├── session-read-actions.ts +\n│   │   │   └── tool-runtime.ts +\n│   │   ├── domain\n│   │   │   ├── completion.ts +\n│   │   │   ├── final-review-coverage.ts +\n│   │   │   └── workflow-policy.ts +\n│   │   ├── transitions\n│   │   │   ├── execution.ts +\n│   │   │   ├── plan.ts +\n│   │   │   ├── recovery.ts +\n│   │   │   └── review.ts +\n│   │   ├── schema.ts +\n│   │   ├── session-persistence.ts +\n│   │   └── session.ts +\n│   └── tools\n│       ├── runtime-tools.ts +\n│       ├── session-tools.ts +\n│       └── schemas.ts +\n├── tests\n│   ├── prompt-behavior-eval.test.ts +\n│   ├── prompt-eval-corpus.test.ts +\n│   ├── runtime-tools.test.ts +\n│   ├── runtime.test.ts +\n│   └── session-engine.test.ts +\n├── scripts\n│   └── cross-area\n│       └── prompt-eval-summary.ts +\n├── docs\n│   └── architecture\n│       ├── invariant-matrix.md\n│       └── strictness-contract.md\n├── package.json\n└── tsconfig.json",
+		"fileMap": "flow-opencode\n\u251c\u2500\u2500 src\n\u2502   \u251c\u2500\u2500 audit\n\u2502   \u2502   \u251c\u2500\u2500 prompts\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 agents.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 commands.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 contracts.ts +\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 fragments.ts +\n\u2502   \u2502   \u251c\u2500\u2500 report-normalizer.ts +\n\u2502   \u2502   \u251c\u2500\u2500 report-presenter.ts +\n\u2502   \u2502   \u2514\u2500\u2500 report-schema.ts +\n\u2502   \u251c\u2500\u2500 runtime\n\u2502   \u2502   \u251c\u2500\u2500 application\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 session-engine.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 session-actions.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 session-read-actions.ts +\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 tool-runtime.ts +\n\u2502   \u2502   \u251c\u2500\u2500 domain\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 completion.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 final-review-coverage.ts +\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 workflow-policy.ts +\n\u2502   \u2502   \u251c\u2500\u2500 transitions\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 execution.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 plan.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 recovery.ts +\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 review.ts +\n\u2502   \u2502   \u251c\u2500\u2500 schema.ts +\n\u2502   \u2502   \u251c\u2500\u2500 session-persistence.ts +\n\u2502   \u2502   \u2514\u2500\u2500 session.ts +\n\u2502   \u2514\u2500\u2500 tools\n\u2502       \u251c\u2500\u2500 runtime-tools.ts +\n\u2502       \u251c\u2500\u2500 session-tools.ts +\n\u2502       \u2514\u2500\u2500 schemas.ts +\n\u251c\u2500\u2500 tests\n\u2502   \u251c\u2500\u2500 prompt-behavior-eval.test.ts +\n\u2502   \u251c\u2500\u2500 prompt-eval-corpus.test.ts +\n\u2502   \u251c\u2500\u2500 runtime-tools.test.ts +\n\u2502   \u251c\u2500\u2500 runtime.test.ts +\n\u2502   \u2514\u2500\u2500 session-engine.test.ts +\n\u251c\u2500\u2500 scripts\n\u2502   \u2514\u2500\u2500 cross-area\n\u2502       \u2514\u2500\u2500 prompt-eval-summary.ts +\n\u251c\u2500\u2500 docs\n\u2502   \u2514\u2500\u2500 architecture\n\u2502       \u251c\u2500\u2500 invariant-matrix.md\n\u2502       \u2514\u2500\u2500 strictness-contract.md\n\u251c\u2500\u2500 package.json\n\u2514\u2500\u2500 tsconfig.json",
 		"notes": [
 			"This scenario intentionally asks for structured output so captured reports can be scored offline.",
 			"Run it through the plugin/model surface you want to evaluate, not through a direct API harness."
-		]
+		],
+		"reviewPacket": {
+			"goal": "Run a focused architecture and regression audit of Flow review prompting quality without executing code.",
+			"architecture": [
+				"Standalone /flow-review prompt -> audit contract -> review report schema -> renderer.",
+				"Review capture scenario -> generated prompt packet -> prompt behavior eval scoring."
+			],
+			"selectedContext": {
+				"included": [
+					"src/audit/prompts/*",
+					"src/audit/report-schema.ts",
+					"scripts/cross-area/review-prompt-capture.ts",
+					"tests/prompt-behavior-eval-helpers.ts"
+				],
+				"excluded": [
+					"Runtime session execution internals except where they shape final-review evidence semantics.",
+					"Release automation unless it directly changes review prompt capture behavior."
+				]
+			},
+			"relationships": [
+				"Prompt input packet sections must survive into review coverage notes and finding scope.",
+				"Structured ledger validation should complement, not replace, packet-boundary preservation."
+			],
+			"ambiguities": [
+				"If a requested surface is not present in the selected context, record the gap instead of inventing evidence.",
+				"Distinguish prompt-contract ambiguity from a confirmed runtime defect."
+			],
+			"knownExclusions": [
+				"Do not audit package-manager detection or install lifecycle unless new evidence links it to review prompting."
+			],
+			"alreadyCoveredFindings": [
+				"Do not repeat generic full-audit overclaim findings unless the packet boundary creates a larger blocker."
+			],
+			"evidenceRequirements": [
+				"Use concrete first-party path:line references for directly reviewed files.",
+				"Use coverageNotes for exclusions, ambiguities, and relationship paths that constrain the review."
+			],
+			"doneWhen": [
+				"The output preserves selected-context limits and known exclusions.",
+				"Findings are ordered by severity and do not duplicate already-covered findings without new evidence."
+			]
+		}
 	},
 	{
 		"id": "flow-review-adversarial-failure-modes-structured",
 		"title": "Flow review adversarial failure-mode audit",
 		"arguments": "detailed Review this codebase for adversarial failure-mode coverage across lifecycle/reentrancy, async state transitions, persistence recovery, accessibility/interaction semantics where applicable, and test-oracle authenticity. Return raw/structured JSON for eval scoring.",
 		"outputView": "structured",
-		"fileMap": "flow-opencode\n├── src\n│   ├── audit\n│   │   ├── prompts\n│   │   │   ├── commands.ts +\n│   │   │   ├── contracts.ts +\n│   │   │   └── fragments.ts +\n│   │   └── report-schema.ts +\n│   ├── prompts\n│   │   ├── agents.ts +\n│   │   ├── contracts.ts +\n│   │   └── fragments.ts +\n│   └── runtime\n│       ├── transitions\n│       │   ├── execution-completion-validation.ts +\n│       │   └── review.ts +\n│       └── domain\n│           └── final-review-coverage.ts +\n├── tests\n│   ├── prompt-behavior-eval-helpers.ts +\n│   ├── prompt-behavior-eval.test.ts +\n│   ├── review-prompt-capture.test.ts +\n│   └── runtime\n│       └── final-review-contracts.test.ts +\n└── package.json",
+		"fileMap": "flow-opencode\n\u251c\u2500\u2500 src\n\u2502   \u251c\u2500\u2500 audit\n\u2502   \u2502   \u251c\u2500\u2500 prompts\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 commands.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 contracts.ts +\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 fragments.ts +\n\u2502   \u2502   \u2514\u2500\u2500 report-schema.ts +\n\u2502   \u251c\u2500\u2500 prompts\n\u2502   \u2502   \u251c\u2500\u2500 agents.ts +\n\u2502   \u2502   \u251c\u2500\u2500 contracts.ts +\n\u2502   \u2502   \u2514\u2500\u2500 fragments.ts +\n\u2502   \u2514\u2500\u2500 runtime\n\u2502       \u251c\u2500\u2500 transitions\n\u2502       \u2502   \u251c\u2500\u2500 execution-completion-validation.ts +\n\u2502       \u2502   \u2514\u2500\u2500 review.ts +\n\u2502       \u2514\u2500\u2500 domain\n\u2502           \u2514\u2500\u2500 final-review-coverage.ts +\n\u251c\u2500\u2500 tests\n\u2502   \u251c\u2500\u2500 prompt-behavior-eval-helpers.ts +\n\u2502   \u251c\u2500\u2500 prompt-behavior-eval.test.ts +\n\u2502   \u251c\u2500\u2500 review-prompt-capture.test.ts +\n\u2502   \u2514\u2500\u2500 runtime\n\u2502       \u2514\u2500\u2500 final-review-contracts.test.ts +\n\u2514\u2500\u2500 package.json",
 		"notes": [
 			"This scenario is intentionally general: it checks whether the review challenges applicable behavior classes instead of memorizing one project-specific bug.",
 			"Promote returned ledgers that make or miss these checks into prompt-behavior eval fixtures."
-		]
+		],
+		"reviewPacket": {
+			"goal": "Challenge applicable adversarial failure-mode classes while respecting non-applicable packet boundaries.",
+			"selectedContext": {
+				"included": [
+					"Audit prompts and contracts",
+					"Reviewer/final-review validation semantics",
+					"Prompt behavior eval helper scoring"
+				],
+				"excluded": [
+					"UI pointer or z-index behavior when no UI surface is selected."
+				]
+			},
+			"relationships": [
+				"Failure-mode prompt language -> eval scoring -> runtime final-review coverage gate."
+			],
+			"ambiguities": [
+				"When a failure-mode class is non-applicable, explain why instead of inventing a defect."
+			],
+			"knownExclusions": [
+				"Do not manufacture accessibility or hit-test findings from non-UI selected context."
+			],
+			"evidenceRequirements": [
+				"Every confirmed or likely finding needs concrete path:line evidence."
+			]
+		}
 	}
 ]

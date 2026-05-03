@@ -1,9 +1,31 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { FLOW_REVIEW_COMMAND_TEMPLATE } from "../../src/audit/prompts/commands";
-import { scorePromptBehaviorModelOutput } from "../../tests/prompt-behavior-eval-helpers";
+import {
+	type PromptBehaviorPacketExpectations,
+	scorePromptBehaviorModelOutput,
+} from "../../tests/prompt-behavior-eval-helpers";
 
 export type ReviewCaptureOutputView = "human" | "structured" | "both";
+
+export type ReviewCaptureTextBlock = string | string[];
+
+export type ReviewCaptureSelectedContext = {
+	included?: string[];
+	excluded?: string[];
+};
+
+export type ReviewCaptureReviewPacket = {
+	goal?: ReviewCaptureTextBlock;
+	architecture?: ReviewCaptureTextBlock;
+	selectedContext?: ReviewCaptureSelectedContext;
+	relationships?: string[];
+	ambiguities?: string[];
+	knownExclusions?: string[];
+	alreadyCoveredFindings?: string[];
+	evidenceRequirements?: string[];
+	doneWhen?: ReviewCaptureTextBlock;
+};
 
 export type ReviewCaptureScenario = {
 	id: string;
@@ -11,6 +33,7 @@ export type ReviewCaptureScenario = {
 	arguments: string;
 	outputView: ReviewCaptureOutputView;
 	fileMap: string;
+	reviewPacket?: ReviewCaptureReviewPacket;
 	notes?: string[];
 };
 
@@ -47,6 +70,92 @@ function assertSafeSlug(value: string, fieldName: string): void {
 	if (!/^[a-z0-9][a-z0-9-]*$/u.test(value)) {
 		throw new Error(
 			`Review capture ${fieldName} must be a lowercase slug: ${value}`,
+		);
+	}
+}
+
+function assertOptionalStringArray(
+	value: unknown,
+	scenarioId: string,
+	fieldName: string,
+): void {
+	if (
+		value !== undefined &&
+		(!Array.isArray(value) || value.some((entry) => typeof entry !== "string"))
+	) {
+		throw new Error(
+			`Review capture scenario '${scenarioId}' ${fieldName} must be an array of strings.`,
+		);
+	}
+}
+
+function assertOptionalTextBlock(
+	value: unknown,
+	scenarioId: string,
+	fieldName: string,
+): void {
+	if (
+		value !== undefined &&
+		typeof value !== "string" &&
+		(!Array.isArray(value) || value.some((entry) => typeof entry !== "string"))
+	) {
+		throw new Error(
+			`Review capture scenario '${scenarioId}' ${fieldName} must be a string or array of strings.`,
+		);
+	}
+}
+
+function validateReviewPacket(reviewPacket: unknown, scenarioId: string): void {
+	if (reviewPacket === undefined) {
+		return;
+	}
+	if (!isRecord(reviewPacket)) {
+		throw new Error(
+			`Review capture scenario '${scenarioId}' reviewPacket must be an object.`,
+		);
+	}
+	assertOptionalTextBlock(reviewPacket.goal, scenarioId, "reviewPacket.goal");
+	assertOptionalTextBlock(
+		reviewPacket.architecture,
+		scenarioId,
+		"reviewPacket.architecture",
+	);
+	assertOptionalTextBlock(
+		reviewPacket.doneWhen,
+		scenarioId,
+		"reviewPacket.doneWhen",
+	);
+	if (
+		reviewPacket.selectedContext !== undefined &&
+		!isRecord(reviewPacket.selectedContext)
+	) {
+		throw new Error(
+			`Review capture scenario '${scenarioId}' reviewPacket.selectedContext must be an object.`,
+		);
+	}
+	if (isRecord(reviewPacket.selectedContext)) {
+		assertOptionalStringArray(
+			reviewPacket.selectedContext.included,
+			scenarioId,
+			"reviewPacket.selectedContext.included",
+		);
+		assertOptionalStringArray(
+			reviewPacket.selectedContext.excluded,
+			scenarioId,
+			"reviewPacket.selectedContext.excluded",
+		);
+	}
+	for (const fieldName of [
+		"relationships",
+		"ambiguities",
+		"knownExclusions",
+		"alreadyCoveredFindings",
+		"evidenceRequirements",
+	] as const) {
+		assertOptionalStringArray(
+			reviewPacket[fieldName],
+			scenarioId,
+			`reviewPacket.${fieldName}`,
 		);
 	}
 }
@@ -95,6 +204,8 @@ export function validateReviewCaptureScenarios(
 				`Review capture scenario '${scenario.id}' needs a flow-opencode fileMap.`,
 			);
 		}
+		validateReviewPacket(scenario.reviewPacket, scenario.id);
+		assertOptionalStringArray(scenario.notes, scenario.id, "notes");
 		return scenario as ReviewCaptureScenario;
 	});
 }
@@ -116,10 +227,120 @@ function viewInstruction(outputView: ReviewCaptureOutputView): string {
 	return "Return raw/structured JSON only so the structured ledger can be scored offline.";
 }
 
+function textBlockLines(value: ReviewCaptureTextBlock | undefined): string[] {
+	if (value === undefined) {
+		return [];
+	}
+	return Array.isArray(value) ? value : [value];
+}
+
+function renderTextBlock(
+	tag: string,
+	value: ReviewCaptureTextBlock | undefined,
+): string[] {
+	const lines = textBlockLines(value)
+		.map((line) => line.trim())
+		.filter(Boolean);
+	if (lines.length === 0) {
+		return [];
+	}
+	return [`<${tag}>`, ...lines.map((line) => `- ${line}`), `</${tag}>`];
+}
+
+function renderStringList(tag: string, values: string[] | undefined): string[] {
+	const lines = values?.map((line) => line.trim()).filter(Boolean) ?? [];
+	if (lines.length === 0) {
+		return [];
+	}
+	return [`<${tag}>`, ...lines.map((line) => `- ${line}`), `</${tag}>`];
+}
+
+function renderSelectedContext(
+	selectedContext: ReviewCaptureSelectedContext | undefined,
+): string[] {
+	const included = renderStringList("included", selectedContext?.included);
+	const excluded = renderStringList("excluded", selectedContext?.excluded);
+	if (included.length === 0 && excluded.length === 0) {
+		return [];
+	}
+	return [
+		"<selected-context>",
+		...included,
+		...excluded,
+		"</selected-context>",
+	];
+}
+
+function renderReviewPacket(
+	reviewPacket: ReviewCaptureReviewPacket | undefined,
+): string[] {
+	if (!reviewPacket) {
+		return [];
+	}
+	const packetLines = [
+		...renderTextBlock("goal", reviewPacket.goal),
+		...renderTextBlock("architecture", reviewPacket.architecture),
+		...renderSelectedContext(reviewPacket.selectedContext),
+		...renderStringList("relationships", reviewPacket.relationships),
+		...renderStringList("ambiguities", reviewPacket.ambiguities),
+		...renderStringList("known-exclusions", reviewPacket.knownExclusions),
+		...renderStringList(
+			"already-covered-findings",
+			reviewPacket.alreadyCoveredFindings,
+		),
+		...renderStringList(
+			"evidence-requirements",
+			reviewPacket.evidenceRequirements,
+		),
+		...renderTextBlock("done-when", reviewPacket.doneWhen),
+	];
+	if (packetLines.length === 0) {
+		return [];
+	}
+	return ["<review-packet>", ...packetLines, "</review-packet>", ""];
+}
+
+function nonEmpty(values: string[] | undefined): string[] | undefined {
+	const trimmed = values?.map((value) => value.trim()).filter(Boolean) ?? [];
+	return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function reviewPacketExpectations(
+	reviewPacket: ReviewCaptureReviewPacket | undefined,
+): PromptBehaviorPacketExpectations | undefined {
+	if (!reviewPacket) {
+		return undefined;
+	}
+	const selectedContext = nonEmpty([
+		...(reviewPacket.selectedContext?.included ?? []),
+		...(reviewPacket.selectedContext?.excluded ?? []),
+	]);
+	const knownExclusions = nonEmpty(reviewPacket.knownExclusions);
+	const relationships = nonEmpty(reviewPacket.relationships);
+	const ambiguities = nonEmpty(reviewPacket.ambiguities);
+	const alreadyCoveredFindings = nonEmpty(reviewPacket.alreadyCoveredFindings);
+	const forbiddenDirectReview = nonEmpty([
+		...(reviewPacket.selectedContext?.excluded ?? []),
+		...(knownExclusions ?? []),
+	]);
+	const expectations: PromptBehaviorPacketExpectations = {
+		...(selectedContext ? { selectedContext } : {}),
+		...(relationships ? { relationships } : {}),
+		...(ambiguities ? { ambiguities } : {}),
+		...(knownExclusions ? { knownExclusions } : {}),
+		...(alreadyCoveredFindings ? { alreadyCoveredFindings } : {}),
+		...(forbiddenDirectReview ? { forbiddenDirectReview } : {}),
+	};
+	return Object.values(expectations).some((value) => value !== undefined)
+		? expectations
+		: undefined;
+}
+
 export function buildReviewCapturePrompt(
 	scenario: ReviewCaptureScenario,
 ): string {
 	const userArguments = [
+		...renderReviewPacket(scenario.reviewPacket),
 		scenario.arguments.trim(),
 		viewInstruction(scenario.outputView),
 		"",
@@ -154,13 +375,15 @@ export function buildReviewCapturePrompt(
 export function buildReviewCaptureTemplate(
 	scenario: ReviewCaptureScenario,
 ): string {
+	const packetExpectations = reviewPacketExpectations(scenario.reviewPacket);
 	return `${JSON.stringify(
 		{
 			id: scenario.id,
 			title: scenario.title,
 			capturedFrom:
 				"Paste the model/plugin surface, model name, date, and prompt packet path here.",
-			minPassingScore: 9,
+			minPassingScore: packetExpectations ? 10 : 9,
+			...(packetExpectations ? { packetExpectations } : {}),
 			modelOutput: {
 				replace: "Paste the structured review ledger JSON here.",
 			},
@@ -216,6 +439,43 @@ export async function writeReviewCapturePromptExports(
 	return exports;
 }
 
+function parsePacketExpectations(
+	value: unknown,
+): PromptBehaviorPacketExpectations | undefined {
+	if (value === undefined) {
+		return undefined;
+	}
+	if (!isRecord(value)) {
+		throw new Error("Review capture packetExpectations must be an object.");
+	}
+	const expectations: PromptBehaviorPacketExpectations = {};
+	for (const fieldName of [
+		"selectedContext",
+		"relationships",
+		"ambiguities",
+		"knownExclusions",
+		"alreadyCoveredFindings",
+		"forbiddenDirectReview",
+	] as const) {
+		const field = value[fieldName];
+		if (field === undefined) {
+			continue;
+		}
+		if (
+			!Array.isArray(field) ||
+			field.some((entry) => typeof entry !== "string")
+		) {
+			throw new Error(
+				`Review capture packetExpectations.${fieldName} must be an array of strings.`,
+			);
+		}
+		expectations[fieldName] = field;
+	}
+	return Object.values(expectations).some((field) => field !== undefined)
+		? expectations
+		: undefined;
+}
+
 export async function scoreReviewCaptureFile(
 	captureFile: string,
 ): Promise<string> {
@@ -225,8 +485,13 @@ export async function scoreReviewCaptureFile(
 	}
 	const id = typeof raw.id === "string" ? raw.id : basename(captureFile);
 	const title = typeof raw.title === "string" ? raw.title : id;
+	const packetExpectations = parsePacketExpectations(raw.packetExpectations);
 	const minPassingScore =
-		typeof raw.minPassingScore === "number" ? raw.minPassingScore : 9;
+		typeof raw.minPassingScore === "number"
+			? raw.minPassingScore
+			: packetExpectations
+				? 10
+				: 9;
 	const modelOutput =
 		isRecord(raw) && "modelOutput" in raw ? raw.modelOutput : raw;
 	const result = scorePromptBehaviorModelOutput({
@@ -234,6 +499,7 @@ export async function scoreReviewCaptureFile(
 		title,
 		modelOutput,
 		minPassingScore,
+		...(packetExpectations ? { packetExpectations } : {}),
 	});
 	return [
 		`Review capture score: ${result.id}`,

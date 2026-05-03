@@ -19,6 +19,12 @@ describe("review prompt capture harness", () => {
 			"flow-review-codebase-architecture-structured",
 		);
 		expect(scenarios[0]?.outputView).toBe("structured");
+		expect(scenarios[0]?.reviewPacket?.selectedContext?.included).toContain(
+			"src/audit/prompts/*",
+		);
+		expect(scenarios[0]?.reviewPacket?.knownExclusions).toContain(
+			"Do not audit package-manager detection or install lifecycle unless new evidence links it to review prompting.",
+		);
 	});
 
 	test("builds an offline prompt packet with the real review command and file map", async () => {
@@ -35,6 +41,10 @@ describe("review prompt capture harness", () => {
 		expect(prompt).toContain(
 			"Return raw/structured JSON only so the structured ledger can be scored offline.",
 		);
+		expect(prompt).toContain("<review-packet>");
+		expect(prompt).toContain("<selected-context>");
+		expect(prompt).toContain("<already-covered-findings>");
+		expect(prompt).toContain("Prompt input packet sections must survive");
 		expect(prompt).toContain("<file_map>");
 		expect(prompt).toContain("report-schema.ts +");
 		expect(prompt).not.toContain("OPENAI_API_KEY");
@@ -68,6 +78,9 @@ describe("review prompt capture harness", () => {
 			expect(captureTemplate).toContain(
 				"Paste the structured review ledger JSON here.",
 			);
+			expect(captureTemplate).toContain('"minPassingScore": 10');
+			expect(captureTemplate).toContain('"packetExpectations"');
+			expect(captureTemplate).toContain('"forbiddenDirectReview"');
 			expect(manifest).toContain(captureExport.id);
 			expect(readme).toContain("providerless");
 		} finally {

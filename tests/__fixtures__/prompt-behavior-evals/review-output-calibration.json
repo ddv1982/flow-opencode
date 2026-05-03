@@ -267,5 +267,72 @@
 				}
 			]
 		}
+	},
+	{
+		"id": "review-packet-boundaries-reopened",
+		"title": "Review packet boundaries are scored down when exclusions and prior findings are ignored",
+		"sourcePaths": [
+			"src/audit/prompts/commands.ts",
+			"tests/review-prompt-capture.test.ts",
+			"tests/prompt-behavior-eval-helpers.ts"
+		],
+		"minPassingScore": 10,
+		"packetExpectations": {
+			"selectedContext": ["audit prompts"],
+			"relationships": ["prompt packet"],
+			"ambiguities": ["missing selected runtime context"],
+			"knownExclusions": ["install lifecycle"],
+			"alreadyCoveredFindings": ["full-audit overclaim"]
+		},
+		"expectedFailures": ["packet_boundaries_preserved"],
+		"modelOutput": {
+			"requestedDepth": "deep_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Flow review prompt and capture surfaces were reviewed.",
+			"overallVerdict": "No confirmed blocker was found; the prompt capture hardening should be validated before release.",
+			"discoveredSurfaces": [
+				{
+					"name": "Review command prompt",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/audit/prompts/commands.ts:1"]
+				},
+				{
+					"name": "Review capture harness",
+					"category": "tooling",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["scripts/cross-area/review-prompt-capture.ts:1"]
+				}
+			],
+			"coverageNotes": [
+				"Every discovered surface in this focused review was directly reviewed with first-party evidence references.",
+				"Failure-mode review covered prompt packet construction, schema/capture drift, and test-oracle authenticity for providerless captures."
+			],
+			"validationRun": [
+				{
+					"command": "bun test tests/review-prompt-capture.test.ts tests/prompt-behavior-eval.test.ts",
+					"status": "not_run",
+					"summary": "Validation was not run during this read-only prompt-behavior calibration fixture."
+				}
+			],
+			"findings": [
+				{
+					"title": "Review packet fixture should protect capture prompt quality",
+					"category": "hardening_opportunity",
+					"confidence": "likely",
+					"severity": "medium",
+					"evidence": [
+						"scripts/cross-area/review-prompt-capture.ts:1",
+						"tests/prompt-behavior-eval-helpers.ts:1"
+					],
+					"impact": "Providerless captures can regress if the fixture never checks packet-aware behavior.",
+					"remediation": "Add packet-aware expectations to the behavior eval fixture and preserve the existing structured ledger checks."
+				}
+			],
+			"nextSteps": [
+				"Add a packet-aware fixture to the prompt behavior eval corpus.",
+				"Run the focused prompt behavior and capture tests."
+			]
+		}
 	}
 ]

@@ -23,6 +23,12 @@ describe("prompt snapshots", () => {
 		expect(snapshot).toContain(
 			"Trace concrete invariants, adversarial sequences, and failure paths before writing findings",
 		);
+		expect(snapshot).toContain(
+			"Treat rich user review packets as structured review input, not loose prose",
+		);
+		expect(snapshot).toContain(
+			"Preserve explicit XML/tagged sections from the user packet",
+		);
 		expect(snapshot).toContain("adversarial failure-mode classes");
 		expect(snapshot).toContain(
 			"achievedDepth can be full_audit only when every major surface",

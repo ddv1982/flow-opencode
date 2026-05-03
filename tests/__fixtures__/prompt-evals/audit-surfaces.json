@@ -65,6 +65,29 @@
 		]
 	},
 	{
+		"id": "audit-command-review-packet-boundaries",
+		"title": "Review command preserves rich packet boundaries before deriving findings",
+		"category": "audit-coverage",
+		"surface": "audit_command_template",
+		"risk": "high",
+		"sourcePaths": [
+			"src/audit/prompts/commands.ts",
+			"tests/prompt-snapshot.test.ts"
+		],
+		"expectedSnippets": [
+			"Treat rich user review packets as structured review input, not loose prose",
+			"preserve selected context, excluded context, relationship hypotheses, ambiguities, known exclusions, already-covered findings, evidence requirements, and done-when criteria",
+			"map the relevant packet relationships and negative space into the existing ledger",
+			"Do not reopen known exclusions or already-covered findings unless new evidence connects them to a larger blocker",
+			"Normalize them into a review packet: Goal, Selected context, Relationships, Ambiguities, Known exclusions, Already-covered findings, Evidence requirements, Constraints, and Done when.",
+			"Preserve explicit XML/tagged sections from the user packet"
+		],
+		"forbiddenSnippets": [
+			"Treat packet exclusions as optional hints that can be ignored.",
+			"Always reopen already-covered findings."
+		]
+	},
+	{
 		"id": "audit-contract-reviewed-unreviewed-surfaces",
 		"title": "Audit contract keeps one canonical surface ledger and derives coverage notes from it",
 		"category": "audit-coverage",

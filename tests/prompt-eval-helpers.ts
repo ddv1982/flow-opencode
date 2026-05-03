@@ -58,6 +58,7 @@ export type PromptEvalCaseId =
 	| "auditor-agent-full-audit-claim-calibration"
 	| "auditor-agent-finding-taxonomy"
 	| "audit-command-downgrades-incomplete-full-review"
+	| "audit-command-review-packet-boundaries"
 	| "audit-contract-reviewed-unreviewed-surfaces";
 
 export type PromptEvalCategory =
@@ -148,6 +149,7 @@ export const PROMPT_EVAL_CASE_IDS = [
 	"auditor-agent-full-audit-claim-calibration",
 	"auditor-agent-finding-taxonomy",
 	"audit-command-downgrades-incomplete-full-review",
+	"audit-command-review-packet-boundaries",
 	"audit-contract-reviewed-unreviewed-surfaces",
 ] as const satisfies readonly PromptEvalCaseId[];
 

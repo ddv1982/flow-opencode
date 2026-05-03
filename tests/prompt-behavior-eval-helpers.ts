@@ -17,7 +17,8 @@ export type PromptBehaviorCriterion =
 	| "finding_grounded"
 	| "failure_modes_accounted"
 	| "taxonomy_calibrated"
-	| "actionable_next_steps";
+	| "actionable_next_steps"
+	| "packet_boundaries_preserved";
 
 export type PromptBehaviorEvalCaseId =
 	| "review-full-depth-downgrades-spot-check"
@@ -25,10 +26,20 @@ export type PromptBehaviorEvalCaseId =
 	| "review-confirmed-defect-grounded"
 	| "review-ungrounded-output-rejected"
 	| "review-misses-failure-mode-accounting"
+	| "review-packet-boundaries-reopened"
 	| "captured-review-csv-memory-risk-calibrated"
 	| "captured-review-overconfident-validation-gap";
 
 export type PromptBehaviorEvalCaseOrigin = "calibration" | "captured";
+
+export type PromptBehaviorPacketExpectations = {
+	selectedContext?: string[];
+	relationships?: string[];
+	ambiguities?: string[];
+	knownExclusions?: string[];
+	alreadyCoveredFindings?: string[];
+	forbiddenDirectReview?: string[];
+};
 
 export type PromptBehaviorEvalCase = {
 	id: PromptBehaviorEvalCaseId;
@@ -38,6 +49,7 @@ export type PromptBehaviorEvalCase = {
 	sourcePaths: string[];
 	modelOutput: unknown;
 	minPassingScore: number;
+	packetExpectations?: PromptBehaviorPacketExpectations;
 	expectedFailures?: PromptBehaviorCriterion[];
 };
 
@@ -84,6 +96,7 @@ const KNOWN_BEHAVIOR_CASE_IDS = new Set<PromptBehaviorEvalCaseId>([
 	"review-confirmed-defect-grounded",
 	"review-ungrounded-output-rejected",
 	"review-misses-failure-mode-accounting",
+	"review-packet-boundaries-reopened",
 	"captured-review-csv-memory-risk-calibrated",
 	"captured-review-overconfident-validation-gap",
 ]);
@@ -160,6 +173,32 @@ export function validatePromptBehaviorEvalCorpus(
 			throw new Error(
 				`Prompt behavior eval case '${candidate.id}' needs minPassingScore.`,
 			);
+		}
+		if (candidate.packetExpectations !== undefined) {
+			if (!isRecord(candidate.packetExpectations)) {
+				throw new Error(
+					`Prompt behavior eval case '${candidate.id}' packetExpectations must be an object.`,
+				);
+			}
+			for (const fieldName of [
+				"selectedContext",
+				"relationships",
+				"ambiguities",
+				"knownExclusions",
+				"alreadyCoveredFindings",
+				"forbiddenDirectReview",
+			] as const) {
+				const field = candidate.packetExpectations[fieldName];
+				if (
+					field !== undefined &&
+					(!Array.isArray(field) ||
+						field.some((entry) => typeof entry !== "string"))
+				) {
+					throw new Error(
+						`Prompt behavior eval case '${candidate.id}' packetExpectations.${fieldName} must be an array of strings.`,
+					);
+				}
+			}
 		}
 		if (
 			candidate.expectedFailures &&
@@ -294,6 +333,76 @@ function hasFailureModeAccounting(report: ReviewReport): boolean {
 	);
 }
 
+function packetExpectationsPreserved(
+	report: ReviewReport,
+	expectations: PromptBehaviorPacketExpectations | undefined,
+): boolean {
+	if (!expectations) {
+		return true;
+	}
+	const reviewText = reportReviewText(report).toLowerCase();
+	const directlyReviewedText = report.discoveredSurfaces
+		.filter((surface) => surface.reviewStatus === "directly_reviewed")
+		.flatMap((surface) => [
+			surface.name,
+			surface.reason ?? "",
+			...(surface.evidence ?? []),
+		])
+		.join("\n")
+		.toLowerCase();
+	if (
+		(expectations.forbiddenDirectReview ?? []).some((value) =>
+			directlyReviewedText.includes(value.toLowerCase()),
+		)
+	) {
+		return false;
+	}
+	const expectedGroups: [
+		keyof PromptBehaviorPacketExpectations,
+		readonly string[],
+	][] = [
+		["selectedContext", expectations.selectedContext ?? []],
+		["relationships", expectations.relationships ?? []],
+		["ambiguities", expectations.ambiguities ?? []],
+		["knownExclusions", expectations.knownExclusions ?? []],
+		["alreadyCoveredFindings", expectations.alreadyCoveredFindings ?? []],
+	];
+	return expectedGroups.every(([groupName, values]) => {
+		if (values.length === 0) {
+			return true;
+		}
+		const groupCuePresent =
+			groupName === "selectedContext"
+				? includesCaseInsensitive(reviewText, ["selected", "scope", "context"])
+				: groupName === "relationships"
+					? includesCaseInsensitive(reviewText, [
+							"relationship",
+							"trace",
+							"path",
+						])
+					: groupName === "ambiguities"
+						? includesCaseInsensitive(reviewText, [
+								"ambigu",
+								"uncertain",
+								"gap",
+							])
+						: groupName === "knownExclusions"
+							? includesCaseInsensitive(reviewText, [
+									"excluded",
+									"out of scope",
+								])
+							: includesCaseInsensitive(reviewText, [
+									"already-covered",
+									"already covered",
+									"previously covered",
+								]);
+		return (
+			groupCuePresent &&
+			values.every((value) => reviewText.includes(value.toLowerCase()))
+		);
+	});
+}
+
 function isFullAuditEvidenceBacked(report: ReviewReport): boolean {
 	return (
 		report.discoveredSurfaces.length > 0 &&
@@ -307,6 +416,7 @@ function isFullAuditEvidenceBacked(report: ReviewReport): boolean {
 
 function scoreParsedReport(
 	report: ReviewReport,
+	packetExpectations?: PromptBehaviorPacketExpectations,
 ): PromptBehaviorCriterionResult[] {
 	const normalizedReport = normalizeReviewReport(report);
 	const rendered = renderReviewReport(normalizedReport, "human");
@@ -367,6 +477,10 @@ function scoreParsedReport(
 		return true;
 	});
 	const failureModesAccounted = hasFailureModeAccounting(normalizedReport);
+	const packetBoundariesPreserved = packetExpectationsPreserved(
+		normalizedReport,
+		packetExpectations,
+	);
 	const actionableNextSteps =
 		(normalizedReport.nextSteps?.length ?? 0) > 0 &&
 		normalizedReport.findings.every((finding) => Boolean(finding.remediation));
@@ -418,6 +532,16 @@ function scoreParsedReport(
 			summary:
 				"Findings include remediation and the review has concrete next steps.",
 		},
+		...(packetExpectations
+			? [
+					{
+						criterion: "packet_boundaries_preserved" as const,
+						passed: packetBoundariesPreserved,
+						summary:
+							"Review output preserves selected context, relationships, ambiguities, exclusions, and already-covered findings from the input packet.",
+					},
+				]
+			: []),
 	];
 }
 
@@ -426,6 +550,7 @@ export function scorePromptBehaviorModelOutput(input: {
 	title: string;
 	modelOutput: unknown;
 	minPassingScore: number;
+	packetExpectations?: PromptBehaviorPacketExpectations;
 	expectedFailures?: PromptBehaviorCriterion[];
 }): PromptBehaviorEvalResult {
 	const parsed = ReviewReportSchema.safeParse(input.modelOutput);
@@ -440,10 +565,15 @@ export function scorePromptBehaviorModelOutput(input: {
 	];
 
 	if (parsed.success) {
-		criteria.push(...scoreParsedReport(parsed.data));
+		criteria.push(...scoreParsedReport(parsed.data, input.packetExpectations));
 	}
 
 	const score = criteria.filter((criterion) => criterion.passed).length;
+	const maxScore = parsed.success
+		? criteria.length
+		: input.packetExpectations
+			? 10
+			: 9;
 	const actualFailures = criteria
 		.filter((criterion) => !criterion.passed)
 		.map((criterion) => criterion.criterion);
@@ -454,7 +584,7 @@ export function scorePromptBehaviorModelOutput(input: {
 		id: input.id,
 		title: input.title,
 		score,
-		maxScore: 9,
+		maxScore,
 		passed: score >= input.minPassingScore,
 		expectedFailures,
 		actualFailures,
@@ -488,6 +618,11 @@ export function buildPromptBehaviorEvalSummary(
 			? results.reduce((total, result) => result.score + total, 0) /
 				results.length
 			: 0;
+	const averageMaxScore =
+		results.length > 0
+			? results.reduce((total, result) => result.maxScore + total, 0) /
+				results.length
+			: 0;
 	const byId = new Map<string, PromptBehaviorEvalCase>(
 		corpus.map((item) => [item.id, item]),
 	);
@@ -519,7 +654,7 @@ export function buildPromptBehaviorEvalSummary(
 		`Quality-threshold fail: ${failingCases}`,
 		`Expectation checks satisfied: ${expectationSatisfiedCases}`,
 		`Unexpected eval outcomes: ${unexpectedCases}`,
-		`Average rubric score: ${averageScore.toFixed(2)} / 9`,
+		`Average rubric score: ${averageScore.toFixed(2)} / ${averageMaxScore.toFixed(2)}`,
 		...resultLines,
 	].join("\n");
 	const markdownReport = [
@@ -530,7 +665,7 @@ export function buildPromptBehaviorEvalSummary(
 		`- Quality-threshold fail: ${failingCases}`,
 		`- Expectation checks satisfied: ${expectationSatisfiedCases}`,
 		`- Unexpected eval outcomes: ${unexpectedCases}`,
-		`- Average rubric score: ${averageScore.toFixed(2)} / 9`,
+		`- Average rubric score: ${averageScore.toFixed(2)} / ${averageMaxScore.toFixed(2)}`,
 		"",
 		"| Case | Origin | Score | Quality | Expectation | Failed criteria |",
 		"| --- | --- | ---: | --- | --- | --- |",
