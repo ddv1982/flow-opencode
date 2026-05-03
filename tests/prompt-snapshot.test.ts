@@ -37,10 +37,8 @@ describe("prompt snapshots", () => {
 			"Use hardening_opportunity for useful architectural, test, or resilience improvements",
 		);
 		expect(snapshot).toContain(
-			"Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }",
+			"Pass the ledger to flow_review_render by spreading the ledger fields directly",
 		);
-		expect(snapshot).toContain(
-			"reviewJson must contain the actual serialized JSON string for the ledger",
-		);
+		expect(snapshot).toContain("Do not wrap the ledger in a JSON string field");
 	});
 });

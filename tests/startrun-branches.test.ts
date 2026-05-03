@@ -74,7 +74,7 @@ test("startRun blocks the session when dependencies prevent every pending featur
 				id: "blocked-beta",
 				title: "Blocked by dependency",
 				summary: "Also waiting on another feature.",
-				fileTargets: ["src/tools.ts"],
+				fileTargets: ["src/adapters/opencode/tools.ts"],
 				verification: ["bun test"],
 				dependsOn: ["blocked-alpha"],
 				status: "pending" as const,

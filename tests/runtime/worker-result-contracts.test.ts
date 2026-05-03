@@ -1,4 +1,4 @@
-// Owns worker-result payload compatibility coverage previously grouped in
+// Owns worker-result payload contract coverage previously grouped in
 // tests/runtime-completion-contracts.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
 import type { WorkerResult } from "../../src/runtime/schema";
@@ -28,26 +28,24 @@ describe("runtime worker result contracts", () => {
 		const tools = createTestTools();
 		const response = await tools.flow_run_complete_feature.execute(
 			{
-				workerJson: JSON.stringify({
-					contractVersion: "1",
-					status: "needs_input",
-					summary: "Need a new plan.",
-					artifactsChanged: [{ path: "src/runtime/session.ts" }],
-					validationRun: [],
-					decisions: [],
-					nextStep: "Replan the work.",
-					outcome: {
-						kind: "replan_required",
-					},
-					featureResult: {
-						featureId: "setup-runtime",
-					},
-					featureReview: {
-						status: "passed",
-						summary: "No blocking findings.",
-						blockingFindings: [],
-					},
-				}),
+				contractVersion: "1",
+				status: "needs_input",
+				summary: "Need a new plan.",
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				validationRun: [],
+				decisions: [],
+				nextStep: "Replan the work.",
+				outcome: {
+					kind: "replan_required",
+				},
+				featureResult: {
+					featureId: "setup-runtime",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "No blocking findings.",
+					blockingFindings: [],
+				},
 			},
 			toolContext(makeTempDir()),
 		);
@@ -150,34 +148,32 @@ describe("runtime worker result contracts", () => {
 		await saveSession(worktree, reviewed.value);
 		const response = await tools.flow_run_complete_feature.execute(
 			{
-				workerJson: JSON.stringify({
-					contractVersion: "1",
-					status: "ok",
-					summary: "Completed runtime setup.",
-					artifactsChanged: [{ path: "src/runtime/session.ts" }],
-					validationRun: [
-						{
-							command: "bun test",
-							status: "passed",
-							summary: "Runtime tests passed.",
-						},
-					],
-					validationScope: "targeted",
-					reviewIterations: 1,
-					decisions: [],
-					nextStep: "Run the next feature.",
-					outcome: { kind: "completed" },
-					featureResult: {
-						featureId: "setup-runtime",
-						verificationStatus: "passed",
-					},
-					featureReview: {
+				contractVersion: "1",
+				status: "ok",
+				summary: "Completed runtime setup.",
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				validationRun: [
+					{
+						command: "bun test",
 						status: "passed",
-						summary: "Looks good.",
-						blockingFindings: [],
+						summary: "Runtime tests passed.",
 					},
-					finalReview: undefined,
-				}),
+				],
+				validationScope: "targeted",
+				reviewIterations: 1,
+				decisions: [],
+				nextStep: "Run the next feature.",
+				outcome: { kind: "completed" },
+				featureResult: {
+					featureId: "setup-runtime",
+					verificationStatus: "passed",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "Looks good.",
+					blockingFindings: [],
+				},
+				finalReview: undefined,
 			},
 			toolContext(worktree),
 		);

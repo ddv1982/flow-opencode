@@ -7,11 +7,14 @@
 		"capturedFrom": "Codex manual providerless capture from flow-plan-eval-rollout.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
-		"modelOutput": "Call flow_plan_start first for this planning goal. Inspect repo evidence for the prompt eval scripts, tests, fixtures, and package manager context, then persist that context with flow_plan_context_record using planningJson. Draft a compact plan and call flow_plan_apply with planJson. Do not implement from this command. Next step: approve the draft plan or select feature ids before running work.",
+		"modelOutput": "Call flow_plan_start first for this planning goal. Inspect repo evidence for the prompt eval scripts, tests, fixtures, and package manager context, then persist that context with flow_plan_context_record using planning context. Draft a compact plan and call flow_plan_apply with draft plan. Do not implement from this command. Next step: approve the draft plan or select feature ids before running work.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_plan_start",
@@ -22,8 +25,8 @@
 		"requiredResponseSnippets": [
 			"repo evidence",
 			"package manager",
-			"planningJson",
-			"planJson",
+			"planning context",
+			"draft plan",
 			"not implement"
 		],
 		"forbiddenResponseSnippets": ["I edited", "implementation is complete"],

@@ -2,9 +2,16 @@
 
 `opencode-plugin-flow` adds a stateful planning-and-execution workflow to OpenCode. It is designed for work that should be planned, validated, reviewed, and resumable rather than handled as a disposable one-shot prompt.
 
-## Maintainer truth
+## The short version
 
-For contributors, [`docs/maintainer-contract.md`](docs/maintainer-contract.md) is the short non-historical contract map for current commands, tools, state paths, and high-risk checks. [`docs/contributor-map.md`](docs/contributor-map.md) maps risky areas to files and validation commands.
+If you just want Flow to handle a task:
+
+1. Install the plugin.
+2. Open OpenCode in the project you want to change.
+3. Run `/flow-auto <your goal>`.
+4. Use `/flow-status` if you want to inspect progress.
+
+Flow will plan, run, validate, review, and resume the work using workspace-local `.flow/**` state.
 
 ## What Flow does
 
@@ -71,11 +78,15 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 
 ## Quick Start
 
-### Most people start with one of these
+### Recommended: let Flow drive the work
 
 ```text
 /flow-auto Add a workflow plugin for OpenCode
 ```
+
+Use **`/flow-auto`** when you want Flow to drive the work end to end. It is the best default for most implementation tasks.
+
+### Other common starts
 
 ```text
 /flow-plan Add a workflow plugin for OpenCode
@@ -85,23 +96,16 @@ curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uni
 /flow-review Review this repository for correctness and release risks
 ```
 
-- Use **`/flow-auto`** when you want Flow to drive the work end to end.
 - Use **`/flow-plan`** when you want to inspect or shape the plan before execution.
 - Use **`/flow-review`** when you want a read-only findings report instead of code changes.
 
-### `/flow-auto` (recommended)
+### `/flow-auto` in practice
 
 Flow will inspect the repo, draft a plan, execute one feature at a time, validate, review, and continue until the work is done or something genuinely blocks it.
 
 For small tasks, this can finish in a single pass. For larger work, Flow adds the extra planning, validation, and review gates it needs.
 
-Flow treats the target repo's existing `package.json` scripts as the primary execution contract. Package-manager detection (`npm`, `pnpm`, `yarn`, `bun`) is supporting evidence, not a guessing engine.
-
-In monorepos, Flow starts from the current working subdirectory and walks upward to the Flow workspace root, so package-local lockfiles or `package.json#packageManager` entries can override root-level defaults.
-
-If one directory contains conflicting lockfile families and there is no explicit `package.json#packageManager`, Flow treats that evidence as ambiguous instead of guessing. In that case it prefers existing `package.json` scripts and surfaces the ambiguity in planning context.
-
-Planning also records stack and standards evidence from local files such as `package.json`, lockfiles, config files, `AGENTS.md`, and project docs. Local repo guidance and configs outrank official docs, while official docs outrank broader web guidance. When local evidence is incomplete, Flow can record bounded research gaps instead of pretending the standard is known.
+Flow uses the target repo's existing scripts and local guidance as the execution contract. It records stack and standards evidence from files such as `package.json`, lockfiles, config files, `AGENTS.md`, and project docs. In monorepos, package-local evidence can override root-level defaults.
 
 ### Manual, step by step
 
@@ -195,29 +199,37 @@ flowchart TD
     H --> I[Session complete]
 ```
 
-## Session state on disk
+## Where Flow stores state
+
+Most users do not need to edit these files directly. They are useful when you want to inspect or back up Flow's workspace-local state.
 
 Flow writes state only inside the worktree it's running in:
 
 ```text
 .flow/active/<session-id>/session.json
 .flow/stored/<session-id>/session.json
-.flow/completed/<session-id>-<timestamp>/
+.flow/completed/<session-id>-<timestamp>/session.json
+.flow/events/<session-id>.jsonl
+.flow/checkpoints/<session-id>.json
+.flow/projections/<session-id>/
+.flow/locks/
 .flow/standards-profile.json
 ```
 
-Readable markdown for each session lives alongside it:
+Workflow events are append-only JSONL records. Checkpoints cache replayed workflow state, and projections contain rendered markdown derived from workflow state.
+
+Readable markdown for active sessions also lives beside the saved session:
 
 ```text
 .flow/active/<session-id>/docs/index.md
 .flow/active/<session-id>/docs/features/<feature-id>.md
 ```
 
-`.flow/standards-profile.json` is a cache for planning context, not the session source of truth. Flow ignores it when the workspace, start directory, package-manager hint, schema version, source-file fingerprint, or external-guidance TTL no longer matches.
+`.flow/standards-profile.json` is a cache for planning context, not workflow state. Flow ignores it when the workspace, start directory, package-manager hint, schema version, source-file fingerprint, or external-guidance TTL no longer matches.
 
 Read-only `/flow-review` reports are returned directly to the caller. Flow does not maintain a separate persisted review-history tree, and direct follow-up fixes outside Flow do not mutate session records.
 
-There is exactly one active session per worktree. Switching with `/flow-session activate <id>` moves the current active session to `stored/` and brings the requested one in. Stored non-completed sessions are parked/inactive snapshots; activate one before continuing it.
+There is exactly one active session per worktree. Switching with `/flow-session activate <id>` moves the current active session to `stored/` and brings the requested one in. Stored non-completed sessions are inactive saved sessions; activate one before continuing it.
 
 ### Workspace safety
 
@@ -239,13 +251,19 @@ Run `/flow-doctor` when something looks off. It reports:
 
 Use `/flow-doctor detail` for the fuller structured view.
 
-## Upgrading
-
-If you're coming from an older release that installed under `~/.opencode/plugins/` or used a flat `.flow/session.json`, legacy paths are no longer auto-migrated. Review the historical notes in [`CHANGELOG.md`](CHANGELOG.md) and [`docs/releases/`](docs/releases/) for the release that introduced the change.
+## Releases
 
 Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
-## Package API boundary (for consumers)
+## Contributing
+
+Working on the plugin itself? See the [Development Guide](docs/development.md).
+
+For maintainers, [`docs/maintainer-contract.md`](docs/maintainer-contract.md) is the short non-historical contract map for current commands, tools, state paths, and high-risk checks. [`docs/contributor-map.md`](docs/contributor-map.md) maps risky areas to files and validation commands.
+
+Prompt behavior is treated as a tested product surface. The maintainer workflow includes providerless prompt captures and behavior evals for review, planning, execution, control, and auto-resume modes, so prompt changes can be checked without calling a model API or requiring an API key.
+
+### Package API boundary
 
 `opencode-plugin-flow` supports **root-only imports**. Treat only the package root as public API:
 
@@ -253,19 +271,7 @@ Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 import flowPlugin from "opencode-plugin-flow";
 ```
 
-Deep imports (for example `opencode-plugin-flow/dist/...` or `opencode-plugin-flow/src/...`) are intentionally not exported and are outside compatibility guarantees.
-
-Compatibility implications:
-
-- patch/minor updates may freely move or remove internal files
-- only root entrypoint behavior is part of semver compatibility
-- if you currently deep-import internals, migrate to the root plugin entrypoint
-
-## Contributing
-
-Working on the plugin itself? See the [Development Guide](docs/development.md).
-
-Prompt behavior is treated as a tested product surface. The maintainer workflow includes providerless prompt captures and behavior evals for review, planning, execution, control, and auto-resume modes, so prompt changes can be checked without calling a model API or requiring an API key.
+Deep imports (for example `opencode-plugin-flow/dist/...` or `opencode-plugin-flow/src/...`) are intentionally not exported and are outside the public API.
 
 ## License
 

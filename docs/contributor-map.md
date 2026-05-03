@@ -17,12 +17,12 @@ Required checks:
 
 - `bun run typecheck`
 - `bun test tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`
-- `bun run check:dependency-contract` when tool payload compatibility may be affected
+- `bun run check:dependency-contract` when tool payload shape may be affected
 
 Do not:
 
 - Change persisted state shape without migration/recovery consideration.
-- Add cast bridges around schema incompatibility without reviewing the `zod` / plugin SDK alignment.
+- Add cast bridges around schema mismatch without reviewing the `zod` / plugin SDK alignment.
 
 ## Runtime transitions and workflow policy
 
@@ -51,10 +51,10 @@ Risk: high
 
 Read first:
 
-- `src/tools/schemas.ts`
-- `src/tools/runtime-tools/`
-- `src/tools/session-tools/`
-- `src/tool-definition-guidance.ts`
+- `src/adapters/opencode/tool-surface/schemas.ts`
+- `src/adapters/opencode/tool-surface/runtime-tools/`
+- `src/adapters/opencode/tool-surface/session-tools/`
+- `src/adapters/opencode/tool-guidance.generated.ts`
 
 Required checks:
 
@@ -64,7 +64,7 @@ Required checks:
 Do not:
 
 - Rename tools casually; tool names are prompt and operator contracts.
-- Change direct `tool(...)` arg-shape compatibility without dependency-contract verification.
+- Change direct `tool(...)` arg shapes without dependency-contract verification.
 
 ## Prompts, command templates, and mode contracts
 
@@ -167,7 +167,7 @@ Read first:
 Required checks:
 
 - Run the focused suite you add or move coverage into.
-- Run the old broad suite plus the new focused suite when splitting tests.
+- Run the previous broad suite plus the new focused suite when splitting tests.
 
 Do not:
 
@@ -192,5 +192,5 @@ Required checks:
 
 Do not:
 
-- Update old investigation evidence as if it were current contract unless the evidence is re-run.
+- Update prior investigation evidence as if it were current contract unless the evidence is re-run.
 - Leave historical docs unlabeled when they can be mistaken for current contracts.

@@ -1,13 +1,39 @@
 // Owns OpenCode tool arg-shape, zod/plugin alignment, and raw-schema
-// compatibility coverage previously grouped in tests/config.test.ts.
+// contract coverage previously grouped in tests/config.test.ts.
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { tool } from "@opencode-ai/plugin";
+import { tool } from "../../src/adapters/opencode/sdk";
+import {
+	getOpenCodeToolProjection,
+	OPENCODE_TOOL_NAMES,
+	OPENCODE_TOOL_PROJECTIONS,
+} from "../../src/adapters/opencode/tool-projections.generated";
 import { WorkerResultSchema } from "../../src/runtime/schema";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
 
 describe("tool schema config contracts", () => {
-	test("exports sdk-compatible raw arg shapes for every tool", () => {
+	test("OpenCode tool surface is ordered by the adapter projection registry", () => {
+		const { tools } = getToolSchemas();
+
+		expect(Object.keys(tools)).toEqual(OPENCODE_TOOL_NAMES);
+		expect(
+			OPENCODE_TOOL_PROJECTIONS.map((projection) => projection.toolName),
+		).toEqual(OPENCODE_TOOL_NAMES);
+		expect(
+			getOpenCodeToolProjection("flow_run_complete_feature")?.coreAction,
+		).toBe("complete_run");
+		expect(
+			getOpenCodeToolProjection("flow_review_record_final")?.coreAction,
+		).toBe("record_reviewer_decision");
+		expect(
+			getOpenCodeToolProjection("flow_review_record_feature")?.runtimeAction,
+		).toBe("record_feature_review");
+		expect(
+			getOpenCodeToolProjection("flow_review_record_final")?.runtimeAction,
+		).toBe("record_final_review");
+	});
+
+	test("exports OpenCode raw arg shapes for every tool", () => {
 		const { tools, schemas } = getToolSchemas();
 
 		for (const [name, definition] of Object.entries(tools)) {
@@ -27,7 +53,7 @@ describe("tool schema config contracts", () => {
 		}
 	});
 
-	test("keeps the global Flow tool schema surface within a bounded budget", () => {
+	test("keeps the global Flow raw object schema surface within a bounded budget", () => {
 		const { tools } = getToolSchemas();
 		const schemaSizes = Object.fromEntries(
 			Object.entries(tools).map(([name, definition]) => [
@@ -40,12 +66,13 @@ describe("tool schema config contracts", () => {
 			0,
 		);
 
-		expect(totalSize).toBeLessThan(30000);
-		expect(schemaSizes.flow_plan_apply).toBeLessThan(500);
-		expect(schemaSizes.flow_plan_context_record).toBeLessThan(500);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(500);
-		expect(schemaSizes.flow_review_record_feature).toBeLessThan(500);
-		expect(schemaSizes.flow_review_record_final).toBeLessThan(500);
+		expect(totalSize).toBeLessThan(175000);
+		expect(schemaSizes.flow_plan_apply).toBeLessThan(60000);
+		expect(schemaSizes.flow_plan_context_record).toBeLessThan(45000);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(30000);
+		expect(schemaSizes.flow_review_record_feature).toBeLessThan(5000);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(12000);
+		expect(schemaSizes.flow_review_render).toBeLessThan(15000);
 	});
 
 	test("pins zod to the plugin SDK's effective zod contract", async () => {
@@ -112,93 +139,87 @@ describe("tool schema config contracts", () => {
 		);
 		expect(
 			schemas.flow_plan_context_record.safeParse({
-				planningJson: asJson({
-					repoProfile: ["TypeScript"],
-					packageManager: "pnpm",
-					stackProfile: {
-						languages: [
-							{
-								name: "TypeScript",
-								evidenceRefs: ["tsconfig.json"],
-								confidence: "high",
-							},
-						],
-						frameworks: [],
-						runtimes: [],
-						packageManagers: [
-							{
-								name: "pnpm",
-								evidenceRefs: ["package.json"],
-								confidence: "high",
-							},
-						],
-						tools: [],
-					},
-					standardsProfile: {
-						localGuidelines: [
-							{
-								title: "AGENTS.md",
-								sourceType: "local",
-								reference: "AGENTS.md",
-								confidence: "high",
-							},
-						],
-						externalGuidance: [],
-						rules: [
-							{
-								summary: "Prefer existing package scripts.",
-								sourceRefs: ["package.json"],
-								priority: "local",
-							},
-						],
-						gaps: [
-							{
-								stackItem: "React",
-								reason: "No local accessibility guidance was detected.",
-								suggestedResearch: [
-									"official React accessibility documentation",
-								],
-							},
-						],
-						precedence: ["local repo guidance before external standards"],
-					},
-					research: ["Check docs if local evidence is insufficient."],
-					decisionLog: [
+				repoProfile: ["TypeScript"],
+				packageManager: "pnpm",
+				stackProfile: {
+					languages: [
 						{
-							question: "Which path should auto mode recommend?",
-							options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
-							recommendation: "Pause and ask",
-							rationale: ["Keeps human control on meaningful decisions."],
+							name: "TypeScript",
+							evidenceRefs: ["tsconfig.json"],
+							confidence: "high",
 						},
 					],
-				}),
+					frameworks: [],
+					runtimes: [],
+					packageManagers: [
+						{
+							name: "pnpm",
+							evidenceRefs: ["package.json"],
+							confidence: "high",
+						},
+					],
+					tools: [],
+				},
+				standardsProfile: {
+					localGuidelines: [
+						{
+							title: "AGENTS.md",
+							sourceType: "local",
+							reference: "AGENTS.md",
+							confidence: "high",
+						},
+					],
+					externalGuidance: [],
+					rules: [
+						{
+							summary: "Prefer existing package scripts.",
+							sourceRefs: ["package.json"],
+							priority: "local",
+						},
+					],
+					gaps: [
+						{
+							stackItem: "React",
+							reason: "No local accessibility guidance was detected.",
+							suggestedResearch: ["official React accessibility documentation"],
+						},
+					],
+					precedence: ["local repo guidance before external standards"],
+				},
+				research: ["Check docs if local evidence is insufficient."],
+				decisionLog: [
+					{
+						question: "Which path should auto mode recommend?",
+						options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
+						recommendation: "Pause and ask",
+						rationale: ["Keeps human control on meaningful decisions."],
+					},
+				],
 			}).success,
 		).toBe(true);
 
 		expect(
 			schemas.flow_plan_apply.safeParse({
-				planJson: asJson({
-					plan: {
-						summary: "Implement a workflow.",
-						overview: "Create one feature.",
-						features: [
-							{
-								id: "setup-runtime",
-								title: "Create runtime helpers",
-								summary: "Add runtime helpers.",
-								fileTargets: ["src/runtime/session.ts"],
-								verification: ["bun test"],
-							},
-						],
-					},
-				}),
+				plan: {
+					summary: "Implement a workflow.",
+					overview: "Create one feature.",
+					features: [
+						{
+							id: "setup-runtime",
+							title: "Create runtime helpers",
+							summary: "Add runtime helpers.",
+							fileTargets: ["src/runtime/session.ts"],
+							verification: ["bun test"],
+						},
+					],
+				},
 			}).success,
 		).toBe(true);
 		expect(
 			schemas.flow_plan_apply.safeParse({
-				planJson: asJson({ plan: { summary: "Missing fields" } }),
+				plan: { summary: "Missing fields" },
 			}).success,
-		).toBe(true);
+		).toBe(false);
 
 		expect(
 			schemas.flow_plan_approve.safeParse({ featureIds: ["setup-runtime"] })
@@ -224,12 +245,10 @@ describe("tool schema config contracts", () => {
 
 		expect(
 			schemas.flow_review_record_feature.safeParse({
-				decisionJson: asJson({
-					scope: "feature",
-					featureId: "setup-runtime",
-					status: "approved",
-					summary: "Looks good.",
-				}),
+				scope: "feature",
+				featureId: "setup-runtime",
+				status: "approved",
+				summary: "Looks good.",
 			}).success,
 		).toBe(true);
 		expect(schemas.flow_review_record_feature.safeParse({}).success).toBe(
@@ -237,32 +256,30 @@ describe("tool schema config contracts", () => {
 		);
 		expect(
 			schemas.flow_review_record_final.safeParse({
-				decisionJson: asJson({
-					scope: "final",
-					reviewDepth: "detailed",
-					reviewedSurfaces: [
-						"changed_files",
-						"shared_surfaces",
-						"validation_evidence",
-					],
-					evidenceSummary:
-						"Checked final cross-feature integration and validation evidence.",
-					validationAssessment:
-						"Validation coverage and cross-feature interactions were reviewed.",
-					evidenceRefs: {
-						changedArtifacts: [],
-						validationCommands: ["bun test"],
-					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
-					remainingGaps: [],
-					status: "approved",
-					summary: "Looks good.",
-				}),
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: [],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Looks good.",
 			}).success,
 		).toBe(true);
 		expect(schemas.flow_review_record_final.safeParse({}).success).toBe(false);
@@ -283,56 +300,54 @@ describe("tool schema config contracts", () => {
 		).toBe(false);
 		expect(
 			schemas.flow_review_render.safeParse({
-				reviewJson: asJson({
-					requestedDepth: "deep_audit",
-					achievedDepth: "deep_audit",
-					repoSummary: "Repo summary.",
-					overallVerdict: "Overall verdict.",
-					discoveredSurfaces: [],
-					coverageNotes: [],
-					validationRun: [],
-					findings: [],
-				}),
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				repoSummary: "Repo summary.",
+				overallVerdict: "Overall verdict.",
+				discoveredSurfaces: [],
+				coverageNotes: [],
+				validationRun: [],
+				findings: [],
 				view: "both",
 			}).success,
 		).toBe(true);
 		expect(schemas.flow_review_render.safeParse({}).success).toBe(false);
 	});
 
-	test("worker tool raw args accept the documented JSON wrapper payload and reject the old nested shape", () => {
+	test("worker tool raw args reject JSON-string transport fields and nested result shape", () => {
 		const { schemas } = getToolSchemas();
 		const schema = schemas.flow_run_complete_feature;
 
 		const validPayload = {
-			workerJson: asJson({
-				contractVersion: "1",
-				status: "ok",
-				summary: "Completed runtime setup.",
-				artifactsChanged: [],
-				validationRun: [],
-				validationScope: "targeted",
-				reviewIterations: 1,
-				decisions: [],
-				nextStep: "Run the next feature.",
-				outcome: { kind: "completed" },
-				featureResult: {
-					featureId: "setup-runtime",
-					verificationStatus: "passed",
-				},
-				featureReview: {
-					status: "passed",
-					summary: "Looks good.",
-					blockingFindings: [],
-				},
-			}),
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed runtime setup.",
+			artifactsChanged: [],
+			validationRun: [],
+			validationScope: "targeted",
+			reviewIterations: 1,
+			decisions: [],
+			nextStep: "Run the next feature.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: "setup-runtime",
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Looks good.",
+				blockingFindings: [],
+			},
 		};
 
+		const invalidJsonTransport = { workerJson: asJson(validPayload) };
 		const invalidNestedPayload = {
 			contractVersion: "1",
 			result: validPayload,
 		};
 
 		expect(schema.safeParse(validPayload).success).toBe(true);
+		expect(schema.safeParse(invalidJsonTransport).success).toBe(false);
 		expect(schema.safeParse(invalidNestedPayload).success).toBe(false);
 	});
 
@@ -382,18 +397,14 @@ describe("tool schema config contracts", () => {
 			},
 		};
 
-		expect(
-			rawSchema.safeParse({ workerJson: asJson(validCompletion) }).success,
-		).toBe(true);
+		expect(rawSchema.safeParse(validCompletion).success).toBe(true);
 		expect(WorkerResultSchema.safeParse(validCompletion).success).toBe(true);
 
-		expect(
-			rawSchema.safeParse({ workerJson: asJson(invalidCrossField) }).success,
-		).toBe(true);
+		expect(rawSchema.safeParse(invalidCrossField).success).toBe(true);
 		expect(WorkerResultSchema.safeParse(invalidCrossField).success).toBe(false);
 	});
 
-	test("worker tool raw schema accepts the JSON wrapper while runtime schema rejects invalid feature ids", () => {
+	test("worker tool raw schema rejects invalid feature ids before runtime parsing", () => {
 		const { schemas } = getToolSchemas();
 		const rawSchema = schemas.flow_run_complete_feature;
 
@@ -416,9 +427,7 @@ describe("tool schema config contracts", () => {
 			},
 		};
 
-		expect(
-			rawSchema.safeParse({ workerJson: asJson(invalidFeatureId) }).success,
-		).toBe(true);
+		expect(rawSchema.safeParse(invalidFeatureId).success).toBe(false);
 		expect(WorkerResultSchema.safeParse(invalidFeatureId).success).toBe(false);
 	});
 
@@ -426,30 +435,32 @@ describe("tool schema config contracts", () => {
 		const { schemas } = getToolSchemas();
 
 		const validPlan = {
-			planJson: asJson({
-				plan: {
-					summary: "Implement a workflow.",
-					overview: "Create one feature.",
-					features: [
-						{
-							id: "setup-runtime",
-							title: "Create runtime helpers",
-							summary: "Add runtime helpers.",
-							fileTargets: ["src/runtime/session.ts"],
-							verification: ["bun test"],
-						},
-					],
-				},
-			}),
+			plan: {
+				summary: "Implement a workflow.",
+				overview: "Create one feature.",
+				features: [
+					{
+						id: "setup-runtime",
+						title: "Create runtime helpers",
+						summary: "Add runtime helpers.",
+						fileTargets: ["src/runtime/session.ts"],
+						verification: ["bun test"],
+					},
+				],
+			},
 		};
 
 		const invalidPlan = {};
+		const invalidJsonTransport = { planJson: asJson(validPlan) };
 
 		expect(schemas.flow_plan_apply.safeParse(validPlan).success).toBe(true);
 		expect(schemas.flow_plan_apply.safeParse(invalidPlan).success).toBe(false);
+		expect(
+			schemas.flow_plan_apply.safeParse(invalidJsonTransport).success,
+		).toBe(false);
 	});
 
-	test("public tool surface excludes raw wrapper compatibility shims", () => {
+	test("public tool surface excludes string-transport alias tools", () => {
 		const { tools } = getToolSchemas();
 
 		expect("flow_review_record_feature_from_raw" in tools).toBe(false);

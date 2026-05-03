@@ -23,13 +23,13 @@ New commands, tools, prompt contracts, state paths, and runtime modes are frozen
 
 Only add one when the change records an explicit retirement or replacement tradeoff in the release/commit lore. If there is no retirement/replacement story, treat the change as scope expansion and defer it.
 
-## Compatibility hotspots
+## Boundary hotspots
 
 These areas require extra caution because they affect external or cross-surface contracts:
 
 | Area | Canonical map |
 | --- | --- |
-| `zod`, `@opencode-ai/plugin`, or tool argument compatibility | `docs/maintainer-contract.md` dependency/tool rows; `docs/contributor-map.md` runtime schema and tool schema sections |
+| `zod`, `@opencode-ai/plugin`, or tool argument shape | `docs/maintainer-contract.md` dependency/tool rows; `docs/contributor-map.md` runtime schema and tool schema sections |
 | Completion, final review, or recovery transitions | `docs/maintainer-contract.md` completion/runtime rows; `docs/contributor-map.md` runtime transitions section |
 | Prompt text, command templates, or mode contracts | `docs/maintainer-contract.md` prompt rows; `docs/contributor-map.md` prompts section |
 | Session paths, persistence, history, or workspace-root handling | `docs/maintainer-contract.md` state path rows; `docs/contributor-map.md` session persistence section |
@@ -42,8 +42,8 @@ These areas require extra caution because they affect external or cross-surface 
 
 When touching historical or evidence-heavy docs:
 
-- keep old values labeled as historical snapshots with capture date/context, or re-run the evidence and update it as current
-- do not make old file names, deleted artifacts, or retired plans look like active contracts
+- keep prior values labeled as historical snapshots with capture date/context, or re-run the evidence and update it as current
+- do not make prior file names, deleted artifacts, or retired plans look like active contracts
 - confirm `package.json` before presenting version-specific statements as current facts
 
 Quick checks:

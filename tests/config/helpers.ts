@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tool } from "@opencode-ai/plugin";
-import { createTools } from "../../src/tools";
+import { tool } from "../../src/adapters/opencode/sdk";
+import { createTools } from "../../src/adapters/opencode/tools";
 
 export type AgentTools = {
 	edit?: boolean;

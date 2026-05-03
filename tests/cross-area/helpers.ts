@@ -37,7 +37,7 @@ function ensureBuiltDist(projectRoot: string): void {
 	builtDistReady = true;
 }
 
-import type { ToolContext } from "../../src/tools/schemas";
+import type { ToolContext } from "../../src/adapters/opencode/tool-surface/schemas";
 
 type PluginFactory = typeof import("../../src/index").default;
 type ToolExecutor = {

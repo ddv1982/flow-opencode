@@ -20,10 +20,9 @@ describe("flow_plan_start idempotency", () => {
 		await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, {
 			worktree,
 		} as never);
-		await tools.flow_plan_apply.execute(
-			{ planJson: JSON.stringify({ plan: samplePlan() }) },
-			{ worktree } as never,
-		);
+		await tools.flow_plan_apply.execute({ plan: samplePlan() }, {
+			worktree,
+		} as never);
 		await tools.flow_plan_approve.execute({}, { worktree } as never);
 
 		const before = await loadSession(worktree);

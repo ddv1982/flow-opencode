@@ -22,8 +22,8 @@ export const FLOW_REVIEW_SHARED_TAXONOMY_RULES = [
 
 export const FLOW_REVIEW_SHARED_RENDER_RULES = [
 	"- Build the structured audit ledger described below, then call flow_review_render to render it.",
-	"- Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }, where view is the selected render view.",
-	'- reviewJson must contain the actual serialized JSON string for the ledger, not a nested object and not the literal text "JSON.stringify(ledger)".',
+	"- Pass the ledger to flow_review_render by spreading the ledger fields directly, plus view when a non-default render view is selected.",
+	"- Do not wrap the ledger in a JSON string field; flow_review_render validates the ledger object directly.",
 	"- Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.",
 	"- Return the renderer's report field verbatim as your final answer.",
 ] as const;

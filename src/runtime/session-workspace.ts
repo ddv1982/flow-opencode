@@ -31,6 +31,10 @@ const FLOW_GITIGNORE_ENTRIES = [
 	"active/",
 	"stored/",
 	"completed/",
+	"events/",
+	"checkpoints/",
+	"projections/",
+	"locks/",
 	"standards-profile.json",
 ] as const;
 const sessionSaveQueues = new Map<string, Promise<void>>();

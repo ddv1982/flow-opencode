@@ -1,6 +1,6 @@
 # SDK/runtime bridge strictness contract
 
-Scope: `src/tools/schemas.ts`, `src/tools/runtime-tools/shared.ts`, `src/tools/runtime-tools/planning-tools.ts`, `src/tools/runtime-tools/execution-tools.ts`.
+Scope: `src/adapters/opencode/tool-surface/schemas.ts`, `src/adapters/opencode/tool-surface/runtime-tools/shared.ts`, `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts`, `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts`.
 
 ## Current state
 
@@ -13,19 +13,19 @@ Scope: `src/tools/schemas.ts`, `src/tools/runtime-tools/shared.ts`, `src/tools/r
 A change is strictness-preserving only if **all** clauses hold:
 
 1. **Required fields and unions do not widen at the bridge.**
-   - `flow_plan_apply` remains `{ plan: PlanArgsSchema.strict(), planning?: PlanningContextArgsSchema.strict() }` (`src/tools/schemas.ts:63-66`).
+   - `flow_plan_apply` remains `{ plan: PlanArgsSchema.strict(), planning?: PlanningContextArgsSchema.strict() }` (`src/adapters/opencode/tool-surface/schemas.ts:63-66`).
    - Worker completion continues to be parsed by `WorkerResultArgsSchema` (`src/runtime/schema.ts:293-311`) before transition calls.
 
 2. **Runtime parse/validation path is never bypassed.**
-   - Runtime tools keep `withParsedArgs(...)` wrappers (`src/tools/parsed-tool.ts:8-19`).
+   - Runtime tools keep `withParsedArgs(...)` wrappers (`src/adapters/opencode/tool-surface/parsed-tool.ts:8-19`).
    - No direct raw-args path to `applyPlan`, `startRun`, `completeRun`, or `resetFeature`.
 
 3. **No new boundary unsafes.**
    - Do not introduce new `any`, `as any`, `unknown as`, or equivalent bridge casts in scoped files.
-   - If a schema-compatibility problem reappears, solve it by dependency alignment first; only add an explicit bridge adapter as a last resort.
+   - If a schema alignment problem appears, solve it by dependency alignment first; only add an explicit bridge adapter as a last resort.
 
-4. **Raw compatibility behavior stays explicit and tested.**
-   - Top-level worker payload is accepted; deprecated nested `result` payload is rejected.
+4. **Raw object behavior stays explicit and tested.**
+   - Top-level worker payload is accepted; nested `result` payload is rejected.
    - Cross-field invalid worker combinations are rejected by runtime schema/transition checks.
 
 5. **Recovery and completion gates stay runtime-owned.**
@@ -57,7 +57,7 @@ Required checks:
 
 Required quick audit:
 
-- `rg -n "as any|as WorkerResult|unknown as" src/tools/schemas.ts src/tools/runtime-tools/shared.ts src/tools/runtime-tools/planning-tools.ts src/tools/runtime-tools/execution-tools.ts`
+- `rg -n "as any|as WorkerResult|unknown as" src/adapters/opencode/tool-surface/schemas.ts src/adapters/opencode/tool-surface/runtime-tools/shared.ts src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts`
 - `bun pm ls zod`
 
-Pass condition: no new boundary cast points, and `zod` remains intentionally aligned with the plugin SDK unless a reviewed compatibility change says otherwise.
+Pass condition: no new boundary cast points, and `zod` remains intentionally aligned with the plugin SDK unless a reviewed SDK-boundary change says otherwise.

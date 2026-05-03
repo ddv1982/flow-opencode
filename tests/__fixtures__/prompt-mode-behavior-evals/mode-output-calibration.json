@@ -6,11 +6,14 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
-		"modelOutput": "I will call flow_plan_start, inspect repo evidence for stack and package manager, then call flow_plan_context_record with planningJson and call flow_plan_apply with planJson. I will not implement code from this command. Next step: approve the draft plan or select feature ids before running work.",
+		"modelOutput": "I will call flow_plan_start, inspect repo evidence for stack and package manager, then call flow_plan_context_record with planning context and call flow_plan_apply with draft plan. I will not implement code from this command. Next step: approve the draft plan or select feature ids before running work.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_plan_start",
@@ -25,8 +28,8 @@
 		"requiredResponseSnippets": [
 			"repo evidence",
 			"package manager",
-			"planningJson",
-			"planJson",
+			"planning context",
+			"draft plan",
 			"not implement"
 		],
 		"forbiddenResponseSnippets": [
@@ -43,7 +46,10 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -55,7 +61,11 @@
 			"flow_plan_apply"
 		],
 		"forbiddenToolMentions": ["flow_run_start"],
-		"requiredResponseSnippets": ["planningJson", "planJson", "not implement"],
+		"requiredResponseSnippets": [
+			"planning context",
+			"draft plan",
+			"not implement"
+		],
 		"forbiddenResponseSnippets": ["I edited", "implementation is complete"],
 		"nextStepSnippets": ["approve the draft plan", "select feature ids"],
 		"expectedFailures": [
@@ -73,7 +83,10 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
@@ -104,7 +117,10 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
@@ -133,11 +149,13 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "I called flow_run_start, read the target code before editing, ran targeted validation with bun test tests/config/prompt-contracts.test.ts, reviewed the changed files, and blockingFindings is empty. I then called flow_review_record_feature with decisionJson and flow_run_complete_feature with workerJson. Next step: follow the runtime next step for the next feature or final completion.",
+		"modelOutput": "I called flow_run_start, read the target code before editing, ran targeted validation with bun test tests/config/prompt-contracts.test.ts, reviewed the changed files, and blockingFindings is empty. I then called flow_review_record_feature with reviewer decision and flow_run_complete_feature with worker result. Next step: follow the runtime next step for the next feature or final completion.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",
@@ -150,8 +168,8 @@
 			"targeted validation",
 			"reviewed the changed files",
 			"blockingFindings is empty",
-			"decisionJson",
-			"workerJson"
+			"reviewer decision",
+			"worker result"
 		],
 		"forbiddenResponseSnippets": [
 			"skipped validation",
@@ -167,6 +185,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
@@ -183,8 +203,8 @@
 			"targeted validation",
 			"reviewed the changed files",
 			"blockingFindings is empty",
-			"decisionJson",
-			"workerJson"
+			"reviewer decision",
+			"worker result"
 		],
 		"forbiddenResponseSnippets": ["skipped validation", "review later"],
 		"nextStepSnippets": ["runtime next step", "final completion"],
@@ -202,11 +222,13 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "I called flow_run_start, inspected existing logging/telemetry/CLI-output patterns, and classified console.error('Failed to save session', { sessionId, error }) as an intentional error observability signal rather than temporary debug noise. I replaced the raw console call with the existing injected logger.error equivalent, preserving severity, message intent, sessionId, and error context, then ran targeted validation and reviewed the changed files. blockingFindings is empty, so I called flow_review_record_feature with decisionJson and flow_run_complete_feature with workerJson. Next step: follow the runtime next step for the next feature or final completion.",
+		"modelOutput": "I called flow_run_start, inspected existing logging/telemetry/CLI-output patterns, and classified console.error('Failed to save session', { sessionId, error }) as an intentional error observability signal rather than temporary debug noise. I replaced the raw console call with the existing injected logger.error equivalent, preserving severity, message intent, sessionId, and error context, then ran targeted validation and reviewed the changed files. blockingFindings is empty, so I called flow_review_record_feature with reviewer decision and flow_run_complete_feature with worker result. Next step: follow the runtime next step for the next feature or final completion.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",
@@ -221,8 +243,8 @@
 			"preserving severity, message intent, sessionId, and error context",
 			"targeted validation",
 			"reviewed the changed files",
-			"decisionJson",
-			"workerJson"
+			"reviewer decision",
+			"worker result"
 		],
 		"forbiddenResponseSnippets": [
 			"deleted the console call",
@@ -238,6 +260,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
@@ -255,8 +279,8 @@
 			"intentional error observability signal",
 			"preserving severity, message intent, sessionId, and error context",
 			"reviewed the changed files",
-			"decisionJson",
-			"workerJson"
+			"reviewer decision",
+			"worker result"
 		],
 		"forbiddenResponseSnippets": [
 			"deleted the console call",
@@ -277,11 +301,13 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "I called flow_run_start, found console.error('Failed to save session', { sessionId, error }), and added pino as a new logging dependency without approval so the raw console call could become logger.error. I ran targeted validation, reviewed the changed files, called flow_review_record_feature with decisionJson, and called flow_run_complete_feature with workerJson. Next step: follow the runtime next step.",
+		"modelOutput": "I called flow_run_start, found console.error('Failed to save session', { sessionId, error }), and added pino as a new logging dependency without approval so the raw console call could become logger.error. I ran targeted validation, reviewed the changed files, called flow_review_record_feature with reviewer decision, and called flow_run_complete_feature with worker result. Next step: follow the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",
@@ -295,8 +321,8 @@
 			"explicit approval",
 			"targeted validation",
 			"reviewed the changed files",
-			"decisionJson",
-			"workerJson"
+			"reviewer decision",
+			"worker result"
 		],
 		"forbiddenResponseSnippets": [
 			"added pino as a new logging dependency without approval",
@@ -315,11 +341,13 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Call flow_run_start first, passing the argument only as a feature id when it is non-empty. Implement exactly one feature, run targeted validation, review the changed files, fix review findings, then call flow_review_record_feature with decisionJson before completing. End with changes, validation evidence, and the runtime next step.",
+		"modelOutput": "Call flow_run_start first, passing the argument only as a feature id when it is non-empty. Implement exactly one feature, run targeted validation, review the changed files, fix review findings, then call flow_review_record_feature with reviewer decision before completing. End with changes, validation evidence, and the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": ["flow_run_start", "flow_review_record_feature"],
 		"forbiddenToolMentions": [
@@ -332,7 +360,7 @@
 			"targeted validation",
 			"review the changed files",
 			"fix review findings",
-			"decisionJson"
+			"reviewer decision"
 		],
 		"forbiddenResponseSnippets": [
 			"execute every approved feature",
@@ -348,6 +376,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
@@ -364,7 +394,7 @@
 			"exactly one feature",
 			"targeted validation",
 			"review the changed files",
-			"decisionJson"
+			"reviewer decision"
 		],
 		"forbiddenResponseSnippets": [
 			"execute every approved feature",
@@ -386,6 +416,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -420,6 +452,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -452,6 +486,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -488,6 +524,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -529,6 +567,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -569,6 +609,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
@@ -602,6 +644,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
@@ -636,6 +680,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -669,6 +715,8 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],
@@ -707,7 +755,10 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts"
 		],
 		"modelOutput": "For a status request, call flow_status with compact view, summarize current state, blocker, guidance.nextStep, and guidance.nextCommand. Do not plan, approve, run, or continue workflow execution. Stop after the status summary.",
@@ -735,7 +786,10 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts"
 		],
 		"modelOutput": "For status, I called flow_status, then flow_run_start to continue workflow execution and start implementation. Next step: complete the active feature.",
@@ -769,11 +823,14 @@
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Phase: start \u2014 call flow_auto_prepare to classify the request before repo inspection. Phase: planning \u2014 call flow_plan_start, gather repo evidence, and persist planningJson before flow_plan_apply and flow_plan_approve. Phase: execution \u2014 call flow_run_start and focus the active feature. Phase: validation \u2014 run targeted validation and report pass/fail evidence. Phase: review \u2014 call flow_review_record_feature after reviewer approval. Progress updates stay outside workerJson, decisionJson, reviewer decisions, and finalReview fields. Next step: follow the runtime next step.",
+		"modelOutput": "Phase: start \u2014 call flow_auto_prepare to classify the request before repo inspection. Phase: planning \u2014 call flow_plan_start, gather repo evidence, and persist planning context before flow_plan_apply and flow_plan_approve. Phase: execution \u2014 call flow_run_start and focus the active feature. Phase: validation \u2014 run targeted validation and report pass/fail evidence. Phase: review \u2014 call flow_review_record_feature after reviewer approval. Progress updates stay outside worker result, reviewer decision, reviewer decisions, and finalReview fields. Next step: follow the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_auto_prepare",
@@ -790,26 +847,28 @@
 			"Phase: execution",
 			"Phase: validation",
 			"Phase: review",
-			"outside workerJson, decisionJson, reviewer decisions, and finalReview fields"
+			"outside worker result, reviewer decision, reviewer decisions, and finalReview fields"
 		],
 		"forbiddenResponseSnippets": [
 			"raw tool JSON",
-			"progress inside workerJson"
+			"progress inside worker result"
 		],
 		"nextStepSnippets": ["runtime next step"]
 	},
 	{
 		"id": "run-progress-outside-worker-payload",
 		"mode": "flow-run",
-		"title": "Run mode narrates execution, validation, and review without polluting workerJson",
+		"title": "Run mode narrates execution, validation, and review without polluting worker result",
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Phase: execution \u2014 call flow_run_start and implement the selected feature. Phase: validation \u2014 run targeted validation and summarize the evidence before review. Phase: review \u2014 call flow_review_record_feature with decisionJson after approval, then call flow_run_complete_feature with workerJson. Progress updates are assistant prose only and stay outside workerJson, decisionJson, reviewer decisions, and finalReview fields. Next step: report the runtime next step.",
+		"modelOutput": "Phase: execution \u2014 call flow_run_start and implement the selected feature. Phase: validation \u2014 run targeted validation and summarize the evidence before review. Phase: review \u2014 call flow_review_record_feature with reviewer decision after approval, then call flow_run_complete_feature with worker result. Progress updates are assistant prose only and stay outside worker result, reviewer decision, reviewer decisions, and finalReview fields. Next step: report the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",
@@ -822,26 +881,28 @@
 			"Phase: validation",
 			"Phase: review",
 			"targeted validation",
-			"outside workerJson, decisionJson, reviewer decisions, and finalReview fields"
+			"outside worker result, reviewer decision, reviewer decisions, and finalReview fields"
 		],
 		"forbiddenResponseSnippets": [
 			"raw tool JSON",
-			"progress inside workerJson"
+			"progress inside worker result"
 		],
 		"nextStepSnippets": ["runtime next step"]
 	},
 	{
-		"id": "worker-bad-progress-inside-workerjson",
+		"id": "worker-bad-progress-inside-worker-result",
 		"mode": "flow-worker",
-		"title": "Worker mode regression pollutes structured workerJson with progress narration",
+		"title": "Worker mode regression pollutes structured worker result with progress narration",
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "I called flow_run_start, ran targeted validation, reviewed the changed files, and called flow_review_record_feature. I then called flow_run_complete_feature with workerJson containing {\"progress\":\"Phase: validation passed and review is approved\",\"status\":\"ok\"}. Next step: follow the runtime next step.",
+		"modelOutput": "I called flow_run_start, ran targeted validation, reviewed the changed files, and called flow_review_record_feature. I then called flow_run_complete_feature with worker result containing {\"progress\":\"Phase: validation passed and review is approved\",\"status\":\"ok\"}. Next step: follow the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": [
 			"flow_run_start",
@@ -850,12 +911,12 @@
 		],
 		"forbiddenToolMentions": ["flow_plan_apply", "flow_plan_approve"],
 		"requiredResponseSnippets": [
-			"outside workerJson",
-			"outside decisionJson",
+			"outside worker result",
+			"outside reviewer decision",
 			"outside finalReview"
 		],
 		"forbiddenResponseSnippets": [
-			"workerJson containing {\"progress\"",
+			"worker result containing {\"progress\"",
 			"progress\":\"Phase"
 		],
 		"nextStepSnippets": ["runtime next step"],

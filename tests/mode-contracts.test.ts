@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { createCoreTools } from "../src/adapters/opencode/tools";
 import { createFlowAuditConfigEntries } from "../src/audit/config";
 import { createFlowCoreConfigEntries } from "../src/config";
 import { FLOW_READ_ONLY_PERMISSION } from "../src/config-shared";
@@ -11,7 +12,6 @@ import {
 	type FlowPromptMode,
 	getFlowModeContract,
 } from "../src/prompts/mode-contracts";
-import { createCoreTools } from "../src/tools";
 import { isFirstPartySourcePath } from "./prompt-eval-helpers";
 
 const EXPECTED_MODE_ORDER = [

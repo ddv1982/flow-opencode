@@ -1,10 +1,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ToolContext } from "../src/adapters/opencode/tool-surface/schemas";
+import { createTools } from "../src/adapters/opencode/tools";
 import type { ReviewReport } from "../src/audit/report-schema";
 import { readActiveSessionId } from "../src/runtime/session";
-import { createTools } from "../src/tools";
-import type { ToolContext } from "../src/tools/schemas";
 import {
 	samplePlan as canonicalSamplePlan,
 	sampleSession as canonicalSampleSession,

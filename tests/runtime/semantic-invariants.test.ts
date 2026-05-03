@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createTools } from "../../src/adapters/opencode/tools";
 import {
 	SEMANTIC_COMPLETION_GATE_ORDER,
 	SEMANTIC_COMPLETION_POLICY_EXPECTATIONS,
@@ -33,7 +34,6 @@ import {
 import { applyPlan, approvePlan } from "../../src/runtime/transitions/plan";
 import { buildCompletionRecovery } from "../../src/runtime/transitions/recovery";
 import type { TransitionResult } from "../../src/runtime/transitions/shared";
-import { createTools } from "../../src/tools";
 import { cloneSamplePlan } from "../fixtures";
 
 function escapeRegExp(value: string): string {
@@ -179,7 +179,7 @@ describe("runtime semantic invariants", () => {
 				"FlowReviewRecordFinalArgsSchema",
 			],
 			"src/runtime/transitions/recovery.ts": ["buildCompletionRecovery"],
-			"src/tools.ts": ["createTools"],
+			"src/adapters/opencode/tools.ts": ["createTools"],
 			"src/runtime/constants.ts": ["CANONICAL_RUNTIME_TOOL_NAMES"],
 		} as const satisfies Record<string, readonly string[]>;
 

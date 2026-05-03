@@ -110,6 +110,12 @@ jobs:
       - name: Run completion-lane invariants gate
         run: bun run gate:completion-lane
 
+      - name: Run replay/property release gate
+        run: bun run test:replay
+
+      - name: Run benchmark baseline gate
+        run: bun run bench:gate
+
       - name: Run typecheck, tests, and build
         run: bun run check
 

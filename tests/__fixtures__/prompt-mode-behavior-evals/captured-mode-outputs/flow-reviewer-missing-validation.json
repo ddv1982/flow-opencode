@@ -7,6 +7,8 @@
 		"capturedFrom": "Codex manual providerless capture from flow-reviewer-missing-validation.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts"
 		],

@@ -13,8 +13,8 @@
 		"requiredResponseSnippets": [
 			"repo evidence",
 			"package manager",
-			"planningJson",
-			"planJson",
+			"planning context",
+			"draft plan",
 			"not implement"
 		],
 		"forbiddenResponseSnippets": ["I edited", "implementation is complete"],
@@ -54,7 +54,7 @@
 			"exactly one feature",
 			"targeted validation",
 			"review the changed files",
-			"decisionJson"
+			"reviewer decision"
 		],
 		"forbiddenResponseSnippets": [
 			"execute every approved feature",
@@ -81,8 +81,8 @@
 			"targeted validation",
 			"reviewed the changed files",
 			"blockingFindings is empty",
-			"decisionJson",
-			"workerJson"
+			"reviewer decision",
+			"worker result"
 		],
 		"forbiddenResponseSnippets": ["skipped validation", "review later"],
 		"nextStepSnippets": ["runtime next step", "final completion"],

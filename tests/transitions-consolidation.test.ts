@@ -5,7 +5,13 @@ import { join } from "node:path";
 const repoRoot = join(import.meta.dir, "..");
 const transitionsDir = join(repoRoot, "src", "runtime", "transitions");
 const srcDir = join(repoRoot, "src");
-const sessionToolsDir = join(srcDir, "tools", "session-tools");
+const opencodeToolSurfaceDir = join(
+	srcDir,
+	"adapters",
+	"opencode",
+	"tool-surface",
+);
+const sessionToolsDir = join(opencodeToolSurfaceDir, "session-tools");
 
 describe("transition consolidation", () => {
 	test("transitions directory stays within the bounded module surface", () => {
@@ -45,11 +51,11 @@ describe("transition consolidation", () => {
 			expect(count).toBeLessThanOrEqual(550);
 		}
 		const runtimeToolsCount = readFileSync(
-			join(srcDir, "tools", "runtime-tools.ts"),
+			join(opencodeToolSurfaceDir, "runtime-tools.ts"),
 			"utf8",
 		).split("\n").length;
 		const sessionToolsCount = readFileSync(
-			join(srcDir, "tools", "session-tools.ts"),
+			join(opencodeToolSurfaceDir, "session-tools.ts"),
 			"utf8",
 		).split("\n").length;
 		expect(runtimeToolsCount).toBeLessThanOrEqual(700);

@@ -37,6 +37,11 @@ export type FlowModeContract = {
 };
 
 const PROMPT_MODE_CONTRACT_SOURCE_PATH = "src/prompts/mode-contracts.ts";
+const CORE_ROLE_PROTOCOL_SOURCE_PATH = "src/core/protocols/roles.ts";
+const GENERATED_ROLE_PROMPT_SOURCE_PATH =
+	"src/prompts/generated/role-prompts.ts";
+const GENERATED_COMMAND_TEMPLATE_SOURCE_PATH =
+	"src/prompts/generated/command-templates.ts";
 
 export const FLOW_PROMPT_MODE_CAPTURE_MODES = [
 	"flow-plan",
@@ -59,7 +64,10 @@ export const FLOW_MODE_CONTRACTS = {
 		surfaceKind: "command",
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			CORE_ROLE_PROTOCOL_SOURCE_PATH,
+			GENERATED_COMMAND_TEMPLATE_SOURCE_PATH,
 			"src/prompts/commands.ts",
+			GENERATED_ROLE_PROMPT_SOURCE_PATH,
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 		],
@@ -98,7 +106,10 @@ export const FLOW_MODE_CONTRACTS = {
 		surfaceKind: "command",
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			CORE_ROLE_PROTOCOL_SOURCE_PATH,
+			GENERATED_COMMAND_TEMPLATE_SOURCE_PATH,
 			"src/prompts/commands.ts",
+			GENERATED_ROLE_PROMPT_SOURCE_PATH,
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts",
 		],
@@ -134,6 +145,8 @@ export const FLOW_MODE_CONTRACTS = {
 		surfaceKind: "command",
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			CORE_ROLE_PROTOCOL_SOURCE_PATH,
+			GENERATED_COMMAND_TEMPLATE_SOURCE_PATH,
 			"src/prompts/commands.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts",
@@ -169,6 +182,8 @@ export const FLOW_MODE_CONTRACTS = {
 		surfaceKind: "agent",
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			CORE_ROLE_PROTOCOL_SOURCE_PATH,
+			GENERATED_ROLE_PROMPT_SOURCE_PATH,
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts",
@@ -204,6 +219,8 @@ export const FLOW_MODE_CONTRACTS = {
 		surfaceKind: "agent",
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			CORE_ROLE_PROTOCOL_SOURCE_PATH,
+			GENERATED_ROLE_PROMPT_SOURCE_PATH,
 			"src/prompts/agents.ts",
 			"src/prompts/contracts.ts",
 		],
@@ -234,7 +251,10 @@ export const FLOW_MODE_CONTRACTS = {
 		surfaceKind: "agent",
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			CORE_ROLE_PROTOCOL_SOURCE_PATH,
+			GENERATED_COMMAND_TEMPLATE_SOURCE_PATH,
 			"src/prompts/commands.ts",
+			GENERATED_ROLE_PROMPT_SOURCE_PATH,
 			"src/prompts/agents.ts",
 		],
 		runtimeMutation: "explicit_control_only",

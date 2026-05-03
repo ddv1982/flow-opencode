@@ -233,7 +233,7 @@ describe("runtime completion and recovery tools", () => {
 		expect(parsed.summary).toContain("No active Flow");
 	});
 
-	test("tool rejects the old nested worker payload shape", async () => {
+	test("tool rejects nested worker payload shape", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Build a workflow plugin");
@@ -328,7 +328,7 @@ describe("runtime completion and recovery tools", () => {
 		expect(parsed.summary).not.toContain("Cannot read properties");
 	});
 
-	test("tool rejects malformed JSON-string worker payloads on the production wrapper path", async () => {
+	test("tool rejects malformed JSON-string worker transport fields", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const response = await tools.flow_run_complete_feature.execute(
@@ -338,25 +338,23 @@ describe("runtime completion and recovery tools", () => {
 
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain("workerJson");
-		expect(parsed.summary).toContain("JSON string payload");
+		expect(parsed.summary).toContain("status");
 	});
 
-	test("tool rejects duplicate keys inside JSON-string worker payloads", async () => {
+	test("tool rejects syntactically valid JSON-string worker transport fields", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const response = await tools.flow_run_complete_feature.execute(
 			{
 				workerJson:
-					'{"contractVersion":"1","status":"needs_input","status":"ok","summary":"Bad payload.","artifactsChanged":[],"validationRun":[],"decisions":[],"nextStep":"Stop.","outcome":{"kind":"completed"},"featureResult":{"featureId":"setup-runtime"},"featureReview":{"status":"passed","summary":"Looks good.","blockingFindings":[]}}',
+					'{"contractVersion":"1","status":"ok","summary":"Bad payload.","artifactsChanged":[],"validationRun":[],"decisions":[],"nextStep":"Stop.","outcome":{"kind":"completed"},"featureResult":{"featureId":"setup-runtime"},"featureReview":{"status":"passed","summary":"Looks good.","blockingFindings":[]}}',
 			},
 			toolContext(worktree),
 		);
 
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain("workerJson");
-		expect(parsed.summary).toContain("JSON string payload");
+		expect(parsed.summary).toContain("status");
 	});
 
 	test("tool returns machine-readable recovery details for missing final reviewer approval", async () => {

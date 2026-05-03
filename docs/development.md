@@ -43,7 +43,7 @@ Useful scripts:
 - `src/index.ts` — plugin entrypoint
 - `src/installer.ts` — local OpenCode plugin installer
 - `src/config.ts` — command and agent injection
-- `src/tools.ts` — OpenCode runtime tool surface
+- `src/adapters/opencode/tools.ts` — OpenCode runtime tool surface
 - `src/runtime/schema.ts` — session and contract schemas
 - `src/runtime/transitions/` — domain state transition rules split by lifecycle phase
 - `src/runtime/domain/completion.ts` — shared completion-policy calculations
@@ -151,9 +151,9 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 
 - Runtime owns workflow semantics; prompts and docs describe them.
 - Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
-- Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed compatibility change is intentional.
-- Preserve direct `tool(...)` arg-shape compatibility at the SDK boundary.
-- Use permission-only OpenCode agent restrictions; do not reintroduce deprecated boolean `tools` config for read-only Flow agents.
+- Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed SDK-boundary change is intentional.
+- Preserve direct `tool(...)` arg shapes at the SDK boundary.
+- Use permission-only OpenCode agent restrictions; do not reintroduce boolean `tools` config for read-only Flow agents.
 - Prefer deletion over new helper layers.
 - Keep release-bound source free of debug-only artifacts. Do not leave ad-hoc `console.*` calls or `debugger` statements in `src` or the built release artifact. Inspect existing logging, telemetry, CLI-output, and test patterns before changing `console.*`; remove temporary debug noise, but preserve intentional operator or observability signals with an equivalent replacement that keeps severity, message intent, and key context.
 - Pair behavior changes with targeted tests and run the existing validation scripts before release.
@@ -253,17 +253,17 @@ const FlowRunStartArgsShape = {
 
 This plugin uses two validation layers:
 
-- SDK-facing tool `args` stay as raw shapes for OpenCode compatibility
+- SDK-facing tool `args` stay as raw shapes for OpenCode's plugin contract
 - stricter runtime validation happens later through schemas such as `WorkerResultSchema`
 
-For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, and `flow_review_record_final`), keep the SDK-facing shape thin by transporting the real object as a JSON string field (`planningJson`, `planJson`, `workerJson`, or `decisionJson`) and validating the decoded object at runtime. This keeps the global tool schema surface small enough for ordinary OpenCode requests. Any legacy direct-object compatibility at the `execute(...)` boundary is for internal direct callers and tests only; OpenCode itself will see and validate the thin wrapper schema.
+For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, and `flow_review_record_final`), expose the current raw object-shape contract directly at the SDK boundary and let runtime schemas enforce the stricter semantic refinements. Do not reintroduce JSON-string transport fields or alternate direct-caller fallbacks.
 
 ## Testing
 
 The test suite covers:
 
 - command and agent injection
-- tool argument shape compatibility
+- tool argument shapes
 - session creation, save, and load
 - markdown doc rendering
 - plan application, selection, and approval

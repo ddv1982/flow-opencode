@@ -1,7 +1,7 @@
 import { describe, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createTools } from "../src/tools";
+import { createTools } from "../src/adapters/opencode/tools";
 
 const DEVELOPMENT_DOC_PATH = join(
 	import.meta.dir,

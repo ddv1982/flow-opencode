@@ -13,12 +13,12 @@ Prompts and docs describe behavior; they do not define it.
 
 Primary ownership map:
 
-- Plugin registration: `src/index.ts`, `src/config.ts`, `src/tools.ts`
+- Plugin registration: `src/index.ts`, `src/config.ts`, `src/adapters/opencode/tools.ts`
 - Runtime schemas and persisted state contracts: `src/runtime/schema.ts`
 - Runtime/domain policy: `src/runtime/domain/`
 - State transitions: `src/runtime/transitions/`
 - Session persistence and workspace-root rules: `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts`
-- Tool schemas: `src/tools/schemas.ts`, with shared runtime payload schemas imported from `src/runtime/schema.ts`
+- Tool schemas: `src/adapters/opencode/tool-surface/schemas.ts`, with shared runtime payload schemas imported from `src/runtime/schema.ts`
 - Prompt-mode contracts: `src/prompts/mode-contracts.ts`
 - Prompt text: `src/prompts/`, `src/audit/prompts/`
 
@@ -46,28 +46,28 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 
 ## Tools
 
-Tool registration is split by operator surface, but `src/tools/schemas.ts` is the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload compatibility is owned by `src/runtime/schema.ts` and re-exported through `src/tools/schemas.ts`.
+Tool registration is split by operator surface, but `src/adapters/opencode/tool-surface/schemas.ts` is the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload validation is owned by `src/runtime/schema.ts` and projected through `src/adapters/opencode/tool-surface/schemas.ts`.
 
 | Tool | Registration owner | Schema owner |
 | --- | --- | --- |
-| `flow_status` | `src/tools/session-tools/history-tools.ts` | `FlowStatusArgsSchema` in `src/tools/schemas.ts` |
-| `flow_doctor` | `src/tools/session-tools/history-tools.ts` | `FlowDoctorArgsSchema` in `src/tools/schemas.ts` |
-| `flow_history` | `src/tools/session-tools/history-tools.ts` | `FlowHistoryArgsSchema` in `src/tools/schemas.ts` |
-| `flow_history_show` | `src/tools/session-tools/history-tools.ts` | `FlowHistoryShowArgsSchema` in `src/tools/schemas.ts` |
-| `flow_session_activate` | `src/tools/session-tools/history-tools.ts` | `FlowSessionActivateArgsSchema` in `src/tools/schemas.ts` |
-| `flow_session_close` | `src/tools/session-tools/lifecycle-tools.ts` | `FlowSessionCloseArgsSchema` in `src/tools/schemas.ts` |
-| `flow_auto_prepare` | `src/tools/session-tools/planning-tools.ts` | `FlowAutoPrepareArgsSchema` in `src/tools/schemas.ts` |
-| `flow_plan_start` | `src/tools/session-tools/planning-tools.ts` | `FlowPlanStartArgsSchema` in `src/tools/schemas.ts` |
-| `flow_plan_context_record` | `src/tools/runtime-tools/planning-tools.ts` | `FlowPlanContextRecordArgsSchema` in `src/tools/schemas.ts` |
-| `flow_plan_apply` | `src/tools/runtime-tools/planning-tools.ts` | `FlowPlanApplyArgsSchema` in `src/tools/schemas.ts` |
-| `flow_plan_approve` | `src/tools/runtime-tools/planning-tools.ts` | `FlowPlanApproveArgsSchema` in `src/tools/schemas.ts` |
-| `flow_plan_select_features` | `src/tools/runtime-tools/planning-tools.ts` | `FlowPlanSelectArgsSchema` in `src/tools/schemas.ts` |
-| `flow_run_start` | `src/tools/runtime-tools/execution-tools.ts` | `FlowRunStartArgsSchema` in `src/tools/schemas.ts` |
-| `flow_run_complete_feature` | `src/tools/runtime-tools/execution-tools.ts` | `FlowRunCompleteFeatureArgsSchema` plus `WorkerResultArgsSchema` in `src/tools/schemas.ts` / `src/runtime/schema.ts` |
-| `flow_reset_feature` | `src/tools/runtime-tools/execution-tools.ts` | `FlowResetFeatureArgsSchema` in `src/tools/schemas.ts` |
-| `flow_review_record_feature` | `src/tools/runtime-tools/review-tools.ts` | `FlowReviewRecordFeatureJsonArgsSchema` plus `FlowReviewRecordFeatureArgsSchema` in `src/tools/schemas.ts` / `src/runtime/schema.ts` |
-| `flow_review_record_final` | `src/tools/runtime-tools/review-tools.ts` | `FlowReviewRecordFinalJsonArgsSchema` plus `FlowReviewRecordFinalArgsSchema` in `src/tools/schemas.ts` / `src/runtime/schema.ts` |
-| `flow_review_render` | `src/tools/runtime-tools/review-tools.ts` | `FlowReviewRenderArgsSchema` in `src/tools/schemas.ts` |
+| `flow_status` | `src/adapters/opencode/tool-surface/session-tools/history-tools.ts` | `FlowStatusArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_doctor` | `src/adapters/opencode/tool-surface/session-tools/history-tools.ts` | `FlowDoctorArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_history` | `src/adapters/opencode/tool-surface/session-tools/history-tools.ts` | `FlowHistoryArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_history_show` | `src/adapters/opencode/tool-surface/session-tools/history-tools.ts` | `FlowHistoryShowArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_session_activate` | `src/adapters/opencode/tool-surface/session-tools/history-tools.ts` | `FlowSessionActivateArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_session_close` | `src/adapters/opencode/tool-surface/session-tools/lifecycle-tools.ts` | `FlowSessionCloseArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_auto_prepare` | `src/adapters/opencode/tool-surface/session-tools/planning-tools.ts` | `FlowAutoPrepareArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_plan_start` | `src/adapters/opencode/tool-surface/session-tools/planning-tools.ts` | `FlowPlanStartArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_plan_context_record` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanContextRecordArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_plan_apply` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanApplyArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_plan_approve` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanApproveArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_plan_select_features` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanSelectArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_run_start` | `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts` | `FlowRunStartArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_run_complete_feature` | `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts` | `FlowRunCompleteFeatureArgsSchema` plus `WorkerResultArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
+| `flow_reset_feature` | `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts` | `FlowResetFeatureArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_review_record_feature` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRecordFeatureArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
+| `flow_review_record_final` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRecordFinalArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
+| `flow_review_render` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRenderArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 
 ## State paths
 
@@ -97,7 +97,7 @@ Ownership rules:
 
 - Runtime owns workflow semantics.
 - Prompt contracts must mirror runtime, not invent behavior.
-- Tool schemas are compatibility surfaces.
+- Tool schemas are SDK boundary surfaces.
 - Completion/reviewer gates are release-critical.
 - `zod` / `@opencode-ai/plugin` alignment must remain stable.
 - Runtime tool names are public prompt contracts; renames require parity updates.
@@ -126,7 +126,7 @@ Prefer the narrowest useful check first, then run `bun run check` before release
 
 | Area touched | Required checks |
 | --- | --- |
-| `zod`, `@opencode-ai/plugin`, or tool arg compatibility | `bun pm ls zod`; `bun run check:dependency-contract`; `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`; `bun run typecheck` |
+| `zod`, `@opencode-ai/plugin`, or tool arg shapes | `bun pm ls zod`; `bun run check:dependency-contract`; `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`; `bun run typecheck` |
 | Completion/finalization transitions | `bun run gate:completion-lane`; `bun test tests/runtime/final-completion-gates.test.ts tests/runtime/final-review-contracts.test.ts tests/completion-gates.test.ts` |
 | Runtime transitions or schema | `bun test tests/runtime.test.ts tests/runtime-replanning.test.ts tests/runtime-actionable-metadata.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts` |
 | Prompt text or prompt-mode contracts | `bun run eval:prompt-capture:check`; `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts` |

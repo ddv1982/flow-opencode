@@ -7,7 +7,10 @@
 		"capturedFrom": "Codex manual providerless capture from flow-control-status-readonly.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
 			"src/prompts/agents.ts"
 		],
 		"modelOutput": "Call flow_status with compact view for this status request. Summarize the current state, blocker if any, guidance.nextStep, and guidance.nextCommand. Do not plan, approve, run, or mutate workflow execution. Stop after the status summary; if no active session exists, point to the recommended start command.",

@@ -47,7 +47,7 @@ export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
 export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =
 	"- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.";
 export const FLOW_OPERATOR_PROGRESS_RULE =
-	"- Keep the user informed with concise operator progress updates at phase boundaries this mode owns: say the current phase, the immediate action, and why it matters in one short sentence before starting a major phase; after each phase, summarize the outcome/evidence and next step. Progress updates are assistant prose only; never include progress narration inside `workerJson`, `decisionJson`, reviewer decisions, or `finalReview` fields. Do not dump raw tool JSON or narrate every minor file read/tool call.";
+	"- Keep the user informed with concise operator progress updates at phase boundaries this mode owns: say the current phase, the immediate action, and why it matters in one short sentence before starting a major phase; after each phase, summarize the outcome/evidence and next step. Progress updates are assistant prose only; never include progress narration inside worker-result, reviewer-decision, or `finalReview` fields. Do not dump raw tool JSON or narrate every minor file read/tool call.";
 export const FLOW_OPERATOR_PROGRESS_CHECKPOINTS = `Operator progress checkpoints:
 - Start: classify the request or active session state.
 - Planning: summarize the repo evidence being gathered and the plan/approval outcome.
@@ -80,8 +80,8 @@ export const FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE =
 export const FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE =
 	"- If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.";
 export const FLOW_FINAL_COMPLETION_COMMAND_RULE =
-	"- On the final completion path, run broad validation, obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) through `flow_review_record_final` using `decisionJson`, include a passing `finalReview`, and only then persist the result through `flow_run_complete_feature` using `workerJson`.";
+	"- On the final completion path, run broad validation, obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) through `flow_review_record_final`, include a passing `finalReview`, and only then persist the result through `flow_run_complete_feature`.";
 export const FLOW_FINAL_COMPLETION_WORKER_STEP_RULE =
-	"On the final completion path, run broad validation, ask flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), and persist that approval with flow_review_record_final, encoding the reviewer decision into `decisionJson`.";
+	"On the final completion path, run broad validation, ask flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), and persist that approval with flow_review_record_final using the direct reviewer decision object.";
 export const FLOW_FINAL_COMPLETION_AUTO_STEP_RULE =
-	"On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), persist it with flow_review_record_final using `decisionJson`, and keep fixing/revalidating until the final review passes.";
+	"On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), persist it with flow_review_record_final using the direct reviewer decision object, and keep fixing/revalidating until the final review passes.";

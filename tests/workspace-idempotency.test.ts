@@ -51,7 +51,7 @@ describe("workspace idempotency", () => {
 		await ensureWorkspace(worktree);
 
 		await expect(readFile(gitignorePath, "utf8")).resolves.toBe(
-			"# local overrides\n/my-temp\nactive/\nstored/\ncompleted/\nstandards-profile.json\n",
+			"# local overrides\n/my-temp\nactive/\nstored/\ncompleted/\nevents/\ncheckpoints/\nprojections/\nlocks/\nstandards-profile.json\n",
 		);
 	});
 });

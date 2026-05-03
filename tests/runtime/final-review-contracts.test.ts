@@ -231,13 +231,19 @@ describe("runtime final review contracts", () => {
 		expect(completed.ok).toBe(true);
 		if (!completed.ok) return;
 
-		const legacySession = JSON.parse(JSON.stringify(completed.value));
-		legacySession.execution.lastReviewerDecision.evidenceRefs = undefined;
-		legacySession.execution.history.at(-1).reviewerDecision.evidenceRefs =
+		const sessionMissingEvidenceRefs = JSON.parse(
+			JSON.stringify(completed.value),
+		);
+		sessionMissingEvidenceRefs.execution.lastReviewerDecision.evidenceRefs =
 			undefined;
-		legacySession.execution.history.at(-1).finalReview.evidenceRefs = undefined;
+		sessionMissingEvidenceRefs.execution.history.at(
+			-1,
+		).reviewerDecision.evidenceRefs = undefined;
+		sessionMissingEvidenceRefs.execution.history.at(
+			-1,
+		).finalReview.evidenceRefs = undefined;
 
-		const parsed = SessionSchema.safeParse(legacySession);
+		const parsed = SessionSchema.safeParse(sessionMissingEvidenceRefs);
 		expect(parsed.success).toBe(true);
 		if (!parsed.success) return;
 		expect(parsed.data.execution.lastReviewerDecision?.scope).toBe("final");

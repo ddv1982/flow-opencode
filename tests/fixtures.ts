@@ -22,7 +22,7 @@ export const samplePlan: Plan = {
 			id: "execute-feature",
 			title: "Implement execution flow",
 			summary: "Wire runtime tools to feature execution.",
-			fileTargets: ["src/tools.ts"],
+			fileTargets: ["src/adapters/opencode/tools.ts"],
 			verification: ["bun test"],
 			dependsOn: ["setup-runtime"],
 			status: "pending",

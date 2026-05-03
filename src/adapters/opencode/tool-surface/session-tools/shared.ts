@@ -1,0 +1,48 @@
+/**
+ * Session tool boundary: tiny shared helpers only.
+ * Keep response shaping in the runtime/application boundary and routing
+ * policy in next-command-policy.ts.
+ */
+import {
+	executeDispatchedSessionWorkspaceAction,
+	inspectWorkspaceContext,
+	runDispatchedSessionReadAction,
+	type SessionReadActionName,
+	type SessionReadPayloadMap,
+	type SessionReadValueMap,
+	type SessionWorkspaceActionName,
+	type SessionWorkspacePayloadMap,
+} from "../../../../runtime/application";
+import { ensureMutableWorkspacePermission } from "../mutable-workspace-permission";
+import type { ToolContext } from "../schemas";
+
+export function inspectToolWorkspace(context: ToolContext) {
+	return inspectWorkspaceContext(context);
+}
+
+export function recordToolMetadata(
+	context: ToolContext,
+	title: string,
+	metadata: Record<string, unknown>,
+) {
+	context.metadata?.({ title, metadata });
+}
+
+export async function readToolSessionValue<Name extends SessionReadActionName>(
+	context: ToolContext,
+	name: Name,
+	payload: SessionReadPayloadMap[Name],
+): Promise<SessionReadValueMap[Name]> {
+	return (await runDispatchedSessionReadAction(context, name, payload)).value;
+}
+
+export async function executeToolWorkspaceAction<
+	Name extends SessionWorkspaceActionName,
+>(
+	context: ToolContext,
+	name: Name,
+	payload: SessionWorkspacePayloadMap[Name],
+): Promise<string> {
+	await ensureMutableWorkspacePermission(context);
+	return executeDispatchedSessionWorkspaceAction(context, name, payload);
+}

@@ -1,5 +1,12 @@
 import type { z } from "zod";
 import type {
+	FlowPlanApplyArgsSchema,
+	FlowReviewRecordFeatureArgsSchema,
+	FlowReviewRecordFinalArgsSchema,
+} from "../src/adapters/opencode/tool-surface/schemas";
+import type {
+	FlowReviewRecordFeatureArgs,
+	FlowReviewRecordFinalArgs,
 	PlanArgs,
 	PlanArgsSchema,
 	PlanningContextArgs,
@@ -7,23 +14,11 @@ import type {
 	ReviewerDecision,
 	WorkerResultArgsSchema,
 } from "../src/runtime/schema";
-import type {
-	FlowPlanApplyArgsSchema,
-	FlowReviewRecordFeatureJsonArgsSchema,
-	FlowReviewRecordFinalJsonArgsSchema,
-} from "../src/tools/schemas";
 import type { Equal, Expect } from "../src/types/typecheck";
 
 type ExpectedFlowPlanApplyArgs = {
-	planJson: string;
-};
-
-type ExpectedFeatureReviewRecordArgs = {
-	decisionJson: string;
-};
-
-type ExpectedFinalReviewRecordArgs = {
-	decisionJson: string;
+	plan: PlanArgs;
+	planning?: PlanningContextArgs | undefined;
 };
 
 export type _planArgsMatchesPlan = Expect<
@@ -55,15 +50,15 @@ export type _workerResultArgsIncludesReplanWithoutRequiredOutcomeOmission =
 
 export type _featureReviewArgsMatchExpected = Expect<
 	Equal<
-		z.input<typeof FlowReviewRecordFeatureJsonArgsSchema>,
-		ExpectedFeatureReviewRecordArgs
+		z.input<typeof FlowReviewRecordFeatureArgsSchema>,
+		FlowReviewRecordFeatureArgs
 	>
 >;
 
 export type _finalReviewArgsMatchExpected = Expect<
 	Equal<
-		z.input<typeof FlowReviewRecordFinalJsonArgsSchema>,
-		ExpectedFinalReviewRecordArgs
+		z.input<typeof FlowReviewRecordFinalArgsSchema>,
+		FlowReviewRecordFinalArgs
 	>
 >;
 

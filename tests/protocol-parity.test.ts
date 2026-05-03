@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { createTools } from "../src/adapters/opencode/tools";
+import { CORE_ROLE_PROTOCOLS } from "../src/core/protocols";
+import { CORE_ACTION_REGISTRY } from "../src/core/registry";
 import {
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
@@ -16,7 +20,6 @@ import {
 } from "../src/runtime/constants";
 import type { CompletionRecoveryKind } from "../src/runtime/transitions/recovery";
 import { buildCompletionRecovery } from "../src/runtime/transitions/recovery";
-import { createTools } from "../src/tools";
 import {
 	expectDistinctIds,
 	expectKnownInvariantIds,
@@ -45,7 +48,7 @@ describe("protocol parity", () => {
 	test("prompts and command templates stay canonical-only and script-first", () => {
 		for (const surface of PROMPT_SURFACES) {
 			expect(surface).not.toContain("_from_raw");
-			expect(surface).not.toContain("deprecated raw-wrapper tools");
+			expect(surface).not.toContain("JSON-string transport tools");
 		}
 
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
@@ -111,6 +114,41 @@ describe("protocol parity", () => {
 			"recovery.next_action.binding",
 			"tools.canonical_surface.no_raw_wrappers",
 		]);
+	});
+
+	test("role prompts are generated from protocol and mode-contract data", () => {
+		const agentsEntry = readFileSync(
+			new URL("../src/prompts/agents.ts", import.meta.url),
+			"utf8",
+		);
+		const commandsEntry = readFileSync(
+			new URL("../src/prompts/commands.ts", import.meta.url),
+			"utf8",
+		);
+
+		expect(agentsEntry).toContain("./generated/role-prompts");
+		expect(commandsEntry).toContain("./generated/command-templates");
+		expect(agentsEntry).not.toContain("renderPromptSections([");
+		expect(commandsEntry).not.toContain("renderPromptSections([");
+
+		for (const protocol of CORE_ROLE_PROTOCOLS) {
+			for (const actionName of protocol.ownedActions) {
+				expect(CORE_ACTION_REGISTRY.map((action) => action.name)).toContain(
+					actionName,
+				);
+			}
+		}
+
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"Generated protocol view. Source data:",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("Core action protocol:");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"Referenced semantic invariants:",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"Mode contracts remain authoritative as data",
+		);
 	});
 
 	test("recovery guidance emits canonical runtime tools only", () => {

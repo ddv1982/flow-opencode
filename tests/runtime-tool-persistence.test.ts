@@ -33,7 +33,7 @@ describe("runtime tool persistence", () => {
 		expect(before).toContain("summary: No plan yet.");
 
 		await tools.flow_plan_apply.execute(
-			{ planJson: JSON.stringify({ plan: samplePlan() }) },
+			{ plan: samplePlan() },
 			toolContext(worktree),
 		);
 		const afterApply = await readFile(

@@ -363,12 +363,10 @@ describe("runtime operator tools", () => {
 		);
 		const response = await tools.flow_plan_apply.execute(
 			{
-				planJson: JSON.stringify({
-					plan: {
-						...samplePlan(),
-						features: [liteFeature],
-					},
-				}),
+				plan: {
+					...samplePlan(),
+					features: [liteFeature],
+				},
 			},
 			toolContext(worktree),
 		);
@@ -396,7 +394,7 @@ describe("runtime operator tools", () => {
 			toolContext(worktree),
 		);
 		const response = await tools.flow_plan_apply.execute(
-			{ planJson: JSON.stringify({ plan: samplePlan() }) },
+			{ plan: samplePlan() },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -422,12 +420,10 @@ describe("runtime operator tools", () => {
 		);
 		const response = await tools.flow_plan_apply.execute(
 			{
-				planJson: JSON.stringify({
-					plan: {
-						...samplePlan(),
-						completionPolicy: { minCompletedFeatures: 99 },
-					},
-				}),
+				plan: {
+					...samplePlan(),
+					completionPolicy: { minCompletedFeatures: 99 },
+				},
 			},
 			toolContext(worktree),
 		);
@@ -449,12 +445,10 @@ describe("runtime operator tools", () => {
 		);
 		await tools.flow_plan_apply.execute(
 			{
-				planJson: JSON.stringify({
-					plan: {
-						...samplePlan(),
-						completionPolicy: { minCompletedFeatures: 2 },
-					},
-				}),
+				plan: {
+					...samplePlan(),
+					completionPolicy: { minCompletedFeatures: 2 },
+				},
 			},
 			toolContext(worktree),
 		);
@@ -481,12 +475,10 @@ describe("runtime operator tools", () => {
 		);
 		await tools.flow_plan_apply.execute(
 			{
-				planJson: JSON.stringify({
-					plan: {
-						...samplePlan(),
-						completionPolicy: { minCompletedFeatures: 2 },
-					},
-				}),
+				plan: {
+					...samplePlan(),
+					completionPolicy: { minCompletedFeatures: 2 },
+				},
 			},
 			toolContext(worktree),
 		);

@@ -28,7 +28,7 @@ describe("workspace mkdir caching", () => {
 		}
 
 		const nonLockMkdirCalls = mkdirSpy.mock.calls.filter(
-			([target]) => !String(target).includes("session-save.lock"),
+			([target]) => !String(target).endsWith(".lock"),
 		);
 		expect(nonLockMkdirCalls.length).toBeLessThanOrEqual(2);
 	});

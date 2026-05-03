@@ -260,29 +260,27 @@ describe("package manager detection", () => {
 		} as never);
 		await tools.flow_plan_context_record.execute(
 			{
-				planningJson: JSON.stringify({
-					standardsProfile: {
-						localGuidelines: [],
-						externalGuidance: [
-							{
-								title: "TypeScript Handbook",
-								sourceType: "official",
-								reference: "https://www.typescriptlang.org/docs/",
-								confidence: "high",
-							},
-						],
-						rules: [
-							{
-								summary:
-									"Prefer TypeScript official guidance for language semantics.",
-								sourceRefs: ["https://www.typescriptlang.org/docs/"],
-								priority: "official",
-							},
-						],
-						gaps: [],
-						precedence: [],
-					},
-				}),
+				standardsProfile: {
+					localGuidelines: [],
+					externalGuidance: [
+						{
+							title: "TypeScript Handbook",
+							sourceType: "official",
+							reference: "https://www.typescriptlang.org/docs/",
+							confidence: "high",
+						},
+					],
+					rules: [
+						{
+							summary:
+								"Prefer TypeScript official guidance for language semantics.",
+							sourceRefs: ["https://www.typescriptlang.org/docs/"],
+							priority: "official",
+						},
+					],
+					gaps: [],
+					precedence: [],
+				},
 			},
 			{ worktree } as never,
 		);

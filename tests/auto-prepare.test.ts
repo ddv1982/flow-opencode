@@ -92,29 +92,27 @@ describe("flow_auto_prepare semantics", () => {
 
 		const response = await tools.flow_plan_context_record.execute(
 			{
-				planningJson: JSON.stringify({
-					repoProfile: ["TypeScript", "Bun"],
-					packageManager: "bun",
-					research: [
-						"Confirm Bun plugin packaging docs if local evidence is unclear.",
-					],
-					stackProfile: sampleStackProfile,
-					standardsProfile: sampleStandardsProfile,
-					decisionLog: [
-						{
-							question:
-								"How should autonomous mode handle unresolved architecture choices?",
-							decisionMode: "recommend_confirm",
-							decisionDomain: "architecture",
-							options: [
-								{ label: "Pause and ask", tradeoffs: ["safer", "slower"] },
-								{ label: "Auto-guess", tradeoffs: ["faster", "riskier"] },
-							],
-							recommendation: "Pause and ask",
-							rationale: ["Preserves user intent for meaningful decisions."],
-						},
-					],
-				}),
+				repoProfile: ["TypeScript", "Bun"],
+				packageManager: "bun",
+				research: [
+					"Confirm Bun plugin packaging docs if local evidence is unclear.",
+				],
+				stackProfile: sampleStackProfile,
+				standardsProfile: sampleStandardsProfile,
+				decisionLog: [
+					{
+						question:
+							"How should autonomous mode handle unresolved architecture choices?",
+						decisionMode: "recommend_confirm",
+						decisionDomain: "architecture",
+						options: [
+							{ label: "Pause and ask", tradeoffs: ["safer", "slower"] },
+							{ label: "Auto-guess", tradeoffs: ["faster", "riskier"] },
+						],
+						recommendation: "Pause and ask",
+						rationale: ["Preserves user intent for meaningful decisions."],
+					},
+				],
 			},
 			{ worktree } as never,
 		);
@@ -147,15 +145,13 @@ describe("flow_auto_prepare semantics", () => {
 
 		const response = await tools.flow_plan_apply.execute(
 			{
-				planJson: JSON.stringify({
-					plan: samplePlan(),
-					planning: {
-						repoProfile: ["TypeScript", "Bun"],
-						packageManager: "bun",
-						stackProfile: sampleStackProfile,
-						standardsProfile: sampleStandardsProfile,
-					},
-				}),
+				plan: samplePlan(),
+				planning: {
+					repoProfile: ["TypeScript", "Bun"],
+					packageManager: "bun",
+					stackProfile: sampleStackProfile,
+					standardsProfile: sampleStandardsProfile,
+				},
 			},
 			{ worktree } as never,
 		);

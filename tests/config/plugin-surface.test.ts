@@ -1,10 +1,30 @@
 // Owns plugin config injection and registered command/agent/tool surface coverage
 // previously grouped in tests/config.test.ts.
 import { describe, expect, test } from "bun:test";
-import { applyFlowConfig, createConfigHook } from "../../src/config";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+	applyFlowConfig,
+	createConfigHook,
+} from "../../src/adapters/opencode/config";
+import { OPENCODE_TOOL_NAMES } from "../../src/adapters/opencode/tool-projections.generated";
+import { createTools } from "../../src/adapters/opencode/tools";
 import FlowPlugin from "../../src/index";
-import { createTools } from "../../src/tools";
 import type { FlowPluginHooks, MutableConfig } from "./helpers";
+
+async function collectTypeScriptFiles(directory: string): Promise<string[]> {
+	const entries = await readdir(directory, { withFileTypes: true });
+	const nested = await Promise.all(
+		entries.map(async (entry) => {
+			const path = join(directory, entry.name);
+			if (entry.isDirectory()) {
+				return collectTypeScriptFiles(path);
+			}
+			return entry.isFile() && path.endsWith(".ts") ? [path] : [];
+		}),
+	);
+	return nested.flat();
+}
 
 describe("plugin config surface", () => {
 	test("plugin entrypoint returns Flow config and tool hooks", async () => {
@@ -43,6 +63,18 @@ describe("plugin config surface", () => {
 		expect(typeof pluginWithHooks.hooks?.["tool.definition"]).toBe("function");
 	});
 
+	test("core modules stay independent of OpenCode adapter packages", async () => {
+		const coreRoot = join(import.meta.dir, "..", "..", "src", "core");
+		const files = await collectTypeScriptFiles(coreRoot);
+
+		expect(files.length).toBeGreaterThan(0);
+		for (const file of files) {
+			const source = await readFile(file, "utf8");
+			expect(source).not.toContain("@opencode-ai/plugin");
+			expect(source).not.toContain("adapters/opencode");
+		}
+	});
+
 	test("plugin entrypoint logs through ctx.client.app.log", async () => {
 		const logCalls: Array<Record<string, unknown>> = [];
 		const ctx = {
@@ -64,27 +96,8 @@ describe("plugin config surface", () => {
 		});
 	});
 
-	test("createTools preserves the expected ordered tool surface", () => {
-		expect(Object.keys(createTools({}))).toEqual([
-			"flow_status",
-			"flow_doctor",
-			"flow_history",
-			"flow_history_show",
-			"flow_session_activate",
-			"flow_plan_start",
-			"flow_auto_prepare",
-			"flow_session_close",
-			"flow_plan_context_record",
-			"flow_plan_apply",
-			"flow_plan_approve",
-			"flow_plan_select_features",
-			"flow_run_start",
-			"flow_run_complete_feature",
-			"flow_reset_feature",
-			"flow_review_record_feature",
-			"flow_review_record_final",
-			"flow_review_render",
-		]);
+	test("createTools preserves the projected ordered OpenCode tool surface", () => {
+		expect(Object.keys(createTools({}))).toEqual(OPENCODE_TOOL_NAMES);
 	});
 	test("injects commands and agents", () => {
 		const config: MutableConfig = {};

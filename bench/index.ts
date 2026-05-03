@@ -1,10 +1,16 @@
-type BenchmarkFilter = "transitions" | "render" | "saveSession" | "zod";
+type BenchmarkFilter =
+	| "transitions"
+	| "render"
+	| "saveSession"
+	| "zod"
+	| "workflow";
 
 const BENCHMARK_MODULES: Record<BenchmarkFilter, string> = {
 	transitions: "./transition-reducer.bench",
 	render: "./markdown-render.bench",
 	saveSession: "./save-session.bench",
 	zod: "./zod-parse-hot-paths.bench",
+	workflow: "./workflow-event-store.bench",
 };
 
 function parseFilter(argv: readonly string[]): BenchmarkFilter | null {
@@ -35,7 +41,30 @@ function parseFilter(argv: readonly string[]): BenchmarkFilter | null {
 	return null;
 }
 
-const filter = parseFilter(process.argv.slice(2));
+function stripLocalBenchmarkArgs(argv: readonly string[]): string[] {
+	const passthrough: string[] = [];
+
+	for (let index = 0; index < argv.length; index += 1) {
+		const argument = argv[index];
+		if (argument === "--filter") {
+			index += 1;
+			continue;
+		}
+		if (argument.startsWith("--filter=")) {
+			continue;
+		}
+		passthrough.push(argument);
+	}
+
+	return passthrough;
+}
+
+const benchmarkArgs = process.argv.slice(2);
+const filter = parseFilter(benchmarkArgs);
+process.argv = [
+	...process.argv.slice(0, 2),
+	...stripLocalBenchmarkArgs(benchmarkArgs),
+];
 
 if (filter) {
 	await import(BENCHMARK_MODULES[filter]);
@@ -45,6 +74,7 @@ if (filter) {
 	await import("./markdown-render.bench");
 	await import("./zod-parse-hot-paths.bench");
 	await import("./save-session.bench");
+	await import("./workflow-event-store.bench");
 }
 
 await import("mitata").then(({ run }) => run());

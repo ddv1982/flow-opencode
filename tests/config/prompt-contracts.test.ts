@@ -300,15 +300,14 @@ describe("prompt and command config contracts", () => {
 			"Stay read-only with respect to repository code and Flow execution/review state; do not mutate Flow planning, execution, review, reset, or session state.",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }",
-		);
-		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("reviewJson");
-		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain("JSON.stringify(ledger)");
-		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"reviewJson must contain the actual serialized JSON string for the ledger",
+			"Pass the ledger to flow_review_render by spreading the ledger fields directly",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			'not the literal text "JSON.stringify(ledger)"',
+			"Do not wrap the ledger in a JSON string field",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).not.toContain("reviewJson");
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).not.toContain(
+			"JSON.stringify(ledger)",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"Use flow_review_render with view: human by default",
@@ -444,7 +443,7 @@ describe("prompt and command config contracts", () => {
 			expect(prompt).toContain(progressSnippet);
 			expect(prompt).toContain("Do not dump raw tool JSON");
 			expect(prompt).toContain(
-				"Progress updates are assistant prose only; never include progress narration inside `workerJson`, `decisionJson`, reviewer decisions, or `finalReview` fields.",
+				"Progress updates are assistant prose only; never include progress narration inside worker-result, reviewer-decision, or `finalReview` fields.",
 			);
 		}
 

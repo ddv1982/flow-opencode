@@ -51,21 +51,19 @@ describe("runtime plan and tool schema contracts", () => {
 		return expect(
 			runtimeTools.flow_plan_apply.execute(
 				{
-					planJson: JSON.stringify({
-						plan: {
-							...samplePlan(),
-							features: [
-								{
-									id: "../escape",
-									title: "Bad feature id",
-									summary: "Should be rejected.",
-									status: "pending",
-									fileTargets: [],
-									verification: [],
-								},
-							],
-						},
-					}),
+					plan: {
+						...samplePlan(),
+						features: [
+							{
+								id: "../escape",
+								title: "Bad feature id",
+								summary: "Should be rejected.",
+								status: "pending",
+								fileTargets: [],
+								verification: [],
+							},
+						],
+					},
 				},
 				toolContext(makeTempDir()),
 			),
@@ -129,35 +127,33 @@ describe("runtime plan and tool schema contracts", () => {
 
 		const response = await tools.flow_review_record_final.execute(
 			{
-				decisionJson: JSON.stringify({
-					scope: "final",
-					reviewDepth: "detailed",
-					reviewedSurfaces: [
-						"changed_files",
-						"shared_surfaces",
-						"validation_evidence",
-					],
-					evidenceSummary:
-						"Checked final cross-feature integration and validation evidence.",
-					validationAssessment:
-						"Validation coverage and cross-feature interactions were reviewed.",
-					evidenceRefs: {
-						changedArtifacts: ["src/runtime/session.ts"],
-						validationCommands: ["bun test"],
-					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
-					remainingGaps: [],
-					status: "approved",
-					summary: "Final state looks good.",
-					blockingFindings: [],
-					followUps: [],
-					suggestedValidation: ["bun run check"],
-				}),
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Final state looks good.",
+				blockingFindings: [],
+				followUps: [],
+				suggestedValidation: ["bun run check"],
 			},
 			toolContext(worktree),
 		);
@@ -248,7 +244,7 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(planStartParsed.session.goal).toBe("Build a workflow plugin");
 
 		const planApplyResponse = await tools.flow_plan_apply.execute(
-			{ planJson: JSON.stringify({ plan: samplePlan() }) },
+			{ plan: samplePlan() },
 			toolContext(worktree),
 		);
 		const planApplyParsed = JSON.parse(planApplyResponse);

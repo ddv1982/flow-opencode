@@ -86,7 +86,7 @@ describe("installer", () => {
 		expect(logs).toEqual([`Installed Flow plugin to ${destinationFile}`]);
 	});
 
-	test("runInstallCommand installs to the canonical plugin directory when no legacy install exists", async () => {
+	test("runInstallCommand installs to the canonical plugin directory by default", async () => {
 		const cwd = makeTempDir();
 		const homeDir = makeTempDir();
 		const logs: string[] = [];

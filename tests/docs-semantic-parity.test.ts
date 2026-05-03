@@ -10,6 +10,7 @@ import {
 const CANONICAL_DOCS = [
 	"docs/architecture/invariant-matrix.md",
 	"docs/architecture/strictness-contract.md",
+	"docs/architecture/role-protocol-projections.md",
 	"docs/maintainer-contract.md",
 ] as const;
 

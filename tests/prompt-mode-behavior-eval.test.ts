@@ -239,7 +239,7 @@ describe("prompt mode behavior eval corpus", () => {
 			"auto-progress-across-phase-boundaries: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
 		);
 		expect(summary.report).toContain(
-			"worker-bad-progress-inside-workerjson: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",
+			"worker-bad-progress-inside-worker-result: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",
 		);
 		expect(summary.markdownReport).toContain(
 			"| reviewer-needs-fix-on-missing-validation | flow-reviewer | calibration | 6/6 | quality-pass | satisfied | — |",

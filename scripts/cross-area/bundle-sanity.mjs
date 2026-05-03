@@ -56,9 +56,9 @@ async function main() {
 				`const require = createRequire(${JSON.stringify(join(projectRoot, "package.json"))});`,
 				"const zodModule = require('zod');",
 				"const z = zodModule.z ?? zodModule;",
-				"const SHIM_TAG = 'flow-bundle-sanity-shim-v1';",
+				"const MOCK_TAG = 'flow-bundle-sanity-mock-v1';",
 				"export function tool(definition) {",
-				"  return { ...definition, __shimTag: SHIM_TAG };",
+				"  return { ...definition, __mockTag: MOCK_TAG };",
 				"}",
 				"tool.schema = z;",
 			].join("\n"),
@@ -104,8 +104,8 @@ async function main() {
 		) {
 			throw new Error("flow_history did not report the stored session.");
 		}
-		if (plugin.tool.flow_status.__shimTag !== "flow-bundle-sanity-shim-v1") {
-			throw new Error("Bundle did not resolve @opencode-ai/plugin from the mock shim.");
+		if (plugin.tool.flow_status.__mockTag !== "flow-bundle-sanity-mock-v1") {
+			throw new Error("Bundle did not resolve @opencode-ai/plugin from the injected mock.");
 		}
 
 		const report = {
@@ -119,8 +119,8 @@ async function main() {
 			configCommands: Object.keys(config.command).length,
 			toolCount: Object.keys(plugin.tool).length,
 			nodeMajor: Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10),
-			shimTagVerified:
-				plugin.tool.flow_status.__shimTag === "flow-bundle-sanity-shim-v1",
+			mockTagVerified:
+				plugin.tool.flow_status.__mockTag === "flow-bundle-sanity-mock-v1",
 		};
 
 		if (report.sizeBytes > 716800) {

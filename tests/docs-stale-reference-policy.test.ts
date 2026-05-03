@@ -84,7 +84,9 @@ function scannablePolicyPaths(): string[] {
 	if (existsSync(join(repoRoot, "release-notes.md"))) {
 		paths.push("release-notes.md");
 	}
-	return paths.filter(isScannable);
+	return paths.filter(
+		(path) => isScannable(path) && existsSync(join(repoRoot, path)),
+	);
 }
 
 function factoryReferencePolicyPaths(): string[] {
@@ -115,7 +117,10 @@ describe("docs stale reference policy", () => {
 
 	test("retired factory artifact name stays out of docs and source", () => {
 		const violations = factoryReferencePolicyPaths().filter((path) => {
-			if (factoryReferenceAllowedFiles.has(path)) {
+			if (
+				factoryReferenceAllowedFiles.has(path) ||
+				isAllowedHistoricalReferencePath(path)
+			) {
 				return false;
 			}
 			return readFileSync(join(repoRoot, path), "utf8").includes(".factory");

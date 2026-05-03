@@ -21,8 +21,8 @@ Behavior:
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the review output.
 - For long reviews, keep the user informed with concise read-only progress updates while mapping repository surfaces, inspecting evidence, calibrating coverage depth, and rendering the final report. Do not announce Flow planning, execution, validation runs, recovery/reset, or workflow finalization from this read-only command; do not dump raw tool JSON or narrate every minor file read/tool call.
 - Build the structured audit ledger described below, then call flow_review_render to render it.
-- Pass the ledger to flow_review_render exactly as { reviewJson: JSON.stringify(ledger), view }, where view is the selected render view.
-- reviewJson must contain the actual serialized JSON string for the ledger, not a nested object and not the literal text "JSON.stringify(ledger)".
+- Pass the ledger to flow_review_render by spreading the ledger fields directly, plus view when a non-default render view is selected.
+- Do not wrap the ledger in a JSON string field; flow_review_render validates the ledger object directly.
 - Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.
 - Return the renderer's report field verbatim as your final answer.
 - Use this ledger contract for internal consistency and renderer input:

@@ -113,15 +113,15 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 			"Recovery emits canonical recovery-stage, prerequisite, nextCommand, and nextRuntimeTool bindings.",
 		assertionType: "structured recovery metadata assertions",
 		stabilityRule:
-			"Stable ID; human-readable prose may vary if structured metadata stays compatible.",
+			"Stable ID; human-readable prose may vary if structured metadata keeps the same machine-readable bindings.",
 	},
 	"tools.canonical_surface.no_raw_wrappers": {
 		id: "tools.canonical_surface.no_raw_wrappers",
 		ownerSummary:
-			"src/tools.ts::createTools + src/runtime/constants.ts::CANONICAL_RUNTIME_TOOL_NAMES",
+			"src/adapters/opencode/tools.ts::createTools + src/runtime/constants.ts::CANONICAL_RUNTIME_TOOL_NAMES",
 		ownerReferences: [
 			{
-				file: "src/tools.ts",
+				file: "src/adapters/opencode/tools.ts",
 				symbols: ["createTools"],
 			},
 			{
@@ -130,7 +130,7 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 			},
 		],
 		semanticClaim:
-			"The public tool surface remains canonical-only and excludes deprecated raw-wrapper aliases.",
+			"The public tool surface remains canonical-only and excludes string-transport alias tools.",
 		assertionType: "tool registration assertions",
 		stabilityRule:
 			"Stable; tool additions require matrix updates and parity verification.",

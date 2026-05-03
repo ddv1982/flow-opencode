@@ -17,14 +17,12 @@ afterEach(() => {
 
 async function renderReview(
 	tools: ReturnType<typeof createTestTools>,
-	reviewJson: ReturnType<typeof sampleReviewReport>,
+	reviewReport: ReturnType<typeof sampleReviewReport>,
 	view?: "human" | "structured" | "both",
 ) {
 	return JSON.parse(
 		await tools.flow_review_render.execute(
-			view
-				? { reviewJson: JSON.stringify(reviewJson), view }
-				: { reviewJson: JSON.stringify(reviewJson) },
+			view ? { ...reviewReport, view } : reviewReport,
 			{ worktree: "unused-review-render-worktree" },
 		),
 	);
@@ -132,12 +130,12 @@ describe("runtime review rendering", () => {
 		});
 
 		const response = await tools.flow_review_render.execute(
-			{ reviewJson: JSON.stringify(report) },
+			report,
 			toolContext(makeTempDir()),
 		);
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain("Review report validation failed");
+		expect(parsed.summary).toContain("Tool argument validation failed");
 		expect(parsed.summary).toContain(
 			"Directly reviewed surfaces require at least one evidence reference.",
 		);
@@ -151,12 +149,12 @@ describe("runtime review rendering", () => {
 		});
 
 		const response = await tools.flow_review_render.execute(
-			{ reviewJson: JSON.stringify(report) },
+			report,
 			toolContext(makeTempDir()),
 		);
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain("Review report validation failed");
+		expect(parsed.summary).toContain("Tool argument validation failed");
 		expect(parsed.summary).toContain("findings");
 		expect(parsed.summary).toContain("evidence");
 	});
@@ -204,12 +202,12 @@ describe("runtime review rendering", () => {
 
 		for (const invalidReport of invalidReports) {
 			const response = await tools.flow_review_render.execute(
-				{ reviewJson: JSON.stringify(invalidReport.report) },
+				invalidReport.report,
 				toolContext(makeTempDir()),
 			);
 			const parsed = JSON.parse(response);
 			expect(parsed.status).toBe("error");
-			expect(parsed.summary).toContain("Review report validation failed");
+			expect(parsed.summary).toContain("Tool argument validation failed");
 			expect(parsed.summary).toContain(invalidReport.message);
 		}
 	});
@@ -397,8 +395,8 @@ describe("runtime review rendering", () => {
 		expect(parsed.report).toContain("confirmed defect");
 		const structuredResponse = await tools.flow_review_render.execute(
 			{
+				...hardeningReport,
 				view: "structured",
-				reviewJson: JSON.stringify(hardeningReport),
 			},
 			toolContext(makeTempDir()),
 		);

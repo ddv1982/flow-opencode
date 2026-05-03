@@ -4,7 +4,15 @@ export class InvalidFlowPathInputError extends Error {
 	readonly code = "INVALID_FLOW_PATH_INPUT";
 
 	constructor(
-		kind: "session" | "feature" | "completed" | "audit",
+		kind:
+			| "session"
+			| "feature"
+			| "completed"
+			| "audit"
+			| "event"
+			| "checkpoint"
+			| "projection"
+			| "lock",
 		value: string,
 	) {
 		super(`Invalid ${kind} id '${value}'.`);
@@ -15,7 +23,15 @@ export class InvalidFlowPathInputError extends Error {
 export type LiveSessionLocation = "active" | "stored";
 
 export function sanitizePathComponent(
-	kind: "session" | "feature" | "completed" | "audit",
+	kind:
+		| "session"
+		| "feature"
+		| "completed"
+		| "audit"
+		| "event"
+		| "checkpoint"
+		| "projection"
+		| "lock",
 	value: string,
 ): string {
 	if (
@@ -61,6 +77,22 @@ export function getStoredSessionsDir(worktree: string): string {
 
 export function getCompletedSessionsDir(worktree: string): string {
 	return join(getFlowDir(worktree), "completed");
+}
+
+export function getWorkflowEventsDir(worktree: string): string {
+	return join(getFlowDir(worktree), "events");
+}
+
+export function getWorkflowCheckpointsDir(worktree: string): string {
+	return join(getFlowDir(worktree), "checkpoints");
+}
+
+export function getWorkflowProjectionsDir(worktree: string): string {
+	return join(getFlowDir(worktree), "projections");
+}
+
+export function getPersistenceLocksDir(worktree: string): string {
+	return join(getFlowDir(worktree), "locks");
 }
 
 function getLiveSessionsDir(
@@ -135,6 +167,42 @@ export function getCompletedSessionPath(
 
 export function getSessionPathFromDir(sessionDir: string): string {
 	return join(sessionDir, "session.json");
+}
+
+export function getWorkflowEventLogPath(
+	worktree: string,
+	sessionId: string,
+): string {
+	const eventsDir = getWorkflowEventsDir(worktree);
+	return assertDescendant(
+		eventsDir,
+		join(eventsDir, `${sanitizePathComponent("event", sessionId)}.jsonl`),
+	);
+}
+
+export function getWorkflowCheckpointPath(
+	worktree: string,
+	sessionId: string,
+): string {
+	const checkpointsDir = getWorkflowCheckpointsDir(worktree);
+	return assertDescendant(
+		checkpointsDir,
+		join(
+			checkpointsDir,
+			`${sanitizePathComponent("checkpoint", sessionId)}.json`,
+		),
+	);
+}
+
+export function getWorkflowProjectionDir(
+	worktree: string,
+	sessionId: string,
+): string {
+	const projectionsDir = getWorkflowProjectionsDir(worktree);
+	return assertDescendant(
+		projectionsDir,
+		join(projectionsDir, sanitizePathComponent("projection", sessionId)),
+	);
 }
 
 export function getDocsDir(

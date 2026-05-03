@@ -7,11 +7,13 @@
 		"capturedFrom": "Codex manual providerless capture from flow-run-single-feature-gate.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
 			"src/prompts/commands.ts",
 			"src/prompts/contracts.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Call flow_run_start first with prompt-evals only as the requested feature id. Execute exactly one feature, run targeted validation, review the changed files, and fix review findings if any. Then call flow_review_record_feature with decisionJson before advancing. End with validation evidence and the runtime next step.",
+		"modelOutput": "Call flow_run_start first with prompt-evals only as the requested feature id. Execute exactly one feature, run targeted validation, review the changed files, and fix review findings if any. Then call flow_review_record_feature with reviewer decision before advancing. End with validation evidence and the runtime next step.",
 		"minPassingScore": 6,
 		"expectedToolMentions": ["flow_run_start", "flow_review_record_feature"],
 		"forbiddenToolMentions": [
@@ -23,7 +25,7 @@
 			"exactly one feature",
 			"targeted validation",
 			"review the changed files",
-			"decisionJson"
+			"reviewer decision"
 		],
 		"forbiddenResponseSnippets": [
 			"execute every approved feature",
