@@ -1,0 +1,236 @@
+import { describe, expect, test } from "bun:test";
+import { ReviewReportSchema } from "../../src/audit/report-schema";
+import {
+	EvidencePacketSchema,
+	FlowReviewRecordFinalArgsSchema,
+	PlanningContextArgsSchema,
+	WorkerResultArgsSchema,
+} from "../../src/runtime/schema";
+import { createSession } from "../../src/runtime/session";
+import {
+	applyPlan,
+	approvePlan,
+	recordReviewerDecision,
+	startRun,
+} from "../../src/runtime/transitions";
+import { samplePlan } from "../runtime-test-helpers";
+
+const sampleEvidencePacket = EvidencePacketSchema.parse({
+	id: "packet:planning-context",
+	purpose: "planning",
+	summary: "Selected and excluded context for the implementation plan.",
+	sourceRefs: ["src/runtime/schema.ts:386-407"],
+	highlights: ["PlanningContextSchema owns planning metadata."],
+	selectedContext: ["src/runtime/schema.ts:386-407"],
+	excludedContext: ["dist/index.js"],
+	codemapSummaries: ["PlanningContextSchema attaches optional packets."],
+	sliceSummaries: ["src/runtime/schema.ts:386-407 planning context shape."],
+	relationshipHypotheses: [
+		"Planning packets should attach without becoming completion gates.",
+	],
+	ambiguities: ["Packet use is optional until prompt behavior is proven."],
+	knownExclusions: ["No event-first persistence migration."],
+	alreadyCoveredFindings: ["Stage 0 authority wording is already covered."],
+	validationEvidence: [
+		{
+			command: "bun test tests/runtime/evidence-packets.test.ts",
+			status: "passed",
+			summary: "Packet schema contract passed.",
+		},
+	],
+});
+
+describe("shared evidence packet primitives", () => {
+	test("parses read-only packet metadata with exact sources and context boundaries", () => {
+		const packet = EvidencePacketSchema.parse(sampleEvidencePacket);
+
+		expect(packet.id).toBe("packet:planning-context");
+		expect(packet.purpose).toBe("planning");
+		expect(packet.sourceRefs?.[0]).toBe("src/runtime/schema.ts:386-407");
+		// Schema-level readonly enforces top-level immutability for parsed packet objects.
+		expect(Object.isFrozen(packet)).toBe(true);
+		expect(packet.highlights).toEqual([
+			"PlanningContextSchema owns planning metadata.",
+		]);
+		expect(packet.validationEvidence?.[0]?.command).toBe(
+			"bun test tests/runtime/evidence-packets.test.ts",
+		);
+	});
+
+	test("rejects obsolete nested source objects", () => {
+		expect(
+			EvidencePacketSchema.safeParse({
+				id: "packet:obsolete-source-shape",
+				summary: "Bad nested source shape.",
+				sources: [
+					{
+						reference: "src/runtime/schema.ts",
+					},
+				],
+			}).success,
+		).toBe(false);
+	});
+
+	test("planning context accepts packet attachments without widening plan payloads", () => {
+		const parsedPlanning = PlanningContextArgsSchema.parse({
+			evidencePackets: [sampleEvidencePacket],
+		});
+		expect(parsedPlanning.evidencePackets?.[0]?.id).toBe(
+			"packet:planning-context",
+		);
+
+		const session = createSession("Build a workflow plugin", {
+			evidencePackets: parsedPlanning.evidencePackets,
+		});
+		const applied = applyPlan(session, samplePlan(), {
+			evidencePackets: [
+				{
+					...sampleEvidencePacket,
+					id: "packet:plan-apply",
+				},
+			],
+		});
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		expect(applied.value.planning.evidencePackets?.[0]?.id).toBe(
+			"packet:plan-apply",
+		);
+	});
+
+	test("final review and reviewer decision payloads can carry packet metadata", () => {
+		const workerResult = WorkerResultArgsSchema.parse({
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed feature safely.",
+			artifactsChanged: [{ path: "src/runtime/schema.ts" }],
+			validationRun: [
+				{
+					command: "bun test tests/runtime/evidence-packets.test.ts",
+					status: "passed",
+					summary: "Packet contract passed.",
+				},
+			],
+			decisions: [],
+			nextStep: "Request final review.",
+			featureResult: { featureId: "setup-runtime" },
+			featureReview: {
+				status: "passed",
+				summary: "Feature review passed.",
+				blockingFindings: [],
+			},
+			finalReview: {
+				status: "passed",
+				reviewDepth: "detailed",
+				reviewedSurfaces: ["changed_files", "validation_evidence"],
+				evidenceSummary: "Reviewed packet schema changes.",
+				validationAssessment: "Targeted tests passed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/schema.ts"],
+					validationCommands: [
+						"bun test tests/runtime/evidence-packets.test.ts",
+					],
+				},
+				evidencePackets: [{ ...sampleEvidencePacket, purpose: "review" }],
+				summary: "Final review passed.",
+				blockingFindings: [],
+			},
+		});
+		expect(workerResult.finalReview?.evidencePackets?.[0]?.purpose).toBe(
+			"review",
+		);
+
+		const decision = FlowReviewRecordFinalArgsSchema.parse({
+			scope: "final",
+			reviewPurpose: "completion_gate",
+			reviewDepth: "detailed",
+			status: "approved",
+			summary: "Final reviewer approved.",
+			blockingFindings: [],
+			reviewedSurfaces: [
+				"changed_files",
+				"validation_evidence",
+				"shared_surfaces",
+			],
+			evidenceSummary: "Reviewed packet schema changes.",
+			validationAssessment: "Targeted tests passed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/schema.ts"],
+				validationCommands: ["bun test tests/runtime/evidence-packets.test.ts"],
+			},
+			integrationChecks: [
+				"Checked packet attachment across planning and review surfaces.",
+			],
+			regressionChecks: ["Checked packet schema contract coverage."],
+			evidencePackets: [{ ...sampleEvidencePacket, purpose: "review" }],
+		});
+		expect(decision.evidencePackets?.[0]?.selectedContext).toEqual([
+			"src/runtime/schema.ts:386-407",
+		]);
+
+		const applied = applyPlan(
+			createSession("Build a workflow plugin"),
+			samplePlan(),
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const recorded = recordReviewerDecision(started.value.session, decision);
+		expect(recorded.ok).toBe(true);
+		if (!recorded.ok) return;
+		expect(
+			recorded.value.execution.lastReviewerDecision?.scope === "final" &&
+				recorded.value.execution.lastReviewerDecision.evidencePackets?.[0]?.id,
+		).toBe("packet:planning-context");
+	});
+
+	test("audit reports can attach packet metadata without replacing ledgers", () => {
+		const report = ReviewReportSchema.parse({
+			requestedDepth: "deep_audit",
+			achievedDepth: "deep_audit",
+			repoSummary: "Repo summary.",
+			overallVerdict: "No blocker found.",
+			discoveredSurfaces: [
+				{
+					name: "Runtime schema",
+					category: "source_runtime",
+					reviewStatus: "directly_reviewed",
+					evidence: ["src/runtime/schema.ts"],
+				},
+			],
+			evidencePackets: [{ ...sampleEvidencePacket, purpose: "audit" }],
+			validationRun: [],
+			findings: [],
+		});
+
+		expect(report.evidencePackets?.[0]?.purpose).toBe("audit");
+		const auditPacketWithNotRun = ReviewReportSchema.parse({
+			...report,
+			evidencePackets: [
+				{
+					...sampleEvidencePacket,
+					purpose: "audit",
+					validationEvidence: [
+						{
+							command: "not_run",
+							status: "not_run",
+							summary: "No validation evidence was available.",
+						},
+					],
+				},
+			],
+		});
+		expect(
+			auditPacketWithNotRun.evidencePackets?.[0]?.validationEvidence?.[0]
+				?.status,
+		).toBe("not_run");
+		expect(report.discoveredSurfaces[0]?.evidence).toEqual([
+			"src/runtime/schema.ts",
+		]);
+	});
+});

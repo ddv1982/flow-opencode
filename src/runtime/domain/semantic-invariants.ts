@@ -1,4 +1,5 @@
 import { CANONICAL_RUNTIME_TOOL_NAMES } from "../constants";
+import { completionRecoveryKindOrderFor } from "../transitions/completion-gates";
 import type { CompletionRecoveryKind } from "../transitions/recovery";
 
 export type SemanticInvariantId =
@@ -32,6 +33,10 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 			{
 				file: "src/runtime/transitions/execution-completion.ts",
 				symbols: ["validateSuccessfulCompletion"],
+			},
+			{
+				file: "src/runtime/transitions/completion-gates.ts",
+				symbols: ["COMPLETION_GATE_DESCRIPTORS", "COMPLETION_GATE_ORDER"],
 			},
 		],
 		semanticClaim:
@@ -146,23 +151,8 @@ export const SEMANTIC_INVARIANT_IDS = Object.keys(
 ) as SemanticInvariantId[];
 
 export const SEMANTIC_COMPLETION_GATE_ORDER = {
-	feature: [
-		"missing_validation",
-		"failing_validation",
-		"missing_reviewer_decision",
-		"missing_validation_scope",
-		"failing_feature_review",
-		"failing_final_review",
-	],
-	final: [
-		"missing_validation",
-		"failing_validation",
-		"missing_validation_scope",
-		"failing_feature_review",
-		"failing_final_review",
-		"missing_final_review",
-		"missing_reviewer_decision",
-	],
+	feature: completionRecoveryKindOrderFor("feature"),
+	final: completionRecoveryKindOrderFor("final"),
 } as const satisfies {
 	feature: readonly CompletionRecoveryKind[];
 	final: readonly CompletionRecoveryKind[];
@@ -204,6 +194,7 @@ export const SEMANTIC_RECOVERY_EXPECTATIONS = {
 		"missing_validation",
 		"missing_reviewer_decision",
 		"missing_validation_scope",
+		"missing_review_closure",
 		"missing_final_review",
 	] as const satisfies readonly CompletionRecoveryKind[],
 	statusCommand: "/flow-status",

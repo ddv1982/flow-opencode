@@ -129,6 +129,51 @@ export const ValidationRunSchema = z.object({
 	summary: z.string().min(1),
 });
 
+const EVIDENCE_PACKET_VALIDATION_STATUSES = [
+	...VALIDATION_STATUSES,
+	"not_run",
+] as const;
+
+export const EvidencePacketValidationStatusSchema = z.enum(
+	EVIDENCE_PACKET_VALIDATION_STATUSES,
+);
+
+export const EvidencePacketValidationRunSchema = z.object({
+	command: z.string().min(1),
+	status: EvidencePacketValidationStatusSchema,
+	summary: z.string().min(1),
+});
+
+export const EvidencePacketPurposeSchema = z.enum([
+	"planning",
+	"review",
+	"audit",
+	"validation",
+	"general",
+]);
+
+export const EvidencePacketSchema = z
+	.object({
+		id: z.string().min(1),
+		purpose: EvidencePacketPurposeSchema.optional(),
+		summary: z.string().min(1),
+		sourceRefs: z.array(z.string().min(1)).optional(),
+		highlights: z.array(z.string().min(1)).optional(),
+		selectedContext: z.array(z.string().min(1)).optional(),
+		excludedContext: z.array(z.string().min(1)).optional(),
+		codemapSummaries: z.array(z.string().min(1)).optional(),
+		sliceSummaries: z.array(z.string().min(1)).optional(),
+		relationshipHypotheses: z.array(z.string().min(1)).optional(),
+		ambiguities: z.array(z.string().min(1)).optional(),
+		knownExclusions: z.array(z.string().min(1)).optional(),
+		alreadyCoveredFindings: z.array(z.string().min(1)).optional(),
+		validationEvidence: z.array(EvidencePacketValidationRunSchema).optional(),
+	})
+	.strict()
+	.readonly();
+
+export const EvidencePacketArraySchema = z.array(EvidencePacketSchema);
+
 export const DecisionSchema = z.object({
 	summary: z.string().min(1),
 });
@@ -179,6 +224,7 @@ export const FinalReviewSchema = ReviewSchema.extend({
 	evidenceSummary: z.string().min(1).optional(),
 	validationAssessment: z.string().min(1).optional(),
 	evidenceRefs: FinalReviewEvidenceRefsSchema,
+	evidencePackets: EvidencePacketArraySchema.optional(),
 	integrationChecks: z.array(z.string().min(1)).default([]),
 	regressionChecks: z.array(z.string().min(1)).default([]),
 	remainingGaps: z.array(z.string().min(1)).default([]),
@@ -209,6 +255,7 @@ export const FinalReviewerDecisionSchema = z
 		evidenceSummary: z.string().min(1).optional(),
 		validationAssessment: z.string().min(1).optional(),
 		evidenceRefs: FinalReviewEvidenceRefsSchema,
+		evidencePackets: EvidencePacketArraySchema.optional(),
 		integrationChecks: z.array(z.string().min(1)).default([]),
 		regressionChecks: z.array(z.string().min(1)).default([]),
 		remainingGaps: z.array(z.string().min(1)).default([]),
@@ -393,6 +440,7 @@ export const PlanningContextSchema = z.object({
 	implementationApproach: ImplementationApproachSchema.optional(),
 	decisionLog: z.array(PlanningDecisionSchema).default([]),
 	replanLog: z.array(ReplanRecordSchema).default([]),
+	evidencePackets: EvidencePacketArraySchema.optional(),
 });
 
 export const PlanArgsSchema = PlanSchema.omit({
@@ -495,6 +543,7 @@ export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
 export type StackProfile = z.infer<typeof StackProfileSchema>;
 export type StandardsProfile = z.infer<typeof StandardsProfileSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
+export type EvidencePacket = z.infer<typeof EvidencePacketSchema>;
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type WorkerResult = z.infer<typeof WorkerResultSchema>;

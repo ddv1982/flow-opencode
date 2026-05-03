@@ -134,6 +134,9 @@ function normalizePlanningContextPatch(
 	if (planning.replanLog !== undefined) {
 		normalized.replanLog = planning.replanLog;
 	}
+	if (planning.evidencePackets !== undefined) {
+		normalized.evidencePackets = planning.evidencePackets;
+	}
 	return normalized;
 }
 

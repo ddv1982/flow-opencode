@@ -57,7 +57,7 @@ Useful scripts:
 
 ## Architecture in one view
 
-Flow is built around a few stable responsibilities:
+Flow is built around a few stable responsibilities and authority boundaries:
 
 1. A plugin `config` hook injects commands and agents.
 2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers.
@@ -66,6 +66,10 @@ Flow is built around a few stable responsibilities:
 5. Prompted agents call runtime tools instead of mutating state directly.
 6. Coordinators use OpenCode task/subagent handoffs for bounded planning, implementation, and review work when the host supports them, so each role can work in a fresh child context while runtime tools remain the state authority.
 7. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
+
+Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
+
+Projection metadata is consolidated through the OpenCode surface descriptor family in `src/adapters/opencode/tool-surface/descriptors.ts`. That family can describe core-backed mutation tools, workspace/control tools, read tools, and render-only tools without pretending every surface has both a runtime action and a core workflow action. Adapter implementation modules still own the dispatch constants they invoke, and `src/adapters/opencode/tool-surface/schemas.ts` owns a payload schema registry that co-locates each tool's raw arg shape, parser schema, and owner metadata; descriptor parity tests compare both sources against the descriptor projection contract. Runtime transitions still enforce behavior; descriptors, prompts, docs, and audit surfaces project or verify that behavior.
 
 ## Current agent roles
 
@@ -96,7 +100,7 @@ Flow may only claim achieved `full_audit` when every major discovered repo surfa
 
 ## Prompt quality and evals
 
-Prompt behavior is part of the product contract. Keep mode boundaries in `src/prompts/mode-contracts.ts` and use that file as the canonical source for:
+Prompt behavior is part of the product contract. Keep prompt-mode boundaries in `src/prompts/mode-contracts.ts` and use that file as the canonical source for prompt visibility and mode behavior, not as the owner of runtime transition law:
 
 - which prompt surfaces exist
 - which source files define each mode
@@ -123,26 +127,26 @@ Do not add model-provider credentials to this path. These checks are intentional
 
 ## Current Runtime Tools
 
-Default (core) surface:
+Default OpenCode tool surface, in descriptor docs-row order:
 
-- `flow_status`
-- `flow_doctor`
-- `flow_history`
-- `flow_history_show`
-- `flow_auto_prepare`
-- `flow_plan_start`
-- `flow_plan_apply`
-- `flow_plan_approve`
-- `flow_plan_select_features`
-- `flow_plan_context_record`
-- `flow_run_start`
-- `flow_run_complete_feature`
-- `flow_review_record_feature`
-- `flow_review_record_final`
-- `flow_review_render`
-- `flow_session_activate`
-- `flow_session_close`
-- `flow_reset_feature`
+- `flow_status` — Show the active Flow session summary
+- `flow_doctor` — Run non-destructive readiness checks for Flow in the current workspace
+- `flow_history` — Show active, stored, and completed Flow session history
+- `flow_history_show` — Show a specific active, stored, or completed Flow session by id
+- `flow_session_activate` — Activate a stored Flow session by id
+- `flow_plan_start` — Create or refresh the active Flow planning session
+- `flow_auto_prepare` — Classify a flow-auto invocation
+- `flow_session_close` — Close the active Flow session as completed, deferred, or abandoned
+- `flow_plan_context_record` — Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session from a JSON payload
+- `flow_plan_apply` — Persist a Flow draft plan into the active session from a JSON payload
+- `flow_plan_approve` — Approve the active Flow draft plan
+- `flow_plan_select_features` — Keep only selected features in the active Flow draft plan
+- `flow_run_start` — Start the next runnable Flow feature
+- `flow_run_complete_feature` — Persist an already-validated Flow feature execution result from a JSON payload
+- `flow_reset_feature` — Reset a Flow feature to pending
+- `flow_review_record_feature` — Record an already-validated reviewer decision for the active feature from a JSON payload
+- `flow_review_record_final` — Record an already-validated reviewer decision for final cross-feature validation from a JSON payload
+- `flow_review_render` — Render a structured Flow review ledger into a human-readable report, structured JSON, or both
 
 
 Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
@@ -150,6 +154,8 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 ## Maintainer rules
 
 - Runtime owns workflow semantics; prompts and docs describe them.
+- Keep live runtime persistence snapshot-primary unless a dedicated event-first migration plan proves and stages a different authority.
+- Treat core workflow/replay, event-store, checkpoint-store, generated projections, audit schemas, and adapter schema boundaries as non-deletion surfaces without import/call-graph evidence and replacement parity tests.
 - Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
 - Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed SDK-boundary change is intentional.
 - Preserve direct `tool(...)` arg shapes at the SDK boundary.

@@ -59,6 +59,12 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_CONTRACT).toContain(
 			"final completion path for the session",
 		);
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"Completion gate guidance (descriptor-projected, runtime enforcement remains authoritative):",
+		);
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"Feature completion gates (default):",
+		);
 	});
 
 	test("audit contract requires calibrated depth claims, explicit coverage accounting, and a human-first final review", () => {
@@ -97,6 +103,16 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUDIT_CONTRACT).toContain(
 			"normal product path rather than a shortcut-only setup",
 		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"Completion gate parity guidance (descriptor-projected, runtime enforcement remains authoritative):",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"Audit parity lens — feature path (default):",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain(
+			"Audit parity lens — feature path (review_and_fix):",
+		);
+		expect(FLOW_AUDIT_CONTRACT).toContain("review_finding_closure");
 		const contractTail = FLOW_AUDIT_CONTRACT.toLowerCase();
 		expect(contractTail).not.toContain("include the returned artifact paths");
 	});

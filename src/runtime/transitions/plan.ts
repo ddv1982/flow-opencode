@@ -251,6 +251,8 @@ export function applyPlan(
 				session.planning.implementationApproach,
 			decisionLog: planning?.decisionLog ?? session.planning.decisionLog,
 			replanLog: planning?.replanLog ?? session.planning.replanLog,
+			evidencePackets:
+				planning?.evidencePackets ?? session.planning.evidencePackets,
 		},
 		execution: {
 			...session.execution,

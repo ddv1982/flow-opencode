@@ -54,6 +54,8 @@ function buildPlannedSession(
 			stackProfile: planning?.stackProfile ?? existing.planning.stackProfile,
 			standardsProfile:
 				planning?.standardsProfile ?? existing.planning.standardsProfile,
+			evidencePackets:
+				planning?.evidencePackets ?? existing.planning.evidencePackets,
 		},
 	};
 }

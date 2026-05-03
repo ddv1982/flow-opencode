@@ -1,6 +1,7 @@
-import { describe, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { FLOW_TOOL_DOCS_ROWS } from "../src/adapters/opencode/tool-surface/docs-rows.generated";
 import { createTools } from "../src/adapters/opencode/tools";
 
 const DEVELOPMENT_DOC_PATH = join(
@@ -11,7 +12,12 @@ const DEVELOPMENT_DOC_PATH = join(
 );
 const RUNTIME_TOOLS_HEADING = "## Current Runtime Tools";
 
-function extractDocumentedToolNames(markdown: string): string[] {
+type DocumentedToolRow = {
+	toolName: string;
+	description: string;
+};
+
+function extractDocumentedToolRows(markdown: string): DocumentedToolRow[] {
 	const headingIndex = markdown.indexOf(RUNTIME_TOOLS_HEADING);
 	if (headingIndex === -1) {
 		throw new Error(
@@ -36,8 +42,15 @@ function extractDocumentedToolNames(markdown: string): string[] {
 	return markdown
 		.slice(lineBreakIndex + 1, sectionEndIndex)
 		.split("\n")
-		.map((line) => line.trim().match(/^- `([^`]+)`$/)?.[1])
-		.filter((toolName): toolName is string => Boolean(toolName));
+		.map((line) => line.trim().match(/^- `([^`]+)` — (.+)$/))
+		.filter((match): match is RegExpMatchArray => match !== null)
+		.map((match) => {
+			const [, toolName, description] = match;
+			if (!toolName || !description) {
+				throw new Error(`Invalid documented tool row: ${match[0]}`);
+			}
+			return { toolName, description };
+		});
 }
 
 function findDuplicates(items: string[]) {
@@ -53,33 +66,74 @@ function findDuplicates(items: string[]) {
 }
 
 describe("development docs tool parity", () => {
-	test("Current Runtime Tools matches the registered tool surface", async () => {
+	test("Current Runtime Tools matches descriptor-derived docs rows", async () => {
 		const markdown = await readFile(DEVELOPMENT_DOC_PATH, "utf8");
-		const documentedToolNames = extractDocumentedToolNames(markdown);
+		const documentedToolRows = extractDocumentedToolRows(markdown);
+		const documentedToolNames = documentedToolRows.map((row) => row.toolName);
 		const registeredToolNames = Object.keys(createTools({}));
+		const descriptorDocsRows = FLOW_TOOL_DOCS_ROWS.filter(
+			(row) => row.section === "docs/development.md#current-runtime-tools",
+		);
+		const expectedToolNames = descriptorDocsRows.map((row) => row.toolName);
+		const descriptorLabels = [
+			...new Set(descriptorDocsRows.map((row) => row.label)),
+		];
 
-		if (documentedToolNames.length === 0) {
+		expect(descriptorLabels).toEqual(["Default OpenCode tool surface"]);
+		expect(markdown).toContain(
+			`${descriptorLabels[0]}, in descriptor docs-row order:`,
+		);
+
+		if (documentedToolRows.length === 0) {
 			throw new Error(
-				"No documented tools found under 'Current Runtime Tools'.",
+				"No documented tool rows found under 'Current Runtime Tools'.",
 			);
 		}
 
 		const duplicates = findDuplicates(documentedToolNames);
-		const missing = registeredToolNames
+		const orderMismatch =
+			documentedToolNames.length === expectedToolNames.length &&
+			documentedToolNames.some(
+				(toolName, index) => toolName !== expectedToolNames[index],
+			);
+		const missing = expectedToolNames
 			.filter((name) => !documentedToolNames.includes(name))
 			.sort();
 		const extra = documentedToolNames
-			.filter((name) => !registeredToolNames.includes(name))
+			.filter((name) => !expectedToolNames.includes(name))
+			.sort();
+		const descriptionMismatches = descriptorDocsRows
+			.filter((expectedRow) => {
+				const documentedRow = documentedToolRows.find(
+					(row) => row.toolName === expectedRow.toolName,
+				);
+				return documentedRow?.description !== expectedRow.description;
+			})
+			.map((row) => row.toolName)
 			.sort();
 
-		if (duplicates.length > 0 || missing.length > 0 || extra.length > 0) {
+		expect(expectedToolNames).toEqual(registeredToolNames);
+
+		if (
+			duplicates.length > 0 ||
+			missing.length > 0 ||
+			extra.length > 0 ||
+			orderMismatch ||
+			descriptionMismatches.length > 0
+		) {
 			const issues = [
 				duplicates.length > 0
 					? `Duplicated in docs: ${duplicates.join(", ")}`
 					: null,
 				missing.length > 0 ? `Missing from docs: ${missing.join(", ")}` : null,
 				extra.length > 0
-					? `Documented but not registered: ${extra.join(", ")}`
+					? `Documented but not descriptor-backed: ${extra.join(", ")}`
+					: null,
+				orderMismatch
+					? "Documented tools do not match descriptor docs row order."
+					: null,
+				descriptionMismatches.length > 0
+					? `Description mismatch: ${descriptionMismatches.join(", ")}`
 					: null,
 			].filter((issue): issue is string => issue !== null);
 

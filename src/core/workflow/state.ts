@@ -37,6 +37,7 @@ export function createInitialWorkflowState(
 			implementationApproach: input.planning?.implementationApproach,
 			decisionLog: input.planning?.decisionLog ?? [],
 			replanLog: input.planning?.replanLog ?? [],
+			evidencePackets: input.planning?.evidencePackets,
 		},
 		plan: null,
 		execution: {

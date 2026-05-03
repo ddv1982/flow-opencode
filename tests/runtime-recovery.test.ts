@@ -105,6 +105,21 @@ describe("runtime recovery policy mapping", () => {
 		expect(missingValidation.nextCommand).toBe("/flow-status");
 		expect(missingValidation.nextRuntimeTool).toBeUndefined();
 
+		const missingReviewClosure = buildCompletionRecovery(
+			"setup-runtime",
+			false,
+			"missing_review_closure",
+		);
+		expect(missingReviewClosure.errorCode).toBe(
+			"missing_review_finding_closure",
+		);
+		expect(missingReviewClosure.recoveryStage).toBe("retry_completion");
+		expect(missingReviewClosure.requiredArtifact).toBe(
+			"review_finding_closure_ledger",
+		);
+		expect(missingReviewClosure.nextCommand).toBe("/flow-status");
+		expect(missingReviewClosure.nextRuntimeTool).toBeUndefined();
+
 		const missingFinalReview = buildCompletionRecovery(
 			"setup-runtime",
 			true,
@@ -123,6 +138,7 @@ describe("runtime recovery policy mapping", () => {
 			"failing_validation",
 			"missing_reviewer_decision",
 			"missing_validation_scope",
+			"missing_review_closure",
 			"failing_feature_review",
 			"missing_final_review",
 			"failing_final_review",
@@ -144,6 +160,7 @@ describe("runtime recovery policy mapping", () => {
 			"failing_validation",
 			"missing_reviewer_decision",
 			"missing_validation_scope",
+			"missing_review_closure",
 			"failing_feature_review",
 			"missing_final_review",
 			"failing_final_review",

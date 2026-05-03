@@ -6,6 +6,7 @@
 import { tool } from "../../sdk";
 import { openCodeToolDescription } from "../../tool-projections.generated";
 
+import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowSessionCloseArgsSchema,
@@ -14,6 +15,13 @@ import {
 } from "../schemas";
 import { nextCommandForResetSession } from "./next-command-policy";
 import { executeToolWorkspaceAction, recordToolMetadata } from "./shared";
+
+export const FLOW_LIFECYCLE_TOOL_RUNTIME_BINDINGS = {
+	flow_session_close: { kind: "workspace", name: "close_session" },
+} as const satisfies Record<
+	string,
+	Extract<RuntimeActionBinding, { kind: "workspace" }>
+>;
 
 export function createLifecycleSessionTools() {
 	return {
@@ -26,11 +34,15 @@ export function createLifecycleSessionTools() {
 					recordToolMetadata(context, `Close Flow session (${input.kind})`, {
 						closureKind: input.kind,
 					});
-					return executeToolWorkspaceAction(context, "close_session", {
-						kind: input.kind,
-						...(input.summary ? { summary: input.summary } : {}),
-						nextCommand: nextCommandForResetSession(),
-					});
+					return executeToolWorkspaceAction(
+						context,
+						FLOW_LIFECYCLE_TOOL_RUNTIME_BINDINGS.flow_session_close.name,
+						{
+							kind: input.kind,
+							...(input.summary ? { summary: input.summary } : {}),
+							nextCommand: nextCommandForResetSession(),
+						},
+					);
 				},
 			),
 		}),

@@ -1,5 +1,6 @@
 import { tool } from "../../sdk";
 import { openCodeToolDescription } from "../../tool-projections.generated";
+import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowResetFeatureArgsSchema,
@@ -10,6 +11,15 @@ import {
 	WorkerResultArgsSchema,
 } from "../schemas";
 import { executeGuardedSessionMutation, flowRunStartArgsShape } from "./shared";
+
+export const FLOW_EXECUTION_TOOL_RUNTIME_BINDINGS = {
+	flow_run_start: { kind: "mutation", name: "start_run" },
+	flow_run_complete_feature: { kind: "mutation", name: "complete_run" },
+	flow_reset_feature: { kind: "mutation", name: "reset_feature" },
+} as const satisfies Record<
+	string,
+	Extract<RuntimeActionBinding, { kind: "mutation" }>
+>;
 
 export function createExecutionRuntimeTools() {
 	return {
@@ -27,9 +37,13 @@ export function createExecutionRuntimeTools() {
 							reason: null,
 						},
 					});
-					return executeGuardedSessionMutation(context, "start_run", {
-						...(input.featureId ? { featureId: input.featureId } : {}),
-					});
+					return executeGuardedSessionMutation(
+						context,
+						FLOW_EXECUTION_TOOL_RUNTIME_BINDINGS.flow_run_start.name,
+						{
+							...(input.featureId ? { featureId: input.featureId } : {}),
+						},
+					);
 				},
 			),
 		}),
@@ -48,9 +62,13 @@ export function createExecutionRuntimeTools() {
 							status: input.status,
 						},
 					});
-					return executeGuardedSessionMutation(context, "complete_run", {
-						worker: input,
-					});
+					return executeGuardedSessionMutation(
+						context,
+						FLOW_EXECUTION_TOOL_RUNTIME_BINDINGS.flow_run_complete_feature.name,
+						{
+							worker: input,
+						},
+					);
 				},
 			),
 		}),
@@ -68,9 +86,13 @@ export function createExecutionRuntimeTools() {
 							featureId: input.featureId,
 						},
 					});
-					return executeGuardedSessionMutation(context, "reset_feature", {
-						featureId: input.featureId,
-					});
+					return executeGuardedSessionMutation(
+						context,
+						FLOW_EXECUTION_TOOL_RUNTIME_BINDINGS.flow_reset_feature.name,
+						{
+							featureId: input.featureId,
+						},
+					);
 				},
 			),
 		}),

@@ -133,3 +133,129 @@ export const FlowReviewRecordFinalArgsSchema =
 	RuntimeFlowReviewRecordFinalArgsSchema;
 export const FlowReviewRenderArgsSchema = z.object(FlowReviewRenderArgsShape);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
+
+type FlowToolPayloadSchemaRegistration = {
+	argsShape: object;
+	argsSchema: object;
+	payloadSchemaOwners: readonly string[];
+};
+
+export const FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY = {
+	flow_status: {
+		argsShape: FlowStatusArgsShape,
+		argsSchema: FlowStatusArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_doctor: {
+		argsShape: FlowDoctorArgsShape,
+		argsSchema: FlowDoctorArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_history: {
+		argsShape: FlowHistoryArgsShape,
+		argsSchema: FlowHistoryArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_history_show: {
+		argsShape: FlowHistoryShowArgsShape,
+		argsSchema: FlowHistoryShowArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_session_activate: {
+		argsShape: FlowSessionActivateArgsShape,
+		argsSchema: FlowSessionActivateArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_plan_start: {
+		argsShape: FlowPlanStartArgsShape,
+		argsSchema: FlowPlanStartArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_auto_prepare: {
+		argsShape: FlowAutoPrepareArgsShape,
+		argsSchema: FlowAutoPrepareArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_session_close: {
+		argsShape: FlowSessionCloseArgsShape,
+		argsSchema: FlowSessionCloseArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_plan_context_record: {
+		argsShape: FlowPlanContextRecordArgsShape,
+		argsSchema: FlowPlanContextRecordArgsSchema,
+		payloadSchemaOwners: [
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/runtime/schema.ts",
+		],
+	},
+	flow_plan_apply: {
+		argsShape: FlowPlanApplyArgsShape,
+		argsSchema: FlowPlanApplyArgsSchema,
+		payloadSchemaOwners: [
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/runtime/schema.ts",
+		],
+	},
+	flow_plan_approve: {
+		argsShape: FlowPlanApproveArgsShape,
+		argsSchema: FlowPlanApproveArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_plan_select_features: {
+		argsShape: FlowPlanSelectArgsShape,
+		argsSchema: FlowPlanSelectArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_run_start: {
+		argsShape: FlowRunStartArgsShape,
+		argsSchema: FlowRunStartArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_run_complete_feature: {
+		argsShape: FlowRunCompleteFeatureArgsShape,
+		argsSchema: WorkerResultArgsSchema,
+		payloadSchemaOwners: [
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/runtime/schema.ts",
+		],
+	},
+	flow_reset_feature: {
+		argsShape: FlowResetFeatureArgsShape,
+		argsSchema: FlowResetFeatureArgsSchema,
+		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
+	},
+	flow_review_record_feature: {
+		argsShape: FlowReviewRecordFeatureArgsShape,
+		argsSchema: FlowReviewRecordFeatureArgsSchema,
+		payloadSchemaOwners: [
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/runtime/schema.ts",
+		],
+	},
+	flow_review_record_final: {
+		argsShape: FlowReviewRecordFinalArgsShape,
+		argsSchema: FlowReviewRecordFinalArgsSchema,
+		payloadSchemaOwners: [
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/runtime/schema.ts",
+		],
+	},
+	flow_review_render: {
+		argsShape: FlowReviewRenderArgsShape,
+		argsSchema: FlowReviewRenderArgsSchema,
+		payloadSchemaOwners: [
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/audit/report-schema.ts",
+		],
+	},
+} as const satisfies Record<string, FlowToolPayloadSchemaRegistration>;
+
+export const FLOW_TOOL_PAYLOAD_SCHEMA_OWNERS: Record<
+	string,
+	readonly string[]
+> = Object.fromEntries(
+	Object.entries(FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY).map(
+		([toolName, registration]) => [toolName, registration.payloadSchemaOwners],
+	),
+);

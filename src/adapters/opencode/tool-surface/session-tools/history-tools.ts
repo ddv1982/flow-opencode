@@ -14,6 +14,7 @@ import {
 import { FLOW_STATUS_COMMAND } from "../../../../runtime/constants";
 import { tool } from "../../sdk";
 import { openCodeToolDescription } from "../../tool-projections.generated";
+import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowDoctorArgsSchema,
@@ -40,6 +41,17 @@ import {
 	recordToolMetadata,
 } from "./shared";
 
+export const FLOW_HISTORY_TOOL_RUNTIME_BINDINGS = {
+	flow_status: { kind: "read", name: "load_status_session" },
+	flow_history: { kind: "read", name: "list_session_history" },
+	flow_history_show: { kind: "read", name: "load_history_session" },
+	flow_session_activate: { kind: "workspace", name: "activate_session" },
+} as const satisfies Record<
+	string,
+	| Extract<RuntimeActionBinding, { kind: "read" }>
+	| Extract<RuntimeActionBinding, { kind: "workspace" }>
+>;
+
 function recordSessionLookupMetadata(
 	context: ToolContext,
 	sessionId: string,
@@ -64,7 +76,7 @@ export function createHistorySessionTools() {
 				async (input, context: ToolContext) => {
 					const session = await readToolSessionValue(
 						context,
-						"load_status_session",
+						FLOW_HISTORY_TOOL_RUNTIME_BINDINGS.flow_status.name,
 						undefined,
 					);
 					const workspace = inspectToolWorkspace(context);
@@ -107,7 +119,7 @@ export function createHistorySessionTools() {
 				async (_input, context: ToolContext) => {
 					const history = await readToolSessionValue(
 						context,
-						"list_session_history",
+						FLOW_HISTORY_TOOL_RUNTIME_BINDINGS.flow_history.name,
 						undefined,
 					);
 					const response = historyResponse(
@@ -128,7 +140,7 @@ export function createHistorySessionTools() {
 				async (input, context: ToolContext) => {
 					const found = await readToolSessionValue(
 						context,
-						"load_history_session",
+						FLOW_HISTORY_TOOL_RUNTIME_BINDINGS.flow_history_show.name,
 						{ sessionId: input.sessionId },
 					);
 					recordSessionLookupMetadata(context, input.sessionId, found);
@@ -158,11 +170,15 @@ export function createHistorySessionTools() {
 					recordToolMetadata(context, `Activate ${input.sessionId}`, {
 						sessionId: input.sessionId,
 					});
-					return executeToolWorkspaceAction(context, "activate_session", {
-						sessionId: input.sessionId,
-						nextCommand: FLOW_STATUS_COMMAND,
-						missingNextCommand: nextCommandForMissingStoredSession(),
-					});
+					return executeToolWorkspaceAction(
+						context,
+						FLOW_HISTORY_TOOL_RUNTIME_BINDINGS.flow_session_activate.name,
+						{
+							sessionId: input.sessionId,
+							nextCommand: FLOW_STATUS_COMMAND,
+							missingNextCommand: nextCommandForMissingStoredSession(),
+						},
+					);
 				},
 			),
 		}),

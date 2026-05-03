@@ -9,6 +9,7 @@ import {
 import type { Session } from "../../../../runtime/schema";
 import { tool } from "../../sdk";
 import { openCodeToolDescription } from "../../tool-projections.generated";
+import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowPlanApplyArgsSchema,
@@ -26,6 +27,22 @@ import {
 	parseFeatureIds,
 	runGuardedSessionMutationAction,
 } from "./shared";
+
+export const FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS = {
+	flow_plan_context_record: {
+		kind: "mutation",
+		name: "record_planning_context",
+	},
+	flow_plan_apply: { kind: "mutation", name: "apply_plan" },
+	flow_plan_approve: { kind: "mutation", name: "approve_plan" },
+	flow_plan_select_features: {
+		kind: "mutation",
+		name: "select_plan_features",
+	},
+} as const satisfies Record<
+	string,
+	Extract<RuntimeActionBinding, { kind: "mutation" }>
+>;
 
 function stackStandardsProfileCacheValue(
 	planning: Pick<Session["planning"], "stackProfile" | "standardsProfile">,
@@ -60,7 +77,8 @@ export function createPlanningRuntimeTools() {
 					);
 					const result = await runGuardedSessionMutationAction(
 						context,
-						"record_planning_context",
+						FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS.flow_plan_context_record
+							.name,
 						planning,
 					);
 					if (result.kind === "success") {
@@ -102,7 +120,7 @@ export function createPlanningRuntimeTools() {
 								) as Partial<Session["planning"]>);
 					const appliedResult = await runGuardedSessionMutationAction(
 						context,
-						"apply_plan",
+						FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS.flow_plan_apply.name,
 						planning === undefined
 							? { plan: input.plan }
 							: { plan: input.plan, planning },
@@ -140,9 +158,13 @@ export function createPlanningRuntimeTools() {
 							approvedCount: parseFeatureIds(input.featureIds).length || null,
 						},
 					});
-					return executeGuardedSessionMutation(context, "approve_plan", {
-						featureIds: parseFeatureIds(input.featureIds),
-					});
+					return executeGuardedSessionMutation(
+						context,
+						FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS.flow_plan_approve.name,
+						{
+							featureIds: parseFeatureIds(input.featureIds),
+						},
+					);
 				},
 			),
 		}),
@@ -162,7 +184,8 @@ export function createPlanningRuntimeTools() {
 					});
 					return executeGuardedSessionMutation(
 						context,
-						"select_plan_features",
+						FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS
+							.flow_plan_select_features.name,
 						{ featureIds: parseFeatureIds(input.featureIds) },
 					);
 				},

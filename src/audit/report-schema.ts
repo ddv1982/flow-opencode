@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EvidencePacketArraySchema } from "../runtime/schema";
 
 const ReviewDepthSchema = z.enum(["broad_audit", "deep_audit", "full_audit"]);
 const SurfaceCategorySchema = z.enum([
@@ -111,6 +112,7 @@ export const ReviewReportSchema = z
 		repoSummary: z.string().min(1),
 		overallVerdict: z.string().min(1),
 		discoveredSurfaces: z.array(ReviewDiscoveredSurfaceSchema),
+		evidencePackets: EvidencePacketArraySchema.optional(),
 		coverageNotes: z.array(z.string().min(1)).optional(),
 		validationRun: z.array(ReviewValidationRunSchema),
 		findings: z.array(ReviewFindingSchema),

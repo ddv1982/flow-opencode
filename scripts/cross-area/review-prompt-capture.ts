@@ -2,6 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { FLOW_REVIEW_COMMAND_TEMPLATE } from "../../src/audit/prompts/commands";
 import {
+	type EvidencePacket,
+	EvidencePacketArraySchema,
+} from "../../src/runtime/schema";
+import {
 	type PromptBehaviorPacketExpectations,
 	scorePromptBehaviorModelOutput,
 } from "../../tests/prompt-behavior-eval-helpers";
@@ -24,6 +28,7 @@ export type ReviewCaptureReviewPacket = {
 	knownExclusions?: string[];
 	alreadyCoveredFindings?: string[];
 	evidenceRequirements?: string[];
+	evidencePackets?: EvidencePacket[];
 	doneWhen?: ReviewCaptureTextBlock;
 };
 
@@ -158,6 +163,16 @@ function validateReviewPacket(reviewPacket: unknown, scenarioId: string): void {
 			`reviewPacket.${fieldName}`,
 		);
 	}
+	if (reviewPacket.evidencePackets !== undefined) {
+		const packetResult = EvidencePacketArraySchema.safeParse(
+			reviewPacket.evidencePackets,
+		);
+		if (!packetResult.success) {
+			throw new Error(
+				`Review capture scenario '${scenarioId}' reviewPacket.evidencePackets must match the shared evidence packet schema.`,
+			);
+		}
+	}
 }
 
 export function validateReviewCaptureScenarios(
@@ -271,6 +286,19 @@ function renderSelectedContext(
 	];
 }
 
+function renderEvidencePackets(
+	evidencePackets: readonly EvidencePacket[] | undefined,
+): string[] {
+	if (!evidencePackets || evidencePackets.length === 0) {
+		return [];
+	}
+	return [
+		"<evidence-packets>",
+		...evidencePackets.map((packet) => JSON.stringify(packet)),
+		"</evidence-packets>",
+	];
+}
+
 function renderReviewPacket(
 	reviewPacket: ReviewCaptureReviewPacket | undefined,
 ): string[] {
@@ -292,6 +320,7 @@ function renderReviewPacket(
 			"evidence-requirements",
 			reviewPacket.evidenceRequirements,
 		),
+		...renderEvidencePackets(reviewPacket.evidencePackets),
 		...renderTextBlock("done-when", reviewPacket.doneWhen),
 	];
 	if (packetLines.length === 0) {

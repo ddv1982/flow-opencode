@@ -1,3 +1,5 @@
+import { COMPLETION_GATE_AUDIT_GUIDANCE } from "../../runtime/transitions/completion-gate-projections.generated";
+
 export const FLOW_AUDIT_CONTRACT = `Build an internal review/audit ledger using these fields so coverage stays explicit and internally consistent:
 
 - requestedDepth: broad_audit | deep_audit | full_audit
@@ -5,6 +7,7 @@ export const FLOW_AUDIT_CONTRACT = `Build an internal review/audit ledger using 
 - repoSummary: string
 - overallVerdict: string
 - discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]
+- evidencePackets?: { id: string, purpose?: planning | review | audit | validation | general, summary: string, sourceRefs?: string[], highlights?: string[], selectedContext?: string[], excludedContext?: string[], codemapSummaries?: string[], sliceSummaries?: string[], relationshipHypotheses?: string[], ambiguities?: string[], knownExclusions?: string[], alreadyCoveredFindings?: string[], validationEvidence?: { command: string, status: passed | failed | failed_existing | partial | not_run, summary: string }[] }[]
 - coverageNotes?: string[]
 - validationRun: { command: string, status: passed | failed | partial | not_run, summary: string }[]
 - findings: { title: string, category: confirmed_defect | risk | hardening_opportunity | process_gap, confidence: confirmed | likely | speculative, severity?: high | medium | low, evidence: string[], impact: string, remediation?: string }[]
@@ -39,6 +42,10 @@ Final response rules:
 Audit rules:
 - treat requestedDepth as the user's requested review strength, but set achievedDepth from actual evidence gathered
 - discoveredSurfaces is the canonical coverage ledger for standalone review coverage; derive human-readable coverage summaries from it instead of duplicating the same truth in extra structures
+- evidencePackets is optional read-only context/evidence metadata for packet boundaries, exact sources, exclusions, uncertainty, and validation evidence; it must support discoveredSurfaces/findings instead of replacing their concrete evidence references
 - achievedDepth can be full_audit only when every major surface discovered during repo mapping is directly reviewed and every discovered surface is represented in discoveredSurfaces
 - if any major surface remains unreviewed, spot-checked only, or intentionally skipped, downgrade achievedDepth below full_audit and explain the gap in coverageNotes
-- when no validation was run, include an explicit validationRun entry with status: not_run and explain why`;
+- when no validation was run, include an explicit validationRun entry with status: not_run and explain why
+
+Completion gate parity guidance (descriptor-projected, runtime enforcement remains authoritative):
+${COMPLETION_GATE_AUDIT_GUIDANCE}`;

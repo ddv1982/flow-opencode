@@ -2,6 +2,7 @@
 // Keep these contracts aligned with runtime invariants; do not introduce conflicting policy here.
 
 import type { SemanticInvariantId } from "../runtime/domain/semantic-invariants";
+import { COMPLETION_GATE_PROMPT_GUIDANCE } from "../runtime/transitions/completion-gate-projections.generated";
 import { renderExampleBlocks } from "./format";
 
 export const FLOW_CONTRACT_INVARIANT_IDS = [
@@ -31,7 +32,8 @@ Record planning context separately via flow_plan_context_record or flow_plan_app
 - planning.standardsProfile?: { localGuidelines: { title, sourceType, reference, confidence }[], externalGuidance: { title, sourceType, reference, confidence }[], rules: { summary, sourceRefs, priority }[], gaps: { stackItem, reason, suggestedResearch }[], precedence: string[] }
 - planning.research?: string[]
 - planning.implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }
-- planning.decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]`;
+- planning.decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]
+- planning.evidencePackets?: { id: string, purpose?: planning | review | audit | validation | general, summary: string, sourceRefs?: string[], highlights?: string[], selectedContext?: string[], excludedContext?: string[], codemapSummaries?: string[], sliceSummaries?: string[], relationshipHypotheses?: string[], ambiguities?: string[], knownExclusions?: string[], alreadyCoveredFindings?: string[], validationEvidence?: { command, status, summary }[] }[]`;
 
 export const FLOW_PLAN_CONTRACT = `${FLOW_PLAN_CONTRACT_BASE}
 
@@ -70,7 +72,7 @@ const FLOW_WORKER_CONTRACT_BASE = `Return exactly one JSON object that matches t
 - outcome?: { kind, category?, summary?, resolutionHint?, retryable?, autoResolvable?, needsHuman?, replanReason?, failedAssumption?, recommendedAdjustment? }
 - featureResult: { featureId, verificationStatus?: passed | partial | failed | not_recorded, notes?: { note }[], followUps?: { summary, severity? }[] }
 - featureReview: { status: passed | failed | needs_followup, summary, blockingFindings: { summary }[] }
-- finalReview?: { status: passed | failed | needs_followup, reviewDepth: broad | detailed, reviewedSurfaces?: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface [], evidenceSummary?: string, validationAssessment?: string, evidenceRefs: { changedArtifacts: string[], validationCommands: string[] }, integrationChecks?: string[], regressionChecks?: string[], remainingGaps?: string[], summary, blockingFindings: { summary }[] }
+- finalReview?: { status: passed | failed | needs_followup, reviewDepth: broad | detailed, reviewedSurfaces?: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface [], evidenceSummary?: string, validationAssessment?: string, evidenceRefs: { changedArtifacts: string[], validationCommands: string[] }, evidencePackets?: immutable evidence/context packet[], integrationChecks?: string[], regressionChecks?: string[], remainingGaps?: string[], summary, blockingFindings: { summary }[] }
 
 Status rules:
 - if status is ok, outcome must be omitted or use kind: completed
@@ -81,11 +83,15 @@ Status rules:
 - when the active feature is the final completion path for the session, run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), set finalReview.reviewDepth to match deliveryPolicy.finalReviewPolicy, and use validationScope: broad
 - finalReview must always include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
 - finalReview.evidenceRefs.changedArtifacts must reference actual artifactsChanged paths, and finalReview.evidenceRefs.validationCommands must reference actual validationRun commands from the current run
+- finalReview.evidencePackets is optional read-only metadata for selected/excluded context, exact sources, relationship hypotheses, ambiguities, known exclusions, already-covered findings, and validation evidence; do not use it as a substitute for required finalReview.evidenceRefs
 - finalReview.reviewedSurfaces must cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending
 - for review_and_fix work, include reviewFindingClosures before claiming success; each original finding must have a stable findingRef, status, code fixRefs, testRefs, validationRefs that match validationRun.command values, and residualRisk
-- do not mark a finding closed unless fixRefs, testRefs, and validationRefs all identify concrete evidence; use status: needs_input with partially_closed, not_closed, or blocked closure entries when evidence is incomplete`;
+- do not mark a finding closed unless fixRefs, testRefs, and validationRefs all identify concrete evidence; use status: needs_input with partially_closed, not_closed, or blocked closure entries when evidence is incomplete
+
+Completion gate guidance (descriptor-projected, runtime enforcement remains authoritative):
+${COMPLETION_GATE_PROMPT_GUIDANCE}`;
 
 export const FLOW_WORKER_CONTRACT = `${FLOW_WORKER_CONTRACT_BASE}
 
@@ -114,6 +120,7 @@ export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that match
 - evidenceSummary?: string
 - validationAssessment?: string
 - evidenceRefs?: { changedArtifacts: string[], validationCommands: string[] }
+- evidencePackets?: read-only evidence/context packet[]
 - integrationChecks?: string[]
 - regressionChecks?: string[]
 - remainingGaps?: string[]
@@ -136,6 +143,7 @@ Reviewer rules:
 - for scope: final, include reviewDepth matching deliveryPolicy.finalReviewPolicy
 - for scope: final, include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
 - for scope: final, set evidenceRefs.changedArtifacts to actual changed artifact paths you reviewed and evidenceRefs.validationCommands to actual validation commands you relied on
+- for scope: final, use evidencePackets only as optional read-only context/evidence metadata; do not let packet references replace concrete evidenceRefs
 - for scope: final, cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - for scope: final, when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface
 - for scope: final, perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving

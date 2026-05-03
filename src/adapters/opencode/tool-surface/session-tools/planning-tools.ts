@@ -7,6 +7,7 @@
 import { autoPrepareResponse } from "../../../../runtime/application";
 import { tool } from "../../sdk";
 import { openCodeToolDescription } from "../../tool-projections.generated";
+import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowAutoPrepareArgsSchema,
@@ -25,6 +26,15 @@ import {
 	recordToolMetadata,
 } from "./shared";
 
+export const FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS = {
+	flow_plan_start: { kind: "workspace", name: "plan_start" },
+	flow_auto_prepare: { kind: "read", name: "load_resumable_session" },
+} as const satisfies Record<
+	string,
+	| Extract<RuntimeActionBinding, { kind: "read" }>
+	| Extract<RuntimeActionBinding, { kind: "workspace" }>
+>;
+
 export function createPlanningSessionTools() {
 	return {
 		flow_plan_start: tool({
@@ -37,12 +47,16 @@ export function createPlanningSessionTools() {
 						goal: input.goal ?? null,
 						repoProfileCount: input.repoProfile?.length ?? 0,
 					});
-					return executeToolWorkspaceAction(context, "plan_start", {
-						...(input.goal ? { goal: input.goal } : {}),
-						...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
-						...(context.directory ? { directory: context.directory } : {}),
-						missingGoalNextCommand: nextCommandForMissingGoal(),
-					});
+					return executeToolWorkspaceAction(
+						context,
+						FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS.flow_plan_start.name,
+						{
+							...(input.goal ? { goal: input.goal } : {}),
+							...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
+							...(context.directory ? { directory: context.directory } : {}),
+							missingGoalNextCommand: nextCommandForMissingGoal(),
+						},
+					);
 				},
 			),
 		}),
@@ -55,7 +69,7 @@ export function createPlanningSessionTools() {
 				async (input, context: ToolContext) => {
 					const resumableSession = await readToolSessionValue(
 						context,
-						"load_resumable_session",
+						FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS.flow_auto_prepare.name,
 						undefined,
 					);
 					const navigation = autoPreparePolicy(

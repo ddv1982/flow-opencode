@@ -149,6 +149,9 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 							decisionLog:
 								nextPlanning.decisionLog ?? session.planning.decisionLog,
 							replanLog: nextPlanning.replanLog ?? session.planning.replanLog,
+							evidencePackets:
+								nextPlanning.evidencePackets ??
+								session.planning.evidencePackets,
 						},
 					};
 					return succeed(updated);
@@ -318,6 +321,9 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 					changedArtifacts: decision.evidenceRefs?.changedArtifacts ?? [],
 					validationCommands: decision.evidenceRefs?.validationCommands ?? [],
 				},
+				...(decision.evidencePackets
+					? { evidencePackets: decision.evidencePackets }
+					: {}),
 				integrationChecks: decision.integrationChecks ?? [],
 				regressionChecks: decision.regressionChecks ?? [],
 				remainingGaps: decision.remainingGaps ?? [],

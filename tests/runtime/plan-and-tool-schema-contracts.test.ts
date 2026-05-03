@@ -142,6 +142,15 @@ describe("runtime plan and tool schema contracts", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
+				evidencePackets: [
+					{
+						id: "packet:final-review-tool",
+						purpose: "review",
+						summary: "Final reviewer packet survives the tool path.",
+						sourceRefs: ["src/runtime/session.ts"],
+						selectedContext: ["src/runtime/session.ts"],
+					},
+				],
 				integrationChecks: [
 					"Reviewed integration points across the active feature boundary.",
 				],
@@ -164,6 +173,9 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(parsed.session.lastReviewerDecision.suggestedValidation).toEqual([
 			"bun run check",
 		]);
+		expect(parsed.session.lastReviewerDecision.evidencePackets[0].id).toBe(
+			"packet:final-review-tool",
+		);
 	});
 
 	test("reviewer decision tool rejects featureId on final review at parse time", async () => {

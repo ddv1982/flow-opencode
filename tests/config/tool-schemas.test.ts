@@ -66,13 +66,13 @@ describe("tool schema config contracts", () => {
 			0,
 		);
 
-		expect(totalSize).toBeLessThan(175000);
-		expect(schemaSizes.flow_plan_apply).toBeLessThan(60000);
-		expect(schemaSizes.flow_plan_context_record).toBeLessThan(45000);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(30000);
+		expect(totalSize).toBeLessThan(240000);
+		expect(schemaSizes.flow_plan_apply).toBeLessThan(75000);
+		expect(schemaSizes.flow_plan_context_record).toBeLessThan(60000);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(45000);
 		expect(schemaSizes.flow_review_record_feature).toBeLessThan(5000);
-		expect(schemaSizes.flow_review_record_final).toBeLessThan(12000);
-		expect(schemaSizes.flow_review_render).toBeLessThan(15000);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(30000);
+		expect(schemaSizes.flow_review_render).toBeLessThan(35000);
 	});
 
 	test("pins zod to the plugin SDK's effective zod contract", async () => {
@@ -100,6 +100,21 @@ describe("tool schema config contracts", () => {
 
 	test("non-worker tool schemas accept representative valid payloads and reject invalid ones", () => {
 		const { schemas } = getToolSchemas();
+		const evidencePacket = {
+			id: "packet:tool-schema",
+			purpose: "planning",
+			summary: "Tool schema packet evidence.",
+			sourceRefs: ["src/runtime/schema.ts"],
+			selectedContext: ["src/runtime/schema.ts"],
+			excludedContext: ["dist/index.js"],
+			validationEvidence: [
+				{
+					command: "bun test tests/config/tool-schemas.test.ts",
+					status: "passed",
+					summary: "Tool schema contract passed.",
+				},
+			],
+		};
 
 		expect(schemas.flow_status.safeParse({}).success).toBe(true);
 		expect(schemas.flow_status.safeParse({ view: "compact" }).success).toBe(
@@ -187,6 +202,7 @@ describe("tool schema config contracts", () => {
 					precedence: ["local repo guidance before external standards"],
 				},
 				research: ["Check docs if local evidence is insufficient."],
+				evidencePackets: [evidencePacket],
 				decisionLog: [
 					{
 						question: "Which path should auto mode recommend?",
@@ -213,6 +229,7 @@ describe("tool schema config contracts", () => {
 						},
 					],
 				},
+				planning: { evidencePackets: [evidencePacket] },
 			}).success,
 		).toBe(true);
 		expect(
@@ -271,6 +288,7 @@ describe("tool schema config contracts", () => {
 					changedArtifacts: [],
 					validationCommands: ["bun test"],
 				},
+				evidencePackets: [{ ...evidencePacket, purpose: "review" }],
 				integrationChecks: [
 					"Reviewed integration points across the active feature boundary.",
 				],
@@ -305,6 +323,7 @@ describe("tool schema config contracts", () => {
 				repoSummary: "Repo summary.",
 				overallVerdict: "Overall verdict.",
 				discoveredSurfaces: [],
+				evidencePackets: [{ ...evidencePacket, purpose: "audit" }],
 				coverageNotes: [],
 				validationRun: [],
 				findings: [],

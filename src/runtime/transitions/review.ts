@@ -29,6 +29,7 @@ type RecordReviewerDecisionInput = {
 				validationCommands?: string[] | undefined;
 		  }
 		| undefined;
+	evidencePackets?: FinalScopeReviewerDecision["evidencePackets"];
 	integrationChecks?: string[] | undefined;
 	regressionChecks?: string[] | undefined;
 	remainingGaps?: string[] | undefined;
@@ -348,6 +349,9 @@ export function recordReviewerDecision(
 						changedArtifacts: finalEvidenceRefs.changedArtifacts,
 						validationCommands: finalEvidenceRefs.validationCommands,
 					},
+					...(input.evidencePackets
+						? { evidencePackets: input.evidencePackets }
+						: {}),
 					integrationChecks: (input.integrationChecks ??
 						[]) as FinalScopeReviewerDecision["integrationChecks"],
 					regressionChecks: (input.regressionChecks ??

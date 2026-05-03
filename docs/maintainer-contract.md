@@ -10,6 +10,7 @@ It injects Flow slash commands, Flow agents, and a bounded runtime tool surface 
 
 Runtime/domain/transitions own behavior.
 Prompts and docs describe behavior; they do not define it.
+Live runtime persistence is snapshot-primary; core event/replay infrastructure is a semantic oracle and regression gate unless a future migration explicitly changes that authority.
 
 Primary ownership map:
 
@@ -19,6 +20,7 @@ Primary ownership map:
 - State transitions: `src/runtime/transitions/`
 - Session persistence and workspace-root rules: `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts`
 - Tool schemas: `src/adapters/opencode/tool-surface/schemas.ts`, with shared runtime payload schemas imported from `src/runtime/schema.ts`
+- OpenCode tool/action projection descriptors: `src/adapters/opencode/tool-surface/descriptors.ts`
 - Prompt-mode contracts: `src/prompts/mode-contracts.ts`
 - Prompt text: `src/prompts/`, `src/audit/prompts/`
 
@@ -46,7 +48,9 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 
 ## Tools
 
-Tool registration is split by operator surface, but `src/adapters/opencode/tool-surface/schemas.ts` is the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload validation is owned by `src/runtime/schema.ts` and projected through `src/adapters/opencode/tool-surface/schemas.ts`.
+Tool registration is split by operator surface, but `src/adapters/opencode/tool-surface/schemas.ts` is the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload validation is owned by `src/runtime/schema.ts` and projected through `src/adapters/opencode/tool-surface/schemas.ts`. `FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY` co-locates each tool's raw arg shape, parser schema, and payload owner metadata so descriptor metadata is parity-tested against the actual schema boundary instead of file-existence checks alone.
+
+OpenCode tool/action metadata is described in `src/adapters/opencode/tool-surface/descriptors.ts`. Descriptors intentionally split typed `runtimeActionBinding` facets from nullable `coreAction` facets because read, control, workspace, and render tools are legitimate public surfaces even when they are not core workflow commands. Tool implementation modules own the dispatch constants they invoke, and descriptor parity tests compare those constants against descriptor `runtimeActionBinding` metadata. OpenCode projections may expose a flat optional `runtimeAction` string for stable host-facing output, but descriptors retain the read/workspace/mutation binding kind. Descriptors do not enforce completion/review/recovery behavior; runtime transitions do.
 
 | Tool | Registration owner | Schema owner |
 | --- | --- | --- |
@@ -58,8 +62,8 @@ Tool registration is split by operator surface, but `src/adapters/opencode/tool-
 | `flow_session_close` | `src/adapters/opencode/tool-surface/session-tools/lifecycle-tools.ts` | `FlowSessionCloseArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_auto_prepare` | `src/adapters/opencode/tool-surface/session-tools/planning-tools.ts` | `FlowAutoPrepareArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_plan_start` | `src/adapters/opencode/tool-surface/session-tools/planning-tools.ts` | `FlowPlanStartArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
-| `flow_plan_context_record` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanContextRecordArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
-| `flow_plan_apply` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanApplyArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_plan_context_record` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanContextRecordArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
+| `flow_plan_apply` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanApplyArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
 | `flow_plan_approve` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanApproveArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_plan_select_features` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanSelectArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_run_start` | `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts` | `FlowRunStartArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
@@ -67,7 +71,7 @@ Tool registration is split by operator surface, but `src/adapters/opencode/tool-
 | `flow_reset_feature` | `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts` | `FlowResetFeatureArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_review_record_feature` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRecordFeatureArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
 | `flow_review_record_final` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRecordFinalArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
-| `flow_review_render` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRenderArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_review_render` | `src/adapters/opencode/tool-surface/runtime-tools/review-tools.ts` | `FlowReviewRenderArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/audit/report-schema.ts` |
 
 ## State paths
 
@@ -96,6 +100,7 @@ Ownership rules:
 ## Contract invariants
 
 - Runtime owns workflow semantics.
+- Live runtime persistence remains snapshot-primary until an explicit event-first migration changes it.
 - Prompt contracts must mirror runtime, not invent behavior.
 - Tool schemas are SDK boundary surfaces.
 - Completion/reviewer gates are release-critical.

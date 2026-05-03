@@ -45,6 +45,7 @@ type SummarizedPlanning = Pick<
 	| "implementationApproach"
 	| "decisionLog"
 	| "replanLog"
+	| "evidencePackets"
 > & {
 	packageManager?: Session["planning"]["packageManager"];
 	packageManagerAmbiguous?: true;
@@ -147,6 +148,9 @@ function summarizePlanning(session: Session): SummarizedPlanning {
 			: {}),
 		...(session.planning.packageManagerAmbiguous
 			? { packageManagerAmbiguous: true as const }
+			: {}),
+		...(session.planning.evidencePackets
+			? { evidencePackets: session.planning.evidencePackets }
 			: {}),
 	};
 }

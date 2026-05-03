@@ -29,7 +29,8 @@ describe("transition consolidation", () => {
 		expect(files).toContain("recovery.ts");
 		expect(files).toContain("review.ts");
 		expect(files).toContain("shared.ts");
-		expect(files.length).toBeLessThanOrEqual(11);
+		// Budget includes completion-gate projection + execution-selection split modules.
+		expect(files.length).toBeLessThanOrEqual(13);
 	});
 
 	test("transition and tool hotspots stay within maintainability caps", () => {

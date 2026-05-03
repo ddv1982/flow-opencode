@@ -17,6 +17,13 @@ If this checklist conflicts with either file, update this checklist or delete th
 4. Run `bun run check` before release, cross-surface merges, or persistence-affecting changes.
 5. Record the risk/alternative in Lore release notes or commit trailers when behavior, contracts, or public surfaces change.
 
+## Authority and deletion freeze
+
+- Live runtime writes are snapshot-primary. Do not describe core event/replay as live persistence unless a separate migration explicitly changes that authority.
+- Treat core workflow/replay, event/checkpoint/projection stores, adapter schemas, generated prompt/tool projections, audit schemas, and canonical architecture docs as boundary or parity surfaces.
+- Do not delete or collapse those surfaces without import/call-graph evidence and replacement parity tests.
+- Descriptor metadata may project tool/action/protocol facts, but runtime transitions remain the enforcement point for completion, review, and recovery gates.
+
 ## Surface expansion freeze
 
 New commands, tools, prompt contracts, state paths, and runtime modes are frozen by default.

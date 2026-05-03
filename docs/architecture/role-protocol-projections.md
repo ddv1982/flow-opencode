@@ -4,20 +4,63 @@ Flow prompt surfaces are generated views, not semantic owners.
 
 ## Source-of-truth order
 
-1. `src/core/registry/actions.ts` owns workflow action metadata: action name, emitted events, invariant IDs, policy owners, and host-neutral descriptions.
-2. `src/core/protocols/roles.ts` owns role protocol data: role objective, action ownership, boundaries, workflow outline, output protocol, and examples.
-3. `src/prompts/mode-contracts.ts` owns mode contracts as data: allowed/forbidden Flow tools, mutation permissions, required behavior, and stop condition.
-4. `src/prompts/generated/**` renders the OpenCode-facing prompt and command projections from those contracts.
-5. `src/prompts/agents.ts` and `src/prompts/commands.ts` expose the generated prompt and command projections.
+1. Runtime transitions and domain policy own workflow enforcement.
+2. `src/core/registry/actions.ts` owns core workflow action metadata: action name, emitted events, invariant IDs, policy owners, and host-neutral descriptions.
+3. OpenCode tool implementation modules own the actual read/workspace/mutation dispatch constants they invoke; descriptor parity tests compare those constants against descriptor metadata.
+4. `src/adapters/opencode/tool-surface/descriptors.ts` owns the OpenCode-facing superset descriptor family for host tools, typed `runtimeActionBinding` facets, nullable `coreAction` facets, permission class, prompt guidance, docs metadata, and verification anchors.
+5. `src/core/protocols/roles.ts` owns role protocol data: role objective, action ownership, boundaries, workflow outline, output protocol, and examples.
+6. `src/prompts/mode-contracts.ts` owns mode contracts as data: allowed/forbidden Flow tools, mutation permissions, required behavior, and stop condition.
+7. `src/prompts/generated/**` renders the OpenCode-facing prompt and command projections from those contracts.
+8. `src/prompts/agents.ts` and `src/prompts/commands.ts` expose the generated prompt and command projections.
 
 Prompt prose may explain how to route work, but runtime/core contracts decide whether an action is valid.
+Live runtime persistence remains snapshot-primary; core event/replay infrastructure is a semantic oracle and regression gate, not live persistence authority.
 
 ## Projection rules
 
 - Do not add new workflow policy by editing `src/prompts/agents.ts` or `src/prompts/commands.ts`; update core role/action data, mode contracts, or runtime policy instead.
+- Do not collapse non-core/read/control/render tools into fake core actions. Typed `runtimeActionBinding` and nullable `coreAction` facets are part of the descriptor contract; only the OpenCode projection exposes an optional flat `runtimeAction` string.
+- Keep adapter execution bindings and schema-owner metadata parity-tested against descriptors; descriptors should not silently claim a runtime action or payload owner that the tool boundary does not use.
 - Generated prompt views must include the source-note, mode-contract summary, core action protocol, and semantic invariant references for mutating roles.
 - Review-only and audit-only roles must remain explicit about read-only boundaries and must not receive hidden mutation authority through prompt wording.
 - Docs and prompt evals should check generated contract expectations rather than long hand-maintained policy paragraphs.
+
+## Completion gate projection table (descriptor-generated)
+
+The table below is mechanically projected from `src/runtime/transitions/completion-gates.ts` via `src/runtime/transitions/completion-gate-projections.generated.ts`. Runtime transition enforcement remains authoritative.
+
+<!-- completion-gate-doc-table:start -->
+| Mode | Path | Step | Gate ID | Required Artifact | Recovery Kind | Predicate Owner | Invariant IDs |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| default | feature | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | feature | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | feature | 3 | reviewer_decision | feature_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| default | feature | 4 | validation_scope | targeted_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | feature | 5 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | feature | 6 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 3 | validation_scope | broad_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 4 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 5 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 6 | final_review_payload | final_review_payload | missing_final_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| default | final | 7 | reviewer_decision | final_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review_and_fix | feature | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 3 | review_finding_closure | review_finding_closure_ledger | missing_review_closure | reviewFindingClosureFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 4 | reviewer_decision | feature_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review_and_fix | feature | 5 | validation_scope | targeted_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 6 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 7 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 3 | review_finding_closure | review_finding_closure_ledger | missing_review_closure | reviewFindingClosureFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 4 | validation_scope | broad_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 5 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 6 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 7 | final_review_payload | final_review_payload | missing_final_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 8 | reviewer_decision | final_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+<!-- completion-gate-doc-table:end -->
 
 ## Semantic parity anchors
 
