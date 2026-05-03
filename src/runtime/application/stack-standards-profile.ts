@@ -41,7 +41,7 @@ type PackageJson = {
 type StackBucket = keyof StackProfile;
 type StandardsPriority = "user" | "local" | "official" | "external";
 
-const STACK_STANDARDS_PROFILE_CACHE_SCHEMA_VERSION = 1;
+const STACK_STANDARDS_PROFILE_CACHE_SCHEMA_VERSION = 3;
 const STACK_STANDARDS_PROFILE_CACHE_FILE = "standards-profile.json";
 const CACHE_FINGERPRINT_ALGORITHM = "sha256";
 const EXTERNAL_GUIDANCE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -258,6 +258,7 @@ const DEPENDENCY_SIGNALS: Record<
 > = {
 	"@angular/core": { bucket: "frameworks", name: "Angular" },
 	"@biomejs/biome": { bucket: "tools", name: "Biome" },
+	"@opencode-ai/plugin": { bucket: "tools", name: "OpenCode Plugin SDK" },
 	"@playwright/test": { bucket: "tools", name: "Playwright" },
 	"@sveltejs/kit": { bucket: "frameworks", name: "SvelteKit" },
 	"@vitejs/plugin-react": { bucket: "tools", name: "Vite" },
@@ -278,6 +279,7 @@ const DEPENDENCY_SIGNALS: Record<
 	vite: { bucket: "tools", name: "Vite" },
 	vitest: { bucket: "tools", name: "Vitest" },
 	vue: { bucket: "frameworks", name: "Vue" },
+	zod: { bucket: "tools", name: "Zod" },
 };
 
 const SCRIPT_TOOL_SIGNALS: Array<[RegExp, string]> = [
@@ -689,7 +691,15 @@ function packageManagerHintsEqual(
 function cacheHasExpiredExternalGuidance(
 	cache: StackStandardsProfileCache,
 ): boolean {
-	if ((cache.profile.standardsProfile?.externalGuidance.length ?? 0) === 0) {
+	const standardsProfile = cache.profile.standardsProfile;
+	if (!standardsProfile) {
+		return false;
+	}
+	const hasExternalGuidance = standardsProfile.externalGuidance.length > 0;
+	const hasExternalPriorityRule = standardsProfile.rules.some(
+		(rule) => rule.priority === "official" || rule.priority === "external",
+	);
+	if (!hasExternalGuidance && !hasExternalPriorityRule) {
 		return false;
 	}
 	const generatedAt = Date.parse(cache.generatedAt);
@@ -845,6 +855,12 @@ async function scanConfigSignals(
 					"local",
 				);
 			}
+			await scanKnownStandardsConfigDetails(
+				signal.file,
+				absolutePath,
+				ref,
+				standardsProfile,
+			);
 		}
 	}
 }
@@ -881,6 +897,81 @@ function hasDependency(packageJson: PackageJson, dependency: string): boolean {
 			packageJson.devDependencies?.[dependency] ??
 			packageJson.peerDependencies?.[dependency],
 	);
+}
+
+async function scanKnownStandardsConfigDetails(
+	filename: string,
+	absolutePath: string,
+	ref: string,
+	standardsProfile: StandardsProfile,
+): Promise<void> {
+	if (filename === "tsconfig.json") {
+		const tsconfig = await readJsonLike<Record<string, unknown>>(absolutePath);
+		const compilerOptions = objectRecord(tsconfig?.compilerOptions);
+		const strictFlags = [
+			"strict",
+			"noUncheckedIndexedAccess",
+			"exactOptionalPropertyTypes",
+			"noImplicitOverride",
+			"noFallthroughCasesInSwitch",
+		]
+			.filter((key) => compilerOptions?.[key] === true)
+			.join(", ");
+		if (strictFlags.length > 0) {
+			addRule(
+				standardsProfile,
+				`Preserve TypeScript strictness from ${ref}: ${strictFlags}.`,
+				[ref],
+				"local",
+			);
+		}
+		return;
+	}
+
+	if (filename === "biome.json") {
+		const biome = await readJsonLike<Record<string, unknown>>(absolutePath);
+		const formatter = objectRecord(biome?.formatter);
+		const linter = objectRecord(biome?.linter);
+		const linterRules = objectRecord(linter?.rules);
+		const topLevelRules = objectRecord(biome?.rules);
+		const suspicious =
+			objectRecord(linterRules?.suspicious) ??
+			objectRecord(topLevelRules?.suspicious);
+		if (formatter?.enabled === true) {
+			addRule(
+				standardsProfile,
+				`Use Biome formatter settings from ${ref}; do not introduce competing formatting tools without explicit approval.`,
+				[ref],
+				"local",
+			);
+		}
+		if (
+			linter?.enabled === true ||
+			linter?.recommended === true ||
+			linterRules?.recommended === true
+		) {
+			addRule(
+				standardsProfile,
+				`Use Biome lint settings from ${ref}, including recommended rules when enabled.`,
+				[ref],
+				"local",
+			);
+		}
+		if (suspicious?.noConsole === "error") {
+			addRule(
+				standardsProfile,
+				`Treat console usage as release-sensitive because ${ref} sets suspicious.noConsole to error unless an override applies.`,
+				[ref],
+				"local",
+			);
+		}
+	}
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: null;
 }
 
 function addSignal(
@@ -1081,11 +1172,42 @@ function dedupeGaps<
 	);
 }
 
+const STACK_RESEARCH_QUERIES: Record<string, string[]> = {
+	Biome: [
+		"Ref MCP: official Biome linter recommended rules and safe fixes documentation",
+		"Exa: current Biome formatter and lint best practices for TypeScript repositories",
+		"Websearch fallback: official Biome CI and configuration documentation",
+	],
+	Bun: [
+		"Ref MCP: official Bun TypeScript configuration and bun test documentation",
+		"Exa: current Bun package manager, runtime, and test best practices",
+		"Websearch fallback: official Bun docs for scripts, CI, and TypeScript",
+	],
+	"OpenCode Plugin SDK": [
+		"Ref MCP: official OpenCode plugin custom tools and MCP server documentation",
+		"Exa: current OpenCode plugin SDK TypeScript and Zod tool argument examples",
+		"Websearch fallback: official OpenCode plugin documentation",
+	],
+	TypeScript: [
+		"Ref MCP: official TypeScript TSConfig strictness and compiler options documentation",
+		"Exa: current TypeScript strict mode and type-safe library authoring best practices",
+		"Websearch fallback: official TypeScript handbook and TSConfig reference",
+	],
+	Zod: [
+		"Ref MCP: official Zod schema parsing, strict object, and error handling documentation",
+		"Exa: current Zod v4 TypeScript validation best practices",
+		"Websearch fallback: official Zod documentation; verify OpenCode plugin SDK tool argument behavior before changing versions",
+	],
+};
+
 function researchQueriesFor(stackItem: string): string[] {
-	return [
-		`official ${stackItem} coding standards documentation`,
-		`official ${stackItem} testing best practices documentation`,
-	];
+	return (
+		STACK_RESEARCH_QUERIES[stackItem] ?? [
+			`Ref MCP: official ${stackItem} coding standards and configuration documentation`,
+			`Exa: current ${stackItem} best practices for production code quality`,
+			`Websearch fallback: official ${stackItem} testing and maintenance documentation`,
+		]
+	);
 }
 
 async function readText(path: string): Promise<string | null> {
@@ -1102,6 +1224,138 @@ async function readJson<T>(path: string): Promise<T | null> {
 	} catch {
 		return null;
 	}
+}
+
+async function readJsonLike<T>(path: string): Promise<T | null> {
+	const contents = await readText(path);
+	if (!contents) {
+		return null;
+	}
+	try {
+		return JSON.parse(contents) as T;
+	} catch {
+		try {
+			const stripped = stripJsonCommentsAndTrailingCommas(contents);
+			return stripped ? (JSON.parse(stripped) as T) : null;
+		} catch {
+			return null;
+		}
+	}
+}
+
+function stripJsonCommentsAndTrailingCommas(contents: string): string | null {
+	let output = "";
+	let inString = false;
+	let quote: '"' | "'" | null = null;
+	let escaped = false;
+	let inLineComment = false;
+	let inBlockComment = false;
+	for (let index = 0; index < contents.length; index += 1) {
+		const char = contents[index];
+		const next = contents[index + 1];
+		if (inLineComment) {
+			if (char === "\n" || char === "\r") {
+				inLineComment = false;
+				output += char;
+			}
+			continue;
+		}
+		if (inBlockComment) {
+			if (char === "*" && next === "/") {
+				inBlockComment = false;
+				index += 1;
+				continue;
+			}
+			if (char === "\n" || char === "\r") {
+				output += char;
+			}
+			continue;
+		}
+		if (inString) {
+			output += char;
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+			if (char === quote) {
+				inString = false;
+				quote = null;
+			}
+			continue;
+		}
+		if (char === '"' || char === "'") {
+			inString = true;
+			quote = char;
+			output += char;
+			continue;
+		}
+		if (char === "/" && next === "/") {
+			inLineComment = true;
+			index += 1;
+			continue;
+		}
+		if (char === "/" && next === "*") {
+			inBlockComment = true;
+			output += " ";
+			index += 1;
+			continue;
+		}
+		output += char;
+	}
+	if (inBlockComment) {
+		return null;
+	}
+	return removeTrailingCommasOutsideStrings(output);
+}
+
+function removeTrailingCommasOutsideStrings(contents: string): string {
+	let output = "";
+	let inString = false;
+	let quote: '"' | "'" | null = null;
+	let escaped = false;
+	for (let index = 0; index < contents.length; index += 1) {
+		const char = contents[index];
+		if (!char) {
+			continue;
+		}
+		if (inString) {
+			output += char;
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+			if (char === quote) {
+				inString = false;
+				quote = null;
+			}
+			continue;
+		}
+		if (char === '"' || char === "'") {
+			inString = true;
+			quote = char;
+			output += char;
+			continue;
+		}
+		if (char === ",") {
+			let lookahead = index + 1;
+			while (/\s/u.test(contents[lookahead] ?? "")) {
+				lookahead += 1;
+			}
+			if (contents[lookahead] === "}" || contents[lookahead] === "]") {
+				continue;
+			}
+		}
+		output += char;
+	}
+	return output;
 }
 
 async function pathExists(target: string): Promise<boolean> {

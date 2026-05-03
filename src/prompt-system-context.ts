@@ -1,5 +1,5 @@
 import type { StackStandardsProfileCacheValue } from "./runtime/application/stack-standards-profile";
-import type { Session } from "./runtime/schema";
+import type { Session, StandardsProfile } from "./runtime/schema";
 import { deriveSessionViewModel } from "./runtime/summary";
 
 const FLOW_RUNTIME_CONTEXT_MARKER =
@@ -24,6 +24,30 @@ function compactNames(
 		.slice(0, limit)
 		.map((item) => item.name)
 		.join(", ");
+}
+
+function compactStandardsRules(
+	standards: StandardsProfile,
+	limit = 3,
+): string | null {
+	const rules = standards.rules
+		.filter((rule) => rule.priority !== "user")
+		.slice(0, limit)
+		.map((rule) => compact(rule.summary, 140));
+	return rules.length > 0 ? rules.join("; ") : null;
+}
+
+function compactStandardsGaps(
+	standards: StandardsProfile,
+	limit = 3,
+): string | null {
+	const gaps = standards.gaps.slice(0, limit).map((gap) => {
+		const query = gap.suggestedResearch[0]
+			? ` -> ${compact(gap.suggestedResearch[0], 110)}`
+			: "";
+		return `${gap.stackItem}${query}`;
+	});
+	return gaps.length > 0 ? gaps.join("; ") : null;
 }
 
 export function buildFlowAdaptiveSystemContext(
@@ -94,6 +118,7 @@ export function buildFlowAdaptiveSystemContext(
 			compactNames(profile.languages),
 			compactNames(profile.frameworks),
 			compactNames(profile.runtimes),
+			compactNames(profile.packageManagers),
 			compactNames(profile.tools),
 		].filter((part): part is string => Boolean(part));
 		if (parts.length > 0) {
@@ -104,11 +129,22 @@ export function buildFlowAdaptiveSystemContext(
 	if (viewModel.session.planning.standardsProfile) {
 		const standards = viewModel.session.planning.standardsProfile;
 		const localCount = standards.localGuidelines.length;
+		const externalCount = standards.externalGuidance.length;
 		const ruleCount = standards.rules.length;
 		const gapCount = standards.gaps.length;
 		lines.push(
-			`- standards profile: ${localCount} local guideline source(s), ${ruleCount} rule(s), ${gapCount} research gap(s); apply local guidance before official docs or broader external research.`,
+			`- standards profile: ${localCount} local guideline source(s), ${externalCount} external guidance source(s), ${ruleCount} rule(s), ${gapCount} research gap(s); apply local guidance before official docs or broader external research.`,
 		);
+		const rules = compactStandardsRules(standards);
+		if (rules) {
+			lines.push(`- standards rules: ${quoted(rules)}`);
+		}
+		const gaps = compactStandardsGaps(standards);
+		if (gaps) {
+			lines.push(
+				`- standards research gaps: ${quoted(gaps)}; resolve with available MCP tools first, especially Ref for official docs and Exa for current ecosystem research, then websearch/webfetch only as fallback.`,
+			);
+		}
 	}
 
 	if (viewModel.session.decisionGate) {
@@ -150,6 +186,7 @@ export function buildFlowCachedProfileSystemContext(
 			compactNames(profile.stackProfile.languages),
 			compactNames(profile.stackProfile.frameworks),
 			compactNames(profile.stackProfile.runtimes),
+			compactNames(profile.stackProfile.packageManagers),
 			compactNames(profile.stackProfile.tools),
 		].filter((part): part is string => Boolean(part));
 		if (parts.length > 0) {
@@ -161,8 +198,18 @@ export function buildFlowCachedProfileSystemContext(
 
 	if (profile.standardsProfile) {
 		lines.push(
-			`- cached standards profile: ${profile.standardsProfile.localGuidelines.length} local guideline source(s), ${profile.standardsProfile.rules.length} rule(s), ${profile.standardsProfile.gaps.length} research gap(s).`,
+			`- cached standards profile: ${profile.standardsProfile.localGuidelines.length} local guideline source(s), ${profile.standardsProfile.externalGuidance.length} external guidance source(s), ${profile.standardsProfile.rules.length} rule(s), ${profile.standardsProfile.gaps.length} research gap(s).`,
 		);
+		const rules = compactStandardsRules(profile.standardsProfile);
+		if (rules) {
+			lines.push(`- cached standards rules: ${quoted(rules)}`);
+		}
+		const gaps = compactStandardsGaps(profile.standardsProfile);
+		if (gaps) {
+			lines.push(
+				`- cached standards research gaps: ${quoted(gaps)}; resolve with available MCP tools first, especially Ref for official docs and Exa for current ecosystem research, then websearch/webfetch only as fallback.`,
+			);
+		}
 	}
 
 	return lines;

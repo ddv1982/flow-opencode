@@ -178,6 +178,10 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("package manager evidence is ambiguous");
 		expect(joined).toContain("stack profile");
 		expect(joined).toContain("standards profile");
+		expect(joined).toContain("standards rules");
+		expect(joined).toContain("Prefer existing package scripts");
+		expect(joined).toContain("standards research gaps");
+		expect(joined).toContain("available MCP tools first");
 		expect(joined).toContain(
 			"decision gate active: recommend_confirm | architecture",
 		);
@@ -252,7 +256,13 @@ describe("runtime hooks", () => {
 				standardsProfile: {
 					localGuidelines: [],
 					externalGuidance: [],
-					rules: [],
+					rules: [
+						{
+							summary: "Preserve TypeScript strictness from tsconfig.json.",
+							sourceRefs: ["tsconfig.json"],
+							priority: "local",
+						},
+					],
 					gaps: [
 						{
 							stackItem: "TypeScript",
@@ -278,6 +288,10 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("Cached Flow stack and standards profile");
 		expect(joined).toContain("cached stack profile");
 		expect(joined).toContain("cached standards profile");
+		expect(joined).toContain("cached standards rules");
+		expect(joined).toContain("Preserve TypeScript strictness");
+		expect(joined).toContain("cached standards research gaps");
+		expect(joined).toContain("available MCP tools first");
 	});
 
 	test("experimental.session.compacting appends goal and execution phase for an active Flow session", async () => {
@@ -343,6 +357,74 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("execution");
 		expect(joined).toContain("Flow planning profile");
 		expect(output.prompt).toBeUndefined();
+	});
+
+	test("experimental.session.compacting surfaces cached standards rules when no active session exists", async () => {
+		const worktree = makeTempDir();
+		const plugin = (await (
+			await import("../src/index")
+		).default({
+			worktree,
+		} as unknown as Parameters<
+			typeof import("../src/index").default
+		>[0])) as FlowPluginWithHooks;
+		const hook = plugin.hooks?.["experimental.session.compacting"];
+
+		expect(typeof hook).toBe("function");
+		if (!hook) {
+			throw new Error("Missing experimental.session.compacting hook");
+		}
+
+		await writeStackStandardsProfileCache(
+			worktree,
+			undefined,
+			{ ambiguous: false },
+			{
+				stackProfile: {
+					languages: [],
+					frameworks: [],
+					runtimes: [],
+					packageManagers: [
+						{
+							name: "bun",
+							evidenceRefs: ["bun.lock"],
+							confidence: "high",
+						},
+					],
+					tools: [],
+				},
+				standardsProfile: {
+					localGuidelines: [],
+					externalGuidance: [],
+					rules: [
+						{
+							summary: "Use existing package scripts.",
+							sourceRefs: ["package.json"],
+							priority: "local",
+						},
+					],
+					gaps: [
+						{
+							stackItem: "Bun",
+							reason: "No local Bun standards were detected.",
+							suggestedResearch: [
+								"Ref MCP: official Bun TypeScript configuration and bun test documentation",
+							],
+						},
+					],
+					precedence: [],
+				},
+			},
+		);
+
+		const output: { context: string[]; prompt?: string } = { context: [] };
+		await hook({}, toolContext(worktree), output);
+
+		const joined = output.context.join("\n");
+		expect(joined).toContain("Flow cached planning profile");
+		expect(joined).toContain("bun");
+		expect(joined).toContain("Use existing package scripts");
+		expect(joined).toContain('"Bun" -> "Ref MCP');
 	});
 
 	test("experimental.session.compacting is a graceful no-op when no active Flow session exists", async () => {

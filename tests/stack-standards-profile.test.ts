@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -22,7 +23,7 @@ async function writeWorkspaceFile(
 }
 
 describe("stack and standards profile detection", () => {
-	test("detects TypeScript, Bun, Biome, package scripts, and local guidelines", async () => {
+	test("detects TypeScript, Bun, Biome, package scripts, local guidelines, and config rules", async () => {
 		const worktree = makeTempDir();
 		await writeWorkspaceFile(
 			worktree,
@@ -39,8 +40,33 @@ describe("stack and standards profile detection", () => {
 				devDependencies: { typescript: "^6.0.0", "@biomejs/biome": "^2.0.0" },
 			}),
 		);
-		await writeWorkspaceFile(worktree, "tsconfig.json", "{}");
-		await writeWorkspaceFile(worktree, "biome.json", "{}");
+		await writeWorkspaceFile(
+			worktree,
+			"tsconfig.json",
+			`{
+				// JSONC is common in tsconfig.json.
+				"compilerOptions": {
+					/* Block comments should parse as whitespace, not disappear. */
+					"strict": true,
+					"noUncheckedIndexedAccess": true,
+					"exactOptionalPropertyTypes": true,
+				},
+			}`,
+		);
+		await writeWorkspaceFile(
+			worktree,
+			"biome.json",
+			JSON.stringify({
+				formatter: { enabled: true },
+				linter: {
+					enabled: true,
+					rules: {
+						recommended: true,
+						suspicious: { noConsole: "error" },
+					},
+				},
+			}),
+		);
 		await writeWorkspaceFile(worktree, "AGENTS.md", "Use repo rules.");
 
 		const profile = await detectStackAndStandardsProfile(worktree, undefined, {
@@ -66,9 +92,86 @@ describe("stack and standards profile detection", () => {
 		expect(
 			profile.standardsProfile?.localGuidelines.map((item) => item.reference),
 		).toEqual(expect.arrayContaining(["AGENTS.md", "biome.json"]));
+		const rules = profile.standardsProfile?.rules
+			.map((item) => item.summary)
+			.join("\n");
+		expect(rules).toContain("Use existing package.json scripts");
+		expect(rules).toContain("Preserve TypeScript strictness");
+		expect(rules).toContain("Use Biome lint settings");
+		expect(rules).toContain("suspicious.noConsole");
+	});
+
+	test("ignores malformed JSONC instead of accepting block-comment-stripped configs", async () => {
+		const malformedConfigs = [
+			`{
+				"compilerOptions": {
+					"strict": tr/* invalid token splice */ue,
+				},
+			}`,
+			`{
+				"compilerOptions": {
+					"strict": true
+				}
+			} /* unterminated trailing comment`,
+		];
+
+		for (const contents of malformedConfigs) {
+			const worktree = makeTempDir();
+			await writeWorkspaceFile(worktree, "tsconfig.json", contents);
+
+			const profile = await detectStackAndStandardsProfile(
+				worktree,
+				undefined,
+				{
+					ambiguous: false,
+				},
+			);
+			const rules = profile.standardsProfile?.rules
+				.map((item) => item.summary)
+				.join("\n");
+
+			expect(
+				profile.stackProfile?.languages.map((item) => item.name),
+			).toContain("TypeScript");
+			expect(rules).not.toContain("Preserve TypeScript strictness");
+		}
+	});
+
+	test("detects plugin validation dependencies and emits tool-aware research gaps", async () => {
+		const worktree = makeTempDir();
+		await writeWorkspaceFile(
+			worktree,
+			"package.json",
+			JSON.stringify({
+				name: "fixture",
+				dependencies: { zod: "4.1.8" },
+				devDependencies: { "@opencode-ai/plugin": "^1.3.10" },
+			}),
+		);
+
+		const profile = await detectStackAndStandardsProfile(worktree, undefined, {
+			ambiguous: false,
+		});
+
+		expect(profile.stackProfile?.tools.map((item) => item.name)).toEqual(
+			expect.arrayContaining(["OpenCode Plugin SDK", "Zod"]),
+		);
 		expect(
-			profile.standardsProfile?.rules.map((item) => item.summary).join("\n"),
-		).toContain("Use existing package.json scripts");
+			profile.standardsProfile?.gaps.find(
+				(gap) => gap.stackItem === "OpenCode Plugin SDK",
+			)?.suggestedResearch,
+		).toEqual(
+			expect.arrayContaining([
+				"Ref MCP: official OpenCode plugin custom tools and MCP server documentation",
+				"Exa: current OpenCode plugin SDK TypeScript and Zod tool argument examples",
+				"Websearch fallback: official OpenCode plugin documentation",
+			]),
+		);
+		expect(
+			profile.standardsProfile?.gaps
+				.find((gap) => gap.stackItem === "Zod")
+				?.suggestedResearch.join("\n"),
+		).toContain("verify OpenCode plugin SDK tool argument behavior");
 	});
 
 	test("records package-manager ambiguity as a local standards rule", async () => {
@@ -202,6 +305,163 @@ require github.com/gin-gonic/gin v1.10.0
 		).toBe(true);
 	});
 
+	test("refreshes old detector-version caches even when source evidence is unchanged", async () => {
+		const worktree = makeTempDir();
+		const packageJson = JSON.stringify({
+			name: "fixture",
+			dependencies: { zod: "4.1.8" },
+		});
+		await writeWorkspaceFile(worktree, "package.json", packageJson);
+		const staleCacheHash = createHash("sha256");
+		staleCacheHash.update("package.json");
+		staleCacheHash.update("\0");
+		staleCacheHash.update(
+			createHash("sha256").update(packageJson).digest("hex"),
+		);
+		staleCacheHash.update("\0");
+		await writeWorkspaceFile(
+			worktree,
+			".flow/standards-profile.json",
+			JSON.stringify({
+				schemaVersion: 2,
+				generatedAt: new Date().toISOString(),
+				workspaceRoot: worktree,
+				startDirectory: ".",
+				packageManagerHint: { ambiguous: false },
+				fingerprint: {
+					algorithm: "sha256",
+					hash: staleCacheHash.digest("hex"),
+					files: ["package.json"],
+				},
+				profile: {
+					stackProfile: {
+						languages: [],
+						frameworks: [],
+						runtimes: [],
+						packageManagers: [],
+						tools: [],
+					},
+				},
+			}),
+		);
+
+		const profile = await detectStackAndStandardsProfile(worktree, undefined, {
+			ambiguous: false,
+		});
+		const cache = JSON.parse(
+			await readFile(join(worktree, ".flow", "standards-profile.json"), "utf8"),
+		);
+
+		expect(cache.schemaVersion).toBe(3);
+		expect(profile.stackProfile?.tools.map((item) => item.name)).toContain(
+			"Zod",
+		);
+	});
+
+	test("refreshes stale external standards evidence even when source evidence is unchanged", async () => {
+		const staleCacheCases = [
+			{
+				name: "official rule",
+				externalGuidance: [],
+				rules: [
+					{
+						summary: "Cached official guidance that must age out.",
+						sourceRefs: [],
+						priority: "official" as const,
+					},
+				],
+			},
+			{
+				name: "external rule",
+				externalGuidance: [],
+				rules: [
+					{
+						summary: "Cached external guidance that must age out.",
+						sourceRefs: [],
+						priority: "external" as const,
+					},
+				],
+			},
+			{
+				name: "external source",
+				externalGuidance: [
+					{
+						title: "Cached external source",
+						sourceType: "external" as const,
+						reference: "https://example.test/standards",
+						confidence: "medium" as const,
+					},
+				],
+				rules: [],
+			},
+		];
+
+		for (const staleCacheCase of staleCacheCases) {
+			const worktree = makeTempDir();
+			const packageJson = JSON.stringify({
+				name: "fixture",
+				dependencies: { zod: "4.1.8" },
+			});
+			await writeWorkspaceFile(worktree, "package.json", packageJson);
+			const cacheHash = createHash("sha256");
+			cacheHash.update("package.json");
+			cacheHash.update("\0");
+			cacheHash.update(createHash("sha256").update(packageJson).digest("hex"));
+			cacheHash.update("\0");
+			await writeWorkspaceFile(
+				worktree,
+				".flow/standards-profile.json",
+				JSON.stringify({
+					schemaVersion: 3,
+					generatedAt: new Date(
+						Date.now() - 31 * 24 * 60 * 60 * 1000,
+					).toISOString(),
+					workspaceRoot: worktree,
+					startDirectory: ".",
+					packageManagerHint: { ambiguous: false },
+					fingerprint: {
+						algorithm: "sha256",
+						hash: cacheHash.digest("hex"),
+						files: ["package.json"],
+					},
+					profile: {
+						stackProfile: {
+							languages: [],
+							frameworks: [],
+							runtimes: [],
+							packageManagers: [],
+							tools: [],
+						},
+						standardsProfile: {
+							localGuidelines: [],
+							externalGuidance: staleCacheCase.externalGuidance,
+							rules: staleCacheCase.rules,
+							gaps: [],
+							precedence: [],
+						},
+					},
+				}),
+			);
+
+			const profile = await detectStackAndStandardsProfile(
+				worktree,
+				undefined,
+				{
+					ambiguous: false,
+				},
+			);
+
+			expect(
+				profile.stackProfile?.tools.map((item) => item.name),
+				staleCacheCase.name,
+			).toContain("Zod");
+			expect(
+				profile.standardsProfile?.rules.map((rule) => rule.summary),
+				staleCacheCase.name,
+			).not.toContain(staleCacheCase.rules[0]?.summary ?? "");
+		}
+	});
+
 	test("writes a fingerprinted cache and refreshes it when source evidence changes", async () => {
 		const worktree = makeTempDir();
 		await writeWorkspaceFile(
@@ -216,7 +476,7 @@ require github.com/gin-gonic/gin v1.10.0
 		const cachePath = join(worktree, ".flow", "standards-profile.json");
 		const cache = JSON.parse(await readFile(cachePath, "utf8"));
 
-		expect(cache.schemaVersion).toBe(1);
+		expect(cache.schemaVersion).toBe(3);
 		expect(cache.fingerprint.files).toContain("pyproject.toml");
 		expect(first.stackProfile?.frameworks.map((item) => item.name)).toContain(
 			"FastAPI",
