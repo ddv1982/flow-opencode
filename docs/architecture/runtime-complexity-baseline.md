@@ -1,4 +1,4 @@
-# Simplification Scoreboard
+# Runtime Complexity Baseline
 
 This document captures measurable simplification baselines and the recurring Phase 4 delete-first loop.
 
@@ -11,20 +11,18 @@ This document captures measurable simplification baselines and the recurring Pha
 
 ## KPI baseline table (captured 2026-05-04)
 
-Post-pass snapshot (after first hotspot extraction): runtime files `56`, runtime LOC `11,239`, hotspot file `stack-standards-profile.ts` reduced to `1,220` LOC, top-5 LOC share `27.1%`.
+Current canonical snapshot (latest same-day capture): runtime files `89`, runtime LOC `11,700`, runtime files >= 300 LOC `1`, top-5 LOC share `12.7%`.
 
-Post-pass snapshot (after schema validation dedupe): runtime files `56`, runtime LOC `11,243`, `schema.ts` remains top churn file with duplicated replan-required validation removed, top-5 LOC share `27.1%`.
-
-Post-pass snapshot (after signal-table extraction): runtime files `57`, runtime LOC `11,264`, hotspot file `stack-standards-profile.ts` reduced to `936` LOC, top-5 LOC share `24.6%`.
+Historical pass snapshots are retained in investigation logs; this document tracks the current planning baseline.
 
 | KPI | Baseline | Target direction | Measurement method | Notes |
 | --- | --- | --- | --- | --- |
 | Architecture seam violations | `0` | Hold at `0` | `bun run check:architecture-seams:enforce` | Enforced in CI |
-| Runtime TypeScript file count | `55` | Down | `report:runtime-simplification-metrics` | Reduce surface area where possible |
-| Runtime LOC | `11,234` | Down | `report:runtime-simplification-metrics` | Delete-first before adding abstractions |
-| Runtime files >= 300 LOC | `8` | Down | `report:runtime-simplification-metrics` | Primary simplification pressure metric |
-| Top-5 runtime-file LOC share | `28.5%` | Down | `report:runtime-simplification-metrics` | Hotspot concentration metric |
-| Runtime churn hotspot leader | `src/runtime/schema.ts` (18 touches / 30d) | Down | `git log` via metrics script | Use for next split/deletion candidate |
+| Runtime TypeScript file count | `89` | Down | `report:runtime-simplification-metrics` | Reduce surface area where possible |
+| Runtime LOC | `11,700` | Down | `report:runtime-simplification-metrics` | Delete-first before adding abstractions |
+| Runtime files >= 300 LOC | `1` | Down | `report:runtime-simplification-metrics` | Primary simplification pressure metric |
+| Top-5 runtime-file LOC share | `12.7%` | Down | `report:runtime-simplification-metrics` | Hotspot concentration metric |
+| Runtime churn hotspot leader | `src/runtime/schema.ts` (19 touches / 30d) | Down | `git log` via metrics script | Use for next split/deletion candidate |
 | Fast test lane runtime | `~0.22s` local | Hold low | timed `bun run test:fast` | Keep this as refactor safety lane |
 | Replay/integration lane runtime | `~0.15s` local | Hold low | timed `bun run test:replay` | Keep replay lane stable |
 
@@ -43,11 +41,11 @@ Repeat weekly (or each simplification PR):
 
 ## Current top hotspot candidates
 
-1. `src/runtime/application/stack-standards-profile.ts` (936 LOC)
-2. `src/runtime/schema.ts` (555 LOC, highest churn)
-3. `src/runtime/domain/final-review-coverage.ts` (493 LOC)
-4. `src/runtime/application/session-actions.ts` (395 LOC)
-5. `src/runtime/transitions/review.ts` (389 LOC)
+1. `src/runtime/schema.ts` (highest churn)
+2. `src/runtime/session-workspace.ts` (high churn)
+3. `src/runtime/session-lifecycle.ts` (high churn)
+4. `src/runtime/transitions/plan.ts` (high churn)
+5. `src/runtime/render-index-sections.ts` (high churn)
 
 ## Guardrails
 

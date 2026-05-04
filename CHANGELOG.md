@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [2.0.5] - 2026-05-05
+
+Simplify governance surfaces by removing stale audit artifacts
+
+Flow 2.0.5 is a docs-only consolidation release focused on reducing governance drift and maintenance overhead. The oversized deep-audit investigation artifact was removed, the runtime complexity baseline doc was renamed for clearer intent, and gate-matrix wording was corrected so generated-drift coverage is described accurately.
+
+This release does not change runtime behavior, commands, tool schemas, state paths, or dependencies. It narrows the maintenance surface so contract documentation stays executable and easier to keep in sync.
+
+Constraint: Keep release scope docs-only with no runtime/tool/dependency changes
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency or SDK-boundary changes in this patch
+Rejected: Keep large point-in-time audit logs in-repo as active governance artifacts | they add drift risk and duplicate canonical contract surfaces
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep one canonical runtime complexity baseline surface and avoid reintroducing long-lived duplicated audit artifacts
+Tested: `bun run check`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.5` before push
+
 ## [2.0.4] - 2026-05-04
 
 Harden stored-session parking after missing `.flow/stored` recovery
