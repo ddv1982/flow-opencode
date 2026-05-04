@@ -40,6 +40,21 @@ Useful scripts:
 - `bun run install:opencode`
 - `bun run uninstall:opencode`
 
+
+## Gate contract quick reference
+
+`bun run check` is the canonical local/mainline readiness contract. Run focused scripts first when they help isolate a touched area, but do not treat focused CI preflights as replacements for the full local contract unless `docs/maintainer-contract.md` records a no-weakening proof.
+
+Gate status terms:
+
+- **Hard** gates fail the command and block merge/release readiness. Examples: `bun run check:dependency-contract`, `bun run check:architecture-seams:enforce`, `bun run check:generated-drift`, `bun run gate:completion-lane`, `bun run test:replay`, and `bun run bench:gate`.
+- **Advisory** gates are supplemental visibility and do not block by exit code. `bun run check:boundary-report` is advisory by design today: it exits `0` and reports prompt/tool boundary findings unless a future reviewed change promotes it with script, docs, and test updates.
+- **Diagnostic/report** commands support investigation or planning. `bun run check:architecture-seams` is seam report mode; `bun run report:runtime-simplification-metrics` prints simplification metrics. Use the corresponding hard gate (`check:architecture-seams:enforce`) for pass/fail readiness.
+
+The full matrix, artifact owners, source-of-truth scripts, repeated-inside-`check` status, and CI/local no-weakening rules live in [`docs/maintainer-contract.md#gate-contract-matrix`](maintainer-contract.md#gate-contract-matrix).
+
+Standing dependency/tool checklist: keep `zod` aligned with `@opencode-ai/plugin`, preserve raw `tool(...)` arg shapes at the SDK boundary, and run `bun run check:dependency-contract` for dependency, schema, or tool-surface changes.
+
 ## Source map
 
 - `src/index.ts` — plugin entrypoint
