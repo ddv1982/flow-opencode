@@ -14,6 +14,7 @@ export type WorkflowCheckpoint = {
 	version: 1;
 	sessionId: string;
 	eventSequence: number;
+	eventPrefixHash: string;
 	recordedAt: string;
 	source: WorkflowCheckpointSource;
 	state: WorkflowState;
@@ -59,6 +60,14 @@ function parseWorkflowCheckpoint(
 		);
 	}
 	if (
+		typeof checkpoint.eventPrefixHash !== "string" ||
+		checkpoint.eventPrefixHash.length === 0
+	) {
+		throw new Error(
+			"Workflow checkpoint eventPrefixHash must be a non-empty string.",
+		);
+	}
+	if (
 		typeof checkpoint.recordedAt !== "string" ||
 		checkpoint.recordedAt.length === 0
 	) {
@@ -84,6 +93,7 @@ function parseWorkflowCheckpoint(
 		version: 1,
 		sessionId: checkpoint.sessionId,
 		eventSequence: checkpoint.eventSequence,
+		eventPrefixHash: checkpoint.eventPrefixHash,
 		recordedAt: checkpoint.recordedAt,
 		source: checkpoint.source,
 		state,
@@ -94,6 +104,7 @@ export function createWorkflowCheckpoint(
 	state: WorkflowState,
 	options: {
 		eventSequence: number;
+		eventPrefixHash: string;
 		recordedAt?: string | undefined;
 		source: WorkflowCheckpointSource;
 	},
@@ -102,6 +113,7 @@ export function createWorkflowCheckpoint(
 		version: 1,
 		sessionId: state.id,
 		eventSequence: options.eventSequence,
+		eventPrefixHash: options.eventPrefixHash,
 		recordedAt: options.recordedAt ?? state.timestamps.updatedAt,
 		source: options.source,
 		state: SessionSchema.parse(state),

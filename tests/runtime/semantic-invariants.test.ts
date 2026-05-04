@@ -436,6 +436,15 @@ describe("runtime semantic invariants", () => {
 				summary: "Approved.",
 			}).success,
 		).toBe(SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.featureRequiresFeatureId);
+		expect(
+			FlowReviewRecordFeatureArgsSchema.safeParse({
+				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.featureScope,
+				featureId: "setup-runtime",
+				status: "approved",
+				summary: "Approved.",
+				unexpected: true,
+			}).success,
+		).toBe(false);
 
 		expect(
 			FlowReviewRecordFinalArgsSchema.safeParse({

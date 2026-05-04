@@ -9,7 +9,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parseStrictJsonObject } from "./json/strict-object";
 import {
 	getActiveSessionsDir,
@@ -78,6 +78,20 @@ async function writeFileAtomically(
 		await rm(tempPath, { force: true });
 		throw error;
 	}
+
+	const directoryHandle = await sessionWorkspaceFs.open(
+		dirname(targetPath),
+		"r",
+	);
+	try {
+		await directoryHandle.sync();
+	} catch (error) {
+		throw new Error(
+			`Atomic session write renamed '${targetPath}' but directory sync failed: ${(error as Error).message}`,
+		);
+	} finally {
+		await directoryHandle.close();
+	}
 }
 
 async function listDirectoryNames(root: string): Promise<string[]> {
@@ -118,7 +132,7 @@ export async function readSessionFromPath(
 	const cacheKey = createHash("sha256").update(raw).digest("hex");
 	const cached = sessionReadCache.get(sessionPath);
 	if (cached?.key === cacheKey) {
-		return cached.session;
+		return structuredClone(cached.session);
 	}
 
 	const object = parseStrictJsonObject(raw, "Session file");
@@ -128,9 +142,9 @@ export async function readSessionFromPath(
 	const parsed = SessionSchema.parse(object.value);
 	sessionReadCache.set(sessionPath, {
 		key: cacheKey,
-		session: parsed,
+		session: structuredClone(parsed),
 	});
-	return parsed;
+	return structuredClone(parsed);
 }
 
 async function ensureWorkspaceAtRoot(

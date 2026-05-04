@@ -13,6 +13,7 @@ export {
 } from "./checkpoint-store";
 export {
 	appendWorkflowEvents,
+	hashWorkflowEventPrefix,
 	readWorkflowEventRecords,
 	readWorkflowEvents,
 	replayWorkflowEventLog,

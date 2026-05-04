@@ -107,6 +107,7 @@ function reduceReviewerDecisionRecorded(
 		...state,
 		execution: {
 			...state.execution,
+			lastSummary: event.decision.summary,
 			lastReviewerDecision: event.decision,
 		},
 		timestamps: {

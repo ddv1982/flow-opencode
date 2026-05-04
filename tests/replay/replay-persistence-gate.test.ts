@@ -4,6 +4,7 @@ import { replayWorkflowEvents } from "../../src/core";
 import {
 	appendWorkflowEvents,
 	createWorkflowCheckpoint,
+	hashWorkflowEventPrefix,
 	readWorkflowCheckpoint,
 	renderWorkflowProjection,
 	replayWorkflowEventLog,
@@ -55,6 +56,10 @@ describe("replay/checkpoint/projection release gate", () => {
 				worktree,
 				createWorkflowCheckpoint(partialState, {
 					eventSequence: checkpointSequence,
+					eventPrefixHash: hashWorkflowEventPrefix(
+						testCase.events,
+						checkpointSequence,
+					),
 					source: "event_replay",
 				}),
 			);
@@ -67,11 +72,20 @@ describe("replay/checkpoint/projection release gate", () => {
 				partialCheckpoint?.state ?? null,
 			);
 			expect(replayedFromPartialCheckpoint).toEqual(replayed);
+			const replayedViaPersistenceCheckpoint = await replayWorkflowEventLog(
+				worktree,
+				testCase.sessionId,
+			);
+			expect(replayedViaPersistenceCheckpoint).toEqual(replayed);
 
 			await writeWorkflowCheckpoint(
 				worktree,
 				createWorkflowCheckpoint(replayed, {
 					eventSequence: records.length,
+					eventPrefixHash: hashWorkflowEventPrefix(
+						testCase.events,
+						records.length,
+					),
 					source: "event_replay",
 				}),
 			);

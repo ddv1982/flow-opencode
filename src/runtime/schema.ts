@@ -257,7 +257,8 @@ export const WorkerResultArgsSchema = z
 		addReplanRequiredIssueIfNeeded(value, context);
 	});
 
-export const FlowReviewRecordFeatureArgsSchema = FeatureReviewerDecisionSchema;
+export const FlowReviewRecordFeatureArgsSchema =
+	FeatureReviewerDecisionSchema.strict();
 
 export const FlowReviewRecordFinalArgsSchema = FinalReviewerDecisionSchema;
 

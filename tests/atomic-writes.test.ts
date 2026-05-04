@@ -176,7 +176,7 @@ describe("atomic writes", () => {
 		}
 	});
 
-	test("atomic writer fsyncs temp session files before rename", async () => {
+	test("atomic writer fsyncs temp session files and target directory before rename", async () => {
 		const worktree = makeTempDir();
 		const syncs: string[] = [];
 
@@ -192,12 +192,14 @@ describe("atomic writes", () => {
 			},
 		});
 
-		await saveSession(worktree, sampleSession("Fsync verification"));
+		const session = sampleSession("Fsync verification");
+		await saveSession(worktree, session);
 
 		expect(syncs.some((path) => path.includes(join(".flow", "active")))).toBe(
 			true,
 		);
 		expect(syncs.some((path) => path.endsWith(".tmp"))).toBe(true);
+		expect(syncs).toContain(getSessionDir(worktree, session.id));
 	});
 
 	test("saveSession leaves event checkpoints unchanged", async () => {
@@ -207,6 +209,7 @@ describe("atomic writes", () => {
 			worktree,
 			createWorkflowCheckpoint(session, {
 				eventSequence: 7,
+				eventPrefixHash: "manual-checkpoint-prefix",
 				source: "event_replay",
 			}),
 		);
@@ -242,6 +245,7 @@ describe("atomic writes", () => {
 			worktree,
 			createWorkflowCheckpoint(session, {
 				eventSequence: 1,
+				eventPrefixHash: "manual-checkpoint-prefix",
 				source: "event_replay",
 			}),
 		);
@@ -263,6 +267,7 @@ describe("atomic writes", () => {
 					{ ...session, goal: "Checkpoint after failure" },
 					{
 						eventSequence: 2,
+						eventPrefixHash: "manual-checkpoint-prefix",
 						source: "event_replay",
 					},
 				),

@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [2.0.6] - 2026-05-05
+
+Enforce strict checkpoint integrity and replay durability over legacy compatibility
+
+Flow 2.0.6 hardens workflow persistence by binding checkpoints to event-log prefixes, validating explicit replay resume offsets, and fsyncing event-log directories after append operations. The release also clarifies post-rename durability error semantics in session writes, keeps strict review-input contracts at the tool boundary, and adds larger replay benchmark coverage plus targeted regression tests.
+
+This release intentionally drops backward compatibility for deprecated checkpoint artifacts that lack integrity metadata. Legacy checkpoints are treated as invalid by design so replay safety does not depend on stale format tolerance.
+
+Constraint: Prioritize replay/checkpoint integrity and durability guarantees over legacy checkpoint compatibility
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Accept legacy checkpoints without `eventPrefixHash` fallback | deprecated state formats undermine deterministic replay integrity
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Treat persistence schema hardening as forward-only when it enforces integrity contracts; document intentional incompatibilities in release notes
+Tested: `bun test tests/runtime/workflow-persistence.test.ts tests/replay/replay-persistence-gate.test.ts tests/atomic-writes.test.ts tests/runtime/workspace-cache.test.ts tests/runtime/workflow-core-reducer.test.ts tests/runtime/semantic-invariants.test.ts` (40 pass); `bun x tsc --noEmit`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.6` before push
+
 ## [2.0.5] - 2026-05-05
 
 Simplify governance surfaces by removing stale audit artifacts

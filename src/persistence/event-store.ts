@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
@@ -10,6 +11,7 @@ import {
 	sanitizePathComponent,
 } from "../runtime/paths";
 import { assertMutableWorkspaceRoot } from "../runtime/workspace-root";
+import { readWorkflowCheckpoint } from "./checkpoint-store";
 import { withPersistenceLock } from "./locks";
 
 export type WorkflowEventRecord = {
@@ -143,6 +145,24 @@ export async function readWorkflowEventRecords(
 	return records;
 }
 
+export function hashWorkflowEventPrefix(
+	events: readonly WorkflowEvent[],
+	eventSequence: number,
+): string {
+	if (!Number.isInteger(eventSequence) || eventSequence < 0) {
+		throw new Error(
+			"Workflow event prefix sequence must be a non-negative integer.",
+		);
+	}
+	if (eventSequence > events.length) {
+		throw new Error(
+			`Workflow event prefix sequence ${eventSequence} exceeds event count ${events.length}.`,
+		);
+	}
+	const payload = JSON.stringify(events.slice(0, eventSequence));
+	return createHash("sha256").update(payload).digest("hex");
+}
+
 export async function readWorkflowEvents(
 	worktree: string,
 	sessionId: string,
@@ -193,6 +213,12 @@ export async function appendWorkflowEvents(
 			} finally {
 				await fileHandle.close();
 			}
+			const directoryHandle = await open(dirname(eventLogPath), "r");
+			try {
+				await directoryHandle.sync();
+			} finally {
+				await directoryHandle.close();
+			}
 			return nextRecords;
 		},
 	);
@@ -202,9 +228,44 @@ export async function replayWorkflowEventLog(
 	worktree: string,
 	sessionId: string,
 	initialState: WorkflowState | null = null,
+	initialEventSequence = 0,
 ): Promise<WorkflowState | null> {
-	const events = await readWorkflowEvents(worktree, sessionId);
-	const replayed = replayWorkflowEvents(events, initialState);
+	const eventRecords = await readWorkflowEventRecords(worktree, sessionId);
+	const events = eventRecords.map((record) => record.event);
+	if (!Number.isInteger(initialEventSequence) || initialEventSequence < 0) {
+		throw new Error(
+			"Workflow replay initialEventSequence must be a non-negative integer.",
+		);
+	}
+	if (initialEventSequence > eventRecords.length) {
+		throw new Error(
+			`Workflow replay initialEventSequence ${initialEventSequence} exceeds persisted event count ${eventRecords.length} for session '${sessionId}'.`,
+		);
+	}
+	let replayBase = initialState;
+	let replayEvents = events.slice(initialEventSequence);
+	if (!replayBase) {
+		const checkpoint = await readWorkflowCheckpoint(worktree, sessionId);
+		if (checkpoint) {
+			if (checkpoint.eventSequence > eventRecords.length) {
+				throw new Error(
+					`Workflow checkpoint sequence ${checkpoint.eventSequence} exceeds persisted event count ${eventRecords.length} for session '${sessionId}'.`,
+				);
+			}
+			const checkpointPrefixHash = hashWorkflowEventPrefix(
+				events,
+				checkpoint.eventSequence,
+			);
+			if (checkpoint.eventPrefixHash !== checkpointPrefixHash) {
+				throw new Error(
+					`Workflow checkpoint prefix hash mismatch for session '${sessionId}'.`,
+				);
+			}
+			replayBase = checkpoint.state;
+			replayEvents = events.slice(checkpoint.eventSequence);
+		}
+	}
+	const replayed = replayWorkflowEvents(replayEvents, replayBase);
 	if (replayed && replayed.id !== sessionId) {
 		throw new Error(
 			`Workflow event log replay produced session '${replayed.id}', expected '${sessionId}'.`,

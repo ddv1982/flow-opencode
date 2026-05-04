@@ -274,6 +274,7 @@ describe("core workflow action/event foundation", () => {
 		);
 		expect(state.execution.lastReviewerDecision?.scope).toBe("feature");
 		expect(state.execution.lastReviewerDecision?.status).toBe("approved");
+		expect(state.execution.lastSummary).toBe("Feature review approved.");
 	});
 
 	test("reduces accepted feature completion events without closing unfinished workflows", () => {

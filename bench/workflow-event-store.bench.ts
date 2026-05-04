@@ -13,6 +13,7 @@ import {
 import {
 	appendWorkflowEvents,
 	createWorkflowCheckpoint,
+	hashWorkflowEventPrefix,
 	renderWorkflowProjection,
 	writeWorkflowCheckpoint,
 } from "../src/persistence";
@@ -94,6 +95,22 @@ const eventLog = collectAcceptedEvents([
 	},
 ]);
 
+const largeReplayEventLog: WorkflowEvent[] = [
+	{
+		type: "workflow_started",
+		sessionId: "bench-large-replay-session",
+		goal: "Benchmark large workflow replay payloads.",
+		recordedAt: "2026-05-03T13:00:00.000Z",
+	},
+	...Array.from({ length: 999 }, (_unused, index) => ({
+		type: "planning_context_recorded" as const,
+		planning: {
+			repoProfile: [`large-replay-${index + 1}`],
+		},
+		recordedAt: new Date(Date.UTC(2026, 4, 3, 13, 0, index + 1)).toISOString(),
+	})),
+];
+
 bench(
 	"workflow events / append 6-event log",
 	withTempDir("flow-bench-event-append-", async (worktree) => {
@@ -105,6 +122,10 @@ bench("workflow events / replay 6-event log", () => {
 	replayWorkflowEvents(eventLog);
 });
 
+bench("workflow events / replay 1k-event log", () => {
+	replayWorkflowEvents(largeReplayEventLog);
+});
+
 bench(
 	"workflow checkpoint / write completed state",
 	withTempDir("flow-bench-checkpoint-", async (worktree) => {
@@ -112,6 +133,7 @@ bench(
 			worktree,
 			createWorkflowCheckpoint(completedSession, {
 				eventSequence: eventLog.length,
+				eventPrefixHash: hashWorkflowEventPrefix(eventLog, eventLog.length),
 				source: "event_replay",
 			}),
 		);

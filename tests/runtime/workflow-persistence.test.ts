@@ -5,6 +5,7 @@ import { replayWorkflowEvents, type WorkflowEvent } from "../../src/core";
 import {
 	appendWorkflowEvents,
 	createWorkflowCheckpoint,
+	hashWorkflowEventPrefix,
 	readWorkflowCheckpoint,
 	readWorkflowEventRecords,
 	replayWorkflowEventLog,
@@ -73,6 +74,7 @@ describe("workflow persistence stores", () => {
 			worktree,
 			createWorkflowCheckpoint(replayed, {
 				eventSequence: records.length,
+				eventPrefixHash: hashWorkflowEventPrefix(events, records.length),
 				recordedAt: "2026-05-03T12:04:00.000Z",
 				source: "event_replay",
 			}),
@@ -116,6 +118,7 @@ describe("workflow persistence stores", () => {
 			worktree,
 			createWorkflowCheckpoint(checkpointState, {
 				eventSequence: 2,
+				eventPrefixHash: hashWorkflowEventPrefix(events, 2),
 				recordedAt: "2026-05-03T12:02:30.000Z",
 				source: "event_replay",
 			}),
@@ -145,6 +148,75 @@ describe("workflow persistence stores", () => {
 		expect(tailState).toEqual(fullReplay);
 		expect(persistedTailEvents).toEqual(events.slice(checkpoint.eventSequence));
 		expect(fullReplay?.approval).toBe("approved");
+
+		const explicitResumeReplay = await replayWorkflowEventLog(
+			worktree,
+			"event-session-1",
+			checkpoint.state,
+			checkpoint.eventSequence,
+		);
+		expect(explicitResumeReplay).toEqual(fullReplay);
+	});
+
+	test("rejects checkpoints with sequence beyond persisted event log", async () => {
+		const worktree = makeTempDir();
+		const events = planningEvents();
+		await appendWorkflowEvents(worktree, "event-session-1", events.slice(0, 2));
+		const state = replayWorkflowEvents(events.slice(0, 2));
+		if (!state) {
+			throw new Error("Expected replay to produce workflow state.");
+		}
+		await writeWorkflowCheckpoint(
+			worktree,
+			createWorkflowCheckpoint(state, {
+				eventSequence: 10,
+				eventPrefixHash: hashWorkflowEventPrefix(events, 2),
+				source: "event_replay",
+			}),
+		);
+
+		await expect(
+			replayWorkflowEventLog(worktree, "event-session-1"),
+		).rejects.toThrow("exceeds persisted event count");
+	});
+
+	test("rejects invalid explicit initialEventSequence values", async () => {
+		const worktree = makeTempDir();
+		const events = planningEvents();
+		await appendWorkflowEvents(worktree, "event-session-1", events);
+		const state = replayWorkflowEvents(events.slice(0, 2));
+		if (!state) {
+			throw new Error("Expected replay to produce workflow state.");
+		}
+
+		await expect(
+			replayWorkflowEventLog(worktree, "event-session-1", state, -1),
+		).rejects.toThrow("non-negative integer");
+		await expect(
+			replayWorkflowEventLog(worktree, "event-session-1", state, 999),
+		).rejects.toThrow("exceeds persisted event count");
+	});
+
+	test("rejects checkpoint prefix hash mismatch", async () => {
+		const worktree = makeTempDir();
+		const events = planningEvents();
+		await appendWorkflowEvents(worktree, "event-session-1", events);
+		const state = replayWorkflowEvents(events.slice(0, 2));
+		if (!state) {
+			throw new Error("Expected replay to produce workflow state.");
+		}
+		await writeWorkflowCheckpoint(
+			worktree,
+			createWorkflowCheckpoint(state, {
+				eventSequence: 2,
+				eventPrefixHash: "tampered-prefix-hash",
+				source: "event_replay",
+			}),
+		);
+
+		await expect(
+			replayWorkflowEventLog(worktree, "event-session-1"),
+		).rejects.toThrow("prefix hash mismatch");
 	});
 
 	test("checkpoint reads reject files for a different session", async () => {
@@ -164,6 +236,7 @@ describe("workflow persistence stores", () => {
 			`${JSON.stringify(
 				createWorkflowCheckpoint(otherState, {
 					eventSequence: events.length,
+					eventPrefixHash: hashWorkflowEventPrefix(events, events.length),
 					source: "event_replay",
 				}),
 				null,
