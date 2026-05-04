@@ -1,11 +1,11 @@
-# ADR: Core/runtime/adapter layer seams (Phase 1)
+# ADR: Core/runtime/adapter layer seams
 
 Date: 2026-05-04  
-Status: accepted (Phase 1 baseline, report-first)
+Status: accepted (enforced baseline with diagnostic report mode)
 
 ## Context
 
-Flow currently has meaningful code in `src/core`, `src/runtime`, and `src/adapters`. We need explicit seams that can be checked mechanically so drift is visible before it becomes expensive.
+Flow currently has meaningful code in `src/core`, `src/runtime`, and `src/adapters`. We need explicit seams that can be checked mechanically so drift is visible before it becomes expensive. The repository has already reached the zero-violation baseline, so seam enforcement is now part of the hard maintainer gate rather than future work.
 
 ## Decision
 
@@ -22,35 +22,31 @@ Interpretation:
 - `runtime` owns execution/session behavior and host-independent runtime logic.
 - `adapters` own host/tool/plugin integration and bind host surfaces to runtime/core contracts.
 
-## Enforcement mechanism (Phase 1)
+## Enforcement mechanism
 
 Use repo-native script checks (no new lint dependency):
 
 - `scripts/cross-area/architecture-seams.mjs`
-- Script scans `src/core`, `src/runtime`, `src/adapters` for relative import edges.
+- Script scans `src/core`, `src/runtime`, and `src/adapters` for relative import edges.
 - It reports blocked cross-layer edges listed above.
 
 Modes:
 
-- **Report-only (default)**: `bun run check:architecture-seams`
-  - Always exits success, prints violations.
-- **Hard-fail**: `bun run check:architecture-seams:enforce`
-  - Fails on any violation.
+- **Diagnostic report**: `bun run check:architecture-seams`
+  - Exits success and prints any blocked edges for local investigation.
+  - Does not define the pass/fail contract for mainline; enforce mode does.
+- **Hard enforcement**: `bun run check:architecture-seams:enforce`
+  - Fails on any blocked cross-layer import.
+  - Runs inside the canonical local/mainline contract through `bun run check` and is also safe as a focused CI fast-fail lane.
 
-## Why report-first
+## Operating policy
 
-The current tree contains known pre-existing seam violations (especially `core -> runtime`). Report mode makes drift visible immediately while allowing phased remediation.
+Seam enforcement is active now. Do not describe blocked seams as an accepted transitional baseline. A change that needs a new dependency edge must either move the shared contract into a seam-safe owner or update this ADR, the checker, and tests in the same reviewed change.
 
-## Switch-to-enforce path
-
-1. Run `bun run check:architecture-seams` and capture baseline violations.
-2. Remove violations by extracting shared types/contracts from runtime-owned files into seam-safe modules (likely `src/core` or neutral boundary modules).
-3. Keep running targeted runtime/core tests during each slice.
-4. When violations reach zero, switch CI/check pipeline to `check:architecture-seams:enforce`.
-5. Keep report command for local diagnostics.
+Use report mode for diagnosis and local inventory only. Use enforce mode when proving merge readiness, release readiness, or mainline health.
 
 ## Notes and limitations
 
-- Phase 1 checker currently resolves **relative** imports; non-relative alias imports are ignored.
+- The checker currently resolves **relative** imports; non-relative alias imports are ignored.
 - Type-only imports still count as layer dependencies by design.
-- This ADR scopes only `core`/`runtime`/`adapters` seams; other areas (for example `prompts`, `audit`, `persistence`) are unchanged in this phase.
+- This ADR scopes only `core`/`runtime`/`adapters` seams; other areas (for example `prompts`, `audit`, `persistence`) are unchanged in this policy.
