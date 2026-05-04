@@ -4,7 +4,7 @@
 		"mode": "flow-plan",
 		"title": "Flow plan creates an eval rollout plan without implementation",
 		"origin": "captured",
-		"capturedFrom": "Codex manual providerless capture from flow-plan-eval-rollout.prompt.md on 2026-05-01; no model API used.",
+		"capturedFrom": "Manual providerless capture from flow-plan-eval-rollout.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
 			"src/core/protocols/roles.ts",

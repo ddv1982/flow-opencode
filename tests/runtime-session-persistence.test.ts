@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	getFeatureDocPath,
 	getIndexDocPath,
 	getSessionPath,
+	getStoredSessionsDir,
 } from "../src/runtime/paths";
 import {
 	createSession,
@@ -20,6 +21,7 @@ import { applyPlan, selectPlanFeatures } from "../src/runtime/transitions";
 import {
 	activeSessionId,
 	createTempDirRegistry,
+	createTestTools,
 	samplePlan,
 } from "./runtime-test-helpers";
 
@@ -86,6 +88,25 @@ describe("runtime session persistence", () => {
 		await expect(
 			readFile(getIndexDocPath(worktree, second.id), "utf8"),
 		).resolves.toContain("goal: Second goal");
+	});
+
+	test("flow_plan_start recreates missing .flow/stored before parking the prior active session", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const first = await saveSession(worktree, createSession("First goal"));
+		await rm(getStoredSessionsDir(worktree), { recursive: true, force: true });
+
+		const response = await tools.flow_plan_start.execute(
+			{ goal: "Second goal" },
+			{ worktree } as never,
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(await activeSessionId(worktree)).not.toBe(first.id);
+		await expect(
+			readFile(getSessionPath(worktree, first.id, "stored"), "utf8"),
+		).resolves.toContain('"goal": "First goal"');
 	});
 
 	test("rejects malformed persisted session data", async () => {

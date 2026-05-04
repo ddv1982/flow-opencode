@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("workspace mkdir caching", () => {
-	test("10 sequential saveSession calls issue at most two mkdir calls after ensureWorkspace", async () => {
+	test("10 sequential saveSession calls re-ensure workspace roots on every save", async () => {
 		const worktree = makeTempDir();
 		const session = sampleSession("Workspace cache");
 		await ensureWorkspace(worktree);
@@ -30,6 +30,6 @@ describe("workspace mkdir caching", () => {
 		const nonLockMkdirCalls = mkdirSpy.mock.calls.filter(
 			([target]) => !String(target).endsWith(".lock"),
 		);
-		expect(nonLockMkdirCalls.length).toBeLessThanOrEqual(2);
+		expect(nonLockMkdirCalls.length).toBe(30);
 	});
 });

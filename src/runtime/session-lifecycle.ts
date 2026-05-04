@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import {
 	getActiveSessionDir,
 	getReviewsDir,
 	getSessionPath,
 	getStoredSessionDir,
+	getStoredSessionsDir,
 } from "./paths";
 import {
 	type ClosedSessionResult,
@@ -101,6 +102,9 @@ export async function activateSession(
 		}
 
 		if (activeSessionId) {
+			await mkdir(getStoredSessionsDir(mutableWorktree), {
+				recursive: true,
+			});
 			await rename(
 				getActiveSessionDir(mutableWorktree, activeSessionId),
 				getStoredSessionDir(mutableWorktree, activeSessionId),

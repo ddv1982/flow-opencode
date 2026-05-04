@@ -4,7 +4,7 @@
 		"mode": "flow-run",
 		"title": "Flow run executes exactly one feature behind validation and review gates",
 		"origin": "captured",
-		"capturedFrom": "Codex manual providerless capture from flow-run-single-feature-gate.prompt.md on 2026-05-01; no model API used.",
+		"capturedFrom": "Manual providerless capture from flow-run-single-feature-gate.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
 			"src/core/protocols/roles.ts",

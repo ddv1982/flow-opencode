@@ -4,7 +4,7 @@
 		"mode": "flow-control",
 		"title": "Flow control status stays read-only",
 		"origin": "captured",
-		"capturedFrom": "Codex manual providerless capture from flow-control-status-readonly.prompt.md on 2026-05-01; no model API used.",
+		"capturedFrom": "Manual providerless capture from flow-control-status-readonly.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
 			"src/core/protocols/roles.ts",

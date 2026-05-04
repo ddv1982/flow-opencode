@@ -7,7 +7,11 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowSessionActivateCommand,
 } from "../src/runtime/constants";
-import { getSessionPath, getStoredSessionDir } from "../src/runtime/paths";
+import {
+	getSessionPath,
+	getStoredSessionDir,
+	getStoredSessionsDir,
+} from "../src/runtime/paths";
 import {
 	createSession,
 	loadSession,
@@ -296,6 +300,32 @@ describe("runtime operator history and session lifecycle", () => {
 		expect(parsed.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(await activeSessionId(worktree)).toBe(first.id);
 		expect((await loadSession(worktree))?.id).toBe(first.id);
+	});
+
+	test("flow_session_activate recreates missing .flow/stored before parking current active session", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = await saveSession(worktree, createSession("Second goal"));
+		await rm(getStoredSessionsDir(worktree), { recursive: true, force: true });
+		await mkdir(getStoredSessionDir(worktree, first.id), { recursive: true });
+		await writeFile(
+			getSessionPath(worktree, first.id, "stored"),
+			`${JSON.stringify(first, null, 2)}\n`,
+			"utf8",
+		);
+
+		const response = await tools.flow_session_activate.execute(
+			{ sessionId: first.id },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(await activeSessionId(worktree)).toBe(first.id);
+		await expect(
+			readFile(getSessionPath(worktree, second.id, "stored"), "utf8"),
+		).resolves.toContain('"goal": "Second goal"');
 	});
 
 	test("history show and session activate report missing ids clearly", async () => {

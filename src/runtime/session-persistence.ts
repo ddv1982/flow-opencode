@@ -1,8 +1,9 @@
-import { rename } from "node:fs/promises";
+import { mkdir, rename } from "node:fs/promises";
 import {
 	getActiveSessionDir,
 	getSessionPath,
 	getStoredSessionDir,
+	getStoredSessionsDir,
 } from "./paths";
 import {
 	persistCompletedSession,
@@ -40,6 +41,9 @@ async function persistOpenSession(
 ): Promise<void> {
 	const activeSessionId = await resolveActiveSessionId(worktree);
 	if (activeSessionId && activeSessionId !== session.id) {
+		await mkdir(getStoredSessionsDir(worktree), {
+			recursive: true,
+		});
 		await rename(
 			getActiveSessionDir(worktree, activeSessionId),
 			getStoredSessionDir(worktree, activeSessionId),

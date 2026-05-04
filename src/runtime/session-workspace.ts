@@ -137,10 +137,10 @@ async function ensureWorkspaceAtRoot(
 	worktree: MutableWorkspaceRoot,
 ): Promise<void> {
 	const flowDir = getFlowDir(worktree);
+	await mkdir(getActiveSessionsDir(worktree), { recursive: true });
+	await mkdir(getStoredSessionsDir(worktree), { recursive: true });
+	await mkdir(getCompletedSessionsDir(worktree), { recursive: true });
 	if (!preparedWorkspaceRoots.has(worktree)) {
-		await mkdir(getActiveSessionsDir(worktree), { recursive: true });
-		await mkdir(getStoredSessionsDir(worktree), { recursive: true });
-		await mkdir(getCompletedSessionsDir(worktree), { recursive: true });
 		preparedWorkspaceRoots.add(worktree);
 	}
 

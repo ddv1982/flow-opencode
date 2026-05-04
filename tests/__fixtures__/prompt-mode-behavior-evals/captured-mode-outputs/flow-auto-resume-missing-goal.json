@@ -4,7 +4,7 @@
 		"mode": "flow-auto",
 		"title": "Flow auto resume stops when no active session supplies a goal",
 		"origin": "captured",
-		"capturedFrom": "Codex manual providerless capture from flow-auto-resume-missing-goal.prompt.md on 2026-05-01; no model API used.",
+		"capturedFrom": "Manual providerless capture from flow-auto-resume-missing-goal.prompt.md on 2026-05-01; no model API used.",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
 			"src/core/protocols/roles.ts",
