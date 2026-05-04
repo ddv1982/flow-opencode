@@ -110,6 +110,29 @@ Ownership rules:
 - `/flow-review` is read-only and must not advance Flow planning/execution state.
 - Surface expansion is frozen by default: avoid new commands, tools, prompt contracts, state paths, or runtime modes unless there is an explicit retirement/replacement tradeoff.
 
+
+## Gate contract matrix
+
+`bun run check` is the canonical local/mainline contract. Focused gates may also run in CI or during local diagnosis to fail faster or produce artifacts, but every hard gate below must remain covered by `bun run check`, an explicitly documented focused lane, or both. Advisory and diagnostic commands must not be treated as merge blockers unless this matrix, the owning script, and tests are updated together.
+
+| Gate | Command / location | Artifact owner | Source of truth | Local role | CI role | Status | Repeated inside `check` | Pass/fail expectation | No-weakening note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Full mainline check | `bun run check` / `package.json` | maintainer contract + CI workflow | `package.json` script | canonical all-in-one readiness gate | final validate job contract | hard | n/a | fails on any included hard-gate failure | Do not replace with focused gates unless every included hard gate is preserved and documented. |
+| Dependency contract | `bun run check:dependency-contract` | package/runtime schema owners | `scripts/cross-area/dependency-contract.mjs` | targeted SDK/dependency compatibility check | may run directly or through `bun run check` | hard | yes | fails on dependency/schema compatibility drift, including `zod` / `@opencode-ai/plugin` alignment | `zod`/plugin compatibility is a standing checklist constraint for tool/schema changes. |
+| Architecture seams enforce | `bun run check:architecture-seams:enforce` | architecture seam owner | `scripts/cross-area/architecture-seams.mjs` | targeted seam blocker and part of `bun run check` | focused fast-fail lane and/or covered by `bun run check` | hard | yes | fails on blocked cross-layer imports | Preserve enforce mode as the merge contract; report mode is not a substitute. |
+| Architecture seams report | `bun run check:architecture-seams` | architecture seam owner | `scripts/cross-area/architecture-seams.mjs` | local diagnostic inventory | optional diagnostic artifact only | diagnostic | no | exits `0` while reporting seam findings | Keep separate from hard enforcement to avoid accidental blocking semantics. |
+| Generated drift | `bun run check:generated-drift` | prompt/review/descriptor owners | `package.json` composed script | generated prompt/review/descriptor parity check | focused fast-fail lane and/or covered by `bun run check` | hard | yes | fails on generated prompt/review/descriptor parity drift | If deduplicated in CI, prove `bun run check` still executes it. |
+| Completion lane | `bun run gate:completion-lane` | runtime completion owner | `scripts/cross-area/check-completion-lane.mjs` | focused completion invariant gate and part of `bun run check` | focused fast-fail lane and/or covered by `bun run check` | hard | yes | fails on completion-lane invariant violation | Completion/reviewer gates are release-critical and must remain hard. |
+| Replay gate | `bun run test:replay` | persistence/replay owners | `tests/replay/**` + workflow persistence test | replay/persistence regression gate and part of `bun run check` | focused fast-fail lane and/or covered by `bun run check` | hard | yes | fails on replay/persistence regression | Keep snapshot/replay authority explicit when changing persistence. |
+| Benchmark gate | `bun run bench:gate` | performance owner | `scripts/cross-area/bench-gate.mjs` | benchmark baseline gate and part of `bun run check` | focused fast-fail lane and/or covered by `bun run check` | hard | yes | fails on benchmark baseline regression | `bench:smoke` may provide extra signal, but `bench:gate` owns baseline failure. |
+| Boundary report | `bun run check:boundary-report` | prompt/tool schema boundary owners | `scripts/cross-area/boundary-violations-report.mjs` | supplemental boundary visibility | optional advisory report | advisory | no | exits `0`; emits advisory signal unless a future change promotes it | Do not cite this as hard enforcement; promote only with script/docs/test updates. |
+| Docs parity/staleness | docs test bundle | docs/runtime/tool owners | `tests/docs-*.test.ts` | required when docs/contracts change | covered by broader test/check lanes | hard when docs/contracts touched | via `bun run test` inside `bun run check` | fails on stale references or parity drift | Contract docs must stay synchronized with runtime/tool surfaces. |
+| Runtime metrics report | `bun run report:runtime-simplification-metrics` | runtime simplification owner | `scripts/cross-area/runtime-simplification-metrics.mjs` | diagnostic/report for simplification planning | optional artifact only | diagnostic/report | no | prints metrics; seam count failure belongs to seam enforce gate | Metrics guide runtime slices; they are not a standalone merge gate. |
+
+### CI/local no-weakening policy
+
+CI may keep focused preflights before the final `bun run check` when the duplicate gives faster failure isolation for high-risk contracts. Any CI/package gate simplification must record: the before/after hard-gate list, where each hard gate still runs, why each retained duplicate is intentional, why each removed duplicate is covered by `bun run check` or a named lane, and fresh verification from affected gates plus `bun run check`.
+
 ## Semantic invariant anchors
 
 The runtime-owned semantic invariant catalog is mirrored here for maintainer orientation. The owners remain in `src/runtime/domain/semantic-invariants.ts` and the runtime/domain/transitions files named there.
