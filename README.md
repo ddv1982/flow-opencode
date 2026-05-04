@@ -156,7 +156,7 @@ Examples:
 
 Flow will only claim the strongest achieved review depth when the inspected coverage actually supports it.
 
-`/flow-review` is intentionally read-only. If you fix findings afterward through a direct Codex/RepoPrompt conversation, that follow-up work does **not** update Flow runtime state, reviewer records, validation records, or completion artifacts. To remediate findings under Flow's tracked gates, start or activate a Flow session for review-fix work and complete it through `/flow-run` / `/flow-auto`, recorded validation, reviewer approval, and final review when applicable.
+`/flow-review` is intentionally read-only. To remediate findings under Flow's tracked gates, start or activate a Flow session for review-fix work and complete it through `/flow-run` / `/flow-auto`, recorded validation, reviewer approval, and final review when applicable.
 
 ## The commands most people use
 
