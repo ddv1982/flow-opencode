@@ -122,6 +122,9 @@ describe("transition consolidation", () => {
 		};
 
 		visit(srcDir);
-		expect(directSessionImports).toEqual(["src/runtime/session.ts"]);
+		expect(directSessionImports.sort()).toEqual([
+			"src/runtime/lifecycle/index.ts",
+			"src/runtime/recovery/session-recovery-service.ts",
+		]);
 	});
 });

@@ -4,7 +4,7 @@ This file is for contributors working on the plugin itself.
 
 If you are trying to use Flow inside OpenCode, start with the top-level `README.md` instead.
 
-Current maintainer contract lives in [`docs/maintainer-contract.md`](maintainer-contract.md). Use [`docs/contributor-map.md`](contributor-map.md) to pick the right source files and checks before touching high-risk areas.
+Current maintainer contract lives in [`docs/maintainer-contract.md`](maintainer-contract.md). Use [`docs/contributor-map.md`](contributor-map.md) to pick the right source files and checks before touching high-risk areas. Ownership boundaries and cross-domain review/triage policy live in [`docs/architecture/ownership-operating-model.md`](architecture/ownership-operating-model.md).
 
 This repo's maintainer workflow is intentionally Bun-first. In target projects, Flow is script-first: existing package.json scripts are the primary contract, and package-manager detection is supporting evidence.
 
@@ -28,6 +28,8 @@ Useful scripts:
 - `bun run build`
 - `bun run deadcode`
 - `bun run test`
+- `bun run test:fast`
+- `bun run test:deep`
 - `bun run typecheck`
 - `bun run check`
 - `bun run report:prompt-eval`
@@ -284,3 +286,21 @@ Run tests with:
 ```bash
 bun test
 ```
+
+Fast lane for core reducer/invariant safety checks:
+
+```bash
+bun run test:fast
+```
+
+Deep lane for broad coverage (default CI depth):
+
+```bash
+bun run test:deep
+```
+
+Phase 3 candidate integration-heavy paths to review before removal:
+
+- `tests/runtime/workflow-persistence.test.ts` (checkpoint + replay end-to-end)
+- `tests/replay/golden-event-corpus.test.ts` (golden corpus replay parity)
+- `tests/runtime/workflow-persistence.test.ts` plus `tests/replay/replay-persistence-gate.test.ts` overlap on replay-from-checkpoint behavior

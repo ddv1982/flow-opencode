@@ -1,4 +1,3 @@
-import { FLOW_PLAN_WITH_GOAL_COMMAND } from "../constants";
 import type {
 	Feature,
 	FlowReviewRecordFeatureArgs,
@@ -12,12 +11,19 @@ import {
 	applyPlan,
 	approvePlan,
 	completeRun,
-	recordReviewerDecision,
 	resetFeature,
 	selectPlanFeatures,
 	startRun,
 } from "../transitions";
 import { succeed } from "../transitions/shared";
+import {
+	completeRunSuccess,
+	MISSING_PLANNING_SESSION_RESPONSE,
+	MISSING_SESSION_RESPONSE,
+	okWithSession,
+	startRunSuccess,
+	summarizedSession,
+} from "./session-action-responses";
 import {
 	DEFAULT_SESSION_RUNTIME_PORT,
 	executeSessionMutationAtRoot,
@@ -26,6 +32,11 @@ import {
 	type SessionMutationResult,
 	type SessionRuntimePort,
 } from "./session-engine";
+import { mergePlanningContext } from "./session-planning-context";
+import {
+	createFeatureReviewerDecisionAction,
+	createFinalReviewerDecisionAction,
+} from "./session-review-actions";
 import {
 	resolveMutableSessionRoot,
 	type WorkspaceContext,
@@ -103,24 +114,6 @@ type SessionMutationActionHandlerMap = {
 	) => SessionMutationAction<SessionMutationValueMap[Name]>;
 };
 
-const MISSING_PLANNING_SESSION_RESPONSE = {
-	status: "missing_session",
-	summary: "No active Flow planning session exists.",
-	nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
-} as const;
-
-function summarizedSession(saved: Session) {
-	return summarizeSession(saved).session;
-}
-
-function okWithSession(saved: Session, summary: string) {
-	return {
-		status: "ok" as const,
-		summary,
-		session: summarizedSession(saved),
-	};
-}
-
 export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 	{
 		record_planning_context(nextPlanning) {
@@ -129,30 +122,7 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				run: (session) => {
 					const updated: Session = {
 						...session,
-						planning: {
-							repoProfile:
-								nextPlanning.repoProfile ?? session.planning.repoProfile,
-							packageManager:
-								nextPlanning.packageManager ?? session.planning.packageManager,
-							packageManagerAmbiguous:
-								nextPlanning.packageManagerAmbiguous ??
-								session.planning.packageManagerAmbiguous,
-							stackProfile:
-								nextPlanning.stackProfile ?? session.planning.stackProfile,
-							standardsProfile:
-								nextPlanning.standardsProfile ??
-								session.planning.standardsProfile,
-							research: nextPlanning.research ?? session.planning.research,
-							implementationApproach:
-								nextPlanning.implementationApproach ??
-								session.planning.implementationApproach,
-							decisionLog:
-								nextPlanning.decisionLog ?? session.planning.decisionLog,
-							replanLog: nextPlanning.replanLog ?? session.planning.replanLog,
-							evidencePackets:
-								nextPlanning.evidencePackets ??
-								session.planning.evidencePackets,
-						},
+						planning: mergePlanningContext(session.planning, nextPlanning),
 					};
 					return succeed(updated);
 				},
@@ -228,26 +198,8 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "start_run",
 				run: (session) => startRun(session, featureId),
 				getSession: (value) => value.session,
-				onSuccess: (saved, value) => {
-					const summary = summarizeSession(saved);
-					return {
-						status:
-							value.reason === "complete"
-								? "complete"
-								: value.feature
-									? "ok"
-									: "blocked",
-						summary: summary.summary,
-						session: summary.session,
-						feature: value.feature,
-						reason: value.reason,
-					};
-				},
-				missingResponse: {
-					status: "missing_session",
-					summary: "No active Flow session exists.",
-					nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
-				},
+				onSuccess: startRunSuccess,
+				missingResponse: MISSING_SESSION_RESPONSE,
 			};
 		},
 
@@ -256,14 +208,7 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				name: "complete_run",
 				run: (session) => completeRun(session, worker),
 				getSession: (value) => value,
-				onSuccess: (saved) => {
-					const summary = summarizeSession(saved);
-					return {
-						status: "ok" as const,
-						summary: summary.summary,
-						session: summary.session,
-					};
-				},
+				onSuccess: completeRunSuccess,
 				onError: (failure) => ({
 					status: "error",
 					summary: failure.message,
@@ -283,64 +228,11 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 		},
 
 		record_feature_review({ decision }) {
-			const normalized = {
-				scope: "feature" as const,
-				featureId: decision.featureId,
-				status: decision.status,
-				summary: decision.summary,
-				blockingFindings: decision.blockingFindings ?? [],
-				followUps: decision.followUps ?? [],
-				suggestedValidation: decision.suggestedValidation ?? [],
-				...(decision.reviewPurpose
-					? { reviewPurpose: decision.reviewPurpose }
-					: {}),
-			};
-			return {
-				name: "record_feature_review",
-				run: (session) => recordReviewerDecision(session, normalized),
-				getSession: (value) => value,
-				onSuccess: (saved) =>
-					okWithSession(saved, "Reviewer decision recorded."),
-			};
+			return createFeatureReviewerDecisionAction(decision);
 		},
 
 		record_final_review({ decision }) {
-			const normalized = {
-				scope: "final" as const,
-				status: decision.status,
-				summary: decision.summary,
-				reviewDepth: decision.reviewDepth,
-				reviewedSurfaces: decision.reviewedSurfaces ?? [],
-				...(decision.evidenceSummary
-					? { evidenceSummary: decision.evidenceSummary }
-					: {}),
-				...(decision.validationAssessment
-					? { validationAssessment: decision.validationAssessment }
-					: {}),
-				evidenceRefs: {
-					changedArtifacts: decision.evidenceRefs?.changedArtifacts ?? [],
-					validationCommands: decision.evidenceRefs?.validationCommands ?? [],
-				},
-				...(decision.evidencePackets
-					? { evidencePackets: decision.evidencePackets }
-					: {}),
-				integrationChecks: decision.integrationChecks ?? [],
-				regressionChecks: decision.regressionChecks ?? [],
-				remainingGaps: decision.remainingGaps ?? [],
-				blockingFindings: decision.blockingFindings ?? [],
-				followUps: decision.followUps ?? [],
-				suggestedValidation: decision.suggestedValidation ?? [],
-				...(decision.reviewPurpose
-					? { reviewPurpose: decision.reviewPurpose }
-					: {}),
-			};
-			return {
-				name: "record_final_review",
-				run: (session) => recordReviewerDecision(session, normalized),
-				getSession: (value) => value,
-				onSuccess: (saved) =>
-					okWithSession(saved, "Reviewer decision recorded."),
-			};
+			return createFinalReviewerDecisionAction(decision);
 		},
 	};
 

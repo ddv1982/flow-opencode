@@ -1,4 +1,4 @@
-import type { SemanticInvariantId } from "../../runtime/domain";
+import type { SemanticInvariantId } from "../../workflow/domain";
 import {
 	CORE_ACTION_REGISTRY,
 	type CoreActionDescriptor,

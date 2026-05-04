@@ -5,8 +5,8 @@ import {
 } from "../../prompt-system-context";
 import { resolveSessionRoot } from "../../runtime/application";
 import { readValidStackStandardsProfileCache } from "../../runtime/application/stack-standards-profile";
+import { loadSession } from "../../runtime/lifecycle";
 import type { PlanningContext } from "../../runtime/schema";
-import { loadSession } from "../../runtime/session";
 import { createConfigHook } from "./config";
 import type { Hooks, Plugin } from "./sdk";
 import { applyFlowToolDefinitionGuidance } from "./tool-guidance.generated";

@@ -7,6 +7,7 @@ import type {
 import { deriveSessionOperatorState } from "../session-operator-state";
 import { deriveSessionViewModel, explainSessionState } from "../summary";
 import { renderSessionStatusSummary } from "./operator-presenters";
+import { guidanceFields } from "./session-presenter-shared";
 import {
 	toCompactJson,
 	toJson,
@@ -51,11 +52,7 @@ export function missingStoredSessionResponse(
 		status: "missing_session",
 		summary: `No stored Flow session exists for id '${sessionId}'.`,
 		operator,
-		phase: operator.phase,
-		lane: operator.lane,
-		laneReason: operator.laneReason,
-		blocker: operator.blocker,
-		reason: operator.reason,
+		...guidanceFields(operator),
 		nextCommand,
 	});
 }
@@ -82,11 +79,7 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 				status: "missing",
 				summary: "No Flow session history found.",
 				operator,
-				phase: guidance.phase,
-				lane: guidance.lane,
-				laneReason: guidance.laneReason,
-				blocker: guidance.blocker,
-				reason: guidance.reason,
+				...guidanceFields(guidance),
 				history,
 				nextCommand,
 			}),
@@ -139,11 +132,7 @@ export function storedSessionResponse(
 		completedAt: found.completedAt ?? null,
 		closure: found.session.closure ?? null,
 		operator,
-		phase: guidance.phase,
-		lane: guidance.lane,
-		laneReason: guidance.laneReason,
-		blocker: guidance.blocker,
-		reason: guidance.reason,
+		...guidanceFields(guidance),
 		session: historySession,
 		guidance,
 		...(inactiveWarning ? { warning: inactiveWarning } : {}),
@@ -170,11 +159,7 @@ export function statusResponse(
 			status: viewModel.status,
 			summary: viewModel.summary,
 			finalReviewPolicy: viewModel.session?.finalReviewPolicy ?? null,
-			phase: guidance.phase,
-			lane: guidance.lane,
-			laneReason: guidance.laneReason,
-			blocker: guidance.blocker,
-			reason: guidance.reason,
+			...guidanceFields(guidance),
 			guidance,
 			operatorSummary,
 			nextCommand: guidance.nextCommand,
@@ -187,11 +172,7 @@ export function statusResponse(
 		summary: viewModel.summary,
 		finalReviewPolicy: viewModel.session?.finalReviewPolicy ?? null,
 		...(viewModel.session ? { session: viewModel.session } : {}),
-		phase: guidance.phase,
-		lane: guidance.lane,
-		laneReason: guidance.laneReason,
-		blocker: guidance.blocker,
-		reason: guidance.reason,
+		...guidanceFields(guidance),
 		guidance,
 		operatorSummary,
 		workspaceRoot,
@@ -226,11 +207,7 @@ export function autoPrepareResponse(
 					mode: "missing_goal" as const,
 					summary:
 						"No active Flow session exists. Provide a goal to start a new autonomous run.",
-					phase: guidance.phase,
-					lane: guidance.lane,
-					laneReason: guidance.laneReason,
-					blocker: guidance.blocker,
-					reason: guidance.reason,
+					...guidanceFields(guidance),
 					nextCommand,
 				}
 			: mode === "resume" && goal
@@ -239,11 +216,7 @@ export function autoPrepareResponse(
 						mode: "resume" as const,
 						goal,
 						summary: `Resuming active Flow goal: ${goal}`,
-						phase: guidance.phase,
-						lane: guidance.lane,
-						laneReason: guidance.laneReason,
-						blocker: guidance.blocker,
-						reason: guidance.reason,
+						...guidanceFields(guidance),
 						nextCommand,
 					}
 				: {
@@ -251,11 +224,7 @@ export function autoPrepareResponse(
 						mode: "start_new_goal" as const,
 						goal,
 						summary: `Starting a new autonomous Flow goal: ${goal}`,
-						phase: guidance.phase,
-						lane: guidance.lane,
-						laneReason: guidance.laneReason,
-						blocker: guidance.blocker,
-						reason: guidance.reason,
+						...guidanceFields(guidance),
 						nextCommand,
 					};
 	return {

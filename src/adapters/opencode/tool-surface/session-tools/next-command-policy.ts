@@ -10,11 +10,11 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowSessionActivateCommand,
 } from "../../../../runtime/constants";
-import type { Session } from "../../../../runtime/schema";
 import type {
 	listSessionHistory,
 	loadStoredSession,
-} from "../../../../runtime/session";
+} from "../../../../runtime/lifecycle";
+import type { Session } from "../../../../runtime/schema";
 
 type SessionHistory = Awaited<ReturnType<typeof listSessionHistory>>;
 type StoredSessionRecord = NonNullable<

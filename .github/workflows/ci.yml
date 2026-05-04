@@ -110,6 +110,15 @@ jobs:
       - name: Run completion-lane invariants gate
         run: bun run gate:completion-lane
 
+      - name: Check generated-file drift
+        run: bun run check:generated-drift
+
+      - name: Enforce architecture seams
+        run: bun run check:architecture-seams:enforce
+
+      - name: Report boundary violations (supplemental report)
+        run: bun run check:boundary-report
+
       - name: Run replay/property release gate
         run: bun run test:replay
 

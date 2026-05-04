@@ -8,6 +8,13 @@ export {
 	finalReviewDepthMatchesPolicy,
 	isKnownFinalReviewSurface,
 } from "./final-review-coverage";
+export { validatePlanGraph } from "./plan-graph-validation";
+export { selectProjectedFeatureSubset } from "./plan-projection";
+export {
+	buildReviewerDecision,
+	type RecordReviewerDecisionInput,
+	validateReviewerDecisionInput,
+} from "./reviewer-decision";
 export {
 	SEMANTIC_COMPLETION_GATE_ORDER,
 	SEMANTIC_COMPLETION_POLICY_EXPECTATIONS,

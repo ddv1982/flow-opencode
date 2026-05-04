@@ -1,4 +1,4 @@
-import type { SemanticInvariantId } from "../../runtime/domain";
+import type { SemanticInvariantId } from "../../workflow/domain";
 import type { WorkflowCommandType } from "../workflow/commands";
 import type { WorkflowEventType } from "../workflow/events";
 

@@ -9,12 +9,12 @@ import {
 	getStoredSessionDir,
 	getStoredSessionsDir,
 } from "./paths";
-import type { Session } from "./schema";
 import {
 	compareCompletedDescending,
 	findNewestCompletedSession,
 	parseCompletedDirectoryName,
-} from "./session-completed-storage";
+} from "./recovery";
+import type { Session } from "./schema";
 import { readActiveSessionId, readSessionFromPath } from "./session-workspace";
 
 export type SessionHistoryEntry = {

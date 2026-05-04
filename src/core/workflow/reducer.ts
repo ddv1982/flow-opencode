@@ -1,5 +1,5 @@
-import type { Plan, Session } from "../../runtime/schema";
-import { SessionSchema } from "../../runtime/schema";
+import type { Plan, Session } from "../../workflow/contracts";
+import { SessionSchema } from "../../workflow/contracts";
 import type { WorkflowEvent } from "./events";
 import { createInitialWorkflowState, type WorkflowState } from "./state";
 

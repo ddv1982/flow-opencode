@@ -1,14 +1,12 @@
 export {
-	featureWouldReachCompletion,
-	summarizeCompletion,
-} from "../../runtime/domain/completion";
-export {
 	activeDecisionGate,
 	completedFeatureCount,
 	completionPolicyTargetError,
 	decisionRequiresPause,
+	featureWouldReachCompletion,
 	finalReviewPolicyForPlan,
 	reviewerPurposeForScope,
 	sessionCompletionReached,
+	summarizeCompletion,
 	targetCompletedFeatureCount,
-} from "../../runtime/domain/workflow-policy";
+} from "../../workflow/domain";

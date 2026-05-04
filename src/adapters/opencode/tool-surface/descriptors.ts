@@ -5,6 +5,10 @@ import type {
 	SessionWorkspaceActionName,
 } from "../../../runtime/application";
 import type { SemanticInvariantId } from "../../../runtime/domain";
+import {
+	FLOW_DEFAULT_TOOL_DOCS_ROW,
+	FLOW_PROMPT_GUIDANCE_BY_ID,
+} from "./descriptor-guidance";
 
 export type FlowSurfaceKind =
 	| "mutation"
@@ -61,12 +65,6 @@ export type FlowSurfaceDescriptor = {
 	verificationAnchors: readonly string[];
 };
 
-const TOOL_DOCS_SECTION = "docs/development.md#current-runtime-tools";
-const DEFAULT_TOOL_DOCS_ROW = {
-	section: TOOL_DOCS_SECTION,
-	label: "Default OpenCode tool surface",
-} as const;
-
 export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 	{
 		id: "flow_status",
@@ -83,7 +81,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		invariantIds: [],
 		policyOwners: ["src/runtime/application/session-read-actions.ts"],
 		hostDescription: "Show the active Flow session summary",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/docs-tool-parity.test.ts",
@@ -105,7 +103,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		policyOwners: ["src/runtime/application/doctor-checks.ts"],
 		hostDescription:
 			"Run non-destructive readiness checks for Flow in the current workspace",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -123,7 +121,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		invariantIds: [],
 		policyOwners: ["src/runtime/application/session-read-actions.ts"],
 		hostDescription: "Show active, stored, and completed Flow session history",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -142,7 +140,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		policyOwners: ["src/runtime/application/session-read-actions.ts"],
 		hostDescription:
 			"Show a specific active, stored, or completed Flow session by id",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -160,7 +158,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		invariantIds: [],
 		policyOwners: ["src/runtime/application/session-workspace-actions.ts"],
 		hostDescription: "Activate a stored Flow session by id",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -181,15 +179,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 			"src/core/workflow/reducer.ts",
 		],
 		hostDescription: "Create or refresh the active Flow planning session",
-		promptGuidance: `## Use when
-- Use first when creating or refreshing a Flow planning session from a user goal.
-
-## Avoid when
-- Do not use for plan approval, feature execution, or review persistence.
-
-## Returns
-- Returns the active planning session state and the next canonical planning step.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_plan_start,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/protocol-parity.test.ts",
@@ -210,7 +201,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		invariantIds: [],
 		policyOwners: ["src/runtime/application/session-read-actions.ts"],
 		hostDescription: "Classify a flow-auto invocation",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -229,7 +220,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		policyOwners: ["src/runtime/application/session-workspace-actions.ts"],
 		hostDescription:
 			"Close the active Flow session as completed, deferred, or abandoned",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -254,16 +245,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session from a JSON payload",
-		promptGuidance: `## Use when
-- Use to persist repo profile, stackProfile, standardsProfile, research findings, implementation approach, or planning decisions that justify the plan.
-- Provide the planning-context fields directly as this tool's arguments.
-
-## Avoid when
-- Do not embed this context inside the plan payload when the runtime has dedicated planning fields.
-
-## Returns
-- Updates the active planning context so downstream Flow summaries expose the same evidence.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_plan_context_record,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/config/prompt-contracts.test.ts",
@@ -292,16 +275,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Persist a Flow draft plan into the active session from a JSON payload",
-		promptGuidance: `## Use when
-- Use after you have a draft plan that already matches the Flow planning contract.
-- Provide the full \`{ plan, planning? }\` payload directly as this tool's arguments.
-
-## Avoid when
-- Do not use to store free-form notes or partial execution results.
-
-## Returns
-- Returns the canonical runtime response for the applied draft, including approval guidance.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_plan_apply,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/protocol-parity.test.ts",
@@ -325,7 +300,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 			"src/core/workflow/reducer.ts",
 		],
 		hostDescription: "Approve the active Flow draft plan",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -347,7 +322,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Keep only selected features in the active Flow draft plan",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
 	{
@@ -368,15 +343,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 			"src/core/workflow/reducer.ts",
 		],
 		hostDescription: "Start the next runnable Flow feature",
-		promptGuidance: `## Use when
-- Use first for execution to start the next runnable feature or a specific approved feature id.
-
-## Avoid when
-- Do not call this after implementation is already complete; use completion tools instead.
-
-## Returns
-- Returns the canonical runtime response describing the active feature or why nothing is runnable.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_run_start,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/protocol-parity.test.ts",
@@ -409,16 +377,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Persist an already-validated Flow feature execution result from a JSON payload",
-		promptGuidance: `## Use when
-- Use only after the required validation for the current path is complete: targeted validation plus feature review for normal features, or broad validation plus the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) for the completion path.
-- Provide the full worker result fields directly as this tool's arguments.
-
-## Avoid when
-- Do not use for partial progress, speculative status updates, or before review is clean.
-
-## Returns
-- Persists a worker result and returns the canonical runtime completion response.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_run_complete_feature,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/runtime/final-completion-gates.test.ts",
@@ -443,7 +403,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 			"src/core/workflow/reducer.ts",
 		],
 		hostDescription: "Reset a Flow feature to pending",
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/recovery-hint-parity.test.ts",
@@ -471,16 +431,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Record an already-validated reviewer decision for the active feature from a JSON payload",
-		promptGuidance: `## Use when
-- Use to persist a reviewer decision for the current feature after the review is already complete.
-- Provide the full reviewer decision fields directly as this tool's arguments.
-
-## Avoid when
-- Do not use to ask for review or to record final cross-feature approval.
-
-## Returns
-- Returns the canonical runtime response for the feature-level approval gate.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_review_record_feature,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/runtime/final-review-contracts.test.ts",
@@ -509,16 +461,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Record an already-validated reviewer decision for final cross-feature validation from a JSON payload",
-		promptGuidance: `## Use when
-- Use to persist the final reviewer decision required by deliveryPolicy.finalReviewPolicy on the final completion path.
-- Provide the full reviewer decision fields directly as this tool's arguments.
-
-## Avoid when
-- Do not use for normal feature reviews or before broad final validation and the runtime-owned final review required by deliveryPolicy.finalReviewPolicy are complete.
-
-## Returns
-- Returns the canonical runtime response for the final approval gate.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_review_record_final,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/runtime/final-review-contracts.test.ts",
@@ -546,18 +490,8 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		hostDescription:
 			"Render a structured Flow review ledger into a human-readable report, structured JSON, or both",
-		promptGuidance: `## Use when
-- Use after you have a complete structured review ledger and want a deterministic human-readable report.
-- Provide the full review ledger fields directly as this tool's arguments.
-- Use \`view: human\` for the default user-facing report, \`structured\` for raw JSON, or \`both\` to append structured details after the readable report.
-
-## Avoid when
-- Do not use before the review findings and coverage ledger are complete.
-- Do not handcraft the final prose when this renderer can produce the deterministic report for you.
-
-## Returns
-- Returns a rendered review report string, not a Flow runtime session mutation response.`,
-		docsRowMetadata: DEFAULT_TOOL_DOCS_ROW,
+		promptGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_review_render,
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",
 			"tests/config/prompt-contracts.test.ts",

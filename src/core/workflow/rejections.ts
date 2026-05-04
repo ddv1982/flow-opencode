@@ -1,4 +1,4 @@
-import type { TransitionRecovery } from "../../runtime/transitions/shared";
+import type { TransitionRecovery } from "../../workflow/recovery";
 
 export type WorkflowRejectionCode =
 	| "missing_session"

@@ -1,9 +1,9 @@
-import type { SemanticInvariantId } from "../../runtime/domain";
+import type { SemanticInvariantId } from "../../workflow/domain";
 import {
 	SEMANTIC_INVARIANT_IDS,
 	SEMANTIC_INVARIANTS,
 	semanticInvariantById,
-} from "../../runtime/domain";
+} from "../../workflow/domain";
 
 export type CoreInvariantMapping = {
 	id: SemanticInvariantId;

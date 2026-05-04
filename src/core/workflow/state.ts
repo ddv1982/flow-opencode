@@ -3,8 +3,8 @@ import type {
 	Plan,
 	PlanningContext,
 	Session,
-} from "../../runtime/schema";
-import { SessionSchema } from "../../runtime/schema";
+} from "../../workflow/contracts";
+import { SessionSchema } from "../../workflow/contracts";
 
 export type WorkflowState = Session;
 export type WorkflowFeature = Feature;

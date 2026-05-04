@@ -4,7 +4,7 @@ import type {
 	ReviewerDecision,
 	Session,
 	WorkerResultArgs,
-} from "../../runtime/schema";
+} from "../../workflow/contracts";
 
 export type WorkflowEventType =
 	| "workflow_started"

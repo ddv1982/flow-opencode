@@ -3,12 +3,22 @@ import {
 	finalReviewPolicyForPlan,
 	summarizeCompletion,
 } from "./domain";
-import type { Feature, Session } from "./schema";
+import type { Session } from "./schema";
 import {
 	deriveNextCommand,
 	deriveSessionOperatorState,
 	type SessionOperatorState,
 } from "./session-operator-state";
+import {
+	activeFeatureForSession,
+	projectActiveFeature,
+	projectFeature,
+	type SummarizedFeature,
+	type SummarizedPlanning,
+	sessionFeatures,
+	summarizeFeature,
+	summarizePlanning,
+} from "./summary-projections";
 
 export type SessionGuidance = {
 	category:
@@ -36,21 +46,6 @@ export type SessionGuidance = {
 	nextCommand: string;
 };
 
-type SummarizedPlanning = Pick<
-	Session["planning"],
-	| "repoProfile"
-	| "stackProfile"
-	| "standardsProfile"
-	| "research"
-	| "implementationApproach"
-	| "decisionLog"
-	| "replanLog"
-	| "evidencePackets"
-> & {
-	packageManager?: Session["planning"]["packageManager"];
-	packageManagerAmbiguous?: true;
-};
-
 export type SummarizedSessionDetails = {
 	id: string;
 	goal: string;
@@ -64,22 +59,12 @@ export type SummarizedSessionDetails = {
 				NonNullable<Session["plan"]>["deliveryPolicy"]
 		  >["finalReviewPolicy"]
 		| null;
-	activeFeature: {
-		id: string;
-		title: string;
-		status: Feature["status"];
-		summary: string;
-	} | null;
+	activeFeature: SummarizedFeature | null;
 	featureProgress: {
 		completed: number;
 		total: number;
 	};
-	features: Array<{
-		id: string;
-		title: string;
-		status: Feature["status"];
-		summary: string;
-	}>;
+	features: SummarizedFeature[];
 	notes: Session["notes"];
 	artifacts: Session["artifacts"];
 	closure: Session["closure"];
@@ -107,64 +92,6 @@ export type SessionViewModel = {
 const NO_ACTIVE_SESSION_SUMMARY = "No active Flow session found.";
 const NO_ACTIVE_SESSION_GUIDANCE_SUMMARY =
 	"No active Flow session exists for this workspace.";
-
-type SummarizedFeature = SummarizedSessionDetails["features"][number];
-type SummarizedActiveFeature = SummarizedSessionDetails["activeFeature"];
-
-function summarizeFeature(feature: Feature): string {
-	return `${feature.id} (${feature.status}): ${feature.title}`;
-}
-
-function projectFeature(feature: Feature): SummarizedFeature {
-	return {
-		id: feature.id,
-		title: feature.title,
-		status: feature.status,
-		summary: feature.summary,
-	};
-}
-
-function projectActiveFeature(
-	feature: Feature | null,
-): SummarizedActiveFeature {
-	return feature ? projectFeature(feature) : null;
-}
-
-function sessionFeatures(session: Session): Feature[] {
-	return session.plan?.features ?? [];
-}
-
-function summarizePlanning(session: Session): SummarizedPlanning {
-	return {
-		repoProfile: session.planning.repoProfile,
-		stackProfile: session.planning.stackProfile,
-		standardsProfile: session.planning.standardsProfile,
-		research: session.planning.research,
-		implementationApproach: session.planning.implementationApproach,
-		decisionLog: session.planning.decisionLog,
-		replanLog: session.planning.replanLog,
-		...(session.planning.packageManager
-			? { packageManager: session.planning.packageManager }
-			: {}),
-		...(session.planning.packageManagerAmbiguous
-			? { packageManagerAmbiguous: true as const }
-			: {}),
-		...(session.planning.evidencePackets
-			? { evidencePackets: session.planning.evidencePackets }
-			: {}),
-	};
-}
-
-function activeFeatureForSession(
-	session: Session,
-	features: Feature[] = sessionFeatures(session),
-): Feature | null {
-	return (
-		features.find(
-			(feature) => feature.id === session.execution.activeFeatureId,
-		) ?? null
-	);
-}
 
 function missingSessionGuidance(
 	operator: SessionOperatorState,

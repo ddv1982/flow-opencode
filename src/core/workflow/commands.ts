@@ -1,11 +1,9 @@
 import type {
 	PlanArgs,
-	PlanningContext,
 	PlanningContextArgs,
 	ReviewerDecision,
-	Session,
 	WorkerResultArgs,
-} from "../../runtime/schema";
+} from "../../workflow/contracts";
 import {
 	applyPlan,
 	approvePlan,
@@ -14,7 +12,14 @@ import {
 	resetFeature,
 	selectPlanFeatures,
 	startRun,
-} from "../../runtime/transitions";
+} from "../../workflow/transitions";
+import {
+	collectAffectedFeatureIds,
+	normalizeAcceptedStateTimestamps,
+	normalizePlanningContextPatch,
+	rejectTransition,
+	requireTransitionPlan,
+} from "./commands-helpers";
 import type { WorkflowEvent } from "./events";
 import {
 	acceptWorkflowEvents,
@@ -81,90 +86,6 @@ export type WorkflowCommandContext = {
 	recordedAt: string;
 };
 
-function normalizePlanningContextPatch(
-	planning?: PlanningContextArgs | undefined,
-): Partial<PlanningContext> | undefined {
-	if (!planning) {
-		return undefined;
-	}
-
-	const normalized: Partial<PlanningContext> = {};
-	if (planning.repoProfile !== undefined) {
-		normalized.repoProfile = planning.repoProfile;
-	}
-	if (planning.packageManager !== undefined) {
-		normalized.packageManager = planning.packageManager;
-	}
-	if (planning.packageManagerAmbiguous !== undefined) {
-		normalized.packageManagerAmbiguous = planning.packageManagerAmbiguous;
-	}
-	if (planning.stackProfile !== undefined) {
-		normalized.stackProfile =
-			planning.stackProfile as PlanningContext["stackProfile"];
-	}
-	if (planning.standardsProfile !== undefined) {
-		normalized.standardsProfile =
-			planning.standardsProfile as PlanningContext["standardsProfile"];
-	}
-	if (planning.research !== undefined) {
-		normalized.research = planning.research;
-	}
-	if (planning.implementationApproach !== undefined) {
-		normalized.implementationApproach = {
-			chosenDirection: planning.implementationApproach.chosenDirection,
-			keyConstraints: planning.implementationApproach.keyConstraints ?? [],
-			validationSignals:
-				planning.implementationApproach.validationSignals ?? [],
-			sources: planning.implementationApproach.sources ?? [],
-		};
-	}
-	if (planning.decisionLog !== undefined) {
-		normalized.decisionLog = planning.decisionLog.map((decision) => ({
-			question: decision.question,
-			decisionMode: decision.decisionMode ?? "recommend_confirm",
-			decisionDomain: decision.decisionDomain ?? "architecture",
-			options: decision.options.map((option) => ({
-				label: option.label,
-				tradeoffs: option.tradeoffs ?? [],
-			})),
-			recommendation: decision.recommendation,
-			rationale: decision.rationale ?? [],
-		}));
-	}
-	if (planning.replanLog !== undefined) {
-		normalized.replanLog = planning.replanLog;
-	}
-	if (planning.evidencePackets !== undefined) {
-		normalized.evidencePackets = planning.evidencePackets;
-	}
-	return normalized;
-}
-
-function normalizeAcceptedStateTimestamps(
-	state: Session,
-	recordedAt: string,
-): Session {
-	const lastHistoryIndex = state.execution.history.length - 1;
-	return {
-		...state,
-		closure: state.closure ? { ...state.closure, recordedAt } : state.closure,
-		execution: {
-			...state.execution,
-			history: state.execution.history.map((entry, index) =>
-				index === lastHistoryIndex ? { ...entry, recordedAt } : entry,
-			),
-		},
-		timestamps: {
-			...state.timestamps,
-			updatedAt: recordedAt,
-			completedAt:
-				state.status === "completed"
-					? recordedAt
-					: state.timestamps.completedAt,
-		},
-	};
-}
-
 function requireState(
 	state: WorkflowState | null,
 ): WorkflowState | WorkflowDecision<WorkflowEvent> {
@@ -218,22 +139,19 @@ export function decideWorkflowCommand(
 			const planning = normalizePlanningContextPatch(command.planning);
 			const transition = applyPlan(current, command.plan, planning);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
-			if (!transition.value.plan) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					"Plan application did not produce a plan.",
-				);
+			const plan = requireTransitionPlan(
+				transition.value.plan,
+				"Plan application did not produce a plan.",
+			);
+			if (!("summary" in plan)) {
+				return plan;
 			}
 			return acceptWorkflowEvents([
 				{
 					type: "plan_applied",
-					plan: transition.value.plan,
+					plan,
 					planning,
 					recordedAt: context.recordedAt,
 				},
@@ -245,22 +163,19 @@ export function decideWorkflowCommand(
 				command.featureIds ? [...command.featureIds] : undefined,
 			);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
-			if (!transition.value.plan) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					"Plan approval did not produce a plan.",
-				);
+			const plan = requireTransitionPlan(
+				transition.value.plan,
+				"Plan approval did not produce a plan.",
+			);
+			if (!("summary" in plan)) {
+				return plan;
 			}
 			return acceptWorkflowEvents([
 				{
 					type: "plan_approved",
-					plan: transition.value.plan,
+					plan,
 					recordedAt: context.recordedAt,
 				},
 			]);
@@ -268,22 +183,19 @@ export function decideWorkflowCommand(
 		case "select_plan_features": {
 			const transition = selectPlanFeatures(current, [...command.featureIds]);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
-			if (!transition.value.plan) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					"Feature selection did not produce a plan.",
-				);
+			const plan = requireTransitionPlan(
+				transition.value.plan,
+				"Feature selection did not produce a plan.",
+			);
+			if (!("summary" in plan)) {
+				return plan;
 			}
 			return acceptWorkflowEvents([
 				{
 					type: "plan_features_selected",
-					plan: transition.value.plan,
+					plan,
 					recordedAt: context.recordedAt,
 				},
 			]);
@@ -291,11 +203,7 @@ export function decideWorkflowCommand(
 		case "start_run": {
 			const transition = startRun(current, command.featureId);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
 			if (transition.value.reason === "complete") {
 				return acceptWorkflowEvents([
@@ -325,11 +233,7 @@ export function decideWorkflowCommand(
 		case "record_reviewer_decision": {
 			const transition = recordReviewerDecision(current, command.decision);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
 			const decision = transition.value.execution.lastReviewerDecision;
 			if (!decision) {
@@ -356,11 +260,7 @@ export function decideWorkflowCommand(
 			}
 			const transition = completeRun(current, command.worker);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
 			return acceptWorkflowEvents([
 				{
@@ -378,28 +278,18 @@ export function decideWorkflowCommand(
 		case "reset_feature": {
 			const transition = resetFeature(current, command.featureId);
 			if (!transition.ok) {
-				return rejectWorkflowCommand(
-					"transition_rejected",
-					transition.message,
-					transition.recovery,
-				);
+				return rejectTransition(transition);
 			}
-			const affectedFeatureIds = transition.value.plan?.features
-				.filter((feature) => {
-					const previous = current.plan?.features.find(
-						(item) => item.id === feature.id,
-					);
-					return previous?.status !== feature.status;
-				})
-				.map((feature) => feature.id) ?? [command.featureId];
+			const affectedFeatureIds = collectAffectedFeatureIds(
+				current,
+				transition.value,
+				command.featureId,
+			);
 			return acceptWorkflowEvents([
 				{
 					type: "feature_reset",
 					featureId: command.featureId,
-					affectedFeatureIds:
-						affectedFeatureIds.length > 0
-							? affectedFeatureIds
-							: [command.featureId],
+					affectedFeatureIds,
 					summary:
 						transition.value.execution.lastSummary ??
 						`Reset feature '${command.featureId}'.`,

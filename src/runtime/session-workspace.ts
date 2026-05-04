@@ -10,7 +10,6 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
 import { parseStrictJsonObject } from "./json/strict-object";
 import {
 	getActiveSessionsDir,
@@ -23,25 +22,18 @@ import {
 } from "./paths";
 import { type Session, SessionSchema } from "./schema";
 import {
+	mergeGitignoreEntries,
+	parseGitignoreEntries,
+	renderGitignoreEntries,
+} from "./session-workspace-gitignore";
+import {
 	assertMutableWorkspaceRoot,
 	type MutableWorkspaceRoot,
 } from "./workspace-root";
 
-const FLOW_GITIGNORE_ENTRIES = [
-	"active/",
-	"stored/",
-	"completed/",
-	"events/",
-	"checkpoints/",
-	"projections/",
-	"locks/",
-	"standards-profile.json",
-] as const;
-const sessionSaveQueues = new Map<string, Promise<void>>();
+export { withSessionSaveLock } from "./session-workspace-locks";
+
 const preparedWorkspaceGitignoreCache = new Map<string, string>();
-const SESSION_SAVE_LOCK_DIRECTORY_NAME = "session-save.lock";
-const SESSION_SAVE_LOCK_RETRY_DELAY_MS = 25;
-const SESSION_SAVE_LOCK_TIMEOUT_MS = 30_000;
 const preparedWorkspaceRoots = new Set<string>();
 const preparedSessionDirs = new Set<string>();
 const sessionReadCache = new Map<
@@ -119,68 +111,6 @@ export function resetSessionWorkspaceFsForTests(): void {
 	sessionWorkspaceFs.rename = rename;
 }
 
-async function acquireFilesystemSessionSaveLock(
-	worktree: MutableWorkspaceRoot,
-): Promise<() => Promise<void>> {
-	const flowDir = getFlowDir(worktree);
-	const lockDir = join(flowDir, SESSION_SAVE_LOCK_DIRECTORY_NAME);
-	const startedAt = Date.now();
-	while (true) {
-		try {
-			await mkdir(lockDir);
-			return async () => {
-				await rm(lockDir, { recursive: true, force: true });
-			};
-		} catch (error) {
-			const code = (error as NodeJS.ErrnoException).code;
-			if (code === "ENOENT") {
-				await mkdir(flowDir, { recursive: true });
-				continue;
-			}
-			if (code !== "EEXIST") {
-				throw error;
-			}
-			if (Date.now() - startedAt >= SESSION_SAVE_LOCK_TIMEOUT_MS) {
-				throw new Error(
-					`Timed out waiting for session save lock at ${lockDir}. If no Flow process is currently writing session state, remove this stale lock directory and retry.`,
-				);
-			}
-			await sleep(SESSION_SAVE_LOCK_RETRY_DELAY_MS);
-		}
-	}
-}
-
-export async function withSessionSaveLock<T>(
-	worktree: MutableWorkspaceRoot,
-	task: () => Promise<T>,
-): Promise<T> {
-	const previous = sessionSaveQueues.get(worktree) ?? Promise.resolve();
-	let release = () => {};
-	const current = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	const queued = previous.then(() => current);
-	sessionSaveQueues.set(worktree, queued);
-
-	let releaseFilesystemLock: (() => Promise<void>) | undefined;
-	try {
-		await previous;
-		releaseFilesystemLock = await acquireFilesystemSessionSaveLock(worktree);
-		return await task();
-	} finally {
-		try {
-			if (releaseFilesystemLock) {
-				await releaseFilesystemLock();
-			}
-		} finally {
-			release();
-			if (sessionSaveQueues.get(worktree) === queued) {
-				sessionSaveQueues.delete(worktree);
-			}
-		}
-	}
-}
-
 export async function readSessionFromPath(
 	sessionPath: string,
 ): Promise<Session> {
@@ -220,23 +150,15 @@ async function ensureWorkspaceAtRoot(
 
 	try {
 		existingContents = await readFile(gitignorePath, "utf8");
-		existingEntries = existingContents
-			.split(/\r?\n/)
-			.filter((line) => line.length > 0);
+		existingEntries = parseGitignoreEntries(existingContents);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
 			throw error;
 		}
 	}
 
-	const nextEntries = [...existingEntries];
-	for (const entry of FLOW_GITIGNORE_ENTRIES) {
-		if (!nextEntries.includes(entry)) {
-			nextEntries.push(entry);
-		}
-	}
-
-	const nextContents = nextEntries.map((entry) => `${entry}\n`).join("");
+	const nextEntries = mergeGitignoreEntries(existingEntries);
+	const nextContents = renderGitignoreEntries(nextEntries);
 	if (preparedWorkspaceGitignoreCache.get(gitignorePath) === existingContents) {
 		return;
 	}

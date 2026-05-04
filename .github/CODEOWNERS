@@ -1,0 +1,10 @@
+# Default ownership
+* @ddv1982
+
+# Phase 5 foundation ownership boundaries
+/src/core/ @ddv1982
+/src/runtime/ @ddv1982
+/src/persistence/ @ddv1982
+/src/adapters/ @ddv1982
+/docs/ @ddv1982
+/tests/ @ddv1982

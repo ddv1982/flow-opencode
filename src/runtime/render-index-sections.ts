@@ -1,8 +1,17 @@
+import { activeDecisionGate } from "./domain";
 import {
-	activeDecisionGate,
-	decisionRequiresPause,
-	summarizeCompletion,
-} from "./domain";
+	renderArtifactLine,
+	renderExecutionHistoryLine,
+	renderValidationLine,
+} from "./render-history-formatters";
+import {
+	maybeApproachSection,
+	maybeDecisionLogSection,
+	maybeReplanLogSection,
+	maybeStackProfileSection,
+	maybeStandardsProfileSection,
+	renderPlanOverviewLines,
+} from "./render-index-plan-sections";
 import {
 	bulletList,
 	formatFollowUpLines,
@@ -14,101 +23,6 @@ import {
 } from "./render-sections-shared";
 import type { Feature, Session } from "./schema";
 import { deriveNextCommand } from "./session-operator-state";
-
-function maybeApproachSection(session: Session): string {
-	const approach = session.planning.implementationApproach;
-	if (!approach) {
-		return "";
-	}
-
-	return joinSections([
-		"## Implementation Approach\n\n" +
-			`- chosen direction: ${toInlineText(approach.chosenDirection)}`,
-		maybeTitledList("Key Constraints", approach.keyConstraints, "###"),
-		maybeTitledList("Validation Signals", approach.validationSignals, "###"),
-		maybeTitledList("Sources", approach.sources, "###"),
-	]).trimEnd();
-}
-
-function maybeDecisionLogSection(session: Session): string {
-	const decisions = session.planning.decisionLog;
-	if (decisions.length === 0) {
-		return "";
-	}
-
-	return `## Decision Log\n\n${bulletList(
-		decisions.map(
-			(decision) =>
-				`${decision.decisionDomain} | ${decision.decisionMode} | pause: ${decisionRequiresPause(decision.decisionMode) ? "yes" : "no"} | ${toInlineText(decision.question)} | recommended: ${toInlineText(decision.recommendation)} | options: ${decision.options.map((option) => toInlineText(option.label)).join(", ")}`,
-		),
-	)}`;
-}
-
-function maybeReplanLogSection(session: Session): string {
-	const replans = session.planning.replanLog;
-	if (replans.length === 0) {
-		return "";
-	}
-
-	return `## Replan Log\n\n${bulletList(
-		replans.map(
-			(replan) =>
-				`${replan.recordedAt} | ${replan.reason} | ${toInlineText(replan.summary)} | failed assumption: ${toInlineText(replan.failedAssumption)} | adjust: ${toInlineText(replan.recommendedAdjustment)}`,
-		),
-	)}`;
-}
-
-function maybeStackProfileSection(session: Session): string {
-	const profile = session.planning.stackProfile;
-	if (!profile) {
-		return "";
-	}
-
-	const sections: Array<{
-		label: string;
-		entries: Array<{ name: string }>;
-	}> = [
-		{ label: "languages", entries: profile.languages },
-		{ label: "frameworks", entries: profile.frameworks },
-		{ label: "runtimes", entries: profile.runtimes },
-		{ label: "package managers", entries: profile.packageManagers },
-		{ label: "tools", entries: profile.tools },
-	];
-	const lines = sections
-		.map(({ label, entries }) => {
-			const names = entries.map((entry) => entry.name);
-			return names.length > 0 ? `- ${label}: ${names.join(", ")}` : "";
-		})
-		.filter(Boolean);
-
-	return lines.length === 0 ? "" : `## Stack Profile\n\n${lines.join("\n")}`;
-}
-
-function maybeStandardsProfileSection(session: Session): string {
-	const profile = session.planning.standardsProfile;
-	if (!profile) {
-		return "";
-	}
-
-	const lines = [
-		...profile.precedence.map((item) => `- precedence: ${toInlineText(item)}`),
-		...profile.localGuidelines.map(
-			(item) => `- local: ${toInlineText(item.title)} | ${item.reference}`,
-		),
-		...profile.externalGuidance.map(
-			(item) => `- external: ${toInlineText(item.title)} | ${item.reference}`,
-		),
-		...profile.rules.map((item) => `- rule: ${toInlineText(item.summary)}`),
-		...profile.gaps.map(
-			(item) =>
-				`- gap: ${toInlineText(item.stackItem)} | ${toInlineText(item.reason)} | research: ${item.suggestedResearch.map(toInlineText).join(", ")}`,
-		),
-	];
-
-	return lines.length === 0
-		? ""
-		: `## Standards Profile\n\n${lines.join("\n")}`;
-}
 
 function formatFeatureLine(feature: Feature): string {
 	return `- ${feature.id} | ${feature.status} | ${toInlineText(feature.title)}`;
@@ -177,52 +91,7 @@ ${summaryLines.join("\n")}`;
 
 function renderPlanSection(session: Session, features: Feature[]): string {
 	const plan = session.plan;
-	const activeFeature =
-		features.find(
-			(feature) => feature.id === session.execution.activeFeatureId,
-		) ?? null;
-	const completion = summarizeCompletion(session);
-	const completedCount =
-		completion?.completedFeatures ??
-		features.filter((feature) => feature.status === "completed").length;
-	const planLines = [
-		`- summary: ${toInlineText(plan?.summary ?? "No plan yet.")}`,
-		`- overview: ${toInlineText(plan?.overview ?? "No plan yet.")}`,
-		...(session.planning.packageManager
-			? [`- package manager: ${session.planning.packageManager}`]
-			: []),
-		...(session.planning.packageManagerAmbiguous
-			? [
-					"- package manager evidence: ambiguous (multiple lockfile families detected in the same directory)",
-				]
-			: []),
-		`- progress: ${completedCount}/${features.length} completed`,
-		`- active feature: ${activeFeature ? activeFeature.id : "none"}`,
-	];
-
-	if (completion) {
-		planLines.push(
-			`- completion target: ${completion.targetCompletedFeatures}/${completion.totalFeatures} features`,
-		);
-		planLines.push(
-			`- stop rule: ${plan?.deliveryPolicy?.stopRule ?? "ship_when_clean"}`,
-		);
-		planLines.push(
-			`- priority mode: ${plan?.deliveryPolicy?.priorityMode ?? "balanced"}`,
-		);
-		planLines.push(
-			`- final review policy: ${plan?.deliveryPolicy?.finalReviewPolicy ?? "detailed"}`,
-		);
-		planLines.push(
-			`- defer allowed: ${plan?.deliveryPolicy?.deferAllowed ? "yes" : "no"}`,
-		);
-		planLines.push(
-			`- pending allowed at completion: ${completion.canCompleteWithPendingFeatures ? "yes" : "no"}`,
-		);
-		planLines.push(
-			`- active feature triggers session completion: ${completion.activeFeatureTriggersSessionCompletion ? "yes" : "no"}`,
-		);
-	}
+	const planLines = renderPlanOverviewLines(session, features);
 
 	return joinSections([
 		`## Plan
@@ -257,7 +126,7 @@ function renderChangedArtifactsSection(session: Session): string {
 		return "";
 	}
 
-	return `## Changed Artifacts\n\n${bulletList(session.artifacts.map((artifact) => (artifact.kind ? `${artifact.path} (${artifact.kind})` : artifact.path)))}`;
+	return `## Changed Artifacts\n\n${bulletList(session.artifacts.map(renderArtifactLine))}`;
 }
 
 function renderLastValidationRunSection(session: Session): string {
@@ -265,7 +134,7 @@ function renderLastValidationRunSection(session: Session): string {
 		return "";
 	}
 
-	return `## Last Validation Run\n\n${bulletList(session.execution.lastValidationRun.map((item) => `${item.status} | ${item.command} | ${item.summary}`))}`;
+	return `## Last Validation Run\n\n${bulletList(session.execution.lastValidationRun.map(renderValidationLine))}`;
 }
 
 function renderExecutionHistoryOverviewSection(session: Session): string {
@@ -273,7 +142,7 @@ function renderExecutionHistoryOverviewSection(session: Session): string {
 		return "";
 	}
 
-	return `## Execution History\n\n${bulletList(session.execution.history.map((item) => `${item.recordedAt} | ${item.featureId} | ${item.status} | ${item.summary}`))}`;
+	return `## Execution History\n\n${bulletList(session.execution.history.map(renderExecutionHistoryLine))}`;
 }
 
 export function renderIndexDoc(session: Session): string {
