@@ -1,12 +1,15 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { normalizeReviewReport } from "../src/audit/report-normalizer";
 import { renderReviewReport } from "../src/audit/report-presenter";
 import {
 	type ReviewReport,
 	ReviewReportSchema,
 } from "../src/audit/report-schema";
-import { isFirstPartySourcePath } from "./prompt-eval-helpers";
+import {
+	listJsonFixtureFilesRecursive,
+	sourcePathExistsWithinRepo,
+} from "./prompt-eval-helpers";
 
 export type PromptBehaviorCriterion =
 	| "schema_valid"
@@ -39,6 +42,7 @@ export type PromptBehaviorPacketExpectations = {
 	knownExclusions?: string[];
 	alreadyCoveredFindings?: string[];
 	forbiddenDirectReview?: string[];
+	requiredDirectReview?: string[];
 };
 
 export type PromptBehaviorEvalCase = {
@@ -106,15 +110,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function sourcePathExists(path: string): boolean {
-	if (!isFirstPartySourcePath(path)) {
-		return false;
-	}
-	const resolved = resolve(PROMPT_BEHAVIOR_EVAL_REPO_ROOT, path);
-	return (
-		(resolved === PROMPT_BEHAVIOR_EVAL_REPO_ROOT ||
-			resolved.startsWith(PROMPT_BEHAVIOR_EVAL_REPO_ROOT + sep)) &&
-		existsSync(resolved)
-	);
+	return sourcePathExistsWithinRepo(path, PROMPT_BEHAVIOR_EVAL_REPO_ROOT);
 }
 
 export function validatePromptBehaviorEvalCorpus(
@@ -187,6 +183,7 @@ export function validatePromptBehaviorEvalCorpus(
 				"knownExclusions",
 				"alreadyCoveredFindings",
 				"forbiddenDirectReview",
+				"requiredDirectReview",
 			] as const) {
 				const field = candidate.packetExpectations[fieldName];
 				if (
@@ -213,18 +210,7 @@ export function validatePromptBehaviorEvalCorpus(
 }
 
 export function listPromptBehaviorEvalFixtureFiles(): string[] {
-	function walk(dir: string): string[] {
-		return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-			const absolutePath = join(dir, entry.name);
-			if (entry.isDirectory()) {
-				return walk(absolutePath);
-			}
-			return entry.isFile() && entry.name.endsWith(".json")
-				? [absolutePath]
-				: [];
-		});
-	}
-	return walk(PROMPT_BEHAVIOR_EVAL_FIXTURE_DIR).sort();
+	return listJsonFixtureFilesRecursive(PROMPT_BEHAVIOR_EVAL_FIXTURE_DIR);
 }
 
 export function readPromptBehaviorEvalCorpus(): PromptBehaviorEvalCase[] {
@@ -353,6 +339,13 @@ function packetExpectationsPreserved(
 	if (
 		(expectations.forbiddenDirectReview ?? []).some((value) =>
 			directlyReviewedText.includes(value.toLowerCase()),
+		)
+	) {
+		return false;
+	}
+	if (
+		(expectations.requiredDirectReview ?? []).some(
+			(value) => !directlyReviewedText.includes(value.toLowerCase()),
 		)
 	) {
 		return false;

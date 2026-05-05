@@ -6,6 +6,7 @@ import {
 	FEATURE_ID_PATTERN,
 } from "../../../runtime/constants";
 import {
+	FinalReviewSchema as RuntimeFinalReviewSchema,
 	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
 	FlowReviewRecordFinalArgsSchema as RuntimeFlowReviewRecordFinalArgsSchema,
 	OutcomeSchema as RuntimeOutcomeSchema,
@@ -63,6 +64,25 @@ export const FlowSessionCloseArgsShape = {
 };
 export const FlowPlanContextRecordArgsShape =
 	RuntimePlanningContextArgsSchema.shape;
+
+const CompactReviewContextPackArgSchema = z
+	.object({
+		task: z.string().min(1),
+		compareBase: z.string().optional(),
+		changedFiles: z.array(z.string()).optional(),
+		includedContext: z.array(z.unknown()).optional(),
+		relationships: z.array(z.unknown()).optional(),
+		validationEvidence: z.array(z.unknown()).optional(),
+		suggestedValidation: z.array(z.string()).optional(),
+		coverageGaps: z.array(z.string()).optional(),
+		reviewedSurfaces: z.array(z.string()).optional(),
+	})
+	.strict()
+	.optional();
+const RuntimeFinalReviewRawArgsSchema = RuntimeFinalReviewSchema.extend({
+	reviewContextPack: CompactReviewContextPackArgSchema,
+});
+
 export const FlowPlanApplyArgsShape = {
 	plan: RuntimePlanArgsSchema,
 	planning: RuntimePlanningContextArgsSchema.optional(),
@@ -71,11 +91,14 @@ export const FlowRunCompleteFeatureArgsShape = {
 	...RuntimeWorkerResultBaseSchema.shape,
 	status: z.enum(["ok", "needs_input"]),
 	outcome: RuntimeOutcomeSchema.optional(),
+	finalReview: RuntimeFinalReviewRawArgsSchema.optional(),
 };
 export const FlowReviewRecordFeatureArgsShape =
 	RuntimeFlowReviewRecordFeatureArgsSchema.shape;
-export const FlowReviewRecordFinalArgsShape =
-	RuntimeFlowReviewRecordFinalArgsSchema.shape;
+export const FlowReviewRecordFinalArgsShape = {
+	...RuntimeFlowReviewRecordFinalArgsSchema.shape,
+	reviewContextPack: CompactReviewContextPackArgSchema,
+};
 export const FlowReviewRenderArgsShape = {
 	...ReviewReportSchema.shape,
 	view: z.enum(["human", "structured", "both"]).optional(),

@@ -4,17 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	buildReviewCapturePrompt,
+	buildReviewCaptureTemplate,
 	checkReviewCaptureScenarios,
 	readReviewCaptureScenarios,
 	scoreReviewCaptureFile,
 	writeReviewCapturePromptExports,
 } from "../scripts/cross-area/review-prompt-capture";
+import { scorePromptBehaviorModelOutput } from "./prompt-behavior-eval-helpers";
 
 describe("review prompt capture harness", () => {
 	test("loads providerless capture scenarios", async () => {
 		const scenarios = await readReviewCaptureScenarios();
 
-		expect(scenarios).toHaveLength(2);
+		expect(scenarios).toHaveLength(3);
 		expect(scenarios[0]?.id).toBe(
 			"flow-review-codebase-architecture-structured",
 		);
@@ -52,7 +54,7 @@ describe("review prompt capture harness", () => {
 
 	test("checks capture scenarios without writing prompt exports", async () => {
 		await expect(checkReviewCaptureScenarios()).resolves.toBe(
-			"Review capture scenarios valid: 2",
+			"Review capture scenarios valid: 3",
 		);
 	});
 
@@ -61,7 +63,7 @@ describe("review prompt capture harness", () => {
 		try {
 			const exports = await writeReviewCapturePromptExports({ outputDir });
 
-			expect(exports).toHaveLength(2);
+			expect(exports).toHaveLength(3);
 			const [captureExport] = exports;
 			if (!captureExport) {
 				throw new Error("Expected a review capture export.");
@@ -86,6 +88,180 @@ describe("review prompt capture harness", () => {
 		} finally {
 			await rm(outputDir, { recursive: true, force: true });
 		}
+	});
+
+	test("rejects changed-files-only review and accepts connected-context coverage gap accounting", async () => {
+		const scenarios = await readReviewCaptureScenarios();
+		const scenario = scenarios.find(
+			(item) =>
+				item.id === "flow-review-connected-context-coverage-gap-structured",
+		);
+		if (!scenario) {
+			throw new Error("Expected connected-context review capture scenario.");
+		}
+		const template = JSON.parse(buildReviewCaptureTemplate(scenario)) as {
+			minPassingScore: number;
+			packetExpectations?: {
+				selectedContext?: string[];
+				relationships?: string[];
+				ambiguities?: string[];
+				knownExclusions?: string[];
+				alreadyCoveredFindings?: string[];
+				forbiddenDirectReview?: string[];
+			};
+		};
+
+		const requiredDirectReview = [
+			"Caller/click-handler context: src/runtime/application/session-read-actions.ts",
+			"Lifecycle/state owner context: src/runtime/domain/final-review-coverage.ts",
+			"Related tests: tests/runtime/final-review-contracts.test.ts",
+		];
+		const packetExpectations = template.packetExpectations
+			? {
+					...template.packetExpectations,
+					requiredDirectReview,
+				}
+			: undefined;
+
+		const changedFilesOnly = scorePromptBehaviorModelOutput({
+			id: scenario.id,
+			title: `${scenario.title} (changed files only)`,
+			minPassingScore: template.minPassingScore,
+			...(packetExpectations ? { packetExpectations } : {}),
+			modelOutput: {
+				requestedDepth: "full_audit",
+				achievedDepth: "deep_audit",
+				repoSummary: "Reviewed only changed files.",
+				overallVerdict: "No issue found after reviewing changed files only.",
+				discoveredSurfaces: [
+					{
+						name: "Changed async action file",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/runtime/application/session-actions.ts:120-180"],
+					},
+				],
+				coverageNotes: [
+					"Changed files only were reviewed.",
+					"Changed async/action file: src/runtime/application/session-actions.ts",
+					"Caller/click-handler context: src/runtime/application/session-read-actions.ts",
+					"Lifecycle/state owner context: src/runtime/domain/final-review-coverage.ts",
+					"Related tests: tests/runtime/final-review-contracts.test.ts",
+					"Trace click-handler -> async action -> lifecycle/state owner before concluding review coverage.",
+					"If product-path behavior was not validated end-to-end, report it as an explicit coverage gap.",
+					"Excluded: Do not treat changed-files-only review as sufficient evidence.",
+					"Do not claim full codebase coverage beyond the selected async/action path.",
+				],
+				validationRun: [
+					{
+						command: "not run",
+						status: "not_run",
+						summary: "Validation not run in this read-only review.",
+					},
+				],
+				findings: [
+					{
+						title: "No findings from changed-files-only review",
+						category: "hardening_opportunity",
+						confidence: "likely",
+						severity: "low",
+						evidence: ["src/runtime/application/session-actions.ts:120-180"],
+						impact: "Connected behavior could be missed.",
+						remediation: "Review linked callers and tests.",
+					},
+				],
+				nextSteps: ["Narrow review is complete."],
+			},
+		});
+
+		expect(changedFilesOnly.passed).toBeFalse();
+		expect(changedFilesOnly.actualFailures).toContain(
+			"packet_boundaries_preserved",
+		);
+
+		const connectedContext = scorePromptBehaviorModelOutput({
+			id: scenario.id,
+			title: `${scenario.title} (connected context accounted)`,
+			minPassingScore: template.minPassingScore,
+			...(packetExpectations ? { packetExpectations } : {}),
+			modelOutput: {
+				requestedDepth: "full_audit",
+				achievedDepth: "deep_audit",
+				repoSummary:
+					"Reviewed async action behavior with caller path, state owner, and related tests.",
+				overallVerdict:
+					"No confirmed blocker, but product-path coverage remains incomplete.",
+				discoveredSurfaces: [
+					{
+						name: "Changed async/action file",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/runtime/application/session-actions.ts:120-180"],
+					},
+					{
+						name: "Caller/click-handler context: src/runtime/application/session-read-actions.ts",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: [
+							"src/runtime/application/session-read-actions.ts:40-110",
+						],
+					},
+					{
+						name: "Lifecycle/state owner context: src/runtime/domain/final-review-coverage.ts",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/runtime/domain/final-review-coverage.ts:1-80"],
+					},
+					{
+						name: "Related tests: tests/runtime/final-review-contracts.test.ts",
+						category: "tests",
+						reviewStatus: "directly_reviewed",
+						evidence: ["tests/runtime/final-review-contracts.test.ts:1-120"],
+					},
+				],
+				coverageNotes: [
+					"Changed async/action file: src/runtime/application/session-actions.ts",
+					"Caller/click-handler context: src/runtime/application/session-read-actions.ts",
+					"Lifecycle/state owner context: src/runtime/domain/final-review-coverage.ts",
+					"Related tests: tests/runtime/final-review-contracts.test.ts",
+					"Trace click-handler -> async action -> lifecycle/state owner before concluding review coverage.",
+					"If product-path behavior was not validated end-to-end, report it as an explicit coverage gap.",
+					"Excluded: Do not treat changed-files-only review as sufficient evidence.",
+					"Do not claim full codebase coverage beyond the selected async/action path.",
+					"Product-path gap: tests cover contracts but not end-to-end click flow through async action timing.",
+				],
+				validationRun: [
+					{
+						command: "bun test tests/runtime/final-review-contracts.test.ts",
+						status: "passed",
+						summary:
+							"Related tests pass, but they do not prove full normal product path coverage.",
+					},
+				],
+				findings: [
+					{
+						title: "Normal product path coverage gap for async click flow",
+						category: "hardening_opportunity",
+						confidence: "likely",
+						severity: "medium",
+						evidence: [
+							"src/runtime/application/session-read-actions.ts:40-110",
+							"tests/runtime/final-review-contracts.test.ts:1-120",
+						],
+						impact:
+							"Regression in caller->action timing can escape contract-focused tests.",
+						remediation:
+							"Add an end-to-end product-path test that exercises click-handler to async action lifecycle ownership.",
+					},
+				],
+				nextSteps: [
+					"Add product-path test coverage for click-handler to async action lifecycle behavior.",
+				],
+			},
+		});
+
+		expect(connectedContext.passed).toBeTrue();
+		expect(connectedContext.actualFailures).toHaveLength(0);
 	});
 
 	test("scores a captured structured review without a model API", async () => {

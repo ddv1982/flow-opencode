@@ -52,6 +52,48 @@
 		}
 	},
 	{
+		"id": "flow-review-connected-context-coverage-gap-structured",
+		"title": "Flow review connected context + product-path coverage gap audit",
+		"arguments": "detailed Review this codebase change as a targeted review packet. Reject changed-files-only reasoning. Return raw/structured JSON for eval scoring.",
+		"outputView": "structured",
+		"fileMap": "flow-opencode\n├── src\n│   ├── runtime\n│   │   ├── application\n│   │   │   ├── session-actions.ts +\n│   │   │   └── session-read-actions.ts +\n│   │   └── domain\n│   │       ├── review-content-discovery.ts +\n│   │       └── final-review-coverage.ts +\n│   └── prompts\n│       ├── contracts.ts +\n│       └── fragments.ts +\n├── tests\n│   ├── review-prompt-capture.test.ts +\n│   ├── prompt-behavior-eval-helpers.ts +\n│   └── runtime\n│       └── final-review-contracts.test.ts +\n└── package.json",
+		"notes": [
+			"This scenario forces connected-context accounting from an async/action entrypoint.",
+			"A review that only claims changed files were reviewed should fail packet-boundary scoring."
+		],
+		"reviewPacket": {
+			"goal": "Verify review coverage does not collapse to changed files only when async action edges imply broader product-path risk.",
+			"selectedContext": {
+				"included": [
+					"Changed async/action file: src/runtime/application/session-actions.ts",
+					"Caller/click-handler context: src/runtime/application/session-read-actions.ts",
+					"Lifecycle/state owner context: src/runtime/domain/final-review-coverage.ts",
+					"Related tests: tests/runtime/final-review-contracts.test.ts"
+				],
+				"excluded": [
+					"Do not claim full codebase coverage beyond the selected async/action path."
+				]
+			},
+			"relationships": [
+				"Trace click-handler -> async action -> lifecycle/state owner before concluding review coverage."
+			],
+			"ambiguities": [
+				"If product-path behavior was not validated end-to-end, report it as an explicit coverage gap."
+			],
+			"knownExclusions": [
+				"Do not treat changed-files-only review as sufficient evidence."
+			],
+			"evidenceRequirements": [
+				"Use concrete path:line evidence for the async action, caller context, state/lifecycle owner, and related tests."
+			],
+			"doneWhen": [
+				"Review output distinguishes directly reviewed files from connected context.",
+				"Connected context (caller/click-handler, lifecycle/state owner, related tests) is represented as discovered surfaces, not only coverage-note text.",
+				"Coverage notes include an explicit product-path validation gap when tests do not cover end-to-end behavior."
+			]
+		}
+	},
+	{
 		"id": "flow-review-adversarial-failure-modes-structured",
 		"title": "Flow review adversarial failure-mode audit",
 		"arguments": "detailed Review this codebase for adversarial failure-mode coverage across lifecycle/reentrancy, async state transitions, persistence recovery, accessibility/interaction semantics where applicable, and test-oracle authenticity. Return raw/structured JSON for eval scoring.",

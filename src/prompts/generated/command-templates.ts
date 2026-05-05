@@ -125,7 +125,7 @@ ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 - Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
-- Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using the direct reviewer decision object.
+- Otherwise implement exactly one feature, run targeted validation, review changed files plus discovered connected context (changed files are the seed, not the boundary), fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using the direct reviewer decision object.
 ${FLOW_WORKER_REVIEW_TASK_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}

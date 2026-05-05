@@ -7,9 +7,24 @@ export {
 	type FinalReviewSurface,
 	finalReviewDepthMatchesPolicy,
 	isKnownFinalReviewSurface,
+	type ReviewContextPack,
+	type ReviewContextPackInput,
+	type ReviewContextRelationship,
+	type ReviewDiscoveryReason,
+	type ReviewDiscoverySurface,
+	type ReviewIncludedContext,
+	type ReviewValidationEvidence,
 } from "./final-review-coverage";
 export { validatePlanGraph } from "./plan-graph-validation";
 export { selectProjectedFeatureSubset } from "./plan-projection";
+export {
+	buildReviewContextPack,
+	deriveReviewContextPackSurfaces,
+	describeReviewContextPackGroundingFailure,
+	REVIEW_DISCOVERY_REASONS,
+	reviewContextPackHasSurfaceEvidence,
+	surfacesForReviewDiscoveryReason,
+} from "./review-content-discovery";
 export {
 	buildReviewerDecision,
 	type RecordReviewerDecisionInput,

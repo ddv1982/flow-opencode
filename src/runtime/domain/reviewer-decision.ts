@@ -3,6 +3,10 @@ import {
 	detailedFinalReviewRequirementFailures,
 	isKnownFinalReviewSurface,
 } from "./final-review-coverage";
+import {
+	buildReviewContextPack,
+	type ReviewContextPackInput,
+} from "./review-content-discovery";
 import { detailedFinalReviewDecisionFailureMessage } from "./review-messages";
 import {
 	finalReviewPolicyForPlan,
@@ -28,6 +32,7 @@ export type RecordReviewerDecisionInput = {
 		  }
 		| undefined;
 	evidencePackets?: FinalScopeReviewerDecision["evidencePackets"];
+	reviewContextPack?: ReviewContextPackInput | undefined;
 	integrationChecks?: string[] | undefined;
 	regressionChecks?: string[] | undefined;
 	remainingGaps?: string[] | undefined;
@@ -175,6 +180,13 @@ export function buildReviewerDecision(
 				},
 				...(input.evidencePackets
 					? { evidencePackets: input.evidencePackets }
+					: {}),
+				...(input.reviewContextPack
+					? {
+							reviewContextPack: buildReviewContextPack(
+								input.reviewContextPack,
+							),
+						}
 					: {}),
 				integrationChecks: (input.integrationChecks ??
 					[]) as FinalScopeReviewerDecision["integrationChecks"],

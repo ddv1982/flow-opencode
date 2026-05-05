@@ -1,12 +1,15 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
 	FLOW_PROMPT_MODE_CAPTURE_MODES,
 	type FlowPromptCaptureMode,
 	getFlowModeForbiddenTools,
 	getFlowModeSourcePaths,
 } from "../src/prompts/mode-contracts";
-import { isFirstPartySourcePath } from "./prompt-eval-helpers";
+import {
+	listJsonFixtureFilesRecursive,
+	sourcePathExistsWithinRepo,
+} from "./prompt-eval-helpers";
 
 export type PromptModeBehaviorMode = FlowPromptCaptureMode;
 
@@ -98,15 +101,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function sourcePathExists(path: string): boolean {
-	if (!isFirstPartySourcePath(path)) {
-		return false;
-	}
-	const resolved = resolve(PROMPT_MODE_BEHAVIOR_EVAL_REPO_ROOT, path);
-	return (
-		(resolved === PROMPT_MODE_BEHAVIOR_EVAL_REPO_ROOT ||
-			resolved.startsWith(PROMPT_MODE_BEHAVIOR_EVAL_REPO_ROOT + sep)) &&
-		existsSync(resolved)
-	);
+	return sourcePathExistsWithinRepo(path, PROMPT_MODE_BEHAVIOR_EVAL_REPO_ROOT);
 }
 
 function assertStringArray(
@@ -246,18 +241,7 @@ export function validatePromptModeBehaviorEvalCorpus(
 }
 
 export function listPromptModeBehaviorEvalFixtureFiles(): string[] {
-	function walk(dir: string): string[] {
-		return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-			const absolutePath = join(dir, entry.name);
-			if (entry.isDirectory()) {
-				return walk(absolutePath);
-			}
-			return entry.isFile() && entry.name.endsWith(".json")
-				? [absolutePath]
-				: [];
-		});
-	}
-	return walk(PROMPT_MODE_BEHAVIOR_EVAL_FIXTURE_DIR).sort();
+	return listJsonFixtureFilesRecursive(PROMPT_MODE_BEHAVIOR_EVAL_FIXTURE_DIR);
 }
 
 export function readPromptModeBehaviorEvalCorpus(): PromptModeBehaviorEvalCase[] {

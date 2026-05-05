@@ -9,9 +9,23 @@ import {
 	validationCommandsForWorker,
 } from "./final-review-coverage-evidence";
 import { normalizeArtifactPath } from "./final-review-coverage-paths";
+import {
+	describeReviewContextPackGroundingFailure,
+	type ReviewContextPack,
+	reviewContextPackHasSurfaceEvidence,
+} from "./review-content-discovery";
 import { finalReviewPolicyForPlan } from "./workflow-policy";
 
 export type { FinalReviewSurface } from "./final-review-coverage-evidence";
+export type {
+	ReviewContextPack,
+	ReviewContextPackInput,
+	ReviewContextRelationship,
+	ReviewDiscoveryReason,
+	ReviewDiscoverySurface,
+	ReviewIncludedContext,
+	ReviewValidationEvidence,
+} from "./review-content-discovery";
 
 export type FinalReviewCoverageTarget = {
 	reviewDepth: string;
@@ -26,6 +40,9 @@ export type FinalReviewCoverageTarget = {
 		| undefined;
 	integrationChecks?: string[] | undefined;
 	regressionChecks?: string[] | undefined;
+	remainingGaps?: string[] | undefined;
+	suggestedValidation?: string[] | undefined;
+	reviewContextPack?: ReviewContextPack | undefined;
 };
 
 export type DetailedFinalReviewRequirementFailure =
@@ -127,6 +144,29 @@ function finalReviewCoverageFailureReasons(
 		reasons.push("must include evidenceRefs");
 	}
 
+	if (review.reviewContextPack) {
+		const reviewContextPackFailure = describeReviewContextPackGroundingFailure(
+			review.reviewContextPack,
+			{
+				changedArtifacts: artifactPaths,
+				validationCommands,
+			},
+		);
+		if (reviewContextPackFailure) {
+			reasons.push(reviewContextPackFailure);
+		}
+
+		const missingPackSurfaces =
+			review.reviewContextPack.reviewedSurfaces.filter(
+				(surface) => !review.reviewedSurfaces.includes(surface),
+			);
+		if (missingPackSurfaces.length > 0) {
+			reasons.push(
+				`must reflect reviewContextPack reviewedSurfaces in reviewedSurfaces: ${missingPackSurfaces.join(", ")}`,
+			);
+		}
+	}
+
 	const invalidArtifactRefs = artifactRefPaths.filter(
 		(path) => !actualArtifactSet.has(path),
 	);
@@ -186,7 +226,17 @@ function finalReviewCoverageFailureReasons(
 	);
 	const unsupportedClaimedArtifactSurfaces =
 		claimedArtifactBackedSurfaces.filter(
-			(surface) => !surfaceHasArtifactEvidence(surface, artifactRefPaths),
+			(surface) =>
+				!surfaceHasArtifactEvidence(surface, artifactRefPaths) &&
+				(!review.reviewContextPack ||
+					!reviewContextPackHasSurfaceEvidence(
+						review.reviewContextPack,
+						surface,
+						{
+							changedArtifacts: artifactPaths,
+							validationCommands,
+						},
+					)),
 		);
 	if (unsupportedClaimedArtifactSurfaces.length > 0) {
 		reasons.push(

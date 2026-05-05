@@ -11,7 +11,7 @@
 		],
 		"expectedSnippets": [
 			"Execute one approved Flow feature.",
-			"Otherwise implement exactly one feature, run targeted validation, review the changed files, fix review findings",
+			"Otherwise implement exactly one feature, run targeted validation, review changed files plus discovered connected context (changed files are the seed, not the boundary), fix review findings",
 			"obtain reviewer approval through `flow_review_record_feature`"
 		],
 		"forbiddenSnippets": ["execute every approved feature"]

@@ -99,7 +99,7 @@ describe("tool schema config contracts", () => {
 	});
 
 	test("non-worker tool schemas accept representative valid payloads and reject invalid ones", () => {
-		const { schemas } = getToolSchemas();
+		const { schemas, tools } = getToolSchemas();
 		const evidencePacket = {
 			id: "packet:tool-schema",
 			purpose: "planning",
@@ -301,6 +301,56 @@ describe("tool schema config contracts", () => {
 			}).success,
 		).toBe(true);
 		expect(schemas.flow_review_record_final.safeParse({}).success).toBe(false);
+
+		const reviewContextPack = {
+			task: "Review tool schema contract",
+			changedFiles: ["src/runtime/session.ts"],
+			includedContext: [],
+			relationships: [],
+			validationEvidence: [],
+			suggestedValidation: [],
+			coverageGaps: [],
+			reviewedSurfaces: ["changed_files"],
+		};
+		const finalReviewWithContextPack = {
+			scope: "final",
+			reviewDepth: "broad",
+			reviewedSurfaces: ["changed_files"],
+			evidenceSummary: "Checked changed files.",
+			validationAssessment: "No validation was available.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: [],
+			},
+			status: "approved",
+			summary: "Looks good.",
+			reviewContextPack,
+		};
+		const finalReviewTool = tools.flow_review_record_final;
+		expect(finalReviewTool).toBeDefined();
+		if (!finalReviewTool) return;
+		const rawOpenCodeFinalReviewSchema = tool.schema.object(
+			finalReviewTool.args,
+		);
+		expect(
+			rawOpenCodeFinalReviewSchema.safeParse(finalReviewWithContextPack)
+				.success,
+		).toBe(true);
+		expect(
+			rawOpenCodeFinalReviewSchema.safeParse({
+				...finalReviewWithContextPack,
+				reviewContextPack: {},
+			}).success,
+		).toBe(false);
+		expect(
+			rawOpenCodeFinalReviewSchema.safeParse({
+				...finalReviewWithContextPack,
+				reviewContextPack: {
+					...reviewContextPack,
+					unexpected: true,
+				},
+			}).success,
+		).toBe(false);
 
 		expect(
 			schemas.flow_session_close.safeParse({ kind: "completed" }).success,

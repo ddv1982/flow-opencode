@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { FLOW_AUDITOR_AGENT_PROMPT } from "../src/audit/prompts/agents";
 import { FLOW_REVIEW_COMMAND_TEMPLATE } from "../src/audit/prompts/commands";
@@ -119,6 +119,16 @@ export const PROMPT_EVAL_FIXTURE_DIR = join(
 	"prompt-evals",
 );
 
+/**
+ * Eval admission rule (bounded complexity):
+ * - Name the unique failure mode the eval protects (not a generic quality check).
+ * - Prefer semantic assertions (schema/behavior/tool boundaries) over wording-level assertions.
+ * - State whether the eval replaces an existing case; if additive, explain why existing coverage is insufficient.
+ * - Include the validation command in the change note.
+ *   - Targeted: bun test tests/review-prompt-capture.test.ts tests/prompt-behavior-eval.test.ts
+ *   - Full prompt/eval gate: bun test tests/prompt-eval-corpus.test.ts tests/prompt-behavior-eval.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-mode-capture.test.ts tests/review-prompt-capture.test.ts
+ */
+
 export const PROMPT_EVAL_CASE_IDS = [
 	"adaptive-package-manager-ambiguity",
 	"adaptive-decision-gate",
@@ -174,6 +184,35 @@ export function isFirstPartySourcePath(path: string): boolean {
 	return (
 		resolved === join(PROMPT_EVAL_REPO_ROOT, allowedRoot) ||
 		resolved.startsWith(join(PROMPT_EVAL_REPO_ROOT, allowedRoot) + sep)
+	);
+}
+
+export function listJsonFixtureFilesRecursive(dir: string): string[] {
+	function walk(currentDir: string): string[] {
+		return readdirSync(currentDir, { withFileTypes: true }).flatMap((entry) => {
+			const absolutePath = join(currentDir, entry.name);
+			if (entry.isDirectory()) {
+				return walk(absolutePath);
+			}
+			return entry.isFile() && entry.name.endsWith(".json")
+				? [absolutePath]
+				: [];
+		});
+	}
+	return walk(dir).sort();
+}
+
+export function sourcePathExistsWithinRepo(
+	path: string,
+	repoRoot: string,
+): boolean {
+	if (!isFirstPartySourcePath(path)) {
+		return false;
+	}
+	const resolved = resolve(repoRoot, path);
+	return (
+		(resolved === repoRoot || resolved.startsWith(repoRoot + sep)) &&
+		existsSync(resolved)
 	);
 }
 

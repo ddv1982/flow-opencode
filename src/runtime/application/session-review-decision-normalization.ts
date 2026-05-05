@@ -1,3 +1,4 @@
+import { buildReviewContextPack } from "../domain";
 import type {
 	FlowReviewRecordFeatureArgs,
 	FlowReviewRecordFinalArgs,
@@ -41,6 +42,11 @@ export function normalizeFinalReviewDecision(
 		},
 		...(decision.evidencePackets
 			? { evidencePackets: decision.evidencePackets }
+			: {}),
+		...(decision.reviewContextPack
+			? {
+					reviewContextPack: buildReviewContextPack(decision.reviewContextPack),
+				}
 			: {}),
 		integrationChecks: decision.integrationChecks ?? [],
 		regressionChecks: decision.regressionChecks ?? [],

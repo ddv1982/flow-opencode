@@ -28,6 +28,7 @@ import {
 	FLOW_RELEASE_HYGIENE_REVIEW_RULE,
 	FLOW_RESOLVE_RUNTIME_ERRORS_RULE,
 	FLOW_RESUME_ONLY_RULE,
+	FLOW_REVIEW_CONTEXT_DISCOVERY_RULE,
 	FLOW_REVIEW_FINDINGS_LOOP_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
@@ -192,7 +193,7 @@ ${FLOW_OPERATOR_PROGRESS_RULE}
 		body: `${renderWorkflowProtocol(worker)}
 1. Call flow_run_start.
 2. If the runtime says there is nothing runnable, summarize the runtime result and stop.
-3. Implement the active feature, run targeted validation, and review changed files.
+3. Implement the active feature, run targeted validation, and review changed files plus discovered connected context; changed files are not the review boundary.
 4. If review finds blocking issues, fix them, rerun targeted validation, and review again. Repeat until review passes or a real blocker remains.
 5. In the lite lane, if the runtime session is small enough and your worker result already contains the required passing feature-level review payload for a non-final feature, you may skip the separate reviewer-persistence hop.
 6. On the final completion path, run broad validation, ask flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy, and persist that approval with flow_review_record_final using the direct reviewer decision object.
@@ -270,6 +271,7 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 - Review only for correctness, regressions, maintainability, security, and missing validation.
 ${FLOW_STACK_STANDARDS_PROFILE_RULE}
 ${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
+${FLOW_REVIEW_CONTEXT_DISCOVERY_RULE}
 ${FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE}
 - Return approved only when the work is clean enough to advance.
 - Return needs_fix when the current feature should continue through another fix/validate/review iteration.

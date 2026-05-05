@@ -152,6 +152,27 @@ export function normalizeArtifactPath(path: string): string {
 	return normalized;
 }
 
+export function isSafeReviewArtifactPath(path: string): boolean {
+	const normalized = normalizeArtifactPath(path);
+	if (
+		normalized.length === 0 ||
+		normalized.startsWith("/") ||
+		/^[A-Za-z]:\//.test(normalized)
+	) {
+		return false;
+	}
+	return normalized
+		.split("/")
+		.every(
+			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
+		);
+}
+
+export function normalizeSafeReviewArtifactPath(path: string): string {
+	const normalized = normalizeArtifactPath(path);
+	return isSafeReviewArtifactPath(normalized) ? normalized : "";
+}
+
 export function isDocsAndPromptsPath(path: string): boolean {
 	return pathMatchesSurface(path, "docs_and_prompts");
 }

@@ -1,3 +1,4 @@
+import { buildReviewContextPack, type ReviewContextPack } from "../domain";
 import type { Session, WorkerResultArgs } from "../schema";
 
 export type NormalizedReview = Omit<
@@ -17,6 +18,7 @@ export type NormalizedFinalReview = Omit<
 	| "integrationChecks"
 	| "regressionChecks"
 	| "remainingGaps"
+	| "reviewContextPack"
 > & {
 	blockingFindings: NonNullable<
 		NonNullable<WorkerResultArgs["finalReview"]>["blockingFindings"]
@@ -37,6 +39,7 @@ export type NormalizedFinalReview = Omit<
 	remainingGaps: NonNullable<
 		NonNullable<WorkerResultArgs["finalReview"]>["remainingGaps"]
 	>;
+	reviewContextPack: ReviewContextPack | undefined;
 };
 
 export type NormalizedReviewFindingClosure = Omit<
@@ -107,6 +110,9 @@ function normalizeFinalReview(
 		integrationChecks: review.integrationChecks ?? [],
 		regressionChecks: review.regressionChecks ?? [],
 		remainingGaps: review.remainingGaps ?? [],
+		reviewContextPack: review.reviewContextPack
+			? buildReviewContextPack(review.reviewContextPack)
+			: undefined,
 	};
 }
 

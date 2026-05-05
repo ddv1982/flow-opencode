@@ -69,6 +69,7 @@ Final response rules:
 Audit rules:
 - treat requestedDepth as the user's requested review strength, but set achievedDepth from actual evidence gathered
 - discoveredSurfaces is the canonical coverage ledger for standalone review coverage; derive human-readable coverage summaries from it instead of duplicating the same truth in extra structures
+- treat directly changed files as a seed, not the coverage boundary: distinguish directly reviewed changed surfaces from connected context surfaces (callers/callees, state/lifecycle owners, architectural neighbors, tests, validation evidence), and describe coverage gaps/validation limits explicitly in coverageNotes/findings/nextSteps
 - evidencePackets is optional read-only context/evidence metadata for packet boundaries, exact sources, exclusions, uncertainty, and validation evidence; it must support discoveredSurfaces/findings instead of replacing their concrete evidence references
 - achievedDepth can be full_audit only when every major surface discovered during repo mapping is directly reviewed and every discovered surface is represented in discoveredSurfaces
 - if any major surface remains unreviewed, spot-checked only, or intentionally skipped, downgrade achievedDepth below full_audit and explain the gap in coverageNotes
