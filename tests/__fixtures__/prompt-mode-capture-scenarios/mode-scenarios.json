@@ -91,6 +91,35 @@
 		]
 	},
 	{
+		"id": "flow-planning-researcher-review-first",
+		"mode": "flow-planning-researcher",
+		"title": "Flow planning researcher keeps review-fix goals review-first",
+		"arguments": "Research a plan for: full codebase review and fix confirmed findings. No findings have been produced yet.",
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_plan_apply",
+			"flow_run_start",
+			"flow_review_record_feature",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"review-first",
+			"evidence packet",
+			"do not invent findings",
+			"requiresReplanAfterAudit"
+		],
+		"forbiddenResponseSnippets": [
+			"I edited",
+			"all findings are fixed",
+			"flow_plan_apply"
+		],
+		"nextStepSnippets": ["flow-planner", "audit ledger", "confirmed findings"],
+		"notes": [
+			"This scenario checks that planning research stays read-only and does not collapse audit discovery plus fixes into a fake all-in-one feature."
+		]
+	},
+	{
 		"id": "flow-reviewer-missing-validation",
 		"mode": "flow-reviewer",
 		"title": "Flow reviewer refuses approval when validation evidence is missing",

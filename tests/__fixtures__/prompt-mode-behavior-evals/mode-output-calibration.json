@@ -709,6 +709,40 @@
 		"nextStepSnippets": ["Record reviewFindingClosures", "targeted validation"]
 	},
 	{
+		"id": "planning-researcher-review-first-no-findings",
+		"mode": "flow-planning-researcher",
+		"title": "Planning researcher recommends review-first shape before findings exist",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "{\"planning\":{\"repoProfile\":[\"Evidence packet will identify stack, package scripts, local standards, and major review surfaces.\"],\"packageManager\":\"bun\",\"packageManagerAmbiguous\":false,\"stackProfile\":{\"languages\":[],\"frameworks\":[],\"runtimes\":[],\"packageManagers\":[],\"tools\":[]},\"standardsProfile\":{\"localGuidelines\":[],\"externalGuidance\":[],\"rules\":[],\"gaps\":[],\"precedence\":[\"local guidance before external docs\"]},\"research\":[\"No findings exist yet; do not invent findings during planning research.\"],\"evidencePackets\":[{\"id\":\"planning-research:review-first\",\"purpose\":\"planning\",\"summary\":\"Research supports a review-first handoff before fix work.\"}]},\"recommendedPlanShape\":{\"goalMode\":\"review_and_fix\",\"decompositionPolicy\":\"iterative_refinement\",\"features\":[{\"id\":\"run-codebase-review\",\"title\":\"Run codebase review\",\"summary\":\"Produce an audit ledger with confirmed findings before fixes.\",\"dependsOn\":[],\"blockedBy\":[],\"verification\":[\"flow-review structured audit ledger\"]},{\"id\":\"fix-confirmed-review-findings\",\"title\":\"Fix confirmed review findings\",\"summary\":\"Fix only concrete findings from the audit ledger and record closure evidence.\",\"dependsOn\":[\"run-codebase-review\"],\"blockedBy\":[\"audit ledger with confirmed findings\"],\"verification\":[\"reviewFindingClosures with fixRefs, testRefs, validationRefs\"]}],\"requiresReplanAfterAudit\":true,\"rationale\":[\"Review discovery and fix execution must stay phase-correct.\",\"The fix phase must wait for confirmed findings.\"]},\"handoffNotes\":[\"Hand this evidence packet to flow-planner; do not call runtime tools from planning research.\"]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_plan_apply",
+			"flow_run_start",
+			"flow_review_record_feature",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"review-first",
+			"evidence packet",
+			"do not invent findings",
+			"requiresReplanAfterAudit"
+		],
+		"forbiddenResponseSnippets": [
+			"I edited",
+			"all findings are fixed",
+			"flow_plan_apply"
+		],
+		"nextStepSnippets": ["flow-planner", "audit ledger", "confirmed findings"]
+	},
+	{
 		"id": "reviewer-bad-approves-missing-closure-ledger",
 		"mode": "flow-reviewer",
 		"title": "Reviewer mode regression approves review-fix work without closure evidence",

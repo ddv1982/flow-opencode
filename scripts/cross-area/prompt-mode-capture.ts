@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import {
 	FLOW_CONTROL_AGENT_PROMPT,
+	FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../../src/prompts/agents";
@@ -91,6 +92,7 @@ const PROMPT_MODE_SURFACES: Record<PromptModeBehaviorMode, string> = {
 	"flow-plan": FLOW_PLAN_COMMAND_TEMPLATE,
 	"flow-auto": FLOW_AUTO_COMMAND_TEMPLATE,
 	"flow-run": FLOW_RUN_COMMAND_TEMPLATE,
+	"flow-planning-researcher": FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
 	"flow-worker": FLOW_WORKER_AGENT_PROMPT,
 	"flow-reviewer": FLOW_REVIEWER_AGENT_PROMPT,
 	"flow-control": FLOW_CONTROL_AGENT_PROMPT,

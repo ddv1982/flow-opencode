@@ -5,6 +5,7 @@ export type FlowPromptMode =
 	| "flow-plan"
 	| "flow-auto"
 	| "flow-run"
+	| "flow-planning-researcher"
 	| "flow-worker"
 	| "flow-reviewer"
 	| "flow-control"
@@ -48,6 +49,7 @@ export const FLOW_PROMPT_MODE_CAPTURE_MODES = [
 	"flow-auto",
 	"flow-run",
 	"flow-worker",
+	"flow-planning-researcher",
 	"flow-reviewer",
 	"flow-control",
 ] as const satisfies readonly FlowPromptCaptureMode[];
@@ -212,6 +214,40 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		stopCondition:
 			"Worker result is persisted only after clean validation/review or a true blocker.",
+	},
+	"flow-planning-researcher": {
+		mode: "flow-planning-researcher",
+		title: "Planning research agent",
+		surfaceKind: "agent",
+		sourcePaths: [
+			PROMPT_MODE_CONTRACT_SOURCE_PATH,
+			GENERATED_ROLE_PROMPT_SOURCE_PATH,
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts",
+		],
+		runtimeMutation: "none",
+		repositoryMutation: "none",
+		allowedFlowTools: [],
+		forbiddenFlowTools: [
+			"flow_auto_prepare",
+			"flow_plan_start",
+			"flow_plan_apply",
+			"flow_plan_approve",
+			"flow_run_start",
+			"flow_run_complete_feature",
+			"flow_review_record_feature",
+			"flow_review_record_final",
+			"flow_reset_feature",
+			"flow_session_close",
+		],
+		requiredBehavior: [
+			"Stay read-only and do not call Flow runtime tools.",
+			"Produce evidence packets for planner/coordinator handoff.",
+			"Recommend review-first decomposition for broad review-and-fix goals without existing findings.",
+			"Do not invent findings or closure evidence during planning research.",
+		],
+		stopCondition:
+			"A compact planning research JSON packet is returned; no runtime state or repository code changes.",
 	},
 	"flow-reviewer": {
 		mode: "flow-reviewer",

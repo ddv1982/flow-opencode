@@ -160,6 +160,7 @@ ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
 - Plan or refresh only when the runtime says planning is needed, detect stack/package-manager/local-standards context first, record stackProfile and standardsProfile with \`flow_plan_context_record\`, approve that plan, then keep work on the current feature until it is clean or truly blocked.
+- For broad review-and-fix/codebase-review goals where findings do not exist yet, prefer a Task-tool handoff to flow-planning-researcher before flow-planner so review discovery and fix execution stay phase-correct.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
 ${FLOW_STACK_STANDARDS_PROFILE_RULE}

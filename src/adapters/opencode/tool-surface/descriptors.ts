@@ -30,6 +30,7 @@ export type FlowSurfaceMode =
 	| "flow-plan"
 	| "flow-auto"
 	| "flow-run"
+	| "flow-planning-researcher"
 	| "flow-worker"
 	| "flow-reviewer"
 	| "flow-control"

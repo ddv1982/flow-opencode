@@ -9,6 +9,7 @@ import {
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
+	FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../../src/prompts/agents";
@@ -148,6 +149,27 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).not.toContain("_from_raw");
 	});
 
+	test("planning researcher prompt is read-only and recommends review-first review-fix decomposition", () => {
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"You are the Flow planning researcher.",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"do not call Flow runtime tools",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"recommend an audit/review-first plan shape before any fix feature",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"Do not invent findings",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"requiresReplanAfterAudit",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			'<example name="review-first-codebase-review">',
+		);
+	});
+
 	test("reviewer contract and prompt require explicit approval gating", () => {
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"Return exactly one JSON object that matches the reviewer result payload below, with no markdown fences, commentary, or trailing text",
@@ -242,7 +264,7 @@ describe("prompt and command config contracts", () => {
 			"Use the flow-reviewer stage as the approval gate",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"hand bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
+			"hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Persist every reviewer decision through flow_review_record_feature or flow_review_record_final",
@@ -294,7 +316,7 @@ describe("prompt and command config contracts", () => {
 			"package-manager detection as supporting evidence instead of assuming Bun",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"flow-planner, implementation to flow-worker, and review to flow-reviewer",
+			"flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"deliveryPolicy.finalReviewPolicy",
@@ -347,7 +369,7 @@ describe("prompt and command config contracts", () => {
 			"Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.",
 		]);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"hand bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
+			"hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
 		);
 	});
 
@@ -367,7 +389,7 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("<raw-arguments>");
 	});
 
-	test("planner, worker, auto, auditor, and reviewer prompts use structured sections with examples", () => {
+	test("planner, planning researcher, worker, auto, auditor, and reviewer prompts use structured sections with examples", () => {
 		expectStructuredSections(FLOW_PLANNER_AGENT_PROMPT, [
 			"Role",
 			"Objective",
@@ -377,6 +399,16 @@ describe("prompt and command config contracts", () => {
 		]);
 		expect(FLOW_PLANNER_AGENT_PROMPT).toContain(
 			'<example name="package-manager-ambiguity">',
+		);
+		expectStructuredSections(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT, [
+			"Role",
+			"Objective",
+			"Rules",
+			"Workflow",
+			"Examples",
+		]);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			'<example name="not-runtime-planner">',
 		);
 		expectStructuredSections(FLOW_WORKER_AGENT_PROMPT, [
 			"Role",

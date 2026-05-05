@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes five agents, nine commands, and eighteen tools by default", async () => {
+	test("dist bundle exposes six agents, nine commands, and eighteen tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -56,7 +56,7 @@ describe("built dist smoke load", () => {
 			config as Parameters<NonNullable<typeof plugin.config>>[0],
 		);
 
-		expect(Object.keys(config.agent ?? {})).toHaveLength(5);
+		expect(Object.keys(config.agent ?? {})).toHaveLength(6);
 		expect(Object.keys(config.command ?? {})).toHaveLength(9);
 		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
 

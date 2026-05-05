@@ -19,6 +19,7 @@ const EXPECTED_MODE_ORDER = [
 	"flow-auto",
 	"flow-run",
 	"flow-worker",
+	"flow-planning-researcher",
 	"flow-reviewer",
 	"flow-control",
 	"flow-review",
@@ -181,7 +182,7 @@ describe("flow prompt mode contracts", () => {
 		}
 	});
 
-	test("fresh-context task handoff config stays narrow while read-only agents deny task delegation", () => {
+	test("fresh-context task handoff config stays narrow while read-only leaf agents deny task delegation", () => {
 		const { agent } = createFlowCoreConfigEntries();
 
 		expect(agent["flow-worker"]).toMatchObject({
@@ -198,16 +199,22 @@ describe("flow prompt mode contracts", () => {
 			permission: {
 				task: {
 					"*": "deny",
+					"flow-planning-researcher": "allow",
 					"flow-planner": "allow",
 					"flow-worker": "allow",
 					"flow-reviewer": "allow",
 				},
 			},
 		});
+		expect(agent["flow-planning-researcher"]).toMatchObject({ mode: "all" });
 		expect(agent["flow-planner"]).toMatchObject({ mode: "all" });
 		expect(agent["flow-reviewer"]).toMatchObject({ mode: "all" });
 		expect(agent["flow-control"]).toMatchObject({ mode: "primary" });
 		expect(agent["flow-planner"]?.permission?.task).toEqual({
+			"*": "deny",
+			"flow-planning-researcher": "allow",
+		});
+		expect(agent["flow-planning-researcher"]?.permission?.task).toEqual({
 			"*": "deny",
 		});
 		expect(agent["flow-reviewer"]?.permission?.task).toEqual({

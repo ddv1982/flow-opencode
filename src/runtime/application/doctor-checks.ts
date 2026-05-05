@@ -63,6 +63,7 @@ export function buildConfigCheck(): DoctorCheck {
 	applyFlowConfig(config);
 
 	const requiredAgents = [
+		"flow-planning-researcher",
 		"flow-planner",
 		"flow-worker",
 		"flow-auto",

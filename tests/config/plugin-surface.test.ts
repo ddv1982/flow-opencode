@@ -105,6 +105,7 @@ describe("plugin config surface", () => {
 
 		expect(config.agent).toBeDefined();
 		expect(config.command).toBeDefined();
+		expect(config.agent?.["flow-planning-researcher"]).toBeDefined();
 		expect(config.agent?.["flow-planner"]).toBeDefined();
 		expect(config.agent?.["flow-worker"]).toBeDefined();
 		expect(config.agent?.["flow-auto"]).toBeDefined();
@@ -150,9 +151,23 @@ describe("plugin config surface", () => {
 		expect(config.command?.["flow-reset"]?.agent).toBe("flow-control");
 	});
 
-	test("keeps planner, reviewer, and control agents read-only", () => {
+	test("keeps planning researcher, planner, reviewer, and control agents read-only", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
+
+		expect(config.agent?.["flow-planning-researcher"]?.mode).toBe("all");
+		expect(config.agent?.["flow-planning-researcher"]?.tools).toBeUndefined();
+		expect(config.agent?.["flow-planning-researcher"]?.permission?.edit).toBe(
+			"deny",
+		);
+		expect(config.agent?.["flow-planning-researcher"]?.permission?.bash).toBe(
+			"deny",
+		);
+		expect(
+			config.agent?.["flow-planning-researcher"]?.permission?.task,
+		).toEqual({
+			"*": "deny",
+		});
 
 		expect(config.agent?.["flow-planner"]?.mode).toBe("all");
 		expect(config.agent?.["flow-planner"]?.tools).toBeUndefined();
@@ -160,6 +175,7 @@ describe("plugin config surface", () => {
 		expect(config.agent?.["flow-planner"]?.permission?.bash).toBe("deny");
 		expect(config.agent?.["flow-planner"]?.permission?.task).toEqual({
 			"*": "deny",
+			"flow-planning-researcher": "allow",
 		});
 
 		expect(config.agent?.["flow-reviewer"]?.mode).toBe("all");
@@ -195,6 +211,7 @@ describe("plugin config surface", () => {
 		applyFlowConfig(config);
 
 		expect(config.agent?.["flow-planner"]?.mode).toBe("all");
+		expect(config.agent?.["flow-planning-researcher"]?.mode).toBe("all");
 		expect(config.agent?.["flow-worker"]?.mode).toBe("all");
 		expect(config.agent?.["flow-reviewer"]?.mode).toBe("all");
 		expect(config.agent?.["flow-auto"]?.mode).toBe("primary");
@@ -204,6 +221,7 @@ describe("plugin config surface", () => {
 		});
 		expect(config.agent?.["flow-auto"]?.permission?.task).toEqual({
 			"*": "deny",
+			"flow-planning-researcher": "allow",
 			"flow-planner": "allow",
 			"flow-worker": "allow",
 			"flow-reviewer": "allow",
@@ -212,6 +230,7 @@ describe("plugin config surface", () => {
 		expect(config.agent?.["flow-reviewer"]?.permission?.bash).toBe("deny");
 		expect(config.agent?.["flow-planner"]?.permission?.task).toEqual({
 			"*": "deny",
+			"flow-planning-researcher": "allow",
 		});
 		expect(config.agent?.["flow-reviewer"]?.permission?.task).toEqual({
 			"*": "deny",
@@ -255,6 +274,9 @@ describe("plugin config surface", () => {
 		expect(first.agent?.["flow-planner"]).not.toBe(
 			second.agent?.["flow-planner"],
 		);
+		expect(first.agent?.["flow-planning-researcher"]).not.toBe(
+			second.agent?.["flow-planning-researcher"],
+		);
 		expect(first.agent?.["flow-reviewer"]).not.toBe(
 			second.agent?.["flow-reviewer"],
 		);
@@ -262,6 +284,9 @@ describe("plugin config surface", () => {
 		expect(first.agent?.["flow-reviewer"]?.tools).toBeUndefined();
 		expect(first.agent?.["flow-planner"]?.permission).not.toBe(
 			second.agent?.["flow-planner"]?.permission,
+		);
+		expect(first.agent?.["flow-planning-researcher"]?.permission).not.toBe(
+			second.agent?.["flow-planning-researcher"]?.permission,
 		);
 		expect(first.agent?.["flow-worker"]?.permission?.task).not.toBe(
 			second.agent?.["flow-worker"]?.permission?.task,

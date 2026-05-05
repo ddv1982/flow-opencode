@@ -19,7 +19,7 @@ describe("prompt mode capture harness", () => {
 	test("loads providerless prompt mode capture scenarios", async () => {
 		const scenarios = await readPromptModeCaptureScenarios();
 
-		expect(scenarios).toHaveLength(6);
+		expect(scenarios).toHaveLength(7);
 		expect(scenarios.map((scenario) => scenario.mode)).toEqual([
 			...FLOW_PROMPT_MODE_CAPTURE_MODES,
 		]);
@@ -53,7 +53,7 @@ describe("prompt mode capture harness", () => {
 
 	test("checks capture scenarios without writing prompt exports", async () => {
 		await expect(checkPromptModeCaptureScenarios()).resolves.toBe(
-			"Prompt mode capture scenarios valid: 6",
+			"Prompt mode capture scenarios valid: 7",
 		);
 	});
 
@@ -62,7 +62,7 @@ describe("prompt mode capture harness", () => {
 		try {
 			const exports = await writePromptModeCapturePromptExports({ outputDir });
 
-			expect(exports).toHaveLength(6);
+			expect(exports).toHaveLength(7);
 			const [captureExport] = exports;
 			if (!captureExport) {
 				throw new Error("Expected a prompt mode capture export.");

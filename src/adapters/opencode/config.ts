@@ -4,6 +4,7 @@ import {
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
 	FLOW_PLANNER_AGENT_PROMPT,
+	FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
 	FLOW_REVIEWER_AGENT_PROMPT,
 	FLOW_WORKER_AGENT_PROMPT,
 } from "../../prompts/agents";
@@ -57,11 +58,25 @@ function createReadOnlyPrimaryAgent(
 }
 
 const FLOW_CORE_AGENTS = {
-	"flow-planner": createReadOnlyPrimaryAgent(
-		"Create and refine compact Flow plans grounded in repo evidence.",
-		FLOW_PLANNER_AGENT_PROMPT,
+	"flow-planning-researcher": createReadOnlyPrimaryAgent(
+		"Research repo evidence for phase-correct Flow planning without mutating runtime state.",
+		FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
 		"all",
 	),
+	"flow-planner": {
+		mode: "all",
+		description:
+			"Create and refine compact Flow plans grounded in repo evidence.",
+		prompt: FLOW_PLANNER_AGENT_PROMPT,
+		permission: {
+			edit: "deny",
+			bash: "deny",
+			task: {
+				"*": "deny",
+				"flow-planning-researcher": "allow",
+			},
+		},
+	},
 	"flow-worker": {
 		mode: "all",
 		description:
@@ -82,6 +97,7 @@ const FLOW_CORE_AGENTS = {
 		permission: {
 			task: {
 				"*": "deny",
+				"flow-planning-researcher": "allow",
 				"flow-planner": "allow",
 				"flow-worker": "allow",
 				"flow-reviewer": "allow",
