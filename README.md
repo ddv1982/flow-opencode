@@ -107,7 +107,7 @@ For small tasks, this can finish in a single pass. For larger work, Flow adds th
 
 Flow uses the target repo's existing scripts and local guidance as the execution contract. It records stack and standards evidence from files such as `package.json`, lockfiles, config files, `AGENTS.md`, and project docs. In monorepos, package-local evidence can override root-level defaults.
 
-For broad review-and-fix goals, Flow may first use a read-only planning researcher to gather repository evidence and recommend a review-first plan. Findings still come from `/flow-review` or persisted reviewer records, not from planning research.
+For broad review-and-fix goals, you can also select the read-only `flow-planning-researcher` agent in OpenCode, or let `/flow-plan` / `/flow-auto` hand off to it when planning needs evidence first. It gathers repository evidence and recommends a review-first plan; findings still come from `/flow-review` or persisted reviewer records, not from planning research.
 
 ### Manual, step by step
 
