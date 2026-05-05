@@ -107,6 +107,8 @@ For small tasks, this can finish in a single pass. For larger work, Flow adds th
 
 Flow uses the target repo's existing scripts and local guidance as the execution contract. It records stack and standards evidence from files such as `package.json`, lockfiles, config files, `AGENTS.md`, and project docs. In monorepos, package-local evidence can override root-level defaults.
 
+For broad review-and-fix goals, Flow may first use a read-only planning researcher to gather repository evidence and recommend a review-first plan. Findings still come from `/flow-review` or persisted reviewer records, not from planning research.
+
 ### Manual, step by step
 
 1. `/flow-plan Add a workflow plugin for OpenCode`
@@ -154,7 +156,7 @@ Examples:
 /flow-review exhaustive Review this repository before release and identify all major risks
 ```
 
-Flow will only claim the strongest achieved review depth when the inspected coverage actually supports it.
+Flow will only claim the strongest achieved review depth when the inspected coverage actually supports it. Changed files are the review starting point, not the full boundary: coverage may include connected callers, callees, tests, prompts, tooling, release surfaces, and validation evidence, but those claims must be grounded in actual files, relationships, and recorded validation commands.
 
 `/flow-review` is intentionally read-only. To remediate findings under Flow's tracked gates, start or activate a Flow session for review-fix work and complete it through `/flow-run` / `/flow-auto`, recorded validation, reviewer approval, and final review when applicable.
 
@@ -179,7 +181,7 @@ At a high level, Flow does this:
 3. **Execute** one feature at a time.
 4. **Validate** the result with recorded evidence.
 5. **Review** the result before advancing.
-6. **Continue, recover, or replan** until the session is complete. Final completion uses broad final validation plus the runtime-owned final review policy (currently a detailed cross-feature review by default).
+6. **Continue, recover, or replan** until the session is complete. Final completion uses broad final validation plus the runtime-owned final review policy (currently a detailed cross-feature review by default), with evidence-backed coverage across changed artifacts, connected context, and validation results.
 
 > Note: Runtime-level parallel feature execution is intentionally deferred; Flow continues to execute one feature at a time.
 
