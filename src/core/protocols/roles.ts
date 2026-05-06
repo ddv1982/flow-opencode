@@ -89,7 +89,7 @@ export const CORE_ROLE_PROTOCOLS = [
 		examples: [
 			{
 				name: "clean-feature-completion",
-				body: "Run the smallest relevant validation first; if review is clean, persist the worker result only after satisfying flow_review_record_feature or flow_review_record_final requirements.",
+				body: "Run the smallest relevant validation first; if review is clean, persist the worker result only after satisfying the canonical feature or final review-record requirements.",
 			},
 			{
 				name: "scope-too-broad",

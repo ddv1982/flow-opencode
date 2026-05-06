@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.13] - 2026-05-07
+
+Dedupe final-completion tool guidance in subagent prompts
+
+Flow 2.0.13 narrows the worker and autonomous subagent prompt surfaces so final-completion tools appear as concrete calls only where they are operationally needed. The hard allowed-tool contract still lists `flow_review_record_final` and `flow_run_complete_feature`, and the workflow steps still name the exact persistence calls for the final-review and completion gates.
+
+The surrounding policy fragments and role examples now refer to the canonical feature/final review-record runtime tool instead of repeating the same literal tool names. This preserves the final-completion path while reducing prompt noise that could make subagents treat the guidance as multiple independent obligations.
+
+Regression coverage now counts rendered worker and auto prompt occurrences for `flow_review_record_final` and `flow_run_complete_feature`, keeping both bounded to two appearances per subagent prompt while preserving presence checks and mode-contract/tool-surface parity.
+
+Constraint: Reduce prompt repetition without renaming tools, adding tools, changing runtime state, or weakening final completion gates
+Constraint: Keep the mode contract as the public allowed-tool source of truth
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Remove exact tool names from workflow steps | subagents still need precise final-review and completion persistence calls at the point of action
+Rejected: Keep all repeated exact names in fragments and role examples | redundant literal mentions increase prompt noise without adding contract clarity
+Rejected: Add runtime idempotency changes in this release | the issue addressed here is prompt duplication, not evidence of duplicate runtime registrations
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep exact final-completion tool names in allowed-tool contracts and concrete workflow actions; use canonical prose elsewhere unless a literal call is required
+Tested: rendered prompt occurrence check for worker/auto subagents; `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts`; `bun run typecheck`; `bun run lint`; Oracle review found no blocker; `bun run check`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.13` before push
+
 ## [2.0.12] - 2026-05-07
 
 Harden review-scope evidence grounding after false-negative review passes

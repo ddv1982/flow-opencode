@@ -33,6 +33,9 @@ import {
 	expectStructuredSections,
 } from "./helpers";
 
+const countOccurrences = (text: string, search: string): number =>
+	text.split(search).length - 1;
+
 describe("prompt and command config contracts", () => {
 	test("context gathering rules distinguish runtime owners from read-only roles", () => {
 		const runtimeSnippet =
@@ -176,6 +179,12 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
+		expect(
+			countOccurrences(FLOW_WORKER_AGENT_PROMPT, "flow_review_record_final"),
+		).toBeLessThanOrEqual(2);
+		expect(
+			countOccurrences(FLOW_WORKER_AGENT_PROMPT, "flow_run_complete_feature"),
+		).toBeLessThanOrEqual(2);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"Task/subagent handoff is available",
 		);
@@ -321,8 +330,14 @@ describe("prompt and command config contracts", () => {
 			"hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"Persist every reviewer decision through flow_review_record_feature or flow_review_record_final",
+			"Persist every reviewer decision through the canonical feature or final review-record runtime tool",
 		);
+		expect(
+			countOccurrences(FLOW_AUTO_AGENT_PROMPT, "flow_review_record_final"),
+		).toBeLessThanOrEqual(2);
+		expect(
+			countOccurrences(FLOW_AUTO_AGENT_PROMPT, "flow_run_complete_feature"),
+		).toBeLessThanOrEqual(2);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If the reviewer returns needs_fix",
 		);
