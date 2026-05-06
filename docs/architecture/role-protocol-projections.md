@@ -45,21 +45,38 @@ The table below is mechanically projected from `src/runtime/transitions/completi
 | default | final | 5 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
 | default | final | 6 | final_review_payload | final_review_payload | missing_final_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
 | default | final | 7 | reviewer_decision | final_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review | feature | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | feature | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | feature | 3 | review_scope_accounting | review_scope_ledger | missing_review_scope_accounting | reviewScopeLedgerFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review | feature | 4 | reviewer_decision | feature_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review | feature | 5 | validation_scope | targeted_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | feature | 6 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | feature | 7 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 3 | review_scope_accounting | review_scope_ledger | missing_review_scope_accounting | reviewScopeLedgerFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review | final | 4 | validation_scope | broad_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 5 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 6 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 7 | final_review_payload | final_review_payload | missing_final_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review | final | 8 | reviewer_decision | final_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
 | review_and_fix | feature | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
 | review_and_fix | feature | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
 | review_and_fix | feature | 3 | review_finding_closure | review_finding_closure_ledger | missing_review_closure | reviewFindingClosureFailureMessage | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | feature | 4 | reviewer_decision | feature_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
-| review_and_fix | feature | 5 | validation_scope | targeted_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | feature | 6 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | feature | 7 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 4 | review_scope_accounting | review_scope_ledger | missing_review_scope_accounting | reviewScopeLedgerFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review_and_fix | feature | 5 | reviewer_decision | feature_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review_and_fix | feature | 6 | validation_scope | targeted_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 7 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | feature | 8 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
 | review_and_fix | final | 1 | validation_evidence | - | missing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
 | review_and_fix | final | 2 | validation_passed | - | failing_validation | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
 | review_and_fix | final | 3 | review_finding_closure | review_finding_closure_ledger | missing_review_closure | reviewFindingClosureFailureMessage | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | final | 4 | validation_scope | broad_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | final | 5 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | final | 6 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | final | 7 | final_review_payload | final_review_payload | missing_final_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
-| review_and_fix | final | 8 | reviewer_decision | final_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review_and_fix | final | 4 | review_scope_accounting | review_scope_ledger | missing_review_scope_accounting | reviewScopeLedgerFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
+| review_and_fix | final | 5 | validation_scope | broad_validation_result | missing_validation_scope | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 6 | feature_review | - | failing_feature_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 7 | final_review_passed | - | failing_final_review | finalReviewFailureMessage | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 8 | final_review_payload | final_review_payload | missing_final_review | validateNormalizedSuccessfulCompletion | completion.gates.required_order, recovery.next_action.binding |
+| review_and_fix | final | 9 | reviewer_decision | final_reviewer_decision | missing_reviewer_decision | finalReviewerDecisionFailureMessage | completion.gates.required_order, review.scope.payload_binding, recovery.next_action.binding |
 <!-- completion-gate-doc-table:end -->
 
 ## Semantic parity anchors

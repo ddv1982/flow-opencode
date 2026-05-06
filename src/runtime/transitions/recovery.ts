@@ -7,6 +7,7 @@ export type CompletionRecoveryKind =
 	| "missing_reviewer_decision"
 	| "missing_validation_scope"
 	| "missing_review_closure"
+	| "missing_review_scope_accounting"
 	| "failing_feature_review"
 	| "missing_final_review"
 	| "failing_final_review";
@@ -183,6 +184,20 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 			recoveryStage: "retry_completion",
 			prerequisite: "completion_payload_rebuild_required",
 			requiredArtifact: "review_finding_closure_ledger",
+			nextCommand: FLOW_STATUS_COMMAND,
+			retryable: true,
+			autoResolvable: true,
+		},
+	},
+	missing_review_scope_accounting: {
+		mode: "status",
+		recovery: {
+			errorCode: "missing_review_scope_accounting",
+			resolutionHint:
+				"Provide reviewScopeLedger entries for every declared review target/domain with status, evidenceRefs, findingRefs when applicable, validationRefs when used, and residualRisk; then retry completion.",
+			recoveryStage: "retry_completion",
+			prerequisite: "completion_payload_rebuild_required",
+			requiredArtifact: "review_scope_ledger",
 			nextCommand: FLOW_STATUS_COMMAND,
 			retryable: true,
 			autoResolvable: true,

@@ -4,6 +4,7 @@ import { createSession } from "../src/runtime/session";
 import {
 	applyPlan,
 	approvePlan,
+	completeRun,
 	recordReviewerDecision,
 	startRun,
 } from "../src/runtime/transitions";
@@ -165,6 +166,34 @@ function closedReviewFindingClosure(
 	};
 }
 
+function scopeLedgerEntry(
+	scopeId = "file_target:src/runtime/session.ts",
+	overrides: Partial<
+		NonNullable<WorkerResult["reviewScopeLedger"]>[number]
+	> = {},
+): NonNullable<WorkerResult["reviewScopeLedger"]>[number] {
+	return {
+		scopeId,
+		status: "reviewed_no_findings",
+		evidenceRefs: [scopeId.replace("file_target:", "")],
+		validationRefs: ["bun test"],
+		residualRisk: "No known residual risk for this declared review scope.",
+		...overrides,
+	};
+}
+
+function scopeLedgerForTargets(
+	targets: readonly string[],
+	overrides?: Record<
+		string,
+		Partial<NonNullable<WorkerResult["reviewScopeLedger"]>[number]>
+	>,
+): NonNullable<WorkerResult["reviewScopeLedger"]> {
+	return targets.map((target) =>
+		scopeLedgerEntry(`file_target:${target}`, overrides?.[target] ?? {}),
+	);
+}
+
 describe("completion gates", () => {
 	test.each([
 		{
@@ -270,6 +299,12 @@ describe("completion gates", () => {
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
 					reviewFindingClosures: [closedReviewFindingClosure()],
+					reviewScopeLedger: [
+						scopeLedgerEntry("file_target:src/runtime/session.ts", {
+							status: "finding_closed",
+							findingRefs: ["review: navigation failure was swallowed"],
+						}),
+					],
 				}),
 		},
 		{
@@ -566,6 +601,366 @@ describe("completion gates", () => {
 		expect(result.recovery?.errorCode).toBe(expectedErrorCode);
 		if (expectedNextCommand) {
 			expect(result.recovery?.nextCommand).toBe(expectedNextCommand);
+		}
+	});
+
+	test("broad review-and-fix final completion requires every declared review scope target", () => {
+		const declaredTargets = [
+			"src/runtime/session.ts",
+			"src/runtime/transitions/execution.ts",
+			"src/adapters/opencode/tools.ts",
+		];
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: declaredTargets,
+				},
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review the runtime and adapter surfaces"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+
+		const finalScopeLedger = scopeLedgerForTargets(declaredTargets, {
+			"src/runtime/session.ts": {
+				status: "finding_closed",
+				findingRefs: ["review: navigation failure was swallowed"],
+			},
+		});
+		const reviewed = recordReviewerDecision(started.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: finalScopeLedger,
+		});
+		expect(reviewed.ok).toBe(true);
+		if (!reviewed.ok) return;
+
+		const workerBase = createWorkerResult(featureId, {
+			validationScope: "broad",
+			reviewFindingClosures: [closedReviewFindingClosure()],
+			finalReview: createFinalReviewPayload(),
+		});
+		const partial = validateSuccessfulCompletion(
+			reviewed.value,
+			{
+				...workerBase,
+				reviewScopeLedger: [
+					scopeLedgerEntry("file_target:src/runtime/session.ts", {
+						status: "finding_closed",
+						findingRefs: ["review: navigation failure was swallowed"],
+					}),
+				],
+			},
+			featureId,
+			true,
+		);
+		expect(partial.ok).toBe(false);
+		if (!partial.ok) {
+			expect(partial.recovery?.errorCode).toBe(
+				"missing_review_scope_accounting",
+			);
+			expect(partial.message).toContain(
+				"file_target:src/runtime/transitions/execution.ts",
+			);
+		}
+
+		const failedAttempt = completeRun(reviewed.value, {
+			...workerBase,
+			reviewScopeLedger: finalScopeLedger,
+			finalReview: undefined,
+		});
+		expect(failedAttempt.ok).toBe(false);
+		if (!failedAttempt.ok) {
+			expect(failedAttempt.recovery?.errorCode).toBe(
+				"missing_final_review_payload",
+			);
+			const retryWithoutFullLedger = validateSuccessfulCompletion(
+				failedAttempt.session ?? reviewed.value,
+				{
+					...workerBase,
+					reviewScopeLedger: [
+						scopeLedgerEntry("file_target:src/runtime/session.ts", {
+							status: "finding_closed",
+							findingRefs: ["review: navigation failure was swallowed"],
+						}),
+					],
+				},
+				featureId,
+				true,
+			);
+			expect(retryWithoutFullLedger.ok).toBe(false);
+			if (!retryWithoutFullLedger.ok) {
+				expect(retryWithoutFullLedger.recovery?.errorCode).toBe(
+					"missing_review_scope_accounting",
+				);
+			}
+		}
+
+		const reviewerWithUnclosedFinding = recordReviewerDecision(
+			started.value.session,
+			{
+				...approvedFinalDecision(),
+				reviewScopeLedger: scopeLedgerForTargets(declaredTargets, {
+					"src/runtime/session.ts": {
+						status: "finding_closed",
+						findingRefs: ["review: unclosed finding"],
+					},
+				}),
+			},
+		);
+		expect(reviewerWithUnclosedFinding.ok).toBe(true);
+		if (reviewerWithUnclosedFinding.ok) {
+			const unclosedFindingCompletion = validateSuccessfulCompletion(
+				reviewerWithUnclosedFinding.value,
+				{
+					...workerBase,
+					reviewScopeLedger: finalScopeLedger,
+				},
+				featureId,
+				true,
+			);
+			expect(unclosedFindingCompletion.ok).toBe(false);
+			if (!unclosedFindingCompletion.ok) {
+				expect(unclosedFindingCompletion.message).toContain(
+					"review: unclosed finding",
+				);
+			}
+		}
+
+		const complete = validateSuccessfulCompletion(
+			reviewed.value,
+			{
+				...workerBase,
+				reviewScopeLedger: finalScopeLedger,
+			},
+			featureId,
+			true,
+		);
+		expect(complete.ok).toBe(true);
+	});
+
+	test("multi-feature review-and-fix final reviewer ledger accepts historical closed findings", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+		};
+		const applied = applyPlan(
+			createSession("Review and fix the runtime and adapter surfaces"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const firstStarted = startRun(approved.value);
+		expect(firstStarted.ok).toBe(true);
+		if (!firstStarted.ok) return;
+		const firstFeatureId = firstStarted.value.session.execution.activeFeatureId;
+		expect(firstFeatureId).toBe("setup-runtime");
+		if (!firstFeatureId) return;
+
+		const firstReviewed = recordReviewerDecision(
+			firstStarted.value.session,
+			approvedFeatureDecision(firstFeatureId),
+		);
+		expect(firstReviewed.ok).toBe(true);
+		if (!firstReviewed.ok) return;
+		const firstFindingRef = "review: setup runtime defect";
+		const firstCompleted = completeRun(
+			firstReviewed.value,
+			createWorkerResult(firstFeatureId, {
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: firstFindingRef }),
+				],
+				reviewScopeLedger: [
+					scopeLedgerEntry("file_target:src/runtime/session.ts", {
+						status: "finding_closed",
+						findingRefs: [firstFindingRef],
+					}),
+				],
+			}),
+		);
+		expect(firstCompleted.ok).toBe(true);
+		if (!firstCompleted.ok) return;
+
+		const secondStarted = startRun(firstCompleted.value);
+		expect(secondStarted.ok).toBe(true);
+		if (!secondStarted.ok) return;
+		const secondFeatureId =
+			secondStarted.value.session.execution.activeFeatureId;
+		expect(secondFeatureId).toBe("execute-feature");
+		if (!secondFeatureId) return;
+
+		const secondFindingRef = "review: execution adapter defect";
+		const finalScopeLedger = [
+			scopeLedgerEntry("file_target:src/runtime/session.ts", {
+				status: "finding_closed",
+				findingRefs: [firstFindingRef],
+			}),
+			scopeLedgerEntry("file_target:src/adapters/opencode/tools.ts", {
+				status: "finding_closed",
+				findingRefs: [secondFindingRef],
+			}),
+		];
+		const finalReviewed = recordReviewerDecision(secondStarted.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: finalScopeLedger,
+		});
+		expect(finalReviewed.ok).toBe(true);
+		if (!finalReviewed.ok) return;
+
+		const finalCompleted = completeRun(
+			finalReviewed.value,
+			createWorkerResult(secondFeatureId, {
+				validationScope: "broad",
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: secondFindingRef }),
+				],
+				reviewScopeLedger: finalScopeLedger,
+				finalReview: createFinalReviewPayload(),
+			}),
+		);
+		expect(finalCompleted.ok).toBe(true);
+	});
+
+	test("failed historical review-and-fix attempts do not satisfy final finding-closed scope", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+		};
+		const applied = applyPlan(
+			createSession("Review and fix the runtime and adapter surfaces"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const firstStarted = startRun(approved.value);
+		expect(firstStarted.ok).toBe(true);
+		if (!firstStarted.ok) return;
+		const firstFeatureId = firstStarted.value.session.execution.activeFeatureId;
+		expect(firstFeatureId).toBe("setup-runtime");
+		if (!firstFeatureId) return;
+
+		const firstReviewed = recordReviewerDecision(
+			firstStarted.value.session,
+			approvedFeatureDecision(firstFeatureId),
+		);
+		expect(firstReviewed.ok).toBe(true);
+		if (!firstReviewed.ok) return;
+		const failedFindingRef = "review: failed attempt only";
+		const failedAttempt = completeRun(
+			firstReviewed.value,
+			createWorkerResult(firstFeatureId, {
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: failedFindingRef }),
+				],
+				reviewScopeLedger: [
+					scopeLedgerEntry("file_target:src/runtime/session.ts", {
+						status: "finding_closed",
+						findingRefs: [failedFindingRef],
+					}),
+				],
+				featureReview: {
+					status: "failed",
+					summary: "Still has blocking review issues.",
+					blockingFindings: [{ summary: "Review issue remains." }],
+				},
+			}),
+		);
+		expect(failedAttempt.ok).toBe(false);
+		if (failedAttempt.ok || !failedAttempt.session) return;
+
+		const successfulFindingRef = "review: successful setup fix";
+		const firstCompleted = completeRun(
+			failedAttempt.session,
+			createWorkerResult(firstFeatureId, {
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: successfulFindingRef }),
+				],
+				reviewScopeLedger: [
+					scopeLedgerEntry("file_target:src/runtime/session.ts", {
+						status: "finding_closed",
+						findingRefs: [successfulFindingRef],
+					}),
+				],
+			}),
+		);
+		expect(firstCompleted.ok).toBe(true);
+		if (!firstCompleted.ok) return;
+
+		const secondStarted = startRun(firstCompleted.value);
+		expect(secondStarted.ok).toBe(true);
+		if (!secondStarted.ok) return;
+		const secondFeatureId =
+			secondStarted.value.session.execution.activeFeatureId;
+		expect(secondFeatureId).toBe("execute-feature");
+		if (!secondFeatureId) return;
+
+		const secondFindingRef = "review: execution adapter defect";
+		const workerScopeLedger = [
+			scopeLedgerEntry("file_target:src/runtime/session.ts", {
+				status: "finding_closed",
+				findingRefs: [successfulFindingRef],
+			}),
+			scopeLedgerEntry("file_target:src/adapters/opencode/tools.ts", {
+				status: "finding_closed",
+				findingRefs: [secondFindingRef],
+			}),
+		];
+		const finalReviewed = recordReviewerDecision(secondStarted.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: [
+				scopeLedgerEntry("file_target:src/runtime/session.ts", {
+					status: "finding_closed",
+					findingRefs: [failedFindingRef],
+				}),
+				scopeLedgerEntry("file_target:src/adapters/opencode/tools.ts", {
+					status: "finding_closed",
+					findingRefs: [secondFindingRef],
+				}),
+			],
+		});
+		expect(finalReviewed.ok).toBe(true);
+		if (!finalReviewed.ok) return;
+
+		const finalCompleted = completeRun(
+			finalReviewed.value,
+			createWorkerResult(secondFeatureId, {
+				validationScope: "broad",
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: secondFindingRef }),
+				],
+				reviewScopeLedger: workerScopeLedger,
+				finalReview: createFinalReviewPayload(),
+			}),
+		);
+		expect(finalCompleted.ok).toBe(false);
+		if (!finalCompleted.ok) {
+			expect(finalCompleted.message).toContain(failedFindingRef);
 		}
 	});
 

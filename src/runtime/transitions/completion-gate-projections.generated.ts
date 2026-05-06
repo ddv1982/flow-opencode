@@ -5,10 +5,11 @@ import {
 	type CompletionGateId,
 	type CompletionGatePath,
 	REVIEW_AND_FIX_COMPLETION_GATE_ORDER,
+	REVIEW_COMPLETION_GATE_ORDER,
 	requiredArtifactForCompletionGate,
 } from "./completion-gates";
 
-type CompletionGateProjectionMode = "default" | "review_and_fix";
+type CompletionGateProjectionMode = "default" | "review" | "review_and_fix";
 
 type CompletionGateProjectionOrder = readonly CompletionGateId[];
 
@@ -27,6 +28,7 @@ export type CompletionGateProjectionRow = {
 
 const COMPLETION_GATE_PROJECTION_ORDERS = {
 	default: COMPLETION_GATE_ORDER,
+	review: REVIEW_COMPLETION_GATE_ORDER,
 	review_and_fix: REVIEW_AND_FIX_COMPLETION_GATE_ORDER,
 } as const satisfies Record<
 	CompletionGateProjectionMode,
@@ -127,6 +129,8 @@ function guidanceBlock(
 export const COMPLETION_GATE_PROMPT_GUIDANCE = [
 	guidanceBlock("Feature completion gates (default):", "feature", "default"),
 	guidanceBlock("Final completion gates (default):", "final", "default"),
+	guidanceBlock("Feature completion gates (review):", "feature", "review"),
+	guidanceBlock("Final completion gates (review):", "final", "review"),
 	guidanceBlock(
 		"Feature completion gates (review_and_fix):",
 		"feature",
@@ -151,6 +155,12 @@ export const COMPLETION_GATE_AUDIT_GUIDANCE = [
 		"final",
 		"default",
 	),
+	guidanceBlock(
+		"Audit parity lens — feature path (review):",
+		"feature",
+		"review",
+	),
+	guidanceBlock("Audit parity lens — final path (review):", "final", "review"),
 	guidanceBlock(
 		"Audit parity lens — feature path (review_and_fix):",
 		"feature",

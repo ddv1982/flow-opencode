@@ -1,5 +1,8 @@
 import {
+	closedReviewFindingRefsForCompletion,
 	describeFinalReviewCoverageFailure,
+	describeFinalReviewerReviewScopeFailure,
+	describeReviewScopeLedgerFailure,
 	finalReviewDepthMatchesPolicy,
 } from "../domain";
 import type { Session, WorkerResultArgs } from "../schema";
@@ -119,8 +122,19 @@ function finalReviewerDecisionFailureMessage(
 		worker,
 		decision,
 	);
-	return coverageFailure
-		? `Worker result cannot complete the session because the recorded final reviewer decision ${coverageFailure}.`
+	if (coverageFailure) {
+		return `Worker result cannot complete the session because the recorded final reviewer decision ${coverageFailure}.`;
+	}
+	const reviewScopeFailure = describeFinalReviewerReviewScopeFailure(
+		session,
+		decision,
+		{
+			closedFindingRefs: closedReviewFindingRefsForCompletion(session, worker),
+			requireClosedFindingMatch: session.plan?.goalMode === "review_and_fix",
+		},
+	);
+	return reviewScopeFailure
+		? `Worker result cannot complete the session because the recorded final reviewer decision ${reviewScopeFailure}`
 		: null;
 }
 
@@ -201,6 +215,23 @@ export function validateNormalizedSuccessfulCompletion(
 				),
 			);
 		}
+	}
+
+	const reviewScopeFailure = describeReviewScopeLedgerFailure(
+		session,
+		normalizedWorker,
+		featureId,
+		wasFinalFeature,
+	);
+	if (reviewScopeFailure) {
+		return fail(
+			`Worker result cannot complete because ${reviewScopeFailure}`,
+			buildCompletionRecovery(
+				featureId,
+				wasFinalFeature,
+				"missing_review_scope_accounting",
+			),
+		);
 	}
 
 	if (!wasFinalFeature) {

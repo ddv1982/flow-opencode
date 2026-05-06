@@ -72,6 +72,10 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_PLAN_CONTRACT).toContain(
 			"finalReviewPolicy?: broad | detailed",
 		);
+		expect(FLOW_PLAN_CONTRACT).toContain("reviewScope?: {");
+		expect(FLOW_PLAN_CONTRACT).toContain(
+			"review/review_and_fix plans must declare review scope through reviewScope or fileTargets",
+		);
 	});
 
 	test("worker contract requires clean review before ok completion", () => {
@@ -84,6 +88,13 @@ describe("prompt and command config contracts", () => {
 			"never return status: ok until targeted validation is complete and featureReview has no blocking findings",
 		);
 		expect(FLOW_WORKER_CONTRACT).toContain("validationScope: broad");
+		expect(FLOW_WORKER_CONTRACT).toContain("reviewScopeLedger?");
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"reviewed_no_findings | finding_closed | deferred | out_of_scope | blocked",
+		);
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"reviewScopeLedger is runtime scope accounting, not a requirement to edit every declared target file",
+		);
 		expect(FLOW_WORKER_CONTRACT).toContain(
 			"include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
 		);
@@ -222,6 +233,15 @@ describe("prompt and command config contracts", () => {
 		);
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"reviewScopeLedger?: { scopeId: string, status: reviewed_no_findings | finding_closed | deferred | out_of_scope | blocked",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"include reviewScopeLedger entries that account for every declared review scope target/domain",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"does not require edits to every target file",
 		);
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"adversarial failure-mode classes",

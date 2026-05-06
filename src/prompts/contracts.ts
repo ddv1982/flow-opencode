@@ -17,12 +17,15 @@ const FLOW_PLAN_CONTRACT_BASE = `Persist a plan with:
 - overview: string
 - requirements: string[]
 - architectureDecisions: string[]
-- features: { id, title, summary, priority?: critical | important | nice_to_have, deferCandidate?: boolean, fileTargets: string[], verification: string[], dependsOn?: string[], blockedBy?: string[] }[]
+- features: { id, title, summary, priority?: critical | important | nice_to_have, deferCandidate?: boolean, fileTargets: string[], reviewScope?: { id: string, kind: file | glob | domain | surface | workflow | custom, target: string, description?: string }[], verification: string[], dependsOn?: string[], blockedBy?: string[] }[]
 - goalMode?: implementation | review | review_and_fix
 - decompositionPolicy?: atomic_feature | iterative_refinement | open_ended
 - completionPolicy?: { minCompletedFeatures?: number }
 - deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean, finalReviewPolicy?: broad | detailed }
 - notes?: string[]
+
+Plan rules:
+- review/review_and_fix plans must declare review scope through reviewScope or fileTargets for every target/domain the runtime must account.
 
 Record planning context separately via flow_plan_context_record or flow_plan_apply({ plan, planning: ... }) when needed — not inside \`plan\`.
 - planning.repoProfile?: string[]
@@ -66,6 +69,7 @@ const FLOW_WORKER_CONTRACT_BASE = `Return exactly one JSON object that matches t
 - validationRun: { command, status: passed | failed | failed_existing | partial, summary }[]
 - decisions: { summary }[]
 - reviewFindingClosures?: { findingRef, status: closed | partially_closed | not_closed | blocked, fixRefs: string[], testRefs: string[], validationRefs: string[], residualRisk }[]
+- reviewScopeLedger?: { scopeId: string, status: reviewed_no_findings | finding_closed | deferred | out_of_scope | blocked, evidenceRefs: string[], findingRefs?: string[], validationRefs?: string[], residualRisk: string, rationale?: string }[]
 - evidencePackets?: immutable compact evidence/context packet reference[]
 - nextStep: string
 - reviewIterations?: number
@@ -94,6 +98,9 @@ Status rules:
 - when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending
 - for review_and_fix work, include reviewFindingClosures before claiming success; each original finding must have a stable findingRef, status, code fixRefs, testRefs, validationRefs that match validationRun.command values, and residualRisk
+- for review/review_and_fix completion, account for every declared review scope target/domain using reviewScopeLedger entries with exactly one status per scopeId: reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked
+- reviewScopeLedger entries must include evidenceRefs and residualRisk; use findingRefs/validationRefs when applicable
+- reviewScopeLedger is runtime scope accounting, not a requirement to edit every declared target file
 - do not mark a finding closed unless fixRefs, testRefs, and validationRefs all identify concrete evidence; use status: needs_input with partially_closed, not_closed, or blocked closure entries when evidence is incomplete
 
 Completion gate guidance (descriptor-projected, runtime enforcement remains authoritative):
@@ -127,6 +134,7 @@ export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that match
 - validationAssessment?: string
 - evidenceRefs?: { changedArtifacts: string[], validationCommands: string[] }
 - evidencePackets?: read-only evidence/context packet references for feature reviews; full evidence/context packets for final reviews
+- reviewScopeLedger?: { scopeId: string, status: reviewed_no_findings | finding_closed | deferred | out_of_scope | blocked, evidenceRefs: string[], findingRefs?: string[], validationRefs?: string[], residualRisk: string, rationale?: string }[]
 - reviewContextPack?: { task: string, compareBase?: string, changedFiles: string[], includedContext: { path: string, reason: changed_file | imported_dependency | caller | callee | state_owner | lifecycle_owner | architectural_neighbor | test_oracle | validation_evidence, surface?: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface, summary?: string }[], relationships: { from: string, to: string, kind: string, summary: string }[], validationEvidence: { command: string, status?: string, summary?: string }[], suggestedValidation: string[], coverageGaps: string[], reviewedSurfaces: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface [] }
 - integrationChecks?: string[]
 - regressionChecks?: string[]
@@ -163,6 +171,8 @@ Reviewer rules:
 - for scope: final, cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - for scope: final, when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface
 - for scope: final, perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving
+- for scope: final in review/review_and_fix sessions, include reviewScopeLedger entries that account for every declared review scope target/domain with statuses reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked; include evidenceRefs and residualRisk for each entry
+- reviewScopeLedger accounting is required for review scope closure and does not require edits to every target file
 - do not implement fixes yourself; only review and report findings
 
 Output examples:

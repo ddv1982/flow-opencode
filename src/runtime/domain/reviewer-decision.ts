@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { ReviewerDecision, Session } from "../schema";
 import type {
 	BehaviorCheckSchema,
+	ReviewScopeLedgerEntrySchema,
 	ValidationCoverageSchema,
 } from "../schema-review-shared";
 import type {
@@ -18,6 +19,7 @@ import {
 	type ReviewContextPackInput,
 } from "./review-content-discovery";
 import { detailedFinalReviewDecisionFailureMessage } from "./review-messages";
+import { describeFinalReviewerReviewScopeFailure } from "./review-scope-accounting";
 import {
 	finalReviewPolicyForPlan,
 	reviewerPurposeForScope,
@@ -54,6 +56,15 @@ function normalizeValidationCoverageForCoverage(
 	}));
 }
 
+function normalizeReviewScopeLedgerForDecision(
+	ledger: RecordReviewerDecisionInput["reviewScopeLedger"],
+): FinalScopeReviewerDecision["reviewScopeLedger"] {
+	return ledger?.map((entry) => ({
+		...entry,
+		evidenceRefs: entry.evidenceRefs ?? [],
+	}));
+}
+
 export type RecordReviewerDecisionInput = {
 	scope: string;
 	reviewPurpose?: string | undefined;
@@ -71,6 +82,9 @@ export type RecordReviewerDecisionInput = {
 		  }
 		| undefined;
 	evidencePackets?: FinalScopeReviewerDecision["evidencePackets"];
+	reviewScopeLedger?:
+		| Array<z.input<typeof ReviewScopeLedgerEntrySchema>>
+		| undefined;
 	reviewContextPack?: ReviewContextPackInput | undefined;
 	integrationChecks?: string[] | undefined;
 	regressionChecks?: string[] | undefined;
@@ -230,6 +244,19 @@ export function validateReviewerDecisionInput(
 		if (coverageFailure) {
 			return `Reviewer decision validation failed: finalReviewCoverage: ${coverageFailure}`;
 		}
+		const reviewScopeFailure = describeFinalReviewerReviewScopeFailure(
+			session,
+			{
+				status: "approved",
+				evidenceRefs,
+				reviewScopeLedger: normalizeReviewScopeLedgerForDecision(
+					input.reviewScopeLedger,
+				),
+			},
+		);
+		if (reviewScopeFailure) {
+			return `Reviewer decision validation failed: reviewScopeLedger: ${reviewScopeFailure}`;
+		}
 	}
 
 	return null;
@@ -248,6 +275,9 @@ export function buildReviewerDecision(
 		| undefined;
 	const featureReviewerId = input.featureId ?? "";
 	const reviewerStatus = input.status as ReviewerDecision["status"];
+	const reviewScopeLedger = normalizeReviewScopeLedgerForDecision(
+		input.reviewScopeLedger,
+	);
 
 	return input.scope === "final"
 		? {
@@ -275,6 +305,7 @@ export function buildReviewerDecision(
 				...(input.evidencePackets
 					? { evidencePackets: input.evidencePackets }
 					: {}),
+				...(reviewScopeLedger ? { reviewScopeLedger } : {}),
 				...(input.reviewContextPack
 					? {
 							reviewContextPack: buildReviewContextPack(

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.11] - 2026-05-06
+
+Require review-scope accounting before broad audit completion
+
+Flow 2.0.11 hardens broad review and review-and-fix workflows with a runtime-owned review scope ledger. Review-shaped plans must now declare an effective scope through `reviewScope` or `fileTargets`, and final completion cannot reduce a full audit request to one closed finding unless every declared target is accounted as reviewed with no findings, finding closed, deferred, out of scope, or blocked with evidence and residual risk.
+
+The release keeps artifact-derived final-review coverage separate from audit-scope closure. `reviewScopeLedger` is carried through worker results, execution history, and final reviewer approvals, while implementation-mode one-file workflows remain valid without the new ledger. Historical completed feature closures can satisfy final review-and-fix scope where appropriate, but failed historical attempts cannot be cited as completion evidence.
+
+The OpenCode adapter, descriptors, prompt contracts, recovery guidance, generated completion-gate projections, architecture notes, and prompt snapshots now surface the new scope-accounting contract. Regression coverage models broad one-file fixes, multi-feature historical closures, failed-attempt evidence rejection, plan scope requirements, effective scope-id collisions, and the preserved implementation-mode path.
+
+Constraint: Add audit-scope completion accounting without requiring edits to every declared target file
+Constraint: Keep final-review `reviewedSurfaces` artifact-derived; do not overload it into a whole-audit ledger
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Treat broad review completion as mutation-count coverage | legitimate audits may fix one file while still reviewing or deferring the rest of the declared scope
+Rejected: Infer audit breadth from natural-language goals at completion time | structured `reviewScope` / `fileTargets` gives the runtime an auditable source of truth
+Rejected: Let failed historical attempts satisfy final reviewer `finding_closed` scope entries | rejected attempts can contain unsupported closure refs and must not become completion evidence
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: For `review` and `review_and_fix` plans, declare scope explicitly and close it with `reviewScopeLedger`; use `deferred`, `out_of_scope`, or `blocked` for honest residual-risk accounting rather than narrowing silently
+Tested: `bun run lint`; `bun run typecheck`; `bun test` (543 pass, 0 fail, 1 snapshot, 17064 expect calls); Oracle review follow-ups fixed and revalidated with targeted completion, final-review, prompt, plan, schema, protocol, recovery, and snapshot suites
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.11` before push
+
 ## [2.0.10] - 2026-05-06
 
 Require behavior-grounded final review approvals

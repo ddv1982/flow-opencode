@@ -4,6 +4,7 @@ export type CompletionGateId =
 	| "validation_evidence"
 	| "validation_passed"
 	| "review_finding_closure"
+	| "review_scope_accounting"
 	| "reviewer_decision"
 	| "validation_scope"
 	| "feature_review"
@@ -12,7 +13,10 @@ export type CompletionGateId =
 
 export type CompletionGatePath = "feature" | "final";
 
-export type CompletionGateApplicability = CompletionGatePath | "review_and_fix";
+export type CompletionGateApplicability =
+	| CompletionGatePath
+	| "review"
+	| "review_and_fix";
 
 export type CompletionGateRequiredArtifact =
 	| null
@@ -29,6 +33,7 @@ export type CompletionGateDescriptor = {
 	predicateOwner:
 		| "validateNormalizedSuccessfulCompletion"
 		| "reviewFindingClosureFailureMessage"
+		| "reviewScopeLedgerFailureMessage"
 		| "finalReviewerDecisionFailureMessage"
 		| "finalReviewFailureMessage";
 	requiredArtifact: CompletionGateRequiredArtifact;
@@ -86,6 +91,22 @@ export const COMPLETION_GATE_DESCRIPTORS = {
 			"Review-and-fix completion must include closure evidence for every remediated review finding.",
 		renderableText:
 			"Attach reviewFindingClosures with fix, test, and validation references before completion.",
+	},
+	review_scope_accounting: {
+		id: "review_scope_accounting",
+		recoveryKind: "missing_review_scope_accounting",
+		appliesTo: ["review", "review_and_fix"],
+		predicateOwner: "reviewScopeLedgerFailureMessage",
+		requiredArtifact: "review_scope_ledger",
+		invariantIds: [
+			"completion.gates.required_order",
+			"review.scope.payload_binding",
+			"recovery.next_action.binding",
+		],
+		operatorHint:
+			"Review and review-and-fix completion must account every declared review scope target without requiring edits to every target.",
+		renderableText:
+			"Attach reviewScopeLedger entries for every declared review target/domain before completion.",
 	},
 	reviewer_decision: {
 		id: "reviewer_decision",
@@ -199,11 +220,34 @@ export const COMPLETION_GATE_ORDER = {
 	],
 } as const satisfies Record<CompletionGatePath, readonly CompletionGateId[]>;
 
+export const REVIEW_COMPLETION_GATE_ORDER = {
+	feature: [
+		"validation_evidence",
+		"validation_passed",
+		"review_scope_accounting",
+		"reviewer_decision",
+		"validation_scope",
+		"feature_review",
+		"final_review_passed",
+	],
+	final: [
+		"validation_evidence",
+		"validation_passed",
+		"review_scope_accounting",
+		"validation_scope",
+		"feature_review",
+		"final_review_passed",
+		"final_review_payload",
+		"reviewer_decision",
+	],
+} as const satisfies Record<CompletionGatePath, readonly CompletionGateId[]>;
+
 export const REVIEW_AND_FIX_COMPLETION_GATE_ORDER = {
 	feature: [
 		"validation_evidence",
 		"validation_passed",
 		"review_finding_closure",
+		"review_scope_accounting",
 		"reviewer_decision",
 		"validation_scope",
 		"feature_review",
@@ -213,6 +257,7 @@ export const REVIEW_AND_FIX_COMPLETION_GATE_ORDER = {
 		"validation_evidence",
 		"validation_passed",
 		"review_finding_closure",
+		"review_scope_accounting",
 		"validation_scope",
 		"feature_review",
 		"final_review_passed",
@@ -222,24 +267,28 @@ export const REVIEW_AND_FIX_COMPLETION_GATE_ORDER = {
 } as const satisfies Record<CompletionGatePath, readonly CompletionGateId[]>;
 
 export const CONDITIONAL_COMPLETION_GATE_ORDER = {
+	review: REVIEW_COMPLETION_GATE_ORDER,
 	reviewAndFix: REVIEW_AND_FIX_COMPLETION_GATE_ORDER,
 } as const satisfies Record<
-	"reviewAndFix",
+	"review" | "reviewAndFix",
 	Record<CompletionGatePath, readonly CompletionGateId[]>
 >;
 
 export function completionGateOrderFor(
 	path: CompletionGatePath,
-	options?: { reviewAndFix?: boolean },
+	options?: { review?: boolean; reviewAndFix?: boolean },
 ): readonly CompletionGateId[] {
-	return options?.reviewAndFix
-		? REVIEW_AND_FIX_COMPLETION_GATE_ORDER[path]
+	if (options?.reviewAndFix) {
+		return REVIEW_AND_FIX_COMPLETION_GATE_ORDER[path];
+	}
+	return options?.review
+		? REVIEW_COMPLETION_GATE_ORDER[path]
 		: COMPLETION_GATE_ORDER[path];
 }
 
 export function completionRecoveryKindOrderFor(
 	path: CompletionGatePath,
-	options?: { reviewAndFix?: boolean },
+	options?: { review?: boolean; reviewAndFix?: boolean },
 ): readonly CompletionRecoveryKind[] {
 	return completionGateOrderFor(path, options).map(
 		(gateId) => COMPLETION_GATE_DESCRIPTORS[gateId].recoveryKind,

@@ -75,6 +75,16 @@ export function createReviewRuntimeTools() {
 								(check) => check.result === "gap_recorded",
 							).length,
 							validationCoverageCount: input.validationCoverage?.length ?? 0,
+							reviewScopeLedgerCount: input.reviewScopeLedger?.length ?? 0,
+							reviewScopeLedgerStatusCounts: (
+								input.reviewScopeLedger ?? []
+							).reduce(
+								(acc, entry) => {
+									acc[entry.status] = (acc[entry.status] ?? 0) + 1;
+									return acc;
+								},
+								{} as Record<string, number>,
+							),
 						},
 					});
 					return executeGuardedSessionMutation(

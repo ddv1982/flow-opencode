@@ -430,6 +430,125 @@ describe("runtime final review contracts", () => {
 		).toBe(true);
 	});
 
+	test("review-mode approved final reviewer decisions require complete review scope ledger", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: [
+						"src/runtime/session.ts",
+						"src/runtime/transitions/execution.ts",
+					],
+				},
+			],
+		};
+		const applied = applyPlan(createSession("Review runtime completion"), plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const baseDecision = {
+			scope: "final" as const,
+			status: "approved" as const,
+			summary: "Final review approved.",
+			reviewDepth: "detailed" as const,
+			reviewedSurfaces: [
+				"changed_files" as const,
+				"shared_surfaces" as const,
+				"validation_evidence" as const,
+			],
+			evidenceSummary: "Reviewed changed files and declared scope.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: ["Checked runtime completion integration."],
+			regressionChecks: ["Checked runtime completion regression coverage."],
+			remainingGaps: [],
+		};
+
+		const missingLedger = recordReviewerDecision(
+			started.value.session,
+			baseDecision,
+		);
+		expect(missingLedger.ok).toBe(false);
+		if (!missingLedger.ok) {
+			expect(missingLedger.message).toContain("reviewScopeLedger");
+		}
+
+		const partialLedger = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+			],
+		});
+		expect(partialLedger.ok).toBe(false);
+		if (!partialLedger.ok) {
+			expect(partialLedger.message).toContain(
+				"file_target:src/runtime/transitions/execution.ts",
+			);
+		}
+
+		const completeLedger = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+				{
+					scopeId: "file_target:src/runtime/transitions/execution.ts",
+					status: "deferred" as const,
+					evidenceRefs: ["src/runtime/transitions/execution.ts"],
+					residualRisk:
+						"Deferred to the next review pass; no blocking completion risk recorded.",
+				},
+			],
+		});
+		expect(completeLedger.ok).toBe(true);
+	});
+
+	test("implementation-mode approved final reviewer decisions do not require review scope ledger", () => {
+		const session = createSession("Implement runtime completion");
+		const accepted = recordReviewerDecision(session, {
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			reviewDepth: "broad",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary: "Reviewed changed files.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+		});
+		expect(accepted.ok).toBe(true);
+	});
+
 	test("accepts optional behavior and validation coverage fields and rejects approved needs_fix combinations", () => {
 		const withOptionalCoverage = FlowReviewRecordFinalArgsSchema.safeParse({
 			scope: "final",

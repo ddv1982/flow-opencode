@@ -25,12 +25,22 @@ export type NormalizedReviewFindingClosure = Omit<
 	validationRefs: string[];
 };
 
+export type NormalizedReviewScopeLedgerEntry = Omit<
+	NonNullable<WorkerResultArgs["reviewScopeLedger"]>[number],
+	"evidenceRefs" | "findingRefs" | "validationRefs"
+> & {
+	evidenceRefs: string[];
+	findingRefs: string[];
+	validationRefs: string[];
+};
+
 export type NormalizedWorkerResultBase = Omit<
 	WorkerResultArgs,
 	| "artifactsChanged"
 	| "validationRun"
 	| "decisions"
 	| "reviewFindingClosures"
+	| "reviewScopeLedger"
 	| "featureReview"
 	| "finalReview"
 > & {
@@ -38,6 +48,7 @@ export type NormalizedWorkerResultBase = Omit<
 	validationRun: NonNullable<WorkerResultArgs["validationRun"]>;
 	decisions: NonNullable<WorkerResultArgs["decisions"]>;
 	reviewFindingClosures: NormalizedReviewFindingClosure[];
+	reviewScopeLedger: NormalizedReviewScopeLedgerEntry[];
 	featureReview: NormalizedReview;
 	finalReview: NormalizedFinalReview | undefined;
 };
@@ -116,6 +127,17 @@ function normalizeReviewFindingClosures(
 	}));
 }
 
+function normalizeReviewScopeLedger(
+	ledger: NonNullable<WorkerResultArgs["reviewScopeLedger"]> | undefined,
+): NormalizedReviewScopeLedgerEntry[] {
+	return (ledger ?? []).map((entry) => ({
+		...entry,
+		evidenceRefs: entry.evidenceRefs ?? [],
+		findingRefs: entry.findingRefs ?? [],
+		validationRefs: entry.validationRefs ?? [],
+	}));
+}
+
 export function normalizeWorkerResult(
 	worker: WorkerResultArgs,
 ): NormalizedWorkerResult {
@@ -127,6 +149,7 @@ export function normalizeWorkerResult(
 		reviewFindingClosures: normalizeReviewFindingClosures(
 			worker.reviewFindingClosures,
 		),
+		reviewScopeLedger: normalizeReviewScopeLedger(worker.reviewScopeLedger),
 		featureReview: normalizeReview(worker.featureReview),
 		finalReview: worker.finalReview
 			? normalizeFinalReview(worker.finalReview)
@@ -205,6 +228,7 @@ export function recordWorkerResult(
 					artifactsChanged: worker.artifactsChanged,
 					decisions: worker.decisions,
 					reviewFindingClosures: worker.reviewFindingClosures,
+					reviewScopeLedger: worker.reviewScopeLedger,
 					featureResult: worker.featureResult,
 					replanRecord: replanRecord ?? undefined,
 					reviewerDecision: session.execution.lastReviewerDecision,

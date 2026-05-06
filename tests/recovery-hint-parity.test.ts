@@ -44,6 +44,11 @@ const cases: Array<[CompletionRecoveryKind, boolean, string]> = [
 		"Record a reviewFindingClosures ledger that maps each remediated finding to fix, test, validation evidence, and residual risk, then retry completion.",
 	],
 	[
+		"missing_review_scope_accounting",
+		false,
+		"Provide reviewScopeLedger entries for every declared review target/domain with status, evidenceRefs, findingRefs when applicable, validationRefs when used, and residualRisk; then retry completion.",
+	],
+	[
 		"missing_final_review",
 		true,
 		"The active feature is on the session's final completion path. Run the final review required by deliveryPolicy.finalReviewPolicy, include a passing finalReview in the worker result, and rerun the current Flow feature.",

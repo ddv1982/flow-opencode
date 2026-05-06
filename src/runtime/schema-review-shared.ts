@@ -3,6 +3,8 @@ import {
 	FINAL_REVIEW_POLICIES,
 	FINAL_REVIEW_SURFACES,
 	REVIEW_FINDING_CLOSURE_STATUSES,
+	REVIEW_SCOPE_ACCOUNTING_STATUSES,
+	REVIEW_SCOPE_TARGET_KINDS,
 	REVIEW_STATUSES,
 } from "./constants";
 import {
@@ -26,6 +28,31 @@ export const ReviewFindingClosureSchema = z
 		testRefs: z.array(z.string().min(1)).default([]),
 		validationRefs: z.array(z.string().min(1)).default([]),
 		residualRisk: z.string().min(1),
+	})
+	.strict();
+
+export const ReviewScopeTargetSchema = z
+	.object({
+		id: z.string().min(1),
+		kind: z.enum(REVIEW_SCOPE_TARGET_KINDS),
+		target: z.string().min(1),
+		description: z.string().min(1).optional(),
+	})
+	.strict();
+
+export const ReviewScopeAccountingStatusSchema = z.enum(
+	REVIEW_SCOPE_ACCOUNTING_STATUSES,
+);
+
+export const ReviewScopeLedgerEntrySchema = z
+	.object({
+		scopeId: z.string().min(1),
+		status: ReviewScopeAccountingStatusSchema,
+		evidenceRefs: z.array(z.string().min(1)).default([]),
+		findingRefs: z.array(z.string().min(1)).optional(),
+		validationRefs: z.array(z.string().min(1)).optional(),
+		residualRisk: z.string().min(1),
+		rationale: z.string().min(1).optional(),
 	})
 	.strict();
 

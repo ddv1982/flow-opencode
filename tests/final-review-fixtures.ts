@@ -26,6 +26,12 @@ type FinalReviewerDecisionOverrides = Partial<FinalReviewerDecision> & {
 	evidenceRefs?: Partial<FinalReviewerDecision["evidenceRefs"]>;
 };
 
+type ReviewScopeLedgerEntry = NonNullable<
+	FinalReviewerDecision["reviewScopeLedger"]
+>[number];
+
+type ReviewScopeLedgerEntryOverrides = Partial<ReviewScopeLedgerEntry>;
+
 function finalReviewBase(): Omit<FinalReviewPayload, "status"> {
 	return {
 		reviewDepth: "detailed",
@@ -57,6 +63,18 @@ export function createFinalReviewPayload(
 			...DEFAULT_EVIDENCE_REFS,
 			...overrides.evidenceRefs,
 		},
+	};
+}
+
+export function createReviewScopeLedgerEntry(
+	overrides: ReviewScopeLedgerEntryOverrides = {},
+): ReviewScopeLedgerEntry {
+	return {
+		scopeId: "feature:runtime-session",
+		status: "reviewed_no_findings",
+		evidenceRefs: ["tests/final-review-fixtures.ts"],
+		residualRisk: "No additional risk identified by fixture coverage.",
+		...overrides,
 	};
 }
 

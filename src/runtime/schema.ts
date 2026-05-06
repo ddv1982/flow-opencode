@@ -23,6 +23,8 @@ import {
 	ReviewFindingClosureSchema,
 	ReviewFindingSchema,
 	ReviewSchema,
+	ReviewScopeLedgerEntrySchema,
+	ReviewScopeTargetSchema,
 } from "./schema-review-shared";
 import {
 	addReplanRequiredIssueIfNeeded,
@@ -40,6 +42,9 @@ export {
 	BehaviorCheckResultSchema,
 	BehaviorCheckSchema,
 	BehaviorRiskClassSchema,
+	ReviewScopeAccountingStatusSchema,
+	ReviewScopeLedgerEntrySchema,
+	ReviewScopeTargetSchema,
 	ValidationCoverageSchema,
 } from "./schema-review-shared";
 export {
@@ -143,6 +148,7 @@ export const FinalReviewerDecisionSchema = z
 		blockingFindings: z.array(ReviewFindingSchema).default([]),
 		followUps: z.array(FollowUpSchema).default([]),
 		...finalReviewInputSharedShape,
+		reviewScopeLedger: z.array(ReviewScopeLedgerEntrySchema).optional(),
 		evidencePackets: EvidencePacketArraySchema.optional(),
 	})
 	.strict()
@@ -157,6 +163,7 @@ export const PersistedFinalReviewerDecisionSchema = z
 		blockingFindings: z.array(ReviewFindingSchema).default([]),
 		followUps: z.array(FollowUpSchema).default([]),
 		...finalReviewPersistedSharedShape,
+		reviewScopeLedger: z.array(ReviewScopeLedgerEntrySchema).optional(),
 		evidencePackets: EvidencePacketArraySchema.optional(),
 	})
 	.strict()
@@ -176,6 +183,7 @@ export const WorkerResultBaseSchema = z.object({
 	reviewIterations: z.number().int().nonnegative().optional(),
 	decisions: z.array(DecisionSchema).default([]),
 	reviewFindingClosures: z.array(ReviewFindingClosureSchema).optional(),
+	reviewScopeLedger: z.array(ReviewScopeLedgerEntrySchema).optional(),
 	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 	nextStep: z.string().min(1),
 	featureResult: FeatureResultSchema,
@@ -235,6 +243,7 @@ export const FeatureSchema = z.object({
 	priority: z.enum(FEATURE_PRIORITIES).optional(),
 	deferCandidate: z.boolean().optional(),
 	fileTargets: z.array(z.string().min(1)).default([]),
+	reviewScope: z.array(ReviewScopeTargetSchema).optional(),
 	verification: z.array(z.string().min(1)).default([]),
 	dependsOn: z.array(z.string().min(1)).optional(),
 	blockedBy: z.array(z.string().min(1)).optional(),
@@ -328,6 +337,7 @@ export const ExecutionHistoryEntrySchema = z.object({
 	artifactsChanged: z.array(ArtifactSchema).default([]),
 	decisions: z.array(DecisionSchema).default([]),
 	reviewFindingClosures: z.array(ReviewFindingClosureSchema).default([]),
+	reviewScopeLedger: z.array(ReviewScopeLedgerEntrySchema).optional(),
 	featureResult: FeatureResultSchema.optional(),
 	replanRecord: ReplanRecordSchema.optional(),
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),

@@ -96,4 +96,82 @@ describe("plan graph validation", () => {
 
 		expect(applied.message).toBe(message);
 	});
+
+	test("review plans must declare review scope through reviewScope or fileTargets", () => {
+		const firstFeature = samplePlan.features[0];
+		expect(firstFeature).toBeDefined();
+		if (!firstFeature) return;
+
+		const withoutScope = applyPlan(createSampleSession(), {
+			...samplePlan,
+			goalMode: "review",
+			features: [
+				{
+					...firstFeature,
+					fileTargets: [],
+					reviewScope: undefined,
+				},
+			],
+		});
+		expect(withoutScope.ok).toBe(false);
+		if (!withoutScope.ok) {
+			expect(withoutScope.message).toBe(
+				"Review and review-and-fix plans must declare review scope through reviewScope or fileTargets before approval.",
+			);
+		}
+
+		const withExplicitScope = applyPlan(createSampleSession(), {
+			...samplePlan,
+			goalMode: "review",
+			features: [
+				{
+					...firstFeature,
+					fileTargets: [],
+					reviewScope: [
+						{
+							id: "runtime-domain",
+							kind: "domain",
+							target: "runtime completion gates",
+						},
+					],
+				},
+			],
+		});
+		expect(withExplicitScope.ok).toBe(true);
+	});
+
+	test("review plans reject effective scope id collisions across explicit and file target scope", () => {
+		const [firstFeature, secondFeature] = samplePlan.features;
+		expect(firstFeature).toBeDefined();
+		expect(secondFeature).toBeDefined();
+		if (!firstFeature || !secondFeature) return;
+
+		const applied = applyPlan(createSampleSession(), {
+			...samplePlan,
+			goalMode: "review",
+			features: [
+				{
+					...firstFeature,
+					fileTargets: ["src/runtime/session.ts"],
+				},
+				{
+					...secondFeature,
+					fileTargets: [],
+					reviewScope: [
+						{
+							id: "file_target:src/runtime/session.ts",
+							kind: "domain",
+							target: "runtime session lifecycle",
+						},
+					],
+				},
+			],
+		});
+
+		expect(applied.ok).toBe(false);
+		if (!applied.ok) {
+			expect(applied.message).toContain("file_target:src/runtime/session.ts");
+			expect(applied.message).toContain("multiple distinct targets");
+		}
+	});
 });

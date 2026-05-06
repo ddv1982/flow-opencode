@@ -69,12 +69,12 @@ describe("tool schema config contracts", () => {
 		// These ceilings intentionally leave narrow headroom over measured growth
 		// (including finalReview/suggestedValidation additive fields) so unrelated
 		// future bloat still fails fast.
-		expect(totalSize).toBeLessThan(345000);
-		expect(schemaSizes.flow_plan_apply).toBeLessThan(71500);
+		expect(totalSize).toBeLessThan(350000);
+		expect(schemaSizes.flow_plan_apply).toBeLessThan(77000);
 		expect(schemaSizes.flow_plan_context_record).toBeLessThan(58500);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(82000);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(88000);
 		expect(schemaSizes.flow_review_record_feature).toBeLessThan(20000);
-		expect(schemaSizes.flow_review_record_final).toBeLessThan(70000);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(73000);
 		expect(schemaSizes.flow_review_render).toBeLessThan(70000);
 	});
 
@@ -277,6 +277,14 @@ describe("tool schema config contracts", () => {
 		expect(
 			schemas.flow_review_record_final.safeParse({
 				scope: "final",
+				reviewScopeLedger: [
+					{
+						scopeId: "feature:setup-runtime",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["tests/config/tool-schemas.test.ts"],
+						residualRisk: "No additional risk found.",
+					},
+				],
 				reviewDepth: "detailed",
 				reviewedSurfaces: [
 					"changed_files",
@@ -450,6 +458,14 @@ describe("tool schema config contracts", () => {
 
 		const validPayload = {
 			contractVersion: "1",
+			reviewScopeLedger: [
+				{
+					scopeId: "feature:setup-runtime",
+					status: "reviewed_no_findings",
+					evidenceRefs: ["tests/config/tool-schemas.test.ts"],
+					residualRisk: "No additional risk found.",
+				},
+			],
 			status: "ok",
 			summary: "Completed runtime setup.",
 			artifactsChanged: [],
@@ -487,6 +503,14 @@ describe("tool schema config contracts", () => {
 
 		const validCompletion = {
 			contractVersion: "1",
+			reviewScopeLedger: [
+				{
+					scopeId: "feature:setup-runtime",
+					status: "reviewed_no_findings",
+					evidenceRefs: ["tests/config/tool-schemas.test.ts"],
+					residualRisk: "No additional risk found.",
+				},
+			],
 			status: "ok",
 			summary: "Completed runtime setup.",
 			artifactsChanged: [],

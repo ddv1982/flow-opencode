@@ -31,6 +31,7 @@ export type TransitionRecovery = {
 		| "feature_review_payload"
 		| "final_review_payload"
 		| "review_finding_closure_ledger"
+		| "review_scope_ledger"
 		| "targeted_validation_result"
 		| "broad_validation_result";
 	nextCommand: string;

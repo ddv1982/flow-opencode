@@ -373,6 +373,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		],
 		policyOwners: [
 			"src/runtime/application/session-actions.ts",
+			"src/runtime/domain/review-scope-accounting.ts",
 			"src/runtime/transitions/execution-completion-validation.ts",
 			"src/core/workflow/rejections.ts",
 		],
@@ -457,6 +458,7 @@ export const FLOW_SURFACE_DESCRIPTORS: readonly FlowSurfaceDescriptor[] = [
 		invariantIds: ["review.scope.payload_binding"],
 		policyOwners: [
 			"src/runtime/application/session-actions.ts",
+			"src/runtime/domain/review-scope-accounting.ts",
 			"src/runtime/transitions/execution-completion-validation.ts",
 			"src/core/workflow/reducer.ts",
 		],

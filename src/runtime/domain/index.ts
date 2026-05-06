@@ -38,6 +38,16 @@ export {
 	surfacesForReviewDiscoveryReason,
 } from "./review-content-discovery";
 export {
+	closedReviewFindingRefsForCompletion,
+	declaredReviewScopeForCompletion,
+	declaredReviewScopeForFeature,
+	declaredReviewScopeForPlan,
+	describeFinalReviewerReviewScopeFailure,
+	describeReviewScopeLedgerFailure,
+	isReviewScopeAccountingRequired,
+	validatePlanReviewScopeDeclaration,
+} from "./review-scope-accounting";
+export {
 	buildReviewerDecision,
 	type RecordReviewerDecisionInput,
 	validateReviewerDecisionInput,

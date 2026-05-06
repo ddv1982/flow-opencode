@@ -92,6 +92,21 @@ export const REVIEW_FINDING_CLOSURE_STATUSES = [
 	"not_closed",
 	"blocked",
 ] as const;
+export const REVIEW_SCOPE_TARGET_KINDS = [
+	"file",
+	"glob",
+	"domain",
+	"surface",
+	"workflow",
+	"custom",
+] as const;
+export const REVIEW_SCOPE_ACCOUNTING_STATUSES = [
+	"reviewed_no_findings",
+	"finding_closed",
+	"deferred",
+	"out_of_scope",
+	"blocked",
+] as const;
 export const REPLAN_REASONS = [
 	"plan_too_broad",
 	"hidden_dependency",

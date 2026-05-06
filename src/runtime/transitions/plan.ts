@@ -3,6 +3,7 @@ import {
 	mergePlanningContext,
 	selectProjectedFeatureSubset,
 	validatePlanGraph,
+	validatePlanReviewScopeDeclaration,
 } from "../domain";
 import type { Plan, PlanInput, PlanningContext, Session } from "../schema";
 import { nowIso } from "../util";
@@ -24,6 +25,7 @@ type ApplyPlanInput = Omit<PlanInput, "features"> & {
 				priority?: PlanInput["features"][number]["priority"];
 				deferCandidate?: PlanInput["features"][number]["deferCandidate"];
 				fileTargets?: readonly string[] | undefined;
+				reviewScope?: PlanInput["features"][number]["reviewScope"];
 				verification?: readonly string[] | undefined;
 				dependsOn?: readonly string[] | undefined;
 				blockedBy?: readonly string[] | undefined;
@@ -60,6 +62,7 @@ function normalizePlan(planInput: ApplyPlanInput): Plan {
 			title: feature.title ?? "",
 			summary: feature.summary ?? "",
 			fileTargets: [...(feature.fileTargets ?? [])],
+			...(feature.reviewScope ? { reviewScope: [...feature.reviewScope] } : {}),
 			verification: [...(feature.verification ?? [])],
 			...(feature.dependsOn ? { dependsOn: [...feature.dependsOn] } : {}),
 			...(feature.blockedBy ? { blockedBy: [...feature.blockedBy] } : {}),
@@ -104,6 +107,10 @@ export function applyPlan(
 	const completionPolicyError = completionPolicyTargetError(plan);
 	if (completionPolicyError) {
 		return fail(completionPolicyError);
+	}
+	const reviewScopeError = validatePlanReviewScopeDeclaration(plan);
+	if (reviewScopeError) {
+		return fail(reviewScopeError);
 	}
 
 	const next: Session = {
@@ -158,6 +165,10 @@ export function approvePlan(
 		if (completionPolicyError) {
 			return fail(completionPolicyError);
 		}
+		const reviewScopeError = validatePlanReviewScopeDeclaration(next.plan);
+		if (reviewScopeError) {
+			return fail(reviewScopeError);
+		}
 	}
 
 	return succeed({
@@ -203,6 +214,10 @@ export function selectPlanFeatures(
 	const completionPolicyError = completionPolicyTargetError(next.plan);
 	if (completionPolicyError) {
 		return fail(completionPolicyError);
+	}
+	const reviewScopeError = validatePlanReviewScopeDeclaration(next.plan);
+	if (reviewScopeError) {
+		return fail(reviewScopeError);
 	}
 	return succeed({
 		...clearExecution(next),

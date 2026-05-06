@@ -43,6 +43,9 @@ export function normalizeFinalReviewDecision(
 		...(decision.evidencePackets
 			? { evidencePackets: decision.evidencePackets }
 			: {}),
+		...(decision.reviewScopeLedger
+			? { reviewScopeLedger: decision.reviewScopeLedger }
+			: {}),
 		...(decision.reviewContextPack
 			? {
 					reviewContextPack: buildReviewContextPack(decision.reviewContextPack),
