@@ -5,7 +5,9 @@ import { normalizeFinalReviewDecision } from "../../src/runtime/application/sess
 import {
 	buildReviewContextPack,
 	describeFinalReviewCoverageFailure,
+	describeFinalReviewerReviewScopeFailure,
 	describeReviewContextPackGroundingFailure,
+	finalReviewBehaviorCoverageFailureReasons,
 	reviewContextPackHasSurfaceEvidence,
 } from "../../src/runtime/domain";
 import {
@@ -505,13 +507,142 @@ describe("runtime final review contracts", () => {
 			);
 		}
 
-		const completeLedger = recordReviewerDecision(started.value.session, {
+		const placeholderEvidence = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["reviewed declared scope"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+				{
+					scopeId: "file_target:src/runtime/transitions/execution.ts",
+					status: "deferred" as const,
+					evidenceRefs: ["src/runtime/transitions/execution.ts"],
+					residualRisk:
+						"Deferred to the next review pass; no blocking completion risk recorded.",
+				},
+			],
+		});
+		expect(placeholderEvidence.ok).toBe(false);
+		if (!placeholderEvidence.ok) {
+			expect(placeholderEvidence.message).toContain("not grounded");
+		}
+
+		const unsafeEvidence = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["../escape.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+				{
+					scopeId: "file_target:src/runtime/transitions/execution.ts",
+					status: "deferred" as const,
+					evidenceRefs: ["src/runtime/transitions/execution.ts"],
+					residualRisk:
+						"Deferred to the next review pass; no blocking completion risk recorded.",
+				},
+			],
+		});
+		expect(unsafeEvidence.ok).toBe(false);
+		if (!unsafeEvidence.ok) {
+			expect(unsafeEvidence.message).toContain("safe relative path");
+		}
+
+		const crossScopeEvidence = recordReviewerDecision(started.value.session, {
 			...baseDecision,
 			reviewScopeLedger: [
 				{
 					scopeId: "file_target:src/runtime/session.ts",
 					status: "reviewed_no_findings" as const,
 					evidenceRefs: ["src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+				{
+					scopeId: "file_target:src/runtime/transitions/execution.ts",
+					status: "deferred" as const,
+					evidenceRefs: ["src/runtime/session.ts"],
+					residualRisk:
+						"Deferred to the next review pass; no blocking completion risk recorded.",
+				},
+			],
+		});
+		expect(crossScopeEvidence.ok).toBe(false);
+		if (!crossScopeEvidence.ok) {
+			expect(crossScopeEvidence.message).toContain(
+				"not grounded in this declared scope target",
+			);
+		}
+
+		const scopeIdOnlyEvidence = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["file_target:src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+				{
+					scopeId: "file_target:src/runtime/transitions/execution.ts",
+					status: "deferred" as const,
+					evidenceRefs: ["src/runtime/transitions/execution.ts"],
+					residualRisk:
+						"Deferred to the next review pass; no blocking completion risk recorded.",
+				},
+			],
+		});
+		expect(scopeIdOnlyEvidence.ok).toBe(false);
+		if (!scopeIdOnlyEvidence.ok) {
+			expect(scopeIdOnlyEvidence.message).toContain(
+				"not grounded in this declared scope target",
+			);
+		}
+
+		const validationOnlyEvidence = recordReviewerDecision(
+			started.value.session,
+			{
+				...baseDecision,
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/session.ts",
+						status: "reviewed_no_findings" as const,
+						evidenceRefs: ["bun test"],
+						validationRefs: ["bun test"],
+						residualRisk: "No known residual risk.",
+					},
+					{
+						scopeId: "file_target:src/runtime/transitions/execution.ts",
+						status: "deferred" as const,
+						evidenceRefs: ["src/runtime/transitions/execution.ts"],
+						residualRisk:
+							"Deferred to the next review pass; no blocking completion risk recorded.",
+					},
+				],
+			},
+		);
+		expect(validationOnlyEvidence.ok).toBe(false);
+		if (!validationOnlyEvidence.ok) {
+			expect(validationOnlyEvidence.message).toContain(
+				"must include at least one concrete artifact reference",
+			);
+		}
+
+		const completeLedger = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["src/runtime/session.ts:42"],
 					validationRefs: ["bun test"],
 					residualRisk: "No known residual risk.",
 				},
@@ -525,6 +656,335 @@ describe("runtime final review contracts", () => {
 			],
 		});
 		expect(completeLedger.ok).toBe(true);
+	});
+
+	test("review-mode non-file scope ledger requires concrete evidence", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: [],
+					reviewScope: [
+						{
+							id: "domain:runtime",
+							kind: "domain" as const,
+							target: "runtime",
+							description: "Review the runtime domain broadly.",
+						},
+					],
+				},
+			],
+		};
+		const applied = applyPlan(createSession("Review runtime domain"), plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const baseDecision = {
+			scope: "final" as const,
+			status: "approved" as const,
+			summary: "Final review approved.",
+			reviewDepth: "detailed" as const,
+			reviewedSurfaces: [
+				"changed_files" as const,
+				"shared_surfaces" as const,
+				"validation_evidence" as const,
+			],
+			evidenceSummary: "Reviewed runtime domain evidence.",
+			validationAssessment: "Runtime validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: ["Checked runtime domain integration."],
+			regressionChecks: ["Checked runtime domain regression evidence."],
+			remainingGaps: [],
+		};
+
+		const targetStringOnly = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "domain:runtime",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["runtime"],
+					residualRisk: "No known residual risk.",
+				},
+			],
+		});
+		expect(targetStringOnly.ok).toBe(false);
+		if (!targetStringOnly.ok) {
+			expect(targetStringOnly.message).toContain(
+				"not grounded in this declared scope target",
+			);
+		}
+
+		expect(
+			describeFinalReviewerReviewScopeFailure(started.value.session, {
+				status: "approved",
+				evidenceRefs: {
+					changedArtifacts: [
+						...baseDecision.evidenceRefs.changedArtifacts,
+						"README.md",
+					],
+					validationCommands: baseDecision.evidenceRefs.validationCommands,
+				},
+				reviewScopeLedger: [
+					{
+						scopeId: "domain:runtime",
+						status: "reviewed_no_findings" as const,
+						evidenceRefs: ["README.md"],
+						residualRisk: "No known residual risk.",
+					},
+				],
+			}),
+		).toContain("not grounded in this declared scope target");
+
+		const concreteEvidence = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "domain:runtime",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["src/runtime/session.ts"],
+					residualRisk: "No known residual risk.",
+				},
+			],
+		});
+		expect(concreteEvidence.ok).toBe(true);
+	});
+
+	test("review-mode glob scope ledger uses path-aware glob matching", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/runtime/*.ts"],
+				},
+			],
+		};
+		const applied = applyPlan(createSession("Review runtime glob"), plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const baseDecision = {
+			scope: "final" as const,
+			status: "approved" as const,
+			summary: "Final review approved.",
+			reviewDepth: "detailed" as const,
+			reviewedSurfaces: [
+				"changed_files" as const,
+				"shared_surfaces" as const,
+				"validation_evidence" as const,
+			],
+			evidenceSummary: "Reviewed runtime glob evidence.",
+			validationAssessment: "Runtime validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: ["Checked runtime glob integration."],
+			regressionChecks: ["Checked runtime glob regression evidence."],
+			remainingGaps: [],
+		};
+
+		const nestedEvidence = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			evidenceRefs: {
+				...baseDecision.evidenceRefs,
+				changedArtifacts: ["src/runtime/nested/session.ts"],
+			},
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/*.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["src/runtime/nested/session.ts"],
+					residualRisk: "No known residual risk.",
+				},
+			],
+		});
+		expect(nestedEvidence.ok).toBe(false);
+		if (!nestedEvidence.ok) {
+			expect(nestedEvidence.message).toContain(
+				"not grounded in this declared scope target",
+			);
+		}
+
+		const wrongExtensionEvidence = recordReviewerDecision(
+			started.value.session,
+			{
+				...baseDecision,
+				evidenceRefs: {
+					...baseDecision.evidenceRefs,
+					changedArtifacts: ["src/runtime/session.md"],
+				},
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/*.ts",
+						status: "reviewed_no_findings" as const,
+						evidenceRefs: ["src/runtime/session.md"],
+						residualRisk: "No known residual risk.",
+					},
+				],
+			},
+		);
+		expect(wrongExtensionEvidence.ok).toBe(false);
+		if (!wrongExtensionEvidence.ok) {
+			expect(wrongExtensionEvidence.message).toContain(
+				"not grounded in this declared scope target",
+			);
+		}
+
+		const matchingEvidence = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/*.ts",
+					status: "reviewed_no_findings" as const,
+					evidenceRefs: ["src/runtime/session.ts"],
+					residualRisk: "No known residual risk.",
+				},
+			],
+		});
+		expect(matchingEvidence.ok).toBe(true);
+	});
+
+	test("broad review-mode final decisions derive behavior risks from declared scope", () => {
+		const declaredTargets = [
+			"src/shell/sessionPanels.ts",
+			"src/game/navigation.ts",
+			"src/scenes/PracticeScene.ts",
+			"tests/sessionPanelActions.test.ts",
+		];
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: declaredTargets,
+				},
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review soft-focus behavior surface"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const decision = recordReviewerDecision(started.value.session, {
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary:
+				"Reviewed the changed shell surface and declared broad review scope.",
+			validationAssessment: "Targeted session panel validation was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/shell/sessionPanels.ts"],
+				validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			integrationChecks: ["Checked declared shell/game/scene review scope."],
+			regressionChecks: ["Checked session panel validation evidence."],
+			remainingGaps: [],
+			reviewScopeLedger: declaredTargets.map((target) => ({
+				scopeId: `file_target:${target}`,
+				status: "reviewed_no_findings" as const,
+				evidenceRefs: [target],
+				residualRisk: "No known residual risk for this scope target.",
+			})),
+		});
+		expect(decision.ok).toBe(false);
+		if (!decision.ok) {
+			expect(decision.message).toContain("finalReviewCoverage");
+			expect(decision.message).toContain(
+				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+			);
+		}
+	});
+
+	test("behavior refs do not ground on non-concrete declared scope labels", () => {
+		const command = "bun test tests/sessionPanelActions.test.ts";
+		expect(
+			finalReviewBehaviorCoverageFailureReasons(
+				{
+					artifactsChanged: [
+						{ path: "src/shell/sessionPanels.ts" },
+						{ path: "src/game/navigation.ts" },
+					],
+					validationRun: [{ command }],
+				},
+				{
+					evidenceRefs: { validationCommands: [command] },
+					declaredReviewScope: [
+						{
+							id: "domain:runtime",
+							kind: "domain",
+							target: "runtime",
+						},
+					],
+					behaviorChecks: [
+						{
+							riskClass: "async_event_ordering",
+							result: "passed",
+							invariant: "Latest event ordering wins.",
+							entrypointRefs: ["runtime"],
+							stateOwnerRefs: [],
+							lifecycleOwnerRefs: [],
+							failurePath: "Out-of-order completion overwrites newer state.",
+							oracleRefs: ["tests/sessionPanelActions.test.ts"],
+							validationRefs: [command],
+						},
+					],
+					validationCoverage: [
+						{
+							command,
+							behaviorClasses: ["async_event_ordering"],
+							proves: ["Panel action ordering was reviewed."],
+							gaps: [],
+							oracleRefs: ["tests/sessionPanelActions.test.ts"],
+						},
+					],
+				},
+			).some((reason) =>
+				reason.includes(
+					"behaviorChecks[0].entrypointRefs includes 'runtime', which is not grounded",
+				),
+			),
+		).toBe(true);
 	});
 
 	test("implementation-mode approved final reviewer decisions do not require review scope ledger", () => {
@@ -1013,6 +1473,23 @@ describe("runtime final review contracts", () => {
 				validationCoverage,
 			}),
 		).toBeNull();
+
+		expect(
+			describeFinalReviewCoverageFailure(session, worker, {
+				...baseReview,
+				behaviorChecks: behaviorChecks.map((check) =>
+					check.riskClass === "async_event_ordering"
+						? {
+								...check,
+								oracleRefs: ["tests/unreviewedBehavior.test.ts"],
+							}
+						: check,
+				),
+				validationCoverage,
+			}),
+		).toContain(
+			"behaviorChecks[0].oracleRefs includes 'tests/unreviewedBehavior.test.ts', which is not grounded",
+		);
 
 		expect(
 			describeFinalReviewCoverageFailure(session, worker, {

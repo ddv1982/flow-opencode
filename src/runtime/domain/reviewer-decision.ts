@@ -252,6 +252,13 @@ export function validateReviewerDecisionInput(
 				reviewScopeLedger: normalizeReviewScopeLedgerForDecision(
 					input.reviewScopeLedger,
 				),
+				...(input.reviewContextPack
+					? {
+							reviewContextPack: buildReviewContextPack(
+								input.reviewContextPack,
+							),
+						}
+					: {}),
 			},
 		);
 		if (reviewScopeFailure) {

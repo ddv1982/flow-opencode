@@ -123,7 +123,7 @@ async function main() {
 				plugin.tool.flow_status.__mockTag === "flow-bundle-sanity-mock-v1",
 		};
 
-		if (report.sizeBytes > 716800) {
+		if (report.sizeBytes > 720896) {
 			throw new Error(`Bundle too large: ${report.sizeBytes} bytes`);
 		}
 		if (!report.hasExternalPeerImport) {

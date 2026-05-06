@@ -19,6 +19,10 @@ import {
 	type ReviewContextPack,
 	reviewContextPackHasSurfaceEvidence,
 } from "./review-content-discovery";
+import {
+	declaredReviewScopeForPlan,
+	isReviewScopeAccountingRequired,
+} from "./review-scope-accounting";
 import { finalReviewPolicyForPlan } from "./workflow-policy";
 
 export type { FinalReviewSurface } from "./final-review-coverage-evidence";
@@ -207,7 +211,14 @@ function finalReviewCoverageFailureReasons(
 		reasons.push(detailedFailureReasonMessages[failure]);
 	}
 
-	reasons.push(...finalReviewBehaviorCoverageFailureReasons(worker, review));
+	reasons.push(
+		...finalReviewBehaviorCoverageFailureReasons(worker, {
+			...review,
+			...(isReviewScopeAccountingRequired(session.plan)
+				? { declaredReviewScope: declaredReviewScopeForPlan(session.plan) }
+				: {}),
+		}),
+	);
 
 	const requiredSurfaces = deriveRequiredFinalReviewSurfaces(
 		session.execution.lastValidationRun.length > 0,

@@ -755,6 +755,96 @@ describe("completion gates", () => {
 		expect(complete.ok).toBe(true);
 	});
 
+	test("final review payload derives behavior risks from declared review scope", () => {
+		const declaredTargets = [
+			"src/shell/sessionPanels.ts",
+			"src/game/navigation.ts",
+			"src/scenes/PracticeScene.ts",
+			"tests/sessionPanelActions.test.ts",
+		];
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: declaredTargets,
+				},
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review soft-focus behavior surface"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+
+		const validationCommand = "bun test tests/sessionPanelActions.test.ts";
+		const result = validateSuccessfulCompletion(
+			started.value.session,
+			createWorkerResult(featureId, {
+				artifactsChanged: [{ path: "src/shell/sessionPanels.ts" }],
+				validationRun: [
+					{
+						command: validationCommand,
+						status: "passed",
+						summary: "Session panel tests passed.",
+					},
+				],
+				validationScope: "broad",
+				reviewScopeLedger: scopeLedgerForTargets(
+					declaredTargets,
+					Object.fromEntries(
+						declaredTargets.map((target) => [
+							target,
+							{ validationRefs: [validationCommand] },
+						]),
+					),
+				),
+				finalReview: createFinalReviewPayload({
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Reviewed the changed shell surface and declared broad review scope.",
+					validationAssessment:
+						"Targeted session panel validation was reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/shell/sessionPanels.ts"],
+						validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+					},
+					integrationChecks: [
+						"Checked declared shell/game/scene review scope.",
+					],
+					regressionChecks: ["Checked session panel validation evidence."],
+					remainingGaps: [],
+				}),
+			}),
+			featureId,
+			true,
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.recovery?.errorCode).toBe("failing_final_review");
+			expect(result.message).toContain(
+				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+			);
+		}
+	});
+
 	test("multi-feature review-and-fix final reviewer ledger accepts historical closed findings", () => {
 		const basePlan = samplePlan();
 		const plan = {

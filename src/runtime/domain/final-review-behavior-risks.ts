@@ -6,6 +6,7 @@ import {
 import {
 	isSafeReviewArtifactRef,
 	isTestPath,
+	normalizeArtifactPath,
 	pathForReviewArtifactRef,
 } from "./final-review-coverage-paths";
 import type { ReviewContextPack } from "./review-content-discovery";
@@ -50,6 +51,13 @@ export type FinalReviewBehaviorCoverageTarget = {
 				validationCommands: string[];
 		  }
 		| undefined;
+	declaredReviewScope?:
+		| readonly {
+				id: string;
+				kind: string;
+				target: string;
+		  }[]
+		| undefined;
 	remainingGaps?: string[] | undefined;
 	suggestedValidation?: string[] | undefined;
 	behaviorChecks?: FinalReviewBehaviorCheck[] | undefined;
@@ -80,6 +88,7 @@ const FLOW_INFRASTRUCTURE_SRC_DOMAINS = new Set([
 
 const ASYNC_EVENT_TEXT_PATTERN =
 	/\b(async|await|promise|deferred?|race|event|listener|handler|callback|queue|timer|timeout|interval|concurrent|interleav(?:e|ing)|click)\b/i;
+const REVIEW_SCOPE_WILDCARD_PATTERN = /[*?[\]{}]/;
 
 function addRequired(
 	required: Set<FinalReviewBehaviorRiskClass>,
@@ -136,18 +145,47 @@ function reviewContextPackHasAsyncEventSignal(
 	return false;
 }
 
+function concreteDeclaredReviewScopePath(
+	scope: NonNullable<
+		FinalReviewBehaviorCoverageTarget["declaredReviewScope"]
+	>[number],
+): string | null {
+	const target = normalizeArtifactPath(scope.target);
+	if (
+		!target.includes("/") ||
+		REVIEW_SCOPE_WILDCARD_PATTERN.test(target) ||
+		!isSafeReviewArtifactRef(target)
+	) {
+		return null;
+	}
+	return target;
+}
+
+function declaredReviewScopePaths(
+	review: Pick<FinalReviewBehaviorCoverageTarget, "declaredReviewScope">,
+): string[] {
+	return (review.declaredReviewScope ?? [])
+		.map(concreteDeclaredReviewScopePath)
+		.filter((target): target is string => target !== null);
+}
+
 export function deriveRequiredFinalReviewBehaviorRisks(
 	worker: FinalReviewWorkerEvidence,
-	review: Pick<FinalReviewBehaviorCoverageTarget, "reviewContextPack"> = {},
+	review: Pick<
+		FinalReviewBehaviorCoverageTarget,
+		"reviewContextPack" | "declaredReviewScope"
+	> = {},
 ): FinalReviewBehaviorRiskClass[] {
 	const required = new Set<FinalReviewBehaviorRiskClass>();
 	const artifactPaths = artifactPathsForWorker(worker);
+	const reviewScopePaths = declaredReviewScopePaths(review);
+	const behaviorRiskPaths = [...artifactPaths, ...reviewScopePaths];
 	const genericAppDomains = new Set(
-		artifactPaths
+		behaviorRiskPaths
 			.map(genericAppDomainForPath)
 			.filter((domain): domain is string => domain !== null),
 	);
-	const testsTouched = artifactPaths.some(isTestPath);
+	const testsTouched = behaviorRiskPaths.some(isTestPath);
 	const pack = review.reviewContextPack;
 
 	if (pack) {
@@ -235,17 +273,22 @@ function reviewContextGroundingPaths(
 	review: FinalReviewBehaviorCoverageTarget,
 ): Set<string> {
 	const pack = review.reviewContextPack;
-	if (!pack) {
-		return new Set();
-	}
 	return new Set([
-		...pack.changedFiles,
-		...pack.includedContext.map((context) => context.path),
-		...pack.relationships.flatMap((relationship) => [
+		...declaredReviewScopePaths(review),
+		...(pack?.changedFiles ?? []),
+		...(pack?.includedContext.map((context) => context.path) ?? []),
+		...(pack?.relationships.flatMap((relationship) => [
 			relationship.from,
 			relationship.to,
-		]),
+		]) ?? []),
 	]);
+}
+
+function pathIsMentionedByValidationCommand(
+	path: string,
+	commands: ReadonlySet<string>,
+): boolean {
+	return [...commands].some((command) => command.includes(path));
 }
 
 function behaviorRefGroundingFailureReasons(
@@ -255,10 +298,19 @@ function behaviorRefGroundingFailureReasons(
 	const reasons: string[] = [];
 	const artifactPathSet = new Set(artifactPathsForWorker(worker));
 	const contextPathSet = reviewContextGroundingPaths(review);
+	const validationCommandSet = normalizedStringSet([
+		...validationCommandsForWorker(worker),
+		...(review.evidenceRefs?.validationCommands ?? []),
+		...(review.reviewContextPack?.validationEvidence.map(
+			(evidence) => evidence.command,
+		) ?? []),
+	]);
 	const isGrounded = (ref: string) => {
 		const path = pathForReviewArtifactRef(ref);
 		return (
-			artifactPathSet.has(path) || contextPathSet.has(path) || isTestPath(path)
+			artifactPathSet.has(path) ||
+			contextPathSet.has(path) ||
+			pathIsMentionedByValidationCommand(path, validationCommandSet)
 		);
 	};
 	const checkRefList = (

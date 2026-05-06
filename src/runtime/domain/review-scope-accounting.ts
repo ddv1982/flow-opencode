@@ -6,6 +6,19 @@ import type {
 	Session,
 	WorkerResultArgs,
 } from "../schema";
+import {
+	integrationAreaForPath,
+	isDocsAndPromptsPath,
+	isOperatorSurfacePath,
+	isReleaseSurfacePath,
+	isSafeReviewArtifactRef,
+	isTestPath,
+	isToolingAndConfigPath,
+	normalizeArtifactPath,
+	pathForReviewArtifactRef,
+	sharedAreaForPath,
+} from "./final-review-coverage-paths";
+import type { ReviewContextPack } from "./review-content-discovery";
 
 export type ReviewScopeTarget = NonNullable<Feature["reviewScope"]>[number];
 export type ReviewScopeLedgerEntry = NonNullable<
@@ -16,6 +29,8 @@ type LedgerValidationContext = {
 	declaredScope: readonly ReviewScopeTarget[];
 	ledger: readonly ReviewScopeLedgerEntry[];
 	validationCommands?: readonly string[];
+	changedArtifacts?: readonly string[];
+	reviewContextPack?: ReviewContextPack | undefined;
 	closedFindingRefs?: readonly string[];
 	requireClosedFindingMatch?: boolean;
 	label?: string;
@@ -26,14 +41,22 @@ const REVIEW_SCOPE_ACCOUNTING_STATUS_SET = new Set<string>(
 );
 
 type WorkerEvidence = {
+	artifactsChanged?: readonly { path: string }[] | undefined;
 	reviewScopeLedger?: readonly ReviewScopeLedgerEntry[] | undefined;
 	validationRun?: readonly { command: string }[] | undefined;
+	finalReview?:
+		| {
+				evidenceRefs?: { changedArtifacts: string[] } | undefined;
+				reviewContextPack?: ReviewContextPack | undefined;
+		  }
+		| undefined;
 	reviewFindingClosures?:
 		| readonly { findingRef: string; status: string }[]
 		| undefined;
 };
 
 const WILDCARD_PATTERN = /[*?[\]{}]/;
+const UNSUPPORTED_GLOB_PATTERN = /[[\]{}]/;
 
 function normalizeScopeText(value: string): string {
 	return value.trim();
@@ -172,22 +195,130 @@ function findingRefsFor(entry: ReviewScopeLedgerEntry): readonly string[] {
 	return entry.findingRefs ?? [];
 }
 
+function reviewContextPackPaths(pack: ReviewContextPack | undefined): string[] {
+	if (!pack) {
+		return [];
+	}
+	return [
+		...pack.changedFiles,
+		...pack.includedContext.map((context) => context.path),
+		...pack.relationships.flatMap((relationship) => [
+			relationship.from,
+			relationship.to,
+		]),
+	];
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[\\^$+?.()|[\]{}]/g, "\\$&");
+}
+
+function globPatternMatchesPath(pattern: string, path: string): boolean {
+	if (UNSUPPORTED_GLOB_PATTERN.test(pattern)) {
+		return false;
+	}
+	const regexSource = escapeRegExp(pattern)
+		.replaceAll("**", ".*")
+		.replaceAll("*", "[^/]*")
+		.replaceAll("\\?", "[^/]");
+	return new RegExp(`^${regexSource}$`).test(path);
+}
+
+function pathMatchesPathLikeScopeTarget(target: string, path: string): boolean {
+	const normalizedTarget = normalizeArtifactPath(target);
+	if (!normalizedTarget.includes("/")) {
+		return false;
+	}
+	return (
+		path === normalizedTarget ||
+		path.startsWith(`${normalizedTarget.replace(/\/$/, "")}/`)
+	);
+}
+
+function pathMatchesDomainScopeTarget(target: string, path: string): boolean {
+	if (pathMatchesPathLikeScopeTarget(target, path)) {
+		return true;
+	}
+	const targetTokens = target.toLowerCase().split(/[^a-z0-9]+/);
+	return [sharedAreaForPath(path), integrationAreaForPath(path)].some(
+		(area) => area !== null && targetTokens.includes(area),
+	);
+}
+
+function pathMatchesSurfaceScopeTarget(target: string, path: string): boolean {
+	const normalizedTarget = normalizeArtifactPath(target).toLowerCase();
+	switch (normalizedTarget) {
+		case "changed_files":
+			return true;
+		case "docs_and_prompts":
+		case "docs":
+			return isDocsAndPromptsPath(path);
+		case "tooling_and_config":
+		case "tooling":
+			return isToolingAndConfigPath(path);
+		case "operator_surfaces":
+		case "operator":
+			return isOperatorSurfacePath(path);
+		case "release_surface":
+		case "release":
+			return isReleaseSurfacePath(path);
+		case "tests":
+			return isTestPath(path);
+		case "shared_surfaces":
+			return sharedAreaForPath(path) !== null;
+		case "integration_points":
+			return integrationAreaForPath(path) !== null;
+		default:
+			return pathMatchesPathLikeScopeTarget(target, path);
+	}
+}
+
+function reviewScopeTargetGroundsRef(
+	scope: ReviewScopeTarget,
+	_pathRef: string,
+	path: string,
+): boolean {
+	const normalizedTarget = normalizeArtifactPath(scope.target);
+	if (scope.kind === "file") {
+		return path === normalizedTarget;
+	}
+	if (scope.kind === "glob") {
+		return globPatternMatchesPath(normalizedTarget, path);
+	}
+	if (scope.kind === "domain") {
+		return pathMatchesDomainScopeTarget(normalizedTarget, path);
+	}
+	if (scope.kind === "surface") {
+		return pathMatchesSurfaceScopeTarget(normalizedTarget, path);
+	}
+	return pathMatchesPathLikeScopeTarget(normalizedTarget, path);
+}
+
 function validateLedgerEntries({
 	declaredScope,
 	ledger,
 	validationCommands = [],
+	changedArtifacts = [],
+	reviewContextPack,
 	closedFindingRefs = [],
 	requireClosedFindingMatch = false,
 	label = "reviewScopeLedger",
 }: LedgerValidationContext): string | null {
-	const declaredIds = new Set(declaredScope.map((scope) => scope.id));
+	const declaredById = new Map(declaredScope.map((scope) => [scope.id, scope]));
 	const validationCommandSet = new Set(validationCommands);
+	const changedArtifactSet = new Set(
+		changedArtifacts.map((path) => normalizeArtifactPath(path)),
+	);
+	const reviewedContextPathSet = new Set(
+		reviewContextPackPaths(reviewContextPack),
+	);
 	const closedFindingSet = new Set(closedFindingRefs);
 	const seen = new Set<string>();
 
 	for (const [index, entry] of ledger.entries()) {
 		const entryLabel = `${label}[${index}]`;
-		if (!declaredIds.has(entry.scopeId)) {
+		const declaredScopeEntry = declaredById.get(entry.scopeId);
+		if (!declaredScopeEntry) {
 			return `${entryLabel}.scopeId '${entry.scopeId}' is not a declared review scope target.`;
 		}
 		if (!REVIEW_SCOPE_ACCOUNTING_STATUS_SET.has(entry.status)) {
@@ -197,8 +328,41 @@ function validateLedgerEntries({
 			return `${entryLabel}.scopeId '${entry.scopeId}' is duplicated in the same review scope ledger.`;
 		}
 		seen.add(entry.scopeId);
+		let hasConcreteScopeEvidence = false;
+		for (const evidenceRef of evidenceRefsFor(entry)) {
+			const trimmedEvidenceRef = evidenceRef.trim();
+			if (validationCommandSet.has(trimmedEvidenceRef)) {
+				if (validationRefsFor(entry).includes(trimmedEvidenceRef)) {
+					continue;
+				}
+				return `${entryLabel}.evidenceRefs includes validation command '${evidenceRef}', which is not tied to this scope entry by validationRefs.`;
+			}
+			if (!isSafeReviewArtifactRef(trimmedEvidenceRef)) {
+				return `${entryLabel}.evidenceRefs includes '${evidenceRef}', which is not a safe relative path reference or recorded validation command.`;
+			}
+			const evidencePath = pathForReviewArtifactRef(trimmedEvidenceRef);
+			const targetSelfReferenceAllowed =
+				declaredScopeEntry.kind === "file" &&
+				evidencePath === normalizeArtifactPath(declaredScopeEntry.target);
+			if (
+				!reviewScopeTargetGroundsRef(
+					declaredScopeEntry,
+					trimmedEvidenceRef,
+					evidencePath,
+				) ||
+				(!changedArtifactSet.has(evidencePath) &&
+					!reviewedContextPathSet.has(evidencePath) &&
+					!targetSelfReferenceAllowed)
+			) {
+				return `${entryLabel}.evidenceRefs includes '${evidenceRef}', which is not grounded in this declared scope target, reviewed context, changed artifacts, or validation evidence.`;
+			}
+			hasConcreteScopeEvidence = true;
+		}
 		if (evidenceRefsFor(entry).length === 0) {
 			return `${entryLabel} must include evidenceRefs.`;
+		}
+		if (!hasConcreteScopeEvidence) {
+			return `${entryLabel}.evidenceRefs must include at least one concrete artifact reference grounded in this declared scope target.`;
 		}
 		if (!entry.residualRisk?.trim()) {
 			return `${entryLabel} must include residualRisk.`;
@@ -255,6 +419,10 @@ function latestValidCompletedHistoryEntries(
 			validationCommands: historyEntry.validationRun.map(
 				(item) => item.command,
 			),
+			changedArtifacts: historyEntry.artifactsChanged.map(
+				(artifact) => artifact.path,
+			),
+			reviewContextPack: historyEntry.finalReview?.reviewContextPack,
 			closedFindingRefs: closedFindingRefsFor(historyEntry),
 			requireClosedFindingMatch: session.plan?.goalMode === "review_and_fix",
 			label: `history[${historyEntry.featureId}].reviewScopeLedger`,
@@ -342,6 +510,11 @@ export function describeReviewScopeLedgerFailure(
 		validationCommands: (worker.validationRun ?? []).map(
 			(item) => item.command,
 		),
+		changedArtifacts: [
+			...(worker.artifactsChanged ?? []).map((artifact) => artifact.path),
+			...(worker.finalReview?.evidenceRefs?.changedArtifacts ?? []),
+		],
+		reviewContextPack: worker.finalReview?.reviewContextPack,
 		closedFindingRefs: wasFinalFeature
 			? closedReviewFindingRefsForCompletion(session, worker)
 			: closedFindingRefsFor(worker),
@@ -368,7 +541,7 @@ export function describeFinalReviewerReviewScopeFailure(
 	session: Session,
 	decision: Pick<
 		Extract<ReviewerDecision, { scope: "final" }>,
-		"reviewScopeLedger" | "evidenceRefs" | "status"
+		"reviewScopeLedger" | "evidenceRefs" | "reviewContextPack" | "status"
 	>,
 	options?: {
 		closedFindingRefs?: readonly string[];
@@ -395,6 +568,8 @@ export function describeFinalReviewerReviewScopeFailure(
 		declaredScope,
 		ledger,
 		validationCommands: decision.evidenceRefs.validationCommands,
+		changedArtifacts: decision.evidenceRefs.changedArtifacts,
+		reviewContextPack: decision.reviewContextPack,
 		closedFindingRefs: options?.closedFindingRefs ?? [],
 		requireClosedFindingMatch: options?.requireClosedFindingMatch ?? false,
 		label: "finalReviewerDecision.reviewScopeLedger",

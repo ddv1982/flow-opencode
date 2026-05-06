@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [2.0.12] - 2026-05-07
+
+Harden review-scope evidence grounding after false-negative review passes
+
+Flow 2.0.12 closes the false-negative gaps found in the review-scope accounting gates. Review and review-and-fix completions now require each `reviewScopeLedger` entry to cite concrete artifact evidence grounded in the declared scope; validation commands can still supplement evidence, but they can no longer be the only proof for every target.
+
+The release tightens scope matching without expanding the public tool surface. File targets accept line-suffixed artifact refs, glob targets use path-aware `*`, `**`, and `?` matching instead of prefix matching, and unsupported bracket/brace glob syntax is conservatively rejected rather than treated as broad evidence. Domain and surface targets now apply kind-aware grounding, while workflow/custom targets require explicit path-like targets instead of fuzzy substring matches.
+
+Behavior-led final-review evidence was also narrowed so non-concrete declared scope labels such as `runtime` or wildcard targets cannot ground behavior refs. Regression coverage locks the previous misses: unrelated concrete paths for `domain:runtime`, nested/wrong-extension glob refs, validation-only ledger evidence, file line refs, and behavior refs grounded only by non-concrete scope labels.
+
+The bundle sanity ceiling moves from 700 KiB to 704 KiB to account for the additional release-gate safety logic while preserving a fixed budget check.
+
+Constraint: Fix review false negatives without adding commands, tools, state paths, package exports, or dependencies
+Constraint: Accept only a narrow 4 KiB bundle budget increase for the new safety checks
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Let validation commands alone close every declared review scope | generic commands do not prove which scope was reviewed
+Rejected: Keep prefix-only glob matching | it accepts nested and wrong-extension files outside the declared pattern
+Rejected: Use non-concrete scope labels as behavior evidence | labels such as `runtime` are audit scope metadata, not artifact refs
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Treat review-scope ledger evidence as concrete scoped proof; use validation commands as supporting evidence, not as a substitute for grounded artifact refs
+Tested: `bun test tests/runtime/final-review-contracts.test.ts tests/completion-gates.test.ts` (49 pass, 338 expect calls); `bun test tests/config/tool-schemas.test.ts` (10 pass, 419 expect calls); `bun run typecheck`; `bun run lint`; `bun run check`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.12` before push
+
 ## [2.0.11] - 2026-05-06
 
 Require review-scope accounting before broad audit completion
