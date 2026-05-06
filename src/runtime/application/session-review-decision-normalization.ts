@@ -37,8 +37,8 @@ export function normalizeFinalReviewDecision(
 			? { validationAssessment: decision.validationAssessment }
 			: {}),
 		evidenceRefs: {
-			changedArtifacts: decision.evidenceRefs?.changedArtifacts ?? [],
-			validationCommands: decision.evidenceRefs?.validationCommands ?? [],
+			changedArtifacts: decision.evidenceRefs.changedArtifacts,
+			validationCommands: decision.evidenceRefs.validationCommands,
 		},
 		...(decision.evidencePackets
 			? { evidencePackets: decision.evidencePackets }
@@ -51,6 +51,8 @@ export function normalizeFinalReviewDecision(
 		integrationChecks: decision.integrationChecks ?? [],
 		regressionChecks: decision.regressionChecks ?? [],
 		remainingGaps: decision.remainingGaps ?? [],
+		behaviorChecks: decision.behaviorChecks ?? [],
+		validationCoverage: decision.validationCoverage ?? [],
 		blockingFindings: decision.blockingFindings ?? [],
 		followUps: decision.followUps ?? [],
 		suggestedValidation: decision.suggestedValidation ?? [],

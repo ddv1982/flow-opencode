@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-flow",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "description": "Stateful planning and execution workflow plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -89,8 +89,6 @@
       "scripts/**/*.ts"
     ],
     "ignore": [
-      "src/types/typecheck.ts",
-      "tests/schema-equivalence.test-d.ts",
       "src/prompts/generated/index.ts"
     ]
   }

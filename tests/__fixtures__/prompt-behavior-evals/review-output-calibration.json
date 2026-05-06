@@ -334,5 +334,297 @@
 				"Run the focused prompt behavior and capture tests."
 			]
 		}
+	},
+	{
+		"id": "review-soft-focus-keyword-only-rejected",
+		"title": "Soft-focus output is rejected when async/race terms replace a temporal trace",
+		"sourcePaths": [
+			"src/audit/prompts/contracts.ts",
+			"tests/prompt-behavior-eval-helpers.ts",
+			"tests/review-prompt-capture.test.ts"
+		],
+		"minPassingScore": 10,
+		"packetExpectations": {
+			"requiredBehaviorChecks": [
+				{
+					"riskClass": "async_event_ordering",
+					"requiredText": [
+						"panel click",
+						"deferred registration",
+						"pending action",
+						"stale first action overrides later user intent"
+					],
+					"requireEntrypointRefs": true,
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "state_commit_rollback",
+					"requiredText": [
+						"session",
+						"current-scene",
+						"commits before",
+						"rollback"
+					],
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				}
+			]
+		},
+		"expectedFailures": ["failure_modes_accounted"],
+		"modelOutput": {
+			"requestedDepth": "deep_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Soft-focus panel, navigation, scene lifecycle, and tests were reviewed at a structured level.",
+			"overallVerdict": "No confirmed blocker was found; the review mentions async race risk and recommends validation.",
+			"discoveredSurfaces": [
+				{
+					"name": "Session panel actions",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/shell/sessionPanelActions.ts:10-80"]
+				},
+				{
+					"name": "Navigation and current scene state",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/game/navigation.ts:20-90"]
+				},
+				{
+					"name": "Session panel tests",
+					"category": "tests",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["tests/sessionPanelActions.ts:1-120"]
+				}
+			],
+			"coverageNotes": [
+				"Every discovered soft-focus surface in this focused review was directly reviewed with first-party evidence references.",
+				"Failure-mode review mentioned async, race, lifecycle, and state rollback risk, but did not record a concrete behavior ledger trace."
+			],
+			"validationRun": [
+				{
+					"command": "bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+					"status": "not_run",
+					"summary": "Validation was not run during this read-only prompt-behavior calibration fixture."
+				}
+			],
+			"findings": [
+				{
+					"title": "Soft-focus review needs a behavior-ledger trace",
+					"category": "hardening_opportunity",
+					"confidence": "likely",
+					"severity": "medium",
+					"evidence": [
+						"tests/prompt-behavior-eval-helpers.ts:1",
+						"src/audit/prompts/contracts.ts:1"
+					],
+					"impact": "Keyword-only async/race language can miss stale action ordering and rollback defects.",
+					"remediation": "Record behaviorChecks that name the entrypoint, async boundary, state or lifecycle owner, failure path, and oracle/gap."
+				}
+			],
+			"nextSteps": [
+				"Add behaviorChecks for the soft-focus async ordering and state rollback path."
+			]
+		}
+	},
+	{
+		"id": "review-soft-focus-temporal-trace-accepted",
+		"title": "Soft-focus output passes when behavior checks trace temporal owners and validation gaps",
+		"sourcePaths": [
+			"src/audit/report-schema.ts",
+			"tests/prompt-behavior-eval-helpers.ts",
+			"tests/review-prompt-capture.test.ts"
+		],
+		"minPassingScore": 10,
+		"packetExpectations": {
+			"requiredBehaviorChecks": [
+				{
+					"riskClass": "async_event_ordering",
+					"requiredText": [
+						"panel click",
+						"deferred registration",
+						"pending action",
+						"stale first action overrides later user intent"
+					],
+					"requireEntrypointRefs": true,
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "lifecycle_reentrancy",
+					"requiredText": ["scene start", "setup", "scene.start", "throws"],
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "state_commit_rollback",
+					"requiredText": [
+						"session",
+						"current-scene",
+						"commits before",
+						"rollback"
+					],
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "test_oracle_authenticity",
+					"requiredText": [
+						"rejection tests",
+						"concurrent interleaving",
+						"rollback"
+					],
+					"requireOracleOrGap": true
+				}
+			]
+		},
+		"modelOutput": {
+			"requestedDepth": "deep_audit",
+			"achievedDepth": "deep_audit",
+			"repoSummary": "Soft-focus panel action, deferred registration, navigation, scene setup, and related tests were reviewed as one temporal path.",
+			"overallVerdict": "No confirmed blocker was proven, but validation does not yet prove concurrent interleaving or rollback behavior.",
+			"discoveredSurfaces": [
+				{
+					"name": "Session panel action entrypoint",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/shell/sessionPanelActions.ts:10-80"]
+				},
+				{
+					"name": "Deferred registration and pending action boundary",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/shell/sessionPanels.ts:30-110"]
+				},
+				{
+					"name": "Navigation current-scene state owner",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/game/navigation.ts:20-120"]
+				},
+				{
+					"name": "PracticeScene scene start/setup lifecycle owner",
+					"category": "source_runtime",
+					"reviewStatus": "directly_reviewed",
+					"evidence": ["src/scenes/PracticeScene.ts:1-90"]
+				},
+				{
+					"name": "Soft-focus tests",
+					"category": "tests",
+					"reviewStatus": "directly_reviewed",
+					"evidence": [
+						"tests/sessionPanelActions.ts:1-140",
+						"tests/fullFlowSmoke.ts:1-160"
+					]
+				}
+			],
+			"coverageNotes": [
+				"Every discovered soft-focus behavior surface in this focused review was directly reviewed with first-party evidence references.",
+				"The temporal trace covered panel click/action -> deferred registration/pending action -> scene start/setup -> session/current-scene commit.",
+				"Validation gap: existing rejection tests are insufficient for concurrent interleaving and rollback after scene.start(...) throws."
+			],
+			"behaviorChecks": [
+				{
+					"riskClass": "async_event_ordering",
+					"result": "passed",
+					"invariant": "A panel click must bind the latest pending action after deferred registration resolves.",
+					"entrypointRefs": ["src/shell/sessionPanelActions.ts:10-80"],
+					"stateOwnerRefs": ["src/game/navigation.ts:20-120"],
+					"lifecycleOwnerRefs": ["src/scenes/PracticeScene.ts:1-90"],
+					"failurePath": "panel click -> deferred registration -> pending action can let stale first action overrides later user intent unless current-scene ownership is checked.",
+					"oracleRefs": [
+						"tests/sessionPanelActions.ts:1-140",
+						"tests/fullFlowSmoke.ts:1-160"
+					],
+					"validationRefs": [
+						"bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts"
+					]
+				},
+				{
+					"riskClass": "lifecycle_reentrancy",
+					"result": "gap_recorded",
+					"invariant": "Scene start setup must be reentrant-safe when scene.start(...) throws.",
+					"entrypointRefs": ["src/game/navigation.ts:20-120"],
+					"stateOwnerRefs": ["src/game/navigation.ts:20-120"],
+					"lifecycleOwnerRefs": ["src/scenes/PracticeScene.ts:1-90"],
+					"failurePath": "scene start/setup calls scene.start(...) and throws before all lifecycle owners prove rollback semantics.",
+					"oracleRefs": [],
+					"validationRefs": [],
+					"remainingGap": "Need a test that forces scene.start(...) throws during setup and observes cleanup/rollback."
+				},
+				{
+					"riskClass": "state_commit_rollback",
+					"result": "gap_recorded",
+					"invariant": "The session/current-scene state owner must not leave commits before scene.start(...) throws without rollback.",
+					"entrypointRefs": ["src/shell/sessionPanelActions.ts:10-80"],
+					"stateOwnerRefs": ["src/game/navigation.ts:20-120"],
+					"lifecycleOwnerRefs": ["src/scenes/PracticeScene.ts:1-90"],
+					"failurePath": "session/current-scene commits before scene.start(...) throws need rollback coverage.",
+					"oracleRefs": [],
+					"validationRefs": [],
+					"remainingGap": "Existing tests do not prove rollback after a failed scene start."
+				},
+				{
+					"riskClass": "test_oracle_authenticity",
+					"result": "gap_recorded",
+					"invariant": "Rejection tests must exercise the product path rather than only isolated guards.",
+					"entrypointRefs": ["tests/sessionPanelActions.ts:1-140"],
+					"stateOwnerRefs": [],
+					"lifecycleOwnerRefs": [],
+					"failurePath": "Existing rejection tests do not prove concurrent interleaving or rollback semantics.",
+					"oracleRefs": [],
+					"validationRefs": [],
+					"remainingGap": "Add a product-path oracle for concurrent interleaving and rollback."
+				}
+			],
+			"validationCoverage": [
+				{
+					"command": "bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+					"behaviorClasses": [
+						"async_event_ordering",
+						"lifecycle_reentrancy",
+						"state_commit_rollback",
+						"test_oracle_authenticity"
+					],
+					"proves": [
+						"Basic panel action rejection and smoke coverage are represented."
+					],
+					"gaps": [
+						"Does not prove concurrent interleaving between stale and later panel actions.",
+						"Does not prove rollback when scene.start(...) throws after state commit."
+					],
+					"oracleRefs": [
+						"tests/sessionPanelActions.ts:1-140",
+						"tests/fullFlowSmoke.ts:1-160"
+					]
+				}
+			],
+			"validationRun": [
+				{
+					"command": "bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+					"status": "not_run",
+					"summary": "Validation was not run during this read-only fixture; even this suite would not fully prove concurrent interleaving and rollback."
+				}
+			],
+			"findings": [
+				{
+					"title": "Soft-focus path still needs temporal validation oracles",
+					"category": "hardening_opportunity",
+					"confidence": "likely",
+					"severity": "medium",
+					"evidence": [
+						"src/shell/sessionPanelActions.ts:10-80",
+						"src/game/navigation.ts:20-120",
+						"tests/sessionPanelActions.ts:1-140"
+					],
+					"impact": "Stale actions or failed scene starts can regress without an oracle that follows the full temporal path.",
+					"remediation": "Add concurrent interleaving and scene.start(...) throw rollback tests before claiming the behavior is fully validated."
+				}
+			],
+			"nextSteps": [
+				"Add a concurrent panel action test for stale-first-action ordering.",
+				"Add a scene.start(...) throw test that proves session/current-scene rollback."
+			]
+		}
 	}
 ]

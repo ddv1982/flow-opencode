@@ -22,6 +22,10 @@ ${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}
 - For deep_audit, inspect every major surface with direct evidence and note any spot-checked or skipped areas explicitly.
 - For full_audit, directly review every discovered major surface, cite evidence for each directly_reviewed surface, and downgrade achievedDepth when any surface is only spot-checked or skipped.
 - Trace concrete invariants, adversarial sequences, and failure paths before writing findings; favor specific regression mechanisms over generic architecture advice.
+- Treat changed files as review seeds, not boundaries; include connected context needed to evaluate async/lifecycle/state/test-oracle behavior risks.
+- When those risks are applicable, populate behaviorChecks with checked paths or explicit gap/not-applicable outcomes.
+- When validation outcomes justify conclusions, map them through validationCoverage rather than relying on command success labels alone.
+- Keep remaining-gap claims empty only when applicable behavior classes are checked or not applicable.
 - Treat rich user review packets as structured review input, not loose prose: preserve selected context, excluded context, relationship hypotheses, ambiguities, known exclusions, already-covered findings, evidence requirements, and done-when criteria before deriving findings.
 - Before writing findings, map the relevant packet relationships and negative space into the existing ledger: use evidencePackets for read-only packet metadata, discoveredSurfaces for reviewed/spot-checked/unreviewed surfaces, and coverageNotes for selected-context limits, exclusions, ambiguities, and relationship paths that shaped the review.
 - Do not reopen known exclusions or already-covered findings unless new evidence connects them to a larger blocker; if an ambiguity is material, report it as a coverage/process gap rather than upgrading it into confirmed-defect language.

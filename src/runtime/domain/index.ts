@@ -1,5 +1,13 @@
 export { featureWouldReachCompletion, summarizeCompletion } from "./completion";
 export {
+	deriveRequiredFinalReviewBehaviorRisks,
+	FINAL_REVIEW_BEHAVIOR_RISK_CLASSES,
+	type FinalReviewBehaviorCheck,
+	type FinalReviewBehaviorRiskClass,
+	type FinalReviewValidationCoverage,
+	finalReviewBehaviorCoverageFailureReasons,
+} from "./final-review-behavior-risks";
+export {
 	type DetailedFinalReviewRequirementFailure,
 	describeFinalReviewCoverageFailure,
 	detailedFinalReviewRequirementFailures,

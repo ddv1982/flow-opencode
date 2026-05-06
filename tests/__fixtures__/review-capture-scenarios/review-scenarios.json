@@ -128,5 +128,96 @@
 				"Every confirmed or likely finding needs concrete path:line evidence."
 			]
 		}
+	},
+	{
+		"id": "flow-review-soft-focus-async-lifecycle-structured",
+		"title": "Flow review soft-focus async lifecycle incident audit",
+		"arguments": "detailed Review this providerless soft-focus-style change packet. Reject changed-files-only reasoning and keyword-only async/race claims. Return raw/structured JSON for eval scoring.",
+		"outputView": "structured",
+		"fileMap": "flow-opencode\n├── src\n│   ├── shell\n│   │   ├── sessionPanels.ts +\n│   │   └── sessionPanelActions.ts +\n│   ├── game\n│   │   └── navigation.ts +\n│   └── scenes\n│       └── PracticeScene.ts +\n├── tests\n│   ├── sessionPanelActions.ts +\n│   └── fullFlowSmoke.ts +\n└── package.json",
+		"notes": [
+			"This scenario mirrors the missed soft-focus incident shape without depending on external provider APIs.",
+			"A capture must trace panel action timing through lifecycle/state owners; mentioning async/race keywords is insufficient."
+		],
+		"reviewPacket": {
+			"goal": "Verify the review traces a panel click/action through deferred registration, scene lifecycle setup, and session/current-scene state commit behavior.",
+			"selectedContext": {
+				"included": [
+					"Entrypoint: panel click/action in src/shell/sessionPanelActions.ts",
+					"Async boundary: deferred registration / pending action in src/shell/sessionPanels.ts",
+					"Navigation/lifecycle handoff: src/game/navigation.ts",
+					"Lifecycle owner: scene start/setup in src/scenes/PracticeScene.ts",
+					"State owner: session/current-scene store in src/game/navigation.ts",
+					"Related tests: tests/sessionPanelActions.ts and tests/fullFlowSmoke.ts"
+				]
+			},
+			"relationships": [
+				"Trace panel click/action -> deferred registration/pending action -> scene start/setup -> session/current-scene commit before concluding review coverage.",
+				"Challenge whether stale first action can override later user intent after async registration resolves.",
+				"Challenge whether state commits before scene.start(...) throws are rolled back or recorded as a validation gap."
+			],
+			"ambiguities": [
+				"Existing rejection tests are insufficient if they do not prove concurrent interleaving and rollback semantics."
+			],
+			"knownExclusions": [
+				"Do not pass this scenario with only changed-files coverage or generic async/race terminology."
+			],
+			"evidenceRequirements": [
+				"Behavior checks must name the entrypoint, async boundary, lifecycle owner, state owner, failure path, and validation oracle or explicit gap.",
+				"Use concrete first-party path:line evidence for directly reviewed soft-focus surfaces."
+			],
+			"doneWhen": [
+				"The output includes behaviorChecks for async_event_ordering, lifecycle_reentrancy, state_commit_rollback, and test_oracle_authenticity.",
+				"Validation coverage explains why existing rejection tests do or do not prove concurrent interleaving and rollback."
+			]
+		},
+		"scoringExpectations": {
+			"requiredDirectReview": [
+				"Entrypoint: panel click/action in src/shell/sessionPanelActions.ts",
+				"Lifecycle owner: scene start/setup in src/scenes/PracticeScene.ts",
+				"State owner: session/current-scene store in src/game/navigation.ts",
+				"Related tests: tests/sessionPanelActions.ts and tests/fullFlowSmoke.ts"
+			],
+			"requiredBehaviorChecks": [
+				{
+					"riskClass": "async_event_ordering",
+					"requiredText": [
+						"panel click",
+						"deferred registration",
+						"pending action",
+						"stale first action overrides later user intent"
+					],
+					"requireEntrypointRefs": true,
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "lifecycle_reentrancy",
+					"requiredText": ["scene start", "setup", "scene.start", "throws"],
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "state_commit_rollback",
+					"requiredText": [
+						"session",
+						"current-scene",
+						"commits before",
+						"rollback"
+					],
+					"requireStateOrLifecycleOwnerRefs": true,
+					"requireOracleOrGap": true
+				},
+				{
+					"riskClass": "test_oracle_authenticity",
+					"requiredText": [
+						"rejection tests",
+						"concurrent interleaving",
+						"rollback"
+					],
+					"requireOracleOrGap": true
+				}
+			]
+		}
 	}
 ]

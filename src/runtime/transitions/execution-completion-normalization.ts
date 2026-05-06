@@ -1,4 +1,4 @@
-import { buildReviewContextPack, type ReviewContextPack } from "../domain";
+import { buildReviewContextPack } from "../domain";
 import type { Session, WorkerResultArgs } from "../schema";
 
 export type NormalizedReview = Omit<
@@ -10,37 +10,11 @@ export type NormalizedReview = Omit<
 	>;
 };
 
-export type NormalizedFinalReview = Omit<
-	NonNullable<WorkerResultArgs["finalReview"]>,
-	| "blockingFindings"
-	| "reviewedSurfaces"
-	| "evidenceRefs"
-	| "integrationChecks"
-	| "regressionChecks"
-	| "remainingGaps"
-	| "reviewContextPack"
-> & {
-	blockingFindings: NonNullable<
-		NonNullable<WorkerResultArgs["finalReview"]>["blockingFindings"]
-	>;
-	reviewedSurfaces: NonNullable<
-		NonNullable<WorkerResultArgs["finalReview"]>["reviewedSurfaces"]
-	>;
-	evidenceRefs: {
-		changedArtifacts: string[];
-		validationCommands: string[];
-	};
-	integrationChecks: NonNullable<
-		NonNullable<WorkerResultArgs["finalReview"]>["integrationChecks"]
-	>;
-	regressionChecks: NonNullable<
-		NonNullable<WorkerResultArgs["finalReview"]>["regressionChecks"]
-	>;
-	remainingGaps: NonNullable<
-		NonNullable<WorkerResultArgs["finalReview"]>["remainingGaps"]
-	>;
-	reviewContextPack: ReviewContextPack | undefined;
-};
+type PersistedFinalReview = NonNullable<
+	Session["execution"]["history"][number]["finalReview"]
+>;
+
+export type NormalizedFinalReview = PersistedFinalReview;
 
 export type NormalizedReviewFindingClosure = Omit<
 	NonNullable<WorkerResultArgs["reviewFindingClosures"]>[number],
@@ -110,6 +84,21 @@ function normalizeFinalReview(
 		integrationChecks: review.integrationChecks ?? [],
 		regressionChecks: review.regressionChecks ?? [],
 		remainingGaps: review.remainingGaps ?? [],
+		behaviorChecks: (review.behaviorChecks ?? []).map((check) => ({
+			...check,
+			entrypointRefs: check.entrypointRefs ?? [],
+			stateOwnerRefs: check.stateOwnerRefs ?? [],
+			lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
+			oracleRefs: check.oracleRefs ?? [],
+			validationRefs: check.validationRefs ?? [],
+		})),
+		validationCoverage: (review.validationCoverage ?? []).map((coverage) => ({
+			...coverage,
+			behaviorClasses: coverage.behaviorClasses ?? [],
+			proves: coverage.proves ?? [],
+			gaps: coverage.gaps ?? [],
+			oracleRefs: coverage.oracleRefs ?? [],
+		})),
 		reviewContextPack: review.reviewContextPack
 			? buildReviewContextPack(review.reviewContextPack)
 			: undefined,

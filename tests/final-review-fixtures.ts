@@ -1,7 +1,7 @@
 import type { Session, WorkerResult } from "../src/runtime/schema";
 
 export const CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT =
-	"Validation coverage and cross-feature interactions were reviewed.";
+	"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.";
 
 const DEFAULT_REVIEWED_SURFACES: NonNullable<
 	NonNullable<WorkerResult["finalReview"]>["reviewedSurfaces"]
@@ -31,17 +31,17 @@ function finalReviewBase(): Omit<FinalReviewPayload, "status"> {
 		reviewDepth: "detailed",
 		reviewedSurfaces: DEFAULT_REVIEWED_SURFACES,
 		evidenceSummary:
-			"Checked final cross-feature integration and validation evidence.",
+			"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 		validationAssessment: CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT,
 		evidenceRefs: DEFAULT_EVIDENCE_REFS,
 		integrationChecks: [
-			"Reviewed integration points across the active feature boundary.",
+			"Checked the session completion entrypoint against the runtime state/finalization boundary.",
 		],
 		regressionChecks: [
-			"Checked for regressions in shared surfaces and validation evidence.",
+			"Checked bun test covers the session-completion regression path cited by the fixture.",
 		],
 		remainingGaps: [],
-		summary: "Final review looks good.",
+		summary: "Final review checked the runtime path and validation oracle.",
 		blockingFindings: [],
 	};
 }

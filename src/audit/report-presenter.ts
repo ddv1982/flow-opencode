@@ -191,6 +191,34 @@ function renderNextSteps(report: ReviewReport): string[] {
 	];
 }
 
+function renderBehaviorCoverageNotes(report: ReviewReport): string[] {
+	const behaviorChecks = report.behaviorChecks ?? [];
+	const validationCoverage = report.validationCoverage ?? [];
+	if (behaviorChecks.length === 0 && validationCoverage.length === 0) {
+		return [];
+	}
+	const byResult = {
+		passed: behaviorChecks.filter((entry) => entry.result === "passed").length,
+		gap_recorded: behaviorChecks.filter(
+			(entry) => entry.result === "gap_recorded",
+		).length,
+		not_applicable: behaviorChecks.filter(
+			(entry) => entry.result === "not_applicable",
+		).length,
+		needs_fix: behaviorChecks.filter((entry) => entry.result === "needs_fix")
+			.length,
+	};
+	return [
+		"- Behavior checks:",
+		`- behaviorChecks: ${behaviorChecks.length} (passed: ${byResult.passed}, gap_recorded: ${byResult.gap_recorded}, not_applicable: ${byResult.not_applicable}, needs_fix: ${byResult.needs_fix})`,
+		...(validationCoverage.length > 0
+			? [
+					`- validationCoverage mappings: ${validationCoverage.length} command mapping(s).`,
+				]
+			: []),
+	];
+}
+
 function renderCoverageNotes(report: ReviewReport): string[] {
 	const notes = report.coverageNotes ?? [];
 	const coverageSummary = summarizeReviewCoverage(report);
@@ -229,6 +257,7 @@ function renderCoverageNotes(report: ReviewReport): string[] {
 		...(validationNotes.length > 0
 			? ["- Validation status:", ...bulletLines(validationNotes)]
 			: []),
+		...renderBehaviorCoverageNotes(report),
 	];
 }
 

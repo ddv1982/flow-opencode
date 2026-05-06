@@ -70,6 +70,11 @@ export function createReviewRuntimeTools() {
 							reviewDepth: input.reviewDepth,
 							reviewedSurfaces: input.reviewedSurfaces,
 							evidenceSummary: input.evidenceSummary,
+							behaviorCheckCount: input.behaviorChecks?.length ?? 0,
+							behaviorGapCount: (input.behaviorChecks ?? []).filter(
+								(check) => check.result === "gap_recorded",
+							).length,
+							validationCoverageCount: input.validationCoverage?.length ?? 0,
 						},
 					});
 					return executeGuardedSessionMutation(

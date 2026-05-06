@@ -8,6 +8,7 @@ import {
 import {
 	type PromptBehaviorPacketExpectations,
 	scorePromptBehaviorModelOutput,
+	validatePromptBehaviorPacketExpectations,
 } from "../../tests/prompt-behavior-eval-helpers";
 
 export type ReviewCaptureOutputView = "human" | "structured" | "both";
@@ -39,6 +40,7 @@ export type ReviewCaptureScenario = {
 	outputView: ReviewCaptureOutputView;
 	fileMap: string;
 	reviewPacket?: ReviewCaptureReviewPacket;
+	scoringExpectations?: PromptBehaviorPacketExpectations;
 	notes?: string[];
 };
 
@@ -220,6 +222,12 @@ export function validateReviewCaptureScenarios(
 			);
 		}
 		validateReviewPacket(scenario.reviewPacket, scenario.id);
+		if (scenario.scoringExpectations !== undefined) {
+			validatePromptBehaviorPacketExpectations(
+				scenario.scoringExpectations,
+				`Review capture scenario '${scenario.id}' scoringExpectations`,
+			);
+		}
 		assertOptionalStringArray(scenario.notes, scenario.id, "notes");
 		return scenario as ReviewCaptureScenario;
 	});
@@ -334,6 +342,51 @@ function nonEmpty(values: string[] | undefined): string[] | undefined {
 	return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function mergeStringArrays(
+	left: string[] | undefined,
+	right: string[] | undefined,
+): string[] | undefined {
+	const merged = [...(left ?? []), ...(right ?? [])];
+	return merged.length > 0 ? [...new Set(merged)] : undefined;
+}
+
+function mergePacketExpectations(
+	base: PromptBehaviorPacketExpectations | undefined,
+	explicit: PromptBehaviorPacketExpectations | undefined,
+): PromptBehaviorPacketExpectations | undefined {
+	if (!base) {
+		return explicit;
+	}
+	if (!explicit) {
+		return base;
+	}
+	const merged: PromptBehaviorPacketExpectations = {};
+	for (const fieldName of [
+		"selectedContext",
+		"relationships",
+		"ambiguities",
+		"knownExclusions",
+		"alreadyCoveredFindings",
+		"forbiddenDirectReview",
+		"requiredDirectReview",
+	] as const) {
+		const values = mergeStringArrays(base[fieldName], explicit[fieldName]);
+		if (values) {
+			merged[fieldName] = values;
+		}
+	}
+	const requiredBehaviorChecks = [
+		...(base.requiredBehaviorChecks ?? []),
+		...(explicit.requiredBehaviorChecks ?? []),
+	];
+	if (requiredBehaviorChecks.length > 0) {
+		merged.requiredBehaviorChecks = requiredBehaviorChecks;
+	}
+	return Object.values(merged).some((value) => value !== undefined)
+		? merged
+		: undefined;
+}
+
 function reviewPacketExpectations(
 	reviewPacket: ReviewCaptureReviewPacket | undefined,
 ): PromptBehaviorPacketExpectations | undefined {
@@ -404,7 +457,10 @@ export function buildReviewCapturePrompt(
 export function buildReviewCaptureTemplate(
 	scenario: ReviewCaptureScenario,
 ): string {
-	const packetExpectations = reviewPacketExpectations(scenario.reviewPacket);
+	const packetExpectations = mergePacketExpectations(
+		reviewPacketExpectations(scenario.reviewPacket),
+		scenario.scoringExpectations,
+	);
 	return `${JSON.stringify(
 		{
 			id: scenario.id,
@@ -474,34 +530,12 @@ function parsePacketExpectations(
 	if (value === undefined) {
 		return undefined;
 	}
-	if (!isRecord(value)) {
-		throw new Error("Review capture packetExpectations must be an object.");
-	}
-	const expectations: PromptBehaviorPacketExpectations = {};
-	for (const fieldName of [
-		"selectedContext",
-		"relationships",
-		"ambiguities",
-		"knownExclusions",
-		"alreadyCoveredFindings",
-		"forbiddenDirectReview",
-	] as const) {
-		const field = value[fieldName];
-		if (field === undefined) {
-			continue;
-		}
-		if (
-			!Array.isArray(field) ||
-			field.some((entry) => typeof entry !== "string")
-		) {
-			throw new Error(
-				`Review capture packetExpectations.${fieldName} must be an array of strings.`,
-			);
-		}
-		expectations[fieldName] = field;
-	}
-	return Object.values(expectations).some((field) => field !== undefined)
-		? expectations
+	validatePromptBehaviorPacketExpectations(
+		value,
+		"Review capture packetExpectations",
+	);
+	return Object.values(value).some((field) => field !== undefined)
+		? value
 		: undefined;
 }
 

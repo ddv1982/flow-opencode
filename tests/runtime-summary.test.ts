@@ -124,22 +124,23 @@ function buildSummaryFixtureSessions() {
 							"validation_evidence",
 						],
 						evidenceSummary:
-							"Checked final cross-feature integration and validation evidence.",
+							"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
+							"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
 						evidenceRefs: {
 							changedArtifacts: ["src/runtime/session.ts"],
 							validationCommands: ["bun test"],
 						},
 						integrationChecks: [
-							"Reviewed integration points across the active feature boundary.",
+							"Checked the session completion entrypoint against the runtime state/finalization boundary.",
 						],
 						regressionChecks: [
-							"Checked for regressions in shared surfaces and validation evidence.",
+							"Checked bun test covers the session-completion regression path cited by the fixture.",
 						],
 						remainingGaps: [],
 						status: "approved",
-						summary: "Final review looks good.",
+						summary:
+							"Final review checked the runtime path and validation oracle.",
 					},
 				),
 			),
@@ -177,18 +178,18 @@ function buildSummaryFixtureSessions() {
 						"validation_evidence",
 					],
 					evidenceSummary:
-						"Checked final cross-feature integration and validation evidence.",
+						"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 					validationAssessment:
-						"Validation coverage and cross-feature interactions were reviewed.",
+						"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
 					evidenceRefs: {
 						changedArtifacts: ["src/runtime/session.ts"],
 						validationCommands: ["bun test"],
 					},
 					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
+						"Checked the session completion entrypoint against the runtime state/finalization boundary.",
 					],
 					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
+						"Checked bun test covers the session-completion regression path cited by the fixture.",
 					],
 					remainingGaps: [],
 					status: "passed",
@@ -583,6 +584,7 @@ describe("runtime summary", () => {
 	            },
 	            "lastOutcomeKind": "completed",
 	            "lastReviewerDecision": {
+	              "behaviorChecks": [],
 	              "blockingFindings": [],
 	              "evidenceRefs": {
 	                "changedArtifacts": [
@@ -592,13 +594,13 @@ describe("runtime summary", () => {
 	                  "bun test",
 	                ],
 	              },
-	              "evidenceSummary": "Checked final cross-feature integration and validation evidence.",
+	              "evidenceSummary": "Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 	              "followUps": [],
 	              "integrationChecks": [
-	                "Reviewed integration points across the active feature boundary.",
+	                "Checked the session completion entrypoint against the runtime state/finalization boundary.",
 	              ],
 	              "regressionChecks": [
-	                "Checked for regressions in shared surfaces and validation evidence.",
+	                "Checked bun test covers the session-completion regression path cited by the fixture.",
 	              ],
 	              "remainingGaps": [],
 	              "reviewDepth": "detailed",
@@ -611,8 +613,9 @@ describe("runtime summary", () => {
 	              "scope": "final",
 	              "status": "approved",
 	              "suggestedValidation": [],
-	              "summary": "Final review looks good.",
-	              "validationAssessment": "Validation coverage and cross-feature interactions were reviewed.",
+	              "summary": "Final review checked the runtime path and validation oracle.",
+	              "validationAssessment": "bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+	              "validationCoverage": [],
 	            },
 	            "lastValidationRun": [
 	              {

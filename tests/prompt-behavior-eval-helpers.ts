@@ -30,10 +30,29 @@ export type PromptBehaviorEvalCaseId =
 	| "review-ungrounded-output-rejected"
 	| "review-misses-failure-mode-accounting"
 	| "review-packet-boundaries-reopened"
+	| "review-soft-focus-keyword-only-rejected"
+	| "review-soft-focus-temporal-trace-accepted"
 	| "captured-review-csv-memory-risk-calibrated"
 	| "captured-review-overconfident-validation-gap";
 
 export type PromptBehaviorEvalCaseOrigin = "calibration" | "captured";
+
+export type PromptBehaviorBehaviorRiskClass =
+	| "async_event_ordering"
+	| "lifecycle_reentrancy"
+	| "state_commit_rollback"
+	| "persistence_recovery"
+	| "interaction_geometry"
+	| "accessibility_semantics"
+	| "test_oracle_authenticity";
+
+export type PromptBehaviorRequiredBehaviorCheck = {
+	riskClass: PromptBehaviorBehaviorRiskClass;
+	requiredText: string[];
+	requireEntrypointRefs?: boolean;
+	requireStateOrLifecycleOwnerRefs?: boolean;
+	requireOracleOrGap?: boolean;
+};
 
 export type PromptBehaviorPacketExpectations = {
 	selectedContext?: string[];
@@ -43,6 +62,7 @@ export type PromptBehaviorPacketExpectations = {
 	alreadyCoveredFindings?: string[];
 	forbiddenDirectReview?: string[];
 	requiredDirectReview?: string[];
+	requiredBehaviorChecks?: PromptBehaviorRequiredBehaviorCheck[];
 };
 
 export type PromptBehaviorEvalCase = {
@@ -101,6 +121,8 @@ const KNOWN_BEHAVIOR_CASE_IDS = new Set<PromptBehaviorEvalCaseId>([
 	"review-ungrounded-output-rejected",
 	"review-misses-failure-mode-accounting",
 	"review-packet-boundaries-reopened",
+	"review-soft-focus-keyword-only-rejected",
+	"review-soft-focus-temporal-trace-accepted",
 	"captured-review-csv-memory-risk-calibrated",
 	"captured-review-overconfident-validation-gap",
 ]);
@@ -111,6 +133,95 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sourcePathExists(path: string): boolean {
 	return sourcePathExistsWithinRepo(path, PROMPT_BEHAVIOR_EVAL_REPO_ROOT);
+}
+
+const BEHAVIOR_RISK_CLASSES = new Set<PromptBehaviorBehaviorRiskClass>([
+	"async_event_ordering",
+	"lifecycle_reentrancy",
+	"state_commit_rollback",
+	"persistence_recovery",
+	"interaction_geometry",
+	"accessibility_semantics",
+	"test_oracle_authenticity",
+]);
+
+function validateRequiredBehaviorChecks(value: unknown, caseId: string): void {
+	if (value === undefined) {
+		return;
+	}
+	if (!Array.isArray(value)) {
+		throw new Error(
+			`${caseId} requiredBehaviorChecks must be an array when present.`,
+		);
+	}
+	for (const [index, entry] of value.entries()) {
+		if (!isRecord(entry)) {
+			throw new Error(
+				`${caseId} requiredBehaviorChecks[${index}] must be an object.`,
+			);
+		}
+		if (
+			typeof entry.riskClass !== "string" ||
+			!BEHAVIOR_RISK_CLASSES.has(
+				entry.riskClass as PromptBehaviorBehaviorRiskClass,
+			)
+		) {
+			throw new Error(
+				`${caseId} requiredBehaviorChecks[${index}].riskClass is unknown.`,
+			);
+		}
+		if (
+			!Array.isArray(entry.requiredText) ||
+			entry.requiredText.length === 0 ||
+			entry.requiredText.some((text) => typeof text !== "string")
+		) {
+			throw new Error(
+				`${caseId} requiredBehaviorChecks[${index}].requiredText must be a non-empty array of strings.`,
+			);
+		}
+		for (const fieldName of [
+			"requireEntrypointRefs",
+			"requireStateOrLifecycleOwnerRefs",
+			"requireOracleOrGap",
+		] as const) {
+			if (
+				entry[fieldName] !== undefined &&
+				typeof entry[fieldName] !== "boolean"
+			) {
+				throw new Error(
+					`${caseId} requiredBehaviorChecks[${index}].${fieldName} must be a boolean when present.`,
+				);
+			}
+		}
+	}
+}
+
+export function validatePromptBehaviorPacketExpectations(
+	value: unknown,
+	caseId = "Prompt behavior packetExpectations",
+): asserts value is PromptBehaviorPacketExpectations {
+	if (!isRecord(value)) {
+		throw new Error(`${caseId} must be an object.`);
+	}
+	for (const fieldName of [
+		"selectedContext",
+		"relationships",
+		"ambiguities",
+		"knownExclusions",
+		"alreadyCoveredFindings",
+		"forbiddenDirectReview",
+		"requiredDirectReview",
+	] as const) {
+		const field = value[fieldName];
+		if (
+			field !== undefined &&
+			(!Array.isArray(field) ||
+				field.some((entry) => typeof entry !== "string"))
+		) {
+			throw new Error(`${caseId}.${fieldName} must be an array of strings.`);
+		}
+	}
+	validateRequiredBehaviorChecks(value.requiredBehaviorChecks, caseId);
 }
 
 export function validatePromptBehaviorEvalCorpus(
@@ -171,31 +282,10 @@ export function validatePromptBehaviorEvalCorpus(
 			);
 		}
 		if (candidate.packetExpectations !== undefined) {
-			if (!isRecord(candidate.packetExpectations)) {
-				throw new Error(
-					`Prompt behavior eval case '${candidate.id}' packetExpectations must be an object.`,
-				);
-			}
-			for (const fieldName of [
-				"selectedContext",
-				"relationships",
-				"ambiguities",
-				"knownExclusions",
-				"alreadyCoveredFindings",
-				"forbiddenDirectReview",
-				"requiredDirectReview",
-			] as const) {
-				const field = candidate.packetExpectations[fieldName];
-				if (
-					field !== undefined &&
-					(!Array.isArray(field) ||
-						field.some((entry) => typeof entry !== "string"))
-				) {
-					throw new Error(
-						`Prompt behavior eval case '${candidate.id}' packetExpectations.${fieldName} must be an array of strings.`,
-					);
-				}
-			}
+			validatePromptBehaviorPacketExpectations(
+				candidate.packetExpectations,
+				`Prompt behavior eval case '${candidate.id}' packetExpectations`,
+			);
 		}
 		if (
 			candidate.expectedFailures &&
@@ -305,7 +395,142 @@ function reportReviewText(report: ReviewReport): string {
 	].join("\n");
 }
 
-function hasFailureModeAccounting(report: ReviewReport): boolean {
+type BehaviorCheck = NonNullable<ReviewReport["behaviorChecks"]>[number];
+
+type ValidationCoverage = NonNullable<
+	ReviewReport["validationCoverage"]
+>[number];
+
+function behaviorCheckText(check: BehaviorCheck): string {
+	return [
+		check.riskClass,
+		check.result,
+		check.invariant,
+		check.failurePath,
+		check.remainingGap ?? "",
+		...check.entrypointRefs,
+		...check.stateOwnerRefs,
+		...check.lifecycleOwnerRefs,
+		...check.oracleRefs,
+		...check.validationRefs,
+	].join("\n");
+}
+
+function referencesHaveEvidence(refs: readonly string[]): boolean {
+	return refs.length > 0 && refs.some(hasSpecificEvidenceReference);
+}
+
+function validationCoverageSatisfies(
+	coverage: ValidationCoverage,
+	riskClass: PromptBehaviorBehaviorRiskClass,
+): boolean {
+	return (
+		coverage.behaviorClasses.includes(riskClass) &&
+		(coverage.proves.length > 0 ||
+			coverage.gaps.length > 0 ||
+			coverage.oracleRefs.length > 0)
+	);
+}
+
+function behaviorCheckHasRecordedValidationRef(
+	report: ReviewReport,
+	validationRefs: readonly string[],
+): boolean {
+	const validationCommands = new Set(
+		report.validationRun.map((entry) => entry.command.trim()).filter(Boolean),
+	);
+	return validationRefs.some((validationRef) =>
+		validationCommands.has(validationRef.trim()),
+	);
+}
+
+function behaviorCheckSatisfiesRequirement(
+	report: ReviewReport,
+	check: BehaviorCheck,
+	requirement: PromptBehaviorRequiredBehaviorCheck,
+): boolean {
+	if (check.result === "not_applicable") {
+		return false;
+	}
+	const text = behaviorCheckText(check).toLowerCase();
+	if (
+		!requirement.requiredText.every((requiredText) =>
+			text.includes(requiredText.toLowerCase()),
+		)
+	) {
+		return false;
+	}
+	if (
+		requirement.requireEntrypointRefs &&
+		!referencesHaveEvidence(check.entrypointRefs)
+	) {
+		return false;
+	}
+	if (
+		requirement.requireStateOrLifecycleOwnerRefs &&
+		!referencesHaveEvidence([
+			...check.stateOwnerRefs,
+			...check.lifecycleOwnerRefs,
+		])
+	) {
+		return false;
+	}
+	if (requirement.requireOracleOrGap) {
+		const hasOracleRef = referencesHaveEvidence(check.oracleRefs);
+		const hasRecordedValidationRef = behaviorCheckHasRecordedValidationRef(
+			report,
+			check.validationRefs,
+		);
+		const hasExplicitGap =
+			check.result === "gap_recorded" && Boolean(check.remainingGap?.trim());
+		const hasCoverageOracleOrGap = (report.validationCoverage ?? []).some(
+			(coverage) =>
+				validationCoverageSatisfies(coverage, requirement.riskClass),
+		);
+		if (
+			!hasOracleRef &&
+			!hasRecordedValidationRef &&
+			!hasExplicitGap &&
+			!hasCoverageOracleOrGap
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function requiredBehaviorChecksAccounted(
+	report: ReviewReport,
+	requiredBehaviorChecks:
+		| readonly PromptBehaviorRequiredBehaviorCheck[]
+		| undefined,
+): boolean {
+	if (!requiredBehaviorChecks || requiredBehaviorChecks.length === 0) {
+		return true;
+	}
+	const checks = report.behaviorChecks ?? [];
+	return requiredBehaviorChecks.every((requirement) =>
+		checks
+			.filter((check) => check.riskClass === requirement.riskClass)
+			.some((check) =>
+				behaviorCheckSatisfiesRequirement(report, check, requirement),
+			),
+	);
+}
+
+function hasFailureModeAccounting(
+	report: ReviewReport,
+	expectations: PromptBehaviorPacketExpectations | undefined,
+): boolean {
+	if (
+		expectations?.requiredBehaviorChecks &&
+		expectations.requiredBehaviorChecks.length > 0
+	) {
+		return requiredBehaviorChecksAccounted(
+			report,
+			expectations.requiredBehaviorChecks,
+		);
+	}
 	const behaviorSurfacePresent = report.discoveredSurfaces.some(
 		(surface) =>
 			surface.category === "source_runtime" || surface.category === "tests",
@@ -469,7 +694,10 @@ function scoreParsedReport(
 		}
 		return true;
 	});
-	const failureModesAccounted = hasFailureModeAccounting(normalizedReport);
+	const failureModesAccounted = hasFailureModeAccounting(
+		normalizedReport,
+		packetExpectations,
+	);
 	const packetBoundariesPreserved = packetExpectationsPreserved(
 		normalizedReport,
 		packetExpectations,

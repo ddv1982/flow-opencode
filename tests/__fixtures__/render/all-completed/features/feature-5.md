@@ -53,12 +53,12 @@
 - scope: final
 - review depth: detailed
 - reviewed surfaces: changed_files, shared_surfaces, validation_evidence
-- evidence: Checked final cross-feature integration and validation evidence.
-- validation assessment: Validation coverage and cross-feature interactions were reviewed.
+- evidence: Checked feature-5 entrypoint, feature state handoff, failure path, and validation evidence.
+- validation assessment: bun test was mapped to the feature-5 regression oracle; no unchecked behavior gap remains in this fixture.
 - evidence changed artifacts: src/feature-5.ts
 - evidence validation commands: bun test
-- integration checks: Reviewed integration points across the active feature boundary.
-- regression checks: Checked for regressions in shared surfaces and validation evidence.
+- integration checks: Checked feature-5 entrypoint against the active feature boundary and state handoff.
+- regression checks: Checked bun test covers the feature-5 regression oracle cited by the fixture.
 - status: approved
 - summary: Approved final review.
 
@@ -80,10 +80,10 @@
 - status: passed
 - review depth: detailed
 - reviewed surfaces: changed_files, shared_surfaces, validation_evidence
-- evidence: Checked final cross-feature integration and validation evidence.
-- validation assessment: Validation coverage and cross-feature interactions were reviewed.
+- evidence: Checked feature-5 entrypoint, feature state handoff, failure path, and validation evidence.
+- validation assessment: bun test was mapped to the feature-5 regression oracle; no unchecked behavior gap remains in this fixture.
 - evidence changed artifacts: src/feature-5.ts
 - evidence validation commands: bun test
-- integration checks: Reviewed integration points across the active feature boundary.
-- regression checks: Checked for regressions in shared surfaces and validation evidence.
+- integration checks: Checked feature-5 entrypoint against the active feature boundary and state handoff.
+- regression checks: Checked bun test covers the feature-5 regression oracle cited by the fixture.
 - summary: Final review passed.

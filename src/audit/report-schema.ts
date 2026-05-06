@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { EvidencePacketArraySchema } from "../runtime/schema";
+import { behaviorValidationLedgerFailureReasons } from "../runtime/domain/final-review-behavior-risks";
+import {
+	BehaviorCheckSchema,
+	EvidencePacketArraySchema,
+	ValidationCoverageSchema,
+} from "../runtime/schema";
 
 const ReviewDepthSchema = z.enum(["broad_audit", "deep_audit", "full_audit"]);
 const SurfaceCategorySchema = z.enum([
@@ -114,10 +119,33 @@ export const ReviewReportSchema = z
 		discoveredSurfaces: z.array(ReviewDiscoveredSurfaceSchema),
 		evidencePackets: EvidencePacketArraySchema.optional(),
 		coverageNotes: z.array(z.string().min(1)).optional(),
+		behaviorChecks: z.array(BehaviorCheckSchema).optional(),
+		validationCoverage: z.array(ValidationCoverageSchema).optional(),
 		validationRun: z.array(ReviewValidationRunSchema),
 		findings: z.array(ReviewFindingSchema),
 		nextSteps: z.array(z.string().min(1)).optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((report, ctx) => {
+		const validationCommands = report.validationRun.map(
+			(entry) => entry.command,
+		);
+		const reasons = behaviorValidationLedgerFailureReasons(
+			validationCommands,
+			{
+				evidenceRefs: { validationCommands },
+				behaviorChecks: report.behaviorChecks,
+				validationCoverage: report.validationCoverage,
+			},
+			[],
+			{ rejectNeedsFix: false },
+		);
+		for (const reason of reasons) {
+			ctx.addIssue({
+				code: "custom",
+				message: `Behavior validation coverage: ${reason}`,
+			});
+		}
+	});
 
 export type ReviewReport = z.infer<typeof ReviewReportSchema>;

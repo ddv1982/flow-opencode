@@ -152,6 +152,22 @@ export function normalizeArtifactPath(path: string): string {
 	return normalized;
 }
 
+const REVIEW_ARTIFACT_REF_LINE_SUFFIX = /:(?:\d+)(?:-\d+)?$/;
+
+export function pathForReviewArtifactRef(ref: string): string {
+	const trimmed = ref.trim();
+	const suffixMatch = REVIEW_ARTIFACT_REF_LINE_SUFFIX.exec(trimmed);
+	const pathPart = suffixMatch ? trimmed.slice(0, suffixMatch.index) : trimmed;
+	return normalizeArtifactPath(pathPart);
+}
+
+export function normalizeReviewArtifactRef(ref: string): string {
+	const trimmed = ref.trim();
+	const suffixMatch = REVIEW_ARTIFACT_REF_LINE_SUFFIX.exec(trimmed);
+	const normalizedPath = pathForReviewArtifactRef(trimmed);
+	return suffixMatch ? `${normalizedPath}${suffixMatch[0]}` : normalizedPath;
+}
+
 export function isSafeReviewArtifactPath(path: string): boolean {
 	const normalized = normalizeArtifactPath(path);
 	if (
@@ -166,6 +182,11 @@ export function isSafeReviewArtifactPath(path: string): boolean {
 		.every(
 			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
 		);
+}
+
+export function isSafeReviewArtifactRef(ref: string): boolean {
+	const normalizedPath = pathForReviewArtifactRef(ref);
+	return isSafeReviewArtifactPath(normalizedPath);
 }
 
 export function normalizeSafeReviewArtifactPath(path: string): string {

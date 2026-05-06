@@ -1,6 +1,11 @@
 import { FINAL_REVIEW_SURFACES } from "../constants";
 import type { Session } from "../schema";
 import {
+	type FinalReviewBehaviorCheck,
+	type FinalReviewValidationCoverage,
+	finalReviewBehaviorCoverageFailureReasons,
+} from "./final-review-behavior-risks";
+import {
 	artifactPathsForWorker,
 	deriveRequiredFinalReviewSurfaces,
 	type FinalReviewSurface,
@@ -42,6 +47,8 @@ export type FinalReviewCoverageTarget = {
 	regressionChecks?: string[] | undefined;
 	remainingGaps?: string[] | undefined;
 	suggestedValidation?: string[] | undefined;
+	behaviorChecks?: FinalReviewBehaviorCheck[] | undefined;
+	validationCoverage?: FinalReviewValidationCoverage[] | undefined;
 	reviewContextPack?: ReviewContextPack | undefined;
 };
 
@@ -199,6 +206,8 @@ function finalReviewCoverageFailureReasons(
 	for (const failure of detailedFinalReviewRequirementFailures(review)) {
 		reasons.push(detailedFailureReasonMessages[failure]);
 	}
+
+	reasons.push(...finalReviewBehaviorCoverageFailureReasons(worker, review));
 
 	const requiredSurfaces = deriveRequiredFinalReviewSurfaces(
 		session.execution.lastValidationRun.length > 0,

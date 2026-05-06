@@ -10,13 +10,16 @@ import {
 	scoreReviewCaptureFile,
 	writeReviewCapturePromptExports,
 } from "../scripts/cross-area/review-prompt-capture";
-import { scorePromptBehaviorModelOutput } from "./prompt-behavior-eval-helpers";
+import {
+	type PromptBehaviorPacketExpectations,
+	scorePromptBehaviorModelOutput,
+} from "./prompt-behavior-eval-helpers";
 
 describe("review prompt capture harness", () => {
 	test("loads providerless capture scenarios", async () => {
 		const scenarios = await readReviewCaptureScenarios();
 
-		expect(scenarios).toHaveLength(3);
+		expect(scenarios).toHaveLength(4);
 		expect(scenarios[0]?.id).toBe(
 			"flow-review-codebase-architecture-structured",
 		);
@@ -54,7 +57,7 @@ describe("review prompt capture harness", () => {
 
 	test("checks capture scenarios without writing prompt exports", async () => {
 		await expect(checkReviewCaptureScenarios()).resolves.toBe(
-			"Review capture scenarios valid: 3",
+			"Review capture scenarios valid: 4",
 		);
 	});
 
@@ -63,7 +66,7 @@ describe("review prompt capture harness", () => {
 		try {
 			const exports = await writeReviewCapturePromptExports({ outputDir });
 
-			expect(exports).toHaveLength(3);
+			expect(exports).toHaveLength(4);
 			const [captureExport] = exports;
 			if (!captureExport) {
 				throw new Error("Expected a review capture export.");
@@ -83,6 +86,20 @@ describe("review prompt capture harness", () => {
 			expect(captureTemplate).toContain('"minPassingScore": 10');
 			expect(captureTemplate).toContain('"packetExpectations"');
 			expect(captureTemplate).toContain('"forbiddenDirectReview"');
+			const softFocusExport = exports.find(
+				(item) =>
+					item.id === "flow-review-soft-focus-async-lifecycle-structured",
+			);
+			expect(softFocusExport).toBeDefined();
+			if (!softFocusExport) {
+				throw new Error("Expected a soft-focus review capture export.");
+			}
+			const softFocusTemplate = await readFile(
+				softFocusExport.captureTemplatePath,
+				"utf8",
+			);
+			expect(softFocusTemplate).toContain('"requiredBehaviorChecks"');
+			expect(softFocusTemplate).toContain('"async_event_ordering"');
 			expect(manifest).toContain(captureExport.id);
 			expect(readme).toContain("providerless");
 		} finally {
@@ -262,6 +279,234 @@ describe("review prompt capture harness", () => {
 
 		expect(connectedContext.passed).toBeTrue();
 		expect(connectedContext.actualFailures).toHaveLength(0);
+	});
+
+	test("soft-focus scenario rejects keyword-only async/race output and accepts temporal traces", async () => {
+		const scenarios = await readReviewCaptureScenarios();
+		const scenario = scenarios.find(
+			(item) => item.id === "flow-review-soft-focus-async-lifecycle-structured",
+		);
+		if (!scenario) {
+			throw new Error("Expected soft-focus review capture scenario.");
+		}
+		const template = JSON.parse(buildReviewCaptureTemplate(scenario)) as {
+			minPassingScore: number;
+			packetExpectations?: PromptBehaviorPacketExpectations;
+		};
+		const packetExpectations: PromptBehaviorPacketExpectations = {
+			requiredBehaviorChecks:
+				template.packetExpectations?.requiredBehaviorChecks ?? [],
+		};
+		expect(packetExpectations.requiredBehaviorChecks).toHaveLength(4);
+
+		const keywordOnly = scorePromptBehaviorModelOutput({
+			id: scenario.id,
+			title: `${scenario.title} (keyword only)`,
+			minPassingScore: template.minPassingScore,
+			packetExpectations,
+			modelOutput: {
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				repoSummary:
+					"Reviewed soft-focus panel action, navigation, scene, and tests.",
+				overallVerdict:
+					"No blocker found; async/race and rollback risk were mentioned.",
+				discoveredSurfaces: [
+					{
+						name: "Session panel actions",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/shell/sessionPanelActions.ts:10-80"],
+					},
+					{
+						name: "Navigation state owner",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/game/navigation.ts:20-120"],
+					},
+					{
+						name: "Soft-focus tests",
+						category: "tests",
+						reviewStatus: "directly_reviewed",
+						evidence: ["tests/sessionPanelActions.ts:1-140"],
+					},
+				],
+				coverageNotes: [
+					"Every discovered surface in this focused review was directly reviewed with first-party evidence references.",
+					"Failure-mode review mentioned async, race, lifecycle, and rollback concerns.",
+				],
+				validationRun: [
+					{
+						command:
+							"bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+						status: "not_run",
+						summary: "Validation was not run during this read-only fixture.",
+					},
+				],
+				findings: [],
+				nextSteps: ["Record concrete behavior checks for this path."],
+			},
+		});
+
+		expect(keywordOnly.passed).toBeFalse();
+		expect(keywordOnly.actualFailures).toEqual(["failure_modes_accounted"]);
+
+		const temporalTrace = scorePromptBehaviorModelOutput({
+			id: scenario.id,
+			title: `${scenario.title} (temporal trace)`,
+			minPassingScore: template.minPassingScore,
+			packetExpectations: template.packetExpectations ?? packetExpectations,
+			modelOutput: {
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				repoSummary:
+					"Reviewed the panel action temporal path through deferred registration, scene setup, state commit, and tests.",
+				overallVerdict:
+					"No confirmed blocker was proven; validation gaps remain for interleaving and rollback.",
+				discoveredSurfaces: [
+					{
+						name: "Entrypoint: panel click/action in src/shell/sessionPanelActions.ts",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/shell/sessionPanelActions.ts:10-80"],
+					},
+					{
+						name: "Deferred registration boundary",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/shell/sessionPanels.ts:30-110"],
+					},
+					{
+						name: "Lifecycle owner: scene start/setup in src/scenes/PracticeScene.ts; State owner: session/current-scene store in src/game/navigation.ts",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: [
+							"src/game/navigation.ts:20-120",
+							"src/scenes/PracticeScene.ts:1-90",
+						],
+					},
+					{
+						name: "Related tests: tests/sessionPanelActions.ts and tests/fullFlowSmoke.ts",
+						category: "tests",
+						reviewStatus: "directly_reviewed",
+						evidence: [
+							"tests/sessionPanelActions.ts:1-140",
+							"tests/fullFlowSmoke.ts:1-160",
+						],
+					},
+				],
+				coverageNotes: [
+					"Selected context: Entrypoint: panel click/action in src/shell/sessionPanelActions.ts",
+					"Selected context: Async boundary: deferred registration / pending action in src/shell/sessionPanels.ts",
+					"Selected context: Navigation/lifecycle handoff: src/game/navigation.ts",
+					"Selected context: Lifecycle owner: scene start/setup in src/scenes/PracticeScene.ts",
+					"Selected context: State owner: session/current-scene store in src/game/navigation.ts",
+					"Selected context: Related tests: tests/sessionPanelActions.ts and tests/fullFlowSmoke.ts",
+					"Relationship trace: Trace panel click/action -> deferred registration/pending action -> scene start/setup -> session/current-scene commit before concluding review coverage.",
+					"Relationship trace: Challenge whether stale first action can override later user intent after async registration resolves.",
+					"Relationship trace: Challenge whether state commits before scene.start(...) throws are rolled back or recorded as a validation gap.",
+					"Ambiguity/gap: Existing rejection tests are insufficient if they do not prove concurrent interleaving and rollback semantics.",
+					"Excluded: Do not pass this scenario with only changed-files coverage or generic async/race terminology.",
+					"Every discovered soft-focus surface in this focused review was directly reviewed with first-party evidence references.",
+					"Validation gap: existing rejection tests are insufficient for concurrent interleaving and rollback.",
+				],
+				behaviorChecks: [
+					{
+						riskClass: "async_event_ordering",
+						result: "passed",
+						invariant:
+							"A panel click must bind the latest pending action after deferred registration.",
+						entrypointRefs: ["src/shell/sessionPanelActions.ts:10-80"],
+						stateOwnerRefs: ["src/game/navigation.ts:20-120"],
+						lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts:1-90"],
+						failurePath:
+							"panel click -> deferred registration -> pending action can let stale first action overrides later user intent.",
+						oracleRefs: [
+							"tests/sessionPanelActions.ts:1-140",
+							"tests/fullFlowSmoke.ts:1-160",
+						],
+						validationRefs: [
+							"bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+						],
+					},
+					{
+						riskClass: "lifecycle_reentrancy",
+						result: "gap_recorded",
+						invariant:
+							"scene start setup must handle scene.start(...) throws reentrantly.",
+						entrypointRefs: ["src/game/navigation.ts:20-120"],
+						stateOwnerRefs: ["src/game/navigation.ts:20-120"],
+						lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts:1-90"],
+						failurePath:
+							"scene start/setup invokes scene.start(...) and throws before rollback is proven.",
+						oracleRefs: [],
+						validationRefs: [],
+						remainingGap:
+							"Need a throw-path test for scene start setup rollback.",
+					},
+					{
+						riskClass: "state_commit_rollback",
+						result: "gap_recorded",
+						invariant:
+							"session/current-scene commits before scene.start(...) throws must rollback.",
+						entrypointRefs: ["src/shell/sessionPanelActions.ts:10-80"],
+						stateOwnerRefs: ["src/game/navigation.ts:20-120"],
+						lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts:1-90"],
+						failurePath:
+							"session/current-scene commits before scene.start(...) throws require rollback coverage.",
+						oracleRefs: [],
+						validationRefs: [],
+						remainingGap:
+							"Existing tests do not prove rollback after failed scene start.",
+					},
+					{
+						riskClass: "test_oracle_authenticity",
+						result: "gap_recorded",
+						invariant: "Rejection tests must exercise the normal product path.",
+						entrypointRefs: ["tests/sessionPanelActions.ts:1-140"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath:
+							"Existing rejection tests do not prove concurrent interleaving or rollback semantics.",
+						oracleRefs: [],
+						validationRefs: [],
+						remainingGap:
+							"Add a product-path oracle for concurrent interleaving and rollback.",
+					},
+				],
+				validationCoverage: [
+					{
+						command:
+							"bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+						behaviorClasses: [
+							"async_event_ordering",
+							"lifecycle_reentrancy",
+							"state_commit_rollback",
+							"test_oracle_authenticity",
+						],
+						proves: ["Basic rejection behavior is represented."],
+						gaps: ["Concurrent interleaving and rollback are not proven."],
+						oracleRefs: ["tests/sessionPanelActions.ts:1-140"],
+					},
+				],
+				validationRun: [
+					{
+						command:
+							"bun test tests/sessionPanelActions.ts tests/fullFlowSmoke.ts",
+						status: "not_run",
+						summary:
+							"Validation was not run; existing tests would still leave interleaving and rollback gaps.",
+					},
+				],
+				findings: [],
+				nextSteps: [
+					"Add interleaving and rollback tests before claiming full behavior validation.",
+				],
+			},
+		});
+
+		expect(temporalTrace.passed).toBeTrue();
+		expect(temporalTrace.actualFailures).toHaveLength(0);
 	});
 
 	test("scores a captured structured review without a model API", async () => {

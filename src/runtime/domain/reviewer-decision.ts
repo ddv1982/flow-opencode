@@ -1,5 +1,15 @@
+import type { z } from "zod";
 import type { ReviewerDecision, Session } from "../schema";
+import type {
+	BehaviorCheckSchema,
+	ValidationCoverageSchema,
+} from "../schema-review-shared";
+import type {
+	FinalReviewBehaviorCheck,
+	FinalReviewValidationCoverage,
+} from "./final-review-behavior-risks";
 import {
+	describeFinalReviewCoverageFailure,
 	detailedFinalReviewRequirementFailures,
 	isKnownFinalReviewSurface,
 } from "./final-review-coverage";
@@ -14,6 +24,35 @@ import {
 } from "./workflow-policy";
 
 type FinalScopeReviewerDecision = Extract<ReviewerDecision, { scope: "final" }>;
+
+function normalizeBehaviorChecksForCoverage(
+	checks: Array<z.input<typeof BehaviorCheckSchema>> | undefined,
+): FinalReviewBehaviorCheck[] {
+	return (checks ?? []).map((check) => ({
+		riskClass: check.riskClass,
+		result: check.result,
+		invariant: check.invariant,
+		entrypointRefs: check.entrypointRefs ?? [],
+		stateOwnerRefs: check.stateOwnerRefs ?? [],
+		lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
+		failurePath: check.failurePath,
+		oracleRefs: check.oracleRefs ?? [],
+		validationRefs: check.validationRefs ?? [],
+		...(check.remainingGap ? { remainingGap: check.remainingGap } : {}),
+	}));
+}
+
+function normalizeValidationCoverageForCoverage(
+	coverage: Array<z.input<typeof ValidationCoverageSchema>> | undefined,
+): FinalReviewValidationCoverage[] {
+	return (coverage ?? []).map((item) => ({
+		command: item.command,
+		behaviorClasses: item.behaviorClasses ?? [],
+		proves: item.proves ?? [],
+		gaps: item.gaps ?? [],
+		oracleRefs: item.oracleRefs ?? [],
+	}));
+}
 
 export type RecordReviewerDecisionInput = {
 	scope: string;
@@ -36,6 +75,10 @@ export type RecordReviewerDecisionInput = {
 	integrationChecks?: string[] | undefined;
 	regressionChecks?: string[] | undefined;
 	remainingGaps?: string[] | undefined;
+	behaviorChecks?: Array<z.input<typeof BehaviorCheckSchema>> | undefined;
+	validationCoverage?:
+		| Array<z.input<typeof ValidationCoverageSchema>>
+		| undefined;
 	blockingFindings?: ReviewerDecision["blockingFindings"];
 	followUps?: ReviewerDecision["followUps"];
 	suggestedValidation?: ReviewerDecision["suggestedValidation"];
@@ -126,6 +169,13 @@ export function validateReviewerDecisionInput(
 	) {
 		return "Reviewer decision validation failed: reviewedSurfaces: Final reviewer decisions must only use known reviewedSurfaces.";
 	}
+	if (
+		input.scope === "final" &&
+		input.status === "approved" &&
+		(input.behaviorChecks ?? []).some((check) => check.result === "needs_fix")
+	) {
+		return "Reviewer decision validation failed: behaviorChecks: Approved final reviewer decisions cannot include needs_fix behavior checks.";
+	}
 	if (input.scope === "final") {
 		const [detailedFailure] = detailedFinalReviewRequirementFailures({
 			reviewDepth: input.reviewDepth ?? "",
@@ -135,6 +185,50 @@ export function validateReviewerDecisionInput(
 		});
 		if (detailedFailure) {
 			return detailedFinalReviewDecisionFailureMessage(detailedFailure);
+		}
+	}
+	if (input.scope === "final" && input.status === "approved") {
+		const evidenceRefs = {
+			changedArtifacts: input.evidenceRefs?.changedArtifacts ?? [],
+			validationCommands: input.evidenceRefs?.validationCommands ?? [],
+		};
+		const coverageFailure = describeFinalReviewCoverageFailure(
+			session,
+			{
+				artifactsChanged: evidenceRefs.changedArtifacts.map((path) => ({
+					path,
+				})),
+				validationRun: evidenceRefs.validationCommands.map((command) => ({
+					command,
+				})),
+			},
+			{
+				reviewDepth: input.reviewDepth ?? "",
+				reviewedSurfaces: finalReviewedSurfaces,
+				evidenceSummary: input.evidenceSummary,
+				validationAssessment: input.validationAssessment,
+				evidenceRefs,
+				integrationChecks: input.integrationChecks,
+				regressionChecks: input.regressionChecks,
+				remainingGaps: input.remainingGaps,
+				suggestedValidation: input.suggestedValidation,
+				behaviorChecks: normalizeBehaviorChecksForCoverage(
+					input.behaviorChecks,
+				),
+				validationCoverage: normalizeValidationCoverageForCoverage(
+					input.validationCoverage,
+				),
+				...(input.reviewContextPack
+					? {
+							reviewContextPack: buildReviewContextPack(
+								input.reviewContextPack,
+							),
+						}
+					: {}),
+			},
+		);
+		if (coverageFailure) {
+			return `Reviewer decision validation failed: finalReviewCoverage: ${coverageFailure}`;
 		}
 	}
 
@@ -194,6 +288,10 @@ export function buildReviewerDecision(
 					[]) as FinalScopeReviewerDecision["regressionChecks"],
 				remainingGaps: (input.remainingGaps ??
 					[]) as FinalScopeReviewerDecision["remainingGaps"],
+				behaviorChecks: (input.behaviorChecks ??
+					[]) as FinalScopeReviewerDecision["behaviorChecks"],
+				validationCoverage: (input.validationCoverage ??
+					[]) as FinalScopeReviewerDecision["validationCoverage"],
 			}
 		: {
 				scope: "feature",

@@ -519,6 +519,10 @@ describe("completion gates", () => {
 							"validation_evidence",
 							"tests",
 						],
+						evidenceRefs: {
+							changedArtifacts: ["src/runtime/session.test.ts"],
+							validationCommands: ["bun test"],
+						},
 					},
 				}),
 			worker: (featureId: string) =>
@@ -563,6 +567,289 @@ describe("completion gates", () => {
 		if (expectedNextCommand) {
 			expect(result.recovery?.nextCommand).toBe(expectedNextCommand);
 		}
+	});
+
+	test("final completion enforces behavior accounting for risk-triggered final reviews", () => {
+		const behaviorChecks = [
+			{
+				riskClass: "async_event_ordering" as const,
+				result: "passed" as const,
+				invariant: "Latest panel action wins after deferred navigation.",
+				entrypointRefs: ["src/shell/sessionPanels.ts"],
+				stateOwnerRefs: ["src/game/navigation.ts"],
+				lifecycleOwnerRefs: [],
+				failurePath: "Earlier deferred click overrides later user intent.",
+				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			{
+				riskClass: "lifecycle_reentrancy" as const,
+				result: "passed" as const,
+				invariant: "Scene startup is not double-registered on re-entry.",
+				entrypointRefs: ["src/shell/sessionPanels.ts"],
+				stateOwnerRefs: [],
+				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
+				failurePath: "Panel re-entry registers duplicate scene callbacks.",
+				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			{
+				riskClass: "state_commit_rollback" as const,
+				result: "passed" as const,
+				invariant: "Navigation state commits after scene startup succeeds.",
+				entrypointRefs: ["src/shell/sessionPanels.ts"],
+				stateOwnerRefs: ["src/game/navigation.ts"],
+				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
+				failurePath: "State commits before scene startup throws.",
+				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			{
+				riskClass: "test_oracle_authenticity" as const,
+				result: "passed" as const,
+				invariant: "The test oracle exercises ordering and rollback behavior.",
+				entrypointRefs: ["tests/sessionPanelActions.test.ts"],
+				stateOwnerRefs: [],
+				lifecycleOwnerRefs: [],
+				failurePath: "Generic validation would miss stale action ordering.",
+				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+		];
+		const validationCoverage = [
+			{
+				command: "bun test tests/sessionPanelActions.test.ts",
+				behaviorClasses: [
+					"async_event_ordering" as const,
+					"lifecycle_reentrancy" as const,
+					"state_commit_rollback" as const,
+					"test_oracle_authenticity" as const,
+				],
+				proves: ["Panel ordering, lifecycle, rollback, and oracle coverage."],
+				gaps: [],
+				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+			},
+		];
+		const riskyReviewFields: Pick<
+			NonNullable<WorkerResult["finalReview"]>,
+			| "reviewedSurfaces"
+			| "evidenceSummary"
+			| "validationAssessment"
+			| "evidenceRefs"
+			| "integrationChecks"
+			| "regressionChecks"
+			| "remainingGaps"
+		> = {
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+				"tests",
+			],
+			evidenceSummary:
+				"Checked panel, navigation, scene, and validation evidence.",
+			validationAssessment:
+				"Targeted behavior validation was mapped to checked invariants.",
+			evidenceRefs: {
+				changedArtifacts: [
+					"src/shell/sessionPanels.ts",
+					"src/game/navigation.ts",
+					"src/scenes/PracticeScene.ts",
+					"tests/sessionPanelActions.test.ts",
+				],
+				validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			integrationChecks: [
+				"Checked panel action, navigation state, and scene lifecycle integration.",
+			],
+			regressionChecks: ["Checked the behavior regression oracle."],
+			remainingGaps: [],
+		};
+
+		const rejected = createStartedSession({
+			finalFeature: true,
+		});
+		const missingBehavior = validateSuccessfulCompletion(
+			rejected.session,
+			createWorkerResult(rejected.featureId, {
+				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
+					(path) => ({ path }),
+				),
+				validationRun: [
+					{
+						command: "bun test tests/sessionPanelActions.test.ts",
+						status: "passed",
+						summary: "Behavior tests passed.",
+					},
+				],
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload(riskyReviewFields),
+			}),
+			rejected.featureId,
+			rejected.wasFinalFeature,
+		);
+		expect(missingBehavior.ok).toBe(false);
+		if (!missingBehavior.ok) {
+			expect(missingBehavior.recovery?.errorCode).toBe("failing_final_review");
+		}
+
+		const reviewerCompleteWorkerMissing = createStartedSession({
+			finalFeature: true,
+			reviewerDecision: createApprovedFinalReviewerDecision({
+				...riskyReviewFields,
+				behaviorChecks,
+				validationCoverage,
+			}),
+		});
+		const workerMissingBehavior = validateSuccessfulCompletion(
+			reviewerCompleteWorkerMissing.session,
+			createWorkerResult(reviewerCompleteWorkerMissing.featureId, {
+				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
+					(path) => ({ path }),
+				),
+				validationRun: [
+					{
+						command: "bun test tests/sessionPanelActions.test.ts",
+						status: "passed",
+						summary: "Behavior tests passed.",
+					},
+				],
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload(riskyReviewFields),
+			}),
+			reviewerCompleteWorkerMissing.featureId,
+			reviewerCompleteWorkerMissing.wasFinalFeature,
+		);
+		expect(workerMissingBehavior.ok).toBe(false);
+		if (!workerMissingBehavior.ok) {
+			expect(workerMissingBehavior.recovery?.errorCode).toBe(
+				"failing_final_review",
+			);
+		}
+
+		const reviewerMissingWorkerComplete = createStartedSession({
+			finalFeature: true,
+		});
+		const reviewerMissingBehavior = validateSuccessfulCompletion(
+			reviewerMissingWorkerComplete.session,
+			createWorkerResult(reviewerMissingWorkerComplete.featureId, {
+				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
+					(path) => ({ path }),
+				),
+				validationRun: [
+					{
+						command: "bun test tests/sessionPanelActions.test.ts",
+						status: "passed",
+						summary: "Behavior tests passed.",
+					},
+				],
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload({
+					...riskyReviewFields,
+					behaviorChecks,
+					validationCoverage,
+				}),
+			}),
+			reviewerMissingWorkerComplete.featureId,
+			reviewerMissingWorkerComplete.wasFinalFeature,
+		);
+		expect(reviewerMissingBehavior.ok).toBe(false);
+		if (!reviewerMissingBehavior.ok) {
+			expect(reviewerMissingBehavior.recovery?.errorCode).toBe(
+				"missing_final_reviewer_decision",
+			);
+		}
+
+		const accepted = createStartedSession({
+			finalFeature: true,
+			reviewerDecision: createApprovedFinalReviewerDecision({
+				...riskyReviewFields,
+				behaviorChecks,
+				validationCoverage,
+			}),
+		});
+		const completed = validateSuccessfulCompletion(
+			accepted.session,
+			createWorkerResult(accepted.featureId, {
+				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
+					(path) => ({ path }),
+				),
+				validationRun: [
+					{
+						command: "bun test tests/sessionPanelActions.test.ts",
+						status: "passed",
+						summary: "Behavior tests passed.",
+					},
+				],
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload({
+					...riskyReviewFields,
+					behaviorChecks,
+					validationCoverage,
+				}),
+			}),
+			accepted.featureId,
+			accepted.wasFinalFeature,
+		);
+		expect(completed.ok).toBe(true);
+
+		const sharedGap =
+			"Concurrent click interleaving remains unproven by providerless tests.";
+		const gapBehaviorChecks = behaviorChecks.map((check) => ({
+			...check,
+			result: "gap_recorded" as const,
+			remainingGap: sharedGap,
+		}));
+		const [firstValidationCoverage] = validationCoverage;
+		expect(firstValidationCoverage).toBeDefined();
+		if (!firstValidationCoverage) return;
+		const gapValidationCoverage = [
+			{
+				...firstValidationCoverage,
+				proves: [],
+				gaps: [sharedGap],
+			},
+		];
+		const gapAccepted = createStartedSession({
+			finalFeature: true,
+			reviewerDecision: createApprovedFinalReviewerDecision({
+				...riskyReviewFields,
+				remainingGaps: [sharedGap],
+				suggestedValidation: [
+					"Add an interleaving test that races two panel actions.",
+				],
+				behaviorChecks: gapBehaviorChecks,
+				validationCoverage: gapValidationCoverage,
+			}),
+		});
+		const gapCompleted = validateSuccessfulCompletion(
+			gapAccepted.session,
+			createWorkerResult(gapAccepted.featureId, {
+				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
+					(path) => ({ path }),
+				),
+				validationRun: [
+					{
+						command: "bun test tests/sessionPanelActions.test.ts",
+						status: "passed",
+						summary: "Behavior tests passed.",
+					},
+				],
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload({
+					...riskyReviewFields,
+					remainingGaps: [sharedGap],
+					suggestedValidation: [
+						"Add an interleaving test that races two panel actions.",
+					],
+					behaviorChecks: gapBehaviorChecks,
+					validationCoverage: gapValidationCoverage,
+				}),
+			}),
+			gapAccepted.featureId,
+			gapAccepted.wasFinalFeature,
+		);
+		expect(gapCompleted.ok).toBe(true);
 	});
 
 	test.each([

@@ -66,15 +66,16 @@ describe("tool schema config contracts", () => {
 			0,
 		);
 
-		// These ceilings intentionally leave narrow headroom over the measured
-		// evidence-packet schema growth so unrelated future bloat still fails fast.
-		expect(totalSize).toBeLessThan(258000);
+		// These ceilings intentionally leave narrow headroom over measured growth
+		// (including finalReview/suggestedValidation additive fields) so unrelated
+		// future bloat still fails fast.
+		expect(totalSize).toBeLessThan(345000);
 		expect(schemaSizes.flow_plan_apply).toBeLessThan(71500);
 		expect(schemaSizes.flow_plan_context_record).toBeLessThan(58500);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(52750);
-		expect(schemaSizes.flow_review_record_feature).toBeLessThan(9700);
-		expect(schemaSizes.flow_review_record_final).toBeLessThan(31000);
-		expect(schemaSizes.flow_review_render).toBeLessThan(31000);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(82000);
+		expect(schemaSizes.flow_review_record_feature).toBeLessThan(20000);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(70000);
+		expect(schemaSizes.flow_review_render).toBeLessThan(70000);
 	});
 
 	test("pins zod to the plugin SDK's effective zod contract", async () => {
@@ -298,11 +299,57 @@ describe("tool schema config contracts", () => {
 					"Checked for regressions in shared surfaces and validation evidence.",
 				],
 				remainingGaps: [],
+				behaviorChecks: [
+					{
+						riskClass: "test_oracle_authenticity",
+						result: "gap_recorded",
+						invariant: "Current tests miss async interleaving scenarios.",
+						entrypointRefs: ["src/runtime/session.ts"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath: "Concurrent updates can bypass assertions.",
+						oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+						validationRefs: ["bun test"],
+						remainingGap: "Add concurrent interleaving coverage.",
+					},
+				],
+				validationCoverage: [
+					{
+						command: "bun test",
+						behaviorClasses: ["test_oracle_authenticity"],
+						proves: ["Existing runtime tests pass for covered paths."],
+						gaps: ["Concurrent interleaving remains uncovered."],
+						oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+					},
+				],
 				status: "approved",
 				summary: "Looks good.",
 			}).success,
 		).toBe(true);
 		expect(schemas.flow_review_record_final.safeParse({}).success).toBe(false);
+		expect(
+			schemas.flow_review_record_final.safeParse({
+				scope: "final",
+				reviewDepth: "broad",
+				reviewedSurfaces: ["changed_files"],
+				evidenceSummary: "Checked changed files.",
+				validationAssessment: "No validation was available.",
+				status: "approved",
+				summary: "Looks good.",
+			}).success,
+		).toBe(false);
+		expect(
+			schemas.flow_review_record_final.safeParse({
+				scope: "final",
+				reviewDepth: "broad",
+				reviewedSurfaces: ["changed_files"],
+				evidenceSummary: "Checked changed files.",
+				validationAssessment: "No validation was available.",
+				evidenceRefs: {},
+				status: "approved",
+				summary: "Looks good.",
+			}).success,
+		).toBe(false);
 
 		const reviewContextPack = {
 			task: "Review tool schema contract",
@@ -338,6 +385,18 @@ describe("tool schema config contracts", () => {
 			rawOpenCodeFinalReviewSchema.safeParse(finalReviewWithContextPack)
 				.success,
 		).toBe(true);
+		expect(
+			rawOpenCodeFinalReviewSchema.safeParse({
+				...finalReviewWithContextPack,
+				evidenceRefs: undefined,
+			}).success,
+		).toBe(false);
+		expect(
+			rawOpenCodeFinalReviewSchema.safeParse({
+				...finalReviewWithContextPack,
+				evidenceRefs: {},
+			}).success,
+		).toBe(false);
 		expect(
 			rawOpenCodeFinalReviewSchema.safeParse({
 				...finalReviewWithContextPack,
@@ -470,6 +529,25 @@ describe("tool schema config contracts", () => {
 
 		expect(rawSchema.safeParse(validCompletion).success).toBe(true);
 		expect(WorkerResultSchema.safeParse(validCompletion).success).toBe(true);
+
+		const invalidWorkerFinalReviewMissingEvidenceRefs = {
+			...validCompletion,
+			finalReview: {
+				status: "passed",
+				summary: "Final review passed.",
+				reviewDepth: "broad",
+				reviewedSurfaces: ["changed_files"],
+				evidenceSummary: "Reviewed changed files.",
+				validationAssessment: "No validation was available.",
+			},
+		};
+		expect(
+			rawSchema.safeParse(invalidWorkerFinalReviewMissingEvidenceRefs).success,
+		).toBe(false);
+		expect(
+			WorkerResultSchema.safeParse(invalidWorkerFinalReviewMissingEvidenceRefs)
+				.success,
+		).toBe(false);
 
 		expect(rawSchema.safeParse(invalidCrossField).success).toBe(true);
 		expect(WorkerResultSchema.safeParse(invalidCrossField).success).toBe(false);

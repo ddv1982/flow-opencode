@@ -348,4 +348,102 @@ describe("shared evidence packet primitives", () => {
 			"src/runtime/schema.ts",
 		]);
 	});
+
+	test("audit report behavior checks and coverage commands must be grounded in validationRun", () => {
+		const base = {
+			requestedDepth: "deep_audit" as const,
+			achievedDepth: "deep_audit" as const,
+			repoSummary: "Repo summary.",
+			overallVerdict: "No blocker found.",
+			discoveredSurfaces: [
+				{
+					name: "Runtime schema",
+					category: "source_runtime" as const,
+					reviewStatus: "directly_reviewed" as const,
+					evidence: ["src/runtime/schema.ts"],
+				},
+			],
+			findings: [],
+		};
+
+		expect(
+			ReviewReportSchema.safeParse({
+				...base,
+				validationRun: [
+					{
+						command: "bun test tests/runtime/evidence-packets.test.ts",
+						status: "passed",
+						summary: "Targeted audit tests passed.",
+					},
+				],
+				behaviorChecks: [
+					{
+						riskClass: "test_oracle_authenticity",
+						result: "needs_fix",
+						invariant: "Validation exposes a behavior gap needing follow-up.",
+						entrypointRefs: ["src/runtime/schema.ts"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath:
+							"Observed gap requires a fix before confidence increases.",
+						oracleRefs: [],
+						validationRefs: ["bun test tests/runtime/evidence-packets.test.ts"],
+					},
+				],
+				validationCoverage: [
+					{
+						command: "bun test tests/runtime/evidence-packets.test.ts",
+						behaviorClasses: ["test_oracle_authenticity"],
+						proves: [],
+						gaps: ["Behavior regression still reproduces."],
+						oracleRefs: [],
+					},
+				],
+			}).success,
+		).toBe(true);
+
+		expect(
+			ReviewReportSchema.safeParse({
+				...base,
+				validationRun: [],
+				behaviorChecks: [
+					{
+						riskClass: "test_oracle_authenticity",
+						result: "not_applicable",
+						invariant: "No behavior-risk assertion claimed.",
+						entrypointRefs: ["src/runtime/schema.ts"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath: "No validation-backed behavior claim.",
+						oracleRefs: [],
+						validationRefs: ["bun test tests/runtime/evidence-packets.test.ts"],
+					},
+				],
+				validationCoverage: [],
+			}).success,
+		).toBe(false);
+
+		expect(
+			ReviewReportSchema.safeParse({
+				...base,
+				validationRun: [
+					{
+						command: "bun test tests/runtime/evidence-packets.test.ts",
+						status: "passed",
+						summary: "Targeted audit tests passed.",
+					},
+				],
+				behaviorChecks: [],
+				validationCoverage: [
+					{
+						command: "bun test tests/runtime/final-review-contracts.test.ts",
+						behaviorClasses: ["test_oracle_authenticity"],
+						proves: [],
+						gaps: [],
+						oracleRefs: [],
+					},
+				],
+			}).success,
+		).toBe(false);
+	});
 });

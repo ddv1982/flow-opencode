@@ -114,6 +114,7 @@ const expectedEnvelopeSnapshot = {
 			lastOutcome: { kind: "completed" },
 			lastOutcomeKind: "completed",
 			lastReviewerDecision: {
+				behaviorChecks: [],
 				blockingFindings: [],
 				followUps: [],
 				scope: "final",
@@ -125,23 +126,24 @@ const expectedEnvelopeSnapshot = {
 					"release_surface",
 				],
 				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
+					"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
+					"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["dist/index.js"],
 					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 				},
 				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
+					"Checked dist/index.js release entrypoint against the plugin load boundary.",
 				],
 				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
+					"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
 				],
 				remainingGaps: [],
 				status: "approved",
 				suggestedValidation: [],
 				summary: "Final review approved.",
+				validationCoverage: [],
 			},
 			lastValidationRun: [
 				{
@@ -255,6 +257,7 @@ const expectedEnvelopeSnapshot = {
 			lastOutcome: null,
 			lastOutcomeKind: null,
 			lastReviewerDecision: {
+				behaviorChecks: [],
 				blockingFindings: [],
 				followUps: [],
 				scope: "final",
@@ -266,23 +269,24 @@ const expectedEnvelopeSnapshot = {
 					"release_surface",
 				],
 				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
+					"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
+					"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["dist/index.js"],
 					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 				},
 				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
+					"Checked dist/index.js release entrypoint against the plugin load boundary.",
 				],
 				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
+					"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
 				],
 				remainingGaps: [],
 				status: "approved",
 				suggestedValidation: [],
 				summary: "Final review approved.",
+				validationCoverage: [],
 			},
 			lastValidationRun: [],
 			nextCommand: "/flow-run",
@@ -516,18 +520,18 @@ describe("cross-area manual flow", () => {
 						"release_surface",
 					],
 					evidenceSummary:
-						"Checked final cross-feature integration and validation evidence.",
+						"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 					validationAssessment:
-						"Validation coverage and cross-feature interactions were reviewed.",
+						"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
 					evidenceRefs: {
 						changedArtifacts: ["dist/index.js"],
 						validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 					},
 					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
+						"Checked dist/index.js release entrypoint against the plugin load boundary.",
 					],
 					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
+						"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
 					],
 					remainingGaps: [],
 					status: "approved",
@@ -573,18 +577,18 @@ describe("cross-area manual flow", () => {
 							"release_surface",
 						],
 						evidenceSummary:
-							"Checked final cross-feature integration and validation evidence.",
+							"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 						validationAssessment:
-							"Validation coverage and cross-feature interactions were reviewed.",
+							"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
 						evidenceRefs: {
 							changedArtifacts: ["dist/index.js"],
 							validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 						},
 						integrationChecks: [
-							"Reviewed integration points across the active feature boundary.",
+							"Checked dist/index.js release entrypoint against the plugin load boundary.",
 						],
 						regressionChecks: [
-							"Checked for regressions in shared surfaces and validation evidence.",
+							"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
 						],
 						remainingGaps: [],
 						status: "passed",

@@ -82,19 +82,17 @@ function createFinalReviewFixture<TStatus extends "approved" | "passed">({
 			"shared_surfaces" as const,
 			"validation_evidence" as const,
 		],
-		evidenceSummary:
-			"Checked final cross-feature integration and validation evidence.",
-		validationAssessment:
-			"Validation coverage and cross-feature interactions were reviewed.",
+		evidenceSummary: `Checked ${featureId} entrypoint, feature state handoff, failure path, and validation evidence.`,
+		validationAssessment: `bun test was mapped to the ${featureId} regression oracle; no unchecked behavior gap remains in this fixture.`,
 		evidenceRefs: {
 			changedArtifacts: [`src/${featureId}.ts`],
 			validationCommands: ["bun test"],
 		},
 		integrationChecks: [
-			"Reviewed integration points across the active feature boundary.",
+			`Checked ${featureId} entrypoint against the active feature boundary and state handoff.`,
 		],
 		regressionChecks: [
-			"Checked for regressions in shared surfaces and validation evidence.",
+			`Checked bun test covers the ${featureId} regression oracle cited by the fixture.`,
 		],
 		remainingGaps: [],
 		status,

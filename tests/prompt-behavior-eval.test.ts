@@ -12,7 +12,7 @@ import {
 describe("prompt behavior eval corpus", () => {
 	test("behavior eval fixtures stay first-party and do not depend on Flow archives", async () => {
 		const corpus = readPromptBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(8);
+		expect(corpus).toHaveLength(10);
 		expect(corpus.some((item) => item.origin === "captured")).toBe(true);
 
 		const fixtureFiles = listPromptBehaviorEvalFixtureFiles();
@@ -42,6 +42,10 @@ describe("prompt behavior eval corpus", () => {
 			true,
 		);
 		expect(byId["captured-review-csv-memory-risk-calibrated"]?.score).toBe(9);
+		expect(byId["review-soft-focus-temporal-trace-accepted"]?.passed).toBe(
+			true,
+		);
+		expect(byId["review-soft-focus-temporal-trace-accepted"]?.score).toBe(10);
 
 		expect(byId["review-overclaims-full-depth"]?.passed).toBe(false);
 		expect(
@@ -73,6 +77,14 @@ describe("prompt behavior eval corpus", () => {
 		expect(byId["review-misses-failure-mode-accounting"]?.passed).toBe(false);
 		expect(
 			byId["review-misses-failure-mode-accounting"]?.criteria
+				.filter((criterion) => !criterion.passed)
+				.map((criterion) => criterion.criterion),
+		).toEqual(["failure_modes_accounted"]);
+
+		expect(byId["review-soft-focus-keyword-only-rejected"]?.passed).toBe(false);
+		expect(byId["review-soft-focus-keyword-only-rejected"]?.maxScore).toBe(10);
+		expect(
+			byId["review-soft-focus-keyword-only-rejected"]?.criteria
 				.filter((criterion) => !criterion.passed)
 				.map((criterion) => criterion.criterion),
 		).toEqual(["failure_modes_accounted"]);
@@ -158,6 +170,83 @@ describe("prompt behavior eval corpus", () => {
 		expect(result.actualFailures).toEqual(["packet_boundaries_preserved"]);
 	});
 
+	test("required behavior checks reject not-applicable accounting", () => {
+		const result = scorePromptBehaviorModelOutput({
+			id: "manual-required-behavior-check",
+			title: "Manual required behavior check",
+			minPassingScore: 10,
+			packetExpectations: {
+				requiredBehaviorChecks: [
+					{
+						riskClass: "async_event_ordering",
+						requiredText: [
+							"panel click",
+							"deferred registration",
+							"pending action",
+							"stale first action overrides later user intent",
+						],
+						requireEntrypointRefs: true,
+						requireStateOrLifecycleOwnerRefs: true,
+						requireOracleOrGap: true,
+					},
+				],
+			},
+			modelOutput: {
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				repoSummary: "Soft-focus behavior surfaces were reviewed.",
+				overallVerdict:
+					"The output repeats the temporal keywords but incorrectly marks the required risk as not applicable.",
+				discoveredSurfaces: [
+					{
+						name: "Session panel action entrypoint",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/shell/sessionPanelActions.ts:10-80"],
+					},
+					{
+						name: "Navigation state owner",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/game/navigation.ts:20-120"],
+					},
+				],
+				coverageNotes: [
+					"Every discovered surface in this focused review was directly reviewed with first-party evidence references.",
+				],
+				behaviorChecks: [
+					{
+						riskClass: "async_event_ordering",
+						result: "not_applicable",
+						invariant:
+							"A panel click must bind the latest pending action after deferred registration.",
+						entrypointRefs: ["src/shell/sessionPanelActions.ts:10-80"],
+						stateOwnerRefs: ["src/game/navigation.ts:20-120"],
+						lifecycleOwnerRefs: [],
+						failurePath:
+							"panel click -> deferred registration -> pending action can let stale first action overrides later user intent.",
+						oracleRefs: ["tests/sessionPanelActions.ts:1-140"],
+						validationRefs: [],
+					},
+				],
+				validationRun: [
+					{
+						command: "not run",
+						status: "not_run",
+						summary: "Validation was not run during this read-only fixture.",
+					},
+				],
+				findings: [],
+				nextSteps: [
+					"Replace not_applicable with passed or gap_recorded accounting.",
+				],
+			},
+		});
+
+		expect(result.actualFailures).toEqual(["failure_modes_accounted"]);
+		expect(result.passed).toBeFalse();
+	});
+
 	test("fixture-declared expected failures match rubric failures", () => {
 		for (const item of readPromptBehaviorEvalCorpus()) {
 			const result = scorePromptBehaviorEvalCase(item);
@@ -173,13 +262,13 @@ describe("prompt behavior eval corpus", () => {
 			readPromptBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(8);
-		expect(summary.passingCases).toBe(3);
-		expect(summary.failingCases).toBe(5);
-		expect(summary.expectationSatisfiedCases).toBe(8);
+		expect(summary.totalCases).toBe(10);
+		expect(summary.passingCases).toBe(4);
+		expect(summary.failingCases).toBe(6);
+		expect(summary.expectationSatisfiedCases).toBe(10);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(6.63, 2);
-		expect(summary.report).toContain("Prompt behavior eval corpus: 8 cases");
+		expect(summary.averageScore).toBeCloseTo(7.2, 2);
+		expect(summary.report).toContain("Prompt behavior eval corpus: 10 cases");
 		expect(summary.report).toContain(
 			"review-full-depth-downgrades-spot-check: 9/9 (quality-pass); expectation=satisfied",
 		);
@@ -192,8 +281,14 @@ describe("prompt behavior eval corpus", () => {
 		expect(summary.report).toContain(
 			"review-packet-boundaries-reopened: 9/10 (quality-fail); expectation=satisfied; failed=packet_boundaries_preserved",
 		);
+		expect(summary.report).toContain(
+			"review-soft-focus-keyword-only-rejected: 9/10 (quality-fail); expectation=satisfied; failed=failure_modes_accounted",
+		);
 		expect(summary.markdownReport).toContain(
 			"| captured-review-csv-memory-risk-calibrated | captured | 9/9 | quality-pass | satisfied | — |",
+		);
+		expect(summary.markdownReport).toContain(
+			"| review-soft-focus-temporal-trace-accepted | calibration | 10/10 | quality-pass | satisfied | — |",
 		);
 		expect(summary.markdownReport).toContain("## Failed criteria details");
 	});

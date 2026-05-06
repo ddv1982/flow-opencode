@@ -18,7 +18,8 @@ import {
 } from "./constants";
 import {
 	FollowUpSchema,
-	finalReviewSharedShape,
+	finalReviewInputSharedShape,
+	finalReviewPersistedSharedShape,
 	ReviewFindingClosureSchema,
 	ReviewFindingSchema,
 	ReviewSchema,
@@ -35,6 +36,12 @@ import {
 	ValidationRunSchema,
 } from "./schema-worker-result-shared";
 
+export {
+	BehaviorCheckResultSchema,
+	BehaviorCheckSchema,
+	BehaviorRiskClassSchema,
+	ValidationCoverageSchema,
+} from "./schema-review-shared";
 export {
 	ArtifactSchema,
 	DecisionSchema,
@@ -86,8 +93,33 @@ export const GoalModeSchema = z.enum(GOAL_MODES);
 export const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
 export const PackageManagerSchema = z.enum(["npm", "pnpm", "yarn", "bun"]);
 
+function addApprovedBehaviorDecisionConsistencyChecks(
+	value: {
+		status: string;
+		behaviorChecks?: Array<{ result: string }> | undefined;
+	},
+	context: z.RefinementCtx,
+): void {
+	if (
+		value.status === "approved" &&
+		value.behaviorChecks?.some((check) => check.result === "needs_fix")
+	) {
+		context.addIssue({
+			code: z.ZodIssueCode.custom,
+			path: ["behaviorChecks"],
+			message:
+				"Approved final decisions cannot include behaviorChecks with result 'needs_fix'.",
+		});
+	}
+}
+
 export const FinalReviewSchema = ReviewSchema.extend({
-	...finalReviewSharedShape,
+	...finalReviewInputSharedShape,
+	evidencePackets: EvidencePacketArraySchema.optional(),
+});
+
+export const PersistedFinalReviewSchema = ReviewSchema.extend({
+	...finalReviewPersistedSharedShape,
 	evidencePackets: EvidencePacketArraySchema.optional(),
 });
 export const FeatureReviewerDecisionSchema = z.object({
@@ -110,15 +142,29 @@ export const FinalReviewerDecisionSchema = z
 		summary: z.string().min(1),
 		blockingFindings: z.array(ReviewFindingSchema).default([]),
 		followUps: z.array(FollowUpSchema).default([]),
-		suggestedValidation: z.array(z.string().min(1)).default([]),
-		...finalReviewSharedShape,
+		...finalReviewInputSharedShape,
 		evidencePackets: EvidencePacketArraySchema.optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine(addApprovedBehaviorDecisionConsistencyChecks);
+
+export const PersistedFinalReviewerDecisionSchema = z
+	.object({
+		scope: z.literal("final"),
+		reviewPurpose: z.enum(REVIEW_PURPOSES).optional(),
+		status: z.enum(REVIEWER_DECISION_STATUSES),
+		summary: z.string().min(1),
+		blockingFindings: z.array(ReviewFindingSchema).default([]),
+		followUps: z.array(FollowUpSchema).default([]),
+		...finalReviewPersistedSharedShape,
+		evidencePackets: EvidencePacketArraySchema.optional(),
+	})
+	.strict()
+	.superRefine(addApprovedBehaviorDecisionConsistencyChecks);
 
 export const ReviewerDecisionSchema = z.discriminatedUnion("scope", [
 	FeatureReviewerDecisionSchema,
-	FinalReviewerDecisionSchema,
+	PersistedFinalReviewerDecisionSchema,
 ]);
 
 export const WorkerResultBaseSchema = z.object({
@@ -287,7 +333,7 @@ export const ExecutionHistoryEntrySchema = z.object({
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
 	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 	featureReview: ReviewSchema.optional(),
-	finalReview: FinalReviewSchema.optional(),
+	finalReview: PersistedFinalReviewSchema.optional(),
 });
 
 export const SessionSchema = z.object({
