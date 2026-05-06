@@ -46,7 +46,10 @@ export {
 	ValidationStatusSchema,
 } from "./schema-worker-result-shared";
 
-import { EvidencePacketArraySchema } from "./schema-evidence-packets";
+import {
+	EvidencePacketArraySchema,
+	EvidencePacketReferenceArraySchema,
+} from "./schema-evidence-packets";
 import {
 	ImplementationApproachSchema,
 	PlanningDecisionSchema,
@@ -57,9 +60,12 @@ import {
 export {
 	EvidencePacketArraySchema,
 	EvidencePacketPurposeSchema,
+	EvidencePacketReferenceArraySchema,
+	EvidencePacketReferenceSchema,
 	EvidencePacketSchema,
 	EvidencePacketValidationRunSchema,
 	EvidencePacketValidationStatusSchema,
+	FlowContextLaneSchema,
 } from "./schema-evidence-packets";
 
 export const FeatureStatusSchema = z.enum([
@@ -93,6 +99,7 @@ export const FeatureReviewerDecisionSchema = z.object({
 	blockingFindings: z.array(ReviewFindingSchema).default([]),
 	followUps: z.array(FollowUpSchema).default([]),
 	suggestedValidation: z.array(z.string().min(1)).default([]),
+	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 });
 
 export const FinalReviewerDecisionSchema = z
@@ -123,6 +130,7 @@ export const WorkerResultBaseSchema = z.object({
 	reviewIterations: z.number().int().nonnegative().optional(),
 	decisions: z.array(DecisionSchema).default([]),
 	reviewFindingClosures: z.array(ReviewFindingClosureSchema).optional(),
+	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 	nextStep: z.string().min(1),
 	featureResult: FeatureResultSchema,
 	featureReview: ReviewSchema,
@@ -277,6 +285,7 @@ export const ExecutionHistoryEntrySchema = z.object({
 	featureResult: FeatureResultSchema.optional(),
 	replanRecord: ReplanRecordSchema.optional(),
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
+	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 	featureReview: ReviewSchema.optional(),
 	finalReview: FinalReviewSchema.optional(),
 });

@@ -18,6 +18,10 @@ export {
 export { validatePlanGraph } from "./plan-graph-validation";
 export { selectProjectedFeatureSubset } from "./plan-projection";
 export {
+	mergeEvidencePackets,
+	mergePlanningContext,
+} from "./planning-context";
+export {
 	buildReviewContextPack,
 	deriveReviewContextPackSurfaces,
 	describeReviewContextPackGroundingFailure,

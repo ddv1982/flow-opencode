@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [2.0.9] - 2026-05-06
+
+Refresh planning evidence packets without preserving stale context
+
+Flow 2.0.9 turns planning context evidence into an explicit durable packet ledger while keeping the workflow surface stable. Planning, execution, review, and final-review schemas can now carry source-backed evidence packets for selected context, exclusions, relationship hypotheses, ambiguity notes, covered findings, and validation evidence, and runtime planning context merges those packets through a shared domain helper instead of duplicating merge behavior across transitions.
+
+The release also closes the review risks found during hardening. Same-id evidence packets now refresh wholesale so replans can retract stale source refs or selected/excluded context instead of unioning obsolete evidence forever. Prompt guidance is split between runtime-owner and read-only roles, so planning researcher and reviewer prompts return evidence for a planner/coordinator/runtime owner to persist rather than telling read-only roles to call planning runtime tools. Tool schema budgets were tightened around the measured evidence-packet growth so future unrelated schema bloat still fails fast.
+
+Constraint: Add source-backed planning/review evidence packets without adding commands, tools, state paths, package exports, or dependency versions
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Preserve same-id packet arrays by unioning old and new context | stale refs and selected/excluded context would survive replans and weaken evidence accuracy
+Rejected: Reuse one prompt fragment for runtime owners and read-only roles | it gives reviewers/researchers contradictory persistence instructions
+Rejected: Leave broad raw-schema ceilings after evidence-packet growth | oversized budgets hide unrelated future tool-schema drift
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Treat same-id evidence packets as refreshes, not append logs; use new packet ids for additive evidence and keep runtime-tool persistence instructions out of read-only prompt surfaces
+Tested: `bun run typecheck`; `bun run lint`; `bun test tests/runtime/evidence-packets.test.ts tests/config/tool-schemas.test.ts tests/config/prompt-contracts.test.ts tests/runtime-hooks.test.ts tests/runtime/workflow-core-reducer.test.ts` (54 pass, 950 expect calls); `bun run check`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.9` before push
+
 ## [2.0.8] - 2026-05-06
 
 Ground final review coverage in canonical evidence

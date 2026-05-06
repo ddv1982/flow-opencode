@@ -9,6 +9,8 @@ import {
 import { renderExampleBlocks, renderPromptSections } from "../format";
 import {
 	FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE,
+	FLOW_CONTEXT_GATHERING_READONLY_RULE,
+	FLOW_CONTEXT_GATHERING_RUNTIME_RULE,
 	FLOW_ENGINEERING_QUALITY_RULE,
 	FLOW_FEATURE_REVIEW_APPROVAL_RULE,
 	FLOW_FINAL_COMPLETION_PATH_RULE,
@@ -32,7 +34,8 @@ import {
 	FLOW_REVIEW_FINDINGS_LOOP_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
-	FLOW_STACK_STANDARDS_PROFILE_RULE,
+	FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE,
+	FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
 	FLOW_TASK_HANDOFF_RULE,
 	FLOW_WORKER_REVIEW_TASK_RULE,
@@ -91,11 +94,12 @@ export const FLOW_PLANNING_RESEARCHER_AGENT_PROMPT = renderPromptSections([
 	{
 		title: "Rules",
 		body: `${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_READONLY_RULE}
 - Stay read-only: do not write repository code, do not call Flow runtime tools, do not apply or approve plans, and do not claim execution success.
 - You are not flow-planner. Produce research for flow-planner or flow-auto to consume through normal runtime-owned planning.
 - For full codebase review and fix goals, recommend an audit/review-first plan shape before any fix feature. Findings belong in the audit/review ledger, not planning research.
 - Do not invent findings, severity, or closure evidence. If findings are not already provided, say the fix phase must wait for a concrete review ledger.
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
@@ -139,9 +143,10 @@ export const FLOW_PLANNER_AGENT_PROMPT = renderPromptSections([
 		body: `${renderProtocolHeader("planner")}
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 - Before drafting the plan, detect the repo stack and package manager from local evidence and persist planning context with flow_plan_context_record.
 - Detect local standards/guideline sources and persist stackProfile plus standardsProfile.
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
@@ -177,9 +182,10 @@ export const FLOW_WORKER_AGENT_PROMPT = renderPromptSections([
 		body: `${renderProtocolHeader("worker")}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 ${FLOW_REVIEW_FINDINGS_LOOP_RULE}
 ${FLOW_FEATURE_REVIEW_APPROVAL_RULE}
 ${FLOW_WORKER_REVIEW_TASK_RULE}
@@ -216,6 +222,7 @@ export const FLOW_AUTO_AGENT_PROMPT = renderPromptSections([
 		body: `${renderProtocolHeader("auto")}
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - Auto-approve plans when autonomy is clearly requested.
 ${FLOW_RESUME_ONLY_RULE}
@@ -225,7 +232,7 @@ ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - Use the flow-reviewer stage as the approval gate before advancing or completing the session.
 ${FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE}
@@ -267,9 +274,10 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 	{
 		title: "Rules",
 		body: `${renderProtocolHeader("reviewer")}
+${FLOW_CONTEXT_GATHERING_READONLY_RULE}
 - Do not write code.
 - Review only for correctness, regressions, maintainability, security, and missing validation.
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE}
 ${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
 ${FLOW_REVIEW_CONTEXT_DISCOVERY_RULE}
 ${FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE}

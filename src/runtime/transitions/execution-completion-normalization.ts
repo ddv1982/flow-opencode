@@ -219,6 +219,7 @@ export function recordWorkerResult(
 					featureResult: worker.featureResult,
 					replanRecord: replanRecord ?? undefined,
 					reviewerDecision: session.execution.lastReviewerDecision,
+					evidencePackets: worker.evidencePackets,
 					featureReview: worker.featureReview,
 					finalReview: worker.finalReview,
 				},

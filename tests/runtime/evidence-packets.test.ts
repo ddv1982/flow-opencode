@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { ReviewReportSchema } from "../../src/audit/report-schema";
+import { mergePlanningContext } from "../../src/runtime/domain/planning-context";
 import {
 	EvidencePacketSchema,
+	FlowReviewRecordFeatureArgsSchema,
 	FlowReviewRecordFinalArgsSchema,
 	PlanningContextArgsSchema,
 	WorkerResultArgsSchema,
@@ -18,6 +20,7 @@ import { samplePlan } from "../runtime-test-helpers";
 const sampleEvidencePacket = EvidencePacketSchema.parse({
 	id: "packet:planning-context",
 	purpose: "planning",
+	contextLane: "planning",
 	summary: "Selected and excluded context for the implementation plan.",
 	sourceRefs: ["src/runtime/schema.ts:386-407"],
 	highlights: ["PlanningContextSchema owns planning metadata."],
@@ -46,6 +49,7 @@ describe("shared evidence packet primitives", () => {
 
 		expect(packet.id).toBe("packet:planning-context");
 		expect(packet.purpose).toBe("planning");
+		expect(packet.contextLane).toBe("planning");
 		expect(packet.sourceRefs?.[0]).toBe("src/runtime/schema.ts:386-407");
 		// Schema-level readonly enforces top-level immutability for parsed packet objects.
 		expect(Object.isFrozen(packet)).toBe(true);
@@ -92,9 +96,91 @@ describe("shared evidence packet primitives", () => {
 		});
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
-		expect(applied.value.planning.evidencePackets?.[0]?.id).toBe(
-			"packet:plan-apply",
+		expect(
+			applied.value.planning.evidencePackets?.map((packet) => packet.id),
+		).toEqual(["packet:planning-context", "packet:plan-apply"]);
+
+		const updated = applyPlan(applied.value, samplePlan(), {
+			evidencePackets: [
+				{
+					id: "packet:plan-apply",
+					summary: "Updated packet summary from plan apply.",
+					sourceRefs: ["src/runtime/domain/planning-context.ts:40-43"],
+					selectedContext: ["src/runtime/domain/planning-context.ts:40-43"],
+					excludedContext: [],
+				},
+			],
+		});
+		expect(updated.ok).toBe(true);
+		if (!updated.ok) return;
+		expect(
+			updated.value.planning.evidencePackets?.map((packet) => packet.id),
+		).toEqual(["packet:planning-context", "packet:plan-apply"]);
+		expect(updated.value.planning.evidencePackets?.[1]?.summary).toBe(
+			"Updated packet summary from plan apply.",
 		);
+		expect(updated.value.planning.evidencePackets?.[1]?.sourceRefs).toEqual([
+			"src/runtime/domain/planning-context.ts:40-43",
+		]);
+		expect(
+			updated.value.planning.evidencePackets?.[1]?.selectedContext,
+		).toEqual(["src/runtime/domain/planning-context.ts:40-43"]);
+		expect(
+			updated.value.planning.evidencePackets?.[1]?.excludedContext,
+		).toEqual([]);
+	});
+
+	test("mergePlanningContext preserves accumulated context and refreshes packets by id", () => {
+		const merged = mergePlanningContext(
+			{
+				repoProfile: ["runtime package"],
+				packageManagerAmbiguous: false,
+				research: ["existing research"],
+				decisionLog: [
+					{
+						question: "Should this pause?",
+						decisionMode: "human_required",
+						decisionDomain: "architecture",
+						options: [{ label: "Pause", tradeoffs: ["safe"] }],
+						recommendation: "Pause",
+						rationale: ["Needs operator decision."],
+					},
+				],
+				replanLog: [],
+				evidencePackets: [sampleEvidencePacket],
+			},
+			{
+				repoProfile: ["runtime package", "prompt package"],
+				packageManagerAmbiguous: true,
+				research: ["existing research", "new research"],
+				decisionLog: [],
+				evidencePackets: [
+					{
+						id: sampleEvidencePacket.id,
+						summary: "Refreshed planning evidence.",
+					},
+					{
+						...sampleEvidencePacket,
+						id: "packet:execution-context",
+						contextLane: "execution",
+					},
+				],
+			},
+		);
+
+		expect(merged.repoProfile).toEqual(["runtime package", "prompt package"]);
+		expect(merged.packageManagerAmbiguous).toBe(true);
+		expect(merged.research).toEqual(["existing research", "new research"]);
+		expect(merged.evidencePackets?.map((packet) => packet.id)).toEqual([
+			"packet:planning-context",
+			"packet:execution-context",
+		]);
+		expect(merged.decisionLog).toEqual([]);
+		expect(merged.evidencePackets?.[0]?.summary).toBe(
+			"Refreshed planning evidence.",
+		);
+		expect(merged.evidencePackets?.[0]?.sourceRefs).toBeUndefined();
+		expect(merged.evidencePackets?.[0]?.selectedContext).toBeUndefined();
 	});
 
 	test("final review and reviewer decision payloads can carry packet metadata", () => {
@@ -111,6 +197,15 @@ describe("shared evidence packet primitives", () => {
 				},
 			],
 			decisions: [],
+			evidencePackets: [
+				{
+					id: sampleEvidencePacket.id,
+					purpose: sampleEvidencePacket.purpose,
+					contextLane: "execution",
+					summary: sampleEvidencePacket.summary,
+					sourceRefs: sampleEvidencePacket.sourceRefs,
+				},
+			],
 			nextStep: "Request final review.",
 			featureResult: { featureId: "setup-runtime" },
 			featureReview: {
@@ -135,9 +230,29 @@ describe("shared evidence packet primitives", () => {
 				blockingFindings: [],
 			},
 		});
+		expect(workerResult.evidencePackets?.[0]?.contextLane).toBe("execution");
 		expect(workerResult.finalReview?.evidencePackets?.[0]?.purpose).toBe(
 			"review",
 		);
+
+		const featureDecision = FlowReviewRecordFeatureArgsSchema.parse({
+			scope: "feature",
+			featureId: "setup-runtime",
+			reviewPurpose: "execution_gate",
+			status: "approved",
+			summary: "Feature reviewer approved.",
+			blockingFindings: [],
+			evidencePackets: [
+				{
+					id: sampleEvidencePacket.id,
+					purpose: "review",
+					contextLane: "review",
+					summary: sampleEvidencePacket.summary,
+					sourceRefs: sampleEvidencePacket.sourceRefs,
+				},
+			],
+		});
+		expect(featureDecision.evidencePackets?.[0]?.contextLane).toBe("review");
 
 		const decision = FlowReviewRecordFinalArgsSchema.parse({
 			scope: "final",

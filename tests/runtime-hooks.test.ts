@@ -118,6 +118,15 @@ describe("runtime hooks", () => {
 			],
 			precedence: ["local before external"],
 		};
+		running.planning.evidencePackets = [
+			{
+				id: "packet:hook-context",
+				purpose: "planning",
+				contextLane: "planning",
+				summary: "Hook context evidence survives into adaptive system context.",
+				sourceRefs: ["tests/runtime-hooks.test.ts"],
+			},
+		];
 		running.planning.decisionLog = [
 			{
 				question: "Should Flow rewrite the API surface now?",
@@ -182,6 +191,8 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("Prefer existing package scripts");
 		expect(joined).toContain("standards research gaps");
 		expect(joined).toContain("available MCP tools first");
+		expect(joined).toContain("context evidence");
+		expect(joined).toContain("packet:hook-context");
 		expect(joined).toContain(
 			"decision gate active: recommend_confirm | architecture",
 		);

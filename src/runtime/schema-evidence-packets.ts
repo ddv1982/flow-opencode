@@ -20,10 +20,34 @@ export const EvidencePacketPurposeSchema = z.enum([
 	"general",
 ]);
 
+export const FLOW_CONTEXT_PRODUCER_LANES = [
+	"planning",
+	"auto_planning",
+	"execution",
+	"review",
+] as const;
+
+export const FLOW_CONTEXT_CONSUMER_LANES = [
+	"status",
+	"history",
+	"session",
+	"reset",
+	"doctor",
+	"control",
+] as const;
+
+export const FLOW_CONTEXT_LANES = [
+	...FLOW_CONTEXT_PRODUCER_LANES,
+	...FLOW_CONTEXT_CONSUMER_LANES,
+] as const;
+
+export const FlowContextLaneSchema = z.enum(FLOW_CONTEXT_LANES);
+
 export const EvidencePacketSchema = z
 	.object({
 		id: z.string().min(1),
 		purpose: EvidencePacketPurposeSchema.optional(),
+		contextLane: FlowContextLaneSchema.optional(),
 		summary: z.string().min(1),
 		sourceRefs: z.array(z.string().min(1)).optional(),
 		highlights: z.array(z.string().min(1)).optional(),
@@ -41,5 +65,21 @@ export const EvidencePacketSchema = z
 	.readonly();
 
 export const EvidencePacketArraySchema = z.array(EvidencePacketSchema);
+
+export const EvidencePacketReferenceSchema = z
+	.object({
+		id: z.string().min(1),
+		purpose: EvidencePacketPurposeSchema.optional(),
+		contextLane: FlowContextLaneSchema.optional(),
+		summary: z.string().min(1),
+		sourceRefs: z.array(z.string().min(1)).optional(),
+		highlights: z.array(z.string().min(1)).optional(),
+	})
+	.strict()
+	.readonly();
+
+export const EvidencePacketReferenceArraySchema = z.array(
+	EvidencePacketReferenceSchema,
+);
 
 export type EvidencePacket = z.infer<typeof EvidencePacketSchema>;

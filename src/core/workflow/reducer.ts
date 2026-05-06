@@ -1,5 +1,6 @@
 import type { Plan, Session } from "../../workflow/contracts";
 import { SessionSchema } from "../../workflow/contracts";
+import { mergePlanningContext } from "../../workflow/domain";
 import type { WorkflowEvent } from "./events";
 import { createInitialWorkflowState, type WorkflowState } from "./state";
 
@@ -58,10 +59,7 @@ function reducePlanApplied(
 		approval: "pending",
 		closure: null,
 		notes: [],
-		planning: {
-			...state.planning,
-			...event.planning,
-		},
+		planning: mergePlanningContext(state.planning, event.planning ?? {}),
 		execution: clearExecutionProjection(state),
 		timestamps: {
 			...state.timestamps,
@@ -169,10 +167,7 @@ export function applyWorkflowEvent(
 			const current = assertState(state, event);
 			return parseState({
 				...current,
-				planning: {
-					...current.planning,
-					...event.planning,
-				},
+				planning: mergePlanningContext(current.planning, event.planning),
 				timestamps: {
 					...current.timestamps,
 					updatedAt: event.recordedAt,

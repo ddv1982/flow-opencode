@@ -5,6 +5,7 @@ import {
 	renderTaggedBlock,
 } from "../format";
 import {
+	FLOW_CONTEXT_GATHERING_RUNTIME_RULE,
 	FLOW_ENGINEERING_QUALITY_RULE,
 	FLOW_FINAL_COMPLETION_COMMAND_RULE,
 	FLOW_FINAL_COMPLETION_REVIEW_RULE,
@@ -23,7 +24,7 @@ import {
 	FLOW_RUNTIME_STATE_TRANSITION_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
-	FLOW_STACK_STANDARDS_PROFILE_RULE,
+	FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
 	FLOW_TASK_HANDOFF_RULE,
 	FLOW_WORKER_REVIEW_TASK_RULE,
@@ -96,11 +97,12 @@ export const FLOW_PLAN_COMMAND_TEMPLATE = renderPromptSections([
 		body: `${commandProtocol("planner")}
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 - If the arguments start with \`approve\`, approve the current draft plan. Extra tokens are feature ids to keep before approval.
 - If the arguments start with \`select\`, narrow the current draft plan to the listed feature ids without approving it.
 - Otherwise treat the full argument string as the planning goal and create or refresh a draft plan.
 - For planning, call \`flow_plan_start\` first, detect the stack, package manager, and local standards from repo evidence, persist stackProfile and standardsProfile through \`flow_plan_context_record\`, persist the draft through \`flow_plan_apply\` using the direct plan object, and end with a concise draft summary plus the next approval step.
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
@@ -123,13 +125,14 @@ export const FLOW_RUN_COMMAND_TEMPLATE = renderPromptSections([
 		body: `${commandProtocol("worker", "flow-run")}
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 - Call \`flow_run_start\` first, passing the argument as a feature id only when it is non-empty.
 - If no feature is runnable, summarize the runtime result and stop.
 - Otherwise implement exactly one feature, run targeted validation, review changed files plus discovered connected context (changed files are the seed, not the boundary), fix review findings, rerun validation, and obtain reviewer approval through \`flow_review_record_feature\` using the direct reviewer decision object.
 ${FLOW_WORKER_REVIEW_TASK_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE}
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
@@ -153,6 +156,7 @@ export const FLOW_AUTO_COMMAND_TEMPLATE = renderPromptSections([
 		body: `${commandProtocol("auto")}
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
+${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 - Treat this command as a coordinator entrypoint for Flow's existing planner, worker, reviewer, and runtime tools.
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
 - If the argument string is non-empty and not \`resume\`, treat the full argument string as a new autonomous goal.
@@ -163,7 +167,7 @@ ${FLOW_NO_INFERRED_GOAL_RULE}
 - For broad review-and-fix/codebase-review goals where findings do not exist yet, prefer a Task-tool handoff to flow-planning-researcher before flow-planner so review discovery and fix execution stay phase-correct.
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
-${FLOW_STACK_STANDARDS_PROFILE_RULE}
+${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_TASK_HANDOFF_RULE}
 ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}

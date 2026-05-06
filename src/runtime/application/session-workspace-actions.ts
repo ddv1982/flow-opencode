@@ -12,6 +12,7 @@ import {
 	type SessionWorkspaceResult,
 	type SessionWorkspaceRuntimePort,
 } from "./session-engine";
+import { mergePlanningContext } from "./session-planning-context";
 import { detectStackAndStandardsProfile } from "./stack-standards-profile";
 import {
 	resolveMutableSessionRoot,
@@ -43,20 +44,7 @@ function buildPlannedSession(
 
 	return {
 		...existing,
-		planning: {
-			...existing.planning,
-			repoProfile: planning?.repoProfile ?? existing.planning.repoProfile,
-			packageManager:
-				planning?.packageManager ?? existing.planning.packageManager,
-			packageManagerAmbiguous:
-				planning?.packageManagerAmbiguous ??
-				existing.planning.packageManagerAmbiguous,
-			stackProfile: planning?.stackProfile ?? existing.planning.stackProfile,
-			standardsProfile:
-				planning?.standardsProfile ?? existing.planning.standardsProfile,
-			evidencePackets:
-				planning?.evidencePackets ?? existing.planning.evidencePackets,
-		},
+		planning: mergePlanningContext(existing.planning, planning ?? {}),
 	};
 }
 

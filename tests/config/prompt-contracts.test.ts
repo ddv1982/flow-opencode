@@ -34,6 +34,40 @@ import {
 } from "./helpers";
 
 describe("prompt and command config contracts", () => {
+	test("context gathering rules distinguish runtime owners from read-only roles", () => {
+		const runtimeSnippet =
+			"Treat context gathering as a Flow-wide runtime contract";
+		const readOnlySnippet =
+			"Treat context gathering as a read-only evidence contract";
+		for (const prompt of [
+			FLOW_PLAN_COMMAND_TEMPLATE,
+			FLOW_RUN_COMMAND_TEMPLATE,
+			FLOW_AUTO_COMMAND_TEMPLATE,
+			FLOW_PLANNER_AGENT_PROMPT,
+			FLOW_WORKER_AGENT_PROMPT,
+			FLOW_AUTO_AGENT_PROMPT,
+		]) {
+			expect(prompt).toContain(runtimeSnippet);
+			expect(prompt).not.toContain(readOnlySnippet);
+		}
+		for (const prompt of [
+			FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
+			FLOW_REVIEWER_AGENT_PROMPT,
+		]) {
+			expect(prompt).toContain(readOnlySnippet);
+			expect(prompt).not.toContain(runtimeSnippet);
+			expect(prompt).not.toContain("flow_plan_context_record");
+		}
+		for (const prompt of [
+			FLOW_STATUS_COMMAND_TEMPLATE,
+			FLOW_DOCTOR_COMMAND_TEMPLATE,
+			FLOW_CONTROL_AGENT_PROMPT,
+		]) {
+			expect(prompt).not.toContain(runtimeSnippet);
+			expect(prompt).not.toContain(readOnlySnippet);
+		}
+	});
+
 	test("plan contract exposes the runtime-owned final review policy field", () => {
 		expect(FLOW_PLAN_CONTRACT).toContain(
 			"finalReviewPolicy?: broad | detailed",

@@ -2,6 +2,7 @@ export {
 	featureWouldReachCompletion,
 	summarizeCompletion,
 } from "../runtime/domain/completion";
+export { mergePlanningContext } from "../runtime/domain/planning-context";
 export {
 	SEMANTIC_INVARIANT_IDS,
 	SEMANTIC_INVARIANTS,

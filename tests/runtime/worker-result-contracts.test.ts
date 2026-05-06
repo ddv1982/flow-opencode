@@ -282,6 +282,15 @@ describe("runtime worker result contracts", () => {
 					residualRisk: "Rollout timing still needs operator approval.",
 				},
 			],
+			evidencePackets: [
+				{
+					id: "packet:worker-context",
+					purpose: "validation",
+					contextLane: "execution",
+					summary: "Worker reused planning evidence during execution.",
+					sourceRefs: ["src/runtime/session.ts"],
+				},
+			],
 			nextStep: "Ask the operator to confirm migration timing.",
 			outcome: {
 				kind: "needs_operator_input",
@@ -344,6 +353,9 @@ describe("runtime worker result contracts", () => {
 		expect(result.value.execution.history.at(-1)?.finalReview?.status).toBe(
 			"needs_followup",
 		);
+		expect(
+			result.value.execution.history.at(-1)?.evidencePackets?.[0]?.id,
+		).toBe("packet:worker-context");
 		expect(
 			result.value.execution.history.at(-1)?.reviewFindingClosures?.[0]
 				?.findingRef,

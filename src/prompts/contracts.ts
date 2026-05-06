@@ -33,7 +33,7 @@ Record planning context separately via flow_plan_context_record or flow_plan_app
 - planning.research?: string[]
 - planning.implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }
 - planning.decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]
-- planning.evidencePackets?: { id: string, purpose?: planning | review | audit | validation | general, summary: string, sourceRefs?: string[], highlights?: string[], selectedContext?: string[], excludedContext?: string[], codemapSummaries?: string[], sliceSummaries?: string[], relationshipHypotheses?: string[], ambiguities?: string[], knownExclusions?: string[], alreadyCoveredFindings?: string[], validationEvidence?: { command, status, summary }[] }[]`;
+- planning.evidencePackets?: { id: string, purpose?: planning | review | audit | validation | general, contextLane?: planning | auto_planning | execution | review | status | history | session | reset | doctor | control, summary: string, sourceRefs?: string[], highlights?: string[], selectedContext?: string[], excludedContext?: string[], codemapSummaries?: string[], sliceSummaries?: string[], relationshipHypotheses?: string[], ambiguities?: string[], knownExclusions?: string[], alreadyCoveredFindings?: string[], validationEvidence?: { command, status, summary }[] }[]`;
 
 export const FLOW_PLAN_CONTRACT = `${FLOW_PLAN_CONTRACT_BASE}
 
@@ -66,6 +66,7 @@ const FLOW_WORKER_CONTRACT_BASE = `Return exactly one JSON object that matches t
 - validationRun: { command, status: passed | failed | failed_existing | partial, summary }[]
 - decisions: { summary }[]
 - reviewFindingClosures?: { findingRef, status: closed | partially_closed | not_closed | blocked, fixRefs: string[], testRefs: string[], validationRefs: string[], residualRisk }[]
+- evidencePackets?: immutable compact evidence/context packet reference[]
 - nextStep: string
 - reviewIterations?: number
 - validationScope?: targeted | broad
@@ -83,6 +84,7 @@ Status rules:
 - when the active feature is the final completion path for the session, run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), set finalReview.reviewDepth to match deliveryPolicy.finalReviewPolicy, and use validationScope: broad
 - finalReview must always include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
 - finalReview.evidenceRefs.changedArtifacts must reference actual artifactsChanged paths, and finalReview.evidenceRefs.validationCommands must reference actual validationRun commands from the current run
+- top-level evidencePackets are compact packet references for planning/execution context the worker reused or extended; they do not replace artifactsChanged, validationRun, featureReview, or finalReview evidenceRefs
 - finalReview.evidencePackets is optional read-only metadata for selected/excluded context, exact sources, relationship hypotheses, ambiguities, known exclusions, already-covered findings, and validation evidence; do not use it as a substitute for required finalReview.evidenceRefs
 - finalReview.reviewedSurfaces must cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
@@ -120,7 +122,7 @@ export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that match
 - evidenceSummary?: string
 - validationAssessment?: string
 - evidenceRefs?: { changedArtifacts: string[], validationCommands: string[] }
-- evidencePackets?: read-only evidence/context packet[]
+- evidencePackets?: read-only evidence/context packet references for feature reviews; full evidence/context packets for final reviews
 - reviewContextPack?: { task: string, compareBase?: string, changedFiles: string[], includedContext: { path: string, reason: changed_file | imported_dependency | caller | callee | state_owner | lifecycle_owner | architectural_neighbor | test_oracle | validation_evidence, surface?: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface, summary?: string }[], relationships: { from: string, to: string, kind: string, summary: string }[], validationEvidence: { command: string, status?: string, summary?: string }[], suggestedValidation: string[], coverageGaps: string[], reviewedSurfaces: changed_files | integration_points | shared_surfaces | validation_evidence | tests | operator_surfaces | docs_and_prompts | tooling_and_config | release_surface [] }
 - integrationChecks?: string[]
 - regressionChecks?: string[]
@@ -147,6 +149,7 @@ Reviewer rules:
 - for scope: final, when reviewContextPack is present, keep it grounded: reviewContextPack.changedFiles should map to reviewed changed artifacts, reviewContextPack.includedContext should capture connected context (not duplicate changed files only), and reviewContextPack.reviewedSurfaces should match reviewedSurfaces
 - for scope: final, distinguish directly changed files from connected context in summary/integrationChecks/regressionChecks/remainingGaps, and use remainingGaps to report uncovered product paths, missing or weak test oracles, and validation limits
 - for scope: final, set evidenceRefs.changedArtifacts to actual changed artifact paths you reviewed and evidenceRefs.validationCommands to actual validation commands you relied on
+- feature-scope evidencePackets are compact packet references; final-scope evidencePackets may include full packet metadata, but neither replaces concrete changed path or validation evidence
 - for scope: final, use evidencePackets only as optional read-only context/evidence metadata; do not let packet references replace concrete evidenceRefs
 - for scope: final, cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - for scope: final, when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface

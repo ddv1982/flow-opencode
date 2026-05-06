@@ -1,5 +1,6 @@
 import {
 	completionPolicyTargetError,
+	mergePlanningContext,
 	selectProjectedFeatureSubset,
 	validatePlanGraph,
 } from "../domain";
@@ -117,25 +118,7 @@ export function applyPlan(
 			completedAt: null,
 		},
 		notes: [],
-		planning: {
-			repoProfile: planning?.repoProfile ?? session.planning.repoProfile,
-			packageManager:
-				planning?.packageManager ?? session.planning.packageManager,
-			packageManagerAmbiguous:
-				planning?.packageManagerAmbiguous ??
-				session.planning.packageManagerAmbiguous,
-			stackProfile: planning?.stackProfile ?? session.planning.stackProfile,
-			standardsProfile:
-				planning?.standardsProfile ?? session.planning.standardsProfile,
-			research: planning?.research ?? session.planning.research,
-			implementationApproach:
-				planning?.implementationApproach ??
-				session.planning.implementationApproach,
-			decisionLog: planning?.decisionLog ?? session.planning.decisionLog,
-			replanLog: planning?.replanLog ?? session.planning.replanLog,
-			evidencePackets:
-				planning?.evidencePackets ?? session.planning.evidencePackets,
-		},
+		planning: mergePlanningContext(session.planning, planning ?? {}),
 		execution: {
 			...session.execution,
 		},

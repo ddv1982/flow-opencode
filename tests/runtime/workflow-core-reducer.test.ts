@@ -213,16 +213,43 @@ describe("core workflow action/event foundation", () => {
 				planning: {
 					repoProfile: ["TypeScript runtime package"],
 					packageManager: "bun",
+					research: ["Initial repo research"],
+					evidencePackets: [
+						{
+							id: "packet:core-context",
+							purpose: "planning",
+							contextLane: "planning",
+							summary: "Initial context packet.",
+							sourceRefs: ["src/core/workflow/reducer.ts"],
+						},
+					],
 				},
 			},
 			"2026-05-03T10:01:00.000Z",
 		);
 		expect(state.planning.packageManager).toBe("bun");
 		expect(state.planning.repoProfile).toEqual(["TypeScript runtime package"]);
+		expect(state.planning.evidencePackets?.[0]?.id).toBe("packet:core-context");
 
 		state = applyCommand(
 			state,
-			{ type: "apply_plan", plan: samplePlan() },
+			{
+				type: "apply_plan",
+				plan: samplePlan(),
+				planning: {
+					repoProfile: ["TypeScript runtime package", "Prompt surfaces"],
+					research: ["Initial repo research", "Plan-specific research"],
+					evidencePackets: [
+						{
+							id: "packet:plan-apply",
+							purpose: "planning",
+							contextLane: "planning",
+							summary: "Plan apply context packet.",
+							sourceRefs: ["src/runtime/transitions/plan.ts"],
+						},
+					],
+				},
+			},
 			"2026-05-03T10:02:00.000Z",
 		);
 		expect(state.status).toBe("planning");
@@ -230,6 +257,18 @@ describe("core workflow action/event foundation", () => {
 		expect(state.plan?.features.map((feature) => feature.status)).toEqual([
 			"pending",
 			"pending",
+		]);
+		expect(state.planning.repoProfile).toEqual([
+			"TypeScript runtime package",
+			"Prompt surfaces",
+		]);
+		expect(state.planning.research).toEqual([
+			"Initial repo research",
+			"Plan-specific research",
+		]);
+		expect(state.planning.evidencePackets?.map((packet) => packet.id)).toEqual([
+			"packet:core-context",
+			"packet:plan-apply",
 		]);
 
 		state = applyCommand(

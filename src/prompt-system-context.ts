@@ -1,5 +1,9 @@
 import type { StackStandardsProfileCacheValue } from "./runtime/application/stack-standards-profile";
-import type { Session, StandardsProfile } from "./runtime/schema";
+import type {
+	EvidencePacket,
+	Session,
+	StandardsProfile,
+} from "./runtime/schema";
 import { deriveSessionViewModel } from "./runtime/summary";
 
 const FLOW_RUNTIME_CONTEXT_MARKER =
@@ -48,6 +52,24 @@ function compactStandardsGaps(
 		return `${gap.stackItem}${query}`;
 	});
 	return gaps.length > 0 ? gaps.join("; ") : null;
+}
+
+function compactEvidencePackets(
+	packets: readonly EvidencePacket[],
+	limit = 3,
+): string | null {
+	if (packets.length === 0) {
+		return null;
+	}
+	const latest = packets
+		.slice(-limit)
+		.map((packet) => {
+			const purpose = packet.purpose ? `/${packet.purpose}` : "";
+			const lane = packet.contextLane ? `@${packet.contextLane}` : "";
+			return `${packet.id}${purpose}${lane}: ${compact(packet.summary, 120)}`;
+		})
+		.join("; ");
+	return `${packets.length} packet(s): ${latest}`;
 }
 
 export function buildFlowAdaptiveSystemContext(
@@ -123,6 +145,15 @@ export function buildFlowAdaptiveSystemContext(
 		].filter((part): part is string => Boolean(part));
 		if (parts.length > 0) {
 			lines.push(`- stack profile: ${quoted(compact(parts.join(" | ")))}`);
+		}
+	}
+
+	if (viewModel.session.planning.evidencePackets?.length) {
+		const evidence = compactEvidencePackets(
+			viewModel.session.planning.evidencePackets,
+		);
+		if (evidence) {
+			lines.push(`- context evidence: ${quoted(evidence)}`);
 		}
 	}
 

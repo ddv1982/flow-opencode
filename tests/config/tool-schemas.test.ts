@@ -66,13 +66,15 @@ describe("tool schema config contracts", () => {
 			0,
 		);
 
-		expect(totalSize).toBeLessThan(240000);
-		expect(schemaSizes.flow_plan_apply).toBeLessThan(75000);
-		expect(schemaSizes.flow_plan_context_record).toBeLessThan(60000);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(45000);
-		expect(schemaSizes.flow_review_record_feature).toBeLessThan(5000);
-		expect(schemaSizes.flow_review_record_final).toBeLessThan(30000);
-		expect(schemaSizes.flow_review_render).toBeLessThan(35000);
+		// These ceilings intentionally leave narrow headroom over the measured
+		// evidence-packet schema growth so unrelated future bloat still fails fast.
+		expect(totalSize).toBeLessThan(258000);
+		expect(schemaSizes.flow_plan_apply).toBeLessThan(71500);
+		expect(schemaSizes.flow_plan_context_record).toBeLessThan(58500);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(52750);
+		expect(schemaSizes.flow_review_record_feature).toBeLessThan(9700);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(31000);
+		expect(schemaSizes.flow_review_render).toBeLessThan(31000);
 	});
 
 	test("pins zod to the plugin SDK's effective zod contract", async () => {
