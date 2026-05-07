@@ -44,7 +44,13 @@ function createStartedSession(options?: {
 				...(options?.goalMode ? { goalMode: options.goalMode } : {}),
 			};
 
-	const applied = applyPlan(createSession("Build a workflow plugin"), plan);
+	const applied = applyPlan(
+		createSession("Build a workflow plugin"),
+		plan,
+		options?.goalMode === "review_and_fix"
+			? { reviewFindings: [knownReviewFinding()] }
+			: undefined,
+	);
 	expect(applied.ok).toBe(true);
 	if (!applied.ok) {
 		throw new Error("Expected plan apply to succeed in test setup.");
@@ -112,6 +118,14 @@ function approvedFinalDecision(): Extract<
 	{ scope: "final" }
 > {
 	return createApprovedFinalReviewerDecision();
+}
+
+function knownReviewFinding(findingRef = "review: known defect") {
+	return {
+		findingRef,
+		summary: "Existing review finding targeted for remediation.",
+		sourceRefs: ["audit#known-defect", "src/runtime/session.ts"],
+	};
 }
 
 function createWorkerResult(
@@ -625,6 +639,11 @@ describe("completion gates", () => {
 		const applied = applyPlan(
 			createSession("Review the runtime and adapter surfaces"),
 			plan,
+			{
+				reviewFindings: [
+					knownReviewFinding("review: navigation failure was swallowed"),
+				],
+			},
 		);
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
@@ -854,6 +873,7 @@ describe("completion gates", () => {
 		const applied = applyPlan(
 			createSession("Review and fix the runtime and adapter surfaces"),
 			plan,
+			{ reviewFindings: [knownReviewFinding("review: setup runtime defect")] },
 		);
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
@@ -941,6 +961,7 @@ describe("completion gates", () => {
 		const applied = applyPlan(
 			createSession("Review and fix the runtime and adapter surfaces"),
 			plan,
+			{ reviewFindings: [knownReviewFinding("review: failed attempt only")] },
 		);
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;

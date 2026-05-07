@@ -147,6 +147,7 @@ describe("shared evidence packet primitives", () => {
 					},
 				],
 				replanLog: [],
+				reviewFindings: [],
 				evidencePackets: [sampleEvidencePacket],
 			},
 			{

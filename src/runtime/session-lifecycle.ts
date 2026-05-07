@@ -138,6 +138,7 @@ export function createSession(
 			implementationApproach: planning?.implementationApproach,
 			decisionLog: planning?.decisionLog ?? [],
 			replanLog: planning?.replanLog ?? [],
+			reviewFindings: planning?.reviewFindings ?? [],
 			evidencePackets: planning?.evidencePackets,
 		},
 		plan: null,

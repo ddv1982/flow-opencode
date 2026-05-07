@@ -269,6 +269,12 @@ export const ReplanRecordSchema = z.object({
 	recordedAt: z.string().min(1),
 });
 
+export const ReviewFindingPlanningContextSchema = z.object({
+	findingRef: z.string().min(1),
+	summary: z.string().min(1),
+	sourceRefs: z.array(z.string().min(1)).min(1),
+});
+
 export const ClosureSchema = z.object({
 	kind: z.enum(CLOSURE_KINDS),
 	summary: z.string().min(1),
@@ -298,6 +304,7 @@ export const PlanningContextSchema = z.object({
 	implementationApproach: ImplementationApproachSchema.optional(),
 	decisionLog: z.array(PlanningDecisionSchema).default([]),
 	replanLog: z.array(ReplanRecordSchema).default([]),
+	reviewFindings: z.array(ReviewFindingPlanningContextSchema).default([]),
 	evidencePackets: EvidencePacketArraySchema.optional(),
 });
 
@@ -403,6 +410,9 @@ export type PlanInput = z.input<typeof PlanSchema>;
 export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
 export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
+export type ReviewFindingPlanningContext = z.infer<
+	typeof ReviewFindingPlanningContextSchema
+>;
 export type StackProfile = z.infer<typeof StackProfileSchema>;
 export type StandardsProfile = z.infer<typeof StandardsProfileSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;

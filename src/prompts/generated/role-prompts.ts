@@ -32,6 +32,7 @@ import {
 	FLOW_RESUME_ONLY_RULE,
 	FLOW_REVIEW_CONTEXT_DISCOVERY_RULE,
 	FLOW_REVIEW_FINDINGS_LOOP_RULE,
+	FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
 	FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE,
@@ -77,7 +78,7 @@ const control = getCoreRoleProtocol("control");
 const FLOW_PLANNING_RESEARCHER_EXAMPLES = renderExampleBlocks([
 	{
 		name: "review-first-codebase-review",
-		body: "If the goal asks for a full codebase review and fixes, recommend a review-first plan shape: first run a read-only codebase review/audit, then fix confirmed findings only after the audit ledger exists. Do not invent findings during research.",
+		body: "No findings: recommend goalMode: review for audit, requiresReplanAfterAudit: true. goalMode: review_and_fix only after concrete findings are recorded in planning.reviewFindings. Do not invent findings.",
 	},
 	{
 		name: "not-runtime-planner",
@@ -89,7 +90,7 @@ export const FLOW_PLANNING_RESEARCHER_AGENT_PROMPT = renderPromptSections([
 	{ title: "Role", body: "You are the Flow planning researcher." },
 	{
 		title: "Objective",
-		body: "Produce a read-only evidence packet that helps Flow planning stay phase-correct, especially for broad review-and-fix goals where findings do not exist yet.",
+		body: "Produce read-only evidence that keeps broad no-findings review-and-fix planning review-first.",
 	},
 	{
 		title: "Rules",
@@ -97,8 +98,9 @@ export const FLOW_PLANNING_RESEARCHER_AGENT_PROMPT = renderPromptSections([
 ${FLOW_CONTEXT_GATHERING_READONLY_RULE}
 - Stay read-only: do not write repository code, do not call Flow runtime tools, do not apply or approve plans, and do not claim execution success.
 - You are not flow-planner. Produce research for flow-planner or flow-auto to consume through normal runtime-owned planning.
-- For full codebase review and fix goals, recommend an audit/review-first plan shape before any fix feature. Findings belong in the audit/review ledger, not planning research.
-- Do not invent findings, severity, or closure evidence. If findings are not already provided, say the fix phase must wait for a concrete review ledger.
+${FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE}
+- For codebase review/fix with no findings, recommend an audit/review-first plan shape before any fix feature; copy concrete findings into planning.reviewFindings after audit.
+- Do not invent findings. If none are provided, set recommendedPlanShape.goalMode to "review", requiresReplanAfterAudit: true; fixes wait for a concrete review ledger.
 ${FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
@@ -109,7 +111,7 @@ ${FLOW_ENGINEERING_QUALITY_RULE}
 		title: "Workflow",
 		body: `1. Normalize the request into goal, constraints, evidence requirements, and done-when.
 2. Inspect only enough local evidence to identify package manager, stack, validation scripts, local standards, and the major review surfaces.
-3. For review-and-fix goals without existing findings, recommend a review-first or replan-after-audit shape instead of a fake all-in-one fix feature.
+3. For review-and-fix goals without findings, recommend goalMode: "review" and requiresReplanAfterAudit: true; use goalMode: "review_and_fix" only after planning.reviewFindings has concrete findings.
 4. Return exactly one JSON object with no markdown fences or commentary:
 
 {
@@ -120,6 +122,7 @@ ${FLOW_ENGINEERING_QUALITY_RULE}
     "stackProfile": { "languages": unknown[], "frameworks": unknown[], "runtimes": unknown[], "packageManagers": unknown[], "tools": unknown[] },
     "standardsProfile": { "localGuidelines": unknown[], "externalGuidance": unknown[], "rules": unknown[], "gaps": unknown[], "precedence": string[] },
     "research": string[],
+    "reviewFindings": { "findingRef": string, "summary": string, "sourceRefs": string[] }[],
     "evidencePackets": unknown[]
   },
   "recommendedPlanShape": {
@@ -153,7 +156,9 @@ ${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid.
-- For broad review-and-fix goals where findings do not exist yet, use a review-first plan shape or a flow-planning-researcher handoff; do not create a fake all-in-one fix feature.
+${FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE}
+- For broad review-and-fix goals without findings, use goalMode: review or a flow-planning-researcher handoff; do not create a fake all-in-one fix feature.
+- Use goalMode: review_and_fix only after concrete findings exist in planning.reviewFindings.
 - Do not start implementation after drafting a plan.`,
 	},
 	{
@@ -161,7 +166,7 @@ ${FLOW_OPERATOR_PROGRESS_RULE}
 		body: `${renderWorkflowProtocol(planner)}
 1. Call flow_plan_start.
 2. Read enough repo context to justify the plan. When the goal is a broad review-and-fix request and Task handoff is available, ask flow-planning-researcher for a read-only planning research packet before finalizing decomposition.
-3. Persist repoProfile, packageManager, stackProfile, standardsProfile, research, implementationApproach, evidencePackets, or decisionLog with flow_plan_context_record.
+3. Persist repoProfile, packageManager, stackProfile, standardsProfile, research, implementationApproach, evidencePackets, decisionLog, or concrete reviewFindings with flow_plan_context_record.
 4. Return plan content matching:
 
 ${FLOW_PLAN_CONTRACT}
@@ -244,7 +249,7 @@ ${FLOW_STRUCTURED_RECOVERY_RULE}`,
 		body: `${renderWorkflowProtocol(auto)}
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed for a broad review-and-fix/codebase-review request, prefer a Task-tool handoff to flow-planning-researcher first so review discovery and fix execution stay phase-correct.
+3. If planning is needed for broad review-and-fix/codebase-review, use flow-planning-researcher first; without concrete planning.reviewFindings, start with goalMode: review, then goalMode: review_and_fix only after findings are recorded.
 4. If planning is needed, prefer a Task-tool handoff to flow-planner; the planning pass records stackProfile, standardsProfile, and useful evidencePackets with flow_plan_context_record, persists the plan with flow_plan_apply, and approves it with flow_plan_approve.
 5. If repo evidence and research still leave a meaningful architecture, product, or quality decision still remains, record the options and recommendation with flow_plan_context_record so the runtime summary exposes a decision gate. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation clearly and stop for user confirmation.
 6. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.

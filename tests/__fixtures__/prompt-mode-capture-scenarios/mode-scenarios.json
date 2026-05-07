@@ -107,6 +107,8 @@
 			"review-first",
 			"evidence packet",
 			"do not invent findings",
+			"\"goalMode\":\"review\"",
+			"\"reviewFindings\"",
 			"requiresReplanAfterAudit"
 		],
 		"forbiddenResponseSnippets": [

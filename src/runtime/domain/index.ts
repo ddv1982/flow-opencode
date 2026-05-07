@@ -23,7 +23,11 @@ export {
 	type ReviewIncludedContext,
 	type ReviewValidationEvidence,
 } from "./final-review-coverage";
-export { validatePlanGraph } from "./plan-graph-validation";
+export {
+	REVIEW_AND_FIX_FINDINGS_REQUIRED_MESSAGE,
+	validatePlanGraph,
+	validateReviewAndFixFindingPrerequisite,
+} from "./plan-graph-validation";
 export { selectProjectedFeatureSubset } from "./plan-projection";
 export {
 	mergeEvidencePackets,

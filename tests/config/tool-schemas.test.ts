@@ -67,11 +67,11 @@ describe("tool schema config contracts", () => {
 		);
 
 		// These ceilings intentionally leave narrow headroom over measured growth
-		// (including finalReview/suggestedValidation additive fields) so unrelated
-		// future bloat still fails fast.
-		expect(totalSize).toBeLessThan(350000);
-		expect(schemaSizes.flow_plan_apply).toBeLessThan(77000);
-		expect(schemaSizes.flow_plan_context_record).toBeLessThan(58500);
+		// (including finalReview/suggestedValidation and planning.reviewFindings
+		// additive fields) so unrelated future bloat still fails fast.
+		expect(totalSize).toBeLessThan(352000);
+		expect(schemaSizes.flow_plan_apply).toBeLessThan(78500);
+		expect(schemaSizes.flow_plan_context_record).toBeLessThan(60500);
 		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(88000);
 		expect(schemaSizes.flow_review_record_feature).toBeLessThan(20000);
 		expect(schemaSizes.flow_review_record_final).toBeLessThan(73000);

@@ -26,6 +26,7 @@ const FLOW_PLAN_CONTRACT_BASE = `Persist a plan with:
 
 Plan rules:
 - review/review_and_fix plans must declare review scope through reviewScope or fileTargets for every target/domain the runtime must account.
+- Use goalMode: review_and_fix only when concrete findings already exist and are recorded in planning.reviewFindings; broad review-and-fix/codebase-review goals with no findings must start as goalMode: review for audit/discovery, then replan review_and_fix after findings are recorded.
 
 Record planning context separately via flow_plan_context_record or flow_plan_apply({ plan, planning: ... }) when needed — not inside \`plan\`.
 - planning.repoProfile?: string[]
@@ -36,6 +37,7 @@ Record planning context separately via flow_plan_context_record or flow_plan_app
 - planning.research?: string[]
 - planning.implementationApproach?: { chosenDirection: string, keyConstraints: string[], validationSignals: string[], sources: string[] }
 - planning.decisionLog?: { question: string, decisionMode?: autonomous_choice | recommend_confirm | human_required, decisionDomain?: architecture | product | quality | scope | delivery, options: { label: string, tradeoffs: string[] }[], recommendation: string, rationale: string[] }[]
+- planning.reviewFindings?: { findingRef: string, summary: string, sourceRefs: string[] }[] — concrete existing findings from a user-provided finding, audit report, issue, failing test, or prior review ledger; sourceRefs must be non-empty concrete refs. Missing/empty means no remediation findings are known yet.
 - planning.evidencePackets?: { id: string, purpose?: planning | review | audit | validation | general, contextLane?: planning | auto_planning | execution | review | status | history | session | reset | doctor | control, summary: string, sourceRefs?: string[], highlights?: string[], selectedContext?: string[], excludedContext?: string[], codemapSummaries?: string[], sliceSummaries?: string[], relationshipHypotheses?: string[], ambiguities?: string[], knownExclusions?: string[], alreadyCoveredFindings?: string[], validationEvidence?: { command, status, summary }[] }[]`;
 
 export const FLOW_PLAN_CONTRACT = `${FLOW_PLAN_CONTRACT_BASE}

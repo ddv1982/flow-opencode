@@ -4,6 +4,7 @@ import {
 	selectProjectedFeatureSubset,
 	validatePlanGraph,
 	validatePlanReviewScopeDeclaration,
+	validateReviewAndFixFindingPrerequisite,
 } from "../domain";
 import type { Plan, PlanInput, PlanningContext, Session } from "../schema";
 import { nowIso } from "../util";
@@ -100,9 +101,17 @@ export function applyPlan(
 	planning?: Partial<PlanningContext>,
 ): TransitionResult<Session> {
 	const plan = normalizePlan(planInput);
+	const nextPlanning = mergePlanningContext(session.planning, planning ?? {});
 	const planGraphError = validatePlanGraph(plan);
 	if (planGraphError) {
 		return fail(planGraphError);
+	}
+	const reviewAndFixFindingError = validateReviewAndFixFindingPrerequisite(
+		plan,
+		nextPlanning,
+	);
+	if (reviewAndFixFindingError) {
+		return fail(reviewAndFixFindingError);
 	}
 	const completionPolicyError = completionPolicyTargetError(plan);
 	if (completionPolicyError) {
@@ -125,7 +134,7 @@ export function applyPlan(
 			completedAt: null,
 		},
 		notes: [],
-		planning: mergePlanningContext(session.planning, planning ?? {}),
+		planning: nextPlanning,
 		execution: {
 			...session.execution,
 		},

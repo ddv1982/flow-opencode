@@ -20,6 +20,8 @@ export const FLOW_COORDINATOR_BOUNDARY_RULE =
 	"- Stay at the coordinator layer: decide whether planning, execution, review, reset, or recovery happens next, and rely on the specialized Flow roles for their detailed contracts.";
 export const FLOW_REVIEW_FINDINGS_LOOP_RULE =
 	"- Do not complete a feature while review findings remain. Fix them, record a finding-by-finding closure ledger with code/test/validation evidence and residual risk, rerun validation, and rereview until the feature is clean or a real blocker remains.";
+export const FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE =
+	"- Broad review-and-fix/codebase-review goals with no concrete existing findings in planning.reviewFindings must start as goalMode: review for audit/discovery; replan to goalMode: review_and_fix only after concrete findings are recorded in planning.reviewFindings.";
 export const FLOW_FEATURE_REVIEW_APPROVAL_RULE =
 	"- Before persisting success, get flow-reviewer approval and record it through flow_review_record_feature.";
 export const FLOW_FINAL_COMPLETION_PATH_RULE =

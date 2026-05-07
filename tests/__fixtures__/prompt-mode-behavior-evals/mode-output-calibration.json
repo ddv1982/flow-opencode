@@ -719,7 +719,7 @@
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "{\"planning\":{\"repoProfile\":[\"Evidence packet will identify stack, package scripts, local standards, and major review surfaces.\"],\"packageManager\":\"bun\",\"packageManagerAmbiguous\":false,\"stackProfile\":{\"languages\":[],\"frameworks\":[],\"runtimes\":[],\"packageManagers\":[],\"tools\":[]},\"standardsProfile\":{\"localGuidelines\":[],\"externalGuidance\":[],\"rules\":[],\"gaps\":[],\"precedence\":[\"local guidance before external docs\"]},\"research\":[\"No findings exist yet; do not invent findings during planning research.\"],\"evidencePackets\":[{\"id\":\"planning-research:review-first\",\"purpose\":\"planning\",\"summary\":\"Research supports a review-first handoff before fix work.\"}]},\"recommendedPlanShape\":{\"goalMode\":\"review_and_fix\",\"decompositionPolicy\":\"iterative_refinement\",\"features\":[{\"id\":\"run-codebase-review\",\"title\":\"Run codebase review\",\"summary\":\"Produce an audit ledger with confirmed findings before fixes.\",\"dependsOn\":[],\"blockedBy\":[],\"verification\":[\"flow-review structured audit ledger\"]},{\"id\":\"fix-confirmed-review-findings\",\"title\":\"Fix confirmed review findings\",\"summary\":\"Fix only concrete findings from the audit ledger and record closure evidence.\",\"dependsOn\":[\"run-codebase-review\"],\"blockedBy\":[\"audit ledger with confirmed findings\"],\"verification\":[\"reviewFindingClosures with fixRefs, testRefs, validationRefs\"]}],\"requiresReplanAfterAudit\":true,\"rationale\":[\"Review discovery and fix execution must stay phase-correct.\",\"The fix phase must wait for confirmed findings.\"]},\"handoffNotes\":[\"Hand this evidence packet to flow-planner; do not call runtime tools from planning research.\"]}",
+		"modelOutput": "{\"planning\":{\"repoProfile\":[\"Evidence packet will identify stack, package scripts, local standards, and major review surfaces.\"],\"packageManager\":\"bun\",\"packageManagerAmbiguous\":false,\"stackProfile\":{\"languages\":[],\"frameworks\":[],\"runtimes\":[],\"packageManagers\":[],\"tools\":[]},\"standardsProfile\":{\"localGuidelines\":[],\"externalGuidance\":[],\"rules\":[],\"gaps\":[],\"precedence\":[\"local guidance before external docs\"]},\"research\":[\"No findings exist yet; do not invent findings during planning research.\"],\"reviewFindings\":[],\"evidencePackets\":[{\"id\":\"planning-research:review-first\",\"purpose\":\"planning\",\"summary\":\"Research supports a review-first handoff before fix work.\"}]},\"recommendedPlanShape\":{\"goalMode\":\"review\",\"decompositionPolicy\":\"iterative_refinement\",\"features\":[{\"id\":\"run-codebase-review\",\"title\":\"Run codebase review\",\"summary\":\"Produce an audit ledger with confirmed findings before any remediation plan exists.\",\"dependsOn\":[],\"blockedBy\":[],\"verification\":[\"flow-review structured audit ledger\"]}],\"requiresReplanAfterAudit\":true,\"rationale\":[\"Review discovery starts as goalMode: review because no findings exist yet.\",\"Do not include a fix feature until confirmed findings are recorded in planning.reviewFindings; then replan as review_and_fix.\"]},\"handoffNotes\":[\"Hand this evidence packet to flow-planner; do not call runtime tools from planning research.\",\"After the audit ledger records confirmed findings, hand those findings back as planning.reviewFindings for a strict review_and_fix remediation plan.\"]}",
 		"minPassingScore": 6,
 		"expectedToolMentions": [],
 		"forbiddenToolMentions": [
@@ -733,6 +733,8 @@
 			"review-first",
 			"evidence packet",
 			"do not invent findings",
+			"\"goalMode\":\"review\"",
+			"\"reviewFindings\"",
 			"requiresReplanAfterAudit"
 		],
 		"forbiddenResponseSnippets": [
@@ -741,6 +743,41 @@
 			"flow_plan_apply"
 		],
 		"nextStepSnippets": ["flow-planner", "audit ledger", "confirmed findings"]
+	},
+	{
+		"id": "planning-researcher-known-findings-allows-review-fix",
+		"mode": "flow-planning-researcher",
+		"title": "Planning researcher allows review-fix shape when concrete findings exist",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "{\"planning\":{\"repoProfile\":[\"Existing audit ledger provides concrete remediation findings.\"],\"packageManager\":\"bun\",\"packageManagerAmbiguous\":false,\"stackProfile\":{\"languages\":[],\"frameworks\":[],\"runtimes\":[],\"packageManagers\":[],\"tools\":[]},\"standardsProfile\":{\"localGuidelines\":[],\"externalGuidance\":[],\"rules\":[],\"gaps\":[],\"precedence\":[\"local guidance before external docs\"]},\"research\":[\"Concrete findings are already provided, so strict remediation planning is allowed.\"],\"reviewFindings\":[{\"findingRef\":\"audit:missing-validation-gate\",\"summary\":\"Worker completion can advance without recorded validation evidence.\",\"sourceRefs\":[\"audit-ledger:2026-05-07#missing-validation-gate\"]}],\"evidencePackets\":[{\"id\":\"planning-research:known-finding\",\"purpose\":\"planning\",\"summary\":\"Research preserves a concrete finding for remediation planning.\"}]},\"recommendedPlanShape\":{\"goalMode\":\"review_and_fix\",\"decompositionPolicy\":\"atomic_feature\",\"features\":[{\"id\":\"fix-missing-validation-gate\",\"title\":\"Fix missing validation gate\",\"summary\":\"Remediate only the concrete audit finding and record closure evidence.\",\"dependsOn\":[],\"blockedBy\":[],\"verification\":[\"reviewFindingClosures with fixRefs, testRefs, validationRefs\"]}],\"requiresReplanAfterAudit\":false,\"rationale\":[\"Concrete planning.reviewFindings entries exist with sourceRefs.\",\"review_and_fix remains strict and requires closure evidence.\"]},\"handoffNotes\":[\"Hand this evidence packet to flow-planner for strict remediation planning.\"]}",
+		"minPassingScore": 6,
+		"expectedToolMentions": [],
+		"forbiddenToolMentions": [
+			"flow_plan_start",
+			"flow_plan_apply",
+			"flow_run_start",
+			"flow_review_record_feature",
+			"apply_patch"
+		],
+		"requiredResponseSnippets": [
+			"\"reviewFindings\"",
+			"\"findingRef\"",
+			"\"sourceRefs\"",
+			"\"goalMode\":\"review_and_fix\"",
+			"reviewFindingClosures"
+		],
+		"forbiddenResponseSnippets": [
+			"I edited",
+			"all findings are fixed",
+			"flow_plan_apply"
+		],
+		"nextStepSnippets": ["flow-planner", "strict remediation planning"]
 	},
 	{
 		"id": "reviewer-bad-approves-missing-closure-ledger",

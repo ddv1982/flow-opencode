@@ -79,6 +79,13 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_PLAN_CONTRACT).toContain(
 			"review/review_and_fix plans must declare review scope through reviewScope or fileTargets",
 		);
+		expect(FLOW_PLAN_CONTRACT).toContain("planning.reviewFindings?:");
+		expect(FLOW_PLAN_CONTRACT).toContain(
+			"Use goalMode: review_and_fix only when concrete findings already exist and are recorded in planning.reviewFindings",
+		);
+		expect(FLOW_PLAN_CONTRACT).toContain(
+			"broad review-and-fix/codebase-review goals with no findings must start as goalMode: review",
+		);
 	});
 
 	test("worker contract requires clean review before ok completion", () => {
@@ -217,10 +224,33 @@ describe("prompt and command config contracts", () => {
 			"Do not invent findings",
 		);
 		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"planning.reviewFindings",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			'recommendedPlanShape.goalMode to "review"',
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
 			"requiresReplanAfterAudit",
 		);
 		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+			"goalMode: review_and_fix only after concrete findings are recorded in planning.reviewFindings",
+		);
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
 			'<example name="review-first-codebase-review">',
+		);
+	});
+
+	test("planner and auto prompts keep broad review-fix goals review-first until findings exist", () => {
+		for (const prompt of [FLOW_PLANNER_AGENT_PROMPT, FLOW_AUTO_AGENT_PROMPT]) {
+			expect(prompt).toContain("planning.reviewFindings");
+			expect(prompt).toContain("goalMode: review");
+			expect(prompt).toContain("goalMode: review_and_fix only after");
+		}
+		expect(FLOW_PLANNER_AGENT_PROMPT).toContain(
+			"Use goalMode: review_and_fix only after concrete findings exist in planning.reviewFindings.",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"without concrete planning.reviewFindings, start with goalMode: review",
 		);
 	});
 

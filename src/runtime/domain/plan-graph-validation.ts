@@ -1,4 +1,20 @@
-import type { Plan } from "../schema";
+import type { Plan, PlanningContext } from "../schema";
+
+export const REVIEW_AND_FIX_FINDINGS_REQUIRED_MESSAGE =
+	"review_and_fix plans require concrete existing findings in planning.reviewFindings. For broad review/codebase-review goals without findings, apply a review-first plan with goalMode: review, run discovery/audit, then replan remediation after findings exist.";
+
+export function validateReviewAndFixFindingPrerequisite(
+	plan: Plan,
+	planning: PlanningContext,
+): string | null {
+	if (plan.goalMode !== "review_and_fix") {
+		return null;
+	}
+	if (planning.reviewFindings.length > 0) {
+		return null;
+	}
+	return REVIEW_AND_FIX_FINDINGS_REQUIRED_MESSAGE;
+}
 
 export function validatePlanGraph(plan: Plan): string | null {
 	const ids = new Set<string>();

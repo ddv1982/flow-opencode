@@ -1,4 +1,4 @@
-import type { PlanningContext } from "../schema";
+import type { PlanningContext, ReviewFindingPlanningContext } from "../schema";
 import type { EvidencePacket } from "../schema-evidence-packets";
 
 function mergeUniqueStrings(
@@ -45,6 +45,20 @@ export function mergeEvidencePackets(
 	return [...byId.values()];
 }
 
+function mergeReviewFindings(
+	current: readonly ReviewFindingPlanningContext[] = [],
+	next?: readonly ReviewFindingPlanningContext[],
+): ReviewFindingPlanningContext[] {
+	const byRef = new Map<string, ReviewFindingPlanningContext>();
+	for (const finding of current) {
+		byRef.set(finding.findingRef, finding);
+	}
+	for (const finding of next ?? []) {
+		byRef.set(finding.findingRef, finding);
+	}
+	return [...byRef.values()];
+}
+
 export function mergePlanningContext(
 	current: PlanningContext,
 	next: Partial<PlanningContext> = {},
@@ -61,6 +75,10 @@ export function mergePlanningContext(
 			next.implementationApproach ?? current.implementationApproach,
 		decisionLog: next.decisionLog ?? current.decisionLog,
 		replanLog: mergeUniqueBySerialized(current.replanLog, next.replanLog),
+		reviewFindings: mergeReviewFindings(
+			current.reviewFindings,
+			next.reviewFindings,
+		),
 		evidencePackets: mergeEvidencePackets(
 			current.evidencePackets,
 			next.evidencePackets,

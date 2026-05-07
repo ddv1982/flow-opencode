@@ -16,7 +16,7 @@ import {
 describe("prompt mode behavior eval corpus", () => {
 	test("mode behavior fixtures are first-party and cover non-review modes", async () => {
 		const corpus = readPromptModeBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(32);
+		expect(corpus).toHaveLength(33);
 		expect(corpus.filter((item) => item.origin === "captured")).toHaveLength(6);
 		expect(new Set(corpus.map((item) => item.mode))).toEqual(
 			new Set(FLOW_PROMPT_MODE_CAPTURE_MODES),
@@ -44,7 +44,7 @@ describe("prompt mode behavior eval corpus", () => {
 			results.map((result) => [result.id, result]),
 		);
 
-		expect(results).toHaveLength(32);
+		expect(results).toHaveLength(33);
 		expect(byId["plan-goal-records-context-and-stops"]?.score).toBe(6);
 		expect(byId["auto-missing-goal-stops-after-prepare"]?.score).toBe(6);
 		expect(
@@ -55,6 +55,9 @@ describe("prompt mode behavior eval corpus", () => {
 		).toBe(6);
 		expect(byId["worker-records-review-finding-closures"]?.score).toBe(6);
 		expect(byId["planning-researcher-review-first-no-findings"]?.score).toBe(6);
+		expect(
+			byId["planning-researcher-known-findings-allows-review-fix"]?.score,
+		).toBe(6);
 		expect(byId["run-one-feature-review-gated"]?.score).toBe(6);
 		expect(byId["reviewer-needs-fix-on-missing-validation"]?.score).toBe(6);
 		expect(byId["reviewer-needs-fix-on-missing-closure-ledger"]?.score).toBe(6);
@@ -188,14 +191,14 @@ describe("prompt mode behavior eval corpus", () => {
 			readPromptModeBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(32);
-		expect(summary.passingCases).toBe(19);
+		expect(summary.totalCases).toBe(33);
+		expect(summary.passingCases).toBe(20);
 		expect(summary.failingCases).toBe(13);
-		expect(summary.expectationSatisfiedCases).toBe(32);
+		expect(summary.expectationSatisfiedCases).toBe(33);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(4.63, 2);
+		expect(summary.averageScore).toBeCloseTo(4.67, 2);
 		expect(summary.report).toContain(
-			"Prompt mode behavior eval corpus: 32 cases",
+			"Prompt mode behavior eval corpus: 33 cases",
 		);
 		expect(summary.report).toContain(
 			"plan-goal-records-context-and-stops: 6/6 (quality-pass); mode=flow-plan; expectation=satisfied",
@@ -208,6 +211,9 @@ describe("prompt mode behavior eval corpus", () => {
 		);
 		expect(summary.report).toContain(
 			"planning-researcher-review-first-no-findings: 6/6 (quality-pass); mode=flow-planning-researcher; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"planning-researcher-known-findings-allows-review-fix: 6/6 (quality-pass); mode=flow-planning-researcher; expectation=satisfied",
 		);
 		expect(summary.report).toContain(
 			"worker-bad-completes-review-fix-without-closures: 3/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent,next_step_calibrated",

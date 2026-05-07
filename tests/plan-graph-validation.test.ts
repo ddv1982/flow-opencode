@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
+import { REVIEW_AND_FIX_FINDINGS_REQUIRED_MESSAGE } from "../src/runtime/domain";
+import { createSession } from "../src/runtime/session";
 import { applyPlan } from "../src/runtime/transitions";
 import { createSampleSession, samplePlan } from "./fixtures";
+
+const knownReviewFinding = {
+	findingRef: "review: navigation failure was swallowed",
+	summary: "Existing review found swallowed navigation failures.",
+	sourceRefs: ["audit#nav-001", "src/runtime/session.ts"],
+};
 
 describe("plan graph validation", () => {
 	const cases = [
@@ -95,6 +103,74 @@ describe("plan graph validation", () => {
 		if (applied.ok) return;
 
 		expect(applied.message).toBe(message);
+	});
+
+	test("review_and_fix plans require concrete existing review findings", () => {
+		const applied = applyPlan(createSampleSession(), {
+			...samplePlan,
+			goalMode: "review_and_fix",
+		});
+
+		expect(applied.ok).toBe(false);
+		if (!applied.ok) {
+			expect(applied.message).toBe(REVIEW_AND_FIX_FINDINGS_REQUIRED_MESSAGE);
+		}
+	});
+
+	test("review_and_fix plans allow findings from existing or inline planning context", () => {
+		const withExistingPlanning = applyPlan(
+			createSession("Fix known review finding", {
+				reviewFindings: [knownReviewFinding],
+			}),
+			{
+				...samplePlan,
+				goalMode: "review_and_fix",
+			},
+		);
+		expect(withExistingPlanning.ok).toBe(true);
+
+		const inlineFinding = {
+			...knownReviewFinding,
+			summary: "Inline context refreshes the existing finding summary.",
+		};
+		const withInlinePlanning = applyPlan(
+			createSession("Fix known review finding", {
+				reviewFindings: [knownReviewFinding],
+			}),
+			{
+				...samplePlan,
+				goalMode: "review_and_fix",
+			},
+			{ reviewFindings: [inlineFinding] },
+		);
+		expect(withInlinePlanning.ok).toBe(true);
+		if (withInlinePlanning.ok) {
+			expect(withInlinePlanning.value.planning.reviewFindings).toEqual([
+				inlineFinding,
+			]);
+		}
+	});
+
+	test("review_and_fix plans allow inline-only review findings", () => {
+		const applied = applyPlan(
+			createSession("Fix known review finding"),
+			{
+				...samplePlan,
+				goalMode: "review_and_fix",
+			},
+			{ reviewFindings: [knownReviewFinding] },
+		);
+
+		expect(applied.ok).toBe(true);
+	});
+
+	test("review plans do not require pre-existing review findings", () => {
+		const applied = applyPlan(createSampleSession(), {
+			...samplePlan,
+			goalMode: "review",
+		});
+
+		expect(applied.ok).toBe(true);
 	});
 
 	test("review plans must declare review scope through reviewScope or fileTargets", () => {
