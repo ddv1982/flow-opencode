@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [2.0.15] - 2026-05-07
+
+Preserve review-and-fix closure obligations across planning refreshes
+
+Flow 2.0.15 closes the follow-up release gap in the new `planning.reviewFindings` remediation contract. Active `review_and_fix` sessions can still refresh planning evidence, but they can no longer remove recorded findings through `record_planning_context` while the plan depends on those findings for completion. Final completion now keeps the original remediation obligation intact until every planned finding is closed with fix, test, validation, ledger, final-review, and reviewer-approval evidence.
+
+The release also consolidates review-finding closure policy into a small runtime-domain helper instead of leaving closure ledger checks and planned-finding closure checks split across transition-local helpers. Completion transitions still own recovery routing and gate order, while the domain helper owns the closure-policy text and missing-ref calculation.
+
+Final-review coverage gap accounting now treats whitespace-only `suggestedValidation` entries as missing. If a review context pack records coverage gaps, the final review must carry those gaps forward and provide real follow-up validation guidance rather than satisfying the contract with blank strings.
+
+The release deliberately does not add commands, tools, runtime modes, state paths, package exports, dependencies, or looser completion paths. It narrows the existing review-and-fix contract and keeps the review-first/remediation split from 2.0.14 intact.
+
+Constraint: Preserve strict `review_and_fix` finding closure after planning context refreshes without changing persisted session shape
+Constraint: Keep completion/reviewer gate recovery behavior unchanged while moving closure-policy checks into a focused domain helper
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Treat empty `planning.reviewFindings` refreshes as valid during active `review_and_fix` execution | this would erase the runtime-owned remediation baseline before final completion
+Rejected: Store a new persisted immutable findings baseline in this release | guarding the mutation ingress fixes the bypass without a migration or state-shape change
+Rejected: Let whitespace-only suggested validation satisfy coverage gaps | blank follow-up guidance weakens final-review evidence quality
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Do not remove `planning.reviewFindings` from an active `review_and_fix` session unless replanning out of remediation mode first; every planned finding must remain auditable through closure evidence before final completion
+Tested: `bun run typecheck`; `bun run lint`; `bun test tests/completion-gates.test.ts tests/runtime/evidence-packets.test.ts tests/runtime/final-review-contracts.test.ts` (63 pass, 405 expect calls); targeted release gates and `bun run check` before tag push
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.15` before push
+
 ## [2.0.14] - 2026-05-07
 
 Route no-findings review-and-fix work through review-first discovery

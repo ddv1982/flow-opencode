@@ -176,6 +176,36 @@ function finalReviewCoverageFailureReasons(
 				`must reflect reviewContextPack reviewedSurfaces in reviewedSurfaces: ${missingPackSurfaces.join(", ")}`,
 			);
 		}
+
+		const normalizedCoverageGaps = review.reviewContextPack.coverageGaps
+			.map((gap) => gap.trim())
+			.filter(Boolean);
+		const remainingGapSet = new Set(
+			(review.remainingGaps ?? []).map((gap) => gap.trim()).filter(Boolean),
+		);
+		const missingCoverageGaps = normalizedCoverageGaps.filter(
+			(gap) => !remainingGapSet.has(gap),
+		);
+		if (missingCoverageGaps.length > 0) {
+			reasons.push(
+				`must carry reviewContextPack coverageGaps into remainingGaps: ${missingCoverageGaps.join(", ")}`,
+			);
+		}
+		const packSuggestedValidation = review.reviewContextPack.suggestedValidation
+			.map((entry) => entry.trim())
+			.filter(Boolean);
+		const reviewSuggestedValidation = (review.suggestedValidation ?? [])
+			.map((entry) => entry.trim())
+			.filter(Boolean);
+		if (
+			normalizedCoverageGaps.length > 0 &&
+			packSuggestedValidation.length === 0 &&
+			reviewSuggestedValidation.length === 0
+		) {
+			reasons.push(
+				"must include suggestedValidation when reviewContextPack records coverageGaps",
+			);
+		}
 	}
 
 	const invalidArtifactRefs = artifactRefPaths.filter(

@@ -1,4 +1,8 @@
-import type { PlanningContext, ReviewFindingPlanningContext } from "../schema";
+import type {
+	PlanningContext,
+	ReviewFindingPlanningContext,
+	Session,
+} from "../schema";
 import type { EvidencePacket } from "../schema-evidence-packets";
 
 function mergeUniqueStrings(
@@ -49,6 +53,9 @@ function mergeReviewFindings(
 	current: readonly ReviewFindingPlanningContext[] = [],
 	next?: readonly ReviewFindingPlanningContext[],
 ): ReviewFindingPlanningContext[] {
+	if (next && next.length === 0) {
+		return [];
+	}
 	const byRef = new Map<string, ReviewFindingPlanningContext>();
 	for (const finding of current) {
 		byRef.set(finding.findingRef, finding);
@@ -57,6 +64,43 @@ function mergeReviewFindings(
 		byRef.set(finding.findingRef, finding);
 	}
 	return [...byRef.values()];
+}
+
+function normalizeFindingRefs(
+	findings: readonly ReviewFindingPlanningContext[],
+): string[] {
+	return findings.map((finding) => finding.findingRef.trim()).filter(Boolean);
+}
+
+export function describeReviewFindingsMutationFailure(
+	session: Pick<Session, "plan" | "planning">,
+	nextPlanning: Partial<PlanningContext>,
+): string | null {
+	if (session.plan?.goalMode !== "review_and_fix") {
+		return null;
+	}
+	if (!nextPlanning.reviewFindings) {
+		return null;
+	}
+
+	const existingFindingRefs = normalizeFindingRefs(
+		session.planning.reviewFindings,
+	);
+	if (existingFindingRefs.length === 0) {
+		return null;
+	}
+
+	const nextFindingRefs = new Set(
+		normalizeFindingRefs(nextPlanning.reviewFindings),
+	);
+	const missingFindingRefs = existingFindingRefs.filter(
+		(findingRef) => !nextFindingRefs.has(findingRef),
+	);
+	if (missingFindingRefs.length === 0) {
+		return null;
+	}
+
+	return `Planning context update cannot remove review_and_fix findings while the active plan depends on them. Missing retained findingRefs: ${missingFindingRefs.join(", ")}.`;
 }
 
 export function mergePlanningContext(

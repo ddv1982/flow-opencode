@@ -1,3 +1,4 @@
+import { describeReviewFindingsMutationFailure } from "../domain";
 import type {
 	Feature,
 	FlowReviewRecordFeatureArgs,
@@ -15,7 +16,7 @@ import {
 	selectPlanFeatures,
 	startRun,
 } from "../transitions";
-import { succeed } from "../transitions/shared";
+import { fail, succeed } from "../transitions/shared";
 import {
 	completeRunSuccess,
 	MISSING_PLANNING_SESSION_RESPONSE,
@@ -120,6 +121,13 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 			return {
 				name: "record_planning_context",
 				run: (session) => {
+					const failure = describeReviewFindingsMutationFailure(
+						session,
+						nextPlanning,
+					);
+					if (failure) {
+						return fail(failure);
+					}
 					const updated: Session = {
 						...session,
 						planning: mergePlanningContext(session.planning, nextPlanning),

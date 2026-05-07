@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { ReviewReportSchema } from "../../src/audit/report-schema";
-import { mergePlanningContext } from "../../src/runtime/domain/planning-context";
+import {
+	describeReviewFindingsMutationFailure,
+	mergePlanningContext,
+} from "../../src/runtime/domain/planning-context";
 import {
 	EvidencePacketSchema,
 	FlowReviewRecordFeatureArgsSchema,
@@ -182,6 +185,79 @@ describe("shared evidence packet primitives", () => {
 		);
 		expect(merged.evidencePackets?.[0]?.sourceRefs).toBeUndefined();
 		expect(merged.evidencePackets?.[0]?.selectedContext).toBeUndefined();
+	});
+
+	test("describeReviewFindingsMutationFailure allows clear when no review_and_fix plan is active", () => {
+		const session = createSession("Build a workflow plugin", {
+			reviewFindings: [
+				{
+					findingRef: "review: stale finding",
+					summary: "Previously recorded finding.",
+					sourceRefs: ["audit#old"],
+				},
+			],
+		});
+		expect(
+			describeReviewFindingsMutationFailure(session, { reviewFindings: [] }),
+		).toBeNull();
+	});
+
+	test("describeReviewFindingsMutationFailure rejects removal and allows additive updates in review_and_fix", () => {
+		const session = createSession("Build a workflow plugin", {
+			reviewFindings: [
+				{
+					findingRef: "review: stale finding",
+					summary: "Previously recorded finding.",
+					sourceRefs: ["audit#old"],
+				},
+			],
+		});
+		session.plan = {
+			...samplePlan(),
+			goalMode: "review_and_fix",
+		};
+
+		expect(
+			describeReviewFindingsMutationFailure(session, { reviewFindings: [] }),
+		).toContain("cannot remove review_and_fix findings");
+		expect(
+			describeReviewFindingsMutationFailure(session, {
+				reviewFindings: [
+					{
+						findingRef: "review: stale finding",
+						summary: "Retained",
+						sourceRefs: ["audit#old"],
+					},
+					{
+						findingRef: "review: newly added finding",
+						summary: "New",
+						sourceRefs: ["audit#new"],
+					},
+				],
+			}),
+		).toBeNull();
+	});
+
+	test("mergePlanningContext lets an explicit empty reviewFindings refresh clear stale findings", () => {
+		const merged = mergePlanningContext(
+			{
+				repoProfile: [],
+				packageManagerAmbiguous: false,
+				research: [],
+				decisionLog: [],
+				replanLog: [],
+				reviewFindings: [
+					{
+						findingRef: "review: stale finding",
+						summary: "Previously recorded finding.",
+						sourceRefs: ["audit#old"],
+					},
+				],
+			},
+			{ reviewFindings: [] },
+		);
+
+		expect(merged.reviewFindings).toEqual([]);
 	});
 
 	test("final review and reviewer decision payloads can carry packet metadata", () => {

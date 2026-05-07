@@ -98,24 +98,26 @@ export function isReviewScopeAccountingRequired(
 	return plan?.goalMode === "review" || plan?.goalMode === "review_and_fix";
 }
 
+function scopeTargetsForFileTargets(
+	fileTargets: readonly string[] | undefined,
+): ReviewScopeTarget[] {
+	return (fileTargets ?? [])
+		.map(normalizeScopeText)
+		.filter(Boolean)
+		.map((target) => ({
+			id: scopeIdForFileTarget(target),
+			kind: scopeTargetKindForFileTarget(target),
+			target,
+		}));
+}
+
 export function declaredReviewScopeForFeature(
 	feature: Pick<Feature, "fileTargets" | "reviewScope">,
 ): ReviewScopeTarget[] {
-	const explicitScope = feature.reviewScope ?? [];
-	if (explicitScope.length > 0) {
-		return dedupeScopeTargets(explicitScope);
-	}
-
-	return dedupeScopeTargets(
-		(feature.fileTargets ?? [])
-			.map(normalizeScopeText)
-			.filter(Boolean)
-			.map((target) => ({
-				id: scopeIdForFileTarget(target),
-				kind: scopeTargetKindForFileTarget(target),
-				target,
-			})),
-	);
+	return dedupeScopeTargets([
+		...(feature.reviewScope ?? []),
+		...scopeTargetsForFileTargets(feature.fileTargets),
+	]);
 }
 
 export function declaredReviewScopeForPlan(
@@ -148,6 +150,27 @@ export function validatePlanReviewScopeDeclaration(plan: Plan): string | null {
 		}
 	}
 	for (const feature of plan.features) {
+		const featureScopesById = new Map<string, ReviewScopeTarget>();
+		for (const rawScope of [
+			...(feature.reviewScope ?? []),
+			...scopeTargetsForFileTargets(feature.fileTargets),
+		]) {
+			const scope = dedupeScopeTargets([rawScope])[0];
+			if (!scope) {
+				continue;
+			}
+			const priorFeatureScope = featureScopesById.get(scope.id);
+			if (!priorFeatureScope) {
+				featureScopesById.set(scope.id, scope);
+				continue;
+			}
+			if (
+				priorFeatureScope.kind !== scope.kind ||
+				priorFeatureScope.target !== scope.target
+			) {
+				return `Review scope target id '${scope.id}' is declared for multiple distinct targets; reviewScope ids must not collide with fileTargets-derived scope ids.`;
+			}
+		}
 		for (const scope of declaredReviewScopeForFeature(feature)) {
 			const priorScope = effectiveScopesById.get(scope.id);
 			if (!priorScope) {

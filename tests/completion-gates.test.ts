@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildSessionMutationAction } from "../src/runtime/application/session-actions";
 import type { Session, WorkerResult } from "../src/runtime/schema";
 import { createSession } from "../src/runtime/session";
 import {
@@ -772,6 +773,178 @@ describe("completion gates", () => {
 			true,
 		);
 		expect(complete.ok).toBe(true);
+	});
+
+	test("explicit reviewScope adds to fileTargets instead of narrowing final review accounting", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/runtime/session.ts"],
+					reviewScope: [
+						{
+							id: "domain:runtime",
+							kind: "domain" as const,
+							target: "runtime",
+							description: "Review runtime domain behavior.",
+						},
+					],
+				},
+			],
+		};
+		const applied = applyPlan(createSession("Review runtime session"), plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const domainLedgerEntry: NonNullable<
+			WorkerResult["reviewScopeLedger"]
+		>[number] = {
+			scopeId: "domain:runtime",
+			status: "reviewed_no_findings",
+			evidenceRefs: ["src/runtime/session.ts"],
+			validationRefs: ["bun test"],
+			residualRisk: "No known residual risk.",
+		};
+		const domainOnlyReview = recordReviewerDecision(started.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: [domainLedgerEntry],
+		});
+		expect(domainOnlyReview.ok).toBe(false);
+		if (!domainOnlyReview.ok) {
+			expect(domainOnlyReview.message).toContain(
+				"file_target:src/runtime/session.ts",
+			);
+		}
+
+		const completeReview = recordReviewerDecision(started.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: [
+				domainLedgerEntry,
+				scopeLedgerEntry("file_target:src/runtime/session.ts"),
+			],
+		});
+		expect(completeReview.ok).toBe(true);
+	});
+
+	test("review-and-fix record_planning_context cannot clear planned findings during an active run", () => {
+		const firstFindingRef = "review: setup runtime defect";
+		const secondFindingRef = "review: execution adapter defect";
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{ ...basePlan.features[0], fileTargets: ["src/runtime/session.ts"] },
+			],
+		};
+		const applied = applyPlan(createSession("Review and fix runtime"), plan, {
+			reviewFindings: [
+				knownReviewFinding(firstFindingRef),
+				knownReviewFinding(secondFindingRef),
+			],
+		});
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const session = started.value.session;
+
+		const mutate = buildSessionMutationAction("record_planning_context", {
+			reviewFindings: [],
+		});
+		const mutation = mutate.run(session);
+		expect(mutation.ok).toBe(false);
+		if (!mutation.ok) {
+			expect(mutation.message).toContain(
+				"cannot remove review_and_fix findings",
+			);
+		}
+		expect(
+			session.planning.reviewFindings.map((finding) => finding.findingRef),
+		).toEqual([firstFindingRef, secondFindingRef]);
+	});
+
+	test("final review-and-fix completion requires every planned finding closure", () => {
+		const firstFindingRef = "review: setup runtime defect";
+		const secondFindingRef = "review: execution adapter defect";
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/runtime/session.ts"],
+				},
+			],
+		};
+		const applied = applyPlan(createSession("Review and fix runtime"), plan, {
+			reviewFindings: [
+				knownReviewFinding(firstFindingRef),
+				knownReviewFinding(secondFindingRef),
+			],
+		});
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+
+		const finalScopeLedger = scopeLedgerForTargets(["src/runtime/session.ts"], {
+			"src/runtime/session.ts": {
+				status: "finding_closed",
+				findingRefs: [firstFindingRef],
+			},
+		});
+		const reviewed = recordReviewerDecision(started.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: finalScopeLedger,
+		});
+		expect(reviewed.ok).toBe(true);
+		if (!reviewed.ok) return;
+
+		const partialClosure = validateSuccessfulCompletion(
+			reviewed.value,
+			createWorkerResult(featureId, {
+				validationScope: "broad",
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: firstFindingRef }),
+				],
+				reviewScopeLedger: finalScopeLedger,
+				finalReview: createFinalReviewPayload(),
+			}),
+			featureId,
+			true,
+		);
+		expect(partialClosure.ok).toBe(false);
+		if (!partialClosure.ok) {
+			expect(partialClosure.recovery?.errorCode).toBe(
+				"missing_review_finding_closure",
+			);
+			expect(partialClosure.message).toContain(secondFindingRef);
+		}
 	});
 
 	test("final review payload derives behavior risks from declared review scope", () => {

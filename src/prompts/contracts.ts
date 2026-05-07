@@ -26,6 +26,7 @@ const FLOW_PLAN_CONTRACT_BASE = `Persist a plan with:
 
 Plan rules:
 - review/review_and_fix plans must declare review scope through reviewScope or fileTargets for every target/domain the runtime must account.
+- reviewScope adds domain/surface targets; it does not narrow or replace fileTargets unless fileTargets are intentionally omitted.
 - Use goalMode: review_and_fix only when concrete findings already exist and are recorded in planning.reviewFindings; broad review-and-fix/codebase-review goals with no findings must start as goalMode: review for audit/discovery, then replan review_and_fix after findings are recorded.
 
 Record planning context separately via flow_plan_context_record or flow_plan_apply({ plan, planning: ... }) when needed — not inside \`plan\`.
@@ -100,6 +101,7 @@ Status rules:
 - when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending
 - for review_and_fix work, include reviewFindingClosures before claiming success; each original finding must have a stable findingRef, status, code fixRefs, testRefs, validationRefs that match validationRun.command values, and residualRisk
+- final review_and_fix completion must close every planning.reviewFindings findingRef, including findings closed by earlier completed features
 - for review/review_and_fix completion, account for every declared review scope target/domain using reviewScopeLedger entries with exactly one status per scopeId: reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked
 - reviewScopeLedger entries must include evidenceRefs and residualRisk; use findingRefs/validationRefs when applicable
 - reviewScopeLedger is runtime scope accounting, not a requirement to edit every declared target file
@@ -166,6 +168,7 @@ Reviewer rules:
 - for scope: final, when validation is used to justify success, map each relied-on command through validationCoverage and align commands with recorded validation evidence
 - for scope: final, keep remainingGaps empty only when every applicable behavior class is explicitly checked as passed or not_applicable
 - for scope: final, when reviewContextPack is present, keep it grounded: reviewContextPack.changedFiles should map to reviewed changed artifacts, reviewContextPack.includedContext should capture connected context (not duplicate changed files only), and reviewContextPack.reviewedSurfaces should match reviewedSurfaces
+- for scope: final, when reviewContextPack.coverageGaps is non-empty, carry those gaps into remainingGaps and include suggestedValidation unless the pack already supplies it
 - for scope: final, distinguish directly changed files from connected context in summary/integrationChecks/regressionChecks/remainingGaps, and use remainingGaps to report uncovered product paths, missing or weak test oracles, and validation limits
 - for scope: final, set evidenceRefs.changedArtifacts to actual changed artifact paths you reviewed and evidenceRefs.validationCommands to actual validation commands you relied on
 - feature-scope evidencePackets are compact packet references; final-scope evidencePackets may include full packet metadata, but neither replaces concrete changed path or validation evidence

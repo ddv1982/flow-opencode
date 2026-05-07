@@ -17,6 +17,7 @@ const sourcemapPath = join(projectRoot, "dist", "index.js.map");
 const bundleText = readFileSync(distPath, "utf8");
 const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
+const BUNDLE_SIZE_BUDGET_BYTES = 724992; // 708 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
@@ -123,7 +124,7 @@ async function main() {
 				plugin.tool.flow_status.__mockTag === "flow-bundle-sanity-mock-v1",
 		};
 
-		if (report.sizeBytes > 720896) {
+		if (report.sizeBytes > BUNDLE_SIZE_BUDGET_BYTES) {
 			throw new Error(`Bundle too large: ${report.sizeBytes} bytes`);
 		}
 		if (!report.hasExternalPeerImport) {

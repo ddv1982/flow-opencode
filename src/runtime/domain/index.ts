@@ -30,6 +30,7 @@ export {
 } from "./plan-graph-validation";
 export { selectProjectedFeatureSubset } from "./plan-projection";
 export {
+	describeReviewFindingsMutationFailure,
 	mergeEvidencePackets,
 	mergePlanningContext,
 } from "./planning-context";
@@ -41,6 +42,11 @@ export {
 	reviewContextPackHasSurfaceEvidence,
 	surfacesForReviewDiscoveryReason,
 } from "./review-content-discovery";
+export {
+	describeReviewFindingClosureLedgerFailure,
+	type ReviewFindingClosureEvidence,
+	type ReviewFindingClosureValidationContext,
+} from "./review-finding-closure-policy";
 export {
 	closedReviewFindingRefsForCompletion,
 	declaredReviewScopeForCompletion,

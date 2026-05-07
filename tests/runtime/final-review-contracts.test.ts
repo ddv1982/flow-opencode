@@ -185,6 +185,42 @@ describe("runtime final review contracts", () => {
 
 		expect(coverageFailure).toBeNull();
 
+		const missingCoverageGapFailure = describeFinalReviewCoverageFailure(
+			session,
+			{
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				validationRun: [
+					{
+						command: "bun test tests/runtime/final-review-contracts.test.ts",
+					},
+				],
+			},
+			{
+				reviewDepth: "broad",
+				reviewedSurfaces: [
+					"changed_files",
+					"integration_points",
+					"shared_surfaces",
+					"validation_evidence",
+					"tests",
+				],
+				evidenceSummary:
+					"Reviewed changed files, connected context, and validation evidence.",
+				validationAssessment:
+					"Targeted runtime review contract validation passed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: [
+						"bun test tests/runtime/final-review-contracts.test.ts",
+					],
+				},
+				reviewContextPack,
+			},
+		);
+		expect(missingCoverageGapFailure).toContain(
+			"must carry reviewContextPack coverageGaps into remainingGaps",
+		);
+
 		expect(
 			describeFinalReviewCoverageFailure(
 				session,
@@ -217,6 +253,76 @@ describe("runtime final review contracts", () => {
 		).toContain(
 			"must reflect reviewContextPack reviewedSurfaces in reviewedSurfaces",
 		);
+	});
+
+	test("treats whitespace-only suggestedValidation as missing for coverage gaps", () => {
+		const session = createSession("Review runtime session completion");
+		const gap = "Prompt integration remains uncovered.";
+		const reviewContextPack = buildReviewContextPack({
+			task: "Review runtime session completion",
+			changedFiles: ["src/runtime/session.ts"],
+			coverageGaps: [gap],
+		});
+		const worker = {
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [
+				{ command: "bun test tests/runtime/final-review-contracts.test.ts" },
+			],
+		};
+
+		const missingSuggestedValidation = describeFinalReviewCoverageFailure(
+			session,
+			worker,
+			{
+				reviewDepth: "broad",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Reviewed changed runtime files and related context.",
+				validationAssessment: "Validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: [
+						"bun test tests/runtime/final-review-contracts.test.ts",
+					],
+				},
+				remainingGaps: [gap],
+				suggestedValidation: ["   "],
+				reviewContextPack,
+			},
+		);
+		expect(missingSuggestedValidation).toContain(
+			"must include suggestedValidation when reviewContextPack records coverageGaps",
+		);
+
+		const withSuggestedValidation = describeFinalReviewCoverageFailure(
+			session,
+			worker,
+			{
+				reviewDepth: "broad",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Reviewed changed runtime files and related context.",
+				validationAssessment: "Validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: [
+						"bun test tests/runtime/final-review-contracts.test.ts",
+					],
+				},
+				remainingGaps: [gap],
+				suggestedValidation: [
+					"bun test tests/runtime/final-review-contracts.test.ts",
+				],
+				reviewContextPack,
+			},
+		);
+		expect(withSuggestedValidation).toBeNull();
 	});
 
 	test("fails final review coverage for ungrounded review context pack surfaces", () => {
