@@ -1,7 +1,10 @@
 import { CORE_ACTION_REGISTRY, type CoreActionName } from "../../core/registry";
-import { FLOW_HOST_TOOL_SURFACE_DESCRIPTORS } from "./tool-surface/descriptors";
+import {
+	OPENCODE_TOOL_REGISTRY,
+	openCodeToolDescription as registryToolDescription,
+} from "./tool-surface/tool-registry";
 
-// NOTE: kept as *.generated.ts for import stability; projections are descriptor-derived
+// NOTE: kept as *.generated.ts for import stability; projections are registry-derived
 // and parity-tested in tests/descriptor-family-parity.test.ts.
 
 export type OpenCodeToolProjection = {
@@ -19,27 +22,29 @@ const CORE_ACTIONS_BY_NAME = new Map(
 );
 
 function toOpenCodeToolProjection(
-	descriptor: (typeof FLOW_HOST_TOOL_SURFACE_DESCRIPTORS)[number],
+	entry: (typeof OPENCODE_TOOL_REGISTRY)[number],
 ): OpenCodeToolProjection {
 	const projection: OpenCodeToolProjection = {
-		toolName: descriptor.hostToolName,
-		hostDescription: descriptor.hostDescription,
+		toolName: entry.toolName,
+		hostDescription: entry.hostDescription,
 	};
 
-	if (descriptor.runtimeActionBinding.kind !== "none") {
-		projection.runtimeAction = descriptor.runtimeActionBinding.name;
+	if (entry.runtimeActionBinding.kind !== "none") {
+		projection.runtimeAction = entry.runtimeActionBinding.name;
 	}
-	if (descriptor.coreAction) {
-		projection.coreAction = descriptor.coreAction;
+	if (entry.coreAction) {
+		projection.coreAction = entry.coreAction;
 	}
-	if (descriptor.promptGuidance) {
-		projection.definitionGuidance = descriptor.promptGuidance;
+	const definitionGuidance =
+		"definitionGuidance" in entry ? entry.definitionGuidance : undefined;
+	if (definitionGuidance) {
+		projection.definitionGuidance = definitionGuidance;
 	}
 
 	return projection;
 }
 
-export const OPENCODE_TOOL_PROJECTIONS = FLOW_HOST_TOOL_SURFACE_DESCRIPTORS.map(
+export const OPENCODE_TOOL_PROJECTIONS = OPENCODE_TOOL_REGISTRY.map(
 	toOpenCodeToolProjection,
 );
 
@@ -58,11 +63,7 @@ export function getOpenCodeToolProjection(
 }
 
 export function openCodeToolDescription(toolName: string): string {
-	const projection = getOpenCodeToolProjection(toolName);
-	if (!projection) {
-		throw new Error(`Missing OpenCode tool projection for '${toolName}'.`);
-	}
-	return projection.hostDescription;
+	return registryToolDescription(toolName);
 }
 
 export function openCodeToolCoreSummary(toolName: string): string | null {

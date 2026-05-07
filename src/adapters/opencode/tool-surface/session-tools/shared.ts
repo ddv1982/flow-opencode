@@ -4,9 +4,9 @@
  * policy in next-command-policy.ts.
  */
 import {
-	executeDispatchedSessionWorkspaceAction,
+	executeFlowCoreCommand,
 	inspectWorkspaceContext,
-	runDispatchedSessionReadAction,
+	runFlowCoreQuery,
 	type SessionReadActionName,
 	type SessionReadPayloadMap,
 	type SessionReadValueMap,
@@ -33,7 +33,8 @@ export async function readToolSessionValue<Name extends SessionReadActionName>(
 	name: Name,
 	payload: SessionReadPayloadMap[Name],
 ): Promise<SessionReadValueMap[Name]> {
-	return (await runDispatchedSessionReadAction(context, name, payload)).value;
+	const result = await runFlowCoreQuery(context, name, payload);
+	return result.value;
 }
 
 export async function executeToolWorkspaceAction<
@@ -44,5 +45,5 @@ export async function executeToolWorkspaceAction<
 	payload: SessionWorkspacePayloadMap[Name],
 ): Promise<string> {
 	await ensureMutableWorkspacePermission(context);
-	return executeDispatchedSessionWorkspaceAction(context, name, payload);
+	return executeFlowCoreCommand(context, name, payload);
 }

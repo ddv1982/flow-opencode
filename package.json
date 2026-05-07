@@ -1,95 +1,95 @@
 {
-  "name": "opencode-plugin-flow",
-  "version": "2.0.16",
-  "description": "Stateful planning and execution workflow plugin for OpenCode",
-  "type": "module",
-  "main": "dist/index.js",
-  "exports": {
-    ".": "./dist/index.js"
-  },
-  "files": [
-    "dist",
-    "LICENSE",
-    "README.md",
-    "CHANGELOG.md"
-  ],
-  "scripts": {
-    "build": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --minify-syntax --minify-whitespace --drop=console --sourcemap=external ./src/index.ts",
-    "bench": "bun run ./bench/index.ts",
-    "bench:smoke": "bun run ./bench/index.ts -- --filter transitions --warmup 0 --iterations 3",
-    "bench:gate": "node ./scripts/cross-area/bench-gate.mjs",
-    "gate:completion-lane": "bun run check:completion-lane",
-    "check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
-    "check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
-    "check:architecture-seams": "node ./scripts/cross-area/architecture-seams.mjs",
-    "check:architecture-seams:enforce": "FLOW_ARCH_SEAMS_MODE=enforce node ./scripts/cross-area/architecture-seams.mjs",
-    "check:release-hygiene": "node ./scripts/cross-area/release-hygiene.mjs",
-    "check:fresh-surfaces": "node ./scripts/cross-area/fresh-surface-terminology.mjs",
-    "check:pack-invariants": "node ./scripts/cross-area/pack-invariants.mjs",
-    "check:generated-drift": "bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun test --test-name-pattern 'descriptor family parity'", 
-    "check:boundary-report": "node ./scripts/cross-area/boundary-violations-report.mjs",
-    "report:runtime-simplification-metrics": "node ./scripts/cross-area/runtime-simplification-metrics.mjs",
-    "check:cold-start-budget": "node ./scripts/cross-area/cold-start-budget.mjs",
-    "report:prompt-eval": "bun run ./scripts/cross-area/prompt-eval-summary.ts",
-    "eval:review-capture": "bun run ./scripts/cross-area/review-prompt-capture.ts",
-    "eval:review-capture:check": "bun run ./scripts/cross-area/review-prompt-capture.ts -- --check",
-    "eval:prompt-capture": "bun run ./scripts/cross-area/prompt-mode-capture.ts",
-    "eval:prompt-capture:check": "bun run ./scripts/cross-area/prompt-mode-capture.ts -- --check",
-    "deadcode": "knip --include files,dependencies",
-    "lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
-    "test": "bun test",
-    "test:fast": "bun test tests/runtime/workflow-core-reducer.test.ts tests/replay/property-invariants.test.ts tests/runtime/semantic-invariants.test.ts",
-    "test:deep": "bun run test && bun run test:replay && bun run test:randomized",
-    "test:replay": "bun test tests/replay tests/runtime/workflow-persistence.test.ts",
-    "test:ci": "bun run build && bun run test:randomized",
-    "test:randomized": "bun test --randomize --timeout 30000",
-    "test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
-    "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate",
-    "install:opencode": "bun run ./src/install-opencode.ts",
-    "uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
-  },
-  "keywords": [
-    "opencode",
-    "plugin",
-    "workflow",
-    "planning",
-    "execution"
-  ],
-  "author": "Douwe de Vries",
-  "license": "MIT",
-  "peerDependencies": {
-    "@opencode-ai/plugin": "^1.3.10"
-  },
-  "dependencies": {
-    "zod": "4.1.8"
-  },
-  "devDependencies": {
-    "@opencode-ai/plugin": "^1.3.10",
-    "@biomejs/biome": "^2.2.6",
-    "bun-types": "latest",
-    "knip": "^5.63.1",
-    "mitata": "^1.0.34",
-    "typescript": "^6.0.2"
-  },
-  "knip": {
-    "entry": [
-      "src/index.ts",
-      "tests/**/*.test.ts",
-      "tests/**/*.test-d.ts",
-      "bench/**/*.ts",
-      "scripts/**/*.mjs",
-      "scripts/**/*.ts"
-    ],
-    "project": [
-      "src/**/*.ts",
-      "tests/**/*.ts",
-      "bench/**/*.ts",
-      "scripts/**/*.mjs",
-      "scripts/**/*.ts"
-    ],
-    "ignore": [
-      "src/prompts/generated/index.ts"
-    ]
-  }
+	"name": "opencode-plugin-flow",
+	"version": "2.0.17",
+	"description": "Stateful planning and execution workflow plugin for OpenCode",
+	"type": "module",
+	"main": "dist/index.js",
+	"exports": {
+		".": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"LICENSE",
+		"README.md",
+		"CHANGELOG.md"
+	],
+	"scripts": {
+		"build": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --minify-syntax --minify-whitespace --drop=console --sourcemap=external ./src/index.ts",
+		"bench": "bun run ./bench/index.ts",
+		"bench:smoke": "bun run ./bench/index.ts -- --filter transitions --warmup 0 --iterations 3",
+		"bench:gate": "node ./scripts/cross-area/bench-gate.mjs",
+		"gate:completion-lane": "bun run check:completion-lane",
+		"check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
+		"check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
+		"check:architecture-seams": "node ./scripts/cross-area/architecture-seams.mjs",
+		"check:architecture-seams:enforce": "FLOW_ARCH_SEAMS_MODE=enforce node ./scripts/cross-area/architecture-seams.mjs",
+		"check:release-hygiene": "node ./scripts/cross-area/release-hygiene.mjs",
+		"check:fresh-surfaces": "node ./scripts/cross-area/fresh-surface-terminology.mjs",
+		"check:pack-invariants": "node ./scripts/cross-area/pack-invariants.mjs",
+		"check:generated-drift": "bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun test --test-name-pattern 'descriptor family parity'",
+		"check:boundary-report": "node ./scripts/cross-area/boundary-violations-report.mjs",
+		"report:runtime-simplification-metrics": "node ./scripts/cross-area/runtime-simplification-metrics.mjs",
+		"check:cold-start-budget": "node ./scripts/cross-area/cold-start-budget.mjs",
+		"report:prompt-eval": "bun run ./scripts/cross-area/prompt-eval-summary.ts",
+		"eval:review-capture": "bun run ./scripts/cross-area/review-prompt-capture.ts",
+		"eval:review-capture:check": "bun run ./scripts/cross-area/review-prompt-capture.ts -- --check",
+		"eval:prompt-capture": "bun run ./scripts/cross-area/prompt-mode-capture.ts",
+		"eval:prompt-capture:check": "bun run ./scripts/cross-area/prompt-mode-capture.ts -- --check",
+		"deadcode": "knip --include files,dependencies",
+		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
+		"test": "bun test",
+		"test:fast": "bun test tests/runtime/semantic-invariants.test.ts tests/runtime/final-completion-gates.test.ts",
+		"test:deep": "bun run test && bun run test:replay && bun run test:randomized",
+		"test:replay": "bun test tests/runtime/semantic-invariants.test.ts tests/runtime/final-completion-gates.test.ts",
+		"test:ci": "bun run build && bun run test:randomized",
+		"test:randomized": "bun test --randomize --timeout 30000",
+		"test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
+		"typecheck": "tsc --noEmit",
+		"check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate",
+		"install:opencode": "bun run ./src/install-opencode.ts",
+		"uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
+	},
+	"keywords": [
+		"opencode",
+		"plugin",
+		"workflow",
+		"planning",
+		"execution"
+	],
+	"author": "Douwe de Vries",
+	"license": "MIT",
+	"peerDependencies": {
+		"@opencode-ai/plugin": "^1.3.10"
+	},
+	"dependencies": {
+		"zod": "4.1.8"
+	},
+	"devDependencies": {
+		"@opencode-ai/plugin": "^1.3.10",
+		"@biomejs/biome": "^2.2.6",
+		"bun-types": "latest",
+		"knip": "^5.63.1",
+		"mitata": "^1.0.34",
+		"typescript": "^6.0.2"
+	},
+	"knip": {
+		"entry": [
+			"src/index.ts",
+			"tests/**/*.test.ts",
+			"tests/**/*.test-d.ts",
+			"bench/**/*.ts",
+			"scripts/**/*.mjs",
+			"scripts/**/*.ts"
+		],
+		"project": [
+			"src/**/*.ts",
+			"tests/**/*.ts",
+			"bench/**/*.ts",
+			"scripts/**/*.mjs",
+			"scripts/**/*.ts"
+		],
+		"ignore": [
+			"src/prompts/generated/index.ts"
+		]
+	}
 }

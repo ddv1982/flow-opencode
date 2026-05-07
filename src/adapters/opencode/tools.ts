@@ -1,6 +1,6 @@
-import { OPENCODE_TOOL_NAMES } from "./tool-projections.generated";
 import { createRuntimeTools } from "./tool-surface/runtime-tools";
 import { createSessionTools } from "./tool-surface/session-tools";
+import { OPENCODE_TOOL_NAMES_FROM_REGISTRY } from "./tool-surface/tool-registry";
 
 type PluginLogContext = {
 	client?: {
@@ -27,18 +27,20 @@ function logPluginEvent(
 
 function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 	const toolNames = new Set(Object.keys(tools));
-	const projectedNames = new Set<string>(OPENCODE_TOOL_NAMES);
-	const missing = OPENCODE_TOOL_NAMES.filter((name) => !toolNames.has(name));
+	const projectedNames = new Set<string>(OPENCODE_TOOL_NAMES_FROM_REGISTRY);
+	const missing = OPENCODE_TOOL_NAMES_FROM_REGISTRY.filter(
+		(name) => !toolNames.has(name),
+	);
 	const extra = [...toolNames].filter((name) => !projectedNames.has(name));
 
 	if (missing.length > 0 || extra.length > 0) {
 		throw new Error(
 			[
 				missing.length > 0
-					? `Missing OpenCode tool projection(s): ${missing.join(", ")}`
+					? `Missing OpenCode registry tool(s): ${missing.join(", ")}`
 					: null,
 				extra.length > 0
-					? `Unprojected OpenCode tool(s): ${extra.join(", ")}`
+					? `Unregistered OpenCode tool(s): ${extra.join(", ")}`
 					: null,
 			]
 				.filter((message): message is string => message !== null)
@@ -47,7 +49,7 @@ function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 	}
 
 	return Object.fromEntries(
-		OPENCODE_TOOL_NAMES.map((name) => [name, tools[name]]),
+		OPENCODE_TOOL_NAMES_FROM_REGISTRY.map((name) => [name, tools[name]]),
 	) as T;
 }
 

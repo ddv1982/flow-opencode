@@ -2,15 +2,11 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdirSync, statSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { join } from "node:path";
-import { getWorkflowProjectionFeaturePath } from "../src/persistence";
 import {
 	getCompletedSessionPath,
 	getFeatureDocPath,
 	getFlowDir,
 	getSessionPath,
-	getWorkflowCheckpointPath,
-	getWorkflowEventLogPath,
-	getWorkflowProjectionDir,
 	InvalidFlowPathInputError,
 } from "../src/runtime/paths";
 import { saveSession } from "../src/runtime/session";
@@ -150,28 +146,6 @@ describe("path traversal hardening", () => {
 			).toThrow(InvalidFlowPathInputError);
 		}
 
-		for (const sessionId of [
-			"..",
-			"../escape",
-			"/tmp/x",
-			"a/b",
-			"a\\b",
-			"safe..id",
-			"..hidden",
-			"name..",
-			"a..b..c",
-		]) {
-			expect(() => getWorkflowEventLogPath(worktree, sessionId)).toThrow(
-				InvalidFlowPathInputError,
-			);
-			expect(() => getWorkflowCheckpointPath(worktree, sessionId)).toThrow(
-				InvalidFlowPathInputError,
-			);
-			expect(() => getWorkflowProjectionDir(worktree, sessionId)).toThrow(
-				InvalidFlowPathInputError,
-			);
-		}
-
 		const validActiveSessionPath = getSessionPath(worktree, "safe-session");
 		const validStoredSessionPath = getSessionPath(
 			worktree,
@@ -186,15 +160,6 @@ describe("path traversal hardening", () => {
 			worktree,
 			"safe-session",
 			"safe-feature",
-		);
-		const validEventLogPath = getWorkflowEventLogPath(worktree, "safe-session");
-		const validCheckpointPath = getWorkflowCheckpointPath(
-			worktree,
-			"safe-session",
-		);
-		const validProjectionDir = getWorkflowProjectionDir(
-			worktree,
-			"safe-session",
 		);
 		expect(validActiveSessionPath).toBe(
 			join(worktree, ".flow", "active", "safe-session", "session.json"),
@@ -222,33 +187,6 @@ describe("path traversal hardening", () => {
 				"safe-feature.md",
 			),
 		);
-		expect(validEventLogPath).toBe(
-			join(worktree, ".flow", "events", "safe-session.jsonl"),
-		);
-		expect(validCheckpointPath).toBe(
-			join(worktree, ".flow", "checkpoints", "safe-session.json"),
-		);
-		expect(validProjectionDir).toBe(
-			join(worktree, ".flow", "projections", "safe-session"),
-		);
-		expect(
-			getWorkflowProjectionFeaturePath(
-				worktree,
-				"safe-session",
-				"safe-feature",
-			),
-		).toBe(
-			join(
-				worktree,
-				".flow",
-				"projections",
-				"safe-session",
-				"docs",
-				"features",
-				"safe-feature.md",
-			),
-		);
-
 		expect(getSessionPath(worktree, "dot.dot")).toBe(
 			join(worktree, ".flow", "active", "dot.dot", "session.json"),
 		);

@@ -1,6 +1,27 @@
 export { InvalidFlowWorkspaceRootError } from "../workspace-root";
 export type { DoctorCheck, DoctorCheckStatus } from "./doctor-checks";
 export { buildDoctorReport } from "./doctor-report";
+export type {
+	FlowCoreCommandName,
+	FlowCoreCommandPayloadMap,
+	FlowCoreCommandResult,
+	FlowCoreCommandValueMap,
+	FlowCoreQueryName,
+	FlowCoreQueryPayloadMap,
+	FlowCoreQueryResult,
+	FlowCoreQueryValueMap,
+} from "./flow-core";
+export {
+	executeFlowCoreCommand,
+	executeFlowCoreQuery,
+	FLOW_CORE_COMMAND_NAMES,
+	FLOW_CORE_QUERY_NAMES,
+	FLOW_CORE_VNEXT_CONTRACT,
+	isFlowCoreMutationCommandName,
+	isFlowCoreWorkspaceCommandName,
+	runFlowCoreCommand,
+	runFlowCoreQuery,
+} from "./flow-core";
 export {
 	renderDoctorSummary,
 	renderSessionStatusSummary,

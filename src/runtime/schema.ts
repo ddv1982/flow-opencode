@@ -258,6 +258,7 @@ export const DeliveryPolicySchema = z.object({
 	stopRule: z.enum(STOP_RULES).default("ship_when_clean"),
 	deferAllowed: z.boolean().default(false),
 	finalReviewPolicy: z.enum(FINAL_REVIEW_POLICIES).default("detailed"),
+	strictReview: z.boolean().optional(),
 });
 
 export const ReplanRecordSchema = z.object({

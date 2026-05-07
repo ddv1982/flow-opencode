@@ -4,6 +4,7 @@ import {
 	type FinalReviewBehaviorCheck,
 	type FinalReviewValidationCoverage,
 	finalReviewBehaviorCoverageFailureReasons,
+	suppliedFinalReviewBehaviorEvidenceFailureReasons,
 } from "./final-review-behavior-risks";
 import {
 	artifactPathsForWorker,
@@ -241,14 +242,25 @@ function finalReviewCoverageFailureReasons(
 		reasons.push(detailedFailureReasonMessages[failure]);
 	}
 
-	reasons.push(
-		...finalReviewBehaviorCoverageFailureReasons(worker, {
-			...review,
-			...(isReviewScopeAccountingRequired(session.plan)
-				? { declaredReviewScope: declaredReviewScopeForPlan(session.plan) }
-				: {}),
-		}),
-	);
+	const behaviorCoverageTarget = {
+		...review,
+		declaredReviewScope: declaredReviewScopeForPlan(session.plan),
+	};
+	if (isReviewScopeAccountingRequired(session.plan)) {
+		reasons.push(
+			...finalReviewBehaviorCoverageFailureReasons(
+				worker,
+				behaviorCoverageTarget,
+			),
+		);
+	} else {
+		reasons.push(
+			...suppliedFinalReviewBehaviorEvidenceFailureReasons(
+				worker,
+				behaviorCoverageTarget,
+			),
+		);
+	}
 
 	const requiredSurfaces = deriveRequiredFinalReviewSurfaces(
 		session.execution.lastValidationRun.length > 0,

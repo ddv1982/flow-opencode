@@ -25,6 +25,16 @@ import {
 } from "../../src/runtime/transitions";
 import { samplePlan } from "../runtime-test-helpers";
 
+function strictReviewSession(goal = "Strict final review governance") {
+	const applied = applyPlan(createSession(goal), {
+		...samplePlan(),
+		deliveryPolicy: { strictReview: true },
+	});
+	expect(applied.ok).toBe(true);
+	if (!applied.ok) throw new Error("applyPlan failed");
+	return applied.value;
+}
+
 describe("runtime final review contracts", () => {
 	test("normalizes a typed review content discovery pack for final review coverage", () => {
 		const reviewContextPack = buildReviewContextPack({
@@ -1200,8 +1210,10 @@ describe("runtime final review contracts", () => {
 		expect(finalDecisionWithNeedsFix.ok).toBe(false);
 	});
 
-	test("enforces risk-triggered checked-or-gap behavior accounting", () => {
-		const session = createSession("Review soft-focus-like lifecycle behavior");
+	test("strict review enforces risk-triggered checked-or-gap behavior accounting", () => {
+		const session = strictReviewSession(
+			"Review soft-focus-like lifecycle behavior",
+		);
 		const worker = {
 			artifactsChanged: [
 				{ path: "src/shell/sessionPanels.ts" },
@@ -1397,9 +1409,9 @@ describe("runtime final review contracts", () => {
 		).toContain("gap_recorded must also list the gap in remainingGaps");
 	});
 
-	test("rejects approved final reviewer decisions when behavior coverage would fail", () => {
+	test("strict review rejects approved final reviewer decisions when behavior coverage would fail", () => {
 		const incompleteApproved = recordReviewerDecision(
-			createSession("Review source-only behavior-sensitive changes"),
+			strictReviewSession("Review source-only behavior-sensitive changes"),
 			{
 				scope: "final",
 				status: "approved",
@@ -1467,8 +1479,10 @@ describe("runtime final review contracts", () => {
 		expect(incompleteNeedsFix.ok).toBe(true);
 	});
 
-	test("requires concrete behavior accounting for source-only multi-domain app changes", () => {
-		const session = createSession("Review source-only app behavior changes");
+	test("strict review requires concrete behavior accounting for source-only multi-domain app changes", () => {
+		const session = strictReviewSession(
+			"Review source-only app behavior changes",
+		);
 		const worker = {
 			artifactsChanged: [
 				{ path: "src/shell/sessionPanels.ts" },
@@ -1719,8 +1733,8 @@ describe("runtime final review contracts", () => {
 		).toBeNull();
 	});
 
-	test("grounds behavior validation refs and rejects needs_fix coverage", () => {
-		const session = createSession(
+	test("strict review grounds behavior validation refs and rejects needs_fix coverage", () => {
+		const session = strictReviewSession(
 			"Review soft-focus-like validation grounding",
 		);
 		const worker = {
@@ -1824,8 +1838,10 @@ describe("runtime final review contracts", () => {
 		);
 	});
 
-	test("triggers behavior accounting from grounded state and lifecycle review context", () => {
-		const session = createSession("Review runtime state and lifecycle context");
+	test("strict review triggers behavior accounting from grounded state and lifecycle review context", () => {
+		const session = strictReviewSession(
+			"Review runtime state and lifecycle context",
+		);
 		const reviewContextPack = buildReviewContextPack({
 			task: "Review runtime lifecycle ordering",
 			changedFiles: ["src/runtime/transitions/execution.ts"],

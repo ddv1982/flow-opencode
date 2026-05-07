@@ -87,5 +87,6 @@ export {
 	finalReviewPolicyForPlan,
 	reviewerPurposeForScope,
 	sessionCompletionReached,
+	strictReviewGovernanceRequiredForPlan,
 	targetCompletedFeatureCount,
 } from "./workflow-policy";

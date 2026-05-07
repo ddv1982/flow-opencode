@@ -4,9 +4,8 @@ This document defines lightweight ownership and review expectations for Phase 5 
 
 ## Ownership boundaries
 
-- Core workflow semantics: `src/core/`
-- Runtime application + transitions: `src/runtime/`
-- Persistence and storage contracts: `src/persistence/`
+- Core protocol and action metadata: `src/core/`
+- Runtime application, transitions, snapshot persistence, and storage contracts: `src/runtime/`
 - OpenCode adapter/tool surface: `src/adapters/`
 - Documentation and architecture guidance: `docs/`
 - Tests and regression coverage: `tests/`
@@ -15,7 +14,7 @@ Default code owner for these areas is defined in `.github/CODEOWNERS`.
 
 ## Cross-domain review requirements
 
-When a PR changes more than one domain (for example runtime + persistence, or core + adapters), require review from maintainers responsible for each touched domain before merge.
+When a PR changes more than one domain (for example runtime + adapters, or core + prompts), require review from maintainers responsible for each touched domain before merge.
 
 Minimum expectation:
 

@@ -4,24 +4,18 @@
  * next-command routing in next-command-policy.ts.
  */
 import { tool } from "../../sdk";
-import { openCodeToolDescription } from "../../tool-projections.generated";
-
-import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowSessionCloseArgsSchema,
 	FlowSessionCloseArgsShape,
 	type ToolContext,
 } from "../schemas";
+import {
+	openCodeToolDescription,
+	openCodeToolRuntimeActionName,
+} from "../tool-registry";
 import { nextCommandForResetSession } from "./next-command-policy";
 import { executeToolWorkspaceAction, recordToolMetadata } from "./shared";
-
-export const FLOW_LIFECYCLE_TOOL_RUNTIME_BINDINGS = {
-	flow_session_close: { kind: "workspace", name: "close_session" },
-} as const satisfies Record<
-	string,
-	Extract<RuntimeActionBinding, { kind: "workspace" }>
->;
 
 export function createLifecycleSessionTools() {
 	return {
@@ -36,7 +30,7 @@ export function createLifecycleSessionTools() {
 					});
 					return executeToolWorkspaceAction(
 						context,
-						FLOW_LIFECYCLE_TOOL_RUNTIME_BINDINGS.flow_session_close.name,
+						openCodeToolRuntimeActionName("flow_session_close", "workspace"),
 						{
 							kind: input.kind,
 							...(input.summary ? { summary: input.summary } : {}),

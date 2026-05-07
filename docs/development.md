@@ -172,7 +172,7 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 
 - Runtime owns workflow semantics; prompts and docs describe them.
 - Keep live runtime persistence snapshot-primary unless a dedicated event-first migration plan proves and stages a different authority.
-- Treat core workflow/replay, event-store, checkpoint-store, generated projections, audit schemas, and adapter schema boundaries as non-deletion surfaces without import/call-graph evidence and replacement parity tests.
+- Runtime transitions and snapshot persistence are the supported workflow authority. Do not reintroduce core workflow replay, event-store, checkpoint-store, or projection-store surfaces without an explicit product requirement and replacement tests.
 - Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
 - Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed SDK-boundary change is intentional.
 - Preserve direct `tool(...)` arg shapes at the SDK boundary.
@@ -302,7 +302,7 @@ Run tests with:
 bun test
 ```
 
-Fast lane for core reducer/invariant safety checks:
+Fast lane for runtime invariant safety checks:
 
 ```bash
 bun run test:fast
@@ -314,8 +314,4 @@ Deep lane for broad coverage (default CI depth):
 bun run test:deep
 ```
 
-Phase 3 candidate integration-heavy paths to review before removal:
-
-- `tests/runtime/workflow-persistence.test.ts` (checkpoint + replay end-to-end)
-- `tests/replay/golden-event-corpus.test.ts` (golden corpus replay parity)
-- `tests/runtime/workflow-persistence.test.ts` plus `tests/replay/replay-persistence-gate.test.ts` overlap on replay-from-checkpoint behavior
+Replay/event/checkpoint/projection persistence was removed during the 2026-05-07 simplification. The supported persistence contract is active/stored/completed session snapshots plus rendered session docs.

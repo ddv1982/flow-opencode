@@ -8,6 +8,16 @@ export function finalReviewPolicyForPlan(
 	return plan?.deliveryPolicy?.finalReviewPolicy ?? "detailed";
 }
 
+export function strictReviewGovernanceRequiredForPlan(
+	plan: Plan | null | undefined,
+): boolean {
+	return (
+		plan?.goalMode === "review" ||
+		plan?.goalMode === "review_and_fix" ||
+		plan?.deliveryPolicy?.strictReview === true
+	);
+}
+
 export function reviewerPurposeForScope(
 	scope: ReviewerDecision["scope"],
 ): NonNullable<ReviewerDecision["reviewPurpose"]> {

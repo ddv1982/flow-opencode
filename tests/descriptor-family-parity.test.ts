@@ -8,19 +8,13 @@ import {
 import {
 	FLOW_HOST_TOOL_SURFACE_DESCRIPTORS,
 	FLOW_SURFACE_DESCRIPTORS,
-	type RuntimeActionBinding,
 } from "../src/adapters/opencode/tool-surface/descriptors";
 import { FLOW_TOOL_DOCS_ROWS } from "../src/adapters/opencode/tool-surface/docs-rows.generated";
-import { FLOW_EXECUTION_TOOL_RUNTIME_BINDINGS } from "../src/adapters/opencode/tool-surface/runtime-tools/execution-tools";
-import { FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS } from "../src/adapters/opencode/tool-surface/runtime-tools/planning-tools";
-import { FLOW_REVIEW_TOOL_RUNTIME_BINDINGS } from "../src/adapters/opencode/tool-surface/runtime-tools/review-tools";
 import {
 	FLOW_TOOL_PAYLOAD_SCHEMA_OWNERS,
 	FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY,
 } from "../src/adapters/opencode/tool-surface/schemas";
-import { FLOW_HISTORY_TOOL_RUNTIME_BINDINGS } from "../src/adapters/opencode/tool-surface/session-tools/history-tools";
-import { FLOW_LIFECYCLE_TOOL_RUNTIME_BINDINGS } from "../src/adapters/opencode/tool-surface/session-tools/lifecycle-tools";
-import { FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS } from "../src/adapters/opencode/tool-surface/session-tools/planning-tools";
+import { OPENCODE_TOOL_REGISTRY } from "../src/adapters/opencode/tool-surface/tool-registry";
 import { createTools } from "../src/adapters/opencode/tools";
 import { CORE_ROLE_PROTOCOLS } from "../src/core/protocols";
 import { CORE_ACTION_REGISTRY } from "../src/core/registry";
@@ -32,18 +26,6 @@ import {
 } from "../src/runtime/application";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
-
-const IMPLEMENTATION_RUNTIME_ACTION_BINDINGS_BY_TOOL_NAME: Record<
-	string,
-	RuntimeActionBinding
-> = {
-	...FLOW_HISTORY_TOOL_RUNTIME_BINDINGS,
-	...FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS,
-	...FLOW_LIFECYCLE_TOOL_RUNTIME_BINDINGS,
-	...FLOW_PLANNING_RUNTIME_TOOL_RUNTIME_BINDINGS,
-	...FLOW_EXECUTION_TOOL_RUNTIME_BINDINGS,
-	...FLOW_REVIEW_TOOL_RUNTIME_BINDINGS,
-};
 
 const PAYLOAD_SCHEMA_OWNERS_BY_TOOL_NAME: Record<string, readonly string[]> =
 	FLOW_TOOL_PAYLOAD_SCHEMA_OWNERS;
@@ -63,11 +45,15 @@ function projectPathExists(reference: string): boolean {
 }
 
 describe("workflow surface descriptor family", () => {
-	test("keeps the OpenCode projection ordered from host tool descriptors", () => {
+	test("keeps the OpenCode projection ordered from the small tool registry", () => {
+		const registryToolNames: string[] = OPENCODE_TOOL_REGISTRY.map(
+			(entry) => entry.toolName,
+		);
 		const descriptorToolNames = FLOW_HOST_TOOL_SURFACE_DESCRIPTORS.map(
 			(descriptor) => descriptor.hostToolName,
 		);
 
+		expect([...registryToolNames]).toEqual([...OPENCODE_TOOL_NAMES]);
 		expect(descriptorToolNames).toEqual(OPENCODE_TOOL_NAMES);
 		expect(
 			OPENCODE_TOOL_PROJECTIONS.map((projection) => projection.toolName),
@@ -180,27 +166,34 @@ describe("workflow surface descriptor family", () => {
 		}
 	});
 
-	test("keeps descriptor runtime bindings aligned with implementation dispatch bindings", () => {
-		const expectedRuntimeBoundTools = new Set(
-			FLOW_HOST_TOOL_SURFACE_DESCRIPTORS.filter(
-				(descriptor) => descriptor.runtimeActionBinding.kind !== "none",
-			).map((descriptor) => descriptor.hostToolName),
-		);
-
-		expect(
-			Object.keys(IMPLEMENTATION_RUNTIME_ACTION_BINDINGS_BY_TOOL_NAME).sort(),
-		).toEqual([...expectedRuntimeBoundTools].sort());
+	test("keeps descriptor bridge metadata registry-backed", () => {
+		const registryByToolName = new Map<
+			string,
+			(typeof OPENCODE_TOOL_REGISTRY)[number]
+		>(OPENCODE_TOOL_REGISTRY.map((entry) => [entry.toolName, entry]));
 
 		for (const descriptor of FLOW_HOST_TOOL_SURFACE_DESCRIPTORS) {
-			const implementationBinding =
-				IMPLEMENTATION_RUNTIME_ACTION_BINDINGS_BY_TOOL_NAME[
-					descriptor.hostToolName
-				];
-			if (descriptor.runtimeActionBinding.kind === "none") {
-				expect(implementationBinding).toBeUndefined();
-				continue;
+			const registryEntry = registryByToolName.get(descriptor.hostToolName);
+			if (!registryEntry) {
+				throw new Error(
+					`Missing registry entry for ${descriptor.hostToolName}`,
+				);
 			}
-			expect(implementationBinding).toEqual(descriptor.runtimeActionBinding);
+			const definitionGuidance =
+				"definitionGuidance" in registryEntry
+					? registryEntry.definitionGuidance
+					: undefined;
+
+			expect(descriptor.surfaceKind).toBe(registryEntry.surfaceKind);
+			expect(descriptor.runtimeActionBinding).toEqual(
+				registryEntry.runtimeActionBinding,
+			);
+			expect(descriptor.coreAction).toBe(registryEntry.coreAction);
+			expect(descriptor.mutationClass).toBe(registryEntry.mutationClass);
+			expect(descriptor.allowedModes).toEqual(registryEntry.allowedModes);
+			expect(descriptor.hostDescription).toBe(registryEntry.hostDescription);
+			expect(descriptor.promptGuidance).toBe(definitionGuidance);
+			expect(descriptor.docsRowMetadata).toEqual(registryEntry.docsRowMetadata);
 		}
 	});
 
@@ -219,19 +212,18 @@ describe("workflow surface descriptor family", () => {
 		}
 	});
 
-	test("keeps descriptor docs rows projected from docs metadata", () => {
-		const expectedRows = FLOW_HOST_TOOL_SURFACE_DESCRIPTORS.flatMap(
-			(descriptor) =>
-				descriptor.docsRowMetadata
-					? [
-							{
-								toolName: descriptor.hostToolName,
-								section: descriptor.docsRowMetadata.section,
-								label: descriptor.docsRowMetadata.label,
-								description: descriptor.hostDescription,
-							},
-						]
-					: [],
+	test("keeps docs rows projected from registry docs metadata", () => {
+		const expectedRows = OPENCODE_TOOL_REGISTRY.flatMap((entry) =>
+			entry.docsRowMetadata
+				? [
+						{
+							toolName: entry.toolName,
+							section: entry.docsRowMetadata.section,
+							label: entry.docsRowMetadata.label,
+							description: entry.hostDescription,
+						},
+					]
+				: [],
 		);
 
 		expect(FLOW_TOOL_DOCS_ROWS).toEqual(expectedRows);
@@ -282,27 +274,27 @@ describe("workflow surface descriptor family", () => {
 		}
 	});
 
-	test("keeps descriptor projections aligned with host projections", () => {
+	test("keeps host projections aligned with registry metadata", () => {
 		for (const projection of OPENCODE_TOOL_PROJECTIONS) {
-			const descriptor = FLOW_HOST_TOOL_SURFACE_DESCRIPTORS.find(
-				(entry) => entry.hostToolName === projection.toolName,
+			const registryEntry = OPENCODE_TOOL_REGISTRY.find(
+				(entry) => entry.toolName === projection.toolName,
 			);
-			expect(descriptor).toBeDefined();
-			expect(projection.hostDescription === descriptor?.hostDescription).toBe(
-				true,
+			if (!registryEntry) {
+				throw new Error(`Missing registry entry for ${projection.toolName}`);
+			}
+			const definitionGuidance =
+				"definitionGuidance" in registryEntry
+					? registryEntry.definitionGuidance
+					: undefined;
+
+			expect(projection.hostDescription).toBe(registryEntry.hostDescription);
+			expect(projection.definitionGuidance).toBe(definitionGuidance);
+			expect(projection.coreAction).toBe(registryEntry.coreAction ?? undefined);
+			expect(projection.runtimeAction).toBe(
+				registryEntry.runtimeActionBinding.kind === "none"
+					? undefined
+					: registryEntry.runtimeActionBinding.name,
 			);
-			expect(projection.definitionGuidance === descriptor?.promptGuidance).toBe(
-				true,
-			);
-			expect(
-				projection.coreAction === (descriptor?.coreAction ?? undefined),
-			).toBe(true);
-			expect(
-				projection.runtimeAction ===
-					(descriptor?.runtimeActionBinding.kind === "none"
-						? undefined
-						: descriptor?.runtimeActionBinding.name),
-			).toBe(true);
 		}
 	});
 

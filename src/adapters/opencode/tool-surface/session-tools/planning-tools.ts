@@ -6,8 +6,6 @@
 
 import { autoPrepareResponse } from "../../../../runtime/application";
 import { tool } from "../../sdk";
-import { openCodeToolDescription } from "../../tool-projections.generated";
-import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowAutoPrepareArgsSchema,
@@ -17,6 +15,10 @@ import {
 	type ToolContext,
 } from "../schemas";
 import {
+	openCodeToolDescription,
+	openCodeToolRuntimeActionName,
+} from "../tool-registry";
+import {
 	autoPreparePolicy,
 	nextCommandForMissingGoal,
 } from "./next-command-policy";
@@ -25,15 +27,6 @@ import {
 	readToolSessionValue,
 	recordToolMetadata,
 } from "./shared";
-
-export const FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS = {
-	flow_plan_start: { kind: "workspace", name: "plan_start" },
-	flow_auto_prepare: { kind: "read", name: "load_resumable_session" },
-} as const satisfies Record<
-	string,
-	| Extract<RuntimeActionBinding, { kind: "read" }>
-	| Extract<RuntimeActionBinding, { kind: "workspace" }>
->;
 
 export function createPlanningSessionTools() {
 	return {
@@ -49,7 +42,7 @@ export function createPlanningSessionTools() {
 					});
 					return executeToolWorkspaceAction(
 						context,
-						FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS.flow_plan_start.name,
+						openCodeToolRuntimeActionName("flow_plan_start", "workspace"),
 						{
 							...(input.goal ? { goal: input.goal } : {}),
 							...(input.repoProfile ? { repoProfile: input.repoProfile } : {}),
@@ -69,7 +62,7 @@ export function createPlanningSessionTools() {
 				async (input, context: ToolContext) => {
 					const resumableSession = await readToolSessionValue(
 						context,
-						FLOW_PLANNING_SESSION_TOOL_RUNTIME_BINDINGS.flow_auto_prepare.name,
+						openCodeToolRuntimeActionName("flow_auto_prepare", "read"),
 						undefined,
 					);
 					const navigation = autoPreparePolicy(

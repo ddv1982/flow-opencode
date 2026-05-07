@@ -1,7 +1,7 @@
-import { FLOW_HOST_TOOL_SURFACE_DESCRIPTORS } from "./descriptors";
+import { OPENCODE_TOOL_REGISTRY } from "./tool-registry";
 
 // NOTE: kept as *.generated.ts for import stability; docs rows are
-// descriptor-derived and parity-tested in tests/docs-tool-parity.test.ts.
+// registry-derived and parity-tested in tests/docs-tool-parity.test.ts.
 
 export type FlowToolDocsRow = {
 	toolName: string;
@@ -11,14 +11,14 @@ export type FlowToolDocsRow = {
 };
 
 export const FLOW_TOOL_DOCS_ROWS: readonly FlowToolDocsRow[] =
-	FLOW_HOST_TOOL_SURFACE_DESCRIPTORS.flatMap((descriptor) =>
-		descriptor.docsRowMetadata
+	OPENCODE_TOOL_REGISTRY.flatMap((entry) =>
+		entry.docsRowMetadata
 			? [
 					{
-						toolName: descriptor.hostToolName,
-						section: descriptor.docsRowMetadata.section,
-						label: descriptor.docsRowMetadata.label,
-						description: descriptor.hostDescription,
+						toolName: entry.toolName,
+						section: entry.docsRowMetadata.section,
+						label: entry.docsRowMetadata.label,
+						description: entry.hostDescription,
 					},
 				]
 			: [],

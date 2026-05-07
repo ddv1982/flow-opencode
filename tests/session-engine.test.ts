@@ -6,9 +6,18 @@ import {
 	executeDispatchedSessionMutation,
 	executeDispatchedSessionReadAction,
 	executeDispatchedSessionWorkspaceAction,
+	executeFlowCoreCommand,
+	executeFlowCoreQuery,
+	FLOW_CORE_COMMAND_NAMES,
+	FLOW_CORE_QUERY_NAMES,
+	FLOW_CORE_VNEXT_CONTRACT,
+	isFlowCoreMutationCommandName,
+	isFlowCoreWorkspaceCommandName,
 	runDispatchedSessionMutationAction,
 	runDispatchedSessionReadAction,
 	runDispatchedSessionWorkspaceAction,
+	runFlowCoreCommand,
+	runFlowCoreQuery,
 } from "../src/runtime/application";
 import {
 	SESSION_MUTATION_ACTION_HANDLERS,
@@ -46,6 +55,25 @@ describe("session engine boundary", () => {
 		expect(Object.keys(SESSION_WORKSPACE_ACTION_HANDLERS).sort()).toEqual(
 			[...SESSION_WORKSPACE_ACTION_NAMES].sort(),
 		);
+	});
+
+	test("flow core contract exposes compact command and query catalogs", () => {
+		expect(FLOW_CORE_VNEXT_CONTRACT.transitionAuthority).toBe(
+			"src/runtime/transitions/**",
+		);
+		expect(FLOW_CORE_VNEXT_CONTRACT.persistenceMode).toBe("snapshot-first");
+		expect([...FLOW_CORE_COMMAND_NAMES].sort()).toEqual(
+			[
+				...SESSION_WORKSPACE_ACTION_NAMES,
+				...SESSION_MUTATION_ACTION_NAMES,
+			].sort(),
+		);
+		expect([...FLOW_CORE_QUERY_NAMES].sort()).toEqual(
+			[...SESSION_READ_ACTION_NAMES].sort(),
+		);
+		expect(isFlowCoreWorkspaceCommandName("plan_start")).toBe(true);
+		expect(isFlowCoreMutationCommandName("start_run")).toBe(true);
+		expect(isFlowCoreMutationCommandName("not_a_flow_command")).toBe(false);
 	});
 
 	test("dispatches named actions through the central handler map", () => {
@@ -233,6 +261,72 @@ describe("session engine boundary", () => {
 		expect(parsed.summary).toBe("Planning context recorded.");
 	});
 
+	test("flow core command facade delegates mutations through session engine persistence", async () => {
+		const baseSession = createSession("Build a compact core");
+		const savedSession = {
+			...baseSession,
+			planning: {
+				...baseSession.planning,
+				research: ["Freeze transition authority"],
+			},
+		};
+		let saved = false;
+		let synced = false;
+
+		const result = await runFlowCoreCommand(
+			{ worktree: "/tmp/project" },
+			"record_planning_context",
+			{ research: ["Freeze transition authority"] },
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async (_worktree, session) => {
+					saved = true;
+					expect(session.planning.research).toEqual([
+						"Freeze transition authority",
+					]);
+					return savedSession;
+				},
+				syncSessionArtifacts: async (_worktree, session) => {
+					synced = true;
+					expect(session).toBe(savedSession);
+				},
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		if (result.kind !== "success") return;
+		expect(saved).toBe(true);
+		expect(synced).toBe(true);
+		expect(result.actionName).toBe("record_planning_context");
+		expect(result.savedSession).toBe(savedSession);
+	});
+
+	test("flow core command facade preserves existing serialized mutation responses", async () => {
+		const baseSession = createSession("Build a compact core");
+		const savedSession = {
+			...baseSession,
+			planning: {
+				...baseSession.planning,
+				research: ["Freeze transition authority"],
+			},
+		};
+
+		const response = await executeFlowCoreCommand(
+			{ worktree: "/tmp/project" },
+			"record_planning_context",
+			{ research: ["Freeze transition authority"] },
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => savedSession,
+				syncSessionArtifacts: async () => undefined,
+			},
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("ok");
+		expect(parsed.summary).toBe("Planning context recorded.");
+	});
+
 	test("runs named dispatched read actions through the central runtime path", async () => {
 		const baseSession = createSession("Inspect history");
 
@@ -277,6 +371,76 @@ describe("session engine boundary", () => {
 			status: "ok",
 			session: baseSession,
 		});
+	});
+
+	test("flow core query facade delegates reads without mutation persistence", async () => {
+		const baseSession = createSession("Inspect history");
+
+		const result = await runFlowCoreQuery(
+			{ worktree: "/tmp/project" },
+			"load_status_session",
+			undefined,
+			{
+				loadSession: async () => baseSession,
+				listSessionHistory: async () => {
+					throw new Error("should not list history");
+				},
+				loadStoredSession: async () => {
+					throw new Error("should not load stored session");
+				},
+			},
+		);
+
+		expect(result.actionName).toBe("load_status_session");
+		expect(result.value).toBe(baseSession);
+
+		const response = await executeFlowCoreQuery(
+			{ worktree: "/tmp/project" },
+			"load_status_session",
+			undefined,
+			{
+				loadSession: async () => baseSession,
+				listSessionHistory: async () => {
+					throw new Error("should not list history");
+				},
+				loadStoredSession: async () => {
+					throw new Error("should not load stored session");
+				},
+			},
+		);
+
+		expect(response).toEqual({ status: "ok", session: baseSession });
+	});
+
+	test("flow core command facade delegates workspace commands through workspace runtime", async () => {
+		let closed = false;
+
+		const response = await executeFlowCoreCommand(
+			{ worktree: "/tmp/project" },
+			"close_session",
+			{ kind: "completed", nextCommand: "/flow-plan <goal>" },
+			{
+				loadSession: async () => null,
+				saveSessionState: async () => {
+					throw new Error("should not save session state");
+				},
+				syncSessionArtifacts: async () => undefined,
+				activateSession: async () => null,
+				closeSession: async () => {
+					closed = true;
+					return {
+						sessionId: "session-1",
+						completedTo: ".flow/completed/session-1",
+						closureKind: "completed",
+					};
+				},
+			},
+		);
+
+		const parsed = JSON.parse(response);
+		expect(closed).toBe(true);
+		expect(parsed.status).toBe("ok");
+		expect(parsed.completedSessionId).toBe("session-1");
 	});
 
 	test("runs named dispatched workspace actions through the central runtime path", async () => {

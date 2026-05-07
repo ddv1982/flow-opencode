@@ -533,6 +533,20 @@ export function behaviorValidationLedgerFailureReasons(
 	return reasons;
 }
 
+export function suppliedFinalReviewBehaviorEvidenceFailureReasons(
+	worker: FinalReviewWorkerEvidence,
+	review: FinalReviewBehaviorCoverageTarget,
+): string[] {
+	return [
+		...behaviorRefGroundingFailureReasons(worker, review),
+		...behaviorValidationLedgerFailureReasons(
+			validationCommandsForWorker(worker),
+			review,
+			[],
+		),
+	];
+}
+
 export function finalReviewBehaviorCoverageFailureReasons(
 	worker: FinalReviewWorkerEvidence,
 	review: FinalReviewBehaviorCoverageTarget,

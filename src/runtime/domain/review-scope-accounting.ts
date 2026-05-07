@@ -19,6 +19,7 @@ import {
 	sharedAreaForPath,
 } from "./final-review-coverage-paths";
 import type { ReviewContextPack } from "./review-content-discovery";
+import { strictReviewGovernanceRequiredForPlan } from "./workflow-policy";
 
 export type ReviewScopeTarget = NonNullable<Feature["reviewScope"]>[number];
 export type ReviewScopeLedgerEntry = NonNullable<
@@ -95,7 +96,7 @@ function dedupeScopeTargets(
 export function isReviewScopeAccountingRequired(
 	plan: Plan | null | undefined,
 ): boolean {
-	return plan?.goalMode === "review" || plan?.goalMode === "review_and_fix";
+	return strictReviewGovernanceRequiredForPlan(plan);
 }
 
 function scopeTargetsForFileTargets(

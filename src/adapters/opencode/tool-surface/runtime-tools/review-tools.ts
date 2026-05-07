@@ -6,8 +6,6 @@ import {
 import { ReviewReportSchema } from "../../../../audit/report-schema";
 import { toJson } from "../../../../runtime/application/workspace-runtime";
 import { tool } from "../../sdk";
-import { openCodeToolDescription } from "../../tool-projections.generated";
-import type { RuntimeActionBinding } from "../descriptors";
 import { withParsedArgs } from "../parsed-tool";
 import {
 	FlowReviewRecordFeatureArgsSchema,
@@ -18,18 +16,11 @@ import {
 	FlowReviewRenderArgsShape,
 	type ToolContext,
 } from "../schemas";
+import {
+	openCodeToolDescription,
+	openCodeToolRuntimeActionName,
+} from "../tool-registry";
 import { executeGuardedSessionMutation } from "./shared";
-
-export const FLOW_REVIEW_TOOL_RUNTIME_BINDINGS = {
-	flow_review_record_feature: {
-		kind: "mutation",
-		name: "record_feature_review",
-	},
-	flow_review_record_final: { kind: "mutation", name: "record_final_review" },
-} as const satisfies Record<
-	string,
-	Extract<RuntimeActionBinding, { kind: "mutation" }>
->;
 
 export function createReviewRuntimeTools() {
 	return {
@@ -49,7 +40,10 @@ export function createReviewRuntimeTools() {
 					});
 					return executeGuardedSessionMutation(
 						context,
-						FLOW_REVIEW_TOOL_RUNTIME_BINDINGS.flow_review_record_feature.name,
+						openCodeToolRuntimeActionName(
+							"flow_review_record_feature",
+							"mutation",
+						),
 						{ decision: input },
 					);
 				},
@@ -89,7 +83,10 @@ export function createReviewRuntimeTools() {
 					});
 					return executeGuardedSessionMutation(
 						context,
-						FLOW_REVIEW_TOOL_RUNTIME_BINDINGS.flow_review_record_final.name,
+						openCodeToolRuntimeActionName(
+							"flow_review_record_final",
+							"mutation",
+						),
 						{
 							decision: input,
 						},

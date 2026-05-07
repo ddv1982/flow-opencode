@@ -55,6 +55,9 @@ function normalizePlan(planInput: ApplyPlanInput): Plan {
 					deferAllowed: planInput.deliveryPolicy.deferAllowed ?? false,
 					finalReviewPolicy:
 						planInput.deliveryPolicy.finalReviewPolicy ?? "detailed",
+					...(planInput.deliveryPolicy.strictReview === true
+						? { strictReview: true }
+						: {}),
 				}
 			: undefined,
 		notes: planInput.notes ? [...planInput.notes] : undefined,

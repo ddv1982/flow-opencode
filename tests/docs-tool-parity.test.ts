@@ -66,22 +66,22 @@ function findDuplicates(items: string[]) {
 }
 
 describe("development docs tool parity", () => {
-	test("Current Runtime Tools matches descriptor-derived docs rows", async () => {
+	test("Current Runtime Tools matches registry-derived docs rows", async () => {
 		const markdown = await readFile(DEVELOPMENT_DOC_PATH, "utf8");
 		const documentedToolRows = extractDocumentedToolRows(markdown);
 		const documentedToolNames = documentedToolRows.map((row) => row.toolName);
 		const registeredToolNames = Object.keys(createTools({}));
-		const descriptorDocsRows = FLOW_TOOL_DOCS_ROWS.filter(
+		const registryDocsRows = FLOW_TOOL_DOCS_ROWS.filter(
 			(row) => row.section === "docs/development.md#current-runtime-tools",
 		);
-		const expectedToolNames = descriptorDocsRows.map((row) => row.toolName);
-		const descriptorLabels = [
-			...new Set(descriptorDocsRows.map((row) => row.label)),
+		const expectedToolNames = registryDocsRows.map((row) => row.toolName);
+		const registryLabels = [
+			...new Set(registryDocsRows.map((row) => row.label)),
 		];
 
-		expect(descriptorLabels).toEqual(["Default OpenCode tool surface"]);
+		expect(registryLabels).toEqual(["Default OpenCode tool surface"]);
 		expect(markdown).toContain(
-			`${descriptorLabels[0]}, in descriptor docs-row order:`,
+			`${registryLabels[0]}, in descriptor docs-row order:`,
 		);
 
 		if (documentedToolRows.length === 0) {
@@ -102,7 +102,7 @@ describe("development docs tool parity", () => {
 		const extra = documentedToolNames
 			.filter((name) => !expectedToolNames.includes(name))
 			.sort();
-		const descriptionMismatches = descriptorDocsRows
+		const descriptionMismatches = registryDocsRows
 			.filter((expectedRow) => {
 				const documentedRow = documentedToolRows.find(
 					(row) => row.toolName === expectedRow.toolName,

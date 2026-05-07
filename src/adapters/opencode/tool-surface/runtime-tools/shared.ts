@@ -1,6 +1,6 @@
 import {
-	executeDispatchedSessionMutation,
-	runDispatchedSessionMutationAction,
+	executeFlowCoreCommand,
+	runFlowCoreCommand,
 	type SessionMutationActionName,
 	type SessionMutationPayloadMap,
 	type SessionMutationResult,
@@ -32,7 +32,7 @@ export async function executeGuardedSessionMutation<
 	payload: SessionMutationPayloadMap[Name],
 ): Promise<string> {
 	await ensureMutableWorkspacePermission(context);
-	return executeDispatchedSessionMutation(context, name, payload);
+	return executeFlowCoreCommand(context, name, payload);
 }
 
 export async function runGuardedSessionMutationAction<
@@ -43,5 +43,7 @@ export async function runGuardedSessionMutationAction<
 	payload: SessionMutationPayloadMap[Name],
 ): Promise<SessionMutationResult<SessionMutationValueMap[Name]>> {
 	await ensureMutableWorkspacePermission(context);
-	return runDispatchedSessionMutationAction(context, name, payload);
+	return runFlowCoreCommand(context, name, payload) as Promise<
+		SessionMutationResult<SessionMutationValueMap[Name]>
+	>;
 }

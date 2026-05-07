@@ -20,6 +20,7 @@ function createStartedSession(options?: {
 	finalFeature?: boolean;
 	finalReviewPolicy?: "broad" | "detailed";
 	goalMode?: "implementation" | "review" | "review_and_fix";
+	strictReview?: boolean;
 	reviewerDecision?: Session["execution"]["lastReviewerDecision"];
 }): {
 	session: Session;
@@ -35,9 +36,15 @@ function createStartedSession(options?: {
 				completionPolicy: {
 					minCompletedFeatures: 1,
 				},
-				deliveryPolicy: options?.finalReviewPolicy
-					? { finalReviewPolicy: options.finalReviewPolicy }
-					: undefined,
+				deliveryPolicy:
+					options?.finalReviewPolicy || options?.strictReview
+						? {
+								...(options?.finalReviewPolicy
+									? { finalReviewPolicy: options.finalReviewPolicy }
+									: {}),
+								...(options?.strictReview ? { strictReview: true } : {}),
+							}
+						: undefined,
 				features: [basePlan.features[0]],
 			}
 		: {
@@ -80,10 +87,9 @@ function createStartedSession(options?: {
 					started.value.session,
 					options.reviewerDecision,
 				);
-				expect(reviewed.ok).toBe(true);
 				if (!reviewed.ok) {
 					throw new Error(
-						"Expected reviewer decision to record successfully in test setup.",
+						`Expected reviewer decision to record successfully in test setup: ${reviewed.message}`,
 					);
 				}
 				return reviewed.value;
@@ -616,6 +622,89 @@ describe("completion gates", () => {
 		expect(result.recovery?.errorCode).toBe(expectedErrorCode);
 		if (expectedNextCommand) {
 			expect(result.recovery?.nextCommand).toBe(expectedNextCommand);
+		}
+	});
+
+	test("non-strict final review rejects supplied behavior evidence with needs_fix", () => {
+		const { session, featureId } = createStartedSession({
+			finalFeature: true,
+			reviewerDecision: approvedFinalDecision(),
+		});
+		const result = validateSuccessfulCompletion(
+			session,
+			createWorkerResult(featureId, {
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload({
+					behaviorChecks: [
+						{
+							riskClass: "state_commit_rollback",
+							result: "needs_fix",
+							invariant:
+								"Final completion must not approve known state rollback defects.",
+							entrypointRefs: [],
+							stateOwnerRefs: [],
+							lifecycleOwnerRefs: [],
+							failurePath:
+								"A known rollback defect is still unresolved after validation.",
+							oracleRefs: [],
+							validationRefs: [],
+						},
+					],
+				}),
+			}),
+			featureId,
+			true,
+		);
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.recovery?.errorCode).toBe("failing_final_review");
+			expect(result.message).toContain(
+				"behaviorChecks[0] cannot use result needs_fix in an approved/passing final review",
+			);
+		}
+	});
+
+	test("non-strict final review rejects supplied behavior evidence with invalid refs", () => {
+		const { session, featureId } = createStartedSession({
+			finalFeature: true,
+			reviewerDecision: approvedFinalDecision(),
+		});
+		const result = validateSuccessfulCompletion(
+			session,
+			createWorkerResult(featureId, {
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload({
+					behaviorChecks: [
+						{
+							riskClass: "state_commit_rollback",
+							result: "passed",
+							invariant:
+								"Final completion only approves grounded behavior evidence.",
+							entrypointRefs: ["../secret"],
+							stateOwnerRefs: [],
+							lifecycleOwnerRefs: [],
+							failurePath:
+								"Ungrounded or unrecorded evidence cannot prove the final path.",
+							oracleRefs: [],
+							validationRefs: ["bun run missing"],
+						},
+					],
+				}),
+			}),
+			featureId,
+			true,
+		);
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.recovery?.errorCode).toBe("failing_final_review");
+			expect(result.message).toContain(
+				"behaviorChecks[0].entrypointRefs includes '../secret', which is not a safe relative path reference",
+			);
+			expect(result.message).toContain(
+				"behaviorChecks[0].validationRefs includes 'bun run missing', which was not recorded in validationRun",
+			);
 		}
 	});
 
@@ -1753,6 +1842,13 @@ describe("completion gates", () => {
 			regressionChecks: ["Checked the behavior regression oracle."],
 			remainingGaps: [],
 		};
+		const riskyReviewScopeLedger: NonNullable<
+			WorkerResult["reviewScopeLedger"]
+		> = [
+			scopeLedgerEntry("file_target:src/runtime/session.ts", {
+				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+			}),
+		];
 
 		const rejected = createStartedSession({
 			finalFeature: true,
@@ -1771,6 +1867,7 @@ describe("completion gates", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload(riskyReviewFields),
 			}),
 			rejected.featureId,
@@ -1778,13 +1875,17 @@ describe("completion gates", () => {
 		);
 		expect(missingBehavior.ok).toBe(false);
 		if (!missingBehavior.ok) {
-			expect(missingBehavior.recovery?.errorCode).toBe("failing_final_review");
+			expect(missingBehavior.recovery?.errorCode).toBe(
+				"missing_final_reviewer_decision",
+			);
 		}
 
 		const reviewerCompleteWorkerMissing = createStartedSession({
 			finalFeature: true,
+			strictReview: true,
 			reviewerDecision: createApprovedFinalReviewerDecision({
 				...riskyReviewFields,
+				reviewScopeLedger: riskyReviewScopeLedger,
 				behaviorChecks,
 				validationCoverage,
 			}),
@@ -1803,6 +1904,7 @@ describe("completion gates", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload(riskyReviewFields),
 			}),
 			reviewerCompleteWorkerMissing.featureId,
@@ -1832,6 +1934,7 @@ describe("completion gates", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload({
 					...riskyReviewFields,
 					behaviorChecks,
@@ -1850,8 +1953,10 @@ describe("completion gates", () => {
 
 		const accepted = createStartedSession({
 			finalFeature: true,
+			strictReview: true,
 			reviewerDecision: createApprovedFinalReviewerDecision({
 				...riskyReviewFields,
+				reviewScopeLedger: riskyReviewScopeLedger,
 				behaviorChecks,
 				validationCoverage,
 			}),
@@ -1870,6 +1975,7 @@ describe("completion gates", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload({
 					...riskyReviewFields,
 					behaviorChecks,
@@ -1879,6 +1985,9 @@ describe("completion gates", () => {
 			accepted.featureId,
 			accepted.wasFinalFeature,
 		);
+		if (!completed.ok) {
+			throw new Error(completed.message);
+		}
 		expect(completed.ok).toBe(true);
 
 		const sharedGap =
@@ -1900,8 +2009,10 @@ describe("completion gates", () => {
 		];
 		const gapAccepted = createStartedSession({
 			finalFeature: true,
+			strictReview: true,
 			reviewerDecision: createApprovedFinalReviewerDecision({
 				...riskyReviewFields,
+				reviewScopeLedger: riskyReviewScopeLedger,
 				remainingGaps: [sharedGap],
 				suggestedValidation: [
 					"Add an interleaving test that races two panel actions.",
@@ -1924,6 +2035,7 @@ describe("completion gates", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload({
 					...riskyReviewFields,
 					remainingGaps: [sharedGap],

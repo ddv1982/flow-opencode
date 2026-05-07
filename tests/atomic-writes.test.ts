@@ -2,23 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { open, readdir, readFile, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
-	appendWorkflowEvents,
-	createWorkflowCheckpoint,
-	getWorkflowProjectionIndexPath,
-	readWorkflowCheckpoint,
-	readWorkflowEventRecords,
-	renderWorkflowProjection,
-	resetPersistenceFsForTests,
-	setPersistenceFsForTests,
-	writeWorkflowCheckpoint,
-} from "../src/persistence";
-import {
 	getFeatureDocPath,
 	getFlowDir,
 	getIndexDocPath,
 	getSessionDir,
 	getSessionPath,
-	getWorkflowCheckpointPath,
 } from "../src/runtime/paths";
 import { renderFeatureDoc } from "../src/runtime/render-feature-sections";
 import { renderIndexDoc } from "../src/runtime/render-index-sections";
@@ -36,7 +24,6 @@ const originalRename = rename;
 
 afterEach(async () => {
 	resetSessionWorkspaceFsForTests();
-	resetPersistenceFsForTests();
 	cleanupTempDirs();
 });
 
@@ -200,146 +187,6 @@ describe("atomic writes", () => {
 		);
 		expect(syncs.some((path) => path.endsWith(".tmp"))).toBe(true);
 		expect(syncs).toContain(getSessionDir(worktree, session.id));
-	});
-
-	test("saveSession leaves event checkpoints unchanged", async () => {
-		const worktree = makeTempDir();
-		const session = sampleSession("Current checkpoint");
-		await writeWorkflowCheckpoint(
-			worktree,
-			createWorkflowCheckpoint(session, {
-				eventSequence: 7,
-				eventPrefixHash: "manual-checkpoint-prefix",
-				source: "event_replay",
-			}),
-		);
-
-		await saveSession(worktree, session);
-
-		const eventCheckpoint = await readWorkflowCheckpoint(worktree, session.id);
-		expect(eventCheckpoint?.eventSequence).toBe(7);
-		expect(eventCheckpoint?.source).toBe("event_replay");
-		expect(eventCheckpoint?.state.id).toBe(session.id);
-	});
-
-	test("saveSession does not create event checkpoints implicitly", async () => {
-		const worktree = makeTempDir();
-		const session = sampleSession("Current session persistence");
-
-		const saved = await saveSession(worktree, session);
-		const checkpoint = await readWorkflowCheckpoint(worktree, session.id);
-		const rawSession = JSON.parse(
-			await readFile(getSessionPath(worktree, session.id), "utf8"),
-		);
-
-		expect(saved.id).toBe(session.id);
-		expect(rawSession.id).toBe(session.id);
-		expect(checkpoint).toBeNull();
-	});
-
-	test("checkpoint rename failure leaves original checkpoint bytes intact", async () => {
-		const worktree = makeTempDir();
-		const session = sampleSession("Checkpoint before failure");
-		const checkpointPath = getWorkflowCheckpointPath(worktree, session.id);
-		await writeWorkflowCheckpoint(
-			worktree,
-			createWorkflowCheckpoint(session, {
-				eventSequence: 1,
-				eventPrefixHash: "manual-checkpoint-prefix",
-				source: "event_replay",
-			}),
-		);
-		const originalBytes = await readFile(checkpointPath);
-
-		setPersistenceFsForTests({
-			rename: async (from, to) => {
-				if (to === checkpointPath) {
-					throw new Error("injected checkpoint rename failure");
-				}
-				return originalRename(from, to);
-			},
-		});
-
-		await expect(
-			writeWorkflowCheckpoint(
-				worktree,
-				createWorkflowCheckpoint(
-					{ ...session, goal: "Checkpoint after failure" },
-					{
-						eventSequence: 2,
-						eventPrefixHash: "manual-checkpoint-prefix",
-						source: "event_replay",
-					},
-				),
-			),
-		).rejects.toThrow("injected checkpoint rename failure");
-
-		const currentBytes = await readFile(checkpointPath);
-		expect(Buffer.compare(currentBytes, originalBytes)).toBe(0);
-	});
-
-	test("concurrent event appends serialize without sequence corruption", async () => {
-		const worktree = makeTempDir();
-		const sessionId = "append-sequence-session";
-		await appendWorkflowEvents(worktree, sessionId, [
-			{
-				type: "workflow_started",
-				sessionId,
-				goal: "Concurrent event append baseline",
-				recordedAt: "2026-05-03T12:00:00.000Z",
-			},
-		]);
-
-		await Promise.all(
-			Array.from({ length: 16 }, (_, index) =>
-				appendWorkflowEvents(worktree, sessionId, [
-					{
-						type: "planning_context_recorded",
-						planning: {
-							repoProfile: [`Concurrent event append ${index}`],
-						},
-						recordedAt: `2026-05-03T12:${String(index + 1).padStart(2, "0")}:00.000Z`,
-					},
-				]),
-			),
-		);
-
-		const records = await readWorkflowEventRecords(worktree, sessionId);
-		expect(records).toHaveLength(17);
-		expect(records.map((record) => record.sequence)).toEqual(
-			Array.from({ length: 17 }, (_, index) => index + 1),
-		);
-	});
-
-	test("projection rendering fsyncs temp docs before rename", async () => {
-		const worktree = makeTempDir();
-		const session = sampleSession("Projection fsync verification");
-		const syncs: string[] = [];
-
-		setPersistenceFsForTests({
-			open: async (...args) => {
-				const handle = await originalOpen(...args);
-				const originalSync = handle.sync.bind(handle);
-				handle.sync = (async () => {
-					syncs.push(String(args[0]));
-					return originalSync();
-				}) as typeof handle.sync;
-				return handle;
-			},
-		});
-
-		await renderWorkflowProjection(worktree, session);
-
-		expect(
-			await readFile(
-				getWorkflowProjectionIndexPath(worktree, session.id),
-				"utf8",
-			),
-		).toBe(renderIndexDoc(session));
-		expect(
-			syncs.some((path) => path.includes(join(".flow", "projections"))),
-		).toBe(true);
-		expect(syncs.some((path) => path.endsWith(".tmp"))).toBe(true);
 	});
 });
 

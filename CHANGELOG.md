@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [2.0.17] - 2026-05-08
+
+Make Flow Core snapshot-first and retire replay infrastructure
+
+Flow 2.0.17 completes the current simplification pass by freezing the supported Flow Core vNext contract around runtime transitions, the session-engine persistence boundary, and snapshot-first active/stored/completed session state. The new Flow Core facade exposes compact command and query names without becoming a second state engine; transitions still own behavior, and the session engine still owns load -> transition -> save -> render synchronization.
+
+The release replaces duplicated OpenCode descriptor/projection metadata with a smaller tool registry that keeps tool names, runtime bindings, mode visibility, descriptions, and docs metadata in one local surface. Generated projections and docs rows now derive from that smaller registry instead of preserving a broader duplicated descriptor family.
+
+Replay/event/checkpoint/projection persistence is intentionally retired as a product-supported surface. The live product path was already snapshot-primary, so the release deletes the core workflow replay wrappers, event/checkpoint/projection stores, replay tests, and event-store benchmark while keeping runtime transition invariants, session history, rendered artifacts, and the new snapshot persistence gate. Historical release and investigation docs may still mention the retired replay architecture as historical evidence.
+
+Strict review governance is narrowed to review/review-and-fix or explicit strict review modes. Ordinary implementation flows keep compact completion safety, while supplied final-review behavior evidence is still sanity-checked so approved/passing final reviews cannot carry `needs_fix`, unsafe refs, or validation refs that were not actually recorded.
+
+The release deliberately does not add commands, tools, runtime modes, package exports, dependencies, or looser completion paths. It retires unsupported replay state surfaces in favor of the documented snapshot-first contract and keeps `zod` / `@opencode-ai/plugin` alignment unchanged.
+
+Constraint: Preserve runtime transition authority and session-engine snapshot persistence while deleting duplicated replay/product metadata surfaces
+Constraint: Retire `.flow/events`, `.flow/checkpoints`, and `.flow/projections` as supported product state paths without changing active/stored/completed session snapshots
+Constraint: Keep command names, tool names, package exports, dependencies, and `zod` / `@opencode-ai/plugin` alignment stable
+Rejected: Keep event/checkpoint/projection stores as dormant compatibility code | dead product surfaces would keep release gates and architecture shaped around unsupported replay behavior
+Rejected: Treat the new Flow Core facade as a new state engine | it is only a command/query boundary over existing runtime application handlers and transitions
+Rejected: Drop all behavior-evidence checks outside strict review mode | supplied invalid evidence must still fail even when strict completeness is optional
+Confidence: high
+Scope-risk: broad
+Reversibility: moderate
+Directive: Keep Flow Core vNext snapshot-first unless a future release deliberately reintroduces event-sourced persistence with migration, public state-path docs, and replay gates
+Tested: `bun test tests/runtime-tool-routing.test.ts tests/completion-gates.test.ts` (47 pass, 319 expect calls); `bun run typecheck`; touched-file Biome; `bun run check`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.17` before push
+
 ## [2.0.16] - 2026-05-07
 
 Harden review-scope recovery accounting before release

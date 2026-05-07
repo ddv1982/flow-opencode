@@ -8,13 +8,23 @@ import {
 } from "../src/runtime/transitions";
 import { samplePlan } from "./runtime-test-helpers";
 
-function startedSession(finalReviewPolicy?: "broad" | "detailed") {
+function startedSession(options?: {
+	finalReviewPolicy?: "broad" | "detailed";
+	strictReview?: boolean;
+}) {
 	const applied = applyPlan(
 		createSession("Build a workflow plugin"),
-		finalReviewPolicy
+		options
 			? {
 					...samplePlan(),
-					deliveryPolicy: { finalReviewPolicy },
+					deliveryPolicy: {
+						...(options.finalReviewPolicy
+							? { finalReviewPolicy: options.finalReviewPolicy }
+							: {}),
+						...(options.strictReview !== undefined
+							? { strictReview: options.strictReview }
+							: {}),
+					},
 				}
 			: samplePlan(),
 	);
@@ -139,28 +149,31 @@ describe("recordReviewerDecision scope validation", () => {
 	});
 
 	test("rejects final review depth that does not match delivery policy", () => {
-		const result = recordReviewerDecision(startedSession("broad"), {
-			scope: "final",
-			reviewDepth: "detailed",
-			reviewedSurfaces: ["shared_surfaces", "validation_evidence"],
-			evidenceSummary:
-				"Checked final cross-feature integration and validation evidence.",
-			validationAssessment:
-				"Validation coverage and cross-feature interactions were reviewed.",
-			evidenceRefs: {
-				changedArtifacts: ["src/setup-runtime.ts"],
-				validationCommands: ["bun test"],
+		const result = recordReviewerDecision(
+			startedSession({ finalReviewPolicy: "broad" }),
+			{
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: ["shared_surfaces", "validation_evidence"],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/setup-runtime.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Final review looks good.",
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
-			remainingGaps: [],
-			status: "approved",
-			summary: "Final review looks good.",
-		});
+		);
 
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -194,5 +207,101 @@ describe("recordReviewerDecision scope validation", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.message).toContain("known reviewedSurfaces");
+	});
+
+	test("ordinary implementation final approval does not require behavior accounting ledgers", () => {
+		const result = recordReviewerDecision(startedSession(), {
+			scope: "final",
+			reviewDepth: "detailed",
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary: "Reviewed shell/game source changes and validation.",
+			validationAssessment: "Targeted behavior validation was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: [
+					"src/shell/sessionPanels.ts",
+					"src/game/navigation.ts",
+				],
+				validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			integrationChecks: ["Checked shell action and game navigation handoff."],
+			regressionChecks: ["Checked behavior validation evidence."],
+			remainingGaps: [],
+			status: "approved",
+			summary: "Final review looks good.",
+		});
+
+		expect(result.ok).toBe(true);
+	});
+
+	test("explicit strictReview final approval requires review scope ledger accounting", () => {
+		const result = recordReviewerDecision(
+			startedSession({ strictReview: true }),
+			{
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Reviewed runtime source changes and validation.",
+				validationAssessment: "Runtime validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: ["Checked runtime integration."],
+				regressionChecks: ["Checked runtime regression evidence."],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Final review looks good.",
+			},
+		);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.message).toContain("reviewScopeLedger");
+	});
+
+	test("explicit strictReview final approval retains behavior accounting requirements", () => {
+		const result = recordReviewerDecision(
+			startedSession({ strictReview: true }),
+			{
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Reviewed shell/game source changes and validation.",
+				validationAssessment: "Targeted behavior validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: [
+						"src/shell/sessionPanels.ts",
+						"src/game/navigation.ts",
+					],
+					validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+				},
+				integrationChecks: [
+					"Checked shell action and game navigation handoff.",
+				],
+				regressionChecks: ["Checked behavior validation evidence."],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Final review looks good.",
+			},
+		);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.message).toContain("finalReviewCoverage");
+		expect(result.message).toContain(
+			"must account for required behavior risk classes",
+		);
 	});
 });

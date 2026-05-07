@@ -79,18 +79,6 @@ export function getCompletedSessionsDir(worktree: string): string {
 	return join(getFlowDir(worktree), "completed");
 }
 
-export function getWorkflowEventsDir(worktree: string): string {
-	return join(getFlowDir(worktree), "events");
-}
-
-export function getWorkflowCheckpointsDir(worktree: string): string {
-	return join(getFlowDir(worktree), "checkpoints");
-}
-
-export function getWorkflowProjectionsDir(worktree: string): string {
-	return join(getFlowDir(worktree), "projections");
-}
-
 export function getPersistenceLocksDir(worktree: string): string {
 	return join(getFlowDir(worktree), "locks");
 }
@@ -167,42 +155,6 @@ export function getCompletedSessionPath(
 
 export function getSessionPathFromDir(sessionDir: string): string {
 	return join(sessionDir, "session.json");
-}
-
-export function getWorkflowEventLogPath(
-	worktree: string,
-	sessionId: string,
-): string {
-	const eventsDir = getWorkflowEventsDir(worktree);
-	return assertDescendant(
-		eventsDir,
-		join(eventsDir, `${sanitizePathComponent("event", sessionId)}.jsonl`),
-	);
-}
-
-export function getWorkflowCheckpointPath(
-	worktree: string,
-	sessionId: string,
-): string {
-	const checkpointsDir = getWorkflowCheckpointsDir(worktree);
-	return assertDescendant(
-		checkpointsDir,
-		join(
-			checkpointsDir,
-			`${sanitizePathComponent("checkpoint", sessionId)}.json`,
-		),
-	);
-}
-
-export function getWorkflowProjectionDir(
-	worktree: string,
-	sessionId: string,
-): string {
-	const projectionsDir = getWorkflowProjectionsDir(worktree);
-	return assertDescendant(
-		projectionsDir,
-		join(projectionsDir, sanitizePathComponent("projection", sessionId)),
-	);
 }
 
 export function getDocsDir(

@@ -16,6 +16,35 @@ afterEach(() => {
 });
 
 describe("runtime tool routing", () => {
+	test("OpenCode shared helpers route through the Flow Core facade", async () => {
+		const runtimeShared = await readFile(
+			join(
+				process.cwd(),
+				"src/adapters/opencode/tool-surface/runtime-tools/shared.ts",
+			),
+			"utf8",
+		);
+		const sessionShared = await readFile(
+			join(
+				process.cwd(),
+				"src/adapters/opencode/tool-surface/session-tools/shared.ts",
+			),
+			"utf8",
+		);
+
+		expect(runtimeShared).toContain("executeFlowCoreCommand");
+		expect(runtimeShared).toContain("runFlowCoreCommand");
+		expect(runtimeShared).not.toContain("executeDispatchedSessionMutation");
+		expect(sessionShared).toContain("executeFlowCoreCommand");
+		expect(sessionShared).toContain("runFlowCoreQuery");
+		expect(sessionShared).not.toContain("executeFlowCoreQuery");
+		expect(sessionShared).not.toContain("valueFromFlowCoreQueryResponse");
+		expect(sessionShared).not.toContain(
+			"executeDispatchedSessionWorkspaceAction",
+		);
+		expect(sessionShared).not.toContain("runDispatchedSessionReadAction");
+	});
+
 	test("flow_auto_prepare returns missing_goal for empty input without a session", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
