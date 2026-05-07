@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "2.0.17",
+	"version": "2.0.18",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -26,7 +26,7 @@
 		"check:release-hygiene": "node ./scripts/cross-area/release-hygiene.mjs",
 		"check:fresh-surfaces": "node ./scripts/cross-area/fresh-surface-terminology.mjs",
 		"check:pack-invariants": "node ./scripts/cross-area/pack-invariants.mjs",
-		"check:generated-drift": "bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun test --test-name-pattern 'descriptor family parity'",
+		"check:generated-drift": "bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun test --test-name-pattern 'workflow surface descriptor family'",
 		"check:boundary-report": "node ./scripts/cross-area/boundary-violations-report.mjs",
 		"report:runtime-simplification-metrics": "node ./scripts/cross-area/runtime-simplification-metrics.mjs",
 		"check:cold-start-budget": "node ./scripts/cross-area/cold-start-budget.mjs",

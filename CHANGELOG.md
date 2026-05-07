@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.18] - 2026-05-08
+
+Restore the hosted generated-drift lane after the Flow Core release
+
+Flow 2.0.18 is a fix-forward release for the hosted CI failure observed immediately after `v2.0.17`. The `v2.0.17` release workflow published successfully, but the main-branch CI generated-drift preflight still invoked Bun with the old test-name pattern `descriptor family parity`. The descriptor suite was intentionally renamed around the smaller OpenCode registry, so the hosted pattern matched zero tests even though the local full `bun run check` path had passed.
+
+This release keeps the Flow Core snapshot-first simplification from `v2.0.17` unchanged. It updates the generated-drift package script to use the renamed descriptor parity suite selector, preserving the same registry/projection/docs parity surface while matching the current test contract.
+
+The release deliberately does not add commands, tools, runtime modes, state paths, package exports, dependencies, or behavior changes. It only restores hosted CI coverage for generated descriptor drift after the descriptor-suite rename.
+
+Constraint: Fix the hosted CI lane without rewriting the already-pushed `v2.0.17` tag or weakening generated-drift coverage
+Constraint: Preserve the `v2.0.17` Flow Core snapshot-first product contract unchanged
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Force-move `v2.0.17` | the release workflow already succeeded and the tag was pushed, so fix-forward is safer and more auditable
+Rejected: Remove descriptor parity from generated-drift checks | that would weaken the release gate that caught the stale test selector
+Rejected: Keep the stale `descriptor family parity` selector | it no longer names the active descriptor parity suite and matched zero hosted tests
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep generated-drift selectors synchronized with descriptor parity suite names when the suite is renamed
+Tested: `bun run check:generated-drift`; `bun run check`
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.18` before push
+
 ## [2.0.17] - 2026-05-08
 
 Make Flow Core snapshot-first and retire replay infrastructure
