@@ -1,4 +1,6 @@
 import {
+	buildFinalReviewerReviewScopeRecoveryDetails,
+	buildReviewScopeRecoveryDetails,
 	closedReviewFindingRefsForCompletion,
 	describeFinalReviewCoverageFailure,
 	describeFinalReviewerReviewScopeFailure,
@@ -60,27 +62,48 @@ function hasApprovedReviewerDecision(
 		: decision.scope === "feature" && decision.featureId === featureId;
 }
 
+type FinalReviewerDecisionFailure = {
+	kind: "missing_or_invalid_reviewer_decision" | "review_scope_accounting";
+	message: string;
+};
+
 function finalReviewerDecisionFailureMessage(
 	session: Session,
 	worker: NormalizedWorkerResult,
 	featureId: string,
 	wasFinalFeature: boolean,
-): string | null {
+): FinalReviewerDecisionFailure | null {
 	if (!wasFinalFeature) {
 		return hasApprovedReviewerDecision(session, worker, featureId, false)
 			? null
-			: "Worker result cannot complete without a recorded approved reviewer decision.";
+			: {
+					kind: "missing_or_invalid_reviewer_decision",
+					message:
+						"Worker result cannot complete without a recorded approved reviewer decision.",
+				};
 	}
 
 	const decision = session.execution.lastReviewerDecision;
 	if (!decision || decision.status !== "approved") {
-		return "Worker result cannot complete without a recorded approved reviewer decision.";
+		return {
+			kind: "missing_or_invalid_reviewer_decision",
+			message:
+				"Worker result cannot complete without a recorded approved reviewer decision.",
+		};
 	}
 	if (decision.scope !== "final") {
-		return "Worker result cannot complete the session without a final-scope approved reviewer decision.";
+		return {
+			kind: "missing_or_invalid_reviewer_decision",
+			message:
+				"Worker result cannot complete the session without a final-scope approved reviewer decision.",
+		};
 	}
 	if (!finalReviewDepthMatchesPolicy(session, decision.reviewDepth)) {
-		return "Worker result cannot complete the session because the recorded final reviewer decision does not match deliveryPolicy.finalReviewPolicy.";
+		return {
+			kind: "missing_or_invalid_reviewer_decision",
+			message:
+				"Worker result cannot complete the session because the recorded final reviewer decision does not match deliveryPolicy.finalReviewPolicy.",
+		};
 	}
 	const coverageFailure = describeFinalReviewCoverageFailure(
 		session,
@@ -88,7 +111,10 @@ function finalReviewerDecisionFailureMessage(
 		decision,
 	);
 	if (coverageFailure) {
-		return `Worker result cannot complete the session because the recorded final reviewer decision ${coverageFailure}.`;
+		return {
+			kind: "missing_or_invalid_reviewer_decision",
+			message: `Worker result cannot complete the session because the recorded final reviewer decision ${coverageFailure}.`,
+		};
 	}
 	const reviewScopeFailure = describeFinalReviewerReviewScopeFailure(
 		session,
@@ -99,7 +125,10 @@ function finalReviewerDecisionFailureMessage(
 		},
 	);
 	return reviewScopeFailure
-		? `Worker result cannot complete the session because the recorded final reviewer decision ${reviewScopeFailure}`
+		? {
+				kind: "review_scope_accounting",
+				message: `Worker result cannot complete the session because the recorded final reviewer decision ${reviewScopeFailure}`,
+			}
 		: null;
 }
 
@@ -210,6 +239,14 @@ export function validateNormalizedSuccessfulCompletion(
 				featureId,
 				wasFinalFeature,
 				"missing_review_scope_accounting",
+				{
+					reviewScopeLedger: buildReviewScopeRecoveryDetails(
+						session,
+						normalizedWorker,
+						featureId,
+						wasFinalFeature,
+					),
+				},
 			),
 		);
 	}
@@ -223,7 +260,7 @@ export function validateNormalizedSuccessfulCompletion(
 		);
 		if (reviewerDecisionFailure) {
 			return fail(
-				reviewerDecisionFailure,
+				reviewerDecisionFailure.message,
 				buildCompletionRecovery(featureId, false, "missing_reviewer_decision"),
 			);
 		}
@@ -284,9 +321,33 @@ export function validateNormalizedSuccessfulCompletion(
 			true,
 		);
 		if (reviewerDecisionFailure) {
+			const recoveryKind =
+				reviewerDecisionFailure.kind === "review_scope_accounting"
+					? "missing_final_reviewer_review_scope_accounting"
+					: "missing_reviewer_decision";
+			const decision = session.execution.lastReviewerDecision;
 			return fail(
-				reviewerDecisionFailure,
-				buildCompletionRecovery(featureId, true, "missing_reviewer_decision"),
+				reviewerDecisionFailure.message,
+				buildCompletionRecovery(
+					featureId,
+					true,
+					recoveryKind,
+					reviewerDecisionFailure.kind === "review_scope_accounting" &&
+						decision?.scope === "final"
+						? {
+								reviewScopeLedger: buildFinalReviewerReviewScopeRecoveryDetails(
+									session,
+									decision,
+									{
+										closedFindingRefs: closedReviewFindingRefsForCompletion(
+											session,
+											normalizedWorker,
+										),
+									},
+								),
+							}
+						: undefined,
+				),
 			);
 		}
 	}

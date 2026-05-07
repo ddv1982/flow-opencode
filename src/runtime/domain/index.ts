@@ -48,6 +48,8 @@ export {
 	type ReviewFindingClosureValidationContext,
 } from "./review-finding-closure-policy";
 export {
+	buildFinalReviewerReviewScopeRecoveryDetails,
+	buildReviewScopeRecoveryDetails,
 	closedReviewFindingRefsForCompletion,
 	declaredReviewScopeForCompletion,
 	declaredReviewScopeForFeature,
@@ -61,6 +63,7 @@ export {
 	buildReviewerDecision,
 	type RecordReviewerDecisionInput,
 	validateReviewerDecisionInput,
+	validateReviewerDecisionInputDetailed,
 } from "./reviewer-decision";
 export {
 	SEMANTIC_COMPLETION_GATE_ORDER,

@@ -279,7 +279,7 @@ describe("runtime final completion gates", () => {
 		expect(completed.recovery?.prerequisite).toBe("validation_rerun_required");
 	});
 
-	test("retains failure-path projections when completion guard rejects an ok result", () => {
+	test("does not retain ok worker projections when completion guard rejects the result", () => {
 		const session = createSession("Build a workflow plugin");
 		const applied = applyPlan(session, samplePlan());
 		expect(applied.ok).toBe(true);
@@ -334,32 +334,13 @@ describe("runtime final completion gates", () => {
 		if (completed.ok) return;
 
 		expect(completed.recovery?.errorCode).toBe("failing_validation");
-		expect(completed.session).toBeDefined();
-		if (!completed.session) return;
-
-		expect(completed.session.execution.lastValidationRun).toEqual([
-			{
-				command: "bun test",
-				status: "failed",
-				summary: "Runtime tests failed.",
-			},
-		]);
-		expect(completed.session.execution.history).toHaveLength(1);
-		expect(completed.session.execution.history[0]?.summary).toBe(
-			"Completed runtime setup.",
-		);
-		expect(completed.session.execution.history[0]?.status).toBe("ok");
-		expect(completed.session.execution.history[0]?.outcomeKind).toBe(
-			"completed",
-		);
-		expect(completed.session.artifacts).toEqual([
-			{ path: "src/runtime/session.ts" },
-		]);
-		expect(completed.session.notes).toEqual([
-			"Recorded failure evidence before retry.",
-		]);
-		expect(completed.session.status).toBe("running");
-		expect(completed.session.execution.activeFeatureId).toBe("setup-runtime");
+		expect(completed.session).toBeUndefined();
+		expect(reviewed.value.execution.lastValidationRun).toEqual([]);
+		expect(reviewed.value.execution.history).toHaveLength(0);
+		expect(reviewed.value.artifacts).toEqual([]);
+		expect(reviewed.value.notes).toEqual([]);
+		expect(reviewed.value.status).toBe("running");
+		expect(reviewed.value.execution.activeFeatureId).toBe("setup-runtime");
 	});
 
 	test("requires broad validation before final session completion", () => {

@@ -37,6 +37,7 @@ export type TransitionRecovery = {
 	nextCommand: string;
 	nextRuntimeTool?: CanonicalRuntimeToolName;
 	nextRuntimeArgs?: Record<string, unknown>;
+	details?: Record<string, unknown>;
 	retryable?: boolean;
 	autoResolvable?: boolean;
 };

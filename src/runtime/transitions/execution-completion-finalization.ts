@@ -192,12 +192,6 @@ export function completeExecutionRun(
 	const recordedAt = nowIso();
 	const normalizedWorker = normalizeWorkerResult(worker);
 	if (normalizedWorker.status === "ok") {
-		const next = recordWorkerResult(
-			session,
-			featureId,
-			normalizedWorker,
-			recordedAt,
-		);
 		const wasFinalFeature = featureWouldReachCompletion(
 			session.plan,
 			featureId,
@@ -209,9 +203,15 @@ export function completeExecutionRun(
 			wasFinalFeature,
 		);
 		if (!validation.ok) {
-			return fail(validation.message, validation.recovery, next);
+			return fail(validation.message, validation.recovery);
 		}
 
+		const next = recordWorkerResult(
+			session,
+			featureId,
+			normalizedWorker,
+			recordedAt,
+		);
 		return finalizeSuccessfulCompletion(next, featureId, worker.summary);
 	}
 

@@ -8,6 +8,7 @@ export type CompletionRecoveryKind =
 	| "missing_validation_scope"
 	| "missing_review_closure"
 	| "missing_review_scope_accounting"
+	| "missing_final_reviewer_review_scope_accounting"
 	| "failing_feature_review"
 	| "missing_final_review"
 	| "failing_final_review";
@@ -39,6 +40,7 @@ function buildStatusRecovery(
 						: {}),
 				}
 			: {}),
+		...(recovery.details ? { details: recovery.details } : {}),
 		...(recovery.retryable !== undefined
 			? { retryable: recovery.retryable }
 			: {}),
@@ -63,6 +65,7 @@ function buildResetFeatureRecovery(
 		nextCommand: flowResetFeatureCommand(featureId),
 		nextRuntimeTool: "flow_reset_feature",
 		nextRuntimeArgs: { featureId },
+		...(recovery.details ? { details: recovery.details } : {}),
 		...(recovery.retryable !== undefined
 			? { retryable: recovery.retryable }
 			: {}),
@@ -203,6 +206,20 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 			autoResolvable: true,
 		},
 	},
+	missing_final_reviewer_review_scope_accounting: {
+		mode: "status",
+		recovery: {
+			errorCode: "missing_review_scope_accounting",
+			resolutionHint:
+				"Re-record the final reviewer decision with reviewScopeLedger entries for every declared review target/domain, using only findingRefs that map to closed findings for that scope; then retry completion.",
+			recoveryStage: "record_review",
+			prerequisite: "reviewer_result_required",
+			requiredArtifact: "final_reviewer_decision",
+			nextCommand: FLOW_STATUS_COMMAND,
+			retryable: true,
+			autoResolvable: true,
+		},
+	},
 	failing_feature_review: {
 		mode: "reset",
 		recovery: {
@@ -247,6 +264,7 @@ export function buildCompletionRecovery(
 	featureId: string,
 	wasFinalFeature: boolean,
 	kind: CompletionRecoveryKind,
+	details?: Record<string, unknown>,
 ): TransitionRecovery {
 	const descriptor = COMPLETION_RECOVERY_DESCRIPTORS[kind];
 	const resolved =
@@ -255,7 +273,10 @@ export function buildCompletionRecovery(
 			: wasFinalFeature
 				? descriptor.final
 				: descriptor.feature;
+	const recovery = details
+		? { ...resolved.recovery, details }
+		: resolved.recovery;
 	return resolved.mode === "reset"
-		? buildResetFeatureRecovery(featureId, resolved.recovery)
-		: buildStatusRecovery(resolved.recovery);
+		? buildResetFeatureRecovery(featureId, recovery)
+		: buildStatusRecovery(recovery);
 }

@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [2.0.16] - 2026-05-07
+
+Harden review-scope recovery accounting before release
+
+Flow 2.0.16 closes the release-readiness gaps in the review-scope accounting contract. Recovery examples now stay conservative: they list closed finding refs as candidates, but no longer assign every closed finding to every declared scope. Agents must map findings to the specific scope they actually prove before using `finding_closed`.
+
+Completion and reviewer validation now route review-scope failures through structured failure kinds instead of substring matching. Worker completion recovery remains tied to worker evidence, while final-reviewer recovery now points at the recorded final reviewer decision when the reviewer approval ledger is the failing artifact.
+
+Historical completed feature evidence is accepted only when its `reviewScopeLedger` is structurally valid and covers every declared scope for that feature. Recursive glob review targets also use standard globstar semantics, so `src/**/*.ts` grounds both `src/index.ts` and nested TypeScript paths without broadening unsupported bracket or brace glob syntax.
+
+The release deliberately does not add commands, tools, runtime modes, state paths, package exports, dependencies, or looser completion paths. It narrows recovery guidance and historical evidence reuse while preserving the existing review/review-and-fix surface. The bundle sanity ceiling moves from 708 KiB to 716 KiB to account for the added release-critical recovery checks while preserving a fixed budget check.
+
+Constraint: Preserve strict review and review-and-fix completion gates without changing persisted session shape
+Constraint: Keep recovery details machine-readable while avoiding automatic closed-finding-to-scope assignment
+Constraint: Accept only a narrow 8 KiB bundle budget increase for release-critical recovery/accounting checks
+Constraint: Keep `zod` aligned with `@opencode-ai/plugin`; no dependency-version changes in this patch
+Rejected: Populate every recovery example scope with all closed finding refs | that overstates which findings were actually mapped to each declared scope
+Rejected: Select review-scope recovery by matching error-message substrings | structured failure kinds are safer and keep worker vs final-reviewer recovery targets explicit
+Rejected: Let partial historical ledgers or one-directory-only globstar behavior satisfy final accounting | both would silently drop declared review scope evidence
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep review-scope ledgers scoped and evidence-grounded; historical completions can contribute only after every declared feature scope is accounted
+Tested: `bun test tests/completion-gates.test.ts tests/runtime-tools.test.ts` (48 pass, 395 expect calls); `bun run typecheck`; targeted Biome; targeted completion/recovery gates and `bun run check` before tag push
+Not-tested: Live GitHub-hosted CI/release workflow runs for tag `v2.0.16` before push
+
 ## [2.0.15] - 2026-05-07
 
 Preserve review-and-fix closure obligations across planning refreshes

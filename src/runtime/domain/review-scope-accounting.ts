@@ -240,10 +240,15 @@ function globPatternMatchesPath(pattern: string, path: string): boolean {
 	if (UNSUPPORTED_GLOB_PATTERN.test(pattern)) {
 		return false;
 	}
+	const doubleStarSlashToken = "\0DOUBLE_STAR_SLASH\0";
+	const doubleStarToken = "\0DOUBLE_STAR\0";
 	const regexSource = escapeRegExp(pattern)
-		.replaceAll("**", ".*")
+		.replaceAll("**/", doubleStarSlashToken)
+		.replaceAll("**", doubleStarToken)
 		.replaceAll("*", "[^/]*")
-		.replaceAll("\\?", "[^/]");
+		.replaceAll("\\?", "[^/]")
+		.replaceAll(doubleStarSlashToken, "(?:.*/)?")
+		.replaceAll(doubleStarToken, ".*");
 	return new RegExp(`^${regexSource}$`).test(path);
 }
 
@@ -413,6 +418,14 @@ function validateLedgerEntries({
 	return null;
 }
 
+function ledgerCoversDeclaredScope(
+	declaredScope: readonly ReviewScopeTarget[],
+	ledger: readonly ReviewScopeLedgerEntry[],
+): boolean {
+	const accountedScopeIds = new Set(ledger.map((entry) => entry.scopeId));
+	return declaredScope.every((scope) => accountedScopeIds.has(scope.id));
+}
+
 function latestValidCompletedHistoryEntries(
 	session: Session,
 ): Session["execution"]["history"] {
@@ -436,9 +449,10 @@ function latestValidCompletedHistoryEntries(
 			continue;
 		}
 		const featureScope = declaredReviewScopeForFeature(feature);
+		const historicalLedger = historyEntry.reviewScopeLedger ?? [];
 		const structuralFailure = validateLedgerEntries({
 			declaredScope: featureScope,
-			ledger: historyEntry.reviewScopeLedger ?? [],
+			ledger: historicalLedger,
 			validationCommands: historyEntry.validationRun.map(
 				(item) => item.command,
 			),
@@ -450,7 +464,10 @@ function latestValidCompletedHistoryEntries(
 			requireClosedFindingMatch: session.plan?.goalMode === "review_and_fix",
 			label: `history[${historyEntry.featureId}].reviewScopeLedger`,
 		});
-		if (!structuralFailure) {
+		if (
+			!structuralFailure &&
+			ledgerCoversDeclaredScope(featureScope, historicalLedger)
+		) {
 			latestValidByFeature.set(historyEntry.featureId, historyEntry);
 		}
 	}
@@ -505,6 +522,182 @@ export function closedReviewFindingRefsForCompletion(
 		refs.add(findingRef);
 	}
 	return [...refs];
+}
+
+type ReviewScopeRecoveryDecisionEvidence = {
+	evidenceRefs?:
+		| {
+				changedArtifacts?: readonly string[] | undefined;
+				validationCommands?: readonly string[] | undefined;
+		  }
+		| undefined;
+	reviewScopeLedger?: readonly ReviewScopeLedgerEntry[] | undefined;
+	reviewContextPack?: ReviewContextPack | undefined;
+};
+
+export type ReviewScopeRecoveryDetails = {
+	declaredScopes: Array<{
+		scopeId: string;
+		kind: ReviewScopeTarget["kind"];
+		target: string;
+		description?: string;
+	}>;
+	evidenceCandidates: {
+		changedArtifacts: string[];
+		reviewedContext: string[];
+		validationCommands: string[];
+		closedFindingRefs: string[];
+	};
+	exampleReviewScopeLedger: ReviewScopeLedgerEntry[];
+	notes: string[];
+};
+
+function uniqueStrings(values: readonly string[]): string[] {
+	return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function scopeRecoveryEntryFor(
+	scope: ReviewScopeTarget,
+	artifactCandidates: readonly string[],
+	validationCommands: readonly string[],
+): ReviewScopeLedgerEntry {
+	const matchingArtifacts = artifactCandidates.filter((candidate) => {
+		if (!isSafeReviewArtifactRef(candidate)) {
+			return false;
+		}
+		return reviewScopeTargetGroundsRef(
+			scope,
+			candidate,
+			pathForReviewArtifactRef(candidate),
+		);
+	});
+	const selfReference = normalizeArtifactPath(scope.target);
+	const evidenceRefs = uniqueStrings([
+		...(scope.kind === "file" && isSafeReviewArtifactRef(selfReference)
+			? [selfReference]
+			: []),
+		...matchingArtifacts,
+	]);
+	return {
+		scopeId: scope.id,
+		status: "reviewed_no_findings",
+		evidenceRefs,
+		...(validationCommands.length > 0
+			? { validationRefs: uniqueStrings(validationCommands) }
+			: {}),
+		residualRisk:
+			"State any residual risk for this declared review scope, or 'No known residual risk.'",
+	};
+}
+
+function buildReviewScopeRecoveryDetailsForDeclaredScope({
+	declaredScope,
+	changedArtifacts,
+	reviewedContext,
+	validationCommands,
+	closedFindingRefs,
+}: {
+	declaredScope: readonly ReviewScopeTarget[];
+	changedArtifacts: readonly string[];
+	reviewedContext: readonly string[];
+	validationCommands: readonly string[];
+	closedFindingRefs: readonly string[];
+}): ReviewScopeRecoveryDetails {
+	const normalizedChangedArtifacts = uniqueStrings(
+		changedArtifacts.map(normalizeArtifactPath),
+	);
+	const normalizedReviewedContext = uniqueStrings(
+		reviewedContext.map(normalizeArtifactPath),
+	);
+	const normalizedValidationCommands = uniqueStrings(validationCommands);
+	const normalizedClosedFindingRefs = uniqueStrings(closedFindingRefs);
+	const artifactCandidates = uniqueStrings([
+		...normalizedChangedArtifacts,
+		...normalizedReviewedContext,
+	]);
+	const exampleReviewScopeLedger = declaredScope.map((scope) =>
+		scopeRecoveryEntryFor(
+			scope,
+			artifactCandidates,
+			normalizedValidationCommands,
+		),
+	);
+	const scopesWithoutArtifactEvidence = exampleReviewScopeLedger
+		.filter((entry) => (entry.evidenceRefs ?? []).length === 0)
+		.map((entry) => entry.scopeId);
+	return {
+		declaredScopes: declaredScope.map((scope) => ({
+			scopeId: scope.id,
+			kind: scope.kind,
+			target: scope.target,
+			...(scope.description ? { description: scope.description } : {}),
+		})),
+		evidenceCandidates: {
+			changedArtifacts: normalizedChangedArtifacts,
+			reviewedContext: normalizedReviewedContext,
+			validationCommands: normalizedValidationCommands,
+			closedFindingRefs: normalizedClosedFindingRefs,
+		},
+		exampleReviewScopeLedger,
+		notes: [
+			"Use each declaredScopes[].scopeId exactly as reviewScopeLedger[].scopeId; arbitrary audit labels are rejected.",
+			"Each ledger entry needs at least one concrete evidenceRef grounded in that scope target, changed artifacts, or reviewed context; validationRefs alone are not enough.",
+			"If evidenceRefs names a validation command, the same command must also appear in validationRefs.",
+			...(normalizedClosedFindingRefs.length > 0
+				? [
+						"Closed finding refs are listed as candidates only. The example ledger does not assign findingRefs automatically; change an entry to finding_closed and add findingRefs only when you can reliably map those findings to that declared scope.",
+					]
+				: []),
+			...(scopesWithoutArtifactEvidence.length > 0
+				? [
+						`No concrete artifact evidence candidate was available for: ${scopesWithoutArtifactEvidence.join(", ")}. Add a matching changed artifact or reviewContextPack entry before retrying.`,
+					]
+				: []),
+		],
+	};
+}
+
+export function buildReviewScopeRecoveryDetails(
+	session: Session,
+	worker: WorkerEvidence,
+	featureId: string,
+	wasFinalFeature: boolean,
+): ReviewScopeRecoveryDetails {
+	const declaredScope = declaredReviewScopeForCompletion(
+		session,
+		featureId,
+		wasFinalFeature,
+	);
+	return buildReviewScopeRecoveryDetailsForDeclaredScope({
+		declaredScope,
+		changedArtifacts: [
+			...(worker.artifactsChanged ?? []).map((artifact) => artifact.path),
+			...(worker.finalReview?.evidenceRefs?.changedArtifacts ?? []),
+		],
+		reviewedContext: reviewContextPackPaths(
+			worker.finalReview?.reviewContextPack,
+		),
+		validationCommands: (worker.validationRun ?? []).map(
+			(item) => item.command,
+		),
+		closedFindingRefs: wasFinalFeature
+			? closedReviewFindingRefsForCompletion(session, worker)
+			: closedFindingRefsFor(worker),
+	});
+}
+
+export function buildFinalReviewerReviewScopeRecoveryDetails(
+	session: Session,
+	decision: ReviewScopeRecoveryDecisionEvidence,
+	options?: { closedFindingRefs?: readonly string[] },
+): ReviewScopeRecoveryDetails {
+	return buildReviewScopeRecoveryDetailsForDeclaredScope({
+		declaredScope: declaredReviewScopeForPlan(session.plan),
+		changedArtifacts: decision.evidenceRefs?.changedArtifacts ?? [],
+		reviewedContext: reviewContextPackPaths(decision.reviewContextPack),
+		validationCommands: decision.evidenceRefs?.validationCommands ?? [],
+		closedFindingRefs: options?.closedFindingRefs ?? [],
+	});
 }
 
 export function describeReviewScopeLedgerFailure(

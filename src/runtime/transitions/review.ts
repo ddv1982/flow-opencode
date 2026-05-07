@@ -1,9 +1,12 @@
 import {
+	buildFinalReviewerReviewScopeRecoveryDetails,
+	buildReviewContextPack,
 	buildReviewerDecision,
 	type RecordReviewerDecisionInput,
-	validateReviewerDecisionInput,
+	validateReviewerDecisionInputDetailed,
 } from "../domain";
 import type { Feature, ReviewerDecision, Session } from "../schema";
+import { buildCompletionRecovery } from "./recovery";
 import { fail, succeed, type TransitionResult } from "./shared";
 
 type FeatureScopeReviewerDecision = Extract<
@@ -69,6 +72,17 @@ function buildResetSummary(featureId: string, affectedCount: number): string {
 	return affectedCount > 1
 		? `Reset feature '${featureId}' and its dependent features to pending.`
 		: `Reset feature '${featureId}' to pending.`;
+}
+
+function featureIdForRecovery(session: Session): string {
+	return (
+		session.execution.activeFeatureId ??
+		session.execution.lastFeatureId ??
+		session.plan?.features.find((feature) => feature.status === "in_progress")
+			?.id ??
+		session.plan?.features[0]?.id ??
+		"review"
+	);
 }
 
 function validateFeatureScopeReviewerDecision(
@@ -150,9 +164,29 @@ export function recordReviewerDecision(
 	session: Session,
 	input: RecordReviewerDecisionInput,
 ): TransitionResult<Session> {
-	const inputError = validateReviewerDecisionInput(session, input);
-	if (inputError) {
-		return fail(inputError);
+	const inputFailure = validateReviewerDecisionInputDetailed(session, input);
+	if (inputFailure) {
+		const reviewScopeRecovery =
+			inputFailure.kind === "final_review_scope_accounting"
+				? buildCompletionRecovery(
+						featureIdForRecovery(session),
+						true,
+						"missing_final_reviewer_review_scope_accounting",
+						{
+							reviewScopeLedger: buildFinalReviewerReviewScopeRecoveryDetails(
+								session,
+								{
+									evidenceRefs: input.evidenceRefs,
+									reviewScopeLedger: input.reviewScopeLedger,
+									reviewContextPack: input.reviewContextPack
+										? buildReviewContextPack(input.reviewContextPack)
+										: undefined,
+								},
+							),
+						},
+					)
+				: undefined;
+		return fail(inputFailure.message, reviewScopeRecovery);
 	}
 
 	const decision = buildReviewerDecision(input);

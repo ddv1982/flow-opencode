@@ -1,3 +1,4 @@
+import { errorResponse } from "../errors";
 import type {
 	FlowReviewRecordFeatureArgs,
 	FlowReviewRecordFinalArgs,
@@ -11,6 +12,15 @@ import {
 	normalizeFinalReviewDecision,
 } from "./session-review-decision-normalization";
 
+function reviewDecisionErrorResponse(failure: {
+	message: string;
+	recovery?: unknown;
+}) {
+	return errorResponse(failure.message, {
+		...(failure.recovery ? { recovery: failure.recovery } : {}),
+	});
+}
+
 export function createFeatureReviewerDecisionAction(
 	decision: FlowReviewRecordFeatureArgs,
 ): SessionMutationAction<Session> {
@@ -20,6 +30,7 @@ export function createFeatureReviewerDecisionAction(
 			recordReviewerDecision(session, normalizeFeatureReviewDecision(decision)),
 		getSession: (value) => value,
 		onSuccess: (saved) => okWithSession(saved, "Reviewer decision recorded."),
+		onError: reviewDecisionErrorResponse,
 	};
 }
 
@@ -32,5 +43,6 @@ export function createFinalReviewerDecisionAction(
 			recordReviewerDecision(session, normalizeFinalReviewDecision(decision)),
 		getSession: (value) => value,
 		onSuccess: (saved) => okWithSession(saved, "Reviewer decision recorded."),
+		onError: reviewDecisionErrorResponse,
 	};
 }

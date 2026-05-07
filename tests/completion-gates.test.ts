@@ -619,6 +619,150 @@ describe("completion gates", () => {
 		}
 	});
 
+	test("completeRun does not persist ok worker history when success gates reject the payload", () => {
+		const { session, featureId } = createStartedSession({
+			reviewerDecision: approvedFeatureDecision(),
+		});
+		const result = completeRun(
+			session,
+			createWorkerResult(featureId, { validationScope: "broad" }),
+		);
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.recovery?.errorCode).toBe("missing_targeted_validation");
+			expect(result.session).toBeUndefined();
+		}
+		expect(session.execution.history).toHaveLength(0);
+	});
+
+	test("review-scope accounting recovery returns declared scopes and ledger examples", () => {
+		const declaredTargets = [
+			"src/runtime/session.ts",
+			"src/adapters/opencode/tools.ts",
+		];
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: declaredTargets,
+				},
+			],
+		};
+		const closedFindingRef = "review: scoped runtime defect";
+		const applied = applyPlan(createSession("Review runtime scope"), plan, {
+			reviewFindings: [knownReviewFinding(closedFindingRef)],
+		});
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+
+		const result = validateSuccessfulCompletion(
+			started.value.session,
+			createWorkerResult(featureId, {
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: closedFindingRef }),
+				],
+				reviewScopeLedger: [
+					{
+						scopeId: "audit:pointer-only-practice-controls",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						residualRisk: "No known residual risk.",
+					},
+				],
+			}),
+			featureId,
+			false,
+		);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.recovery?.errorCode).toBe("missing_review_scope_accounting");
+		const details = result.recovery?.details?.reviewScopeLedger as
+			| {
+					declaredScopes: Array<{ scopeId: string }>;
+					evidenceCandidates: {
+						changedArtifacts: string[];
+						closedFindingRefs: string[];
+					};
+					exampleReviewScopeLedger: NonNullable<
+						WorkerResult["reviewScopeLedger"]
+					>;
+					notes: string[];
+			  }
+			| undefined;
+		expect(details?.declaredScopes.map((scope) => scope.scopeId)).toEqual([
+			"file_target:src/runtime/session.ts",
+			"file_target:src/adapters/opencode/tools.ts",
+		]);
+		expect(details?.evidenceCandidates.changedArtifacts).toContain(
+			"src/runtime/session.ts",
+		);
+		expect(
+			details?.exampleReviewScopeLedger.map((entry) => entry.scopeId),
+		).toEqual([
+			"file_target:src/runtime/session.ts",
+			"file_target:src/adapters/opencode/tools.ts",
+		]);
+		expect(details?.exampleReviewScopeLedger[0]?.evidenceRefs).toContain(
+			"src/runtime/session.ts",
+		);
+		expect(details?.evidenceCandidates.closedFindingRefs).toEqual([
+			closedFindingRef,
+		]);
+		expect(
+			details?.exampleReviewScopeLedger.every(
+				(entry) =>
+					entry.status === "reviewed_no_findings" &&
+					entry.findingRefs === undefined,
+			),
+		).toBe(true);
+		expect(details?.notes.join("\n")).toContain(
+			"does not assign findingRefs automatically",
+		);
+	});
+
+	test("final reviewer review-scope failures return recovery details", () => {
+		const { session } = createStartedSession({
+			finalFeature: true,
+			goalMode: "review",
+		});
+		const result = recordReviewerDecision(session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: [
+				{
+					scopeId: "audit:pointer-only-practice-controls",
+					status: "reviewed_no_findings",
+					evidenceRefs: ["src/runtime/session.ts"],
+					residualRisk: "No known residual risk.",
+				},
+			],
+		});
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.recovery?.errorCode).toBe("missing_review_scope_accounting");
+		const details = result.recovery?.details?.reviewScopeLedger as
+			| { declaredScopes: Array<{ scopeId: string }> }
+			| undefined;
+		expect(details?.declaredScopes.map((scope) => scope.scopeId)).toContain(
+			"file_target:src/runtime/session.ts",
+		);
+	});
+
 	test("broad review-and-fix final completion requires every declared review scope target", () => {
 		const declaredTargets = [
 			"src/runtime/session.ts",
@@ -773,6 +917,164 @@ describe("completion gates", () => {
 			true,
 		);
 		expect(complete.ok).toBe(true);
+	});
+
+	test("final completion review-scope recovery points at the recorded final reviewer decision", () => {
+		const declaredTargets = [
+			"src/runtime/session.ts",
+			"src/adapters/opencode/tools.ts",
+		];
+		const closedFindingRef = "review: setup runtime defect";
+		const staleFindingRef = "review: stale final reviewer finding";
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review_and_fix" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: declaredTargets,
+				},
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review and fix final reviewer accounting"),
+			plan,
+			{ reviewFindings: [knownReviewFinding(closedFindingRef)] },
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+
+		const finalReviewerLedger = scopeLedgerForTargets(declaredTargets, {
+			"src/runtime/session.ts": {
+				status: "finding_closed",
+				findingRefs: [staleFindingRef],
+			},
+		});
+		const reviewed = recordReviewerDecision(started.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: finalReviewerLedger,
+		});
+		expect(reviewed.ok).toBe(true);
+		if (!reviewed.ok) return;
+
+		const workerScopeLedger = scopeLedgerForTargets(declaredTargets, {
+			"src/runtime/session.ts": {
+				status: "finding_closed",
+				findingRefs: [closedFindingRef],
+			},
+		});
+		const result = validateSuccessfulCompletion(
+			reviewed.value,
+			createWorkerResult(featureId, {
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				validationScope: "broad",
+				reviewFindingClosures: [
+					closedReviewFindingClosure({ findingRef: closedFindingRef }),
+				],
+				reviewScopeLedger: workerScopeLedger,
+				finalReview: createFinalReviewPayload(),
+			}),
+			featureId,
+			true,
+		);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.recovery?.errorCode).toBe("missing_review_scope_accounting");
+		expect(result.recovery?.recoveryStage).toBe("record_review");
+		expect(result.recovery?.prerequisite).toBe("reviewer_result_required");
+		expect(result.recovery?.requiredArtifact).toBe("final_reviewer_decision");
+		expect(result.message).toContain(staleFindingRef);
+
+		const details = result.recovery?.details?.reviewScopeLedger as
+			| {
+					evidenceCandidates: {
+						changedArtifacts: string[];
+						closedFindingRefs: string[];
+					};
+					exampleReviewScopeLedger: NonNullable<
+						WorkerResult["reviewScopeLedger"]
+					>;
+			  }
+			| undefined;
+		expect(details?.evidenceCandidates.changedArtifacts).toEqual([
+			"src/runtime/session.ts",
+		]);
+		expect(details?.evidenceCandidates.changedArtifacts).not.toContain(
+			"src/adapters/opencode/tools.ts",
+		);
+		expect(details?.evidenceCandidates.closedFindingRefs).toEqual([
+			closedFindingRef,
+		]);
+		expect(
+			details?.exampleReviewScopeLedger.every(
+				(entry) => entry.findingRefs === undefined,
+			),
+		).toBe(true);
+	});
+
+	test("recursive fileTargets globs ground scoped evidence", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/**/*.ts"],
+				},
+				basePlan.features[1],
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review recursive TypeScript scope"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+
+		const reviewed = recordReviewerDecision(
+			started.value.session,
+			approvedFeatureDecision(featureId),
+		);
+		expect(reviewed.ok).toBe(true);
+		if (!reviewed.ok) return;
+
+		const completed = completeRun(
+			reviewed.value,
+			createWorkerResult(featureId, {
+				artifactsChanged: [
+					{ path: "src/index.ts" },
+					{ path: "src/runtime/session.ts" },
+				],
+				reviewScopeLedger: [
+					scopeLedgerEntry("file_target:src/**/*.ts", {
+						evidenceRefs: ["src/index.ts", "src/runtime/session.ts"],
+					}),
+				],
+			}),
+		);
+		expect(completed.ok).toBe(true);
 	});
 
 	test("explicit reviewScope adds to fileTargets instead of narrowing final review accounting", () => {
@@ -1125,6 +1427,111 @@ describe("completion gates", () => {
 		expect(finalCompleted.ok).toBe(true);
 	});
 
+	test("incomplete historical review-scope ledgers do not satisfy final accounting", () => {
+		const firstTargets = [
+			"src/runtime/session.ts",
+			"src/runtime/transitions/execution.ts",
+		];
+		const secondTarget = "src/adapters/opencode/tools.ts";
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: firstTargets,
+				},
+				{
+					...basePlan.features[1],
+					fileTargets: [secondTarget],
+				},
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review historical scope accounting"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const firstStarted = startRun(approved.value);
+		expect(firstStarted.ok).toBe(true);
+		if (!firstStarted.ok) return;
+		const firstFeatureId = firstStarted.value.session.execution.activeFeatureId;
+		expect(firstFeatureId).toBeTruthy();
+		if (!firstFeatureId) return;
+
+		const firstReviewed = recordReviewerDecision(
+			firstStarted.value.session,
+			approvedFeatureDecision(firstFeatureId),
+		);
+		expect(firstReviewed.ok).toBe(true);
+		if (!firstReviewed.ok) return;
+		const firstCompleted = completeRun(
+			firstReviewed.value,
+			createWorkerResult(firstFeatureId, {
+				reviewScopeLedger: scopeLedgerForTargets(firstTargets),
+			}),
+		);
+		expect(firstCompleted.ok).toBe(true);
+		if (!firstCompleted.ok) return;
+
+		const legacySession: Session = {
+			...firstCompleted.value,
+			execution: {
+				...firstCompleted.value.execution,
+				history: firstCompleted.value.execution.history.map((entry) =>
+					entry.featureId === firstFeatureId
+						? {
+								...entry,
+								reviewScopeLedger: [
+									scopeLedgerEntry("file_target:src/runtime/session.ts"),
+								],
+							}
+						: entry,
+				),
+			},
+		};
+
+		const secondStarted = startRun(legacySession);
+		expect(secondStarted.ok).toBe(true);
+		if (!secondStarted.ok) return;
+		const secondFeatureId =
+			secondStarted.value.session.execution.activeFeatureId;
+		expect(secondFeatureId).toBeTruthy();
+		if (!secondFeatureId) return;
+
+		const finalReviewed = recordReviewerDecision(secondStarted.value.session, {
+			...approvedFinalDecision(),
+			reviewScopeLedger: scopeLedgerForTargets([...firstTargets, secondTarget]),
+		});
+		expect(finalReviewed.ok).toBe(true);
+		if (!finalReviewed.ok) return;
+
+		const finalCompleted = completeRun(
+			finalReviewed.value,
+			createWorkerResult(secondFeatureId, {
+				artifactsChanged: [{ path: secondTarget }],
+				validationScope: "broad",
+				reviewScopeLedger: scopeLedgerForTargets([
+					"src/runtime/transitions/execution.ts",
+					secondTarget,
+				]),
+				finalReview: createFinalReviewPayload(),
+			}),
+		);
+		expect(finalCompleted.ok).toBe(false);
+		if (!finalCompleted.ok) {
+			expect(finalCompleted.message).toContain(
+				"file_target:src/runtime/session.ts",
+			);
+		}
+	});
+
 	test("failed historical review-and-fix attempts do not satisfy final finding-closed scope", () => {
 		const basePlan = samplePlan();
 		const plan = {
@@ -1176,11 +1583,13 @@ describe("completion gates", () => {
 			}),
 		);
 		expect(failedAttempt.ok).toBe(false);
-		if (failedAttempt.ok || !failedAttempt.session) return;
+		if (!failedAttempt.ok) {
+			expect(failedAttempt.session).toBeUndefined();
+		}
 
 		const successfulFindingRef = "review: successful setup fix";
 		const firstCompleted = completeRun(
-			failedAttempt.session,
+			firstReviewed.value,
 			createWorkerResult(firstFeatureId, {
 				reviewFindingClosures: [
 					closedReviewFindingClosure({ findingRef: successfulFindingRef }),

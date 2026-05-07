@@ -17,7 +17,7 @@ const sourcemapPath = join(projectRoot, "dist", "index.js.map");
 const bundleText = readFileSync(distPath, "utf8");
 const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
-const BUNDLE_SIZE_BUDGET_BYTES = 724992; // 708 KiB
+const BUNDLE_SIZE_BUDGET_BYTES = 733184; // 716 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });

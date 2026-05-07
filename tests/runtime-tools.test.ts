@@ -450,7 +450,86 @@ describe("runtime completion and recovery tools", () => {
 		expect(parsed.recovery.retryable).toBe(true);
 	});
 
-	test("tool persists worker evidence when completion fails with retryable recovery", async () => {
+	test("final review tool returns recovery details for review-scope accounting failures", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const basePlan = samplePlan();
+		const applied = applyPlan(createSession("Review runtime scope"), {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/runtime/session.ts"],
+				},
+			],
+		});
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		await saveSession(worktree, started.value.session);
+
+		const response = await tools.flow_review_record_final.execute(
+			{
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Checked final runtime state and validation evidence.",
+				validationAssessment: "bun test validates the reviewed runtime scope.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Checked the runtime session boundary against completion behavior.",
+				],
+				regressionChecks: [
+					"Checked validation evidence for the runtime session boundary.",
+				],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Looks good.",
+				reviewScopeLedger: [
+					{
+						scopeId: "audit:pointer-only-practice-controls",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						residualRisk: "No known residual risk.",
+					},
+				],
+			},
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.recovery.errorCode).toBe("missing_review_scope_accounting");
+		expect(parsed.recovery.recoveryStage).toBe("record_review");
+		expect(parsed.recovery.prerequisite).toBe("reviewer_result_required");
+		expect(parsed.recovery.requiredArtifact).toBe("final_reviewer_decision");
+		expect(
+			parsed.recovery.details.reviewScopeLedger.declaredScopes.map(
+				(scope: { scopeId: string }) => scope.scopeId,
+			),
+		).toContain("file_target:src/runtime/session.ts");
+		expect(
+			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedger.map(
+				(entry: { scopeId: string }) => entry.scopeId,
+			),
+		).toContain("file_target:src/runtime/session.ts");
+	});
+
+	test("tool does not persist worker evidence when success-gate recovery rejects ok completion", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Build a workflow plugin");
@@ -505,23 +584,14 @@ describe("runtime completion and recovery tools", () => {
 
 		const persisted = await loadSession(worktree);
 		expect(persisted?.execution.activeFeatureId).toBe("setup-runtime");
-		expect(persisted?.execution.lastSummary).toBe("Completed runtime setup.");
-		expect(persisted?.execution.lastFeatureResult?.featureId).toBe(
-			"setup-runtime",
+		expect(persisted?.execution.lastSummary).toBe(
+			"Running feature 'setup-runtime'.",
 		);
-		expect(persisted?.execution.lastValidationRun).toEqual([
-			{
-				command: "bun test",
-				status: "passed",
-				summary: "Runtime tests passed.",
-			},
-		]);
-		expect(persisted?.execution.history).toHaveLength(1);
-		expect(persisted?.execution.history[0]?.summary).toBe(
-			"Completed runtime setup.",
-		);
-		expect(persisted?.artifacts).toEqual([{ path: "src/runtime/session.ts" }]);
-		expect(persisted?.notes).toEqual(["Runtime wiring is complete."]);
+		expect(persisted?.execution.lastFeatureResult).toBeNull();
+		expect(persisted?.execution.lastValidationRun).toEqual([]);
+		expect(persisted?.execution.history).toHaveLength(0);
+		expect(persisted?.artifacts).toEqual([]);
+		expect(persisted?.notes).toEqual([]);
 	});
 
 	test("tool returns machine-readable recovery details for missing broad validation", async () => {
