@@ -252,6 +252,23 @@ function normalizeSummaryFixture(summary: ReturnType<typeof summarizeSession>) {
 	};
 }
 
+function stripFeatureDrilldownFields(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map(stripFeatureDrilldownFields);
+	}
+	if (!value || typeof value !== "object") {
+		return value;
+	}
+	return Object.fromEntries(
+		Object.entries(value as Record<string, unknown>)
+			.filter(
+				([key]) =>
+					key !== "featureDrilldown" && key !== "activeFeatureDrilldown",
+			)
+			.map(([key, nested]) => [key, stripFeatureDrilldownFields(nested)]),
+	);
+}
+
 function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 	const {
 		workspace,
@@ -272,7 +289,9 @@ function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 	void blocker;
 	void laneReason;
 	void reason;
-	return normalizeSummaryFixture(rest as ReturnType<typeof summarizeSession>);
+	return normalizeSummaryFixture(
+		stripFeatureDrilldownFields(rest) as ReturnType<typeof summarizeSession>,
+	);
 }
 
 describe("runtime summary", () => {

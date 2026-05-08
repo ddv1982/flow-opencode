@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 export class InvalidFlowPathInputError extends Error {
 	readonly code = "INVALID_FLOW_PATH_INPUT";
@@ -211,6 +211,13 @@ export function getFeatureDocPath(
 		getSessionDir(worktree, sessionId, location),
 		featureId,
 	);
+}
+
+export function getFeatureDocPathFromSessionPath(
+	sessionPath: string,
+	featureId: string,
+): string {
+	return getFeatureDocPathFromSessionDir(dirname(sessionPath), featureId);
 }
 
 export function getFeatureDocPathFromSessionDir(

@@ -1,3 +1,8 @@
+import {
+	type FeatureDocDrilldownSource,
+	type FeatureDocDrilldownTarget,
+	resolveFeatureDocDrilldownTarget,
+} from "../feature-doc-drilldown";
 import type { Session } from "../schema";
 import type {
 	closeSession,
@@ -5,7 +10,11 @@ import type {
 	loadStoredSession,
 } from "../session";
 import { deriveSessionOperatorState } from "../session-operator-state";
-import { deriveSessionViewModel, explainSessionState } from "../summary";
+import {
+	deriveSessionViewModel,
+	explainSessionState,
+	type SummarizedSessionDetails,
+} from "../summary";
 import { renderSessionStatusSummary } from "./operator-presenters";
 import { guidanceFields } from "./session-presenter-shared";
 import {
@@ -19,6 +28,110 @@ type StoredSessionRecord = Awaited<ReturnType<typeof loadStoredSession>>;
 type CompletedSessionRecord = Awaited<ReturnType<typeof closeSession>>;
 type StatusView = "detailed" | "compact";
 type AutoPrepareMode = "resume" | "missing_goal" | "start_new_goal";
+type SessionFeatureDrilldownSource = FeatureDocDrilldownSource | null;
+
+function activeFeatureDrilldownSource(
+	session: Session | null,
+	workspace?: WorkspaceContextSummary,
+): SessionFeatureDrilldownSource {
+	if (!session || !workspace?.root) {
+		return null;
+	}
+	return {
+		location: "active",
+		worktree: workspace.root,
+		sessionId: session.id,
+	};
+}
+
+function storedFeatureDrilldownSource(
+	found: NonNullable<StoredSessionRecord>,
+	workspace?: WorkspaceContextSummary,
+): SessionFeatureDrilldownSource {
+	if (!workspace?.root) {
+		return null;
+	}
+	return {
+		location: found.source,
+		worktree: workspace.root,
+		sessionDir: found.completedPath ?? found.path,
+		sessionId: found.session.id,
+	};
+}
+
+function collectFeatureDrilldownIds(
+	session: SummarizedSessionDetails,
+): string[] {
+	return Array.from(
+		new Set(
+			[
+				session.activeFeature?.id,
+				...session.taskProgress.map((row) => row.featureId),
+			].filter((id): id is string => Boolean(id)),
+		),
+	);
+}
+
+async function resolveFeatureDrilldownMap(
+	session: SummarizedSessionDetails,
+	source: SessionFeatureDrilldownSource,
+): Promise<Map<string, FeatureDocDrilldownTarget>> {
+	if (!source) {
+		return new Map();
+	}
+	const entries = await Promise.all(
+		collectFeatureDrilldownIds(session).map(async (featureId) => {
+			try {
+				return [
+					featureId,
+					await resolveFeatureDocDrilldownTarget({ featureId, source }),
+				] as const;
+			} catch {
+				return null;
+			}
+		}),
+	);
+	return new Map(
+		entries.filter(
+			(entry): entry is readonly [string, FeatureDocDrilldownTarget] =>
+				entry !== null,
+		),
+	);
+}
+
+function featureDrilldownField(
+	drilldowns: Map<string, FeatureDocDrilldownTarget>,
+	featureId: string | undefined,
+): { featureDrilldown: FeatureDocDrilldownTarget } | Record<string, never> {
+	if (!featureId) {
+		return {};
+	}
+	const featureDrilldown = drilldowns.get(featureId);
+	return featureDrilldown ? { featureDrilldown } : {};
+}
+
+async function withFeatureDrilldowns(
+	session: SummarizedSessionDetails,
+	source: SessionFeatureDrilldownSource,
+): Promise<SummarizedSessionDetails> {
+	const drilldowns = await resolveFeatureDrilldownMap(session, source);
+	if (drilldowns.size === 0) {
+		return session;
+	}
+	return {
+		...session,
+		activeFeature: session.activeFeature
+			? {
+					...session.activeFeature,
+					...featureDrilldownField(drilldowns, session.activeFeature.id),
+				}
+			: null,
+		taskProgress: session.taskProgress.map((row) => ({
+			...row,
+			...featureDrilldownField(drilldowns, row.featureId),
+		})),
+	};
+}
 
 function storedSessionGuidance(
 	found: NonNullable<StoredSessionRecord>,
@@ -122,13 +235,19 @@ export function historyResponse(history: SessionHistory, nextCommand: string) {
 	};
 }
 
-export function storedSessionResponse(
+export async function storedSessionResponse(
 	sessionId: string,
 	found: NonNullable<StoredSessionRecord>,
 	nextCommand: string,
-) {
+	workspace?: WorkspaceContextSummary,
+): Promise<string> {
 	const viewModel = deriveSessionViewModel(found.session);
-	const summarizedSession = viewModel.session;
+	const summarizedSession = viewModel.session
+		? await withFeatureDrilldowns(
+				viewModel.session,
+				storedFeatureDrilldownSource(found, workspace),
+			)
+		: null;
 	if (!summarizedSession) {
 		throw new Error("Stored Flow session summary unexpectedly missing.");
 	}
@@ -175,21 +294,35 @@ export function storedSessionResponse(
 	});
 }
 
-export function statusResponse(
+export async function statusResponse(
 	session: Session | null | undefined,
 	view: StatusView = "detailed",
 	workspace?: WorkspaceContextSummary,
-) {
+): Promise<string> {
 	const viewModel = deriveSessionViewModel(session ?? null);
 	const normalizedSession = session ?? null;
 	const guidance = viewModel.guidance;
-	const operatorSummary = renderSessionStatusSummary(normalizedSession);
+	const presentedSession = viewModel.session
+		? await withFeatureDrilldowns(
+				viewModel.session,
+				activeFeatureDrilldownSource(normalizedSession, workspace),
+			)
+		: null;
+	const operatorSummary = renderSessionStatusSummary(
+		normalizedSession,
+		presentedSession
+			? { taskProgressOverride: presentedSession.taskProgress }
+			: undefined,
+	);
 	const workspaceRoot = workspace?.root ?? null;
+	const activeFeatureDrilldown =
+		presentedSession?.activeFeature?.featureDrilldown ?? null;
 	if (view === "compact") {
 		return toCompactJson({
 			status: viewModel.status,
 			summary: viewModel.summary,
-			finalReviewPolicy: viewModel.session?.finalReviewPolicy ?? null,
+			finalReviewPolicy: presentedSession?.finalReviewPolicy ?? null,
+			...(activeFeatureDrilldown ? { activeFeatureDrilldown } : {}),
 			...guidanceFields(guidance),
 			guidance,
 			operatorSummary,
@@ -201,8 +334,9 @@ export function statusResponse(
 	return toJson({
 		status: viewModel.status,
 		summary: viewModel.summary,
-		finalReviewPolicy: viewModel.session?.finalReviewPolicy ?? null,
-		...(viewModel.session ? { session: viewModel.session } : {}),
+		finalReviewPolicy: presentedSession?.finalReviewPolicy ?? null,
+		...(activeFeatureDrilldown ? { activeFeatureDrilldown } : {}),
+		...(presentedSession ? { session: presentedSession } : {}),
 		...guidanceFields(guidance),
 		guidance,
 		operatorSummary,

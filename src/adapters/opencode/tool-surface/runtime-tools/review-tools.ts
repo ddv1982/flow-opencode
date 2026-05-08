@@ -20,7 +20,10 @@ import {
 	openCodeToolDescription,
 	openCodeToolRuntimeActionName,
 } from "../tool-registry";
-import { executeGuardedSessionMutation } from "./shared";
+import {
+	executeGuardedSessionMutation,
+	resolveFeatureDocDrilldownFromCurrentSession,
+} from "./shared";
 
 export function createReviewRuntimeTools() {
 	return {
@@ -30,6 +33,11 @@ export function createReviewRuntimeTools() {
 			execute: withParsedArgs(
 				FlowReviewRecordFeatureArgsSchema,
 				async (input, context: ToolContext) => {
+					const featureDocDrilldown =
+						await resolveFeatureDocDrilldownFromCurrentSession(
+							context,
+							input.featureId,
+						);
 					context.metadata?.({
 						title: `Reviewer ${input.status} ${input.featureId}`,
 						metadata: {
@@ -41,6 +49,7 @@ export function createReviewRuntimeTools() {
 							requestedTaskStatus: input.status,
 							featureId: input.featureId,
 							status: input.status,
+							...(featureDocDrilldown ? { featureDocDrilldown } : {}),
 						},
 					});
 					return executeGuardedSessionMutation(

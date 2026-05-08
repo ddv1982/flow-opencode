@@ -8,6 +8,8 @@ import {
 	flowSessionActivateCommand,
 } from "../src/runtime/constants";
 import {
+	getFeatureDocPath,
+	getFeatureDocPathFromSessionDir,
 	getSessionPath,
 	getStoredSessionDir,
 	getStoredSessionsDir,
@@ -26,6 +28,26 @@ import {
 } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
+
+function createSessionWithActiveFeature(goal: string) {
+	const session = createSession(goal);
+	session.plan = samplePlan();
+	session.status = "ready";
+	session.approval = "approved";
+	session.execution.activeFeatureId = "setup-runtime";
+	if (!session.plan) {
+		throw new Error("Expected sample plan to be present.");
+	}
+	const [firstFeature] = session.plan.features;
+	if (!firstFeature) {
+		throw new Error("Expected sample plan to include a first feature.");
+	}
+	session.plan.features[0] = {
+		...firstFeature,
+		status: "in_progress",
+	};
+	return session;
+}
 
 afterEach(() => {
 	cleanupTempDirs();
@@ -115,6 +137,283 @@ describe("runtime operator history and session lifecycle", () => {
 		});
 		expect(parsed.history.completed[0].path).toBe(resetParsed.completedTo);
 		expect(parsed.nextCommand).toBe(flowSessionActivateCommand(first.id));
+	});
+
+	test("flow_status exposes active feature doc drilldowns", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const saved = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Active drilldown goal"),
+		);
+
+		const response = await tools.flow_status.execute(
+			{ view: "detailed" },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+		const expectedPath = getFeatureDocPath(
+			worktree,
+			saved.id,
+			"setup-runtime",
+			"active",
+		);
+
+		expect(parsed.status).toBe("ready");
+		expect(parsed.activeFeatureDrilldown).toMatchObject({
+			kind: "feature_doc",
+			label: "Open feature details",
+			featureId: "setup-runtime",
+			path: expectedPath,
+			available: true,
+			availability: "available",
+			sessionLocation: "active",
+			sessionId: saved.id,
+		});
+		expect(parsed.session.activeFeature.featureDrilldown).toMatchObject({
+			path: expectedPath,
+			available: true,
+		});
+		expect(parsed.session.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "feature:setup-runtime",
+					featureId: "setup-runtime",
+					featureDrilldown: expect.objectContaining({
+						path: expectedPath,
+						available: true,
+					}),
+				}),
+			]),
+		);
+	});
+
+	test("flow_status compact view exposes active feature doc drilldown", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const saved = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Compact drilldown goal"),
+		);
+
+		const response = await tools.flow_status.execute(
+			{ view: "compact" },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+		const expectedPath = getFeatureDocPath(
+			worktree,
+			saved.id,
+			"setup-runtime",
+			"active",
+		);
+
+		expect(parsed.activeFeatureDrilldown).toMatchObject({
+			kind: "feature_doc",
+			featureId: "setup-runtime",
+			path: expectedPath,
+			available: true,
+			availability: "available",
+			sessionLocation: "active",
+			sessionId: saved.id,
+		});
+		expect(parsed.session).toBeUndefined();
+	});
+
+	test("flow_status reports missing feature doc fallback without mutating the session", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const saved = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Missing doc goal"),
+		);
+		const expectedPath = getFeatureDocPath(
+			worktree,
+			saved.id,
+			"setup-runtime",
+			"active",
+		);
+		await rm(expectedPath);
+
+		const response = await tools.flow_status.execute(
+			{ view: "detailed" },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.activeFeatureDrilldown).toMatchObject({
+			kind: "feature_doc",
+			featureId: "setup-runtime",
+			path: expectedPath,
+			available: false,
+			availability: "missing_feature_doc",
+			sessionLocation: "active",
+			sessionId: saved.id,
+		});
+		expect(parsed.session.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "feature:setup-runtime",
+					featureDrilldown: expect.objectContaining({
+						path: expectedPath,
+						available: false,
+						availability: "missing_feature_doc",
+					}),
+				}),
+			]),
+		);
+		expect(await activeSessionId(worktree)).toBe(saved.id);
+	});
+
+	test("flow_status remains readable when drilldown enrichment source is malformed", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const saved = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Malformed drilldown source"),
+		);
+		const sessionPath = getSessionPath(worktree, saved.id, "active");
+		const session = JSON.parse(await readFile(sessionPath, "utf8"));
+		session.id = "../escape";
+		await writeFile(
+			sessionPath,
+			`${JSON.stringify(session, null, 2)}\n`,
+			"utf8",
+		);
+
+		const response = await tools.flow_status.execute(
+			{ view: "detailed" },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ready");
+		expect(parsed.activeFeatureDrilldown).toBeUndefined();
+		expect(parsed.session.activeFeature.featureDrilldown).toBeUndefined();
+		const activeFeatureRow = parsed.session.taskProgress.find(
+			(row: { id: string }) => row.id === "feature:setup-runtime",
+		);
+		expect(activeFeatureRow?.featureDrilldown).toBeUndefined();
+		expect(await activeSessionId(worktree)).toBe(saved.id);
+	});
+
+	test("flow_history_show resolves stored feature doc drilldowns", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const stored = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Stored drilldown goal"),
+		);
+		await saveSession(worktree, createSession("Current active goal"));
+
+		const response = await tools.flow_history_show.execute(
+			{ sessionId: stored.id },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+		const expectedPath = getFeatureDocPath(
+			worktree,
+			stored.id,
+			"setup-runtime",
+			"stored",
+		);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.source).toBe("stored");
+		expect(parsed.session.activeFeature.featureDrilldown).toMatchObject({
+			path: expectedPath,
+			available: true,
+			availability: "available",
+			sessionLocation: "stored",
+			sessionId: stored.id,
+		});
+		expect(parsed.session.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "feature:setup-runtime",
+					featureDrilldown: expect.objectContaining({
+						path: expectedPath,
+						available: true,
+					}),
+				}),
+			]),
+		);
+	});
+
+	test("flow_history_show remains readable when stored drilldown enrichment source is malformed", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const stored = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Stored malformed drilldown source"),
+		);
+		await saveSession(worktree, createSession("Current active goal"));
+
+		const storedSessionPath = getSessionPath(worktree, stored.id, "stored");
+		const storedSession = JSON.parse(await readFile(storedSessionPath, "utf8"));
+		storedSession.id = "../escape";
+		await writeFile(
+			storedSessionPath,
+			`${JSON.stringify(storedSession, null, 2)}\n`,
+			"utf8",
+		);
+
+		const response = await tools.flow_history_show.execute(
+			{ sessionId: stored.id },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.source).toBe("stored");
+		expect(parsed.session.activeFeature.featureDrilldown).toBeUndefined();
+		const storedFeatureRow = parsed.session.taskProgress.find(
+			(row: { id: string }) => row.id === "feature:setup-runtime",
+		);
+		expect(storedFeatureRow?.featureDrilldown).toBeUndefined();
+	});
+
+	test("flow_history_show resolves completed feature doc drilldowns", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const saved = await saveSession(
+			worktree,
+			createSessionWithActiveFeature("Completed drilldown goal"),
+		);
+		const closeResponse = await tools.flow_session_close.execute(
+			{ kind: "completed" },
+			toolContext(worktree),
+		);
+		const closeParsed = JSON.parse(closeResponse);
+
+		const response = await tools.flow_history_show.execute(
+			{ sessionId: saved.id },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+		const expectedPath = getFeatureDocPathFromSessionDir(
+			join(worktree, closeParsed.completedTo),
+			"setup-runtime",
+		);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.source).toBe("completed");
+		expect(parsed.session.activeFeature).toBeNull();
+		expect(parsed.session.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "feature:setup-runtime",
+					featureId: "setup-runtime",
+					featureDrilldown: expect.objectContaining({
+						path: expectedPath,
+						available: true,
+						availability: "available",
+						sessionLocation: "completed",
+						sessionId: saved.id,
+					}),
+				}),
+			]),
+		);
 	});
 
 	test("flow_history_show returns stored session details by id", async () => {

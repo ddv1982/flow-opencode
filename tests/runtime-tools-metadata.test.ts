@@ -170,6 +170,18 @@ describe("runtime tool metadata", () => {
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 
 		metadata.mockClear();
+		await tools.flow_run_start.execute({ featureId: "setup-runtime" }, context);
+		let drilldown = latestMetadataCall(metadata).metadata
+			?.featureDocDrilldown as Record<string, unknown>;
+		expect(drilldown?.kind).toBe("feature_doc");
+		expect(drilldown?.featureId).toBe("setup-runtime");
+		expect(typeof drilldown?.path).toBe("string");
+		expect(
+			(drilldown?.path as string).endsWith("/docs/features/setup-runtime.md"),
+		).toBe(true);
+		expect(typeof drilldown?.availability).toBe("string");
+
+		metadata.mockClear();
 		await tools.flow_run_complete_feature.execute(
 			{
 				contractVersion: "1",
@@ -203,6 +215,22 @@ describe("runtime tool metadata", () => {
 		expect(latestCall.metadata?.requestedTaskStatus).toBe("needs_input");
 		expect(latestCall.metadata?.validationCount).toBe(0);
 		expect(latestCall.metadata?.hasFinalReview).toBe(false);
+		drilldown = latestCall.metadata?.featureDocDrilldown as Record<
+			string,
+			unknown
+		>;
+		expect(drilldown?.kind).toBe("feature_doc");
+		expect(drilldown?.featureId).toBe("setup-runtime");
+
+		metadata.mockClear();
+		await tools.flow_reset_feature.execute(
+			{ featureId: "setup-runtime" },
+			context,
+		);
+		drilldown = latestMetadataCall(metadata).metadata
+			?.featureDocDrilldown as Record<string, unknown>;
+		expect(drilldown?.kind).toBe("feature_doc");
+		expect(drilldown?.featureId).toBe("setup-runtime");
 
 		metadata.mockClear();
 		await tools.flow_review_record_feature.execute(
@@ -219,6 +247,12 @@ describe("runtime tool metadata", () => {
 		expect(latestCall.metadata?.taskPhase).toBe("review");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 		expect(latestCall.metadata?.requestedTaskStatus).toBe("approved");
+		drilldown = latestCall.metadata?.featureDocDrilldown as Record<
+			string,
+			unknown
+		>;
+		expect(drilldown?.kind).toBe("feature_doc");
+		expect(drilldown?.featureId).toBe("setup-runtime");
 
 		metadata.mockClear();
 		await tools.flow_status.execute({}, context);

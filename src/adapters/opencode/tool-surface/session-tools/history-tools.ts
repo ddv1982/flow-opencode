@@ -92,7 +92,11 @@ export function createHistorySessionTools() {
 						workspaceRoot: workspace.root,
 						workspaceMutationAllowed: workspace.mutationAllowed,
 					});
-					return statusResponse(session, input.view ?? "detailed", workspace);
+					return await statusResponse(
+						session,
+						input.view ?? "detailed",
+						workspace,
+					);
 				},
 			),
 		}),
@@ -155,10 +159,12 @@ export function createHistorySessionTools() {
 						);
 					}
 
-					return storedSessionResponse(
+					const workspace = inspectToolWorkspace(context);
+					return await storedSessionResponse(
 						input.sessionId,
 						found,
 						nextCommandForStoredSession(input.sessionId, found),
+						workspace,
 					);
 				},
 			),

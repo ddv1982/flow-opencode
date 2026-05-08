@@ -3,6 +3,7 @@ import {
 	finalReviewPolicyForPlan,
 	summarizeCompletion,
 } from "./domain";
+import type { FeatureDocDrilldownTarget } from "./feature-doc-drilldown";
 import type { Feature, ReviewerDecision, Session } from "./schema";
 
 export type SummarizedFeature = {
@@ -10,6 +11,7 @@ export type SummarizedFeature = {
 	title: string;
 	status: Feature["status"];
 	summary: string;
+	featureDrilldown?: FeatureDocDrilldownTarget;
 };
 
 export type SummarizedPlanning = Pick<
@@ -54,6 +56,7 @@ export type TaskProgressRow = {
 		| "completed"
 		| "ready";
 	featureId?: string;
+	featureDrilldown?: FeatureDocDrilldownTarget;
 	evidence: string[];
 	blocker: string | null;
 	next: string;

@@ -12,7 +12,11 @@ import {
 	openCodeToolDescription,
 	openCodeToolRuntimeActionName,
 } from "../tool-registry";
-import { executeGuardedSessionMutation, flowRunStartArgsShape } from "./shared";
+import {
+	executeGuardedSessionMutation,
+	flowRunStartArgsShape,
+	resolveFeatureDocDrilldownFromCurrentSession,
+} from "./shared";
 
 export function createExecutionRuntimeTools() {
 	return {
@@ -22,6 +26,11 @@ export function createExecutionRuntimeTools() {
 			execute: withParsedArgs(
 				FlowRunStartArgsSchema,
 				async (input, context: ToolContext) => {
+					const featureDocDrilldown =
+						await resolveFeatureDocDrilldownFromCurrentSession(
+							context,
+							input.featureId,
+						);
 					context.metadata?.({
 						title: input.featureId ? `Start ${input.featureId}` : "Start next",
 						metadata: {
@@ -32,6 +41,7 @@ export function createExecutionRuntimeTools() {
 							taskStatus: "active",
 							featureId: input.featureId ?? null,
 							reason: null,
+							...(featureDocDrilldown ? { featureDocDrilldown } : {}),
 						},
 					});
 					return executeGuardedSessionMutation(
@@ -51,6 +61,11 @@ export function createExecutionRuntimeTools() {
 			execute: withParsedArgs(
 				WorkerResultArgsSchema,
 				async (input, context: ToolContext) => {
+					const featureDocDrilldown =
+						await resolveFeatureDocDrilldownFromCurrentSession(
+							context,
+							input.featureResult?.featureId,
+						);
 					context.metadata?.({
 						title: `Complete ${input.featureResult?.featureId ?? "feature"}`,
 						metadata: {
@@ -67,6 +82,7 @@ export function createExecutionRuntimeTools() {
 							validationCount: input.validationRun.length,
 							reviewIterations: input.reviewIterations ?? null,
 							hasFinalReview: input.finalReview !== undefined,
+							...(featureDocDrilldown ? { featureDocDrilldown } : {}),
 						},
 					});
 					return executeGuardedSessionMutation(
@@ -89,6 +105,11 @@ export function createExecutionRuntimeTools() {
 			execute: withParsedArgs(
 				FlowResetFeatureArgsSchema,
 				async (input, context: ToolContext) => {
+					const featureDocDrilldown =
+						await resolveFeatureDocDrilldownFromCurrentSession(
+							context,
+							input.featureId,
+						);
 					context.metadata?.({
 						title: `Reset ${input.featureId}`,
 						metadata: {
@@ -98,6 +119,7 @@ export function createExecutionRuntimeTools() {
 							taskSubject: input.featureId,
 							taskStatus: "active",
 							featureId: input.featureId,
+							...(featureDocDrilldown ? { featureDocDrilldown } : {}),
 						},
 					});
 					return executeGuardedSessionMutation(
