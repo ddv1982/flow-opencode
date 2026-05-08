@@ -1,8 +1,9 @@
 // Owns plugin config injection and registered command/agent/tool surface coverage
 // previously grouped in tests/config.test.ts.
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { clearFlowAttachments } from "../../src/adapters/opencode/attachment-store";
 import {
 	applyFlowConfig,
 	createConfigHook,
@@ -10,7 +11,25 @@ import {
 import { OPENCODE_TOOL_NAMES } from "../../src/adapters/opencode/tool-projections.generated";
 import { createTools } from "../../src/adapters/opencode/tools";
 import FlowPlugin from "../../src/index";
+import { createTempDirRegistry, toolContext } from "../runtime-test-helpers";
 import type { FlowPluginHooks, MutableConfig } from "./helpers";
+
+const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
+	"flow-plugin-surface-",
+);
+
+const PNG_HEADER_BYTES = Buffer.from([
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
+]);
+
+function dataUrl(mime: string, bytes: Buffer) {
+	return `data:${mime};base64,${bytes.toString("base64")}`;
+}
+
+afterEach(() => {
+	clearFlowAttachments();
+	cleanupTempDirs();
+});
 
 async function collectTypeScriptFiles(directory: string): Promise<string[]> {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -60,7 +79,97 @@ describe("plugin config surface", () => {
 		expect(
 			typeof pluginWithHooks.hooks?.["experimental.chat.system.transform"],
 		).toBe("function");
+		expect(typeof pluginWithHooks.hooks?.["chat.message"]).toBe("function");
+		expect(typeof pluginWithHooks.hooks?.["command.execute.before"]).toBe(
+			"function",
+		);
 		expect(typeof pluginWithHooks.hooks?.["tool.definition"]).toBe("function");
+	});
+
+	test("plugin hooks ingest FilePart payloads before attachment materialization", async () => {
+		const worktree = makeTempDir();
+		const plugin = await FlowPlugin({ worktree } as unknown as Parameters<
+			typeof FlowPlugin
+		>[0]);
+		type AttachmentHook = (
+			input: { sessionID: string; messageID?: string },
+			output: { parts: unknown[] },
+		) => Promise<void> | void;
+		const pluginWithHooks = plugin as typeof plugin & FlowPluginHooks;
+		const chatHook = pluginWithHooks.hooks?.["chat.message"] as
+			| AttachmentHook
+			| undefined;
+		const commandHook = pluginWithHooks.hooks?.["command.execute.before"] as
+			| AttachmentHook
+			| undefined;
+		const materializeTool = plugin.tool?.flow_attachments_materialize;
+		if (!chatHook || !commandHook || !materializeTool) {
+			throw new Error("Missing attachment hook or tool surface.");
+		}
+
+		await chatHook(
+			{ sessionID: "chat-session", messageID: "message-1" },
+			{
+				parts: [
+					{
+						id: "chat-png",
+						type: "file",
+						mime: "image/png",
+						filename: "chat.png",
+						url: dataUrl("image/png", PNG_HEADER_BYTES),
+					},
+				],
+			},
+		);
+		await commandHook(
+			{ sessionID: "command-session" },
+			{
+				parts: [
+					{
+						id: "command-png",
+						type: "file",
+						mime: "image/png",
+						filename: "command.png",
+						url: dataUrl("image/png", PNG_HEADER_BYTES),
+					},
+				],
+			},
+		);
+
+		const chatResponse = JSON.parse(
+			await materializeTool.execute(
+				{ destinationDirectory: "assets/chat" },
+				toolContext(worktree, undefined, {
+					sessionID: "chat-session",
+					messageID: "message-1",
+					agent: "flow-auto",
+				}) as Parameters<typeof materializeTool.execute>[1],
+			),
+		) as { status: string; imported: Array<{ path: string }> };
+		const commandResponse = JSON.parse(
+			await materializeTool.execute(
+				{ destinationDirectory: "assets/command" },
+				toolContext(worktree, undefined, {
+					sessionID: "command-session",
+					agent: "flow-auto",
+				}) as Parameters<typeof materializeTool.execute>[1],
+			),
+		) as { status: string; imported: Array<{ path: string }> };
+
+		expect(chatResponse.status).toBe("ok");
+		expect(chatResponse.imported.map((item) => item.path)).toEqual([
+			"assets/chat/chat.png",
+		]);
+		expect(commandResponse.status).toBe("ok");
+		expect(commandResponse.imported.map((item) => item.path)).toEqual([
+			"assets/command/command.png",
+		]);
+		expect(
+			await readFile(join(worktree, "assets", "chat", "chat.png")),
+		).toEqual(PNG_HEADER_BYTES);
+		expect(
+			await readFile(join(worktree, "assets", "command", "command.png")),
+		).toEqual(PNG_HEADER_BYTES);
 	});
 
 	test("core modules stay independent of OpenCode adapter packages", async () => {

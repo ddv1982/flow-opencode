@@ -5,6 +5,7 @@ import {
 	renderTaggedBlock,
 } from "../format";
 import {
+	FLOW_ATTACHMENT_MATERIALIZATION_COORDINATOR_RULE,
 	FLOW_CONTEXT_GATHERING_RUNTIME_RULE,
 	FLOW_ENGINEERING_QUALITY_RULE,
 	FLOW_FINAL_COMPLETION_COMMAND_RULE,
@@ -85,6 +86,14 @@ const FLOW_AUTO_COMMAND_EXAMPLES = renderExampleBlocks([
 		body: "If arguments are empty or resume, resume the active session only. If no active session exists, stop and request a goal.",
 	},
 	{
+		name: "attachment-dependent-goal",
+		body: "If the user asks to use supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; not SVG), call flow_auto_prepare, then flow_attachments_materialize into an explicit workspace asset directory before planning or handing work to flow-planner/flow-worker.",
+	},
+	{
+		name: "ordinary-goal",
+		body: "If the goal has no attachment dependency, do not call flow_attachments_materialize; continue with normal planning/execution classification.",
+	},
+	{
 		name: "decision-gate",
 		body: "If the runtime exposes status `recommend_confirm` or `human_required`, present that recommendation clearly and stop instead of continuing autonomously.",
 	},
@@ -157,8 +166,10 @@ export const FLOW_AUTO_COMMAND_TEMPLATE = renderPromptSections([
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 ${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
+${FLOW_ATTACHMENT_MATERIALIZATION_COORDINATOR_RULE}
 - Treat this command as a coordinator entrypoint for Flow's existing planner, worker, reviewer, and runtime tools.
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
+- If the classified goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; SVG is unsupported), call \`flow_attachments_materialize\` before planning, implementation repo inspection, or Task/subagent handoff; use returned workspace-relative paths as plan/evidence inputs.
 - If the argument string is non-empty and not \`resume\`, treat the full argument string as a new autonomous goal.
 - If the argument string is empty or \`resume\`, resume the active session only.
 ${FLOW_RESUME_ONLY_RULE}

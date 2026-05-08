@@ -84,6 +84,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_run_start",
 			"flow_run_complete_feature",
 			"flow_review_record_feature",
@@ -119,6 +120,7 @@ export const FLOW_MODE_CONTRACTS = {
 		repositoryMutation: "allowed",
 		allowedFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_context_record",
 			"flow_plan_apply",
@@ -132,6 +134,8 @@ export const FLOW_MODE_CONTRACTS = {
 		forbiddenFlowTools: ["flow_session_close"],
 		requiredBehavior: [
 			"Call flow_auto_prepare before planning or repo inspection.",
+			"Materialize supported image attachments (PNG, JPEG, WebP, GIF, and AVIF; SVG unsupported) before planning, repo inspection for implementation, or delegation when the goal depends on attached assets.",
+			"Do not call attachment materialization for ordinary goals with no attachment dependency.",
 			"Stop on missing goal or human decision gates.",
 			"Record and apply the runtime-owned stack and standards profile.",
 			"Apply coding guidelines, release hygiene, and tests before completion.",
@@ -163,6 +167,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_plan_apply",
 			"flow_plan_approve",
 			"flow_session_close",
@@ -200,6 +205,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_plan_apply",
 			"flow_plan_approve",
 			"flow_session_close",
@@ -230,6 +236,7 @@ export const FLOW_MODE_CONTRACTS = {
 		allowedFlowTools: [],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_apply",
 			"flow_plan_approve",
@@ -264,6 +271,7 @@ export const FLOW_MODE_CONTRACTS = {
 		repositoryMutation: "none",
 		allowedFlowTools: [],
 		forbiddenFlowTools: [
+			"flow_attachments_materialize",
 			"flow_plan_apply",
 			"flow_plan_approve",
 			"flow_run_start",
@@ -307,6 +315,7 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_apply",
 			"flow_plan_approve",
@@ -341,6 +350,7 @@ export const FLOW_MODE_CONTRACTS = {
 		allowedFlowTools: ["flow_review_render"],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
+			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_apply",
 			"flow_plan_approve",

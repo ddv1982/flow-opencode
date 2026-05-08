@@ -961,6 +961,105 @@
 		"nextStepSnippets": ["runtime next step"]
 	},
 	{
+		"id": "auto-materializes-attached-image-before-planning",
+		"mode": "flow-auto",
+		"title": "Auto mode materializes attachment-dependent image assets before planning or delegation",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare with the raw argument string first. Because the classified goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; not SVG), call flow_attachments_materialize into assets/images before planning or Task/subagent handoff. Use the returned workspace-relative paths as plan evidence and pass them to flow-planner/flow-worker; do not assume OpenCode chat attachments are filesystem files before import. Next step: continue normal planning with the materialized asset paths.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_auto_prepare",
+			"flow_attachments_materialize"
+		],
+		"forbiddenToolMentions": ["flow_run_start", "flow_session_close"],
+		"requiredResponseSnippets": [
+			"supported image attachments",
+			"before planning",
+			"Task/subagent handoff",
+			"workspace-relative paths",
+			"do not assume OpenCode chat attachments are filesystem files before import"
+		],
+		"forbiddenResponseSnippets": [
+			"asked the user to copy files manually",
+			"use chat attachments as paths"
+		],
+		"nextStepSnippets": ["materialized asset paths", "normal planning"]
+	},
+	{
+		"id": "auto-ordinary-goal-skips-attachment-materialization",
+		"mode": "flow-auto",
+		"title": "Auto mode does not materialize attachments for ordinary goals",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare with the raw argument string. The goal has no attachment dependency, so do not call attachment materialization; continue with normal planning and repo evidence gathering. Next step: create or refresh the plan from the classified goal.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": ["flow_attachments_materialize", "flow_run_start"],
+		"requiredResponseSnippets": [
+			"no attachment dependency",
+			"do not call attachment materialization",
+			"normal planning"
+		],
+		"forbiddenResponseSnippets": ["materialized attachments", "imported image"],
+		"nextStepSnippets": ["create or refresh the plan", "classified goal"]
+	},
+	{
+		"id": "auto-bad-materializes-attached-image-after-planning",
+		"mode": "flow-auto",
+		"title": "Auto mode regression plans before materializing attached image assets",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare, then call flow_plan_start and hand the task to flow-planner. After planning, call flow_attachments_materialize and pass any image paths to the worker. Next step: continue execution.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_auto_prepare",
+			"flow_attachments_materialize",
+			"flow_plan_start"
+		],
+		"forbiddenToolMentions": ["flow_session_close"],
+		"requiredResponseSnippets": [
+			"before planning",
+			"workspace-relative paths",
+			"do not assume OpenCode chat attachments are filesystem files"
+		],
+		"forbiddenResponseSnippets": ["After planning"],
+		"nextStepSnippets": [
+			"materialize before planning",
+			"materialized asset paths"
+		],
+		"expectedFailures": [
+			"required_tool_sequence",
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
 		"id": "worker-bad-progress-inside-worker-result",
 		"mode": "flow-worker",
 		"title": "Worker mode regression pollutes structured worker result with progress narration",

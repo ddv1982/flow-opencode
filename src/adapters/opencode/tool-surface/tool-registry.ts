@@ -131,6 +131,17 @@ export const OPENCODE_TOOL_REGISTRY = [
 		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 	},
 	{
+		toolName: "flow_attachments_materialize",
+		surfaceKind: "workspace",
+		runtimeActionBinding: { kind: "none" },
+		coreAction: null,
+		mutationClass: "execution",
+		allowedModes: ["flow-auto"],
+		hostDescription:
+			"Import captured PNG, JPEG, WebP, GIF, or AVIF OpenCode attachments into a safe workspace path",
+		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
+	},
+	{
 		toolName: "flow_session_close",
 		surfaceKind: "workspace",
 		runtimeActionBinding: { kind: "workspace", name: "close_session" },

@@ -2,16 +2,59 @@
 // contract coverage previously grouped in tests/config.test.ts.
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import type { ToolContext as OpenCodeToolContext } from "@opencode-ai/plugin/tool";
 import { tool } from "../../src/adapters/opencode/sdk";
 import {
 	getOpenCodeToolProjection,
 	OPENCODE_TOOL_NAMES,
 	OPENCODE_TOOL_PROJECTIONS,
 } from "../../src/adapters/opencode/tool-projections.generated";
+import { FlowAttachmentsMaterializeArgsSchema } from "../../src/adapters/opencode/tool-surface/schemas";
 import { WorkerResultSchema } from "../../src/runtime/schema";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
 
+type IsRequired<T, K extends keyof T> =
+	Record<string, never> extends Pick<T, K> ? false : true;
+type Assert<T extends true> = T;
+type OpenCodeToolContextRequiredAssertions = [
+	Assert<IsRequired<OpenCodeToolContext, "agent">>,
+	Assert<IsRequired<OpenCodeToolContext, "sessionID">>,
+	Assert<IsRequired<OpenCodeToolContext, "messageID">>,
+	Assert<IsRequired<OpenCodeToolContext, "abort">>,
+	Assert<IsRequired<OpenCodeToolContext, "metadata">>,
+	Assert<IsRequired<OpenCodeToolContext, "ask">>,
+];
+
 describe("tool schema config contracts", () => {
+	test("installed OpenCode ToolContext keeps required execution fields", () => {
+		const requiredAssertions: OpenCodeToolContextRequiredAssertions = [
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+		];
+		const requiredFields = [
+			"agent",
+			"sessionID",
+			"messageID",
+			"abort",
+			"metadata",
+			"ask",
+		] as const satisfies readonly (keyof OpenCodeToolContext)[];
+
+		expect(requiredAssertions).toEqual([true, true, true, true, true, true]);
+		expect(requiredFields).toEqual([
+			"agent",
+			"sessionID",
+			"messageID",
+			"abort",
+			"metadata",
+			"ask",
+		]);
+	});
+
 	test("OpenCode tool surface is ordered by the adapter projection registry", () => {
 		const { tools } = getToolSchemas();
 
@@ -69,7 +112,7 @@ describe("tool schema config contracts", () => {
 		// These ceilings intentionally leave narrow headroom over measured growth
 		// (including finalReview/suggestedValidation and planning.reviewFindings
 		// additive fields) so unrelated future bloat still fails fast.
-		expect(totalSize).toBeLessThan(352000);
+		expect(totalSize).toBeLessThan(354000);
 		expect(schemaSizes.flow_plan_apply).toBeLessThan(78500);
 		expect(schemaSizes.flow_plan_context_record).toBeLessThan(60500);
 		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(88000);
@@ -155,6 +198,36 @@ describe("tool schema config contracts", () => {
 		expect(schemas.flow_plan_start.safeParse({ goal: 123 }).success).toBe(
 			false,
 		);
+		expect(
+			schemas.flow_attachments_materialize.safeParse({
+				destinationDirectory: "assets/images",
+				attachments: [{ id: "att-1" }, { filename: "background.png" }],
+			}).success,
+		).toBe(true);
+		expect(
+			schemas.flow_attachments_materialize.safeParse({
+				destinationDirectory: "assets/images",
+				attachments: [{ id: "att-1", rawBase64: "AAAA" }],
+			}).success,
+		).toBe(false);
+		expect(
+			FlowAttachmentsMaterializeArgsSchema.safeParse({
+				destinationDirectory: "assets/images",
+				base64: "AAAA",
+			}).success,
+		).toBe(false);
+		expect(
+			FlowAttachmentsMaterializeArgsSchema.safeParse({
+				destinationDirectory: "assets/images",
+				filenamePolicy: "safe-slug",
+			}).success,
+		).toBe(false);
+		expect(
+			FlowAttachmentsMaterializeArgsSchema.safeParse({
+				destinationDirectory: "assets/images",
+				overwrite: false,
+			}).success,
+		).toBe(false);
 		expect(
 			schemas.flow_plan_context_record.safeParse({
 				repoProfile: ["TypeScript"],
@@ -642,5 +715,12 @@ describe("tool schema config contracts", () => {
 		expect(Object.keys(tools).some((name) => name.includes("_from_raw"))).toBe(
 			false,
 		);
+		expect(tools.flow_attachments_materialize).toBeDefined();
+		const attachmentToolArgs = JSON.stringify(
+			tools.flow_attachments_materialize?.args,
+		);
+		expect(attachmentToolArgs).not.toContain("base64");
+		expect(attachmentToolArgs).not.toContain("filenamePolicy");
+		expect(attachmentToolArgs).not.toContain("overwrite");
 	});
 });

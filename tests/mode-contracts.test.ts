@@ -91,6 +91,7 @@ describe("flow prompt mode contracts", () => {
 		expect(getFlowModeContract("flow-auto").allowedFlowTools).toEqual(
 			expect.arrayContaining([
 				"flow_auto_prepare",
+				"flow_attachments_materialize",
 				"flow_review_record_feature",
 				"flow_review_record_final",
 				"flow_reset_feature",

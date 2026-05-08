@@ -9,6 +9,7 @@ import {
 import { renderExampleBlocks, renderPromptSections } from "../format";
 import {
 	FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE,
+	FLOW_ATTACHMENT_MATERIALIZATION_COORDINATOR_RULE,
 	FLOW_CONTEXT_GATHERING_READONLY_RULE,
 	FLOW_CONTEXT_GATHERING_RUNTIME_RULE,
 	FLOW_ENGINEERING_QUALITY_RULE,
@@ -231,6 +232,7 @@ export const FLOW_AUTO_AGENT_PROMPT = renderPromptSections([
 ${FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE}
 ${FLOW_NEVER_WRITE_FLOW_FILES_RULE}
 ${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
+${FLOW_ATTACHMENT_MATERIALIZATION_COORDINATOR_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - Auto-approve plans when autonomy is clearly requested.
 ${FLOW_RESUME_ONLY_RULE}
@@ -253,16 +255,17 @@ ${FLOW_STRUCTURED_RECOVERY_RULE}`,
 		body: `${renderWorkflowProtocol(auto)}
 1. Call flow_auto_prepare with the raw command argument string before planning or repo inspection.
 2. If flow_auto_prepare returns missing_goal, render that result clearly and stop.
-3. If planning is needed for broad review-and-fix/codebase-review, use flow-planning-researcher first; without concrete planning.reviewFindings, start with goalMode: review, then goalMode: review_and_fix only after findings are recorded.
-4. If planning is needed, prefer a Task-tool handoff to flow-planner; the planning pass records stackProfile, standardsProfile, and useful evidencePackets with flow_plan_context_record, persists the plan with flow_plan_apply, and approves it with flow_plan_approve.
-5. If repo evidence and research still leave a meaningful architecture, product, or quality decision still remains, record the options and recommendation with flow_plan_context_record so the runtime summary exposes a decision gate. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation clearly and stop for user confirmation.
-6. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
-7. Prefer a Task-tool handoff to flow-worker for implementation and validation. Prefer a Task-tool handoff to flow-reviewer for approval so each role works in a fresh child context.
-8. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue. If a feature lands in a blocked state with a retryable or auto-resolvable outcome, satisfy the runtime prerequisite, reset it through the runtime when appropriate, and continue instead of stopping.
-9. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
-10. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
-11. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy, persist it with flow_review_record_final using the direct reviewer decision object, and keep fixing/revalidating until the final review passes.
-12. Only then allow final completion.
+3. If the classified goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; SVG is unsupported), call flow_attachments_materialize into an explicit workspace asset directory before planning, implementation repo inspection, or Task/subagent handoff; pass returned workspace-relative paths as plan/evidence inputs and do not treat chat attachments as filesystem files before import.
+4. If planning is needed for broad review-and-fix/codebase-review, use flow-planning-researcher first; without concrete planning.reviewFindings, start with goalMode: review, then goalMode: review_and_fix only after findings are recorded.
+5. If planning is needed, prefer a Task-tool handoff to flow-planner; the planning pass records stackProfile, standardsProfile, and useful evidencePackets with flow_plan_context_record, persists the plan with flow_plan_apply, and approves it with flow_plan_approve.
+6. If repo evidence and research still leave a meaningful architecture, product, or quality decision still remains, record the options and recommendation with flow_plan_context_record so the runtime summary exposes a decision gate. If any Flow tool response includes session.decisionGate with status recommend_confirm or human_required, present that recommendation clearly and stop for user confirmation.
+7. Start the next feature with flow_run_start and keep that feature active until it is clean or truly blocked.
+8. Prefer a Task-tool handoff to flow-worker for implementation and validation. Prefer a Task-tool handoff to flow-reviewer for approval so each role works in a fresh child context.
+9. If the reviewer returns needs_fix, or the runtime marks the outcome retryable or auto-resolvable, keep the same feature active, coordinate the smallest credible fix/review/reset step, and continue. If a feature lands in a blocked state with a retryable or auto-resolvable outcome, satisfy the runtime prerequisite, reset it through the runtime when appropriate, and continue instead of stopping.
+10. If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata, satisfy the stated prerequisite, and perform the indicated canonical runtime action when one is provided.
+11. If the runtime routes back into planning because the feature needs decomposition, refresh the plan and continue.
+12. On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy, persist it with flow_review_record_final using the direct reviewer decision object, and keep fixing/revalidating until the final review passes.
+13. Only then allow final completion.
 
 ${FLOW_OPERATOR_PROGRESS_CHECKPOINTS}
 

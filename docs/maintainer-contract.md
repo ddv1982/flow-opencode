@@ -21,6 +21,7 @@ Primary ownership map:
 - Session persistence and workspace-root rules: `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts`
 - Tool schemas: `src/adapters/opencode/tool-surface/schemas.ts`, with shared runtime payload schemas imported from `src/runtime/schema.ts`
 - OpenCode tool/action projection descriptors: `src/adapters/opencode/tool-surface/descriptors.ts`
+- Attachment ingress/materialization: `src/adapters/opencode/attachment-store.ts`, `src/adapters/opencode/attachment-materialization.ts`, and `src/adapters/opencode/tool-surface/session-tools/attachment-tools.ts`
 - Prompt-mode contracts: `src/prompts/mode-contracts.ts`
 - Prompt text: `src/prompts/`, `src/audit/prompts/`
 
@@ -36,7 +37,7 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | --- | --- | --- |
 | `/flow-plan` | `flow-planner` | Planning tools: `flow_plan_start`, `flow_plan_context_record`, `flow_plan_apply`, `flow_plan_approve`, `flow_plan_select_features` |
 | `/flow-run` | `flow-worker` | Execution tools: `flow_run_start`, `flow_review_record_feature`, `flow_review_record_final`, `flow_run_complete_feature`; where Task/subagent handoff is supported, the worker can ask `flow-reviewer` for an independent fresh-context approval pass before persistence |
-| `/flow-auto` | `flow-auto` | Autonomous coordinator starts with `flow_auto_prepare`, then routes planning/execution/review through `flow-planner`, `flow-worker`, and `flow-reviewer` Task handoffs where supported while runtime tools remain the state authority |
+| `/flow-auto` | `flow-auto` | Autonomous coordinator starts with `flow_auto_prepare`, materializes supported image attachments (PNG, JPEG, WebP, GIF, and AVIF; SVG unsupported) with `flow_attachments_materialize` before attachment-dependent planning/delegation, then routes planning/execution/review through `flow-planner`, `flow-worker`, and `flow-reviewer` Task handoffs where supported while runtime tools remain the state authority |
 | `/flow-status` | `flow-control` | `flow_status` |
 | `/flow-doctor` | `flow-control` | `flow_doctor` |
 | `/flow-history` | `flow-control` | `flow_history`, `flow_history_show` |
@@ -44,7 +45,7 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | `/flow-reset` | `flow-control` | `flow_reset_feature` |
 | `/flow-review` | `flow-control` | Read-only audit prompt plus `flow_review_render` |
 
-`flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, and prompts must never edit `.flow` state directly.
+`flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. For goals that depend on supported image attachments (PNG, JPEG, WebP, GIF, and AVIF), `flow-auto` must materialize attachments before planning or handoff so child roles receive concrete workspace-relative paths rather than chat-only file parts. SVG remains unsupported by the materialization tool. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, and prompts must never edit `.flow` state directly.
 
 ## Tools
 
@@ -61,6 +62,7 @@ OpenCode tool/action metadata is described in `src/adapters/opencode/tool-surfac
 | `flow_session_activate` | `src/adapters/opencode/tool-surface/session-tools/history-tools.ts` | `FlowSessionActivateArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_session_close` | `src/adapters/opencode/tool-surface/session-tools/lifecycle-tools.ts` | `FlowSessionCloseArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_auto_prepare` | `src/adapters/opencode/tool-surface/session-tools/planning-tools.ts` | `FlowAutoPrepareArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
+| `flow_attachments_materialize` | `src/adapters/opencode/tool-surface/session-tools/attachment-tools.ts` | `FlowAttachmentsMaterializeArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_plan_start` | `src/adapters/opencode/tool-surface/session-tools/planning-tools.ts` | `FlowPlanStartArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` |
 | `flow_plan_context_record` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanContextRecordArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
 | `flow_plan_apply` | `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts` | `FlowPlanApplyArgsSchema` in `src/adapters/opencode/tool-surface/schemas.ts` / `src/runtime/schema.ts` |
@@ -92,6 +94,7 @@ Current workspace-local state paths:
 Ownership rules:
 
 - Runtime writes `.flow/**`; prompts and docs must not prescribe alternate state paths.
+- Materialized OpenCode attachment assets are user/project files outside `.flow/**`; `.flow/**` remains session state and derived docs only.
 - Task/subagent handoffs do not bypass runtime ownership; they still report back through runtime tools instead of mutating `.flow/**` directly.
 - State shape changes require schema, persistence, recovery, and migration/recovery consideration.
 - Rendered docs are derived artifacts, not the source of workflow truth.

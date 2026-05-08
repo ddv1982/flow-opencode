@@ -17,7 +17,10 @@ const sourcemapPath = join(projectRoot, "dist", "index.js.map");
 const bundleText = readFileSync(distPath, "utf8");
 const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
-const BUNDLE_SIZE_BUDGET_BYTES = 746496; // 729 KiB
+// Attachment materialization adds one public tool plus root-safe data/file/http
+// decoding and write guards. Review fixes retain skipped attachment metadata and
+// capture-time oversized data-URL guards; keep the bundle below 756 KiB.
+const BUNDLE_SIZE_BUDGET_BYTES = 774144; // 756 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
@@ -139,7 +142,7 @@ async function main() {
 		if (
 			report.configAgents !== 6 ||
 			report.configCommands !== 9 ||
-			report.toolCount !== 18
+			report.toolCount !== 19
 		) {
 			throw new Error(
 				`Plugin surface shape is incorrect after build: ${JSON.stringify({

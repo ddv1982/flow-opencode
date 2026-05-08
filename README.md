@@ -107,6 +107,8 @@ For small tasks, this can finish in a single pass. For larger work, Flow adds th
 
 Flow uses the target repo's existing scripts and local guidance as the execution contract. It records stack and standards evidence from files such as `package.json`, lockfiles, config files, `AGENTS.md`, and project docs. In monorepos, package-local evidence can override root-level defaults.
 
+If your `/flow-auto` goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF), Flow materializes captured OpenCode chat attachments into explicit workspace asset files before planning or delegating implementation. SVG, raw base64 payloads, filesystem paths, and HTTP URLs are not supported by this materialization tool. Chat attachments are not shell-readable project files until Flow imports them; imported assets are placed in normal project asset paths you direct Flow toward, not under `.flow/**`.
+
 For broad review-and-fix goals, you can also select the read-only `flow-planning-researcher` agent in OpenCode, or let `/flow-plan` / `/flow-auto` hand off to it when planning needs evidence first. It gathers repository evidence and recommends a review-first plan; findings still come from `/flow-review` or persisted reviewer records, not from planning research.
 
 ### Manual, step by step
@@ -209,23 +211,17 @@ Flow writes state only inside the worktree it's running in:
 
 ```text
 .flow/active/<session-id>/session.json
+.flow/active/<session-id>/docs/index.md
+.flow/active/<session-id>/docs/features/<feature-id>.md
 .flow/stored/<session-id>/session.json
 .flow/completed/<session-id>-<timestamp>/session.json
-.flow/events/<session-id>.jsonl
-.flow/checkpoints/<session-id>.json
-.flow/projections/<session-id>/
 .flow/locks/
 .flow/standards-profile.json
 ```
 
-Workflow events are append-only JSONL records. Checkpoints cache replayed workflow state, and projections contain rendered markdown derived from workflow state.
+Flow stores the canonical workflow state in session JSON files. Readable markdown for active sessions lives beside the saved active session and is regenerated from that state; removed event, checkpoint, and projection trees are not current storage locations.
 
-Readable markdown for active sessions also lives beside the saved session:
-
-```text
-.flow/active/<session-id>/docs/index.md
-.flow/active/<session-id>/docs/features/<feature-id>.md
-```
+Materialized attachment assets are user/project files, not Flow state. Flow does not store imported image assets under `.flow/**`; workers and reviewers cite the returned workspace-relative asset paths as artifacts or evidence after import.
 
 `.flow/standards-profile.json` is a cache for planning context, not workflow state. Flow ignores it when the workspace, start directory, package-manager hint, schema version, source-file fingerprint, or external-guidance TTL no longer matches.
 

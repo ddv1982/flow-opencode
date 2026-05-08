@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [2.0.21] - 2026-05-08
+
+Materialize OpenCode image attachments before Flow automation planning
+
+Flow 2.0.21 adds a narrow attachment-ingress bridge for `/flow-auto` goals that depend on user-supplied images. The OpenCode plugin now captures supported chat/file parts for the active session and exposes `flow_attachments_materialize`, a coordinator-only tool that imports PNG, JPEG, WebP, GIF, and AVIF `data:` attachments into explicit workspace asset paths before planning, implementation inspection, or Task/subagent handoff.
+
+The release is a deliberate surface-freeze exception: it adds one public Flow tool because the previous behavior left chat-visible image attachments unavailable as shell-readable project files, forcing manual user file placement. The new tool is bounded to `/flow-auto`, returns workspace-relative paths for plan/evidence handoff, and keeps binary assets outside `.flow/**`; Flow session state remains snapshot-primary and derived docs remain markdown artifacts only.
+
+The materialization path is intentionally conservative. It allowlists image MIME types, keeps SVG unsupported, rejects raw base64, filesystem, `file:`, and HTTP URL sources, enforces data-size limits before decode, sanitizes filenames, prevents traversal and `.flow/**` destinations, rejects symlink destination ancestry, and writes final files exclusively with deterministic collision suffixes. Unsupported or stale attachments are reported as skipped metadata instead of silently falling back to older captured files.
+
+Prompt, mode, descriptor, docs, and schema contracts now teach `flow-auto` to materialize attachments only when the classified goal depends on them. Ordinary goals must not call the tool, and planner/worker/reviewer handoffs should receive concrete imported paths rather than chat-only attachment references.
+
+The release deliberately does not add commands, runtime modes, package exports, dependencies, state paths, worker/reviewer payload shapes, evidence-packet binary transport, or persisted attachment indexes. It preserves `zod` / `@opencode-ai/plugin` alignment and accepts a narrow bundle budget increase for the release-bound attachment capture, policy, and root-safe materialization guards.
+
+Constraint: Add exactly one narrow `/flow-auto` workspace tool to bridge supported OpenCode image attachments into project asset files
+Constraint: Keep imported binary assets outside `.flow/**`; Flow-owned state remains session JSON plus derived markdown docs
+Constraint: Preserve worker/reviewer/tool JSON payload contracts except for the explicit `flow_attachments_materialize` raw arg schema
+Constraint: Preserve `zod` / `@opencode-ai/plugin` alignment; no dependency-version changes
+Constraint: Accept only a narrow bundle budget increase for attachment capture, validation, and exclusive-write safety guards
+Rejected: Treat chat attachments as filesystem files without materialization | OpenCode file parts are model-visible context and may not be shell-readable workspace paths
+Rejected: Store attachment bytes or imported assets under `.flow/**` | Flow state paths are runtime/session artifacts, not project asset storage
+Rejected: Support SVG, raw base64, filesystem paths, `file:`, or HTTP URLs now | those sources need separate trusted-origin and threat-model review
+Rejected: Reuse evidence packets or worker artifacts as binary transport | those contracts are metadata references, not attachment byte channels
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep future attachment ingress narrow, permissioned, root-bound, and explicitly documented before expanding formats or source URL support
+Tested: `bun test tests/attachment-materialization.test.ts tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/runtime-tools-metadata.test.ts tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/prompt-mode-behavior-eval.test.ts tests/smoke/dist-load.test.ts` (88 pass, 2095 expect calls); `bun run typecheck`; `bun run check` before tag push
+Not-tested: Live OpenCode UI attachment upload session; live GitHub-hosted CI/release workflow run for tag `v2.0.21` before push
+
 ## [2.0.20] - 2026-05-08
 
 Make feature identifiers drill down to Flow-rendered feature docs

@@ -2,16 +2,33 @@ import { basename, join } from "node:path";
 import { resolveMutableSessionRoot } from "../../../runtime/application";
 import type { ToolContext } from "./schemas";
 
+export type ResolvedMutableToolWorkspace = {
+	root: string;
+	source: string;
+	requiresHiddenRootApproval: boolean;
+};
+
 function requiresHiddenRootApproval(root: string): boolean {
 	const name = basename(root);
 	return name.startsWith(".") && name !== ".flow";
 }
 
+export function resolveMutableToolWorkspace(
+	context: ToolContext,
+): ResolvedMutableToolWorkspace {
+	const resolved = resolveMutableSessionRoot(context);
+	return {
+		root: resolved.root,
+		source: resolved.source,
+		requiresHiddenRootApproval: requiresHiddenRootApproval(resolved.root),
+	};
+}
+
 export async function ensureMutableWorkspacePermission(
 	context: ToolContext,
+	resolved = resolveMutableToolWorkspace(context),
 ): Promise<string> {
-	const resolved = resolveMutableSessionRoot(context);
-	if (!requiresHiddenRootApproval(resolved.root)) {
+	if (!resolved.requiresHiddenRootApproval) {
 		return resolved.root;
 	}
 

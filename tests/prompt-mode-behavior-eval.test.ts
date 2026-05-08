@@ -16,7 +16,7 @@ import {
 describe("prompt mode behavior eval corpus", () => {
 	test("mode behavior fixtures are first-party and cover non-review modes", async () => {
 		const corpus = readPromptModeBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(33);
+		expect(corpus).toHaveLength(36);
 		expect(corpus.filter((item) => item.origin === "captured")).toHaveLength(6);
 		expect(new Set(corpus.map((item) => item.mode))).toEqual(
 			new Set(FLOW_PROMPT_MODE_CAPTURE_MODES),
@@ -44,9 +44,15 @@ describe("prompt mode behavior eval corpus", () => {
 			results.map((result) => [result.id, result]),
 		);
 
-		expect(results).toHaveLength(33);
+		expect(results).toHaveLength(36);
 		expect(byId["plan-goal-records-context-and-stops"]?.score).toBe(6);
 		expect(byId["auto-missing-goal-stops-after-prepare"]?.score).toBe(6);
+		expect(
+			byId["auto-materializes-attached-image-before-planning"]?.score,
+		).toBe(6);
+		expect(
+			byId["auto-ordinary-goal-skips-attachment-materialization"]?.score,
+		).toBe(6);
 		expect(
 			byId["worker-validates-reviews-and-persists-clean-feature"]?.score,
 		).toBe(6);
@@ -66,6 +72,9 @@ describe("prompt mode behavior eval corpus", () => {
 
 		expect(byId["plan-bad-starts-implementation"]?.passed).toBe(false);
 		expect(byId["auto-bad-infers-goal-after-missing-goal"]?.passed).toBe(false);
+		expect(
+			byId["auto-bad-materializes-attached-image-after-planning"]?.passed,
+		).toBe(false);
 		expect(byId["worker-bad-completes-without-validation"]?.passed).toBe(false);
 		expect(byId["worker-bad-deletes-observability-console"]?.passed).toBe(
 			false,
@@ -191,14 +200,14 @@ describe("prompt mode behavior eval corpus", () => {
 			readPromptModeBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(33);
-		expect(summary.passingCases).toBe(20);
-		expect(summary.failingCases).toBe(13);
-		expect(summary.expectationSatisfiedCases).toBe(33);
+		expect(summary.totalCases).toBe(36);
+		expect(summary.passingCases).toBe(22);
+		expect(summary.failingCases).toBe(14);
+		expect(summary.expectationSatisfiedCases).toBe(36);
 		expect(summary.unexpectedCases).toBe(0);
 		expect(summary.averageScore).toBeCloseTo(4.67, 2);
 		expect(summary.report).toContain(
-			"Prompt mode behavior eval corpus: 33 cases",
+			"Prompt mode behavior eval corpus: 36 cases",
 		);
 		expect(summary.report).toContain(
 			"plan-goal-records-context-and-stops: 6/6 (quality-pass); mode=flow-plan; expectation=satisfied",
@@ -247,6 +256,15 @@ describe("prompt mode behavior eval corpus", () => {
 		);
 		expect(summary.report).toContain(
 			"auto-progress-across-phase-boundaries: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"auto-materializes-attached-image-before-planning: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"auto-ordinary-goal-skips-attachment-materialization: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"auto-bad-materializes-attached-image-after-planning: 2/6 (quality-fail); mode=flow-auto; expectation=satisfied; failed=required_tool_sequence,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
 		);
 		expect(summary.report).toContain(
 			"worker-bad-progress-inside-worker-result: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",
