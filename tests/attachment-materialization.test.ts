@@ -157,6 +157,13 @@ describe("OpenCode attachment capture and materialization", () => {
 					url: dataUrl("image/png", PNG_HEADER_BYTES),
 				},
 				{
+					id: "jpg-misleading-extension",
+					type: "file",
+					mime: "image/jpeg",
+					filename: "Actually A Photo.png",
+					url: dataUrl("image/jpeg", JPEG_HEADER_BYTES),
+				},
+				{
 					id: "webp-1",
 					type: "file",
 					mime: "image/webp",
@@ -188,6 +195,7 @@ describe("OpenCode attachment capture and materialization", () => {
 		expect(response.imported.map((item) => item.path)).toEqual([
 			"assets/images/hero-background.png",
 			"assets/images/hero-background-2.png",
+			"assets/images/actually-a-photo.jpg",
 			"assets/images/marketing-card.webp",
 			"assets/images/spinner.gif",
 			"assets/images/hero.avif",
@@ -274,6 +282,68 @@ describe("OpenCode attachment capture and materialization", () => {
 		expect(response.skipped).toEqual([
 			expect.objectContaining({
 				attachmentId: "svg-1",
+				reason: expect.stringContaining("Unsupported attachment MIME"),
+			}),
+		]);
+	});
+
+	test("flow_auto_prepare guidance args use implicit materialization and surface skipped batch records", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		captureOpenCodeAttachments({
+			sessionId: "session-1",
+			parts: [
+				{
+					id: "png-1",
+					type: "file",
+					mime: "image/png",
+					filename: "safe.png",
+					url: dataUrl("image/png", PNG_HEADER_BYTES),
+				},
+				{
+					id: "svg-1",
+					type: "file",
+					mime: "image/svg+xml",
+					filename: "unsafe.svg",
+					url: "data:image/svg+xml;base64,PHN2Zy8+",
+				},
+			],
+		});
+		const prepared = JSON.parse(
+			await tools.flow_auto_prepare.execute(
+				{ argumentString: "Use attached assets" },
+				toolContext(worktree, undefined, {
+					sessionID: "session-1",
+					agent: "flow-auto",
+				}),
+			),
+		);
+
+		expect(prepared.attachmentGuidance.materializationRequired).toBe(true);
+		expect(prepared.attachmentGuidance.materialize.args).toEqual({
+			destinationDirectory: "assets/flow-attachments",
+		});
+		const response = JSON.parse(
+			await tools.flow_attachments_materialize.execute(
+				prepared.attachmentGuidance.materialize.args,
+				toolContext(worktree, undefined, {
+					sessionID: "session-1",
+					agent: "flow-auto",
+				}),
+			),
+		) as Awaited<ReturnType<typeof materialize>>;
+
+		expect(response.status).toBe("partial");
+		expect(response.imported.map((item) => item.path)).toEqual([
+			"assets/flow-attachments/safe.png",
+		]);
+		expect(
+			await readFile(join(worktree, "assets/flow-attachments/safe.png")),
+		).toEqual(PNG_HEADER_BYTES);
+		expect(response.skipped).toEqual([
+			expect.objectContaining({
+				attachmentId: "svg-1",
+				filename: "unsafe.svg",
 				reason: expect.stringContaining("Unsupported attachment MIME"),
 			}),
 		]);

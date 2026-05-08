@@ -44,6 +44,38 @@ export type FlowAttachmentCaptureSummary = {
 	totalStored: number;
 };
 
+export type FlowAttachmentAvailabilityStatus =
+	| "unavailable"
+	| "none"
+	| "available"
+	| "mixed"
+	| "unsupported_only";
+
+export type FlowAttachmentSelectionSource =
+	| "current_message"
+	| "latest_batch"
+	| "none";
+
+export type FlowAttachmentAvailabilityAttachment = {
+	id: string;
+	filename?: string;
+	mime: FlowAttachmentMimeType;
+	batchId: string;
+	messageId?: string;
+};
+
+export type FlowAttachmentAvailabilitySnapshot = {
+	status: FlowAttachmentAvailabilityStatus;
+	source: FlowAttachmentSelectionSource;
+	sessionId?: string;
+	messageId?: string;
+	supportedFormats: string;
+	materializationRequired: boolean;
+	attachments: FlowAttachmentAvailabilityAttachment[];
+	skipped: FlowAttachmentSkippedMetadata[];
+	reason: string;
+};
+
 type OpenCodeChatMessageInput = Parameters<
 	NonNullable<Hooks["chat.message"]>
 >[0];
@@ -204,37 +236,16 @@ export function selectFlowAttachments(
 	const candidates = listFlowAttachments(input.sessionId, now);
 	const skippedCandidates = listSkippedFlowAttachments(input.sessionId, now);
 	if (!input.selectors || input.selectors.length === 0) {
-		const messageScoped = input.messageId
-			? candidates.filter(
-					(candidate) => candidate.messageId === input.messageId,
-				)
-			: [];
-		const messageScopedSkipped = input.messageId
-			? skippedCandidates.filter(
-					(candidate) => candidate.messageId === input.messageId,
-				)
-			: [];
-		if (messageScoped.length > 0 || messageScopedSkipped.length > 0) {
-			return {
-				selected: messageScoped,
-				skipped: skippedMetadata(messageScopedSkipped),
-			};
-		}
-		const latestBatchId = input.sessionId
-			? latestBatchBySession.get(input.sessionId)
-			: null;
-		const latestBatch = latestBatchId
-			? candidates.filter((candidate) => candidate.batchId === latestBatchId)
-			: [];
-		const latestBatchSkipped = latestBatchId
-			? skippedCandidates.filter(
-					(candidate) => candidate.batchId === latestBatchId,
-				)
-			: [];
-		return latestBatch.length > 0 || latestBatchSkipped.length > 0
+		const implicitSelection = selectImplicitCurrentOrLatestAttachmentBatch({
+			sessionId: input.sessionId,
+			messageId: input.messageId,
+			candidates,
+			skippedCandidates,
+		});
+		return implicitSelection.source !== "none"
 			? {
-					selected: latestBatch,
-					skipped: skippedMetadata(latestBatchSkipped),
+					selected: implicitSelection.selected,
+					skipped: skippedMetadata(implicitSelection.skipped),
 				}
 			: {
 					selected: [],
@@ -299,6 +310,68 @@ export function selectFlowAttachments(
 	}
 
 	return { selected, skipped };
+}
+
+export function describeFlowAttachmentAvailability(
+	input: {
+		sessionId?: string | undefined;
+		messageId?: string | undefined;
+	},
+	now = Date.now(),
+): FlowAttachmentAvailabilitySnapshot {
+	const supportedFormats = describeSupportedAttachmentFormats();
+	if (!input.sessionId) {
+		return {
+			status: "unavailable",
+			source: "none",
+			supportedFormats,
+			materializationRequired: false,
+			attachments: [],
+			skipped: [],
+			reason:
+				"OpenCode sessionID is unavailable, so attachment availability could not be evaluated.",
+		};
+	}
+
+	const candidates = listFlowAttachments(input.sessionId, now);
+	const skippedCandidates = listSkippedFlowAttachments(input.sessionId, now);
+	const implicitSelection = selectImplicitCurrentOrLatestAttachmentBatch({
+		sessionId: input.sessionId,
+		messageId: input.messageId,
+		candidates,
+		skippedCandidates,
+	});
+	const selectedCount = implicitSelection.selected.length;
+	const skippedCount = implicitSelection.skipped.length;
+	const status: FlowAttachmentAvailabilityStatus =
+		selectedCount > 0 && skippedCount > 0
+			? "mixed"
+			: selectedCount > 0
+				? "available"
+				: skippedCount > 0
+					? "unsupported_only"
+					: "none";
+	const materializationRequired =
+		status === "available" ||
+		status === "mixed" ||
+		status === "unsupported_only";
+	return {
+		status,
+		source: implicitSelection.source,
+		sessionId: input.sessionId,
+		...(input.messageId ? { messageId: input.messageId } : {}),
+		supportedFormats,
+		materializationRequired,
+		attachments: implicitSelection.selected.map((attachment) => ({
+			id: attachment.id,
+			...(attachment.filename ? { filename: attachment.filename } : {}),
+			mime: attachment.mime,
+			batchId: attachment.batchId,
+			...(attachment.messageId ? { messageId: attachment.messageId } : {}),
+		})),
+		skipped: skippedMetadata(implicitSelection.skipped),
+		reason: attachmentAvailabilityReason(status, implicitSelection.source),
+	};
 }
 
 export function clearFlowAttachments(): void {
@@ -379,6 +452,79 @@ function listSkippedFlowAttachments(
 	return [...skippedAttachmentsBySession.values()].flatMap((records) => [
 		...records.values(),
 	]);
+}
+
+function selectImplicitCurrentOrLatestAttachmentBatch(input: {
+	sessionId?: string | undefined;
+	messageId?: string | undefined;
+	candidates: readonly FlowAttachmentRecord[];
+	skippedCandidates: readonly FlowAttachmentSkippedRecord[];
+}): {
+	source: FlowAttachmentSelectionSource;
+	selected: FlowAttachmentRecord[];
+	skipped: FlowAttachmentSkippedRecord[];
+} {
+	const messageScoped = input.messageId
+		? input.candidates.filter(
+				(candidate) => candidate.messageId === input.messageId,
+			)
+		: [];
+	const messageScopedSkipped = input.messageId
+		? input.skippedCandidates.filter(
+				(candidate) => candidate.messageId === input.messageId,
+			)
+		: [];
+	if (messageScoped.length > 0 || messageScopedSkipped.length > 0) {
+		return {
+			source: "current_message",
+			selected: messageScoped,
+			skipped: messageScopedSkipped,
+		};
+	}
+
+	const latestBatchId = input.sessionId
+		? latestBatchBySession.get(input.sessionId)
+		: null;
+	const latestBatch = latestBatchId
+		? input.candidates.filter(
+				(candidate) => candidate.batchId === latestBatchId,
+			)
+		: [];
+	const latestBatchSkipped = latestBatchId
+		? input.skippedCandidates.filter(
+				(candidate) => candidate.batchId === latestBatchId,
+			)
+		: [];
+	return latestBatch.length > 0 || latestBatchSkipped.length > 0
+		? {
+				source: "latest_batch",
+				selected: latestBatch,
+				skipped: latestBatchSkipped,
+			}
+		: { source: "none", selected: [], skipped: [] };
+}
+
+function attachmentAvailabilityReason(
+	status: FlowAttachmentAvailabilityStatus,
+	source: FlowAttachmentSelectionSource,
+): string {
+	if (status === "none") {
+		return "No current or latest OpenCode attachment batch is available.";
+	}
+	const sourceLabel =
+		source === "current_message"
+			? "current message"
+			: "latest attachment batch";
+	if (status === "available") {
+		return `Supported image attachments are available from the ${sourceLabel}; materialize them before planning or implementation inspection.`;
+	}
+	if (status === "mixed") {
+		return `Supported and unsupported attachments are present in the ${sourceLabel}; materialize the implicit batch so supported files import and skipped reasons are surfaced.`;
+	}
+	if (status === "unsupported_only") {
+		return `Only unsupported or invalid attachments are present in the ${sourceLabel}; call materialization to surface skipped reasons and stop instead of planning with nonexistent files.`;
+	}
+	return "OpenCode sessionID is unavailable, so attachment availability could not be evaluated.";
 }
 
 function normalizeOpenCodeFilePart(

@@ -134,8 +134,8 @@ export const FLOW_MODE_CONTRACTS = {
 		forbiddenFlowTools: ["flow_session_close"],
 		requiredBehavior: [
 			"Call flow_auto_prepare before planning or repo inspection.",
-			"Materialize supported image attachments (PNG, JPEG, WebP, GIF, and AVIF; SVG unsupported) before planning, repo inspection for implementation, or delegation when the goal depends on attached assets.",
-			"Do not call attachment materialization for ordinary goals with no attachment dependency.",
+			"After flow_auto_prepare, follow attachmentGuidance.materializationRequired; when true, call flow_attachments_materialize before planning, repo inspection for implementation, or delegation.",
+			"Do not call attachment materialization when attachmentGuidance.materializationRequired is false.",
 			"Stop on missing goal or human decision gates.",
 			"Record and apply the runtime-owned stack and standards profile.",
 			"Apply coding guidelines, release hygiene, and tests before completion.",

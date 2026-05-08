@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.22] - 2026-05-08
+
+Make attachment materialization runtime-guided and content-policy explicit
+
+Flow 2.0.22 tightens the `/flow-auto` attachment contract introduced in 2.0.21. Auto preparation now exposes attachment availability as runtime-owned `attachmentGuidance`, and prompt/mode contracts instruct coordinators to materialize attachments only when `attachmentGuidance.materializationRequired` is true, using the provided tool and args before planning, repository inspection, or Task/subagent handoff.
+
+The release also clarifies that supported attachment formats are MIME/content-policy based rather than filename-extension trust based. Captured file names are used only for safe slug bases; materialization normalizes MIME, requires matching data URL MIME, verifies image magic bytes, and writes canonical extensions from the validated MIME policy. A JPEG uploaded with a misleading `.png` filename therefore imports as `.jpg`, not as the user-provided extension.
+
+The release deliberately does not expand attachment ingress. It adds no commands, runtime modes, package exports, dependencies, state paths, persisted attachment indexes, SVG support, raw base64 transport, filesystem path imports, `file:` imports, or HTTP URL imports. It keeps binary assets outside `.flow/**`, preserves `zod` / `@opencode-ai/plugin` alignment, and accepts a narrow 4 KiB bundle-budget increase for runtime attachment guidance snapshots and coordinator instructions.
+
+Constraint: Treat attachment materialization as a runtime-guided preparation contract, not a prompt-inferred goal classification
+Constraint: Keep the format restriction MIME/content-policy based; never trust the uploaded filename extension for validation or output extension selection
+Constraint: Preserve the 2.0.21 ingress boundary: supported `data:` image attachments only, root-bound destinations, no `.flow/**` asset writes, no dependency-version changes, and only a narrow 4 KiB bundle-budget increase
+Rejected: Materialize based on whether prose appears attachment-dependent | the runtime already knows current/latest attachment availability and skipped unsupported records
+Rejected: Preserve user-supplied filename extensions | filenames are untrusted metadata and may not match the payload MIME or bytes
+Rejected: Broaden attachment sources or formats in this patch | SVG, raw base64, filesystem, `file:`, and HTTP sources need separate threat-model review
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep future attachment changes driven by explicit runtime attachment guidance and validated MIME/content policy, not model inference or filename suffixes
+Tested: `bun test tests/attachment-materialization.test.ts tests/auto-prepare.test.ts tests/config/plugin-surface.test.ts tests/config/prompt-contracts.test.ts tests/runtime-tool-routing.test.ts tests/prompt-mode-behavior-eval.test.ts tests/docs-stale-reference-policy.test.ts` (86 pass, 1298 expect calls); `bun run typecheck`; `bun run eval:prompt-capture:check`; `bunx biome check ... --files-ignore-unknown=true`; `bun run check`
+Not-tested: Live OpenCode UI attachment upload session; live GitHub-hosted CI/release workflow run for tag `v2.0.22` before push
+
 ## [2.0.21] - 2026-05-08
 
 Materialize OpenCode image attachments before Flow automation planning
@@ -12,7 +35,7 @@ The release is a deliberate surface-freeze exception: it adds one public Flow to
 
 The materialization path is intentionally conservative. It allowlists image MIME types, keeps SVG unsupported, rejects raw base64, filesystem, `file:`, and HTTP URL sources, enforces data-size limits before decode, sanitizes filenames, prevents traversal and `.flow/**` destinations, rejects symlink destination ancestry, and writes final files exclusively with deterministic collision suffixes. Unsupported or stale attachments are reported as skipped metadata instead of silently falling back to older captured files.
 
-Prompt, mode, descriptor, docs, and schema contracts now teach `flow-auto` to materialize attachments only when the classified goal depends on them. Ordinary goals must not call the tool, and planner/worker/reviewer handoffs should receive concrete imported paths rather than chat-only attachment references.
+Prompt, mode, descriptor, docs, and schema contracts now teach `flow-auto` to follow the runtime `attachmentGuidance.materializationRequired` field from `flow_auto_prepare`: when true, materialize with the provided tool/args before planning or handoff; when false, do not call the tool. Planner/worker/reviewer handoffs should receive concrete imported paths rather than chat-only attachment references.
 
 The release deliberately does not add commands, runtime modes, package exports, dependencies, state paths, worker/reviewer payload shapes, evidence-packet binary transport, or persisted attachment indexes. It preserves `zod` / `@opencode-ai/plugin` alignment and accepts a narrow bundle budget increase for the release-bound attachment capture, policy, and root-safe materialization guards.
 

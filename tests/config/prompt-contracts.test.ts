@@ -327,11 +327,11 @@ describe("prompt and command config contracts", () => {
 		);
 	});
 
-	test("auto prompt requires attachment materialization before attachment-dependent planning and delegation", () => {
+	test("auto prompt follows runtime attachmentGuidance before planning and delegation", () => {
 		for (const prompt of [FLOW_AUTO_AGENT_PROMPT, FLOW_AUTO_COMMAND_TEMPLATE]) {
 			expect(prompt).toContain("flow_attachments_materialize");
-			expect(prompt).toContain("supported image attachments");
-			expect(prompt).toContain("PNG, JPEG, WebP, GIF");
+			expect(prompt).toContain("attachmentGuidance.materializationRequired");
+			expect(prompt).toContain("attachmentGuidance.materialize.args");
 			expect(prompt).toContain("SVG");
 			expect(prompt).toContain("before planning");
 			expect(prompt).toContain("Task/subagent handoff");
@@ -340,22 +340,23 @@ describe("prompt and command config contracts", () => {
 				"Do not assume OpenCode chat attachments are filesystem files before this tool succeeds",
 			);
 			expect(prompt).toContain(
-				"do not call it for ordinary tasks with no attachment dependency",
+				"Do not infer attachment dependency from goal wording",
 			);
+			expect(prompt).toContain("do not call materialization when");
 		}
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"If the classified goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; SVG is unsupported), call `flow_attachments_materialize` before planning",
+			"After `flow_auto_prepare`, follow `attachmentGuidance.materializationRequired`",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"If the classified goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; SVG is unsupported), call flow_attachments_materialize into an explicit workspace asset directory before planning",
+			"Inspect attachmentGuidance from flow_auto_prepare",
 		);
 		expect(FLOW_MODE_CONTRACTS["flow-auto"].allowedFlowTools).toContain(
 			"flow_attachments_materialize",
 		);
 		expect(FLOW_MODE_CONTRACTS["flow-auto"].requiredBehavior).toEqual(
 			expect.arrayContaining([
-				"Materialize supported image attachments (PNG, JPEG, WebP, GIF, and AVIF; SVG unsupported) before planning, repo inspection for implementation, or delegation when the goal depends on attached assets.",
-				"Do not call attachment materialization for ordinary goals with no attachment dependency.",
+				"After flow_auto_prepare, follow attachmentGuidance.materializationRequired; when true, call flow_attachments_materialize before planning, repo inspection for implementation, or delegation.",
+				"Do not call attachment materialization when attachmentGuidance.materializationRequired is false.",
 			]),
 		);
 	});

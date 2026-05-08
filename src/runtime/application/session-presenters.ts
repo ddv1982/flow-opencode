@@ -28,7 +28,44 @@ type StoredSessionRecord = Awaited<ReturnType<typeof loadStoredSession>>;
 type CompletedSessionRecord = Awaited<ReturnType<typeof closeSession>>;
 type StatusView = "detailed" | "compact";
 type AutoPrepareMode = "resume" | "missing_goal" | "start_new_goal";
+export type AutoPrepareAttachmentGuidance = {
+	status: "unavailable" | "none" | "available" | "mixed" | "unsupported_only";
+	source: "current_message" | "latest_batch" | "none";
+	supportedFormats: string;
+	unsupportedFormats: readonly ["SVG"];
+	materializationRequired: boolean;
+	materialize: null | {
+		tool: "flow_attachments_materialize";
+		args: { destinationDirectory: string };
+		requiredBefore: readonly ["planning", "repo_inspection", "task_handoff"];
+		useImplicitCurrentBatch: true;
+	};
+	attachments: readonly {
+		id: string;
+		filename?: string;
+		mime: string;
+	}[];
+	skipped: readonly {
+		attachmentId?: string;
+		filename?: string;
+		reason: string;
+	}[];
+	reason: string;
+};
 type SessionFeatureDrilldownSource = FeatureDocDrilldownSource | null;
+
+const DEFAULT_AUTO_PREPARE_ATTACHMENT_GUIDANCE: AutoPrepareAttachmentGuidance =
+	{
+		status: "unavailable",
+		source: "none",
+		supportedFormats: "PNG, JPEG, WebP, GIF, and AVIF",
+		unsupportedFormats: ["SVG"],
+		materializationRequired: false,
+		materialize: null,
+		attachments: [],
+		skipped: [],
+		reason: "Attachment availability was not evaluated for this invocation.",
+	};
 
 function activeFeatureDrilldownSource(
 	session: Session | null,
@@ -350,6 +387,7 @@ export function autoPrepareResponse(
 	goal: string | null,
 	nextCommand: string,
 	session?: Session | null,
+	attachmentGuidance: AutoPrepareAttachmentGuidance = DEFAULT_AUTO_PREPARE_ATTACHMENT_GUIDANCE,
 ) {
 	const guidance =
 		mode === "resume" && session
@@ -372,6 +410,7 @@ export function autoPrepareResponse(
 					mode: "missing_goal" as const,
 					summary:
 						"No active Flow session exists. Provide a goal to start a new autonomous run.",
+					attachmentGuidance,
 					...guidanceFields(guidance),
 					nextCommand,
 				}
@@ -381,6 +420,7 @@ export function autoPrepareResponse(
 						mode: "resume" as const,
 						goal,
 						summary: `Resuming active Flow goal: ${goal}`,
+						attachmentGuidance,
 						...guidanceFields(guidance),
 						nextCommand,
 					}
@@ -389,6 +429,7 @@ export function autoPrepareResponse(
 						mode: "start_new_goal" as const,
 						goal,
 						summary: `Starting a new autonomous Flow goal: ${goal}`,
+						attachmentGuidance,
 						...guidanceFields(guidance),
 						nextCommand,
 					};
@@ -398,6 +439,11 @@ export function autoPrepareResponse(
 			mode,
 			goal,
 			operator: deriveSessionOperatorState(session ?? null),
+			attachmentStatus: attachmentGuidance.status,
+			attachmentMaterializationRequired:
+				attachmentGuidance.materializationRequired,
+			attachmentCount: attachmentGuidance.attachments.length,
+			attachmentSkippedCount: attachmentGuidance.skipped.length,
 		},
 	};
 }

@@ -54,6 +54,7 @@ export {
 	DEFAULT_SESSION_RUNTIME_PORT,
 	DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 } from "./session-engine";
+export type { AutoPrepareAttachmentGuidance } from "./session-presenters";
 export {
 	autoPrepareResponse,
 	closeSessionResponse,

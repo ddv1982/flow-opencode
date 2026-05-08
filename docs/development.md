@@ -154,7 +154,7 @@ Default OpenCode tool surface, in descriptor docs-row order:
 - `flow_history_show` — Show a specific active, stored, or completed Flow session by id
 - `flow_session_activate` — Activate a stored Flow session by id
 - `flow_plan_start` — Create or refresh the active Flow planning session
-- `flow_auto_prepare` — Classify a flow-auto invocation
+- `flow_auto_prepare` — Classify a flow-auto invocation and report attachment materialization requirements
 - `flow_attachments_materialize` — Import captured PNG, JPEG, WebP, GIF, or AVIF OpenCode attachments into a safe workspace path
 - `flow_session_close` — Close the active Flow session as completed, deferred, or abandoned
 - `flow_plan_context_record` — Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session from a JSON payload

@@ -86,12 +86,12 @@ const FLOW_AUTO_COMMAND_EXAMPLES = renderExampleBlocks([
 		body: "If arguments are empty or resume, resume the active session only. If no active session exists, stop and request a goal.",
 	},
 	{
-		name: "attachment-dependent-goal",
-		body: "If the user asks to use supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; not SVG), call flow_auto_prepare, then flow_attachments_materialize into an explicit workspace asset directory before planning or handing work to flow-planner/flow-worker.",
+		name: "attachment-guidance-required",
+		body: "After flow_auto_prepare, if attachmentGuidance.materializationRequired is true, call attachmentGuidance.materialize.tool with attachmentGuidance.materialize.args before planning or handing work to flow-planner/flow-worker.",
 	},
 	{
-		name: "ordinary-goal",
-		body: "If the goal has no attachment dependency, do not call flow_attachments_materialize; continue with normal planning/execution classification.",
+		name: "attachment-guidance-not-required",
+		body: "If attachmentGuidance.materializationRequired is false, do not call flow_attachments_materialize; continue with normal planning/execution classification.",
 	},
 	{
 		name: "decision-gate",
@@ -169,7 +169,7 @@ ${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 ${FLOW_ATTACHMENT_MATERIALIZATION_COORDINATOR_RULE}
 - Treat this command as a coordinator entrypoint for Flow's existing planner, worker, reviewer, and runtime tools.
 - Call \`flow_auto_prepare\` first and follow its classification before planning or repo inspection.
-- If the classified goal depends on supported image attachments (PNG, JPEG, WebP, GIF, or AVIF; SVG is unsupported), call \`flow_attachments_materialize\` before planning, implementation repo inspection, or Task/subagent handoff; use returned workspace-relative paths as plan/evidence inputs.
+- After \`flow_auto_prepare\`, follow \`attachmentGuidance.materializationRequired\`: when true, call \`attachmentGuidance.materialize.tool\` with \`attachmentGuidance.materialize.args\` before planning, implementation repo inspection, or Task/subagent handoff; use returned workspace-relative paths as plan/evidence inputs. Do not infer attachment dependency from goal wording, and do not call materialization when the field is false.
 - If the argument string is non-empty and not \`resume\`, treat the full argument string as a new autonomous goal.
 - If the argument string is empty or \`resume\`, resume the active session only.
 ${FLOW_RESUME_ONLY_RULE}

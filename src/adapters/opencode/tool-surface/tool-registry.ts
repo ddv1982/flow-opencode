@@ -127,7 +127,8 @@ export const OPENCODE_TOOL_REGISTRY = [
 		coreAction: null,
 		mutationClass: "none",
 		allowedModes: ["flow-auto"],
-		hostDescription: "Classify a flow-auto invocation",
+		hostDescription:
+			"Classify a flow-auto invocation and report attachment materialization requirements",
 		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 	},
 	{

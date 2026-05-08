@@ -103,7 +103,8 @@ describe("plugin config surface", () => {
 			| AttachmentHook
 			| undefined;
 		const materializeTool = plugin.tool?.flow_attachments_materialize;
-		if (!chatHook || !commandHook || !materializeTool) {
+		const prepareTool = plugin.tool?.flow_auto_prepare;
+		if (!chatHook || !commandHook || !materializeTool || !prepareTool) {
 			throw new Error("Missing attachment hook or tool surface.");
 		}
 
@@ -135,6 +136,22 @@ describe("plugin config surface", () => {
 				],
 			},
 		);
+
+		const prepareResponse = JSON.parse(
+			await prepareTool.execute(
+				{ argumentString: "Use the attached image" },
+				toolContext(worktree, undefined, {
+					sessionID: "chat-session",
+					messageID: "message-1",
+				}) as Parameters<typeof prepareTool.execute>[1],
+			),
+		) as {
+			attachmentGuidance: { materializationRequired: boolean; status: string };
+		};
+		expect(prepareResponse.attachmentGuidance).toMatchObject({
+			materializationRequired: true,
+			status: "available",
+		});
 
 		const chatResponse = JSON.parse(
 			await materializeTool.execute(

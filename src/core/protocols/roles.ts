@@ -122,7 +122,7 @@ export const CORE_ROLE_PROTOCOLS = [
 		],
 		workflow: [
 			"Classify the request, then plan or resume only when the runtime says that lane is valid.",
-			"When the goal depends on supported image attachments (PNG, JPEG, WebP, GIF, and AVIF; SVG unsupported), materialize supported attachments into workspace assets before planning, repo inspection for implementation, or delegation; do not use the materializer for unsupported attachment types.",
+			"After flow_auto_prepare, follow attachmentGuidance.materializationRequired; when true, call attachmentGuidance.materialize.tool with attachmentGuidance.materialize.args before planning, repo inspection for implementation, or delegation; when false, do not call attachment materialization.",
 			"Keep one feature active until clean, blocked, or replanned; never advance while review findings remain.",
 			"When runtime errors include structured recovery metadata, satisfy the prerequisite and use the canonical runtime action when present.",
 			"For completion-path coordination, require broad validation plus the final review required by deliveryPolicy.finalReviewPolicy before completing.",
