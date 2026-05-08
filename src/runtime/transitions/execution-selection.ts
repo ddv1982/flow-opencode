@@ -103,6 +103,24 @@ function blockRun(
 	};
 }
 
+export function isRunStartAlreadyActive(
+	session: Session,
+	requestedId?: string,
+): boolean {
+	const activeFeatureId = session.execution.activeFeatureId;
+	if (
+		session.status !== "running" ||
+		!activeFeatureId ||
+		(requestedId !== undefined && requestedId !== activeFeatureId)
+	) {
+		return false;
+	}
+	const feature = session.plan?.features.find(
+		(feature) => feature.id === activeFeatureId,
+	);
+	return feature?.status === "in_progress";
+}
+
 function startFeatureRun(
 	session: Session,
 	featureId: string,
@@ -161,6 +179,17 @@ export function startRun(
 	const completionPolicyError = completionPolicyTargetError(session.plan);
 	if (completionPolicyError) {
 		return fail(completionPolicyError);
+	}
+	if (isRunStartAlreadyActive(session, requestedId)) {
+		const activeFeatureId = session.execution.activeFeatureId;
+		return succeed({
+			session,
+			feature:
+				session.plan.features.find(
+					(feature) => feature.id === activeFeatureId,
+				) ?? null,
+			reason: "already_active",
+		});
 	}
 	if (session.execution.activeFeatureId) {
 		return fail(

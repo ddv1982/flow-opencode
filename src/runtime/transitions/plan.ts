@@ -145,10 +145,62 @@ export function applyPlan(
 	return succeed(clearExecution(next));
 }
 
+export function isPlanApprovalAlreadyApplied(
+	session: Session,
+	featureIds?: readonly string[],
+): boolean {
+	const { plan } = session;
+	if (
+		!plan ||
+		session.approval !== "approved" ||
+		session.status !== "ready" ||
+		session.execution.activeFeatureId !== null
+	) {
+		return false;
+	}
+	if (!featureIds || featureIds.length === 0) {
+		return true;
+	}
+	if (featureIds.length !== plan.features.length) {
+		return false;
+	}
+
+	const requestedFeatureIds = new Set(featureIds);
+	if (requestedFeatureIds.size !== featureIds.length) {
+		return false;
+	}
+
+	const approvedFeatureIds = new Set(
+		plan.features.map((feature) => feature.id),
+	);
+	return (
+		requestedFeatureIds.size === approvedFeatureIds.size &&
+		[...requestedFeatureIds].every((featureId) =>
+			approvedFeatureIds.has(featureId),
+		)
+	);
+}
+
 export function approvePlan(
 	session: Session,
 	featureIds?: string[],
 ): TransitionResult<Session> {
+	if (isPlanApprovalAlreadyApplied(session, featureIds)) {
+		return succeed(session);
+	}
+	if (
+		session.plan &&
+		session.approval === "approved" &&
+		session.status === "ready" &&
+		session.execution.activeFeatureId === null &&
+		featureIds &&
+		featureIds.length > 0
+	) {
+		return fail(
+			"The plan is already approved; feature selection cannot be changed during approval.",
+		);
+	}
+
 	const editable = prepareDraftPlanEdit(session, {
 		missingPlan: "There is no draft plan to approve.",
 		activeSession:

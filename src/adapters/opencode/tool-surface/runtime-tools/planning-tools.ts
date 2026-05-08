@@ -50,7 +50,7 @@ export function createPlanningRuntimeTools() {
 				FlowPlanContextRecordArgsSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
-						title: "Record planning context",
+						title: "Planning context record requested",
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-planner",
@@ -96,7 +96,7 @@ export function createPlanningRuntimeTools() {
 				FlowPlanApplyArgsSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
-						title: "Apply draft plan",
+						title: "Draft plan apply requested",
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-planner",
@@ -148,7 +148,7 @@ export function createPlanningRuntimeTools() {
 				FlowPlanApproveArgsSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
-						title: "Approve plan",
+						title: "Plan approval requested",
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-planner",
@@ -156,6 +156,9 @@ export function createPlanningRuntimeTools() {
 							taskSubject: "Plan approval",
 							taskStatus: "active",
 							requestedTaskStatus: "completed",
+							requestedApprovalStatus: "approved",
+							persistedTaskStatus: null,
+							persistedApprovalStatus: null,
 							approvedCount: parseFeatureIds(input.featureIds).length || null,
 						},
 					});
@@ -177,7 +180,7 @@ export function createPlanningRuntimeTools() {
 				FlowPlanSelectArgsSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
-						title: "Narrow plan",
+						title: "Feature selection requested",
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-planner",

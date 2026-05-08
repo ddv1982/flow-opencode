@@ -165,19 +165,31 @@ describe("runtime tool metadata", () => {
 			context,
 		);
 		await tools.flow_plan_apply.execute({ plan: samplePlan() }, context);
+		metadata.mockClear();
 		await tools.flow_plan_approve.execute({}, context);
+		let latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe("Plan approval requested");
+		expect(latestCall.metadata?.requestedTaskStatus).toBe("completed");
+		expect(latestCall.metadata?.requestedApprovalStatus).toBe("approved");
+		expect(latestCall.metadata?.persistedTaskStatus).toBeNull();
+		expect(latestCall.metadata?.persistedApprovalStatus).toBeNull();
 
 		metadata.mockClear();
 		await tools.flow_run_start.execute({}, context);
-		let latestCall = latestMetadataCall(metadata);
+		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe("Run start requested: next approved feature");
 		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
 		expect(latestCall.metadata?.taskPhase).toBe("execution");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 
 		metadata.mockClear();
 		await tools.flow_run_start.execute({ featureId: "setup-runtime" }, context);
-		let drilldown = latestMetadataCall(metadata).metadata
-			?.featureDocDrilldown as Record<string, unknown>;
+		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe("Run start requested: setup-runtime");
+		let drilldown = latestCall.metadata?.featureDocDrilldown as Record<
+			string,
+			unknown
+		>;
 		expect(drilldown?.kind).toBe("feature_doc");
 		expect(drilldown?.featureId).toBe("setup-runtime");
 		expect(typeof drilldown?.path).toBe("string");
@@ -214,10 +226,17 @@ describe("runtime tool metadata", () => {
 			context,
 		);
 		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe(
+			"Feature completion requested: setup-runtime",
+		);
 		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
 		expect(latestCall.metadata?.taskPhase).toBe("execution");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 		expect(latestCall.metadata?.requestedTaskStatus).toBe("needs_input");
+		expect(latestCall.metadata?.requestedWorkerStatus).toBe("needs_input");
+		expect(latestCall.metadata?.persistedTaskStatus).toBeNull();
+		expect(latestCall.metadata?.persistedWorkerStatus).toBeNull();
+		expect(latestCall.metadata?.status).toBeUndefined();
 		expect(latestCall.metadata?.validationCount).toBe(0);
 		expect(latestCall.metadata?.hasFinalReview).toBe(false);
 		drilldown = latestCall.metadata?.featureDocDrilldown as Record<
@@ -232,8 +251,12 @@ describe("runtime tool metadata", () => {
 			{ featureId: "setup-runtime" },
 			context,
 		);
-		drilldown = latestMetadataCall(metadata).metadata
-			?.featureDocDrilldown as Record<string, unknown>;
+		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe("Feature reset requested: setup-runtime");
+		drilldown = latestCall.metadata?.featureDocDrilldown as Record<
+			string,
+			unknown
+		>;
 		expect(drilldown?.kind).toBe("feature_doc");
 		expect(drilldown?.featureId).toBe("setup-runtime");
 
@@ -248,16 +271,60 @@ describe("runtime tool metadata", () => {
 			context,
 		);
 		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe("Reviewer requested approved setup-runtime");
 		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
 		expect(latestCall.metadata?.taskPhase).toBe("review");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 		expect(latestCall.metadata?.requestedTaskStatus).toBe("approved");
+		expect(latestCall.metadata?.requestedReviewStatus).toBe("approved");
+		expect(latestCall.metadata?.persistedReviewStatus).toBeNull();
+		expect(latestCall.metadata?.status).toBeUndefined();
 		drilldown = latestCall.metadata?.featureDocDrilldown as Record<
 			string,
 			unknown
 		>;
 		expect(drilldown?.kind).toBe("feature_doc");
 		expect(drilldown?.featureId).toBe("setup-runtime");
+
+		metadata.mockClear();
+		await tools.flow_review_record_final.execute(
+			{
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Checked final cross-feature integration and validation evidence.",
+				validationAssessment:
+					"Validation coverage and cross-feature interactions were reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: [
+					"Reviewed integration points across the active feature boundary.",
+				],
+				regressionChecks: [
+					"Checked for regressions in shared surfaces and validation evidence.",
+				],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Final review looks good.",
+			},
+			context,
+		);
+		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.title).toBe("Final reviewer requested approved");
+		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
+		expect(latestCall.metadata?.taskPhase).toBe("final_review");
+		expect(latestCall.metadata?.taskStatus).toBe("active");
+		expect(latestCall.metadata?.requestedTaskStatus).toBe("approved");
+		expect(latestCall.metadata?.requestedReviewStatus).toBe("approved");
+		expect(latestCall.metadata?.persistedReviewStatus).toBeNull();
+		expect(latestCall.metadata?.status).toBeUndefined();
 
 		metadata.mockClear();
 		await tools.flow_status.execute({}, context);

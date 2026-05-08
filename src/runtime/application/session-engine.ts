@@ -35,6 +35,8 @@ export type SessionMutationAction<T, Name extends string = string> = {
 	run: (session: Session) => TransitionResult<T>;
 	getSession: (value: T) => Session;
 	onSuccess: (saved: Session, value: T) => RuntimeToolResponse;
+	isNoopSuccess?: (value: T, originalSession: Session) => boolean;
+	onNoopSuccess?: (saved: Session, value: T) => RuntimeToolResponse;
 	missingResponse?: RuntimeToolResponse;
 	onError?: (
 		result: Extract<TransitionResult<T>, { ok: false }>,
@@ -263,10 +265,28 @@ export async function runSessionMutationActionAtRoot<T, Name extends string>(
 		};
 	}
 
+	const result = action.run(session);
+	if (
+		result.ok &&
+		action.onNoopSuccess &&
+		action.isNoopSuccess?.(result.value, session) === true
+	) {
+		if (action.syncArtifacts ?? true) {
+			await runtime.syncSessionArtifacts(worktree, session);
+		}
+		return {
+			kind: "success",
+			actionName: action.name,
+			value: result.value,
+			savedSession: session,
+			response: action.onNoopSuccess(session, result.value),
+		};
+	}
+
 	return executeTransitionAtRoot(
 		action.name,
 		worktree,
-		action.run(session),
+		result,
 		action.getSession,
 		action.onSuccess,
 		action.onError,

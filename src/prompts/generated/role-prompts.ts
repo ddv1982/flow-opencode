@@ -16,6 +16,7 @@ import {
 	FLOW_FEATURE_REVIEW_APPROVAL_RULE,
 	FLOW_FINAL_COMPLETION_PATH_RULE,
 	FLOW_FINAL_COMPLETION_REVIEW_RULE,
+	FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE,
 	FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE,
 	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
@@ -36,6 +37,7 @@ import {
 	FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
+	FLOW_SINGLETON_RUNTIME_RETRY_RULE,
 	FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE,
 	FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
@@ -160,6 +162,7 @@ ${FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE}
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid.
 ${FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE}
+${FLOW_SINGLETON_RUNTIME_RETRY_RULE}
 - For broad review-and-fix goals without findings, use goalMode: review or a flow-planning-researcher handoff; do not create a fake all-in-one fix feature.
 - Use goalMode: review_and_fix only after concrete findings exist in planning.reviewFindings.
 - Do not start implementation after drafting a plan.`,
@@ -200,6 +203,8 @@ ${FLOW_WORKER_REVIEW_TASK_RULE}
 ${FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE}
 - Task/subagent handoff is available when OpenCode exposes the Task tool; use it for independent review in a fresh child context while keeping tightly coupled implementation work in the same worker context.
 ${FLOW_FINAL_COMPLETION_PATH_RULE}
+${FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE}
+${FLOW_SINGLETON_RUNTIME_RETRY_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.`,
 	},
@@ -241,6 +246,8 @@ ${FLOW_TASK_HANDOFF_RULE}
 ${FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE}
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
+${FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE}
+${FLOW_SINGLETON_RUNTIME_RETRY_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE}
 ${FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE}

@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [2.0.23] - 2026-05-08
+
+Make singleton runtime retries idempotent and artifact-repairable
+
+Flow 2.0.23 narrows retry noise around singleton runtime transitions without expanding the public surface. Review, plan approval, and run-start paths now distinguish requested tool metadata from persisted state more clearly, and identical singleton retries no-op instead of rewriting state where the runtime can prove the requested transition is already applied.
+
+The release also makes no-op mutation retries artifact-repairable. A lost-response retry that reloads an already-mutated session still skips the session-state save, but it now runs artifact sync when the action's `syncArtifacts` contract allows it. This preserves idempotent state writes while letting retries repair missing rendered artifacts after a partial save/sync failure.
+
+Execution-start retry handling is now aligned with prompt guidance. An implicit `flow_run_start({})` retry no-ops only when the current active feature is already `in_progress`; explicit attempts to switch to a different feature while one is active still fail. Review-record behavior is documented as current identical-decision no-op behavior plus changed-decision singleton overwrite, with no reviewer-history append.
+
+The release deliberately does not add commands, tools, runtime modes, package exports, dependencies, state paths, worker/reviewer payload shapes, or history-appending completion idempotency. It keeps completion calls non-idempotent without new worker evidence, preserves snapshot-primary runtime persistence, keeps prompts/docs descriptive rather than authoritative over runtime semantics, and accepts a narrow 6 KiB bundle-budget increase for release-bound retry/idempotency metadata and guidance.
+
+Constraint: Treat runtime tool metadata as request progress until the structured response confirms persisted state
+Constraint: Preserve singleton no-op behavior only where the runtime can prove the same transition is already applied
+Constraint: Keep no-op retries artifact-repairable without saving session state again
+Constraint: Preserve completion history semantics; do not make `flow_run_complete_feature` idempotent without new worker evidence
+Constraint: Accept only a narrow 6 KiB bundle-budget increase for release-bound retry/idempotency metadata and prompt guidance
+Rejected: Make all repeated runtime calls successful no-ops | history-appending completion and changed reviewer decisions carry new evidence/state and must remain explicit
+Rejected: Add new runtime status or retry tools | existing status, recovery metadata, and no-op transitions are sufficient
+Rejected: Broaden prompt guidance into runtime authority | runtime transitions remain the behavior source of truth; prompts only describe safe retry boundaries
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep future retry/idempotency work transition-specific, test-backed, and explicit about whether artifacts sync, session state saves, or history rows are appended
+Tested: `bun test tests/runtime-tools-metadata.test.ts tests/runtime-tools.test.ts tests/config/prompt-contracts.test.ts tests/reviewer-decision-scope.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/prompt-snapshot.test.ts tests/prompt-eval-corpus.test.ts` (76 pass, 1314 expect calls); focused runtime/prompt/tool/docs gate bundle (133 pass, 2587 expect calls); `bun run eval:prompt-capture:check`; `bun run eval:review-capture:check`; `bun run typecheck`; final focused RepoPrompt review for doc/export blockers; `bun run check`
+Not-tested: Live OpenCode UI session exercising lost-response retry rendering; live GitHub-hosted CI/release workflow run for tag `v2.0.23` before push
+
 ## [2.0.22] - 2026-05-08
 
 Make attachment materialization runtime-guided and content-policy explicit

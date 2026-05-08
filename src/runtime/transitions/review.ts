@@ -107,6 +107,47 @@ function isFeatureScopeReviewerDecision(
 	return decision.scope === "feature";
 }
 
+function canonicalizeDecisionValue(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map(canonicalizeDecisionValue);
+	}
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value)
+				.filter(([, entryValue]) => entryValue !== undefined)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([key, entryValue]) => [
+					key,
+					canonicalizeDecisionValue(entryValue),
+				]),
+		);
+	}
+	return value;
+}
+
+function reviewerDecisionFingerprint(decision: ReviewerDecision): string {
+	return JSON.stringify(canonicalizeDecisionValue(decision));
+}
+
+function isSameReviewerDecision(
+	current: ReviewerDecision | null,
+	next: ReviewerDecision,
+): boolean {
+	return current
+		? reviewerDecisionFingerprint(current) === reviewerDecisionFingerprint(next)
+		: false;
+}
+
+export function isReviewerDecisionAlreadyRecorded(
+	session: Session,
+	input: RecordReviewerDecisionInput,
+): boolean {
+	return isSameReviewerDecision(
+		session.execution.lastReviewerDecision,
+		buildReviewerDecision(input),
+	);
+}
+
 export function resetFeature(
 	session: Session,
 	featureId: string,
@@ -196,6 +237,10 @@ export function recordReviewerDecision(
 		if (!validation.ok) {
 			return validation;
 		}
+	}
+
+	if (isReviewerDecisionAlreadyRecorded(session, input)) {
+		return succeed(session);
 	}
 
 	return succeed({

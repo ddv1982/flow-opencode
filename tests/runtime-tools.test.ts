@@ -1,4 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { dispatchSessionMutationAction } from "../src/runtime/application/session-actions";
+import {
+	runSessionMutationActionAtRoot,
+	type SessionMutationAction,
+	type SessionRuntimePort,
+} from "../src/runtime/application/session-engine";
+import {
+	createFeatureReviewerDecisionAction,
+	createFinalReviewerDecisionAction,
+} from "../src/runtime/application/session-review-actions";
 import { FLOW_STATUS_COMMAND } from "../src/runtime/constants";
 import {
 	createSession,
@@ -448,6 +458,531 @@ describe("runtime completion and recovery tools", () => {
 		expect(parsed.recovery.nextCommand).toBe(FLOW_STATUS_COMMAND);
 		expect(parsed.recovery.nextRuntimeTool).toBeUndefined();
 		expect(parsed.recovery.retryable).toBe(true);
+	});
+
+	test("same-session success still persists without an explicit noop predicate", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		let currentSession = started.value.session;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const action: SessionMutationAction<typeof currentSession> = {
+			name: "identity_success",
+			run: (loadedSession) => ({ ok: true, value: loadedSession }),
+			getSession: (value) => value,
+			onSuccess: () => ({ status: "ok", summary: "saved" }),
+			onNoopSuccess: () => ({ status: "ok", summary: "noop" }),
+		};
+
+		const result = await runSessionMutationActionAtRoot(
+			worktree,
+			action,
+			runtime,
+		);
+
+		expect(result.kind).toBe("success");
+		expect(result.response.summary).toBe("saved");
+		expect(saveCount).toBe(1);
+		expect(syncCount).toBe(1);
+	});
+
+	test("no-op mutation with disabled artifact sync skips persistence and sync", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => session,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				return structuredClone(nextSession);
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const action: SessionMutationAction<typeof session> = {
+			name: "disabled_sync_noop",
+			run: (loadedSession) => ({ ok: true, value: loadedSession }),
+			getSession: (value) => value,
+			onSuccess: () => ({ status: "ok", summary: "saved" }),
+			isNoopSuccess: (value, originalSession) => value === originalSession,
+			onNoopSuccess: () => ({ status: "ok", summary: "noop" }),
+			syncArtifacts: false,
+		};
+
+		const result = await runSessionMutationActionAtRoot(
+			worktree,
+			action,
+			runtime,
+		);
+
+		expect(result.kind).toBe("success");
+		expect(result.response.summary).toBe("noop");
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(0);
+	});
+
+	test("plan approval action skips persistence for duplicate approval", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		let currentSession = approved.value;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const savedAfterFirst = currentSession;
+
+		const duplicate = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("approve_plan", { featureIds: [] }),
+			runtime,
+		);
+
+		expect(duplicate.kind).toBe("success");
+		expect(duplicate.response.summary).toBe(
+			"Plan approval already recorded; no state change.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+		expect(currentSession).toBe(savedAfterFirst);
+		if (duplicate.kind === "success") {
+			expect(duplicate.savedSession).toBe(savedAfterFirst);
+		}
+
+		const changedSelection = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("approve_plan", {
+				featureIds: ["execute-flow"],
+			}),
+			runtime,
+		);
+
+		expect(changedSelection.kind).toBe("failure");
+		expect(changedSelection.response.summary).toContain(
+			"feature selection cannot be changed",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+	});
+
+	test("plan approval action treats selected subset duplicates as narrowed-plan no-ops", async () => {
+		const worktree = makeTempDir();
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			features: [
+				...basePlan.features,
+				{
+					...basePlan.features[0],
+					id: "document-runtime",
+					title: "Document runtime helpers",
+					summary: "Document runtime helper behavior.",
+					fileTargets: ["README.md"],
+					dependsOn: undefined,
+				},
+			],
+		};
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value, [
+			"document-runtime",
+			"setup-runtime",
+		]);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		let currentSession = approved.value;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const savedAfterFirst = currentSession;
+		expect(currentSession.plan?.features.map((feature) => feature.id)).toEqual([
+			"setup-runtime",
+			"document-runtime",
+		]);
+
+		const duplicateDifferentOrder = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("approve_plan", {
+				featureIds: ["document-runtime", "setup-runtime"],
+			}),
+			runtime,
+		);
+
+		expect(duplicateDifferentOrder.kind).toBe("success");
+		expect(duplicateDifferentOrder.response.summary).toBe(
+			"Plan approval already recorded; no state change.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+		expect(currentSession).toBe(savedAfterFirst);
+		if (duplicateDifferentOrder.kind === "success") {
+			expect(duplicateDifferentOrder.savedSession).toBe(savedAfterFirst);
+		}
+
+		const duplicateOmittedIds = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("approve_plan", { featureIds: [] }),
+			runtime,
+		);
+
+		expect(duplicateOmittedIds.kind).toBe("success");
+		expect(duplicateOmittedIds.response.summary).toBe(
+			"Plan approval already recorded; no state change.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(2);
+		expect(currentSession).toBe(savedAfterFirst);
+		expect(currentSession.plan?.features.map((feature) => feature.id)).toEqual([
+			"setup-runtime",
+			"document-runtime",
+		]);
+
+		const changedSelection = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("approve_plan", {
+				featureIds: ["setup-runtime"],
+			}),
+			runtime,
+		);
+
+		expect(changedSelection.kind).toBe("failure");
+		expect(changedSelection.response.summary).toContain(
+			"feature selection cannot be changed",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(2);
+		expect(currentSession).toBe(savedAfterFirst);
+	});
+
+	test("explicit duplicate run start skips persistence for the same active feature", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value, "setup-runtime");
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		let currentSession = started.value.session;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const savedAfterFirst = currentSession;
+
+		const duplicate = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("start_run", {
+				featureId: "setup-runtime",
+			}),
+			runtime,
+		);
+
+		expect(duplicate.kind).toBe("success");
+		expect(duplicate.response.summary).toBe(
+			"Feature 'setup-runtime' is already running; no state change.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+		expect(currentSession).toBe(savedAfterFirst);
+		expect(currentSession.execution.activeFeatureId).toBe("setup-runtime");
+		if (duplicate.kind === "success") {
+			expect(duplicate.savedSession).toBe(savedAfterFirst);
+		}
+	});
+
+	test("implicit duplicate run start is no-op while explicit different feature still fails", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value, "setup-runtime");
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		let currentSession = started.value.session;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+
+		const implicit = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("start_run", {}),
+			runtime,
+		);
+		expect(implicit.kind).toBe("success");
+		expect(implicit.response.summary).toBe(
+			"Feature 'setup-runtime' is already running; no state change.",
+		);
+
+		const differentFeature = await runSessionMutationActionAtRoot(
+			worktree,
+			dispatchSessionMutationAction("start_run", {
+				featureId: "execute-flow",
+			}),
+			runtime,
+		);
+		expect(differentFeature.kind).toBe("failure");
+		expect(differentFeature.response.summary).toContain(
+			"Feature 'setup-runtime' is already in progress.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+		expect(currentSession.execution.activeFeatureId).toBe("setup-runtime");
+	});
+
+	test("reviewer decision action skips persistence for identical no-op records", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const decision = {
+			scope: "feature" as const,
+			featureId: "setup-runtime",
+			status: "approved" as const,
+			summary: "Looks good.",
+		};
+		const preRecorded = recordReviewerDecision(started.value.session, decision);
+		expect(preRecorded.ok).toBe(true);
+		if (!preRecorded.ok) return;
+
+		let currentSession = preRecorded.value;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const savedAfterFirst = currentSession;
+		const duplicate = await runSessionMutationActionAtRoot(
+			worktree,
+			createFeatureReviewerDecisionAction(decision),
+			runtime,
+		);
+		expect(duplicate.kind).toBe("success");
+		expect(duplicate.response.summary).toBe(
+			"Reviewer decision already recorded; no state change.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+		expect(currentSession).toBe(savedAfterFirst);
+		if (duplicate.kind === "success") {
+			expect(duplicate.savedSession).toBe(savedAfterFirst);
+		}
+
+		const changed = await runSessionMutationActionAtRoot(
+			worktree,
+			createFeatureReviewerDecisionAction({
+				...decision,
+				status: "needs_fix",
+				summary: "Needs one fix.",
+				blockingFindings: [{ summary: "Validation evidence is incomplete." }],
+			}),
+			runtime,
+		);
+		expect(changed.kind).toBe("success");
+		expect(changed.response.summary).toBe("Reviewer decision recorded.");
+		expect(saveCount).toBe(1);
+		expect(syncCount).toBe(2);
+		expect(currentSession).not.toBe(savedAfterFirst);
+		expect(currentSession.execution.lastReviewerDecision?.status).toBe(
+			"needs_fix",
+		);
+	});
+
+	test("final reviewer decision action skips persistence for identical no-op records", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Build a workflow plugin");
+		const plan = {
+			...samplePlan(),
+			completionPolicy: {
+				minCompletedFeatures: 1,
+			},
+			features: [samplePlan().features[0]],
+		};
+		const applied = applyPlan(session, plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const decision = {
+			scope: "final" as const,
+			reviewDepth: "detailed" as const,
+			reviewedSurfaces: [
+				"changed_files" as const,
+				"shared_surfaces" as const,
+				"validation_evidence" as const,
+			],
+			evidenceSummary:
+				"Checked final cross-feature integration and validation evidence.",
+			validationAssessment:
+				"Validation coverage and cross-feature interactions were reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: [
+				"Reviewed integration points across the active feature boundary.",
+			],
+			regressionChecks: [
+				"Checked for regressions in shared surfaces and validation evidence.",
+			],
+			remainingGaps: [],
+			status: "approved" as const,
+			summary: "Final review looks good.",
+		};
+		const preRecorded = recordReviewerDecision(started.value.session, decision);
+		expect(preRecorded.ok).toBe(true);
+		if (!preRecorded.ok) return;
+
+		let currentSession = preRecorded.value;
+		let saveCount = 0;
+		let syncCount = 0;
+		const runtime: SessionRuntimePort = {
+			loadSession: async () => currentSession,
+			saveSessionState: async (_worktree, nextSession) => {
+				saveCount += 1;
+				const saved = structuredClone(nextSession);
+				currentSession = saved;
+				return saved;
+			},
+			syncSessionArtifacts: async () => {
+				syncCount += 1;
+			},
+		};
+		const savedAfterFirst = currentSession;
+		const duplicate = await runSessionMutationActionAtRoot(
+			worktree,
+			createFinalReviewerDecisionAction(decision),
+			runtime,
+		);
+
+		expect(duplicate.kind).toBe("success");
+		expect(duplicate.response.summary).toBe(
+			"Reviewer decision already recorded; no state change.",
+		);
+		expect(saveCount).toBe(0);
+		expect(syncCount).toBe(1);
+		expect(currentSession).toBe(savedAfterFirst);
+		if (duplicate.kind === "success") {
+			expect(duplicate.savedSession).toBe(savedAfterFirst);
+		}
 	});
 
 	test("final review tool returns recovery details for review-scope accounting failures", async () => {

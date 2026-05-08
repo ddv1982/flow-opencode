@@ -32,7 +32,9 @@ export function createExecutionRuntimeTools() {
 							input.featureId,
 						);
 					context.metadata?.({
-						title: input.featureId ? `Start ${input.featureId}` : "Start next",
+						title: input.featureId
+							? `Run start requested: ${input.featureId}`
+							: "Run start requested: next approved feature",
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-worker",
@@ -67,7 +69,7 @@ export function createExecutionRuntimeTools() {
 							input.featureResult?.featureId,
 						);
 					context.metadata?.({
-						title: `Complete ${input.featureResult?.featureId ?? "feature"}`,
+						title: `Feature completion requested: ${input.featureResult?.featureId ?? "feature"}`,
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-worker",
@@ -77,8 +79,10 @@ export function createExecutionRuntimeTools() {
 							taskStatus: "active",
 							requestedTaskStatus:
 								input.status === "ok" ? "completed" : "needs_input",
+							requestedWorkerStatus: input.status,
+							persistedTaskStatus: null,
+							persistedWorkerStatus: null,
 							featureId: input.featureResult?.featureId ?? null,
-							status: input.status,
 							validationCount: input.validationRun.length,
 							reviewIterations: input.reviewIterations ?? null,
 							hasFinalReview: input.finalReview !== undefined,
@@ -111,7 +115,7 @@ export function createExecutionRuntimeTools() {
 							input.featureId,
 						);
 					context.metadata?.({
-						title: `Reset ${input.featureId}`,
+						title: `Feature reset requested: ${input.featureId}`,
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-runtime",

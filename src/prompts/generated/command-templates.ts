@@ -10,6 +10,7 @@ import {
 	FLOW_ENGINEERING_QUALITY_RULE,
 	FLOW_FINAL_COMPLETION_COMMAND_RULE,
 	FLOW_FINAL_COMPLETION_REVIEW_RULE,
+	FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE,
 	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
 	FLOW_NO_INFERRED_GOAL_RULE,
 	FLOW_OPERATOR_PROGRESS_CHECKPOINTS,
@@ -25,6 +26,7 @@ import {
 	FLOW_RUNTIME_STATE_TRANSITION_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE,
 	FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE,
+	FLOW_SINGLETON_RUNTIME_RETRY_RULE,
 	FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
 	FLOW_TASK_HANDOFF_RULE,
@@ -116,6 +118,7 @@ ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 - If \`flow_plan_apply\` reports \`autoApproved: true\`, treat the draft as ready to run immediately instead of asking for a separate approval step.
 ${FLOW_OPERATOR_PROGRESS_RULE}
+${FLOW_SINGLETON_RUNTIME_RETRY_RULE}
 Do not start implementation from this command.`,
 	},
 	{
@@ -146,6 +149,8 @@ ${FLOW_ENGINEERING_QUALITY_RULE}
 - In the lite lane, if the runtime session is small enough and the worker result already contains the required passing feature-level review payload for a non-final feature, you may persist completion without a separate \`flow_review_record_feature\` step.
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending so Flow can rerun it without a separate manual reset step.
 ${FLOW_FINAL_COMPLETION_COMMAND_RULE}
+${FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE}
+${FLOW_SINGLETON_RUNTIME_RETRY_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - End with a compact summary of changes, validation evidence, and the runtime next step.`,
 	},
@@ -188,6 +193,8 @@ ${FLOW_RESOLVE_RUNTIME_ERRORS_RULE}
 ${FLOW_STRUCTURED_RECOVERY_RULE}
 - Do not advance to the next feature until the current one is clean.
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
+${FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE}
+${FLOW_SINGLETON_RUNTIME_RETRY_RULE}
 ${FLOW_RELEASE_HYGIENE_REVIEW_RULE}
 ${FLOW_RUNTIME_STATE_TRANSITION_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}

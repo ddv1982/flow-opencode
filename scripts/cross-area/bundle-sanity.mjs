@@ -19,8 +19,9 @@ const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // Attachment materialization adds one public tool plus root-safe data/file/http
 // decoding and write guards. Runtime attachment guidance adds availability
-// snapshots and coordinator instructions; keep the bundle below 760 KiB.
-const BUNDLE_SIZE_BUDGET_BYTES = 778240; // 760 KiB
+// snapshots and coordinator instructions. Singleton retry/idempotency metadata adds
+// narrow runtime and prompt guidance; keep the bundle below 766 KiB.
+const BUNDLE_SIZE_BUDGET_BYTES = 784384; // 766 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });

@@ -12,6 +12,8 @@ import {
 	applyPlan,
 	approvePlan,
 	completeRun,
+	isPlanApprovalAlreadyApplied,
+	isRunStartAlreadyActive,
 	resetFeature,
 	selectPlanFeatures,
 	startRun,
@@ -189,6 +191,14 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				run: (session) => approvePlan(session, featureIds),
 				getSession: (value) => value,
 				onSuccess: (saved) => okWithSession(saved, "Plan approved."),
+				isNoopSuccess: (value, originalSession) =>
+					value === originalSession &&
+					isPlanApprovalAlreadyApplied(originalSession, featureIds),
+				onNoopSuccess: (saved) =>
+					okWithSession(
+						saved,
+						"Plan approval already recorded; no state change.",
+					),
 			};
 		},
 
@@ -207,6 +217,14 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				run: (session) => startRun(session, featureId),
 				getSession: (value) => value.session,
 				onSuccess: startRunSuccess,
+				isNoopSuccess: (value, originalSession) =>
+					value.session === originalSession &&
+					isRunStartAlreadyActive(originalSession, featureId),
+				onNoopSuccess: (saved, value) =>
+					okWithSession(
+						saved,
+						`Feature '${value.feature?.id ?? featureId}' is already running; no state change.`,
+					),
 				missingResponse: MISSING_SESSION_RESPONSE,
 			};
 		},

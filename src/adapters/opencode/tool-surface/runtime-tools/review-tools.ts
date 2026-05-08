@@ -39,7 +39,7 @@ export function createReviewRuntimeTools() {
 							input.featureId,
 						);
 					context.metadata?.({
-						title: `Reviewer ${input.status} ${input.featureId}`,
+						title: `Reviewer requested ${input.status} ${input.featureId}`,
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-reviewer",
@@ -47,8 +47,9 @@ export function createReviewRuntimeTools() {
 							taskSubject: `Feature review: ${input.featureId}`,
 							taskStatus: "active",
 							requestedTaskStatus: input.status,
+							requestedReviewStatus: input.status,
+							persistedReviewStatus: null,
 							featureId: input.featureId,
-							status: input.status,
 							...(featureDocDrilldown ? { featureDocDrilldown } : {}),
 						},
 					});
@@ -71,7 +72,7 @@ export function createReviewRuntimeTools() {
 				FlowReviewRecordFinalArgsSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
-						title: `Final reviewer ${input.status}`,
+						title: `Final reviewer requested ${input.status}`,
 						metadata: {
 							sessionId: null,
 							taskOwner: "flow-reviewer",
@@ -79,7 +80,8 @@ export function createReviewRuntimeTools() {
 							taskSubject: "Final session review",
 							taskStatus: "active",
 							requestedTaskStatus: input.status,
-							status: input.status,
+							requestedReviewStatus: input.status,
+							persistedReviewStatus: null,
 							reviewDepth: input.reviewDepth,
 							reviewedSurfaces: input.reviewedSurfaces,
 							evidenceSummary: input.evidenceSummary,

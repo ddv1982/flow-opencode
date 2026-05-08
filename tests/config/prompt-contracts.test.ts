@@ -71,6 +71,37 @@ describe("prompt and command config contracts", () => {
 		}
 	});
 
+	test("singleton runtime retry guidance is limited to mutation-owning prompts and templates", () => {
+		const singletonRetrySnippet =
+			"Treat runtime tool metadata as request progress, not persisted state.";
+		const repeatableContextSnippet =
+			"This does not apply to repeatable planning context/evidence recording such as flow_plan_context_record when new evidence should be persisted.";
+		const implicitRunStartRetrySnippet =
+			"For a lost-response execution-start retry, an implicit flow_run_start may return an already-running/no-state-change ok; treat that as confirmation and continue, not permission to start another feature.";
+		for (const prompt of [
+			FLOW_PLAN_COMMAND_TEMPLATE,
+			FLOW_RUN_COMMAND_TEMPLATE,
+			FLOW_AUTO_COMMAND_TEMPLATE,
+			FLOW_PLANNER_AGENT_PROMPT,
+			FLOW_WORKER_AGENT_PROMPT,
+			FLOW_AUTO_AGENT_PROMPT,
+		]) {
+			expect(prompt).toContain(singletonRetrySnippet);
+			expect(prompt).toContain(repeatableContextSnippet);
+			expect(prompt).toContain(implicitRunStartRetrySnippet);
+		}
+		for (const prompt of [
+			FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
+			FLOW_REVIEWER_AGENT_PROMPT,
+			FLOW_STATUS_COMMAND_TEMPLATE,
+			FLOW_DOCTOR_COMMAND_TEMPLATE,
+			FLOW_CONTROL_AGENT_PROMPT,
+		]) {
+			expect(prompt).not.toContain(singletonRetrySnippet);
+			expect(prompt).not.toContain(implicitRunStartRetrySnippet);
+		}
+	});
+
 	test("plan contract exposes the runtime-owned final review policy field", () => {
 		expect(FLOW_PLAN_CONTRACT).toContain(
 			"finalReviewPolicy?: broad | detailed",
@@ -186,12 +217,24 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"returns structured recovery that explicitly requires `final_reviewer_decision`",
+		);
 		expect(
 			countOccurrences(FLOW_WORKER_AGENT_PROMPT, "flow_review_record_final"),
-		).toBeLessThanOrEqual(2);
+		).toBe(4);
 		expect(
 			countOccurrences(FLOW_WORKER_AGENT_PROMPT, "flow_run_complete_feature"),
-		).toBeLessThanOrEqual(2);
+		).toBe(3);
+		expect(
+			countOccurrences(
+				FLOW_WORKER_AGENT_PROMPT,
+				"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+			),
+		).toBe(1);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"Task/subagent handoff is available",
 		);
@@ -414,12 +457,24 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Persist every reviewer decision through the canonical feature or final review-record runtime tool",
 		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"returns structured recovery that explicitly requires `final_reviewer_decision`",
+		);
 		expect(
 			countOccurrences(FLOW_AUTO_AGENT_PROMPT, "flow_review_record_final"),
-		).toBeLessThanOrEqual(2);
+		).toBe(4);
 		expect(
 			countOccurrences(FLOW_AUTO_AGENT_PROMPT, "flow_run_complete_feature"),
-		).toBeLessThanOrEqual(2);
+		).toBe(3);
+		expect(
+			countOccurrences(
+				FLOW_AUTO_AGENT_PROMPT,
+				"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+			),
+		).toBe(1);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"If the reviewer returns needs_fix",
 		);
@@ -475,6 +530,12 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("passing `finalReview`");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
 			"finish with a passing `finalReview`",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"returns structured recovery that explicitly requires `final_reviewer_decision`",
 		);
 	});
 
@@ -825,6 +886,12 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"runtime-owned final approval required by deliveryPolicy.finalReviewPolicy",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"returns structured recovery that explicitly requires `final_reviewer_decision`",
 		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"independent review in a fresh child context",

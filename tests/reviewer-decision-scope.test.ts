@@ -106,6 +106,40 @@ describe("recordReviewerDecision scope validation", () => {
 		);
 	});
 
+	test("identical reviewer decisions are no-ops but different decisions can re-record", () => {
+		const decision = {
+			scope: "feature" as const,
+			featureId: "setup-runtime",
+			status: "approved" as const,
+			summary: "Looks good.",
+		};
+		const first = recordReviewerDecision(startedSession(), decision);
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+
+		const duplicate = recordReviewerDecision(first.value, decision);
+		expect(duplicate.ok).toBe(true);
+		if (!duplicate.ok) return;
+		expect(duplicate.value).toBe(first.value);
+		expect(duplicate.value.execution.lastReviewerDecision).toBe(
+			first.value.execution.lastReviewerDecision,
+		);
+
+		const changed = recordReviewerDecision(duplicate.value, {
+			...decision,
+			status: "needs_fix" as const,
+			summary: "Needs one fix.",
+			blockingFindings: [{ summary: "Validation evidence is incomplete." }],
+		});
+		expect(changed.ok).toBe(true);
+		if (!changed.ok) return;
+		expect(changed.value).not.toBe(duplicate.value);
+		expect(changed.value.execution.lastReviewerDecision?.status).toBe(
+			"needs_fix",
+		);
+		expect(changed.value.execution.lastSummary).toBe("Needs one fix.");
+	});
+
 	test("rejects mismatched reviewPurpose for final scope", () => {
 		const result = recordReviewerDecision(startedSession(), {
 			scope: "final",
@@ -235,6 +269,56 @@ describe("recordReviewerDecision scope validation", () => {
 		});
 
 		expect(result.ok).toBe(true);
+	});
+
+	test("reordered final review arrays are changed because idempotency is exact normalized payload equality", () => {
+		const decision = {
+			scope: "final" as const,
+			reviewDepth: "detailed" as const,
+			reviewedSurfaces: [
+				"changed_files",
+				"shared_surfaces",
+				"validation_evidence",
+			],
+			evidenceSummary: "Reviewed shell/game source changes and validation.",
+			validationAssessment: "Targeted behavior validation was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: [
+					"src/shell/sessionPanels.ts",
+					"src/game/navigation.ts",
+				],
+				validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			integrationChecks: ["Checked shell action and game navigation handoff."],
+			regressionChecks: ["Checked behavior validation evidence."],
+			remainingGaps: [],
+			status: "approved" as const,
+			summary: "Final review looks good.",
+		};
+		const first = recordReviewerDecision(startedSession(), decision);
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+
+		const reordered = recordReviewerDecision(first.value, {
+			...decision,
+			reviewedSurfaces: [
+				"validation_evidence",
+				"shared_surfaces",
+				"changed_files",
+			],
+		});
+
+		expect(reordered.ok).toBe(true);
+		if (!reordered.ok) return;
+		expect(reordered.value).not.toBe(first.value);
+		const persistedDecision = reordered.value.execution.lastReviewerDecision;
+		expect(persistedDecision?.scope).toBe("final");
+		if (persistedDecision?.scope !== "final") return;
+		expect(persistedDecision.reviewedSurfaces).toEqual([
+			"validation_evidence",
+			"shared_surfaces",
+			"changed_files",
+		]);
 	});
 
 	test("explicit strictReview final approval requires review scope ledger accounting", () => {

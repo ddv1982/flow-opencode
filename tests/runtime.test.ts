@@ -132,7 +132,7 @@ describe("runtime transitions", () => {
 		expect(started.value.session.status).toBe("running");
 	});
 
-	test("rejects starting a second run while one feature is active", () => {
+	test("treats implicit run-start retry as a no-op while rejecting feature switches", () => {
 		const session = createSession("Build a workflow plugin");
 		const applied = applyPlan(session, samplePlan());
 		expect(applied.ok).toBe(true);
@@ -146,11 +146,19 @@ describe("runtime transitions", () => {
 		expect(started.ok).toBe(true);
 		if (!started.ok) return;
 
-		const restarted = startRun(started.value.session);
-		expect(restarted.ok).toBe(false);
-		if (restarted.ok) return;
+		const retried = startRun(started.value.session);
+		expect(retried.ok).toBe(true);
+		if (!retried.ok) return;
 
-		expect(restarted.message).toContain("already in progress");
+		expect(retried.value.session).toBe(started.value.session);
+		expect(retried.value.reason).toBe("already_active");
+		expect(retried.value.feature?.id).toBe("setup-runtime");
+
+		const switched = startRun(started.value.session, "execute-feature");
+		expect(switched.ok).toBe(false);
+		if (switched.ok) return;
+
+		expect(switched.message).toContain("already in progress");
 	});
 
 	test("rejects plan approval after execution has started", () => {
