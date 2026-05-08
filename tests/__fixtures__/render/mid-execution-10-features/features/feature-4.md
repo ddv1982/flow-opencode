@@ -7,6 +7,10 @@
 - active: yes
 - goal: Benchmark 10-feature session
 
+## Task Progress
+
+- active | flow-worker | execution | feature-4 — Feature feature-4 | next: Continue the active feature. | evidence: file targets: 1, verification: 1, validation: 1
+
 ## Description
 
 > Implement feature-4.

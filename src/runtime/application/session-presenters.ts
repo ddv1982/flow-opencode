@@ -43,6 +43,25 @@ function storedSessionInactiveWarning(
 		: null;
 }
 
+function parkedStoredTaskProgressRows(
+	found: NonNullable<StoredSessionRecord>,
+	rows: NonNullable<
+		ReturnType<typeof deriveSessionViewModel>["session"]
+	>["taskProgress"],
+	nextStep: string,
+) {
+	if (
+		found.source !== "stored" ||
+		found.active ||
+		found.session.status === "completed"
+	) {
+		return rows;
+	}
+	return rows.map((row) =>
+		row.status === "completed" ? row : { ...row, next: nextStep },
+	);
+}
+
 export function missingStoredSessionResponse(
 	sessionId: string,
 	nextCommand: string,
@@ -110,12 +129,23 @@ export function storedSessionResponse(
 ) {
 	const viewModel = deriveSessionViewModel(found.session);
 	const summarizedSession = viewModel.session;
+	if (!summarizedSession) {
+		throw new Error("Stored Flow session summary unexpectedly missing.");
+	}
 	const guidance = storedSessionGuidance(found, nextCommand);
 	const operator = deriveSessionOperatorState(found.session);
 	const historySession = found.active
 		? summarizedSession
 		: { ...summarizedSession, nextCommand };
 	const inactiveWarning = storedSessionInactiveWarning(found);
+	const parkedAwareSession = {
+		...historySession,
+		taskProgress: parkedStoredTaskProgressRows(
+			found,
+			historySession.taskProgress,
+			guidance.nextStep,
+		),
+	};
 	return toJson({
 		status: "ok",
 		summary: inactiveWarning
@@ -133,12 +163,13 @@ export function storedSessionResponse(
 		closure: found.session.closure ?? null,
 		operator,
 		...guidanceFields(guidance),
-		session: historySession,
+		session: parkedAwareSession,
 		guidance,
 		...(inactiveWarning ? { warning: inactiveWarning } : {}),
 		operatorSummary: renderSessionStatusSummary(found.session, {
 			nextCommand: guidance.nextCommand,
 			nextStep: guidance.nextStep,
+			taskProgressOverride: parkedAwareSession.taskProgress,
 		}),
 		nextCommand,
 	});

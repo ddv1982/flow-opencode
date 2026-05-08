@@ -26,6 +26,10 @@ export function createExecutionRuntimeTools() {
 						title: input.featureId ? `Start ${input.featureId}` : "Start next",
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-worker",
+							taskPhase: "execution",
+							taskSubject: input.featureId ?? "Next approved feature",
+							taskStatus: "active",
 							featureId: input.featureId ?? null,
 							reason: null,
 						},
@@ -51,8 +55,18 @@ export function createExecutionRuntimeTools() {
 						title: `Complete ${input.featureResult?.featureId ?? "feature"}`,
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-worker",
+							taskPhase: "execution",
+							taskSubject:
+								input.featureResult?.featureId ?? "Feature completion",
+							taskStatus: "active",
+							requestedTaskStatus:
+								input.status === "ok" ? "completed" : "needs_input",
 							featureId: input.featureResult?.featureId ?? null,
 							status: input.status,
+							validationCount: input.validationRun.length,
+							reviewIterations: input.reviewIterations ?? null,
+							hasFinalReview: input.finalReview !== undefined,
 						},
 					});
 					return executeGuardedSessionMutation(
@@ -79,6 +93,10 @@ export function createExecutionRuntimeTools() {
 						title: `Reset ${input.featureId}`,
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-runtime",
+							taskPhase: "recovery",
+							taskSubject: input.featureId,
+							taskStatus: "active",
 							featureId: input.featureId,
 						},
 					});

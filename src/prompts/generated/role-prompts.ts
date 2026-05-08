@@ -38,6 +38,7 @@ import {
 	FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE,
 	FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE,
 	FLOW_STRUCTURED_RECOVERY_RULE,
+	FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE,
 	FLOW_TASK_HANDOFF_RULE,
 	FLOW_WORKER_REVIEW_TASK_RULE,
 } from "../fragments";
@@ -154,6 +155,7 @@ ${FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE}
 ${FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE}
 ${FLOW_ENGINEERING_QUALITY_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
+${FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE}
 - Keep plans short, concrete, and ready to execute.
 - Broad goals are valid.
 ${FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE}
@@ -194,7 +196,8 @@ ${FLOW_CONTEXT_GATHERING_RUNTIME_RULE}
 ${FLOW_REVIEW_FINDINGS_LOOP_RULE}
 ${FLOW_FEATURE_REVIEW_APPROVAL_RULE}
 ${FLOW_WORKER_REVIEW_TASK_RULE}
-- Task/subagent handoff is available when OpenCode exposes the Task tool; use it for independent review in a fresh child context.
+${FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE}
+- Task/subagent handoff is available when OpenCode exposes the Task tool; use it for independent review in a fresh child context while keeping tightly coupled implementation work in the same worker context.
 ${FLOW_FINAL_COMPLETION_PATH_RULE}
 ${FLOW_OPERATOR_PROGRESS_RULE}
 - In the lite lane, retryable non-human blockers may return the feature directly to ready/pending without a separate manual reset step.`,
@@ -233,6 +236,7 @@ ${FLOW_OPERATOR_PROGRESS_RULE}
 ${FLOW_RESUME_ONLY_RULE}
 ${FLOW_NO_INFERRED_GOAL_RULE}
 ${FLOW_TASK_HANDOFF_RULE}
+${FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE}
 ${FLOW_PERSIST_REVIEWER_DECISIONS_RULE}
 ${FLOW_FINAL_COMPLETION_REVIEW_RULE}
 ${FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE}
@@ -281,6 +285,7 @@ export const FLOW_REVIEWER_AGENT_PROMPT = renderPromptSections([
 		body: `${renderProtocolHeader("reviewer")}
 ${FLOW_CONTEXT_GATHERING_READONLY_RULE}
 - Do not write code.
+- Treat this role as a read-only leaf approval/reporting surface by default; do not recursively delegate unless an explicit independent subproblem is assigned.
 - Review only for correctness, regressions, maintainability, security, and missing validation.
 ${FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE}
 ${FLOW_RELEASE_HYGIENE_REVIEW_RULE}

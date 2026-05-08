@@ -12,6 +12,16 @@ afterEach(() => {
 	cleanupTempDirs();
 });
 
+function latestMetadataCall(metadata: ReturnType<typeof mock>): {
+	metadata?: Record<string, unknown>;
+	title?: unknown;
+} {
+	return (metadata.mock.calls.at(-1)?.[0] ?? {}) as unknown as {
+		metadata?: Record<string, unknown>;
+		title?: unknown;
+	};
+}
+
 describe("runtime tool metadata", () => {
 	test("every Flow tool emits non-empty metadata and still returns a string", async () => {
 		const worktree = makeTempDir();
@@ -126,17 +136,132 @@ describe("runtime tool metadata", () => {
 			}
 			expect(metadata).toHaveBeenCalled();
 
-			const latestCallEntry = metadata.mock.calls.at(-1) as
-				| [unknown, ...unknown[]]
-				| undefined;
-			const latestCall = latestCallEntry?.[0] as
-				| { title?: unknown; metadata?: unknown }
-				| undefined;
+			const latestCall = latestMetadataCall(metadata);
 
-			expect(typeof latestCall?.title).toBe("string");
-			expect((latestCall?.title as string).trim().length).toBeGreaterThan(0);
-			expect(latestCall?.metadata).toBeObject();
-			expect(Array.isArray(latestCall?.metadata)).toBe(false);
+			expect(typeof latestCall.title).toBe("string");
+			expect((latestCall.title as string).trim().length).toBeGreaterThan(0);
+			expect(latestCall.metadata).toBeObject();
+			expect(Array.isArray(latestCall.metadata)).toBe(false);
 		}
+	});
+
+	test("runtime tools expose task progress metadata signals", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const metadata = mock(() => {});
+		const context = {
+			...toolContext(worktree),
+			metadata,
+			client: { app: { log: () => {} } },
+		};
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Build a workflow plugin" },
+			context,
+		);
+		await tools.flow_plan_apply.execute({ plan: samplePlan() }, context);
+		await tools.flow_plan_approve.execute({}, context);
+
+		metadata.mockClear();
+		await tools.flow_run_start.execute({}, context);
+		let latestCall = latestMetadataCall(metadata);
+		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
+		expect(latestCall.metadata?.taskPhase).toBe("execution");
+		expect(latestCall.metadata?.taskStatus).toBe("active");
+
+		metadata.mockClear();
+		await tools.flow_run_complete_feature.execute(
+			{
+				contractVersion: "1",
+				status: "needs_input",
+				summary: "Need a follow-up plan.",
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				validationRun: [],
+				decisions: [],
+				nextStep: "Replan the work.",
+				outcome: {
+					kind: "replan_required",
+					replanReason: "plan_too_broad",
+					failedAssumption:
+						"The current feature was small enough to finish in one pass.",
+					recommendedAdjustment:
+						"Split the work into a smaller follow-up plan.",
+				},
+				featureResult: { featureId: "setup-runtime" },
+				featureReview: {
+					status: "passed",
+					summary: "No blocking review findings.",
+					blockingFindings: [],
+				},
+			},
+			context,
+		);
+		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
+		expect(latestCall.metadata?.taskPhase).toBe("execution");
+		expect(latestCall.metadata?.taskStatus).toBe("active");
+		expect(latestCall.metadata?.requestedTaskStatus).toBe("needs_input");
+		expect(latestCall.metadata?.validationCount).toBe(0);
+		expect(latestCall.metadata?.hasFinalReview).toBe(false);
+
+		metadata.mockClear();
+		await tools.flow_review_record_feature.execute(
+			{
+				scope: "feature",
+				featureId: "setup-runtime",
+				status: "approved",
+				summary: "Looks good.",
+			},
+			context,
+		);
+		latestCall = latestMetadataCall(metadata);
+		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
+		expect(latestCall.metadata?.taskPhase).toBe("review");
+		expect(latestCall.metadata?.taskStatus).toBe("active");
+		expect(latestCall.metadata?.requestedTaskStatus).toBe("approved");
+
+		metadata.mockClear();
+		await tools.flow_status.execute({}, context);
+		latestCall = latestMetadataCall(metadata);
+		expect(typeof latestCall.metadata?.taskProgressCount).toBe("number");
+		expect(typeof latestCall.metadata?.activeTaskCount).toBe("number");
+		expect(typeof latestCall.metadata?.blockedTaskCount).toBe("number");
+	});
+
+	test("flow_status counts needs_input task progress rows as blocked metadata", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const metadata = mock(() => {});
+		const context = {
+			...toolContext(worktree),
+			metadata,
+			client: { app: { log: () => {} } },
+		};
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Build a workflow plugin" },
+			context,
+		);
+		await tools.flow_plan_apply.execute({ plan: samplePlan() }, context);
+		await tools.flow_plan_approve.execute({}, context);
+		await tools.flow_plan_context_record.execute(
+			{
+				decisionLog: [
+					{
+						question: "Should Flow pause for approval?",
+						decisionMode: "recommend_confirm",
+						decisionDomain: "architecture",
+						options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
+						recommendation: "Pause and ask before changing the architecture.",
+						rationale: ["The architecture choice affects multiple files."],
+					},
+				],
+			},
+			context,
+		);
+		await tools.flow_status.execute({}, context);
+
+		const latestCall = latestMetadataCall(metadata);
+		expect(latestCall.metadata?.blockedTaskCount).toBeGreaterThanOrEqual(1);
 	});
 });

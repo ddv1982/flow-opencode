@@ -34,6 +34,11 @@ export function createReviewRuntimeTools() {
 						title: `Reviewer ${input.status} ${input.featureId}`,
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-reviewer",
+							taskPhase: "review",
+							taskSubject: `Feature review: ${input.featureId}`,
+							taskStatus: "active",
+							requestedTaskStatus: input.status,
 							featureId: input.featureId,
 							status: input.status,
 						},
@@ -60,6 +65,11 @@ export function createReviewRuntimeTools() {
 						title: `Final reviewer ${input.status}`,
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-reviewer",
+							taskPhase: "final_review",
+							taskSubject: "Final session review",
+							taskStatus: "active",
+							requestedTaskStatus: input.status,
 							status: input.status,
 							reviewDepth: input.reviewDepth,
 							reviewedSurfaces: input.reviewedSurfaces,

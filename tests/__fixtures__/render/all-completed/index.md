@@ -12,6 +12,14 @@
 - reviewer decision: final | completion_gate | approved | Approved final review.
 - created: 2026-01-01T00:00:00.000Z
 
+## Task Progress
+
+- completed | flow-worker | validation | Validation for feature-5 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
+- completed | flow-reviewer | final_review | Final session review | next: Review is complete; continue the next runtime step. | evidence: decision: approved, purpose: completion_gate, review depth: detailed, reviewed surfaces: 3, Approved final review.
+- completed | flow-planner | planning | Planning | next: Plan is approved; no planning action needed. | evidence: features: 5
+- completed | flow-worker | execution | feature-1 — Feature feature-1 | next: No action needed. | evidence: file targets: 1, verification: 1
+- 4 more task progress rows omitted.
+
 ## Plan
 
 - summary: Plan with 5 features.

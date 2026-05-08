@@ -108,6 +108,17 @@ describe("runtime actionable metadata", () => {
 		);
 		expect(summary.session?.lastOutcome?.kind).toBe("needs_operator_input");
 		expect(summary.session?.nextCommand).toBe("/flow-status");
+		expect(summary.session?.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					blocker: "Credentials are required before work can continue.",
+					featureId: "setup-runtime",
+					ownerRole: "flow-worker",
+					phase: "execution",
+					status: "blocked",
+				}),
+			]),
+		);
 
 		await saveSession(worktree, blocked.value);
 		const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
@@ -116,11 +127,19 @@ describe("runtime actionable metadata", () => {
 			"utf8",
 		);
 
+		expect(indexDoc).toContain("## Task Progress");
+		expect(indexDoc).toContain(
+			"blocked | flow-worker | execution | setup-runtime — Create runtime helpers",
+		);
 		expect(indexDoc).toContain(
 			"next step: Ask the operator to provide API credentials.",
 		);
 		expect(indexDoc).toContain(
 			"resolution hint: Set the API token and rerun the feature.",
+		);
+		expect(featureDoc).toContain("## Task Progress");
+		expect(featureDoc).toContain(
+			"blocked | flow-worker | execution | setup-runtime — Create runtime helpers",
 		);
 		expect(featureDoc).toContain("#### Outcome");
 		expect(featureDoc).toContain("needs human: yes");

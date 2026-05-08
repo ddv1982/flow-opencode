@@ -1,4 +1,5 @@
 import { renderFeatureHistoryEntrySections } from "./render-feature-history-sections";
+import { renderTaskProgressLine } from "./render-history-formatters";
 import {
 	bulletList,
 	formatFollowUpLines,
@@ -9,6 +10,7 @@ import {
 	toQuotedBlock,
 } from "./render-sections-shared";
 import type { Feature, Session } from "./schema";
+import { projectTaskProgress } from "./summary-projections";
 
 function renderFeatureHistory(session: Session, feature: Feature): string {
 	const entries = session.execution.history.filter(
@@ -47,6 +49,22 @@ function renderFeatureSummarySection(
 - goal: ${toInlineText(session.goal)}`;
 }
 
+function renderFeatureTaskProgressSection(
+	session: Session,
+	feature: Feature,
+): string {
+	const rows = projectTaskProgress(session).filter(
+		(row) =>
+			row.featureId === feature.id &&
+			(row.phase !== "execution" || row.status !== "pending"),
+	);
+	if (rows.length === 0) {
+		return "";
+	}
+
+	return `## Task Progress\n\n${bulletList(rows.map(renderTaskProgressLine))}`;
+}
+
 function renderFeatureDescriptionSection(feature: Feature): string {
 	return `## Description\n\n${toQuotedBlock(feature.summary)}`;
 }
@@ -63,6 +81,7 @@ export function renderFeatureDoc(session: Session, feature: Feature): string {
 	return joinSections([
 		`# Feature ${feature.id}`,
 		renderFeatureSummarySection(session, feature),
+		renderFeatureTaskProgressSection(session, feature),
 		renderFeatureDescriptionSection(feature),
 		maybeQuotedSection(
 			"Latest Runtime Summary",

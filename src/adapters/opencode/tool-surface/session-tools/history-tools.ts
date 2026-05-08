@@ -12,6 +12,7 @@ import {
 	storedSessionResponse,
 } from "../../../../runtime/application";
 import { FLOW_STATUS_COMMAND } from "../../../../runtime/constants";
+import { projectTaskProgress } from "../../../../runtime/summary-projections";
 import { tool } from "../../sdk";
 import { withParsedArgs } from "../parsed-tool";
 import {
@@ -71,12 +72,23 @@ export function createHistorySessionTools() {
 						undefined,
 					);
 					const workspace = inspectToolWorkspace(context);
+					const taskProgress = session ? projectTaskProgress(session) : [];
 					recordToolMetadata(context, "Flow status", {
 						sessionId: session?.id ?? null,
 						status: session?.status ?? "missing",
 						approval: session?.approval ?? null,
 						activeFeatureId: session?.execution.activeFeatureId ?? null,
 						view: input.view ?? "detailed",
+						taskProgressCount: taskProgress.length,
+						activeTaskCount: taskProgress.filter(
+							(row) => row.status === "active",
+						).length,
+						blockedTaskCount: taskProgress.filter(
+							(row) =>
+								row.status === "blocked" ||
+								row.status === "needs_fix" ||
+								row.status === "needs_input",
+						).length,
 						workspaceRoot: workspace.root,
 						workspaceMutationAllowed: workspace.mutationAllowed,
 					});

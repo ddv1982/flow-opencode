@@ -13,11 +13,13 @@ import {
 	activeFeatureForSession,
 	projectActiveFeature,
 	projectFeature,
+	projectTaskProgress,
 	type SummarizedFeature,
 	type SummarizedPlanning,
 	sessionFeatures,
 	summarizeFeature,
 	summarizePlanning,
+	type TaskProgressRow,
 } from "./summary-projections";
 
 export type SessionGuidance = {
@@ -64,6 +66,7 @@ export type SummarizedSessionDetails = {
 		completed: number;
 		total: number;
 	};
+	taskProgress: TaskProgressRow[];
 	features: SummarizedFeature[];
 	notes: Session["notes"];
 	artifacts: Session["artifacts"];
@@ -139,6 +142,7 @@ function buildSessionDetails(
 				.length,
 			total: features.length,
 		},
+		taskProgress: projectTaskProgress(session, operator),
 		features: features.map(projectFeature),
 		notes: session.notes,
 		artifacts: session.artifacts,

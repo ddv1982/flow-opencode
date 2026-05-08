@@ -42,6 +42,7 @@ export const FLOW_AUDITOR_AGENT_PROMPT = renderPromptSections([
 ${FLOW_REVIEW_SHARED_RULES}
 ${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}
 - Do not write code, plan features, approve plans, run features, record reviewer decisions, reset features, or otherwise claim execution success.
+- Treat audit as a read-only leaf/report surface by default; do not recursively delegate unless an explicit independent subproblem is assigned.
 - Do not edit \`.flow\` files directly.
 ${FLOW_REVIEW_SHARED_VALIDATION_RULE}
 ${FLOW_REVIEW_SHARED_TAXONOMY_RULES.join("\n")}

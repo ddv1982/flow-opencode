@@ -205,6 +205,12 @@ describe("prompt and command config contracts", () => {
 			"ask flow-reviewer through the Task tool for an independent review in a fresh child context instead of performing the approval gate in the same worker context.",
 		);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"This is a direct approval handoff, not recursive delegation by default.",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"Do not split tiny sequential steps, same-file chains, or tightly shared-context work",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"Do not default to Bun in non-Bun repos.",
 		);
 		expect(FLOW_WORKER_AGENT_PROMPT).not.toContain("_from_raw");
@@ -288,6 +294,9 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEWER_CONTRACT).toContain("test-oracle authenticity");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Do not write code");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
+			"read-only leaf approval/reporting surface by default; do not recursively delegate",
+		);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
 			"Return needs_fix when the current feature should continue",
 		);
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
@@ -306,6 +315,9 @@ describe("prompt and command config contracts", () => {
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"Present the final answer as a human-readable review first",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"Treat audit as a read-only leaf/report surface by default; do not recursively delegate",
 		);
 		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
 			"applicable adversarial failure-mode classes",
@@ -358,6 +370,12 @@ describe("prompt and command config contracts", () => {
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"Apply a hybrid split policy: use handoffs for independent bounded subject groups, but keep tiny sequential/shared-context work in one role context.",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"Treat flow-reviewer and audit/review surfaces as leaf reporting roles by default",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Persist every reviewer decision through the canonical feature or final review-record runtime tool",

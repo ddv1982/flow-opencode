@@ -21,6 +21,7 @@ import {
 	activeSessionId,
 	createTempDirRegistry,
 	createTestTools,
+	samplePlan,
 	toolContext,
 } from "./runtime-test-helpers";
 
@@ -150,6 +151,15 @@ describe("runtime operator history and session lifecycle", () => {
 		expect(parsed.session.nextCommand).toBe(
 			flowSessionActivateCommand(first.id),
 		);
+		expect(parsed.session.taskProgress).toEqual([
+			expect.objectContaining({
+				id: "planning",
+				ownerRole: "flow-planner",
+				phase: "planning",
+				status: "active",
+				next: "Activate this session to continue it in the current worktree.",
+			}),
+		]);
 		expect(parsed.guidance.nextCommand).toBe(
 			flowSessionActivateCommand(first.id),
 		);
@@ -160,6 +170,8 @@ describe("runtime operator history and session lifecycle", () => {
 				"Next: Activate this session to continue it in the current worktree.",
 				`Command: ${flowSessionActivateCommand(first.id)}`,
 				"Progress: 0/0 completed",
+				"Task progress:",
+				"- flow-planner | planning | active | Planning | next: Activate this session to continue it in the current worktree.",
 				"Goal: First goal",
 			].join("\n"),
 		);
@@ -206,6 +218,46 @@ describe("runtime operator history and session lifecycle", () => {
 				toolContext(worktree),
 			),
 		).rejects.toThrow("ENOENT");
+	});
+
+	test("flow_history_show neutralizes parked ready-session task progress next steps", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const readySession = createSession("Ready goal");
+		readySession.plan = samplePlan();
+		readySession.status = "ready";
+		readySession.approval = "approved";
+		const saved = await saveSession(worktree, readySession);
+		await saveSession(worktree, createSession("Current active goal"));
+
+		const response = await tools.flow_history_show.execute(
+			{ sessionId: saved.id },
+			toolContext(worktree),
+		);
+		const parsed = JSON.parse(response);
+
+		expect(parsed.status).toBe("ok");
+		expect(parsed.source).toBe("stored");
+		expect(parsed.parked).toBe(true);
+		expect(parsed.session.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "planning",
+					status: "completed",
+					next: "Plan is approved; no planning action needed.",
+				}),
+				expect.objectContaining({
+					id: "feature:setup-runtime",
+					next: "Activate this session to continue it in the current worktree.",
+				}),
+			]),
+		);
+		expect(parsed.operatorSummary).toContain(
+			"next: Activate this session to continue it in the current worktree.",
+		);
+		expect(parsed.operatorSummary).not.toContain(
+			"next: Waiting for execution selection.",
+		);
 	});
 
 	test("flow_history_show returns completed session details by id", async () => {

@@ -12,6 +12,11 @@
 - reviewer decision: none
 - created: 2026-01-01T00:00:00.000Z
 
+## Task Progress
+
+- ready | flow-planner | planning | Planning | next: Review or approve the draft plan. | evidence: features: 1
+- pending | flow-worker | execution | feature-1 — Feature feature-1 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
+
 ## Plan
 
 - summary: Plan with 1 feature.

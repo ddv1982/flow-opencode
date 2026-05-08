@@ -40,10 +40,12 @@ export const FLOW_RUNTIME_STATE_TRANSITION_RULE =
 	"- Use Flow runtime tools for every state transition.";
 export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =
 	"- Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.";
+export const FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE =
+	"- Use Task/subagent handoffs for independent, bounded, role-appropriate subject groups that benefit from isolated context. Do not split tiny sequential steps, same-file chains, or tightly shared-context work just to create extra subagents.";
 export const FLOW_TASK_HANDOFF_RULE =
-	"- When OpenCode task/subagent invocation is available, use the Task tool to hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer so each role works in a fresh child context and reports back with artifacts, validation, and blockers. Handoffs do not replace runtime ownership: persist state changes only through Flow runtime tools and never edit .flow files directly.";
+	"- When OpenCode task/subagent invocation is available, use the Task tool to hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer so each role works in a fresh child context and reports back with artifacts, validation, and blockers. Apply a hybrid split policy: use handoffs for independent bounded subject groups, but keep tiny sequential/shared-context work in one role context. Treat flow-reviewer and audit/review surfaces as leaf reporting roles by default; do not recurse delegation unless a concrete independent subproblem materially benefits. Handoffs do not replace runtime ownership: persist state changes only through Flow runtime tools and never edit .flow files directly.";
 export const FLOW_WORKER_REVIEW_TASK_RULE =
-	"- When OpenCode task/subagent invocation is available, ask flow-reviewer through the Task tool for an independent review in a fresh child context instead of performing the approval gate in the same worker context.";
+	"- When OpenCode task/subagent invocation is available, ask flow-reviewer through the Task tool for an independent review in a fresh child context instead of performing the approval gate in the same worker context. This is a direct approval handoff, not recursive delegation by default.";
 export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
 	"- Persist every reviewer decision through the canonical feature or final review-record runtime tool before deciding whether to continue, fix, block, or complete.";
 export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =

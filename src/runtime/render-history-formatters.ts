@@ -1,5 +1,6 @@
 import { toInlineText } from "./render-sections-shared";
 import type { Session } from "./schema";
+import type { TaskProgressRow } from "./summary-projections";
 
 type ArtifactRecord = Session["artifacts"][number];
 type ValidationRecord = Session["execution"]["lastValidationRun"][number];
@@ -17,6 +18,17 @@ export function renderExecutionHistoryLine(
 	item: ExecutionHistoryRecord,
 ): string {
 	return `${item.recordedAt} | ${item.featureId} | ${item.status} | ${item.summary}`;
+}
+
+export function renderTaskProgressLine(row: TaskProgressRow): string {
+	return [
+		`${row.status} | ${row.ownerRole} | ${row.phase} | ${toInlineText(row.subject)}`,
+		`next: ${toInlineText(row.next)}`,
+		...(row.evidence.length > 0
+			? [`evidence: ${row.evidence.map(toInlineText).join(", ")}`]
+			: ["evidence: none"]),
+		...(row.blocker ? [`blocker: ${toInlineText(row.blocker)}`] : []),
+	].join(" | ");
 }
 
 export function renderReviewFindingClosureLine(

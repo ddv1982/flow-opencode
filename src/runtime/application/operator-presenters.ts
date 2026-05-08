@@ -1,10 +1,73 @@
 import type { Session } from "../schema";
 import { deriveSessionViewModel, type SessionGuidance } from "../summary";
+import type { TaskProgressRow } from "../summary-projections";
 import type { DoctorCheck } from "./doctor-checks";
+
+function prioritizedTaskProgressRows(
+	rows: TaskProgressRow[],
+): TaskProgressRow[] {
+	const selected: TaskProgressRow[] = [];
+	const add = (candidates: TaskProgressRow[]) => {
+		for (const row of candidates) {
+			if (selected.length >= 4) {
+				return;
+			}
+			if (!selected.some((item) => item.id === row.id)) {
+				selected.push(row);
+			}
+		}
+	};
+
+	add(rows.filter((row) => row.status === "active"));
+	add(rows.filter((row) => row.status === "ready"));
+	add(
+		rows.filter((row) =>
+			["blocked", "needs_fix", "needs_input"].includes(row.status),
+		),
+	);
+	add(
+		rows.filter((row) =>
+			["validation", "review", "final_review"].includes(row.phase),
+		),
+	);
+	add(rows.filter((row) => row.status === "pending").slice(0, 1));
+	return selected;
+}
+
+function toInlineSummaryText(value: string, maxLength: number): string {
+	const inline = value
+		.replace(/\r?\n+/g, " / ")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (inline.length <= maxLength) {
+		return inline;
+	}
+	return `${inline.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
+	const selected = prioritizedTaskProgressRows(rows);
+	if (selected.length === 0) {
+		return [];
+	}
+
+	return [
+		"Task progress:",
+		...selected.map((row) => {
+			const subject = toInlineSummaryText(row.subject, 80);
+			const next = toInlineSummaryText(row.next, 100);
+			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | ${subject} | next: ${next}`;
+		}),
+	];
+}
 
 export function renderSessionStatusSummary(
 	session: Session | null,
-	options?: { nextCommand?: string; nextStep?: string },
+	options?: {
+		nextCommand?: string;
+		nextStep?: string;
+		taskProgressOverride?: TaskProgressRow[];
+	},
 ): string {
 	const viewModel = deriveSessionViewModel(session);
 	const lines = [
@@ -28,6 +91,12 @@ export function renderSessionStatusSummary(
 		lines.push(
 			`Progress: ${viewModel.session.featureProgress.completed}/${viewModel.session.featureProgress.total} completed`,
 		);
+	}
+
+	const taskProgress =
+		options?.taskProgressOverride ?? viewModel.session?.taskProgress;
+	if (taskProgress) {
+		lines.push(...renderTaskProgressSummary(taskProgress));
 	}
 
 	if (viewModel.session?.finalReviewPolicy) {

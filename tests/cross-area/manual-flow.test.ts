@@ -68,6 +68,7 @@ function normalizeEnvelope(value: unknown): unknown {
 			}
 		}
 		delete session.operator;
+		delete session.taskProgress;
 		delete session.finalReviewPolicy;
 		const lastReviewerDecision = session.lastReviewerDecision as
 			| Record<string, unknown>

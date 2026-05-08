@@ -53,6 +53,10 @@ export function createPlanningRuntimeTools() {
 						title: "Record planning context",
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-planner",
+							taskPhase: "planning",
+							taskSubject: "Planning context",
+							taskStatus: "active",
 							repoProfileCount: input.repoProfile?.length ?? 0,
 							researchCount: input.research?.length ?? 0,
 							decisionCount: input.decisionLog?.length ?? 0,
@@ -95,6 +99,10 @@ export function createPlanningRuntimeTools() {
 						title: "Apply draft plan",
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-planner",
+							taskPhase: "planning",
+							taskSubject: "Draft plan",
+							taskStatus: "active",
 							featureCount: input.plan.features.length,
 						},
 					});
@@ -143,6 +151,11 @@ export function createPlanningRuntimeTools() {
 						title: "Approve plan",
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-planner",
+							taskPhase: "planning",
+							taskSubject: "Plan approval",
+							taskStatus: "active",
+							requestedTaskStatus: "completed",
 							approvedCount: parseFeatureIds(input.featureIds).length || null,
 						},
 					});
@@ -167,6 +180,10 @@ export function createPlanningRuntimeTools() {
 						title: "Narrow plan",
 						metadata: {
 							sessionId: null,
+							taskOwner: "flow-planner",
+							taskPhase: "planning",
+							taskSubject: "Feature selection",
+							taskStatus: "active",
 							selectedCount: parseFeatureIds(input.featureIds).length,
 						},
 					});

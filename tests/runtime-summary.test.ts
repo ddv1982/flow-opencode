@@ -327,6 +327,44 @@ describe("runtime summary", () => {
 		});
 	});
 
+	test("task progress marks planning as needs_input when a decision gate is active", () => {
+		const session = createSession("Choose a path");
+		session.plan = samplePlan();
+		session.approval = "approved";
+		session.planning.decisionLog.push({
+			question: "Should Flow pause for approval?",
+			decisionMode: "recommend_confirm",
+			decisionDomain: "architecture",
+			options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
+			recommendation: "Pause and ask before changing the architecture.",
+			rationale: ["The architecture choice affects multiple files."],
+		});
+
+		const planningRow = summarizeSession(session).session?.taskProgress?.find(
+			(row) => row.id === "planning",
+		);
+		expect(planningRow?.status).toBe("needs_input");
+	});
+
+	test("renderSessionStatusSummary keeps task progress lines single-line and concise", () => {
+		const session = buildSummaryFixtureSessions().running;
+		if (session.plan?.features[0]) {
+			session.plan.features[0].title =
+				"Create runtime helpers\nwith extra context that should be compacted for operator summaries and trimmed when too long for a single line presentation";
+		}
+		session.execution.lastNextStep =
+			"Continue\nwith a follow-up step that should stay on one line and be truncated in the operator summary for readability and quick scanning by operators.";
+
+		const summary = renderSessionStatusSummary(session);
+		const taskLine = summary
+			.split("\n")
+			.find((line) => line.startsWith("- flow-worker | execution | active |"));
+		expect(taskLine).toBeDefined();
+		expect(taskLine?.includes("\n")).toBe(false);
+		expect(taskLine).toContain(" / ");
+		expect((taskLine ?? "").length).toBeLessThanOrEqual(230);
+	});
+
 	test("renderSessionStatusSummary creates a canonical human-readable status string", () => {
 		const running = buildSummaryFixtureSessions().running;
 
@@ -337,6 +375,9 @@ describe("runtime summary", () => {
 				"Command: /flow-run",
 				"Working on: setup-runtime — Create runtime helpers (in_progress)",
 				"Progress: 0/2 completed",
+				"Task progress:",
+				"- flow-worker | execution | active | setup-runtime — Create runtime helpers | next: Continue the active feature through validation and review.",
+				"- flow-worker | execution | pending | execute-feature — Implement execution flow | next: Waiting for execution selection.",
 				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
@@ -399,9 +440,29 @@ describe("runtime summary", () => {
 				"Next: Review or refine the draft plan, then approve it when ready.",
 				"Command: /flow-session activate test-session",
 				"Progress: 0/2 completed",
+				"Task progress:",
+				"- flow-planner | planning | ready | Planning | next: Review or refine the draft plan, then approve it when ready.",
+				"- flow-worker | execution | pending | setup-runtime — Create runtime helpers | next: Waiting for execution selection.",
 				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
+		);
+	});
+
+	test("summarizeSession exposes a runtime-owned task progress projection", () => {
+		const blocked = summarizeSession(buildSummaryFixtureSessions().blocked);
+
+		expect(blocked.session?.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "feature:setup-runtime",
+					featureId: "setup-runtime",
+					ownerRole: "flow-worker",
+					phase: "execution",
+					status: "blocked",
+					source: "execution",
+				}),
+			]),
 		);
 	});
 
@@ -530,6 +591,54 @@ describe("runtime summary", () => {
 	              "research": [],
 	            },
 	            "status": "blocked",
+	            "taskProgress": [
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "features: 2",
+	                ],
+	                "id": "planning",
+	                "next": "Plan is approved; no planning action needed.",
+	                "ownerRole": "flow-planner",
+	                "phase": "planning",
+	                "source": "plan",
+	                "status": "completed",
+	                "subject": "Planning",
+	              },
+	              {
+	                "blocker": "Credentials are required before work can continue.",
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                  "validation: 0",
+	                  "outcome: needs_operator_input",
+	                  "verification status: not_recorded",
+	                ],
+	                "featureId": "setup-runtime",
+	                "id": "feature:setup-runtime",
+	                "next": "Ask the operator to provide API credentials.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "blocked",
+	                "subject": "setup-runtime — Create runtime helpers",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                ],
+	                "featureId": "execute-feature",
+	                "id": "feature:execute-feature",
+	                "next": "Waiting for execution selection.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "pending",
+	                "subject": "execute-feature — Implement execution flow",
+	              },
+	            ],
 	          },
 	          "status": "blocked",
 	          "summary": "Waiting on an operator decision.",
@@ -633,6 +742,70 @@ describe("runtime summary", () => {
 	              "research": [],
 	            },
 	            "status": "completed",
+	            "taskProgress": [
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "features: 1",
+	                ],
+	                "id": "planning",
+	                "next": "Plan is approved; no planning action needed.",
+	                "ownerRole": "flow-planner",
+	                "phase": "planning",
+	                "source": "plan",
+	                "status": "completed",
+	                "subject": "Planning",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                  "validation: 1",
+	                  "outcome: completed",
+	                  "verification status: passed",
+	                ],
+	                "featureId": "setup-runtime",
+	                "id": "feature:setup-runtime",
+	                "next": "No action needed.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "completed",
+	                "subject": "setup-runtime — Create runtime helpers",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "passed: bun test — Runtime tests passed.",
+	                ],
+	                "featureId": "setup-runtime",
+	                "id": "validation:setup-runtime",
+	                "next": "Validation is complete; continue review or completion.",
+	                "ownerRole": "flow-worker",
+	                "phase": "validation",
+	                "source": "validation",
+	                "status": "completed",
+	                "subject": "Validation for setup-runtime",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "decision: approved",
+	                  "purpose: completion_gate",
+	                  "review depth: detailed",
+	                  "reviewed surfaces: 3",
+	                  "Final review checked the runtime path and validation oracle.",
+	                ],
+	                "id": "review:final",
+	                "next": "Review is complete; continue the next runtime step.",
+	                "ownerRole": "flow-reviewer",
+	                "phase": "final_review",
+	                "source": "reviewer_decision",
+	                "status": "completed",
+	                "subject": "Final session review",
+	              },
+	            ],
 	          },
 	          "status": "completed",
 	          "summary": "Completed runtime setup.",
@@ -691,6 +864,51 @@ describe("runtime summary", () => {
 	              "research": [],
 	            },
 	            "status": "planning",
+	            "taskProgress": [
+	              {
+	                "blocker": "The draft plan is not approved yet.",
+	                "evidence": [
+	                  "features: 2",
+	                ],
+	                "id": "planning",
+	                "next": "Review or refine the draft plan, then approve it when ready.",
+	                "ownerRole": "flow-planner",
+	                "phase": "planning",
+	                "source": "plan",
+	                "status": "ready",
+	                "subject": "Planning",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                ],
+	                "featureId": "setup-runtime",
+	                "id": "feature:setup-runtime",
+	                "next": "Waiting for execution selection.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "pending",
+	                "subject": "setup-runtime — Create runtime helpers",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                ],
+	                "featureId": "execute-feature",
+	                "id": "feature:execute-feature",
+	                "next": "Waiting for execution selection.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "pending",
+	                "subject": "execute-feature — Implement execution flow",
+	              },
+	            ],
 	          },
 	          "status": "planning",
 	          "summary": "Implement a small workflow feature set.",
@@ -754,6 +972,52 @@ describe("runtime summary", () => {
 	              "research": [],
 	            },
 	            "status": "running",
+	            "taskProgress": [
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "features: 2",
+	                ],
+	                "id": "planning",
+	                "next": "Plan is approved; no planning action needed.",
+	                "ownerRole": "flow-planner",
+	                "phase": "planning",
+	                "source": "plan",
+	                "status": "completed",
+	                "subject": "Planning",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                  "validation: 0",
+	                ],
+	                "featureId": "setup-runtime",
+	                "id": "feature:setup-runtime",
+	                "next": "Continue the active feature through validation and review.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "active",
+	                "subject": "setup-runtime — Create runtime helpers",
+	              },
+	              {
+	                "blocker": null,
+	                "evidence": [
+	                  "file targets: 1",
+	                  "verification: 1",
+	                ],
+	                "featureId": "execute-feature",
+	                "id": "feature:execute-feature",
+	                "next": "Waiting for execution selection.",
+	                "ownerRole": "flow-worker",
+	                "phase": "execution",
+	                "source": "execution",
+	                "status": "pending",
+	                "subject": "execute-feature — Implement execution flow",
+	              },
+	            ],
 	          },
 	          "status": "running",
 	          "summary": "Running feature 'setup-runtime'.",
