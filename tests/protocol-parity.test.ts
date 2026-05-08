@@ -159,6 +159,7 @@ describe("protocol parity", () => {
 			"missing_validation_scope",
 			"missing_review_closure",
 			"missing_review_scope_accounting",
+			"missing_final_reviewer_review_scope_accounting",
 			"failing_feature_review",
 			"missing_final_review",
 			"failing_final_review",

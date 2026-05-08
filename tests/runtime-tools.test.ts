@@ -1058,10 +1058,20 @@ describe("runtime completion and recovery tools", () => {
 			),
 		).toContain("file_target:src/runtime/session.ts");
 		expect(
+			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedgerPurpose,
+		).toBe("scaffold_only");
+		expect(
 			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedger.map(
 				(entry: { scopeId: string }) => entry.scopeId,
 			),
 		).toContain("file_target:src/runtime/session.ts");
+		expect(
+			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedger[0]
+				.residualRisk,
+		).toContain("Example scaffold only");
+		expect(
+			parsed.recovery.details.reviewScopeLedger.notes.join("\n"),
+		).toContain("do not replay unchanged");
 	});
 
 	test("tool does not persist worker evidence when success-gate recovery rejects ok completion", async () => {

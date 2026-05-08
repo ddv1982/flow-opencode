@@ -136,6 +136,9 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_CONTRACT).toContain(
 			"reviewScopeLedger is runtime scope accounting, not a requirement to edit every declared target file",
 		);
+		expect(FLOW_WORKER_CONTRACT).toContain("exampleReviewScopeLedger");
+		expect(FLOW_WORKER_CONTRACT).toContain("scaffold-only");
+		expect(FLOW_WORKER_CONTRACT).toContain("never replay unchanged");
 		expect(FLOW_WORKER_CONTRACT).toContain(
 			"include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
 		);
@@ -218,10 +221,14 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review.",
 		);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"returns structured recovery that explicitly requires `final_reviewer_decision`",
+			"`flow_run_complete_feature` recovery requires `final_reviewer_decision`",
+		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("exampleReviewScopeLedger");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
+			"never an identical decision or unchanged scaffold",
 		);
 		expect(
 			countOccurrences(FLOW_WORKER_AGENT_PROMPT, "flow_review_record_final"),
@@ -232,7 +239,7 @@ describe("prompt and command config contracts", () => {
 		expect(
 			countOccurrences(
 				FLOW_WORKER_AGENT_PROMPT,
-				"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+				"After `flow_review_record_final` returns `ok`, do not re-record the same final review.",
 			),
 		).toBe(1);
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
@@ -331,6 +338,8 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"does not require edits to every target file",
 		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain("exampleReviewScopeLedger");
+		expect(FLOW_REVIEWER_CONTRACT).toContain("do not replay unchanged");
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"adversarial failure-mode classes",
 		);
@@ -458,10 +467,14 @@ describe("prompt and command config contracts", () => {
 			"Persist every reviewer decision through the canonical feature or final review-record runtime tool",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review.",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"returns structured recovery that explicitly requires `final_reviewer_decision`",
+			"`flow_run_complete_feature` recovery requires `final_reviewer_decision`",
+		);
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain("exampleReviewScopeLedger");
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
+			"never an identical decision or unchanged scaffold",
 		);
 		expect(
 			countOccurrences(FLOW_AUTO_AGENT_PROMPT, "flow_review_record_final"),
@@ -472,7 +485,7 @@ describe("prompt and command config contracts", () => {
 		expect(
 			countOccurrences(
 				FLOW_AUTO_AGENT_PROMPT,
-				"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+				"After `flow_review_record_final` returns `ok`, do not re-record the same final review.",
 			),
 		).toBe(1);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
@@ -488,7 +501,7 @@ describe("prompt and command config contracts", () => {
 			"satisfy `recovery.prerequisite` first",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"Only call canonical `recovery.nextRuntimeTool` values when they are present",
+			"Only call canonical `recovery.nextRuntimeTool` values when present",
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
 			"Never write .flow files directly.",
@@ -532,11 +545,12 @@ describe("prompt and command config contracts", () => {
 			"finish with a passing `finalReview`",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review.",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"returns structured recovery that explicitly requires `final_reviewer_decision`",
+			"`flow_run_complete_feature` recovery requires `final_reviewer_decision`",
 		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("exampleReviewScopeLedger");
 	});
 
 	test("review command template keeps read-only review behavior with calibrated depth mapping and a readable default output", () => {
@@ -838,6 +852,8 @@ describe("prompt and command config contracts", () => {
 		expect(output.description).toContain(
 			"broad validation plus the final review required by deliveryPolicy.finalReviewPolicy",
 		);
+		expect(output.description).toContain("exampleReviewScopeLedger");
+		expect(output.description).toContain("scaffold-only");
 		expect(output.description).toContain("## Avoid when");
 		expect(output.description).toContain("## Returns");
 	});
@@ -888,10 +904,10 @@ describe("prompt and command config contracts", () => {
 			"runtime-owned final approval required by deliveryPolicy.finalReviewPolicy",
 		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"After `flow_review_record_final` returns `ok`, do not re-record the same final review decision.",
+			"After `flow_review_record_final` returns `ok`, do not re-record the same final review.",
 		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"returns structured recovery that explicitly requires `final_reviewer_decision`",
+			"`flow_run_complete_feature` recovery requires `final_reviewer_decision`",
 		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"independent review in a fresh child context",

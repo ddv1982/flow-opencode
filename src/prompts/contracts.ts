@@ -103,7 +103,8 @@ Status rules:
 - for review_and_fix work, include reviewFindingClosures before claiming success; each original finding must have a stable findingRef, status, code fixRefs, testRefs, validationRefs that match validationRun.command values, and residualRisk
 - final review_and_fix completion must close every planning.reviewFindings findingRef, including findings closed by earlier completed features
 - for review/review_and_fix completion, account for every declared review scope target/domain using reviewScopeLedger entries with exactly one status per scopeId: reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked
-- reviewScopeLedger entries must include evidenceRefs and residualRisk; use findingRefs/validationRefs when applicable
+- reviewScopeLedger entries must be evidence-grounded and include evidenceRefs plus truthful residualRisk; use findingRefs/validationRefs when applicable
+- when recovery details provide exampleReviewScopeLedger, reassess scope entries; scaffold-only, never replay unchanged
 - reviewScopeLedger is runtime scope accounting, not a requirement to edit every declared target file
 - do not mark a finding closed unless fixRefs, testRefs, and validationRefs all identify concrete evidence; use status: needs_input with partially_closed, not_closed, or blocked closure entries when evidence is incomplete
 
@@ -176,7 +177,8 @@ Reviewer rules:
 - for scope: final, cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
 - for scope: final, when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface
 - for scope: final, perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving
-- for scope: final in review/review_and_fix sessions, include reviewScopeLedger entries that account for every declared review scope target/domain with statuses reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked; include evidenceRefs and residualRisk for each entry
+- for scope: final in review/review_and_fix sessions, include reviewScopeLedger entries that account for every declared review scope target/domain with statuses reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked; include evidenceRefs and truthful residualRisk for each entry
+- when recovery details provide exampleReviewScopeLedger, reassess scope entries; scaffold-only, do not replay unchanged
 - reviewScopeLedger accounting is required for review scope closure and does not require edits to every target file
 - do not implement fixes yourself; only review and report findings
 

@@ -104,9 +104,9 @@ export const COMPLETION_GATE_DESCRIPTORS = {
 			"recovery.next_action.binding",
 		],
 		operatorHint:
-			"Review and review-and-fix completion must account every declared review scope target without requiring edits to every target.",
+			"Review and review-and-fix completion must account each declared review scope with evidence-grounded entries; recovery examples are scaffold-only.",
 		renderableText:
-			"Attach reviewScopeLedger entries for every declared review target/domain before completion.",
+			"Attach evidence-grounded reviewScopeLedger entries for each declared review target/domain before completing.",
 	},
 	reviewer_decision: {
 		id: "reviewer_decision",

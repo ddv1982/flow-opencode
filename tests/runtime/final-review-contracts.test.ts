@@ -10,6 +10,7 @@ import {
 	finalReviewBehaviorCoverageFailureReasons,
 	reviewContextPackHasSurfaceEvidence,
 } from "../../src/runtime/domain";
+import type { ReviewScopeRecoveryDetails } from "../../src/runtime/domain/review-scope-accounting";
 import {
 	FinalReviewSchema,
 	FlowReviewRecordFinalArgsSchema,
@@ -772,6 +773,100 @@ describe("runtime final review contracts", () => {
 			],
 		});
 		expect(completeLedger.ok).toBe(true);
+	});
+
+	test("rejects blind final reviewer scope scaffold replay and accepts repaired retry", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			completionPolicy: { minCompletedFeatures: 1 },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/runtime/session.ts"],
+				},
+			],
+		};
+		const applied = applyPlan(
+			createSession("Review runtime scaffold replay"),
+			plan,
+		);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		const baseDecision = {
+			scope: "final" as const,
+			status: "approved" as const,
+			summary: "Final review approved.",
+			reviewDepth: "detailed" as const,
+			reviewedSurfaces: [
+				"changed_files" as const,
+				"shared_surfaces" as const,
+				"validation_evidence" as const,
+			],
+			evidenceSummary: "Reviewed changed files and declared scope.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+			integrationChecks: ["Checked runtime completion integration."],
+			regressionChecks: ["Checked runtime completion regression coverage."],
+			remainingGaps: [],
+		};
+
+		const missingLedger = recordReviewerDecision(
+			started.value.session,
+			baseDecision,
+		);
+		expect(missingLedger.ok).toBe(false);
+		if (missingLedger.ok) return;
+		expect(missingLedger.recovery?.errorCode).toBe(
+			"missing_review_scope_accounting",
+		);
+		expect(missingLedger.recovery?.recoveryStage).toBe("record_review");
+		expect(missingLedger.recovery?.requiredArtifact).toBe(
+			"final_reviewer_decision",
+		);
+
+		const details = missingLedger.recovery?.details?.reviewScopeLedger as
+			| ReviewScopeRecoveryDetails
+			| undefined;
+		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
+		expect(details?.notes.join("\n")).toContain("scaffold-only");
+		expect(details?.notes.join("\n")).toContain("do not replay unchanged");
+		expect(details?.exampleReviewScopeLedger).toHaveLength(1);
+		expect(details?.exampleReviewScopeLedger[0]?.residualRisk).toContain(
+			"Example scaffold only",
+		);
+		if (!details) return;
+
+		const blindReplay = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: details.exampleReviewScopeLedger,
+		});
+		expect(blindReplay.ok).toBe(false);
+		if (!blindReplay.ok) {
+			expect(blindReplay.message).toContain("uses scaffold placeholder");
+		}
+
+		const repairedLedger = details.exampleReviewScopeLedger.map((entry) => ({
+			...entry,
+			residualRisk:
+				"No known residual risk after reviewing this declared scope.",
+		}));
+		const repairedRetry = recordReviewerDecision(started.value.session, {
+			...baseDecision,
+			reviewScopeLedger: repairedLedger,
+		});
+		expect(repairedRetry.ok).toBe(true);
 	});
 
 	test("review-mode non-file scope ledger requires concrete evidence", () => {

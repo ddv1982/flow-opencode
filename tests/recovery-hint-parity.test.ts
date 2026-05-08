@@ -46,7 +46,12 @@ const cases: Array<[CompletionRecoveryKind, boolean, string]> = [
 	[
 		"missing_review_scope_accounting",
 		false,
-		"Provide reviewScopeLedger entries for every declared review target/domain with status, evidenceRefs, findingRefs when applicable, validationRefs when used, and residualRisk; then retry completion.",
+		"Treat declaredScopes/exampleReviewScopeLedger as scaffold-only. Submit evidence-grounded reviewScopeLedger with truthful residualRisk for each declared review target/domain, then retry.",
+	],
+	[
+		"missing_final_reviewer_review_scope_accounting",
+		true,
+		"Re-record final reviewer decision with evidence-grounded reviewScopeLedger for each declared review target/domain. Treat exampleReviewScopeLedger as scaffold-only, replace scaffold residualRisk, and use only findingRefs mapped to closed findings for that scope before retry.",
 	],
 	[
 		"missing_final_review",

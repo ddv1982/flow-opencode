@@ -44,6 +44,7 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 	flow_run_complete_feature: `## Use when
 - Use only after the required validation for the current path is complete: targeted validation plus feature review for normal features, or broad validation plus the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) for the completion path.
 - For review/review_and_fix completion paths, include reviewScopeLedger accounting for every declared review scope target/domain.
+- If recovery details include reviewScopeLedger.exampleReviewScopeLedger, treat it as scaffold-only; do not replay unchanged.
 - Provide the full worker result fields directly as this tool's arguments.
 
 ## Avoid when
@@ -63,6 +64,7 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 	flow_review_record_final: `## Use when
 - Use to persist the final reviewer decision required by deliveryPolicy.finalReviewPolicy on the final completion path.
 - For review/review_and_fix approvals, include reviewScopeLedger accounting for every declared review scope target/domain.
+- If recovery details include reviewScopeLedger.exampleReviewScopeLedger, re-record only corrected evidence-grounded entries with truthful residualRisk.
 - Provide the full reviewer decision fields directly as this tool's arguments.
 
 ## Avoid when

@@ -197,7 +197,7 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 		recovery: {
 			errorCode: "missing_review_scope_accounting",
 			resolutionHint:
-				"Provide reviewScopeLedger entries for every declared review target/domain with status, evidenceRefs, findingRefs when applicable, validationRefs when used, and residualRisk; then retry completion.",
+				"Treat declaredScopes/exampleReviewScopeLedger as scaffold-only. Submit evidence-grounded reviewScopeLedger with truthful residualRisk for each declared review target/domain, then retry.",
 			recoveryStage: "retry_completion",
 			prerequisite: "completion_payload_rebuild_required",
 			requiredArtifact: "review_scope_ledger",
@@ -211,7 +211,7 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 		recovery: {
 			errorCode: "missing_review_scope_accounting",
 			resolutionHint:
-				"Re-record the final reviewer decision with reviewScopeLedger entries for every declared review target/domain, using only findingRefs that map to closed findings for that scope; then retry completion.",
+				"Re-record final reviewer decision with evidence-grounded reviewScopeLedger for each declared review target/domain. Treat exampleReviewScopeLedger as scaffold-only, replace scaffold residualRisk, and use only findingRefs mapped to closed findings for that scope before retry.",
 			recoveryStage: "record_review",
 			prerequisite: "reviewer_result_required",
 			requiredArtifact: "final_reviewer_decision",

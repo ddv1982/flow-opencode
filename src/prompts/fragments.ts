@@ -35,7 +35,7 @@ export const FLOW_NO_INFERRED_GOAL_RULE =
 export const FLOW_RESUME_ONLY_RULE =
 	"- When invoked with empty input or `resume`, treat the command as resume-only. If no active session exists, stop and request a goal instead of creating one.";
 export const FLOW_STRUCTURED_RECOVERY_RULE =
-	"- When tool errors include structured recovery metadata, satisfy `recovery.prerequisite` first. Only call canonical `recovery.nextRuntimeTool` values when they are present. Treat `recovery.nextCommand` as user-facing guidance, not the agent's only option.";
+	"- When tool errors include structured recovery metadata, satisfy `recovery.prerequisite` first. Only call canonical `recovery.nextRuntimeTool` values when present. Treat `recovery.nextCommand` as guidance. Recovery examples (including `exampleReviewScopeLedger`) are scaffold-only, never replay evidence.";
 export const FLOW_RUNTIME_STATE_TRANSITION_RULE =
 	"- Use Flow runtime tools for every state transition.";
 export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =
@@ -100,6 +100,6 @@ export const FLOW_FINAL_COMPLETION_WORKER_STEP_RULE =
 export const FLOW_FINAL_COMPLETION_AUTO_STEP_RULE =
 	"On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), persist it with the canonical final-review runtime tool using the direct reviewer decision object, and keep fixing/revalidating until the final review passes.";
 export const FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE =
-	"- After `flow_review_record_final` returns `ok`, do not re-record the same final review decision. Retry or re-record final review only when `flow_review_record_final` itself errors or when `flow_run_complete_feature` returns structured recovery that explicitly requires `final_reviewer_decision`.";
+	"- After `flow_review_record_final` returns `ok`, do not re-record the same final review. Retry only when `flow_review_record_final` errors or `flow_run_complete_feature` recovery requires `final_reviewer_decision`; then submit a corrected evidence-grounded decision, never an identical decision or unchanged scaffold.";
 export const FLOW_SINGLETON_RUNTIME_RETRY_RULE =
 	"- Treat runtime tool metadata as request progress, not persisted state. After the singleton plan-approval, execution-start, or review state transition returns ok, do not repeat the same runtime call unless the tool response was lost, flow_status shows the state is still missing, or structured recovery explicitly requires that transition/artifact. For a lost-response execution-start retry, an implicit flow_run_start may return an already-running/no-state-change ok; treat that as confirmation and continue, not permission to start another feature. This does not apply to repeatable planning context/evidence recording such as flow_plan_context_record when new evidence should be persisted. Do not repeat history-appending completion calls without new worker evidence.";

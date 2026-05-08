@@ -41,6 +41,13 @@ const REVIEW_SCOPE_ACCOUNTING_STATUS_SET = new Set<string>(
 	REVIEW_SCOPE_ACCOUNTING_STATUSES,
 );
 
+const REVIEW_SCOPE_LEDGER_SCAFFOLD_PURPOSE = "scaffold_only";
+const REVIEW_SCOPE_LEDGER_SCAFFOLD_RESIDUAL_RISK =
+	"Example scaffold only; replace residual risk.";
+function isScaffoldResidualRiskPlaceholder(value: string | undefined): boolean {
+	return value?.trim() === REVIEW_SCOPE_LEDGER_SCAFFOLD_RESIDUAL_RISK;
+}
+
 type WorkerEvidence = {
 	artifactsChanged?: readonly { path: string }[] | undefined;
 	reviewScopeLedger?: readonly ReviewScopeLedgerEntry[] | undefined;
@@ -396,6 +403,9 @@ function validateLedgerEntries({
 		if (!entry.residualRisk?.trim()) {
 			return `${entryLabel} must include residualRisk.`;
 		}
+		if (isScaffoldResidualRiskPlaceholder(entry.residualRisk)) {
+			return `${entryLabel}.residualRisk uses scaffold placeholder; replace.`;
+		}
 		for (const validationRef of validationRefsFor(entry)) {
 			if (!validationCommandSet.has(validationRef)) {
 				return `${entryLabel}.validationRefs includes '${validationRef}', which was not recorded in validation evidence.`;
@@ -549,6 +559,7 @@ export type ReviewScopeRecoveryDetails = {
 		validationCommands: string[];
 		closedFindingRefs: string[];
 	};
+	exampleReviewScopeLedgerPurpose: typeof REVIEW_SCOPE_LEDGER_SCAFFOLD_PURPOSE;
 	exampleReviewScopeLedger: ReviewScopeLedgerEntry[];
 	notes: string[];
 };
@@ -586,8 +597,7 @@ function scopeRecoveryEntryFor(
 		...(validationCommands.length > 0
 			? { validationRefs: uniqueStrings(validationCommands) }
 			: {}),
-		residualRisk:
-			"State any residual risk for this declared review scope, or 'No known residual risk.'",
+		residualRisk: REVIEW_SCOPE_LEDGER_SCAFFOLD_RESIDUAL_RISK,
 	};
 }
 
@@ -639,19 +649,19 @@ function buildReviewScopeRecoveryDetailsForDeclaredScope({
 			validationCommands: normalizedValidationCommands,
 			closedFindingRefs: normalizedClosedFindingRefs,
 		},
+		exampleReviewScopeLedgerPurpose: REVIEW_SCOPE_LEDGER_SCAFFOLD_PURPOSE,
 		exampleReviewScopeLedger,
 		notes: [
-			"Use each declaredScopes[].scopeId exactly as reviewScopeLedger[].scopeId; arbitrary audit labels are rejected.",
-			"Each ledger entry needs at least one concrete evidenceRef grounded in that scope target, changed artifacts, or reviewed context; validationRefs alone are not enough.",
-			"If evidenceRefs names a validation command, the same command must also appear in validationRefs.",
+			"exampleReviewScopeLedger is scaffold-only; do not replay unchanged.",
+			"Replace scaffold.",
 			...(normalizedClosedFindingRefs.length > 0
 				? [
-						"Closed finding refs are listed as candidates only. The example ledger does not assign findingRefs automatically; change an entry to finding_closed and add findingRefs only when you can reliably map those findings to that declared scope.",
+						"Closed finding refs are candidates only; add findingRefs only when mapped to that scope.",
 					]
 				: []),
 			...(scopesWithoutArtifactEvidence.length > 0
 				? [
-						`No concrete artifact evidence candidate was available for: ${scopesWithoutArtifactEvidence.join(", ")}. Add a matching changed artifact or reviewContextPack entry before retrying.`,
+						`No concrete artifact candidate for: ${scopesWithoutArtifactEvidence.join(", ")}. Add matching changed artifact or reviewContextPack entry before retry.`,
 					]
 				: []),
 		],

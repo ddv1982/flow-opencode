@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildSessionMutationAction } from "../src/runtime/application/session-actions";
+import type { ReviewScopeRecoveryDetails } from "../src/runtime/domain/review-scope-accounting";
 import type { Session, WorkerResult } from "../src/runtime/schema";
 import { createSession } from "../src/runtime/session";
 import {
@@ -781,17 +782,7 @@ describe("completion gates", () => {
 		if (result.ok) return;
 		expect(result.recovery?.errorCode).toBe("missing_review_scope_accounting");
 		const details = result.recovery?.details?.reviewScopeLedger as
-			| {
-					declaredScopes: Array<{ scopeId: string }>;
-					evidenceCandidates: {
-						changedArtifacts: string[];
-						closedFindingRefs: string[];
-					};
-					exampleReviewScopeLedger: NonNullable<
-						WorkerResult["reviewScopeLedger"]
-					>;
-					notes: string[];
-			  }
+			| ReviewScopeRecoveryDetails
 			| undefined;
 		expect(details?.declaredScopes.map((scope) => scope.scopeId)).toEqual([
 			"file_target:src/runtime/session.ts",
@@ -800,6 +791,7 @@ describe("completion gates", () => {
 		expect(details?.evidenceCandidates.changedArtifacts).toContain(
 			"src/runtime/session.ts",
 		);
+		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
 		expect(
 			details?.exampleReviewScopeLedger.map((entry) => entry.scopeId),
 		).toEqual([
@@ -808,6 +800,9 @@ describe("completion gates", () => {
 		]);
 		expect(details?.exampleReviewScopeLedger[0]?.evidenceRefs).toContain(
 			"src/runtime/session.ts",
+		);
+		expect(details?.exampleReviewScopeLedger[0]?.residualRisk).toContain(
+			"Example scaffold only",
 		);
 		expect(details?.evidenceCandidates.closedFindingRefs).toEqual([
 			closedFindingRef,
@@ -820,8 +815,98 @@ describe("completion gates", () => {
 			),
 		).toBe(true);
 		expect(details?.notes.join("\n")).toContain(
-			"does not assign findingRefs automatically",
+			"Closed finding refs are candidates only",
 		);
+		expect(details?.notes.join("\n")).toContain("do not replay unchanged");
+	});
+
+	test("worker completion rejects blind review-scope recovery scaffold replay", () => {
+		const basePlan = samplePlan();
+		const plan = {
+			...basePlan,
+			goalMode: "review" as const,
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/runtime/session.ts"],
+				},
+			],
+		};
+		const applied = applyPlan(createSession("Review runtime scaffold"), plan);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+		const featureId = started.value.session.execution.activeFeatureId;
+		expect(featureId).toBeTruthy();
+		if (!featureId) return;
+		const reviewed = recordReviewerDecision(
+			started.value.session,
+			approvedFeatureDecision(featureId),
+		);
+		expect(reviewed.ok).toBe(true);
+		if (!reviewed.ok) return;
+
+		const baseWorker = createWorkerResult(featureId, {
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+		});
+		const missingScope = validateSuccessfulCompletion(
+			reviewed.value,
+			{
+				...baseWorker,
+				reviewScopeLedger: [
+					{
+						scopeId: "audit:pointer-only-practice-controls",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						residualRisk: "No known residual risk.",
+					},
+				],
+			},
+			featureId,
+			false,
+		);
+		expect(missingScope.ok).toBe(false);
+		if (missingScope.ok) return;
+		const details = missingScope.recovery?.details?.reviewScopeLedger as
+			| ReviewScopeRecoveryDetails
+			| undefined;
+		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
+		expect(details?.exampleReviewScopeLedger).toHaveLength(1);
+		if (!details) return;
+
+		const blindReplay = validateSuccessfulCompletion(
+			reviewed.value,
+			{
+				...baseWorker,
+				reviewScopeLedger: details.exampleReviewScopeLedger,
+			},
+			featureId,
+			false,
+		);
+		expect(blindReplay.ok).toBe(false);
+		if (!blindReplay.ok) {
+			expect(blindReplay.message).toContain("uses scaffold placeholder");
+		}
+
+		const repaired = validateSuccessfulCompletion(
+			reviewed.value,
+			{
+				...baseWorker,
+				reviewScopeLedger: details.exampleReviewScopeLedger.map((entry) => ({
+					...entry,
+					residualRisk:
+						"No known residual risk after reviewing this declared scope.",
+				})),
+			},
+			featureId,
+			false,
+		);
+		expect(repaired.ok).toBe(true);
 	});
 
 	test("final reviewer review-scope failures return recovery details", () => {
@@ -845,11 +930,12 @@ describe("completion gates", () => {
 		if (result.ok) return;
 		expect(result.recovery?.errorCode).toBe("missing_review_scope_accounting");
 		const details = result.recovery?.details?.reviewScopeLedger as
-			| { declaredScopes: Array<{ scopeId: string }> }
+			| ReviewScopeRecoveryDetails
 			| undefined;
 		expect(details?.declaredScopes.map((scope) => scope.scopeId)).toContain(
 			"file_target:src/runtime/session.ts",
 		);
+		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
 	});
 
 	test("broad review-and-fix final completion requires every declared review scope target", () => {
