@@ -306,7 +306,7 @@
 			],
 			"coverageNotes": [
 				"Every discovered surface in this focused review was directly reviewed with first-party evidence references.",
-				"Failure-mode review covered prompt packet construction, schema/capture drift, and test-oracle authenticity for providerless captures."
+				"Failure-mode review covered prompt packet construction, schema/capture drift, and test-evidence authenticity for providerless captures."
 			],
 			"validationRun": [
 				{
@@ -356,7 +356,7 @@
 					],
 					"requireEntrypointRefs": true,
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
 					"riskClass": "state_commit_rollback",
@@ -367,7 +367,7 @@
 						"rollback"
 					],
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				}
 			]
 		},
@@ -419,7 +419,7 @@
 						"src/audit/prompts/contracts.ts:1"
 					],
 					"impact": "Keyword-only async/race language can miss stale action ordering and rollback defects.",
-					"remediation": "Record behaviorChecks that name the entrypoint, async boundary, state or lifecycle owner, failure path, and oracle/gap."
+					"remediation": "Record behaviorChecks that name the entrypoint, async boundary, state or lifecycle owner, failure path, and test evidence/gap."
 				}
 			],
 			"nextSteps": [
@@ -448,13 +448,13 @@
 					],
 					"requireEntrypointRefs": true,
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
 					"riskClass": "lifecycle_reentrancy",
 					"requiredText": ["scene start", "setup", "scene.start", "throws"],
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
 					"riskClass": "state_commit_rollback",
@@ -465,16 +465,16 @@
 						"rollback"
 					],
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
-					"riskClass": "test_oracle_authenticity",
+					"riskClass": "test_evidence_authenticity",
 					"requiredText": [
 						"rejection tests",
 						"concurrent interleaving",
 						"rollback"
 					],
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				}
 			]
 		},
@@ -532,7 +532,7 @@
 					"stateOwnerRefs": ["src/game/navigation.ts:20-120"],
 					"lifecycleOwnerRefs": ["src/scenes/PracticeScene.ts:1-90"],
 					"failurePath": "panel click -> deferred registration -> pending action can let stale first action overrides later user intent unless current-scene ownership is checked.",
-					"oracleRefs": [
+					"testEvidenceRefs": [
 						"tests/sessionPanelActions.ts:1-140",
 						"tests/fullFlowSmoke.ts:1-160"
 					],
@@ -548,7 +548,7 @@
 					"stateOwnerRefs": ["src/game/navigation.ts:20-120"],
 					"lifecycleOwnerRefs": ["src/scenes/PracticeScene.ts:1-90"],
 					"failurePath": "scene start/setup calls scene.start(...) and throws before all lifecycle owners prove rollback semantics.",
-					"oracleRefs": [],
+					"testEvidenceRefs": [],
 					"validationRefs": [],
 					"remainingGap": "Need a test that forces scene.start(...) throws during setup and observes cleanup/rollback."
 				},
@@ -560,21 +560,21 @@
 					"stateOwnerRefs": ["src/game/navigation.ts:20-120"],
 					"lifecycleOwnerRefs": ["src/scenes/PracticeScene.ts:1-90"],
 					"failurePath": "session/current-scene commits before scene.start(...) throws need rollback coverage.",
-					"oracleRefs": [],
+					"testEvidenceRefs": [],
 					"validationRefs": [],
 					"remainingGap": "Existing tests do not prove rollback after a failed scene start."
 				},
 				{
-					"riskClass": "test_oracle_authenticity",
+					"riskClass": "test_evidence_authenticity",
 					"result": "gap_recorded",
 					"invariant": "Rejection tests must exercise the product path rather than only isolated guards.",
 					"entrypointRefs": ["tests/sessionPanelActions.ts:1-140"],
 					"stateOwnerRefs": [],
 					"lifecycleOwnerRefs": [],
 					"failurePath": "Existing rejection tests do not prove concurrent interleaving or rollback semantics.",
-					"oracleRefs": [],
+					"testEvidenceRefs": [],
 					"validationRefs": [],
-					"remainingGap": "Add a product-path oracle for concurrent interleaving and rollback."
+					"remainingGap": "Add a product-path evidence for concurrent interleaving and rollback."
 				}
 			],
 			"validationCoverage": [
@@ -584,7 +584,7 @@
 						"async_event_ordering",
 						"lifecycle_reentrancy",
 						"state_commit_rollback",
-						"test_oracle_authenticity"
+						"test_evidence_authenticity"
 					],
 					"proves": [
 						"Basic panel action rejection and smoke coverage are represented."
@@ -593,7 +593,7 @@
 						"Does not prove concurrent interleaving between stale and later panel actions.",
 						"Does not prove rollback when scene.start(...) throws after state commit."
 					],
-					"oracleRefs": [
+					"testEvidenceRefs": [
 						"tests/sessionPanelActions.ts:1-140",
 						"tests/fullFlowSmoke.ts:1-160"
 					]
@@ -608,7 +608,7 @@
 			],
 			"findings": [
 				{
-					"title": "Soft-focus path still needs temporal validation oracles",
+					"title": "Soft-focus path still needs temporal validation evidences",
 					"category": "hardening_opportunity",
 					"confidence": "likely",
 					"severity": "medium",
@@ -617,7 +617,7 @@
 						"src/game/navigation.ts:20-120",
 						"tests/sessionPanelActions.ts:1-140"
 					],
-					"impact": "Stale actions or failed scene starts can regress without an oracle that follows the full temporal path.",
+					"impact": "Stale actions or failed scene starts can regress without test evidence that follows the full temporal path.",
 					"remediation": "Add concurrent interleaving and scene.start(...) throw rollback tests before claiming the behavior is fully validated."
 				}
 			],

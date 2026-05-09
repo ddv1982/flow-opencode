@@ -59,11 +59,11 @@
 - review depth: detailed
 - reviewed surfaces: changed_files, shared_surfaces, validation_evidence
 - evidence: Checked feature-5 entrypoint, feature state handoff, failure path, and validation evidence.
-- validation assessment: bun test was mapped to the feature-5 regression oracle; no unchecked behavior gap remains in this fixture.
+- validation assessment: bun test was mapped to the feature-5 regression evidence; no unchecked behavior gap remains in this fixture.
 - evidence changed artifacts: src/feature-5.ts
 - evidence validation commands: bun test
 - integration checks: Checked feature-5 entrypoint against the active feature boundary and state handoff.
-- regression checks: Checked bun test covers the feature-5 regression oracle cited by the fixture.
+- regression checks: Checked bun test covers the feature-5 regression evidence cited by the fixture.
 - status: approved
 - summary: Approved final review.
 
@@ -86,9 +86,9 @@
 - review depth: detailed
 - reviewed surfaces: changed_files, shared_surfaces, validation_evidence
 - evidence: Checked feature-5 entrypoint, feature state handoff, failure path, and validation evidence.
-- validation assessment: bun test was mapped to the feature-5 regression oracle; no unchecked behavior gap remains in this fixture.
+- validation assessment: bun test was mapped to the feature-5 regression evidence; no unchecked behavior gap remains in this fixture.
 - evidence changed artifacts: src/feature-5.ts
 - evidence validation commands: bun test
 - integration checks: Checked feature-5 entrypoint against the active feature boundary and state handoff.
-- regression checks: Checked bun test covers the feature-5 regression oracle cited by the fixture.
+- regression checks: Checked bun test covers the feature-5 regression evidence cited by the fixture.
 - summary: Final review passed.

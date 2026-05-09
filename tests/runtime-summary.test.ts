@@ -126,7 +126,7 @@ function buildSummaryFixtureSessions() {
 						evidenceSummary:
 							"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 						validationAssessment:
-							"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+							"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 						evidenceRefs: {
 							changedArtifacts: ["src/runtime/session.ts"],
 							validationCommands: ["bun test"],
@@ -140,7 +140,7 @@ function buildSummaryFixtureSessions() {
 						remainingGaps: [],
 						status: "approved",
 						summary:
-							"Final review checked the runtime path and validation oracle.",
+							"Final review checked the runtime path and validation evidence.",
 					},
 				),
 			),
@@ -180,7 +180,7 @@ function buildSummaryFixtureSessions() {
 					evidenceSummary:
 						"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 					validationAssessment:
-						"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+						"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 					evidenceRefs: {
 						changedArtifacts: ["src/runtime/session.ts"],
 						validationCommands: ["bun test"],
@@ -741,8 +741,8 @@ describe("runtime summary", () => {
 	              "scope": "final",
 	              "status": "approved",
 	              "suggestedValidation": [],
-	              "summary": "Final review checked the runtime path and validation oracle.",
-	              "validationAssessment": "bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+	              "summary": "Final review checked the runtime path and validation evidence.",
+	              "validationAssessment": "bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 	              "validationCoverage": [],
 	            },
 	            "lastValidationRun": [
@@ -814,7 +814,7 @@ describe("runtime summary", () => {
 	                  "purpose: completion_gate",
 	                  "review depth: detailed",
 	                  "reviewed surfaces: 3",
-	                  "Final review checked the runtime path and validation oracle.",
+	                  "Final review checked the runtime path and validation evidence.",
 	                ],
 	                "id": "review:final",
 	                "next": "Review is complete; continue the next runtime step.",

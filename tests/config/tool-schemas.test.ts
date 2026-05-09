@@ -110,12 +110,13 @@ describe("tool schema config contracts", () => {
 		);
 
 		// These ceilings intentionally leave narrow headroom over measured growth
-		// (including finalReview/suggestedValidation and planning.reviewFindings
-		// additive fields) so unrelated future bloat still fails fast.
-		expect(totalSize).toBeLessThan(354000);
+		// (including finalReview/suggestedValidation, planning.reviewFindings,
+		// and prior test-evidence input aliases) so unrelated future
+		// bloat still fails fast.
+		expect(totalSize).toBeLessThan(372000);
 		expect(schemaSizes.flow_plan_apply).toBeLessThan(78500);
 		expect(schemaSizes.flow_plan_context_record).toBeLessThan(60500);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(88000);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(95000);
 		expect(schemaSizes.flow_review_record_feature).toBeLessThan(20000);
 		expect(schemaSizes.flow_review_record_final).toBeLessThan(73000);
 		expect(schemaSizes.flow_review_render).toBeLessThan(70000);
@@ -382,14 +383,14 @@ describe("tool schema config contracts", () => {
 				remainingGaps: [],
 				behaviorChecks: [
 					{
-						riskClass: "test_oracle_authenticity",
+						riskClass: "test_evidence_authenticity",
 						result: "gap_recorded",
 						invariant: "Current tests miss async interleaving scenarios.",
 						entrypointRefs: ["src/runtime/session.ts"],
 						stateOwnerRefs: [],
 						lifecycleOwnerRefs: [],
 						failurePath: "Concurrent updates can bypass assertions.",
-						oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+						testEvidenceRefs: ["tests/runtime/final-review-contracts.test.ts"],
 						validationRefs: ["bun test"],
 						remainingGap: "Add concurrent interleaving coverage.",
 					},
@@ -397,10 +398,10 @@ describe("tool schema config contracts", () => {
 				validationCoverage: [
 					{
 						command: "bun test",
-						behaviorClasses: ["test_oracle_authenticity"],
+						behaviorClasses: ["test_evidence_authenticity"],
 						proves: ["Existing runtime tests pass for covered paths."],
 						gaps: ["Concurrent interleaving remains uncovered."],
-						oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+						testEvidenceRefs: ["tests/runtime/final-review-contracts.test.ts"],
 					},
 				],
 				status: "approved",

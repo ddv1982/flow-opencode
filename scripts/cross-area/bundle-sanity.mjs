@@ -20,8 +20,9 @@ const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // Attachment materialization adds one public tool plus root-safe data/file/http
 // decoding and write guards. Runtime attachment guidance adds availability
 // snapshots and coordinator instructions. Singleton retry/idempotency metadata adds
-// narrow runtime and prompt guidance; keep the bundle below 766 KiB.
-const BUNDLE_SIZE_BUDGET_BYTES = 784384; // 766 KiB
+// narrow runtime and prompt guidance. Evidence terminology normalization adds
+// prior-input parsing guards; keep the bundle below 771 KiB.
+const BUNDLE_SIZE_BUDGET_BYTES = 789504; // 771 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });

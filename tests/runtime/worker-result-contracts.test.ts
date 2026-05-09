@@ -334,11 +334,33 @@ describe("runtime worker result contracts", () => {
 					"Checked for regressions in shared surfaces and validation evidence.",
 				],
 				remainingGaps: [],
+				behaviorChecks: [
+					{
+						riskClass: "test_oracle_authenticity",
+						result: "passed",
+						invariant: "Prior test evidence payloads are normalized.",
+						entrypointRefs: ["src/runtime/session.ts"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath: "Prior refs could leak into persisted history.",
+						oracleRefs: ["tests/runtime/worker-result-contracts.test.ts"],
+						validationRefs: ["bun test"],
+					},
+				],
+				validationCoverage: [
+					{
+						command: "bun test",
+						behaviorClasses: ["test_oracle_authenticity"],
+						proves: ["Prior worker final review payload was normalized."],
+						gaps: [],
+						oracleRefs: ["tests/runtime/worker-result-contracts.test.ts"],
+					},
+				],
 				status: "needs_followup",
 				summary: "Final approval still pending.",
 				blockingFindings: [{ summary: "Awaiting operator sign-off." }],
 			},
-		} satisfies WorkerResult;
+		} as unknown as WorkerResult;
 
 		const result = completeRun(reviewed.value, payload);
 		expect(result.ok).toBe(true);
@@ -353,6 +375,34 @@ describe("runtime worker result contracts", () => {
 		expect(result.value.execution.history.at(-1)?.finalReview?.status).toBe(
 			"needs_followup",
 		);
+		const persistedFinalReview =
+			result.value.execution.history.at(-1)?.finalReview;
+		expect(persistedFinalReview?.behaviorChecks?.[0]?.riskClass).toBe(
+			"test_evidence_authenticity",
+		);
+		expect(persistedFinalReview?.behaviorChecks?.[0]?.testEvidenceRefs).toEqual(
+			["tests/runtime/worker-result-contracts.test.ts"],
+		);
+		expect(
+			(
+				persistedFinalReview?.behaviorChecks?.[0] as
+					| { oracleRefs?: string[] }
+					| undefined
+			)?.oracleRefs,
+		).toBeUndefined();
+		expect(
+			persistedFinalReview?.validationCoverage?.[0]?.behaviorClasses,
+		).toEqual(["test_evidence_authenticity"]);
+		expect(
+			persistedFinalReview?.validationCoverage?.[0]?.testEvidenceRefs,
+		).toEqual(["tests/runtime/worker-result-contracts.test.ts"]);
+		expect(
+			(
+				persistedFinalReview?.validationCoverage?.[0] as
+					| { oracleRefs?: string[] }
+					| undefined
+			)?.oracleRefs,
+		).toBeUndefined();
 		expect(
 			result.value.execution.history.at(-1)?.evidencePackets?.[0]?.id,
 		).toBe("packet:worker-context");

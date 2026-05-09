@@ -44,14 +44,14 @@ export type PromptBehaviorBehaviorRiskClass =
 	| "persistence_recovery"
 	| "interaction_geometry"
 	| "accessibility_semantics"
-	| "test_oracle_authenticity";
+	| "test_evidence_authenticity";
 
 export type PromptBehaviorRequiredBehaviorCheck = {
 	riskClass: PromptBehaviorBehaviorRiskClass;
 	requiredText: string[];
 	requireEntrypointRefs?: boolean;
 	requireStateOrLifecycleOwnerRefs?: boolean;
-	requireOracleOrGap?: boolean;
+	requireTestEvidenceOrGap?: boolean;
 };
 
 export type PromptBehaviorPacketExpectations = {
@@ -142,7 +142,7 @@ const BEHAVIOR_RISK_CLASSES = new Set<PromptBehaviorBehaviorRiskClass>([
 	"persistence_recovery",
 	"interaction_geometry",
 	"accessibility_semantics",
-	"test_oracle_authenticity",
+	"test_evidence_authenticity",
 ]);
 
 function validateRequiredBehaviorChecks(value: unknown, caseId: string): void {
@@ -182,7 +182,7 @@ function validateRequiredBehaviorChecks(value: unknown, caseId: string): void {
 		for (const fieldName of [
 			"requireEntrypointRefs",
 			"requireStateOrLifecycleOwnerRefs",
-			"requireOracleOrGap",
+			"requireTestEvidenceOrGap",
 		] as const) {
 			if (
 				entry[fieldName] !== undefined &&
@@ -371,7 +371,7 @@ const FAILURE_MODE_REVIEW_PATTERNS = [
 	"pointer",
 	"accessib",
 	"aria",
-	"test oracle",
+	"test evidence",
 	"normal product path",
 	"shortcut",
 ] as const;
@@ -411,7 +411,7 @@ function behaviorCheckText(check: BehaviorCheck): string {
 		...check.entrypointRefs,
 		...check.stateOwnerRefs,
 		...check.lifecycleOwnerRefs,
-		...check.oracleRefs,
+		...check.testEvidenceRefs,
 		...check.validationRefs,
 	].join("\n");
 }
@@ -428,7 +428,7 @@ function validationCoverageSatisfies(
 		coverage.behaviorClasses.includes(riskClass) &&
 		(coverage.proves.length > 0 ||
 			coverage.gaps.length > 0 ||
-			coverage.oracleRefs.length > 0)
+			coverage.testEvidenceRefs.length > 0)
 	);
 }
 
@@ -475,23 +475,23 @@ function behaviorCheckSatisfiesRequirement(
 	) {
 		return false;
 	}
-	if (requirement.requireOracleOrGap) {
-		const hasOracleRef = referencesHaveEvidence(check.oracleRefs);
+	if (requirement.requireTestEvidenceOrGap) {
+		const hasTestEvidenceRef = referencesHaveEvidence(check.testEvidenceRefs);
 		const hasRecordedValidationRef = behaviorCheckHasRecordedValidationRef(
 			report,
 			check.validationRefs,
 		);
 		const hasExplicitGap =
 			check.result === "gap_recorded" && Boolean(check.remainingGap?.trim());
-		const hasCoverageOracleOrGap = (report.validationCoverage ?? []).some(
+		const hasCoverageTestEvidenceOrGap = (report.validationCoverage ?? []).some(
 			(coverage) =>
 				validationCoverageSatisfies(coverage, requirement.riskClass),
 		);
 		if (
-			!hasOracleRef &&
+			!hasTestEvidenceRef &&
 			!hasRecordedValidationRef &&
 			!hasExplicitGap &&
-			!hasCoverageOracleOrGap
+			!hasCoverageTestEvidenceOrGap
 		) {
 			return false;
 		}

@@ -49,7 +49,7 @@
 			],
 			"coverageNotes": [
 				"User requested exhaustive/full review, but achievedDepth is deep_audit because frontend UI components and frontend tests were spot-checked rather than every discovered file being directly reviewed.",
-				"Failure-mode review covered persistence/session lifetime, repeated upload backpressure, and transport test-oracle authenticity; frontend accessibility and interaction geometry remained spot-checked."
+				"Failure-mode review covered persistence/session lifetime, repeated upload backpressure, and transport test-evidence authenticity; frontend accessibility and interaction geometry remained spot-checked."
 			],
 			"validationRun": [
 				{

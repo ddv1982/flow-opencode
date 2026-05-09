@@ -1,4 +1,6 @@
 import { buildReviewContextPack } from "../domain";
+import type { FinalReviewBehaviorRiskClass } from "../domain/final-review-behavior-risks";
+import type { ReviewContextPackInput } from "../domain/review-content-discovery";
 import type { Session, WorkerResultArgs } from "../schema";
 
 export type NormalizedReview = Omit<
@@ -15,6 +17,29 @@ type PersistedFinalReview = NonNullable<
 >;
 
 export type NormalizedFinalReview = PersistedFinalReview;
+
+type WorkerBehaviorCheckInput = {
+	riskClass: string;
+	result: "passed" | "gap_recorded" | "not_applicable" | "needs_fix";
+	invariant: string;
+	entrypointRefs?: string[] | undefined;
+	stateOwnerRefs?: string[] | undefined;
+	lifecycleOwnerRefs?: string[] | undefined;
+	failurePath: string;
+	testEvidenceRefs?: string[] | undefined;
+	oracleRefs?: string[] | undefined;
+	validationRefs?: string[] | undefined;
+	remainingGap?: string | undefined;
+};
+
+type WorkerValidationCoverageInput = {
+	command: string;
+	behaviorClasses?: string[] | undefined;
+	proves?: string[] | undefined;
+	gaps?: string[] | undefined;
+	testEvidenceRefs?: string[] | undefined;
+	oracleRefs?: string[] | undefined;
+};
 
 export type NormalizedReviewFindingClosure = Omit<
 	NonNullable<WorkerResultArgs["reviewFindingClosures"]>[number],
@@ -81,6 +106,23 @@ function normalizeReview(
 	};
 }
 
+function legacyCompatibleTestEvidenceRefs(value: {
+	testEvidenceRefs?: string[] | undefined;
+	oracleRefs?: string[] | undefined;
+}): string[] {
+	return value.testEvidenceRefs ?? value.oracleRefs ?? [];
+}
+
+function normalizeBehaviorRiskClass(
+	riskClass: string,
+): FinalReviewBehaviorRiskClass {
+	return (
+		riskClass === "test_oracle_authenticity"
+			? "test_evidence_authenticity"
+			: riskClass
+	) as FinalReviewBehaviorRiskClass;
+}
+
 function normalizeFinalReview(
 	review: NonNullable<WorkerResultArgs["finalReview"]>,
 ): NormalizedFinalReview {
@@ -95,23 +137,38 @@ function normalizeFinalReview(
 		integrationChecks: review.integrationChecks ?? [],
 		regressionChecks: review.regressionChecks ?? [],
 		remainingGaps: review.remainingGaps ?? [],
-		behaviorChecks: (review.behaviorChecks ?? []).map((check) => ({
-			...check,
-			entrypointRefs: check.entrypointRefs ?? [],
-			stateOwnerRefs: check.stateOwnerRefs ?? [],
-			lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
-			oracleRefs: check.oracleRefs ?? [],
-			validationRefs: check.validationRefs ?? [],
-		})),
-		validationCoverage: (review.validationCoverage ?? []).map((coverage) => ({
-			...coverage,
-			behaviorClasses: coverage.behaviorClasses ?? [],
-			proves: coverage.proves ?? [],
-			gaps: coverage.gaps ?? [],
-			oracleRefs: coverage.oracleRefs ?? [],
-		})),
+		behaviorChecks: (
+			(review.behaviorChecks ?? []) as WorkerBehaviorCheckInput[]
+		).map((check) => {
+			const { oracleRefs: _legacyOracleRefs, ...canonicalCheck } = check;
+			return {
+				...canonicalCheck,
+				riskClass: normalizeBehaviorRiskClass(check.riskClass),
+				entrypointRefs: check.entrypointRefs ?? [],
+				stateOwnerRefs: check.stateOwnerRefs ?? [],
+				lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
+				testEvidenceRefs: legacyCompatibleTestEvidenceRefs(check),
+				validationRefs: check.validationRefs ?? [],
+			};
+		}),
+		validationCoverage: (
+			(review.validationCoverage ?? []) as WorkerValidationCoverageInput[]
+		).map((coverage) => {
+			const { oracleRefs: _legacyOracleRefs, ...canonicalCoverage } = coverage;
+			return {
+				...canonicalCoverage,
+				behaviorClasses: (coverage.behaviorClasses ?? []).map(
+					normalizeBehaviorRiskClass,
+				),
+				proves: coverage.proves ?? [],
+				gaps: coverage.gaps ?? [],
+				testEvidenceRefs: legacyCompatibleTestEvidenceRefs(coverage),
+			};
+		}),
 		reviewContextPack: review.reviewContextPack
-			? buildReviewContextPack(review.reviewContextPack)
+			? buildReviewContextPack(
+					review.reviewContextPack as ReviewContextPackInput,
+				)
 			: undefined,
 	};
 }

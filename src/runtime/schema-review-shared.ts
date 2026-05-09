@@ -88,8 +88,9 @@ export const BehaviorRiskClassSchema = z.enum([
 	"persistence_recovery",
 	"interaction_geometry",
 	"accessibility_semantics",
-	"test_oracle_authenticity",
+	"test_evidence_authenticity",
 ]);
+const ReviewDiscoveryReasonSchema = z.enum(REVIEW_DISCOVERY_REASONS);
 
 const NonEmptyTrimmedStringSchema = z.string().trim().min(1);
 const SafeReviewRefSchema = NonEmptyTrimmedStringSchema.transform(
@@ -103,6 +104,18 @@ const SafeReviewPathSchema = NonEmptyTrimmedStringSchema.transform(
 	message: "must be a safe relative path",
 });
 
+const BehaviorRiskClassCompatSchema = z
+	.enum([...BehaviorRiskClassSchema.options, "test_oracle_authenticity"])
+	.overwrite((value) =>
+		value === "test_oracle_authenticity" ? "test_evidence_authenticity" : value,
+	) as typeof BehaviorRiskClassSchema;
+
+const ReviewDiscoveryReasonCompatSchema = z
+	.enum([...ReviewDiscoveryReasonSchema.options, "test_oracle"])
+	.overwrite((value) =>
+		value === "test_oracle" ? "test_evidence" : value,
+	) as typeof ReviewDiscoveryReasonSchema;
+
 export const BehaviorCheckResultSchema = z.enum([
 	"passed",
 	"gap_recorded",
@@ -111,14 +124,15 @@ export const BehaviorCheckResultSchema = z.enum([
 ]);
 
 const behaviorCheckShape = {
-	riskClass: BehaviorRiskClassSchema,
+	riskClass: BehaviorRiskClassCompatSchema,
 	result: BehaviorCheckResultSchema,
 	invariant: z.string().min(1),
 	entrypointRefs: z.array(z.string().min(1)).default([]),
 	stateOwnerRefs: z.array(z.string().min(1)).default([]),
 	lifecycleOwnerRefs: z.array(z.string().min(1)).default([]),
 	failurePath: z.string().min(1),
-	oracleRefs: z.array(z.string().min(1)).default([]),
+	testEvidenceRefs: z.array(z.string().min(1)).optional(),
+	oracleRefs: z.array(z.string().min(1)).optional(),
 	validationRefs: z.array(z.string().min(1)).default([]),
 	remainingGap: z.string().min(1).optional(),
 } as const;
@@ -136,42 +150,139 @@ function addGapRecordedRemainingGapIssue(
 	}
 }
 
+function arraysMatch(
+	left: readonly string[],
+	right: readonly string[],
+): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	return left.every((value, index) => value === right[index]);
+}
+
+function addPriorRefsConflictIssue(
+	value: {
+		testEvidenceRefs?: string[] | undefined;
+		oracleRefs?: string[] | undefined;
+	},
+	context: z.RefinementCtx,
+): void {
+	if (
+		value.testEvidenceRefs !== undefined &&
+		value.oracleRefs !== undefined &&
+		!arraysMatch(value.testEvidenceRefs, value.oracleRefs)
+	) {
+		context.addIssue({
+			code: z.ZodIssueCode.custom,
+			path: ["oracleRefs"],
+			message:
+				"prior oracleRefs input must match testEvidenceRefs when both are provided.",
+		});
+	}
+}
+
+function addBehaviorCheckIssues(
+	value: {
+		result: string;
+		remainingGap?: string | undefined;
+		testEvidenceRefs?: string[] | undefined;
+		oracleRefs?: string[] | undefined;
+	},
+	context: z.RefinementCtx,
+): void {
+	addGapRecordedRemainingGapIssue(value, context);
+	addPriorRefsConflictIssue(value, context);
+}
+
+function canonicalizeTestEvidenceRefs<
+	T extends {
+		testEvidenceRefs?: string[] | undefined;
+		oracleRefs?: string[] | undefined;
+	},
+>(
+	value: T,
+): Omit<T, "oracleRefs" | "testEvidenceRefs"> & { testEvidenceRefs: string[] } {
+	const { oracleRefs, testEvidenceRefs, ...rest } = value;
+	return {
+		...rest,
+		testEvidenceRefs: testEvidenceRefs ?? oracleRefs ?? [],
+	};
+}
+
+type CanonicalBehaviorCheck = {
+	riskClass: z.infer<typeof BehaviorRiskClassSchema>;
+	result: z.infer<typeof BehaviorCheckResultSchema>;
+	invariant: string;
+	entrypointRefs: string[];
+	stateOwnerRefs: string[];
+	lifecycleOwnerRefs: string[];
+	failurePath: string;
+	testEvidenceRefs: string[];
+	validationRefs: string[];
+	remainingGap?: string | undefined;
+};
+
 export const BehaviorCheckSchema = z
 	.object(behaviorCheckShape)
 	.strict()
-	.superRefine(addGapRecordedRemainingGapIssue);
+	.superRefine(addBehaviorCheckIssues)
+	.overwrite(
+		canonicalizeTestEvidenceRefs,
+	) as unknown as z.ZodType<CanonicalBehaviorCheck>;
 
 const runtimeBehaviorCheckShape = {
 	...behaviorCheckShape,
 	entrypointRefs: z.array(SafeReviewRefSchema).default([]),
 	stateOwnerRefs: z.array(SafeReviewRefSchema).default([]),
 	lifecycleOwnerRefs: z.array(SafeReviewRefSchema).default([]),
-	oracleRefs: z.array(SafeReviewRefSchema).default([]),
+	testEvidenceRefs: z.array(SafeReviewRefSchema).optional(),
+	oracleRefs: z.array(SafeReviewRefSchema).optional(),
 } as const;
 
 export const RuntimeBehaviorCheckSchema = z
 	.object(runtimeBehaviorCheckShape)
 	.strict()
-	.superRefine(addGapRecordedRemainingGapIssue);
+	.superRefine(addBehaviorCheckIssues)
+	.overwrite(
+		canonicalizeTestEvidenceRefs,
+	) as unknown as z.ZodType<CanonicalBehaviorCheck>;
 
 const validationCoverageShape = {
 	command: z.string().min(1),
-	behaviorClasses: z.array(BehaviorRiskClassSchema).default([]),
+	behaviorClasses: z.array(BehaviorRiskClassCompatSchema).default([]),
 	proves: z.array(z.string().min(1)).default([]),
 	gaps: z.array(z.string().min(1)).default([]),
-	oracleRefs: z.array(z.string().min(1)).default([]),
+	testEvidenceRefs: z.array(z.string().min(1)).optional(),
+	oracleRefs: z.array(z.string().min(1)).optional(),
 } as const;
+
+type CanonicalValidationCoverage = {
+	command: string;
+	behaviorClasses: z.infer<typeof BehaviorRiskClassSchema>[];
+	proves: string[];
+	gaps: string[];
+	testEvidenceRefs: string[];
+};
 
 export const ValidationCoverageSchema = z
 	.object(validationCoverageShape)
-	.strict();
+	.strict()
+	.superRefine(addPriorRefsConflictIssue)
+	.overwrite(
+		canonicalizeTestEvidenceRefs,
+	) as unknown as z.ZodType<CanonicalValidationCoverage>;
 
 export const RuntimeValidationCoverageSchema = z
 	.object({
 		...validationCoverageShape,
-		oracleRefs: z.array(SafeReviewRefSchema).default([]),
+		testEvidenceRefs: z.array(SafeReviewRefSchema).optional(),
+		oracleRefs: z.array(SafeReviewRefSchema).optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine(addPriorRefsConflictIssue)
+	.overwrite(
+		canonicalizeTestEvidenceRefs,
+	) as unknown as z.ZodType<CanonicalValidationCoverage>;
 
 export const ReviewContextPackSchema = z
 	.object({
@@ -183,7 +294,7 @@ export const ReviewContextPackSchema = z
 				z
 					.object({
 						path: SafeReviewPathSchema,
-						reason: z.enum(REVIEW_DISCOVERY_REASONS),
+						reason: ReviewDiscoveryReasonCompatSchema,
 						surface: ReviewSurfaceSchema.optional(),
 						summary: NonEmptyTrimmedStringSchema.optional(),
 					})

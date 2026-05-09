@@ -18,7 +18,7 @@ export const FINAL_REVIEW_BEHAVIOR_RISK_CLASSES = [
 	"persistence_recovery",
 	"interaction_geometry",
 	"accessibility_semantics",
-	"test_oracle_authenticity",
+	"test_evidence_authenticity",
 ] as const;
 
 export type FinalReviewBehaviorRiskClass =
@@ -32,7 +32,7 @@ export type FinalReviewBehaviorCheck = {
 	stateOwnerRefs: string[];
 	lifecycleOwnerRefs: string[];
 	failurePath: string;
-	oracleRefs: string[];
+	testEvidenceRefs: string[];
 	validationRefs: string[];
 	remainingGap?: string | undefined;
 };
@@ -42,7 +42,7 @@ export type FinalReviewValidationCoverage = {
 	behaviorClasses: FinalReviewBehaviorRiskClass[];
 	proves: string[];
 	gaps: string[];
-	oracleRefs: string[];
+	testEvidenceRefs: string[];
 };
 
 export type FinalReviewBehaviorCoverageTarget = {
@@ -221,7 +221,7 @@ export function deriveRequiredFinalReviewBehaviorRisks(
 			validationCommandsForWorker(worker).length > 0 ||
 			(pack?.validationEvidence.length ?? 0) > 0)
 	) {
-		addRequired(required, "test_oracle_authenticity");
+		addRequired(required, "test_evidence_authenticity");
 	}
 
 	return FINAL_REVIEW_BEHAVIOR_RISK_CLASSES.filter((riskClass) =>
@@ -267,7 +267,7 @@ type BehaviorRefField =
 	| "entrypointRefs"
 	| "stateOwnerRefs"
 	| "lifecycleOwnerRefs"
-	| "oracleRefs";
+	| "testEvidenceRefs";
 
 function reviewContextGroundingPaths(
 	review: FinalReviewBehaviorCoverageTarget,
@@ -338,10 +338,14 @@ function behaviorRefGroundingFailureReasons(
 		checkRefList(label, "entrypointRefs", check.entrypointRefs);
 		checkRefList(label, "stateOwnerRefs", check.stateOwnerRefs);
 		checkRefList(label, "lifecycleOwnerRefs", check.lifecycleOwnerRefs);
-		checkRefList(label, "oracleRefs", check.oracleRefs);
+		checkRefList(label, "testEvidenceRefs", check.testEvidenceRefs);
 	}
 	for (const [index, item] of (review.validationCoverage ?? []).entries()) {
-		checkRefList(`validationCoverage[${index}]`, "oracleRefs", item.oracleRefs);
+		checkRefList(
+			`validationCoverage[${index}]`,
+			"testEvidenceRefs",
+			item.testEvidenceRefs,
+		);
 	}
 
 	return reasons;
@@ -448,10 +452,12 @@ export function behaviorValidationLedgerFailureReasons(
 					);
 				}
 				if (
-					check.oracleRefs.length === 0 &&
+					check.testEvidenceRefs.length === 0 &&
 					check.validationRefs.length === 0
 				) {
-					reasons.push(`${label} must include oracleRefs or validationRefs`);
+					reasons.push(
+						`${label} must include testEvidenceRefs or validationRefs`,
+					);
 				}
 				const mappedCoverage = validationCoverageForRisk(
 					validationCoverage,

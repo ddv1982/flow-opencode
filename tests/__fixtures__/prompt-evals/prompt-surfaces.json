@@ -44,7 +44,7 @@
 			"Return needs_fix when the current feature should continue",
 			"Review only for correctness",
 			"Review changed behavior through applicable adversarial failure-mode classes",
-			"test-oracle authenticity"
+			"test-evidence authenticity"
 		],
 		"forbiddenSnippets": ["reviewer applies code fixes directly"]
 	}

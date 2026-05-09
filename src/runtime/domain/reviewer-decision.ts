@@ -1,12 +1,9 @@
 import type { z } from "zod";
 import type { ReviewerDecision, Session } from "../schema";
-import type {
-	BehaviorCheckSchema,
-	ReviewScopeLedgerEntrySchema,
-	ValidationCoverageSchema,
-} from "../schema-review-shared";
+import type { ReviewScopeLedgerEntrySchema } from "../schema-review-shared";
 import type {
 	FinalReviewBehaviorCheck,
+	FinalReviewBehaviorRiskClass,
 	FinalReviewValidationCoverage,
 } from "./final-review-behavior-risks";
 import {
@@ -27,32 +24,74 @@ import {
 
 type FinalScopeReviewerDecision = Extract<ReviewerDecision, { scope: "final" }>;
 
+type BehaviorCheckInput = {
+	riskClass: string;
+	result: "passed" | "gap_recorded" | "not_applicable" | "needs_fix";
+	invariant: string;
+	entrypointRefs?: string[] | undefined;
+	stateOwnerRefs?: string[] | undefined;
+	lifecycleOwnerRefs?: string[] | undefined;
+	failurePath: string;
+	testEvidenceRefs?: string[] | undefined;
+	oracleRefs?: string[] | undefined;
+	validationRefs?: string[] | undefined;
+	remainingGap?: string | undefined;
+};
+
+type ValidationCoverageInput = {
+	command: string;
+	behaviorClasses?: string[] | undefined;
+	proves?: string[] | undefined;
+	gaps?: string[] | undefined;
+	testEvidenceRefs?: string[] | undefined;
+	oracleRefs?: string[] | undefined;
+};
+
+function normalizeBehaviorRiskClass(
+	riskClass: string,
+): FinalReviewBehaviorRiskClass {
+	return (
+		riskClass === "test_oracle_authenticity"
+			? "test_evidence_authenticity"
+			: riskClass
+	) as FinalReviewBehaviorRiskClass;
+}
+
+function legacyCompatibleTestEvidenceRefs(value: {
+	testEvidenceRefs?: string[] | undefined;
+	oracleRefs?: string[] | undefined;
+}): string[] {
+	return value.testEvidenceRefs ?? value.oracleRefs ?? [];
+}
+
 function normalizeBehaviorChecksForCoverage(
-	checks: Array<z.input<typeof BehaviorCheckSchema>> | undefined,
+	checks: BehaviorCheckInput[] | undefined,
 ): FinalReviewBehaviorCheck[] {
 	return (checks ?? []).map((check) => ({
-		riskClass: check.riskClass,
+		riskClass: normalizeBehaviorRiskClass(check.riskClass),
 		result: check.result,
 		invariant: check.invariant,
 		entrypointRefs: check.entrypointRefs ?? [],
 		stateOwnerRefs: check.stateOwnerRefs ?? [],
 		lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
 		failurePath: check.failurePath,
-		oracleRefs: check.oracleRefs ?? [],
+		testEvidenceRefs: legacyCompatibleTestEvidenceRefs(check),
 		validationRefs: check.validationRefs ?? [],
 		...(check.remainingGap ? { remainingGap: check.remainingGap } : {}),
 	}));
 }
 
 function normalizeValidationCoverageForCoverage(
-	coverage: Array<z.input<typeof ValidationCoverageSchema>> | undefined,
+	coverage: ValidationCoverageInput[] | undefined,
 ): FinalReviewValidationCoverage[] {
 	return (coverage ?? []).map((item) => ({
 		command: item.command,
-		behaviorClasses: item.behaviorClasses ?? [],
+		behaviorClasses: (item.behaviorClasses ?? []).map(
+			normalizeBehaviorRiskClass,
+		),
 		proves: item.proves ?? [],
 		gaps: item.gaps ?? [],
-		oracleRefs: item.oracleRefs ?? [],
+		testEvidenceRefs: legacyCompatibleTestEvidenceRefs(item),
 	}));
 }
 
@@ -89,10 +128,8 @@ export type RecordReviewerDecisionInput = {
 	integrationChecks?: string[] | undefined;
 	regressionChecks?: string[] | undefined;
 	remainingGaps?: string[] | undefined;
-	behaviorChecks?: Array<z.input<typeof BehaviorCheckSchema>> | undefined;
-	validationCoverage?:
-		| Array<z.input<typeof ValidationCoverageSchema>>
-		| undefined;
+	behaviorChecks?: BehaviorCheckInput[] | undefined;
+	validationCoverage?: ValidationCoverageInput[] | undefined;
 	blockingFindings?: ReviewerDecision["blockingFindings"];
 	followUps?: ReviewerDecision["followUps"];
 	suggestedValidation?: ReviewerDecision["suggestedValidation"];
@@ -407,10 +444,12 @@ export function buildReviewerDecision(
 					[]) as FinalScopeReviewerDecision["regressionChecks"],
 				remainingGaps: (input.remainingGaps ??
 					[]) as FinalScopeReviewerDecision["remainingGaps"],
-				behaviorChecks: (input.behaviorChecks ??
-					[]) as FinalScopeReviewerDecision["behaviorChecks"],
-				validationCoverage: (input.validationCoverage ??
-					[]) as FinalScopeReviewerDecision["validationCoverage"],
+				behaviorChecks: normalizeBehaviorChecksForCoverage(
+					input.behaviorChecks,
+				) as FinalScopeReviewerDecision["behaviorChecks"],
+				validationCoverage: normalizeValidationCoverageForCoverage(
+					input.validationCoverage,
+				) as FinalScopeReviewerDecision["validationCoverage"],
 			}
 		: {
 				scope: "feature",

@@ -96,7 +96,7 @@
 	{
 		"id": "flow-review-adversarial-failure-modes-structured",
 		"title": "Flow review adversarial failure-mode audit",
-		"arguments": "detailed Review this codebase for adversarial failure-mode coverage across lifecycle/reentrancy, async state transitions, persistence recovery, accessibility/interaction semantics where applicable, and test-oracle authenticity. Return raw/structured JSON for eval scoring.",
+		"arguments": "detailed Review this codebase for adversarial failure-mode coverage across lifecycle/reentrancy, async state transitions, persistence recovery, accessibility/interaction semantics where applicable, and test-evidence authenticity. Return raw/structured JSON for eval scoring.",
 		"outputView": "structured",
 		"fileMap": "flow-opencode\n\u251c\u2500\u2500 src\n\u2502   \u251c\u2500\u2500 audit\n\u2502   \u2502   \u251c\u2500\u2500 prompts\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 commands.ts +\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 contracts.ts +\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 fragments.ts +\n\u2502   \u2502   \u2514\u2500\u2500 report-schema.ts +\n\u2502   \u251c\u2500\u2500 prompts\n\u2502   \u2502   \u251c\u2500\u2500 agents.ts +\n\u2502   \u2502   \u251c\u2500\u2500 contracts.ts +\n\u2502   \u2502   \u2514\u2500\u2500 fragments.ts +\n\u2502   \u2514\u2500\u2500 runtime\n\u2502       \u251c\u2500\u2500 transitions\n\u2502       \u2502   \u251c\u2500\u2500 execution-completion-validation.ts +\n\u2502       \u2502   \u2514\u2500\u2500 review.ts +\n\u2502       \u2514\u2500\u2500 domain\n\u2502           \u2514\u2500\u2500 final-review-coverage.ts +\n\u251c\u2500\u2500 tests\n\u2502   \u251c\u2500\u2500 prompt-behavior-eval-helpers.ts +\n\u2502   \u251c\u2500\u2500 prompt-behavior-eval.test.ts +\n\u2502   \u251c\u2500\u2500 review-prompt-capture.test.ts +\n\u2502   \u2514\u2500\u2500 runtime\n\u2502       \u2514\u2500\u2500 final-review-contracts.test.ts +\n\u2514\u2500\u2500 package.json",
 		"notes": [
@@ -163,11 +163,11 @@
 				"Do not pass this scenario with only changed-files coverage or generic async/race terminology."
 			],
 			"evidenceRequirements": [
-				"Behavior checks must name the entrypoint, async boundary, lifecycle owner, state owner, failure path, and validation oracle or explicit gap.",
+				"Behavior checks must name the entrypoint, async boundary, lifecycle owner, state owner, failure path, and validation evidence or explicit gap.",
 				"Use concrete first-party path:line evidence for directly reviewed soft-focus surfaces."
 			],
 			"doneWhen": [
-				"The output includes behaviorChecks for async_event_ordering, lifecycle_reentrancy, state_commit_rollback, and test_oracle_authenticity.",
+				"The output includes behaviorChecks for async_event_ordering, lifecycle_reentrancy, state_commit_rollback, and test_evidence_authenticity.",
 				"Validation coverage explains why existing rejection tests do or do not prove concurrent interleaving and rollback."
 			]
 		},
@@ -189,13 +189,13 @@
 					],
 					"requireEntrypointRefs": true,
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
 					"riskClass": "lifecycle_reentrancy",
 					"requiredText": ["scene start", "setup", "scene.start", "throws"],
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
 					"riskClass": "state_commit_rollback",
@@ -206,16 +206,16 @@
 						"rollback"
 					],
 					"requireStateOrLifecycleOwnerRefs": true,
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				},
 				{
-					"riskClass": "test_oracle_authenticity",
+					"riskClass": "test_evidence_authenticity",
 					"requiredText": [
 						"rejection tests",
 						"concurrent interleaving",
 						"rollback"
 					],
-					"requireOracleOrGap": true
+					"requireTestEvidenceOrGap": true
 				}
 			]
 		}

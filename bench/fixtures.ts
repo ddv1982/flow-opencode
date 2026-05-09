@@ -83,7 +83,7 @@ function createFinalReviewFixture<TStatus extends "approved" | "passed">({
 			"validation_evidence" as const,
 		],
 		evidenceSummary: `Checked ${featureId} entrypoint, feature state handoff, failure path, and validation evidence.`,
-		validationAssessment: `bun test was mapped to the ${featureId} regression oracle; no unchecked behavior gap remains in this fixture.`,
+		validationAssessment: `bun test was mapped to the ${featureId} regression evidence; no unchecked behavior gap remains in this fixture.`,
 		evidenceRefs: {
 			changedArtifacts: [`src/${featureId}.ts`],
 			validationCommands: ["bun test"],
@@ -92,7 +92,7 @@ function createFinalReviewFixture<TStatus extends "approved" | "passed">({
 			`Checked ${featureId} entrypoint against the active feature boundary and state handoff.`,
 		],
 		regressionChecks: [
-			`Checked bun test covers the ${featureId} regression oracle cited by the fixture.`,
+			`Checked bun test covers the ${featureId} regression evidence cited by the fixture.`,
 		],
 		remainingGaps: [],
 		status,

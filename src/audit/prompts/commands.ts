@@ -22,7 +22,7 @@ ${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}
 - For deep_audit, inspect every major surface with direct evidence and note any spot-checked or skipped areas explicitly.
 - For full_audit, directly review every discovered major surface, cite evidence for each directly_reviewed surface, and downgrade achievedDepth when any surface is only spot-checked or skipped.
 - Trace concrete invariants, adversarial sequences, and failure paths before writing findings; favor specific regression mechanisms over generic architecture advice.
-- Treat changed files as review seeds, not boundaries; include connected context needed to evaluate async/lifecycle/state/test-oracle behavior risks.
+- Treat changed files as review seeds, not boundaries; include connected context needed to evaluate async/lifecycle/state/test-evidence behavior risks.
 - When those risks are applicable, populate behaviorChecks with checked paths or explicit gap/not-applicable outcomes.
 - When validation outcomes justify conclusions, map them through validationCoverage rather than relying on command success labels alone.
 - Keep remaining-gap claims empty only when applicable behavior classes are checked or not applicable.

@@ -50,7 +50,7 @@ describe("runtime final review contracts", () => {
 				},
 				{
 					path: "tests/runtime/final-review-contracts.test.ts",
-					reason: "test_oracle",
+					reason: "test_evidence",
 					summary: "Runtime final-review contract coverage.",
 				},
 			],
@@ -414,7 +414,7 @@ describe("runtime final review contracts", () => {
 			includedContext: [
 				{
 					path: "src/runtime/session.ts",
-					reason: "test_oracle",
+					reason: "test_evidence",
 					surface: "tests",
 					summary: "Spoofed test evidence on a runtime source file.",
 				},
@@ -1142,7 +1142,7 @@ describe("runtime final review contracts", () => {
 		if (!decision.ok) {
 			expect(decision.message).toContain("finalReviewCoverage");
 			expect(decision.message).toContain(
-				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_evidence_authenticity",
 			);
 		}
 	});
@@ -1176,7 +1176,7 @@ describe("runtime final review contracts", () => {
 							stateOwnerRefs: [],
 							lifecycleOwnerRefs: [],
 							failurePath: "Out-of-order completion overwrites newer state.",
-							oracleRefs: ["tests/sessionPanelActions.test.ts"],
+							testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 							validationRefs: [command],
 						},
 					],
@@ -1186,7 +1186,7 @@ describe("runtime final review contracts", () => {
 							behaviorClasses: ["async_event_ordering"],
 							proves: ["Panel action ordering was reviewed."],
 							gaps: [],
-							oracleRefs: ["tests/sessionPanelActions.test.ts"],
+							testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 						},
 					],
 				},
@@ -1242,7 +1242,7 @@ describe("runtime final review contracts", () => {
 					stateOwnerRefs: [],
 					lifecycleOwnerRefs: [],
 					failurePath: "Out-of-order completion overwrites newer state.",
-					oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+					testEvidenceRefs: ["tests/runtime/final-review-contracts.test.ts"],
 					validationRefs: ["bun test"],
 				},
 			],
@@ -1252,7 +1252,7 @@ describe("runtime final review contracts", () => {
 					behaviorClasses: ["async_event_ordering"],
 					proves: ["Targeted runtime behavior remained stable."],
 					gaps: [],
-					oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+					testEvidenceRefs: ["tests/runtime/final-review-contracts.test.ts"],
 				},
 			],
 		});
@@ -1296,7 +1296,7 @@ describe("runtime final review contracts", () => {
 						stateOwnerRefs: [],
 						lifecycleOwnerRefs: [],
 						failurePath: "Out-of-order completion overwrites newer state.",
-						oracleRefs: ["tests/runtime/final-review-contracts.test.ts"],
+						testEvidenceRefs: ["tests/runtime/final-review-contracts.test.ts"],
 						validationRefs: ["bun test"],
 					},
 				],
@@ -1353,7 +1353,7 @@ describe("runtime final review contracts", () => {
 		expect(
 			describeFinalReviewCoverageFailure(session, worker, baseReview),
 		).toContain(
-			"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+			"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_evidence_authenticity",
 		);
 
 		const behaviorChecks = [
@@ -1366,7 +1366,7 @@ describe("runtime final review contracts", () => {
 				lifecycleOwnerRefs: [],
 				failurePath:
 					"Earlier deferred click overrides the later selected session.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
@@ -1378,7 +1378,7 @@ describe("runtime final review contracts", () => {
 				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
 				failurePath:
 					"Repeated panel entry double-registers scene lifecycle callbacks.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
@@ -1390,19 +1390,20 @@ describe("runtime final review contracts", () => {
 				stateOwnerRefs: ["src/game/navigation.ts"],
 				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
 				failurePath: "Selected session is committed before scene.start throws.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
-				riskClass: "test_oracle_authenticity" as const,
+				riskClass: "test_evidence_authenticity" as const,
 				result: "passed" as const,
-				invariant: "The test oracle exercises the panel-to-scene failure path.",
+				invariant:
+					"The test evidence exercises the panel-to-scene failure path.",
 				entrypointRefs: ["tests/sessionPanelActions.test.ts"],
 				stateOwnerRefs: [],
 				lifecycleOwnerRefs: [],
 				failurePath:
-					"A smoke-only oracle would miss ordering and rollback regressions.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					"Smoke-only evidence would miss ordering and rollback regressions.",
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 		];
@@ -1413,13 +1414,13 @@ describe("runtime final review contracts", () => {
 					"async_event_ordering" as const,
 					"lifecycle_reentrancy" as const,
 					"state_commit_rollback" as const,
-					"test_oracle_authenticity" as const,
+					"test_evidence_authenticity" as const,
 				],
 				proves: [
-					"Panel action ordering, scene lifecycle handoff, rollback, and oracle coverage were exercised.",
+					"Panel action ordering, scene lifecycle handoff, rollback, and test evidence coverage were exercised.",
 				],
 				gaps: [],
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 			},
 		];
 
@@ -1441,7 +1442,7 @@ describe("runtime final review contracts", () => {
 						behaviorClasses: [],
 						proves: [],
 						gaps: [],
-						oracleRefs: [],
+						testEvidenceRefs: [],
 					},
 				],
 			}),
@@ -1610,14 +1611,14 @@ describe("runtime final review contracts", () => {
 			integrationChecks: [
 				"Checked panel action, navigation state, and scene lifecycle integration.",
 			],
-			regressionChecks: ["Checked the behavior regression oracle."],
+			regressionChecks: ["Checked the behavior regression evidence."],
 			remainingGaps: [],
 		};
 
 		expect(
 			describeFinalReviewCoverageFailure(session, worker, baseReview),
 		).toContain(
-			"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+			"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_evidence_authenticity",
 		);
 
 		const behaviorChecks = [
@@ -1629,7 +1630,7 @@ describe("runtime final review contracts", () => {
 				stateOwnerRefs: ["src/game/navigation.ts"],
 				lifecycleOwnerRefs: [],
 				failurePath: "Earlier deferred click overrides later user intent.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
@@ -1640,7 +1641,7 @@ describe("runtime final review contracts", () => {
 				stateOwnerRefs: [],
 				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
 				failurePath: "Panel re-entry registers duplicate scene callbacks.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
@@ -1651,18 +1652,19 @@ describe("runtime final review contracts", () => {
 				stateOwnerRefs: ["src/game/navigation.ts"],
 				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
 				failurePath: "State commits before scene startup throws.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
-				riskClass: "test_oracle_authenticity" as const,
+				riskClass: "test_evidence_authenticity" as const,
 				result: "passed" as const,
-				invariant: "The test oracle exercises ordering and rollback behavior.",
+				invariant:
+					"The test evidence exercises ordering and rollback behavior.",
 				entrypointRefs: ["tests/sessionPanelActions.test.ts"],
 				stateOwnerRefs: [],
 				lifecycleOwnerRefs: [],
 				failurePath: "Generic validation would miss stale action ordering.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 		];
@@ -1673,11 +1675,13 @@ describe("runtime final review contracts", () => {
 					"async_event_ordering" as const,
 					"lifecycle_reentrancy" as const,
 					"state_commit_rollback" as const,
-					"test_oracle_authenticity" as const,
+					"test_evidence_authenticity" as const,
 				],
-				proves: ["Panel ordering, lifecycle, rollback, and oracle coverage."],
+				proves: [
+					"Panel ordering, lifecycle, rollback, and test evidence coverage.",
+				],
 				gaps: [],
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 			},
 		];
 
@@ -1696,14 +1700,14 @@ describe("runtime final review contracts", () => {
 					check.riskClass === "async_event_ordering"
 						? {
 								...check,
-								oracleRefs: ["tests/unreviewedBehavior.test.ts"],
+								testEvidenceRefs: ["tests/unreviewedBehavior.test.ts"],
 							}
 						: check,
 				),
 				validationCoverage,
 			}),
 		).toContain(
-			"behaviorChecks[0].oracleRefs includes 'tests/unreviewedBehavior.test.ts', which is not grounded",
+			"behaviorChecks[0].testEvidenceRefs includes 'tests/unreviewedBehavior.test.ts', which is not grounded",
 		);
 
 		expect(
@@ -1764,7 +1768,9 @@ describe("runtime final review contracts", () => {
 					stateOwnerRefs: [],
 					lifecycleOwnerRefs: [],
 					failurePath: "Out-of-order completion overwrites newer state.",
-					oracleRefs: [" ./tests/runtime/final-review-contracts.test.ts "],
+					testEvidenceRefs: [
+						" ./tests/runtime/final-review-contracts.test.ts ",
+					],
 					validationRefs: ["bun test"],
 				},
 			],
@@ -1774,7 +1780,7 @@ describe("runtime final review contracts", () => {
 		expect(parsed.data.behaviorChecks?.[0]?.entrypointRefs).toEqual([
 			"src/shell/sessionPanels.ts:10-20",
 		]);
-		expect(parsed.data.behaviorChecks?.[0]?.oracleRefs).toEqual([
+		expect(parsed.data.behaviorChecks?.[0]?.testEvidenceRefs).toEqual([
 			"tests/runtime/final-review-contracts.test.ts",
 		]);
 
@@ -1787,11 +1793,114 @@ describe("runtime final review contracts", () => {
 				behaviorChecks: [
 					{
 						...parsedBehaviorCheck,
-						oracleRefs: ["../escape.test.ts"],
+						testEvidenceRefs: ["../escape.test.ts"],
 					},
 				],
 			}).success,
 		).toBe(false);
+	});
+
+	test("accepts prior final-review terminology and emits canonical evidence fields", () => {
+		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			reviewDepth: "broad",
+			reviewedSurfaces: ["changed_files", "tests"],
+			evidenceSummary: "Reviewed changed files and tests.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/shell/sessionPanels.ts"],
+				validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+			},
+			reviewContextPack: {
+				task: "Review runtime behavior",
+				changedFiles: ["src/shell/sessionPanels.ts"],
+				includedContext: [
+					{
+						path: "tests/sessionPanelActions.test.ts",
+						reason: "test_oracle",
+						summary: "Prior discovery reason maps to test evidence.",
+					},
+				],
+			},
+			behaviorChecks: [
+				{
+					riskClass: "test_oracle_authenticity",
+					result: "passed",
+					invariant: "Tests exercise the product behavior path.",
+					entrypointRefs: ["src/shell/sessionPanels.ts"],
+					stateOwnerRefs: [],
+					lifecycleOwnerRefs: [],
+					failurePath: "Generic validation would miss stale action ordering.",
+					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+				},
+			],
+			validationCoverage: [
+				{
+					command: "bun test tests/sessionPanelActions.test.ts",
+					behaviorClasses: ["test_oracle_authenticity"],
+					proves: ["Panel action ordering was exercised."],
+					gaps: [],
+					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				},
+			],
+		});
+
+		expect(parsed.success).toBe(true);
+		if (!parsed.success) return;
+		const [behaviorCheck] = parsed.data.behaviorChecks ?? [];
+		const [coverage] = parsed.data.validationCoverage ?? [];
+		expect(behaviorCheck?.riskClass).toBe("test_evidence_authenticity");
+		expect(behaviorCheck?.testEvidenceRefs).toEqual([
+			"tests/sessionPanelActions.test.ts",
+		]);
+		expect(
+			(behaviorCheck as { oracleRefs?: string[] } | undefined)?.oracleRefs,
+		).toBe(undefined);
+		expect(coverage?.behaviorClasses).toEqual(["test_evidence_authenticity"]);
+		expect(coverage?.testEvidenceRefs).toEqual([
+			"tests/sessionPanelActions.test.ts",
+		]);
+		expect(
+			(coverage as { oracleRefs?: string[] } | undefined)?.oracleRefs,
+		).toBe(undefined);
+		expect(parsed.data.reviewContextPack?.includedContext[0]?.reason).toBe(
+			"test_evidence",
+		);
+	});
+
+	test("rejects conflicting prior and canonical test evidence refs", () => {
+		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			reviewDepth: "broad",
+			reviewedSurfaces: ["changed_files"],
+			evidenceSummary: "Reviewed changed files.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/shell/sessionPanels.ts"],
+				validationCommands: ["bun test"],
+			},
+			behaviorChecks: [
+				{
+					riskClass: "test_evidence_authenticity",
+					result: "passed",
+					invariant: "Tests exercise the product behavior path.",
+					entrypointRefs: ["src/shell/sessionPanels.ts"],
+					stateOwnerRefs: [],
+					lifecycleOwnerRefs: [],
+					failurePath: "Generic validation would miss stale action ordering.",
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+					oracleRefs: ["tests/other.test.ts"],
+					validationRefs: ["bun test"],
+				},
+			],
+		});
+
+		expect(parsed.success).toBe(false);
 	});
 
 	test("allows non-risk simple final review without behavior accounting", () => {
@@ -1812,7 +1921,7 @@ describe("runtime final review contracts", () => {
 				evidenceSummary:
 					"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 				validationAssessment:
-					"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+					"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
@@ -1872,7 +1981,7 @@ describe("runtime final review contracts", () => {
 					stateOwnerRefs: ["src/game/navigation.ts"],
 					lifecycleOwnerRefs: [],
 					failurePath: "Stale deferred action wins.",
-					oracleRefs: [],
+					testEvidenceRefs: [],
 					validationRefs: ["bun test tests/missing.test.ts"],
 				},
 				{
@@ -1883,7 +1992,7 @@ describe("runtime final review contracts", () => {
 					stateOwnerRefs: [],
 					lifecycleOwnerRefs: [],
 					failurePath: "No lifecycle entrypoint exists in this slice.",
-					oracleRefs: [],
+					testEvidenceRefs: [],
 					validationRefs: [],
 				},
 				{
@@ -1894,18 +2003,18 @@ describe("runtime final review contracts", () => {
 					stateOwnerRefs: ["src/game/navigation.ts"],
 					lifecycleOwnerRefs: [],
 					failurePath: "State commits before navigation throws.",
-					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 					validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 				},
 				{
-					riskClass: "test_oracle_authenticity" as const,
+					riskClass: "test_evidence_authenticity" as const,
 					result: "passed" as const,
-					invariant: "Oracle exercises the behavior path.",
+					invariant: "Test evidence exercises the behavior path.",
 					entrypointRefs: ["tests/sessionPanelActions.test.ts"],
 					stateOwnerRefs: [],
 					lifecycleOwnerRefs: [],
 					failurePath: "A generic smoke test would miss stale actions.",
-					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 					validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 				},
 			],
@@ -1915,7 +2024,7 @@ describe("runtime final review contracts", () => {
 					behaviorClasses: ["async_event_ordering" as const],
 					proves: ["Invalid command should not ground coverage."],
 					gaps: [],
-					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				},
 			],
 		};
@@ -1980,7 +2089,7 @@ describe("runtime final review contracts", () => {
 		);
 
 		expect(failure).toContain(
-			"must account for required behavior risk classes: lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+			"must account for required behavior risk classes: lifecycle_reentrancy, state_commit_rollback, test_evidence_authenticity",
 		);
 	});
 
@@ -2004,7 +2113,7 @@ describe("runtime final review contracts", () => {
 				includedContext: [
 					{
 						path: " ./tests/runtime/final-review-contracts.test.ts ",
-						reason: "test_oracle",
+						reason: "test_evidence",
 						summary: "  Runtime final-review contract coverage.  ",
 					},
 				],
@@ -2135,7 +2244,7 @@ describe("runtime final review contracts", () => {
 			evidenceSummary:
 				"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 			validationAssessment:
-				"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+				"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 			evidenceRefs: {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
@@ -2148,7 +2257,7 @@ describe("runtime final review contracts", () => {
 			],
 			remainingGaps: [],
 			status: "approved",
-			summary: "Final review checked the runtime path and validation oracle.",
+			summary: "Final review checked the runtime path and validation evidence.",
 		});
 		expect(reviewed.ok).toBe(true);
 		if (!reviewed.ok) return;
@@ -2189,7 +2298,7 @@ describe("runtime final review contracts", () => {
 				evidenceSummary:
 					"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 				validationAssessment:
-					"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+					"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
@@ -2246,7 +2355,7 @@ describe("runtime final review contracts", () => {
 			evidenceSummary:
 				"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 			validationAssessment:
-				"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+				"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 			evidenceRefs: {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
@@ -2259,7 +2368,7 @@ describe("runtime final review contracts", () => {
 			],
 			remainingGaps: [],
 			status: "approved",
-			summary: "Final review checked the runtime path and validation oracle.",
+			summary: "Final review checked the runtime path and validation evidence.",
 		});
 		expect(reviewed.ok).toBe(true);
 		if (!reviewed.ok) return;
@@ -2300,7 +2409,7 @@ describe("runtime final review contracts", () => {
 				evidenceSummary:
 					"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 				validationAssessment:
-					"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+					"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
@@ -2313,7 +2422,8 @@ describe("runtime final review contracts", () => {
 				],
 				remainingGaps: [],
 				status: "passed",
-				summary: "Final review checked the runtime path and validation oracle.",
+				summary:
+					"Final review checked the runtime path and validation evidence.",
 				blockingFindings: [],
 			},
 		});
@@ -2409,7 +2519,7 @@ describe("runtime final review contracts", () => {
 				evidenceSummary:
 					"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 				validationAssessment:
-					"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.",
+					"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
@@ -2422,7 +2532,8 @@ describe("runtime final review contracts", () => {
 				],
 				remainingGaps: [],
 				status: "passed",
-				summary: "Final review checked the runtime path and validation oracle.",
+				summary:
+					"Final review checked the runtime path and validation evidence.",
 				blockingFindings: [],
 			},
 		});

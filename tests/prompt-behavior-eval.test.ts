@@ -138,7 +138,7 @@ describe("prompt behavior eval corpus", () => {
 				],
 				coverageNotes: [
 					"Selected context focused on audit prompts; install lifecycle was explicitly excluded by the packet.",
-					"Failure-mode review covered packet boundary preservation and test-oracle authenticity.",
+					"Failure-mode review covered packet boundary preservation and test-evidence authenticity.",
 				],
 				validationRun: [
 					{
@@ -187,7 +187,7 @@ describe("prompt behavior eval corpus", () => {
 						],
 						requireEntrypointRefs: true,
 						requireStateOrLifecycleOwnerRefs: true,
-						requireOracleOrGap: true,
+						requireTestEvidenceOrGap: true,
 					},
 				],
 			},
@@ -225,7 +225,7 @@ describe("prompt behavior eval corpus", () => {
 						lifecycleOwnerRefs: [],
 						failurePath:
 							"panel click -> deferred registration -> pending action can let stale first action overrides later user intent.",
-						oracleRefs: ["tests/sessionPanelActions.ts:1-140"],
+						testEvidenceRefs: ["tests/sessionPanelActions.ts:1-140"],
 						validationRefs: [],
 					},
 				],

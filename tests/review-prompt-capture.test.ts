@@ -421,7 +421,7 @@ describe("review prompt capture harness", () => {
 						lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts:1-90"],
 						failurePath:
 							"panel click -> deferred registration -> pending action can let stale first action overrides later user intent.",
-						oracleRefs: [
+						testEvidenceRefs: [
 							"tests/sessionPanelActions.ts:1-140",
 							"tests/fullFlowSmoke.ts:1-160",
 						],
@@ -439,7 +439,7 @@ describe("review prompt capture harness", () => {
 						lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts:1-90"],
 						failurePath:
 							"scene start/setup invokes scene.start(...) and throws before rollback is proven.",
-						oracleRefs: [],
+						testEvidenceRefs: [],
 						validationRefs: [],
 						remainingGap:
 							"Need a throw-path test for scene start setup rollback.",
@@ -454,13 +454,13 @@ describe("review prompt capture harness", () => {
 						lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts:1-90"],
 						failurePath:
 							"session/current-scene commits before scene.start(...) throws require rollback coverage.",
-						oracleRefs: [],
+						testEvidenceRefs: [],
 						validationRefs: [],
 						remainingGap:
 							"Existing tests do not prove rollback after failed scene start.",
 					},
 					{
-						riskClass: "test_oracle_authenticity",
+						riskClass: "test_evidence_authenticity",
 						result: "gap_recorded",
 						invariant: "Rejection tests must exercise the normal product path.",
 						entrypointRefs: ["tests/sessionPanelActions.ts:1-140"],
@@ -468,10 +468,10 @@ describe("review prompt capture harness", () => {
 						lifecycleOwnerRefs: [],
 						failurePath:
 							"Existing rejection tests do not prove concurrent interleaving or rollback semantics.",
-						oracleRefs: [],
+						testEvidenceRefs: [],
 						validationRefs: [],
 						remainingGap:
-							"Add a product-path oracle for concurrent interleaving and rollback.",
+							"Add a product-path evidence for concurrent interleaving and rollback.",
 					},
 				],
 				validationCoverage: [
@@ -482,11 +482,11 @@ describe("review prompt capture harness", () => {
 							"async_event_ordering",
 							"lifecycle_reentrancy",
 							"state_commit_rollback",
-							"test_oracle_authenticity",
+							"test_evidence_authenticity",
 						],
 						proves: ["Basic rejection behavior is represented."],
 						gaps: ["Concurrent interleaving and rollback are not proven."],
-						oracleRefs: ["tests/sessionPanelActions.ts:1-140"],
+						testEvidenceRefs: ["tests/sessionPanelActions.ts:1-140"],
 					},
 				],
 				validationRun: [
@@ -543,7 +543,7 @@ describe("review prompt capture harness", () => {
 							],
 							coverageNotes: [
 								"Downgraded from full audit because not every test surface was directly reviewed.",
-								"Failure-mode review covered test-oracle authenticity for captured outputs; runtime lifecycle and UI interaction classes were outside this focused prompt-contract capture.",
+								"Failure-mode review covered test-evidence authenticity for captured outputs; runtime lifecycle and UI interaction classes were outside this focused prompt-contract capture.",
 							],
 							validationRun: [
 								{

@@ -129,7 +129,7 @@ const expectedEnvelopeSnapshot = {
 				evidenceSummary:
 					"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 				validationAssessment:
-					"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
+					"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression evidence; no unchecked behavior gap remains for this release-surface fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["dist/index.js"],
 					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
@@ -138,7 +138,7 @@ const expectedEnvelopeSnapshot = {
 					"Checked dist/index.js release entrypoint against the plugin load boundary.",
 				],
 				regressionChecks: [
-					"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
+					"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
 				],
 				remainingGaps: [],
 				status: "approved",
@@ -272,7 +272,7 @@ const expectedEnvelopeSnapshot = {
 				evidenceSummary:
 					"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 				validationAssessment:
-					"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
+					"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression evidence; no unchecked behavior gap remains for this release-surface fixture.",
 				evidenceRefs: {
 					changedArtifacts: ["dist/index.js"],
 					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
@@ -281,7 +281,7 @@ const expectedEnvelopeSnapshot = {
 					"Checked dist/index.js release entrypoint against the plugin load boundary.",
 				],
 				regressionChecks: [
-					"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
+					"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
 				],
 				remainingGaps: [],
 				status: "approved",
@@ -523,7 +523,7 @@ describe("cross-area manual flow", () => {
 					evidenceSummary:
 						"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 					validationAssessment:
-						"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
+						"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression evidence; no unchecked behavior gap remains for this release-surface fixture.",
 					evidenceRefs: {
 						changedArtifacts: ["dist/index.js"],
 						validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
@@ -532,7 +532,7 @@ describe("cross-area manual flow", () => {
 						"Checked dist/index.js release entrypoint against the plugin load boundary.",
 					],
 					regressionChecks: [
-						"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
+						"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
 					],
 					remainingGaps: [],
 					status: "approved",
@@ -580,7 +580,7 @@ describe("cross-area manual flow", () => {
 						evidenceSummary:
 							"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
 						validationAssessment:
-							"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression oracle; no unchecked behavior gap remains for this release-surface fixture.",
+							"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression evidence; no unchecked behavior gap remains for this release-surface fixture.",
 						evidenceRefs: {
 							changedArtifacts: ["dist/index.js"],
 							validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
@@ -589,7 +589,7 @@ describe("cross-area manual flow", () => {
 							"Checked dist/index.js release entrypoint against the plugin load boundary.",
 						],
 						regressionChecks: [
-							"Checked dist-load smoke validation covers the bundle-load regression oracle cited by the fixture.",
+							"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
 						],
 						remainingGaps: [],
 						status: "passed",

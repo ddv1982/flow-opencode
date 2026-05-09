@@ -1,4 +1,6 @@
 import { buildReviewContextPack } from "../domain";
+import type { ReviewContextPackInput } from "../domain/review-content-discovery";
+import type { RecordReviewerDecisionInput } from "../domain/reviewer-decision";
 import type {
 	FlowReviewRecordFeatureArgs,
 	FlowReviewRecordFinalArgs,
@@ -23,7 +25,7 @@ export function normalizeFeatureReviewDecision(
 
 export function normalizeFinalReviewDecision(
 	decision: FlowReviewRecordFinalArgs,
-) {
+): RecordReviewerDecisionInput {
 	return {
 		scope: "final" as const,
 		status: decision.status,
@@ -48,14 +50,20 @@ export function normalizeFinalReviewDecision(
 			: {}),
 		...(decision.reviewContextPack
 			? {
-					reviewContextPack: buildReviewContextPack(decision.reviewContextPack),
+					reviewContextPack: buildReviewContextPack(
+						decision.reviewContextPack as ReviewContextPackInput,
+					),
 				}
 			: {}),
 		integrationChecks: decision.integrationChecks ?? [],
 		regressionChecks: decision.regressionChecks ?? [],
 		remainingGaps: decision.remainingGaps ?? [],
-		behaviorChecks: decision.behaviorChecks ?? [],
-		validationCoverage: decision.validationCoverage ?? [],
+		behaviorChecks:
+			(decision.behaviorChecks as RecordReviewerDecisionInput["behaviorChecks"]) ??
+			[],
+		validationCoverage:
+			(decision.validationCoverage as RecordReviewerDecisionInput["validationCoverage"]) ??
+			[],
 		blockingFindings: decision.blockingFindings ?? [],
 		followUps: decision.followUps ?? [],
 		suggestedValidation: decision.suggestedValidation ?? [],

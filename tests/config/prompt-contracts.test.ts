@@ -343,7 +343,7 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"adversarial failure-mode classes",
 		);
-		expect(FLOW_REVIEWER_CONTRACT).toContain("test-oracle authenticity");
+		expect(FLOW_REVIEWER_CONTRACT).toContain("test-evidence authenticity");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Do not write code");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
 			"read-only leaf approval/reporting surface by default; do not recursively delegate",

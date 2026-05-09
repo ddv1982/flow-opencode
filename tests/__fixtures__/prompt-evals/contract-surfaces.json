@@ -48,7 +48,7 @@
 			"include reviewDepth matching deliveryPolicy.finalReviewPolicy",
 			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving",
 			"adversarial failure-mode classes",
-			"test-oracle authenticity"
+			"test-evidence authenticity"
 		],
 		"forbiddenSnippets": ["reviewer implements fixes directly"]
 	},

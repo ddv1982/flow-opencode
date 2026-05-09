@@ -19,7 +19,7 @@ export const REVIEW_DISCOVERY_REASONS = [
 	"state_owner",
 	"lifecycle_owner",
 	"architectural_neighbor",
-	"test_oracle",
+	"test_evidence",
 	"validation_evidence",
 ] as const;
 
@@ -32,6 +32,13 @@ export type ReviewIncludedContext = {
 	reason: ReviewDiscoveryReason;
 	surface?: ReviewDiscoverySurface | undefined;
 	summary?: string | undefined;
+};
+
+export type ReviewIncludedContextInput = Omit<
+	ReviewIncludedContext,
+	"reason"
+> & {
+	reason: string;
 };
 
 export type ReviewContextRelationship = {
@@ -63,7 +70,7 @@ export type ReviewContextPackInput = {
 	task: string;
 	compareBase?: string | undefined;
 	changedFiles?: readonly string[] | undefined;
-	includedContext?: readonly ReviewIncludedContext[] | undefined;
+	includedContext?: readonly ReviewIncludedContextInput[] | undefined;
 	relationships?: readonly ReviewContextRelationship[] | undefined;
 	validationEvidence?: readonly ReviewValidationEvidence[] | undefined;
 	suggestedValidation?: readonly string[] | undefined;
@@ -92,9 +99,18 @@ const REVIEW_DISCOVERY_REASON_SURFACES: Record<
 	state_owner: ["shared_surfaces"],
 	lifecycle_owner: ["operator_surfaces"],
 	architectural_neighbor: ["integration_points", "shared_surfaces"],
-	test_oracle: ["tests"],
+	test_evidence: ["tests"],
 	validation_evidence: ["validation_evidence"],
 };
+
+export function normalizeReviewDiscoveryReason(
+	reason: string,
+): ReviewDiscoveryReason | null {
+	const normalized = reason === "test_oracle" ? "test_evidence" : reason;
+	return REVIEW_DISCOVERY_REASONS.includes(normalized as ReviewDiscoveryReason)
+		? (normalized as ReviewDiscoveryReason)
+		: null;
+}
 
 function normalizeNonEmptyString(value: string): string {
 	return value.trim();
@@ -118,7 +134,7 @@ function uniqueNormalizedStrings(
 }
 
 function normalizeIncludedContext(
-	input: readonly ReviewIncludedContext[] | undefined,
+	input: readonly ReviewIncludedContextInput[] | undefined,
 	changedFiles: readonly string[],
 ): ReviewIncludedContext[] {
 	const contextByPathAndReason = new Map<string, ReviewIncludedContext>();
@@ -133,14 +149,18 @@ function normalizeIncludedContext(
 
 	for (const context of input ?? []) {
 		const path = normalizeSafeReviewArtifactPath(context.path);
+		const reason = normalizeReviewDiscoveryReason(context.reason);
 		if (path.length === 0) {
 			continue;
 		}
+		if (!reason) {
+			continue;
+		}
 		const summary = context.summary?.trim();
-		const key = `${path}\u0000${context.reason}`;
+		const key = `${path}\u0000${reason}`;
 		contextByPathAndReason.set(key, {
 			path,
-			reason: context.reason,
+			reason,
 			...(context.surface ? { surface: context.surface } : {}),
 			...(summary ? { summary } : {}),
 		});

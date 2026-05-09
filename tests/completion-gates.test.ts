@@ -304,7 +304,7 @@ describe("completion gates", () => {
 					reviewFindingClosures: [
 						closedReviewFindingClosure({
 							status: "partially_closed",
-							residualRisk: "Ordering coverage still needs a stronger oracle.",
+							residualRisk: "Ordering coverage still needs stronger evidence.",
 						}),
 					],
 				}),
@@ -647,7 +647,7 @@ describe("completion gates", () => {
 							lifecycleOwnerRefs: [],
 							failurePath:
 								"A known rollback defect is still unresolved after validation.",
-							oracleRefs: [],
+							testEvidenceRefs: [],
 							validationRefs: [],
 						},
 					],
@@ -687,7 +687,7 @@ describe("completion gates", () => {
 							lifecycleOwnerRefs: [],
 							failurePath:
 								"Ungrounded or unrecorded evidence cannot prove the final path.",
-							oracleRefs: [],
+							testEvidenceRefs: [],
 							validationRefs: ["bun run missing"],
 						},
 					],
@@ -1509,7 +1509,7 @@ describe("completion gates", () => {
 		if (!result.ok) {
 			expect(result.recovery?.errorCode).toBe("failing_final_review");
 			expect(result.message).toContain(
-				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_oracle_authenticity",
+				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_evidence_authenticity",
 			);
 		}
 	});
@@ -1842,7 +1842,7 @@ describe("completion gates", () => {
 				stateOwnerRefs: ["src/game/navigation.ts"],
 				lifecycleOwnerRefs: [],
 				failurePath: "Earlier deferred click overrides later user intent.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
@@ -1853,7 +1853,7 @@ describe("completion gates", () => {
 				stateOwnerRefs: [],
 				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
 				failurePath: "Panel re-entry registers duplicate scene callbacks.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
@@ -1864,18 +1864,19 @@ describe("completion gates", () => {
 				stateOwnerRefs: ["src/game/navigation.ts"],
 				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
 				failurePath: "State commits before scene startup throws.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 			{
-				riskClass: "test_oracle_authenticity" as const,
+				riskClass: "test_evidence_authenticity" as const,
 				result: "passed" as const,
-				invariant: "The test oracle exercises ordering and rollback behavior.",
+				invariant:
+					"The test evidence exercises ordering and rollback behavior.",
 				entrypointRefs: ["tests/sessionPanelActions.test.ts"],
 				stateOwnerRefs: [],
 				lifecycleOwnerRefs: [],
 				failurePath: "Generic validation would miss stale action ordering.",
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			},
 		];
@@ -1886,11 +1887,13 @@ describe("completion gates", () => {
 					"async_event_ordering" as const,
 					"lifecycle_reentrancy" as const,
 					"state_commit_rollback" as const,
-					"test_oracle_authenticity" as const,
+					"test_evidence_authenticity" as const,
 				],
-				proves: ["Panel ordering, lifecycle, rollback, and oracle coverage."],
+				proves: [
+					"Panel ordering, lifecycle, rollback, and test evidence coverage.",
+				],
 				gaps: [],
-				oracleRefs: ["tests/sessionPanelActions.test.ts"],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 			},
 		];
 		const riskyReviewFields: Pick<
@@ -1925,7 +1928,7 @@ describe("completion gates", () => {
 			integrationChecks: [
 				"Checked panel action, navigation state, and scene lifecycle integration.",
 			],
-			regressionChecks: ["Checked the behavior regression oracle."],
+			regressionChecks: ["Checked the behavior regression evidence."],
 			remainingGaps: [],
 		};
 		const riskyReviewScopeLedger: NonNullable<

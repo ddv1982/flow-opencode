@@ -1,7 +1,7 @@
 import type { Session, WorkerResult } from "../src/runtime/schema";
 
 export const CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT =
-	"bun test was mapped to the session-completion regression oracle; no unchecked behavior gap remains for this runtime-only fixture.";
+	"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.";
 
 const DEFAULT_REVIEWED_SURFACES: NonNullable<
 	NonNullable<WorkerResult["finalReview"]>["reviewedSurfaces"]
@@ -47,7 +47,7 @@ function finalReviewBase(): Omit<FinalReviewPayload, "status"> {
 			"Checked bun test covers the session-completion regression path cited by the fixture.",
 		],
 		remainingGaps: [],
-		summary: "Final review checked the runtime path and validation oracle.",
+		summary: "Final review checked the runtime path and validation evidence.",
 		blockingFindings: [],
 	};
 }

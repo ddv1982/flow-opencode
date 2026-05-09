@@ -455,7 +455,7 @@ describe("shared evidence packet primitives", () => {
 				],
 				behaviorChecks: [
 					{
-						riskClass: "test_oracle_authenticity",
+						riskClass: "test_evidence_authenticity",
 						result: "needs_fix",
 						invariant: "Validation exposes a behavior gap needing follow-up.",
 						entrypointRefs: ["src/runtime/schema.ts"],
@@ -463,17 +463,17 @@ describe("shared evidence packet primitives", () => {
 						lifecycleOwnerRefs: [],
 						failurePath:
 							"Observed gap requires a fix before confidence increases.",
-						oracleRefs: [],
+						testEvidenceRefs: [],
 						validationRefs: ["bun test tests/runtime/evidence-packets.test.ts"],
 					},
 				],
 				validationCoverage: [
 					{
 						command: "bun test tests/runtime/evidence-packets.test.ts",
-						behaviorClasses: ["test_oracle_authenticity"],
+						behaviorClasses: ["test_evidence_authenticity"],
 						proves: [],
 						gaps: ["Behavior regression still reproduces."],
-						oracleRefs: [],
+						testEvidenceRefs: [],
 					},
 				],
 			}).success,
@@ -485,14 +485,14 @@ describe("shared evidence packet primitives", () => {
 				validationRun: [],
 				behaviorChecks: [
 					{
-						riskClass: "test_oracle_authenticity",
+						riskClass: "test_evidence_authenticity",
 						result: "not_applicable",
 						invariant: "No behavior-risk assertion claimed.",
 						entrypointRefs: ["src/runtime/schema.ts"],
 						stateOwnerRefs: [],
 						lifecycleOwnerRefs: [],
 						failurePath: "No validation-backed behavior claim.",
-						oracleRefs: [],
+						testEvidenceRefs: [],
 						validationRefs: ["bun test tests/runtime/evidence-packets.test.ts"],
 					},
 				],
@@ -514,10 +514,10 @@ describe("shared evidence packet primitives", () => {
 				validationCoverage: [
 					{
 						command: "bun test tests/runtime/final-review-contracts.test.ts",
-						behaviorClasses: ["test_oracle_authenticity"],
+						behaviorClasses: ["test_evidence_authenticity"],
 						proves: [],
 						gaps: [],
-						oracleRefs: [],
+						testEvidenceRefs: [],
 					},
 				],
 			}).success,

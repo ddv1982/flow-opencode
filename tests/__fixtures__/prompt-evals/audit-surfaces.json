@@ -15,7 +15,7 @@
 			"downgrade achievedDepth",
 			"trace at least one concrete invariant or failure path",
 			"applicable adversarial failure-mode classes",
-			"test-oracle authenticity"
+			"test-evidence authenticity"
 		],
 		"forbiddenSnippets": [
 			"claim full_audit after spot-checking only a subset of surfaces",
