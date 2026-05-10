@@ -1,4 +1,4 @@
-import type { Session } from "../schema";
+import type { LatestFailedFlowAttempt, Session } from "../schema";
 import { deriveSessionViewModel, type SessionGuidance } from "../summary";
 import type { TaskProgressRow } from "../summary-projections";
 import type { DoctorCheck } from "./doctor-checks";
@@ -45,6 +45,23 @@ function toInlineSummaryText(value: string, maxLength: number): string {
 	return `${inline.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function renderLatestFailedAttemptLines(
+	failure: LatestFailedFlowAttempt | null | undefined,
+): string[] {
+	if (!failure) {
+		return [];
+	}
+	const repeated = failure.sameCategoryFailureCount
+		? ` (${failure.sameCategoryFailureCount} same-category attempts)`
+		: "";
+	return [
+		`Latest failed attempt: ${failure.tool} — ${failure.failureCategory}${repeated}.`,
+		...(failure.recoveryHint
+			? [`Fix: ${toInlineSummaryText(failure.recoveryHint, 160)}`]
+			: []),
+	];
+}
+
 function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
 	const selected = prioritizedTaskProgressRows(rows);
 	if (selected.length === 0) {
@@ -79,6 +96,10 @@ export function renderSessionStatusSummary(
 	if (viewModel.guidance.blocker) {
 		lines.splice(1, 0, `Blocker: ${viewModel.guidance.blocker}`);
 	}
+
+	lines.push(
+		...renderLatestFailedAttemptLines(viewModel.session?.latestFailedAttempt),
+	);
 
 	if (viewModel.session?.activeFeature) {
 		const activeFeature = viewModel.session.activeFeature;
@@ -116,6 +137,7 @@ export function renderDoctorSummary(
 	guidance: SessionGuidance,
 	nextStep: string,
 	nextCommand: string,
+	latestFailedAttempt?: LatestFailedFlowAttempt | null,
 ) {
 	const firstIssue =
 		checks.find((check) => check.status === "fail") ??
@@ -125,6 +147,7 @@ export function renderDoctorSummary(
 		return [
 			"Flow doctor: Ready.",
 			...(guidance.blocker ? [`Blocker: ${guidance.blocker}`] : []),
+			...renderLatestFailedAttemptLines(latestFailedAttempt),
 			`Next: ${nextStep}`,
 			`Command: ${nextCommand}`,
 		].join("\n");
@@ -137,6 +160,7 @@ export function renderDoctorSummary(
 	if (guidance.blocker) {
 		lines.push(`Blocker: ${guidance.blocker}`);
 	}
+	lines.push(...renderLatestFailedAttemptLines(latestFailedAttempt));
 	lines.push(`Next: ${nextStep}`);
 	lines.push(`Command: ${nextCommand}`);
 	return lines.join("\n");

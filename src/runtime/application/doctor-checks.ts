@@ -129,7 +129,7 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 			label: "Command and agent injection",
 			status: "pass",
 			summary:
-				"Flow can inject the expected commands, agents, and reasoningEffort budgets.",
+				"Flow can inject the expected commands, agents, and Flow-owned reasoningEffort budgets.",
 			remediation: null,
 			details: {
 				agentCount: Object.keys(config.agent ?? {}).length,
@@ -140,6 +140,11 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 					"flow-review": reviewAgent,
 				},
 				agentReasoningEffort,
+				reasoningEffortDiagnostic: {
+					verifies: "flow_injected_config",
+					doesNotVerify: "opencode_host_effective_session_reasoning",
+					hostObservation: "unsupported_by_documented_api",
+				},
 			},
 		};
 	}
@@ -149,9 +154,9 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 		label: "Command and agent injection",
 		status: "fail",
 		summary:
-			"Flow's injected command, agent, or reasoningEffort surface is incomplete or misrouted.",
+			"Flow's injected command, agent, or Flow-owned reasoningEffort surface is incomplete or misrouted.",
 		remediation:
-			"Rebuild or reinstall Flow, then confirm /flow-doctor is routed through flow-control, /flow-review is routed through flow-auditor, and Flow agents carry the expected reasoningEffort budgets.",
+			"Rebuild or reinstall Flow, then confirm /flow-doctor is routed through flow-control, /flow-review is routed through flow-auditor, and Flow agents carry the expected Flow-injected reasoningEffort budgets. This does not verify OpenCode host-effective or session-persisted reasoning.",
 		details: {
 			missingAgents,
 			missingCommands,
@@ -162,6 +167,11 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 			},
 			agentReasoningEffort,
 			reasoningMismatches,
+			reasoningEffortDiagnostic: {
+				verifies: "flow_injected_config",
+				doesNotVerify: "opencode_host_effective_session_reasoning",
+				hostObservation: "unsupported_by_documented_api",
+			},
 		},
 	};
 }

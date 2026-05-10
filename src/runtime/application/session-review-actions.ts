@@ -8,7 +8,10 @@ import {
 	isReviewerDecisionAlreadyRecorded,
 	recordReviewerDecision,
 } from "../transitions";
-import { okWithSession } from "./session-action-responses";
+import {
+	okWithSession,
+	withLatestFailedMutation,
+} from "./session-action-responses";
 import type { SessionMutationAction } from "./session-engine";
 import {
 	normalizeFeatureReviewDecision,
@@ -18,9 +21,13 @@ import {
 function reviewDecisionErrorResponse(failure: {
 	message: string;
 	recovery?: unknown;
+	session?: Session;
 }) {
 	return errorResponse(failure.message, {
 		...(failure.recovery ? { recovery: failure.recovery } : {}),
+		...(failure.session?.execution.lastFailedMutation
+			? { latestFailedAttempt: failure.session.execution.lastFailedMutation }
+			: {}),
 	});
 }
 
@@ -45,6 +52,11 @@ export function createFeatureReviewerDecisionAction(
 			isReviewerDecisionAlreadyRecorded(originalSession, normalizedDecision),
 		onNoopSuccess: reviewerDecisionNoopSuccess,
 		onError: reviewDecisionErrorResponse,
+		recordFailure: (session, failure) =>
+			withLatestFailedMutation("record_feature_review", session, failure),
+		clearFailedAttemptOnSuccess: {
+			tool: "flow_review_record_feature",
+		},
 	};
 }
 
@@ -62,5 +74,10 @@ export function createFinalReviewerDecisionAction(
 			isReviewerDecisionAlreadyRecorded(originalSession, normalizedDecision),
 		onNoopSuccess: reviewerDecisionNoopSuccess,
 		onError: reviewDecisionErrorResponse,
+		recordFailure: (session, failure) =>
+			withLatestFailedMutation("record_final_review", session, failure),
+		clearFailedAttemptOnSuccess: {
+			tool: "flow_review_record_final",
+		},
 	};
 }

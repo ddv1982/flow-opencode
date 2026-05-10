@@ -18,6 +18,7 @@ import {
 	saveSession,
 } from "../src/runtime/session";
 import { applyPlan, approvePlan } from "../src/runtime/transitions";
+import { createFinalReviewPayload } from "./final-review-fixtures";
 import {
 	createTempDirRegistry,
 	createTestTools,
@@ -209,6 +210,11 @@ describe("runtime operator tools", () => {
 				"flow-control": "low",
 				"flow-auditor": "high",
 			});
+			expect(configCheck?.details.reasoningEffortDiagnostic).toEqual({
+				verifies: "flow_injected_config",
+				doesNotVerify: "opencode_host_effective_session_reasoning",
+				hostObservation: "unsupported_by_documented_api",
+			});
 
 			expect(parsed.checks).toEqual(
 				expect.arrayContaining([
@@ -266,6 +272,14 @@ describe("runtime operator tools", () => {
 		expect(check.details?.reasoningMismatches).toEqual([
 			{ agent: "flow-worker", expected: "low", actual: "high" },
 		]);
+		expect(check.details?.reasoningEffortDiagnostic).toEqual({
+			verifies: "flow_injected_config",
+			doesNotVerify: "opencode_host_effective_session_reasoning",
+			hostObservation: "unsupported_by_documented_api",
+		});
+		expect(check.remediation).toContain(
+			"does not verify OpenCode host-effective or session-persisted reasoning",
+		);
 	});
 
 	test("flow_doctor config check reports missing flow-review routing", () => {
@@ -282,6 +296,210 @@ describe("runtime operator tools", () => {
 			"flow-doctor": "flow-control",
 			"flow-review": null,
 		});
+	});
+
+	test("failed completion attempts are persisted and surfaced in status, doctor, and history", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const [feature] = samplePlan().features;
+		if (!feature) {
+			throw new Error("Missing feature fixture.");
+		}
+		const scopedFeature = {
+			...feature,
+			reviewScope: [
+				{
+					id: "file:src/runtime/session.ts",
+					kind: "file" as const,
+					target: "src/runtime/session.ts",
+				},
+			],
+		};
+
+		await tools.flow_plan_start.execute(
+			{ goal: "Surface failed completion" },
+			toolContext(worktree),
+		);
+		const applyResponse = JSON.parse(
+			await tools.flow_plan_apply.execute(
+				{
+					plan: {
+						...samplePlan(),
+						features: [scopedFeature],
+						completionPolicy: { minCompletedFeatures: 1 },
+					},
+				},
+				toolContext(worktree),
+			),
+		);
+		expect(applyResponse.status).toBe("ok");
+		const approveResponse = JSON.parse(
+			await tools.flow_plan_approve.execute({}, toolContext(worktree)),
+		);
+		expect(approveResponse.status).toBe("ok");
+		const startResponse = JSON.parse(
+			await tools.flow_run_start.execute({}, toolContext(worktree)),
+		);
+		expect(startResponse.status).toBe("ok");
+
+		const completionPayload = {
+			contractVersion: "1",
+			status: "ok",
+			summary: "Tried to complete with incomplete final review evidence.",
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [
+				{
+					command: "bun test tests/runtime-operator-tools.test.ts",
+					status: "passed",
+					summary: "Targeted operator tests passed.",
+				},
+			],
+			validationScope: "broad",
+			reviewIterations: 1,
+			decisions: [],
+			nextStep: "Fix final review findings and rerun broad validation.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: scopedFeature.id,
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Feature review passed.",
+				blockingFindings: [],
+			},
+			finalReview: createFinalReviewPayload(),
+		};
+
+		const failedCompletion = JSON.parse(
+			await tools.flow_run_complete_feature.execute(
+				completionPayload,
+				toolContext(worktree),
+			),
+		);
+
+		expect(failedCompletion.status).toBe("error");
+		expect(failedCompletion.recovery.errorCode).toBe("failing_final_review");
+		expect(failedCompletion.latestFailedAttempt).toMatchObject({
+			tool: "flow_run_complete_feature",
+			phase: "execution",
+			status: "error",
+			failureCategory: "failing_final_review",
+		});
+
+		const saved = await loadSession(worktree);
+		expect(saved?.status).toBe("running");
+		expect(saved?.closure).toBeNull();
+		expect(saved?.execution.lastFailedMutation).toMatchObject({
+			tool: "flow_run_complete_feature",
+			failureCategory: "failing_final_review",
+		});
+
+		const unrelatedReviewSuccess = JSON.parse(
+			await tools.flow_review_record_feature.execute(
+				{
+					scope: "feature",
+					featureId: scopedFeature.id,
+					status: "approved",
+					summary: "Feature review recorded after the failed completion.",
+					blockingFindings: [],
+					followUps: [],
+					suggestedValidation: [],
+				},
+				toolContext(worktree),
+			),
+		);
+		expect(unrelatedReviewSuccess.status).toBe("ok");
+		const savedAfterUnrelatedSuccess = await loadSession(worktree);
+		expect(
+			savedAfterUnrelatedSuccess?.execution.lastFailedMutation,
+		).toMatchObject({
+			tool: "flow_run_complete_feature",
+			failureCategory: "failing_final_review",
+		});
+
+		const repeatedFailedCompletion = JSON.parse(
+			await tools.flow_run_complete_feature.execute(
+				completionPayload,
+				toolContext(worktree),
+			),
+		);
+		expect(repeatedFailedCompletion.status).toBe("error");
+		expect(repeatedFailedCompletion.latestFailedAttempt).toMatchObject({
+			tool: "flow_run_complete_feature",
+			failureCategory: "failing_final_review",
+			sameCategoryFailureCount: 2,
+		});
+
+		const savedAfterRepeat = await loadSession(worktree);
+		expect(savedAfterRepeat?.execution.lastFailedMutation).toMatchObject({
+			tool: "flow_run_complete_feature",
+			failureCategory: "failing_final_review",
+			sameCategoryFailureCount: 2,
+		});
+
+		const status = JSON.parse(
+			await tools.flow_status.execute({}, toolContext(worktree)),
+		);
+		expect(status.latestFailedAttempt).toMatchObject({
+			tool: "flow_run_complete_feature",
+			failureCategory: "failing_final_review",
+		});
+		expect(status.operatorSummary).toContain(
+			"Latest failed attempt: flow_run_complete_feature — failing_final_review (2 same-category attempts).",
+		);
+		expect(status.operatorSummary).toContain(
+			"Fix: Fix the final review findings, rerun broad validation",
+		);
+		expect(status.session.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "failed:flow_run_complete_feature:failing_final_review",
+					status: "blocked",
+					evidence: expect.arrayContaining(["same-category attempts: 2"]),
+				}),
+			]),
+		);
+
+		const doctor = JSON.parse(
+			await tools.flow_doctor.execute({}, toolContext(worktree)),
+		);
+		expect(doctor.latestFailedAttempt).toMatchObject({
+			failureCategory: "failing_final_review",
+		});
+		expect(doctor.operatorSummary).toContain(
+			"Latest failed attempt: flow_run_complete_feature — failing_final_review (2 same-category attempts).",
+		);
+
+		const history = JSON.parse(
+			await tools.flow_history.execute({}, toolContext(worktree)),
+		);
+		expect(history.latestFailedAttempt).toMatchObject({
+			failureCategory: "failing_final_review",
+		});
+		expect(history.failedAttemptGroups).toEqual([
+			expect.objectContaining({
+				tool: "flow_run_complete_feature",
+				failureCategory: "failing_final_review",
+				count: 2,
+				sessionIds: [savedAfterRepeat?.id],
+			}),
+		]);
+
+		const reset = JSON.parse(
+			await tools.flow_reset_feature.execute(
+				{ featureId: scopedFeature.id },
+				toolContext(worktree),
+			),
+		);
+		expect(reset.status).toBe("ok");
+		const statusAfterReset = JSON.parse(
+			await tools.flow_status.execute({}, toolContext(worktree)),
+		);
+		expect(statusAfterReset.latestFailedAttempt).toBeUndefined();
+		expect(statusAfterReset.operatorSummary).not.toContain(
+			"Latest failed attempt:",
+		);
 	});
 
 	test("flow_doctor supports a compact view for easier operator scanning", async () => {
@@ -612,7 +830,6 @@ describe("runtime operator tools", () => {
 				hiddenWorkspace,
 				sampleSession("Hidden workspace fixture"),
 			);
-
 			const response = await tools.flow_run_start.execute(
 				{},
 				toolContext("/", hiddenWorkspace, { ask }),

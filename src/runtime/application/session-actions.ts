@@ -26,6 +26,7 @@ import {
 	okWithSession,
 	startRunSuccess,
 	summarizedSession,
+	withLatestFailedMutation,
 } from "./session-action-responses";
 import {
 	DEFAULT_SESSION_RUNTIME_PORT,
@@ -239,7 +240,18 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 					status: "error",
 					summary: failure.message,
 					recovery: failure.recovery,
+					...(failure.session?.execution.lastFailedMutation
+						? {
+								latestFailedAttempt:
+									failure.session.execution.lastFailedMutation,
+							}
+						: {}),
 				}),
+				recordFailure: (session, failure) =>
+					withLatestFailedMutation("complete_run", session, failure),
+				clearFailedAttemptOnSuccess: {
+					tool: "flow_run_complete_feature",
+				},
 			};
 		},
 
@@ -250,6 +262,7 @@ export const SESSION_MUTATION_ACTION_HANDLERS: SessionMutationActionHandlerMap =
 				getSession: (value) => value,
 				onSuccess: (saved) =>
 					okWithSession(saved, `Reset feature '${featureId}'.`),
+				clearFailedAttemptOnSuccess: true,
 			};
 		},
 

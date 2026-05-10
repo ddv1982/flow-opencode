@@ -365,6 +365,50 @@ describe("runtime summary", () => {
 		expect(planningRow?.status).toBe("needs_input");
 	});
 
+	test("runtime summary surfaces latest failed attempts as blocked task progress", () => {
+		const session = buildSummaryFixtureSessions().running;
+		session.execution.lastFailedMutation = {
+			tool: "flow_run_complete_feature",
+			phase: "execution",
+			status: "error",
+			failureCategory: "missing_review_scope_accounting",
+			summary:
+				"Worker result cannot complete because reviewScopeLedger is missing.",
+			recoveryHint:
+				"Provide grounded reviewScopeLedger evidence before retrying.\nThen replace scaffold residualRisk with real review notes and rerun validation before submitting another completion attempt that should stay compact in operator summaries.",
+			occurredAt: "2026-05-10T12:00:00.000Z",
+			sameCategoryFailureCount: 2,
+		};
+
+		const summary = summarizeSession(session);
+		expect(summary.session?.latestFailedAttempt).toMatchObject({
+			tool: "flow_run_complete_feature",
+			failureCategory: "missing_review_scope_accounting",
+		});
+		expect(summary.session?.taskProgress).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "failed:flow_run_complete_feature:missing_review_scope_accounting",
+					ownerRole: "flow-runtime",
+					status: "blocked",
+					next: expect.stringContaining(
+						"Provide grounded reviewScopeLedger evidence before retrying.",
+					),
+				}),
+			]),
+		);
+		const operatorSummary = renderSessionStatusSummary(session);
+		expect(operatorSummary).toContain(
+			"Latest failed attempt: flow_run_complete_feature — missing_review_scope_accounting (2 same-category attempts).",
+		);
+		const fixLine = operatorSummary
+			.split("\n")
+			.find((line) => line.startsWith("Fix: "));
+		expect(fixLine).toContain(" / Then replace scaffold residualRisk");
+		expect(fixLine).toContain("…");
+		expect((fixLine ?? "").length).toBeLessThanOrEqual(165);
+	});
+
 	test("renderSessionStatusSummary keeps task progress lines single-line and concise", () => {
 		const session = buildSummaryFixtureSessions().running;
 		if (session.plan?.features[0]) {

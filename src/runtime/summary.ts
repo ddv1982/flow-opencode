@@ -78,6 +78,7 @@ export type SummarizedSessionDetails = {
 	lastFeatureResult: Session["execution"]["lastFeatureResult"];
 	lastReviewerDecision: Session["execution"]["lastReviewerDecision"];
 	lastValidationRun: Session["execution"]["lastValidationRun"];
+	latestFailedAttempt?: NonNullable<Session["execution"]["lastFailedMutation"]>;
 	lastOutcomeKind: Session["execution"]["lastOutcomeKind"];
 	nextCommand: string;
 	operator: SessionOperatorState;
@@ -154,6 +155,9 @@ function buildSessionDetails(
 		lastFeatureResult: session.execution.lastFeatureResult,
 		lastReviewerDecision: session.execution.lastReviewerDecision,
 		lastValidationRun: session.execution.lastValidationRun,
+		...(session.execution.lastFailedMutation
+			? { latestFailedAttempt: session.execution.lastFailedMutation }
+			: {}),
 		lastOutcomeKind: session.execution.lastOutcomeKind,
 		nextCommand: deriveNextCommand(session),
 		operator,

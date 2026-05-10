@@ -43,9 +43,11 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 - Returns the canonical runtime response describing the active feature or why nothing is runnable.`,
 	flow_run_complete_feature: `## Use when
 - Use only to persist the worker result for the active feature after its required validation/review gate is satisfied.
+- Treat the returned tool JSON as authoritative; OpenCode row metadata is provisional request-time context until this tool returns ok.
 - Normal features require targeted validation and clean featureReview; final completion requires broad validation and the finalReview required by deliveryPolicy.finalReviewPolicy.
 - For review/review_and_fix completion paths, include reviewScopeLedger accounting for every declared review scope target/domain.
 - If recovery details include reviewScopeLedger.exampleReviewScopeLedger, treat it as scaffold-only; do not replay unchanged.
+- If this tool returns status: "error", do not retry the same completion payload unchanged; after repeated same-category reviewScopeLedger failures, inspect flow_status or recovery details and repair evidenceRefs before retrying.
 - Provide the full worker result fields directly as this tool's arguments.
 
 ## Avoid when
@@ -56,6 +58,7 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 - Persists a worker result and returns the canonical runtime completion response.`,
 	flow_review_record_feature: `## Use when
 - Use to persist a reviewer decision for the current feature after the review is already complete.
+- Treat the returned tool JSON as authoritative; OpenCode row metadata is provisional request-time context until this tool returns ok.
 - Provide the full reviewer decision fields directly as this tool's arguments.
 
 ## Avoid when
@@ -65,8 +68,10 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 - Returns the canonical runtime response for the feature-level approval gate.`,
 	flow_review_record_final: `## Use when
 - Use only to persist the final reviewer decision for the final completion gate.
+- Treat the returned tool JSON as authoritative; OpenCode row metadata is provisional request-time context until this tool returns ok.
 - The decision must satisfy deliveryPolicy.finalReviewPolicy; review/review_and_fix approvals must include reviewScopeLedger accounting for every declared review scope target/domain.
 - If recovery details include reviewScopeLedger.exampleReviewScopeLedger, re-record only corrected evidence-grounded entries with truthful residualRisk.
+- If this tool returns status: "error", do not retry the same final-review payload unchanged; after repeated same-category reviewScopeLedger failures, inspect flow_status or recovery details and repair evidenceRefs before retrying.
 - Provide the full reviewer decision fields directly as this tool's arguments.
 
 ## Avoid when

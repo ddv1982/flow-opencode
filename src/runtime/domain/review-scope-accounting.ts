@@ -346,7 +346,9 @@ function validateLedgerEntries({
 		changedArtifacts.map((path) => normalizeArtifactPath(path)),
 	);
 	const reviewedContextPathSet = new Set(
-		reviewContextPackPaths(reviewContextPack),
+		reviewContextPackPaths(reviewContextPack).map((path) =>
+			normalizeArtifactPath(path),
+		),
 	);
 	const closedFindingSet = new Set(closedFindingRefs);
 	const seen = new Set<string>();
@@ -377,9 +379,6 @@ function validateLedgerEntries({
 				return `${entryLabel}.evidenceRefs includes '${evidenceRef}', which is not a safe relative path reference or recorded validation command.`;
 			}
 			const evidencePath = pathForReviewArtifactRef(trimmedEvidenceRef);
-			const targetSelfReferenceAllowed =
-				declaredScopeEntry.kind === "file" &&
-				evidencePath === normalizeArtifactPath(declaredScopeEntry.target);
 			if (
 				!reviewScopeTargetGroundsRef(
 					declaredScopeEntry,
@@ -387,8 +386,7 @@ function validateLedgerEntries({
 					evidencePath,
 				) ||
 				(!changedArtifactSet.has(evidencePath) &&
-					!reviewedContextPathSet.has(evidencePath) &&
-					!targetSelfReferenceAllowed)
+					!reviewedContextPathSet.has(evidencePath))
 			) {
 				return `${entryLabel}.evidenceRefs includes '${evidenceRef}', which is not grounded in this declared scope target, reviewed context, changed artifacts, or validation evidence.`;
 			}
@@ -559,6 +557,18 @@ export type ReviewScopeRecoveryDetails = {
 		validationCommands: string[];
 		closedFindingRefs: string[];
 	};
+	repairSteps: string[];
+	retryPolicy: {
+		doNotReplayScaffold: true;
+		mustChangeEvidenceRefs: boolean;
+	};
+	invalidLedgerGuidance?: Array<{
+		scopeId: string;
+		problem: "missing_scope_evidence" | "candidate_scope_evidence_available";
+		guidance: string;
+		requiredEvidenceSource: "changedArtifacts_or_reviewContextPack";
+		suggestedEvidenceRefs: string[];
+	}>;
 	exampleReviewScopeLedgerPurpose: typeof REVIEW_SCOPE_LEDGER_SCAFFOLD_PURPOSE;
 	exampleReviewScopeLedger: ReviewScopeLedgerEntry[];
 	notes: string[];
@@ -568,11 +578,10 @@ function uniqueStrings(values: readonly string[]): string[] {
 	return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function scopeRecoveryEntryFor(
+function evidenceRefsForScope(
 	scope: ReviewScopeTarget,
 	artifactCandidates: readonly string[],
-	validationCommands: readonly string[],
-): ReviewScopeLedgerEntry {
+): string[] {
 	const matchingArtifacts = artifactCandidates.filter((candidate) => {
 		if (!isSafeReviewArtifactRef(candidate)) {
 			return false;
@@ -583,13 +592,15 @@ function scopeRecoveryEntryFor(
 			pathForReviewArtifactRef(candidate),
 		);
 	});
-	const selfReference = normalizeArtifactPath(scope.target);
-	const evidenceRefs = uniqueStrings([
-		...(scope.kind === "file" && isSafeReviewArtifactRef(selfReference)
-			? [selfReference]
-			: []),
-		...matchingArtifacts,
-	]);
+	return uniqueStrings(matchingArtifacts);
+}
+
+function scopeRecoveryEntryFor(
+	scope: ReviewScopeTarget,
+	artifactCandidates: readonly string[],
+	validationCommands: readonly string[],
+): ReviewScopeLedgerEntry {
+	const evidenceRefs = evidenceRefsForScope(scope, artifactCandidates);
 	return {
 		scopeId: scope.id,
 		status: "reviewed_no_findings",
@@ -633,9 +644,30 @@ function buildReviewScopeRecoveryDetailsForDeclaredScope({
 			normalizedValidationCommands,
 		),
 	);
-	const scopesWithoutArtifactEvidence = exampleReviewScopeLedger
-		.filter((entry) => (entry.evidenceRefs ?? []).length === 0)
+	const invalidLedgerGuidance = declaredScope.map((scope) => {
+		const suggestedEvidenceRefs = evidenceRefsForScope(
+			scope,
+			artifactCandidates,
+		);
+		const hasScopeEvidence = suggestedEvidenceRefs.length > 0;
+		return {
+			scopeId: scope.id,
+			problem: hasScopeEvidence
+				? ("candidate_scope_evidence_available" as const)
+				: ("missing_scope_evidence" as const),
+			guidance: hasScopeEvidence
+				? `Use evidenceRefs for '${scope.id}' only after reviewing artifacts that ground '${scope.target}'; replace scaffold residualRisk with the actual residual risk for that scope.`
+				: `No changed artifact or reviewContextPack path currently grounds '${scope.target}'. Add a matching changed artifact or reviewContextPack entry, then cite that concrete ref in reviewScopeLedger before retry.`,
+			requiredEvidenceSource: "changedArtifacts_or_reviewContextPack" as const,
+			suggestedEvidenceRefs,
+		};
+	});
+	const scopesWithoutArtifactEvidence = invalidLedgerGuidance
+		.filter((entry) => entry.problem === "missing_scope_evidence")
 		.map((entry) => entry.scopeId);
+	const mustChangeEvidenceRefs = exampleReviewScopeLedger.some(
+		(entry) => evidenceRefsFor(entry).length === 0,
+	);
 	return {
 		declaredScopes: declaredScope.map((scope) => ({
 			scopeId: scope.id,
@@ -649,11 +681,25 @@ function buildReviewScopeRecoveryDetailsForDeclaredScope({
 			validationCommands: normalizedValidationCommands,
 			closedFindingRefs: normalizedClosedFindingRefs,
 		},
+		repairSteps: [
+			"Rebuild reviewScopeLedger; do not resubmit exampleReviewScopeLedger unchanged.",
+			"For every declaredScopes entry, include one ledger entry with the same scopeId.",
+			"Set evidenceRefs to safe relative artifact paths that are grounded in changedArtifacts or reviewContextPack for that exact scope; validation commands alone are not concrete scope evidence.",
+			"Use validationRefs only for commands that were recorded in validation evidence and that support the scoped review.",
+			"Replace scaffold residualRisk with a truthful residual-risk statement for the reviewed scope before retrying completion or final-review approval.",
+		],
+		retryPolicy: {
+			doNotReplayScaffold: true,
+			mustChangeEvidenceRefs,
+		},
+		...(invalidLedgerGuidance.length > 0 ? { invalidLedgerGuidance } : {}),
 		exampleReviewScopeLedgerPurpose: REVIEW_SCOPE_LEDGER_SCAFFOLD_PURPOSE,
 		exampleReviewScopeLedger,
 		notes: [
 			"exampleReviewScopeLedger is scaffold-only; do not replay unchanged.",
-			"Replace scaffold.",
+			mustChangeEvidenceRefs
+				? "Evidence refs must come from changed artifacts or review context that ground the declared scope; at least one declared scope has no generated evidenceRefs, so add grounded evidence before retry."
+				: "Generated evidenceRefs are grounded candidates; reuse them only after actual review and replace scaffold residualRisk with a truthful scope-specific statement.",
 			...(normalizedClosedFindingRefs.length > 0
 				? [
 						"Closed finding refs are candidates only; add findingRefs only when mapped to that scope.",

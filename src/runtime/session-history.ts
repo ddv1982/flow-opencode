@@ -33,6 +33,7 @@ export type SessionHistoryEntry = {
 	completedAt: string | null;
 	active: boolean;
 	path: string;
+	latestFailedAttempt: Session["execution"]["lastFailedMutation"] | null;
 	error?: string;
 };
 
@@ -75,6 +76,7 @@ function toHistoryEntry(
 		completedAt: session.timestamps.completedAt,
 		active: session.id === activeSessionId,
 		path: relative(worktree, path),
+		latestFailedAttempt: session.execution.lastFailedMutation ?? null,
 	};
 }
 
@@ -97,6 +99,7 @@ function toInvalidHistoryEntry(
 		completedAt: null,
 		active: id === activeSessionId,
 		path: relative(worktree, path),
+		latestFailedAttempt: null,
 		error: error instanceof Error ? error.message : String(error),
 	};
 }

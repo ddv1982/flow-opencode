@@ -82,6 +82,7 @@ export async function buildDoctorReport(
 		: null;
 	const sessionViewModel = deriveSessionViewModel(session);
 	const sessionSummary = sessionViewModel.session;
+	const latestFailedAttempt = sessionSummary?.latestFailedAttempt ?? null;
 	const sessionGuidance = sessionViewModel.guidance;
 	const sessionArtifactsCheck = await buildSessionArtifactsCheck(
 		workspaceRoot,
@@ -103,6 +104,7 @@ export async function buildDoctorReport(
 		sessionGuidance,
 		sessionGuidance.nextStep,
 		sessionGuidance.nextCommand,
+		latestFailedAttempt,
 	);
 
 	if ((args.view ?? "detailed") === "compact") {
@@ -114,6 +116,7 @@ export async function buildDoctorReport(
 			blocker: sessionGuidance.blocker,
 			reason: sessionGuidance.reason,
 			guidance: sessionGuidance,
+			latestFailedAttempt,
 			operatorSummary,
 			nextCommand: sessionGuidance.nextCommand,
 			workspaceRoot: workspace.root,
@@ -141,6 +144,7 @@ export async function buildDoctorReport(
 		workspace,
 		checks,
 		session: sessionSummary,
+		latestFailedAttempt,
 		guidance: sessionGuidance,
 		operatorSummary,
 		nextCommand: sessionGuidance.nextCommand,

@@ -227,8 +227,13 @@ describe("runtime tool metadata", () => {
 		);
 		latestCall = latestMetadataCall(metadata);
 		expect(latestCall.title).toBe(
-			"Feature completion requested: setup-runtime",
+			"Feature completion requested — pending Flow validation: setup-runtime",
 		);
+		expect(latestCall.metadata?.metadataAuthority).toBe("requested_only");
+		expect(latestCall.metadata?.authoritativeStatusSource).toBe(
+			"tool_result_json",
+		);
+		expect(latestCall.metadata?.mutationState).toBe("pending_guarded_mutation");
 		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
 		expect(latestCall.metadata?.taskPhase).toBe("execution");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
@@ -271,7 +276,14 @@ describe("runtime tool metadata", () => {
 			context,
 		);
 		latestCall = latestMetadataCall(metadata);
-		expect(latestCall.title).toBe("Reviewer requested approved setup-runtime");
+		expect(latestCall.title).toBe(
+			"Feature review requested approved — pending Flow persistence: setup-runtime",
+		);
+		expect(latestCall.metadata?.metadataAuthority).toBe("requested_only");
+		expect(latestCall.metadata?.authoritativeStatusSource).toBe(
+			"tool_result_json",
+		);
+		expect(latestCall.metadata?.mutationState).toBe("pending_guarded_mutation");
 		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
 		expect(latestCall.metadata?.taskPhase).toBe("review");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
@@ -317,7 +329,14 @@ describe("runtime tool metadata", () => {
 			context,
 		);
 		latestCall = latestMetadataCall(metadata);
-		expect(latestCall.title).toBe("Final reviewer requested approved");
+		expect(latestCall.title).toBe(
+			"Final reviewer requested approved — pending Flow persistence",
+		);
+		expect(latestCall.metadata?.metadataAuthority).toBe("requested_only");
+		expect(latestCall.metadata?.authoritativeStatusSource).toBe(
+			"tool_result_json",
+		);
+		expect(latestCall.metadata?.mutationState).toBe("pending_guarded_mutation");
 		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
 		expect(latestCall.metadata?.taskPhase).toBe("final_review");
 		expect(latestCall.metadata?.taskStatus).toBe("active");

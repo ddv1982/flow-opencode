@@ -128,6 +128,90 @@ function approvedFinalDecision(): Extract<
 	return createApprovedFinalReviewerDecision();
 }
 
+const REVIEW_SCOPE_FIXTURE_BEHAVIOR_CLASSES = [
+	"async_event_ordering",
+	"lifecycle_reentrancy",
+	"state_commit_rollback",
+	"persistence_recovery",
+	"interaction_geometry",
+	"accessibility_semantics",
+	"test_evidence_authenticity",
+] as const;
+
+function reviewedSurfacesForTargets(targets: readonly string[]) {
+	return [
+		"changed_files",
+		"shared_surfaces",
+		"validation_evidence",
+		...(targets.some((target) => target.includes("adapters/opencode"))
+			? (["integration_points", "tooling_and_config"] as const)
+			: []),
+		...(targets.some((target) => target.includes("transitions/"))
+			? (["operator_surfaces"] as const)
+			: []),
+	] as const;
+}
+
+function behaviorChecksForTargets(targets: readonly string[]) {
+	const evidenceRef = targets[0] ?? "src/runtime/session.ts";
+	return REVIEW_SCOPE_FIXTURE_BEHAVIOR_CLASSES.map((riskClass) => ({
+		riskClass,
+		result: "passed" as const,
+		invariant: `${riskClass} reviewed for declared review scope fixtures.`,
+		entrypointRefs: [evidenceRef],
+		stateOwnerRefs: [],
+		lifecycleOwnerRefs: [],
+		failurePath: `${riskClass} regression would be caught by the scoped fixture validation.`,
+		testEvidenceRefs: [],
+		validationRefs: ["bun test"],
+	}));
+}
+
+function validationCoverageForTargets() {
+	return [
+		{
+			command: "bun test",
+			behaviorClasses: [...REVIEW_SCOPE_FIXTURE_BEHAVIOR_CLASSES],
+			proves: [
+				"Scoped final review fixture validation covers declared behavior classes.",
+			],
+			gaps: [],
+			testEvidenceRefs: [],
+		},
+	];
+}
+
+function approvedFinalDecisionForTargets(
+	targets: readonly string[],
+): Extract<
+	NonNullable<Session["execution"]["lastReviewerDecision"]>,
+	{ scope: "final" }
+> {
+	return createApprovedFinalReviewerDecision({
+		reviewedSurfaces: [...reviewedSurfacesForTargets(targets)],
+		evidenceRefs: {
+			changedArtifacts: [...targets],
+			validationCommands: ["bun test"],
+		},
+		behaviorChecks: behaviorChecksForTargets(targets),
+		validationCoverage: validationCoverageForTargets(),
+	});
+}
+
+function finalReviewPayloadForTargets(
+	targets: readonly string[],
+): NonNullable<WorkerResult["finalReview"]> {
+	return createFinalReviewPayload({
+		reviewedSurfaces: [...reviewedSurfacesForTargets(targets)],
+		evidenceRefs: {
+			changedArtifacts: [...targets],
+			validationCommands: ["bun test"],
+		},
+		behaviorChecks: behaviorChecksForTargets(targets),
+		validationCoverage: validationCoverageForTargets(),
+	});
+}
+
 function knownReviewFinding(findingRef = "review: known defect") {
 	return {
 		findingRef,
@@ -168,7 +252,6 @@ function createWorkerResult(
 		},
 		...overrides,
 	} as WorkerResult;
-
 	return result;
 }
 
@@ -804,6 +887,29 @@ describe("completion gates", () => {
 		expect(details?.exampleReviewScopeLedger[0]?.residualRisk).toContain(
 			"Example scaffold only",
 		);
+		expect(details?.retryPolicy).toEqual({
+			doNotReplayScaffold: true,
+			mustChangeEvidenceRefs: true,
+		});
+		expect(details?.repairSteps.join("\n")).toContain(
+			"evidenceRefs to safe relative artifact paths",
+		);
+		expect(details?.repairSteps.join("\n")).toContain(
+			"Replace scaffold residualRisk",
+		);
+		expect(details?.invalidLedgerGuidance).toEqual([
+			expect.objectContaining({
+				scopeId: "file_target:src/runtime/session.ts",
+				problem: "candidate_scope_evidence_available",
+				requiredEvidenceSource: "changedArtifacts_or_reviewContextPack",
+				suggestedEvidenceRefs: ["src/runtime/session.ts"],
+			}),
+			expect.objectContaining({
+				scopeId: "file_target:src/adapters/opencode/tools.ts",
+				problem: "missing_scope_evidence",
+				suggestedEvidenceRefs: [],
+			}),
+		]);
 		expect(details?.evidenceCandidates.closedFindingRefs).toEqual([
 			closedFindingRef,
 		]);
@@ -818,6 +924,9 @@ describe("completion gates", () => {
 			"Closed finding refs are candidates only",
 		);
 		expect(details?.notes.join("\n")).toContain("do not replay unchanged");
+		expect(details?.notes.join("\n")).toContain(
+			"Evidence refs must come from changed artifacts or review context",
+		);
 	});
 
 	test("worker completion rejects blind review-scope recovery scaffold replay", () => {
@@ -877,6 +986,18 @@ describe("completion gates", () => {
 			| undefined;
 		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
 		expect(details?.exampleReviewScopeLedger).toHaveLength(1);
+		expect(details?.retryPolicy.doNotReplayScaffold).toBe(true);
+		expect(details?.retryPolicy.mustChangeEvidenceRefs).toBe(false);
+		expect(details?.repairSteps.join("\n")).toContain(
+			"do not resubmit exampleReviewScopeLedger unchanged",
+		);
+		expect(details?.invalidLedgerGuidance?.[0]).toEqual(
+			expect.objectContaining({
+				scopeId: "file_target:src/runtime/session.ts",
+				problem: "candidate_scope_evidence_available",
+				suggestedEvidenceRefs: ["src/runtime/session.ts"],
+			}),
+		);
 		if (!details) return;
 
 		const blindReplay = validateSuccessfulCompletion(
@@ -936,6 +1057,11 @@ describe("completion gates", () => {
 			"file_target:src/runtime/session.ts",
 		);
 		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
+		expect(details?.retryPolicy).toEqual({
+			doNotReplayScaffold: true,
+			mustChangeEvidenceRefs: false,
+		});
+		expect(details?.repairSteps.join("\n")).toContain("final-review approval");
 	});
 
 	test("broad review-and-fix final completion requires every declared review scope target", () => {
@@ -984,16 +1110,17 @@ describe("completion gates", () => {
 			},
 		});
 		const reviewed = recordReviewerDecision(started.value.session, {
-			...approvedFinalDecision(),
+			...approvedFinalDecisionForTargets(declaredTargets),
 			reviewScopeLedger: finalScopeLedger,
 		});
 		expect(reviewed.ok).toBe(true);
 		if (!reviewed.ok) return;
 
 		const workerBase = createWorkerResult(featureId, {
+			artifactsChanged: declaredTargets.map((path) => ({ path })),
 			validationScope: "broad",
 			reviewFindingClosures: [closedReviewFindingClosure()],
-			finalReview: createFinalReviewPayload(),
+			finalReview: finalReviewPayloadForTargets(declaredTargets),
 		});
 		const partial = validateSuccessfulCompletion(
 			reviewed.value,
@@ -1054,7 +1181,7 @@ describe("completion gates", () => {
 		const reviewerWithUnclosedFinding = recordReviewerDecision(
 			started.value.session,
 			{
-				...approvedFinalDecision(),
+				...approvedFinalDecisionForTargets(declaredTargets),
 				reviewScopeLedger: scopeLedgerForTargets(declaredTargets, {
 					"src/runtime/session.ts": {
 						status: "finding_closed",
@@ -1137,7 +1264,7 @@ describe("completion gates", () => {
 			},
 		});
 		const reviewed = recordReviewerDecision(started.value.session, {
-			...approvedFinalDecision(),
+			...approvedFinalDecisionForTargets(declaredTargets),
 			reviewScopeLedger: finalReviewerLedger,
 		});
 		expect(reviewed.ok).toBe(true);
@@ -1152,13 +1279,13 @@ describe("completion gates", () => {
 		const result = validateSuccessfulCompletion(
 			reviewed.value,
 			createWorkerResult(featureId, {
-				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				artifactsChanged: declaredTargets.map((path) => ({ path })),
 				validationScope: "broad",
 				reviewFindingClosures: [
 					closedReviewFindingClosure({ findingRef: closedFindingRef }),
 				],
 				reviewScopeLedger: workerScopeLedger,
-				finalReview: createFinalReviewPayload(),
+				finalReview: finalReviewPayloadForTargets(declaredTargets),
 			}),
 			featureId,
 			true,
@@ -1185,10 +1312,8 @@ describe("completion gates", () => {
 			| undefined;
 		expect(details?.evidenceCandidates.changedArtifacts).toEqual([
 			"src/runtime/session.ts",
-		]);
-		expect(details?.evidenceCandidates.changedArtifacts).not.toContain(
 			"src/adapters/opencode/tools.ts",
-		);
+		]);
 		expect(details?.evidenceCandidates.closedFindingRefs).toEqual([
 			closedFindingRef,
 		]);
@@ -1396,7 +1521,7 @@ describe("completion gates", () => {
 			},
 		});
 		const reviewed = recordReviewerDecision(started.value.session, {
-			...approvedFinalDecision(),
+			...approvedFinalDecisionForTargets(["src/runtime/session.ts"]),
 			reviewScopeLedger: finalScopeLedger,
 		});
 		expect(reviewed.ok).toBe(true);
@@ -1463,7 +1588,7 @@ describe("completion gates", () => {
 		const result = validateSuccessfulCompletion(
 			started.value.session,
 			createWorkerResult(featureId, {
-				artifactsChanged: [{ path: "src/shell/sessionPanels.ts" }],
+				artifactsChanged: declaredTargets.map((path) => ({ path })),
 				validationRun: [
 					{
 						command: validationCommand,
@@ -1492,7 +1617,7 @@ describe("completion gates", () => {
 					validationAssessment:
 						"Targeted session panel validation was reviewed.",
 					evidenceRefs: {
-						changedArtifacts: ["src/shell/sessionPanels.ts"],
+						changedArtifacts: declaredTargets,
 						validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
 					},
 					integrationChecks: [
@@ -1582,7 +1707,10 @@ describe("completion gates", () => {
 			}),
 		];
 		const finalReviewed = recordReviewerDecision(secondStarted.value.session, {
-			...approvedFinalDecision(),
+			...approvedFinalDecisionForTargets([
+				"src/runtime/session.ts",
+				"src/adapters/opencode/tools.ts",
+			]),
 			reviewScopeLedger: finalScopeLedger,
 		});
 		expect(finalReviewed.ok).toBe(true);
@@ -1591,12 +1719,19 @@ describe("completion gates", () => {
 		const finalCompleted = completeRun(
 			finalReviewed.value,
 			createWorkerResult(secondFeatureId, {
+				artifactsChanged: [
+					{ path: "src/runtime/session.ts" },
+					{ path: "src/adapters/opencode/tools.ts" },
+				],
 				validationScope: "broad",
 				reviewFindingClosures: [
 					closedReviewFindingClosure({ findingRef: secondFindingRef }),
 				],
 				reviewScopeLedger: finalScopeLedger,
-				finalReview: createFinalReviewPayload(),
+				finalReview: finalReviewPayloadForTargets([
+					"src/runtime/session.ts",
+					"src/adapters/opencode/tools.ts",
+				]),
 			}),
 		);
 		expect(finalCompleted.ok).toBe(true);
@@ -1649,6 +1784,7 @@ describe("completion gates", () => {
 		const firstCompleted = completeRun(
 			firstReviewed.value,
 			createWorkerResult(firstFeatureId, {
+				artifactsChanged: firstTargets.map((path) => ({ path })),
 				reviewScopeLedger: scopeLedgerForTargets(firstTargets),
 			}),
 		);
@@ -1681,7 +1817,7 @@ describe("completion gates", () => {
 		if (!secondFeatureId) return;
 
 		const finalReviewed = recordReviewerDecision(secondStarted.value.session, {
-			...approvedFinalDecision(),
+			...approvedFinalDecisionForTargets([...firstTargets, secondTarget]),
 			reviewScopeLedger: scopeLedgerForTargets([...firstTargets, secondTarget]),
 		});
 		expect(finalReviewed.ok).toBe(true);
@@ -1690,7 +1826,10 @@ describe("completion gates", () => {
 		const finalCompleted = completeRun(
 			finalReviewed.value,
 			createWorkerResult(secondFeatureId, {
-				artifactsChanged: [{ path: secondTarget }],
+				artifactsChanged: [
+					{ path: "src/runtime/transitions/execution.ts" },
+					{ path: secondTarget },
+				],
 				validationScope: "broad",
 				reviewScopeLedger: scopeLedgerForTargets([
 					"src/runtime/transitions/execution.ts",
@@ -1800,7 +1939,10 @@ describe("completion gates", () => {
 			}),
 		];
 		const finalReviewed = recordReviewerDecision(secondStarted.value.session, {
-			...approvedFinalDecision(),
+			...approvedFinalDecisionForTargets([
+				"src/runtime/session.ts",
+				"src/adapters/opencode/tools.ts",
+			]),
 			reviewScopeLedger: [
 				scopeLedgerEntry("file_target:src/runtime/session.ts", {
 					status: "finding_closed",
@@ -1833,69 +1975,6 @@ describe("completion gates", () => {
 	});
 
 	test("final completion enforces behavior accounting for risk-triggered final reviews", () => {
-		const behaviorChecks = [
-			{
-				riskClass: "async_event_ordering" as const,
-				result: "passed" as const,
-				invariant: "Latest panel action wins after deferred navigation.",
-				entrypointRefs: ["src/shell/sessionPanels.ts"],
-				stateOwnerRefs: ["src/game/navigation.ts"],
-				lifecycleOwnerRefs: [],
-				failurePath: "Earlier deferred click overrides later user intent.",
-				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
-			},
-			{
-				riskClass: "lifecycle_reentrancy" as const,
-				result: "passed" as const,
-				invariant: "Scene startup is not double-registered on re-entry.",
-				entrypointRefs: ["src/shell/sessionPanels.ts"],
-				stateOwnerRefs: [],
-				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
-				failurePath: "Panel re-entry registers duplicate scene callbacks.",
-				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
-			},
-			{
-				riskClass: "state_commit_rollback" as const,
-				result: "passed" as const,
-				invariant: "Navigation state commits after scene startup succeeds.",
-				entrypointRefs: ["src/shell/sessionPanels.ts"],
-				stateOwnerRefs: ["src/game/navigation.ts"],
-				lifecycleOwnerRefs: ["src/scenes/PracticeScene.ts"],
-				failurePath: "State commits before scene startup throws.",
-				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
-			},
-			{
-				riskClass: "test_evidence_authenticity" as const,
-				result: "passed" as const,
-				invariant:
-					"The test evidence exercises ordering and rollback behavior.",
-				entrypointRefs: ["tests/sessionPanelActions.test.ts"],
-				stateOwnerRefs: [],
-				lifecycleOwnerRefs: [],
-				failurePath: "Generic validation would miss stale action ordering.",
-				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
-			},
-		];
-		const validationCoverage = [
-			{
-				command: "bun test tests/sessionPanelActions.test.ts",
-				behaviorClasses: [
-					"async_event_ordering" as const,
-					"lifecycle_reentrancy" as const,
-					"state_commit_rollback" as const,
-					"test_evidence_authenticity" as const,
-				],
-				proves: [
-					"Panel ordering, lifecycle, rollback, and test evidence coverage.",
-				],
-				gaps: [],
-				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-			},
-		];
 		const riskyReviewFields: Pick<
 			NonNullable<WorkerResult["finalReview"]>,
 			| "reviewedSurfaces"
@@ -1911,6 +1990,7 @@ describe("completion gates", () => {
 				"shared_surfaces",
 				"validation_evidence",
 				"tests",
+				"integration_points",
 			],
 			evidenceSummary:
 				"Checked panel, navigation, scene, and validation evidence.",
@@ -1938,6 +2018,33 @@ describe("completion gates", () => {
 				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 			}),
 		];
+		const riskyArtifactsChanged = [
+			"src/runtime/session.ts",
+			...riskyReviewFields.evidenceRefs.changedArtifacts,
+		];
+		const completeRiskBehaviorChecks =
+			REVIEW_SCOPE_FIXTURE_BEHAVIOR_CLASSES.map((riskClass) => ({
+				riskClass,
+				result: "passed" as const,
+				invariant: `${riskClass} reviewed for risk-triggered final review.`,
+				entrypointRefs: ["src/runtime/session.ts"],
+				stateOwnerRefs: [],
+				lifecycleOwnerRefs: [],
+				failurePath: `${riskClass} regression would be caught by behavior validation.`,
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+				validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
+			}));
+		const completeRiskValidationCoverage = [
+			{
+				command: "bun test tests/sessionPanelActions.test.ts",
+				behaviorClasses: [...REVIEW_SCOPE_FIXTURE_BEHAVIOR_CLASSES],
+				proves: [
+					"Panel ordering, lifecycle, rollback, persistence, accessibility, geometry, and test evidence coverage.",
+				],
+				gaps: [],
+				testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+			},
+		];
 
 		const rejected = createStartedSession({
 			finalFeature: true,
@@ -1945,19 +2052,17 @@ describe("completion gates", () => {
 		const missingBehavior = validateSuccessfulCompletion(
 			rejected.session,
 			createWorkerResult(rejected.featureId, {
-				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
-					(path) => ({ path }),
-				),
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
 					{
-						command: "bun test tests/sessionPanelActions.test.ts",
+						command: "bun test",
 						status: "passed",
 						summary: "Behavior tests passed.",
 					},
 				],
 				validationScope: "broad",
 				reviewScopeLedger: riskyReviewScopeLedger,
-				finalReview: createFinalReviewPayload(riskyReviewFields),
+				finalReview: finalReviewPayloadForTargets(["src/runtime/session.ts"]),
 			}),
 			rejected.featureId,
 			rejected.wasFinalFeature,
@@ -1974,17 +2079,19 @@ describe("completion gates", () => {
 			strictReview: true,
 			reviewerDecision: createApprovedFinalReviewerDecision({
 				...riskyReviewFields,
+				evidenceRefs: {
+					...riskyReviewFields.evidenceRefs,
+					changedArtifacts: riskyArtifactsChanged,
+				},
 				reviewScopeLedger: riskyReviewScopeLedger,
-				behaviorChecks,
-				validationCoverage,
+				behaviorChecks: completeRiskBehaviorChecks,
+				validationCoverage: completeRiskValidationCoverage,
 			}),
 		});
 		const workerMissingBehavior = validateSuccessfulCompletion(
 			reviewerCompleteWorkerMissing.session,
 			createWorkerResult(reviewerCompleteWorkerMissing.featureId, {
-				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
-					(path) => ({ path }),
-				),
+				artifactsChanged: riskyArtifactsChanged.map((path) => ({ path })),
 				validationRun: [
 					{
 						command: "bun test tests/sessionPanelActions.test.ts",
@@ -2012,9 +2119,7 @@ describe("completion gates", () => {
 		const reviewerMissingBehavior = validateSuccessfulCompletion(
 			reviewerMissingWorkerComplete.session,
 			createWorkerResult(reviewerMissingWorkerComplete.featureId, {
-				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
-					(path) => ({ path }),
-				),
+				artifactsChanged: riskyArtifactsChanged.map((path) => ({ path })),
 				validationRun: [
 					{
 						command: "bun test tests/sessionPanelActions.test.ts",
@@ -2026,8 +2131,12 @@ describe("completion gates", () => {
 				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload({
 					...riskyReviewFields,
-					behaviorChecks,
-					validationCoverage,
+					evidenceRefs: {
+						...riskyReviewFields.evidenceRefs,
+						changedArtifacts: riskyArtifactsChanged,
+					},
+					behaviorChecks: completeRiskBehaviorChecks,
+					validationCoverage: completeRiskValidationCoverage,
 				}),
 			}),
 			reviewerMissingWorkerComplete.featureId,
@@ -2045,17 +2154,19 @@ describe("completion gates", () => {
 			strictReview: true,
 			reviewerDecision: createApprovedFinalReviewerDecision({
 				...riskyReviewFields,
+				evidenceRefs: {
+					...riskyReviewFields.evidenceRefs,
+					changedArtifacts: riskyArtifactsChanged,
+				},
 				reviewScopeLedger: riskyReviewScopeLedger,
-				behaviorChecks,
-				validationCoverage,
+				behaviorChecks: completeRiskBehaviorChecks,
+				validationCoverage: completeRiskValidationCoverage,
 			}),
 		});
 		const completed = validateSuccessfulCompletion(
 			accepted.session,
 			createWorkerResult(accepted.featureId, {
-				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
-					(path) => ({ path }),
-				),
+				artifactsChanged: riskyArtifactsChanged.map((path) => ({ path })),
 				validationRun: [
 					{
 						command: "bun test tests/sessionPanelActions.test.ts",
@@ -2067,8 +2178,12 @@ describe("completion gates", () => {
 				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload({
 					...riskyReviewFields,
-					behaviorChecks,
-					validationCoverage,
+					evidenceRefs: {
+						...riskyReviewFields.evidenceRefs,
+						changedArtifacts: riskyArtifactsChanged,
+					},
+					behaviorChecks: completeRiskBehaviorChecks,
+					validationCoverage: completeRiskValidationCoverage,
 				}),
 			}),
 			accepted.featureId,
@@ -2081,12 +2196,12 @@ describe("completion gates", () => {
 
 		const sharedGap =
 			"Concurrent click interleaving remains unproven by providerless tests.";
-		const gapBehaviorChecks = behaviorChecks.map((check) => ({
+		const gapBehaviorChecks = completeRiskBehaviorChecks.map((check) => ({
 			...check,
 			result: "gap_recorded" as const,
 			remainingGap: sharedGap,
 		}));
-		const [firstValidationCoverage] = validationCoverage;
+		const [firstValidationCoverage] = completeRiskValidationCoverage;
 		expect(firstValidationCoverage).toBeDefined();
 		if (!firstValidationCoverage) return;
 		const gapValidationCoverage = [
@@ -2101,6 +2216,10 @@ describe("completion gates", () => {
 			strictReview: true,
 			reviewerDecision: createApprovedFinalReviewerDecision({
 				...riskyReviewFields,
+				evidenceRefs: {
+					...riskyReviewFields.evidenceRefs,
+					changedArtifacts: riskyArtifactsChanged,
+				},
 				reviewScopeLedger: riskyReviewScopeLedger,
 				remainingGaps: [sharedGap],
 				suggestedValidation: [
@@ -2113,9 +2232,7 @@ describe("completion gates", () => {
 		const gapCompleted = validateSuccessfulCompletion(
 			gapAccepted.session,
 			createWorkerResult(gapAccepted.featureId, {
-				artifactsChanged: riskyReviewFields.evidenceRefs.changedArtifacts.map(
-					(path) => ({ path }),
-				),
+				artifactsChanged: riskyArtifactsChanged.map((path) => ({ path })),
 				validationRun: [
 					{
 						command: "bun test tests/sessionPanelActions.test.ts",
@@ -2127,6 +2244,10 @@ describe("completion gates", () => {
 				reviewScopeLedger: riskyReviewScopeLedger,
 				finalReview: createFinalReviewPayload({
 					...riskyReviewFields,
+					evidenceRefs: {
+						...riskyReviewFields.evidenceRefs,
+						changedArtifacts: riskyArtifactsChanged,
+					},
 					remainingGaps: [sharedGap],
 					suggestedValidation: [
 						"Add an interleaving test that races two panel actions.",

@@ -14,6 +14,8 @@ export const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE =
 	"- Treat Flow runtime tools as authoritative.";
 export const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE =
 	"- Treat Flow runtime tools as authoritative for workflow state.";
+export const FLOW_AUTHORITATIVE_TOOL_JSON_RULE =
+	"- Treat returned Flow tool JSON as authoritative. OpenCode row metadata is provisional request-time UI context only; when tool JSON returns status: error, do not retry the same final-review or completion payload unchanged.";
 export const FLOW_NEVER_WRITE_FLOW_FILES_RULE =
 	"- Never write .flow files directly.";
 export const FLOW_COORDINATOR_BOUNDARY_RULE =
@@ -35,7 +37,7 @@ export const FLOW_NO_INFERRED_GOAL_RULE =
 export const FLOW_RESUME_ONLY_RULE =
 	"- When invoked with empty input or `resume`, treat the command as resume-only. If no active session exists, stop and request a goal instead of creating one.";
 export const FLOW_STRUCTURED_RECOVERY_RULE =
-	"- When tool errors include structured recovery metadata, satisfy `recovery.prerequisite` first. Only call canonical `recovery.nextRuntimeTool` values when present. Treat `recovery.nextCommand` as guidance. Recovery examples (including `exampleReviewScopeLedger`) are scaffold-only, never replay evidence.";
+	"- When tool errors include structured recovery metadata, satisfy `recovery.prerequisite` first. Only call canonical `recovery.nextRuntimeTool` values when present. Treat `recovery.nextCommand` as guidance. Recovery examples (including `exampleReviewScopeLedger`) are scaffold-only, never replay evidence. After repeated same-category reviewScopeLedger failures, inspect flow_status or recovery details and repair evidenceRefs before retrying.";
 export const FLOW_RUNTIME_STATE_TRANSITION_RULE =
 	"- Use Flow runtime tools for every state transition.";
 export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =

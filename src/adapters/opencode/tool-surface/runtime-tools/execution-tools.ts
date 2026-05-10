@@ -69,9 +69,12 @@ export function createExecutionRuntimeTools() {
 							input.featureResult?.featureId,
 						);
 					context.metadata?.({
-						title: `Feature completion requested: ${input.featureResult?.featureId ?? "feature"}`,
+						title: `Feature completion requested — pending Flow validation: ${input.featureResult?.featureId ?? "feature"}`,
 						metadata: {
 							sessionId: null,
+							metadataAuthority: "requested_only",
+							authoritativeStatusSource: "tool_result_json",
+							mutationState: "pending_guarded_mutation",
 							taskOwner: "flow-worker",
 							taskPhase: "execution",
 							taskSubject:

@@ -5,7 +5,10 @@ import {
 	getCoreRoleInvariantIds,
 	getCoreRoleProtocol,
 } from "../../core/protocols";
-import { FLOW_NEVER_WRITE_FLOW_FILES_RULE } from "../fragments";
+import {
+	FLOW_AUTHORITATIVE_TOOL_JSON_RULE,
+	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
+} from "../fragments";
 import { type FlowPromptMode, getFlowModeContract } from "../mode-contracts";
 
 function listLines(items: readonly string[]): string {
@@ -195,6 +198,7 @@ export function renderFallbackContract(
 			? `- Forbidden Flow tools: ${backtickList(contract.forbiddenFlowTools)}.`
 			: "- Forbidden Flow tools: none.",
 		FLOW_NEVER_WRITE_FLOW_FILES_RULE,
+		FLOW_AUTHORITATIVE_TOOL_JSON_RULE,
 		`- Tool ordering: ${toolOrdering}`,
 		`- Stop condition: ${contract.stopCondition}`,
 		"- If a referenced Flow skill is unavailable or denied by OpenCode permissions, continue with this fallback contract; do not weaken `permission.skill` or edit `.flow/**` to compensate.",

@@ -69,6 +69,32 @@ export type TaskProgressRow = {
 		| "operator";
 };
 
+function latestFailedAttemptRow(session: Session): TaskProgressRow | null {
+	const failure = session.execution.lastFailedMutation;
+	if (!failure || session.status === "completed") {
+		return null;
+	}
+	return {
+		id: `failed:${failure.tool}:${failure.failureCategory}`,
+		phase: failure.phase,
+		ownerRole: "flow-runtime",
+		subject: `Latest failed attempt: ${failure.tool}`,
+		status: "blocked",
+		evidence: compactEvidence([
+			`category: ${failure.failureCategory}`,
+			failure.sameCategoryFailureCount
+				? `same-category attempts: ${failure.sameCategoryFailureCount}`
+				: null,
+			failure.summary,
+		]),
+		blocker: failure.summary,
+		next:
+			failure.recoveryHint ??
+			"Inspect the failed tool JSON recovery details before retrying.",
+		source: "operator",
+	};
+}
+
 type OperatorLike = {
 	phase: string;
 	nextStep: string;
@@ -410,6 +436,7 @@ export function projectTaskProgress(
 			featureRow(session, feature, operator),
 		),
 		validationRow(session),
+		latestFailedAttemptRow(session),
 		reviewerRow(session),
 		pendingFinalReviewRow(session),
 	].filter((row): row is TaskProgressRow => Boolean(row));

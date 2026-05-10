@@ -333,6 +333,23 @@ export const FlowReviewRecordFeatureArgsSchema =
 
 export const FlowReviewRecordFinalArgsSchema = FinalReviewerDecisionSchema;
 
+export const LatestFailedFlowAttemptSchema = z
+	.object({
+		tool: z.enum([
+			"flow_review_record_final",
+			"flow_run_complete_feature",
+			"flow_review_record_feature",
+		]),
+		phase: z.enum(["review", "final_review", "execution"]),
+		status: z.literal("error"),
+		failureCategory: z.string().min(1),
+		summary: z.string().min(1),
+		recoveryHint: z.string().min(1).optional(),
+		occurredAt: z.string().min(1).optional(),
+		sameCategoryFailureCount: z.number().int().positive().optional(),
+	})
+	.strict();
+
 export const ExecutionHistoryEntrySchema = z.object({
 	featureId: z.string().min(1),
 	status: z.string().min(1),
@@ -372,6 +389,7 @@ export const SessionSchema = z.object({
 		lastFeatureResult: FeatureResultSchema.nullable().default(null),
 		lastReviewerDecision: ReviewerDecisionSchema.nullable().default(null),
 		lastValidationRun: z.array(ValidationRunSchema).default([]),
+		lastFailedMutation: LatestFailedFlowAttemptSchema.nullable().default(null),
 		history: z.array(ExecutionHistoryEntrySchema).default([]),
 	}),
 	closure: ClosureSchema.nullable().default(null),
@@ -419,6 +437,9 @@ export type StandardsProfile = z.infer<typeof StandardsProfileSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 export type { EvidencePacket } from "./schema-evidence-packets";
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
+export type LatestFailedFlowAttempt = z.infer<
+	typeof LatestFailedFlowAttemptSchema
+>;
 export type Session = z.infer<typeof SessionSchema>;
 export type WorkerResult = z.infer<typeof WorkerResultSchema>;
 export type WorkerResultArgs = z.input<typeof WorkerResultArgsSchema>;

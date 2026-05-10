@@ -584,11 +584,15 @@ describe("runtime final review contracts", () => {
 				"changed_files" as const,
 				"shared_surfaces" as const,
 				"validation_evidence" as const,
+				"operator_surfaces" as const,
 			],
 			evidenceSummary: "Reviewed changed files and declared scope.",
 			validationAssessment: "Validation evidence was reviewed.",
 			evidenceRefs: {
-				changedArtifacts: ["src/runtime/session.ts"],
+				changedArtifacts: [
+					"src/runtime/session.ts",
+					"src/runtime/transitions/execution.ts",
+				],
 				validationCommands: ["bun test"],
 			},
 			integrationChecks: ["Checked runtime completion integration."],
@@ -724,6 +728,44 @@ describe("runtime final review contracts", () => {
 			);
 		}
 
+		const targetSelfReferenceWithoutSource = recordReviewerDecision(
+			started.value.session,
+			{
+				...baseDecision,
+				reviewedSurfaces: [
+					"changed_files" as const,
+					"shared_surfaces" as const,
+					"validation_evidence" as const,
+				],
+				evidenceRefs: {
+					...baseDecision.evidenceRefs,
+					changedArtifacts: ["src/runtime/session.ts"],
+				},
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/session.ts",
+						status: "reviewed_no_findings" as const,
+						evidenceRefs: ["src/runtime/session.ts"],
+						validationRefs: ["bun test"],
+						residualRisk: "No known residual risk.",
+					},
+					{
+						scopeId: "file_target:src/runtime/transitions/execution.ts",
+						status: "deferred" as const,
+						evidenceRefs: ["src/runtime/transitions/execution.ts"],
+						residualRisk:
+							"Deferred to the next review pass; no blocking completion risk recorded.",
+					},
+				],
+			},
+		);
+		expect(targetSelfReferenceWithoutSource.ok).toBe(false);
+		if (!targetSelfReferenceWithoutSource.ok) {
+			expect(targetSelfReferenceWithoutSource.message).toContain(
+				"not grounded in this declared scope target",
+			);
+		}
+
 		const validationOnlyEvidence = recordReviewerDecision(
 			started.value.session,
 			{
@@ -842,6 +884,21 @@ describe("runtime final review contracts", () => {
 		expect(details?.exampleReviewScopeLedgerPurpose).toBe("scaffold_only");
 		expect(details?.notes.join("\n")).toContain("scaffold-only");
 		expect(details?.notes.join("\n")).toContain("do not replay unchanged");
+		expect(details?.repairSteps.join("\n")).toContain(
+			"Rebuild reviewScopeLedger",
+		);
+		expect(details?.retryPolicy).toEqual({
+			doNotReplayScaffold: true,
+			mustChangeEvidenceRefs: false,
+		});
+		expect(details?.invalidLedgerGuidance?.[0]).toEqual(
+			expect.objectContaining({
+				scopeId: "file_target:src/runtime/session.ts",
+				problem: "candidate_scope_evidence_available",
+				requiredEvidenceSource: "changedArtifacts_or_reviewContextPack",
+				suggestedEvidenceRefs: ["src/runtime/session.ts"],
+			}),
+		);
 		expect(details?.exampleReviewScopeLedger).toHaveLength(1);
 		expect(details?.exampleReviewScopeLedger[0]?.residualRisk).toContain(
 			"Example scaffold only",

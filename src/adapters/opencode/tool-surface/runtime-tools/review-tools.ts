@@ -39,9 +39,12 @@ export function createReviewRuntimeTools() {
 							input.featureId,
 						);
 					context.metadata?.({
-						title: `Reviewer requested ${input.status} ${input.featureId}`,
+						title: `Feature review requested ${input.status} — pending Flow persistence: ${input.featureId}`,
 						metadata: {
 							sessionId: null,
+							metadataAuthority: "requested_only",
+							authoritativeStatusSource: "tool_result_json",
+							mutationState: "pending_guarded_mutation",
 							taskOwner: "flow-reviewer",
 							taskPhase: "review",
 							taskSubject: `Feature review: ${input.featureId}`,
@@ -72,9 +75,12 @@ export function createReviewRuntimeTools() {
 				FlowReviewRecordFinalArgsSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
-						title: `Final reviewer requested ${input.status}`,
+						title: `Final reviewer requested ${input.status} — pending Flow persistence`,
 						metadata: {
 							sessionId: null,
+							metadataAuthority: "requested_only",
+							authoritativeStatusSource: "tool_result_json",
+							mutationState: "pending_guarded_mutation",
 							taskOwner: "flow-reviewer",
 							taskPhase: "final_review",
 							taskSubject: "Final session review",
