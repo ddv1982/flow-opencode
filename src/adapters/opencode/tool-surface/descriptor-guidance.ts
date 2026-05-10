@@ -42,13 +42,15 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 ## Returns
 - Returns the canonical runtime response describing the active feature or why nothing is runnable.`,
 	flow_run_complete_feature: `## Use when
-- Use only after the required validation for the current path is complete: targeted validation plus feature review for normal features, or broad validation plus the final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default) for the completion path.
+- Use only to persist the worker result for the active feature after its required validation/review gate is satisfied.
+- Normal features require targeted validation and clean featureReview; final completion requires broad validation and the finalReview required by deliveryPolicy.finalReviewPolicy.
 - For review/review_and_fix completion paths, include reviewScopeLedger accounting for every declared review scope target/domain.
 - If recovery details include reviewScopeLedger.exampleReviewScopeLedger, treat it as scaffold-only; do not replay unchanged.
 - Provide the full worker result fields directly as this tool's arguments.
 
 ## Avoid when
-- Do not use for partial progress, speculative status updates, or before review is clean.
+- Do not use for partial progress or speculative status updates.
+- Do not use while validation, review, finalReview, or reviewScopeLedger prerequisites are missing.
 
 ## Returns
 - Persists a worker result and returns the canonical runtime completion response.`,
@@ -62,24 +64,24 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 ## Returns
 - Returns the canonical runtime response for the feature-level approval gate.`,
 	flow_review_record_final: `## Use when
-- Use to persist the final reviewer decision required by deliveryPolicy.finalReviewPolicy on the final completion path.
-- For review/review_and_fix approvals, include reviewScopeLedger accounting for every declared review scope target/domain.
+- Use only to persist the final reviewer decision for the final completion gate.
+- The decision must satisfy deliveryPolicy.finalReviewPolicy; review/review_and_fix approvals must include reviewScopeLedger accounting for every declared review scope target/domain.
 - If recovery details include reviewScopeLedger.exampleReviewScopeLedger, re-record only corrected evidence-grounded entries with truthful residualRisk.
 - Provide the full reviewer decision fields directly as this tool's arguments.
 
 ## Avoid when
-- Do not use for normal feature reviews or before broad final validation and the runtime-owned final review required by deliveryPolicy.finalReviewPolicy are complete.
+- Do not use for normal feature reviews.
+- Do not use while broad validation, finalReview, or reviewScopeLedger prerequisites are missing.
 
 ## Returns
 - Returns the canonical runtime response for the final approval gate.`,
 	flow_review_render: `## Use when
-- Use after you have a complete structured review ledger and want a deterministic human-readable report.
+- Use to render an already-complete structured review ledger.
 - Provide the full review ledger fields directly as this tool's arguments.
 - Use \`view: human\` for the default user-facing report, \`structured\` for raw JSON, or \`both\` to append structured details after the readable report.
 
 ## Avoid when
-- Do not use before the review findings and coverage ledger are complete.
-- Do not handcraft the final prose when this renderer can produce the deterministic report for you.
+- Do not use to create findings, fill coverage gaps, or mutate Flow state.
 
 ## Returns
 - Returns a rendered review report string, not a Flow runtime session mutation response.`,

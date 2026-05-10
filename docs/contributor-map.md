@@ -66,7 +66,7 @@ Do not:
 - Rename tools casually; tool names are prompt and operator contracts.
 - Change direct `tool(...)` arg shapes without dependency-contract verification.
 
-## Prompts, command templates, and mode contracts
+## Prompts, command templates, skills, and mode contracts
 
 Risk: medium-high
 
@@ -75,18 +75,23 @@ Read first:
 - `src/prompts/mode-contracts.ts`
 - `src/prompts/commands.ts`
 - `src/prompts/agents.ts`
+- `src/prompts/skills.ts`
+- `src/prompts/generated/skill-docs.ts`
+- `src/adapters/opencode/skill-bundle.ts`
 - `src/audit/prompts/`
 
 Required checks:
 
 - `bun run eval:prompt-capture:check`
 - `bun run eval:review-capture:check` when `/flow-review` changes
-- `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-behavior-eval.test.ts`
+- `bun test tests/config/prompt-contracts.test.ts tests/config/skill-bundle.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-behavior-eval.test.ts`
 
 Do not:
 
 - Add a prompt-only workflow rule unless runtime already owns it or the runtime change ships with it.
-- Expand command/agent surfaces during the surface freeze unless an explicit replacement/removal tradeoff is recorded.
+- Treat generated skills as runtime authorities; skills may reference existing tools and contracts but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior.
+- Remove public command/agent names or fallback contracts when slimming prompts.
+- Expand command/agent/skill surfaces during the surface freeze unless an explicit replacement/removal tradeoff is recorded.
 
 ## Session persistence, paths, and workspace root handling
 
@@ -118,6 +123,7 @@ Read first:
 - `src/audit/config.ts`
 - `src/install-opencode.ts`
 - `src/installer.ts`
+- `src/adapters/opencode/skill-bundle.ts`
 - `scripts/cross-area/pack-invariants.mjs`
 
 Required checks:
@@ -125,12 +131,12 @@ Required checks:
 - `bun run build`
 - `bun run check:release-hygiene`
 - `bun run check:pack-invariants`
-- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts`
-
+- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/skill-bundle.test.ts tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts`
 Do not:
 
 - Ship debug-only artifacts in `src` or `dist`.
 - Add package files without updating pack/release invariants.
+- Overwrite user-edited `.opencode/skills/**` files silently or mutate the global plugin before skill-conflict preflight passes.
 
 ## Performance-sensitive paths
 

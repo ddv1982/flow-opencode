@@ -190,7 +190,7 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("standards rules");
 		expect(joined).toContain("Prefer existing package scripts");
 		expect(joined).toContain("standards research gaps");
-		expect(joined).toContain("available MCP tools first");
+		expect(joined).toContain("available/authorized lookup tools");
 		expect(joined).toContain("context evidence");
 		expect(joined).toContain("packet:hook-context");
 		expect(joined).toContain(
@@ -302,7 +302,7 @@ describe("runtime hooks", () => {
 		expect(joined).toContain("cached standards rules");
 		expect(joined).toContain("Preserve TypeScript strictness");
 		expect(joined).toContain("cached standards research gaps");
-		expect(joined).toContain("available MCP tools first");
+		expect(joined).toContain("available/authorized lookup tools");
 	});
 
 	test("experimental.session.compacting appends goal and execution phase for an active Flow session", async () => {

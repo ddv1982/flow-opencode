@@ -173,7 +173,7 @@ export function buildFlowAdaptiveSystemContext(
 		const gaps = compactStandardsGaps(standards);
 		if (gaps) {
 			lines.push(
-				`- standards research gaps: ${quoted(gaps)}; resolve with available MCP tools first, especially Ref for official docs and Exa for current ecosystem research, then websearch/webfetch only as fallback.`,
+				`- standards research gaps: ${quoted(gaps)}; resolve only when material using available/authorized lookup tools, preferring official-doc sources when present and broader web search only as fallback.`,
 			);
 		}
 	}
@@ -238,7 +238,7 @@ export function buildFlowCachedProfileSystemContext(
 		const gaps = compactStandardsGaps(profile.standardsProfile);
 		if (gaps) {
 			lines.push(
-				`- cached standards research gaps: ${quoted(gaps)}; resolve with available MCP tools first, especially Ref for official docs and Exa for current ecosystem research, then websearch/webfetch only as fallback.`,
+				`- cached standards research gaps: ${quoted(gaps)}; resolve only when material using available/authorized lookup tools, preferring official-doc sources when present and broader web search only as fallback.`,
 			);
 		}
 	}

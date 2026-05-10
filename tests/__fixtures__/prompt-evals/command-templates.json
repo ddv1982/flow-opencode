@@ -5,10 +5,13 @@
 		"category": "command-entry",
 		"surface": "auto_command_template",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/commands.ts", "src/prompts/fragments.ts"],
+		"sourcePaths": [
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
+		],
 		"expectedSnippets": [
-			"Do not derive, infer, or invent a new goal from repository inspection",
-			"Call `flow_auto_prepare` first"
+			"flow_auto_prepare",
+			"stop and request a goal instead of inferring one"
 		],
 		"forbiddenSnippets": ["infer a goal from repository inspection"]
 	},
@@ -19,8 +22,8 @@
 		"surface": "auto_command_template",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"resume the active session only",
@@ -35,8 +38,8 @@
 		"surface": "auto_command_template",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"status `recommend_confirm` or `human_required`",
@@ -51,29 +54,27 @@
 		"surface": "auto_command_template",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"Before final completion, run broad repo validation",
-			"deliveryPolicy.finalReviewPolicy",
-			"finish with a passing `finalReview`"
+			"final completion path",
+			"passing final review",
+			"runtime-owned completion evidence"
 		],
 		"forbiddenSnippets": ["skip final cross-feature review"]
 	},
 	{
 		"id": "threshold-completion-min-completed-features",
-		"title": "Final completion path explicitly includes completionPolicy.minCompletedFeatures",
+		"title": "Worker contract treats threshold completion as a final completion path",
 		"category": "completion-gating",
-		"surface": "auto_command_template",
+		"surface": "worker_contract",
 		"risk": "high",
-		"sourcePaths": [
-			"src/prompts/fragments.ts",
-			"src/runtime/domain/workflow-policy.ts"
-		],
+		"sourcePaths": ["src/prompts/contracts.ts"],
 		"expectedSnippets": [
+			"final completion path",
 			"completionPolicy.minCompletedFeatures",
-			"even when other plan features remain pending"
+			"even if other plan features remain pending"
 		],
 		"forbiddenSnippets": ["all plan features must be completed"]
 	},
@@ -84,8 +85,8 @@
 		"surface": "plan_command_template",
 		"risk": "medium",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"If the arguments start with `approve`",

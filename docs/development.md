@@ -37,8 +37,8 @@ Useful scripts:
 - `bun run eval:review-capture:check`
 - `bun run eval:prompt-capture`
 - `bun run eval:prompt-capture:check`
-- `bun run install:opencode`
-- `bun run uninstall:opencode`
+- `bun run install:opencode --project /path/to/workspace` to install the global OpenCode plugin and generated project-local Flow skills into the target workspace (defaults to cwd when omitted)
+- `bun run uninstall:opencode --project /path/to/workspace` to clear the canonical global `flow.js` plugin slot, including stale or outdated Flow plugin files, and remove only intact generated Flow-owned skills from the target workspace (defaults to cwd when omitted)
 
 
 ## Gate contract quick reference
@@ -69,9 +69,11 @@ Standing dependency/tool checklist: keep `zod` aligned with `@opencode-ai/plugin
 - `src/runtime/application/workspace-runtime.ts` — tool-argument parsing and workspace-root adapters
 - `src/runtime/session.ts` — persistence and lifecycle exports
 - `src/runtime/render.ts` — derived markdown rendering
-- `src/prompts/agents.ts` — agent instructions
-- `src/prompts/commands.ts` — slash-command templates
+- `src/prompts/agents.ts` — fallback agent prompt surfaces
+- `src/prompts/commands.ts` — fallback slash-command templates
 - `src/prompts/mode-contracts.ts` — canonical prompt-mode boundaries used by prompts, tests, and capture tooling
+- `src/prompts/skills.ts` and `src/prompts/generated/skill-docs.ts` — generated Flow skill specs and renderers
+- `src/adapters/opencode/skill-bundle.ts` — installer/uninstaller support for generated Flow-owned `.opencode/skills/**`
 
 ## Architecture in one view
 
@@ -83,8 +85,9 @@ Flow is built around a few stable responsibilities and authority boundaries:
 4. Domain transitions and runtime policy helpers remain authoritative for workflow state changes.
 5. Prompted agents call runtime tools instead of mutating state directly.
 6. Coordinators use OpenCode task/subagent handoffs for bounded planning, implementation, and review work when the host supports them, so each role can work in a fresh child context while runtime tools remain the state authority.
-7. For attachment-dependent `/flow-auto` goals, the coordinator materializes captured OpenCode PNG, JPEG, WebP, GIF, or AVIF attachments into explicit workspace asset paths before planning or handoff; SVG remains unsupported, and chat attachments are not filesystem files until `flow_attachments_materialize` returns paths.
-8. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
+7. Generated OpenCode skills under `.opencode/skills/flow-{plan,run,review}/SKILL.md` provide on-demand guidance. Slash commands and agents remain fallback surfaces and must keep working when skills are absent, denied, or hidden by OpenCode permissions.
+8. For attachment-dependent `/flow-auto` goals, the coordinator materializes captured OpenCode PNG, JPEG, WebP, GIF, or AVIF attachments into explicit workspace asset paths before planning or handoff; SVG remains unsupported, and chat attachments are not filesystem files until `flow_attachments_materialize` returns paths.
+9. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
 Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
 
@@ -117,7 +120,7 @@ Read-only repo review stays separate from feature execution and is exposed throu
 `/flow-review` now returns a renderer-backed human report by default; the structured review ledger remains an internal contract behind `flow_review_render`.
 Flow may only claim achieved `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
 
-## Prompt quality and evals
+## Prompt quality, skills, and evals
 
 Prompt behavior is part of the product contract. Keep prompt-mode boundaries in `src/prompts/mode-contracts.ts` and use that file as the canonical source for prompt visibility and mode behavior, not as the owner of runtime transition law:
 
@@ -126,6 +129,8 @@ Prompt behavior is part of the product contract. Keep prompt-mode boundaries in 
 - which runtime and repository mutations are allowed
 - which Flow tools are expected or forbidden
 - what each mode must do before stopping
+
+Generated skills are now part of the default OpenCode install lifecycle. Keep `flow-plan`, `flow-run`, and `flow-review` generated from Flow-owned specs; they may reference mode contracts, role protocols, and registered runtime tools, but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior. Command templates and role prompts should stay slim fallback surfaces with a fallback contract: mode title/boundary, allowed/forbidden Flow tools, stop condition, never edit `.flow/**`, one-sentence tool ordering, and recovery guidance when a skill is unavailable or denied.
 
 Providerless evals protect this contract without calling a model API:
 
@@ -178,6 +183,7 @@ Keep operator-facing messaging simple. Runtime remains the single owner of workf
 - Runtime owns workflow semantics; prompts and docs describe them.
 - Keep live runtime persistence snapshot-primary unless a dedicated event-first migration plan proves and stages a different authority.
 - Runtime transitions and snapshot persistence are the supported workflow authority. Do not reintroduce core workflow replay, event-store, checkpoint-store, or projection-store surfaces without an explicit product requirement and replacement tests.
+- Generated skills are instruction surfaces only; keep slash commands and agents usable as fallback surfaces when skills are absent or denied.
 - Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
 - Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed SDK-boundary change is intentional.
 - Preserve direct `tool(...)` arg shapes at the SDK boundary.

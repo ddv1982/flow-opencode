@@ -5,7 +5,7 @@ Scope: `src/adapters/opencode/tool-surface/schemas.ts`, `src/adapters/opencode/t
 ## Current state
 
 - The bridge no longer carries explicit `as any` / `as WorkerResult` arg-shape casts in the scoped files.
-- `zod` is pinned to `4.1.8` in this repo to stay aligned with `@opencode-ai/plugin@1.3.10`, which also bundles `zod@4.1.8`.
+- `zod` is pinned to `4.1.8` in this repo to stay aligned with the installed `@opencode-ai/plugin` SDK's effective `zod` version; the Slice 1 refresh on 2026-05-10 confirmed both installed `@opencode-ai/plugin@1.3.10` and latest `@opencode-ai/plugin@1.14.46` declare `zod@4.1.8`.
 - Treat that version alignment as part of the bridge contract. If you change either `zod` or `@opencode-ai/plugin`, rerun the bridge verification suite before accepting the change.
 
 ## What counts as **no relaxation of strictness**
@@ -59,5 +59,6 @@ Required quick audit:
 
 - `rg -n "as any|as WorkerResult|unknown as" src/adapters/opencode/tool-surface/schemas.ts src/adapters/opencode/tool-surface/runtime-tools/shared.ts src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts`
 - `bun pm ls zod`
+- Inspect the target `@opencode-ai/plugin` package typings for `tool(...)` raw arg-shape support and tool result support before changing package policy.
 
 Pass condition: no new boundary cast points, and `zod` remains intentionally aligned with the plugin SDK unless a reviewed SDK-boundary change says otherwise.

@@ -23,7 +23,8 @@ Primary ownership map:
 - OpenCode tool/action projection descriptors: `src/adapters/opencode/tool-surface/descriptors.ts`
 - Attachment ingress/materialization: `src/adapters/opencode/attachment-store.ts`, `src/adapters/opencode/attachment-materialization.ts`, and `src/adapters/opencode/tool-surface/session-tools/attachment-tools.ts`
 - Prompt-mode contracts: `src/prompts/mode-contracts.ts`
-- Prompt text: `src/prompts/`, `src/audit/prompts/`
+- Prompt text and fallback surfaces: `src/prompts/`, `src/audit/prompts/`
+- Generated skills: `src/prompts/skills.ts`, `src/prompts/generated/skill-docs.ts`, `src/adapters/opencode/skill-bundle.ts`
 
 ## Historical references
 
@@ -46,6 +47,18 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | `/flow-review` | `flow-control` | Read-only audit prompt plus `flow_review_render` |
 
 `flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. For goals that depend on supported image attachments (PNG, JPEG, WebP, GIF, and AVIF), `flow-auto` must materialize attachments before planning or handoff so child roles receive concrete workspace-relative paths rather than chat-only file parts. SVG remains unsupported by the materialization tool. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, and prompts must never edit `.flow` state directly.
+
+## Generated skills
+
+Generated project-local OpenCode skills are installed by the default OpenCode lifecycle alongside the global plugin. The current generated bundle is:
+
+| Skill | Installed path | Runtime authority |
+| --- | --- | --- |
+| `flow-plan` | `.opencode/skills/flow-plan/SKILL.md` | Existing planning tools and `flow-plan` mode contract |
+| `flow-run` | `.opencode/skills/flow-run/SKILL.md` | Existing execution/review tools and `flow-run` / `flow-worker` mode contracts |
+| `flow-review` | `.opencode/skills/flow-review/SKILL.md` | Existing reviewer/audit contracts and `flow-reviewer` / `flow-review` mode contracts |
+
+Skills are instruction surfaces only. They may cite Flow mode contracts, role protocols, and registered runtime tool names, but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior. OpenCode `permission.skill` controls whether generated skills are visible; `deny` or hidden skills must leave slash commands and agents usable through their named fallback contracts. Install/uninstall may touch only intact generated Flow-owned files under `.opencode/skills/**` and must never write under `.flow/**`.
 
 ## Tools
 
@@ -104,14 +117,15 @@ Ownership rules:
 
 - Runtime owns workflow semantics.
 - Live runtime persistence remains snapshot-primary until an explicit event-first migration changes it.
-- Prompt contracts must mirror runtime, not invent behavior.
+- Prompt contracts and generated skills must mirror runtime, not invent behavior.
 - Tool schemas are SDK boundary surfaces.
 - Completion/reviewer gates are release-critical.
 - `zod` / `@opencode-ai/plugin` alignment must remain stable.
 - Runtime tool names are public prompt contracts; renames require parity updates.
 - Prompt-mode boundaries are first-party product contracts and are guarded by capture/eval tests.
 - `/flow-review` is read-only and must not advance Flow planning/execution state.
-- Surface expansion is frozen by default: avoid new commands, tools, prompt contracts, state paths, or runtime modes unless there is an explicit retirement/replacement tradeoff.
+- Surface expansion is frozen by default: avoid new commands, tools, skills, prompt contracts, state paths, or runtime modes unless there is an explicit retirement/replacement tradeoff.
+- Fallback surfaces are required: existing slash commands and agents must remain usable without installed or permitted skills.
 
 
 ## Gate contract matrix
@@ -160,7 +174,7 @@ Prefer the narrowest useful check first, then run `bun run check` before release
 | `zod`, `@opencode-ai/plugin`, or tool arg shapes | `bun pm ls zod`; `bun run check:dependency-contract`; `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`; `bun run typecheck` |
 | Completion/finalization transitions | `bun run gate:completion-lane`; `bun test tests/runtime/final-completion-gates.test.ts tests/runtime/final-review-contracts.test.ts tests/completion-gates.test.ts` |
 | Runtime transitions or schema | `bun test tests/runtime.test.ts tests/runtime-replanning.test.ts tests/runtime-actionable-metadata.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts` |
-| Prompt text or prompt-mode contracts | `bun run eval:prompt-capture:check`; `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts` |
+| Prompt text, generated skills, or prompt-mode contracts | `bun run eval:prompt-capture:check`; `bun test tests/config/prompt-contracts.test.ts tests/config/skill-bundle.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts` |
 | `/flow-review` audit prompt or renderer | `bun run eval:review-capture:check`; `bun test tests/review-prompt-capture.test.ts tests/prompt-behavior-eval.test.ts` |
 | Tool registration or tool schemas | `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime-tools-metadata.test.ts tests/docs-tool-parity.test.ts`; `bun run typecheck` |
 | Session paths, persistence, history, or migration | `bun test tests/runtime-session-persistence.test.ts tests/runtime-tool-persistence.test.ts tests/runtime-execution-history.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/runtime-summary.test.ts tests/workspace-root-guard.test.ts` |

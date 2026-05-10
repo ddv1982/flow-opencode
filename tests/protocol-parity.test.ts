@@ -45,10 +45,11 @@ describe("protocol parity", () => {
 		expect(toolNames.some((name) => name.includes("_from_raw"))).toBe(false);
 	});
 
-	test("prompts and command templates stay canonical-only and script-first", () => {
+	test("prompt fallback surfaces stay canonical-only and expose runtime boundaries", () => {
 		for (const surface of PROMPT_SURFACES) {
 			expect(surface).not.toContain("_from_raw");
 			expect(surface).not.toContain("JSON-string transport tools");
+			expect(surface).toContain("Mode contracts remain authoritative as data");
 		}
 
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
@@ -56,40 +57,31 @@ describe("protocol parity", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_run_complete_feature");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_run_complete_feature");
-		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("package.json scripts");
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain("package.json scripts first");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"generated `flow-run` OpenCode skill",
+		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+			"No `flow-auto` skill is generated yet",
+		);
 	});
 
-	test("prompt surfaces preserve lite-lane, reviewer-persistence, final-path, and recovery/replan semantics", () => {
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"In the lite lane, if the runtime session is small enough",
-		);
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"retryable non-human blockers may return the feature directly to ready/pending",
-		);
+	test("prompt fallback surfaces preserve reviewer-persistence, final-path, and recovery/replan contracts through tools and schemas", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"On the final completion path, run broad validation",
-		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("final completion path");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("broad validation");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"deliveryPolicy.finalReviewPolicy",
 		);
-		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"If flow_run_complete_feature fails, inspect the runtime error and any structured recovery metadata",
-		);
-		expect(FLOW_AUTO_AGENT_PROMPT).toContain(
-			"If the runtime routes back into planning because the feature needs decomposition",
-		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("replan_required");
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_reset_feature");
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain("clean, blocked, or replanned");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("final completion path");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"On the final completion path, run broad validation",
+			"runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
 		);
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"obtain the runtime-owned final approval required by deliveryPolicy.finalReviewPolicy",
-		);
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"In the lite lane, if the runtime session is small enough",
-		);
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
 	});
 
 	test("prompt expression invariant references stay known and distinct", () => {

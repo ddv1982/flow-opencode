@@ -26,6 +26,17 @@ function dataUrl(mime: string, bytes: Buffer) {
 	return `data:${mime};base64,${bytes.toString("base64")}`;
 }
 
+function expectSdkBoundaryContinuationResponse(response: unknown) {
+	expect(response).toBeDefined();
+	expect(typeof response).toBe("object");
+	expect(response).not.toBeNull();
+	expect(response).not.toHaveProperty("terminated");
+	expect(response).not.toHaveProperty("terminate");
+	expect(response).not.toHaveProperty("stop");
+	expect(response).not.toHaveProperty("closed");
+	expect(JSON.stringify(response).toLowerCase()).not.toContain("terminated");
+}
+
 afterEach(() => {
 	clearFlowAttachments();
 	cleanupTempDirs();
@@ -84,6 +95,92 @@ describe("plugin config surface", () => {
 			"function",
 		);
 		expect(typeof pluginWithHooks.hooks?.["tool.definition"]).toBe("function");
+	});
+
+	test("plan and run lifecycle tools return JSON continuation envelopes without host termination signals", async () => {
+		const worktree = makeTempDir();
+		const tools = createTools({}) as Record<
+			string,
+			{ execute: (args: unknown, context: unknown) => Promise<unknown> }
+		>;
+		const context = toolContext(worktree, undefined, {
+			sessionID: "sdk-boundary-session",
+			messageID: "sdk-boundary-message",
+			agent: "flow-auto",
+		});
+
+		const planStartOutput = await tools.flow_plan_start?.execute(
+			{ goal: "Stabilize the SDK boundary" },
+			context,
+		);
+		expect(typeof planStartOutput).toBe("string");
+		const planStart = JSON.parse(planStartOutput as string) as {
+			status: string;
+			summary: string;
+			session: { status: string; operator: { phase: string } };
+		};
+
+		expect(planStart.status).toBe("ok");
+		expect(planStart.session.status).toBe("planning");
+		expect(planStart.session.operator.phase).toBe("planning");
+		expectSdkBoundaryContinuationResponse(planStart);
+
+		const planApply = JSON.parse(
+			(await tools.flow_plan_apply?.execute(
+				{
+					plan: {
+						summary: "Keep SDK lifecycle tools stable.",
+						overview:
+							"Exercise plan start, plan apply, approval, and run start through the OpenCode tool boundary.",
+						features: [
+							{
+								id: "sdk-boundary",
+								title: "Stabilize SDK boundary",
+								summary: "Lock lifecycle response semantics.",
+								fileTargets: ["src/adapters/opencode/plugin.ts"],
+								verification: ["bun test tests/config/plugin-surface.test.ts"],
+							},
+						],
+					},
+				},
+				context,
+			)) as string,
+		) as {
+			status: string;
+			autoApproved?: boolean;
+			session: { status: string; operator: { phase: string } };
+		};
+		expect(planApply.status).toBe("ok");
+		expectSdkBoundaryContinuationResponse(planApply);
+
+		if (!planApply.autoApproved) {
+			const planApprove = JSON.parse(
+				(await tools.flow_plan_approve?.execute({}, context)) as string,
+			) as { status: string; session: { status: string } };
+			expect(planApprove.status).toBe("ok");
+			expect(planApprove.session.status).toBe("approved");
+			expectSdkBoundaryContinuationResponse(planApprove);
+		}
+
+		const runStartOutput = await tools.flow_run_start?.execute({}, context);
+		expect(typeof runStartOutput).toBe("string");
+		const runStart = JSON.parse(runStartOutput as string) as {
+			status: string;
+			summary: string;
+			session: { status: string; operator: { phase: string } };
+		};
+		expect(runStart.status).toBe("ok");
+		expect(runStart.session.status).toBe("running");
+		expect(runStart.session.operator.phase).toBe("executing");
+		expectSdkBoundaryContinuationResponse(runStart);
+
+		const retryRunStart = JSON.parse(
+			(await tools.flow_run_start?.execute({}, context)) as string,
+		) as { status: string; summary: string; session: { status: string } };
+		expect(retryRunStart.status).toBe("ok");
+		expect(retryRunStart.summary).toContain("already running");
+		expect(retryRunStart.session.status).toBe("running");
+		expectSdkBoundaryContinuationResponse(retryRunStart);
 	});
 
 	test("plugin hooks ingest FilePart payloads before attachment materialization", async () => {

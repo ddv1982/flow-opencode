@@ -6,13 +6,14 @@
 		"surface": "run_command_template",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts",
+			"src/prompts/contracts.ts"
 		],
 		"expectedSnippets": [
-			"Execute one approved Flow feature.",
-			"Otherwise implement exactly one feature, run targeted validation, review changed files plus discovered connected context (changed files are the seed, not the boundary), fix review findings",
-			"obtain reviewer approval through `flow_review_record_feature`"
+			"Outcome: execute one approved feature through validation, review, and runtime-owned completion or blocker reporting.",
+			"Otherwise implement exactly one feature, run targeted validation, review changed files plus discovered connected context",
+			"flow_review_record_feature"
 		],
 		"forbiddenSnippets": ["execute every approved feature"]
 	},
@@ -23,8 +24,8 @@
 		"surface": "status_command_template",
 		"risk": "medium",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"Inspect the active Flow session.",
@@ -41,8 +42,8 @@
 		"surface": "doctor_command_template",
 		"risk": "medium",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"Check Flow readiness for the current workspace.",
@@ -59,8 +60,8 @@
 		"surface": "history_command_template",
 		"risk": "medium",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"Inspect stored Flow session history.",
@@ -77,8 +78,8 @@
 		"surface": "session_command_template",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"Manage the active Flow session pointer.",
@@ -95,8 +96,8 @@
 		"surface": "reset_command_template",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/commands.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"Reset Flow state.",

@@ -5,7 +5,11 @@
 		"category": "planning-evidence",
 		"surface": "planner_agent_prompt",
 		"risk": "high",
-		"sourcePaths": ["src/prompts/agents.ts", "src/prompts/contracts.ts"],
+		"sourcePaths": [
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/mode-contracts.ts"
+		],
 		"expectedSnippets": [
 			"If package-manager evidence is ambiguous, do not guess.",
 			"flow_plan_context_record",
@@ -20,12 +24,13 @@
 		"surface": "worker_agent_prompt",
 		"risk": "medium",
 		"sourcePaths": [
-			"src/prompts/agents.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"Repeat until review passes or a real blocker remains.",
-			"retryable non-human blockers may return the feature directly to ready/pending"
+			"generated `flow-run` OpenCode skill",
+			"Worker result is persisted only after clean validation/review or a true blocker"
 		],
 		"forbiddenSnippets": ["stop after the first review failure"]
 	},
@@ -36,14 +41,15 @@
 		"surface": "reviewer_agent_prompt",
 		"risk": "high",
 		"sourcePaths": [
-			"src/prompts/agents.ts",
-			"tests/config/prompt-contracts.test.ts"
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/contracts.ts",
+			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
 			"Do not write code.",
-			"Return needs_fix when the current feature should continue",
-			"Review only for correctness",
-			"Review changed behavior through applicable adversarial failure-mode classes",
+			"needs_fix",
+			"Review for correctness",
+			"failure-mode classes",
 			"test-evidence authenticity"
 		],
 		"forbiddenSnippets": ["reviewer applies code fixes directly"]

@@ -42,7 +42,9 @@ describe("prompt mode capture harness", () => {
 
 		expect(planPrompt).toContain("offline/providerless prompt-quality capture");
 		expect(planPrompt).toContain("Objective");
-		expect(planPrompt).toContain("Manage the active Flow plan.");
+		expect(planPrompt).toContain(
+			"Outcome: turn the requested planning action into",
+		);
 		expect(planPrompt).toContain("flow_plan_context_record");
 		expect(planPrompt).toContain("contractSourcePaths");
 		expect(planPrompt).not.toContain("OPENAI_API_KEY");
