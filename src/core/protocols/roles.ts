@@ -183,7 +183,7 @@ export const CORE_ROLE_PROTOCOLS = [
 			"Stop after rendering the requested status or control result.",
 		],
 		workflow: [
-			"Choose the requested status, doctor, history, activation, reset, close, or audit-control surface.",
+			"Choose the requested status, doctor, history, activation, reset, or close surface.",
 			"For multi-step control operations, emit one progress update before the runtime call and one outcome summary after it.",
 		],
 		examples: [],

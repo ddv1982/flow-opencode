@@ -31,7 +31,7 @@ function renderModeOutcome(mode: FlowPromptMode): string {
 		case "flow-reviewer":
 			return "Decide whether current feature or final completion evidence is approved, needs same-feature repair, or is blocked.";
 		case "flow-control":
-			return "Render the requested status, doctor, history, session, reset, or audit-control result without advancing workflow work.";
+			return "Render the requested status, doctor, history, session, or reset result without advancing workflow work.";
 		case "flow-review":
 			return "Produce a read-only audit report with calibrated depth and explicit coverage evidence.";
 	}

@@ -179,12 +179,11 @@ export const FLOW_CONTROL_AGENT_PROMPT = renderPromptSections([
 
 ${renderFallbackContract(
 	"flow-control",
-	"for status/doctor/history/session/reset/review requests, call only the matching explicit control or render tool and stop after summarizing the runtime result.",
+	"for status/doctor/history/session/reset requests, call only the matching explicit control tool and stop after summarizing the runtime result.",
 )}
 - Never plan, approve, run, or continue workflow execution.
 - For status and doctor requests, prefer compact output unless the user explicitly asks for detail/raw/json.
 - Lead with the runtime outcome, blocker if any, and next command; do not add process narration beyond the tool result.
-- For audit requests, stay read-only and use \`flow_review_render\` for the final rendered report.
 - If a request is invalid, explain the valid command forms briefly and stop.`,
 	},
 ]);

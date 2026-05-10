@@ -1,5 +1,9 @@
 import { applyFlowAuditConfig } from "../../audit/config";
-import { FLOW_READ_ONLY_PERMISSION } from "../../config-shared";
+import {
+	FLOW_READ_ONLY_PERMISSION,
+	FLOW_REASONING,
+	type FlowAgentConfig,
+} from "../../config-shared";
 import {
 	FLOW_AUTO_AGENT_PROMPT,
 	FLOW_CONTROL_AGENT_PROMPT,
@@ -24,20 +28,6 @@ type MutableConfig = {
 	command?: Record<string, unknown>;
 };
 
-type FlowPermissionConfig = {
-	edit?: string;
-	bash?: string;
-	external_directory?: string;
-	task?: Record<string, string>;
-};
-
-type FlowAgentConfig = {
-	mode: "primary" | "all";
-	description: string;
-	prompt: string;
-	permission?: FlowPermissionConfig;
-};
-
 type FlowCommandConfig = {
 	description: string;
 	agent: string;
@@ -48,12 +38,14 @@ function createReadOnlyPrimaryAgent(
 	description: string,
 	prompt: string,
 	mode: FlowAgentConfig["mode"] = "primary",
+	reasoningEffort?: FlowAgentConfig["reasoningEffort"],
 ): FlowAgentConfig {
 	return {
 		mode,
 		description,
 		prompt,
 		permission: FLOW_READ_ONLY_PERMISSION,
+		...(reasoningEffort ? { reasoningEffort } : {}),
 	};
 }
 
@@ -62,12 +54,14 @@ const FLOW_CORE_AGENTS = {
 		"Research repo evidence for phase-correct Flow planning without mutating runtime state.",
 		FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
 		"all",
+		FLOW_REASONING.deep,
 	),
 	"flow-planner": {
 		mode: "all",
 		description:
 			"Create and refine compact Flow plans grounded in repo evidence.",
 		prompt: FLOW_PLANNER_AGENT_PROMPT,
+		reasoningEffort: FLOW_REASONING.deep,
 		permission: {
 			edit: "deny",
 			bash: "deny",
@@ -82,6 +76,7 @@ const FLOW_CORE_AGENTS = {
 		description:
 			"Execute one approved Flow feature with focused validation and review.",
 		prompt: FLOW_WORKER_AGENT_PROMPT,
+		reasoningEffort: FLOW_REASONING.fast,
 		permission: {
 			task: {
 				"*": "deny",
@@ -94,6 +89,7 @@ const FLOW_CORE_AGENTS = {
 		description:
 			"Coordinate Flow planning, execution, review, and recovery autonomously.",
 		prompt: FLOW_AUTO_AGENT_PROMPT,
+		reasoningEffort: FLOW_REASONING.balanced,
 		permission: {
 			task: {
 				"*": "deny",
@@ -108,10 +104,13 @@ const FLOW_CORE_AGENTS = {
 		"Review Flow work and decide whether it may advance.",
 		FLOW_REVIEWER_AGENT_PROMPT,
 		"all",
+		FLOW_REASONING.deep,
 	),
 	"flow-control": createReadOnlyPrimaryAgent(
 		"Inspect or reset Flow runtime state without executing work.",
 		FLOW_CONTROL_AGENT_PROMPT,
+		"primary",
+		FLOW_REASONING.fast,
 	),
 } satisfies Record<string, FlowAgentConfig>;
 

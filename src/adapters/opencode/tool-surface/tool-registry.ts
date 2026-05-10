@@ -270,7 +270,7 @@ export const OPENCODE_TOOL_REGISTRY = [
 		runtimeActionBinding: { kind: "none" },
 		coreAction: null,
 		mutationClass: "none",
-		allowedModes: ["flow-control", "flow-review"],
+		allowedModes: ["flow-review"],
 		hostDescription:
 			"Render a structured Flow review ledger into a human-readable report, structured JSON, or both",
 		definitionGuidance: FLOW_PROMPT_GUIDANCE_BY_ID.flow_review_render,

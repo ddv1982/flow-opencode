@@ -44,7 +44,7 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | `/flow-history` | `flow-control` | `flow_history`, `flow_history_show` |
 | `/flow-session` | `flow-control` | `flow_session_activate`, `flow_session_close` |
 | `/flow-reset` | `flow-control` | `flow_reset_feature` |
-| `/flow-review` | `flow-control` | Read-only audit prompt plus `flow_review_render` |
+| `/flow-review` | `flow-auditor` | Read-only audit prompt plus `flow_review_render` |
 
 `flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. For goals that depend on supported image attachments (PNG, JPEG, WebP, GIF, and AVIF), `flow-auto` must materialize attachments before planning or handoff so child roles receive concrete workspace-relative paths rather than chat-only file parts. SVG remains unsupported by the materialization tool. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, and prompts must never edit `.flow` state directly.
 

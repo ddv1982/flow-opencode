@@ -311,7 +311,6 @@ export const FLOW_MODE_CONTRACTS = {
 			"flow_session_activate",
 			"flow_session_close",
 			"flow_reset_feature",
-			"flow_review_render",
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
@@ -323,6 +322,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"flow_run_complete_feature",
 			"flow_review_record_feature",
 			"flow_review_record_final",
+			"flow_review_render",
 		],
 		requiredBehavior: [
 			"Never plan, approve, run, or continue workflow execution.",
@@ -340,6 +340,7 @@ export const FLOW_MODE_CONTRACTS = {
 		sourcePaths: [
 			PROMPT_MODE_CONTRACT_SOURCE_PATH,
 			"src/audit/prompts/commands.ts",
+			"src/audit/prompts/agents.ts",
 			"src/audit/prompts/contracts.ts",
 			"src/audit/prompts/fragments.ts",
 			"src/audit/report-presenter.ts",

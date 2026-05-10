@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { OPENCODE_TOOL_REGISTRY } from "../src/adapters/opencode/tool-surface/tool-registry";
 import { createCoreTools } from "../src/adapters/opencode/tools";
 import { createFlowAuditConfigEntries } from "../src/audit/config";
 import { createFlowCoreConfigEntries } from "../src/config";
-import { FLOW_READ_ONLY_PERMISSION } from "../src/config-shared";
+import {
+	FLOW_READ_ONLY_PERMISSION,
+	FLOW_REASONING,
+} from "../src/config-shared";
 import {
 	FLOW_MODE_CONTRACTS,
 	FLOW_PROMPT_MODE_CAPTURE_MODES,
@@ -29,7 +33,7 @@ const EXPECTED_COMMAND_AGENT_BINDINGS = {
 	"flow-plan": "flow-planner",
 	"flow-run": "flow-worker",
 	"flow-auto": "flow-auto",
-	"flow-review": "flow-control",
+	"flow-review": "flow-auditor",
 } as const;
 
 describe("flow prompt mode contracts", () => {
@@ -100,9 +104,19 @@ describe("flow prompt mode contracts", () => {
 	});
 
 	test("standalone audit renders reports without mutating Flow workflow state", () => {
+		const controlContract = getFlowModeContract("flow-control");
 		const contract = getFlowModeContract("flow-review");
+		const renderTool = OPENCODE_TOOL_REGISTRY.find(
+			(entry) => entry.toolName === "flow_review_render",
+		);
 
+		expect(controlContract.allowedFlowTools).not.toContain(
+			"flow_review_render",
+		);
+		expect(controlContract.forbiddenFlowTools).toContain("flow_review_render");
 		expect(contract.allowedFlowTools).toEqual(["flow_review_render"]);
+		expect(renderTool?.allowedModes).toEqual(["flow-review"]);
+		expect(contract.sourcePaths).toContain("src/audit/prompts/agents.ts");
 		expect(contract.forbiddenFlowTools).toEqual(
 			expect.arrayContaining([
 				"flow_auto_prepare",
@@ -175,11 +189,40 @@ describe("flow prompt mode contracts", () => {
 			"flow-planner",
 			"flow-reviewer",
 			"flow-control",
+			"flow-auditor",
 		] as const) {
 			expect(agents[readOnlyAgentName]).toMatchObject({
 				permission: FLOW_READ_ONLY_PERMISSION,
 			});
 			expect(agents[readOnlyAgentName]).not.toHaveProperty("tools");
+		}
+
+		const expectedReasoningEffort = {
+			"flow-plan": FLOW_REASONING.deep,
+			"flow-run": FLOW_REASONING.fast,
+			"flow-auto": FLOW_REASONING.balanced,
+			"flow-review": FLOW_REASONING.deep,
+			"flow-planning-researcher": FLOW_REASONING.deep,
+			"flow-worker": FLOW_REASONING.fast,
+			"flow-reviewer": FLOW_REASONING.deep,
+			"flow-control": FLOW_REASONING.fast,
+		} as const;
+
+		for (const mode of FLOW_PROMPT_MODE_ORDER) {
+			const contract = getFlowModeContract(mode);
+			const agentName =
+				contract.surfaceKind === "command"
+					? (commands[mode] as { agent?: string } | undefined)?.agent
+					: mode;
+			if (!agentName) {
+				throw new Error(`Missing agent binding for ${mode}`);
+			}
+			expect(agents[agentName]).toMatchObject({
+				reasoningEffort: expectedReasoningEffort[mode],
+			});
+			expect(agents[agentName]).not.toHaveProperty("model");
+			expect(agents[agentName]).not.toHaveProperty("variant");
+			expect(agents[agentName]).not.toHaveProperty("reasoning");
 		}
 	});
 
@@ -224,5 +267,13 @@ describe("flow prompt mode contracts", () => {
 		expect(agent["flow-control"]?.permission?.task).toEqual({
 			"*": "deny",
 		});
+
+		const { agent: auditAgent } = createFlowAuditConfigEntries();
+		expect(auditAgent["flow-auditor"]).toMatchObject({
+			mode: "primary",
+			permission: FLOW_READ_ONLY_PERMISSION,
+			reasoningEffort: FLOW_REASONING.deep,
+		});
+		expect(auditAgent["flow-auditor"]).not.toHaveProperty("tools");
 	});
 });

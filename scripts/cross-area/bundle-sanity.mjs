@@ -142,7 +142,7 @@ async function main() {
 			throw new Error("Source map is not valid v3 JSON with mappings.");
 		}
 		if (
-			report.configAgents !== 6 ||
+			report.configAgents !== 7 ||
 			report.configCommands !== 9 ||
 			report.toolCount !== 19
 		) {

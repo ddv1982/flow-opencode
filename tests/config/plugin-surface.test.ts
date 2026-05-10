@@ -9,6 +9,7 @@ import {
 	createConfigHook,
 } from "../../src/adapters/opencode/config";
 import { OPENCODE_TOOL_NAMES } from "../../src/adapters/opencode/tool-projections.generated";
+import { OPENCODE_TOOL_REGISTRY } from "../../src/adapters/opencode/tool-surface/tool-registry";
 import { createTools } from "../../src/adapters/opencode/tools";
 import FlowPlugin from "../../src/index";
 import { createTempDirRegistry, toolContext } from "../runtime-test-helpers";
@@ -322,6 +323,15 @@ describe("plugin config surface", () => {
 	test("createTools preserves the projected ordered OpenCode tool surface", () => {
 		expect(Object.keys(createTools({}))).toEqual(OPENCODE_TOOL_NAMES);
 	});
+
+	test("review renderer is available only to the standalone audit mode", () => {
+		const renderTool = OPENCODE_TOOL_REGISTRY.find(
+			(entry) => entry.toolName === "flow_review_render",
+		);
+
+		expect(renderTool?.allowedModes).toEqual(["flow-review"]);
+	});
+
 	test("injects commands and agents", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
@@ -334,6 +344,7 @@ describe("plugin config surface", () => {
 		expect(config.agent?.["flow-auto"]).toBeDefined();
 		expect(config.agent?.["flow-reviewer"]).toBeDefined();
 		expect(config.agent?.["flow-control"]).toBeDefined();
+		expect(config.agent?.["flow-auditor"]).toBeDefined();
 		expect(config.command?.["flow-plan"]).toBeDefined();
 		expect(config.command?.["flow-run"]).toBeDefined();
 		expect(config.command?.["flow-auto"]).toBeDefined();
@@ -362,11 +373,11 @@ describe("plugin config surface", () => {
 		expect(tools.flow_review_record_final.description).toContain("Record");
 	});
 
-	test("routes status, doctor, history, session activation, and reset through the control agent", () => {
+	test("routes review through the auditor and control commands through the control agent", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
-		expect(config.command?.["flow-review"]?.agent).toBe("flow-control");
+		expect(config.command?.["flow-review"]?.agent).toBe("flow-auditor");
 		expect(config.command?.["flow-status"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-doctor"]?.agent).toBe("flow-control");
 		expect(config.command?.["flow-history"]?.agent).toBe("flow-control");
@@ -374,7 +385,33 @@ describe("plugin config surface", () => {
 		expect(config.command?.["flow-reset"]?.agent).toBe("flow-control");
 	});
 
-	test("keeps planning researcher, planner, reviewer, and control agents read-only", () => {
+	test("emits pass-through reasoningEffort budgets without provider-specific model config", () => {
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+
+		const expectedReasoningEffort = {
+			"flow-planning-researcher": "high",
+			"flow-planner": "high",
+			"flow-worker": "low",
+			"flow-auto": "medium",
+			"flow-reviewer": "high",
+			"flow-control": "low",
+			"flow-auditor": "high",
+		} as const;
+
+		for (const [agentName, reasoningEffort] of Object.entries(
+			expectedReasoningEffort,
+		)) {
+			const agent = config.agent?.[agentName];
+			expect(agent).toBeDefined();
+			expect(agent?.reasoningEffort).toBe(reasoningEffort);
+			expect(agent).not.toHaveProperty("model");
+			expect(agent).not.toHaveProperty("variant");
+			expect(agent).not.toHaveProperty("reasoning");
+		}
+	});
+
+	test("keeps planning researcher, planner, reviewer, auditor, and control agents read-only", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 
@@ -416,6 +453,23 @@ describe("plugin config surface", () => {
 		expect(config.agent?.["flow-control"]?.permission?.task).toEqual({
 			"*": "deny",
 		});
+
+		expect(config.agent?.["flow-auditor"]?.mode).toBe("primary");
+		expect(config.agent?.["flow-auditor"]?.tools).toBeUndefined();
+		expect(config.agent?.["flow-auditor"]?.permission?.edit).toBe("deny");
+		expect(config.agent?.["flow-auditor"]?.permission?.bash).toBe("deny");
+		expect(config.agent?.["flow-auditor"]?.permission?.task).toEqual({
+			"*": "deny",
+		});
+		expect(config.command?.["flow-review"]?.template).toContain(
+			"call flow_review_render",
+		);
+		expect(config.agent?.["flow-control"]?.prompt).toContain(
+			"Allowed Flow tools: `flow_status`, `flow_doctor`, `flow_history`, `flow_history_show`, `flow_session_activate`, `flow_session_close`, `flow_reset_feature`.",
+		);
+		expect(config.agent?.["flow-control"]?.prompt).not.toContain(
+			"For audit requests",
+		);
 
 		expect(
 			config.agent?.["flow-worker"]?.permission?.external_directory,
@@ -503,6 +557,9 @@ describe("plugin config surface", () => {
 		expect(first.agent?.["flow-reviewer"]).not.toBe(
 			second.agent?.["flow-reviewer"],
 		);
+		expect(first.agent?.["flow-auditor"]).not.toBe(
+			second.agent?.["flow-auditor"],
+		);
 		expect(first.agent?.["flow-planner"]?.tools).toBeUndefined();
 		expect(first.agent?.["flow-reviewer"]?.tools).toBeUndefined();
 		expect(first.agent?.["flow-planner"]?.permission).not.toBe(
@@ -510,6 +567,9 @@ describe("plugin config surface", () => {
 		);
 		expect(first.agent?.["flow-planning-researcher"]?.permission).not.toBe(
 			second.agent?.["flow-planning-researcher"]?.permission,
+		);
+		expect(first.agent?.["flow-auditor"]?.permission).not.toBe(
+			second.agent?.["flow-auditor"]?.permission,
 		);
 		expect(first.agent?.["flow-worker"]?.permission?.task).not.toBe(
 			second.agent?.["flow-worker"]?.permission?.task,
@@ -539,6 +599,9 @@ describe("plugin config surface", () => {
 		firstPlanner.permission.edit = "allow";
 		firstWorker.permission.task["flow-reviewer"] = "deny";
 		firstAuto.permission.task["flow-worker"] = "deny";
+		if (first.agent?.["flow-auditor"]?.permission?.task) {
+			first.agent["flow-auditor"].permission.task["*"] = "allow";
+		}
 		expect(second.agent?.["flow-planner"]?.tools).toBeUndefined();
 		expect(first.agent?.["flow-reviewer"]?.tools).toBeUndefined();
 		expect(second.agent?.["flow-planner"]?.permission?.edit).toBe("deny");
@@ -547,6 +610,9 @@ describe("plugin config surface", () => {
 		).toBe("allow");
 		expect(second.agent?.["flow-auto"]?.permission?.task?.["flow-worker"]).toBe(
 			"allow",
+		);
+		expect(second.agent?.["flow-auditor"]?.permission?.task?.["*"]).toBe(
+			"deny",
 		);
 	});
 });
