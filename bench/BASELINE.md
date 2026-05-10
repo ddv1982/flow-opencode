@@ -16,12 +16,5 @@ Environment: `bun 1.3.5` on Apple M4 (`~3.83 GHz`)
 | zod parse hot paths / WorkerResultSchema.parse | 813.25 ns avg |
 | full saveSession cycle / 20-feature plan | 3.38 ms avg |
 | warm saveSession cycle | 777.70 µs avg |
-| workflow events / append 6-event log | 1.20 ms avg |
-| workflow events / replay 6-event log | 18.00 µs avg |
-| workflow checkpoint / write completed state | 950.00 µs avg |
-| workflow projection / render completed state | 1.50 ms avg |
-| opencode tool projection / createCoreTools | 40.00 µs avg |
 
 Warm `saveSession` baseline note: M5 is the first build with hash-based incremental markdown rendering, so the warm re-save row above is the initial recorded baseline for the unchanged-session path.
-
-Item 5 event baseline note: workflow event/checkpoint/projection/tool rows are the initial release-gate baselines for the deterministic workflow rewrite path. Regressions above the bench gate tolerance require an explained note in `bench/RESULTS.md`.

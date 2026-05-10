@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { applyFlowConfig } from "../../config";
+import { FLOW_REASONING, type FlowReasoningEffort } from "../../config-shared";
 import { resolveInstallTarget } from "../../installer";
 import { getActiveSessionPath, getIndexDocPath } from "../paths";
 import type { Session } from "../schema";
@@ -19,10 +20,27 @@ export type DoctorCheck = {
 	details?: Record<string, unknown>;
 };
 
-type MutableConfig = {
-	agent?: Record<string, { agent?: string; description?: string }>;
+export type MutableConfig = {
+	agent?: Record<
+		string,
+		{
+			agent?: string;
+			description?: string;
+			reasoningEffort?: FlowReasoningEffort;
+		}
+	>;
 	command?: Record<string, { agent?: string; description?: string }>;
 };
+
+const EXPECTED_FLOW_AGENT_REASONING = {
+	"flow-planning-researcher": FLOW_REASONING.deep,
+	"flow-planner": FLOW_REASONING.deep,
+	"flow-worker": FLOW_REASONING.fast,
+	"flow-auto": FLOW_REASONING.balanced,
+	"flow-reviewer": FLOW_REASONING.deep,
+	"flow-control": FLOW_REASONING.fast,
+	"flow-auditor": FLOW_REASONING.deep,
+} as const satisfies Record<string, FlowReasoningEffort>;
 
 async function pathExists(target: string, mode = constants.F_OK) {
 	try {
@@ -61,19 +79,16 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 export function buildConfigCheck(): DoctorCheck {
 	const config: MutableConfig = {};
 	applyFlowConfig(config);
+	return evaluateConfigCheck(config);
+}
 
-	const requiredAgents = [
-		"flow-planning-researcher",
-		"flow-planner",
-		"flow-worker",
-		"flow-auto",
-		"flow-reviewer",
-		"flow-control",
-	];
+export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
+	const requiredAgents = Object.keys(EXPECTED_FLOW_AGENT_REASONING);
 	const requiredCommands = [
 		"flow-plan",
 		"flow-run",
 		"flow-auto",
+		"flow-review",
 		"flow-status",
 		"flow-doctor",
 		"flow-history",
@@ -85,22 +100,46 @@ export function buildConfigCheck(): DoctorCheck {
 		(name) => !config.command?.[name],
 	);
 	const doctorAgent = config.command?.["flow-doctor"]?.agent;
+	const reviewAgent = config.command?.["flow-review"]?.agent;
+	const agentReasoningEffort = Object.fromEntries(
+		requiredAgents.map((name) => [
+			name,
+			config.agent?.[name]?.reasoningEffort ?? null,
+		]),
+	);
+	const reasoningMismatches = Object.entries(EXPECTED_FLOW_AGENT_REASONING)
+		.filter(
+			([name, expected]) => config.agent?.[name]?.reasoningEffort !== expected,
+		)
+		.map(([name, expected]) => ({
+			agent: name,
+			expected,
+			actual: config.agent?.[name]?.reasoningEffort ?? null,
+		}));
 
 	if (
 		missingAgents.length === 0 &&
 		missingCommands.length === 0 &&
-		doctorAgent === "flow-control"
+		doctorAgent === "flow-control" &&
+		reviewAgent === "flow-auditor" &&
+		reasoningMismatches.length === 0
 	) {
 		return {
 			id: "config",
 			label: "Command and agent injection",
 			status: "pass",
 			summary:
-				"Flow can inject the expected commands and agents, including /flow-doctor through flow-control.",
+				"Flow can inject the expected commands, agents, and reasoningEffort budgets.",
 			remediation: null,
 			details: {
 				agentCount: Object.keys(config.agent ?? {}).length,
 				commandCount: Object.keys(config.command ?? {}).length,
+				doctorAgent,
+				commandRouting: {
+					"flow-doctor": doctorAgent,
+					"flow-review": reviewAgent,
+				},
+				agentReasoningEffort,
 			},
 		};
 	}
@@ -110,13 +149,19 @@ export function buildConfigCheck(): DoctorCheck {
 		label: "Command and agent injection",
 		status: "fail",
 		summary:
-			"Flow's injected command or agent surface is incomplete or misrouted.",
+			"Flow's injected command, agent, or reasoningEffort surface is incomplete or misrouted.",
 		remediation:
-			"Rebuild or reinstall Flow, then confirm /flow-doctor is routed through flow-control.",
+			"Rebuild or reinstall Flow, then confirm /flow-doctor is routed through flow-control, /flow-review is routed through flow-auditor, and Flow agents carry the expected reasoningEffort budgets.",
 		details: {
 			missingAgents,
 			missingCommands,
 			doctorAgent: doctorAgent ?? null,
+			commandRouting: {
+				"flow-doctor": doctorAgent ?? null,
+				"flow-review": reviewAgent ?? null,
+			},
+			agentReasoningEffort,
+			reasoningMismatches,
 		},
 	};
 }

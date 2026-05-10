@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { applyFlowConfig } from "../src/config";
 import { resolveInstallTarget } from "../src/installer";
+import {
+	evaluateConfigCheck,
+	type MutableConfig,
+} from "../src/runtime/application/doctor-checks";
 import {
 	FLOW_PLAN_WITH_GOAL_COMMAND,
 	FLOW_RUN_COMMAND,
@@ -35,6 +40,14 @@ function assertOk<T>(
 	}
 
 	return result.value;
+}
+
+function requireConfigEntry<T>(entry: T | undefined, label: string): T {
+	if (!entry) {
+		throw new Error(`Missing ${label} in test config.`);
+	}
+
+	return entry;
 }
 
 async function installDoctorPluginFixture(homeDir: string) {
@@ -180,6 +193,23 @@ describe("runtime operator tools", () => {
 			);
 			expect(parsed.operatorSummary).toContain("Command: /flow-plan <goal>");
 
+			const configCheck = parsed.checks.find(
+				(check: { id: string }) => check.id === "config",
+			);
+			expect(configCheck?.details.commandRouting).toEqual({
+				"flow-doctor": "flow-control",
+				"flow-review": "flow-auditor",
+			});
+			expect(configCheck?.details.agentReasoningEffort).toEqual({
+				"flow-planning-researcher": "high",
+				"flow-planner": "high",
+				"flow-worker": "low",
+				"flow-auto": "medium",
+				"flow-reviewer": "high",
+				"flow-control": "low",
+				"flow-auditor": "high",
+			});
+
 			expect(parsed.checks).toEqual(
 				expect.arrayContaining([
 					expect.objectContaining({
@@ -204,6 +234,53 @@ describe("runtime operator tools", () => {
 					}),
 				]),
 			);
+		});
+	});
+
+	test("flow_doctor config check reports reasoning and command route failures", () => {
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+		requireConfigEntry(
+			config.agent?.["flow-worker"],
+			"flow-worker agent",
+		).reasoningEffort = "high";
+		requireConfigEntry(
+			config.command?.["flow-review"],
+			"flow-review command",
+		).agent = "flow-control";
+
+		const check = evaluateConfigCheck(config);
+
+		expect(check.status).toBe("fail");
+		expect(check.remediation).toContain(
+			"/flow-doctor is routed through flow-control",
+		);
+		expect(check.remediation).toContain(
+			"/flow-review is routed through flow-auditor",
+		);
+		expect(check.details?.doctorAgent).toBe("flow-control");
+		expect(check.details?.commandRouting).toEqual({
+			"flow-doctor": "flow-control",
+			"flow-review": "flow-control",
+		});
+		expect(check.details?.reasoningMismatches).toEqual([
+			{ agent: "flow-worker", expected: "low", actual: "high" },
+		]);
+	});
+
+	test("flow_doctor config check reports missing flow-review routing", () => {
+		const config: MutableConfig = {};
+		applyFlowConfig(config);
+		delete requireConfigEntry(config.command, "commands")["flow-review"];
+
+		const check = evaluateConfigCheck(config);
+
+		expect(check.status).toBe("fail");
+		expect(check.details?.missingCommands).toContain("flow-review");
+		expect(check.details?.doctorAgent).toBe("flow-control");
+		expect(check.details?.commandRouting).toEqual({
+			"flow-doctor": "flow-control",
+			"flow-review": null,
 		});
 	});
 

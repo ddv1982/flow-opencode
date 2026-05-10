@@ -192,7 +192,7 @@ Flow installs dedicated OpenCode agents for planning, execution, auto coordinati
 - medium: `/flow-auto` coordination
 - low: focused worker execution and control/status commands
 
-Flow does not set a default model or provider. Your OpenCode configuration still owns model choice. `reasoningEffort` is passed through as OpenCode agent metadata.
+Flow does not set a default model or provider. Your OpenCode configuration still owns model choice. `reasoningEffort` is passed through as OpenCode agent metadata. To inspect the budgets Flow configured, run `/flow-doctor detail` and look at the `config` check's `agentReasoningEffort` details.
 
 ## Troubleshooting
 
