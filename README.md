@@ -54,6 +54,12 @@ bun run install:opencode --project /path/to/workspace
 curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
 ```
 
+The release installer installs Flow's project-local guidance skills into the current working directory. To target another workspace, pass `--project` through Bash:
+
+```bash
+curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash -s -- --project /path/to/workspace
+```
+
 Both install paths install the global OpenCode plugin and Flow's project-local guidance skills.
 
 The plugin is installed globally for OpenCode:

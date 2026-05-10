@@ -82,6 +82,9 @@ jobs:
           escaped_tag="$(printf '%s' "${GITHUB_REF_NAME}" | sed -e 's/[\/&]/\\&/g')"
           sed -i "s/__FLOW_RELEASE_TAG__/${escaped_tag}/g" install.sh
           cp scripts/release-uninstall.sh uninstall.sh
+          skill_bundle_root="$(mktemp -d)"
+          bun run ./scripts/cross-area/write-release-skill-bundle.ts "$skill_bundle_root"
+          tar -czf flow-skills.tar.gz -C "$skill_bundle_root" .opencode
           shasum -a 256 flow.js > flow.js.sha256
 
           version="${GITHUB_REF_NAME#v}"
@@ -106,6 +109,7 @@ jobs:
             release-evidence.txt
             release-notes.md
             flow.js.sha256
+            flow-skills.tar.gz
           if-no-files-found: error
 
       - name: Publish GitHub release assets
@@ -118,7 +122,7 @@ jobs:
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --notes-file release-notes.md
-            gh release upload "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --clobber
+            gh release upload "$tag" flow.js flow.js.sha256 flow-skills.tar.gz install.sh uninstall.sh --clobber
           else
-            gh release create "$tag" flow.js flow.js.sha256 install.sh uninstall.sh --title "$tag" --notes-file release-notes.md
+            gh release create "$tag" flow.js flow.js.sha256 flow-skills.tar.gz install.sh uninstall.sh --title "$tag" --notes-file release-notes.md
           fi

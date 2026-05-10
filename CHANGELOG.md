@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.27] - 2026-05-10
+
+Make the release installer install project-local skills
+
+Flow 2.0.27 fixes the release installer gap exposed after 2.0.26: `curl .../install.sh | bash` now installs both the global `flow.js` plugin and the generated `flow-plan`, `flow-run`, and `flow-review` skills into the current workspace by default. Operators can pass `--project <path>` through Bash to install those skills into another workspace while keeping the plugin in the canonical global OpenCode plugin slot.
+
+The release workflow now publishes a `flow-skills.tar.gz` asset generated from the same source skill bundle used by the Bun installer. The release `install.sh` downloads that asset, preflights existing skill files, refuses to overwrite user-managed or user-edited skill files, then extracts the generated skills. The release `uninstall.sh` mirrors the workspace target behavior and removes only intact generated skills after the same preflight while still clearing the canonical global plugin file.
+
+The release deliberately does not add commands, tools, runtime modes, package exports, dependencies, state paths, or new Flow workflow semantics. It keeps the fix scoped to release asset packaging and install/uninstall parity with the already generated project-local guidance surface.
+
+Constraint: Keep the curl installer useful for users who install outside the plugin repository checkout
+Constraint: Generate release skill files from the same source bundle as the Bun installer
+Constraint: Preserve user-edited skill files by failing before plugin or skill removal when skill preflight fails
+Rejected: Leave release install as plugin-only | README and 2.0.26 behavior promised project-local guidance skills
+Rejected: Inline three skill documents directly into `install.sh` | generated tarball assets keep the script smaller and source-owned
+Rejected: Add new runtime/plugin behavior | this is release packaging parity, not a workflow expansion
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Keep release install assets and source install skill generation in sync; future release-script changes must test both plugin and skill installation paths
+Tested: `bun run check` (typecheck, prompt captures, dependency and architecture contracts, fresh-surface terminology, dead-code scan, build, release hygiene, pack invariants, completion-lane gate, runtime replay tests, cold-start budget, bundle sanity, full test suite, Biome lint, bench smoke, and bench gate)
+Not-tested: Live `curl .../install.sh | bash` against the GitHub-hosted `v2.0.27` assets before tag push; live OpenCode UI skill discovery after installing from the GitHub release
+
 ## [2.0.26] - 2026-05-10
 
 Make OpenCode guidance installable and uninstall cleanup authoritative

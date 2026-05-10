@@ -3,9 +3,11 @@ import {
 	chmodSync,
 	copyFileSync,
 	cpSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -13,6 +15,10 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import {
+	FLOW_SKILL_BUNDLE_DIRECTORY,
+	resolveFlowSkillBundleFiles,
+} from "../../src/adapters/opencode/skill-bundle";
 
 const tempDirs: string[] = [];
 type PluginFactory = typeof import("../../src/index").default;
@@ -38,9 +44,11 @@ async function runScript(
 	homeDir: string,
 	binDir: string,
 	extraEnv: Record<string, string> = {},
+	cwd?: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 	const spawned = Bun.spawn({
 		cmd: ["bash", scriptPath],
+		...(cwd === undefined ? {} : { cwd }),
 		env: {
 			...process.env,
 			HOME: homeDir,
@@ -56,6 +64,26 @@ async function runScript(
 		stdout: await new Response(spawned.stdout).text(),
 		stderr: await new Response(spawned.stderr).text(),
 	};
+}
+
+function createSkillBundleArchive(tempRoot: string): string {
+	const bundleRoot = join(tempRoot, "skill-bundle-root");
+	const archivePath = join(tempRoot, "flow-skills.tar.gz");
+	for (const file of resolveFlowSkillBundleFiles(bundleRoot)) {
+		mkdirSync(dirname(file.absolutePath), { recursive: true });
+		writeFileSync(file.absolutePath, file.content, "utf8");
+	}
+	const archiveProcess = Bun.spawnSync({
+		cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, ".opencode"],
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	if (!archiveProcess.success) {
+		throw new Error(
+			`failed to create skill bundle: ${new TextDecoder().decode(archiveProcess.stderr)}`,
+		);
+	}
+	return archivePath;
 }
 
 async function importInstalledPlugin(
@@ -99,10 +127,16 @@ async function importInstalledPlugin(
 	return module.default;
 }
 
-function writeCurlStub(tempRoot: string, body: string): string {
+function writeCurlStub(
+	tempRoot: string,
+	{
+		pluginBody,
+		skillBundlePath = createSkillBundleArchive(tempRoot),
+	}: { pluginBody: string; skillBundlePath?: string },
+): string {
 	const stubPath = join(tempRoot, "curl");
 	const bodyPath = join(tempRoot, "curl-body.txt");
-	writeFileSync(bodyPath, body);
+	writeFileSync(bodyPath, pluginBody);
 	writeFileSync(
 		stubPath,
 		[
@@ -129,9 +163,16 @@ function writeCurlStub(tempRoot: string, body: string): string {
 			"  echo 'curl stub expected -o <path>' >&2",
 			"  exit 1",
 			"fi",
-			`cp ${JSON.stringify(bodyPath)} "$output_path"`,
+			'case "$url" in',
+			"  *flow-skills.tar.gz)",
+			`    cp ${JSON.stringify(skillBundlePath)} "$output_path"`,
+			"    ;;",
+			"  *)",
+			`    cp ${JSON.stringify(bodyPath)} "$output_path"`,
+			"    ;;",
+			"esac",
 			'if [[ -n "$' + '{CURL_ARGS_PATH:-}" ]]; then',
-			'  printf \'%s\\n\' "$url" > "$CURL_ARGS_PATH"',
+			'  printf \'%s\\n\' "$url" >> "$CURL_ARGS_PATH"',
 			"fi",
 		].join("\n"),
 		{ mode: 0o755 },
@@ -153,10 +194,12 @@ describe("cross-area install lifecycle", () => {
 		const tempRoot = makeTempDir("flow-install-lifecycle-");
 		const homeDir = join(tempRoot, "home");
 		const binDir = join(tempRoot, "bin");
+		const projectRoot = join(tempRoot, "project");
 		mkdirSync(homeDir, { recursive: true });
 		mkdirSync(binDir, { recursive: true });
+		mkdirSync(projectRoot, { recursive: true });
 
-		writeCurlStub(binDir, "export default 'installed-flow';\n");
+		writeCurlStub(binDir, { pluginBody: "export default 'installed-flow';\n" });
 		const installScript = copyScriptToTemp("release-install.sh", tempRoot);
 		const uninstallScript = copyScriptToTemp("release-uninstall.sh", tempRoot);
 		const canonicalPath = join(
@@ -169,27 +212,53 @@ describe("cross-area install lifecycle", () => {
 		mkdirSync(dirname(canonicalPath), { recursive: true });
 		writeFileSync(canonicalPath, "// third-party plugin\n");
 
-		const installResult = await runScript(installScript, homeDir, binDir);
+		const installResult = await runScript(
+			installScript,
+			homeDir,
+			binDir,
+			{},
+			projectRoot,
+		);
 		expect(installResult.exitCode).toBe(0);
 		expect(readFileSync(canonicalPath, "utf8")).toBe(
 			"// Managed by flow-opencode install/uninstall\nexport default 'installed-flow';\n",
 		);
+		expect(installResult.stdout).toContain(
+			`Flow skills installed to ${join(realpathSync(projectRoot), FLOW_SKILL_BUNDLE_DIRECTORY)}`,
+		);
+		for (const file of resolveFlowSkillBundleFiles(projectRoot)) {
+			expect(readFileSync(file.absolutePath, "utf8")).toBe(file.content);
+		}
 
 		writeFileSync(canonicalPath, "// third-party plugin\n");
-		const uninstallResult = await runScript(uninstallScript, homeDir, binDir);
+		const uninstallResult = await runScript(
+			uninstallScript,
+			homeDir,
+			binDir,
+			{},
+			projectRoot,
+		);
 		expect(uninstallResult.exitCode).toBe(0);
 		expect(() => readFileSync(canonicalPath, "utf8")).toThrow();
 		expect(uninstallResult.stdout).toContain(
 			`Flow removed from ${canonicalPath}`,
 		);
+		expect(uninstallResult.stdout).toContain(
+			`Flow skills removed from ${join(realpathSync(projectRoot), FLOW_SKILL_BUNDLE_DIRECTORY)}`,
+		);
+		for (const file of resolveFlowSkillBundleFiles(projectRoot)) {
+			expect(existsSync(file.absolutePath)).toBe(false);
+		}
 	});
 
 	test("release scripts install to canonical path, plugin loads, flow_status reports missing session, and uninstall removes the file", async () => {
 		const tempRoot = makeTempDir("flow-install-lifecycle-");
 		const homeDir = join(tempRoot, "home");
 		const binDir = join(tempRoot, "bin");
+		const projectRoot = join(tempRoot, "project");
 		mkdirSync(homeDir, { recursive: true });
 		mkdirSync(binDir, { recursive: true });
+		mkdirSync(projectRoot, { recursive: true });
 
 		const distPluginPath = join(
 			import.meta.dir,
@@ -199,7 +268,7 @@ describe("cross-area install lifecycle", () => {
 			"index.js",
 		);
 		const pluginBody = await readFile(distPluginPath, "utf8");
-		writeCurlStub(binDir, pluginBody);
+		writeCurlStub(binDir, { pluginBody });
 		const curlArgsPath = join(tempRoot, "curl-url.txt");
 
 		const installScript = copyScriptToTemp("release-install.sh", tempRoot);
@@ -227,7 +296,7 @@ describe("cross-area install lifecycle", () => {
 			exitCode: installExitCode,
 			stdout: installStdout,
 			stderr: installStderr,
-		} = await runScript(installScript, homeDir, binDir);
+		} = await runScript(installScript, homeDir, binDir, {}, projectRoot);
 
 		if (installExitCode !== 0) {
 			throw new Error(`install stderr: ${installStderr}`);
@@ -244,13 +313,23 @@ describe("cross-area install lifecycle", () => {
 		expect(installedBytes.endsWith(pluginBody)).toBe(true);
 
 		const { exitCode: pinnedInstallExitCode, stderr: pinnedInstallStderr } =
-			await runScript(generatedInstallScript, homeDir, binDir, {
-				CURL_ARGS_PATH: curlArgsPath,
-			});
+			await runScript(
+				generatedInstallScript,
+				homeDir,
+				binDir,
+				{
+					CURL_ARGS_PATH: curlArgsPath,
+				},
+				projectRoot,
+			);
 		expect(pinnedInstallExitCode).toBe(0);
 		expect(pinnedInstallStderr).toBe("");
 		expect(await readFile(curlArgsPath, "utf8")).toBe(
-			"https://github.com/ddv1982/flow-opencode/releases/download/v9.9.9/flow.js\n",
+			[
+				"https://github.com/ddv1982/flow-opencode/releases/download/v9.9.9/flow.js",
+				"https://github.com/ddv1982/flow-opencode/releases/download/v9.9.9/flow-skills.tar.gz",
+				"",
+			].join("\n"),
 		);
 
 		const pluginModule = await importInstalledPlugin(canonicalPath);
@@ -277,7 +356,7 @@ describe("cross-area install lifecycle", () => {
 			exitCode: uninstallExitCode,
 			stdout: uninstallStdout,
 			stderr: uninstallStderr,
-		} = await runScript(uninstallScript, homeDir, binDir);
+		} = await runScript(uninstallScript, homeDir, binDir, {}, projectRoot);
 
 		expect(uninstallExitCode).toBe(0);
 		expect(uninstallStderr).toBe("");
