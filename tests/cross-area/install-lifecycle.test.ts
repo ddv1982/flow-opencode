@@ -7,7 +7,6 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
-	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -74,7 +73,7 @@ function createSkillBundleArchive(tempRoot: string): string {
 		writeFileSync(file.absolutePath, file.content, "utf8");
 	}
 	const archiveProcess = Bun.spawnSync({
-		cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, ".opencode"],
+		cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, ".config"],
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -224,11 +223,21 @@ describe("cross-area install lifecycle", () => {
 			"// Managed by flow-opencode install/uninstall\nexport default 'installed-flow';\n",
 		);
 		expect(installResult.stdout).toContain(
-			`Flow skills installed to ${join(realpathSync(projectRoot), FLOW_SKILL_BUNDLE_DIRECTORY)}`,
+			`Flow skills installed to ${join(homeDir, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
 		);
-		for (const file of resolveFlowSkillBundleFiles(projectRoot)) {
+		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
 			expect(readFileSync(file.absolutePath, "utf8")).toBe(file.content);
 		}
+		const userManagedSameNameSkill = resolveFlowSkillBundleFiles(homeDir).find(
+			(file) => file.skill.name === "flow-plan",
+		);
+		if (!userManagedSameNameSkill) {
+			throw new Error("Expected generated flow-plan skill fixture.");
+		}
+		writeFileSync(
+			userManagedSameNameSkill.absolutePath,
+			"# user-managed flow-plan\n",
+		);
 
 		writeFileSync(canonicalPath, "// third-party plugin\n");
 		const uninstallResult = await runScript(
@@ -244,9 +253,15 @@ describe("cross-area install lifecycle", () => {
 			`Flow removed from ${canonicalPath}`,
 		);
 		expect(uninstallResult.stdout).toContain(
-			`Flow skills removed from ${join(realpathSync(projectRoot), FLOW_SKILL_BUNDLE_DIRECTORY)}`,
+			`Flow skills removed from ${join(homeDir, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
 		);
-		for (const file of resolveFlowSkillBundleFiles(projectRoot)) {
+		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
+			if (file.skill.name === "flow-plan") {
+				expect(readFileSync(file.absolutePath, "utf8")).toBe(
+					"# user-managed flow-plan\n",
+				);
+				continue;
+			}
 			expect(existsSync(file.absolutePath)).toBe(false);
 		}
 	});

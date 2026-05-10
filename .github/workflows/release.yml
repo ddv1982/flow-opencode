@@ -84,7 +84,7 @@ jobs:
           cp scripts/release-uninstall.sh uninstall.sh
           skill_bundle_root="$(mktemp -d)"
           bun run ./scripts/cross-area/write-release-skill-bundle.ts "$skill_bundle_root"
-          tar -czf flow-skills.tar.gz -C "$skill_bundle_root" .opencode
+          tar -czf flow-skills.tar.gz -C "$skill_bundle_root" .config
           shasum -a 256 flow.js > flow.js.sha256
 
           version="${GITHUB_REF_NAME#v}"

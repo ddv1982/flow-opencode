@@ -81,7 +81,7 @@ describe("installer", () => {
 			runInstallCommand(["--project"], {
 				build: async () => {},
 			}),
-		).rejects.toThrow("Missing value for --project");
+		).rejects.toThrow("Unknown argument: --project");
 	});
 
 	test("resolveInstallTarget defaults to the global OpenCode plugin directory", () => {
@@ -118,7 +118,7 @@ describe("installer", () => {
 		expect(logs).toEqual([`Installed Flow plugin to ${destinationFile}`]);
 	});
 
-	test("runInstallCommand installs the global plugin and generated skills by default", async () => {
+	test("runInstallCommand installs the global plugin and generated global skills", async () => {
 		const cwd = makeTempDir();
 		const homeDir = makeTempDir();
 		const logs: string[] = [];
@@ -141,26 +141,26 @@ describe("installer", () => {
 		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
 			`${FLOW_PLUGIN_OWNERSHIP_HEADER}global-install\n`,
 		);
-		for (const file of resolveFlowSkillBundleFiles(cwd)) {
+		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
 			await expect(readFile(file.absolutePath, "utf8")).resolves.toBe(
 				file.content,
 			);
 		}
 		expect(existsSync(join(cwd, ".flow"))).toBe(false);
+		expect(existsSync(join(cwd, ".opencode"))).toBe(false);
 		expect(logs).toEqual([
 			`Installed Flow plugin to ${canonicalPath}`,
-			`Installed Flow skills to ${join(cwd, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
+			`Installed Flow skills to ${join(homeDir, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
 		]);
 	});
 
-	test("runInstallCommand can target generated skills at an explicit project", async () => {
+	test("runInstallCommand ignores cwd for generated skills and installs them globally", async () => {
 		const cwd = makeTempDir();
-		const projectRoot = makeTempDir();
 		const homeDir = makeTempDir();
 		const canonicalPath = resolveInstallTarget({ homeDir });
 		await writeBuiltPlugin(cwd, "global-install\n");
 
-		const installedPath = await runInstallCommand(["--project", projectRoot], {
+		const installedPath = await runInstallCommand([], {
 			cwd,
 			homeDir,
 			build: async () => {},
@@ -168,7 +168,7 @@ describe("installer", () => {
 		});
 
 		expect(installedPath).toBe(canonicalPath);
-		for (const file of resolveFlowSkillBundleFiles(projectRoot)) {
+		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
 			await expect(readFile(file.absolutePath, "utf8")).resolves.toBe(
 				file.content,
 			);
@@ -183,7 +183,7 @@ describe("installer", () => {
 		const homeDir = makeTempDir();
 		let buildCalls = 0;
 		const canonicalPath = resolveInstallTarget({ homeDir });
-		const flowPlanSkill = getFlowSkillBundleFile(cwd, "flow-plan");
+		const flowPlanSkill = getFlowSkillBundleFile(homeDir, "flow-plan");
 		await mkdir(join(flowPlanSkill.absolutePath, ".."), { recursive: true });
 		await writeFile(
 			flowPlanSkill.absolutePath,
@@ -232,7 +232,7 @@ describe("installer", () => {
 		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
 			"// not flow managed\n",
 		);
-		for (const file of resolveFlowSkillBundleFiles(cwd)) {
+		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
 			expect(existsSync(file.absolutePath)).toBe(false);
 		}
 	});
@@ -242,7 +242,7 @@ describe("installer", () => {
 		const homeDir = makeTempDir();
 		let buildCalls = 0;
 		const canonicalPath = resolveInstallTarget({ homeDir });
-		const flowPlanSkill = getFlowSkillBundleFile(cwd, "flow-plan");
+		const flowPlanSkill = getFlowSkillBundleFile(homeDir, "flow-plan");
 		await writeBuiltPlugin(cwd, "global-install\n");
 
 		await expect(
@@ -358,24 +358,22 @@ describe("installer", () => {
 		});
 
 		const removedPath = await runUninstallCommand([], {
-			cwd,
 			homeDir,
 			logger: (message) => logs.push(message),
 		});
 
 		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
 		expect(removedPath).toBe(canonicalPath);
-		for (const file of resolveFlowSkillBundleFiles(cwd)) {
+		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
 			expect(existsSync(file.absolutePath)).toBe(false);
 		}
 		expect(logs).toEqual([
-			`Removed Flow skills from ${join(cwd, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
+			`Removed Flow skills from ${join(homeDir, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
 			`Removed Flow plugin from ${canonicalPath}`,
 		]);
 	});
 
 	test("runUninstallCommand removes an outdated canonical flow.js", async () => {
-		const cwd = makeTempDir();
 		const homeDir = makeTempDir();
 		const logs: string[] = [];
 		const canonicalPath = resolveInstallTarget({ homeDir });
@@ -383,7 +381,6 @@ describe("installer", () => {
 		await writeFile(canonicalPath, "// stale outdated flow plugin\n", "utf8");
 
 		const removedPath = await runUninstallCommand([], {
-			cwd,
 			homeDir,
 			logger: (message) => logs.push(message),
 		});
@@ -410,7 +407,7 @@ describe("installer", () => {
 			build: async () => {},
 			logger: () => {},
 		});
-		const flowRunSkill = getFlowSkillBundleFile(cwd, "flow-run");
+		const flowRunSkill = getFlowSkillBundleFile(homeDir, "flow-run");
 		await writeFile(
 			flowRunSkill.absolutePath,
 			`${await readFile(flowRunSkill.absolutePath, "utf8")}\nuser edit\n`,
@@ -419,7 +416,6 @@ describe("installer", () => {
 
 		await expect(
 			runUninstallCommand([], {
-				cwd,
 				homeDir,
 				logger: () => {},
 			}),
@@ -437,7 +433,7 @@ describe("installer", () => {
 
 		await expect(
 			runUninstallCommand(["--project"], { homeDir }),
-		).rejects.toThrow("Missing value for --project");
+		).rejects.toThrow("Unknown argument: --project");
 		await expect(
 			runInstallCommand(["--with-skills"], {
 				homeDir,

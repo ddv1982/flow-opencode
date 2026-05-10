@@ -16,10 +16,14 @@ import {
 	renderFlowSkillDocument,
 } from "../../prompts/generated/skill-docs";
 
-export const FLOW_SKILL_BUNDLE_DIRECTORY = join(".opencode", "skills");
+export const FLOW_SKILL_BUNDLE_DIRECTORY = join(
+	".config",
+	"opencode",
+	"skills",
+);
 
 export const FLOW_OPENCODE_SKILL_PERMISSION_EXPECTATION = {
-	discoveryPath: ".opencode/skills/<name>/SKILL.md",
+	discoveryPath: "~/.config/opencode/skills/<name>/SKILL.md",
 	permissionPattern: "flow-*",
 	allowedPostures: ["allow", "ask"],
 	deniedPosture: "deny hides generated Flow skills from agents",
@@ -127,7 +131,7 @@ export async function uninstallFlowSkillBundle({
 		await removeDirectoryIfEmpty(
 			join(projectRoot, FLOW_SKILL_BUNDLE_DIRECTORY),
 		);
-		await removeDirectoryIfEmpty(join(projectRoot, ".opencode"));
+		await removeDirectoryIfEmpty(join(projectRoot, ".config", "opencode"));
 	} catch (error) {
 		await restoreFlowSkillBundleSnapshot(snapshot);
 		throw error;

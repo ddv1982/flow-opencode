@@ -37,8 +37,8 @@ Useful scripts:
 - `bun run eval:review-capture:check`
 - `bun run eval:prompt-capture`
 - `bun run eval:prompt-capture:check`
-- `bun run install:opencode --project /path/to/workspace` to install the global OpenCode plugin and generated project-local Flow skills into the target workspace (defaults to cwd when omitted)
-- `bun run uninstall:opencode --project /path/to/workspace` to clear the canonical global `flow.js` plugin slot, including stale or outdated Flow plugin files, and remove only intact generated Flow-owned skills from the target workspace (defaults to cwd when omitted)
+- `bun run install:opencode` to install the global OpenCode plugin and generated global Flow skills
+- `bun run uninstall:opencode` to clear the canonical global `flow.js` plugin slot, including stale or outdated Flow plugin files, and remove only intact generated global Flow-owned skills
 
 
 ## Gate contract quick reference
@@ -73,7 +73,7 @@ Standing dependency/tool checklist: keep `zod` aligned with `@opencode-ai/plugin
 - `src/prompts/commands.ts` — fallback slash-command templates
 - `src/prompts/mode-contracts.ts` — canonical prompt-mode boundaries used by prompts, tests, and capture tooling
 - `src/prompts/skills.ts` and `src/prompts/generated/skill-docs.ts` — generated Flow skill specs and renderers
-- `src/adapters/opencode/skill-bundle.ts` — installer/uninstaller support for generated Flow-owned `.opencode/skills/**`
+- `src/adapters/opencode/skill-bundle.ts` — installer/uninstaller support for generated Flow-owned `~/.config/opencode/skills/**`
 
 ## Architecture in one view
 
@@ -85,7 +85,7 @@ Flow is built around a few stable responsibilities and authority boundaries:
 4. Domain transitions and runtime policy helpers remain authoritative for workflow state changes.
 5. Prompted agents call runtime tools instead of mutating state directly.
 6. Coordinators use OpenCode task/subagent handoffs for bounded planning, implementation, and review work when the host supports them, so each role can work in a fresh child context while runtime tools remain the state authority.
-7. Generated OpenCode skills under `.opencode/skills/flow-{plan,run,review}/SKILL.md` provide on-demand guidance. Slash commands and agents remain fallback surfaces and must keep working when skills are absent, denied, or hidden by OpenCode permissions.
+7. Generated OpenCode skills under `~/.config/opencode/skills/flow-{plan,run,review}/SKILL.md` provide on-demand guidance. Slash commands and agents remain fallback surfaces and must keep working when skills are absent, denied, or hidden by OpenCode permissions.
 8. For attachment-dependent `/flow-auto` goals, the coordinator materializes captured OpenCode PNG, JPEG, WebP, GIF, or AVIF attachments into explicit workspace asset paths before planning or handoff; SVG remains unsupported, and chat attachments are not filesystem files until `flow_attachments_materialize` returns paths.
 9. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 

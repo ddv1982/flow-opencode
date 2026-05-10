@@ -19,22 +19,20 @@ const CANONICAL_OPENCODE_PLUGIN_DIRECTORY = [
 	"opencode",
 	"plugins",
 ] as const;
-export const INSTALL_USAGE = `Install the built Flow plugin and generated Flow skills.
+export const INSTALL_USAGE = `Install the built Flow plugin and generated global Flow skills.
 
 Usage:
-  bun run install:opencode [--project <path>] [--help]
+  bun run install:opencode [--help]
 
 Options:
-  --project <path> Install generated project-local Flow skills into this workspace (default: cwd)
   --help           Show this message`;
 
-export const UNINSTALL_USAGE = `Remove the canonical Flow plugin slot and intact generated Flow skills.
+export const UNINSTALL_USAGE = `Remove the canonical Flow plugin slot and intact generated global Flow skills.
 
 Usage:
-  bun run uninstall:opencode [--project <path>] [--help]
+  bun run uninstall:opencode [--help]
 
 Options:
-  --project <path> Remove generated project-local Flow skills from this workspace (default: cwd)
   --help           Show this message`;
 
 export interface ResolveInstallTargetOptions {
@@ -53,12 +51,10 @@ export interface InstallCommandDependencies {
 	cwd?: string;
 	homeDir?: string;
 	logger?: (message: string) => void;
-	projectRoot?: string;
 	sourceFile?: string;
 }
 
 type ParsedLifecycleOptions = {
-	projectRoot?: string;
 	showHelp: boolean;
 };
 
@@ -71,28 +67,17 @@ function parseLifecycleOptions(
 	argv: string[],
 	usage: string,
 ): ParsedLifecycleOptions {
-	let projectRoot: string | undefined;
 	let showHelp = false;
 
-	for (let index = 0; index < argv.length; index += 1) {
-		const argument = argv[index];
+	for (const argument of argv) {
 		if (argument === "--help") {
 			showHelp = true;
-			continue;
-		}
-		if (argument === "--project") {
-			const value = argv[index + 1];
-			if (!value || value.startsWith("--")) {
-				throw new Error(`Missing value for --project\n\n${usage}`);
-			}
-			projectRoot = value;
-			index += 1;
 			continue;
 		}
 		throw new Error(`Unknown argument: ${argument}\n\n${usage}`);
 	}
 
-	return projectRoot === undefined ? { showHelp } : { projectRoot, showHelp };
+	return { showHelp };
 }
 
 export function resolveInstallTarget({
@@ -137,7 +122,6 @@ export async function runInstallCommand(
 		cwd = process.cwd(),
 		homeDir,
 		logger = writeStdoutLine,
-		projectRoot = cwd,
 		sourceFile,
 	}: InstallCommandDependencies = {},
 ): Promise<string | undefined> {
@@ -147,22 +131,20 @@ export async function runInstallCommand(
 		return;
 	}
 
-	const resolvedProjectRoot = options.projectRoot
-		? resolveFromCwd(cwd, options.projectRoot)
-		: projectRoot;
+	const skillRoot = homeDir ?? homedir();
 	const resolvedSourceFile = sourceFile
 		? resolveFromCwd(cwd, sourceFile)
 		: join(cwd, "dist", "index.js");
-	const destinationFile = resolveInstallTarget(homeDir ? { homeDir } : {});
+	const destinationFile = resolveInstallTarget({ homeDir: skillRoot });
 
-	await assertFlowSkillBundleCanInstall({ projectRoot: resolvedProjectRoot });
+	await assertFlowSkillBundleCanInstall({ projectRoot: skillRoot });
 	await assertPluginDestinationCanInstall(destinationFile);
 	await build();
 	await assertSourceFileExists(resolvedSourceFile);
 
 	const pluginSnapshot = await snapshotPlugin(destinationFile);
 	const skillSnapshot = await snapshotFlowSkillBundle({
-		projectRoot: resolvedProjectRoot,
+		projectRoot: skillRoot,
 	});
 
 	try {
@@ -171,7 +153,7 @@ export async function runInstallCommand(
 			destinationFile,
 			logger,
 		});
-		await installFlowSkillBundle({ projectRoot: resolvedProjectRoot, logger });
+		await installFlowSkillBundle({ projectRoot: skillRoot, logger });
 		return installedPath;
 	} catch (error) {
 		await restoreFlowSkillBundleSnapshot(skillSnapshot);
@@ -183,14 +165,9 @@ export async function runInstallCommand(
 export async function runUninstallCommand(
 	argv: string[],
 	{
-		cwd = process.cwd(),
 		homeDir,
 		logger = writeStdoutLine,
-		projectRoot = cwd,
-	}: Pick<
-		InstallCommandDependencies,
-		"cwd" | "homeDir" | "logger" | "projectRoot"
-	> = {},
+	}: Pick<InstallCommandDependencies, "homeDir" | "logger"> = {},
 ): Promise<string | undefined> {
 	const options = parseLifecycleOptions(argv, UNINSTALL_USAGE);
 	if (options.showHelp) {
@@ -198,20 +175,18 @@ export async function runUninstallCommand(
 		return;
 	}
 
-	const resolvedProjectRoot = options.projectRoot
-		? resolveFromCwd(cwd, options.projectRoot)
-		: projectRoot;
-	await assertFlowSkillBundleCanUninstall({ projectRoot: resolvedProjectRoot });
+	const skillRoot = homeDir ?? homedir();
+	await assertFlowSkillBundleCanUninstall({ projectRoot: skillRoot });
 
-	const destinationFile = resolveInstallTarget(homeDir ? { homeDir } : {});
+	const destinationFile = resolveInstallTarget({ homeDir: skillRoot });
 	const pluginSnapshot = await snapshotPlugin(destinationFile);
 	const skillSnapshot = await snapshotFlowSkillBundle({
-		projectRoot: resolvedProjectRoot,
+		projectRoot: skillRoot,
 	});
 
 	try {
 		await uninstallFlowSkillBundle({
-			projectRoot: resolvedProjectRoot,
+			projectRoot: skillRoot,
 			logger,
 		});
 		const removedPath = await removeInstalledPluginIfPresent(

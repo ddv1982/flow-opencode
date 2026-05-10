@@ -3,13 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Install the Flow OpenCode plugin and generated project-local Flow skills.
+Install the Flow OpenCode plugin and generated global Flow skills.
 
 Usage:
-  install.sh [--project <path>] [--help]
+  install.sh [--help]
 
 Options:
-  --project <path> Install generated Flow skills into this workspace (default: cwd)
   --help           Show this message
 USAGE
 }
@@ -26,21 +25,11 @@ fi
 DOWNLOAD_URL="${FLOW_RELEASE_DOWNLOAD_URL:-$DEFAULT_DOWNLOAD_URL}"
 SKILL_BUNDLE_URL="${FLOW_RELEASE_SKILL_BUNDLE_URL:-$DEFAULT_SKILL_BUNDLE_URL}"
 
-PROJECT_ROOT="$PWD"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help)
       usage
       exit 0
-      ;;
-    --project)
-      if [[ $# -lt 2 || "$2" == --* ]]; then
-        echo "Missing value for --project" >&2
-        usage >&2
-        exit 1
-      fi
-      PROJECT_ROOT="$2"
-      shift 2
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -50,22 +39,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-mkdir -p "$PROJECT_ROOT"
-PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
-
 CANONICAL_PLUGIN_PATH="${HOME}/.config/opencode/plugins/flow.js"
 FLOW_OWNERSHIP_HEADER='// Managed by flow-opencode install/uninstall'
 FLOW_SKILL_MARKER='flow-opencode-generated-skill'
 FLOW_SKILLS=(flow-plan flow-run flow-review)
 
 skill_path() {
-  printf '%s/.opencode/skills/%s/SKILL.md' "$PROJECT_ROOT" "$1"
+  printf '%s/.config/opencode/skills/%s/SKILL.md' "$HOME" "$1"
 }
 
 is_intact_flow_skill() {
   local file="$1"
+  local expected_name="$2"
   local marker_line
-  marker_line="$(grep -E -m 1 '^<!-- flow-opencode-generated-skill name=[a-z0-9]+(-[a-z0-9]+)* version=[0-9]+ hash=sha256:[a-f0-9]{64} -->$' "$file" || true)"
+  marker_line="$(grep -E -m 1 "^<!-- flow-opencode-generated-skill name=${expected_name} version=[0-9]+ hash=sha256:[a-f0-9]{64} -->$" "$file" || true)"
   if [[ -z "$marker_line" ]]; then
     return 1
   fi
@@ -85,7 +72,7 @@ preflight_skill_install() {
   local skill file
   for skill in "${FLOW_SKILLS[@]}"; do
     file="$(skill_path "$skill")"
-    if [[ -e "$file" ]] && ! is_intact_flow_skill "$file"; then
+    if [[ -e "$file" ]] && ! is_intact_flow_skill "$file" "$skill"; then
       echo "Refusing to overwrite user-managed OpenCode skill at ${file}." >&2
       exit 1
     fi
@@ -116,9 +103,9 @@ else
   mv "$managed_path" "$CANONICAL_PLUGIN_PATH"
 fi
 
-tar -xzf "$skill_bundle_path" -C "$PROJECT_ROOT"
+tar -xzf "$skill_bundle_path" -C "$HOME"
 cleanup
 trap - EXIT
 
 echo "Flow installed to ${CANONICAL_PLUGIN_PATH}"
-echo "Flow skills installed to ${PROJECT_ROOT}/.opencode/skills"
+echo "Flow skills installed to ${HOME}/.config/opencode/skills"

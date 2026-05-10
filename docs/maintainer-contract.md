@@ -50,15 +50,15 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 
 ## Generated skills
 
-Generated project-local OpenCode skills are installed by the default OpenCode lifecycle alongside the global plugin. The current generated bundle is:
+Generated global OpenCode skills are installed by the default OpenCode lifecycle alongside the global plugin. The current generated bundle is:
 
 | Skill | Installed path | Runtime authority |
 | --- | --- | --- |
-| `flow-plan` | `.opencode/skills/flow-plan/SKILL.md` | Existing planning tools and `flow-plan` mode contract |
-| `flow-run` | `.opencode/skills/flow-run/SKILL.md` | Existing execution/review tools and `flow-run` / `flow-worker` mode contracts |
-| `flow-review` | `.opencode/skills/flow-review/SKILL.md` | Existing reviewer/audit contracts and `flow-reviewer` / `flow-review` mode contracts |
+| `flow-plan` | `~/.config/opencode/skills/flow-plan/SKILL.md` | Existing planning tools and `flow-plan` mode contract |
+| `flow-run` | `~/.config/opencode/skills/flow-run/SKILL.md` | Existing execution/review tools and `flow-run` / `flow-worker` mode contracts |
+| `flow-review` | `~/.config/opencode/skills/flow-review/SKILL.md` | Existing reviewer/audit contracts and `flow-reviewer` / `flow-review` mode contracts |
 
-Skills are instruction surfaces only. They may cite Flow mode contracts, role protocols, and registered runtime tool names, but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior. OpenCode `permission.skill` controls whether generated skills are visible; `deny` or hidden skills must leave slash commands and agents usable through their named fallback contracts. Install/uninstall may touch only intact generated Flow-owned files under `.opencode/skills/**` and must never write under `.flow/**`.
+Skills are instruction surfaces only. They may cite Flow mode contracts, role protocols, and registered runtime tool names, but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior. OpenCode `permission.skill` controls whether generated skills are visible; `deny` or hidden skills must leave slash commands and agents usable through their named fallback contracts. Install/uninstall may touch only intact generated Flow-owned files under `~/.config/opencode/skills/**` and must never write under `.flow/**`.
 
 ## Tools
 

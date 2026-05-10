@@ -45,7 +45,7 @@ Flow is the wrong fit when you want:
 
 ```bash
 bun install
-bun run install:opencode --project /path/to/workspace
+bun run install:opencode
 ```
 
 ### From the latest GitHub release
@@ -54,13 +54,9 @@ bun run install:opencode --project /path/to/workspace
 curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
 ```
 
-The release installer installs Flow's project-local guidance skills into the current working directory. To target another workspace, pass `--project` through Bash:
+The release installer installs both the global OpenCode plugin and Flow's global guidance skills.
 
-```bash
-curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash -s -- --project /path/to/workspace
-```
-
-Both install paths install the global OpenCode plugin and Flow's project-local guidance skills.
+Both install paths install global OpenCode assets only.
 
 The plugin is installed globally for OpenCode:
 
@@ -68,12 +64,12 @@ The plugin is installed globally for OpenCode:
 ~/.config/opencode/plugins/flow.js
 ```
 
-The guidance skills are installed in the project passed with `--project` (or in the current working directory when omitted):
+The guidance skills are installed globally for OpenCode:
 
 ```text
-.opencode/skills/flow-plan/SKILL.md
-.opencode/skills/flow-run/SKILL.md
-.opencode/skills/flow-review/SKILL.md
+~/.config/opencode/skills/flow-plan/SKILL.md
+~/.config/opencode/skills/flow-run/SKILL.md
+~/.config/opencode/skills/flow-review/SKILL.md
 ```
 
 You still start Flow with the slash commands below. The skills give OpenCode on-demand guidance for planning, running, and reviewing work; they do not replace the plugin or create separate workflow state.
@@ -85,7 +81,7 @@ The source-install path for this plugin repo is Bun-based. That does **not** mea
 From the repo:
 
 ```bash
-bun run uninstall:opencode --project /path/to/workspace
+bun run uninstall:opencode
 ```
 
 From the latest release:
@@ -201,7 +197,7 @@ Flow will only claim the strongest achieved review depth when the inspected cove
 Flow has four pieces:
 
 - **Global OpenCode plugin** — adds Flow commands, agents, tools, and hooks to OpenCode.
-- **Project-local skills** — provide on-demand guidance for planning, running, and reviewing.
+- **Global OpenCode skills** — provide on-demand guidance for planning, running, and reviewing.
 - **Slash commands** — the user-facing way to start or inspect Flow work.
 - **`.flow/**` state** — the workspace-local session files Flow owns and updates.
 

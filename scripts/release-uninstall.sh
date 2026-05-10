@@ -3,32 +3,21 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Remove the Flow OpenCode plugin and intact generated project-local Flow skills.
+Remove the Flow OpenCode plugin and intact generated global Flow skills.
 
 Usage:
-  uninstall.sh [--project <path>] [--help]
+  uninstall.sh [--help]
 
 Options:
-  --project <path> Remove generated Flow skills from this workspace (default: cwd)
   --help           Show this message
 USAGE
 }
 
-PROJECT_ROOT="$PWD"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help)
       usage
       exit 0
-      ;;
-    --project)
-      if [[ $# -lt 2 || "$2" == --* ]]; then
-        echo "Missing value for --project" >&2
-        usage >&2
-        exit 1
-      fi
-      PROJECT_ROOT="$2"
-      shift 2
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -38,20 +27,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-mkdir -p "$PROJECT_ROOT"
-PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
-
 CANONICAL_PLUGIN_PATH="${HOME}/.config/opencode/plugins/flow.js"
 FLOW_SKILLS=(flow-plan flow-run flow-review)
 
 skill_path() {
-  printf '%s/.opencode/skills/%s/SKILL.md' "$PROJECT_ROOT" "$1"
+  printf '%s/.config/opencode/skills/%s/SKILL.md' "$HOME" "$1"
+}
+
+has_flow_generated_skill_marker() {
+  local file="$1"
+  grep -E -q '^<!-- flow-opencode-generated-skill name=[a-z0-9]+(-[a-z0-9]+)* version=[0-9]+ hash=sha256:[a-f0-9]{64} -->$' "$file"
 }
 
 is_intact_flow_skill() {
   local file="$1"
+  local expected_name="$2"
   local marker_line
-  marker_line="$(grep -E -m 1 '^<!-- flow-opencode-generated-skill name=[a-z0-9]+(-[a-z0-9]+)* version=[0-9]+ hash=sha256:[a-f0-9]{64} -->$' "$file" || true)"
+  marker_line="$(grep -E -m 1 "^<!-- flow-opencode-generated-skill name=${expected_name} version=[0-9]+ hash=sha256:[a-f0-9]{64} -->$" "$file" || true)"
   if [[ -z "$marker_line" ]]; then
     return 1
   fi
@@ -71,7 +63,7 @@ preflight_skill_uninstall() {
   local skill file
   for skill in "${FLOW_SKILLS[@]}"; do
     file="$(skill_path "$skill")"
-    if [[ -e "$file" ]] && ! is_intact_flow_skill "$file"; then
+    if [[ -e "$file" ]] && has_flow_generated_skill_marker "$file" && ! is_intact_flow_skill "$file" "$skill"; then
       echo "Refusing to remove user-edited OpenCode skill at ${file}." >&2
       exit 1
     fi
@@ -94,15 +86,15 @@ fi
 removed_skills=0
 for skill in "${FLOW_SKILLS[@]}"; do
   file="$(skill_path "$skill")"
-  if [[ -f "$file" ]]; then
+  if [[ -f "$file" ]] && is_intact_flow_skill "$file" "$skill"; then
     rm -f "$file"
     remove_empty_dir "$(dirname "$file")"
     removed_skills=1
   fi
 done
-remove_empty_dir "${PROJECT_ROOT}/.opencode/skills"
-remove_empty_dir "${PROJECT_ROOT}/.opencode"
+remove_empty_dir "${HOME}/.config/opencode/skills"
+remove_empty_dir "${HOME}/.config/opencode"
 
 if [[ "$removed_skills" == "1" ]]; then
-  echo "Flow skills removed from ${PROJECT_ROOT}/.opencode/skills"
+  echo "Flow skills removed from ${HOME}/.config/opencode/skills"
 fi

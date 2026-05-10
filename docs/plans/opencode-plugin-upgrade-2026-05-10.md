@@ -7,7 +7,7 @@ This is an OpenCode adapter and workflow-surface plan, not a runtime rewrite. Ru
 
 ## Decisions
 - Keep the npm/global OpenCode plugin as the primary runtime distribution (`package.json:2`, `package.json:16`).
-- Install generated project-local `.opencode/skills` as part of the default OpenCode lifecycle alongside the global plugin, with conflict preflights before any plugin mutation.
+- Install generated global `~/.config/opencode/skills` as part of the default OpenCode lifecycle alongside the global plugin, with conflict preflights before any plugin mutation.
 - Keep existing slash commands and agents stable, but make them thinner fallback surfaces after skills exist (`src/adapters/opencode/config.ts:59`, `src/adapters/opencode/config.ts:113`).
 - Move detailed review/audit workflow guidance primarily into on-demand skills; keep runtime-enforced completion and review gates where they are.
 - Do not add new Flow tools, runtime modes, `.flow/**` paths, or state semantics for this upgrade.
@@ -20,7 +20,7 @@ This is an OpenCode adapter and workflow-surface plan, not a runtime rewrite. Ru
 - Prompt-mode contracts own allowed/forbidden tools, mutation boundaries, behavior requirements, and stop conditions (`src/prompts/mode-contracts.ts:1`).
 - Prior simplification already completed Flow Core vNext, routed OpenCode tools through the runtime facade, collapsed adapter metadata, separated strict review governance, and removed unsupported replay/event/checkpoint/projection persistence (`docs/investigations/simplify-flow-opencode-2026-05-07.md:120`).
 - Current fragile contracts are the OpenCode SDK boundary: `zod` / `@opencode-ai/plugin` alignment, raw `tool()` arg shapes, and lifecycle semantics around `flow_plan_start` / `flow_run_start` (`docs/investigations/newest-opencode-plugin-regression-2026-05-08.md:9`).
-- OpenCode supports npm/local plugins, TypeScript plugin functions, `tool()` custom tools, plugin events, markdown/config commands, and on-demand skills under `.opencode/skills/<name>/SKILL.md`.
+- OpenCode supports npm/local plugins, TypeScript plugin functions, `tool()` custom tools, plugin events, markdown/config commands, and on-demand skills under `~/.config/opencode/skills/<name>/SKILL.md`.
 - OpenCode skills are discovered through the native `skill` tool and can be allowed, denied, hidden, or approval-gated by permission config; generated skill installation alone is not enough if permissions hide them.
 - ECC’s useful inspiration is structural: skills as the canonical workflow surface, command fallback surfaces for continuity, selective install/profile thinking, generated project-conventions skills, harness health/security/verification workflows, and context-bloat avoidance.
 
@@ -39,7 +39,7 @@ Keep:
 Do not combine this slice with prompt slimming or skill generation.
 
 ### Slice 2 — Generate a minimal Flow skills bundle
-Add a Flow-owned skill catalog that renders installable `.opencode/skills/<name>/SKILL.md` files. Skills are instruction surfaces only; they must reference existing runtime tools and mode contracts instead of owning behavior.
+Add a Flow-owned skill catalog that renders installable `~/.config/opencode/skills/<name>/SKILL.md` files. Skills are instruction surfaces only; they must reference existing runtime tools and mode contracts instead of owning behavior.
 
 Start with the smallest useful set:
 
@@ -91,7 +91,7 @@ Keep prompt capture/eval checks, recalibrated to the slimmer surface.
 
 ## Acceptance Criteria
 - Existing commands, agents, tools, and runtime state behavior still work without installed skills.
-- The generated skills bundle installs only generated Flow-owned files under `.opencode/skills/**` and never writes under `.flow/**`.
+- The generated skills bundle installs only generated Flow-owned files under `~/.config/opencode/skills/**` and never writes under `.flow/**`.
 - User-edited generated skills are not overwritten silently.
 - Prompt fallback surfaces retain the fallback contract and point to skills only as on-demand guidance.
 - No Flow skill defines new tools, state transitions, completion gates, persistence paths, or review semantics.

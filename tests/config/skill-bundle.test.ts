@@ -95,7 +95,7 @@ afterEach(() => {
 });
 
 describe("OpenCode skill bundle", () => {
-	test("defines only the minimal Slice 2 Flow skills with valid project-local paths", () => {
+	test("defines only the minimal Slice 2 Flow skills with valid global paths", () => {
 		expect(FLOW_SKILL_SPECS.map((skill) => skill.name)).toEqual([
 			"flow-plan",
 			"flow-run",
@@ -137,7 +137,7 @@ describe("OpenCode skill bundle", () => {
 				"completion, review, and persistence remain runtime-owned",
 			);
 			expect(document).toContain("This skill does not define new tools");
-			expect(document).toContain("OpenCode discovers this project-local file");
+			expect(document).toContain("OpenCode discovers this global file");
 			expect(document).toContain("permission.skill");
 
 			const inspection = inspectFlowSkillDocument(document);
@@ -370,7 +370,7 @@ describe("OpenCode skill bundle", () => {
 
 	test("documents OpenCode discovery and permission expectations without weakening deny or ask", () => {
 		expect(FLOW_OPENCODE_SKILL_PERMISSION_EXPECTATION.discoveryPath).toBe(
-			".opencode/skills/<name>/SKILL.md",
+			"~/.config/opencode/skills/<name>/SKILL.md",
 		);
 		expect(FLOW_OPENCODE_SKILL_PERMISSION_EXPECTATION.permissionPattern).toBe(
 			"flow-*",

@@ -136,7 +136,7 @@ Do not:
 
 - Ship debug-only artifacts in `src` or `dist`.
 - Add package files without updating pack/release invariants.
-- Overwrite user-edited `.opencode/skills/**` files silently or mutate the global plugin before skill-conflict preflight passes.
+- Overwrite user-edited `~/.config/opencode/skills/**` files silently or mutate the global plugin before skill-conflict preflight passes.
 
 ## Performance-sensitive paths
 
