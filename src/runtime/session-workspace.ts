@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	getActiveSessionsDir,
@@ -21,6 +21,11 @@ import {
 } from "./workspace-root";
 
 export {
+	findStoredSessionDir,
+	readActiveSessionId,
+	resolveActiveSessionId,
+} from "./session-live-storage";
+export {
 	readSessionFromPath,
 	resetSessionWorkspaceFsForTests,
 	setSessionWorkspaceFsForTests,
@@ -30,21 +35,6 @@ export { withSessionSaveLock } from "./session-workspace-locks";
 
 const preparedWorkspaceGitignoreCache = new Map<string, string>();
 const preparedWorkspaceRoots = new Set<string>();
-
-async function listDirectoryNames(root: string): Promise<string[]> {
-	try {
-		const entries = await readdir(root, { withFileTypes: true });
-		return entries
-			.filter((entry) => entry.isDirectory())
-			.map((entry) => entry.name);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return [];
-		}
-
-		throw error;
-	}
-}
 
 async function ensureWorkspaceAtRoot(
 	worktree: MutableWorkspaceRoot,
@@ -87,22 +77,6 @@ export async function ensureWorkspace(worktree: string): Promise<void> {
 	await ensureWorkspaceAtRoot(assertMutableWorkspaceRoot(worktree));
 }
 
-export async function readActiveSessionId(
-	worktree: string,
-): Promise<string | null> {
-	const sessionIds = await listDirectoryNames(getActiveSessionsDir(worktree));
-	if (sessionIds.length === 0) {
-		return null;
-	}
-	if (sessionIds.length > 1) {
-		throw new Error(
-			`Expected exactly one active Flow session directory, found ${sessionIds.length}.`,
-		);
-	}
-
-	return sessionIds[0] ?? null;
-}
-
 export async function writeSessionFile(
 	worktree: string,
 	session: Session,
@@ -114,27 +88,4 @@ export async function writeSessionFile(
 		getSessionDir(mutableWorktree, session.id, location),
 		session,
 	);
-}
-
-export async function findStoredSessionDir(
-	worktree: MutableWorkspaceRoot,
-	sessionId: string,
-): Promise<string | null> {
-	const sessionDir = getSessionDir(worktree, sessionId, "stored");
-	try {
-		const details = await stat(sessionDir);
-		return details.isDirectory() ? sessionDir : null;
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return null;
-		}
-
-		throw error;
-	}
-}
-
-export async function resolveActiveSessionId(
-	worktree: string,
-): Promise<string | null> {
-	return readActiveSessionId(worktree);
 }

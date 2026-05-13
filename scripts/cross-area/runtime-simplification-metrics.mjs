@@ -21,7 +21,7 @@ function listTsFiles(root) {
 	while (stack.length > 0) {
 		const current = stack.pop();
 		if (!current) continue;
-		for (const entry of readdirSync(current)) {
+		for (const entry of readdirSync(current).sort((a, b) => a.localeCompare(b))) {
 			const absolute = path.join(current, entry);
 			const stats = statSync(absolute);
 			if (stats.isDirectory()) {
@@ -33,7 +33,7 @@ function listTsFiles(root) {
 			}
 		}
 	}
-	return files;
+	return files.sort((a, b) => toPosix(a).localeCompare(toPosix(b)));
 }
 
 function countLines(filePath) {
@@ -105,7 +105,9 @@ function main() {
 	const totalRuntimeLoc = runtimeFiles.reduce((sum, entry) => sum + entry.loc, 0);
 	const largeFileThreshold = 300;
 	const largeFiles = runtimeFiles.filter((entry) => entry.loc >= largeFileThreshold);
-	const largest = [...runtimeFiles].sort((a, b) => b.loc - a.loc).slice(0, 5);
+	const largest = [...runtimeFiles]
+		.sort((a, b) => b.loc - a.loc || a.file.localeCompare(b.file))
+		.slice(0, 5);
 	const subdomains = summarizeSubdomains(runtimeFiles, largeFileThreshold);
 	const top5Loc = largest.reduce((sum, entry) => sum + entry.loc, 0);
 	const top5LocShare = totalRuntimeLoc === 0 ? 0 : Number(((top5Loc / totalRuntimeLoc) * 100).toFixed(1));
@@ -113,7 +115,7 @@ function main() {
 	const churn = getRuntimeChurnByFile();
 	const topChurn = [...churn.entries()]
 		.map(([file, changes]) => ({ file, changes }))
-		.sort((a, b) => b.changes - a.changes)
+		.sort((a, b) => b.changes - a.changes || a.file.localeCompare(b.file))
 		.slice(0, 5);
 
 	const output = {

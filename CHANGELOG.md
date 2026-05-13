@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [2.0.34] - 2026-05-13
+
+Keep simplification seams measurable and compatibility-stable
+
+Flow 2.0.34 completes the next simplification pass across adapter projections, review-domain validation, rendering projections, and session live-storage boundaries. The change moves implementation detail into narrower helper modules while preserving the existing OpenCode tool names, runtime action bindings, public schema surfaces, `.flow/**` state paths, and facade imports.
+
+The release makes the OpenCode core-action projection seam explicit through `core-action-projection.ts`, splits final-review context grounding and review-scope ledger validation into focused domain helpers, separates task-progress row selection from render/presenter code, and centralizes active/stored/completed session live-storage helpers. A follow-up compatibility fix keeps `openCodeToolCoreSummary()` tolerant for stale projected core actions by returning `null` instead of throwing, while strict descriptor metadata lookup remains fail-fast.
+
+Fresh metrics after the pass: runtime files `116`, runtime LOC `17,249`, large runtime files `11`, top-5 runtime-file LOC share `12%`, and architecture seam violations `0`. The largest runtime files are now `session-presenters.ts` (`553` LOC), `final-review-behavior-validation.ts` (`424`), `schema-review-shared.ts` (`366`), `summary-task-progress.ts` (`366`), and `session-engine.ts` (`358`).
+
+The release deliberately does not add slash commands, runtime tools, state paths, package exports, dependencies, installer behavior, or workflow semantics. `zod` remains aligned with `@opencode-ai/plugin`; this is internal structure, compatibility preservation, and regression coverage only.
+
+Constraint: Preserve existing OpenCode tool names, schema owners, generated guidance/projection shape, and runtime action bindings while reducing adapter projection duplication
+Constraint: Preserve review-domain validation semantics, review decision normalization behavior, and session persistence precedence across active, stored, and completed sessions
+Constraint: Keep `.flow/**` path authority and rendered-doc-as-derived-artifact rules unchanged while centralizing live-storage helpers
+Rejected: Make projection-summary rendering strict at the public helper boundary | stale generated projection data previously returned `null` and host guidance should stay tolerant
+Rejected: Add new runtime surfaces or state paths during simplification | this release is behavior-preserving boundary repair, not product expansion
+Rejected: Change `zod` or plugin SDK versions | tool arg compatibility depends on keeping the effective SDK contract aligned
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Future simplification should keep public facades stable, add focused regression coverage for extracted seams, and record fresh runtime metrics before release
+Tested: `bun run report:runtime-simplification-metrics`; `bun test tests/config/tool-schemas.test.ts tests/descriptor-family-parity.test.ts` (22 pass, 0 fail); `bun run typecheck`; targeted `bunx biome check` on projection fix files; focused RepoPrompt review found no P0/P1/P2 findings for the compatibility fix; `bun run check` (631 pass, 0 fail; build, release hygiene, pack invariants, completion lane, full tests, lint, bench smoke, and bench gate passed)
+Not-tested: Live OpenCode UI runtime interaction; live GitHub-hosted release workflow run for tag `v2.0.34` before push
+
 ## [2.0.33] - 2026-05-13
 
 Lower runtime hotspot concentration behind stable facades

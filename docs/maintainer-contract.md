@@ -130,6 +130,18 @@ Ownership rules:
 - Fallback surfaces are required: existing slash commands and agents must remain usable without installed or permitted skills.
 
 
+## Simplification/change-map playbook
+
+For simplification PRs, maintainers should require a narrow change map before review:
+
+1. Name the touched surface (`runtime hotspot`, `adapter projection`, or `persistence boundary`) and the stable facade that remains the public contract.
+2. Capture `bun run report:runtime-simplification-metrics` before and after runtime refactors; review deterministic deltas for top-level runtime fields and touched `runtime.subdomains` entries.
+3. Keep adapter projection changes behind `src/adapters/opencode/tool-surface/*` helpers. Public OpenCode tool names, schemas, host descriptions, docs rows, generated guidance/projections, and core-action summaries must remain parity-stable.
+4. For persistence changes, preserve `.flow/**` paths, session schema, locking, activation, completion, and rendered-doc-as-derived-artifact rules.
+5. Run the focused checks listed in `docs/contributor-map.md` for the touched slice before broader release gates.
+
+Accepted simplification tradeoffs should be explicit: a file-count increase is allowed only when hotspot concentration or coupling drops and the facade boundary becomes clearer.
+
 ## Gate contract matrix
 
 `bun run check` is the canonical local/mainline contract. Focused gates may also run in CI or during local diagnosis to fail faster or produce artifacts, but every hard gate below must remain covered by `bun run check`, an explicitly documented focused lane, or both. Advisory and diagnostic commands must not be treated as merge blockers unless this matrix, the owning script, and tests are updated together.

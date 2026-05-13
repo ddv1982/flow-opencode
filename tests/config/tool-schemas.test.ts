@@ -8,8 +8,10 @@ import {
 	getOpenCodeToolProjection,
 	OPENCODE_TOOL_NAMES,
 	OPENCODE_TOOL_PROJECTIONS,
+	openCodeToolCoreSummary,
 } from "../../src/adapters/opencode/tool-projections.generated";
 import { FlowAttachmentsMaterializeArgsSchema } from "../../src/adapters/opencode/tool-surface/schemas";
+import type { CoreActionName } from "../../src/core/registry";
 import { WorkerResultSchema } from "../../src/runtime/schema";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
 
@@ -74,6 +76,31 @@ describe("tool schema config contracts", () => {
 		expect(
 			getOpenCodeToolProjection("flow_review_record_final")?.runtimeAction,
 		).toBe("record_final_review");
+	});
+
+	test("OpenCode core summaries return null for stale projected core actions", () => {
+		expect(openCodeToolCoreSummary("flow_run_complete_feature")).toContain(
+			"- Core action: `complete_run`",
+		);
+
+		const projection = getOpenCodeToolProjection("flow_run_complete_feature");
+		expect(projection).not.toBeNull();
+		if (!projection) {
+			return;
+		}
+
+		const originalCoreAction = projection.coreAction;
+		try {
+			projection.coreAction = "missing_projected_action" as CoreActionName;
+
+			expect(openCodeToolCoreSummary("flow_run_complete_feature")).toBeNull();
+		} finally {
+			if (originalCoreAction) {
+				projection.coreAction = originalCoreAction;
+			} else {
+				delete projection.coreAction;
+			}
+		}
 	});
 
 	test("exports OpenCode raw arg shapes for every tool", () => {

@@ -1,8 +1,6 @@
-import {
-	CORE_ACTION_REGISTRY,
-	type CoreActionName,
-} from "../../../core/registry";
+import type { CoreActionName } from "../../../core/registry";
 import type { SemanticInvariantId } from "../../../runtime/domain";
+import { optionalCoreActionProjectionMetadata } from "./core-action-projection";
 import { FLOW_TOOL_PAYLOAD_SCHEMA_OWNERS } from "./schemas";
 import {
 	type FlowSurfaceKind,
@@ -234,10 +232,6 @@ const FLOW_DESCRIPTOR_GOVERNANCE_BY_TOOL_NAME = {
 	},
 } as const satisfies Record<OpenCodeToolName, FlowDescriptorGovernance>;
 
-const CORE_ACTIONS_BY_NAME = new Map(
-	CORE_ACTION_REGISTRY.map((action) => [action.name, action]),
-);
-
 function payloadSchemaOwnersFor(toolName: OpenCodeToolName): readonly string[] {
 	const payloadSchemaOwners = FLOW_TOOL_PAYLOAD_SCHEMA_OWNERS[toolName];
 	if (!payloadSchemaOwners) {
@@ -249,18 +243,10 @@ function payloadSchemaOwnersFor(toolName: OpenCodeToolName): readonly string[] {
 function coreActionMetadata(
 	coreActionName: CoreActionName | null,
 ): Pick<FlowSurfaceDescriptor, "emittedEvents" | "invariantIds"> {
-	if (!coreActionName) {
-		return { emittedEvents: [], invariantIds: [] };
-	}
-	const coreAction = CORE_ACTIONS_BY_NAME.get(coreActionName);
-	if (!coreAction) {
-		throw new Error(
-			`Missing core action registry entry for '${coreActionName}'.`,
-		);
-	}
+	const coreAction = optionalCoreActionProjectionMetadata(coreActionName);
 	return {
-		emittedEvents: coreAction.emits,
-		invariantIds: coreAction.invariantIds,
+		emittedEvents: coreAction?.emits ?? [],
+		invariantIds: coreAction?.invariantIds ?? [],
 	};
 }
 

@@ -1,4 +1,5 @@
-import { CORE_ACTION_REGISTRY, type CoreActionName } from "../../core/registry";
+import type { CoreActionName } from "../../core/registry";
+import { renderOpenCodeToolCoreSummary } from "./tool-surface/core-action-projection";
 import {
 	OPENCODE_TOOL_REGISTRY,
 	openCodeToolDescription as registryToolDescription,
@@ -16,10 +17,6 @@ export type OpenCodeToolProjection = {
 	hostDescription: string;
 	definitionGuidance?: string;
 };
-
-const CORE_ACTIONS_BY_NAME = new Map(
-	CORE_ACTION_REGISTRY.map((action) => [action.name, action]),
-);
 
 function toOpenCodeToolProjection(
 	entry: (typeof OPENCODE_TOOL_REGISTRY)[number],
@@ -68,23 +65,8 @@ export function openCodeToolDescription(toolName: string): string {
 
 export function openCodeToolCoreSummary(toolName: string): string | null {
 	const projection = getOpenCodeToolProjection(toolName);
-	if (!projection?.coreAction) {
-		return null;
-	}
-	const action = CORE_ACTIONS_BY_NAME.get(projection.coreAction);
-	if (!action) {
-		return null;
-	}
-
-	return [
-		"## Core registry projection",
-		projection.runtimeAction
-			? `- Adapter action: \`${projection.runtimeAction}\``
-			: null,
-		`- Core action: \`${action.name}\` — ${action.description}`,
-		`- Emits: ${action.emits.map((event) => `\`${event}\``).join(", ")}`,
-		`- Invariants: ${action.invariantIds.map((id) => `\`${id}\``).join(", ")}`,
-	]
-		.filter((line): line is string => line !== null)
-		.join("\n");
+	return renderOpenCodeToolCoreSummary({
+		coreActionName: projection?.coreAction,
+		runtimeAction: projection?.runtimeAction,
+	});
 }

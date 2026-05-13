@@ -1,38 +1,10 @@
 import type { LatestFailedFlowAttempt, Session } from "../schema";
 import { deriveSessionViewModel, type SessionGuidance } from "../summary";
-import type { TaskProgressRow } from "../summary-projections";
+import {
+	selectOperatorTaskProgressRows,
+	type TaskProgressRow,
+} from "../summary-projections";
 import type { DoctorCheck } from "./doctor-checks";
-
-function prioritizedTaskProgressRows(
-	rows: TaskProgressRow[],
-): TaskProgressRow[] {
-	const selected: TaskProgressRow[] = [];
-	const add = (candidates: TaskProgressRow[]) => {
-		for (const row of candidates) {
-			if (selected.length >= 4) {
-				return;
-			}
-			if (!selected.some((item) => item.id === row.id)) {
-				selected.push(row);
-			}
-		}
-	};
-
-	add(rows.filter((row) => row.status === "active"));
-	add(rows.filter((row) => row.status === "ready"));
-	add(
-		rows.filter((row) =>
-			["blocked", "needs_fix", "needs_input"].includes(row.status),
-		),
-	);
-	add(
-		rows.filter((row) =>
-			["validation", "review", "final_review"].includes(row.phase),
-		),
-	);
-	add(rows.filter((row) => row.status === "pending").slice(0, 1));
-	return selected;
-}
 
 function toInlineSummaryText(value: string, maxLength: number): string {
 	const inline = value
@@ -63,7 +35,7 @@ function renderLatestFailedAttemptLines(
 }
 
 function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
-	const selected = prioritizedTaskProgressRows(rows);
+	const selected = selectOperatorTaskProgressRows(rows);
 	if (selected.length === 0) {
 		return [];
 	}

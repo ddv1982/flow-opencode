@@ -66,7 +66,7 @@ Repeat weekly (or each simplification PR):
 4. Verify with `bun run test:fast` + targeted suite for touched area.
 5. Record before/after deltas in PR description.
 
-For each simplification phase, capture the metrics report immediately before and after the change. Record deltas for the top-level runtime fields (`fileCount`, `totalLoc`, `largeFileCount`, `top5LocSharePercent`, `largestFiles`, `topChurnFiles`) and the touched entries under `runtime.subdomains`. Treat subdomain movement as diagnostic evidence only: it explains the local effect of a refactor, while `check:architecture-seams:enforce` remains the hard seam gate.
+For each simplification phase, capture the metrics report immediately before and after the change. Record deltas for the top-level runtime fields (`fileCount`, `totalLoc`, `largeFileCount`, `top5LocSharePercent`, `largestFiles`, `topChurnFiles`) and the touched entries under `runtime.subdomains`. The report uses deterministic ordering for file lists, largest-file ties, churn ties, and subdomains so PR deltas can be reviewed without order noise. Treat subdomain movement as diagnostic evidence only: it explains the local effect of a refactor, while `check:architecture-seams:enforce` remains the hard seam gate.
 
 ## Current top hotspot candidates
 

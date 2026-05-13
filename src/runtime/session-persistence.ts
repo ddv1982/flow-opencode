@@ -1,10 +1,4 @@
-import { mkdir, rename } from "node:fs/promises";
-import {
-	getActiveSessionDir,
-	getSessionPath,
-	getStoredSessionDir,
-	getStoredSessionsDir,
-} from "./paths";
+import { getSessionPath } from "./paths";
 import {
 	persistCompletedSession,
 	syncCompletedSessionArtifacts,
@@ -12,10 +6,10 @@ import {
 import { renderSessionDocs } from "./rendering";
 import type { Session } from "./schema";
 import {
-	findStoredSessionDir,
+	makeSessionActive,
 	resolveActiveSessionId,
-	writeSessionFile,
-} from "./session-workspace";
+} from "./session-live-storage";
+import { writeSessionFile } from "./session-workspace";
 import { readSessionFromPath } from "./session-workspace-io";
 import { withSessionSaveLock } from "./session-workspace-locks";
 import { nowIso } from "./util";
@@ -39,23 +33,7 @@ async function persistOpenSession(
 	session: Session,
 	includeArtifacts: boolean,
 ): Promise<void> {
-	const activeSessionId = await resolveActiveSessionId(worktree);
-	if (activeSessionId && activeSessionId !== session.id) {
-		await mkdir(getStoredSessionsDir(worktree), {
-			recursive: true,
-		});
-		await rename(
-			getActiveSessionDir(worktree, activeSessionId),
-			getStoredSessionDir(worktree, activeSessionId),
-		);
-	}
-
-	if (activeSessionId !== session.id) {
-		const storedDir = await findStoredSessionDir(worktree, session.id);
-		if (storedDir) {
-			await rename(storedDir, getActiveSessionDir(worktree, session.id));
-		}
-	}
+	await makeSessionActive(worktree, session.id);
 
 	await writeSessionFile(worktree, session, "active");
 	if (includeArtifacts) {

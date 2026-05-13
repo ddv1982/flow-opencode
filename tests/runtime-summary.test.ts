@@ -16,6 +16,12 @@ import {
 	summarizeSession,
 } from "../src/runtime/summary";
 import {
+	selectFeatureTaskProgressRows,
+	selectIndexTaskProgressRows,
+	selectOperatorTaskProgressRows,
+	type TaskProgressRow,
+} from "../src/runtime/summary-projections";
+import {
 	applyPlan,
 	approvePlan,
 	completeRun,
@@ -48,6 +54,26 @@ function assertOk<T>(
 	}
 
 	return result.value;
+}
+
+function taskProgressRow(
+	id: string,
+	status: TaskProgressRow["status"],
+	phase: TaskProgressRow["phase"] = "execution",
+	featureId?: string,
+): TaskProgressRow {
+	return {
+		id,
+		phase,
+		ownerRole: "flow-worker",
+		subject: id,
+		status,
+		...(featureId ? { featureId } : {}),
+		evidence: [],
+		blocker: null,
+		next: `Next for ${id}.`,
+		source: "execution",
+	};
 }
 
 function buildSummaryFixtureSessions() {
@@ -363,6 +389,50 @@ describe("runtime summary", () => {
 			(row) => row.id === "planning",
 		);
 		expect(planningRow?.status).toBe("needs_input");
+	});
+
+	test("task progress selectors preserve view-specific ordering and limits", () => {
+		const rows = [
+			taskProgressRow("duplicate", "pending"),
+			taskProgressRow("pending-1", "pending"),
+			taskProgressRow("completed-1", "completed"),
+			taskProgressRow("duplicate", "active"),
+			taskProgressRow("active-2", "active"),
+			taskProgressRow("ready", "ready"),
+			taskProgressRow("blocked", "blocked"),
+			taskProgressRow("validation", "pending", "validation"),
+			taskProgressRow("pending-2", "pending"),
+			taskProgressRow("pending-3", "pending"),
+			taskProgressRow("completed-2", "completed"),
+			taskProgressRow("completed-3", "completed"),
+		];
+
+		expect(selectIndexTaskProgressRows(rows).map((row) => row.id)).toEqual([
+			"duplicate",
+			"active-2",
+			"ready",
+			"blocked",
+			"validation",
+			"pending-1",
+			"completed-1",
+			"completed-2",
+		]);
+		expect(selectOperatorTaskProgressRows(rows).map((row) => row.id)).toEqual([
+			"duplicate",
+			"active-2",
+			"ready",
+			"blocked",
+		]);
+
+		const featureRows = [
+			taskProgressRow("f1-execution-pending", "pending", "execution", "f1"),
+			taskProgressRow("f1-execution-active", "active", "execution", "f1"),
+			taskProgressRow("f1-validation-pending", "pending", "validation", "f1"),
+			taskProgressRow("f2-execution-active", "active", "execution", "f2"),
+		];
+		expect(
+			selectFeatureTaskProgressRows(featureRows, "f1").map((row) => row.id),
+		).toEqual(["f1-execution-active", "f1-validation-pending"]);
 	});
 
 	test("runtime summary surfaces latest failed attempts as blocked task progress", () => {

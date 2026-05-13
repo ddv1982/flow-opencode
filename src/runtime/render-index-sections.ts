@@ -26,7 +26,7 @@ import type { Feature, Session } from "./schema";
 import { deriveNextCommand } from "./session-operator-state";
 import {
 	projectTaskProgress,
-	type TaskProgressRow,
+	selectIndexTaskProgressRows,
 } from "./summary-projections";
 
 function formatFeatureLine(feature: Feature): string {
@@ -94,49 +94,13 @@ function renderIndexSummarySection(session: Session): string {
 ${summaryLines.join("\n")}`;
 }
 
-function selectTaskProgressRows(rows: TaskProgressRow[]): TaskProgressRow[] {
-	const selected: TaskProgressRow[] = [];
-	const add = (candidates: TaskProgressRow[], limit = candidates.length) => {
-		for (const row of candidates.slice(0, limit)) {
-			if (selected.length >= 8) {
-				return;
-			}
-			if (!selected.some((item) => item.id === row.id)) {
-				selected.push(row);
-			}
-		}
-	};
-
-	add(rows.filter((row) => row.status === "active"));
-	add(rows.filter((row) => row.status === "ready"));
-	add(
-		rows.filter((row) =>
-			["blocked", "needs_fix", "needs_input"].includes(row.status),
-		),
-	);
-	add(
-		rows.filter((row) =>
-			["validation", "review", "final_review"].includes(row.phase),
-		),
-	);
-	add(
-		rows.filter((row) => row.status === "pending"),
-		2,
-	);
-	add(
-		rows.filter((row) => row.status === "completed"),
-		2,
-	);
-	return selected;
-}
-
 function renderTaskProgressSection(session: Session): string {
 	const rows = projectTaskProgress(session);
 	if (rows.length === 0) {
 		return "";
 	}
 
-	const selectedRows = selectTaskProgressRows(rows);
+	const selectedRows = selectIndexTaskProgressRows(rows);
 	const omittedCount = rows.length - selectedRows.length;
 	const lines = [
 		...selectedRows.map(renderTaskProgressLine),

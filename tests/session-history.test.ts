@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { mkdirSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { getSessionPath } from "../src/runtime/paths";
 import {
 	closeSession,
 	createSession,
 	listSessionHistory,
+	loadStoredSession,
 	saveSession,
 } from "../src/runtime/session";
 import * as time from "../src/runtime/util";
@@ -37,6 +42,61 @@ describe("session history completed parsing", () => {
 		});
 		expect(history.stored).toEqual([]);
 		expect(history.completed).toEqual([]);
+	});
+
+	test("loadStoredSession falls back to stored copy when active copy is corrupt", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Recoverable stored session");
+		await saveSession(worktree, session);
+		mkdirSync(dirname(getSessionPath(worktree, session.id, "stored")), {
+			recursive: true,
+		});
+		await writeFile(
+			getSessionPath(worktree, session.id, "stored"),
+			JSON.stringify(
+				{
+					...session,
+					goal: "Stored copy survives corrupt active",
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
+		await writeFile(
+			getSessionPath(worktree, session.id),
+			"{not valid json",
+			"utf8",
+		);
+
+		const loaded = await loadStoredSession(worktree, session.id);
+
+		expect(loaded?.source).toBe("stored");
+		expect(loaded?.active).toBe(false);
+		expect(loaded?.session.goal).toBe("Stored copy survives corrupt active");
+	});
+
+	test("loadStoredSession falls back to completed copy when active copy is corrupt", async () => {
+		const worktree = makeTempDir();
+		const session = createSession("Recoverable completed session");
+		await saveSession(worktree, session);
+		const completed = await closeSession(worktree, "completed");
+		expect(completed).not.toBeNull();
+		mkdirSync(dirname(getSessionPath(worktree, session.id)), {
+			recursive: true,
+		});
+		await writeFile(
+			getSessionPath(worktree, session.id),
+			"{not valid json",
+			"utf8",
+		);
+
+		const loaded = await loadStoredSession(worktree, session.id);
+
+		expect(loaded?.source).toBe("completed");
+		expect(loaded?.active).toBe(false);
+		expect(loaded?.session.goal).toBe("Recoverable completed session");
+		expect(loaded?.completedPath).toBe(completed?.completedTo);
 	});
 
 	test("listSessionHistory parses millisecond completed timestamps and sorts descending", async () => {

@@ -1,20 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, rm } from "node:fs/promises";
-import {
-	getActiveSessionDir,
-	getReviewsDir,
-	getSessionPath,
-	getStoredSessionDir,
-	getStoredSessionsDir,
-} from "./paths";
-import {
-	type ClosedSessionResult,
-	closeActiveSession,
-	pathExists,
-} from "./recovery";
+import { rm } from "node:fs/promises";
+import { getActiveSessionDir, getReviewsDir, getSessionPath } from "./paths";
+import { type ClosedSessionResult, closeActiveSession } from "./recovery";
 import { deleteSessionDocs } from "./rendering";
 import { type PlanningContext, type Session, SessionSchema } from "./schema";
-import { resolveActiveSessionId } from "./session-workspace";
+import {
+	activateStoredSessionBoundary,
+	resolveActiveSessionId,
+} from "./session-live-storage";
 import { readSessionFromPath } from "./session-workspace-io";
 import { withSessionSaveLock } from "./session-workspace-locks";
 import { nowIso } from "./util";
@@ -89,27 +82,14 @@ export async function activateSession(
 ): Promise<Session | null> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
 	return withSessionSaveLock(mutableWorktree, async () => {
-		const activeSessionId = await resolveActiveSessionId(mutableWorktree);
-		if (activeSessionId === sessionId) {
-			return readActiveSession(mutableWorktree, sessionId);
-		}
-
-		const storedDir = getStoredSessionDir(mutableWorktree, sessionId);
-		if (!(await pathExists(storedDir))) {
+		const activation = await activateStoredSessionBoundary(
+			mutableWorktree,
+			sessionId,
+		);
+		if (activation === "missing") {
 			return null;
 		}
 
-		if (activeSessionId) {
-			await mkdir(getStoredSessionsDir(mutableWorktree), {
-				recursive: true,
-			});
-			await rename(
-				getActiveSessionDir(mutableWorktree, activeSessionId),
-				getStoredSessionDir(mutableWorktree, activeSessionId),
-			);
-		}
-
-		await rename(storedDir, getActiveSessionDir(mutableWorktree, sessionId));
 		return readActiveSession(mutableWorktree, sessionId);
 	});
 }

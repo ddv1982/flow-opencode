@@ -10,7 +10,10 @@ import {
 	toQuotedBlock,
 } from "./render-sections-shared";
 import type { Feature, Session } from "./schema";
-import { projectTaskProgress } from "./summary-projections";
+import {
+	projectTaskProgress,
+	selectFeatureTaskProgressRows,
+} from "./summary-projections";
 
 function renderFeatureHistory(session: Session, feature: Feature): string {
 	const entries = session.execution.history.filter(
@@ -53,10 +56,9 @@ function renderFeatureTaskProgressSection(
 	session: Session,
 	feature: Feature,
 ): string {
-	const rows = projectTaskProgress(session).filter(
-		(row) =>
-			row.featureId === feature.id &&
-			(row.phase !== "execution" || row.status !== "pending"),
+	const rows = selectFeatureTaskProgressRows(
+		projectTaskProgress(session),
+		feature.id,
 	);
 	if (rows.length === 0) {
 		return "";

@@ -1,139 +1,21 @@
-import type { z } from "zod";
 import type { ReviewerDecision, Session } from "../schema";
-import type { ReviewScopeLedgerEntrySchema } from "../schema-review-shared";
-import type {
-	FinalReviewBehaviorCheck,
-	FinalReviewBehaviorRiskClass,
-	FinalReviewValidationCoverage,
-} from "./final-review-behavior-risks";
-import {
-	describeFinalReviewCoverageFailure,
-	detailedFinalReviewRequirementFailures,
-	isKnownFinalReviewSurface,
-} from "./final-review-coverage";
-import {
-	buildReviewContextPack,
-	type ReviewContextPackInput,
-} from "./review-content-discovery";
-import { detailedFinalReviewDecisionFailureMessage } from "./review-messages";
+import { describeFinalReviewCoverageFailure } from "./final-review-coverage";
 import { describeFinalReviewerReviewScopeFailure } from "./review-scope-accounting";
 import {
-	finalReviewPolicyForPlan,
-	reviewerPurposeForScope,
-} from "./workflow-policy";
+	buildNormalizedReviewContextPack,
+	finalReviewedSurfacesForInput,
+	normalizeBehaviorChecksForCoverage,
+	normalizeFinalReviewEvidenceRefs,
+	normalizeReviewScopeLedgerForDecision,
+	normalizeValidationCoverageForCoverage,
+	type RecordReviewerDecisionInput,
+} from "./reviewer-decision-normalization";
+import { describeReviewerDecisionShapeFailure } from "./reviewer-decision-shape-validation";
+import { reviewerPurposeForScope } from "./workflow-policy";
+
+export type { RecordReviewerDecisionInput } from "./reviewer-decision-normalization";
 
 type FinalScopeReviewerDecision = Extract<ReviewerDecision, { scope: "final" }>;
-
-type BehaviorCheckInput = {
-	riskClass: string;
-	result: "passed" | "gap_recorded" | "not_applicable" | "needs_fix";
-	invariant: string;
-	entrypointRefs?: string[] | undefined;
-	stateOwnerRefs?: string[] | undefined;
-	lifecycleOwnerRefs?: string[] | undefined;
-	failurePath: string;
-	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
-	validationRefs?: string[] | undefined;
-	remainingGap?: string | undefined;
-};
-
-type ValidationCoverageInput = {
-	command: string;
-	behaviorClasses?: string[] | undefined;
-	proves?: string[] | undefined;
-	gaps?: string[] | undefined;
-	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
-};
-
-function normalizeBehaviorRiskClass(
-	riskClass: string,
-): FinalReviewBehaviorRiskClass {
-	return (
-		riskClass === "test_oracle_authenticity"
-			? "test_evidence_authenticity"
-			: riskClass
-	) as FinalReviewBehaviorRiskClass;
-}
-
-function legacyCompatibleTestEvidenceRefs(value: {
-	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
-}): string[] {
-	return value.testEvidenceRefs ?? value.oracleRefs ?? [];
-}
-
-function normalizeBehaviorChecksForCoverage(
-	checks: BehaviorCheckInput[] | undefined,
-): FinalReviewBehaviorCheck[] {
-	return (checks ?? []).map((check) => ({
-		riskClass: normalizeBehaviorRiskClass(check.riskClass),
-		result: check.result,
-		invariant: check.invariant,
-		entrypointRefs: check.entrypointRefs ?? [],
-		stateOwnerRefs: check.stateOwnerRefs ?? [],
-		lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
-		failurePath: check.failurePath,
-		testEvidenceRefs: legacyCompatibleTestEvidenceRefs(check),
-		validationRefs: check.validationRefs ?? [],
-		...(check.remainingGap ? { remainingGap: check.remainingGap } : {}),
-	}));
-}
-
-function normalizeValidationCoverageForCoverage(
-	coverage: ValidationCoverageInput[] | undefined,
-): FinalReviewValidationCoverage[] {
-	return (coverage ?? []).map((item) => ({
-		command: item.command,
-		behaviorClasses: (item.behaviorClasses ?? []).map(
-			normalizeBehaviorRiskClass,
-		),
-		proves: item.proves ?? [],
-		gaps: item.gaps ?? [],
-		testEvidenceRefs: legacyCompatibleTestEvidenceRefs(item),
-	}));
-}
-
-function normalizeReviewScopeLedgerForDecision(
-	ledger: RecordReviewerDecisionInput["reviewScopeLedger"],
-): FinalScopeReviewerDecision["reviewScopeLedger"] {
-	return ledger?.map((entry) => ({
-		...entry,
-		evidenceRefs: entry.evidenceRefs ?? [],
-	}));
-}
-
-export type RecordReviewerDecisionInput = {
-	scope: string;
-	reviewPurpose?: string | undefined;
-	status: string;
-	summary: string;
-	featureId?: string | undefined;
-	reviewDepth?: string | undefined;
-	reviewedSurfaces?: string[] | undefined;
-	evidenceSummary?: string | undefined;
-	validationAssessment?: string | undefined;
-	evidenceRefs?:
-		| {
-				changedArtifacts?: string[] | undefined;
-				validationCommands?: string[] | undefined;
-		  }
-		| undefined;
-	evidencePackets?: FinalScopeReviewerDecision["evidencePackets"];
-	reviewScopeLedger?:
-		| Array<z.input<typeof ReviewScopeLedgerEntrySchema>>
-		| undefined;
-	reviewContextPack?: ReviewContextPackInput | undefined;
-	integrationChecks?: string[] | undefined;
-	regressionChecks?: string[] | undefined;
-	remainingGaps?: string[] | undefined;
-	behaviorChecks?: BehaviorCheckInput[] | undefined;
-	validationCoverage?: ValidationCoverageInput[] | undefined;
-	blockingFindings?: ReviewerDecision["blockingFindings"];
-	followUps?: ReviewerDecision["followUps"];
-	suggestedValidation?: ReviewerDecision["suggestedValidation"];
-};
 
 export type ReviewerDecisionValidationFailureKind =
 	| "shape"
@@ -156,161 +38,15 @@ export function validateReviewerDecisionInputDetailed(
 	session: Session,
 	input: RecordReviewerDecisionInput,
 ): ReviewerDecisionValidationFailure | null {
-	if (input.scope === "final" && input.featureId !== undefined) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: featureId: Final reviewer decisions must not include a featureId.",
-		);
+	const shapeFailure = describeReviewerDecisionShapeFailure(session, input);
+	if (shapeFailure) {
+		return reviewerDecisionValidationFailure("shape", shapeFailure);
 	}
-	if (
-		input.scope === "feature" &&
-		(input.featureId === undefined || input.featureId.trim() === "")
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: featureId: Feature reviewer decisions must include a featureId.",
-		);
-	}
-	if (input.scope !== "feature" && input.scope !== "final") {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			`Reviewer decision validation failed: scope: Invalid enum value. Expected 'feature' | 'final', received '${input.scope}'.`,
-		);
-	}
-	if (
-		input.status !== "approved" &&
-		input.status !== "needs_fix" &&
-		input.status !== "blocked"
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			`Reviewer decision validation failed: status: Invalid enum value. Expected 'approved' | 'needs_fix' | 'blocked', received '${input.status}'.`,
-		);
-	}
-	if (
-		input.scope === "feature" &&
-		input.reviewPurpose !== undefined &&
-		input.reviewPurpose !== "execution_gate"
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: reviewPurpose: Feature reviewer decisions must use execution_gate.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.reviewPurpose !== undefined &&
-		input.reviewPurpose !== "completion_gate"
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: reviewPurpose: Final reviewer decisions must use completion_gate.",
-		);
-	}
-	if (input.scope === "final" && input.reviewDepth === undefined) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: reviewDepth: Final reviewer decisions must include a reviewDepth.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.reviewDepth !== "broad" &&
-		input.reviewDepth !== "detailed"
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			`Reviewer decision validation failed: reviewDepth: Invalid enum value. Expected 'broad' | 'detailed', received '${input.reviewDepth}'.`,
-		);
-	}
-	if (input.scope === "feature" && input.reviewDepth !== undefined) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: reviewDepth: Feature reviewer decisions must not include a reviewDepth.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		session.plan &&
-		input.reviewDepth !== finalReviewPolicyForPlan(session.plan)
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			`Reviewer decision validation failed: reviewDepth: Final reviewer decisions must match deliveryPolicy.finalReviewPolicy (${finalReviewPolicyForPlan(session.plan)}).`,
-		);
-	}
-	if (
-		input.scope === "final" &&
-		(!input.reviewedSurfaces || input.reviewedSurfaces.length === 0)
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: reviewedSurfaces: Final reviewer decisions must list reviewedSurfaces.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		(!input.evidenceSummary || input.evidenceSummary.trim() === "")
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: evidenceSummary: Final reviewer decisions must include an evidenceSummary.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		(!input.validationAssessment || input.validationAssessment.trim() === "")
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: validationAssessment: Final reviewer decisions must include a validationAssessment.",
-		);
-	}
-	if (input.scope === "final" && !input.evidenceRefs) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: evidenceRefs: Final reviewer decisions must include evidenceRefs.",
-		);
-	}
-	const finalReviewedSurfaces = input.reviewedSurfaces ?? [];
-	if (
-		input.scope === "final" &&
-		finalReviewedSurfaces.some((surface) => !isKnownFinalReviewSurface(surface))
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: reviewedSurfaces: Final reviewer decisions must only use known reviewedSurfaces.",
-		);
-	}
-	if (
-		input.scope === "final" &&
-		input.status === "approved" &&
-		(input.behaviorChecks ?? []).some((check) => check.result === "needs_fix")
-	) {
-		return reviewerDecisionValidationFailure(
-			"shape",
-			"Reviewer decision validation failed: behaviorChecks: Approved final reviewer decisions cannot include needs_fix behavior checks.",
-		);
-	}
-	if (input.scope === "final") {
-		const [detailedFailure] = detailedFinalReviewRequirementFailures({
-			reviewDepth: input.reviewDepth ?? "",
-			reviewedSurfaces: finalReviewedSurfaces,
-			integrationChecks: input.integrationChecks,
-			regressionChecks: input.regressionChecks,
-		});
-		if (detailedFailure) {
-			return reviewerDecisionValidationFailure(
-				"shape",
-				detailedFinalReviewDecisionFailureMessage(detailedFailure),
-			);
-		}
-	}
+
 	if (input.scope === "final" && input.status === "approved") {
-		const evidenceRefs = {
-			changedArtifacts: input.evidenceRefs?.changedArtifacts ?? [],
-			validationCommands: input.evidenceRefs?.validationCommands ?? [],
-		};
+		const finalReviewedSurfaces = finalReviewedSurfacesForInput(input);
+		const evidenceRefs = normalizeFinalReviewEvidenceRefs(input);
+		const reviewContextPack = buildNormalizedReviewContextPack(input);
 		const coverageFailure = describeFinalReviewCoverageFailure(
 			session,
 			{
@@ -337,13 +73,7 @@ export function validateReviewerDecisionInputDetailed(
 				validationCoverage: normalizeValidationCoverageForCoverage(
 					input.validationCoverage,
 				),
-				...(input.reviewContextPack
-					? {
-							reviewContextPack: buildReviewContextPack(
-								input.reviewContextPack,
-							),
-						}
-					: {}),
+				...(reviewContextPack ? { reviewContextPack } : {}),
 			},
 		);
 		if (coverageFailure) {
@@ -360,13 +90,7 @@ export function validateReviewerDecisionInputDetailed(
 				reviewScopeLedger: normalizeReviewScopeLedgerForDecision(
 					input.reviewScopeLedger,
 				),
-				...(input.reviewContextPack
-					? {
-							reviewContextPack: buildReviewContextPack(
-								input.reviewContextPack,
-							),
-						}
-					: {}),
+				...(reviewContextPack ? { reviewContextPack } : {}),
 			},
 		);
 		if (reviewScopeFailure) {
@@ -390,11 +114,8 @@ export function validateReviewerDecisionInput(
 export function buildReviewerDecision(
 	input: RecordReviewerDecisionInput,
 ): ReviewerDecision {
-	const finalReviewedSurfaces = input.reviewedSurfaces ?? [];
-	const finalEvidenceRefs = {
-		changedArtifacts: input.evidenceRefs?.changedArtifacts ?? [],
-		validationCommands: input.evidenceRefs?.validationCommands ?? [],
-	};
+	const finalReviewedSurfaces = finalReviewedSurfacesForInput(input);
+	const finalEvidenceRefs = normalizeFinalReviewEvidenceRefs(input);
 	const finalReviewDepth = input.reviewDepth as
 		| FinalScopeReviewerDecision["reviewDepth"]
 		| undefined;
@@ -403,6 +124,7 @@ export function buildReviewerDecision(
 	const reviewScopeLedger = normalizeReviewScopeLedgerForDecision(
 		input.reviewScopeLedger,
 	);
+	const reviewContextPack = buildNormalizedReviewContextPack(input);
 
 	return input.scope === "final"
 		? {
@@ -431,13 +153,7 @@ export function buildReviewerDecision(
 					? { evidencePackets: input.evidencePackets }
 					: {}),
 				...(reviewScopeLedger ? { reviewScopeLedger } : {}),
-				...(input.reviewContextPack
-					? {
-							reviewContextPack: buildReviewContextPack(
-								input.reviewContextPack,
-							),
-						}
-					: {}),
+				...(reviewContextPack ? { reviewContextPack } : {}),
 				integrationChecks: (input.integrationChecks ??
 					[]) as FinalScopeReviewerDecision["integrationChecks"],
 				regressionChecks: (input.regressionChecks ??

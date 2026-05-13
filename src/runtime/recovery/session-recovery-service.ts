@@ -5,30 +5,17 @@ import {
 	allocateCompletedSessionLocation,
 	completedTimestampForSession,
 	findNewestCompletedSession,
-	moveSessionDirToCompleted,
 } from "../session-completed-storage";
-import { resolveActiveSessionId } from "../session-workspace";
+import {
+	moveActiveSessionToCompleted,
+	resolveActiveSessionId,
+} from "../session-live-storage";
 import {
 	readSessionFromPath,
 	writeSessionFileAtDir,
 } from "../session-workspace-io";
 import { completedTimestampNow, nowIso } from "../util";
 import type { MutableWorkspaceRoot } from "../workspace-root";
-
-async function moveActiveSessionToCompleted(
-	worktree: MutableWorkspaceRoot,
-	sessionId: string,
-	activeDir: string,
-	completedAt: string,
-): Promise<boolean> {
-	const moved = await moveSessionDirToCompleted(
-		worktree,
-		sessionId,
-		activeDir,
-		completedAt,
-	);
-	return Boolean(moved);
-}
 
 export async function persistCompletedSession(
 	worktree: MutableWorkspaceRoot,
@@ -43,12 +30,7 @@ export async function persistCompletedSession(
 		if (includeArtifacts) {
 			await renderSessionDocsAtDir(activeDir, session);
 		}
-		await moveActiveSessionToCompleted(
-			worktree,
-			session.id,
-			activeDir,
-			completedAt,
-		);
+		await moveActiveSessionToCompleted(worktree, session.id, completedAt);
 		return;
 	}
 
@@ -132,10 +114,9 @@ export async function closeActiveSession(
 	});
 
 	await writeSessionFileAtDir(activeDir, closedSession);
-	const moved = await moveSessionDirToCompleted(
+	const moved = await moveActiveSessionToCompleted(
 		worktree,
 		sessionId,
-		activeDir,
 		completedTimestampNow(),
 	);
 	return moved

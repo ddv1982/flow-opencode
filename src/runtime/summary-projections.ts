@@ -5,6 +5,11 @@ export {
 	projectTaskProgress,
 	type TaskProgressRow,
 } from "./summary-task-progress";
+export {
+	selectFeatureTaskProgressRows,
+	selectIndexTaskProgressRows,
+	selectOperatorTaskProgressRows,
+} from "./summary-task-progress-selection";
 
 export type SummarizedFeature = {
 	id: string;

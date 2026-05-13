@@ -125,7 +125,6 @@ describe("transition consolidation", () => {
 		visit(srcDir);
 		expect(directSessionImports.sort()).toEqual([
 			"src/runtime/lifecycle/index.ts",
-			"src/runtime/recovery/session-recovery-service.ts",
 		]);
 	});
 });

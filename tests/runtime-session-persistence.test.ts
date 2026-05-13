@@ -9,6 +9,7 @@ import {
 	getStoredSessionsDir,
 } from "../src/runtime/paths";
 import {
+	activateSession,
 	createSession,
 	deleteSessionArtifacts,
 	deleteSessionState,
@@ -88,6 +89,23 @@ describe("runtime session persistence", () => {
 		await expect(
 			readFile(getIndexDocPath(worktree, second.id), "utf8"),
 		).resolves.toContain("goal: Second goal");
+	});
+
+	test("activating a stored session parks the prior active session", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = await saveSession(worktree, createSession("Second goal"));
+
+		const activated = await activateSession(worktree, first.id);
+
+		expect(activated?.id).toBe(first.id);
+		expect(await activeSessionId(worktree)).toBe(first.id);
+		await expect(
+			readFile(getSessionPath(worktree, first.id), "utf8"),
+		).resolves.toContain('"goal": "First goal"');
+		await expect(
+			readFile(getSessionPath(worktree, second.id, "stored"), "utf8"),
+		).resolves.toContain('"goal": "Second goal"');
 	});
 
 	test("flow_plan_start recreates missing .flow/stored before parking the prior active session", async () => {
