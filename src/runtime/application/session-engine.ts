@@ -8,7 +8,7 @@ import {
 	saveSessionState,
 	syncSessionArtifacts,
 } from "../lifecycle";
-import type { LatestFailedFlowAttempt, Session } from "../schema";
+import type { Session } from "../schema";
 import type { TransitionResult } from "../transitions";
 import {
 	type RuntimeToolResponse as EngineRuntimeToolResponse,
@@ -18,12 +18,19 @@ import {
 	type SessionWorkspaceResult as RuntimeSessionWorkspaceResult,
 	runRuntimeActionAtRoot,
 } from "./session-engine-action-runner";
+import {
+	type FailedAttemptClearPolicy,
+	finalizeNoopMutationAtRoot,
+	finalizeTransitionAtRoot,
+	type SessionMutationResult,
+} from "./session-mutation-finalization";
+
+export type {
+	FailedAttemptClearPolicy,
+	SessionMutationResult,
+} from "./session-mutation-finalization";
 
 export type RuntimeToolResponse = EngineRuntimeToolResponse;
-
-type FailedAttemptClearPolicy =
-	| true
-	| { tool: LatestFailedFlowAttempt["tool"] };
 
 export interface SessionRuntimePort {
 	loadSession: (worktree: string) => Promise<Session | null>;
@@ -60,23 +67,6 @@ export type SessionMutationAction<T, Name extends string = string> = {
 	clearFailedAttemptOnSuccess?: FailedAttemptClearPolicy;
 	syncArtifacts?: boolean;
 };
-
-export type SessionMutationResult<T, Name extends string = string> =
-	| { kind: "missing"; actionName: Name; response: RuntimeToolResponse }
-	| {
-			kind: "success";
-			actionName: Name;
-			value: T;
-			savedSession: Session;
-			response: RuntimeToolResponse;
-	  }
-	| {
-			kind: "failure";
-			actionName: Name;
-			response: RuntimeToolResponse;
-			transition: Extract<TransitionResult<T>, { ok: false }>;
-			savedSession?: Session;
-	  };
 
 export type SessionReadAction<
 	T,
@@ -118,28 +108,6 @@ export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort
 		activateSession,
 		closeSession,
 	};
-
-function applyFailedAttemptClearPolicy(
-	session: Session,
-	policy: FailedAttemptClearPolicy | undefined,
-): Session {
-	if (!policy) {
-		return session;
-	}
-	const shouldClear =
-		policy === true ||
-		session.execution.lastFailedMutation?.tool === policy.tool;
-	if (!shouldClear) {
-		return session;
-	}
-	return {
-		...session,
-		execution: {
-			...session.execution,
-			lastFailedMutation: null,
-		},
-	};
-}
 
 export async function executeSessionReadActionAtRoot<T, Name extends string>(
 	worktree: string,
@@ -221,44 +189,16 @@ export async function executeTransitionAtRoot<T, Name extends string>(
 	} = { syncArtifacts: true },
 	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
 ): Promise<SessionMutationResult<T, Name>> {
-	if (!result.ok) {
-		if (result.session) {
-			const saved = await runtime.saveSessionState(worktree, result.session);
-			if (options.syncArtifacts)
-				await runtime.syncSessionArtifacts(worktree, saved);
-			return {
-				kind: "failure",
-				actionName,
-				response: onError(result),
-				transition: result,
-				savedSession: saved,
-			};
-		}
-		return {
-			kind: "failure",
-			actionName,
-			response: onError(result),
-			transition: result,
-		};
-	}
-
-	const resultSession = getSession(result.value);
-	const nextSession = applyFailedAttemptClearPolicy(
-		resultSession,
-		options.clearFailedAttemptOnSuccess,
-	);
-	const saved = await runtime.saveSessionState(worktree, nextSession);
-	const responseValue =
-		result.value === resultSession ? (saved as T) : result.value;
-	if (options.syncArtifacts)
-		await runtime.syncSessionArtifacts(worktree, saved);
-	return {
-		kind: "success",
+	return finalizeTransitionAtRoot(
 		actionName,
-		value: responseValue,
-		savedSession: saved,
-		response: onSuccess(saved, responseValue),
-	};
+		worktree,
+		result,
+		getSession,
+		onSuccess,
+		onError,
+		options,
+		runtime,
+	);
 }
 
 export async function executeSessionMutationAtRoot<T, Name extends string>(
@@ -303,19 +243,15 @@ export async function runSessionMutationActionAtRoot<T, Name extends string>(
 		action.onNoopSuccess &&
 		action.isNoopSuccess?.(resultWithFailureProjection.value, session) === true
 	) {
-		if (action.syncArtifacts ?? true) {
-			await runtime.syncSessionArtifacts(worktree, session);
-		}
-		return {
-			kind: "success",
-			actionName: action.name,
-			value: resultWithFailureProjection.value,
-			savedSession: session,
-			response: action.onNoopSuccess(
-				session,
-				resultWithFailureProjection.value,
-			),
-		};
+		return finalizeNoopMutationAtRoot(
+			action.name,
+			worktree,
+			session,
+			resultWithFailureProjection.value,
+			action.onNoopSuccess,
+			action.syncArtifacts ?? true,
+			runtime,
+		);
 	}
 
 	return executeTransitionAtRoot(

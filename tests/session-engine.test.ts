@@ -25,6 +25,7 @@ import {
 } from "../src/runtime/application/session-actions";
 import {
 	executeSessionMutationAtRoot,
+	executeTransitionAtRoot,
 	runSessionMutationActionAtRoot,
 	runSessionReadActionAtRoot,
 	runSessionWorkspaceActionAtRoot,
@@ -37,8 +38,9 @@ import {
 	SESSION_WORKSPACE_ACTION_HANDLERS,
 	SESSION_WORKSPACE_ACTION_NAMES,
 } from "../src/runtime/application/session-workspace-actions";
+import type { LatestFailedFlowAttempt } from "../src/runtime/schema";
 import { createSession } from "../src/runtime/session";
-import { succeed } from "../src/runtime/transitions/shared";
+import { fail, succeed } from "../src/runtime/transitions/shared";
 
 describe("session engine boundary", () => {
 	test("action handlers cover the named runtime mutation catalog", () => {
@@ -327,6 +329,360 @@ describe("session engine boundary", () => {
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toBe("Planning context recorded.");
+	});
+
+	test("mutation finalization saves and syncs failures that carry a session", async () => {
+		const failedSession = createSession("Persist failed mutation state");
+		const savedSession = {
+			...failedSession,
+			notes: ["saved failure projection"],
+		};
+		let saved = false;
+		let synced = false;
+
+		const transition = fail<never>(
+			"Completion failed",
+			undefined,
+			failedSession,
+		);
+		if (transition.ok) throw new Error("expected failure transition");
+		const result = await executeTransitionAtRoot(
+			"complete_feature",
+			"/tmp/project",
+			transition,
+			(value: never) => value,
+			() => ({ status: "ok" }),
+			(failure) => ({ status: "error", summary: failure.message }),
+			undefined,
+			{
+				loadSession: async () => null,
+				saveSessionState: async (_worktree, session) => {
+					saved = true;
+					expect(session).toBe(failedSession);
+					return savedSession;
+				},
+				syncSessionArtifacts: async (_worktree, session) => {
+					synced = true;
+					expect(session).toBe(savedSession);
+				},
+			},
+		);
+
+		expect(saved).toBe(true);
+		expect(synced).toBe(true);
+		expect(result.kind).toBe("failure");
+		if (result.kind !== "failure") return;
+		expect(result.actionName).toBe("complete_feature");
+		expect(result.response).toEqual({
+			status: "error",
+			summary: "Completion failed",
+		});
+		expect(result.transition).toBe(transition);
+		expect(result.savedSession).toBe(savedSession);
+	});
+
+	test("mutation finalization does not save or sync failures without a session", async () => {
+		const transition = fail<never>("No active plan");
+		if (transition.ok) throw new Error("expected failure transition");
+
+		const result = await executeTransitionAtRoot(
+			"start_run",
+			"/tmp/project",
+			transition,
+			(value: never) => value,
+			() => ({ status: "ok" }),
+			(failure) => ({ status: "error", summary: failure.message }),
+			undefined,
+			{
+				loadSession: async () => null,
+				saveSessionState: async () => {
+					throw new Error("should not save");
+				},
+				syncSessionArtifacts: async () => {
+					throw new Error("should not sync");
+				},
+			},
+		);
+
+		expect(result.kind).toBe("failure");
+		if (result.kind !== "failure") return;
+		expect(result.actionName).toBe("start_run");
+		expect(result.response).toEqual({
+			status: "error",
+			summary: "No active plan",
+		});
+		expect(result.transition).toBe(transition);
+		expect(result.savedSession).toBeUndefined();
+	});
+
+	test("recordFailure projection is persisted through the mutation boundary", async () => {
+		const baseSession = createSession("Record latest failed mutation");
+		const projectedFailure = {
+			tool: "flow_run_complete_feature" as const,
+			phase: "execution" as const,
+			status: "error" as const,
+			failureCategory: "failing_validation",
+			summary: "Validation failed.",
+			recoveryHint: "Rerun validation.",
+		};
+		const projectedSession = {
+			...baseSession,
+			execution: {
+				...baseSession.execution,
+				lastFailedMutation: projectedFailure,
+			},
+		};
+		let synced = false;
+
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "complete_feature",
+				run: () => fail<never>("Completion failed"),
+				getSession: (value: never) => value,
+				onSuccess: () => ({ status: "ok" }),
+				onError: (failure) => ({ status: "error", summary: failure.message }),
+				recordFailure: (session, failure) => {
+					expect(session).toBe(baseSession);
+					expect(failure.message).toBe("Completion failed");
+					return projectedSession;
+				},
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async (_worktree, session) => {
+					expect(session).toBe(projectedSession);
+					return session;
+				},
+				syncSessionArtifacts: async (_worktree, session) => {
+					synced = true;
+					expect(session).toBe(projectedSession);
+				},
+			},
+		);
+
+		expect(result.kind).toBe("failure");
+		if (result.kind !== "failure") return;
+		expect(synced).toBe(true);
+		expect(result.savedSession?.execution.lastFailedMutation).toEqual(
+			projectedFailure,
+		);
+	});
+
+	test("noop mutation success syncs by default, skips save, and uses the noop response", async () => {
+		const baseSession = createSession("Already selected feature");
+		let synced = false;
+
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "start_run",
+				run: (session) => succeed({ alreadyRunning: true, session }),
+				getSession: (value) => value.session,
+				onSuccess: () => ({ status: "ok", summary: "saved" }),
+				isNoopSuccess: () => true,
+				onNoopSuccess: (session, value) => ({
+					status: "ok",
+					summary: `${session.goal}: ${value.alreadyRunning}`,
+				}),
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => {
+					throw new Error("should not save noop success");
+				},
+				syncSessionArtifacts: async (_worktree, session) => {
+					synced = true;
+					expect(session).toBe(baseSession);
+				},
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		if (result.kind !== "success") return;
+		expect(synced).toBe(true);
+		expect(result.savedSession).toBe(baseSession);
+		expect(result.response).toEqual({
+			status: "ok",
+			summary: "Already selected feature: true",
+		});
+	});
+
+	test("noop mutation success with syncArtifacts false skips save and sync", async () => {
+		const baseSession = createSession("Already complete");
+
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "complete_feature",
+				run: (session) => succeed(session),
+				getSession: (session) => session,
+				onSuccess: () => ({ status: "ok" }),
+				isNoopSuccess: () => true,
+				onNoopSuccess: () => ({ status: "ok", summary: "noop" }),
+				syncArtifacts: false,
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => {
+					throw new Error("should not save noop success");
+				},
+				syncSessionArtifacts: async () => {
+					throw new Error("should not sync noop success");
+				},
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		if (result.kind !== "success") return;
+		expect(result.savedSession).toBe(baseSession);
+		expect(result.response).toEqual({ status: "ok", summary: "noop" });
+	});
+
+	test("success clear policy clears all failed attempts when set to true", async () => {
+		const failedAttempt: LatestFailedFlowAttempt = {
+			tool: "flow_run_complete_feature",
+			phase: "execution",
+			status: "error",
+			failureCategory: "failing_validation",
+			summary: "Validation failed.",
+		};
+		const emptySession = createSession("Clear failed attempt");
+		const baseSession = {
+			...emptySession,
+			execution: {
+				...emptySession.execution,
+				lastFailedMutation: failedAttempt,
+			},
+		};
+		let savedFailedAttempt: LatestFailedFlowAttempt | null | undefined;
+
+		await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "complete_feature",
+				run: (session) => succeed(session),
+				getSession: (session) => session,
+				onSuccess: () => ({ status: "ok" }),
+				clearFailedAttemptOnSuccess: true,
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async (_worktree, session) => {
+					savedFailedAttempt = session.execution.lastFailedMutation;
+					return session;
+				},
+				syncSessionArtifacts: async () => undefined,
+			},
+		);
+
+		expect(savedFailedAttempt).toBeNull();
+	});
+
+	test("success clear policy only clears matching failed-attempt tools", async () => {
+		const failedAttempt: LatestFailedFlowAttempt = {
+			tool: "flow_run_complete_feature",
+			phase: "execution",
+			status: "error",
+			failureCategory: "failing_validation",
+			summary: "Validation failed.",
+		};
+		const baseSession = createSession("Clear matching failed attempt");
+		const sessionWithFailure = {
+			...baseSession,
+			execution: {
+				...baseSession.execution,
+				lastFailedMutation: failedAttempt,
+			},
+		};
+		const savedFailedAttempts: Array<LatestFailedFlowAttempt | null> = [];
+
+		for (const policy of [
+			{ tool: "flow_run_complete_feature" as const },
+			{ tool: "flow_review_record_feature" as const },
+		]) {
+			await runSessionMutationActionAtRoot(
+				"/tmp/project",
+				{
+					name: "record_review",
+					run: (session) => succeed(session),
+					getSession: (session) => session,
+					onSuccess: () => ({ status: "ok" }),
+					clearFailedAttemptOnSuccess: policy,
+				},
+				{
+					loadSession: async () => sessionWithFailure,
+					saveSessionState: async (_worktree, session) => {
+						savedFailedAttempts.push(session.execution.lastFailedMutation);
+						return session;
+					},
+					syncSessionArtifacts: async () => undefined,
+				},
+			);
+		}
+
+		expect(savedFailedAttempts).toEqual([null, failedAttempt]);
+	});
+
+	test("success response value is substituted with the saved session when the transition value is the session", async () => {
+		const baseSession = createSession("Substitute saved session response");
+		const transitionSession = { ...baseSession, status: "running" as const };
+		const savedSession = {
+			...transitionSession,
+			notes: ["saved object"],
+		};
+
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "start_run",
+				run: () => succeed(transitionSession),
+				getSession: (session) => session,
+				onSuccess: (_session, value) => ({
+					status: "ok",
+					summary: value.notes[0] ?? "missing saved note",
+				}),
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => savedSession,
+				syncSessionArtifacts: async () => undefined,
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		if (result.kind !== "success") return;
+		expect(result.value).toBe(savedSession);
+		expect(result.savedSession).toBe(savedSession);
+		expect(result.response).toEqual({
+			status: "ok",
+			summary: "saved object",
+		});
+	});
+
+	test("explicit empty transition options preserve current no-sync behavior", async () => {
+		const baseSession = createSession("Explicit empty options");
+		let synced = false;
+
+		const result = await executeTransitionAtRoot(
+			"approve_plan",
+			"/tmp/project",
+			succeed(baseSession),
+			(session) => session,
+			() => ({ status: "ok" }),
+			(failure) => ({ status: "error", summary: failure.message }),
+			{},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => baseSession,
+				syncSessionArtifacts: async () => {
+					synced = true;
+				},
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		expect(synced).toBe(false);
 	});
 
 	test("read runner preserves the generic action result envelope", async () => {
