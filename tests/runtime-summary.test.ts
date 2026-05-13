@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
-import { renderSessionStatusSummary } from "../src/runtime/application";
+import { readFile, rm } from "node:fs/promises";
+import {
+	renderSessionStatusSummary,
+	statusResponse,
+	storedSessionResponse,
+} from "../src/runtime/application";
 import {
 	FLOW_PLAN_COMMAND,
 	FLOW_PLAN_WITH_GOAL_COMMAND,
@@ -8,8 +12,18 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowResetFeatureCommand,
 } from "../src/runtime/constants";
-import { getIndexDocPath } from "../src/runtime/paths";
-import { createSession, saveSession } from "../src/runtime/session";
+import {
+	getFeatureDocPathFromSessionDir,
+	getIndexDocPath,
+	getSessionDir,
+} from "../src/runtime/paths";
+import { renderSessionDocs } from "../src/runtime/rendering";
+import {
+	createSession,
+	loadStoredSession,
+	saveSession,
+	writeSessionFile,
+} from "../src/runtime/session";
 import {
 	deriveNextCommand,
 	explainSessionState,
@@ -44,6 +58,17 @@ afterEach(() => {
 
 async function activeIndexDocPath(worktree: string): Promise<string> {
 	return getIndexDocPath(worktree, await activeSessionId(worktree));
+}
+
+function testWorkspaceSummary(root: string) {
+	return {
+		root,
+		source: "worktree" as const,
+		trusted: true,
+		mutationAllowed: true,
+		usedFallback: false,
+		rejectionReason: null,
+	};
 }
 
 function assertOk<T>(
@@ -1157,6 +1182,105 @@ describe("runtime summary", () => {
 	        },
 	      }
 	      `);
+	});
+
+	test("statusResponse includes available feature drilldowns for active feature JSON", async () => {
+		const worktree = makeTempDir();
+		const running = buildSummaryFixtureSessions().running;
+		await saveSession(worktree, running);
+
+		const parsed = JSON.parse(
+			await statusResponse(running, "detailed", testWorkspaceSummary(worktree)),
+		);
+		const activeFeatureDrilldown = parsed.activeFeatureDrilldown;
+		const sessionActiveFeatureDrilldown =
+			parsed.session.activeFeature.featureDrilldown;
+		const taskProgressDrilldown = parsed.session.taskProgress.find(
+			(row: { featureId?: string }) => row.featureId === "setup-runtime",
+		)?.featureDrilldown;
+
+		expect(activeFeatureDrilldown).toMatchObject({
+			kind: "feature_doc",
+			featureId: "setup-runtime",
+			available: true,
+			availability: "available",
+			sessionLocation: "active",
+		});
+		expect(sessionActiveFeatureDrilldown).toEqual(activeFeatureDrilldown);
+		expect(taskProgressDrilldown).toEqual(activeFeatureDrilldown);
+	});
+
+	test("storedSessionResponse includes available feature drilldowns for parked stored feature JSON", async () => {
+		const worktree = makeTempDir();
+		const running = buildSummaryFixtureSessions().running;
+		await writeSessionFile(worktree, running, "stored");
+		await renderSessionDocs(worktree, running, "stored");
+
+		const storedSessionDir = getSessionDir(worktree, running.id, "stored");
+		const parsed = JSON.parse(
+			await storedSessionResponse(
+				running.id,
+				{
+					session: running,
+					source: "stored",
+					active: false,
+					path: storedSessionDir.replace(`${worktree}/`, ""),
+				},
+				"flow-session-activate",
+				testWorkspaceSummary(worktree),
+			),
+		);
+		const activeFeatureDrilldown =
+			parsed.session.activeFeature.featureDrilldown;
+		const taskProgressDrilldown = parsed.session.taskProgress.find(
+			(row: { featureId?: string }) => row.featureId === "setup-runtime",
+		)?.featureDrilldown;
+
+		expect(activeFeatureDrilldown).toMatchObject({
+			kind: "feature_doc",
+			featureId: "setup-runtime",
+			available: true,
+			availability: "available",
+			sessionLocation: "stored",
+		});
+		expect(taskProgressDrilldown).toEqual(activeFeatureDrilldown);
+	});
+
+	test("storedSessionResponse preserves completed drilldowns when the feature doc is missing", async () => {
+		const worktree = makeTempDir();
+		const completed = buildSummaryFixtureSessions().completed;
+		await saveSession(worktree, completed);
+		const found = await loadStoredSession(worktree, completed.id);
+		if (!found?.completedPath || found.source !== "completed") {
+			throw new Error("Expected completed session lookup.");
+		}
+		await rm(
+			getFeatureDocPathFromSessionDir(
+				`${worktree}/${found.completedPath}`,
+				"setup-runtime",
+			),
+		);
+
+		const parsed = JSON.parse(
+			await storedSessionResponse(
+				completed.id,
+				found,
+				"flow-session-activate",
+				testWorkspaceSummary(worktree),
+			),
+		);
+		const taskProgressDrilldown = parsed.session.taskProgress.find(
+			(row: { featureId?: string }) => row.featureId === "setup-runtime",
+		)?.featureDrilldown;
+
+		expect(taskProgressDrilldown).toMatchObject({
+			kind: "feature_doc",
+			featureId: "setup-runtime",
+			available: false,
+			availability: "missing_feature_doc",
+			sessionLocation: "completed",
+		});
+		expect(taskProgressDrilldown.sessionDir).toContain(found.completedPath);
 	});
 
 	test("flow_status returns the unchanged default summary shape for planning/running/blocked/completed fixtures", async () => {
