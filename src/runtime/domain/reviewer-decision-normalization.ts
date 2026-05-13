@@ -7,6 +7,10 @@ import type {
 	FinalReviewValidationCoverage,
 } from "./final-review-behavior-risks";
 import {
+	canonicalTestEvidenceRefs,
+	normalizeBehaviorRiskClassName,
+} from "./final-review-canonicalization";
+import {
 	buildReviewContextPack,
 	type ReviewContextPack,
 	type ReviewContextPackInput,
@@ -71,18 +75,9 @@ export type RecordReviewerDecisionInput = {
 export function normalizeBehaviorRiskClass(
 	riskClass: string,
 ): FinalReviewBehaviorRiskClass {
-	return (
-		riskClass === "test_oracle_authenticity"
-			? "test_evidence_authenticity"
-			: riskClass
+	return normalizeBehaviorRiskClassName(
+		riskClass,
 	) as FinalReviewBehaviorRiskClass;
-}
-
-function legacyCompatibleTestEvidenceRefs(value: {
-	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
-}): string[] {
-	return value.testEvidenceRefs ?? value.oracleRefs ?? [];
 }
 
 export function normalizeBehaviorChecksForCoverage(
@@ -96,7 +91,7 @@ export function normalizeBehaviorChecksForCoverage(
 		stateOwnerRefs: check.stateOwnerRefs ?? [],
 		lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
 		failurePath: check.failurePath,
-		testEvidenceRefs: legacyCompatibleTestEvidenceRefs(check),
+		testEvidenceRefs: canonicalTestEvidenceRefs(check),
 		validationRefs: check.validationRefs ?? [],
 		...(check.remainingGap ? { remainingGap: check.remainingGap } : {}),
 	}));
@@ -112,7 +107,7 @@ export function normalizeValidationCoverageForCoverage(
 		),
 		proves: item.proves ?? [],
 		gaps: item.gaps ?? [],
-		testEvidenceRefs: legacyCompatibleTestEvidenceRefs(item),
+		testEvidenceRefs: canonicalTestEvidenceRefs(item),
 	}));
 }
 

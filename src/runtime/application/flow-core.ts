@@ -102,6 +102,10 @@ export function isFlowCoreMutationCommandName(
 	return FLOW_CORE_MUTATION_COMMAND_NAME_SET.has(name);
 }
 
+function unknownFlowCoreCommandError(name: string): Error {
+	return new Error(`Unknown Flow Core command '${name}'.`);
+}
+
 export function runFlowCoreCommand<Name extends SessionWorkspaceActionName>(
 	context: WorkspaceContext,
 	name: Name,
@@ -114,7 +118,7 @@ export function runFlowCoreCommand<Name extends SessionMutationActionName>(
 	payload: SessionMutationPayloadMap[Name],
 	runtime?: SessionRuntimePort,
 ): Promise<SessionMutationResult<SessionMutationValueMap[Name], Name>>;
-export function runFlowCoreCommand(
+export async function runFlowCoreCommand(
 	context: WorkspaceContext,
 	name: FlowCoreCommandName,
 	payload:
@@ -129,6 +133,10 @@ export function runFlowCoreCommand(
 			payload as SessionWorkspacePayloadMap[typeof name],
 			runtime as SessionWorkspaceRuntimePort | undefined,
 		) as Promise<FlowCoreCommandResult<FlowCoreCommandName>>;
+	}
+
+	if (!isFlowCoreMutationCommandName(name)) {
+		throw unknownFlowCoreCommandError(name);
 	}
 
 	return runDispatchedSessionMutationAction(
@@ -151,7 +159,7 @@ export function executeFlowCoreCommand<Name extends SessionMutationActionName>(
 	payload: SessionMutationPayloadMap[Name],
 	runtime?: SessionRuntimePort,
 ): Promise<string>;
-export function executeFlowCoreCommand(
+export async function executeFlowCoreCommand(
 	context: WorkspaceContext,
 	name: FlowCoreCommandName,
 	payload:
@@ -166,6 +174,10 @@ export function executeFlowCoreCommand(
 			payload as SessionWorkspacePayloadMap[typeof name],
 			runtime as SessionWorkspaceRuntimePort | undefined,
 		);
+	}
+
+	if (!isFlowCoreMutationCommandName(name)) {
+		throw unknownFlowCoreCommandError(name);
 	}
 
 	return executeDispatchedSessionMutation(

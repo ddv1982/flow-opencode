@@ -49,12 +49,13 @@ export async function withSessionSaveLock<T>(
 	const current = new Promise<void>((resolve) => {
 		release = resolve;
 	});
-	const queued = previous.then(() => current);
+	const previousSettled = previous.catch(() => undefined);
+	const queued = previousSettled.then(() => current);
 	sessionSaveQueues.set(worktree, queued);
 
 	let releaseFilesystemLock: (() => Promise<void>) | undefined;
 	try {
-		await previous;
+		await previousSettled;
 		releaseFilesystemLock = await acquireFilesystemSessionSaveLock(worktree);
 		return await task();
 	} finally {

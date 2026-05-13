@@ -50,6 +50,27 @@ function applyFailedAttemptClearPolicy(
 	};
 }
 
+function valueWithSavedSession<T>(
+	value: T,
+	resultSession: Session,
+	savedSession: Session,
+): T {
+	if (value === resultSession) {
+		return savedSession as T;
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		return value;
+	}
+	if (!Object.hasOwn(value, "session")) {
+		return value;
+	}
+	const compositeValue = value as T & { session?: unknown };
+	if (compositeValue.session !== resultSession) {
+		return value;
+	}
+	return { ...compositeValue, session: savedSession } as T;
+}
+
 export async function finalizeTransitionAtRoot<T, Name extends string>(
 	actionName: Name,
 	worktree: string,
@@ -92,8 +113,11 @@ export async function finalizeTransitionAtRoot<T, Name extends string>(
 		options.clearFailedAttemptOnSuccess,
 	);
 	const saved = await runtime.saveSessionState(worktree, nextSession);
-	const responseValue =
-		result.value === resultSession ? (saved as T) : result.value;
+	const responseValue = valueWithSavedSession(
+		result.value,
+		resultSession,
+		saved,
+	);
 	if (options.syncArtifacts)
 		await runtime.syncSessionArtifacts(worktree, saved);
 	return {

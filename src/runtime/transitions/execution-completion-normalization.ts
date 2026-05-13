@@ -1,5 +1,9 @@
 import { buildReviewContextPack } from "../domain";
 import type { FinalReviewBehaviorRiskClass } from "../domain/final-review-behavior-risks";
+import {
+	canonicalTestEvidenceRefs,
+	normalizeBehaviorRiskClassName,
+} from "../domain/final-review-canonicalization";
 import type { ReviewContextPackInput } from "../domain/review-content-discovery";
 import type { Session, WorkerResultArgs } from "../schema";
 
@@ -106,20 +110,11 @@ function normalizeReview(
 	};
 }
 
-function legacyCompatibleTestEvidenceRefs(value: {
-	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
-}): string[] {
-	return value.testEvidenceRefs ?? value.oracleRefs ?? [];
-}
-
 function normalizeBehaviorRiskClass(
 	riskClass: string,
 ): FinalReviewBehaviorRiskClass {
-	return (
-		riskClass === "test_oracle_authenticity"
-			? "test_evidence_authenticity"
-			: riskClass
+	return normalizeBehaviorRiskClassName(
+		riskClass,
 	) as FinalReviewBehaviorRiskClass;
 }
 
@@ -147,7 +142,7 @@ function normalizeFinalReview(
 				entrypointRefs: check.entrypointRefs ?? [],
 				stateOwnerRefs: check.stateOwnerRefs ?? [],
 				lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
-				testEvidenceRefs: legacyCompatibleTestEvidenceRefs(check),
+				testEvidenceRefs: canonicalTestEvidenceRefs(check),
 				validationRefs: check.validationRefs ?? [],
 			};
 		}),
@@ -162,7 +157,7 @@ function normalizeFinalReview(
 				),
 				proves: coverage.proves ?? [],
 				gaps: coverage.gaps ?? [],
-				testEvidenceRefs: legacyCompatibleTestEvidenceRefs(coverage),
+				testEvidenceRefs: canonicalTestEvidenceRefs(coverage),
 			};
 		}),
 		reviewContextPack: review.reviewContextPack

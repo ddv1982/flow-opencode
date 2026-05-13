@@ -8,6 +8,12 @@ export {
 	finalReviewBehaviorCoverageFailureReasons,
 } from "./final-review-behavior-risks";
 export {
+	canonicalizeTestEvidenceRefs,
+	canonicalTestEvidenceRefs,
+	normalizeBehaviorRiskClassName,
+	type TestEvidenceRefsCompatInput,
+} from "./final-review-canonicalization";
+export {
 	type DetailedFinalReviewRequirementFailure,
 	describeFinalReviewCoverageFailure,
 	detailedFinalReviewRequirementFailures,

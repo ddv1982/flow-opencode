@@ -80,6 +80,90 @@ describe("session engine boundary", () => {
 		expect(isFlowCoreMutationCommandName("not_a_flow_command")).toBe(false);
 	});
 
+	test("flow core run command rejects unknown command names before dispatch", async () => {
+		let dispatched = false;
+		const invalidRunFlowCoreCommand = runFlowCoreCommand as unknown as (
+			context: { worktree: string },
+			name: string,
+			payload: unknown,
+			runtime: unknown,
+		) => Promise<unknown>;
+		const runtime = {
+			loadSession: async () => {
+				dispatched = true;
+				throw new Error("should not load");
+			},
+			saveSessionState: async () => {
+				dispatched = true;
+				throw new Error("should not save");
+			},
+			syncSessionArtifacts: async () => {
+				dispatched = true;
+				throw new Error("should not sync");
+			},
+			activateSession: async () => {
+				dispatched = true;
+				throw new Error("should not activate");
+			},
+			closeSession: async () => {
+				dispatched = true;
+				throw new Error("should not close");
+			},
+		};
+
+		await expect(
+			invalidRunFlowCoreCommand(
+				{ worktree: "/tmp/project" },
+				"not_a_flow_command",
+				undefined,
+				runtime,
+			),
+		).rejects.toThrow("Unknown Flow Core command 'not_a_flow_command'.");
+		expect(dispatched).toBe(false);
+	});
+
+	test("flow core execute command rejects unknown command names before dispatch", async () => {
+		let dispatched = false;
+		const invalidExecuteFlowCoreCommand = executeFlowCoreCommand as unknown as (
+			context: { worktree: string },
+			name: string,
+			payload: unknown,
+			runtime: unknown,
+		) => Promise<unknown>;
+		const runtime = {
+			loadSession: async () => {
+				dispatched = true;
+				throw new Error("should not load");
+			},
+			saveSessionState: async () => {
+				dispatched = true;
+				throw new Error("should not save");
+			},
+			syncSessionArtifacts: async () => {
+				dispatched = true;
+				throw new Error("should not sync");
+			},
+			activateSession: async () => {
+				dispatched = true;
+				throw new Error("should not activate");
+			},
+			closeSession: async () => {
+				dispatched = true;
+				throw new Error("should not close");
+			},
+		};
+
+		await expect(
+			invalidExecuteFlowCoreCommand(
+				{ worktree: "/tmp/project" },
+				"not_a_flow_command",
+				undefined,
+				runtime,
+			),
+		).rejects.toThrow("Unknown Flow Core command 'not_a_flow_command'.");
+		expect(dispatched).toBe(false);
+	});
+
 	test("dispatches named actions through the central handler map", () => {
 		const action = dispatchSessionMutationAction("approve_plan", {
 			featureIds: ["ship-it"],
@@ -657,6 +741,100 @@ describe("session engine boundary", () => {
 		expect(result.response).toEqual({
 			status: "ok",
 			summary: "saved object",
+		});
+	});
+
+	test("success response value substitutes saved session in apply_plan-style composite values", async () => {
+		const baseSession = createSession("Substitute saved apply plan response");
+		const transitionSession = { ...baseSession, status: "ready" as const };
+		const savedSession = {
+			...transitionSession,
+			notes: ["saved composite"],
+		};
+
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "apply_plan",
+				run: () => succeed({ session: transitionSession, autoApproved: true }),
+				getSession: (value) => value.session,
+				onSuccess: (_session, value) => ({
+					status: "ok",
+					summary: value.session.notes[0] ?? "missing saved note",
+					autoApproved: value.autoApproved,
+				}),
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => savedSession,
+				syncSessionArtifacts: async () => undefined,
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		if (result.kind !== "success") return;
+		expect(result.value.session).toBe(savedSession);
+		expect(result.value.autoApproved).toBe(true);
+		expect(result.savedSession).toBe(savedSession);
+		expect(result.response).toEqual({
+			status: "ok",
+			summary: "saved composite",
+			autoApproved: true,
+		});
+	});
+
+	test("success response value substitutes saved session in start_run-style composite values", async () => {
+		const baseSession = createSession("Substitute saved start run response");
+		const transitionSession = { ...baseSession, status: "running" as const };
+		const savedSession = {
+			...transitionSession,
+			notes: ["saved start run composite"],
+		};
+		const feature = {
+			id: "feature-1",
+			title: "Feature 1",
+			summary: "Run the first feature.",
+			status: "in_progress" as const,
+			fileTargets: [],
+			verification: [],
+		};
+
+		const result = await runSessionMutationActionAtRoot(
+			"/tmp/project",
+			{
+				name: "start_run",
+				run: () =>
+					succeed({
+						session: transitionSession,
+						feature,
+						reason: "selected next feature",
+					}),
+				getSession: (value) => value.session,
+				onSuccess: (_session, value) => ({
+					status: "ok",
+					summary: value.session.notes[0] ?? "missing saved note",
+					featureId: value.feature?.id,
+					reason: value.reason,
+				}),
+			},
+			{
+				loadSession: async () => baseSession,
+				saveSessionState: async () => savedSession,
+				syncSessionArtifacts: async () => undefined,
+			},
+		);
+
+		expect(result.kind).toBe("success");
+		if (result.kind !== "success") return;
+		expect(result.value.session).toBe(savedSession);
+		expect(result.value.feature).toBe(feature);
+		expect(result.value.reason).toBe("selected next feature");
+		expect(result.savedSession).toBe(savedSession);
+		expect(result.response).toEqual({
+			status: "ok",
+			summary: "saved start run composite",
+			featureId: "feature-1",
+			reason: "selected next feature",
 		});
 	});
 

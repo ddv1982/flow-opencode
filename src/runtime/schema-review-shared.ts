@@ -8,6 +8,10 @@ import {
 	REVIEW_STATUSES,
 } from "./constants";
 import {
+	canonicalizeTestEvidenceRefs,
+	normalizeBehaviorRiskClassName,
+} from "./domain/final-review-canonicalization";
+import {
 	isSafeReviewArtifactPath,
 	isSafeReviewArtifactRef,
 	normalizeArtifactPath,
@@ -106,9 +110,7 @@ const SafeReviewPathSchema = NonEmptyTrimmedStringSchema.transform(
 
 const BehaviorRiskClassCompatSchema = z
 	.enum([...BehaviorRiskClassSchema.options, "test_oracle_authenticity"])
-	.overwrite((value) =>
-		value === "test_oracle_authenticity" ? "test_evidence_authenticity" : value,
-	) as typeof BehaviorRiskClassSchema;
+	.overwrite(normalizeBehaviorRiskClassName) as typeof BehaviorRiskClassSchema;
 
 const ReviewDiscoveryReasonCompatSchema = z
 	.enum([...ReviewDiscoveryReasonSchema.options, "test_oracle"])
@@ -192,21 +194,6 @@ function addBehaviorCheckIssues(
 ): void {
 	addGapRecordedRemainingGapIssue(value, context);
 	addPriorRefsConflictIssue(value, context);
-}
-
-function canonicalizeTestEvidenceRefs<
-	T extends {
-		testEvidenceRefs?: string[] | undefined;
-		oracleRefs?: string[] | undefined;
-	},
->(
-	value: T,
-): Omit<T, "oracleRefs" | "testEvidenceRefs"> & { testEvidenceRefs: string[] } {
-	const { oracleRefs, testEvidenceRefs, ...rest } = value;
-	return {
-		...rest,
-		testEvidenceRefs: testEvidenceRefs ?? oracleRefs ?? [],
-	};
 }
 
 type CanonicalBehaviorCheck = {

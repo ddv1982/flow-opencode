@@ -18,7 +18,9 @@ import {
 	saveSessionState,
 	syncSessionArtifacts,
 } from "../src/runtime/session";
+import { withSessionSaveLock } from "../src/runtime/session-workspace";
 import { applyPlan, selectPlanFeatures } from "../src/runtime/transitions";
+import { assertMutableWorkspaceRoot } from "../src/runtime/workspace-root";
 import {
 	activeSessionId,
 	createTempDirRegistry,
@@ -155,6 +157,38 @@ describe("runtime session persistence", () => {
 		);
 
 		await expect(loadSession(worktree)).rejects.toThrow("Duplicate JSON key");
+	});
+
+	test("withSessionSaveLock runs a queued same-worktree task after an earlier task rejects", async () => {
+		const worktree = assertMutableWorkspaceRoot(makeTempDir());
+		let releaseFirstTask!: () => void;
+		const firstTaskCanFinish = new Promise<void>((resolve) => {
+			releaseFirstTask = resolve;
+		});
+		let secondTaskRan = false;
+
+		const firstTask = withSessionSaveLock(worktree, async () => {
+			await firstTaskCanFinish;
+			throw new Error("first task failed");
+		});
+		const secondTask = withSessionSaveLock(worktree, async () => {
+			secondTaskRan = true;
+			return "second task completed";
+		});
+		expect(secondTaskRan).toBe(false);
+
+		releaseFirstTask();
+
+		let firstTaskError: unknown;
+		try {
+			await firstTask;
+		} catch (error) {
+			firstTaskError = error;
+		}
+		expect(firstTaskError).toBeInstanceOf(Error);
+		expect((firstTaskError as Error).message).toBe("first task failed");
+		expect(await secondTask).toBe("second task completed");
+		expect(secondTaskRan).toBe(true);
 	});
 
 	test("saveSession refreshes updatedAt while preserving createdAt", async () => {
