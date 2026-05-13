@@ -13,14 +13,16 @@ import {
 	activeFeatureForSession,
 	projectActiveFeature,
 	projectFeature,
-	projectTaskProgress,
 	type SummarizedFeature,
 	type SummarizedPlanning,
 	sessionFeatures,
 	summarizeFeature,
 	summarizePlanning,
-	type TaskProgressRow,
 } from "./summary-projections";
+import {
+	projectTaskProgress,
+	type TaskProgressRow,
+} from "./summary-task-progress";
 
 export type SessionGuidance = {
 	category:

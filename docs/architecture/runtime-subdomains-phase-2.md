@@ -34,7 +34,14 @@ Create explicit, low-risk runtime boundaries around current behavior hotspots wi
 4. Shift import sites to subdomain entrypoints as files are touched.
 5. Optionally split large long-lived files behind subdomain facades in later phases.
 
+## Completed simplification notes
+- Task-progress projection is now split from the broader summary projection surface behind `src/runtime/summary-task-progress.ts`, keeping summary/view-model behavior behind stable runtime exports.
+- Final-review behavior validation is now extracted behind the `final-review-behavior-risks.ts` facade in `src/runtime/domain/final-review-behavior-validation.ts`, preserving the final-review behavior-risk contract while reducing the former largest hotspot.
+- The 2026-05-13 post-pass metrics snapshot is diagnostic, not a new gate: runtime files `107`, runtime LOC `17,040`, large files `14`, top-5 LOC share `14.1%`, and seam violations `0`.
+- The tradeoff for the completed split was `+2` files and `+35` LOC versus the pre-pass baseline (`105` files, `17,005` LOC), with large-file count unchanged and top-5 concentration reduced from `15.0%`.
+
 ## Known coupling hotspots (still unresolved)
 - `session-lifecycle.ts` still coordinates filesystem movement + schema mutation + closure defaults in one module.
 - `session-persistence.ts` still combines active/stored/completed movement with rendering coordination.
 - `session-history.ts` still handles parsing, IO, and projection shaping in one pass.
+- `session-presenters.ts`, `review-content-discovery.ts`, `review-scope-ledger-validation.ts`, and `reviewer-decision.ts` are the current largest measured runtime files after the completed projection/validation split.
