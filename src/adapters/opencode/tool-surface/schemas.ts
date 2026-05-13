@@ -15,32 +15,20 @@ import {
 	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
 	WorkerResultBaseSchema as RuntimeWorkerResultBaseSchema,
 } from "../../../runtime/schema";
+import type { ToolContext as OpenCodeToolContext } from "../sdk";
 import { tool } from "../sdk";
 
 const z = tool.schema;
-export type ToolMetadataPayload = {
-	title?: string;
-	metadata?: Record<string, unknown>;
-};
-
-export type ToolPermissionAskInput = {
-	permission: string;
-	patterns: string[];
-	always: string[];
-	metadata: Record<string, unknown>;
-};
-
 // Production OpenCode ToolContext requires these fields. This local adapter
 // shape keeps them optional so defensive wrappers and focused unit tests can
 // exercise missing-context branches without constructing a full host context.
-export type ToolContext = WorkspaceContext & {
-	sessionID?: string;
-	messageID?: string;
-	agent?: string;
-	abort?: AbortSignal;
-	metadata?: (payload: ToolMetadataPayload) => void;
-	ask?: (input: ToolPermissionAskInput) => Promise<void>;
-};
+export type ToolContext = WorkspaceContext &
+	Partial<
+		Omit<OpenCodeToolContext, keyof WorkspaceContext | "metadata" | "ask">
+	> & {
+		metadata?: OpenCodeToolContext["metadata"];
+		ask?: OpenCodeToolContext["ask"];
+	};
 export const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
 export const featureIdSchema = z
 	.string()

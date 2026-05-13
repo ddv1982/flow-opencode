@@ -37,6 +37,10 @@ export {
 	runDispatchedSessionMutationAction,
 	SESSION_MUTATION_ACTION_NAMES,
 } from "./session-actions";
+export {
+	type AutoPrepareAttachmentGuidance,
+	autoPrepareResponse,
+} from "./session-auto-prepare-presenter";
 export type {
 	RuntimeToolResponse,
 	SessionMutationAction,
@@ -54,9 +58,7 @@ export {
 	DEFAULT_SESSION_RUNTIME_PORT,
 	DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
 } from "./session-engine";
-export type { AutoPrepareAttachmentGuidance } from "./session-presenters";
 export {
-	autoPrepareResponse,
 	closeSessionResponse,
 	historyResponse,
 	missingStoredSessionResponse,

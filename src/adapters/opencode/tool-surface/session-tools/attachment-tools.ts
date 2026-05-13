@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { runPromise } from "effect/Effect";
 import { toJson } from "../../../../runtime/application";
 import {
 	isFlowAttachmentAbortError,
@@ -23,10 +24,8 @@ import {
 import { openCodeToolDescription } from "../tool-registry";
 import { recordToolMetadata } from "./shared";
 
-type AttachmentMaterializeStatus = "ok" | "partial" | "error";
-
 type AttachmentToolResponse = {
-	status: AttachmentMaterializeStatus;
+	status: "ok" | "partial" | "error";
 	summary: string;
 	imported: unknown[];
 	skipped: unknown[];
@@ -121,7 +120,7 @@ export function createAttachmentSessionTools() {
 						context,
 						resolvedWorkspace,
 					);
-					await context.ask?.({
+					const askEffect = context.ask?.({
 						permission: "edit",
 						patterns: [join(destinationDirectory, "**")],
 						always: [join(destinationDirectory, "**")],
@@ -132,6 +131,9 @@ export function createAttachmentSessionTools() {
 								"Flow is about to materialize captured OpenCode attachments into workspace files.",
 						},
 					});
+					if (askEffect) {
+						await runPromise(askEffect);
+					}
 
 					const result = await materializeFlowAttachments({
 						attachments: selection.selected,
@@ -180,7 +182,7 @@ export function createAttachmentSessionTools() {
 function attachmentMaterializeStatus(
 	importedCount: number,
 	skippedCount: number,
-): AttachmentMaterializeStatus {
+): AttachmentToolResponse["status"] {
 	return importedCount === 0 ? "error" : skippedCount > 0 ? "partial" : "ok";
 }
 

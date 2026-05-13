@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fail, succeed, sync } from "effect/Effect";
 import { applyFlowConfig } from "../src/config";
 import { resolveInstallTarget } from "../src/installer";
 import {
@@ -793,7 +794,12 @@ describe("runtime operator tools", () => {
 	test("flow_plan_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		const ask = mock(async () => {});
+		let permissionEffectRan = false;
+		const ask = mock(() =>
+			sync(() => {
+				permissionEffectRan = true;
+			}),
+		);
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
@@ -807,6 +813,7 @@ describe("runtime operator tools", () => {
 			expect(parsed.status).toBe("ok");
 			expect(parsed.session.goal).toBe("Keep Flow inside the repo");
 			expect(ask).toHaveBeenCalledTimes(1);
+			expect(permissionEffectRan).toBe(true);
 			expect(ask).toHaveBeenCalledWith({
 				permission: "edit",
 				patterns: [join(hiddenWorkspace, ".flow", "**")],
@@ -822,7 +829,12 @@ describe("runtime operator tools", () => {
 	test("flow_run_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		const ask = mock(async () => {});
+		let permissionEffectRan = false;
+		const ask = mock(() =>
+			sync(() => {
+				permissionEffectRan = true;
+			}),
+		);
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
@@ -839,6 +851,26 @@ describe("runtime operator tools", () => {
 			expect(String(parsed.summary)).not.toContain(
 				"Flow blocked mutable workspace root",
 			);
+			expect(ask).toHaveBeenCalledTimes(1);
+			expect(permissionEffectRan).toBe(true);
+		});
+	});
+
+	test("flow_plan_start rejects when hidden workspace permission is denied", async () => {
+		const fakeHome = makeTempDir();
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
+		const denied = new Error("permission denied");
+		const ask = mock(() => fail(denied));
+		const tools = createTestTools();
+
+		await withHomeEnv(fakeHome, async () => {
+			await mkdir(hiddenWorkspace, { recursive: true });
+			await expect(
+				tools.flow_plan_start.execute(
+					{ goal: "Do not write without permission" },
+					toolContext("/", hiddenWorkspace, { ask }),
+				),
+			).rejects.toThrow("permission denied");
 			expect(ask).toHaveBeenCalledTimes(1);
 		});
 	});
@@ -943,7 +975,7 @@ describe("runtime operator tools", () => {
 	test("flow_plan_start at a normal project root does not ask just because hidden dirs exist inside it", async () => {
 		const worktree = makeTempDir();
 		const hiddenChild = join(worktree, ".hidden-workspace");
-		const ask = mock(async () => {});
+		const ask = mock(() => succeed(undefined));
 		const tools = createTestTools();
 
 		await mkdir(hiddenChild, { recursive: true });
@@ -963,7 +995,7 @@ describe("runtime operator tools", () => {
 	test("flow_plan_start does not ask when the mutable workspace root is .flow itself", async () => {
 		const worktree = makeTempDir();
 		const flowRoot = join(worktree, ".flow");
-		const ask = mock(async () => {});
+		const ask = mock(() => succeed(undefined));
 		const tools = createTestTools();
 
 		await mkdir(flowRoot, { recursive: true });

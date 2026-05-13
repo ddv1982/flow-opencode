@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "2.0.34",
+	"version": "2.0.35",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -59,13 +59,14 @@
 	"author": "Douwe de Vries",
 	"license": "MIT",
 	"peerDependencies": {
-		"@opencode-ai/plugin": "^1.3.10"
+		"@opencode-ai/plugin": "1.14.48"
 	},
 	"dependencies": {
+		"effect": "4.0.0-beta.59",
 		"zod": "4.1.8"
 	},
 	"devDependencies": {
-		"@opencode-ai/plugin": "^1.3.10",
+		"@opencode-ai/plugin": "1.14.48",
 		"@biomejs/biome": "^2.2.6",
 		"bun-types": "latest",
 		"knip": "^5.63.1",

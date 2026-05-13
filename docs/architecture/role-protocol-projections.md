@@ -25,6 +25,18 @@ Live runtime persistence remains snapshot-primary; core event/replay infrastruct
 - Review-only and audit-only roles must remain explicit about read-only boundaries and must not receive hidden mutation authority through prompt wording.
 - Docs and prompt evals should check generated contract expectations rather than long hand-maintained policy paragraphs.
 
+## OpenCode core-action projection strictness
+
+OpenCode projections have two intentional boundaries:
+
+| Boundary | Helper / file | Behavior |
+| --- | --- | --- |
+| Strict descriptor metadata | `coreActionProjectionMetadata()` / `optionalCoreActionProjectionMetadata()` in `src/adapters/opencode/tool-surface/core-action-projection.ts` | A non-null stale core action is an error. Descriptor generation and parity checks should fail fast when projection metadata drifts. |
+| Tolerant public host summary | `openCodeToolCoreSummary()` in `src/adapters/opencode/tool-projections.generated.ts` and `renderOpenCodeToolCoreSummary()` in `src/adapters/opencode/tool-surface/core-action-projection.ts` | Missing tool, absent core action, or stale projected core action returns `null`. |
+| Guidance rendering | `applyFlowToolDefinitionGuidance()` in `src/adapters/opencode/tool-guidance.generated.ts` | Filters falsy summary text and continues rendering available guidance. |
+
+Do not make public host guidance strict: stale generated projection data must not break tool definition rendering. Do not make descriptor metadata tolerant: descriptor drift should fail in parity/descriptor tests instead of being hidden. Read, control, workspace, and render-only tools may have no core action; that absence is a valid public projection, not an error.
+
 ## Completion gate projection table (descriptor-generated)
 
 The table below is mechanically projected from `src/runtime/transitions/completion-gates.ts` via `src/runtime/transitions/completion-gate-projections.generated.ts`. Runtime transition enforcement remains authoritative.

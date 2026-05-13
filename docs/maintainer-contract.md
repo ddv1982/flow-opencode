@@ -12,6 +12,19 @@ Runtime/domain/transitions own behavior.
 Prompts and docs describe behavior; they do not define it.
 Live runtime persistence is snapshot-primary; core event/replay infrastructure is a semantic oracle and regression gate unless a future migration explicitly changes that authority.
 
+Runtime mental model:
+
+```text
+user / slash command / agent
+  -> OpenCode adapter tool surface
+  -> runtime application action
+  -> domain and transition policy
+  -> `.flow/**/session.json` snapshot persistence
+  -> derived markdown rendering
+```
+
+OpenCode tools are adapter entrypoints, not workflow-policy owners. `.flow/**/session.json` snapshots are authoritative live state; rendered markdown is derived. Core action, role-protocol, and descriptor metadata are projection/regression infrastructure, not live persistence authority. Prompts, skills, and docs must route through runtime tools instead of mutating `.flow/**`.
+
 Primary ownership map:
 
 - Plugin registration: `src/index.ts`, `src/config.ts`, `src/adapters/opencode/tools.ts`
@@ -67,6 +80,8 @@ Skills are instruction surfaces only. They may cite Flow mode contracts, role pr
 Tool registration is split by operator surface, but `src/adapters/opencode/tool-surface/schemas.ts` is the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload validation is owned by `src/runtime/schema.ts` and projected through `src/adapters/opencode/tool-surface/schemas.ts`. `FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY` co-locates each tool's raw arg shape, parser schema, and payload owner metadata so descriptor metadata is parity-tested against the actual schema boundary instead of file-existence checks alone.
 
 OpenCode tool/action metadata is described in `src/adapters/opencode/tool-surface/descriptors.ts`. Descriptors intentionally split typed `runtimeActionBinding` facets from nullable `coreAction` facets because read, control, workspace, and render tools are legitimate public surfaces even when they are not core workflow commands. Tool implementation modules own the dispatch constants they invoke, and descriptor parity tests compare those constants against descriptor `runtimeActionBinding` metadata. OpenCode projections may expose a flat optional `runtimeAction` string for stable host-facing output, but descriptors retain the read/workspace/mutation binding kind. Descriptors do not enforce completion/review/recovery behavior; runtime transitions do.
+
+OpenCode core-action projection strictness is intentionally split. Descriptor metadata lookup (`coreActionProjectionMetadata()` / `optionalCoreActionProjectionMetadata()`) stays strict for non-null core actions so descriptor drift fails fast. Public host guidance summaries (`openCodeToolCoreSummary()` / `renderOpenCodeToolCoreSummary()`) stay tolerant: missing tools, tools without a core action, or stale projected core-action names return `null` so generated OpenCode guidance can omit that sentence instead of failing tool definition rendering. Do not make public host guidance strict, and do not make descriptor metadata tolerant, without updating the projection contract and parity tests together.
 
 | Tool | Registration owner | Schema owner |
 | --- | --- | --- |
@@ -138,7 +153,7 @@ For simplification PRs, maintainers should require a narrow change map before re
 2. Capture `bun run report:runtime-simplification-metrics` before and after runtime refactors; review deterministic deltas for top-level runtime fields and touched `runtime.subdomains` entries.
 3. Keep adapter projection changes behind `src/adapters/opencode/tool-surface/*` helpers. Public OpenCode tool names, schemas, host descriptions, docs rows, generated guidance/projections, and core-action summaries must remain parity-stable.
 4. For persistence changes, preserve `.flow/**` paths, session schema, locking, activation, completion, and rendered-doc-as-derived-artifact rules.
-5. Run the focused checks listed in `docs/contributor-map.md` for the touched slice before broader release gates.
+5. Run the focused checks listed in `docs/contributor-map.md` for the touched slice before broader release gates; use the verification tiers in `docs/development.md` to choose focused, projection, runtime invariant, generated drift, deep, and mainline readiness lanes.
 
 Accepted simplification tradeoffs should be explicit: a file-count increase is allowed only when hotspot concentration or coupling drops and the facade boundary becomes clearer.
 

@@ -7,9 +7,9 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { sync } from "effect/Effect";
 
 const projectRoot = resolve(import.meta.dirname, "..", "..");
 const distPath = join(projectRoot, "dist", "index.js");
@@ -20,9 +20,11 @@ const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // Attachment materialization adds one public tool plus root-safe data/file/http
 // decoding and write guards. Runtime attachment guidance adds availability
 // snapshots and coordinator instructions. Singleton retry/idempotency metadata adds
-// narrow runtime and prompt guidance. Evidence terminology normalization adds
-// prior-input parsing guards; keep the bundle below 771 KiB.
-const BUNDLE_SIZE_BUDGET_BYTES = 789504; // 771 KiB
+// narrow runtime and prompt guidance. The OpenCode SDK 1.14 permission API
+// requires a small bundled Effect runner so release-installed single-file
+// plugins can execute permission prompts without external package resolution;
+// keep the bundle below 850 KiB.
+const BUNDLE_SIZE_BUDGET_BYTES = 870400; // 850 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
@@ -32,8 +34,10 @@ async function main() {
 	try {
 		const packageDir = join(tempRoot, "package");
 		const worktree = join(tempRoot, "worktree");
+		const hiddenWorktree = join(tempRoot, ".hidden-worktree");
 		mkdirSync(packageDir, { recursive: true });
 		mkdirSync(worktree, { recursive: true });
+		mkdirSync(hiddenWorktree, { recursive: true });
 
 		writeFileSync(
 			join(packageDir, "package.json"),
@@ -87,15 +91,21 @@ async function main() {
 					{ worktree },
 				),
 			),
-			status: JSON.parse(await plugin.tool.flow_status.execute({}, { worktree })),
-			history: JSON.parse(await plugin.tool.flow_history.execute({}, { worktree })),
+			status: JSON.parse(
+				await plugin.tool.flow_status.execute({}, { worktree }),
+			),
+			history: JSON.parse(
+				await plugin.tool.flow_history.execute({}, { worktree }),
+			),
 		};
 
 		if (toolResults.planStart.status !== "ok") {
 			throw new Error("flow_plan_start failed in bundle sanity smoke.");
 		}
 		if (toolResults.status.status !== "planning") {
-			throw new Error("flow_status did not report the expected planning status.");
+			throw new Error(
+				"flow_status did not report the expected planning status.",
+			);
 		}
 		if (toolResults.status.session?.goal !== "Bundle sanity") {
 			throw new Error("flow_status did not expose the expected session goal.");
@@ -105,13 +115,35 @@ async function main() {
 			...(toolResults.history.history?.stored ?? []),
 			...(toolResults.history.history?.completed ?? []),
 		].filter(Boolean);
-		if (
-			!historyEntries.some((entry) => entry.goal === "Bundle sanity")
-		) {
+		if (!historyEntries.some((entry) => entry.goal === "Bundle sanity")) {
 			throw new Error("flow_history did not report the stored session.");
 		}
 		if (plugin.tool.flow_status.__mockTag !== "flow-bundle-sanity-mock-v1") {
-			throw new Error("Bundle did not resolve @opencode-ai/plugin from the injected mock.");
+			throw new Error(
+				"Bundle did not resolve @opencode-ai/plugin from the injected mock.",
+			);
+		}
+
+		let permissionAskRuns = 0;
+		const permissionSmoke = JSON.parse(
+			await plugin.tool.flow_plan_start.execute(
+				{ goal: "Bundle permission sanity" },
+				{
+					worktree: hiddenWorktree,
+					ask: () =>
+						sync(() => {
+							permissionAskRuns += 1;
+						}),
+				},
+			),
+		);
+		if (permissionSmoke.status !== "ok" || permissionAskRuns !== 1) {
+			throw new Error(
+				`Permission Effect smoke failed: ${JSON.stringify({
+					status: permissionSmoke.status,
+					permissionAskRuns,
+				})}`,
+			);
 		}
 
 		const report = {
@@ -120,20 +152,28 @@ async function main() {
 			inlinesCreateOpencodeClient: bundleText.includes("createOpencodeClient"),
 			sourceMapVersion: sourcemap.version,
 			sourceMapHasMappings: typeof sourcemap.mappings === "string",
-			sourceCount: Array.isArray(sourcemap.sources) ? sourcemap.sources.length : 0,
+			sourceCount: Array.isArray(sourcemap.sources)
+				? sourcemap.sources.length
+				: 0,
 			configAgents: Object.keys(config.agent).length,
 			configCommands: Object.keys(config.command).length,
 			toolCount: Object.keys(plugin.tool).length,
-			nodeMajor: Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10),
+			nodeMajor: Number.parseInt(
+				process.versions.node.split(".")[0] ?? "0",
+				10,
+			),
 			mockTagVerified:
 				plugin.tool.flow_status.__mockTag === "flow-bundle-sanity-mock-v1",
+			permissionAskRuns,
 		};
 
 		if (report.sizeBytes > BUNDLE_SIZE_BUDGET_BYTES) {
 			throw new Error(`Bundle too large: ${report.sizeBytes} bytes`);
 		}
 		if (!report.hasExternalPeerImport) {
-			throw new Error("Bundle does not preserve the @opencode-ai/plugin reference.");
+			throw new Error(
+				"Bundle does not preserve the @opencode-ai/plugin reference.",
+			);
 		}
 		if (report.inlinesCreateOpencodeClient) {
 			throw new Error("Bundle appears to inline peer dependency symbols.");
@@ -155,7 +195,9 @@ async function main() {
 			);
 		}
 		if (report.nodeMajor < 22) {
-			throw new Error(`Node major version ${report.nodeMajor} is below the required 22.`);
+			throw new Error(
+				`Node major version ${report.nodeMajor} is below the required 22.`,
+			);
 		}
 
 		console.log(JSON.stringify(report, null, 2));

@@ -1,14 +1,13 @@
 import {
-	cpSync,
 	copyFileSync,
-	mkdirSync,
+	cpSync,
 	mkdtempSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { performance } from "node:perf_hooks";
-import path from "node:path";
 import { tmpdir } from "node:os";
+import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 const thresholdMs = 150;
 const iterations = 7;
@@ -32,10 +31,19 @@ async function importBuiltPlugin(uniqueSuffix) {
 	const bundledEntry = path.join(packageDir, "index.js");
 	copyFileSync(distEntry, bundledEntry);
 
-	const peerDir = path.join(packageDir, "node_modules", "@opencode-ai", "plugin");
-	cpSync(path.join(projectRoot, "node_modules", "@opencode-ai", "plugin"), peerDir, {
-		recursive: true,
-	});
+	const peerDir = path.join(
+		packageDir,
+		"node_modules",
+		"@opencode-ai",
+		"plugin",
+	);
+	cpSync(
+		path.join(projectRoot, "node_modules", "@opencode-ai", "plugin"),
+		peerDir,
+		{
+			recursive: true,
+		},
+	);
 	const zodDir = path.join(packageDir, "node_modules", "zod");
 	cpSync(path.join(projectRoot, "node_modules", "zod"), zodDir, {
 		recursive: true,

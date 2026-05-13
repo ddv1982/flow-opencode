@@ -1,4 +1,5 @@
 import { basename, join } from "node:path";
+import { runPromise } from "effect/Effect";
 import { resolveMutableSessionRoot } from "../../../runtime/application";
 import type { ToolContext } from "./schemas";
 
@@ -32,7 +33,7 @@ export async function ensureMutableWorkspacePermission(
 		return resolved.root;
 	}
 
-	await context.ask?.({
+	const askEffect = context.ask?.({
 		permission: "edit",
 		patterns: [join(resolved.root, ".flow", "**")],
 		always: [join(resolved.root, ".flow", "**")],
@@ -43,5 +44,8 @@ export async function ensureMutableWorkspacePermission(
 				"Flow is about to persist state inside a hidden workspace root outside its own .flow directory.",
 		},
 	});
+	if (askEffect) {
+		await runPromise(askEffect);
+	}
 	return resolved.root;
 }

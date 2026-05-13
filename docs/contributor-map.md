@@ -28,12 +28,12 @@ Do not:
 
 Risk: medium-high
 
-Before editing, capture `bun run report:runtime-simplification-metrics` and identify one target hotspot or projection boundary. Prefer a stable facade plus moved internals over public API churn: keep existing exports, tool names, schemas, docs rows, generated guidance/projections, and persisted `.flow/**` shapes unchanged unless the maintainer contract explicitly changes.
+Before editing, read the runtime mental model and gate matrix in `docs/maintainer-contract.md`, then capture `bun run report:runtime-simplification-metrics` and identify one target hotspot or projection boundary. Prefer a stable facade plus moved internals over public API churn: keep existing exports, tool names, schemas, docs rows, generated guidance/projections, and persisted `.flow/**` shapes unchanged unless the maintainer contract explicitly changes.
 
 Required checks by slice:
 
 - Runtime hotspot extraction: targeted behavior tests for the touched area, `bun run report:runtime-simplification-metrics`, `bun run check:architecture-seams:enforce`, and `bun run typecheck`.
-- Adapter projection changes: `bun test tests/descriptor-family-parity.test.ts tests/docs-tool-parity.test.ts tests/config/tool-schemas.test.ts`, `bun run check:generated-drift`, and `bun run typecheck`.
+- Adapter projection changes: read `docs/architecture/role-protocol-projections.md` for the strict descriptor metadata vs tolerant public host summary boundary, then run `bun test tests/descriptor-family-parity.test.ts tests/docs-tool-parity.test.ts tests/config/tool-schemas.test.ts`, `bun run check:generated-drift`, and `bun run typecheck`.
 - Persistence-boundary changes: the session/path checks listed below plus `bun run check:architecture-seams:enforce`.
 
 Record before/after metric deltas in the PR and call out any accepted file-count tradeoff. Treat `runtime.subdomains` as diagnostic evidence only; seam enforcement remains the hard boundary gate.
@@ -207,7 +207,9 @@ Read first:
 
 Required checks:
 
-- `bun test tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts`
+- `bun test tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/docs-stale-reference-policy.test.ts`
+- Add the projection checks from the simplification playbook when docs describe OpenCode projection behavior.
+- Use the verification tiers in `docs/development.md` to decide whether focused docs checks are enough for the current slice or whether generated drift, runtime invariant, deep, or mainline readiness lanes are needed.
 - Compare historical version references with `package.json` before presenting them as current facts.
 
 Do not:

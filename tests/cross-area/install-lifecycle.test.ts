@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import type { ToolResult } from "../../src/adapters/opencode/sdk";
 import {
 	FLOW_SKILL_BUNDLE_DIRECTORY,
 	resolveFlowSkillBundleFiles,
@@ -22,6 +23,10 @@ import {
 const tempDirs: string[] = [];
 type PluginFactory = typeof import("../../src/index").default;
 const require = createRequire(import.meta.url);
+
+function toolResultOutput(result: ToolResult): string {
+	return typeof result === "string" ? result : result.output;
+}
 
 function makeTempDir(prefix: string): string {
 	const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -358,11 +363,13 @@ describe("cross-area install lifecycle", () => {
 			throw new Error("Expected installed plugin to expose flow_status.");
 		}
 		const statusResponse = JSON.parse(
-			await flowStatusTool.execute({}, { worktree } as Parameters<
-				NonNullable<
-					Awaited<ReturnType<PluginFactory>>["tool"]
-				>["flow_status"]["execute"]
-			>[1]),
+			toolResultOutput(
+				await flowStatusTool.execute({}, { worktree } as Parameters<
+					NonNullable<
+						Awaited<ReturnType<PluginFactory>>["tool"]
+					>["flow_status"]["execute"]
+				>[1]),
+			),
 		);
 		expect(statusResponse.status).toBe("missing");
 		expect(statusResponse.summary).toBe("No active Flow session found.");

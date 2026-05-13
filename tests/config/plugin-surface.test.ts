@@ -8,6 +8,7 @@ import {
 	applyFlowConfig,
 	createConfigHook,
 } from "../../src/adapters/opencode/config";
+import type { ToolResult } from "../../src/adapters/opencode/sdk";
 import { OPENCODE_TOOL_NAMES } from "../../src/adapters/opencode/tool-projections.generated";
 import { OPENCODE_TOOL_REGISTRY } from "../../src/adapters/opencode/tool-surface/tool-registry";
 import { createTools } from "../../src/adapters/opencode/tools";
@@ -25,6 +26,10 @@ const PNG_HEADER_BYTES = Buffer.from([
 
 function dataUrl(mime: string, bytes: Buffer) {
 	return `data:${mime};base64,${bytes.toString("base64")}`;
+}
+
+function toolResultOutput(result: ToolResult): string {
+	return typeof result === "string" ? result : result.output;
 }
 
 function expectSdkBoundaryContinuationResponse(response: unknown) {
@@ -236,12 +241,14 @@ describe("plugin config surface", () => {
 		);
 
 		const prepareResponse = JSON.parse(
-			await prepareTool.execute(
-				{ argumentString: "Use the attached image" },
-				toolContext(worktree, undefined, {
-					sessionID: "chat-session",
-					messageID: "message-1",
-				}) as Parameters<typeof prepareTool.execute>[1],
+			toolResultOutput(
+				await prepareTool.execute(
+					{ argumentString: "Use the attached image" },
+					toolContext(worktree, undefined, {
+						sessionID: "chat-session",
+						messageID: "message-1",
+					}) as Parameters<typeof prepareTool.execute>[1],
+				),
 			),
 		) as {
 			attachmentGuidance: { materializationRequired: boolean; status: string };
@@ -252,22 +259,26 @@ describe("plugin config surface", () => {
 		});
 
 		const chatResponse = JSON.parse(
-			await materializeTool.execute(
-				{ destinationDirectory: "assets/chat" },
-				toolContext(worktree, undefined, {
-					sessionID: "chat-session",
-					messageID: "message-1",
-					agent: "flow-auto",
-				}) as Parameters<typeof materializeTool.execute>[1],
+			toolResultOutput(
+				await materializeTool.execute(
+					{ destinationDirectory: "assets/chat" },
+					toolContext(worktree, undefined, {
+						sessionID: "chat-session",
+						messageID: "message-1",
+						agent: "flow-auto",
+					}) as Parameters<typeof materializeTool.execute>[1],
+				),
 			),
 		) as { status: string; imported: Array<{ path: string }> };
 		const commandResponse = JSON.parse(
-			await materializeTool.execute(
-				{ destinationDirectory: "assets/command" },
-				toolContext(worktree, undefined, {
-					sessionID: "command-session",
-					agent: "flow-auto",
-				}) as Parameters<typeof materializeTool.execute>[1],
+			toolResultOutput(
+				await materializeTool.execute(
+					{ destinationDirectory: "assets/command" },
+					toolContext(worktree, undefined, {
+						sessionID: "command-session",
+						agent: "flow-auto",
+					}) as Parameters<typeof materializeTool.execute>[1],
+				),
 			),
 		) as { status: string; imported: Array<{ path: string }> };
 

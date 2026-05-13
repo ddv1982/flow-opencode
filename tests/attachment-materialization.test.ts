@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fail, succeed, sync } from "effect/Effect";
 import { FLOW_ATTACHMENT_MAX_BYTES } from "../src/adapters/opencode/attachment-materialization";
 import {
 	captureOpenCodeAttachments,
@@ -424,9 +425,79 @@ describe("OpenCode attachment capture and materialization", () => {
 		expect(response.imported).toEqual([]);
 	});
 
+	test("runs the attachment permission Effect before writing files", async () => {
+		const worktree = makeTempDir();
+		let permissionEffectRan = false;
+		const ask = mock(() =>
+			sync(() => {
+				permissionEffectRan = true;
+			}),
+		);
+		captureOpenCodeAttachments({
+			sessionId: "session-1",
+			parts: [
+				{
+					id: "png-1",
+					type: "file",
+					mime: "image/png",
+					filename: "permission.png",
+					url: dataUrl("image/png", PNG_HEADER_BYTES),
+				},
+			],
+		});
+
+		const response = await materialize(
+			worktree,
+			{ destinationDirectory: "assets/flow-attachments" },
+			"session-1",
+			{ ask },
+		);
+
+		expect(response.status).toBe("ok");
+		expect(ask).toHaveBeenCalledTimes(1);
+		expect(permissionEffectRan).toBe(true);
+		expect(
+			await readFile(join(worktree, "assets/flow-attachments/permission.png")),
+		).toHaveLength(PNG_HEADER_BYTES.length);
+	});
+
+	test("rejects attachment materialization when permission is denied before writing", async () => {
+		const worktree = makeTempDir();
+		const denied = new Error("permission denied");
+		const ask = mock(() => fail(denied));
+		captureOpenCodeAttachments({
+			sessionId: "session-1",
+			parts: [
+				{
+					id: "png-1",
+					type: "file",
+					mime: "image/png",
+					filename: "permission.png",
+					url: dataUrl("image/png", PNG_HEADER_BYTES),
+				},
+			],
+		});
+		const tools = createTestTools();
+
+		await expect(
+			tools.flow_attachments_materialize.execute(
+				{ destinationDirectory: "assets/flow-attachments" },
+				toolContext(worktree, undefined, {
+					sessionID: "session-1",
+					agent: "flow-auto",
+					ask,
+				}),
+			),
+		).rejects.toThrow("permission denied");
+		expect(ask).toHaveBeenCalledTimes(1);
+		await expect(
+			stat(join(worktree, "assets/flow-attachments/permission.png")),
+		).rejects.toThrow();
+	});
+
 	test("returns early without permission prompts or directory creation when no attachments are selected", async () => {
 		const worktree = makeTempDir();
-		const ask = mock(async () => undefined);
+		const ask = mock(() => succeed(undefined));
 		const metadata = mock(() => undefined);
 		const tools = createTestTools();
 
@@ -458,7 +529,7 @@ describe("OpenCode attachment capture and materialization", () => {
 
 	test("rejects glob metacharacters in destination directories before permission prompts", async () => {
 		const worktree = makeTempDir();
-		const ask = mock(async () => undefined);
+		const ask = mock(() => succeed(undefined));
 		captureOpenCodeAttachments({
 			sessionId: "session-1",
 			parts: [

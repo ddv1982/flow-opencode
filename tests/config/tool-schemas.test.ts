@@ -78,10 +78,12 @@ describe("tool schema config contracts", () => {
 		).toBe("record_final_review");
 	});
 
-	test("OpenCode core summaries return null for stale projected core actions", () => {
+	test("OpenCode core summaries tolerate absent and stale projected core actions", () => {
 		expect(openCodeToolCoreSummary("flow_run_complete_feature")).toContain(
 			"- Core action: `complete_run`",
 		);
+		expect(openCodeToolCoreSummary("missing_tool")).toBeNull();
+		expect(openCodeToolCoreSummary("flow_status")).toBeNull();
 
 		const projection = getOpenCodeToolProjection("flow_run_complete_feature");
 		expect(projection).not.toBeNull();

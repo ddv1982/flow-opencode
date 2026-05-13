@@ -55,6 +55,21 @@ The full matrix, artifact owners, source-of-truth scripts, repeated-inside-`chec
 
 Standing dependency/tool checklist: keep `zod` aligned with `@opencode-ai/plugin`, preserve raw `tool(...)` arg shapes at the SDK boundary, and run `bun run check:dependency-contract` for dependency, schema, or tool-surface changes.
 
+## Verification tiers
+
+Use the smallest tier that can prove the current change, then broaden before release or cross-surface merges.
+
+| Tier | When to run | Commands |
+| --- | --- | --- |
+| Focused touched-slice checks | While editing one risk area | Use [`docs/maintainer-contract.md#if-you-touch-x-run-y`](maintainer-contract.md#if-you-touch-x-run-y) |
+| Docs/projection checks | Current docs or OpenCode projection metadata changes | `bun test tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/docs-stale-reference-policy.test.ts`; add `bun test tests/config/tool-schemas.test.ts tests/descriptor-family-parity.test.ts` when projection behavior is affected |
+| Runtime invariant fast lane | Runtime/domain/transition confidence | `bun run test:fast`; `bun run test:replay` for snapshot/runtime invariant coverage |
+| Generated drift lane | Prompt, review, descriptor, or generated surface changes | `bun run check:generated-drift` |
+| Deep/randomized confidence | Broad regression confidence beyond focused tests | `bun run test:deep` or `bun run test:randomized` |
+| Mainline readiness | Before release or cross-surface merge | `bun run check` |
+
+Hard gates block readiness. Advisory and diagnostic commands guide investigation only unless the maintainer contract promotes them with script, docs, and test updates. Focused checks are isolation tools, not replacements for `bun run check` before release or cross-surface changes.
+
 ## Source map
 
 - `src/index.ts` — plugin entrypoint
@@ -79,8 +94,17 @@ Standing dependency/tool checklist: keep `zod` aligned with `@opencode-ai/plugin
 
 Flow is built around a few stable responsibilities and authority boundaries:
 
+```text
+user / slash command / agent
+  -> OpenCode adapter tool surface
+  -> runtime application action
+  -> domain and transition policy
+  -> `.flow/**/session.json` snapshot persistence
+  -> derived markdown rendering
+```
+
 1. A plugin `config` hook injects commands and agents.
-2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers.
+2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers; they do not own workflow policy.
 3. Session state is stored under `.flow/active/<session-id>/session.json`, with inactive resumable sessions under `.flow/stored/<session-id>/` and closed history under `.flow/completed/<session-id>-<timestamp>/`.
 4. Domain transitions and runtime policy helpers remain authoritative for workflow state changes.
 5. Prompted agents call runtime tools instead of mutating state directly.
@@ -89,7 +113,7 @@ Flow is built around a few stable responsibilities and authority boundaries:
 8. For attachment-dependent `/flow-auto` goals, the coordinator materializes captured OpenCode PNG, JPEG, WebP, GIF, or AVIF attachments into explicit workspace asset paths before planning or handoff; SVG remains unsupported, and chat attachments are not filesystem files until `flow_attachments_materialize` returns paths.
 9. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
-Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
+Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. Rendered markdown docs are derived artifacts, not workflow truth. Core action and role-protocol metadata are projection/regression infrastructure; they are not live persistence. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
 
 Projection metadata is consolidated through the OpenCode surface descriptor family in `src/adapters/opencode/tool-surface/descriptors.ts`. That family can describe core-backed mutation tools, workspace/control tools, read tools, and render-only tools without pretending every surface has both a runtime action and a core workflow action. Adapter implementation modules still own the dispatch constants they invoke, and `src/adapters/opencode/tool-surface/schemas.ts` owns a payload schema registry that co-locates each tool's raw arg shape, parser schema, and owner metadata; descriptor parity tests compare both sources against the descriptor projection contract. Runtime transitions still enforce behavior; descriptors, prompts, docs, and audit surfaces project or verify that behavior.
 
