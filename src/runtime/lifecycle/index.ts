@@ -22,9 +22,12 @@ export {
 	ensureWorkspace,
 	findStoredSessionDir,
 	readActiveSessionId,
-	resetSessionWorkspaceFsForTests,
 	resolveActiveSessionId,
-	setSessionWorkspaceFsForTests,
 	writeSessionFile,
-	writeSessionFileAtDir,
 } from "../session-workspace";
+export {
+	readSessionFromPath,
+	resetSessionWorkspaceFsForTests,
+	setSessionWorkspaceFsForTests,
+	writeSessionFileAtDir,
+} from "../session-workspace-io";

@@ -1,6 +1,6 @@
 import { FLOW_PLAN_WITH_GOAL_COMMAND, FLOW_STATUS_COMMAND } from "../constants";
+import { type closeSession, createSession } from "../lifecycle";
 import type { PlanningContext, Session } from "../schema";
-import { type closeSession, createSession } from "../session";
 import { deriveSessionOperatorState } from "../session-operator-state";
 import { summarizeSession } from "../summary";
 import { detectPackageManager } from "./package-manager";

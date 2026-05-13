@@ -15,7 +15,8 @@ import {
 	parseCompletedDirectoryName,
 } from "./recovery";
 import type { Session } from "./schema";
-import { readActiveSessionId, readSessionFromPath } from "./session-workspace";
+import { readActiveSessionId } from "./session-workspace";
+import { readSessionFromPath } from "./session-workspace-io";
 
 export type SessionHistoryEntry = {
 	id: string;

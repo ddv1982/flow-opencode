@@ -28,7 +28,9 @@ Primary ownership map:
 
 ## Historical references
 
-Historical artifacts may mention deleted or renamed files that existed when the artifact was written. This is expected in `CHANGELOG.md`, generated `release-notes.md`, `docs/releases/**`, and `docs/investigations/**`. Current behavior and required checks are defined by this maintainer contract, current source files, current tests, and active scripts.
+Historical artifacts may mention deleted or renamed files that existed when the artifact was written. This is expected in `CHANGELOG.md`, generated `release-notes.md`, `docs/releases/**`, and `docs/investigations/**`. Those files are archive records, not live contracts, and should not be mass-edited solely to chase current terminology.
+
+Current source-of-truth docs live outside the historical/archive trees, especially `docs/maintainer-contract.md` and `docs/architecture/**`. When current docs change, update the narrow docs parity/staleness tests if the policy changes; otherwise keep historical references confined to the archive locations above. Current behavior and required checks are defined by this maintainer contract, current source files, current tests, and active scripts.
 
 ## Commands
 

@@ -14,11 +14,9 @@ import {
 } from "./recovery";
 import { deleteSessionDocs } from "./rendering";
 import { type PlanningContext, type Session, SessionSchema } from "./schema";
-import {
-	readSessionFromPath,
-	resolveActiveSessionId,
-	withSessionSaveLock,
-} from "./session-workspace";
+import { resolveActiveSessionId } from "./session-workspace";
+import { readSessionFromPath } from "./session-workspace-io";
+import { withSessionSaveLock } from "./session-workspace-locks";
 import { nowIso } from "./util";
 import { assertMutableWorkspaceRoot } from "./workspace-root";
 

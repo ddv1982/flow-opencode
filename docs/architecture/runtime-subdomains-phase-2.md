@@ -6,14 +6,20 @@ Date: 2026-05-04
 Create explicit, low-risk runtime boundaries around current behavior hotspots without broad rewrites.
 
 ## Subdomains
-- `src/runtime/lifecycle/`
-  - Session lifecycle, history, persistence, and workspace-facing lifecycle entrypoints.
+- `src/runtime/application/`
+  - Flow Core, session action orchestration, workspace-runtime parsing, operator presenters, doctor/package-manager, and stack-standards application services.
+- `src/runtime/domain/`
+  - Runtime-owned governance, semantic invariants, final-review coverage, workflow policy, and review-scope accounting.
 - `src/runtime/transitions/`
   - Planning/execution/review/recovery transition logic (existing bounded area).
-- `src/runtime/rendering/`
-  - Render entrypoints for index/feature docs and session-doc synchronization.
+- `src/runtime/lifecycle/`
+  - Session lifecycle, history, persistence, and workspace-facing lifecycle entrypoints.
 - `src/runtime/recovery/`
   - Completed-session storage/retrieval primitives and transition recovery exports.
+- `src/runtime/rendering/`
+  - Render entrypoints for index/feature docs and session-doc synchronization.
+- `src/runtime/root files`
+  - Stable public barrels, schemas, session/workspace/persistence helpers, rendering helpers, path/root guards, and shared utilities until they are safely moved behind subdomain facades.
 
 ## Entry points
 - Runtime subdomain entrypoints are exposed from `src/runtime/lifecycle/index.ts`,
@@ -23,8 +29,10 @@ Create explicit, low-risk runtime boundaries around current behavior hotspots wi
 
 ## Incremental migration path
 1. Keep existing implementation files stable (no behavior rewrite in this phase).
-2. Shift import sites to subdomain entrypoints as files are touched.
-3. Optionally split large long-lived files behind subdomain facades in later phases.
+2. Run `bun run report:runtime-simplification-metrics` before and after each simplification phase.
+3. Record top-level runtime deltas plus touched `runtime.subdomains` entries in the PR or phase note; these metrics are diagnostic evidence, not a new merge blocker.
+4. Shift import sites to subdomain entrypoints as files are touched.
+5. Optionally split large long-lived files behind subdomain facades in later phases.
 
 ## Known coupling hotspots (still unresolved)
 - `session-lifecycle.ts` still coordinates filesystem movement + schema mutation + closure defaults in one module.

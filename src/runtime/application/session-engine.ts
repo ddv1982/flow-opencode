@@ -1,5 +1,4 @@
 import { errorResponse } from "../errors";
-import type { LatestFailedFlowAttempt, Session } from "../schema";
 import {
 	activateSession,
 	closeSession,
@@ -8,7 +7,8 @@ import {
 	loadStoredSession,
 	saveSessionState,
 	syncSessionArtifacts,
-} from "../session";
+} from "../lifecycle";
+import type { LatestFailedFlowAttempt, Session } from "../schema";
 import type { TransitionResult } from "../transitions";
 
 export type RuntimeToolResponse = Record<string, unknown>;

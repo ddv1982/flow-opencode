@@ -1,5 +1,5 @@
+import type { listSessionHistory, loadStoredSession } from "../lifecycle";
 import type { Session } from "../schema";
-import type { listSessionHistory, loadStoredSession } from "../session";
 import {
 	DEFAULT_SESSION_READ_RUNTIME_PORT,
 	executeSessionReadActionAtRoot,

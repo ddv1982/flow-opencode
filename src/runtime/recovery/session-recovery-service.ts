@@ -7,11 +7,11 @@ import {
 	findNewestCompletedSession,
 	moveSessionDirToCompleted,
 } from "../session-completed-storage";
+import { resolveActiveSessionId } from "../session-workspace";
 import {
 	readSessionFromPath,
-	resolveActiveSessionId,
 	writeSessionFileAtDir,
-} from "../session-workspace";
+} from "../session-workspace-io";
 import { completedTimestampNow, nowIso } from "../util";
 import type { MutableWorkspaceRoot } from "../workspace-root";
 

@@ -13,11 +13,11 @@ import { renderSessionDocs } from "./rendering";
 import type { Session } from "./schema";
 import {
 	findStoredSessionDir,
-	readSessionFromPath,
 	resolveActiveSessionId,
-	withSessionSaveLock,
 	writeSessionFile,
 } from "./session-workspace";
+import { readSessionFromPath } from "./session-workspace-io";
+import { withSessionSaveLock } from "./session-workspace-locks";
 import { nowIso } from "./util";
 import {
 	assertMutableWorkspaceRoot,

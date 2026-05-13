@@ -11,7 +11,7 @@ import {
 	type FeatureDocDrilldownTarget,
 	resolveFeatureDocDrilldownTarget,
 } from "../../../../runtime/feature-doc-drilldown";
-import { readActiveSessionId } from "../../../../runtime/session";
+import { readActiveSessionId } from "../../../../runtime/lifecycle";
 import { ensureMutableWorkspacePermission } from "../mutable-workspace-permission";
 import {
 	FlowPlanApproveArgsShape,

@@ -3,12 +3,12 @@ import {
 	type FeatureDocDrilldownTarget,
 	resolveFeatureDocDrilldownTarget,
 } from "../feature-doc-drilldown";
-import type { Session } from "../schema";
 import type {
 	closeSession,
 	listSessionHistory,
 	loadStoredSession,
-} from "../session";
+} from "../lifecycle";
+import type { Session } from "../schema";
 import { deriveSessionOperatorState } from "../session-operator-state";
 import {
 	deriveSessionViewModel,

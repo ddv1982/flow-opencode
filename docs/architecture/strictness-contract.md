@@ -1,9 +1,11 @@
 # SDK/runtime bridge strictness contract
 
-Scope: `src/adapters/opencode/tool-surface/schemas.ts`, `src/adapters/opencode/tool-surface/runtime-tools/shared.ts`, `src/adapters/opencode/tool-surface/runtime-tools/planning-tools.ts`, `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts`.
+Scope: `src/adapters/opencode/tool-surface/schemas.ts`, `src/adapters/opencode/tool-surface/runtime-tools/shared.ts`, `src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts`, `src/runtime/schema.ts`, and the runtime-owned schema modules it composes. This records the current strict bridge between OpenCode tool payloads and runtime schemas after the schema decomposition work while preserving the stable adapter-facing import surface.
 
 ## Current state
 
+- `src/runtime/schema.ts` is the stable public schema barrel. Narrower runtime-owned modules hold cohesive schema definitions: `schema-plan.ts` owns plan/planning/session status schemas, `schema-review-decisions.ts` owns reviewer/final-review decision schemas, `schema-worker-result.ts` owns worker result and execution-history schemas, and `schema-session.ts` owns the persisted session schema.
+- OpenCode adapter schemas continue to import runtime payload schemas through `src/runtime/schema.ts` unless a reviewed strictness change requires a narrower import. The runtime schema export surface remains stable for existing adapter imports.
 - The bridge no longer carries explicit `as any` / `as WorkerResult` arg-shape casts in the scoped files.
 - `zod` is pinned to `4.1.8` in this repo to stay aligned with the installed `@opencode-ai/plugin` SDK's effective `zod` version; the Slice 1 refresh on 2026-05-10 confirmed both installed `@opencode-ai/plugin@1.3.10` and latest `@opencode-ai/plugin@1.14.46` declare `zod@4.1.8`.
 - Treat that version alignment as part of the bridge contract. If you change either `zod` or `@opencode-ai/plugin`, rerun the bridge verification suite before accepting the change.
@@ -13,8 +15,8 @@ Scope: `src/adapters/opencode/tool-surface/schemas.ts`, `src/adapters/opencode/t
 A change is strictness-preserving only if **all** clauses hold:
 
 1. **Required fields and unions do not widen at the bridge.**
-   - `flow_plan_apply` remains `{ plan: PlanArgsSchema.strict(), planning?: PlanningContextArgsSchema.strict() }` (`src/adapters/opencode/tool-surface/schemas.ts:63-66`).
-   - Worker completion continues to be parsed by `WorkerResultArgsSchema` (`src/runtime/schema.ts:293-311`) before transition calls.
+   - `flow_plan_apply` remains `{ plan: PlanArgsSchema.strict(), planning?: PlanningContextArgsSchema.strict() }` at the adapter boundary.
+   - Worker completion continues to be parsed by `WorkerResultArgsSchema`, exported from `src/runtime/schema.ts` and owned internally by `src/runtime/schema-worker-result.ts`, before transition calls.
 
 2. **Runtime parse/validation path is never bypassed.**
    - Runtime tools keep `withParsedArgs(...)` wrappers (`src/adapters/opencode/tool-surface/parsed-tool.ts:8-19`).
@@ -30,6 +32,7 @@ A change is strictness-preserving only if **all** clauses hold:
 
 5. **Recovery and completion gates stay runtime-owned.**
    - Validation/reviewer/final-review completion gates remain enforced in runtime transitions (`src/runtime/transitions/execution-completion.ts`).
+   - Schema refactors may move definitions among runtime-owned `schema-*` modules, but `src/runtime/schema.ts` remains the stable export surface for adapter-facing payload shapes.
    - Bridge refactors must not move those rules into prompt/docs-only logic.
 
 ## Semantic parity anchors

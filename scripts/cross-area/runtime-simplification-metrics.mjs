@@ -67,6 +67,34 @@ function getSeamViolationCount() {
 	return Number.parseInt(match[1], 10);
 }
 
+function runtimeSubdomainForFile(file) {
+	const relativeRuntimePath = file.replace(/^src\/runtime\//, "");
+	const [firstSegment] = relativeRuntimePath.split("/");
+	return relativeRuntimePath === firstSegment ? "root" : firstSegment;
+}
+
+function summarizeSubdomains(runtimeFiles, largeFileThreshold) {
+	const summaries = new Map();
+	for (const entry of runtimeFiles) {
+		const subdomain = runtimeSubdomainForFile(entry.file);
+		const summary = summaries.get(subdomain) ?? {
+			fileCount: 0,
+			loc: 0,
+			largeFileCount: 0,
+		};
+		summary.fileCount += 1;
+		summary.loc += entry.loc;
+		if (entry.loc >= largeFileThreshold) {
+			summary.largeFileCount += 1;
+		}
+		summaries.set(subdomain, summary);
+	}
+
+	return Object.fromEntries(
+		[...summaries.entries()].sort(([a], [b]) => a.localeCompare(b)),
+	);
+}
+
 function main() {
 	const runtimeFiles = listTsFiles(runtimeRoot).map((filePath) => {
 		const rel = toPosix(path.relative(repoRoot, filePath));
@@ -78,6 +106,7 @@ function main() {
 	const largeFileThreshold = 300;
 	const largeFiles = runtimeFiles.filter((entry) => entry.loc >= largeFileThreshold);
 	const largest = [...runtimeFiles].sort((a, b) => b.loc - a.loc).slice(0, 5);
+	const subdomains = summarizeSubdomains(runtimeFiles, largeFileThreshold);
 	const top5Loc = largest.reduce((sum, entry) => sum + entry.loc, 0);
 	const top5LocShare = totalRuntimeLoc === 0 ? 0 : Number(((top5Loc / totalRuntimeLoc) * 100).toFixed(1));
 
@@ -99,6 +128,7 @@ function main() {
 			top5LocSharePercent: top5LocShare,
 			largestFiles: largest,
 			topChurnFiles: topChurn,
+			subdomains,
 		},
 	};
 
