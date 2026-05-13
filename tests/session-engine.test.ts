@@ -26,6 +26,8 @@ import {
 import {
 	executeSessionMutationAtRoot,
 	runSessionMutationActionAtRoot,
+	runSessionReadActionAtRoot,
+	runSessionWorkspaceActionAtRoot,
 } from "../src/runtime/application/session-engine";
 import {
 	SESSION_READ_ACTION_HANDLERS,
@@ -325,6 +327,76 @@ describe("session engine boundary", () => {
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.summary).toBe("Planning context recorded.");
+	});
+
+	test("read runner preserves the generic action result envelope", async () => {
+		const runtime = {
+			loadSession: async () => createSession("Inspect direct read runner"),
+			listSessionHistory: async () => ({
+				activeSessionId: null,
+				active: null,
+				stored: [],
+				completed: [],
+			}),
+			loadStoredSession: async () => null,
+		};
+		const value = { status: "ready", count: 2 };
+		const result = await runSessionReadActionAtRoot(
+			"/tmp/project",
+			{
+				name: "direct_read_envelope",
+				run: async (worktree, receivedRuntime) => {
+					expect(worktree).toBe("/tmp/project");
+					expect(receivedRuntime).toBe(runtime);
+					return value;
+				},
+				onSuccess: (receivedValue) => ({
+					status: "ok",
+					value: receivedValue,
+				}),
+			},
+			runtime,
+		);
+
+		expect(result).toEqual({
+			actionName: "direct_read_envelope",
+			value,
+			response: { status: "ok", value },
+		});
+	});
+
+	test("workspace runner preserves the generic action result envelope", async () => {
+		const session = createSession("Inspect direct workspace runner");
+		const runtime = {
+			loadSession: async () => session,
+			saveSessionState: async () => session,
+			syncSessionArtifacts: async () => undefined,
+			activateSession: async () => session,
+			closeSession: async () => null,
+		};
+		const value = { sessionId: session.id, activated: true };
+		const result = await runSessionWorkspaceActionAtRoot(
+			"/tmp/project",
+			{
+				name: "direct_workspace_envelope",
+				run: async (worktree, receivedRuntime) => {
+					expect(worktree).toBe("/tmp/project");
+					expect(receivedRuntime).toBe(runtime);
+					return value;
+				},
+				onSuccess: (receivedValue) => ({
+					status: "ok",
+					value: receivedValue,
+				}),
+			},
+			runtime,
+		);
+
+		expect(result).toEqual({
+			actionName: "direct_workspace_envelope",
+			value,
+			response: { status: "ok", value },
+		});
 	});
 
 	test("runs named dispatched read actions through the central runtime path", async () => {

@@ -10,8 +10,16 @@ import {
 } from "../lifecycle";
 import type { LatestFailedFlowAttempt, Session } from "../schema";
 import type { TransitionResult } from "../transitions";
+import {
+	type RuntimeToolResponse as EngineRuntimeToolResponse,
+	type SessionReadAction as RuntimeSessionReadAction,
+	type SessionReadResult as RuntimeSessionReadResult,
+	type SessionWorkspaceAction as RuntimeSessionWorkspaceAction,
+	type SessionWorkspaceResult as RuntimeSessionWorkspaceResult,
+	runRuntimeActionAtRoot,
+} from "./session-engine-action-runner";
 
-export type RuntimeToolResponse = Record<string, unknown>;
+export type RuntimeToolResponse = EngineRuntimeToolResponse;
 
 type FailedAttemptClearPolicy =
 	| true
@@ -70,35 +78,25 @@ export type SessionMutationResult<T, Name extends string = string> =
 			savedSession?: Session;
 	  };
 
-export type SessionReadAction<T, Name extends string = string> = {
-	name: Name;
-	run: (worktree: string, runtime: SessionReadRuntimePort) => Promise<T>;
-	onSuccess: (value: T) => RuntimeToolResponse;
-};
+export type SessionReadAction<
+	T,
+	Name extends string = string,
+> = RuntimeSessionReadAction<T, Name, SessionReadRuntimePort>;
 
-export type SessionReadResult<T, Name extends string = string> = {
-	actionName: Name;
-	value: T;
-	response: RuntimeToolResponse;
-};
+export type SessionReadResult<
+	T,
+	Name extends string = string,
+> = RuntimeSessionReadResult<T, Name>;
 
-export type SessionWorkspaceAction<T, Name extends string = string> = {
-	name: Name;
-	run: (worktree: string, runtime: SessionWorkspaceRuntimePort) => Promise<T>;
-	onSuccess: (value: T) => RuntimeToolResponse;
-};
+export type SessionWorkspaceAction<
+	T,
+	Name extends string = string,
+> = RuntimeSessionWorkspaceAction<T, Name, SessionWorkspaceRuntimePort>;
 
-export type SessionWorkspaceResult<T, Name extends string = string> = {
-	actionName: Name;
-	value: T;
-	response: RuntimeToolResponse;
-};
-
-type RuntimeAction<Name extends string, T, Port> = {
-	name: Name;
-	run: (worktree: string, runtime: Port) => Promise<T>;
-	onSuccess: (value: T) => RuntimeToolResponse;
-};
+export type SessionWorkspaceResult<
+	T,
+	Name extends string = string,
+> = RuntimeSessionWorkspaceResult<T, Name>;
 
 export const DEFAULT_SESSION_RUNTIME_PORT: SessionRuntimePort = {
 	loadSession,
@@ -121,14 +119,6 @@ export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort
 		closeSession,
 	};
 
-function actionSuccessResult<T, Name extends string>(
-	actionName: Name,
-	value: T,
-	response: RuntimeToolResponse,
-) {
-	return { actionName, value, response };
-}
-
 function applyFailedAttemptClearPolicy(
 	session: Session,
 	policy: FailedAttemptClearPolicy | undefined,
@@ -149,15 +139,6 @@ function applyFailedAttemptClearPolicy(
 			lastFailedMutation: null,
 		},
 	};
-}
-
-async function runRuntimeActionAtRoot<T, Name extends string, Port>(
-	worktree: string,
-	action: RuntimeAction<Name, T, Port>,
-	runtime: Port,
-) {
-	const value = await action.run(worktree, runtime);
-	return actionSuccessResult(action.name, value, action.onSuccess(value));
 }
 
 export async function executeSessionReadActionAtRoot<T, Name extends string>(
