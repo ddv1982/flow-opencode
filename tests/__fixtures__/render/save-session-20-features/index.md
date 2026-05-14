@@ -14,9 +14,9 @@
 
 ## Task Progress
 
-- pending | flow-worker | execution | feature-1 — Feature feature-1 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
-- pending | flow-worker | execution | feature-2 — Feature feature-2 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
-- completed | flow-planner | planning | Planning | next: Plan is approved; no planning action needed. | evidence: features: 20
+- pending | flow-worker | execution | handoff: runtime_projection | feature-1 — Feature feature-1 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
+- pending | flow-worker | execution | handoff: runtime_projection | feature-2 — Feature feature-2 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
+- completed | flow-planner | planning | handoff: runtime_projection | Planning | next: Plan is approved; no planning action needed. | evidence: features: 20
 - 18 more task progress rows omitted.
 
 ## Plan

@@ -14,7 +14,7 @@
 
 ## Task Progress
 
-- active | flow-planner | planning | Planning | next: Create a draft plan. | evidence: none
+- active | flow-planner | planning | handoff: runtime_projection | Planning | next: Create a draft plan. | evidence: none
 
 ## Plan
 

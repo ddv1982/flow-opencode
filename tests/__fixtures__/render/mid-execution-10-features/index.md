@@ -14,12 +14,12 @@
 
 ## Task Progress
 
-- active | flow-worker | execution | feature-4 — Feature feature-4 | next: Continue the active feature. | evidence: file targets: 1, verification: 1, validation: 1
-- completed | flow-worker | validation | Validation for feature-3 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
-- pending | flow-worker | execution | feature-5 — Feature feature-5 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
-- pending | flow-worker | execution | feature-6 — Feature feature-6 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
-- completed | flow-planner | planning | Planning | next: Plan is approved; no planning action needed. | evidence: features: 10
-- completed | flow-worker | execution | feature-1 — Feature feature-1 | next: No action needed. | evidence: file targets: 1, verification: 1
+- active | flow-worker | execution | handoff: runtime_projection | feature-4 — Feature feature-4 | next: Continue the active feature. | evidence: file targets: 1, verification: 1, validation: 1
+- completed | flow-worker | validation | handoff: runtime_projection | Validation for feature-3 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
+- pending | flow-worker | execution | handoff: runtime_projection | feature-5 — Feature feature-5 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
+- pending | flow-worker | execution | handoff: runtime_projection | feature-6 — Feature feature-6 | next: Waiting for execution selection. | evidence: file targets: 1, verification: 1
+- completed | flow-planner | planning | handoff: runtime_projection | Planning | next: Plan is approved; no planning action needed. | evidence: features: 10
+- completed | flow-worker | execution | handoff: runtime_projection | feature-1 — Feature feature-1 | next: No action needed. | evidence: file targets: 1, verification: 1
 - 6 more task progress rows omitted.
 
 ## Plan

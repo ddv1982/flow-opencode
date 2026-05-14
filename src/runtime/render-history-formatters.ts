@@ -20,9 +20,15 @@ export function renderExecutionHistoryLine(
 	return `${item.recordedAt} | ${item.featureId} | ${item.status} | ${item.summary}`;
 }
 
+function formatTaskProgressHandoff(row: TaskProgressRow): string {
+	return row.handoffMode
+		? `${row.handoffMode} (${row.handoffSource})`
+		: row.handoffSource;
+}
+
 export function renderTaskProgressLine(row: TaskProgressRow): string {
 	return [
-		`${row.status} | ${row.ownerRole} | ${row.phase} | ${toInlineText(row.subject)}`,
+		`${row.status} | ${row.ownerRole} | ${row.phase} | handoff: ${formatTaskProgressHandoff(row)} | ${toInlineText(row.subject)}`,
 		`next: ${toInlineText(row.next)}`,
 		...(row.evidence.length > 0
 			? [`evidence: ${row.evidence.map(toInlineText).join(", ")}`]

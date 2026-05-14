@@ -53,7 +53,7 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | --- | --- | --- |
 | `/flow-plan` | `flow-planner` | Planning tools: `flow_plan_start`, `flow_plan_context_record`, `flow_plan_apply`, `flow_plan_approve`, `flow_plan_select_features` |
 | `/flow-run` | `flow-worker` | Execution tools: `flow_run_start`, `flow_review_record_feature`, `flow_review_record_final`, `flow_run_complete_feature`; where Task/subagent handoff is supported, the worker can ask `flow-reviewer` for an independent fresh-context approval pass before persistence |
-| `/flow-auto` | `flow-auto` | Autonomous coordinator starts with `flow_auto_prepare`, leaves native OpenCode image/file attachments in host/model context, then routes planning/execution/review through `flow-planner`, `flow-worker`, and `flow-reviewer` Task handoffs where supported while runtime tools remain the state authority |
+| `/flow-auto` | `flow-auto` | Autonomous coordinator starts with `flow_auto_prepare`, leaves native OpenCode image/file attachments in host/model context, then reports per-phase `handoffMode` (`task_subagent`, `inline_role`, or `not_supported`) while routing non-trivial planning/execution/review through `flow-planner`, `flow-worker`, and `flow-reviewer` Task handoffs where supported and keeping runtime tools as the state authority |
 | `/flow-status` | `flow-control` | `flow_status` |
 | `/flow-doctor` | `flow-control` | `flow_doctor` |
 | `/flow-history` | `flow-control` | `flow_history`, `flow_history_show` |
@@ -61,7 +61,7 @@ Command registration lives in `src/config.ts`, with the read-only audit command 
 | `/flow-reset` | `flow-control` | `flow_reset_feature` |
 | `/flow-review` | `flow-auditor` | Read-only audit prompt plus `flow_review_render` |
 
-`flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. Native OpenCode owns image/file attachments; Flow tools and prompts leave that host/model context untouched and must not introduce Flow-owned attachment files without a new explicit product requirement and tests. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, and prompts must never edit `.flow` state directly.
+`flow-auto` is the coordinator-facing entrypoint for task/subagent orchestration. Its injected agent config allows Task handoffs to `flow-planning-researcher`, `flow-planner`, `flow-worker`, and `flow-reviewer`; `flow-worker` can hand off to `flow-reviewer` for an independent fresh-context approval pass. Before each planning, execution, and review phase, `flow-auto` reports `handoffMode` exactly as `task_subagent`, `inline_role`, or `not_supported`, plus the target role and reason. `task_subagent` means an actual OpenCode Task/subagent handoff; `inline_role` means tiny, sequential, or shared-context work stayed in the current role context; `not_supported` means Task was unavailable, denied, or not permission-allowed. Native OpenCode owns image/file attachments; Flow tools and prompts leave that host/model context untouched and must not introduce Flow-owned attachment files without a new explicit product requirement and tests. Those handoffs are orchestration only: runtime tools remain the only authority for Flow state transitions, prompts must never edit `.flow` state directly, and derived task-progress rows are runtime projections rather than proof of actual child sessions.
 
 ## Generated skills
 
@@ -124,7 +124,7 @@ Ownership rules:
 
 - Runtime writes `.flow/**`; prompts and docs must not prescribe alternate state paths.
 - Native OpenCode owns image/file attachment handling; `.flow/**` remains session state and derived docs only.
-- Task/subagent handoffs do not bypass runtime ownership; they still report back through runtime tools instead of mutating `.flow/**` directly.
+- Task/subagent handoffs do not bypass runtime ownership; they still report back through runtime tools instead of mutating `.flow/**` directly. Reviewers and audit surfaces remain leaf-like reporting roles by default, and derived task-progress rows are runtime projections rather than child-session telemetry.
 - State shape changes require schema, persistence, recovery, and migration/recovery consideration.
 - Rendered docs are derived artifacts, not the source of workflow truth.
 - Read-only `/flow-review` reports are returned to the caller; Flow does not own a persisted review-history tree.

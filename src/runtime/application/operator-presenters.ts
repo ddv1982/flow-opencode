@@ -34,6 +34,12 @@ function renderLatestFailedAttemptLines(
 	];
 }
 
+function formatTaskProgressHandoff(row: TaskProgressRow): string {
+	return row.handoffMode
+		? `${row.handoffMode} (${row.handoffSource})`
+		: row.handoffSource;
+}
+
 function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
 	const selected = selectOperatorTaskProgressRows(rows);
 	if (selected.length === 0) {
@@ -43,9 +49,9 @@ function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
 	return [
 		"Task progress:",
 		...selected.map((row) => {
-			const subject = toInlineSummaryText(row.subject, 80);
-			const next = toInlineSummaryText(row.next, 100);
-			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | ${subject} | next: ${next}`;
+			const subject = toInlineSummaryText(row.subject, 55);
+			const next = toInlineSummaryText(row.next, 75);
+			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | handoff: ${formatTaskProgressHandoff(row)} | ${subject} | next: ${next}`;
 		}),
 	];
 }

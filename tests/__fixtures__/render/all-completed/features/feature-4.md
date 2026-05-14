@@ -9,7 +9,7 @@
 
 ## Task Progress
 
-- completed | flow-worker | execution | feature-4 — Feature feature-4 | next: No action needed. | evidence: file targets: 1, verification: 1
+- completed | flow-worker | execution | handoff: runtime_projection | feature-4 — Feature feature-4 | next: No action needed. | evidence: file targets: 1, verification: 1
 
 ## Description
 

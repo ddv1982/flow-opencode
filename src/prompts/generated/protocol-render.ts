@@ -7,6 +7,7 @@ import {
 } from "../../core/protocols";
 import {
 	FLOW_AUTHORITATIVE_TOOL_JSON_RULE,
+	FLOW_HANDOFF_MODE_PROGRESS_RULE,
 	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
 } from "../fragments";
 import { type FlowPromptMode, getFlowModeContract } from "../mode-contracts";
@@ -107,6 +108,7 @@ function renderOutcomeFirstFrame(mode: FlowPromptMode): string[] {
 		`- ${renderEvidenceBudget(mode)}`,
 		`- ${renderValidationExpectation(mode)}`,
 		"- Progress style: for multi-step or tool-heavy work, send one brief visible update naming the target result and first step, then report only meaningful phase changes, evidence, blockers, or final outcome.",
+		...(mode === "flow-auto" ? [FLOW_HANDOFF_MODE_PROGRESS_RULE] : []),
 		`- ${renderFinalAnswerShape(mode)}`,
 	];
 }

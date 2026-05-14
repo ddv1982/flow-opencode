@@ -3,6 +3,7 @@ import type { Feature, Session } from "./schema";
 import {
 	compactEvidence,
 	type OperatorLike,
+	runtimeProjectionHandoffFields,
 	type TaskProgressRow,
 } from "./summary-task-progress-model";
 import {
@@ -82,6 +83,7 @@ function planningRow(
 						? "Review or approve the draft plan."
 						: "Create a draft plan.")),
 		source: hasPlan ? "plan" : "planning",
+		...runtimeProjectionHandoffFields(),
 	};
 }
 
@@ -143,6 +145,7 @@ function featureRow(
 					? "No action needed."
 					: "Waiting for execution selection.",
 		source: "execution",
+		...runtimeProjectionHandoffFields(),
 	};
 }
 

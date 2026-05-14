@@ -6,6 +6,11 @@ import {
 } from "../contracts";
 import { renderExampleBlocks, renderPromptSections } from "../format";
 import {
+	FLOW_HANDOFF_MODE_DECISION_RULE,
+	FLOW_HANDOFF_MODE_PROGRESS_RULE,
+	FLOW_WORKER_REVIEW_TASK_RULE,
+} from "../fragments";
+import {
 	renderAutoSkillReferences,
 	renderFallbackContract,
 	renderProtocolHeader,
@@ -97,6 +102,7 @@ ${renderFallbackContract(
 )}
 - Execute exactly one active feature; do not turn a worker handoff into autonomous multi-feature execution.
 - Run targeted validation before success claims; on the final completion path use broad validation plus the runtime-owned final review.
+${FLOW_WORKER_REVIEW_TASK_RULE}
 - If validation cannot run, record the next-best check, why it is weaker, and the exact gap before success or blocker reporting.
 - Review changed files plus connected context; changed files are the seed, not the boundary.
 - Worker results should match the compact execution contract:
@@ -126,6 +132,8 @@ ${renderFallbackContract(
 - Empty input or \`resume\` is resume-only; if no active session exists, stop and request a goal instead of inferring one.
 - Native OpenCode owns file/image attachments; use them as host/model context when available, but do not call Flow tools to materialize them.
 - Stop on missing_goal, recommend_confirm, or human_required decision gates.
+${FLOW_HANDOFF_MODE_DECISION_RULE}
+${FLOW_HANDOFF_MODE_PROGRESS_RULE}
 - Keep one feature active until clean, blocked, or replanned; never advance while review findings remain.
 - When a Flow tool returns structured recovery metadata or a retryable/auto-resolvable outcome, satisfy the stated prerequisite and use the canonical recovery/reset runtime path when present before stopping.
 - On the final completion path, require broad validation and a passing final review before completion.

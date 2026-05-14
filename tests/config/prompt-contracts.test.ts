@@ -206,6 +206,9 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_MODE_CONTRACTS["flow-auto"].requiredBehavior).toContain(
 			"Stop on missing goal or human decision gates.",
 		);
+		expect(FLOW_MODE_CONTRACTS["flow-auto"].requiredBehavior).toContain(
+			"For each planning, execution, and review phase, report handoffMode as exactly task_subagent, inline_role, or not_supported before acting; do not treat derived task-progress rows as proof of an actual OpenCode Task/subagent handoff.",
+		);
 		expect(FLOW_MODE_CONTRACTS["flow-run"].requiredBehavior).toContain(
 			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
 		);
@@ -370,12 +373,23 @@ describe("prompt and command config contracts", () => {
 			expect(surface).toContain("recommend_confirm");
 			expect(surface).toContain("human_required");
 			expect(surface).toContain("Keep one feature active");
+			expect(surface).toContain("handoffMode");
+			expect(surface).toContain("task_subagent");
+			expect(surface).toContain("inline_role");
+			expect(surface).toContain("not_supported");
+			expect(surface).toContain("target: <role>");
+			expect(surface).toContain(
+				"derived task-progress rows are runtime projections",
+			);
+			expect(surface).toContain("not proof of actual child sessions");
 			expect(surface).toContain("final completion path");
 			expect(surface).toContain("passing final review");
 		}
 		expect(FLOW_MODE_CONTRACTS["flow-auto"].allowedFlowTools).not.toContain(
 			"flow_attachments_materialize",
 		);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Remain leaf-like");
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("do not delegate further");
 	});
 
 	test("audit command template keeps read-only review behavior with calibrated depth mapping and a readable default output", () => {

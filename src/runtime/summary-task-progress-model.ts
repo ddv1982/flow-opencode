@@ -38,7 +38,18 @@ export type TaskProgressRow = {
 		| "validation"
 		| "reviewer_decision"
 		| "operator";
+	handoffMode?: "inline_role" | "task_subagent" | "not_supported";
+	handoffSource: "runtime_projection";
 };
+
+export function runtimeProjectionHandoffFields(): Pick<
+	TaskProgressRow,
+	"handoffSource"
+> {
+	return {
+		handoffSource: "runtime_projection",
+	};
+}
 
 export type OperatorLike = {
 	phase: string;

@@ -1059,6 +1059,130 @@
 		]
 	},
 	{
+		"id": "auto-handoff-task-subagent-nontrivial-work",
+		"mode": "flow-auto",
+		"title": "Auto mode reports task_subagent for non-trivial bounded work",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare first. Phase: planning — handoffMode: task_subagent — target: flow-planner — reason: non-trivial plan decomposition benefits from fresh context; use an actual OpenCode Task/subagent handoff before applying runtime tools. When planner artifacts return, call flow_plan_start, flow_plan_apply, and flow_plan_approve as the runtime permits. Phase: execution — handoffMode: task_subagent — target: flow-worker — reason: bounded implementation should run in a fresh child context. Phase: review — handoffMode: task_subagent — target: flow-reviewer — reason: independent approval is non-trivial and supported. Next step: follow the runtime next step after child artifacts return.",
+		"minPassingScore": 6,
+		"expectedToolMentions": [
+			"flow_auto_prepare",
+			"flow_plan_start",
+			"flow_plan_apply",
+			"flow_plan_approve"
+		],
+		"forbiddenToolMentions": ["flow_session_close"],
+		"requiredResponseSnippets": [
+			"handoffMode: task_subagent",
+			"target: flow-planner",
+			"target: flow-worker",
+			"target: flow-reviewer",
+			"actual OpenCode Task/subagent handoff"
+		],
+		"forbiddenResponseSnippets": ["proof of actual child sessions"],
+		"nextStepSnippets": ["runtime next step"]
+	},
+	{
+		"id": "auto-handoff-inline-role-tiny-shared-context",
+		"mode": "flow-auto",
+		"title": "Auto mode reports inline_role for tiny shared-context work",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare first. Phase: execution — handoffMode: inline_role — target: flow-worker contract — reason: the change is tiny, sequential, and tightly shared-context, so Task split would add overhead. Continue by applying the worker contract inline, run targeted validation, and keep progress prose outside worker result and finalReview fields. Next step: follow the runtime next step.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": ["flow_session_close"],
+		"requiredResponseSnippets": [
+			"handoffMode: inline_role",
+			"target: flow-worker contract",
+			"tiny, sequential, and tightly shared-context",
+			"Task split would add overhead"
+		],
+		"forbiddenResponseSnippets": [
+			"actual OpenCode Task/subagent handoff occurred"
+		],
+		"nextStepSnippets": ["runtime next step"]
+	},
+	{
+		"id": "auto-handoff-not-supported-task-unavailable",
+		"mode": "flow-auto",
+		"title": "Auto mode reports not_supported when Task is unavailable",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare first. Phase: review — handoffMode: not_supported — target: flow-reviewer — reason: Task/subagent invocation is unavailable or denied; no actual Task handoff occurred, so continue with the fallback contract inline. After evidence-backed approval, call flow_review_record_feature. Next step: follow the runtime next step.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare", "flow_review_record_feature"],
+		"forbiddenToolMentions": ["flow_session_close"],
+		"requiredResponseSnippets": [
+			"handoffMode: not_supported",
+			"target: flow-reviewer",
+			"Task/subagent invocation is unavailable or denied",
+			"no actual Task handoff occurred"
+		],
+		"forbiddenResponseSnippets": ["child session proved"],
+		"nextStepSnippets": ["runtime next step"]
+	},
+	{
+		"id": "auto-bad-derived-progress-proves-child-session",
+		"mode": "flow-auto",
+		"title": "Auto mode regression treats derived task progress as child-session proof",
+		"origin": "calibration",
+		"sourcePaths": [
+			"src/prompts/mode-contracts.ts",
+			"src/core/protocols/roles.ts",
+			"src/prompts/generated/command-templates.ts",
+			"src/prompts/commands.ts",
+			"src/prompts/generated/role-prompts.ts",
+			"src/prompts/agents.ts",
+			"src/prompts/fragments.ts"
+		],
+		"modelOutput": "Call flow_auto_prepare. The derived task-progress rows show planning, execution, and review, so proof of actual child sessions exists and actual child subagents happened. I will not report handoffMode because the runtime projection already proves delegation. Next step: complete.",
+		"minPassingScore": 6,
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": ["flow_session_close"],
+		"requiredResponseSnippets": [
+			"handoffMode",
+			"task_subagent",
+			"inline_role",
+			"not_supported"
+		],
+		"forbiddenResponseSnippets": [
+			"proof of actual child sessions",
+			"actual child subagents happened"
+		],
+		"nextStepSnippets": ["runtime next step"],
+		"expectedFailures": [
+			"required_behavior_present",
+			"forbidden_behavior_absent",
+			"next_step_calibrated"
+		]
+	},
+	{
 		"id": "worker-bad-progress-inside-worker-result",
 		"mode": "flow-worker",
 		"title": "Worker mode regression pollutes structured worker result with progress narration",

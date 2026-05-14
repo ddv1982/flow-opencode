@@ -51,6 +51,16 @@ describe("flow prompt mode contracts", () => {
 			expect(contract.requiredBehavior.length).toBeGreaterThan(0);
 			expect(contract.stopCondition.length).toBeGreaterThan(0);
 		}
+
+		expect(getFlowModeContract("flow-auto").requiredBehavior).toContain(
+			"For each planning, execution, and review phase, report handoffMode as exactly task_subagent, inline_role, or not_supported before acting; do not treat derived task-progress rows as proof of an actual OpenCode Task/subagent handoff.",
+		);
+		expect(getFlowModeContract("flow-worker").requiredBehavior).toContain(
+			"When requesting reviewer approval, distinguish an actual flow-reviewer Task handoff from inline or not_supported review fallback.",
+		);
+		expect(getFlowModeContract("flow-reviewer").requiredBehavior).toContain(
+			"Remain leaf-like: do not delegate further by default; return an evidence-backed decision.",
+		);
 	});
 
 	test("source ownership paths are first-party files", () => {

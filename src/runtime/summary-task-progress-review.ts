@@ -2,6 +2,7 @@ import { finalReviewPolicyForPlan, summarizeCompletion } from "./domain";
 import type { ReviewerDecision, Session } from "./schema";
 import {
 	compactEvidence,
+	runtimeProjectionHandoffFields,
 	type TaskProgressRow,
 } from "./summary-task-progress-model";
 
@@ -30,6 +31,7 @@ export function latestFailedAttemptRow(
 			failure.recoveryHint ??
 			"Inspect the failed tool JSON recovery details before retrying.",
 		source: "operator",
+		...runtimeProjectionHandoffFields(),
 	};
 }
 
@@ -93,6 +95,7 @@ export function validationRow(session: Session): TaskProgressRow | null {
 				? "Validation is complete; continue review or completion."
 				: "Fix validation findings, then rerun validation.",
 		source: "validation",
+		...runtimeProjectionHandoffFields(),
 	};
 }
 
@@ -133,6 +136,7 @@ export function reviewerRow(session: Session): TaskProgressRow | null {
 				? "Review is complete; continue the next runtime step."
 				: "Address reviewer findings before continuing.",
 		source: "reviewer_decision",
+		...runtimeProjectionHandoffFields(),
 	};
 }
 
@@ -162,5 +166,6 @@ export function pendingFinalReviewRow(
 		blocker: null,
 		next: `Run broad validation and record the ${policy} final review.`,
 		source: "operator",
+		...runtimeProjectionHandoffFields(),
 	};
 }

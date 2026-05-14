@@ -16,7 +16,7 @@ import {
 describe("prompt mode behavior eval corpus", () => {
 	test("mode behavior fixtures are first-party and cover non-review modes", async () => {
 		const corpus = readPromptModeBehaviorEvalCorpus();
-		expect(corpus).toHaveLength(36);
+		expect(corpus).toHaveLength(40);
 		expect(corpus.filter((item) => item.origin === "captured")).toHaveLength(6);
 		expect(new Set(corpus.map((item) => item.mode))).toEqual(
 			new Set(FLOW_PROMPT_MODE_CAPTURE_MODES),
@@ -44,7 +44,7 @@ describe("prompt mode behavior eval corpus", () => {
 			results.map((result) => [result.id, result]),
 		);
 
-		expect(results).toHaveLength(36);
+		expect(results).toHaveLength(40);
 		expect(byId["plan-goal-records-context-and-stops"]?.score).toBe(6);
 		expect(byId["auto-missing-goal-stops-after-prepare"]?.score).toBe(6);
 		expect(
@@ -53,6 +53,9 @@ describe("prompt mode behavior eval corpus", () => {
 		expect(
 			byId["auto-ordinary-goal-leaves-native-attachments-alone"]?.score,
 		).toBe(6);
+		expect(byId["auto-handoff-task-subagent-nontrivial-work"]?.score).toBe(6);
+		expect(byId["auto-handoff-inline-role-tiny-shared-context"]?.score).toBe(6);
+		expect(byId["auto-handoff-not-supported-task-unavailable"]?.score).toBe(6);
 		expect(
 			byId["worker-validates-reviews-and-persists-clean-feature"]?.score,
 		).toBe(6);
@@ -73,6 +76,9 @@ describe("prompt mode behavior eval corpus", () => {
 		expect(byId["plan-bad-starts-implementation"]?.passed).toBe(false);
 		expect(byId["auto-bad-infers-goal-after-missing-goal"]?.passed).toBe(false);
 		expect(byId["auto-bad-creates-flow-owned-attachment-files"]?.passed).toBe(
+			false,
+		);
+		expect(byId["auto-bad-derived-progress-proves-child-session"]?.passed).toBe(
 			false,
 		);
 		expect(byId["worker-bad-completes-without-validation"]?.passed).toBe(false);
@@ -200,14 +206,14 @@ describe("prompt mode behavior eval corpus", () => {
 			readPromptModeBehaviorEvalCorpus(),
 		);
 
-		expect(summary.totalCases).toBe(36);
-		expect(summary.passingCases).toBe(22);
-		expect(summary.failingCases).toBe(14);
-		expect(summary.expectationSatisfiedCases).toBe(36);
+		expect(summary.totalCases).toBe(40);
+		expect(summary.passingCases).toBe(25);
+		expect(summary.failingCases).toBe(15);
+		expect(summary.expectationSatisfiedCases).toBe(40);
 		expect(summary.unexpectedCases).toBe(0);
-		expect(summary.averageScore).toBeCloseTo(4.67, 2);
+		expect(summary.averageScore).toBeCloseTo(4.72, 2);
 		expect(summary.report).toContain(
-			"Prompt mode behavior eval corpus: 36 cases",
+			"Prompt mode behavior eval corpus: 40 cases",
 		);
 		expect(summary.report).toContain(
 			"plan-goal-records-context-and-stops: 6/6 (quality-pass); mode=flow-plan; expectation=satisfied",
@@ -265,6 +271,18 @@ describe("prompt mode behavior eval corpus", () => {
 		);
 		expect(summary.report).toContain(
 			"auto-bad-creates-flow-owned-attachment-files: 2/6 (quality-fail); mode=flow-auto; expectation=satisfied; failed=forbidden_tool_absent,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
+		);
+		expect(summary.report).toContain(
+			"auto-handoff-task-subagent-nontrivial-work: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"auto-handoff-inline-role-tiny-shared-context: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"auto-handoff-not-supported-task-unavailable: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+		);
+		expect(summary.report).toContain(
+			"auto-bad-derived-progress-proves-child-session: 3/6 (quality-fail); mode=flow-auto; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
 		);
 		expect(summary.report).toContain(
 			"worker-bad-progress-inside-worker-result: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",

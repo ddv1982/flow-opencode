@@ -4,6 +4,10 @@ import {
 	renderTaggedBlock,
 } from "../format";
 import {
+	FLOW_HANDOFF_MODE_DECISION_RULE,
+	FLOW_HANDOFF_MODE_PROGRESS_RULE,
+} from "../fragments";
+import {
 	renderAutoSkillReferences,
 	renderFallbackContract,
 	renderProtocolHeader,
@@ -137,6 +141,8 @@ ${renderFallbackContract(
 - If the argument string is empty or \`resume\`, resume the active session only; if no active session exists, stop and request a goal instead of inferring one.
 - Native OpenCode owns file/image attachments; use them as host/model context when available, but do not call Flow tools to materialize them.
 - Stop on \`missing_goal\`, \`recommend_confirm\`, or \`human_required\` decision gates.
+${FLOW_HANDOFF_MODE_DECISION_RULE}
+${FLOW_HANDOFF_MODE_PROGRESS_RULE}
 - Keep the current feature active until it is clean, blocked, or replanned; never advance while review findings remain.
 - When a Flow tool returns structured recovery metadata or a retryable/auto-resolvable outcome, satisfy the stated prerequisite and use the canonical recovery/reset runtime path when present before stopping.
 - On the final completion path, require broad validation, a passing final review, and runtime-owned completion evidence.

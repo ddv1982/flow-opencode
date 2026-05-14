@@ -98,6 +98,7 @@ function taskProgressRow(
 		blocker: null,
 		next: `Next for ${id}.`,
 		source: "execution",
+		handoffSource: "runtime_projection",
 	};
 }
 
@@ -516,7 +517,11 @@ describe("runtime summary", () => {
 		const summary = renderSessionStatusSummary(session);
 		const taskLine = summary
 			.split("\n")
-			.find((line) => line.startsWith("- flow-worker | execution | active |"));
+			.find((line) =>
+				line.startsWith(
+					"- flow-worker | execution | active | handoff: runtime_projection |",
+				),
+			);
 		expect(taskLine).toBeDefined();
 		expect(taskLine?.includes("\n")).toBe(false);
 		expect(taskLine).toContain(" / ");
@@ -534,8 +539,8 @@ describe("runtime summary", () => {
 				"Working on: setup-runtime — Create runtime helpers (in_progress)",
 				"Progress: 0/2 completed",
 				"Task progress:",
-				"- flow-worker | execution | active | setup-runtime — Create runtime helpers | next: Continue the active feature through validation and review.",
-				"- flow-worker | execution | pending | execute-feature — Implement execution flow | next: Waiting for execution selection.",
+				"- flow-worker | execution | active | handoff: runtime_projection | setup-runtime — Create runtime helpers | next: Continue the active feature through validation and review.",
+				"- flow-worker | execution | pending | handoff: runtime_projection | execute-feature — Implement execution flow | next: Waiting for execution selection.",
 				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
@@ -599,8 +604,8 @@ describe("runtime summary", () => {
 				"Command: /flow-session activate test-session",
 				"Progress: 0/2 completed",
 				"Task progress:",
-				"- flow-planner | planning | ready | Planning | next: Review or refine the draft plan, then approve it when ready.",
-				"- flow-worker | execution | pending | setup-runtime — Create runtime helpers | next: Waiting for execution selection.",
+				"- flow-planner | planning | ready | handoff: runtime_projection | Planning | next: Review or refine the draft plan, then approve it when ready.",
+				"- flow-worker | execution | pending | handoff: runtime_projection | setup-runtime — Create runtime helpers | next: Waiting for execution selection.",
 				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
@@ -619,6 +624,7 @@ describe("runtime summary", () => {
 					phase: "execution",
 					status: "blocked",
 					source: "execution",
+					handoffSource: "runtime_projection",
 				}),
 			]),
 		);
@@ -755,6 +761,7 @@ describe("runtime summary", () => {
 	                "evidence": [
 	                  "features: 2",
 	                ],
+	                "handoffSource": "runtime_projection",
 	                "id": "planning",
 	                "next": "Plan is approved; no planning action needed.",
 	                "ownerRole": "flow-planner",
@@ -773,6 +780,7 @@ describe("runtime summary", () => {
 	                  "verification status: not_recorded",
 	                ],
 	                "featureId": "setup-runtime",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:setup-runtime",
 	                "next": "Ask the operator to provide API credentials.",
 	                "ownerRole": "flow-worker",
@@ -788,6 +796,7 @@ describe("runtime summary", () => {
 	                  "verification: 1",
 	                ],
 	                "featureId": "execute-feature",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:execute-feature",
 	                "next": "Waiting for execution selection.",
 	                "ownerRole": "flow-worker",
@@ -906,6 +915,7 @@ describe("runtime summary", () => {
 	                "evidence": [
 	                  "features: 1",
 	                ],
+	                "handoffSource": "runtime_projection",
 	                "id": "planning",
 	                "next": "Plan is approved; no planning action needed.",
 	                "ownerRole": "flow-planner",
@@ -924,6 +934,7 @@ describe("runtime summary", () => {
 	                  "verification status: passed",
 	                ],
 	                "featureId": "setup-runtime",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:setup-runtime",
 	                "next": "No action needed.",
 	                "ownerRole": "flow-worker",
@@ -938,6 +949,7 @@ describe("runtime summary", () => {
 	                  "passed: bun test — Runtime tests passed.",
 	                ],
 	                "featureId": "setup-runtime",
+	                "handoffSource": "runtime_projection",
 	                "id": "validation:setup-runtime",
 	                "next": "Validation is complete; continue review or completion.",
 	                "ownerRole": "flow-worker",
@@ -955,6 +967,7 @@ describe("runtime summary", () => {
 	                  "reviewed surfaces: 3",
 	                  "Final review checked the runtime path and validation evidence.",
 	                ],
+	                "handoffSource": "runtime_projection",
 	                "id": "review:final",
 	                "next": "Review is complete; continue the next runtime step.",
 	                "ownerRole": "flow-reviewer",
@@ -1028,6 +1041,7 @@ describe("runtime summary", () => {
 	                "evidence": [
 	                  "features: 2",
 	                ],
+	                "handoffSource": "runtime_projection",
 	                "id": "planning",
 	                "next": "Review or refine the draft plan, then approve it when ready.",
 	                "ownerRole": "flow-planner",
@@ -1043,6 +1057,7 @@ describe("runtime summary", () => {
 	                  "verification: 1",
 	                ],
 	                "featureId": "setup-runtime",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:setup-runtime",
 	                "next": "Waiting for execution selection.",
 	                "ownerRole": "flow-worker",
@@ -1058,6 +1073,7 @@ describe("runtime summary", () => {
 	                  "verification: 1",
 	                ],
 	                "featureId": "execute-feature",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:execute-feature",
 	                "next": "Waiting for execution selection.",
 	                "ownerRole": "flow-worker",
@@ -1136,6 +1152,7 @@ describe("runtime summary", () => {
 	                "evidence": [
 	                  "features: 2",
 	                ],
+	                "handoffSource": "runtime_projection",
 	                "id": "planning",
 	                "next": "Plan is approved; no planning action needed.",
 	                "ownerRole": "flow-planner",
@@ -1152,6 +1169,7 @@ describe("runtime summary", () => {
 	                  "validation: 0",
 	                ],
 	                "featureId": "setup-runtime",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:setup-runtime",
 	                "next": "Continue the active feature through validation and review.",
 	                "ownerRole": "flow-worker",
@@ -1167,6 +1185,7 @@ describe("runtime summary", () => {
 	                  "verification: 1",
 	                ],
 	                "featureId": "execute-feature",
+	                "handoffSource": "runtime_projection",
 	                "id": "feature:execute-feature",
 	                "next": "Waiting for execution selection.",
 	                "ownerRole": "flow-worker",

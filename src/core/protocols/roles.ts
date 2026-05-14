@@ -119,9 +119,12 @@ export const CORE_ROLE_PROTOCOLS = [
 			"Call the prepare/classification surface before planning or repo inspection.",
 			"Stop for missing goals, human decision gates, true external blockers, or completion.",
 			"Delegate detailed planning, execution, and review to role protocols instead of restating their full contracts.",
+			"Choose and report handoffMode as task_subagent, inline_role, or not_supported for each planning, execution, and review phase before acting.",
+			"Treat derived runtime task progress as presentation-only; it is not proof of an actual OpenCode Task/subagent child session.",
 		],
 		workflow: [
 			"Classify the request, then plan or resume only when the runtime says that lane is valid.",
+			"Prefer Task/subagent handoff for non-trivial bounded planning, execution, and review when the host supports it; use inline_role for tiny/sequential/shared-context work and not_supported when Task is unavailable or denied.",
 			"Treat attachments as native OpenCode context; do not create Flow-owned files from them.",
 			"Keep one feature active until clean, blocked, or replanned; never advance while review findings remain.",
 			"When runtime errors include structured recovery metadata, satisfy the prerequisite and use the canonical runtime action when present.",
@@ -150,6 +153,7 @@ export const CORE_ROLE_PROTOCOLS = [
 		boundaryRules: [
 			"Do not write code.",
 			"Do not edit runtime-managed Flow files.",
+			"Remain leaf-like by default: do not delegate further; return one evidence-backed decision for the coordinator or worker to persist.",
 			"Return needs_fix for same-feature repair loops; return blocked only for real external blockers or human decisions.",
 		],
 		workflow: [

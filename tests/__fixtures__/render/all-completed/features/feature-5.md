@@ -9,8 +9,8 @@
 
 ## Task Progress
 
-- completed | flow-worker | execution | feature-5 — Feature feature-5 | next: No action needed. | evidence: file targets: 1, verification: 1, validation: 1, verification status: passed
-- completed | flow-worker | validation | Validation for feature-5 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
+- completed | flow-worker | execution | handoff: runtime_projection | feature-5 — Feature feature-5 | next: No action needed. | evidence: file targets: 1, verification: 1, validation: 1, verification status: passed
+- completed | flow-worker | validation | handoff: runtime_projection | Validation for feature-5 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
 
 ## Description
 
