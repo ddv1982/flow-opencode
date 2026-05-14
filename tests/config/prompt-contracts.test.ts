@@ -176,14 +176,20 @@ describe("prompt and command config contracts", () => {
 		}
 	});
 
-	test("plan contract exposes the runtime-owned final review policy field", () => {
+	test("plan contract exposes calibrated final review policy and strictReview guidance", () => {
 		expect(FLOW_PLAN_CONTRACT).toContain(
-			"finalReviewPolicy?: broad | detailed",
+			"finalReviewPolicy?: broad | detailed, strictReview?: true",
 		);
 		expect(FLOW_PLAN_CONTRACT).toContain("reviewScope?: {");
 		expect(FLOW_PLAN_CONTRACT).toContain("planning.reviewFindings?:");
 		expect(FLOW_PLAN_CONTRACT).toContain(
 			"broad review-and-fix/codebase-review goals with no findings must start as goalMode: review",
+		);
+		expect(FLOW_PLAN_CONTRACT).toContain(
+			"choose broad for one localized implementation file or small DOM/CSS/accessibility tweaks",
+		);
+		expect(FLOW_PLAN_CONTRACT).toContain(
+			"priorityMode: strict_scope alone is scope discipline and does not imply strictReview",
 		);
 		expect(FLOW_PLAN_CONTRACT).toContain(
 			"planning.packageManagerAmbiguous?: true",
@@ -238,10 +244,22 @@ describe("prompt and command config contracts", () => {
 			"never return status: ok until targeted validation is complete and featureReview has no blocking findings",
 		);
 		expect(FLOW_WORKER_CONTRACT).toContain("validationScope: broad");
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"runtime-owned final review matching deliveryPolicy.finalReviewPolicy",
+		);
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"omit non-required behavior classes instead of padding not_applicable entries",
+		);
+		expect(FLOW_WORKER_CONTRACT).toContain(
+			"when deliveryPolicy.finalReviewPolicy is broad, keep the final review proportional",
+		);
 		expect(FLOW_WORKER_CONTRACT).toContain("reviewScopeLedger?");
 		expect(FLOW_WORKER_CONTRACT).toContain("exampleReviewScopeLedger");
 		expect(FLOW_WORKER_CONTRACT).toContain(
 			"Completion gate guidance (descriptor-projected, runtime enforcement remains authoritative):",
+		);
+		expect(FLOW_WORKER_CONTRACT).not.toContain(
+			"detailed cross-feature by default",
 		);
 		expect(FLOW_WORKER_CONTRACT).not.toContain("_from_raw");
 	});
@@ -319,6 +337,15 @@ describe("prompt and command config contracts", () => {
 		);
 		expect(FLOW_REVIEWER_CONTRACT).toContain(
 			"adversarial failure-mode classes",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"when reviewDepth is broad, keep review proportional",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"do not treat priorityMode: strict_scope alone as strictReview governance",
+		);
+		expect(FLOW_REVIEWER_CONTRACT).toContain(
+			"omit non-required behavior classes instead of padding not_applicable entries",
 		);
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Do not write code");
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(

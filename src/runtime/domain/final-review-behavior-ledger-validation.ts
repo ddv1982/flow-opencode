@@ -4,6 +4,7 @@ import type {
 	FinalReviewBehaviorRiskClass,
 	FinalReviewValidationCoverage,
 } from "./final-review-behavior-risks";
+import { normalizeBehaviorRiskClassName } from "./final-review-canonicalization";
 
 export type BehaviorValidationLedgerTarget = Pick<
 	FinalReviewBehaviorCoverageTarget,
@@ -47,6 +48,45 @@ function validationCoverageForRisk(
 			commands.has(item.command.trim()) &&
 			item.behaviorClasses.includes(riskClass),
 	);
+}
+
+function duplicateRiskClasses(riskClasses: readonly string[]): string[] {
+	const seen = new Set<string>();
+	const duplicates = new Set<string>();
+	for (const riskClass of riskClasses) {
+		const normalized = normalizeBehaviorRiskClassName(riskClass);
+		if (seen.has(normalized)) {
+			duplicates.add(normalized);
+			continue;
+		}
+		seen.add(normalized);
+	}
+	return [...duplicates];
+}
+
+function duplicateBehaviorCheckReasons(
+	behaviorChecks: readonly FinalReviewBehaviorCheck[],
+): string[] {
+	return duplicateRiskClasses(
+		behaviorChecks.map((check) => check.riskClass),
+	).map(
+		(riskClass) =>
+			`behaviorChecks must contain at most one entry per riskClass: ${riskClass}`,
+	);
+}
+
+function duplicateValidationCoverageReasons(
+	validationCoverage: readonly FinalReviewValidationCoverage[],
+): string[] {
+	const reasons: string[] = [];
+	for (const [index, item] of validationCoverage.entries()) {
+		for (const riskClass of duplicateRiskClasses(item.behaviorClasses)) {
+			reasons.push(
+				`validationCoverage[${index}].behaviorClasses must contain at most one entry per riskClass: ${riskClass}`,
+			);
+		}
+	}
+	return reasons;
 }
 
 export function behaviorValidationLedgerFailureReasons(
@@ -97,6 +137,11 @@ export function behaviorValidationLedgerFailureReasons(
 			);
 		}
 	}
+
+	reasons.push(
+		...duplicateBehaviorCheckReasons(behaviorChecks),
+		...duplicateValidationCoverageReasons(validationCoverage),
+	);
 
 	if (requiredRisks.length === 0) {
 		return reasons;

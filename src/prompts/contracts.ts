@@ -21,13 +21,15 @@ const FLOW_PLAN_CONTRACT_BASE = `Persist a plan with:
 - goalMode?: implementation | review | review_and_fix
 - decompositionPolicy?: atomic_feature | iterative_refinement | open_ended
 - completionPolicy?: { minCompletedFeatures?: number }
-- deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean, finalReviewPolicy?: broad | detailed }
+- deliveryPolicy?: { priorityMode?: strict_scope | balanced | quality_first, stopRule?: ship_when_clean | ship_when_core_done | ship_when_threshold_met, deferAllowed?: boolean, finalReviewPolicy?: broad | detailed, strictReview?: true }
 - notes?: string[]
 
 Plan rules:
 - review/review_and_fix plans must declare review scope through reviewScope or fileTargets for every target/domain the runtime must account.
 - reviewScope adds domain/surface targets; it does not narrow or replace fileTargets unless fileTargets are intentionally omitted.
 - Use goalMode: review_and_fix only when concrete findings already exist and are recorded in planning.reviewFindings; broad review-and-fix/codebase-review goals with no findings must start as goalMode: review for audit/discovery, then replan review_and_fix after findings are recorded.
+- Match deliveryPolicy.finalReviewPolicy to implementation risk: choose broad for one localized implementation file or small DOM/CSS/accessibility tweaks with direct validation and no state/lifecycle/async/persistence/release/tooling/schema risk; choose detailed for actual multi-domain source behavior changes, runtime transitions, persistence/recovery, adapter/tool schemas, release automation, prompt/runtime semantic contracts, review/review_and_fix work, or explicit high-assurance implementation.
+- Set deliveryPolicy.strictReview true only for explicit high-assurance implementation or review/review_and_fix strict governance, and include a rationale in decisions/notes; priorityMode: strict_scope alone is scope discipline and does not imply strictReview.
 
 Record planning context separately via flow_plan_context_record or flow_plan_apply({ plan, planning: ... }) when needed — not inside \`plan\`.
 - planning.repoProfile?: string[]
@@ -88,17 +90,17 @@ Status rules:
 - if outcome.kind is replan_required, include replanReason, failedAssumption, and recommendedAdjustment
 - never return status: ok with a non-completion outcome
 - never return status: ok until targeted validation is complete and featureReview has no blocking findings
-- when the active feature is the final completion path for the session, run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy (detailed cross-feature by default), set finalReview.reviewDepth to match deliveryPolicy.finalReviewPolicy, and use validationScope: broad
+- when the active feature is the final completion path for the session, run broad validation, include finalReview from the runtime-owned final review matching deliveryPolicy.finalReviewPolicy, set finalReview.reviewDepth to match deliveryPolicy.finalReviewPolicy, and use validationScope: broad
 - finalReview must always include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
-- changed artifacts are review seeds, not the final review boundary; include connected context and cross-surface behavior coverage before approval
-- when async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity risks are applicable, include finalReview.behaviorChecks entries that record checked paths or explicit gaps/not-applicable outcomes
+- changed artifacts are review seeds, not the final review boundary; include connected context and cross-surface behavior coverage required by deliveryPolicy.finalReviewPolicy and the actual risk profile before approval
+- when async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity risks are truly required, include finalReview.behaviorChecks entries with result passed or gap_recorded; omit non-required behavior classes instead of padding not_applicable entries
 - when validation is used to justify final review success, map each relied-on command through finalReview.validationCoverage and keep commands aligned with validationRun
-- set finalReview.remainingGaps to an empty array only when every applicable behavior class is explicitly checked as passed or not_applicable
+- set finalReview.remainingGaps to an empty array only when every truly required behavior class is passed, or each required gap is explicitly recorded in behaviorChecks/validationCoverage with no additional unrecorded gaps
 - finalReview.evidenceRefs.changedArtifacts must reference actual artifactsChanged paths, and finalReview.evidenceRefs.validationCommands must reference actual validationRun commands from the current run
 - top-level evidencePackets are compact packet references for planning/execution context the worker reused or extended; they do not replace artifactsChanged, validationRun, featureReview, or finalReview evidenceRefs
 - finalReview.evidencePackets is optional read-only metadata for selected/excluded context, exact sources, relationship hypotheses, ambiguities, known exclusions, already-covered findings, and validation evidence; do not use it as a substitute for required finalReview.evidenceRefs
 - finalReview.reviewedSurfaces must cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
-- when deliveryPolicy.finalReviewPolicy is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
+- when deliveryPolicy.finalReviewPolicy is broad, keep the final review proportional to changed files, validation evidence, and local connected context; when it is detailed, include finalReview.integrationChecks and finalReview.regressionChecks, and make sure reviewedSurfaces covers validation_evidence plus at least one cross-feature surface
 - treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending
 - for review_and_fix work, include reviewFindingClosures before claiming success; each original finding must have a stable findingRef, status, code fixRefs, testRefs, validationRefs that match validationRun.command values, and residualRisk
 - final review_and_fix completion must close every planning.reviewFindings findingRef, including findings closed by earlier completed features
@@ -165,10 +167,10 @@ Reviewer rules:
 - for scope: final, use reviewPurpose completion_gate
 - for scope: final, include reviewDepth matching deliveryPolicy.finalReviewPolicy
 - for scope: final, include reviewedSurfaces, evidenceSummary, validationAssessment, and evidenceRefs describing what was checked
-- for scope: final, changed files are required evidence but not the review boundary; include connected context and integration surfaces discovered from changed files, relationships, state/lifecycle ownership, tests, and validation evidence
-- for scope: final, when async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity risks are applicable, include behaviorChecks entries that record checked paths or explicit gaps/not-applicable outcomes
+- for scope: final, changed files are required evidence but not the review boundary; include connected context and integration surfaces discovered from changed files, relationships, state/lifecycle ownership, tests, and validation evidence when deliveryPolicy.finalReviewPolicy or the actual risk profile requires them
+- for scope: final, when async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity risks are truly required, include behaviorChecks entries with result passed or gap_recorded; omit non-required behavior classes instead of padding not_applicable entries
 - for scope: final, when validation is used to justify success, map each relied-on command through validationCoverage and align commands with recorded validation evidence
-- for scope: final, keep remainingGaps empty only when every applicable behavior class is explicitly checked as passed or not_applicable
+- for scope: final, keep remainingGaps empty only when every truly required behavior class is passed, or each required gap is explicitly recorded in behaviorChecks/validationCoverage with no additional unrecorded gaps
 - for scope: final, when reviewContextPack is present, keep it grounded: reviewContextPack.changedFiles should map to reviewed changed artifacts, reviewContextPack.includedContext should capture connected context (not duplicate changed files only), and reviewContextPack.reviewedSurfaces should match reviewedSurfaces
 - for scope: final, when reviewContextPack.coverageGaps is non-empty, carry those gaps into remainingGaps and include suggestedValidation unless the pack already supplies it
 - for scope: final, distinguish directly changed files from connected context in summary/integrationChecks/regressionChecks/remainingGaps, and use remainingGaps to report uncovered product paths, missing or weak test evidences, and validation limits
@@ -176,8 +178,8 @@ Reviewer rules:
 - feature-scope evidencePackets are compact packet references; final-scope evidencePackets may include full packet metadata, but neither replaces concrete changed path or validation evidence
 - for scope: final, use evidencePackets only as optional read-only context/evidence metadata; do not let packet references replace concrete evidenceRefs
 - for scope: final, cover the execution-derived required surfaces from the current run, including changed_files when artifactsChanged is non-empty, validation_evidence when validationRun is recorded, and any touched docs/prompt, tooling/config, operator, release, or test surfaces
-- for scope: final, when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface
-- for scope: final, perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving
+- for scope: final, when reviewDepth is broad, keep review proportional to changed files, validation evidence, and local connected context; when reviewDepth is detailed, include integrationChecks and regressionChecks, and cover validation_evidence plus at least one cross-feature surface
+- for scope: final, perform the review depth required by deliveryPolicy.finalReviewPolicy before approving; do not treat priorityMode: strict_scope alone as strictReview governance
 - for scope: final in review/review_and_fix sessions, include reviewScopeLedger entries that account for every declared review scope target/domain with statuses reviewed_no_findings, finding_closed, deferred, out_of_scope, or blocked; include evidenceRefs and truthful residualRisk for each entry
 - when recovery details provide exampleReviewScopeLedger, reassess scope entries; scaffold-only, do not replay unchanged
 - if final-review persistence returns status: error, do not retry the same reviewer decision unchanged; inspect flow_status or recovery details and repair reviewScopeLedger evidenceRefs before retrying

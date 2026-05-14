@@ -10,6 +10,7 @@ import { samplePlan } from "./runtime-test-helpers";
 
 function startedSession(options?: {
 	finalReviewPolicy?: "broad" | "detailed";
+	priorityMode?: "strict_scope" | "balanced" | "quality_first";
 	strictReview?: boolean;
 }) {
 	const applied = applyPlan(
@@ -20,6 +21,9 @@ function startedSession(options?: {
 					deliveryPolicy: {
 						...(options.finalReviewPolicy
 							? { finalReviewPolicy: options.finalReviewPolicy }
+							: {}),
+						...(options.priorityMode
+							? { priorityMode: options.priorityMode }
 							: {}),
 						...(options.strictReview !== undefined
 							? { strictReview: options.strictReview }
@@ -319,6 +323,39 @@ describe("recordReviewerDecision scope validation", () => {
 			"shared_surfaces",
 			"changed_files",
 		]);
+	});
+
+	test("priorityMode strict_scope alone does not require review scope or behavior ledgers", () => {
+		const result = recordReviewerDecision(
+			startedSession({ priorityMode: "strict_scope" }),
+			{
+				scope: "final",
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Reviewed shell/game source changes and validation.",
+				validationAssessment: "Targeted behavior validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: [
+						"src/shell/sessionPanels.ts",
+						"src/game/navigation.ts",
+					],
+					validationCommands: ["bun test tests/sessionPanelActions.test.ts"],
+				},
+				integrationChecks: [
+					"Checked shell action and game navigation handoff.",
+				],
+				regressionChecks: ["Checked behavior validation evidence."],
+				remainingGaps: [],
+				status: "approved",
+				summary: "Final review looks good.",
+			},
+		);
+
+		expect(result.ok).toBe(true);
 	});
 
 	test("explicit strictReview final approval requires review scope ledger accounting", () => {

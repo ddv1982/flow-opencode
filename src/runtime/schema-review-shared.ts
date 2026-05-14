@@ -196,6 +196,49 @@ function addBehaviorCheckIssues(
 	addPriorRefsConflictIssue(value, context);
 }
 
+function duplicateRiskClasses(riskClasses: readonly string[]): string[] {
+	const seen = new Set<string>();
+	const duplicates = new Set<string>();
+	for (const riskClass of riskClasses) {
+		const normalized = normalizeBehaviorRiskClassName(riskClass);
+		if (seen.has(normalized)) {
+			duplicates.add(normalized);
+			continue;
+		}
+		seen.add(normalized);
+	}
+	return [...duplicates];
+}
+
+function addDuplicateBehaviorCheckIssues(
+	value: readonly { riskClass: string }[],
+	context: z.RefinementCtx,
+): void {
+	for (const riskClass of duplicateRiskClasses(
+		value.map((check) => check.riskClass),
+	)) {
+		context.addIssue({
+			code: z.ZodIssueCode.custom,
+			message: `behaviorChecks must contain at most one entry per riskClass: ${riskClass}`,
+		});
+	}
+}
+
+function addDuplicateValidationCoverageIssues(
+	value: readonly { behaviorClasses: readonly string[] }[],
+	context: z.RefinementCtx,
+): void {
+	for (const [index, item] of value.entries()) {
+		for (const riskClass of duplicateRiskClasses(item.behaviorClasses)) {
+			context.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: [index, "behaviorClasses"],
+				message: `validationCoverage[${index}].behaviorClasses must contain at most one entry per riskClass: ${riskClass}`,
+			});
+		}
+	}
+}
+
 type CanonicalBehaviorCheck = {
 	riskClass: z.infer<typeof BehaviorRiskClassSchema>;
 	result: z.infer<typeof BehaviorCheckResultSchema>;
@@ -271,6 +314,14 @@ export const RuntimeValidationCoverageSchema = z
 		canonicalizeTestEvidenceRefs,
 	) as unknown as z.ZodType<CanonicalValidationCoverage>;
 
+const RuntimeBehaviorCheckArraySchema = z
+	.array(RuntimeBehaviorCheckSchema)
+	.superRefine(addDuplicateBehaviorCheckIssues);
+
+const RuntimeValidationCoverageArraySchema = z
+	.array(RuntimeValidationCoverageSchema)
+	.superRefine(addDuplicateValidationCoverageIssues);
+
 export const ReviewContextPackSchema = z
 	.object({
 		task: NonEmptyTrimmedStringSchema,
@@ -338,8 +389,8 @@ const finalReviewCommonShape = {
 export const finalReviewInputSharedShape = {
 	...finalReviewCommonShape,
 	evidenceRefs: FinalReviewEvidenceRefsInputSchema,
-	behaviorChecks: z.array(RuntimeBehaviorCheckSchema).optional(),
-	validationCoverage: z.array(RuntimeValidationCoverageSchema).optional(),
+	behaviorChecks: RuntimeBehaviorCheckArraySchema.optional(),
+	validationCoverage: RuntimeValidationCoverageArraySchema.optional(),
 } as const;
 
 export const finalReviewPersistedSharedShape = {

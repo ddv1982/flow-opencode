@@ -27,7 +27,7 @@
 			"tests/runtime/final-review-contracts.test.ts"
 		],
 		"expectedSnippets": [
-			"run broad validation, include finalReview from the runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
+			"run broad validation, include finalReview from the runtime-owned final review matching deliveryPolicy.finalReviewPolicy",
 			"completionPolicy.minCompletedFeatures"
 		],
 		"forbiddenSnippets": ["targeted validation is enough for final completion"]
@@ -46,7 +46,7 @@
 			"status: approved | needs_fix | blocked",
 			"return needs_fix when implementation should continue on the same feature",
 			"include reviewDepth matching deliveryPolicy.finalReviewPolicy",
-			"perform the cross-feature review depth required by deliveryPolicy.finalReviewPolicy before approving",
+			"perform the review depth required by deliveryPolicy.finalReviewPolicy before approving",
 			"adversarial failure-mode classes",
 			"test-evidence authenticity"
 		],

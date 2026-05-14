@@ -2,7 +2,6 @@ import {
 	type BehaviorValidationLedgerTarget,
 	behaviorRefGroundingFailureReasons,
 	behaviorValidationLedgerFailureReasons,
-	declaredReviewScopePaths,
 	genericAppDomainForPath,
 	reviewContextPackHasAsyncEventSignal,
 } from "./final-review-behavior-validation";
@@ -13,6 +12,7 @@ import {
 } from "./final-review-coverage-evidence";
 import { isTestPath } from "./final-review-coverage-paths";
 import type { ReviewContextPack } from "./review-content-discovery";
+import { describeReviewContextPackGroundingFailure } from "./review-context-grounding";
 
 export const FINAL_REVIEW_BEHAVIOR_RISK_CLASSES = [
 	"async_event_ordering",
@@ -89,30 +89,39 @@ export function deriveRequiredFinalReviewBehaviorRisks(
 ): FinalReviewBehaviorRiskClass[] {
 	const required = new Set<FinalReviewBehaviorRiskClass>();
 	const artifactPaths = artifactPathsForWorker(worker);
-	const reviewScopePaths = declaredReviewScopePaths(review);
-	const behaviorRiskPaths = [...artifactPaths, ...reviewScopePaths];
+	const validationCommands = validationCommandsForWorker(worker);
 	const genericAppDomains = new Set(
-		behaviorRiskPaths
+		artifactPaths
 			.map(genericAppDomainForPath)
 			.filter((domain): domain is string => domain !== null),
 	);
-	const testsTouched = behaviorRiskPaths.some(isTestPath);
+	const testsTouched = artifactPaths.some(isTestPath);
 	const pack = review.reviewContextPack;
+	const groundedPack =
+		pack &&
+		describeReviewContextPackGroundingFailure(pack, {
+			changedArtifacts: artifactPaths,
+			validationCommands,
+		}) === null
+			? pack
+			: undefined;
 
-	if (pack) {
+	if (groundedPack) {
 		if (
-			pack.includedContext.some((context) => context.reason === "state_owner")
+			groundedPack.includedContext.some(
+				(context) => context.reason === "state_owner",
+			)
 		) {
 			addRequired(required, "state_commit_rollback");
 		}
 		if (
-			pack.includedContext.some(
+			groundedPack.includedContext.some(
 				(context) => context.reason === "lifecycle_owner",
 			)
 		) {
 			addRequired(required, "lifecycle_reentrancy");
 		}
-		if (reviewContextPackHasAsyncEventSignal(pack)) {
+		if (reviewContextPackHasAsyncEventSignal(groundedPack)) {
 			addRequired(required, "async_event_ordering");
 		}
 	}
@@ -129,8 +138,8 @@ export function deriveRequiredFinalReviewBehaviorRisks(
 	if (
 		required.size > 0 &&
 		(testsTouched ||
-			validationCommandsForWorker(worker).length > 0 ||
-			(pack?.validationEvidence.length ?? 0) > 0)
+			validationCommands.length > 0 ||
+			(groundedPack?.validationEvidence.length ?? 0) > 0)
 	) {
 		addRequired(required, "test_evidence_authenticity");
 	}

@@ -19,7 +19,7 @@ describe("review prompt capture harness", () => {
 	test("loads providerless capture scenarios", async () => {
 		const scenarios = await readReviewCaptureScenarios();
 
-		expect(scenarios).toHaveLength(4);
+		expect(scenarios).toHaveLength(5);
 		expect(scenarios[0]?.id).toBe(
 			"flow-review-codebase-architecture-structured",
 		);
@@ -57,7 +57,7 @@ describe("review prompt capture harness", () => {
 
 	test("checks capture scenarios without writing prompt exports", async () => {
 		await expect(checkReviewCaptureScenarios()).resolves.toBe(
-			"Review capture scenarios valid: 4",
+			"Review capture scenarios valid: 5",
 		);
 	});
 
@@ -66,7 +66,7 @@ describe("review prompt capture harness", () => {
 		try {
 			const exports = await writeReviewCapturePromptExports({ outputDir });
 
-			expect(exports).toHaveLength(4);
+			expect(exports).toHaveLength(5);
 			const [captureExport] = exports;
 			if (!captureExport) {
 				throw new Error("Expected a review capture export.");
@@ -507,6 +507,266 @@ describe("review prompt capture harness", () => {
 
 		expect(temporalTrace.passed).toBeTrue();
 		expect(temporalTrace.actualFailures).toHaveLength(0);
+	});
+
+	test("behavior coverage scoring requires validation coverage commands to be recorded", () => {
+		const packetExpectations: PromptBehaviorPacketExpectations = {
+			requiredBehaviorChecks: [
+				{
+					riskClass: "async_event_ordering",
+					requiredText: ["deferred", "race"],
+					requireTestEvidenceOrGap: true,
+				},
+			],
+		};
+		const modelOutput = {
+			requestedDepth: "deep_audit",
+			achievedDepth: "deep_audit",
+			repoSummary:
+				"Reviewed the deferred callback race behavior with validation coverage.",
+			overallVerdict:
+				"No blocker found; validation coverage records the async event-ordering proof.",
+			discoveredSurfaces: [
+				{
+					name: "Deferred callback path",
+					category: "source_runtime",
+					reviewStatus: "directly_reviewed",
+					evidence: ["src/runtime/session.ts:1-80"],
+				},
+			],
+			coverageNotes: [
+				"Failure-mode review traced deferred callback race and event ordering.",
+			],
+			behaviorChecks: [
+				{
+					riskClass: "async_event_ordering",
+					result: "passed",
+					invariant:
+						"Deferred callback ordering must not let an older event race a newer session update.",
+					entrypointRefs: [],
+					stateOwnerRefs: [],
+					lifecycleOwnerRefs: [],
+					failurePath:
+						"Deferred callback can race event ordering across the session boundary.",
+					testEvidenceRefs: [],
+					validationRefs: [],
+				},
+			],
+			validationCoverage: [
+				{
+					command: "bun test tests/runtime/final-review-contracts.test.ts",
+					behaviorClasses: ["async_event_ordering"],
+					proves: ["Deferred callback race behavior is covered."],
+					gaps: [],
+					testEvidenceRefs: [],
+				},
+			],
+			validationRun: [
+				{
+					command: "bun test tests/runtime/final-review-contracts.test.ts",
+					status: "passed",
+					summary: "Targeted runtime final-review contracts passed.",
+				},
+			],
+			findings: [],
+			nextSteps: ["No follow-up needed for this focused scoring fixture."],
+		};
+
+		const recordedCoverage = scorePromptBehaviorModelOutput({
+			id: "flow-review-soft-focus-async-lifecycle-structured",
+			title: "Recorded validation coverage scoring fixture",
+			minPassingScore: 10,
+			packetExpectations,
+			modelOutput,
+		});
+		expect(recordedCoverage.passed).toBeTrue();
+		expect(recordedCoverage.actualFailures).toHaveLength(0);
+
+		const unrecordedCoverage = scorePromptBehaviorModelOutput({
+			id: "flow-review-soft-focus-async-lifecycle-structured",
+			title: "Unrecorded validation coverage scoring fixture",
+			minPassingScore: 10,
+			packetExpectations,
+			modelOutput: {
+				...modelOutput,
+				validationRun: [
+					{
+						command: "bun test tests/review-prompt-capture.test.ts",
+						status: "passed",
+						summary: "Different command was recorded.",
+					},
+				],
+			},
+		});
+		expect(unrecordedCoverage.passed).toBeFalse();
+		expect(unrecordedCoverage.actualFailures).toContain("schema_valid");
+	});
+
+	test("tiny DOM focus scenario accepts local review and rejects padded temporal ledgers", async () => {
+		const scenarios = await readReviewCaptureScenarios();
+		const scenario = scenarios.find(
+			(item) => item.id === "flow-review-tiny-dom-focus-localized-structured",
+		);
+		if (!scenario) {
+			throw new Error("Expected tiny DOM focus review capture scenario.");
+		}
+		const template = JSON.parse(buildReviewCaptureTemplate(scenario)) as {
+			minPassingScore: number;
+			packetExpectations?: PromptBehaviorPacketExpectations;
+		};
+		const packetExpectations = template.packetExpectations;
+		expect(packetExpectations?.requiredBehaviorChecks ?? []).toHaveLength(0);
+		expect(packetExpectations?.forbiddenBehaviorChecks).toEqual([
+			"async_event_ordering",
+			"lifecycle_reentrancy",
+			"state_commit_rollback",
+			"test_evidence_authenticity",
+		]);
+
+		const localReview = scorePromptBehaviorModelOutput({
+			id: scenario.id,
+			title: `${scenario.title} (local DOM/accessibility review)`,
+			minPassingScore: template.minPassingScore,
+			...(packetExpectations ? { packetExpectations } : {}),
+			modelOutput: {
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				repoSummary:
+					"Reviewed the tiny DOM focus cleanup with local CSS neighbor context and validation evidence.",
+				overallVerdict:
+					"No blocker found; accessibility semantics were checked locally without temporal behavior padding.",
+				discoveredSurfaces: [
+					{
+						name: "Changed DOM focus file: src/dom/setupShell.ts",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/dom/setupShell.ts:10-30"],
+					},
+					{
+						name: "Unchanged CSS neighbor context: src/styles/app-shell.css",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/styles/app-shell.css:1-60"],
+					},
+				],
+				coverageNotes: [
+					"Selected context: Changed DOM focus file: src/dom/setupShell.ts",
+					"Selected context: Unchanged CSS neighbor context: src/styles/app-shell.css",
+					"Selected context: Validation command: bun run validate",
+					"Relationship trace: Check DOM focus behavior against local shell markup and CSS neighbor context only.",
+					"Ambiguity/gap: Accessibility semantics may be relevant; temporal async/lifecycle/state behavior is out of scope unless a reviewed source path proves it.",
+					"Excluded: Do not infer async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity solely from the unchanged CSS neighbor.",
+					"Excluded: Do not pad behaviorChecks with async/lifecycle/state/test-evidence classes for this tiny localized DOM cleanup.",
+					"Accessibility semantics were checked for the deleted autofocus behavior; no async, lifecycle, or state owner was changed.",
+				],
+				behaviorChecks: [
+					{
+						riskClass: "accessibility_semantics",
+						result: "passed",
+						invariant:
+							"Removing autofocus must not hide focus state or break keyboard-visible semantics.",
+						entrypointRefs: ["src/dom/setupShell.ts:10-30"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath:
+							"Deleting autofocus could leave the shell without visible keyboard focus affordance.",
+						testEvidenceRefs: [],
+						validationRefs: ["bun run validate"],
+					},
+				],
+				validationCoverage: [
+					{
+						command: "bun run validate",
+						behaviorClasses: ["accessibility_semantics"],
+						proves: ["DOM focus cleanup validation was reviewed."],
+						gaps: [],
+						testEvidenceRefs: [],
+					},
+				],
+				validationRun: [
+					{
+						command: "bun run validate",
+						status: "passed",
+						summary: "Validation passed for the localized DOM focus cleanup.",
+					},
+				],
+				findings: [],
+				nextSteps: [
+					"No temporal ledger follow-up is needed for this localized DOM cleanup.",
+				],
+			},
+		});
+		expect(localReview.passed).toBeTrue();
+		expect(localReview.actualFailures).toHaveLength(0);
+
+		const paddedTemporal = scorePromptBehaviorModelOutput({
+			id: scenario.id,
+			title: `${scenario.title} (padded temporal ledgers)`,
+			minPassingScore: template.minPassingScore,
+			...(packetExpectations ? { packetExpectations } : {}),
+			modelOutput: {
+				requestedDepth: "deep_audit",
+				achievedDepth: "deep_audit",
+				repoSummary:
+					"Reviewed DOM focus cleanup but padded it with unrelated temporal ledgers.",
+				overallVerdict: "No blocker found.",
+				discoveredSurfaces: [
+					{
+						name: "Changed DOM focus file: src/dom/setupShell.ts",
+						category: "source_runtime",
+						reviewStatus: "directly_reviewed",
+						evidence: ["src/dom/setupShell.ts:10-30"],
+					},
+				],
+				coverageNotes: [
+					"Selected context: Changed DOM focus file: src/dom/setupShell.ts",
+					"Selected context: Unchanged CSS neighbor context: src/styles/app-shell.css",
+					"Selected context: Validation command: bun run validate",
+					"Relationship trace: Check DOM focus behavior against local shell markup and CSS neighbor context only.",
+					"Ambiguity/gap: Accessibility semantics may be relevant; temporal async/lifecycle/state behavior is out of scope unless a reviewed source path proves it.",
+					"Excluded: Do not infer async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity solely from the unchanged CSS neighbor.",
+					"Excluded: Do not pad behaviorChecks with async/lifecycle/state/test-evidence classes for this tiny localized DOM cleanup.",
+				],
+				behaviorChecks: [
+					{
+						riskClass: "async_event_ordering",
+						result: "not_applicable",
+						invariant: "No async owner changed.",
+						entrypointRefs: ["src/dom/setupShell.ts:10-30"],
+						stateOwnerRefs: [],
+						lifecycleOwnerRefs: [],
+						failurePath:
+							"No async event path exists in this localized deletion.",
+						testEvidenceRefs: [],
+						validationRefs: [],
+					},
+				],
+				validationCoverage: [
+					{
+						command: "bun run validate",
+						behaviorClasses: ["async_event_ordering"],
+						proves: [],
+						gaps: ["No async event path exists in this localized deletion."],
+						testEvidenceRefs: [],
+					},
+				],
+				validationRun: [
+					{
+						command: "bun run validate",
+						status: "passed",
+						summary: "Validation passed for the localized DOM focus cleanup.",
+					},
+				],
+				findings: [],
+				nextSteps: [
+					"Remove padded temporal ledgers from this localized review.",
+				],
+			},
+		});
+		expect(paddedTemporal.passed).toBeFalse();
+		expect(paddedTemporal.actualFailures).toContain(
+			"packet_boundaries_preserved",
+		);
 	});
 
 	test("scores a captured structured review without a model API", async () => {

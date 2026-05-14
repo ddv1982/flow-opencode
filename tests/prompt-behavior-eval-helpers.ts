@@ -62,6 +62,7 @@ export type PromptBehaviorPacketExpectations = {
 	alreadyCoveredFindings?: string[];
 	forbiddenDirectReview?: string[];
 	requiredDirectReview?: string[];
+	forbiddenBehaviorChecks?: PromptBehaviorBehaviorRiskClass[];
 	requiredBehaviorChecks?: PromptBehaviorRequiredBehaviorCheck[];
 };
 
@@ -220,6 +221,20 @@ export function validatePromptBehaviorPacketExpectations(
 		) {
 			throw new Error(`${caseId}.${fieldName} must be an array of strings.`);
 		}
+	}
+	const forbiddenBehaviorChecks = value.forbiddenBehaviorChecks;
+	if (
+		forbiddenBehaviorChecks !== undefined &&
+		(!Array.isArray(forbiddenBehaviorChecks) ||
+			forbiddenBehaviorChecks.some(
+				(entry) =>
+					typeof entry !== "string" ||
+					!BEHAVIOR_RISK_CLASSES.has(entry as PromptBehaviorBehaviorRiskClass),
+			))
+	) {
+		throw new Error(
+			`${caseId}.forbiddenBehaviorChecks must be an array of known behavior risk classes.`,
+		);
 	}
 	validateRequiredBehaviorChecks(value.requiredBehaviorChecks, caseId);
 }
@@ -423,8 +438,10 @@ function referencesHaveEvidence(refs: readonly string[]): boolean {
 function validationCoverageSatisfies(
 	coverage: ValidationCoverage,
 	riskClass: PromptBehaviorBehaviorRiskClass,
+	recordedValidationCommands: ReadonlySet<string>,
 ): boolean {
 	return (
+		recordedValidationCommands.has(coverage.command.trim()) &&
 		coverage.behaviorClasses.includes(riskClass) &&
 		(coverage.proves.length > 0 ||
 			coverage.gaps.length > 0 ||
@@ -476,6 +493,9 @@ function behaviorCheckSatisfiesRequirement(
 		return false;
 	}
 	if (requirement.requireTestEvidenceOrGap) {
+		const recordedValidationCommands = new Set(
+			report.validationRun.map((entry) => entry.command.trim()).filter(Boolean),
+		);
 		const hasTestEvidenceRef = referencesHaveEvidence(check.testEvidenceRefs);
 		const hasRecordedValidationRef = behaviorCheckHasRecordedValidationRef(
 			report,
@@ -485,7 +505,11 @@ function behaviorCheckSatisfiesRequirement(
 			check.result === "gap_recorded" && Boolean(check.remainingGap?.trim());
 		const hasCoverageTestEvidenceOrGap = (report.validationCoverage ?? []).some(
 			(coverage) =>
-				validationCoverageSatisfies(coverage, requirement.riskClass),
+				validationCoverageSatisfies(
+					coverage,
+					requirement.riskClass,
+					recordedValidationCommands,
+				),
 		);
 		if (
 			!hasTestEvidenceRef &&
@@ -572,6 +596,22 @@ function packetExpectationsPreserved(
 		(expectations.requiredDirectReview ?? []).some(
 			(value) => !directlyReviewedText.includes(value.toLowerCase()),
 		)
+	) {
+		return false;
+	}
+	const forbiddenBehaviorChecks = new Set(
+		expectations.forbiddenBehaviorChecks ?? [],
+	);
+	if (
+		forbiddenBehaviorChecks.size > 0 &&
+		((report.behaviorChecks ?? []).some((check) =>
+			forbiddenBehaviorChecks.has(check.riskClass),
+		) ||
+			(report.validationCoverage ?? []).some((coverage) =>
+				coverage.behaviorClasses.some((riskClass) =>
+					forbiddenBehaviorChecks.has(riskClass),
+				),
+			))
 	) {
 		return false;
 	}

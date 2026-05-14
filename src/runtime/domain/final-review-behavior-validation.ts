@@ -31,6 +31,8 @@ const FLOW_INFRASTRUCTURE_SRC_DOMAINS = new Set([
 
 const ASYNC_EVENT_TEXT_PATTERN =
 	/\b(async|await|promise|deferred?|race|event|listener|handler|callback|queue|timer|timeout|interval|concurrent|interleav(?:e|ing)|click)\b/i;
+const ASYNC_EVENT_PATH_PATTERN =
+	/\b(async|await|promise|deferred?|race|queue|timer|timeout|interval|concurrent|interleav(?:e|ing))\b/i;
 const REVIEW_SCOPE_WILDCARD_PATTERN = /[*?[\]{}]/;
 
 export function genericAppDomainForPath(path: string): string | null {
@@ -50,13 +52,11 @@ export function reviewContextPackHasAsyncEventSignal(
 ): boolean {
 	for (const context of pack.includedContext) {
 		if (
+			ASYNC_EVENT_PATH_PATTERN.test(context.path) ||
 			ASYNC_EVENT_TEXT_PATTERN.test(
-				[
-					context.path,
-					context.reason,
-					context.surface ?? "",
-					context.summary ?? "",
-				].join(" "),
+				[context.reason, context.surface ?? "", context.summary ?? ""].join(
+					" ",
+				),
 			)
 		) {
 			return true;
@@ -64,13 +64,10 @@ export function reviewContextPackHasAsyncEventSignal(
 	}
 	for (const relationship of pack.relationships) {
 		if (
+			ASYNC_EVENT_PATH_PATTERN.test(relationship.from) ||
+			ASYNC_EVENT_PATH_PATTERN.test(relationship.to) ||
 			ASYNC_EVENT_TEXT_PATTERN.test(
-				[
-					relationship.from,
-					relationship.to,
-					relationship.kind,
-					relationship.summary,
-				].join(" "),
+				[relationship.kind, relationship.summary].join(" "),
 			)
 		) {
 			return true;

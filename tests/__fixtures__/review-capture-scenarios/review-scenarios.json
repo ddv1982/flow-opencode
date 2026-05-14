@@ -130,6 +130,56 @@
 		}
 	},
 	{
+		"id": "flow-review-tiny-dom-focus-localized-structured",
+		"title": "Flow review tiny DOM focus localized audit",
+		"arguments": "detailed Review this tiny DOM focus cleanup packet. Keep review proportional to the local DOM/accessibility change and do not pad async/lifecycle/state ledgers. Return raw/structured JSON for eval scoring.",
+		"outputView": "structured",
+		"fileMap": "flow-opencode\n├── src\n│   ├── dom\n│   │   └── setupShell.ts +\n│   └── styles\n│       └── app-shell.css +\n├── tests\n│   └── domFocusSmoke.ts +\n└── package.json",
+		"notes": [
+			"This scenario is deliberately separate from the multi-domain soft-focus temporal incident.",
+			"A capture may account for DOM focus and accessibility semantics, but async/lifecycle/state ledgers are padding for this localized deletion."
+		],
+		"reviewPacket": {
+			"goal": "Verify a tiny deletion of two autofocus lines in src/dom/setupShell.ts using unchanged src/styles/app-shell.css only as neighbor context.",
+			"selectedContext": {
+				"included": [
+					"Changed DOM focus file: src/dom/setupShell.ts",
+					"Unchanged CSS neighbor context: src/styles/app-shell.css",
+					"Validation command: bun run validate"
+				],
+				"excluded": [
+					"Do not infer async_event_ordering, lifecycle_reentrancy, state_commit_rollback, or test_evidence_authenticity solely from the unchanged CSS neighbor."
+				]
+			},
+			"relationships": [
+				"Check DOM focus behavior against local shell markup and CSS neighbor context only."
+			],
+			"ambiguities": [
+				"Accessibility semantics may be relevant; temporal async/lifecycle/state behavior is out of scope unless a reviewed source path proves it."
+			],
+			"knownExclusions": [
+				"Do not pad behaviorChecks with async/lifecycle/state/test-evidence classes for this tiny localized DOM cleanup."
+			],
+			"evidenceRequirements": [
+				"Use first-party path:line evidence for src/dom/setupShell.ts and any CSS neighbor context reviewed.",
+				"If behaviorChecks are included, they should be limited to locally applicable DOM/accessibility semantics."
+			],
+			"doneWhen": [
+				"The output directly reviews the DOM focus file and validation evidence.",
+				"The output omits padded async/lifecycle/state/test-evidence behavior ledgers."
+			]
+		},
+		"scoringExpectations": {
+			"requiredDirectReview": ["Changed DOM focus file: src/dom/setupShell.ts"],
+			"forbiddenBehaviorChecks": [
+				"async_event_ordering",
+				"lifecycle_reentrancy",
+				"state_commit_rollback",
+				"test_evidence_authenticity"
+			]
+		}
+	},
+	{
 		"id": "flow-review-soft-focus-async-lifecycle-structured",
 		"title": "Flow review soft-focus async lifecycle incident audit",
 		"arguments": "detailed Review this providerless soft-focus-style change packet. Reject changed-files-only reasoning and keyword-only async/race claims. Return raw/structured JSON for eval scoring.",

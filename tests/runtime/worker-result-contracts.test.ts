@@ -1,7 +1,10 @@
 // Owns worker-result payload contract coverage previously grouped in
 // tests/runtime-completion-contracts.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
-import type { WorkerResult } from "../../src/runtime/schema";
+import {
+	type WorkerResult,
+	WorkerResultArgsSchema,
+} from "../../src/runtime/schema";
 import { createSession, saveSession } from "../../src/runtime/session";
 import {
 	applyPlan,
@@ -232,6 +235,89 @@ describe("runtime worker result contracts", () => {
 		const parsed = completeRun(reviewed.value, payload);
 
 		expect(parsed.ok).toBe(true);
+	});
+
+	test("worker finalReview input rejects duplicate behavior and validation coverage classes", () => {
+		const behaviorCheck = {
+			riskClass: "test_evidence_authenticity" as const,
+			result: "passed" as const,
+			invariant: "Tests exercise the product behavior path.",
+			entrypointRefs: ["src/runtime/session.ts"],
+			stateOwnerRefs: [],
+			lifecycleOwnerRefs: [],
+			failurePath: "Generic validation would miss stale action ordering.",
+			testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
+			validationRefs: ["bun test"],
+		};
+		const parsed = WorkerResultArgsSchema.safeParse({
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed runtime setup.",
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [
+				{ command: "bun test", status: "passed", summary: "Tests passed." },
+			],
+			validationScope: "broad",
+			decisions: [],
+			nextStep: "Complete the session.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: "setup-runtime",
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Looks good.",
+				blockingFindings: [],
+			},
+			finalReview: {
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary: "Reviewed changed files and validation evidence.",
+				validationAssessment: "Validation evidence was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: ["bun test"],
+				},
+				integrationChecks: ["Checked runtime integration."],
+				regressionChecks: ["Checked runtime regression evidence."],
+				remainingGaps: [],
+				behaviorChecks: [
+					{ ...behaviorCheck, riskClass: "test_oracle_authenticity" },
+					behaviorCheck,
+				],
+				validationCoverage: [
+					{
+						command: "bun test",
+						behaviorClasses: [
+							"test_oracle_authenticity",
+							"test_evidence_authenticity",
+						],
+						proves: ["Tests exercise the behavior path."],
+						gaps: [],
+						testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
+					},
+				],
+				status: "passed",
+				summary: "Final review passed.",
+				blockingFindings: [],
+			},
+		});
+
+		expect(parsed.success).toBe(false);
+		if (!parsed.success) {
+			const messages = parsed.error.issues.map((issue) => issue.message);
+			expect(messages).toContain(
+				"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
+			);
+			expect(messages).toContain(
+				"validationCoverage[0].behaviorClasses must contain at most one entry per riskClass: test_evidence_authenticity",
+			);
+		}
 	});
 
 	test("completeRun preserves optional worker-result fields without adapters", () => {

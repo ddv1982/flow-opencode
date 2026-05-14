@@ -10,6 +10,7 @@ import {
 	finalReviewBehaviorCoverageFailureReasons,
 	reviewContextPackHasSurfaceEvidence,
 } from "../../src/runtime/domain";
+import { behaviorValidationLedgerFailureReasons } from "../../src/runtime/domain/final-review-behavior-ledger-validation";
 import type { ReviewScopeRecoveryDetails } from "../../src/runtime/domain/review-scope-accounting";
 import {
 	FinalReviewSchema,
@@ -1190,7 +1191,7 @@ describe("runtime final review contracts", () => {
 		expect(matchingEvidence.ok).toBe(true);
 	});
 
-	test("broad review-mode final decisions derive behavior risks from declared scope", () => {
+	test("broad review-mode final decisions do not derive behavior risks from declared scope alone", () => {
 		const declaredTargets = [
 			"src/shell/sessionPanels.ts",
 			"src/game/navigation.ts",
@@ -1222,15 +1223,18 @@ describe("runtime final review contracts", () => {
 		expect(started.ok).toBe(true);
 		if (!started.ok) return;
 
-		const decision = recordReviewerDecision(started.value.session, {
-			scope: "final",
-			status: "approved",
-			summary: "Final review approved.",
-			reviewDepth: "detailed",
+		const worker = {
+			artifactsChanged: [{ path: "src/shell/sessionPanels.ts" }],
+			validationRun: [
+				{ command: "bun test tests/sessionPanelActions.test.ts" },
+			],
+		};
+		const review = {
+			reviewDepth: "detailed" as const,
 			reviewedSurfaces: [
-				"changed_files",
-				"shared_surfaces",
-				"validation_evidence",
+				"changed_files" as const,
+				"shared_surfaces" as const,
+				"validation_evidence" as const,
 			],
 			evidenceSummary:
 				"Reviewed the changed shell surface and declared broad review scope.",
@@ -1242,6 +1246,20 @@ describe("runtime final review contracts", () => {
 			integrationChecks: ["Checked declared shell/game/scene review scope."],
 			regressionChecks: ["Checked session panel validation evidence."],
 			remainingGaps: [],
+		};
+
+		const coverageFailure = describeFinalReviewCoverageFailure(
+			started.value.session,
+			worker,
+			review,
+		);
+		expect(coverageFailure).toBeNull();
+
+		const decision = recordReviewerDecision(started.value.session, {
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			...review,
 			reviewScopeLedger: declaredTargets.map((target) => ({
 				scopeId: `file_target:${target}`,
 				status: "reviewed_no_findings" as const,
@@ -1251,9 +1269,10 @@ describe("runtime final review contracts", () => {
 		});
 		expect(decision.ok).toBe(false);
 		if (!decision.ok) {
-			expect(decision.message).toContain("finalReviewCoverage");
-			expect(decision.message).toContain(
-				"must account for required behavior risk classes: async_event_ordering, lifecycle_reentrancy, state_commit_rollback, test_evidence_authenticity",
+			expect(decision.message).toContain("reviewScopeLedger");
+			expect(decision.message).not.toContain("finalReviewCoverage");
+			expect(decision.message).not.toContain(
+				"must account for required behavior risk classes",
 			);
 		}
 	});
@@ -1911,6 +1930,139 @@ describe("runtime final review contracts", () => {
 		).toBe(false);
 	});
 
+	test("direct behavior ledger validation rejects duplicate classes before required-risk checks", () => {
+		const behaviorCheck = {
+			riskClass: "test_evidence_authenticity" as const,
+			result: "passed" as const,
+			invariant: "Tests exercise the product behavior path.",
+			entrypointRefs: ["src/shell/sessionPanels.ts"],
+			stateOwnerRefs: [],
+			lifecycleOwnerRefs: [],
+			failurePath: "Generic validation would miss stale action ordering.",
+			testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+			validationRefs: ["bun test"],
+		};
+
+		const reasons = behaviorValidationLedgerFailureReasons(
+			["bun test"],
+			{
+				evidenceRefs: { validationCommands: ["bun test"] },
+				behaviorChecks: [behaviorCheck, behaviorCheck],
+				validationCoverage: [
+					{
+						command: "bun test",
+						behaviorClasses: [
+							"test_evidence_authenticity",
+							"test_evidence_authenticity",
+						],
+						proves: ["Panel action ordering was exercised."],
+						gaps: [],
+						testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+					},
+				],
+			},
+			[],
+		);
+
+		expect(reasons).toContain(
+			"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
+		);
+		expect(reasons).toContain(
+			"validationCoverage[0].behaviorClasses must contain at most one entry per riskClass: test_evidence_authenticity",
+		);
+	});
+
+	test("rejects duplicate behavior checks after canonical risk-class normalization", () => {
+		const baseFinalReview = {
+			scope: "final" as const,
+			status: "approved" as const,
+			summary: "Final review approved.",
+			reviewDepth: "broad" as const,
+			reviewedSurfaces: ["changed_files"],
+			evidenceSummary: "Reviewed changed files.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/shell/sessionPanels.ts"],
+				validationCommands: ["bun test"],
+			},
+		};
+		const behaviorCheck = {
+			riskClass: "test_evidence_authenticity" as const,
+			result: "passed" as const,
+			invariant: "Tests exercise the product behavior path.",
+			entrypointRefs: ["src/shell/sessionPanels.ts"],
+			stateOwnerRefs: [],
+			lifecycleOwnerRefs: [],
+			failurePath: "Generic validation would miss stale action ordering.",
+			testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+			validationRefs: ["bun test"],
+		};
+
+		const duplicateCanonical = FlowReviewRecordFinalArgsSchema.safeParse({
+			...baseFinalReview,
+			behaviorChecks: [behaviorCheck, behaviorCheck],
+		});
+		expect(duplicateCanonical.success).toBe(false);
+		if (!duplicateCanonical.success) {
+			expect(
+				duplicateCanonical.error.issues.map((issue) => issue.message),
+			).toContain(
+				"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
+			);
+		}
+
+		const duplicateAlias = FlowReviewRecordFinalArgsSchema.safeParse({
+			...baseFinalReview,
+			behaviorChecks: [
+				{ ...behaviorCheck, riskClass: "test_oracle_authenticity" },
+				behaviorCheck,
+			],
+		});
+		expect(duplicateAlias.success).toBe(false);
+		if (!duplicateAlias.success) {
+			expect(
+				duplicateAlias.error.issues.map((issue) => issue.message),
+			).toContain(
+				"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
+			);
+		}
+	});
+
+	test("rejects duplicate validation coverage behavior classes after canonicalization", () => {
+		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			reviewDepth: "broad",
+			reviewedSurfaces: ["changed_files"],
+			evidenceSummary: "Reviewed changed files.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/shell/sessionPanels.ts"],
+				validationCommands: ["bun test"],
+			},
+			validationCoverage: [
+				{
+					command: "bun test",
+					behaviorClasses: [
+						"test_oracle_authenticity",
+						"test_evidence_authenticity",
+					],
+					proves: ["Panel action ordering was exercised."],
+					gaps: [],
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
+				},
+			],
+		});
+
+		expect(parsed.success).toBe(false);
+		if (!parsed.success) {
+			expect(parsed.error.issues.map((issue) => issue.message)).toContain(
+				"validationCoverage[0].behaviorClasses must contain at most one entry per riskClass: test_evidence_authenticity",
+			);
+		}
+	});
+
 	test("accepts prior final-review terminology and emits canonical evidence fields", () => {
 		const priorFinalReview = {
 			status: "approved",
@@ -2125,6 +2277,63 @@ describe("runtime final review contracts", () => {
 		).toBeNull();
 	});
 
+	test("proportional tiny DOM focus change with unchanged CSS neighbor does not require temporal behavior ledger", () => {
+		const basePlan = samplePlan();
+		const applied = applyPlan(createSession("Review tiny DOM focus cleanup"), {
+			...basePlan,
+			deliveryPolicy: { strictReview: true },
+			features: [
+				{
+					...basePlan.features[0],
+					fileTargets: ["src/styles/app-shell.css"],
+					verification: ["bun run validate"],
+				},
+			],
+		});
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const failure = describeFinalReviewCoverageFailure(
+			applied.value,
+			{
+				artifactsChanged: [{ path: "src/dom/setupShell.ts" }],
+				validationRun: [{ command: "bun run validate" }],
+			},
+			{
+				reviewDepth: "detailed",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Reviewed the localized DOM focus cleanup, unchanged CSS neighbor context, and validation evidence.",
+				validationAssessment:
+					"bun run validate was reviewed for the tiny DOM focus cleanup; no async, lifecycle, state, or test-evidence behavior path was introduced by the unchanged CSS neighbor.",
+				evidenceRefs: {
+					changedArtifacts: ["src/dom/setupShell.ts"],
+					validationCommands: ["bun run validate"],
+				},
+				integrationChecks: [
+					"Checked the deleted autofocus behavior against the local DOM setup boundary and CSS neighbor context.",
+				],
+				regressionChecks: [
+					"Checked validation evidence for the localized DOM cleanup.",
+				],
+				remainingGaps: [],
+			},
+		);
+
+		const failureText = failure ?? "";
+		expect(failureText).not.toContain("async_event_ordering");
+		expect(failureText).not.toContain("lifecycle_reentrancy");
+		expect(failureText).not.toContain("state_commit_rollback");
+		expect(failureText).not.toContain("test_evidence_authenticity");
+		expect(failureText).not.toContain(
+			"must account for required behavior risk classes",
+		);
+	});
+
 	test("strict review grounds behavior validation refs and rejects needs_fix coverage", () => {
 		const session = strictReviewSession(
 			"Review soft-focus-like validation grounding",
@@ -2227,6 +2436,110 @@ describe("runtime final review contracts", () => {
 		);
 		expect(failure).toContain(
 			"must map evidenceRefs.validationCommands in validationCoverage",
+		);
+	});
+
+	test("grounded architectural-neighbor path names do not imply async behavior risk", () => {
+		const worker = {
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [{ command: "bun test tests/runtime.test.ts" }],
+		};
+		const reviewContextPack = buildReviewContextPack({
+			task: "Review runtime event helper context",
+			changedFiles: ["src/runtime/session.ts"],
+			includedContext: [
+				{
+					path: "src/runtime/event-listener-handler.ts",
+					reason: "architectural_neighbor",
+					summary: "Unchanged helper context reviewed as a neighbor.",
+				},
+			],
+			relationships: [
+				{
+					from: "src/runtime/session.ts",
+					to: "src/runtime/event-listener-handler.ts",
+					kind: "imports",
+					summary: "Changed runtime session imports this unchanged helper.",
+				},
+			],
+			validationEvidence: [{ command: "bun test tests/runtime.test.ts" }],
+		});
+
+		expect(
+			finalReviewBehaviorCoverageFailureReasons(worker, {
+				reviewContextPack,
+			}),
+		).toEqual([]);
+	});
+
+	test("grounded relationship summary can require async behavior accounting with generic kind", () => {
+		const worker = {
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [{ command: "bun test tests/runtime.test.ts" }],
+		};
+		const reviewContextPack = buildReviewContextPack({
+			task: "Review runtime async event ordering",
+			changedFiles: ["src/runtime/session.ts"],
+			includedContext: [
+				{
+					path: "src/runtime/session-events.ts",
+					reason: "architectural_neighbor",
+					summary: "Unchanged event context reviewed as a neighbor.",
+				},
+			],
+			relationships: [
+				{
+					from: "src/runtime/session.ts",
+					to: "src/runtime/session-events.ts",
+					kind: "calls",
+					summary:
+						"Deferred callback can race event ordering across the session boundary.",
+				},
+			],
+			validationEvidence: [{ command: "bun test tests/runtime.test.ts" }],
+		});
+
+		expect(
+			finalReviewBehaviorCoverageFailureReasons(worker, {
+				reviewContextPack,
+			}),
+		).toContain(
+			"must account for required behavior risk classes: async_event_ordering, test_evidence_authenticity",
+		);
+	});
+
+	test("grounded relationship kind can explicitly require async behavior accounting", () => {
+		const worker = {
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [{ command: "bun test tests/runtime.test.ts" }],
+		};
+		const reviewContextPack = buildReviewContextPack({
+			task: "Review runtime async event ordering",
+			changedFiles: ["src/runtime/session.ts"],
+			includedContext: [
+				{
+					path: "src/runtime/session-events.ts",
+					reason: "architectural_neighbor",
+					summary: "Unchanged event context reviewed as a neighbor.",
+				},
+			],
+			relationships: [
+				{
+					from: "src/runtime/session.ts",
+					to: "src/runtime/session-events.ts",
+					kind: "async_event_ordering",
+					summary: "The relationship explicitly marks async event ordering.",
+				},
+			],
+			validationEvidence: [{ command: "bun test tests/runtime.test.ts" }],
+		});
+
+		expect(
+			finalReviewBehaviorCoverageFailureReasons(worker, {
+				reviewContextPack,
+			}),
+		).toContain(
+			"must account for required behavior risk classes: async_event_ordering, test_evidence_authenticity",
 		);
 	});
 

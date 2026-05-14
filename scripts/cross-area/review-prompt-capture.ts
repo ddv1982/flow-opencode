@@ -375,6 +375,15 @@ function mergePacketExpectations(
 			merged[fieldName] = values;
 		}
 	}
+	const forbiddenBehaviorChecks = mergeStringArrays(
+		base.forbiddenBehaviorChecks,
+		explicit.forbiddenBehaviorChecks,
+	) as NonNullable<
+		PromptBehaviorPacketExpectations["forbiddenBehaviorChecks"]
+	> | undefined;
+	if (forbiddenBehaviorChecks) {
+		merged.forbiddenBehaviorChecks = forbiddenBehaviorChecks;
+	}
 	const requiredBehaviorChecks = [
 		...(base.requiredBehaviorChecks ?? []),
 		...(explicit.requiredBehaviorChecks ?? []),

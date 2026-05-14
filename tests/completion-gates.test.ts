@@ -21,6 +21,7 @@ function createStartedSession(options?: {
 	finalFeature?: boolean;
 	finalReviewPolicy?: "broad" | "detailed";
 	goalMode?: "implementation" | "review" | "review_and_fix";
+	priorityMode?: "strict_scope" | "balanced" | "quality_first";
 	strictReview?: boolean;
 	reviewerDecision?: Session["execution"]["lastReviewerDecision"];
 }): {
@@ -38,10 +39,15 @@ function createStartedSession(options?: {
 					minCompletedFeatures: 1,
 				},
 				deliveryPolicy:
-					options?.finalReviewPolicy || options?.strictReview
+					options?.finalReviewPolicy ||
+					options?.priorityMode ||
+					options?.strictReview
 						? {
 								...(options?.finalReviewPolicy
 									? { finalReviewPolicy: options.finalReviewPolicy }
+									: {}),
+								...(options?.priorityMode
+									? { priorityMode: options.priorityMode }
 									: {}),
 								...(options?.strictReview ? { strictReview: true } : {}),
 							}
@@ -1972,6 +1978,26 @@ describe("completion gates", () => {
 		if (!finalCompleted.ok) {
 			expect(finalCompleted.message).toContain(failedFindingRef);
 		}
+	});
+
+	test("priorityMode strict_scope alone allows final completion without strict review ledgers", () => {
+		const accepted = createStartedSession({
+			finalFeature: true,
+			priorityMode: "strict_scope",
+			reviewerDecision: createApprovedFinalReviewerDecision(),
+		});
+
+		const completed = validateSuccessfulCompletion(
+			accepted.session,
+			createWorkerResult(accepted.featureId, {
+				validationScope: "broad",
+				finalReview: createFinalReviewPayload(),
+			}),
+			accepted.featureId,
+			accepted.wasFinalFeature,
+		);
+
+		expect(completed.ok).toBe(true);
 	});
 
 	test("final completion enforces behavior accounting for risk-triggered final reviews", () => {
