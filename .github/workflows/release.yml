@@ -98,7 +98,21 @@ jobs:
             echo "package_version=${package_version}"
             echo "changelog_heading=${changelog_heading}"
             echo "release_notes_bytes=${release_notes_bytes}"
+            echo "opencode_smoke=passed"
+            echo "opencode_smoke_evidence=opencode-smoke-evidence.json"
+            echo "manual_live_opencode_required=true"
           } > release-evidence.txt
+
+      - name: Run OpenCode smoke evidence
+        run: >-
+          bun run smoke:opencode --
+          --skip-build
+          --flow-js "$PWD/flow.js"
+          --skill-bundle "$PWD/flow-skills.tar.gz"
+          --install-script "$PWD/install.sh"
+          --uninstall-script "$PWD/uninstall.sh"
+          --json opencode-smoke-evidence.json
+          --summary opencode-smoke-evidence.md
 
       - name: Upload release evidence artifact
         if: success()
@@ -110,6 +124,8 @@ jobs:
             release-notes.md
             flow.js.sha256
             flow-skills.tar.gz
+            opencode-smoke-evidence.json
+            opencode-smoke-evidence.md
           if-no-files-found: error
 
       - name: Publish GitHub release assets
