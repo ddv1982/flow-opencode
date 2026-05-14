@@ -32,7 +32,8 @@ Useful scripts:
 - `bun run test:deep`
 - `bun run typecheck`
 - `bun run check`
-- `bun run smoke:opencode` for automated OpenCode-oriented release smoke evidence; this does not replace manual live OpenCode UI validation
+- `bun run smoke:release` for the standard release-candidate smoke path; it prepares candidate assets and writes evidence under `prompt-exports/release-smoke/` by default
+- `bun run smoke:opencode` for the lower-level automated OpenCode-oriented smoke runner; this does not replace manual live OpenCode UI validation
 - `bun run report:prompt-eval`
 - `bun run eval:review-capture`
 - `bun run eval:review-capture:check`
@@ -67,7 +68,7 @@ Use the smallest tier that can prove the current change, then broaden before rel
 | Runtime invariant fast lane | Runtime/domain/transition confidence | `bun run test:fast`; `bun run test:replay` for snapshot/runtime invariant coverage |
 | Generated drift lane | Prompt, review, descriptor, or generated surface changes | `bun run check:generated-drift` |
 | Deep/randomized confidence | Broad regression confidence beyond focused tests | `bun run test:deep` or `bun run test:randomized` |
-| Install/release smoke | Before release candidates that touch OpenCode install, generated skills, or release packaging | `bun run smoke:opencode` for automated release-shaped evidence; still perform manual live OpenCode UI validation before claiming live host coverage |
+| Install/release smoke | Before release candidates that touch OpenCode install, generated skills, or release packaging | `bun run smoke:release` for the standard release-candidate asset/evidence path; use `bun run smoke:opencode` for lower-level runner diagnosis; still perform manual live OpenCode UI validation before claiming live host coverage |
 | Mainline readiness | Before release or cross-surface merge | `bun run check` |
 
 Hard gates block readiness. Advisory and diagnostic commands guide investigation only unless the maintainer contract promotes them with script, docs, and test updates. Focused checks are isolation tools, not replacements for `bun run check` before release or cross-surface changes.

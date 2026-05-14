@@ -145,7 +145,9 @@ Required checks:
 - `bun run build`
 - `bun run check:release-hygiene`
 - `bun run check:pack-invariants`
-- `bun run smoke:opencode` for automated release-shaped OpenCode smoke evidence; still perform manual live OpenCode UI validation before claiming live host coverage
+- `bun run smoke:release` for the standard release-candidate asset/evidence path; the generated manual-live checklist is evidence scaffolding only, not proof of live validation
+- `bun run smoke:opencode` for lower-level automated OpenCode smoke runner diagnosis
+- Still perform manual live OpenCode UI validation before claiming live host coverage
 - `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/skill-bundle.test.ts tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts`
 Do not:
 

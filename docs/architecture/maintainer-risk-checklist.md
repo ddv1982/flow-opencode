@@ -6,8 +6,9 @@ Canonical current-facing maps:
 
 - `docs/maintainer-contract.md` owns commands, tools, state paths, invariants, gate contracts, the surface-expansion freeze, and the compact "if you touch X, run Y" map.
 - `docs/contributor-map.md` owns contributor onboarding risk by area: read-first files, required checks, and "do not" rules.
+- `docs/release-process.md` owns the repeatable release-candidate smoke path and manual live OpenCode evidence protocol.
 
-If this checklist conflicts with either canonical file, update this checklist or delete the duplicate guidance. Do not treat this file as a second source of truth.
+If this checklist conflicts with any canonical file above, update this checklist or delete the duplicate guidance. Do not treat this file as a second source of truth.
 
 ## Merge-time risk check
 
