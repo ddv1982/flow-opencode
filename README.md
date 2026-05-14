@@ -170,20 +170,6 @@ There is one active Flow session per worktree. Activating another session parks 
 
 Flow refuses to write session state at filesystem roots or directly in `$HOME`. If a hidden directory outside the normal project root would become the mutable workspace root, Flow asks before writing `.flow/**` there.
 
-## Attachments
-
-When OpenCode reports current chat attachments to `/flow-auto`, Flow may import supported image attachments before planning or handing work to another agent.
-
-Supported imported image types:
-
-- PNG
-- JPEG
-- WebP
-- GIF
-- AVIF
-
-SVG, raw base64 blobs, filesystem paths, and HTTP URLs are not imported by the materialization tool. Imported images are written as normal project files using paths from Flow's runtime guidance, not under `.flow/**`.
-
 ## Agents and reasoning budgets
 
 Flow installs dedicated OpenCode agents for planning, execution, auto coordination, review, control commands, and standalone audit. In v2.0.29 and later, Flow emits OpenCode `reasoningEffort` hints for those agents:
