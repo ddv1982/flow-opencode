@@ -4,6 +4,10 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	ensureMutableWorkspacePermission,
+	MutableWorkspacePermissionError,
+} from "../src/adapters/opencode/tool-surface/mutable-workspace-permission";
+import {
 	closeSession,
 	createSession,
 	ensureWorkspace,
@@ -34,6 +38,37 @@ afterEach(() => {
 });
 
 describe("workspace root guards", () => {
+	test("adapter permission fails closed for hidden workspace roots when ask is unavailable", async () => {
+		const fakeHome = await makeTempDir("flow-home-");
+		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
+
+		try {
+			await withHomeEnv(fakeHome, async () => {
+				await mkdir(hiddenWorkspace, { recursive: true });
+
+				try {
+					await ensureMutableWorkspacePermission({ worktree: hiddenWorkspace });
+					throw new Error("expected hidden workspace permission rejection");
+				} catch (error) {
+					expect(error).toBeInstanceOf(MutableWorkspacePermissionError);
+					expect((error as MutableWorkspacePermissionError).code).toBe(
+						"MUTABLE_WORKSPACE_PERMISSION_REQUIRED",
+					);
+					expect((error as MutableWorkspacePermissionError).root).toBe(
+						hiddenWorkspace,
+					);
+					expect(String((error as Error).message)).toContain(
+						"ToolContext.ask is unavailable",
+					);
+				}
+
+				expect(existsSync(join(hiddenWorkspace, ".flow"))).toBe(false);
+			});
+		} finally {
+			rmSync(fakeHome, { recursive: true, force: true });
+		}
+	});
+
 	test("saveSession allows mutable roots under hidden home directories", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");

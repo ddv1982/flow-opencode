@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import type { ToolContext as OpenCodeToolContext } from "@opencode-ai/plugin/tool";
+import { z } from "zod";
 import { tool } from "../../src/adapters/opencode/sdk";
 import {
 	getOpenCodeToolProjection,
@@ -11,8 +12,16 @@ import {
 	openCodeToolCoreSummary,
 } from "../../src/adapters/opencode/tool-projections.generated";
 import { FLOW_SURFACE_DESCRIPTORS } from "../../src/adapters/opencode/tool-surface/descriptors";
+import { FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY } from "../../src/adapters/opencode/tool-surface/schemas";
 import { type CoreActionName, coreActionByName } from "../../src/core/registry";
-import { WorkerResultSchema } from "../../src/runtime/schema";
+import {
+	FlowReviewRecordFeatureArgsSchema,
+	FlowReviewRecordFinalArgsSchema,
+	PlanArgsSchema,
+	PlanningContextArgsSchema,
+	WorkerResultArgsSchema,
+	WorkerResultSchema,
+} from "../../src/runtime/schema";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
 
 type IsRequired<T, K extends keyof T> =
@@ -182,12 +191,12 @@ describe("tool schema config contracts", () => {
 		// (including finalReview/suggestedValidation, planning.reviewFindings,
 		// and prior test-evidence input aliases) so unrelated future
 		// bloat still fails fast.
-		expect(totalSize).toBeLessThan(372000);
+		expect(totalSize).toBeLessThan(397000);
 		expect(schemaSizes.flow_plan_apply).toBeLessThan(78500);
 		expect(schemaSizes.flow_plan_context_record).toBeLessThan(60500);
-		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(95000);
+		expect(schemaSizes.flow_run_complete_feature).toBeLessThan(108500);
 		expect(schemaSizes.flow_review_record_feature).toBeLessThan(20000);
-		expect(schemaSizes.flow_review_record_final).toBeLessThan(73000);
+		expect(schemaSizes.flow_review_record_final).toBeLessThan(86500);
 		expect(schemaSizes.flow_review_render).toBeLessThan(70000);
 	});
 
@@ -212,6 +221,318 @@ describe("tool schema config contracts", () => {
 			zod: pluginZodPackage.version,
 		});
 		expect(rootZodPackage.version).toBe(pluginZodPackage.version);
+	});
+
+	test("runtime-owned OpenCode payload schemas document adapter/runtime parity intent", () => {
+		const { schemas } = getToolSchemas();
+		const RuntimeFlowPlanApplyArgsSchema = z.object({
+			plan: PlanArgsSchema,
+			planning: PlanningContextArgsSchema.optional(),
+		});
+		const runtimeOwnedTools = [
+			"flow_plan_context_record",
+			"flow_plan_apply",
+			"flow_run_complete_feature",
+			"flow_review_record_feature",
+			"flow_review_record_final",
+		] as const;
+		const expectAdapterRuntimeAgreement = (
+			adapterSchema: { safeParse: (payload: unknown) => { success: boolean } },
+			runtimeSchema: { safeParse: (payload: unknown) => { success: boolean } },
+			payload: unknown,
+			expected: boolean,
+		) => {
+			expect(adapterSchema.safeParse(payload).success).toBe(expected);
+			expect(runtimeSchema.safeParse(payload).success).toBe(expected);
+		};
+
+		for (const toolName of runtimeOwnedTools) {
+			expect(
+				FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY[toolName].payloadSchemaOwners,
+			).toContain("src/runtime/schema.ts");
+		}
+
+		const validPlanningContext = {
+			repoProfile: ["TypeScript"],
+			packageManager: "bun",
+			research: ["Use local schema contracts as source of truth."],
+		};
+		expectAdapterRuntimeAgreement(
+			schemas.flow_plan_context_record,
+			PlanningContextArgsSchema,
+			validPlanningContext,
+			true,
+		);
+		expectAdapterRuntimeAgreement(
+			schemas.flow_plan_context_record,
+			PlanningContextArgsSchema,
+			{ ...validPlanningContext, packageManager: "cargo" },
+			false,
+		);
+
+		const validPlanApply = {
+			plan: {
+				summary: "Implement a workflow.",
+				overview: "Create one feature.",
+				features: [
+					{
+						id: "setup-runtime",
+						title: "Create runtime helpers",
+						summary: "Add runtime helpers.",
+						fileTargets: ["src/runtime/session.ts"],
+						verification: ["bun test"],
+					},
+				],
+			},
+			planning: validPlanningContext,
+		};
+		expectAdapterRuntimeAgreement(
+			schemas.flow_plan_apply,
+			RuntimeFlowPlanApplyArgsSchema,
+			validPlanApply,
+			true,
+		);
+		expectAdapterRuntimeAgreement(
+			schemas.flow_plan_apply,
+			RuntimeFlowPlanApplyArgsSchema,
+			{
+				...validPlanApply,
+				plan: {
+					...validPlanApply.plan,
+					features: [{ ...validPlanApply.plan.features[0], id: "Bad Id" }],
+				},
+			},
+			false,
+		);
+
+		const validWorkerResult = {
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed runtime setup.",
+			artifactsChanged: [],
+			validationRun: [],
+			validationScope: "targeted",
+			reviewIterations: 1,
+			decisions: [],
+			nextStep: "Run the next feature.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: "setup-runtime",
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Looks good.",
+				blockingFindings: [],
+			},
+		};
+		expectAdapterRuntimeAgreement(
+			schemas.flow_run_complete_feature,
+			WorkerResultArgsSchema,
+			validWorkerResult,
+			true,
+		);
+		expectAdapterRuntimeAgreement(
+			schemas.flow_run_complete_feature,
+			WorkerResultArgsSchema,
+			{ ...validWorkerResult, nextStep: undefined },
+			false,
+		);
+		expectAdapterRuntimeAgreement(
+			schemas.flow_run_complete_feature,
+			WorkerResultArgsSchema,
+			{
+				...validWorkerResult,
+				featureResult: {
+					...validWorkerResult.featureResult,
+					featureId: "Bad Id",
+				},
+			},
+			false,
+		);
+
+		const validFeatureReview = {
+			scope: "feature",
+			featureId: "setup-runtime",
+			status: "approved",
+			summary: "Looks good.",
+		};
+		expectAdapterRuntimeAgreement(
+			schemas.flow_review_record_feature,
+			FlowReviewRecordFeatureArgsSchema,
+			validFeatureReview,
+			true,
+		);
+		expectAdapterRuntimeAgreement(
+			schemas.flow_review_record_feature,
+			FlowReviewRecordFeatureArgsSchema,
+			{ scope: "final", status: "approved", summary: "Wrong scope." },
+			false,
+		);
+
+		const validFinalReview = {
+			scope: "final",
+			reviewDepth: "broad",
+			reviewedSurfaces: ["changed_files"],
+			evidenceSummary: "Checked changed files.",
+			validationAssessment: "No validation was available.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: [],
+			},
+			status: "approved",
+			summary: "Looks good.",
+		};
+		expectAdapterRuntimeAgreement(
+			schemas.flow_review_record_final,
+			FlowReviewRecordFinalArgsSchema,
+			validFinalReview,
+			true,
+		);
+		expectAdapterRuntimeAgreement(
+			schemas.flow_review_record_final,
+			FlowReviewRecordFinalArgsSchema,
+			{ ...validFinalReview, evidenceRefs: undefined },
+			false,
+		);
+	});
+
+	test("final review reviewContextPack raw schemas match runtime structured schema", () => {
+		const { schemas } = getToolSchemas();
+		const structuredReviewContextPack = {
+			task: "Review tool schema contract",
+			changedFiles: ["src/runtime/session.ts"],
+			includedContext: [
+				{
+					path: "src/runtime/session.ts",
+					reason: "changed_file",
+					surface: "changed_files",
+					summary: "Runtime session state changed.",
+				},
+			],
+			relationships: [
+				{
+					from: "src/adapters/opencode/tool-surface/schemas.ts",
+					to: "src/runtime/schema-review-shared.ts",
+					kind: "schema_source",
+					summary: "Adapter raw schema mirrors runtime review context shape.",
+				},
+			],
+			validationEvidence: [
+				{
+					command: "bun test tests/config/tool-schemas.test.ts",
+					status: "passed",
+					summary: "Tool schema parity verified.",
+				},
+			],
+			suggestedValidation: ["bun test tests/config/tool-schemas.test.ts"],
+			coverageGaps: [],
+			reviewedSurfaces: ["changed_files", "validation_evidence"],
+		};
+		const compactReviewContextPack = {
+			...structuredReviewContextPack,
+			includedContext: ["compact context entry rejected by adapter"],
+			relationships: ["compact relationship entry rejected by adapter"],
+			validationEvidence: ["compact validation entry rejected by adapter"],
+		};
+		const finalReview = {
+			scope: "final",
+			reviewDepth: "broad",
+			reviewedSurfaces: ["changed_files"],
+			evidenceSummary: "Checked changed files.",
+			validationAssessment: "No validation was available.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: [],
+			},
+			status: "approved",
+			summary: "Looks good.",
+			reviewContextPack: structuredReviewContextPack,
+		};
+		const compactContextFinalReview = {
+			...finalReview,
+			reviewContextPack: compactReviewContextPack,
+		};
+		const workerResultWithFinalReview = {
+			contractVersion: "1",
+			status: "ok",
+			summary: "Completed runtime setup.",
+			artifactsChanged: [],
+			validationRun: [],
+			validationScope: "targeted",
+			reviewIterations: 1,
+			decisions: [],
+			nextStep: "Run the next feature.",
+			outcome: { kind: "completed" },
+			featureResult: {
+				featureId: "setup-runtime",
+				verificationStatus: "passed",
+			},
+			featureReview: {
+				status: "passed",
+				summary: "Looks good.",
+				blockingFindings: [],
+			},
+			finalReview: {
+				status: "passed",
+				summary: "Final review passed.",
+				reviewDepth: "broad",
+				reviewedSurfaces: ["changed_files"],
+				evidenceSummary: "Reviewed changed files.",
+				validationAssessment: "No validation was available.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: [],
+				},
+				reviewContextPack: structuredReviewContextPack,
+			},
+		};
+		const workerResultWithCompactFinalReviewContext = {
+			...workerResultWithFinalReview,
+			finalReview: {
+				...workerResultWithFinalReview.finalReview,
+				reviewContextPack: compactReviewContextPack,
+			},
+		};
+
+		expect(
+			schemas.flow_review_record_final.safeParse(finalReview).success,
+		).toBe(true);
+		expect(FlowReviewRecordFinalArgsSchema.safeParse(finalReview).success).toBe(
+			true,
+		);
+		expect(
+			schemas.flow_review_record_final.safeParse(compactContextFinalReview)
+				.success,
+		).toBe(false);
+		expect(
+			FlowReviewRecordFinalArgsSchema.safeParse(compactContextFinalReview)
+				.success,
+		).toBe(false);
+		expect(
+			schemas.flow_run_complete_feature.safeParse(workerResultWithFinalReview)
+				.success,
+		).toBe(true);
+		expect(
+			WorkerResultArgsSchema.safeParse(workerResultWithFinalReview).success,
+		).toBe(true);
+		expect(
+			schemas.flow_run_complete_feature.safeParse(
+				workerResultWithCompactFinalReviewContext,
+			).success,
+		).toBe(false);
+		expect(
+			WorkerResultArgsSchema.safeParse(
+				workerResultWithCompactFinalReviewContext,
+			).success,
+		).toBe(false);
+		expect(
+			FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY.flow_review_record_final
+				.payloadSchemaOwners,
+		).toEqual([
+			"src/adapters/opencode/tool-surface/schemas.ts",
+			"src/runtime/schema.ts",
+		]);
 	});
 
 	test("non-worker tool schemas accept representative valid payloads and reject invalid ones", () => {

@@ -455,6 +455,60 @@ describe("runtime final review contracts", () => {
 		);
 	});
 
+	test("requires validation evidence when current worker validation exists without last validation run", () => {
+		const session = createSession("Review current worker validation evidence");
+		expect(session.execution.lastValidationRun).toEqual([]);
+		const worker = {
+			artifactsChanged: [{ path: "src/runtime/session.ts" }],
+			validationRun: [
+				{ command: "bun test tests/runtime/final-review-contracts.test.ts" },
+			],
+		};
+
+		const missingValidationEvidence = describeFinalReviewCoverageFailure(
+			session,
+			worker,
+			{
+				reviewDepth: "broad",
+				reviewedSurfaces: ["changed_files", "shared_surfaces"],
+				evidenceSummary: "Reviewed changed runtime files and related context.",
+				validationAssessment: "Validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: [
+						"bun test tests/runtime/final-review-contracts.test.ts",
+					],
+				},
+			},
+		);
+		expect(missingValidationEvidence).toContain(
+			"must cover derived required review surfaces: validation_evidence",
+		);
+
+		const withValidationEvidence = describeFinalReviewCoverageFailure(
+			session,
+			worker,
+			{
+				reviewDepth: "broad",
+				reviewedSurfaces: [
+					"changed_files",
+					"shared_surfaces",
+					"validation_evidence",
+				],
+				evidenceSummary:
+					"Reviewed changed runtime files and validation evidence.",
+				validationAssessment: "Validation was reviewed.",
+				evidenceRefs: {
+					changedArtifacts: ["src/runtime/session.ts"],
+					validationCommands: [
+						"bun test tests/runtime/final-review-contracts.test.ts",
+					],
+				},
+			},
+		);
+		expect(withValidationEvidence).toBeNull();
+	});
+
 	test("fails review context grounding when validation evidence lacks worker validation", () => {
 		const pack = buildReviewContextPack({
 			task: "Review validation grounding",

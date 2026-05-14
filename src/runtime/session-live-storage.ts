@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import {
 	getActiveSessionDir,
 	getActiveSessionsDir,
@@ -10,8 +10,37 @@ import {
 	type CompletedSessionLocation,
 	moveSessionDirToCompleted,
 } from "./session-completed-storage";
-import { syncSessionWorkspaceDirectory } from "./session-workspace-io";
+import {
+	renameSessionWorkspacePath,
+	syncSessionWorkspaceDirectory,
+} from "./session-workspace-io";
 import type { MutableWorkspaceRoot } from "./workspace-root";
+
+export type SessionActivationRollbackPhase =
+	| "restore_prior_active"
+	| "sync_live_parent_directories";
+
+export class SessionActivationRollbackError extends Error {
+	readonly code = "SESSION_ACTIVATION_ROLLBACK_FAILED";
+	readonly promotionError: unknown;
+	readonly rollbackError: unknown;
+	readonly rollbackPhase: SessionActivationRollbackPhase;
+
+	constructor(
+		message: string,
+		promotionError: unknown,
+		rollbackError: unknown,
+		rollbackPhase: SessionActivationRollbackPhase,
+	) {
+		super(message, {
+			cause: { promotionError, rollbackError, rollbackPhase },
+		});
+		this.name = "SessionActivationRollbackError";
+		this.promotionError = promotionError;
+		this.rollbackError = rollbackError;
+		this.rollbackPhase = rollbackPhase;
+	}
+}
 
 async function listDirectoryNames(root: string): Promise<string[]> {
 	try {
@@ -79,7 +108,7 @@ async function parkActiveSession(
 	sessionId: string,
 ): Promise<void> {
 	await mkdir(getStoredSessionsDir(worktree), { recursive: true });
-	await rename(
+	await renameSessionWorkspacePath(
 		getActiveSessionDir(worktree, sessionId),
 		getStoredSessionDir(worktree, sessionId),
 	);
@@ -90,7 +119,41 @@ async function promoteStoredSessionDir(
 	storedDir: string,
 	sessionId: string,
 ): Promise<void> {
-	await rename(storedDir, getActiveSessionDir(worktree, sessionId));
+	await renameSessionWorkspacePath(
+		storedDir,
+		getActiveSessionDir(worktree, sessionId),
+	);
+}
+
+async function rollbackParkedActiveSession(
+	worktree: MutableWorkspaceRoot,
+	sessionId: string,
+	promotionError: unknown,
+): Promise<void> {
+	try {
+		await renameSessionWorkspacePath(
+			getStoredSessionDir(worktree, sessionId),
+			getActiveSessionDir(worktree, sessionId),
+		);
+	} catch (rollbackError) {
+		throw new SessionActivationRollbackError(
+			`Session activation failed after parking the prior active session, and rollback failed: ${(rollbackError as Error).message}`,
+			promotionError,
+			rollbackError,
+			"restore_prior_active",
+		);
+	}
+
+	try {
+		await syncLiveSessionParentDirectories(worktree);
+	} catch (rollbackSyncError) {
+		throw new SessionActivationRollbackError(
+			`Session activation failed after parking the prior active session, and rollback directory sync failed: ${(rollbackSyncError as Error).message}`,
+			promotionError,
+			rollbackSyncError,
+			"sync_live_parent_directories",
+		);
+	}
 }
 
 async function promoteStoredSessionToActive(
@@ -109,9 +172,20 @@ async function promoteStoredSessionToActive(
 
 	if (activeSessionId) {
 		await parkActiveSession(worktree, activeSessionId);
+		try {
+			await promoteStoredSessionDir(worktree, storedDir, sessionId);
+		} catch (promotionError) {
+			await rollbackParkedActiveSession(
+				worktree,
+				activeSessionId,
+				promotionError,
+			);
+			throw promotionError;
+		}
+	} else {
+		await promoteStoredSessionDir(worktree, storedDir, sessionId);
 	}
 
-	await promoteStoredSessionDir(worktree, storedDir, sessionId);
 	await syncLiveSessionParentDirectories(worktree);
 	return "activated";
 }

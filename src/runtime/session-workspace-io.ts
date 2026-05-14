@@ -35,6 +35,13 @@ export async function syncSessionWorkspaceDirectory(
 	}
 }
 
+export async function renameSessionWorkspacePath(
+	from: string,
+	to: string,
+): Promise<void> {
+	await sessionWorkspaceFs.rename(from, to);
+}
+
 async function writeFileAtomically(
 	targetPath: string,
 	contents: string,

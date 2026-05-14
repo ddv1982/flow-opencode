@@ -9,6 +9,21 @@ export type ResolvedMutableToolWorkspace = {
 	requiresHiddenRootApproval: boolean;
 };
 
+export class MutableWorkspacePermissionError extends Error {
+	readonly code = "MUTABLE_WORKSPACE_PERMISSION_REQUIRED";
+	readonly root: string;
+	readonly source: string;
+
+	constructor(resolved: ResolvedMutableToolWorkspace) {
+		super(
+			`Refusing to mutate hidden workspace root ${resolved.root}: OpenCode edit approval is required but ToolContext.ask is unavailable.`,
+		);
+		this.name = "MutableWorkspacePermissionError";
+		this.root = resolved.root;
+		this.source = resolved.source;
+	}
+}
+
 function requiresHiddenRootApproval(root: string): boolean {
 	const name = basename(root);
 	return name.startsWith(".") && name !== ".flow";
@@ -33,7 +48,11 @@ export async function ensureMutableWorkspacePermission(
 		return resolved.root;
 	}
 
-	const askEffect = context.ask?.({
+	if (!context.ask) {
+		throw new MutableWorkspacePermissionError(resolved);
+	}
+
+	const askEffect = context.ask({
 		permission: "edit",
 		patterns: [join(resolved.root, ".flow", "**")],
 		always: [join(resolved.root, ".flow", "**")],
@@ -44,8 +63,6 @@ export async function ensureMutableWorkspacePermission(
 				"Flow is about to persist state inside a hidden workspace root outside its own .flow directory.",
 		},
 	});
-	if (askEffect) {
-		await runPromise(askEffect);
-	}
+	await runPromise(askEffect);
 	return resolved.root;
 }

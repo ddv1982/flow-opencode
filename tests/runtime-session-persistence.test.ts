@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
-import { open, readFile, rm, writeFile } from "node:fs/promises";
+import { open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+	getActiveSessionDir,
 	getActiveSessionsDir,
 	getFeatureDocPath,
 	getIndexDocPath,
 	getSessionPath,
+	getStoredSessionDir,
 	getStoredSessionsDir,
 } from "../src/runtime/paths";
 import {
@@ -19,6 +21,7 @@ import {
 	saveSessionState,
 	syncSessionArtifacts,
 } from "../src/runtime/session";
+import { SessionActivationRollbackError } from "../src/runtime/session-live-storage";
 import {
 	resetSessionWorkspaceFsForTests,
 	setSessionWorkspaceFsForTests,
@@ -145,6 +148,181 @@ describe("runtime session persistence", () => {
 		await expect(
 			readFile(getSessionPath(worktree, second.id), "utf8"),
 		).rejects.toThrow();
+	});
+
+	test("keeps prior active session when requested session promotion fails", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = createSession("Second goal");
+
+		setSessionWorkspaceFsForTests({
+			rename: async (from, to) => {
+				if (
+					String(from) === getStoredSessionDir(worktree, second.id) &&
+					String(to) === getActiveSessionDir(worktree, second.id)
+				) {
+					throw new Error("injected promotion rename failure");
+				}
+
+				return rename(from, to);
+			},
+		});
+
+		await expect(saveSession(worktree, second)).rejects.toThrow(
+			"injected promotion rename failure",
+		);
+
+		expect(await activeSessionId(worktree)).toBe(first.id);
+		expect((await loadSession(worktree))?.id).toBe(first.id);
+		await expect(
+			readFile(getSessionPath(worktree, first.id), "utf8"),
+		).resolves.toContain('"goal": "First goal"');
+		await expect(
+			readFile(getSessionPath(worktree, second.id, "stored"), "utf8"),
+		).resolves.toContain('"goal": "Second goal"');
+		await expect(
+			readFile(getSessionPath(worktree, second.id), "utf8"),
+		).rejects.toThrow();
+	});
+
+	test("keeps prior active session when direct activation promotion fails", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = await saveSession(worktree, createSession("Second goal"));
+
+		setSessionWorkspaceFsForTests({
+			rename: async (from, to) => {
+				if (
+					String(from) === getStoredSessionDir(worktree, first.id) &&
+					String(to) === getActiveSessionDir(worktree, first.id)
+				) {
+					throw new Error("injected direct activation promotion failure");
+				}
+
+				return rename(from, to);
+			},
+		});
+
+		await expect(activateSession(worktree, first.id)).rejects.toThrow(
+			"injected direct activation promotion failure",
+		);
+
+		expect(await activeSessionId(worktree)).toBe(second.id);
+		expect((await loadSession(worktree))?.id).toBe(second.id);
+		await expect(
+			readFile(getSessionPath(worktree, second.id), "utf8"),
+		).resolves.toContain('"goal": "Second goal"');
+		await expect(
+			readFile(getSessionPath(worktree, first.id, "stored"), "utf8"),
+		).resolves.toContain('"goal": "First goal"');
+		await expect(
+			readFile(getSessionPath(worktree, first.id), "utf8"),
+		).rejects.toThrow();
+	});
+
+	test("exposes structured diagnostics when direct activation rollback restore fails", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = await saveSession(worktree, createSession("Second goal"));
+		const promotionError = new Error("injected activation promotion failure");
+		const rollbackError = new Error("injected rollback restore failure");
+
+		setSessionWorkspaceFsForTests({
+			rename: async (from, to) => {
+				if (
+					String(from) === getStoredSessionDir(worktree, first.id) &&
+					String(to) === getActiveSessionDir(worktree, first.id)
+				) {
+					throw promotionError;
+				}
+				if (
+					String(from) === getStoredSessionDir(worktree, second.id) &&
+					String(to) === getActiveSessionDir(worktree, second.id)
+				) {
+					throw rollbackError;
+				}
+
+				return rename(from, to);
+			},
+		});
+
+		let caught: unknown;
+		try {
+			await activateSession(worktree, first.id);
+		} catch (error) {
+			caught = error;
+		}
+
+		expect(caught).toBeInstanceOf(SessionActivationRollbackError);
+		expect((caught as SessionActivationRollbackError).code).toBe(
+			"SESSION_ACTIVATION_ROLLBACK_FAILED",
+		);
+		expect((caught as SessionActivationRollbackError).rollbackPhase).toBe(
+			"restore_prior_active",
+		);
+		expect((caught as SessionActivationRollbackError).promotionError).toBe(
+			promotionError,
+		);
+		expect((caught as SessionActivationRollbackError).rollbackError).toBe(
+			rollbackError,
+		);
+		expect((caught as Error).cause).toEqual({
+			promotionError,
+			rollbackError,
+			rollbackPhase: "restore_prior_active",
+		});
+	});
+
+	test("exposes structured diagnostics when direct activation rollback sync fails", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = await saveSession(worktree, createSession("Second goal"));
+		const promotionError = new Error("injected activation promotion failure");
+		const rollbackSyncError = new Error("injected rollback sync failure");
+
+		setSessionWorkspaceFsForTests({
+			rename: async (from, to) => {
+				if (
+					String(from) === getStoredSessionDir(worktree, first.id) &&
+					String(to) === getActiveSessionDir(worktree, first.id)
+				) {
+					throw promotionError;
+				}
+
+				return rename(from, to);
+			},
+			open: async (path, flags, mode) => {
+				if (String(path) === getActiveSessionsDir(worktree)) {
+					throw rollbackSyncError;
+				}
+
+				return open(path, flags, mode);
+			},
+		});
+
+		let caught: unknown;
+		try {
+			await activateSession(worktree, first.id);
+		} catch (error) {
+			caught = error;
+		}
+
+		expect(caught).toBeInstanceOf(SessionActivationRollbackError);
+		expect((caught as SessionActivationRollbackError).rollbackPhase).toBe(
+			"sync_live_parent_directories",
+		);
+		expect((caught as SessionActivationRollbackError).promotionError).toBe(
+			promotionError,
+		);
+		expect((caught as SessionActivationRollbackError).rollbackError).toBe(
+			rollbackSyncError,
+		);
+		expect((caught as Error).cause).toEqual({
+			promotionError,
+			rollbackError: rollbackSyncError,
+			rollbackPhase: "sync_live_parent_directories",
+		});
+		expect(await activeSessionId(worktree)).toBe(second.id);
 	});
 
 	test("keeps a consistent active session after promotion directory sync fails", async () => {
