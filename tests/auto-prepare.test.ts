@@ -1,26 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-	captureOpenCodeAttachments,
-	clearFlowAttachments,
-} from "../src/adapters/opencode/attachment-store";
 import { readValidStackStandardsProfileCache } from "../src/runtime/application/stack-standards-profile";
 import { createSession, saveSession } from "../src/runtime/session";
 import {
 	createTempDirRegistry,
 	createTestTools,
 	samplePlan,
-	toolContext,
 } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
-
-const PNG_HEADER_BYTES = Buffer.from([
-	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
-
-function dataUrl(mime: string, bytes: Buffer) {
-	return `data:${mime};base64,${bytes.toString("base64")}`;
-}
 
 const sampleStackProfile = {
 	languages: [
@@ -56,7 +43,6 @@ const sampleStandardsProfile = {
 } as const;
 
 afterEach(() => {
-	clearFlowAttachments();
 	cleanupTempDirs();
 });
 
@@ -78,6 +64,7 @@ describe("flow_auto_prepare semantics", () => {
 			expect(parsed.phase).toBe("planning");
 			expect(parsed.lane).toBe("lite");
 			expect(parsed.nextCommand).toBe("/flow-auto resume");
+			expect(parsed).not.toHaveProperty("attachmentGuidance");
 		}
 	});
 
@@ -95,140 +82,30 @@ describe("flow_auto_prepare semantics", () => {
 		expect(parsed.lane).toBe("lite");
 		expect(parsed.nextCommand).toBe("/flow-auto <goal>");
 		expect(String(parsed.summary)).toContain("goal");
+		expect(parsed).not.toHaveProperty("attachmentGuidance");
 	});
 
-	test("returns materialization guidance for supported current-message attachments without leaking data URLs", async () => {
+	test("explicit goals do not report Flow-owned attachment materialization guidance", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		captureOpenCodeAttachments({
-			sessionId: "session-1",
-			messageId: "message-1",
-			parts: [
-				{
-					id: "png-1",
-					type: "file",
-					mime: "image/png",
-					filename: "hero.png",
-					url: dataUrl("image/png", PNG_HEADER_BYTES),
-				},
-			],
-		});
 
 		const response = await tools.flow_auto_prepare.execute(
-			{ argumentString: "Use the attached image" },
-			toolContext(worktree, undefined, {
-				sessionID: "session-1",
-				messageID: "message-1",
-			}),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.attachmentGuidance).toMatchObject({
-			status: "available",
-			source: "current_message",
-			materializationRequired: true,
-			materialize: {
-				tool: "flow_attachments_materialize",
-				args: { destinationDirectory: "assets/flow-attachments" },
-				useImplicitCurrentBatch: true,
+			{
+				argumentString: "Use any native OpenCode attachments as context",
 			},
-			attachments: [{ id: "png-1", filename: "hero.png", mime: "image/png" }],
-			skipped: [],
-		});
-		expect(parsed.attachmentGuidance.materialize.args).not.toHaveProperty(
-			"attachments",
-		);
-		expect(JSON.stringify(parsed.attachmentGuidance)).not.toContain(
-			"data:image",
-		);
-	});
-
-	test("returns none guidance when no attachments exist for the OpenCode session", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-
-		const response = await tools.flow_auto_prepare.execute(
-			{ argumentString: "Improve recovery" },
-			toolContext(worktree, undefined, { sessionID: "session-1" }),
+			{
+				worktree,
+			} as never,
 		);
 		const parsed = JSON.parse(response);
 
-		expect(parsed.attachmentGuidance).toMatchObject({
-			status: "none",
-			source: "none",
-			materializationRequired: false,
-			materialize: null,
-			attachments: [],
-			skipped: [],
-		});
-	});
-
-	test("returns required guidance for mixed and unsupported-only latest batches", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		captureOpenCodeAttachments({
-			sessionId: "mixed-session",
-			parts: [
-				{
-					id: "png-1",
-					type: "file",
-					mime: "image/png",
-					filename: "safe.png",
-					url: dataUrl("image/png", PNG_HEADER_BYTES),
-				},
-				{
-					id: "svg-1",
-					type: "file",
-					mime: "image/svg+xml",
-					filename: "unsafe.svg",
-					url: "data:image/svg+xml;base64,PHN2Zy8+",
-				},
-			],
-		});
-		captureOpenCodeAttachments({
-			sessionId: "unsupported-session",
-			parts: [
-				{
-					id: "svg-2",
-					type: "file",
-					mime: "image/svg+xml",
-					filename: "only.svg",
-					url: "data:image/svg+xml;base64,PHN2Zy8+",
-				},
-			],
-		});
-
-		const mixed = JSON.parse(
-			await tools.flow_auto_prepare.execute(
-				{ argumentString: "Use assets" },
-				toolContext(worktree, undefined, { sessionID: "mixed-session" }),
-			),
+		expect(parsed.status).toBe("ok");
+		expect(parsed.mode).toBe("start_new_goal");
+		expect(parsed.goal).toBe("Use any native OpenCode attachments as context");
+		expect(parsed).not.toHaveProperty("attachmentGuidance");
+		expect(JSON.stringify(parsed)).not.toContain(
+			"flow_attachments_materialize",
 		);
-		const unsupported = JSON.parse(
-			await tools.flow_auto_prepare.execute(
-				{ argumentString: "Use assets" },
-				toolContext(worktree, undefined, {
-					sessionID: "unsupported-session",
-				}),
-			),
-		);
-
-		expect(mixed.attachmentGuidance.status).toBe("mixed");
-		expect(mixed.attachmentGuidance.source).toBe("latest_batch");
-		expect(mixed.attachmentGuidance.materializationRequired).toBe(true);
-		expect(mixed.attachmentGuidance.attachments).toHaveLength(1);
-		expect(mixed.attachmentGuidance.skipped).toEqual([
-			expect.objectContaining({ attachmentId: "svg-1" }),
-		]);
-		expect(mixed.attachmentGuidance.materialize.args).not.toHaveProperty(
-			"attachments",
-		);
-		expect(unsupported.attachmentGuidance.status).toBe("unsupported_only");
-		expect(unsupported.attachmentGuidance.materializationRequired).toBe(true);
-		expect(unsupported.attachmentGuidance.attachments).toEqual([]);
-		expect(unsupported.attachmentGuidance.skipped).toEqual([
-			expect.objectContaining({ attachmentId: "svg-2" }),
-		]);
 	});
 
 	test("planning context schema accepts a decision log payload", async () => {

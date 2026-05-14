@@ -63,12 +63,7 @@ describe("runtime tool routing", () => {
 			"No active Flow session exists for this workspace.",
 		);
 		expect(parsed.nextCommand).toBe("/flow-auto <goal>");
-		expect(parsed.attachmentGuidance).toMatchObject({
-			status: "unavailable",
-			source: "none",
-			materializationRequired: false,
-			materialize: null,
-		});
+		expect(parsed).not.toHaveProperty("attachmentGuidance");
 	});
 
 	test("flow_auto_prepare resumes an existing session for empty input", async () => {

@@ -55,7 +55,6 @@ type ToolSchemaName =
 	| "flow_session_close"
 	| "flow_plan_start"
 	| "flow_auto_prepare"
-	| "flow_attachments_materialize"
 	| "flow_plan_context_record"
 	| "flow_plan_apply"
 	| "flow_plan_approve"

@@ -7,10 +7,6 @@ import { resolveSessionRoot } from "../../runtime/application";
 import { readValidStackStandardsProfileCache } from "../../runtime/application/stack-standards-profile";
 import { loadSession } from "../../runtime/lifecycle";
 import type { PlanningContext } from "../../runtime/schema";
-import {
-	captureChatMessageAttachments,
-	captureCommandAttachments,
-} from "./attachment-store";
 import { createConfigHook } from "./config";
 import type { Hooks, Plugin } from "./sdk";
 import { applyFlowToolDefinitionGuidance } from "./tool-guidance.generated";
@@ -37,19 +33,6 @@ const flowToolDefinitionHook: NonNullable<Hooks["tool.definition"]> = async (
 		return;
 	}
 	applyFlowToolDefinitionGuidance(input.toolID, output);
-};
-
-const flowChatMessageHook: NonNullable<Hooks["chat.message"]> = async (
-	input,
-	output,
-) => {
-	captureChatMessageAttachments(input, output);
-};
-
-const flowCommandExecuteBeforeHook: NonNullable<
-	Hooks["command.execute.before"]
-> = async (input, output) => {
-	captureCommandAttachments(input, output);
 };
 
 function createFlowSystemTransformHook(
@@ -126,8 +109,6 @@ const FlowPlugin: Plugin = async (ctx) => {
 		tool: createTools(ctx),
 		hooks: {
 			"tool.definition": flowToolDefinitionHook,
-			"chat.message": flowChatMessageHook,
-			"command.execute.before": flowCommandExecuteBeforeHook,
 			"experimental.chat.system.transform": createFlowSystemTransformHook(ctx),
 			"experimental.session.compacting": async (
 				_input: unknown,

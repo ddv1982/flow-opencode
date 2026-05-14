@@ -127,19 +127,7 @@ export const OPENCODE_TOOL_REGISTRY = [
 		coreAction: null,
 		mutationClass: "none",
 		allowedModes: ["flow-auto"],
-		hostDescription:
-			"Classify a flow-auto invocation and report attachment materialization requirements",
-		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
-	},
-	{
-		toolName: "flow_attachments_materialize",
-		surfaceKind: "workspace",
-		runtimeActionBinding: { kind: "none" },
-		coreAction: null,
-		mutationClass: "execution",
-		allowedModes: ["flow-auto"],
-		hostDescription:
-			"Import captured PNG, JPEG, WebP, GIF, or AVIF OpenCode attachments into a safe workspace path",
+		hostDescription: "Classify a flow-auto invocation and choose the next step",
 		docsRowMetadata: FLOW_DEFAULT_TOOL_DOCS_ROW,
 	},
 	{

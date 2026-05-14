@@ -84,7 +84,6 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_run_start",
 			"flow_run_complete_feature",
 			"flow_review_record_feature",
@@ -120,7 +119,6 @@ export const FLOW_MODE_CONTRACTS = {
 		repositoryMutation: "allowed",
 		allowedFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_context_record",
 			"flow_plan_apply",
@@ -134,8 +132,7 @@ export const FLOW_MODE_CONTRACTS = {
 		forbiddenFlowTools: ["flow_session_close"],
 		requiredBehavior: [
 			"Call flow_auto_prepare before planning or repo inspection.",
-			"After flow_auto_prepare, follow attachmentGuidance.materializationRequired; when true, call flow_attachments_materialize before planning, repo inspection for implementation, or delegation.",
-			"Do not call attachment materialization when attachmentGuidance.materializationRequired is false.",
+			"Leave native OpenCode image/file attachments in host/model context; Flow does not materialize them into workspace files.",
 			"Stop on missing goal or human decision gates.",
 			"Record and apply the runtime-owned stack and standards profile.",
 			"Apply coding guidelines, release hygiene, and tests before completion.",
@@ -167,7 +164,6 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_plan_apply",
 			"flow_plan_approve",
 			"flow_session_close",
@@ -205,7 +201,6 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_plan_apply",
 			"flow_plan_approve",
 			"flow_session_close",
@@ -236,7 +231,6 @@ export const FLOW_MODE_CONTRACTS = {
 		allowedFlowTools: [],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_apply",
 			"flow_plan_approve",
@@ -271,7 +265,6 @@ export const FLOW_MODE_CONTRACTS = {
 		repositoryMutation: "none",
 		allowedFlowTools: [],
 		forbiddenFlowTools: [
-			"flow_attachments_materialize",
 			"flow_plan_apply",
 			"flow_plan_approve",
 			"flow_run_start",
@@ -314,7 +307,6 @@ export const FLOW_MODE_CONTRACTS = {
 		],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_apply",
 			"flow_plan_approve",
@@ -351,7 +343,6 @@ export const FLOW_MODE_CONTRACTS = {
 		allowedFlowTools: ["flow_review_render"],
 		forbiddenFlowTools: [
 			"flow_auto_prepare",
-			"flow_attachments_materialize",
 			"flow_plan_start",
 			"flow_plan_apply",
 			"flow_plan_approve",

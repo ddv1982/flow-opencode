@@ -48,10 +48,10 @@ describe("prompt mode behavior eval corpus", () => {
 		expect(byId["plan-goal-records-context-and-stops"]?.score).toBe(6);
 		expect(byId["auto-missing-goal-stops-after-prepare"]?.score).toBe(6);
 		expect(
-			byId["auto-materializes-attached-image-before-planning"]?.score,
+			byId["auto-preserves-native-attachments-before-planning"]?.score,
 		).toBe(6);
 		expect(
-			byId["auto-ordinary-goal-skips-attachment-materialization"]?.score,
+			byId["auto-ordinary-goal-leaves-native-attachments-alone"]?.score,
 		).toBe(6);
 		expect(
 			byId["worker-validates-reviews-and-persists-clean-feature"]?.score,
@@ -72,9 +72,9 @@ describe("prompt mode behavior eval corpus", () => {
 
 		expect(byId["plan-bad-starts-implementation"]?.passed).toBe(false);
 		expect(byId["auto-bad-infers-goal-after-missing-goal"]?.passed).toBe(false);
-		expect(
-			byId["auto-bad-materializes-attached-image-after-planning"]?.passed,
-		).toBe(false);
+		expect(byId["auto-bad-creates-flow-owned-attachment-files"]?.passed).toBe(
+			false,
+		);
 		expect(byId["worker-bad-completes-without-validation"]?.passed).toBe(false);
 		expect(byId["worker-bad-deletes-observability-console"]?.passed).toBe(
 			false,
@@ -258,13 +258,13 @@ describe("prompt mode behavior eval corpus", () => {
 			"auto-progress-across-phase-boundaries: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
 		);
 		expect(summary.report).toContain(
-			"auto-materializes-attached-image-before-planning: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+			"auto-preserves-native-attachments-before-planning: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
 		);
 		expect(summary.report).toContain(
-			"auto-ordinary-goal-skips-attachment-materialization: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
+			"auto-ordinary-goal-leaves-native-attachments-alone: 6/6 (quality-pass); mode=flow-auto; expectation=satisfied",
 		);
 		expect(summary.report).toContain(
-			"auto-bad-materializes-attached-image-after-planning: 2/6 (quality-fail); mode=flow-auto; expectation=satisfied; failed=required_tool_sequence,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
+			"auto-bad-creates-flow-owned-attachment-files: 2/6 (quality-fail); mode=flow-auto; expectation=satisfied; failed=forbidden_tool_absent,required_behavior_present,forbidden_behavior_absent,next_step_calibrated",
 		);
 		expect(summary.report).toContain(
 			"worker-bad-progress-inside-worker-result: 4/6 (quality-fail); mode=flow-worker; expectation=satisfied; failed=required_behavior_present,forbidden_behavior_absent",

@@ -97,19 +97,6 @@ const FLOW_DESCRIPTOR_GOVERNANCE_BY_TOOL_NAME = {
 		policyOwners: ["src/runtime/application/session-read-actions.ts"],
 		verificationAnchors: ["tests/config/tool-schemas.test.ts"],
 	},
-	flow_attachments_materialize: {
-		registrationOwner:
-			"src/adapters/opencode/tool-surface/session-tools/attachment-tools.ts",
-		policyOwners: [
-			"src/adapters/opencode/attachment-policy.ts",
-			"src/adapters/opencode/attachment-store.ts",
-			"src/adapters/opencode/attachment-materialization.ts",
-		],
-		verificationAnchors: [
-			"tests/config/tool-schemas.test.ts",
-			"tests/attachment-materialization.test.ts",
-		],
-	},
 	flow_session_close: {
 		registrationOwner:
 			"src/adapters/opencode/tool-surface/session-tools/lifecycle-tools.ts",

@@ -10,7 +10,6 @@ import {
 	OPENCODE_TOOL_PROJECTIONS,
 	openCodeToolCoreSummary,
 } from "../../src/adapters/opencode/tool-projections.generated";
-import { FlowAttachmentsMaterializeArgsSchema } from "../../src/adapters/opencode/tool-surface/schemas";
 import type { CoreActionName } from "../../src/core/registry";
 import { WorkerResultSchema } from "../../src/runtime/schema";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
@@ -228,36 +227,6 @@ describe("tool schema config contracts", () => {
 		expect(schemas.flow_plan_start.safeParse({ goal: 123 }).success).toBe(
 			false,
 		);
-		expect(
-			schemas.flow_attachments_materialize.safeParse({
-				destinationDirectory: "assets/images",
-				attachments: [{ id: "att-1" }, { filename: "background.png" }],
-			}).success,
-		).toBe(true);
-		expect(
-			schemas.flow_attachments_materialize.safeParse({
-				destinationDirectory: "assets/images",
-				attachments: [{ id: "att-1", rawBase64: "AAAA" }],
-			}).success,
-		).toBe(false);
-		expect(
-			FlowAttachmentsMaterializeArgsSchema.safeParse({
-				destinationDirectory: "assets/images",
-				base64: "AAAA",
-			}).success,
-		).toBe(false);
-		expect(
-			FlowAttachmentsMaterializeArgsSchema.safeParse({
-				destinationDirectory: "assets/images",
-				filenamePolicy: "safe-slug",
-			}).success,
-		).toBe(false);
-		expect(
-			FlowAttachmentsMaterializeArgsSchema.safeParse({
-				destinationDirectory: "assets/images",
-				overwrite: false,
-			}).success,
-		).toBe(false);
 		expect(
 			schemas.flow_plan_context_record.safeParse({
 				repoProfile: ["TypeScript"],
@@ -745,12 +714,6 @@ describe("tool schema config contracts", () => {
 		expect(Object.keys(tools).some((name) => name.includes("_from_raw"))).toBe(
 			false,
 		);
-		expect(tools.flow_attachments_materialize).toBeDefined();
-		const attachmentToolArgs = JSON.stringify(
-			tools.flow_attachments_materialize?.args,
-		);
-		expect(attachmentToolArgs).not.toContain("base64");
-		expect(attachmentToolArgs).not.toContain("filenamePolicy");
-		expect(attachmentToolArgs).not.toContain("overwrite");
+		expect("flow_attachments_materialize" in tools).toBe(false);
 	});
 });

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.43] - 2026-05-14
+
+Return attachment ownership to native OpenCode
+
+Flow 2.0.43 removes the Flow-owned OpenCode attachment materialization bridge after confirming native OpenCode image/file attachment handling is the correct owner for ordinary chat context. The plugin no longer registers chat or command attachment capture hooks, and `flow_auto_prepare` no longer reports attachment availability, `attachmentGuidance`, or materialization requirements.
+
+The public Flow tool surface shrinks from nineteen tools to eighteen by removing `flow_attachments_materialize`. The deleted adapter attachment store, selection, policy, materialization tool, and behavior tests remove the in-memory byte-retention and workspace-file write path that had made Flow responsible for a host capability it should not duplicate.
+
+The release keeps the change intentionally scoped: no slash commands, state paths, package exports, installer behavior, runtime workflow modes, persisted session schemas, package dependencies, or OpenCode SDK compatibility boundaries change. Native OpenCode remains responsible for attached images/files; Flow remains responsible for workflow JSON/state under `.flow/**` and derived docs.
+
+Constraint: Remove Flow-owned attachment capture and materialization from normal public operation while preserving native OpenCode attachment behavior as host/model context
+Constraint: Keep the release as a surface contraction, not a replacement attachment system; no new tools, commands, state paths, package exports, dependencies, or workflow modes are added
+Constraint: Keep `@opencode-ai/plugin` at `1.14.48` and `zod` at `4.1.8`; this release changes no dependency compatibility boundary
+Rejected: Keep `flow_attachments_materialize` as a hidden compatibility shim | retaining the obsolete workspace-mutating bridge would preserve the ownership confusion and public-surface maintenance cost
+Rejected: Rebuild a smaller Flow attachment cache with byte caps | the product decision is to let native OpenCode own ordinary attachments rather than make Flow a second attachment subsystem
+Rejected: Rewrite historical release/investigation notes that described the previous bridge | historical docs should remain evidence of prior decisions, while current docs and contracts now describe native ownership
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Do not reintroduce Flow-owned attachment capture/materialization unless a new explicit product requirement proves native OpenCode context is insufficient and includes a fresh threat model, byte-retention policy, workspace-write policy, and tests
+Tested: `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/prompt-contracts.test.ts tests/auto-prepare.test.ts tests/runtime-tools-metadata.test.ts tests/runtime-tool-routing.test.ts tests/smoke/dist-load.test.ts tests/mode-contracts.test.ts tests/docs-tool-parity.test.ts tests/descriptor-family-parity.test.ts tests/protocol-parity.test.ts` (90 pass, 0 fail); `bun test tests/config/plugin-surface.test.ts tests/auto-prepare.test.ts tests/config/tool-schemas.test.ts tests/docs-tool-parity.test.ts` (34 pass, 0 fail); `bun run typecheck`; `bun run lint`; RepoPrompt Oracle review of the uncommitted attachment-downgrade diff found no issues; `bun run check` (release gate passed: dependency contract OK with project/plugin/root `zod=4.1.8`, architecture seams OK, pack invariants OK for version `2.0.43`, bundle sanity reported 7 agents, 9 commands, 18 tools, full suite 635 pass/0 fail, lint passed, bench smoke and bench gate passed)
+Not-tested: Live OpenCode UI runtime interaction with image attachments; live GitHub-hosted release workflow run for tag `v2.0.43` before push
+
 ## [2.0.42] - 2026-05-14
 
 Simplify maintainer risk guidance and completion-gate internals

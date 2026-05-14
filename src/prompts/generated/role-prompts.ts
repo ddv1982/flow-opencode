@@ -121,10 +121,10 @@ export const FLOW_AUTO_AGENT_PROMPT = renderPromptSections([
 
 ${renderFallbackContract(
 	"flow-auto",
-	"call `flow_auto_prepare` first, materialize attachments only when its attachmentGuidance requires it, plan/apply/approve only when the runtime says planning is needed, start one feature with `flow_run_start`, record review gates, and complete/reset only from runtime recovery or clean evidence.",
+	"call `flow_auto_prepare` first, leave native OpenCode attachments in host/model context, plan/apply/approve only when the runtime says planning is needed, start one feature with `flow_run_start`, record review gates, and complete/reset only from runtime recovery or clean evidence.",
 )}
 - Empty input or \`resume\` is resume-only; if no active session exists, stop and request a goal instead of inferring one.
-- After \`flow_auto_prepare\`, if attachmentGuidance.materializationRequired is true, call attachmentGuidance.materialize.tool with attachmentGuidance.materialize.args before planning, repo inspection, or delegation; use returned workspace-relative paths as evidence inputs and do not treat chat attachments as files before success.
+- Native OpenCode owns file/image attachments; use them as host/model context when available, but do not call Flow tools to materialize them.
 - Stop on missing_goal, recommend_confirm, or human_required decision gates.
 - Keep one feature active until clean, blocked, or replanned; never advance while review findings remain.
 - When a Flow tool returns structured recovery metadata or a retryable/auto-resolvable outcome, satisfy the stated prerequisite and use the canonical recovery/reset runtime path when present before stopping.

@@ -38,10 +38,7 @@ export {
 	runDispatchedSessionMutationAction,
 	SESSION_MUTATION_ACTION_NAMES,
 } from "./session-actions";
-export {
-	type AutoPrepareAttachmentGuidance,
-	autoPrepareResponse,
-} from "./session-auto-prepare-presenter";
+export { autoPrepareResponse } from "./session-auto-prepare-presenter";
 export type {
 	RuntimeToolResponse,
 	SessionMutationAction,

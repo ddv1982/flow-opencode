@@ -49,7 +49,6 @@ describe("runtime tool metadata", () => {
 			flow_session_activate: { sessionId: currentSessionId },
 			flow_plan_start: { goal: "Build a workflow plugin" },
 			flow_auto_prepare: { argumentString: "resume" },
-			flow_attachments_materialize: { destinationDirectory: "assets" },
 			flow_session_close: { kind: "completed" },
 			flow_plan_apply: { plan: samplePlan() },
 			flow_plan_approve: {},

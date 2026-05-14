@@ -4,14 +4,7 @@
  * next-command routing in next-command-policy.ts.
  */
 
-import {
-	type AutoPrepareAttachmentGuidance,
-	autoPrepareResponse,
-} from "../../../../runtime/application";
-import {
-	describeFlowAttachmentAvailability,
-	type FlowAttachmentAvailabilitySnapshot,
-} from "../../attachment-store";
+import { autoPrepareResponse } from "../../../../runtime/application";
 import { tool } from "../../sdk";
 import { withParsedArgs } from "../parsed-tool";
 import {
@@ -34,8 +27,6 @@ import {
 	readToolSessionValue,
 	recordToolMetadata,
 } from "./shared";
-
-const FLOW_AUTO_ATTACHMENT_DESTINATION_DIRECTORY = "assets/flow-attachments";
 
 export function createPlanningSessionTools() {
 	return {
@@ -78,58 +69,19 @@ export function createPlanningSessionTools() {
 						input.argumentString,
 						resumableSession,
 					);
-					const attachmentGuidance = autoPrepareAttachmentGuidance(
-						describeFlowAttachmentAvailability({
-							sessionId: context.sessionID,
-							messageId: context.messageID,
-						}),
-					);
 					const response = autoPrepareResponse(
 						navigation.mode,
 						navigation.goal,
 						navigation.nextCommand,
 						resumableSession,
-						attachmentGuidance,
 					);
 					recordToolMetadata(context, `Flow auto (${response.metadata.mode})`, {
 						mode: response.metadata.mode,
 						goal: response.metadata.goal,
-						attachmentStatus: response.metadata.attachmentStatus,
-						attachmentMaterializationRequired:
-							response.metadata.attachmentMaterializationRequired,
 					});
 					return response.payload;
 				},
 			),
 		}),
-	};
-}
-
-function autoPrepareAttachmentGuidance(
-	snapshot: FlowAttachmentAvailabilitySnapshot,
-): AutoPrepareAttachmentGuidance {
-	return {
-		status: snapshot.status,
-		source: snapshot.source,
-		supportedFormats: snapshot.supportedFormats,
-		unsupportedFormats: ["SVG"],
-		materializationRequired: snapshot.materializationRequired,
-		materialize: snapshot.materializationRequired
-			? {
-					tool: "flow_attachments_materialize",
-					args: {
-						destinationDirectory: FLOW_AUTO_ATTACHMENT_DESTINATION_DIRECTORY,
-					},
-					requiredBefore: ["planning", "repo_inspection", "task_handoff"],
-					useImplicitCurrentBatch: true,
-				}
-			: null,
-		attachments: snapshot.attachments.map((attachment) => ({
-			id: attachment.id,
-			...(attachment.filename ? { filename: attachment.filename } : {}),
-			mime: attachment.mime,
-		})),
-		skipped: snapshot.skipped,
-		reason: snapshot.reason,
 	};
 }

@@ -98,20 +98,6 @@ export const FlowReviewRenderArgsShape = {
 	...ReviewReportSchema.shape,
 	view: z.enum(["human", "structured", "both"]).optional(),
 };
-const FlowAttachmentSelectorSchema = z
-	.object({
-		id: z.string().trim().min(1).optional(),
-		filename: z.string().trim().min(1).optional(),
-	})
-	.strict()
-	.refine((selector) => selector.id || selector.filename, {
-		message: "Attachment selectors require id or filename",
-	});
-
-export const FlowAttachmentsMaterializeArgsShape = {
-	attachments: z.array(FlowAttachmentSelectorSchema).optional(),
-	destinationDirectory: z.string().trim().min(1),
-};
 export const FlowAutoPrepareArgsShape = {
 	argumentString: z.string().optional(),
 };
@@ -151,9 +137,6 @@ export const FlowSessionActivateArgsSchema = z.object(
 	FlowSessionActivateArgsShape,
 );
 export const FlowSessionCloseArgsSchema = z.object(FlowSessionCloseArgsShape);
-export const FlowAttachmentsMaterializeArgsSchema = z
-	.object(FlowAttachmentsMaterializeArgsShape)
-	.strict();
 export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
 export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
 export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
@@ -209,11 +192,6 @@ export const FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY = {
 	flow_auto_prepare: {
 		argsShape: FlowAutoPrepareArgsShape,
 		argsSchema: FlowAutoPrepareArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_attachments_materialize: {
-		argsShape: FlowAttachmentsMaterializeArgsShape,
-		argsSchema: FlowAttachmentsMaterializeArgsSchema,
 		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
 	},
 	flow_session_close: {

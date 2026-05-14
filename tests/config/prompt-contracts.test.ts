@@ -144,7 +144,7 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_review_record_feature");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("flow_run_complete_feature");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("flow_auto_prepare");
-		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).not.toContain(
 			"flow_attachments_materialize",
 		);
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("flow_reset_feature");
@@ -328,14 +328,15 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("missing validation");
 	});
 
-	test("auto prompt and command keep classification, attachment, resume, and decision-gate guardrails", () => {
+	test("auto prompt and command keep classification, native attachment ownership, resume, and decision-gate guardrails", () => {
 		for (const surface of [
 			FLOW_AUTO_AGENT_PROMPT,
 			FLOW_AUTO_COMMAND_TEMPLATE,
 		]) {
 			expect(surface).toContain("flow_auto_prepare");
-			expect(surface).toContain("attachmentGuidance");
-			expect(surface).toContain("materialize attachments only when");
+			expect(surface).toContain("Native OpenCode owns file/image attachments");
+			expect(surface).toContain("do not call Flow tools to materialize them");
+			expect(surface).not.toContain("attachmentGuidance");
 			expect(surface).toContain("resume-only");
 			expect(surface).toContain("stop and request a goal");
 			expect(surface).toContain("missing_goal");
@@ -345,7 +346,7 @@ describe("prompt and command config contracts", () => {
 			expect(surface).toContain("final completion path");
 			expect(surface).toContain("passing final review");
 		}
-		expect(FLOW_MODE_CONTRACTS["flow-auto"].allowedFlowTools).toContain(
+		expect(FLOW_MODE_CONTRACTS["flow-auto"].allowedFlowTools).not.toContain(
 			"flow_attachments_materialize",
 		);
 	});

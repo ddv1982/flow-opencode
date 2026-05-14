@@ -961,9 +961,9 @@
 		"nextStepSnippets": ["runtime next step"]
 	},
 	{
-		"id": "auto-materializes-attached-image-before-planning",
+		"id": "auto-preserves-native-attachments-before-planning",
 		"mode": "flow-auto",
-		"title": "Auto mode follows attachmentGuidance before planning or delegation",
+		"title": "Auto mode keeps attachments native while planning",
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
@@ -974,31 +974,30 @@
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Call flow_auto_prepare with the raw argument string first. Inspect attachmentGuidance from the runtime response. If attachmentGuidance.materializationRequired is true, call flow_attachments_materialize (the attachmentGuidance.materialize.tool value) with attachmentGuidance.materialize.args before planning or Task/subagent handoff. Use the returned workspace-relative paths as plan evidence and pass them to flow-planner/flow-worker; do not assume OpenCode chat attachments are filesystem files before import. Next step: continue normal planning with the materialized asset paths.",
+		"modelOutput": "Call flow_auto_prepare with the raw argument string first. Native OpenCode owns file/image attachments, so leave attached files in host/model context and do not call Flow tools to materialize them into workspace files. Next step: continue normal planning using the runtime-classified goal and cite native attachment context only as host/model context when relevant.",
 		"minPassingScore": 6,
-		"expectedToolMentions": [
-			"flow_auto_prepare",
-			"flow_attachments_materialize"
+		"expectedToolMentions": ["flow_auto_prepare"],
+		"forbiddenToolMentions": [
+			"flow_attachments_materialize",
+			"flow_run_start",
+			"flow_session_close"
 		],
-		"forbiddenToolMentions": ["flow_run_start", "flow_session_close"],
 		"requiredResponseSnippets": [
-			"attachmentGuidance.materializationRequired",
-			"attachmentGuidance.materialize.args",
-			"before planning",
-			"Task/subagent handoff",
-			"workspace-relative paths",
-			"do not assume OpenCode chat attachments are filesystem files before import"
+			"Native OpenCode owns file/image attachments",
+			"host/model context",
+			"do not call Flow tools to materialize them",
+			"normal planning"
 		],
 		"forbiddenResponseSnippets": [
-			"asked the user to copy files manually",
-			"use chat attachments as paths"
+			"workspace-relative paths",
+			"materialized asset paths"
 		],
-		"nextStepSnippets": ["materialized asset paths", "normal planning"]
+		"nextStepSnippets": ["normal planning", "runtime-classified goal"]
 	},
 	{
-		"id": "auto-ordinary-goal-skips-attachment-materialization",
+		"id": "auto-ordinary-goal-leaves-native-attachments-alone",
 		"mode": "flow-auto",
-		"title": "Auto mode does not materialize when attachmentGuidance says it is not required",
+		"title": "Auto mode leaves native attachments alone for ordinary goals",
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
@@ -1009,14 +1008,14 @@
 			"src/prompts/agents.ts",
 			"src/prompts/fragments.ts"
 		],
-		"modelOutput": "Call flow_auto_prepare with the raw argument string. If attachmentGuidance.materializationRequired is false, do not call attachment materialization; continue with normal planning and repo evidence gathering. Next step: create or refresh the plan from the runtime-classified goal.",
+		"modelOutput": "Call flow_auto_prepare with the raw argument string. Flow no longer reports attachment materialization requirements; native OpenCode owns file/image attachments in host/model context. Next step: create or refresh the plan from the runtime-classified goal.",
 		"minPassingScore": 6,
 		"expectedToolMentions": ["flow_auto_prepare"],
 		"forbiddenToolMentions": ["flow_attachments_materialize", "flow_run_start"],
 		"requiredResponseSnippets": [
-			"attachmentGuidance.materializationRequired is false",
-			"do not call attachment materialization",
-			"normal planning"
+			"Flow no longer reports attachment materialization requirements",
+			"native OpenCode owns file/image attachments",
+			"host/model context"
 		],
 		"forbiddenResponseSnippets": ["materialized attachments", "imported image"],
 		"nextStepSnippets": [
@@ -1025,9 +1024,9 @@
 		]
 	},
 	{
-		"id": "auto-bad-materializes-attached-image-after-planning",
+		"id": "auto-bad-creates-flow-owned-attachment-files",
 		"mode": "flow-auto",
-		"title": "Auto mode regression plans before materializing attached image assets",
+		"title": "Auto mode regression creates Flow-owned attachment files",
 		"origin": "calibration",
 		"sourcePaths": [
 			"src/prompts/mode-contracts.ts",
@@ -1040,24 +1039,20 @@
 		],
 		"modelOutput": "Call flow_auto_prepare, then call flow_plan_start and hand the task to flow-planner. After planning, call flow_attachments_materialize and pass any image paths to the worker. Next step: continue execution.",
 		"minPassingScore": 6,
-		"expectedToolMentions": [
-			"flow_auto_prepare",
+		"expectedToolMentions": ["flow_auto_prepare", "flow_plan_start"],
+		"forbiddenToolMentions": [
 			"flow_attachments_materialize",
-			"flow_plan_start"
+			"flow_session_close"
 		],
-		"forbiddenToolMentions": ["flow_session_close"],
 		"requiredResponseSnippets": [
-			"before planning",
-			"workspace-relative paths",
-			"do not assume OpenCode chat attachments are filesystem files"
+			"Native OpenCode owns file/image attachments",
+			"do not call Flow tools to materialize them",
+			"host/model context"
 		],
 		"forbiddenResponseSnippets": ["After planning"],
-		"nextStepSnippets": [
-			"materialize before planning",
-			"materialized asset paths"
-		],
+		"nextStepSnippets": ["normal planning", "runtime-classified goal"],
 		"expectedFailures": [
-			"required_tool_sequence",
+			"forbidden_tool_absent",
 			"required_behavior_present",
 			"forbidden_behavior_absent",
 			"next_step_calibrated"

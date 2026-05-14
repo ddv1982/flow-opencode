@@ -76,7 +76,7 @@ Hard gates block readiness. Advisory and diagnostic commands guide investigation
 - `src/installer.ts` — local OpenCode plugin installer
 - `src/config.ts` — command and agent injection
 - `src/adapters/opencode/tools.ts` — OpenCode runtime tool surface
-- `src/adapters/opencode/attachment-policy.ts`, `src/adapters/opencode/attachment-store.ts`, and `src/adapters/opencode/attachment-materialization.ts` — supported image attachment policy, captured OpenCode attachment index, and explicit workspace materialization for `/flow-auto`
+- Native OpenCode owns image/file attachments; Flow does not capture or materialize chat/command attachments by default and owns only workflow JSON/state under `.flow/**` plus derived docs
 - `src/runtime/schema.ts` — session and contract schemas
 - `src/runtime/transitions/` — domain state transition rules split by lifecycle phase
 - `src/runtime/domain/completion.ts` — shared completion-policy calculations
@@ -110,7 +110,7 @@ user / slash command / agent
 5. Prompted agents call runtime tools instead of mutating state directly.
 6. Coordinators use OpenCode task/subagent handoffs for bounded planning, implementation, and review work when the host supports them, so each role can work in a fresh child context while runtime tools remain the state authority.
 7. Generated OpenCode skills under `~/.config/opencode/skills/flow-{plan,run,review}/SKILL.md` provide on-demand guidance. Slash commands and agents remain fallback surfaces and must keep working when skills are absent, denied, or hidden by OpenCode permissions.
-8. For attachment-dependent `/flow-auto` goals, the coordinator materializes captured OpenCode PNG, JPEG, WebP, GIF, or AVIF attachments into explicit workspace asset paths before planning or handoff; SVG remains unsupported, and chat attachments are not filesystem files until `flow_attachments_materialize` returns paths.
+8. Native OpenCode owns image/file attachments. Flow leaves host/model attachment context untouched and does not create Flow-owned workspace files from chat or command attachments by default.
 9. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
 
 Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. Rendered markdown docs are derived artifacts, not workflow truth. Core action and role-protocol metadata are projection/regression infrastructure; they are not live persistence. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
@@ -183,8 +183,7 @@ Default OpenCode tool surface, in descriptor docs-row order:
 - `flow_history_show` — Show a specific active, stored, or completed Flow session by id
 - `flow_session_activate` — Activate a stored Flow session by id
 - `flow_plan_start` — Create or refresh the active Flow planning session
-- `flow_auto_prepare` — Classify a flow-auto invocation and report attachment materialization requirements
-- `flow_attachments_materialize` — Import captured PNG, JPEG, WebP, GIF, or AVIF OpenCode attachments into a safe workspace path
+- `flow_auto_prepare` — Classify a flow-auto invocation and choose the next step
 - `flow_session_close` — Close the active Flow session as completed, deferred, or abandoned
 - `flow_plan_context_record` — Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session from a JSON payload
 - `flow_plan_apply` — Persist a Flow draft plan into the active session from a JSON payload
@@ -198,7 +197,7 @@ Default OpenCode tool surface, in descriptor docs-row order:
 - `flow_review_render` — Render a structured Flow review ledger into a human-readable report, structured JSON, or both
 
 
-Attachment materialization is a narrow `/flow-auto` coordinator surface. It imports only captured OpenCode PNG, JPEG, WebP, GIF, or AVIF `data:` attachments into a caller-selected workspace asset directory, never into `.flow/**`, and returns workspace-relative paths for plans, workers, and reviewers to cite as artifacts/evidence. SVG, raw base64 payloads, filesystem paths, and HTTP URLs are unsupported; unsupported attachment types remain chat/model context unless a future explicit materialization path adds support.
+Native OpenCode owns image/file attachment handling. Flow tools and prompts must not add a Flow-owned attachment materialization surface unless a new explicit product requirement, schema contract, docs update, and regression tests establish that ownership boundary.
 
 Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
 

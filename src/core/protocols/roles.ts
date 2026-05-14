@@ -122,7 +122,7 @@ export const CORE_ROLE_PROTOCOLS = [
 		],
 		workflow: [
 			"Classify the request, then plan or resume only when the runtime says that lane is valid.",
-			"After flow_auto_prepare, follow attachmentGuidance.materializationRequired; when true, call attachmentGuidance.materialize.tool with attachmentGuidance.materialize.args before planning, repo inspection for implementation, or delegation; when false, do not call attachment materialization.",
+			"Treat attachments as native OpenCode context; do not create Flow-owned files from them.",
 			"Keep one feature active until clean, blocked, or replanned; never advance while review findings remain.",
 			"When runtime errors include structured recovery metadata, satisfy the prerequisite and use the canonical runtime action when present.",
 			"For completion-path coordination, require broad validation plus the final review required by deliveryPolicy.finalReviewPolicy before completing.",

@@ -71,7 +71,6 @@ describe("transition consolidation", () => {
 				]),
 		);
 		expect(Object.keys(sessionToolModuleCounts)).toEqual([
-			"attachment-tools.ts",
 			"history-tools.ts",
 			"lifecycle-tools.ts",
 			"next-command-policy.ts",

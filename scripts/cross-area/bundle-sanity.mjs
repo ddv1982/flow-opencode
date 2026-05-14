@@ -184,7 +184,7 @@ async function main() {
 		if (
 			report.configAgents !== 7 ||
 			report.configCommands !== 9 ||
-			report.toolCount !== 19
+			report.toolCount !== 18
 		) {
 			throw new Error(
 				`Plugin surface shape is incorrect after build: ${JSON.stringify({
