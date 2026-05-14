@@ -39,29 +39,6 @@ function isValidationPassing(
 	);
 }
 
-function hasApprovedReviewerDecision(
-	session: Session,
-	worker: NormalizedWorkerResult,
-	featureId: string,
-	wasFinalFeature: boolean,
-): boolean {
-	const executionLane = deriveExecutionLane(session).lane;
-	if (executionLane === "lite" && !wasFinalFeature) {
-		return isReviewPassing(worker.featureReview);
-	}
-
-	const decision = session.execution.lastReviewerDecision;
-	if (!decision || decision.status !== "approved") {
-		return false;
-	}
-
-	return wasFinalFeature
-		? decision.scope === "final" &&
-				finalReviewDepthMatchesPolicy(session, decision.reviewDepth) &&
-				describeFinalReviewCoverageFailure(session, worker, decision) === null
-		: decision.scope === "feature" && decision.featureId === featureId;
-}
-
 type FinalReviewerDecisionFailure = {
 	kind: "missing_or_invalid_reviewer_decision" | "review_scope_accounting";
 	message: string;
@@ -74,7 +51,20 @@ function finalReviewerDecisionFailureMessage(
 	wasFinalFeature: boolean,
 ): FinalReviewerDecisionFailure | null {
 	if (!wasFinalFeature) {
-		return hasApprovedReviewerDecision(session, worker, featureId, false)
+		if (deriveExecutionLane(session).lane === "lite") {
+			return isReviewPassing(worker.featureReview)
+				? null
+				: {
+						kind: "missing_or_invalid_reviewer_decision",
+						message:
+							"Worker result cannot complete without a recorded approved reviewer decision.",
+					};
+		}
+
+		const decision = session.execution.lastReviewerDecision;
+		return decision?.status === "approved" &&
+			decision.scope === "feature" &&
+			decision.featureId === featureId
 			? null
 			: {
 					kind: "missing_or_invalid_reviewer_decision",

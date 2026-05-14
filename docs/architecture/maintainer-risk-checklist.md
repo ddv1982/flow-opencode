@@ -1,65 +1,29 @@
 # Flow Maintainer Risk Checklist
 
-Use this as a merge-time checklist for risky changes. It is intentionally not the canonical contract.
+Use this as a compact merge-time risk pointer. It is intentionally **not** canonical.
 
 Canonical current-facing maps:
 
-- `docs/maintainer-contract.md` owns commands, tools, state paths, invariants, the surface-expansion freeze, and the compact "if you touch X, run Y" map.
+- `docs/maintainer-contract.md` owns commands, tools, state paths, invariants, gate contracts, the surface-expansion freeze, and the compact "if you touch X, run Y" map.
 - `docs/contributor-map.md` owns contributor onboarding risk by area: read-first files, required checks, and "do not" rules.
 
-If this checklist conflicts with either file, update this checklist or delete the duplicate guidance. Do not treat this file as a second source of truth.
+If this checklist conflicts with either canonical file, update this checklist or delete the duplicate guidance. Do not treat this file as a second source of truth.
 
-## Before changing a high-risk area
+## Merge-time risk check
 
-1. Identify the touched area in `docs/maintainer-contract.md`.
-2. Read the matching section in `docs/contributor-map.md` before editing.
-3. Run the narrow checks listed there before broad checks.
+1. Identify the touched surface in `docs/maintainer-contract.md`.
+2. Read the matching risk area in `docs/contributor-map.md` before editing.
+3. Run the narrow checks listed for that area before broad checks.
 4. Run `bun run check` before release, cross-surface merges, or persistence-affecting changes.
 5. Record the risk/alternative in Lore release notes or commit trailers when behavior, contracts, or public surfaces change.
 
-## Authority and deletion freeze
+## Current-facing docs hygiene
 
-- Live runtime writes are snapshot-primary. Do not describe core event/replay as live persistence unless a separate migration explicitly changes that authority.
-- Treat core workflow/replay, event/checkpoint/projection stores, adapter schemas, generated prompt/tool projections, audit schemas, and canonical architecture docs as boundary or parity surfaces.
-- Do not delete or collapse those surfaces without import/call-graph evidence and replacement parity tests.
-- Descriptor metadata may project tool/action/protocol facts, but runtime transitions remain the enforcement point for completion, review, and recovery gates.
+- Keep detailed command, tool, state-path, gate, and invariant guidance in the canonical docs above.
+- Do not duplicate boundary-hotspot tables here; point readers back to the canonical maps.
+- Keep historical evidence (`docs/releases/**`, `docs/investigations/**`, generated `release-notes.md`, and `CHANGELOG.md`) labeled as historical unless evidence is freshly re-run and promoted to current guidance.
 
-## Surface expansion freeze
-
-New commands, tools, prompt contracts, state paths, and runtime modes are frozen by default.
-
-Only add one when the change records an explicit retirement or replacement tradeoff in the release/commit lore. If there is no retirement/replacement story, treat the change as scope expansion and defer it.
-
-## Boundary hotspots
-
-These areas require extra caution because they affect external or cross-surface contracts:
-
-| Area | Canonical map |
-| --- | --- |
-| `zod`, `@opencode-ai/plugin`, or tool argument shape | `docs/maintainer-contract.md` dependency/tool rows; `docs/contributor-map.md` runtime schema and tool schema sections |
-| Completion, final review, or recovery transitions | `docs/maintainer-contract.md` completion/runtime rows; `docs/contributor-map.md` runtime transitions section |
-| Prompt text, command templates, or mode contracts | `docs/maintainer-contract.md` prompt rows; `docs/contributor-map.md` prompts section |
-| Session paths, persistence, history, or workspace-root handling | `docs/maintainer-contract.md` state path rows; `docs/contributor-map.md` session persistence section |
-| Install/uninstall, package contents, or release scripts | `docs/maintainer-contract.md` release/package row; `docs/contributor-map.md` config/install/release section |
-| Performance-sensitive save/render/schema paths | `docs/maintainer-contract.md` performance row; `docs/contributor-map.md` performance section |
-
-## Historical evidence docs hygiene
-
-`docs/releases/**`, `docs/investigations/**`, generated `release-notes.md`, and `CHANGELOG.md` are historical evidence unless explicitly refreshed.
-
-When touching historical or evidence-heavy docs:
-
-- keep prior values labeled as historical snapshots with capture date/context, or re-run the evidence and update it as current
-- do not make prior file names, deleted artifacts, or retired plans look like active contracts
-- confirm `package.json` before presenting version-specific statements as current facts
-
-Quick checks:
+## Quick docs checks
 
 - `bun test tests/docs-stale-reference-policy.test.ts tests/docs-semantic-parity.test.ts`
-- `bun test tests/docs-tool-parity.test.ts` when command/tool docs change
-
-## Full release gate
-
-Before merging any cross-surface or persistence-affecting change:
-
-- `bun run check`
+- Add `bun test tests/docs-tool-parity.test.ts` when command/tool docs change.

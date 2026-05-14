@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [2.0.42] - 2026-05-14
+
+Simplify maintainer risk guidance and completion-gate internals
+
+Flow 2.0.42 continues the delete-first simplification line without widening the public surface. The maintainer risk checklist is now a compact non-canonical pointer to the canonical maintainer contract and contributor map instead of a second copy of boundary policy, reducing current-facing documentation drift risk.
+
+The runtime cleanup stays intentionally small: `execution-completion-validation.ts` no longer carries a private reviewer-decision helper with duplicated final-path logic. The non-final reviewer-decision behavior is inlined where it is used, while completion gate ordering, failure messages, recovery metadata, final-review coverage checks, schemas, persistence behavior, package exports, dependencies, installer behavior, slash commands, runtime tools, state paths, and workflow modes remain unchanged.
+
+Fresh simplification metrics after the pass: runtime files `124`, runtime LOC `17,480`, large runtime files `7`, top-5 runtime-file LOC share `9.7%`, and architecture seam violations `0`. The largest runtime files are now `schema-review-shared.ts` (`353` LOC), `execution-completion-validation.ts` (`347`), `session-presenters.ts` (`341`), `final-review-coverage.ts` (`332`), and `session-actions.ts` (`326`). Compared with v2.0.41, the release lowers the completion-validation hotspot by `10` LOC and keeps seam violations at zero.
+
+Constraint: Preserve Flow's public tool names, command names, runtime response envelopes, `.flow/**` state paths, package exports, installer behavior, completion/reviewer gate semantics, and OpenCode SDK dependency contract while simplifying duplicated guidance and private helper logic
+Constraint: Keep `@opencode-ai/plugin` at `1.14.48` and `zod` at `4.1.8`; this release changes no dependency compatibility boundary
+Constraint: Keep final-feature reviewer approval, final-review coverage, failure messages, and recovery metadata behavior locked while deleting only private redundant logic
+Rejected: Delete or weaken completion/reviewer/final-review gates for a larger LOC reduction | those checks are load-bearing runtime safety contracts
+Rejected: Keep detailed boundary-hotspot guidance duplicated in the non-canonical checklist | duplicated current-facing authority increases drift risk relative to the canonical docs
+Rejected: Broaden the cleanup into additional runtime hotspots before release | one hotspot per pass keeps the simplification diff reviewable and behavior-locked
+Confidence: high
+Scope-risk: narrow
+Reversibility: clean
+Directive: Continue simplification one hotspot at a time; keep detailed current-facing authority in `docs/maintainer-contract.md` and `docs/contributor-map.md`, and preserve completion-gate tests before editing reviewer/final-review validation paths
+Tested: `bun test tests/docs-stale-reference-policy.test.ts tests/docs-semantic-parity.test.ts` (5 pass, 0 fail); `bun run test:fast` (16 pass, 0 fail); `bun run gate:completion-lane` (124 pass, 0 fail); `bun run check:architecture-seams:enforce` (0 blocked imports); `bun run typecheck`; `bun run report:runtime-simplification-metrics` (`runtime.totalLoc=17480`, `seamViolationCount=0`); `bun run check` (release gate passed: dependency contract OK with project/plugin/root `zod=4.1.8`, pack invariants OK for version `2.0.42`, 662 pass, 0 fail, lint passed, bench smoke passed, bench gate passed)
+Not-tested: Live OpenCode UI runtime interaction; live GitHub-hosted release workflow run for tag `v2.0.42` before push
+
 ## [2.0.41] - 2026-05-14
 
 Publish release-only continuity evidence
