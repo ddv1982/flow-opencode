@@ -12,6 +12,7 @@ import {
 	FLOW_CORE_QUERY_NAMES,
 	FLOW_CORE_VNEXT_CONTRACT,
 	isFlowCoreMutationCommandName,
+	isFlowCoreQueryName,
 	isFlowCoreWorkspaceCommandName,
 	runDispatchedSessionMutationAction,
 	runDispatchedSessionReadAction,
@@ -78,6 +79,8 @@ describe("session engine boundary", () => {
 		expect(isFlowCoreWorkspaceCommandName("plan_start")).toBe(true);
 		expect(isFlowCoreMutationCommandName("start_run")).toBe(true);
 		expect(isFlowCoreMutationCommandName("not_a_flow_command")).toBe(false);
+		expect(isFlowCoreQueryName("load_status_session")).toBe(true);
+		expect(isFlowCoreQueryName("not_a_flow_query")).toBe(false);
 	});
 
 	test("flow core run command rejects unknown command names before dispatch", async () => {
@@ -161,6 +164,74 @@ describe("session engine boundary", () => {
 				runtime,
 			),
 		).rejects.toThrow("Unknown Flow Core command 'not_a_flow_command'.");
+		expect(dispatched).toBe(false);
+	});
+
+	test("flow core run query rejects unknown query names before dispatch", async () => {
+		let dispatched = false;
+		const invalidRunFlowCoreQuery = runFlowCoreQuery as unknown as (
+			context: { worktree: string },
+			name: string,
+			payload: unknown,
+			runtime: unknown,
+		) => Promise<unknown>;
+		const runtime = {
+			loadSession: async () => {
+				dispatched = true;
+				throw new Error("should not load");
+			},
+			listSessionHistory: async () => {
+				dispatched = true;
+				throw new Error("should not list history");
+			},
+			loadStoredSession: async () => {
+				dispatched = true;
+				throw new Error("should not load stored session");
+			},
+		};
+
+		await expect(
+			invalidRunFlowCoreQuery(
+				{ worktree: "/tmp/project" },
+				"not_a_flow_query",
+				undefined,
+				runtime,
+			),
+		).rejects.toThrow("Unknown Flow Core query 'not_a_flow_query'.");
+		expect(dispatched).toBe(false);
+	});
+
+	test("flow core execute query rejects unknown query names before dispatch", async () => {
+		let dispatched = false;
+		const invalidExecuteFlowCoreQuery = executeFlowCoreQuery as unknown as (
+			context: { worktree: string },
+			name: string,
+			payload: unknown,
+			runtime: unknown,
+		) => Promise<unknown>;
+		const runtime = {
+			loadSession: async () => {
+				dispatched = true;
+				throw new Error("should not load");
+			},
+			listSessionHistory: async () => {
+				dispatched = true;
+				throw new Error("should not list history");
+			},
+			loadStoredSession: async () => {
+				dispatched = true;
+				throw new Error("should not load stored session");
+			},
+		};
+
+		await expect(
+			invalidExecuteFlowCoreQuery(
+				{ worktree: "/tmp/project" },
+				"not_a_flow_query",
+				undefined,
+				runtime,
+			),
+		).rejects.toThrow("Unknown Flow Core query 'not_a_flow_query'.");
 		expect(dispatched).toBe(false);
 	});
 

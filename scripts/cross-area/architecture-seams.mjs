@@ -12,11 +12,18 @@ const enforce =
 	process.env.FLOW_ARCH_SEAMS_ENFORCE === "1";
 
 const seamRoot = path.join(repoRoot, "src");
-const sourceRoots = ["core", "runtime", "adapters"].map((segment) =>
+const sourceRoots = ["core", "workflow", "runtime", "adapters"].map((segment) =>
 	path.join(seamRoot, segment),
 );
 
-const deniedEdges = new Set(["core->runtime", "core->adapters", "runtime->adapters"]);
+const deniedEdges = new Set([
+	"core->workflow",
+	"core->runtime",
+	"core->adapters",
+	"workflow->runtime",
+	"workflow->adapters",
+	"runtime->adapters",
+]);
 
 function toPosix(filePath) {
 	return filePath.split(path.sep).join("/");
@@ -38,7 +45,11 @@ function listTsFiles(root) {
 				pending.push(absolute);
 				continue;
 			}
-			if (entry.endsWith(".ts") || entry.endsWith(".tsx") || entry.endsWith(".mts")) {
+			if (
+				entry.endsWith(".ts") ||
+				entry.endsWith(".tsx") ||
+				entry.endsWith(".mts")
+			) {
 				files.push(absolute);
 			}
 		}
@@ -49,6 +60,7 @@ function listTsFiles(root) {
 function layerFromPath(filePath) {
 	const relative = toPosix(path.relative(repoRoot, filePath));
 	if (relative.startsWith("src/core/")) return "core";
+	if (relative.startsWith("src/workflow/")) return "workflow";
 	if (relative.startsWith("src/runtime/")) return "runtime";
 	if (relative.startsWith("src/adapters/")) return "adapters";
 	return null;
@@ -56,11 +68,16 @@ function layerFromPath(filePath) {
 
 function collectModuleSpecifiers(content) {
 	const specifiers = [];
-	const importExportPattern = /(?:import|export)\s+(?:type\s+)?[^;]*?from\s+["']([^"']+)["']/g;
+	const importExportPattern =
+		/(?:import|export)\s+(?:type\s+)?[^;]*?from\s+["']([^"']+)["']/g;
 	const sideEffectPattern = /import\s+["']([^"']+)["']/g;
 	const dynamicImportPattern = /import\(\s*["']([^"']+)["']\s*\)/g;
 
-	for (const pattern of [importExportPattern, sideEffectPattern, dynamicImportPattern]) {
+	for (const pattern of [
+		importExportPattern,
+		sideEffectPattern,
+		dynamicImportPattern,
+	]) {
 		let match = pattern.exec(content);
 		while (match) {
 			specifiers.push(match[1]);
@@ -120,10 +137,9 @@ function printSummary(violations) {
 		return;
 	}
 
-	const heading =
-		enforce
-			? "Architecture seam contract violations detected."
-			: "Architecture seam contract report (report-only mode).";
+	const heading = enforce
+		? "Architecture seam contract violations detected."
+		: "Architecture seam contract report (report-only mode).";
 	console.log(heading);
 	console.log(
 		`Detected ${violations.length} blocked cross-layer import${violations.length === 1 ? "" : "s"}.`,

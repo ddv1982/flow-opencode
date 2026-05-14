@@ -18,6 +18,7 @@ export {
 	FLOW_CORE_QUERY_NAMES,
 	FLOW_CORE_VNEXT_CONTRACT,
 	isFlowCoreMutationCommandName,
+	isFlowCoreQueryName,
 	isFlowCoreWorkspaceCommandName,
 	runFlowCoreCommand,
 	runFlowCoreQuery,

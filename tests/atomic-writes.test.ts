@@ -2,11 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { open, readdir, readFile, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+	getActiveSessionsDir,
 	getFeatureDocPath,
 	getFlowDir,
 	getIndexDocPath,
 	getSessionDir,
 	getSessionPath,
+	getStoredSessionsDir,
 } from "../src/runtime/paths";
 import { renderFeatureDoc } from "../src/runtime/render-feature-sections";
 import { renderIndexDoc } from "../src/runtime/render-index-sections";
@@ -163,7 +165,7 @@ describe("atomic writes", () => {
 		}
 	});
 
-	test("atomic writer fsyncs temp session files and target directory before rename", async () => {
+	test("atomic writer fsyncs staged session files and live-session promotion directories", async () => {
 		const worktree = makeTempDir();
 		const syncs: string[] = [];
 
@@ -182,11 +184,13 @@ describe("atomic writes", () => {
 		const session = sampleSession("Fsync verification");
 		await saveSession(worktree, session);
 
-		expect(syncs.some((path) => path.includes(join(".flow", "active")))).toBe(
+		expect(syncs.some((path) => path.includes(join(".flow", "stored")))).toBe(
 			true,
 		);
 		expect(syncs.some((path) => path.endsWith(".tmp"))).toBe(true);
-		expect(syncs).toContain(getSessionDir(worktree, session.id));
+		expect(syncs).toContain(getSessionDir(worktree, session.id, "stored"));
+		expect(syncs).toContain(getActiveSessionsDir(worktree));
+		expect(syncs).toContain(getStoredSessionsDir(worktree));
 	});
 });
 

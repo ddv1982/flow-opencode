@@ -10,6 +10,7 @@ import {
 	type CompletedSessionLocation,
 	moveSessionDirToCompleted,
 } from "./session-completed-storage";
+import { syncSessionWorkspaceDirectory } from "./session-workspace-io";
 import type { MutableWorkspaceRoot } from "./workspace-root";
 
 async function listDirectoryNames(root: string): Promise<string[]> {
@@ -66,6 +67,13 @@ export async function findStoredSessionDir(
 	}
 }
 
+async function syncLiveSessionParentDirectories(
+	worktree: MutableWorkspaceRoot,
+): Promise<void> {
+	await syncSessionWorkspaceDirectory(getActiveSessionsDir(worktree));
+	await syncSessionWorkspaceDirectory(getStoredSessionsDir(worktree));
+}
+
 async function parkActiveSession(
 	worktree: MutableWorkspaceRoot,
 	sessionId: string,
@@ -77,20 +85,15 @@ async function parkActiveSession(
 	);
 }
 
-async function promoteStoredSession(
+async function promoteStoredSessionDir(
 	worktree: MutableWorkspaceRoot,
+	storedDir: string,
 	sessionId: string,
-): Promise<boolean> {
-	const storedDir = await findStoredSessionDir(worktree, sessionId);
-	if (!storedDir) {
-		return false;
-	}
-
+): Promise<void> {
 	await rename(storedDir, getActiveSessionDir(worktree, sessionId));
-	return true;
 }
 
-export async function activateStoredSessionBoundary(
+async function promoteStoredSessionToActive(
 	worktree: MutableWorkspaceRoot,
 	sessionId: string,
 ): Promise<"already-active" | "activated" | "missing"> {
@@ -108,22 +111,23 @@ export async function activateStoredSessionBoundary(
 		await parkActiveSession(worktree, activeSessionId);
 	}
 
-	await rename(storedDir, getActiveSessionDir(worktree, sessionId));
+	await promoteStoredSessionDir(worktree, storedDir, sessionId);
+	await syncLiveSessionParentDirectories(worktree);
 	return "activated";
+}
+
+export async function activateStoredSessionBoundary(
+	worktree: MutableWorkspaceRoot,
+	sessionId: string,
+): Promise<"already-active" | "activated" | "missing"> {
+	return promoteStoredSessionToActive(worktree, sessionId);
 }
 
 export async function makeSessionActive(
 	worktree: MutableWorkspaceRoot,
 	sessionId: string,
 ): Promise<void> {
-	const activeSessionId = await resolveActiveSessionId(worktree);
-	if (activeSessionId && activeSessionId !== sessionId) {
-		await parkActiveSession(worktree, activeSessionId);
-	}
-
-	if (activeSessionId !== sessionId) {
-		await promoteStoredSession(worktree, sessionId);
-	}
+	await promoteStoredSessionToActive(worktree, sessionId);
 }
 
 export async function moveActiveSessionToCompleted(

@@ -1,9 +1,9 @@
-import type { SemanticInvariantId } from "../../workflow/domain";
 import {
 	CORE_ACTION_REGISTRY,
 	type CoreActionDescriptor,
 	type CoreActionName,
 } from "../registry";
+import type { SemanticInvariantId } from "./semantic-invariants";
 
 export type CoreRoleProtocolId =
 	| "planner"

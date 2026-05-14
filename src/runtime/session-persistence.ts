@@ -33,11 +33,16 @@ async function persistOpenSession(
 	session: Session,
 	includeArtifacts: boolean,
 ): Promise<void> {
-	await makeSessionActive(worktree, session.id);
+	const activeSessionId = await resolveActiveSessionId(worktree);
+	const targetLocation = activeSessionId === session.id ? "active" : "stored";
 
-	await writeSessionFile(worktree, session, "active");
+	await writeSessionFile(worktree, session, targetLocation);
 	if (includeArtifacts) {
-		await renderSessionDocs(worktree, session, "active");
+		await renderSessionDocs(worktree, session, targetLocation);
+	}
+
+	if (targetLocation === "stored") {
+		await makeSessionActive(worktree, session.id);
 	}
 }
 

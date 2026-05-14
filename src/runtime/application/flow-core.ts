@@ -89,6 +89,7 @@ const FLOW_CORE_WORKSPACE_COMMAND_NAME_SET = new Set<string>(
 const FLOW_CORE_MUTATION_COMMAND_NAME_SET = new Set<string>(
 	SESSION_MUTATION_ACTION_NAMES,
 );
+const FLOW_CORE_QUERY_NAME_SET = new Set<string>(SESSION_READ_ACTION_NAMES);
 
 export function isFlowCoreWorkspaceCommandName(
 	name: string,
@@ -102,8 +103,18 @@ export function isFlowCoreMutationCommandName(
 	return FLOW_CORE_MUTATION_COMMAND_NAME_SET.has(name);
 }
 
+export function isFlowCoreQueryName(
+	name: string,
+): name is SessionReadActionName {
+	return FLOW_CORE_QUERY_NAME_SET.has(name);
+}
+
 function unknownFlowCoreCommandError(name: string): Error {
 	return new Error(`Unknown Flow Core command '${name}'.`);
+}
+
+function unknownFlowCoreQueryError(name: string): Error {
+	return new Error(`Unknown Flow Core query '${name}'.`);
 }
 
 export function runFlowCoreCommand<Name extends SessionWorkspaceActionName>(
@@ -188,20 +199,28 @@ export async function executeFlowCoreCommand(
 	);
 }
 
-export function runFlowCoreQuery<Name extends FlowCoreQueryName>(
+export async function runFlowCoreQuery<Name extends FlowCoreQueryName>(
 	context: WorkspaceContext,
 	name: Name,
 	payload: FlowCoreQueryPayloadMap[Name],
 	runtime?: SessionReadRuntimePort,
 ): Promise<FlowCoreQueryResult<Name>> {
+	if (!isFlowCoreQueryName(name)) {
+		throw unknownFlowCoreQueryError(name);
+	}
+
 	return runDispatchedSessionReadAction(context, name, payload, runtime);
 }
 
-export function executeFlowCoreQuery<Name extends FlowCoreQueryName>(
+export async function executeFlowCoreQuery<Name extends FlowCoreQueryName>(
 	context: WorkspaceContext,
 	name: Name,
 	payload: FlowCoreQueryPayloadMap[Name],
 	runtime?: SessionReadRuntimePort,
 ): Promise<RuntimeToolResponse> {
+	if (!isFlowCoreQueryName(name)) {
+		throw unknownFlowCoreQueryError(name);
+	}
+
 	return executeDispatchedSessionReadAction(context, name, payload, runtime);
 }

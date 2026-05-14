@@ -1,14 +1,9 @@
+import type { SemanticInvariantId } from "../../core/protocols/semantic-invariants";
 import { CANONICAL_RUNTIME_TOOL_NAMES } from "../constants";
 import { completionRecoveryKindOrderFor } from "../transitions/completion-gates";
 import type { CompletionRecoveryKind } from "../transitions/recovery";
 
-export type SemanticInvariantId =
-	| "completion.gates.required_order"
-	| "completion.policy.min_completed_features"
-	| "decision_gate.planning_surface.binding"
-	| "review.scope.payload_binding"
-	| "recovery.next_action.binding"
-	| "tools.canonical_surface.no_raw_wrappers";
+export type { SemanticInvariantId };
 
 export type SemanticInvariantOwnerReference = {
 	file: string;

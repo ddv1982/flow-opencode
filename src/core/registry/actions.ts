@@ -1,4 +1,4 @@
-import type { SemanticInvariantId } from "../../workflow/domain";
+import type { SemanticInvariantId } from "../protocols/semantic-invariants";
 
 export type CoreActionName =
 	| "start_workflow"

@@ -4,8 +4,8 @@ Flow prompt surfaces are generated views, not semantic owners.
 
 ## Source-of-truth order
 
-1. Runtime transitions and domain policy own workflow enforcement.
-2. `src/core/registry/actions.ts` owns core workflow action metadata: action name, emitted events, invariant IDs, policy owners, and host-neutral descriptions.
+1. Runtime transitions and domain policy own workflow enforcement and semantic invariant descriptors/projections.
+2. `src/core/registry/actions.ts` owns core workflow action metadata: action name, emitted events, invariant IDs, policy owners, and host-neutral descriptions. `src/core/protocols/semantic-invariants.ts` owns the core-safe `SemanticInvariantId` union used by this metadata.
 3. OpenCode tool implementation modules own the actual read/workspace/mutation dispatch constants they invoke; descriptor parity tests compare those constants against descriptor metadata.
 4. `src/adapters/opencode/tool-surface/descriptors.ts` owns the OpenCode-facing superset descriptor family for host tools, typed `runtimeActionBinding` facets, nullable `coreAction` facets, permission class, prompt guidance, docs metadata, and verification anchors.
 5. `src/core/protocols/roles.ts` owns role protocol data: role objective, action ownership, boundaries, workflow outline, output protocol, and examples.

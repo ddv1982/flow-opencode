@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
-import { getSessionPath } from "../../src/runtime/paths";
+import {
+	getActiveSessionsDir,
+	getCompletedSessionsDir,
+	getSessionPath,
+	getStoredSessionsDir,
+} from "../../src/runtime/paths";
 import { ensureWorkspace, saveSession } from "../../src/runtime/session";
 import { readSessionFromPath } from "../../src/runtime/session-workspace";
 import { createTempDirRegistry, sampleSession } from "../runtime-test-helpers";
@@ -43,9 +48,14 @@ describe("workspace mkdir caching", () => {
 			});
 		}
 
-		const nonLockMkdirCalls = mkdirSpy.mock.calls.filter(
-			([target]) => !String(target).endsWith(".lock"),
+		const workspaceRootDirs = new Set([
+			getActiveSessionsDir(worktree),
+			getStoredSessionsDir(worktree),
+			getCompletedSessionsDir(worktree),
+		]);
+		const workspaceRootMkdirCalls = mkdirSpy.mock.calls.filter(([target]) =>
+			workspaceRootDirs.has(String(target)),
 		);
-		expect(nonLockMkdirCalls.length).toBe(30);
+		expect(workspaceRootMkdirCalls.length).toBe(30);
 	});
 });

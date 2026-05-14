@@ -24,6 +24,17 @@ const sessionWorkspaceFs: SessionWorkspaceFs = {
 	rename,
 };
 
+export async function syncSessionWorkspaceDirectory(
+	directoryPath: string,
+): Promise<void> {
+	const directoryHandle = await sessionWorkspaceFs.open(directoryPath, "r");
+	try {
+		await directoryHandle.sync();
+	} finally {
+		await directoryHandle.close();
+	}
+}
+
 async function writeFileAtomically(
 	targetPath: string,
 	contents: string,
@@ -49,18 +60,12 @@ async function writeFileAtomically(
 		throw error;
 	}
 
-	const directoryHandle = await sessionWorkspaceFs.open(
-		dirname(targetPath),
-		"r",
-	);
 	try {
-		await directoryHandle.sync();
+		await syncSessionWorkspaceDirectory(dirname(targetPath));
 	} catch (error) {
 		throw new Error(
 			`Atomic session write renamed '${targetPath}' but directory sync failed: ${(error as Error).message}`,
 		);
-	} finally {
-		await directoryHandle.close();
 	}
 }
 

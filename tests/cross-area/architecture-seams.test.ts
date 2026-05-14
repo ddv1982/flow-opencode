@@ -101,6 +101,103 @@ describe("architecture seams script", () => {
 		expect(stdout).toContain("runtime->adapters");
 	});
 
+	test("fails in enforce mode when core imports workflow facade", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/core/registry/a.ts",
+					content:
+						'import type { SemanticInvariantId } from "../../workflow/domain";\nexport type LocalInvariantId = SemanticInvariantId;\n',
+				},
+				{
+					path: "src/workflow/domain.ts",
+					content: "export type SemanticInvariantId = 'x';\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("core->workflow");
+		expect(stdout).toContain("src/core/registry/a.ts");
+	});
+
+	test("fails in enforce mode when workflow domain imports runtime domain", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/workflow/domain.ts",
+					content: 'export { x } from "../runtime/domain/b";\n',
+				},
+				{ path: "src/runtime/domain/b.ts", content: "export const x = 1;\n" },
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("workflow->runtime");
+		expect(stdout).toContain("src/runtime/domain/b");
+	});
+
+	test("fails in enforce mode when workflow imports adapters", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/workflow/domain.ts",
+					content:
+						'import { x } from "../adapters/opencode/b";\nexport const y = x;\n',
+				},
+				{
+					path: "src/adapters/opencode/b.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("workflow->adapters");
+	});
+
+	test("fails in enforce mode when workflow domain facade imports runtime application", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/workflow/domain.ts",
+					content:
+						'import { x } from "../runtime/application/b";\nexport const y = x;\n',
+				},
+				{
+					path: "src/runtime/application/b.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("workflow->runtime");
+		expect(stdout).toContain("src/runtime/application/b");
+	});
+
+	test("fails in enforce mode when non-facade workflow files import runtime", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/workflow/worker.ts",
+					content:
+						'import { x } from "../runtime/domain/b";\nexport const y = x;\n',
+				},
+				{ path: "src/runtime/domain/b.ts", content: "export const x = 1;\n" },
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("workflow->runtime");
+		expect(stdout).toContain("src/workflow/worker.ts");
+	});
+
 	test("passes clean layouts in enforce mode", async () => {
 		const process = runArchitectureSeams({
 			mode: "enforce",

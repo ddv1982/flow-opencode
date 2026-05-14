@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, realpath, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import {
 	dirname,
 	extname,
@@ -373,10 +373,9 @@ async function writeFileExclusively(
 		constants.O_WRONLY |
 		(constants.O_NOFOLLOW ?? 0);
 	let handle: Awaited<ReturnType<typeof open>> | undefined;
-	let realTarget: string | undefined;
 	try {
 		handle = await open(path, flags, 0o666);
-		realTarget = await realpath(path);
+		const realTarget = await realpath(path);
 		assertWorkspaceAssetPath(workspaceRoot, realTarget);
 		if (dirname(realTarget) !== dirname(path)) {
 			throw new FlowAttachmentMaterializationError(
@@ -386,11 +385,9 @@ async function writeFileExclusively(
 		await handle.writeFile(bytes);
 	} catch (error) {
 		await handle?.close().catch(() => undefined);
-		if (realTarget) {
-			await unlink(realTarget).catch(() => undefined);
-		} else if (!(isNodeError(error) && error.code === "EEXIST")) {
-			await unlink(path).catch(() => undefined);
-		}
+		// Do not perform path-based cleanup after a post-open failure. A local
+		// actor can replace the path between any safety proof and unlink; leaking a
+		// partial/orphaned file is safer than deleting a swapped target.
 		throw error;
 	}
 	await handle.close();

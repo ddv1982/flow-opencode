@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { open, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+	getActiveSessionsDir,
 	getFeatureDocPath,
 	getIndexDocPath,
 	getSessionPath,
@@ -18,7 +19,11 @@ import {
 	saveSessionState,
 	syncSessionArtifacts,
 } from "../src/runtime/session";
-import { withSessionSaveLock } from "../src/runtime/session-workspace";
+import {
+	resetSessionWorkspaceFsForTests,
+	setSessionWorkspaceFsForTests,
+	withSessionSaveLock,
+} from "../src/runtime/session-workspace";
 import { applyPlan, selectPlanFeatures } from "../src/runtime/transitions";
 import { assertMutableWorkspaceRoot } from "../src/runtime/workspace-root";
 import {
@@ -31,6 +36,7 @@ import {
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
 
 afterEach(() => {
+	resetSessionWorkspaceFsForTests();
 	cleanupTempDirs();
 });
 
@@ -108,6 +114,64 @@ describe("runtime session persistence", () => {
 		await expect(
 			readFile(getSessionPath(worktree, second.id, "stored"), "utf8"),
 		).resolves.toContain('"goal": "Second goal"');
+	});
+
+	test("keeps prior active session when a new open session write fails", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = createSession("Second goal");
+
+		setSessionWorkspaceFsForTests({
+			open: async (path, flags, mode) => {
+				if (String(path).includes(`${second.id}/session.json.`)) {
+					throw new Error("injected session write failure");
+				}
+
+				return open(path, flags, mode);
+			},
+		});
+
+		await expect(saveSession(worktree, second)).rejects.toThrow(
+			"injected session write failure",
+		);
+
+		expect(await activeSessionId(worktree)).toBe(first.id);
+		expect((await loadSession(worktree))?.id).toBe(first.id);
+		await expect(
+			readFile(getSessionPath(worktree, first.id), "utf8"),
+		).resolves.toContain('"goal": "First goal"');
+		await expect(
+			readFile(getSessionPath(worktree, second.id), "utf8"),
+		).rejects.toThrow();
+	});
+
+	test("keeps a consistent active session after promotion directory sync fails", async () => {
+		const worktree = makeTempDir();
+		const first = await saveSession(worktree, createSession("First goal"));
+		const second = createSession("Second goal");
+
+		setSessionWorkspaceFsForTests({
+			open: async (path, flags, mode) => {
+				if (String(path) === getActiveSessionsDir(worktree)) {
+					throw new Error("injected promotion sync failure");
+				}
+
+				return open(path, flags, mode);
+			},
+		});
+
+		await expect(saveSession(worktree, second)).rejects.toThrow(
+			"injected promotion sync failure",
+		);
+
+		expect(await activeSessionId(worktree)).toBe(second.id);
+		expect((await loadSession(worktree))?.id).toBe(second.id);
+		await expect(
+			readFile(getSessionPath(worktree, second.id), "utf8"),
+		).resolves.toContain('"goal": "Second goal"');
+		await expect(
+			readFile(getSessionPath(worktree, first.id, "stored"), "utf8"),
+		).resolves.toContain('"goal": "First goal"');
 	});
 
 	test("flow_plan_start recreates missing .flow/stored before parking the prior active session", async () => {
