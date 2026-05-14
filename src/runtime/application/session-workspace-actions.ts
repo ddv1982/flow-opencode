@@ -12,6 +12,7 @@ import {
 	type SessionWorkspaceResult,
 	type SessionWorkspaceRuntimePort,
 } from "./session-engine";
+import type { SessionArtifactSyncFailure } from "./session-mutation-finalization";
 import { mergePlanningContext } from "./session-planning-context";
 import { detectStackAndStandardsProfile } from "./stack-standards-profile";
 import {
@@ -29,7 +30,16 @@ type PlannedSessionResult =
 	| {
 			status: "ok";
 			session: Session;
+			artifactSync?: SessionArtifactSyncFailure;
 	  };
+
+function artifactSyncFailure(error: unknown): SessionArtifactSyncFailure {
+	return {
+		status: "failed",
+		error:
+			error instanceof Error && error.message ? error.message : String(error),
+	};
+}
 
 function buildPlannedSession(
 	existing: Session | null,
@@ -135,8 +145,16 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 							...detectedProfiles,
 						}),
 					);
-					await runtime.syncSessionArtifacts(worktree, session);
-					return { status: "ok", session };
+					try {
+						await runtime.syncSessionArtifacts(worktree, session);
+						return { status: "ok", session };
+					} catch (error) {
+						return {
+							status: "ok",
+							session,
+							artifactSync: artifactSyncFailure(error),
+						};
+					}
 				},
 				onSuccess: (value) =>
 					value.status === "missing_goal"
@@ -146,8 +164,14 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 								nextCommand: value.nextCommand,
 							}
 						: {
-								status: "ok",
+								status: value.artifactSync ? "partial_success" : "ok",
 								summary: `Planning session ready for goal: ${value.session.goal}`,
+								...(value.artifactSync
+									? {
+											persistedMutation: true,
+											artifactSync: value.artifactSync,
+										}
+									: {}),
 								session: summarizeSession(value.session).session,
 							},
 			};

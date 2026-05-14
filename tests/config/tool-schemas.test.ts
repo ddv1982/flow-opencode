@@ -1,6 +1,6 @@
 // Owns OpenCode tool arg-shape, zod/plugin alignment, and raw-schema
 // contract coverage previously grouped in tests/config.test.ts.
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import type { ToolContext as OpenCodeToolContext } from "@opencode-ai/plugin/tool";
 import { z } from "zod";
@@ -22,6 +22,12 @@ import {
 	WorkerResultArgsSchema,
 	WorkerResultSchema,
 } from "../../src/runtime/schema";
+import {
+	createTempDirRegistry,
+	createTestTools,
+	samplePlan,
+	toolContext,
+} from "../runtime-test-helpers";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
 
 type IsRequired<T, K extends keyof T> =
@@ -35,6 +41,12 @@ type OpenCodeToolContextRequiredAssertions = [
 	Assert<IsRequired<OpenCodeToolContext, "metadata">>,
 	Assert<IsRequired<OpenCodeToolContext, "ask">>,
 ];
+
+const { makeTempDir, cleanupTempDirs } = createTempDirRegistry();
+
+afterEach(() => {
+	cleanupTempDirs();
+});
 
 describe("tool schema config contracts", () => {
 	test("installed OpenCode ToolContext keeps required execution fields", () => {
@@ -225,10 +237,12 @@ describe("tool schema config contracts", () => {
 
 	test("runtime-owned OpenCode payload schemas document adapter/runtime parity intent", () => {
 		const { schemas } = getToolSchemas();
-		const RuntimeFlowPlanApplyArgsSchema = z.object({
-			plan: PlanArgsSchema,
-			planning: PlanningContextArgsSchema.optional(),
-		});
+		const RuntimeFlowPlanApplyArgsSchema = z
+			.object({
+				plan: PlanArgsSchema,
+				planning: PlanningContextArgsSchema.optional(),
+			})
+			.strict();
 		const runtimeOwnedTools = [
 			"flow_plan_context_record",
 			"flow_plan_apply",
@@ -269,7 +283,6 @@ describe("tool schema config contracts", () => {
 			{ ...validPlanningContext, packageManager: "cargo" },
 			false,
 		);
-
 		const validPlanApply = {
 			plan: {
 				summary: "Implement a workflow.",
@@ -304,7 +317,6 @@ describe("tool schema config contracts", () => {
 			},
 			false,
 		);
-
 		const validWorkerResult = {
 			contractVersion: "1",
 			status: "ok",
@@ -395,6 +407,138 @@ describe("tool schema config contracts", () => {
 			{ ...validFinalReview, evidenceRefs: undefined },
 			false,
 		);
+	});
+
+	test("planning runtime parse schemas reject unknown adapter-facing keys narrowly", () => {
+		const adapterSchema = (
+			toolName: "flow_plan_apply" | "flow_plan_context_record",
+		) =>
+			FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY[toolName].argsSchema as {
+				safeParse: (payload: unknown) => { success: boolean };
+			};
+		const validPlanningContext = {
+			repoProfile: ["TypeScript"],
+			packageManager: "bun",
+			research: ["Use local schema contracts as source of truth."],
+		};
+		const validPlan = {
+			summary: "Implement a workflow.",
+			overview: "Create one feature.",
+			features: [
+				{
+					id: "setup-runtime",
+					title: "Create runtime helpers",
+					summary: "Add runtime helpers.",
+					fileTargets: ["src/runtime/session.ts"],
+					verification: ["bun test"],
+				},
+			],
+		};
+		const validPlanApply = {
+			plan: validPlan,
+			planning: validPlanningContext,
+		};
+
+		expect(
+			PlanArgsSchema.safeParse({ ...validPlan, unexpected: true }).success,
+		).toBe(false);
+		expect(
+			PlanningContextArgsSchema.safeParse({
+				...validPlanningContext,
+				unexpected: true,
+			}).success,
+		).toBe(false);
+		expect(
+			adapterSchema("flow_plan_apply").safeParse({
+				...validPlanApply,
+				unexpected: true,
+			}).success,
+		).toBe(false);
+		expect(
+			adapterSchema("flow_plan_apply").safeParse({
+				...validPlanApply,
+				plan: { ...validPlan, unexpected: true },
+			}).success,
+		).toBe(false);
+		expect(
+			adapterSchema("flow_plan_apply").safeParse({
+				...validPlanApply,
+				planning: { ...validPlanningContext, unexpected: true },
+			}).success,
+		).toBe(false);
+		expect(
+			adapterSchema("flow_plan_context_record").safeParse({
+				...validPlanningContext,
+				unexpected: true,
+			}).success,
+		).toBe(false);
+
+		const { schemas } = getToolSchemas();
+		expect(schemas.flow_status.safeParse({ extra: true }).success).toBe(true);
+		expect(schemas.flow_history.safeParse({ extra: true }).success).toBe(true);
+	});
+
+	test("planning tools reject unknown keys through execute validation path", async () => {
+		const tools = createTestTools();
+		const worktree = makeTempDir();
+		const validPlanningContext = {
+			repoProfile: ["TypeScript"],
+			packageManager: "bun",
+			research: ["Use local schema contracts as source of truth."],
+		};
+		const validPlanApply = {
+			plan: samplePlan(),
+			planning: validPlanningContext,
+		};
+		const cases = [
+			{
+				name: "context top-level",
+				toolName: "flow_plan_context_record",
+				payload: { ...validPlanningContext, unexpectedPlanningKey: true },
+				expectedFragments: ["unexpectedPlanningKey"],
+			},
+			{
+				name: "apply outer",
+				toolName: "flow_plan_apply",
+				payload: { ...validPlanApply, unexpectedOuterKey: true },
+				expectedFragments: ["unexpectedOuterKey"],
+			},
+			{
+				name: "apply nested plan",
+				toolName: "flow_plan_apply",
+				payload: {
+					...validPlanApply,
+					plan: { ...validPlanApply.plan, unexpectedPlanKey: true },
+				},
+				expectedFragments: ["plan", "unexpectedPlanKey"],
+			},
+			{
+				name: "apply nested planning",
+				toolName: "flow_plan_apply",
+				payload: {
+					...validPlanApply,
+					planning: { ...validPlanningContext, unexpectedPlanningKey: true },
+				},
+				expectedFragments: ["planning", "unexpectedPlanningKey"],
+			},
+		] as const;
+
+		for (const testCase of cases) {
+			const response = await tools[testCase.toolName].execute(
+				testCase.payload,
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+			const responseText = JSON.stringify(parsed);
+
+			expect(parsed.status, testCase.name).toBe("error");
+			expect(String(parsed.summary), testCase.name).toContain(
+				"Tool argument validation failed",
+			);
+			for (const fragment of testCase.expectedFragments) {
+				expect(responseText, testCase.name).toContain(fragment);
+			}
+		}
 	});
 
 	test("final review reviewContextPack raw schemas match runtime structured schema", () => {

@@ -420,6 +420,78 @@ describe("session engine boundary", () => {
 		expect(parsed.summary).toBe("Planning context recorded.");
 	});
 
+	test("plan_start returns partial success when artifact sync fails after saving", async () => {
+		const savedSession = createSession("Build a workflow plugin");
+		const events: string[] = [];
+
+		const response = await executeDispatchedSessionWorkspaceAction(
+			{ worktree: "/tmp/project" },
+			"plan_start",
+			{ goal: "Build a workflow plugin" },
+			{
+				loadSession: async () => null,
+				saveSessionState: async (_worktree, session) => {
+					events.push("save");
+					expect(session.goal).toBe("Build a workflow plugin");
+					return savedSession;
+				},
+				syncSessionArtifacts: async (_worktree, session) => {
+					events.push("sync");
+					expect(session).toBe(savedSession);
+					throw new Error("injected artifact sync failure");
+				},
+				activateSession: async () => {
+					throw new Error("should not activate");
+				},
+				closeSession: async () => {
+					throw new Error("should not close");
+				},
+			},
+		);
+
+		const parsed = JSON.parse(response);
+		expect(events).toEqual(["save", "sync"]);
+		expect(parsed.status).toBe("partial_success");
+		expect(parsed.persistedMutation).toBe(true);
+		expect(parsed.artifactSync).toEqual({
+			status: "failed",
+			error: "injected artifact sync failure",
+		});
+		expect(parsed.summary).toBe(
+			"Planning session ready for goal: Build a workflow plugin",
+		);
+		expect(parsed.session.goal).toBe("Build a workflow plugin");
+	});
+
+	test("plan_start throws persistence failures without syncing artifacts", async () => {
+		let synced = false;
+
+		await expect(
+			executeDispatchedSessionWorkspaceAction(
+				{ worktree: "/tmp/project" },
+				"plan_start",
+				{ goal: "Build a workflow plugin" },
+				{
+					loadSession: async () => null,
+					saveSessionState: async () => {
+						throw new Error("injected persistence failure");
+					},
+					syncSessionArtifacts: async () => {
+						synced = true;
+						throw new Error("should not sync");
+					},
+					activateSession: async () => {
+						throw new Error("should not activate");
+					},
+					closeSession: async () => {
+						throw new Error("should not close");
+					},
+				},
+			),
+		).rejects.toThrow("injected persistence failure");
+		expect(synced).toBe(false);
+	});
+
 	test("flow core command facade delegates mutations through session engine persistence", async () => {
 		const baseSession = createSession("Build a compact core");
 		const savedSession = {

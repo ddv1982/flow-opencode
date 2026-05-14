@@ -15,7 +15,8 @@ Scope: `src/adapters/opencode/tool-surface/schemas.ts`, `src/adapters/opencode/t
 A change is strictness-preserving only if **all** clauses hold:
 
 1. **Required fields and unions do not widen at the bridge.**
-   - `flow_plan_apply` remains `{ plan: PlanArgsSchema.strict(), planning?: PlanningContextArgsSchema.strict() }` at the adapter boundary.
+   - Adapter-facing planning payloads reject unknown keys at these object boundaries: outer `flow_plan_apply`, `flow_plan_apply.plan` (`PlanArgsSchema.strict()`), optional `flow_plan_apply.planning` (`PlanningContextArgsSchema.strict()`), and outer `flow_plan_context_record`.
+   - This planning strictness is scoped; it is not a global all-tools policy, and intentionally tolerant simple tool schemas remain covered by their own tests.
    - Worker completion continues to be parsed by `WorkerResultArgsSchema`, exported from `src/runtime/schema.ts` and owned internally by `src/runtime/schema-worker-result.ts`, before transition calls.
 
 2. **Runtime parse/validation path is never bypassed.**

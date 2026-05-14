@@ -119,9 +119,12 @@ export const PlanningContextSchema = z.object({
 export const PlanArgsSchema = PlanSchema.omit({
 	goalMode: true,
 	decompositionPolicy: true,
-}).extend({
-	goalMode: GoalModeSchema.optional(),
-	decompositionPolicy: DecompositionPolicySchema.optional(),
-});
+})
+	.extend({
+		goalMode: GoalModeSchema.optional(),
+		decompositionPolicy: DecompositionPolicySchema.optional(),
+	})
+	.strict();
 
-export const PlanningContextArgsSchema = PlanningContextSchema.partial();
+export const PlanningContextArgsSchema =
+	PlanningContextSchema.partial().strict();

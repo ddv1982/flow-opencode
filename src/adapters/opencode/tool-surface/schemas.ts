@@ -83,10 +83,10 @@ export const FlowPlanStartArgsShape = {
 	goal: z.string().trim().min(1).optional(),
 	repoProfile: z.array(z.string().min(1)).optional(),
 };
-export const FlowPlanContextRecordArgsSchema = z.object(
-	FlowPlanContextRecordArgsShape,
-);
-export const FlowPlanApplyArgsSchema = z.object(FlowPlanApplyArgsShape);
+export const FlowPlanContextRecordArgsSchema = RuntimePlanningContextArgsSchema;
+export const FlowPlanApplyArgsSchema = z
+	.object(FlowPlanApplyArgsShape)
+	.strict();
 export const FlowPlanApproveArgsShape = {
 	featureIds: z.array(featureIdSchema).optional(),
 };
