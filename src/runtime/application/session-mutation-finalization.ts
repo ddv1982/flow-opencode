@@ -11,6 +11,11 @@ export interface SessionMutationPersistencePort {
 	syncSessionArtifacts: (worktree: string, session: Session) => Promise<void>;
 }
 
+export type SessionArtifactSyncFailure = {
+	status: "failed";
+	error: string;
+};
+
 export type SessionMutationResult<T, Name extends string = string> =
 	| { kind: "missing"; actionName: Name; response: RuntimeToolResponse }
 	| {
@@ -21,11 +26,20 @@ export type SessionMutationResult<T, Name extends string = string> =
 			response: RuntimeToolResponse;
 	  }
 	| {
+			kind: "success_artifact_sync_failed";
+			actionName: Name;
+			value: T;
+			savedSession: Session;
+			response: RuntimeToolResponse;
+			artifactSync: SessionArtifactSyncFailure;
+	  }
+	| {
 			kind: "failure";
 			actionName: Name;
 			response: RuntimeToolResponse;
 			transition: Extract<TransitionResult<T>, { ok: false }>;
 			savedSession?: Session;
+			artifactSync?: SessionArtifactSyncFailure;
 	  };
 
 function applyFailedAttemptClearPolicy(
@@ -71,6 +85,64 @@ function valueWithSavedSession<T>(
 	return { ...compositeValue, session: savedSession } as T;
 }
 
+function errorMessage(error: unknown): string {
+	return error instanceof Error && error.message
+		? error.message
+		: String(error);
+}
+
+async function syncArtifactsAfterPersistence(
+	worktree: string,
+	session: Session,
+	syncArtifacts: boolean | undefined,
+	runtime: SessionMutationPersistencePort,
+): Promise<SessionArtifactSyncFailure | null> {
+	if (!syncArtifacts) {
+		return null;
+	}
+	try {
+		await runtime.syncSessionArtifacts(worktree, session);
+		return null;
+	} catch (error) {
+		return { status: "failed", error: errorMessage(error) };
+	}
+}
+
+function responseWithPersistedArtifactFailure(
+	response: RuntimeToolResponse,
+	artifactSync: SessionArtifactSyncFailure,
+): RuntimeToolResponse {
+	return {
+		...response,
+		status: "partial_success",
+		persistedMutation: true,
+		artifactSync,
+	};
+}
+
+function responseWithArtifactFailure(
+	response: RuntimeToolResponse,
+	artifactSync: SessionArtifactSyncFailure,
+): RuntimeToolResponse {
+	return {
+		...response,
+		persistedMutation: true,
+		artifactSync,
+	};
+}
+
+function responseWithNoopArtifactFailure(
+	response: RuntimeToolResponse,
+	artifactSync: SessionArtifactSyncFailure,
+): RuntimeToolResponse {
+	return {
+		...response,
+		status: "partial_success",
+		persistedMutation: false,
+		artifactSync,
+	};
+}
+
 export async function finalizeTransitionAtRoot<T, Name extends string>(
 	actionName: Name,
 	worktree: string,
@@ -89,14 +161,22 @@ export async function finalizeTransitionAtRoot<T, Name extends string>(
 	if (!result.ok) {
 		if (result.session) {
 			const saved = await runtime.saveSessionState(worktree, result.session);
-			if (options.syncArtifacts)
-				await runtime.syncSessionArtifacts(worktree, saved);
+			const artifactSync = await syncArtifactsAfterPersistence(
+				worktree,
+				saved,
+				options.syncArtifacts,
+				runtime,
+			);
+			const response = onError(result);
 			return {
 				kind: "failure",
 				actionName,
-				response: onError(result),
+				response: artifactSync
+					? responseWithArtifactFailure(response, artifactSync)
+					: response,
 				transition: result,
 				savedSession: saved,
+				...(artifactSync ? { artifactSync } : {}),
 			};
 		}
 		return {
@@ -118,14 +198,29 @@ export async function finalizeTransitionAtRoot<T, Name extends string>(
 		resultSession,
 		saved,
 	);
-	if (options.syncArtifacts)
-		await runtime.syncSessionArtifacts(worktree, saved);
+	const artifactSync = await syncArtifactsAfterPersistence(
+		worktree,
+		saved,
+		options.syncArtifacts,
+		runtime,
+	);
+	const response = onSuccess(saved, responseValue);
+	if (artifactSync) {
+		return {
+			kind: "success_artifact_sync_failed",
+			actionName,
+			value: responseValue,
+			savedSession: saved,
+			response: responseWithPersistedArtifactFailure(response, artifactSync),
+			artifactSync,
+		};
+	}
 	return {
 		kind: "success",
 		actionName,
 		value: responseValue,
 		savedSession: saved,
-		response: onSuccess(saved, responseValue),
+		response,
 	};
 }
 
@@ -138,14 +233,28 @@ export async function finalizeNoopMutationAtRoot<T, Name extends string>(
 	syncArtifacts: boolean,
 	runtime: SessionMutationPersistencePort,
 ): Promise<SessionMutationResult<T, Name>> {
-	if (syncArtifacts) {
-		await runtime.syncSessionArtifacts(worktree, originalSession);
+	const artifactSync = await syncArtifactsAfterPersistence(
+		worktree,
+		originalSession,
+		syncArtifacts,
+		runtime,
+	);
+	const response = onNoopSuccess(originalSession, value);
+	if (artifactSync) {
+		return {
+			kind: "success_artifact_sync_failed",
+			actionName,
+			value,
+			savedSession: originalSession,
+			response: responseWithNoopArtifactFailure(response, artifactSync),
+			artifactSync,
+		};
 	}
 	return {
 		kind: "success",
 		actionName,
 		value,
 		savedSession: originalSession,
-		response: onNoopSuccess(originalSession, value),
+		response,
 	};
 }

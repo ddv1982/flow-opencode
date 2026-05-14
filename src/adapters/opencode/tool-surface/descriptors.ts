@@ -173,7 +173,7 @@ const FLOW_DESCRIPTOR_GOVERNANCE_BY_TOOL_NAME = {
 			"src/adapters/opencode/tool-surface/runtime-tools/execution-tools.ts",
 		policyOwners: [
 			"src/runtime/application/session-actions.ts",
-			"src/runtime/transitions/recovery.ts",
+			"src/runtime/transitions/review.ts",
 		],
 		verificationAnchors: [
 			"tests/config/tool-schemas.test.ts",

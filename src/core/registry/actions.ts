@@ -119,7 +119,7 @@ export const CORE_ACTION_REGISTRY = [
 		invariantIds: ["recovery.next_action.binding"],
 		policyOwners: [
 			"src/runtime/application/session-actions.ts",
-			"src/runtime/transitions/recovery.ts",
+			"src/runtime/transitions/review.ts",
 		],
 		description:
 			"Reset a feature and dependent feature statuses after recovery.",

@@ -67,6 +67,8 @@ describe("runtime session persistence", () => {
 
 		const loaded = await loadSession(worktree);
 		const indexDoc = await readFile(await activeIndexDocPath(worktree), "utf8");
+		expect(created.version).toBe(1);
+		expect(loaded?.version).toBe(1);
 		expect(loaded?.goal).toBe("Build a workflow plugin");
 		expect(loaded?.status).toBe("planning");
 		expect(indexDoc).toContain("# Flow Session");
@@ -221,6 +223,25 @@ describe("runtime session persistence", () => {
 		);
 
 		await expect(loadSession(worktree)).rejects.toThrow("Duplicate JSON key");
+	});
+
+	test("rejects persisted session data with unsupported future schema versions", async () => {
+		const worktree = makeTempDir();
+		const saved = await saveSessionState(
+			worktree,
+			createSession("Build a workflow plugin"),
+		);
+		const persisted = JSON.parse(
+			await readFile(getSessionPath(worktree, saved.id), "utf8"),
+		);
+
+		await writeFile(
+			getSessionPath(worktree, saved.id),
+			`${JSON.stringify({ ...persisted, version: 2 }, null, "\t")}\n`,
+			"utf8",
+		);
+
+		await expect(loadSession(worktree)).rejects.toThrow();
 	});
 
 	test("withSessionSaveLock runs a queued same-worktree task after an earlier task rejects", async () => {

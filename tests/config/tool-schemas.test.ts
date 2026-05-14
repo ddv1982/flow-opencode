@@ -10,7 +10,8 @@ import {
 	OPENCODE_TOOL_PROJECTIONS,
 	openCodeToolCoreSummary,
 } from "../../src/adapters/opencode/tool-projections.generated";
-import type { CoreActionName } from "../../src/core/registry";
+import { FLOW_SURFACE_DESCRIPTORS } from "../../src/adapters/opencode/tool-surface/descriptors";
+import { type CoreActionName, coreActionByName } from "../../src/core/registry";
 import { WorkerResultSchema } from "../../src/runtime/schema";
 import { asJson, getToolSchemas, projectPath, readJson } from "./helpers";
 
@@ -75,6 +76,46 @@ describe("tool schema config contracts", () => {
 		expect(
 			getOpenCodeToolProjection("flow_review_record_final")?.runtimeAction,
 		).toBe("record_final_review");
+	});
+
+	test("reset feature ownership metadata tracks the review transition owner", () => {
+		const descriptor = FLOW_SURFACE_DESCRIPTORS.find(
+			(surface) => surface.id === "flow_reset_feature",
+		);
+		const coreAction = coreActionByName("reset_feature");
+
+		expect(descriptor).toBeDefined();
+		expect(coreAction).not.toBeNull();
+		expect(descriptor?.coreAction).toBe("reset_feature");
+		expect(descriptor?.policyOwners).toContain(
+			"src/runtime/transitions/review.ts",
+		);
+		expect(coreAction?.policyOwners).toContain(
+			"src/runtime/transitions/review.ts",
+		);
+		expect(descriptor?.policyOwners).not.toContain(
+			"src/runtime/transitions/recovery.ts",
+		);
+		expect(coreAction?.policyOwners).not.toContain(
+			"src/runtime/transitions/recovery.ts",
+		);
+	});
+
+	test("OpenCode surface descriptors project core action registry metadata", () => {
+		for (const descriptor of FLOW_SURFACE_DESCRIPTORS) {
+			if (!descriptor.coreAction) {
+				continue;
+			}
+			const coreAction = coreActionByName(descriptor.coreAction);
+			if (!coreAction) {
+				throw new Error(
+					`Missing core action registry entry for ${descriptor.coreAction}`,
+				);
+			}
+
+			expect(descriptor.emittedEvents).toEqual(coreAction.emits);
+			expect(descriptor.invariantIds).toEqual(coreAction.invariantIds);
+		}
 	});
 
 	test("OpenCode core summaries tolerate absent and stale projected core actions", () => {

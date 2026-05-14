@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [2.0.44] - 2026-05-14
+
+Lock maintenance guardrails before release
+
+Flow 2.0.44 turns the latest quality review into small, behavior-locked maintenance guardrails. `flow_reset_feature` ownership metadata now points at the actual review transition owner, and descriptor/core-action parity coverage verifies emitted events and invariant IDs so registry drift is caught before release.
+
+The release also clarifies architecture governance without widening the hard seam checker: `src/prompts/**` and `src/audit/**` are documented as governed projection surfaces outside the `core`/`workflow`/`runtime`/`adapters` layer-edge checker, with tests proving the checker does not partially enforce those projection imports.
+
+Runtime mutation finalization now distinguishes artifact-rendering failures after persistence from unsaved mutation failures. Successful and no-op mutations whose `.flow` source-of-truth state is already saved report partial success with artifact-sync failure metadata, while failed transitions that persist recovery state remain failures and include the same artifact-sync evidence. Session persistence policy is also explicit: version `1` sessions remain the only supported persisted schema, and future versions are rejected rather than silently downgraded.
+
+The release deliberately does not add slash commands, runtime tools, prompt modes, state paths, package exports, installer behavior, dependencies, or schema migrations. It preserves the existing `@opencode-ai/plugin` and `zod` compatibility boundary.
+
+Constraint: Reduce registry, seam-policy, mutation-finalization, and session-version maintenance risk without widening Flow's public command/tool surface or persisted schema contract
+Constraint: Keep `@opencode-ai/plugin` at `1.14.48` and `zod` at `4.1.8`; this release changes no dependency compatibility boundary
+Constraint: Preserve persistence-first session semantics while making stale artifact rendering an explicit partial-success/recovery signal
+Rejected: Collapse all tool/schema/mode metadata into a new manifest in this release | a broad projection rewrite would be riskier than focused parity coverage for the reviewed drift
+Rejected: Expand the hard architecture seam checker to prompts/audit immediately | those surfaces intentionally project cross-cutting contracts and need projection-specific governance before layer-edge denial
+Rejected: Add session migration logic for hypothetical future versions | the current release only documents and tests the existing version-1-only policy
+Confidence: high
+Scope-risk: moderate
+Reversibility: clean
+Directive: Keep future registry/projection changes covered by parity tests, keep prompt/audit governance explicit, and treat artifact sync failures after saved state as projection repair work rather than lost mutation state
+Tested: `bun run typecheck`; `bun test tests/config/tool-schemas.test.ts tests/mode-contracts.test.ts tests/cross-area/architecture-seams.test.ts tests/runtime-mutation-finalization.test.ts tests/runtime-session-persistence.test.ts tests/cross-area/module-scope-schemas.test.ts` (55 pass, 0 fail); `bun run check:architecture-seams:enforce`; RepoPrompt Oracle review of the uncommitted maintenance diff found no actionable findings; `bun run check` (release gate passed: dependency contract OK with project/plugin/root `zod=4.1.8`, architecture seams OK, pack invariants OK for version `2.0.44`, bundle sanity reported 7 agents, 9 commands, 18 tools, full suite 644 pass/0 fail, lint passed, bench smoke and bench gate passed)
+Not-tested: Live OpenCode UI runtime interaction; live GitHub-hosted release workflow run for tag `v2.0.44` before push
+
 ## [2.0.43] - 2026-05-14
 
 Return attachment ownership to native OpenCode
