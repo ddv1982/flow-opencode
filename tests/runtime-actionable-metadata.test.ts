@@ -129,7 +129,7 @@ describe("runtime actionable metadata", () => {
 
 		expect(indexDoc).toContain("## Task Progress");
 		expect(indexDoc).toContain(
-			"blocked | flow-worker | execution | handoff: runtime_projection | setup-runtime — Create runtime helpers",
+			"blocked | flow-worker | execution | projection: runtime_projection | setup-runtime — Create runtime helpers",
 		);
 		expect(indexDoc).toContain(
 			"next step: Ask the operator to provide API credentials.",
@@ -139,7 +139,7 @@ describe("runtime actionable metadata", () => {
 		);
 		expect(featureDoc).toContain("## Task Progress");
 		expect(featureDoc).toContain(
-			"blocked | flow-worker | execution | handoff: runtime_projection | setup-runtime — Create runtime helpers",
+			"blocked | flow-worker | execution | projection: runtime_projection | setup-runtime — Create runtime helpers",
 		);
 		expect(featureDoc).toContain("#### Outcome");
 		expect(featureDoc).toContain("needs human: yes");

@@ -51,7 +51,7 @@ function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
 		...selected.map((row) => {
 			const subject = toInlineSummaryText(row.subject, 55);
 			const next = toInlineSummaryText(row.next, 75);
-			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | handoff: ${formatTaskProgressHandoff(row)} | ${subject} | next: ${next}`;
+			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | projection: ${formatTaskProgressHandoff(row)} | ${subject} | next: ${next}`;
 		}),
 	];
 }

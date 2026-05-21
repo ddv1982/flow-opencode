@@ -211,7 +211,7 @@ export const FLOW_MODE_CONTRACTS = {
 			"Apply the stored stack and standards profile before editing.",
 			"Validate and self-review changed files before success.",
 			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
-			"When requesting reviewer approval, distinguish an actual flow-reviewer Task handoff from inline or not_supported review fallback.",
+			"When requesting reviewer approval, distinguish handoffMode exactly as task_subagent for an actual flow-reviewer Task handoff, inline_role for inline approval fallback, or not_supported when Task is unavailable or denied.",
 			"Return structured replan/blocker data instead of partial success.",
 			"Emit concise phase-boundary progress across execution, validation, review, and completion.",
 		],

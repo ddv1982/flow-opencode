@@ -9,7 +9,7 @@
 
 ## Task Progress
 
-- active | flow-worker | execution | handoff: runtime_projection | feature-4 — Feature feature-4 | next: Continue the active feature. | evidence: file targets: 1, verification: 1, validation: 1
+- active | flow-worker | execution | projection: runtime_projection | feature-4 — Feature feature-4 | next: Continue the active feature. | evidence: file targets: 1, verification: 1, validation: 1
 
 ## Description
 

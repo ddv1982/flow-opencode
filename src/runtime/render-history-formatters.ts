@@ -28,7 +28,7 @@ function formatTaskProgressHandoff(row: TaskProgressRow): string {
 
 export function renderTaskProgressLine(row: TaskProgressRow): string {
 	return [
-		`${row.status} | ${row.ownerRole} | ${row.phase} | handoff: ${formatTaskProgressHandoff(row)} | ${toInlineText(row.subject)}`,
+		`${row.status} | ${row.ownerRole} | ${row.phase} | projection: ${formatTaskProgressHandoff(row)} | ${toInlineText(row.subject)}`,
 		`next: ${toInlineText(row.next)}`,
 		...(row.evidence.length > 0
 			? [`evidence: ${row.evidence.map(toInlineText).join(", ")}`]

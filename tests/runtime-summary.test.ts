@@ -519,7 +519,7 @@ describe("runtime summary", () => {
 			.split("\n")
 			.find((line) =>
 				line.startsWith(
-					"- flow-worker | execution | active | handoff: runtime_projection |",
+					"- flow-worker | execution | active | projection: runtime_projection |",
 				),
 			);
 		expect(taskLine).toBeDefined();
@@ -539,8 +539,8 @@ describe("runtime summary", () => {
 				"Working on: setup-runtime — Create runtime helpers (in_progress)",
 				"Progress: 0/2 completed",
 				"Task progress:",
-				"- flow-worker | execution | active | handoff: runtime_projection | setup-runtime — Create runtime helpers | next: Continue the active feature through validation and review.",
-				"- flow-worker | execution | pending | handoff: runtime_projection | execute-feature — Implement execution flow | next: Waiting for execution selection.",
+				"- flow-worker | execution | active | projection: runtime_projection | setup-runtime — Create runtime helpers | next: Continue the active feature through validation and review.",
+				"- flow-worker | execution | pending | projection: runtime_projection | execute-feature — Implement execution flow | next: Waiting for execution selection.",
 				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),
@@ -604,8 +604,8 @@ describe("runtime summary", () => {
 				"Command: /flow-session activate test-session",
 				"Progress: 0/2 completed",
 				"Task progress:",
-				"- flow-planner | planning | ready | handoff: runtime_projection | Planning | next: Review or refine the draft plan, then approve it when ready.",
-				"- flow-worker | execution | pending | handoff: runtime_projection | setup-runtime — Create runtime helpers | next: Waiting for execution selection.",
+				"- flow-planner | planning | ready | projection: runtime_projection | Planning | next: Review or refine the draft plan, then approve it when ready.",
+				"- flow-worker | execution | pending | projection: runtime_projection | setup-runtime — Create runtime helpers | next: Waiting for execution selection.",
 				"Final review policy: detailed",
 				"Goal: Build a workflow plugin",
 			].join("\n"),

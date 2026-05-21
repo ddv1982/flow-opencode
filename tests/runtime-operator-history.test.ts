@@ -471,7 +471,7 @@ describe("runtime operator history and session lifecycle", () => {
 				`Command: ${flowSessionActivateCommand(first.id)}`,
 				"Progress: 0/0 completed",
 				"Task progress:",
-				"- flow-planner | planning | active | handoff: runtime_projection | Planning | next: Activate this session to continue it in the current worktree.",
+				"- flow-planner | planning | active | projection: runtime_projection | Planning | next: Activate this session to continue it in the current worktree.",
 				"Goal: First goal",
 			].join("\n"),
 		);
