@@ -1,7 +1,5 @@
-import {
-	getOpenCodeToolProjection,
-	openCodeToolCoreSummary,
-} from "./tool-projections.generated";
+import { renderOpenCodeToolCoreSummary } from "./tool-surface/core-action-projection";
+import { getOpenCodeToolRegistryEntry } from "./tool-surface/tool-registry";
 
 type ToolDefinitionOutput = {
 	description: string;
@@ -12,14 +10,21 @@ export function applyFlowToolDefinitionGuidance(
 	toolID: string,
 	output: ToolDefinitionOutput,
 ): void {
-	const projection = getOpenCodeToolProjection(toolID);
-	if (!projection) {
+	const registryEntry = getOpenCodeToolRegistryEntry(toolID);
+	if (!registryEntry) {
 		return;
 	}
 
+	const runtimeAction =
+		registryEntry.runtimeActionBinding.kind === "none"
+			? undefined
+			: registryEntry.runtimeActionBinding.name;
 	const additions = [
-		projection.definitionGuidance,
-		openCodeToolCoreSummary(toolID),
+		registryEntry.definitionGuidance,
+		renderOpenCodeToolCoreSummary({
+			coreActionName: registryEntry.coreAction,
+			runtimeAction,
+		}),
 	].filter((value): value is string => Boolean(value));
 
 	if (additions.length === 0) {

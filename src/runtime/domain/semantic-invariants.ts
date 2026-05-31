@@ -35,7 +35,7 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 			},
 		],
 		semanticClaim:
-			"Completion path enforces validation, reviewer, review, and final-path gates in runtime-defined order.",
+			"Completion path enforces validation, review payload, final-path, and strict-review governance gates in runtime-defined order.",
 		assertionType: "transition outcome assertions",
 		stabilityRule:
 			"Stable across refactors; behavior changes require ADR updates and semantic-suite updates.",
@@ -148,6 +148,14 @@ export const SEMANTIC_INVARIANT_IDS = Object.keys(
 export const SEMANTIC_COMPLETION_GATE_ORDER = {
 	feature: completionRecoveryKindOrderFor("feature"),
 	final: completionRecoveryKindOrderFor("final"),
+} as const satisfies {
+	feature: readonly CompletionRecoveryKind[];
+	final: readonly CompletionRecoveryKind[];
+};
+
+export const SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER = {
+	feature: completionRecoveryKindOrderFor("feature", { strictReview: true }),
+	final: completionRecoveryKindOrderFor("final", { strictReview: true }),
 } as const satisfies {
 	feature: readonly CompletionRecoveryKind[];
 	final: readonly CompletionRecoveryKind[];

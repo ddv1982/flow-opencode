@@ -61,6 +61,35 @@ afterEach(() => {
 });
 
 describe("installer", () => {
+	test("preserves package and OpenCode install stability surfaces", async () => {
+		const packageJson = JSON.parse(
+			await readFile(join(import.meta.dir, "..", "package.json"), "utf8"),
+		) as {
+			name: string;
+			main: string;
+			exports: Record<string, string>;
+		};
+		const homeDir = "/tmp/flow-home";
+
+		expect(packageJson.name).toBe("opencode-plugin-flow");
+		expect(packageJson.main).toBe("dist/index.js");
+		expect(packageJson.exports).toEqual({ ".": "./dist/index.js" });
+		expect(FLOW_PLUGIN_FILENAME).toBe("flow.js");
+		expect(resolveInstallTarget({ homeDir })).toBe(
+			join(homeDir, ".config", "opencode", "plugins", "flow.js"),
+		);
+		expect(FLOW_SKILL_BUNDLE_DIRECTORY).toBe(
+			join(".config", "opencode", "skills"),
+		);
+		expect(
+			resolveFlowSkillBundleFiles(homeDir).map((file) => file.relativePath),
+		).toEqual([
+			join(FLOW_SKILL_BUNDLE_DIRECTORY, "flow-plan", "SKILL.md"),
+			join(FLOW_SKILL_BUNDLE_DIRECTORY, "flow-run", "SKILL.md"),
+			join(FLOW_SKILL_BUNDLE_DIRECTORY, "flow-review", "SKILL.md"),
+		]);
+	});
+
 	test("runInstallCommand accepts help and rejects unknown arguments", async () => {
 		const logs: string[] = [];
 

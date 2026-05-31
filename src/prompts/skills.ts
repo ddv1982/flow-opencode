@@ -39,9 +39,9 @@ export const FLOW_SKILL_SPECS = [
 		roleProtocols: ["worker"],
 		operatorGuidance: [
 			"Start exactly one runnable feature and keep edits scoped to that feature plus necessary support changes.",
-			"Run targeted validation before success claims, then review changed behavior and fix blocking findings.",
-			"If validation cannot run, record the next-best check, why it is weaker, and the exact evidence gap.",
-			"Persist reviewer decisions and completion only through runtime tools after gates are satisfied.",
+			"Run targeted validation before success claims, then provide clean featureReview evidence and fix blocking findings.",
+			"For ordinary implementation, completion may use passing validation plus featureReview/finalReview payloads without a separately recorded reviewer decision.",
+			"Persist reviewer decisions only when review, review_and_fix, or explicit strictReview governance requires them; completion remains runtime-owned through flow_run_complete_feature.",
 		],
 	},
 	{
@@ -56,6 +56,7 @@ export const FLOW_SKILL_SPECS = [
 		operatorGuidance: [
 			"Stay read-only for reviewer and standalone audit surfaces; do not implement fixes.",
 			"Review changed evidence, connected context, validation records, and applicable risk classes until the decision is supportable.",
+			"For ordinary implementation, provide feature/final review payload guidance; recorded reviewer decisions are required only for review, review_and_fix, or explicit strictReview governance.",
 			"Approve only when blocking findings are empty and evidence supports the claimed review depth; missing evidence is a gap, not proof of safety.",
 			"For audit reports, maintain discoveredSurfaces as the coverage ledger and downgrade unsupported depth claims.",
 		],

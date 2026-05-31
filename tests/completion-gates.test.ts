@@ -31,6 +31,18 @@ function createStartedSession(options?: {
 } {
 	const finalFeature = options?.finalFeature ?? false;
 	const basePlan = samplePlan();
+	const deliveryPolicy =
+		options?.finalReviewPolicy || options?.priorityMode || options?.strictReview
+			? {
+					...(options?.finalReviewPolicy
+						? { finalReviewPolicy: options.finalReviewPolicy }
+						: {}),
+					...(options?.priorityMode
+						? { priorityMode: options.priorityMode }
+						: {}),
+					...(options?.strictReview ? { strictReview: true } : {}),
+				}
+			: undefined;
 	const plan = finalFeature
 		? {
 				...basePlan,
@@ -38,25 +50,13 @@ function createStartedSession(options?: {
 				completionPolicy: {
 					minCompletedFeatures: 1,
 				},
-				deliveryPolicy:
-					options?.finalReviewPolicy ||
-					options?.priorityMode ||
-					options?.strictReview
-						? {
-								...(options?.finalReviewPolicy
-									? { finalReviewPolicy: options.finalReviewPolicy }
-									: {}),
-								...(options?.priorityMode
-									? { priorityMode: options.priorityMode }
-									: {}),
-								...(options?.strictReview ? { strictReview: true } : {}),
-							}
-						: undefined,
+				...(deliveryPolicy ? { deliveryPolicy } : {}),
 				features: [basePlan.features[0]],
 			}
 		: {
 				...basePlan,
 				...(options?.goalMode ? { goalMode: options.goalMode } : {}),
+				...(deliveryPolicy ? { deliveryPolicy } : {}),
 			};
 
 	const applied = applyPlan(
@@ -336,9 +336,18 @@ describe("completion gates", () => {
 			expectedErrorCode: "failing_validation",
 		},
 		{
-			name: "missing reviewer decision",
+			name: "ordinary one-feature implementation does not require a recorded reviewer decision",
+			expectedOk: true,
 			setup: () => createStartedSession(),
 			worker: (featureId: string) => createWorkerResult(featureId),
+		},
+		{
+			name: "strict review governance missing reviewer decision",
+			setup: () => createStartedSession({ strictReview: true }),
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					reviewScopeLedger: [scopeLedgerEntry()],
+				}),
 			expectedErrorCode: "missing_feature_reviewer_decision",
 		},
 		{
@@ -419,8 +428,14 @@ describe("completion gates", () => {
 				}),
 		},
 		{
-			name: "lite lane final completion still requires a recorded final reviewer decision",
-			expectedOk: false,
+			name: "ordinary non-final feature completion does not require a recorded reviewer decision",
+			expectedOk: true,
+			setup: () => createStartedSession(),
+			worker: (featureId: string) => createWorkerResult(featureId),
+		},
+		{
+			name: "ordinary lite lane final completion does not require a recorded final reviewer decision",
+			expectedOk: true,
 			setup: () => {
 				const basePlan = samplePlan();
 				const liteFeature = basePlan.features[0];
@@ -465,7 +480,6 @@ describe("completion gates", () => {
 					validationScope: "broad",
 					finalReview: createFinalReviewPayload(),
 				}),
-			expectedErrorCode: "missing_final_reviewer_decision",
 		},
 		{
 			name: "missing targeted validation scope on non-final feature",
@@ -575,43 +589,33 @@ describe("completion gates", () => {
 			expectedNextCommand: "/flow-reset feature setup-runtime",
 		},
 		{
-			name: "final reviewer decision must cover derived docs and prompt surfaces",
+			name: "strict final completion requires a final-scope reviewer decision",
 			setup: () =>
 				createStartedSession({
 					finalFeature: true,
-					reviewerDecision: approvedFinalDecision(),
+					strictReview: true,
+					reviewerDecision: approvedFeatureDecision(),
 				}),
 			worker: (featureId: string) =>
 				createWorkerResult(featureId, {
-					artifactsChanged: [{ path: "./docs/development.md" }],
 					validationScope: "broad",
-					finalReview: {
-						reviewDepth: "detailed",
-						reviewedSurfaces: [
-							"changed_files",
-							"shared_surfaces",
-							"validation_evidence",
-							"docs_and_prompts",
-						],
-						evidenceSummary:
-							"Reviewed changed docs and prompt surfaces together with validation evidence.",
-						validationAssessment:
-							"Validation coverage and changed docs/prompt surfaces were reviewed.",
-						evidenceRefs: {
-							changedArtifacts: ["docs/development.md"],
-							validationCommands: ["bun test"],
-						},
-						integrationChecks: [
-							"Checked that prompt-facing guidance still matches runtime behavior.",
-						],
-						regressionChecks: [
-							"Checked that the docs surface stays aligned with runtime review policy.",
-						],
-						remainingGaps: [],
-						status: "passed",
-						summary: "Final review looks good.",
-						blockingFindings: [],
-					},
+					reviewScopeLedger: [scopeLedgerEntry()],
+					finalReview: createFinalReviewPayload(),
+				}),
+			expectedErrorCode: "missing_final_reviewer_decision",
+		},
+		{
+			name: "strict lite lane final completion still requires a recorded final reviewer decision",
+			expectedOk: false,
+			setup: () =>
+				createStartedSession({ finalFeature: true, strictReview: true }),
+			worker: (featureId: string) =>
+				createWorkerResult(featureId, {
+					validationScope: "broad",
+					reviewScopeLedger: [
+						scopeLedgerEntry("file_target:src/runtime/session.ts"),
+					],
+					finalReview: createFinalReviewPayload(),
 				}),
 			expectedErrorCode: "missing_final_reviewer_decision",
 		},
@@ -933,6 +937,64 @@ describe("completion gates", () => {
 		expect(details?.notes.join("\n")).toContain(
 			"Evidence refs must come from changed artifacts or review context",
 		);
+	});
+
+	test.each([
+		{ goalMode: "review" as const, finalFeature: false },
+		{ goalMode: "review_and_fix" as const, finalFeature: false },
+		{ goalMode: "review" as const, finalFeature: true },
+		{ goalMode: "review_and_fix" as const, finalFeature: true },
+	])("$goalMode $finalFeature completion requires reviewer decision when accounting is otherwise satisfied", ({
+		goalMode,
+		finalFeature,
+	}) => {
+		const { session, featureId, wasFinalFeature } = createStartedSession({
+			goalMode,
+			finalFeature,
+		});
+		const findingRef = "review: known defect";
+		const reviewScopeLedger = [
+			scopeLedgerEntry("file_target:src/runtime/session.ts", {
+				...(goalMode === "review_and_fix"
+					? {
+							status: "finding_closed" as const,
+							findingRefs: [findingRef],
+						}
+					: {}),
+			}),
+		];
+		const result = validateSuccessfulCompletion(
+			session,
+			createWorkerResult(featureId, {
+				validationScope: finalFeature ? "broad" : "targeted",
+				reviewScopeLedger,
+				...(goalMode === "review_and_fix"
+					? {
+							reviewFindingClosures: [
+								closedReviewFindingClosure({ findingRef }),
+							],
+						}
+					: {}),
+				...(finalFeature
+					? {
+							finalReview: finalReviewPayloadForTargets([
+								"src/runtime/session.ts",
+							]),
+						}
+					: {}),
+			}),
+			featureId,
+			wasFinalFeature,
+		);
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.recovery?.errorCode).toBe(
+				finalFeature
+					? "missing_final_reviewer_decision"
+					: "missing_feature_reviewer_decision",
+			);
+		}
 	});
 
 	test("worker completion rejects blind review-scope recovery scaffold replay", () => {
@@ -2072,12 +2134,12 @@ describe("completion gates", () => {
 			},
 		];
 
-		const rejected = createStartedSession({
+		const ordinaryAccepted = createStartedSession({
 			finalFeature: true,
 		});
-		const missingBehavior = validateSuccessfulCompletion(
-			rejected.session,
-			createWorkerResult(rejected.featureId, {
+		const ordinaryBehavior = validateSuccessfulCompletion(
+			ordinaryAccepted.session,
+			createWorkerResult(ordinaryAccepted.featureId, {
 				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
 					{
@@ -2087,18 +2149,12 @@ describe("completion gates", () => {
 					},
 				],
 				validationScope: "broad",
-				reviewScopeLedger: riskyReviewScopeLedger,
-				finalReview: finalReviewPayloadForTargets(["src/runtime/session.ts"]),
+				finalReview: createFinalReviewPayload(),
 			}),
-			rejected.featureId,
-			rejected.wasFinalFeature,
+			ordinaryAccepted.featureId,
+			ordinaryAccepted.wasFinalFeature,
 		);
-		expect(missingBehavior.ok).toBe(false);
-		if (!missingBehavior.ok) {
-			expect(missingBehavior.recovery?.errorCode).toBe(
-				"missing_final_reviewer_decision",
-			);
-		}
+		expect(ordinaryBehavior.ok).toBe(true);
 
 		const reviewerCompleteWorkerMissing = createStartedSession({
 			finalFeature: true,
@@ -2141,6 +2197,7 @@ describe("completion gates", () => {
 
 		const reviewerMissingWorkerComplete = createStartedSession({
 			finalFeature: true,
+			strictReview: true,
 		});
 		const reviewerMissingBehavior = validateSuccessfulCompletion(
 			reviewerMissingWorkerComplete.session,
@@ -2301,6 +2358,7 @@ describe("completion gates", () => {
 			name: "final-scope reviewer decision satisfies final-feature gate",
 			reviewerDecision: {
 				...approvedFinalDecision(),
+				reviewScopeLedger: [scopeLedgerEntry()],
 				summary: "Final review looks good.",
 			},
 			expectedOk: true,
@@ -2308,12 +2366,16 @@ describe("completion gates", () => {
 	])("$name", ({ reviewerDecision, expectedOk }) => {
 		const { session, featureId, wasFinalFeature } = createStartedSession({
 			finalFeature: true,
-			reviewerDecision,
+			strictReview: true,
+			reviewerDecision: structuredClone(
+				reviewerDecision,
+			) as Session["execution"]["lastReviewerDecision"],
 		});
 		const result = validateSuccessfulCompletion(
 			session,
 			createWorkerResult(featureId, {
 				validationScope: "broad",
+				reviewScopeLedger: [scopeLedgerEntry()],
 				finalReview: createFinalReviewPayload({
 					summary: "Repo-wide validation is clean.",
 				}),

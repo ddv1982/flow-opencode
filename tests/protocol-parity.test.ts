@@ -49,7 +49,7 @@ describe("protocol parity", () => {
 		for (const surface of PROMPT_SURFACES) {
 			expect(surface).not.toContain("_from_raw");
 			expect(surface).not.toContain("JSON-string transport tools");
-			expect(surface).toContain("Mode contracts remain authoritative as data");
+			expect(surface.toLowerCase()).toContain("runtime");
 		}
 
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_run_complete_feature");
@@ -60,28 +60,32 @@ describe("protocol parity", () => {
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
 			"generated `flow-run` OpenCode skill",
 		);
-		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"No `flow-auto` skill is generated yet",
-		);
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("flow-auto");
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("flow-plan");
+		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain("flow-run");
 	});
 
 	test("prompt fallback surfaces preserve reviewer-persistence, final-path, and recovery/replan contracts through tools and schemas", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_feature");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain("flow_review_record_final");
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain("final completion path");
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain("broad validation");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"deliveryPolicy.finalReviewPolicy",
+			"finalReview on final completion",
 		);
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain("replan_required");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("broad validation");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("strictReview governance");
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("true blocker");
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow_reset_feature");
-		expect(FLOW_AUTO_AGENT_PROMPT).toContain("clean, blocked, or replanned");
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("final completion path");
+		expect(FLOW_AUTO_AGENT_PROMPT).toContain("real blocker");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"finalReview on final completion",
+		);
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("broad validation");
 		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
-			"runtime-owned final review required by deliveryPolicy.finalReviewPolicy",
+			"broad validation plus finalReview",
 		);
-		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain("passing `finalReview`");
+		expect(FLOW_RUN_COMMAND_TEMPLATE).toContain(
+			"persist reviewer decisions only for review/review_and_fix/strictReview governance",
+		);
 	});
 
 	test("prompt expression invariant references stay known and distinct", () => {
@@ -134,12 +138,12 @@ describe("protocol parity", () => {
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
 			"Generated protocol view. Source data:",
 		);
-		expect(FLOW_WORKER_AGENT_PROMPT).toContain("Core action protocol:");
 		expect(FLOW_WORKER_AGENT_PROMPT).toContain(
-			"Referenced semantic invariants:",
+			"Fallback contract for `flow-worker`",
 		);
+		expect(FLOW_WORKER_AGENT_PROMPT).toContain("Allowed Flow tools:");
 		expect(FLOW_AUTO_COMMAND_TEMPLATE).toContain(
-			"Mode contracts remain authoritative as data",
+			"Fallback contract for `flow-auto`",
 		);
 	});
 

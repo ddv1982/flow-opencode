@@ -1,7 +1,7 @@
 [
 	{
 		"id": "planner-agent-package-manager-ambiguity",
-		"title": "Planner agent prompt requires recording package-manager ambiguity instead of guessing",
+		"title": "Planner agent prompt keeps planning tool boundary and points to skill for detail",
 		"category": "planning-evidence",
 		"surface": "planner_agent_prompt",
 		"risk": "high",
@@ -11,9 +11,9 @@
 			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"If package-manager evidence is ambiguous, do not guess.",
 			"flow_plan_context_record",
-			"Broad goals are valid."
+			"broad review-and-fix goals without findings as review-first planning",
+			"generated `flow-plan` OpenCode skill"
 		],
 		"forbiddenSnippets": ["guess a package manager despite ambiguous evidence"]
 	},
@@ -48,9 +48,8 @@
 		"expectedSnippets": [
 			"Do not write code.",
 			"needs_fix",
-			"Review for correctness",
-			"failure-mode classes",
-			"test-evidence authenticity"
+			"generated `flow-review` OpenCode skill",
+			"Output contract pointer"
 		],
 		"forbiddenSnippets": ["reviewer applies code fixes directly"]
 	}

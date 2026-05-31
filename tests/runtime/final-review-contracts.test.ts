@@ -2970,7 +2970,7 @@ describe("runtime final review contracts", () => {
 		});
 	});
 
-	test("rejects lite-lane final completion without a separately recorded final reviewer decision", () => {
+	test("strict lite-lane final completion rejects missing separately recorded final reviewer decision", () => {
 		const session = createSession("Ship a tiny fix");
 		const liteFeature = samplePlan().features[0];
 		if (!liteFeature) {
@@ -2978,6 +2978,7 @@ describe("runtime final review contracts", () => {
 		}
 		const plan = {
 			...samplePlan(),
+			deliveryPolicy: { strictReview: true },
 			features: [liteFeature],
 		};
 
@@ -3006,6 +3007,15 @@ describe("runtime final review contracts", () => {
 				},
 			],
 			validationScope: "broad",
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings",
+					evidenceRefs: ["src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+			],
 			reviewIterations: 1,
 			decisions: [],
 			nextStep: "Session should complete.",

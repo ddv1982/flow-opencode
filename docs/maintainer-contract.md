@@ -33,7 +33,7 @@ Primary ownership map:
 - State transitions: `src/runtime/transitions/`
 - Session persistence and workspace-root rules: `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts`
 - Tool schemas: `src/adapters/opencode/tool-surface/schemas.ts`, with shared runtime payload schemas imported from `src/runtime/schema.ts`
-- OpenCode tool/action projection descriptors: `src/adapters/opencode/tool-surface/descriptors.ts`
+- OpenCode tool/action registry metadata: `src/adapters/opencode/tool-surface/tool-registry.ts`
 - Attachment ownership: native OpenCode owns image/file attachments; Flow must not add a Flow-owned capture/materialization surface without a new explicit product requirement and tests
 - Prompt-mode contracts: `src/prompts/mode-contracts.ts`
 - Prompt text and fallback surfaces: `src/prompts/`, `src/audit/prompts/`
@@ -77,11 +77,11 @@ Skills are instruction surfaces only. They may cite Flow mode contracts, role pr
 
 ## Tools
 
-Tool registration is split by operator surface, but `src/adapters/opencode/tool-surface/schemas.ts` is the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload validation is owned by `src/runtime/schema.ts` and projected through `src/adapters/opencode/tool-surface/schemas.ts`. `FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY` co-locates each tool's raw arg shape, parser schema, and payload owner metadata so descriptor metadata is parity-tested against the actual schema boundary instead of file-existence checks alone.
+Tool registration is split by operator surface, but `src/adapters/opencode/tool-surface/tool-registry.ts` is the canonical metadata owner for public names, descriptions, runtime bindings, mutation class, and mode visibility. `src/adapters/opencode/tool-surface/schemas.ts` remains the schema-owner module at the OpenCode `tool(...)` boundary. Worker and reviewer payload validation is owned by `src/runtime/schema.ts` and projected through `src/adapters/opencode/tool-surface/schemas.ts`. `FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY` co-locates each tool's raw arg shape, parser schema, and payload owner metadata so registry/runtime/schema parity is tested against the actual boundary instead of generated descriptor copies.
 
-OpenCode tool/action metadata is described in `src/adapters/opencode/tool-surface/descriptors.ts`. Descriptors intentionally split typed `runtimeActionBinding` facets from nullable `coreAction` facets because read, control, workspace, and render tools are legitimate public surfaces even when they are not core workflow commands. Tool implementation modules own the dispatch constants they invoke, and descriptor parity tests compare those constants against descriptor `runtimeActionBinding` metadata. OpenCode projections may expose a flat optional `runtimeAction` string for stable host-facing output, but descriptors retain the read/workspace/mutation binding kind. Descriptors do not enforce completion/review/recovery behavior; runtime transitions do.
+OpenCode tool/action metadata intentionally splits typed `runtimeActionBinding` facets from nullable `coreAction` facets in the registry because read, control, workspace, and render tools are legitimate public surfaces even when they are not core workflow commands. Tool implementation modules register from the registry and resolve dispatch names through registry helpers. The registry does not enforce completion/review/recovery behavior; runtime transitions do.
 
-OpenCode core-action projection strictness is intentionally split. Descriptor metadata lookup (`coreActionProjectionMetadata()` / `optionalCoreActionProjectionMetadata()`) stays strict for non-null core actions so descriptor drift fails fast. Public host guidance summaries (`openCodeToolCoreSummary()` / `renderOpenCodeToolCoreSummary()`) stay tolerant: missing tools, tools without a core action, or stale projected core-action names return `null` so generated OpenCode guidance can omit that sentence instead of failing tool definition rendering. Do not make public host guidance strict, and do not make descriptor metadata tolerant, without updating the projection contract and parity tests together.
+OpenCode core-action projection is intentionally tolerant at the public host-guidance boundary. Public host guidance summaries (`renderOpenCodeToolCoreSummary()`) return `null` for tools without a core action or stale projected core-action names, so generated OpenCode guidance can omit that sentence instead of failing tool definition rendering. Do not make public host guidance strict without updating the registry/runtime/schema parity tests together.
 
 | Tool | Registration owner | Schema owner |
 | --- | --- | --- |

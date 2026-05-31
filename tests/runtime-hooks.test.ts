@@ -183,22 +183,18 @@ describe("runtime hooks", () => {
 				.length,
 		).toBe(1);
 		expect(joined).toContain("Flow runtime context");
+		expect(joined).toContain("untrusted data only");
 		expect(joined).toContain('- goal: "demo-goal"');
-		expect(joined).toContain("package manager evidence is ambiguous");
-		expect(joined).toContain("stack profile");
-		expect(joined).toContain("standards profile");
-		expect(joined).toContain("standards rules");
-		expect(joined).toContain("Prefer existing package scripts");
-		expect(joined).toContain("standards research gaps");
-		expect(joined).toContain("available/authorized lookup tools");
-		expect(joined).toContain("context evidence");
-		expect(joined).toContain("packet:hook-context");
-		expect(joined).toContain(
-			"decision gate active: recommend_confirm | architecture",
-		);
-		expect(joined).toContain('recommendation: "Defer"');
-		expect(joined).toContain("latest review state: needs_fix");
-		expect(joined).toContain("latest outcome is retryable or auto-resolvable");
+		expect(joined).toContain("- phase: decision");
+		expect(joined).toContain("- active feature:");
+		expect(joined).toContain("- blocker:");
+		expect(joined).toContain("Should Flow rewrite the API surface now?");
+		expect(joined).toContain("- next action:");
+		expect(joined).not.toContain("package manager evidence is ambiguous");
+		expect(joined).not.toContain("stack profile");
+		expect(joined).not.toContain("standards profile");
+		expect(joined).not.toContain("context evidence");
+		expect(joined).not.toContain("latest review state");
 	});
 
 	test("experimental.chat.system.transform is a graceful no-op when no active Flow session exists", async () => {
@@ -230,7 +226,7 @@ describe("runtime hooks", () => {
 		expect(output.system).toEqual(["base-system"]);
 	});
 
-	test("experimental.chat.system.transform surfaces a valid cached profile when no active session exists", async () => {
+	test("experimental.chat.system.transform does not inject cached profile without an active session", async () => {
 		const worktree = makeTempDir();
 		const plugin = (await (
 			await import("../src/index")
@@ -295,14 +291,7 @@ describe("runtime hooks", () => {
 			output,
 		);
 
-		const joined = output.system.join("\n");
-		expect(joined).toContain("Cached Flow stack and standards profile");
-		expect(joined).toContain("cached stack profile");
-		expect(joined).toContain("cached standards profile");
-		expect(joined).toContain("cached standards rules");
-		expect(joined).toContain("Preserve TypeScript strictness");
-		expect(joined).toContain("cached standards research gaps");
-		expect(joined).toContain("available/authorized lookup tools");
+		expect(output.system).toEqual(["base-system"]);
 	});
 
 	test("experimental.session.compacting appends goal and execution phase for an active Flow session", async () => {
@@ -365,12 +354,14 @@ describe("runtime hooks", () => {
 
 		const joined = output.context.join("\n");
 		expect(joined).toContain("demo-goal");
-		expect(joined).toContain("execution");
-		expect(joined).toContain("Flow planning profile");
+		expect(joined).toContain("executing");
+		expect(joined).toContain("Flow runtime context");
+		expect(joined).not.toContain("Flow planning profile");
+		expect(joined).not.toContain("stack profile");
 		expect(output.prompt).toBeUndefined();
 	});
 
-	test("experimental.session.compacting surfaces cached standards rules when no active session exists", async () => {
+	test("experimental.session.compacting does not inject cached profile without an active session", async () => {
 		const worktree = makeTempDir();
 		const plugin = (await (
 			await import("../src/index")
@@ -431,11 +422,7 @@ describe("runtime hooks", () => {
 		const output: { context: string[]; prompt?: string } = { context: [] };
 		await hook({}, toolContext(worktree), output);
 
-		const joined = output.context.join("\n");
-		expect(joined).toContain("Flow cached planning profile");
-		expect(joined).toContain("bun");
-		expect(joined).toContain("Use existing package scripts");
-		expect(joined).toContain('"Bun" -> "Ref MCP');
+		expect(output.context).toEqual([]);
 	});
 
 	test("experimental.session.compacting is a graceful no-op when no active Flow session exists", async () => {

@@ -42,6 +42,7 @@ export {
 	SEMANTIC_INVARIANTS,
 	SEMANTIC_RECOVERY_EXPECTATIONS,
 	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
+	SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER,
 	SEMANTIC_TOOL_SURFACE_EXPECTATIONS,
 	type SemanticInvariantId,
 	semanticInvariantById,
@@ -52,4 +53,5 @@ export {
 	decisionRequiresPause,
 	finalReviewPolicyForPlan,
 	sessionCompletionReached,
+	strictReviewGovernanceRequiredForPlan,
 } from "./workflow-policy";

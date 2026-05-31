@@ -3,9 +3,9 @@ import {
 	describeFinalReviewCoverageFailure,
 	describeFinalReviewerReviewScopeFailure,
 	finalReviewDepthMatchesPolicy,
+	strictReviewGovernanceRequiredForPlan,
 } from "../domain";
 import type { Session } from "../schema";
-import { deriveExecutionLane } from "../session-operator-state";
 import type { NormalizedWorkerResult } from "./execution-completion-normalization";
 
 type FinalReviewerDecisionFailure = {
@@ -32,17 +32,11 @@ export function finalReviewerDecisionFailureMessage(
 	featureId: string,
 	wasFinalFeature: boolean,
 ): FinalReviewerDecisionFailure | null {
-	if (!wasFinalFeature) {
-		if (deriveExecutionLane(session).lane === "lite") {
-			return isReviewPassing(worker.featureReview)
-				? null
-				: {
-						kind: "missing_or_invalid_reviewer_decision",
-						message:
-							"Worker result cannot complete without a recorded approved reviewer decision.",
-					};
-		}
+	if (!strictReviewGovernanceRequiredForPlan(session.plan)) {
+		return null;
+	}
 
+	if (!wasFinalFeature) {
 		const decision = session.execution.lastReviewerDecision;
 		return decision?.status === "approved" &&
 			decision.scope === "feature" &&

@@ -31,9 +31,13 @@ afterEach(() => {
 });
 
 describe("runtime reviewer decision and reset tools", () => {
-	test("requires a recorded reviewer approval before successful completion", () => {
+	test("explicit strict review requires a recorded reviewer approval before successful completion", () => {
 		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
+		const plan = {
+			...samplePlan(),
+			deliveryPolicy: { strictReview: true as const },
+		};
+		const applied = applyPlan(session, plan);
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
 
@@ -58,6 +62,15 @@ describe("runtime reviewer decision and reset tools", () => {
 				},
 			],
 			validationScope: "targeted",
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings",
+					evidenceRefs: ["src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+			],
 			reviewIterations: 1,
 			decisions: [],
 			nextStep: "Run the next feature.",
@@ -82,7 +95,7 @@ describe("runtime reviewer decision and reset tools", () => {
 		expect(completed.recovery?.prerequisite).toBe("reviewer_result_required");
 	});
 
-	test("lite lane final completion requires a separately recorded final reviewer approval", async () => {
+	test("explicit strict final completion requires a separately recorded final reviewer approval", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Ship a tiny fix");
@@ -92,6 +105,7 @@ describe("runtime reviewer decision and reset tools", () => {
 		}
 		const plan = {
 			...samplePlan(),
+			deliveryPolicy: { strictReview: true as const },
 			features: [liteFeature],
 		};
 
@@ -122,6 +136,15 @@ describe("runtime reviewer decision and reset tools", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/session.ts",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						validationRefs: ["bun test"],
+						residualRisk: "No known residual risk.",
+					},
+				],
 				reviewIterations: 1,
 				decisions: [],
 				nextStep: "Session should complete.",

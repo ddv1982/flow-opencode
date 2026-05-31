@@ -56,7 +56,7 @@ describe("flow prompt mode contracts", () => {
 			"For each planning, execution, and review phase, report handoffMode as exactly task_subagent, inline_role, or not_supported before acting; do not treat derived task-progress rows as proof of an actual OpenCode Task/subagent handoff.",
 		);
 		expect(getFlowModeContract("flow-worker").requiredBehavior).toContain(
-			"When requesting reviewer approval, distinguish handoffMode exactly as task_subagent for an actual flow-reviewer Task handoff, inline_role for inline approval fallback, or not_supported when Task is unavailable or denied.",
+			"When strict/review governance requests reviewer approval, distinguish handoffMode exactly as task_subagent for an actual flow-reviewer Task handoff, inline_role for inline approval fallback, or not_supported when Task is unavailable or denied.",
 		);
 		expect(getFlowModeContract("flow-reviewer").requiredBehavior).toContain(
 			"Remain leaf-like: do not delegate further by default; return an evidence-backed decision.",

@@ -63,8 +63,6 @@ features:
 	},
 ])}`;
 
-export const FLOW_PLAN_CONTRACT_COMPACT = FLOW_PLAN_CONTRACT_BASE;
-
 const FLOW_WORKER_CONTRACT_BASE = `Return exactly one JSON object that matches the worker result payload below, with no markdown fences, commentary, or trailing text:
 
 - contractVersion: "1"
@@ -128,8 +126,6 @@ ${renderExampleBlocks([
 		body: `{"contractVersion":"1","status":"needs_input","summary":"Feature is still too broad for one safe execution pass.","artifactsChanged":[],"validationRun":[],"decisions":[{"summary":"A smaller feature split is required before editing."}],"nextStep":"Refresh the plan with smaller executable features.","outcome":{"kind":"replan_required","replanReason":"Feature mixes prompt refactor, tool-hook changes, and eval harness rollout.","failedAssumption":"The active feature was atomic enough to execute safely.","recommendedAdjustment":"Split prompt refactor and eval harness work into separate features."},"featureResult":{"featureId":"improve-prompts"},"featureReview":{"status":"needs_followup","summary":"Execution should not advance yet.","blockingFindings":[{"summary":"Scope is too broad for a single worker pass."}]}}`,
 	},
 ])}`;
-
-export const FLOW_WORKER_CONTRACT_COMPACT = FLOW_WORKER_CONTRACT_BASE;
 
 export const FLOW_REVIEWER_CONTRACT = `Return exactly one JSON object that matches the reviewer result payload below, with no markdown fences, commentary, or trailing text:
 

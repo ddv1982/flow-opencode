@@ -376,6 +376,7 @@ describe("runtime completion and recovery tools", () => {
 			completionPolicy: {
 				minCompletedFeatures: 1,
 			},
+			deliveryPolicy: { strictReview: true },
 			features: [samplePlan().features[0]],
 		};
 
@@ -406,6 +407,15 @@ describe("runtime completion and recovery tools", () => {
 					},
 				],
 				validationScope: "broad",
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/session.ts",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						validationRefs: ["bun test"],
+						residualRisk: "No known residual risk.",
+					},
+				],
 				reviewIterations: 1,
 				decisions: [],
 				nextStep: "Session should complete.",
@@ -1078,7 +1088,10 @@ describe("runtime completion and recovery tools", () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
+		const applied = applyPlan(session, {
+			...samplePlan(),
+			deliveryPolicy: { strictReview: true },
+		});
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
 
@@ -1105,6 +1118,15 @@ describe("runtime completion and recovery tools", () => {
 					},
 				],
 				validationScope: "targeted",
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/session.ts",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						validationRefs: ["bun test"],
+						residualRisk: "No known residual risk.",
+					},
+				],
 				reviewIterations: 1,
 				decisions: [{ summary: "Runtime wiring is complete." }],
 				nextStep: "Run the next feature.",
@@ -1207,6 +1229,15 @@ describe("runtime completion and recovery tools", () => {
 					},
 				],
 				validationScope: "targeted",
+				reviewScopeLedger: [
+					{
+						scopeId: "file_target:src/runtime/session.ts",
+						status: "reviewed_no_findings",
+						evidenceRefs: ["src/runtime/session.ts"],
+						validationRefs: ["bun test"],
+						residualRisk: "No known residual risk.",
+					},
+				],
 				reviewIterations: 1,
 				decisions: [],
 				nextStep: "Session should complete.",
@@ -1263,7 +1294,10 @@ describe("runtime completion and recovery tools", () => {
 
 	test("feature reviewer recovery exposes runtime tool guidance without suggesting flow-run", () => {
 		const session = createSession("Build a workflow plugin");
-		const applied = applyPlan(session, samplePlan());
+		const applied = applyPlan(session, {
+			...samplePlan(),
+			deliveryPolicy: { strictReview: true },
+		});
 		expect(applied.ok).toBe(true);
 		if (!applied.ok) return;
 
@@ -1288,6 +1322,15 @@ describe("runtime completion and recovery tools", () => {
 				},
 			],
 			validationScope: "targeted",
+			reviewScopeLedger: [
+				{
+					scopeId: "file_target:src/runtime/session.ts",
+					status: "reviewed_no_findings",
+					evidenceRefs: ["src/runtime/session.ts"],
+					validationRefs: ["bun test"],
+					residualRisk: "No known residual risk.",
+				},
+			],
 			reviewIterations: 1,
 			decisions: [],
 			nextStep: "Run the next feature.",

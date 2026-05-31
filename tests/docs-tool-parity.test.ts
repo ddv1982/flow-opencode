@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { FLOW_TOOL_DOCS_ROWS } from "../src/adapters/opencode/tool-surface/docs-rows.generated";
+import { OPENCODE_TOOL_REGISTRY } from "../src/adapters/opencode/tool-surface/tool-registry";
 import { createTools } from "../src/adapters/opencode/tools";
 
 const DEVELOPMENT_DOC_PATH = join(
@@ -71,17 +71,29 @@ describe("development docs tool parity", () => {
 		const documentedToolRows = extractDocumentedToolRows(markdown);
 		const documentedToolNames = documentedToolRows.map((row) => row.toolName);
 		const registeredToolNames = Object.keys(createTools({}));
-		const registryDocsRows = FLOW_TOOL_DOCS_ROWS.filter(
-			(row) => row.section === "docs/development.md#current-runtime-tools",
+		const registryDocsRows = OPENCODE_TOOL_REGISTRY.flatMap((entry) =>
+			entry.docsRowMetadata?.section ===
+			"docs/development.md#current-runtime-tools"
+				? [
+						{
+							toolName: entry.toolName,
+							section: entry.docsRowMetadata.section,
+							label: entry.docsRowMetadata.label,
+							description: entry.hostDescription,
+						},
+					]
+				: [],
 		);
-		const expectedToolNames = registryDocsRows.map((row) => row.toolName);
+		const expectedToolNames: string[] = registryDocsRows.map(
+			(row) => row.toolName,
+		);
 		const registryLabels = [
 			...new Set(registryDocsRows.map((row) => row.label)),
 		];
 
 		expect(registryLabels).toEqual(["Default OpenCode tool surface"]);
 		expect(markdown).toContain(
-			`${registryLabels[0]}, in descriptor docs-row order:`,
+			`${registryLabels[0]}, in registry docs-row order:`,
 		);
 
 		if (documentedToolRows.length === 0) {
@@ -127,10 +139,10 @@ describe("development docs tool parity", () => {
 					: null,
 				missing.length > 0 ? `Missing from docs: ${missing.join(", ")}` : null,
 				extra.length > 0
-					? `Documented but not descriptor-backed: ${extra.join(", ")}`
+					? `Documented but not registry-backed: ${extra.join(", ")}`
 					: null,
 				orderMismatch
-					? "Documented tools do not match descriptor docs row order."
+					? "Documented tools do not match registry docs row order."
 					: null,
 				descriptionMismatches.length > 0
 					? `Description mismatch: ${descriptionMismatches.join(", ")}`

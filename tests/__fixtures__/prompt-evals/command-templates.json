@@ -9,10 +9,7 @@
 			"src/prompts/generated/command-templates.ts",
 			"src/prompts/mode-contracts.ts"
 		],
-		"expectedSnippets": [
-			"flow_auto_prepare",
-			"stop and request a goal instead of inferring one"
-		],
+		"expectedSnippets": ["flow_auto_prepare", "stop and request a goal"],
 		"forbiddenSnippets": ["infer a goal from repository inspection"]
 	},
 	{
@@ -26,8 +23,8 @@
 			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"resume the active session only",
-			"If no active session exists, stop and request a goal"
+			"`resume` is resume-only",
+			"if no active session exists, stop and request a goal"
 		],
 		"forbiddenSnippets": ["resume can create a new goal"]
 	},
@@ -42,8 +39,9 @@
 			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"status `recommend_confirm` or `human_required`",
-			"present that recommendation clearly and stop"
+			"`recommend_confirm`",
+			"`human_required`",
+			"Stop on `missing_goal`, `recommend_confirm`, or `human_required` decision gates"
 		],
 		"forbiddenSnippets": ["continue autonomously after human_required"]
 	},
@@ -58,9 +56,9 @@
 			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"final completion path",
-			"passing final review",
-			"runtime-owned completion evidence"
+			"finalReview",
+			"broad validation",
+			"clean evidence or runtime recovery"
 		],
 		"forbiddenSnippets": ["skip final cross-feature review"]
 	},
@@ -89,9 +87,9 @@
 			"src/prompts/mode-contracts.ts"
 		],
 		"expectedSnippets": [
-			"If the arguments start with `approve`",
-			"If the arguments start with `select`",
-			"Otherwise treat the full argument string as the planning goal"
+			"`approve ...` approves the current draft",
+			"`select ...` narrows the current draft",
+			"Other arguments are a planning goal"
 		],
 		"forbiddenSnippets": ["treat approve or select as a new planning goal"]
 	}

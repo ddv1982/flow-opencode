@@ -44,7 +44,6 @@ const REVIEW_SURFACE_PATH_RULES: readonly SurfacePathRule[] = [
 		exact: [
 			"src/adapters/opencode/tools.ts",
 			"src/adapters/opencode/tool-guidance.generated.ts",
-			"src/adapters/opencode/tool-projections.generated.ts",
 			"src/config.ts",
 			"src/config-shared.ts",
 			"src/audit/config.ts",

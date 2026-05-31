@@ -1,38 +1,4 @@
-import {
-	type CoreActionDescriptor,
-	type CoreActionName,
-	coreActionByName,
-} from "../../../core/registry";
-
-export type CoreActionProjectionMetadata = Pick<
-	CoreActionDescriptor,
-	"emits" | "invariantIds" | "description"
-> & {
-	name: CoreActionName;
-};
-
-function coreActionProjectionMetadata(
-	coreActionName: CoreActionName,
-): CoreActionProjectionMetadata {
-	const coreAction = coreActionByName(coreActionName);
-	if (!coreAction) {
-		throw new Error(
-			`Missing core action registry entry for '${coreActionName}'.`,
-		);
-	}
-	return {
-		name: coreAction.name,
-		emits: coreAction.emits,
-		invariantIds: coreAction.invariantIds,
-		description: coreAction.description,
-	};
-}
-
-export function optionalCoreActionProjectionMetadata(
-	coreActionName: CoreActionName | null | undefined,
-): CoreActionProjectionMetadata | null {
-	return coreActionName ? coreActionProjectionMetadata(coreActionName) : null;
-}
+import { type CoreActionName, coreActionByName } from "../../../core/registry";
 
 export function renderOpenCodeToolCoreSummary(input: {
 	coreActionName: CoreActionName | null | undefined;

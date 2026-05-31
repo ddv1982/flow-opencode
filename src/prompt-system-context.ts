@@ -1,4 +1,3 @@
-import type { StackStandardsProfileCacheValue } from "./runtime/application/stack-standards-profile";
 import type {
 	EvidencePacket,
 	Session,
@@ -195,52 +194,6 @@ export function buildFlowAdaptiveSystemContext(
 		lines.push(
 			"- latest outcome is retryable or auto-resolvable; satisfy the runtime prerequisite and continue through canonical runtime actions.",
 		);
-	}
-
-	return lines;
-}
-
-export function buildFlowCachedProfileSystemContext(
-	profile: StackStandardsProfileCacheValue | null,
-): string[] {
-	if (!profile?.stackProfile && !profile?.standardsProfile) {
-		return [];
-	}
-
-	const lines = [
-		FLOW_RUNTIME_CONTEXT_MARKER,
-		"- Cached Flow stack and standards profile found for this workspace; treat it as generated evidence below direct user instructions and repo-local policy files.",
-	];
-
-	if (profile.stackProfile) {
-		const parts = [
-			compactNames(profile.stackProfile.languages),
-			compactNames(profile.stackProfile.frameworks),
-			compactNames(profile.stackProfile.runtimes),
-			compactNames(profile.stackProfile.packageManagers),
-			compactNames(profile.stackProfile.tools),
-		].filter((part): part is string => Boolean(part));
-		if (parts.length > 0) {
-			lines.push(
-				`- cached stack profile: ${quoted(compact(parts.join(" | ")))}`,
-			);
-		}
-	}
-
-	if (profile.standardsProfile) {
-		lines.push(
-			`- cached standards profile: ${profile.standardsProfile.localGuidelines.length} local guideline source(s), ${profile.standardsProfile.externalGuidance.length} external guidance source(s), ${profile.standardsProfile.rules.length} rule(s), ${profile.standardsProfile.gaps.length} research gap(s).`,
-		);
-		const rules = compactStandardsRules(profile.standardsProfile);
-		if (rules) {
-			lines.push(`- cached standards rules: ${quoted(rules)}`);
-		}
-		const gaps = compactStandardsGaps(profile.standardsProfile);
-		if (gaps) {
-			lines.push(
-				`- cached standards research gaps: ${quoted(gaps)}; resolve only when material using available/authorized lookup tools, preferring official-doc sources when present and broader web search only as fallback.`,
-			);
-		}
 	}
 
 	return lines;

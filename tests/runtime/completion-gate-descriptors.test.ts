@@ -19,6 +19,7 @@ import {
 	REVIEW_AND_FIX_COMPLETION_GATE_ORDER,
 	REVIEW_COMPLETION_GATE_ORDER,
 	requiredArtifactForCompletionGate,
+	STRICT_REVIEW_COMPLETION_GATE_ORDER,
 } from "../../src/runtime/transitions/completion-gates";
 import {
 	buildCompletionRecovery,
@@ -40,7 +41,7 @@ const ALL_COMPLETION_RECOVERY_KINDS: readonly CompletionRecoveryKind[] = [
 const repoRoot = join(import.meta.dir, "..", "..");
 
 function rowsFor(
-	mode: "default" | "review" | "review_and_fix",
+	mode: "default" | "strict_review" | "review" | "review_and_fix",
 	path: "feature" | "final",
 ) {
 	return COMPLETION_GATE_DOC_ROWS.filter(
@@ -74,7 +75,6 @@ describe("completion gate descriptors", () => {
 		expect(COMPLETION_GATE_ORDER.feature).toEqual([
 			"validation_evidence",
 			"validation_passed",
-			"reviewer_decision",
 			"validation_scope",
 			"feature_review",
 			"final_review_passed",
@@ -86,8 +86,10 @@ describe("completion gate descriptors", () => {
 			"feature_review",
 			"final_review_passed",
 			"final_review_payload",
-			"reviewer_decision",
 		]);
+		expect(STRICT_REVIEW_COMPLETION_GATE_ORDER).toEqual(
+			REVIEW_COMPLETION_GATE_ORDER,
+		);
 		expect(REVIEW_COMPLETION_GATE_ORDER.feature).toEqual([
 			"validation_evidence",
 			"validation_passed",
@@ -128,11 +130,17 @@ describe("completion gate descriptors", () => {
 			"final_review_payload",
 			"reviewer_decision",
 		]);
+		expect(CONDITIONAL_COMPLETION_GATE_ORDER.strictReview).toEqual(
+			STRICT_REVIEW_COMPLETION_GATE_ORDER,
+		);
 		expect(CONDITIONAL_COMPLETION_GATE_ORDER.review).toEqual(
 			REVIEW_COMPLETION_GATE_ORDER,
 		);
 		expect(CONDITIONAL_COMPLETION_GATE_ORDER.reviewAndFix).toEqual(
 			REVIEW_AND_FIX_COMPLETION_GATE_ORDER,
+		);
+		expect(completionGateOrderFor("feature", { strictReview: true })).toEqual(
+			STRICT_REVIEW_COMPLETION_GATE_ORDER.feature,
 		);
 		expect(completionGateOrderFor("feature", { review: true })).toEqual(
 			REVIEW_COMPLETION_GATE_ORDER.feature,
@@ -205,6 +213,12 @@ describe("completion gate descriptors", () => {
 		expect(rowsFor("default", "final").map((row) => row.gateId)).toEqual([
 			...COMPLETION_GATE_ORDER.final,
 		]);
+		expect(
+			rowsFor("strict_review", "feature").map((row) => row.gateId),
+		).toEqual([...STRICT_REVIEW_COMPLETION_GATE_ORDER.feature]);
+		expect(rowsFor("strict_review", "final").map((row) => row.gateId)).toEqual([
+			...STRICT_REVIEW_COMPLETION_GATE_ORDER.final,
+		]);
 		expect(rowsFor("review", "feature").map((row) => row.gateId)).toEqual([
 			...REVIEW_COMPLETION_GATE_ORDER.feature,
 		]);
@@ -220,6 +234,8 @@ describe("completion gate descriptors", () => {
 		expect(COMPLETION_GATE_DOC_ROWS.length).toBe(
 			COMPLETION_GATE_ORDER.feature.length +
 				COMPLETION_GATE_ORDER.final.length +
+				STRICT_REVIEW_COMPLETION_GATE_ORDER.feature.length +
+				STRICT_REVIEW_COMPLETION_GATE_ORDER.final.length +
 				REVIEW_COMPLETION_GATE_ORDER.feature.length +
 				REVIEW_COMPLETION_GATE_ORDER.final.length +
 				REVIEW_AND_FIX_COMPLETION_GATE_ORDER.feature.length +
@@ -236,6 +252,9 @@ describe("completion gate descriptors", () => {
 			"Feature completion gates (default):",
 		);
 		expect(COMPLETION_GATE_PROMPT_GUIDANCE).toContain(
+			"Final completion gates (strict_review):",
+		);
+		expect(COMPLETION_GATE_PROMPT_GUIDANCE).toContain(
 			"Final completion gates (review):",
 		);
 		expect(COMPLETION_GATE_PROMPT_GUIDANCE).toContain(
@@ -243,6 +262,9 @@ describe("completion gate descriptors", () => {
 		);
 		expect(COMPLETION_GATE_AUDIT_GUIDANCE).toContain(
 			"Audit parity lens — final path (default):",
+		);
+		expect(COMPLETION_GATE_AUDIT_GUIDANCE).toContain(
+			"Audit parity lens — final path (strict_review):",
 		);
 		expect(COMPLETION_GATE_AUDIT_GUIDANCE).toContain(
 			"Audit parity lens — feature path (review_and_fix):",

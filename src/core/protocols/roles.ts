@@ -1,9 +1,4 @@
-import {
-	CORE_ACTION_REGISTRY,
-	type CoreActionDescriptor,
-	type CoreActionName,
-} from "../registry";
-import type { SemanticInvariantId } from "./semantic-invariants";
+import type { CoreActionName } from "../registry";
 
 export type CoreRoleProtocolId =
 	| "planner"
@@ -24,10 +19,6 @@ export type CoreRoleProtocol = {
 	workflow: readonly string[];
 	examples: readonly { name: string; body: string }[];
 };
-
-const ACTIONS_BY_NAME = new Map<CoreActionName, CoreActionDescriptor>(
-	CORE_ACTION_REGISTRY.map((action) => [action.name, action]),
-);
 
 export const CORE_ROLE_PROTOCOLS = [
 	{
@@ -225,26 +216,4 @@ export function getCoreRoleProtocol(id: CoreRoleProtocolId): CoreRoleProtocol {
 		throw new Error(`Unknown Flow role protocol '${id}'.`);
 	}
 	return protocol;
-}
-
-export function getCoreRoleActions(
-	protocol: CoreRoleProtocol,
-): CoreActionDescriptor[] {
-	return protocol.ownedActions.map((name) => {
-		const action = ACTIONS_BY_NAME.get(name);
-		if (!action) {
-			throw new Error(`Missing core action descriptor for '${name}'.`);
-		}
-		return action;
-	});
-}
-
-export function getCoreRoleInvariantIds(
-	protocol: CoreRoleProtocol,
-): SemanticInvariantId[] {
-	return [
-		...new Set(
-			getCoreRoleActions(protocol).flatMap((action) => action.invariantIds),
-		),
-	];
 }

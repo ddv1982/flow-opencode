@@ -10,6 +10,7 @@ import {
 	SEMANTIC_INVARIANTS,
 	SEMANTIC_RECOVERY_EXPECTATIONS,
 	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
+	SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER,
 	SEMANTIC_TOOL_SURFACE_EXPECTATIONS,
 	semanticInvariantById,
 } from "../../src/runtime/domain";
@@ -245,29 +246,57 @@ describe("runtime semantic invariants", () => {
 		};
 		expectFailureKind(
 			validateSuccessfulCompletion(session, withValidation, featureId, false),
-			"missing_feature_reviewer_decision",
+			"missing_targeted_validation",
 		);
 
-		const reviewedSession: Session = {
+		const strictSession: Session = {
 			...session,
-			execution: {
-				...session.execution,
-				lastReviewerDecision: approvedReviewerDecision("feature", featureId),
-			},
+			plan: session.plan
+				? {
+						...session.plan,
+						deliveryPolicy: {
+							priorityMode: "balanced",
+							stopRule: "ship_when_clean",
+							deferAllowed: false,
+							finalReviewPolicy: "detailed",
+							strictReview: true,
+						},
+					}
+				: null,
 		};
 		expectFailureKind(
 			validateSuccessfulCompletion(
-				reviewedSession,
-				withValidation,
+				strictSession,
+				{
+					...withValidation,
+					artifactsChanged: [{ path: "src/runtime/session.ts" }],
+					reviewScopeLedger: [
+						{
+							scopeId: "file_target:src/runtime/session.ts",
+							status: "reviewed_no_findings",
+							evidenceRefs: ["src/runtime/session.ts"],
+							validationRefs: ["bun test"],
+							residualRisk: "No known residual risk.",
+						},
+					],
+				},
 				featureId,
 				false,
 			),
-			"missing_targeted_validation",
+			"missing_feature_reviewer_decision",
 		);
 
 		expect(SEMANTIC_COMPLETION_GATE_ORDER.feature).toEqual([
 			"missing_validation",
 			"failing_validation",
+			"missing_validation_scope",
+			"failing_feature_review",
+			"failing_final_review",
+		]);
+		expect(SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER.feature).toEqual([
+			"missing_validation",
+			"failing_validation",
+			"missing_review_scope_accounting",
 			"missing_reviewer_decision",
 			"missing_validation_scope",
 			"failing_feature_review",
@@ -354,7 +383,6 @@ describe("runtime semantic invariants", () => {
 			"failing_feature_review",
 			"failing_final_review",
 			"missing_final_review",
-			"missing_reviewer_decision",
 		]);
 	});
 

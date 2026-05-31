@@ -121,7 +121,7 @@ user / slash command / agent
 
 Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. Rendered markdown docs are derived artifacts, not workflow truth. Core action and role-protocol metadata are projection/regression infrastructure; they are not live persistence. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
 
-Projection metadata is consolidated through the OpenCode surface descriptor family in `src/adapters/opencode/tool-surface/descriptors.ts`. That family can describe core-backed mutation tools, workspace/control tools, read tools, and render-only tools without pretending every surface has both a runtime action and a core workflow action. Adapter implementation modules still own the dispatch constants they invoke, and `src/adapters/opencode/tool-surface/schemas.ts` owns a payload schema registry that co-locates each tool's raw arg shape, parser schema, and owner metadata; descriptor parity tests compare both sources against the descriptor projection contract. Runtime transitions still enforce behavior; descriptors, prompts, docs, and audit surfaces project or verify that behavior.
+OpenCode tool metadata is consolidated in `src/adapters/opencode/tool-surface/tool-registry.ts`. The registry describes core-backed mutation tools, workspace/control tools, read tools, and render-only tools without pretending every surface has both a runtime action and a core workflow action. Adapter implementation modules register tools from the registry and resolve dispatch names through registry helpers; `src/adapters/opencode/tool-surface/schemas.ts` owns the payload schema registry that co-locates each tool's raw arg shape, parser schema, and owner metadata. Parity tests compare registry metadata directly against runtime tool registration, runtime action catalogs, mode contracts, docs rows, and schema owners. Runtime transitions still enforce behavior; registry metadata, prompts, docs, and audit surfaces project or verify that behavior.
 
 ## Current agent roles
 
@@ -181,7 +181,7 @@ Do not add model-provider credentials to this path. These checks are intentional
 
 ## Current Runtime Tools
 
-Default OpenCode tool surface, in descriptor docs-row order:
+Default OpenCode tool surface, in registry docs-row order:
 
 - `flow_status` — Show the active Flow session summary
 - `flow_doctor` — Run non-destructive readiness checks for Flow in the current workspace

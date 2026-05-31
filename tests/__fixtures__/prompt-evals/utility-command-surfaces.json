@@ -11,9 +11,9 @@
 			"src/prompts/contracts.ts"
 		],
 		"expectedSnippets": [
-			"Outcome: execute one approved feature through validation, review, and runtime-owned completion or blocker reporting.",
-			"Otherwise implement exactly one feature, run targeted validation, review changed files plus discovered connected context",
-			"flow_review_record_feature"
+			"Outcome: execute one approved feature through validation, review payloads, and runtime-owned completion or blocker reporting.",
+			"execute exactly one active feature",
+			"review payload status"
 		],
 		"forbiddenSnippets": ["execute every approved feature"]
 	},

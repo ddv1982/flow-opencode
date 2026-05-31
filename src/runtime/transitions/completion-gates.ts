@@ -15,6 +15,7 @@ export type CompletionGatePath = "feature" | "final";
 
 export type CompletionGateApplicability =
 	| CompletionGatePath
+	| "strict_review"
 	| "review"
 	| "review_and_fix";
 
@@ -95,7 +96,7 @@ export const COMPLETION_GATE_DESCRIPTORS = {
 	review_scope_accounting: {
 		id: "review_scope_accounting",
 		recoveryKind: "missing_review_scope_accounting",
-		appliesTo: ["review", "review_and_fix"],
+		appliesTo: ["strict_review", "review", "review_and_fix"],
 		predicateOwner: "reviewScopeLedgerFailureMessage",
 		requiredArtifact: "review_scope_ledger",
 		invariantIds: [
@@ -123,9 +124,9 @@ export const COMPLETION_GATE_DESCRIPTORS = {
 			"recovery.next_action.binding",
 		],
 		operatorHint:
-			"Completion requires an approved reviewer decision with feature or final scope matching the completion path.",
+			"Strict review governance requires an approved reviewer decision with feature or final scope matching the completion path.",
 		renderableText:
-			"Record the required reviewer approval before retrying completion.",
+			"Record the required strict-review approval before retrying completion.",
 	},
 	validation_scope: {
 		id: "validation_scope",
@@ -204,7 +205,6 @@ export const COMPLETION_GATE_ORDER = {
 	feature: [
 		"validation_evidence",
 		"validation_passed",
-		"reviewer_decision",
 		"validation_scope",
 		"feature_review",
 		"final_review_passed",
@@ -216,11 +216,32 @@ export const COMPLETION_GATE_ORDER = {
 		"feature_review",
 		"final_review_passed",
 		"final_review_payload",
-		"reviewer_decision",
 	],
 } as const satisfies Record<CompletionGatePath, readonly CompletionGateId[]>;
 
 export const REVIEW_COMPLETION_GATE_ORDER = {
+	feature: [
+		"validation_evidence",
+		"validation_passed",
+		"review_scope_accounting",
+		"reviewer_decision",
+		"validation_scope",
+		"feature_review",
+		"final_review_passed",
+	],
+	final: [
+		"validation_evidence",
+		"validation_passed",
+		"review_scope_accounting",
+		"validation_scope",
+		"feature_review",
+		"final_review_passed",
+		"final_review_payload",
+		"reviewer_decision",
+	],
+} as const satisfies Record<CompletionGatePath, readonly CompletionGateId[]>;
+
+export const STRICT_REVIEW_COMPLETION_GATE_ORDER = {
 	feature: [
 		"validation_evidence",
 		"validation_passed",
@@ -267,28 +288,38 @@ export const REVIEW_AND_FIX_COMPLETION_GATE_ORDER = {
 } as const satisfies Record<CompletionGatePath, readonly CompletionGateId[]>;
 
 export const CONDITIONAL_COMPLETION_GATE_ORDER = {
+	strictReview: STRICT_REVIEW_COMPLETION_GATE_ORDER,
 	review: REVIEW_COMPLETION_GATE_ORDER,
 	reviewAndFix: REVIEW_AND_FIX_COMPLETION_GATE_ORDER,
 } as const satisfies Record<
-	"review" | "reviewAndFix",
+	"strictReview" | "review" | "reviewAndFix",
 	Record<CompletionGatePath, readonly CompletionGateId[]>
 >;
 
 export function completionGateOrderFor(
 	path: CompletionGatePath,
-	options?: { review?: boolean; reviewAndFix?: boolean },
+	options?: {
+		review?: boolean;
+		reviewAndFix?: boolean;
+		strictReview?: boolean;
+	},
 ): readonly CompletionGateId[] {
 	if (options?.reviewAndFix) {
 		return REVIEW_AND_FIX_COMPLETION_GATE_ORDER[path];
 	}
-	return options?.review
-		? REVIEW_COMPLETION_GATE_ORDER[path]
-		: COMPLETION_GATE_ORDER[path];
+	if (options?.review || options?.strictReview) {
+		return REVIEW_COMPLETION_GATE_ORDER[path];
+	}
+	return COMPLETION_GATE_ORDER[path];
 }
 
 export function completionRecoveryKindOrderFor(
 	path: CompletionGatePath,
-	options?: { review?: boolean; reviewAndFix?: boolean },
+	options?: {
+		review?: boolean;
+		reviewAndFix?: boolean;
+		strictReview?: boolean;
+	},
 ): readonly CompletionRecoveryKind[] {
 	return completionGateOrderFor(path, options).map(
 		(gateId) => COMPLETION_GATE_DESCRIPTORS[gateId].recoveryKind,

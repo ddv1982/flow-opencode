@@ -5,14 +5,13 @@ import { existsSync } from "node:fs";
 import type { ToolContext as OpenCodeToolContext } from "@opencode-ai/plugin/tool";
 import { z } from "zod";
 import { tool } from "../../src/adapters/opencode/sdk";
-import {
-	getOpenCodeToolProjection,
-	OPENCODE_TOOL_NAMES,
-	OPENCODE_TOOL_PROJECTIONS,
-	openCodeToolCoreSummary,
-} from "../../src/adapters/opencode/tool-projections.generated";
-import { FLOW_SURFACE_DESCRIPTORS } from "../../src/adapters/opencode/tool-surface/descriptors";
+import { renderOpenCodeToolCoreSummary } from "../../src/adapters/opencode/tool-surface/core-action-projection";
 import { FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY } from "../../src/adapters/opencode/tool-surface/schemas";
+import {
+	getOpenCodeToolRegistryEntry,
+	OPENCODE_TOOL_NAMES_FROM_REGISTRY,
+	OPENCODE_TOOL_REGISTRY,
+} from "../../src/adapters/opencode/tool-surface/tool-registry";
 import { type CoreActionName, coreActionByName } from "../../src/core/registry";
 import {
 	FinalReviewerDecisionSchema,
@@ -78,92 +77,72 @@ describe("tool schema config contracts", () => {
 		]);
 	});
 
-	test("OpenCode tool surface is ordered by the adapter projection registry", () => {
+	test("OpenCode tool surface is ordered by the adapter registry", () => {
 		const { tools } = getToolSchemas();
 
-		expect(Object.keys(tools)).toEqual(OPENCODE_TOOL_NAMES);
+		expect(Object.keys(tools)).toEqual(OPENCODE_TOOL_NAMES_FROM_REGISTRY);
 		expect(
-			OPENCODE_TOOL_PROJECTIONS.map((projection) => projection.toolName),
-		).toEqual(OPENCODE_TOOL_NAMES);
-		expect(
-			getOpenCodeToolProjection("flow_run_complete_feature")?.coreAction,
+			getOpenCodeToolRegistryEntry("flow_run_complete_feature")?.coreAction,
 		).toBe("complete_run");
 		expect(
-			getOpenCodeToolProjection("flow_review_record_final")?.coreAction,
+			getOpenCodeToolRegistryEntry("flow_review_record_final")?.coreAction,
 		).toBe("record_reviewer_decision");
 		expect(
-			getOpenCodeToolProjection("flow_review_record_feature")?.runtimeAction,
-		).toBe("record_feature_review");
+			getOpenCodeToolRegistryEntry("flow_review_record_feature")
+				?.runtimeActionBinding,
+		).toEqual({ kind: "mutation", name: "record_feature_review" });
 		expect(
-			getOpenCodeToolProjection("flow_review_record_final")?.runtimeAction,
-		).toBe("record_final_review");
+			getOpenCodeToolRegistryEntry("flow_review_record_final")
+				?.runtimeActionBinding,
+		).toEqual({ kind: "mutation", name: "record_final_review" });
 	});
 
-	test("reset feature ownership metadata tracks the review transition owner", () => {
-		const descriptor = FLOW_SURFACE_DESCRIPTORS.find(
-			(surface) => surface.id === "flow_reset_feature",
-		);
+	test("reset feature metadata tracks the review transition owner", () => {
+		const registryEntry = getOpenCodeToolRegistryEntry("flow_reset_feature");
 		const coreAction = coreActionByName("reset_feature");
 
-		expect(descriptor).toBeDefined();
+		expect(registryEntry).toBeDefined();
 		expect(coreAction).not.toBeNull();
-		expect(descriptor?.coreAction).toBe("reset_feature");
-		expect(descriptor?.policyOwners).toContain(
-			"src/runtime/transitions/review.ts",
-		);
+		expect(registryEntry?.coreAction).toBe("reset_feature");
 		expect(coreAction?.policyOwners).toContain(
 			"src/runtime/transitions/review.ts",
-		);
-		expect(descriptor?.policyOwners).not.toContain(
-			"src/runtime/transitions/recovery.ts",
 		);
 		expect(coreAction?.policyOwners).not.toContain(
 			"src/runtime/transitions/recovery.ts",
 		);
 	});
 
-	test("OpenCode surface descriptors project core action registry metadata", () => {
-		for (const descriptor of FLOW_SURFACE_DESCRIPTORS) {
-			if (!descriptor.coreAction) {
+	test("OpenCode registry references existing core action metadata", () => {
+		for (const entry of OPENCODE_TOOL_REGISTRY) {
+			if (!entry.coreAction) {
 				continue;
 			}
-			const coreAction = coreActionByName(descriptor.coreAction);
+			const coreAction = coreActionByName(entry.coreAction);
 			if (!coreAction) {
 				throw new Error(
-					`Missing core action registry entry for ${descriptor.coreAction}`,
+					`Missing core action registry entry for ${entry.coreAction}`,
 				);
 			}
 
-			expect(descriptor.emittedEvents).toEqual(coreAction.emits);
-			expect(descriptor.invariantIds).toEqual(coreAction.invariantIds);
+			expect(coreAction.emits).toBeDefined();
+			expect(coreAction.invariantIds).toBeDefined();
 		}
 	});
 
-	test("OpenCode core summaries tolerate absent and stale projected core actions", () => {
-		expect(openCodeToolCoreSummary("flow_run_complete_feature")).toContain(
-			"- Core action: `complete_run`",
-		);
-		expect(openCodeToolCoreSummary("missing_tool")).toBeNull();
-		expect(openCodeToolCoreSummary("flow_status")).toBeNull();
-
-		const projection = getOpenCodeToolProjection("flow_run_complete_feature");
-		expect(projection).not.toBeNull();
-		if (!projection) {
-			return;
-		}
-
-		const originalCoreAction = projection.coreAction;
-		try {
-			projection.coreAction = "missing_projected_action" as CoreActionName;
-
-			expect(openCodeToolCoreSummary("flow_run_complete_feature")).toBeNull();
-		} finally {
-			if (originalCoreAction) {
-				projection.coreAction = originalCoreAction;
-			} else {
-				delete projection.coreAction;
-			}
-		}
+	test("OpenCode core summaries tolerate absent and stale core actions", () => {
+		expect(
+			renderOpenCodeToolCoreSummary({
+				coreActionName: "complete_run",
+				runtimeAction: "complete_run",
+			}),
+		).toContain("- Core action: `complete_run`");
+		expect(renderOpenCodeToolCoreSummary({ coreActionName: null })).toBeNull();
+		expect(
+			renderOpenCodeToolCoreSummary({
+				coreActionName: "missing_projected_action" as CoreActionName,
+				runtimeAction: "complete_run",
+			}),
+		).toBeNull();
 	});
 
 	test("exports OpenCode raw arg shapes for every tool", () => {
@@ -184,6 +163,47 @@ describe("tool schema config contracts", () => {
 
 			expect(name.length).toBeGreaterThan(0);
 		}
+	});
+
+	test("records default OpenCode tool surface counts by kind and mode", () => {
+		const { tools } = getToolSchemas();
+		const countBy = <K extends string>(values: readonly K[]) =>
+			Object.fromEntries(
+				[...new Set(values)].map((value) => [
+					value,
+					values.filter((item) => item === value).length,
+				]),
+			);
+		const exposedToolNames = Object.keys(tools);
+		const modes = OPENCODE_TOOL_REGISTRY.flatMap((entry) => entry.allowedModes);
+
+		expect(exposedToolNames).toEqual(OPENCODE_TOOL_NAMES_FROM_REGISTRY);
+		expect(exposedToolNames).toHaveLength(18);
+		expect(
+			countBy(OPENCODE_TOOL_REGISTRY.map((entry) => entry.surfaceKind)),
+		).toEqual({
+			read: 5,
+			workspace: 3,
+			mutation: 9,
+			render: 1,
+		});
+		expect(
+			countBy(OPENCODE_TOOL_REGISTRY.map((entry) => entry.mutationClass)),
+		).toEqual({
+			none: 6,
+			control: 2,
+			planning: 5,
+			execution: 3,
+			review: 2,
+		});
+		expect(countBy(modes)).toEqual({
+			"flow-control": 7,
+			"flow-plan": 5,
+			"flow-auto": 10,
+			"flow-run": 4,
+			"flow-worker": 4,
+			"flow-review": 1,
+		});
 	});
 
 	test("keeps the global Flow raw object schema surface within a bounded budget", () => {

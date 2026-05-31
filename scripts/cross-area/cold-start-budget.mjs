@@ -11,6 +11,11 @@ import { performance } from "node:perf_hooks";
 
 const thresholdMs = 150;
 const iterations = 7;
+// Measured locally before rebuilding dist for Item 9 on 2026-06-01 from the
+// existing 2.0.52 package artifact in this worktree. This is informational:
+// the hard release gate remains thresholdMs. The comparison fields are named
+// as local recorded measurements because CI runners may have different timing.
+const localRecordedPreRebuildMainMedianMs = 32.66;
 const projectRoot = path.resolve(import.meta.dirname, "..", "..");
 const distEntry = path.join(projectRoot, "dist", "index.js");
 const tempRoots = [];
@@ -69,10 +74,17 @@ try {
 	}
 
 	const medianMs = median(durations);
+	const medianRounded = Number(medianMs.toFixed(2));
 	const result = {
 		iterations,
 		thresholdMs,
-		medianMs: Number(medianMs.toFixed(2)),
+		localRecordedPreRebuildMainMedianMs,
+		medianMs: medianRounded,
+		deltaFromLocalRecordedPreRebuildMainMs: Number(
+			(medianMs - localRecordedPreRebuildMainMedianMs).toFixed(2),
+		),
+		improvedFromLocalRecordedPreRebuildMain:
+			medianMs < localRecordedPreRebuildMainMedianMs,
 		durationsMs: durations.map((value) => Number(value.toFixed(2))),
 	};
 

@@ -1,13 +1,10 @@
 import {
 	type CoreRoleProtocol,
 	type CoreRoleProtocolId,
-	getCoreRoleActions,
-	getCoreRoleInvariantIds,
 	getCoreRoleProtocol,
 } from "../../core/protocols";
 import {
 	FLOW_AUTHORITATIVE_TOOL_JSON_RULE,
-	FLOW_HANDOFF_MODE_PROGRESS_RULE,
 	FLOW_NEVER_WRITE_FLOW_FILES_RULE,
 } from "../fragments";
 import { type FlowPromptMode, getFlowModeContract } from "../mode-contracts";
@@ -41,78 +38,6 @@ function renderModeOutcome(mode: FlowPromptMode): string {
 	}
 }
 
-function renderEvidenceBudget(mode: FlowPromptMode): string {
-	switch (mode) {
-		case "flow-plan":
-			return "Evidence budget: gather only enough repo/package/stack/standards evidence to justify the plan and decisions; use available/authorized external lookup only when current or official guidance materially affects the plan, and treat missing evidence as an explicit gap rather than proof of absence.";
-		case "flow-auto":
-			return "Evidence budget: use the runtime summary and active feature context first; retrieve more only when needed for the current planning, execution, validation, review, or recovery decision, and stop searching once the next safe runtime action is justified.";
-		case "flow-run":
-		case "flow-worker":
-			return "Evidence budget: inspect the active feature, changed files, connected context, and validation outputs enough to support the worker result; do not broaden into unrelated repo archaeology unless a concrete dependency or review risk requires it.";
-		case "flow-planning-researcher":
-			return "Evidence budget: stay read-only, cite concrete repo or supplied sources, use available/authorized external lookup only for material current/official context, and report unresolved gaps instead of inventing findings.";
-		case "flow-reviewer":
-			return "Evidence budget: review changed evidence, connected context, validation records, and applicable risk classes until approval or blocking findings are supportable; absence of evidence is a gap, not proof that behavior is safe.";
-		case "flow-control":
-			return "Evidence budget: the matching runtime tool result is sufficient unless the user explicitly requested detailed/raw output.";
-		case "flow-review":
-			return "Evidence budget: map enough surfaces to support the requested audit depth, downgrade unsupported depth claims, and stop once findings and coverage limits are evidence-backed.";
-	}
-}
-
-function renderValidationExpectation(mode: FlowPromptMode): string {
-	switch (mode) {
-		case "flow-plan":
-			return "Validation expectation: sanity-check that the plan is evidence-grounded, scoped, and includes verification signals; do not claim implementation or test success from planning evidence.";
-		case "flow-auto":
-			return "Validation expectation: use targeted validation for feature work, broad validation on the final completion path, and a next-best check plus explicit gap when validation cannot run.";
-		case "flow-run":
-		case "flow-worker":
-			return "Validation expectation: run targeted validation before success claims, use lint/typecheck/build/smoke checks when relevant, and record the next-best check plus limitation when a validation command cannot run.";
-		case "flow-planning-researcher":
-			return "Validation expectation: verify that each recommendation is traceable to supplied or repo evidence and label assumptions or unknowns.";
-		case "flow-reviewer":
-			return "Validation expectation: verify claims against changed artifacts, validation evidence, and required review scope; request fixes for missing or weak validation instead of approving by assumption.";
-		case "flow-control":
-			return "Validation expectation: confirm the requested runtime/control operation result was rendered; do not infer workflow progress beyond the tool output.";
-		case "flow-review":
-			return "Validation expectation: align findings and achieved depth with reviewed surfaces and renderer output; report gaps instead of overstating coverage.";
-	}
-}
-
-function renderFinalAnswerShape(mode: FlowPromptMode): string {
-	switch (mode) {
-		case "flow-plan":
-			return "Final answer shape: outcome, key constraints/evidence, plan status, and the next approval or execution step.";
-		case "flow-auto":
-			return "Final answer shape: current runtime outcome, evidence or blocker, validation/review status, and the exact next command or decision needed.";
-		case "flow-run":
-		case "flow-worker":
-			return "Final answer shape: changed files, validation evidence or gap, review result, and runtime next step.";
-		case "flow-planning-researcher":
-			return "Final answer shape: the compact JSON research packet only, including evidence, recommended plan shape, gaps, and handoff notes.";
-		case "flow-reviewer":
-			return "Final answer shape: the reviewer decision only, with concrete evidence, blocking findings, and suggested validation when needed.";
-		case "flow-control":
-			return "Final answer shape: action/result first, blocker if any, then guidance.nextStep or the valid command form.";
-		case "flow-review":
-			return "Final answer shape: the rendered audit report with findings, coverage, achieved depth, and limits.";
-	}
-}
-
-function renderOutcomeFirstFrame(mode: FlowPromptMode): string[] {
-	return [
-		`- Outcome: ${renderModeOutcome(mode)}`,
-		`- Success before stopping: ${getFlowModeContract(mode).stopCondition}`,
-		`- ${renderEvidenceBudget(mode)}`,
-		`- ${renderValidationExpectation(mode)}`,
-		"- Progress style: for multi-step or tool-heavy work, send one brief visible update naming the target result and first step, then report only meaningful phase changes, evidence, blockers, or final outcome.",
-		...(mode === "flow-auto" ? [FLOW_HANDOFF_MODE_PROGRESS_RULE] : []),
-		`- ${renderFinalAnswerShape(mode)}`,
-	];
-}
-
 function renderGeneratedSourceNote(protocol: CoreRoleProtocol): string {
 	const sources = [
 		"src/core/protocols/roles.ts",
@@ -129,24 +54,17 @@ export function renderProtocolHeader(
 	modeOverride?: FlowPromptMode,
 ): string {
 	const protocol = getCoreRoleProtocol(roleId);
+	const mode =
+		modeOverride ?? (protocol.modeContract as FlowPromptMode | undefined);
 	return [
 		renderGeneratedSourceNote(protocol),
-		renderModeContractProtocol(protocol, modeOverride),
-		renderCoreActionProtocol(protocol),
-		renderInvariantProtocol(protocol),
+		`Role boundary: ${protocol.title}. ${protocol.objective}`,
+		mode ? renderModeContractSummary(mode) : "Mode contract: none.",
 		renderRoleBoundaryProtocol(protocol),
 	].join("\n\n");
 }
 
-function renderModeContractProtocol(
-	protocol: CoreRoleProtocol,
-	modeOverride?: FlowPromptMode,
-): string {
-	const mode =
-		modeOverride ?? (protocol.modeContract as FlowPromptMode | undefined);
-	if (!mode) {
-		return "Mode contract: none.";
-	}
+function renderModeContractSummary(mode: FlowPromptMode): string {
 	const contract = getFlowModeContract(mode);
 	return [
 		`Mode contract: \`${contract.mode}\` — ${contract.title}.`,
@@ -157,26 +75,7 @@ function renderModeContractProtocol(
 		contract.forbiddenFlowTools.length > 0
 			? `Forbidden Flow tools: ${backtickList(contract.forbiddenFlowTools)}.`
 			: "Forbidden Flow tools: none.",
-		"Required behavior from mode contract:",
-		listLines(contract.requiredBehavior),
 		`Stop condition: ${contract.stopCondition}`,
-	].join("\n");
-}
-
-function renderCoreActionProtocol(protocol: CoreRoleProtocol): string {
-	const actions = getCoreRoleActions(protocol);
-	if (actions.length === 0) {
-		return "Core actions: none; this role renders or reviews without mutating workflow state.";
-	}
-	return [
-		"Core action protocol:",
-		...actions.map((action) =>
-			[
-				`- \`${action.name}\`: ${action.description}`,
-				`  - emits: ${backtickList(action.emits)}`,
-				`  - invariants: ${backtickList(action.invariantIds)}`,
-			].join("\n"),
-		),
 	].join("\n");
 }
 
@@ -191,7 +90,7 @@ export function renderFallbackContract(
 	const contract = getFlowModeContract(mode);
 	return [
 		`Fallback contract for \`${mode}\` — ${contract.title}:`,
-		...renderOutcomeFirstFrame(mode),
+		`- Outcome: ${renderModeOutcome(mode)}`,
 		`- Runtime mutation: \`${contract.runtimeMutation}\`; repository mutation: \`${contract.repositoryMutation}\`.`,
 		contract.allowedFlowTools.length > 0
 			? `- Allowed Flow tools: ${backtickList(contract.allowedFlowTools)}.`
@@ -203,7 +102,7 @@ export function renderFallbackContract(
 		FLOW_AUTHORITATIVE_TOOL_JSON_RULE,
 		`- Tool ordering: ${toolOrdering}`,
 		`- Stop condition: ${contract.stopCondition}`,
-		"- If a referenced Flow skill is unavailable or denied by OpenCode permissions, continue with this fallback contract; do not weaken `permission.skill` or edit `.flow/**` to compensate.",
+		"- If a referenced Flow skill is unavailable or denied by OpenCode permissions, continue with this compact fallback contract; do not weaken `permission.skill` or edit `.flow/**` to compensate.",
 	].join("\n");
 }
 
@@ -226,12 +125,4 @@ export function renderAutoSkillReferences(fallbackTarget: string): string {
 		"Keep `flow-planning-researcher` available as the fallback read-only research agent for review-first planning evidence.",
 		`Otherwise ${fallbackTarget}.`,
 	].join(" ");
-}
-
-function renderInvariantProtocol(protocol: CoreRoleProtocol): string {
-	const ids = getCoreRoleInvariantIds(protocol);
-	if (ids.length === 0) {
-		return "Referenced semantic invariants: none; read-only audit coverage is governed by the audit ledger contract.";
-	}
-	return `Referenced semantic invariants: ${backtickList(ids)}.`;
 }

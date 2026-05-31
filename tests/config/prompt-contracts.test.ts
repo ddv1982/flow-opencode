@@ -104,10 +104,16 @@ describe("prompt and command config contracts", () => {
 	test("generated command and agent surfaces are fallback surfaces around mode contracts", () => {
 		for (const { mode, surface } of SHIM_SURFACES) {
 			expectModeFallbackContract(mode, surface);
+			expect(surface).not.toContain("Core action protocol:");
+			expect(surface).not.toContain("Referenced semantic invariants:");
+			expect(surface).not.toContain("Required behavior from mode contract:");
+			expect(surface).not.toContain("Output examples:");
+			expect(surface).not.toContain("FLOW_WORKER_CONTRACT");
 			if (surface.includes("Generated protocol view")) {
 				expect(surface).toContain(
 					"Mode contracts remain authoritative as data",
 				);
+				expect(surface).toContain("Role boundary:");
 			}
 			expect(surface).not.toContain("_from_raw");
 			expect(surface).not.toContain("JSON-string transport tools");
@@ -210,7 +216,7 @@ describe("prompt and command config contracts", () => {
 			"For each planning, execution, and review phase, report handoffMode as exactly task_subagent, inline_role, or not_supported before acting; do not treat derived task-progress rows as proof of an actual OpenCode Task/subagent handoff.",
 		);
 		expect(FLOW_MODE_CONTRACTS["flow-run"].requiredBehavior).toContain(
-			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
+			"For ordinary implementation completion, provide passing featureReview/finalReview payloads; persist reviewer approval only when review, review_and_fix, or explicit strictReview governance requires it.",
 		);
 		expect(FLOW_MODE_CONTRACTS["flow-reviewer"].requiredBehavior).toContain(
 			"Return needs_fix for same-feature repair loops.",
@@ -235,7 +241,7 @@ describe("prompt and command config contracts", () => {
 			"Do not weaken deny/ask posture just to load this skill.",
 		);
 		expect(flowRunSkillDocument).toContain(
-			"Apply coding guidelines, reject debug-only artifacts, and preserve intentional observability before completion.",
+			"For ordinary implementation, completion may use passing validation plus featureReview/finalReview payloads without a separately recorded reviewer decision.",
 		);
 	});
 
@@ -294,7 +300,7 @@ describe("prompt and command config contracts", () => {
 
 	test("planner and planning researcher keep broad review-fix goals review-first until findings exist", () => {
 		expect(FLOW_PLANNER_AGENT_PROMPT).toContain(
-			"broad review-and-fix goals without findings stay review-first",
+			"broad review-and-fix goals without findings as review-first planning",
 		);
 		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
 			"Recommend review-first decomposition",
@@ -305,7 +311,7 @@ describe("prompt and command config contracts", () => {
 		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
 			"Do not invent findings",
 		);
-		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).toContain(
+		expect(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT).not.toContain(
 			'<example name="review-first-codebase-review">',
 		);
 		expect(FLOW_AUTO_AGENT_PROMPT).toContain("flow-planning-researcher");
@@ -318,11 +324,9 @@ describe("prompt and command config contracts", () => {
 		]) {
 			expect(surface).toContain("exactly one");
 			expect(surface).toContain("targeted validation");
-			expect(surface).toContain("changed files");
-			expect(surface).toContain("connected context");
-			expect(surface).toContain("final completion path");
+			expect(surface).toContain("final completion");
 			expect(surface).toContain("broad validation");
-			expect(surface).toContain("runtime-owned final review");
+			expect(surface).toContain("finalReview");
 			expect(surface).toContain("flow_review_record_final");
 			expect(surface).toContain("flow_run_complete_feature");
 		}
@@ -355,7 +359,12 @@ describe("prompt and command config contracts", () => {
 			"Return approved only when blocking findings are empty",
 		);
 		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("needs_fix");
-		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("missing validation");
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain(
+			"load the generated `flow-review` skill",
+		);
+		expect(FLOW_REVIEWER_AGENT_PROMPT).not.toContain(
+			"adversarial failure-mode classes",
+		);
 	});
 
 	test("auto prompt and command keep classification, native attachment ownership, resume, and decision-gate guardrails", () => {
@@ -372,24 +381,26 @@ describe("prompt and command config contracts", () => {
 			expect(surface).toContain("missing_goal");
 			expect(surface).toContain("recommend_confirm");
 			expect(surface).toContain("human_required");
-			expect(surface).toContain("Keep one feature active");
-			expect(surface).toContain("handoffMode");
-			expect(surface).toContain("task_subagent");
-			expect(surface).toContain("inline_role");
-			expect(surface).toContain("not_supported");
-			expect(surface).toContain("target: <role>");
+			if (surface === FLOW_AUTO_COMMAND_TEMPLATE) {
+				expect(surface).toContain("Keep one feature active");
+			}
 			expect(surface).toContain(
+				"targeted validation plus featureReview payloads",
+			);
+			expect(surface).toContain("broad validation plus finalReview");
+			expect(surface).toContain(
+				"persist reviewer decisions only for review/review_and_fix/strictReview governance",
+			);
+			expect(surface).not.toContain("target: <role>");
+			expect(surface).not.toContain(
 				"derived task-progress rows are runtime projections",
 			);
-			expect(surface).toContain("not proof of actual child sessions");
-			expect(surface).toContain("final completion path");
-			expect(surface).toContain("passing final review");
 		}
 		expect(FLOW_MODE_CONTRACTS["flow-auto"].allowedFlowTools).not.toContain(
 			"flow_attachments_materialize",
 		);
-		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Remain leaf-like");
-		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("do not delegate further");
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Forbidden Flow tools:");
+		expect(FLOW_REVIEWER_AGENT_PROMPT).toContain("Role boundary:");
 	});
 
 	test("audit command template keeps read-only review behavior with calibrated depth mapping and a readable default output", () => {
@@ -420,35 +431,30 @@ describe("prompt and command config contracts", () => {
 			"Objective",
 			"Skill reference",
 			"Fallback contract",
-			"Examples",
 		]);
 		expectStructuredSections(FLOW_WORKER_AGENT_PROMPT, [
 			"Role",
 			"Objective",
 			"Skill reference",
 			"Fallback contract",
-			"Examples",
 		]);
 		expectStructuredSections(FLOW_AUTO_AGENT_PROMPT, [
 			"Role",
 			"Objective",
 			"Skill references",
 			"Fallback contract",
-			"Examples",
 		]);
 		expectStructuredSections(FLOW_REVIEWER_AGENT_PROMPT, [
 			"Role",
 			"Objective",
 			"Skill reference",
 			"Fallback contract",
-			"Output contract",
-			"Examples",
+			"Output contract pointer",
 		]);
 		expectStructuredSections(FLOW_PLANNING_RESEARCHER_AGENT_PROMPT, [
 			"Role",
 			"Objective",
 			"Fallback contract",
-			"Examples",
 		]);
 		expectStructuredSections(FLOW_CONTROL_AGENT_PROMPT, [
 			"Role",
@@ -472,15 +478,14 @@ describe("prompt and command config contracts", () => {
 		]) {
 			expectStructuredSections(template, [
 				"Objective",
+				"Skill reference",
+				"Fallback contract",
 				"Task input",
-				"Behavior",
-				"Examples",
 			]);
 			expect(template).toContain("<raw-arguments>");
-			expect(template).toContain("- Goal");
-			expect(template).toContain("- Context");
-			expect(template).toContain("- Constraints");
-			expect(template).toContain("- Done when");
+			expect(template).toContain("- Goal or requested action");
+			expect(template).toContain("- Constraints and explicit IDs");
+			expect(template).toContain("- Done condition or evidence gap");
 		}
 	});
 
@@ -505,7 +510,7 @@ describe("prompt and command config contracts", () => {
 			"reset the named feature through `flow_reset_feature`",
 		);
 		expect(FLOW_CONTROL_AGENT_PROMPT).toContain(
-			"For status and doctor requests, prefer compact output",
+			"Prefer compact status/doctor output",
 		);
 		expect(FLOW_CONTROL_AGENT_PROMPT).toContain(
 			"Never plan, approve, run, or continue workflow execution",
