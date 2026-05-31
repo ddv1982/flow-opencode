@@ -15,6 +15,13 @@ import {
 	validationCommandsForWorker,
 } from "./final-review-coverage-evidence";
 import { normalizeArtifactPath } from "./final-review-coverage-paths";
+
+export {
+	type DetailedFinalReviewRequirementFailure,
+	detailedFinalReviewRequirementFailures,
+} from "./final-review-detailed-requirements";
+
+import { detailedFinalReviewRequirementFailureMessages } from "./final-review-detailed-requirements";
 import {
 	describeReviewContextPackGroundingFailure,
 	type ReviewContextPack,
@@ -26,18 +33,7 @@ import {
 } from "./review-scope-accounting";
 import { finalReviewPolicyForPlan } from "./workflow-policy";
 
-export type { FinalReviewSurface } from "./final-review-coverage-evidence";
-export type {
-	ReviewContextPack,
-	ReviewContextPackInput,
-	ReviewContextRelationship,
-	ReviewDiscoveryReason,
-	ReviewDiscoverySurface,
-	ReviewIncludedContext,
-	ReviewValidationEvidence,
-} from "./review-content-discovery";
-
-export type FinalReviewCoverageTarget = {
+type FinalReviewCoverageTarget = {
 	reviewDepth: string;
 	reviewedSurfaces: string[];
 	evidenceSummary?: string | undefined;
@@ -57,18 +53,6 @@ export type FinalReviewCoverageTarget = {
 	reviewContextPack?: ReviewContextPack | undefined;
 };
 
-export type DetailedFinalReviewRequirementFailure =
-	| "too_few_surfaces"
-	| "missing_validation_evidence"
-	| "missing_cross_feature_surface"
-	| "missing_integration_checks"
-	| "missing_regression_checks";
-
-type DetailedFinalReviewTarget = Pick<
-	FinalReviewCoverageTarget,
-	"reviewDepth" | "reviewedSurfaces" | "integrationChecks" | "regressionChecks"
->;
-
 export function finalReviewDepthMatchesPolicy(
 	session: Session,
 	reviewDepth: string | undefined,
@@ -76,53 +60,12 @@ export function finalReviewDepthMatchesPolicy(
 	return reviewDepth === finalReviewPolicyForPlan(session.plan);
 }
 
-const DETAILED_FINAL_REVIEW_CROSS_FEATURE_SURFACES: readonly FinalReviewSurface[] =
-	[
-		"integration_points",
-		"shared_surfaces",
-		"tooling_and_config",
-		"release_surface",
-	] as const;
-
 export function isKnownFinalReviewSurface(
 	surface: string,
 ): surface is FinalReviewSurface {
 	return FINAL_REVIEW_SURFACES.includes(
 		surface as (typeof FINAL_REVIEW_SURFACES)[number],
 	);
-}
-
-export function detailedFinalReviewRequirementFailures(
-	review: DetailedFinalReviewTarget,
-): DetailedFinalReviewRequirementFailure[] {
-	if (review.reviewDepth !== "detailed") {
-		return [];
-	}
-
-	const failures: DetailedFinalReviewRequirementFailure[] = [];
-	const reviewedSurfaceSet = new Set(review.reviewedSurfaces);
-
-	if (review.reviewedSurfaces.length < 2) {
-		failures.push("too_few_surfaces");
-	}
-	if (!reviewedSurfaceSet.has("validation_evidence")) {
-		failures.push("missing_validation_evidence");
-	}
-	if (
-		!DETAILED_FINAL_REVIEW_CROSS_FEATURE_SURFACES.some((surface) =>
-			reviewedSurfaceSet.has(surface),
-		)
-	) {
-		failures.push("missing_cross_feature_surface");
-	}
-	if (!review.integrationChecks?.length) {
-		failures.push("missing_integration_checks");
-	}
-	if (!review.regressionChecks?.length) {
-		failures.push("missing_regression_checks");
-	}
-
-	return failures;
 }
 
 function finalReviewCoverageFailureReasons(
@@ -227,20 +170,7 @@ function finalReviewCoverageFailureReasons(
 		);
 	}
 
-	const detailedFailureReasonMessages: Record<
-		DetailedFinalReviewRequirementFailure,
-		string
-	> = {
-		too_few_surfaces: "must cover at least two reviewedSurfaces",
-		missing_validation_evidence: "must include validation_evidence",
-		missing_cross_feature_surface:
-			"must include at least one cross-feature surface",
-		missing_integration_checks: "must include integrationChecks",
-		missing_regression_checks: "must include regressionChecks",
-	};
-	for (const failure of detailedFinalReviewRequirementFailures(review)) {
-		reasons.push(detailedFailureReasonMessages[failure]);
-	}
+	reasons.push(...detailedFinalReviewRequirementFailureMessages(review));
 
 	const behaviorCoverageTarget = {
 		...review,

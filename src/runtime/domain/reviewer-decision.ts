@@ -17,12 +17,12 @@ export type { RecordReviewerDecisionInput } from "./reviewer-decision-normalizat
 
 type FinalScopeReviewerDecision = Extract<ReviewerDecision, { scope: "final" }>;
 
-export type ReviewerDecisionValidationFailureKind =
+type ReviewerDecisionValidationFailureKind =
 	| "shape"
 	| "final_review_coverage"
 	| "final_review_scope_accounting";
 
-export type ReviewerDecisionValidationFailure = {
+type ReviewerDecisionValidationFailure = {
 	kind: ReviewerDecisionValidationFailureKind;
 	message: string;
 };
@@ -102,13 +102,6 @@ export function validateReviewerDecisionInputDetailed(
 	}
 
 	return null;
-}
-
-export function validateReviewerDecisionInput(
-	session: Session,
-	input: RecordReviewerDecisionInput,
-): string | null {
-	return validateReviewerDecisionInputDetailed(session, input)?.message ?? null;
 }
 
 export function buildReviewerDecision(

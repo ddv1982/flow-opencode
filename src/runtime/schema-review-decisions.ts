@@ -48,7 +48,7 @@ export const PersistedFinalReviewSchema = ReviewSchema.extend({
 	evidencePackets: EvidencePacketArraySchema.optional(),
 });
 
-export const FeatureReviewerDecisionSchema = z.object({
+const FeatureReviewerDecisionSchema = z.object({
 	scope: z.literal("feature"),
 	featureId: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
 	reviewPurpose: z.enum(REVIEW_PURPOSES).optional(),
@@ -75,7 +75,7 @@ export const FinalReviewerDecisionSchema = z
 	.strict()
 	.superRefine(addApprovedBehaviorDecisionConsistencyChecks);
 
-export const PersistedFinalReviewerDecisionSchema = z
+const PersistedFinalReviewerDecisionSchema = z
 	.object({
 		scope: z.literal("final"),
 		reviewPurpose: z.enum(REVIEW_PURPOSES).optional(),
@@ -97,5 +97,3 @@ export const ReviewerDecisionSchema = z.discriminatedUnion("scope", [
 
 export const FlowReviewRecordFeatureArgsSchema =
 	FeatureReviewerDecisionSchema.strict();
-
-export const FlowReviewRecordFinalArgsSchema = FinalReviewerDecisionSchema;

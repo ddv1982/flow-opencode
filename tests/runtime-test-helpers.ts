@@ -6,7 +6,6 @@ import { createTools } from "../src/adapters/opencode/tools";
 import type { ReviewReport } from "../src/audit/report-schema";
 import { readActiveSessionId } from "../src/runtime/session";
 import {
-	samplePlan as canonicalSamplePlan,
 	sampleSession as canonicalSampleSession,
 	cloneSamplePlan,
 	createSampleSession,
@@ -17,7 +16,7 @@ export type TestToolContext = Partial<ToolContext> & {
 	directory?: string;
 };
 
-export type TestToolDefinition = {
+type TestToolDefinition = {
 	args: Record<string, unknown>;
 	execute: (args: unknown, context: TestToolContext) => Promise<string>;
 };
@@ -130,5 +129,3 @@ export function sampleReviewReport(
 		...overrides,
 	};
 }
-
-export { canonicalSamplePlan, canonicalSampleSession };

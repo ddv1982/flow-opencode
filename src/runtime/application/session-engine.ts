@@ -145,35 +145,6 @@ export async function runSessionWorkspaceActionAtRoot<T, Name extends string>(
 	return runRuntimeActionAtRoot(worktree, action, runtime);
 }
 
-export async function persistTransitionAtRoot<T, Name extends string>(
-	actionName: Name,
-	worktree: string,
-	result: TransitionResult<T>,
-	getSession: (value: T) => Session,
-	onSuccess: (saved: Session, value: T) => RuntimeToolResponse,
-	onError: (
-		result: Extract<TransitionResult<T>, { ok: false }>,
-	) => RuntimeToolResponse = (failure) => errorResponse(failure.message),
-	options: {
-		syncArtifacts?: boolean;
-		clearFailedAttemptOnSuccess?: FailedAttemptClearPolicy;
-	} = { syncArtifacts: true },
-	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
-): Promise<RuntimeToolResponse> {
-	return (
-		await executeTransitionAtRoot(
-			actionName,
-			worktree,
-			result,
-			getSession,
-			onSuccess,
-			onError,
-			options,
-			runtime,
-		)
-	).response;
-}
-
 export async function executeTransitionAtRoot<T, Name extends string>(
 	actionName: Name,
 	worktree: string,

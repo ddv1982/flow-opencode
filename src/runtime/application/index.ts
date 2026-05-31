@@ -1,16 +1,5 @@
 export { InvalidFlowWorkspaceRootError } from "../workspace-root";
-export type { DoctorCheck, DoctorCheckStatus } from "./doctor-checks";
 export { buildDoctorReport } from "./doctor-report";
-export type {
-	FlowCoreCommandName,
-	FlowCoreCommandPayloadMap,
-	FlowCoreCommandResult,
-	FlowCoreCommandValueMap,
-	FlowCoreQueryName,
-	FlowCoreQueryPayloadMap,
-	FlowCoreQueryResult,
-	FlowCoreQueryValueMap,
-} from "./flow-core";
 export {
 	executeFlowCoreCommand,
 	executeFlowCoreQuery,
@@ -23,10 +12,7 @@ export {
 	runFlowCoreCommand,
 	runFlowCoreQuery,
 } from "./flow-core";
-export {
-	renderDoctorSummary,
-	renderSessionStatusSummary,
-} from "./operator-presenters";
+export { renderSessionStatusSummary } from "./operator-presenters";
 export type {
 	SessionMutationActionName,
 	SessionMutationPayloadMap,
@@ -41,23 +27,9 @@ export {
 export { autoPrepareResponse } from "./session-auto-prepare-presenter";
 export type {
 	RuntimeToolResponse,
-	SessionMutationAction,
 	SessionMutationResult,
-	SessionReadAction,
-	SessionReadResult,
-	SessionReadRuntimePort,
-	SessionRuntimePort,
-	SessionWorkspaceAction,
-	SessionWorkspaceResult,
-	SessionWorkspaceRuntimePort,
 } from "./session-engine";
 export {
-	DEFAULT_SESSION_READ_RUNTIME_PORT,
-	DEFAULT_SESSION_RUNTIME_PORT,
-	DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT,
-} from "./session-engine";
-export {
-	closeSessionResponse,
 	historyResponse,
 	missingStoredSessionResponse,
 	statusResponse,
@@ -77,7 +49,6 @@ export {
 export type {
 	SessionWorkspaceActionName,
 	SessionWorkspacePayloadMap,
-	SessionWorkspaceValueMap,
 } from "./session-workspace-actions";
 export {
 	dispatchSessionWorkspaceAction,
@@ -85,18 +56,10 @@ export {
 	runDispatchedSessionWorkspaceAction,
 	SESSION_WORKSPACE_ACTION_NAMES,
 } from "./session-workspace-actions";
-export type {
-	ResolvedSessionRoot,
-	SessionRootMode,
-	SessionRootSource,
-	WorkspaceContext,
-	WorkspaceContextSummary,
-} from "./workspace-runtime";
+export type { WorkspaceContext } from "./workspace-runtime";
 export {
 	inspectWorkspaceContext,
 	resolveMutableSessionRoot,
-	resolveReadableSessionRoot,
 	resolveSessionRoot,
-	toCompactJson,
 	toJson,
 } from "./workspace-runtime";

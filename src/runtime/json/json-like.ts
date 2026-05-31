@@ -33,9 +33,7 @@ export async function readJsonLike<T>(path: string): Promise<T | null> {
 	}
 }
 
-export function stripJsonCommentsAndTrailingCommas(
-	contents: string,
-): string | null {
+function stripJsonCommentsAndTrailingCommas(contents: string): string | null {
 	let output = "";
 	let inString = false;
 	let quote: '"' | "'" | null = null;

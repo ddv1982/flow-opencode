@@ -57,7 +57,7 @@ export function maybeQuotedSection(
 	return `## ${title}\n\n${toQuotedBlock(value)}`;
 }
 
-export function formatFollowUpLine(item: {
+function formatFollowUpLine(item: {
 	summary: string;
 	severity?: string | undefined;
 }): string {

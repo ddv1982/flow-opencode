@@ -1,5 +1,4 @@
-export const FLOW_TOOL_DOCS_SECTION =
-	"docs/development.md#current-runtime-tools";
+const FLOW_TOOL_DOCS_SECTION = "docs/development.md#current-runtime-tools";
 
 export const FLOW_DEFAULT_TOOL_DOCS_ROW = {
 	section: FLOW_TOOL_DOCS_SECTION,

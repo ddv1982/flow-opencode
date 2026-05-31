@@ -1,4 +1,4 @@
-export const FLOW_GITIGNORE_ENTRIES = [
+const FLOW_GITIGNORE_ENTRIES = [
 	"active/",
 	"stored/",
 	"completed/",

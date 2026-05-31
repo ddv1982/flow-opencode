@@ -17,7 +17,7 @@ export function closedFindingRefsFor(
 		.map((closure) => closure.findingRef);
 }
 
-export function latestValidCompletedHistoryEntries(
+function latestValidCompletedHistoryEntries(
 	session: Session,
 ): Session["execution"]["history"] {
 	const completedFeatureIds = new Set(

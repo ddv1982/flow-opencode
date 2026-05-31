@@ -13,7 +13,7 @@ export type CompletedSessionLocation = {
 	completedTo: string;
 };
 
-export function completedDirectoryName(
+function completedDirectoryName(
 	sessionId: string,
 	completedAt: string,
 	attempt = 0,
@@ -67,7 +67,7 @@ export function compareCompletedDescending(
 	return rightSuffix - leftSuffix;
 }
 
-export async function pathExists(path: string): Promise<boolean> {
+async function pathExists(path: string): Promise<boolean> {
 	try {
 		await stat(path);
 		return true;
@@ -80,7 +80,7 @@ export async function pathExists(path: string): Promise<boolean> {
 	}
 }
 
-export function buildCompletedSessionLocation(
+function buildCompletedSessionLocation(
 	worktree: string,
 	sessionId: string,
 	completedDirName: string,

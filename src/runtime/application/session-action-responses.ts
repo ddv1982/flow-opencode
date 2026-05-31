@@ -46,7 +46,7 @@ const FAILED_MUTATION_DESCRIPTORS: Record<
 	},
 };
 
-export function buildLatestFailedMutation(
+function buildLatestFailedMutation(
 	actionName: FailedMutationActionName,
 	session: Session,
 	failure: FailedMutationResult,

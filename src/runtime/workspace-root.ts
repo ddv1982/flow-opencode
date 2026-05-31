@@ -7,7 +7,7 @@ export type MutableWorkspaceRoot = string & {
 	readonly [mutableWorkspaceRootBrand]: "MutableWorkspaceRoot";
 };
 
-export type MutableWorkspaceRootDetails = {
+type MutableWorkspaceRootDetails = {
 	root: string | null;
 	trusted: boolean;
 	rejectionReason: string | null;

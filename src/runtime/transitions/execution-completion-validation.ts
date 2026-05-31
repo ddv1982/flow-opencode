@@ -2,33 +2,24 @@ import {
 	buildFinalReviewerReviewScopeRecoveryDetails,
 	buildReviewScopeRecoveryDetails,
 	closedReviewFindingRefsForCompletion,
-	describeFinalReviewCoverageFailure,
-	describeFinalReviewerReviewScopeFailure,
 	describeReviewFindingClosureLedgerFailure,
 	describeReviewScopeLedgerFailure,
-	finalReviewDepthMatchesPolicy,
 } from "../domain";
 import type { Session, WorkerResultArgs } from "../schema";
-import { deriveExecutionLane } from "../session-operator-state";
 import {
 	type NormalizedWorkerResult,
 	normalizeWorkerResult,
 } from "./execution-completion-normalization";
-import { buildCompletionRecovery } from "./recovery";
+import {
+	finalReviewerDecisionFailureMessage,
+	finalReviewFailureMessage,
+	isReviewPassing,
+} from "./execution-completion-review-gates";
+import {
+	buildCompletionRecovery,
+	type CompletionRecoveryKind,
+} from "./recovery";
 import { fail, succeed, type TransitionResult } from "./shared";
-
-function isReviewPassing(
-	review:
-		| NormalizedWorkerResult["featureReview"]
-		| NormalizedWorkerResult["finalReview"]
-		| undefined,
-): boolean {
-	return Boolean(
-		review &&
-			review.status === "passed" &&
-			review.blockingFindings.length === 0,
-	);
-}
 
 function isValidationPassing(
 	validationRun: NormalizedWorkerResult["validationRun"],
@@ -39,110 +30,17 @@ function isValidationPassing(
 	);
 }
 
-type FinalReviewerDecisionFailure = {
-	kind: "missing_or_invalid_reviewer_decision" | "review_scope_accounting";
-	message: string;
-};
-
-function finalReviewerDecisionFailureMessage(
-	session: Session,
-	worker: NormalizedWorkerResult,
+function failCompletion(
 	featureId: string,
 	wasFinalFeature: boolean,
-): FinalReviewerDecisionFailure | null {
-	if (!wasFinalFeature) {
-		if (deriveExecutionLane(session).lane === "lite") {
-			return isReviewPassing(worker.featureReview)
-				? null
-				: {
-						kind: "missing_or_invalid_reviewer_decision",
-						message:
-							"Worker result cannot complete without a recorded approved reviewer decision.",
-					};
-		}
-
-		const decision = session.execution.lastReviewerDecision;
-		return decision?.status === "approved" &&
-			decision.scope === "feature" &&
-			decision.featureId === featureId
-			? null
-			: {
-					kind: "missing_or_invalid_reviewer_decision",
-					message:
-						"Worker result cannot complete without a recorded approved reviewer decision.",
-				};
-	}
-
-	const decision = session.execution.lastReviewerDecision;
-	if (!decision || decision.status !== "approved") {
-		return {
-			kind: "missing_or_invalid_reviewer_decision",
-			message:
-				"Worker result cannot complete without a recorded approved reviewer decision.",
-		};
-	}
-	if (decision.scope !== "final") {
-		return {
-			kind: "missing_or_invalid_reviewer_decision",
-			message:
-				"Worker result cannot complete the session without a final-scope approved reviewer decision.",
-		};
-	}
-	if (!finalReviewDepthMatchesPolicy(session, decision.reviewDepth)) {
-		return {
-			kind: "missing_or_invalid_reviewer_decision",
-			message:
-				"Worker result cannot complete the session because the recorded final reviewer decision does not match deliveryPolicy.finalReviewPolicy.",
-		};
-	}
-	const coverageFailure = describeFinalReviewCoverageFailure(
-		session,
-		worker,
-		decision,
+	message: string,
+	kind: CompletionRecoveryKind,
+	details?: Record<string, unknown>,
+): TransitionResult<void> {
+	return fail(
+		message,
+		buildCompletionRecovery(featureId, wasFinalFeature, kind, details),
 	);
-	if (coverageFailure) {
-		return {
-			kind: "missing_or_invalid_reviewer_decision",
-			message: `Worker result cannot complete the session because the recorded final reviewer decision ${coverageFailure}.`,
-		};
-	}
-	const reviewScopeFailure = describeFinalReviewerReviewScopeFailure(
-		session,
-		decision,
-		{
-			closedFindingRefs: closedReviewFindingRefsForCompletion(session, worker),
-			requireClosedFindingMatch: session.plan?.goalMode === "review_and_fix",
-		},
-	);
-	return reviewScopeFailure
-		? {
-				kind: "review_scope_accounting",
-				message: `Worker result cannot complete the session because the recorded final reviewer decision ${reviewScopeFailure}`,
-			}
-		: null;
-}
-
-function finalReviewFailureMessage(
-	session: Session,
-	worker: NormalizedWorkerResult,
-): string | null {
-	if (!worker.finalReview) {
-		return null;
-	}
-	if (!isReviewPassing(worker.finalReview)) {
-		return "Worker result cannot complete the feature because finalReview is not passing.";
-	}
-	if (!finalReviewDepthMatchesPolicy(session, worker.finalReview.reviewDepth)) {
-		return "Worker result cannot complete the feature because finalReview does not match deliveryPolicy.finalReviewPolicy.";
-	}
-	const coverageFailure = describeFinalReviewCoverageFailure(
-		session,
-		worker,
-		worker.finalReview,
-	);
-	return coverageFailure
-		? `Worker result cannot complete the feature because finalReview ${coverageFailure}.`
-		: null;
 }
 
 export function validateSuccessfulCompletion(
@@ -175,15 +73,19 @@ export function validateNormalizedSuccessfulCompletion(
 	}
 
 	if (normalizedWorker.validationRun.length === 0) {
-		return fail(
+		return failCompletion(
+			featureId,
+			wasFinalFeature,
 			"Worker result cannot complete the feature without recorded validation evidence.",
-			buildCompletionRecovery(featureId, wasFinalFeature, "missing_validation"),
+			"missing_validation",
 		);
 	}
 	if (!isValidationPassing(normalizedWorker.validationRun)) {
-		return fail(
+		return failCompletion(
+			featureId,
+			wasFinalFeature,
 			"Worker result cannot complete the feature because validation did not fully pass.",
-			buildCompletionRecovery(featureId, wasFinalFeature, "failing_validation"),
+			"failing_validation",
 		);
 	}
 
@@ -205,13 +107,11 @@ export function validateNormalizedSuccessfulCompletion(
 			},
 		);
 		if (closureFailure) {
-			return fail(
+			return failCompletion(
+				featureId,
+				wasFinalFeature,
 				closureFailure,
-				buildCompletionRecovery(
-					featureId,
-					wasFinalFeature,
-					"missing_review_closure",
-				),
+				"missing_review_closure",
 			);
 		}
 	}
@@ -223,21 +123,19 @@ export function validateNormalizedSuccessfulCompletion(
 		wasFinalFeature,
 	);
 	if (reviewScopeFailure) {
-		return fail(
+		return failCompletion(
+			featureId,
+			wasFinalFeature,
 			`Worker result cannot complete because ${reviewScopeFailure}`,
-			buildCompletionRecovery(
-				featureId,
-				wasFinalFeature,
-				"missing_review_scope_accounting",
-				{
-					reviewScopeLedger: buildReviewScopeRecoveryDetails(
-						session,
-						normalizedWorker,
-						featureId,
-						wasFinalFeature,
-					),
-				},
-			),
+			"missing_review_scope_accounting",
+			{
+				reviewScopeLedger: buildReviewScopeRecoveryDetails(
+					session,
+					normalizedWorker,
+					featureId,
+					wasFinalFeature,
+				),
+			},
 		);
 	}
 
@@ -249,32 +147,36 @@ export function validateNormalizedSuccessfulCompletion(
 			false,
 		);
 		if (reviewerDecisionFailure) {
-			return fail(
+			return failCompletion(
+				featureId,
+				false,
 				reviewerDecisionFailure.message,
-				buildCompletionRecovery(featureId, false, "missing_reviewer_decision"),
+				"missing_reviewer_decision",
 			);
 		}
 		if (normalizedWorker.validationScope !== "targeted") {
-			return fail(
+			return failCompletion(
+				featureId,
+				false,
 				"Worker result cannot complete the feature without targeted validation.",
-				buildCompletionRecovery(featureId, false, "missing_validation_scope"),
+				"missing_validation_scope",
 			);
 		}
 	}
 	if (wasFinalFeature && normalizedWorker.validationScope !== "broad") {
-		return fail(
+		return failCompletion(
+			featureId,
+			true,
 			"Worker result cannot complete the session without broad final validation.",
-			buildCompletionRecovery(featureId, true, "missing_validation_scope"),
+			"missing_validation_scope",
 		);
 	}
 	if (!isReviewPassing(normalizedWorker.featureReview)) {
-		return fail(
+		return failCompletion(
+			featureId,
+			wasFinalFeature,
 			"Worker result cannot complete the feature because featureReview is not passing.",
-			buildCompletionRecovery(
-				featureId,
-				wasFinalFeature,
-				"failing_feature_review",
-			),
+			"failing_feature_review",
 		);
 	}
 
@@ -283,23 +185,19 @@ export function validateNormalizedSuccessfulCompletion(
 		normalizedWorker,
 	);
 	if (finalReviewFailure) {
-		return fail(
+		return failCompletion(
+			featureId,
+			wasFinalFeature,
 			finalReviewFailure,
-			buildCompletionRecovery(
-				featureId,
-				wasFinalFeature,
-				"failing_final_review",
-			),
+			"failing_final_review",
 		);
 	}
 	if (wasFinalFeature && !normalizedWorker.finalReview) {
-		return fail(
+		return failCompletion(
+			featureId,
+			wasFinalFeature,
 			"Worker result cannot complete the session without a finalReview.",
-			buildCompletionRecovery(
-				featureId,
-				wasFinalFeature,
-				"missing_final_review",
-			),
+			"missing_final_review",
 		);
 	}
 
@@ -316,28 +214,26 @@ export function validateNormalizedSuccessfulCompletion(
 					? "missing_final_reviewer_review_scope_accounting"
 					: "missing_reviewer_decision";
 			const decision = session.execution.lastReviewerDecision;
-			return fail(
+			return failCompletion(
+				featureId,
+				true,
 				reviewerDecisionFailure.message,
-				buildCompletionRecovery(
-					featureId,
-					true,
-					recoveryKind,
-					reviewerDecisionFailure.kind === "review_scope_accounting" &&
-						decision?.scope === "final"
-						? {
-								reviewScopeLedger: buildFinalReviewerReviewScopeRecoveryDetails(
-									session,
-									decision,
-									{
-										closedFindingRefs: closedReviewFindingRefsForCompletion(
-											session,
-											normalizedWorker,
-										),
-									},
-								),
-							}
-						: undefined,
-				),
+				recoveryKind,
+				reviewerDecisionFailure.kind === "review_scope_accounting" &&
+					decision?.scope === "final"
+					? {
+							reviewScopeLedger: buildFinalReviewerReviewScopeRecoveryDetails(
+								session,
+								decision,
+								{
+									closedFindingRefs: closedReviewFindingRefsForCompletion(
+										session,
+										normalizedWorker,
+									),
+								},
+							),
+						}
+					: undefined,
 			);
 		}
 	}

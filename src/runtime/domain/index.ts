@@ -1,33 +1,9 @@
 export { featureWouldReachCompletion, summarizeCompletion } from "./completion";
-export {
-	deriveRequiredFinalReviewBehaviorRisks,
-	FINAL_REVIEW_BEHAVIOR_RISK_CLASSES,
-	type FinalReviewBehaviorCheck,
-	type FinalReviewBehaviorRiskClass,
-	type FinalReviewValidationCoverage,
-	finalReviewBehaviorCoverageFailureReasons,
-} from "./final-review-behavior-risks";
-export {
-	canonicalizeTestEvidenceRefs,
-	canonicalTestEvidenceRefs,
-	normalizeBehaviorRiskClassName,
-	type TestEvidenceRefsCompatInput,
-} from "./final-review-canonicalization";
+export { finalReviewBehaviorCoverageFailureReasons } from "./final-review-behavior-risks";
 export {
 	type DetailedFinalReviewRequirementFailure,
 	describeFinalReviewCoverageFailure,
-	detailedFinalReviewRequirementFailures,
-	type FinalReviewCoverageTarget,
-	type FinalReviewSurface,
 	finalReviewDepthMatchesPolicy,
-	isKnownFinalReviewSurface,
-	type ReviewContextPack,
-	type ReviewContextPackInput,
-	type ReviewContextRelationship,
-	type ReviewDiscoveryReason,
-	type ReviewDiscoverySurface,
-	type ReviewIncludedContext,
-	type ReviewValidationEvidence,
 } from "./final-review-coverage";
 export {
 	REVIEW_AND_FIX_FINDINGS_REQUIRED_MESSAGE,
@@ -37,38 +13,25 @@ export {
 export { selectProjectedFeatureSubset } from "./plan-projection";
 export {
 	describeReviewFindingsMutationFailure,
-	mergeEvidencePackets,
 	mergePlanningContext,
 } from "./planning-context";
 export {
 	buildReviewContextPack,
-	deriveReviewContextPackSurfaces,
 	describeReviewContextPackGroundingFailure,
-	REVIEW_DISCOVERY_REASONS,
 	reviewContextPackHasSurfaceEvidence,
-	surfacesForReviewDiscoveryReason,
 } from "./review-content-discovery";
-export {
-	describeReviewFindingClosureLedgerFailure,
-	type ReviewFindingClosureEvidence,
-	type ReviewFindingClosureValidationContext,
-} from "./review-finding-closure-policy";
+export { describeReviewFindingClosureLedgerFailure } from "./review-finding-closure-policy";
 export {
 	buildFinalReviewerReviewScopeRecoveryDetails,
 	buildReviewScopeRecoveryDetails,
 	closedReviewFindingRefsForCompletion,
-	declaredReviewScopeForCompletion,
-	declaredReviewScopeForFeature,
-	declaredReviewScopeForPlan,
 	describeFinalReviewerReviewScopeFailure,
 	describeReviewScopeLedgerFailure,
-	isReviewScopeAccountingRequired,
 	validatePlanReviewScopeDeclaration,
 } from "./review-scope-accounting";
 export {
 	buildReviewerDecision,
 	type RecordReviewerDecisionInput,
-	validateReviewerDecisionInput,
 	validateReviewerDecisionInputDetailed,
 } from "./reviewer-decision";
 export {
@@ -80,19 +43,13 @@ export {
 	SEMANTIC_RECOVERY_EXPECTATIONS,
 	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
 	SEMANTIC_TOOL_SURFACE_EXPECTATIONS,
-	type SemanticInvariantDescriptor,
 	type SemanticInvariantId,
-	type SemanticInvariantOwnerReference,
 	semanticInvariantById,
 } from "./semantic-invariants";
 export {
 	activeDecisionGate,
-	completedFeatureCount,
 	completionPolicyTargetError,
 	decisionRequiresPause,
 	finalReviewPolicyForPlan,
-	reviewerPurposeForScope,
 	sessionCompletionReached,
-	strictReviewGovernanceRequiredForPlan,
-	targetCompletedFeatureCount,
 } from "./workflow-policy";

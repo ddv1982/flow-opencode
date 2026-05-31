@@ -61,7 +61,7 @@ export type FeatureDocDrilldownSource =
 			sessionId?: string;
 	  };
 
-export type FeatureDocDrilldownInput = {
+type FeatureDocDrilldownInput = {
 	featureId: string;
 	source: FeatureDocDrilldownSource;
 };

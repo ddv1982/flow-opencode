@@ -15,7 +15,7 @@ import {
 	type ReviewScopeTarget,
 } from "./review-scope-targets";
 
-export type LedgerValidationContext = {
+type LedgerValidationContext = {
 	declaredScope: readonly ReviewScopeTarget[];
 	ledger: readonly ReviewScopeLedgerEntry[];
 	validationCommands?: readonly string[];

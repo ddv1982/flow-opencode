@@ -29,7 +29,7 @@ function mergeUniqueBySerialized<T>(
 	return merged;
 }
 
-export function mergeEvidencePackets(
+function mergeEvidencePackets(
 	current?: readonly EvidencePacket[],
 	next?: readonly EvidencePacket[],
 ): EvidencePacket[] | undefined {

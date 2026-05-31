@@ -190,7 +190,7 @@ export function createFlowCoreConfigEntries() {
 	return { agent, command };
 }
 
-export function applyFlowCoreConfig(config: MutableConfig): void {
+function applyFlowCoreConfig(config: MutableConfig): void {
 	const entries = createFlowCoreConfigEntries();
 	config.agent = {
 		...(config.agent ?? {}),

@@ -6,11 +6,7 @@ import {
 import { startRun as startExecutionRun } from "./execution-selection";
 import { fail, type TransitionResult } from "./shared";
 
-export type { WorkerOutcomeKind } from "./execution-completion";
-export {
-	markSessionCompleted,
-	validateSuccessfulCompletion,
-} from "./execution-completion";
+export { validateSuccessfulCompletion } from "./execution-completion";
 
 export function startRun(
 	session: Session,

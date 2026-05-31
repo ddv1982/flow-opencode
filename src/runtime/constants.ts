@@ -5,8 +5,8 @@ export const FLOW_AUTO_WITH_GOAL_COMMAND = "/flow-auto <goal>";
 export const FLOW_AUTO_RESUME_COMMAND = "/flow-auto resume";
 export const FLOW_STATUS_COMMAND = "/flow-status";
 export const FLOW_HISTORY_COMMAND = "/flow-history";
-export const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
-export const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
+const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
+const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
 
 export const CANONICAL_RUNTIME_TOOL_NAMES = [
 	"flow_review_record_feature",

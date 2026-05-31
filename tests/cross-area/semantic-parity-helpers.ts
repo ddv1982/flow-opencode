@@ -9,12 +9,12 @@ const repoRoot = join(import.meta.dir, "..", "..");
 const DOC_INVARIANT_MARKER_PATTERN =
 	/^\s*-\s+\[semantic-invariant\]\s+([a-z_]+\.[a-z_]+\.[a-z_]+)\s*$/;
 
-export type DocumentedSemanticInvariant = {
+type DocumentedSemanticInvariant = {
 	id: string;
 	line: number;
 };
 
-export function knownSemanticInvariantIds(): SemanticInvariantId[] {
+function knownSemanticInvariantIds(): SemanticInvariantId[] {
 	return [...SEMANTIC_INVARIANT_IDS];
 }
 
@@ -41,7 +41,7 @@ export function readRepoFile(relativePath: string): string {
 	return readFileSync(join(repoRoot, relativePath), "utf8");
 }
 
-export function extractDocumentedSemanticInvariants(
+function extractDocumentedSemanticInvariants(
 	text: string,
 ): DocumentedSemanticInvariant[] {
 	const markers: DocumentedSemanticInvariant[] = [];

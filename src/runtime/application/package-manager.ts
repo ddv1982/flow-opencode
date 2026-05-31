@@ -13,7 +13,7 @@ const PACKAGE_MANAGER_LOCKFILES: Array<{
 	{ manager: "bun", filenames: ["bun.lock", "bun.lockb"] },
 ];
 
-export type PackageManagerDetection = {
+type PackageManagerDetection = {
 	packageManager?: PackageManager;
 	ambiguous: boolean;
 };

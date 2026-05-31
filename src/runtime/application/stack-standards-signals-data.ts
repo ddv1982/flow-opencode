@@ -1,17 +1,17 @@
-export type StackSignalBucket =
+type StackSignalBucket =
 	| "languages"
 	| "frameworks"
 	| "runtimes"
 	| "packageManagers"
 	| "tools";
 
-export type ConfigSignal = {
+type ConfigSignal = {
 	file: string;
 	bucket: StackSignalBucket;
 	name: string;
 };
 
-export type TextSignal = {
+type TextSignal = {
 	file: string;
 	pattern: RegExp;
 	bucket: StackSignalBucket;
@@ -47,7 +47,7 @@ export const GUIDELINE_FILES = [
 	"Directory.Build.props",
 ] as const;
 
-export const PACKAGE_MANAGER_EVIDENCE_FILES = [
+const PACKAGE_MANAGER_EVIDENCE_FILES = [
 	"package.json",
 	"package-lock.json",
 	"npm-shrinkwrap.json",

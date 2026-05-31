@@ -16,5 +16,4 @@ export {
 	completeExecutionRun,
 	markSessionCompleted,
 } from "./execution-completion-finalization";
-export type { WorkerOutcomeKind } from "./execution-completion-normalization";
 export { validateSuccessfulCompletion } from "./execution-completion-validation";

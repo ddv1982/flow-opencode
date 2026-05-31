@@ -113,7 +113,7 @@ function renderOutcomeFirstFrame(mode: FlowPromptMode): string[] {
 	];
 }
 
-export function renderGeneratedSourceNote(protocol: CoreRoleProtocol): string {
+function renderGeneratedSourceNote(protocol: CoreRoleProtocol): string {
 	const sources = [
 		"src/core/protocols/roles.ts",
 		"src/core/registry/actions.ts",
@@ -138,7 +138,7 @@ export function renderProtocolHeader(
 	].join("\n\n");
 }
 
-export function renderModeContractProtocol(
+function renderModeContractProtocol(
 	protocol: CoreRoleProtocol,
 	modeOverride?: FlowPromptMode,
 ): string {
@@ -163,7 +163,7 @@ export function renderModeContractProtocol(
 	].join("\n");
 }
 
-export function renderCoreActionProtocol(protocol: CoreRoleProtocol): string {
+function renderCoreActionProtocol(protocol: CoreRoleProtocol): string {
 	const actions = getCoreRoleActions(protocol);
 	if (actions.length === 0) {
 		return "Core actions: none; this role renders or reviews without mutating workflow state.";
@@ -180,7 +180,7 @@ export function renderCoreActionProtocol(protocol: CoreRoleProtocol): string {
 	].join("\n");
 }
 
-export function renderRoleBoundaryProtocol(protocol: CoreRoleProtocol): string {
+function renderRoleBoundaryProtocol(protocol: CoreRoleProtocol): string {
 	return ["Role boundaries:", listLines(protocol.boundaryRules)].join("\n");
 }
 
@@ -228,7 +228,7 @@ export function renderAutoSkillReferences(fallbackTarget: string): string {
 	].join(" ");
 }
 
-export function renderInvariantProtocol(protocol: CoreRoleProtocol): string {
+function renderInvariantProtocol(protocol: CoreRoleProtocol): string {
 	const ids = getCoreRoleInvariantIds(protocol);
 	if (ids.length === 0) {
 		return "Referenced semantic invariants: none; read-only audit coverage is governed by the audit ledger contract.";

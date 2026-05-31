@@ -239,9 +239,7 @@ export const SESSION_WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap
 		},
 	};
 
-export function buildSessionWorkspaceAction<
-	Name extends SessionWorkspaceActionName,
->(
+function buildSessionWorkspaceAction<Name extends SessionWorkspaceActionName>(
 	name: Name,
 	payload: SessionWorkspacePayloadMap[Name],
 ): SessionWorkspaceAction<SessionWorkspaceValueMap[Name], Name> {

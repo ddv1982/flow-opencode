@@ -6,7 +6,7 @@ export type FailedAttemptClearPolicy =
 	| true
 	| { tool: LatestFailedFlowAttempt["tool"] };
 
-export interface SessionMutationPersistencePort {
+interface SessionMutationPersistencePort {
 	saveSessionState: (worktree: string, session: Session) => Promise<Session>;
 	syncSessionArtifacts: (worktree: string, session: Session) => Promise<void>;
 }

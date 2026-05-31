@@ -28,7 +28,7 @@ import { createSession } from "../src/runtime/session";
 import { applyPlan, approvePlan, startRun } from "../src/runtime/transitions";
 import { samplePlan } from "./runtime-test-helpers";
 
-export type PromptEvalCaseId =
+type PromptEvalCaseId =
 	| "adaptive-package-manager-ambiguity"
 	| "adaptive-decision-gate"
 	| "adaptive-retryable-outcome"
@@ -61,7 +61,7 @@ export type PromptEvalCaseId =
 	| "audit-command-review-packet-boundaries"
 	| "audit-contract-reviewed-unreviewed-surfaces";
 
-export type PromptEvalCategory =
+type PromptEvalCategory =
 	| "command-entry"
 	| "planning-evidence"
 	| "decision-gating"
@@ -72,7 +72,7 @@ export type PromptEvalCategory =
 	| "finding-taxonomy"
 	| "audit-coverage";
 
-export type PromptEvalSurface =
+type PromptEvalSurface =
 	| "adaptive_system_context"
 	| "auto_command_template"
 	| "planner_agent_prompt"
@@ -92,9 +92,9 @@ export type PromptEvalSurface =
 	| "audit_command_template"
 	| "audit_contract";
 
-export type PromptEvalRisk = "medium" | "high";
+type PromptEvalRisk = "medium" | "high";
 
-export type PromptEvalCase = {
+type PromptEvalCase = {
 	id: PromptEvalCaseId;
 	title: string;
 	category: PromptEvalCategory;
@@ -105,7 +105,7 @@ export type PromptEvalCase = {
 	forbiddenSnippets?: string[];
 };
 
-export type PromptEvalCoverageSummary = {
+type PromptEvalCoverageSummary = {
 	totalCases: number;
 	byCategory: Record<PromptEvalCategory, number>;
 	bySurface: Record<PromptEvalSurface, number>;
@@ -129,7 +129,7 @@ export const PROMPT_EVAL_FIXTURE_DIR = join(
  *   - Full prompt/eval gate: bun test tests/prompt-eval-corpus.test.ts tests/prompt-behavior-eval.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-mode-capture.test.ts tests/review-prompt-capture.test.ts
  */
 
-export const PROMPT_EVAL_CASE_IDS = [
+const PROMPT_EVAL_CASE_IDS = [
 	"adaptive-package-manager-ambiguity",
 	"adaptive-decision-gate",
 	"adaptive-retryable-outcome",
@@ -216,7 +216,7 @@ export function sourcePathExistsWithinRepo(
 	);
 }
 
-export function validatePromptEvalCorpus(raw: unknown): PromptEvalCase[] {
+function validatePromptEvalCorpus(raw: unknown): PromptEvalCase[] {
 	if (!Array.isArray(raw)) {
 		throw new Error("Prompt eval corpus must be an array.");
 	}
@@ -406,7 +406,7 @@ const ADAPTIVE_SCENARIO_BUILDERS: Partial<
 	},
 };
 
-export function renderAdaptiveScenario(caseId: PromptEvalCaseId): string {
+function renderAdaptiveScenario(caseId: PromptEvalCaseId): string {
 	const session = createRunningSession();
 	const activeFeatureId = session.execution.activeFeatureId;
 	if (!activeFeatureId) {

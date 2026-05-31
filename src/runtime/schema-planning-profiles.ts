@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { DECISION_DOMAINS, DECISION_MODES } from "./constants";
 
-export const EvidenceConfidenceSchema = z.enum(["low", "medium", "high"]);
+const EvidenceConfidenceSchema = z.enum(["low", "medium", "high"]);
 
-export const StackProfileEntrySchema = z
+const StackProfileEntrySchema = z
 	.object({
 		name: z.string().min(1),
 		evidenceRefs: z.array(z.string().min(1)).default([]),
@@ -21,7 +21,7 @@ export const StackProfileSchema = z
 	})
 	.strict();
 
-export const StandardsSourceSchema = z
+const StandardsSourceSchema = z
 	.object({
 		title: z.string().min(1),
 		sourceType: z.enum(["local", "official", "external"]),
@@ -30,7 +30,7 @@ export const StandardsSourceSchema = z
 	})
 	.strict();
 
-export const StandardsRuleSchema = z
+const StandardsRuleSchema = z
 	.object({
 		summary: z.string().min(1),
 		sourceRefs: z.array(z.string().min(1)).default([]),
@@ -38,7 +38,7 @@ export const StandardsRuleSchema = z
 	})
 	.strict();
 
-export const StandardsGapSchema = z
+const StandardsGapSchema = z
 	.object({
 		stackItem: z.string().min(1),
 		reason: z.string().min(1),
@@ -63,7 +63,7 @@ export const ImplementationApproachSchema = z.object({
 	sources: z.array(z.string().min(1)).default([]),
 });
 
-export const PlanningDecisionOptionSchema = z.object({
+const PlanningDecisionOptionSchema = z.object({
 	label: z.string().min(1),
 	tradeoffs: z.array(z.string().min(1)).default([]),
 });

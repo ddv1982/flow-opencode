@@ -11,7 +11,7 @@ import {
 	sourcePathExistsWithinRepo,
 } from "./prompt-eval-helpers";
 
-export type PromptBehaviorCriterion =
+type PromptBehaviorCriterion =
 	| "schema_valid"
 	| "human_readable_sections"
 	| "depth_calibrated"
@@ -23,7 +23,7 @@ export type PromptBehaviorCriterion =
 	| "actionable_next_steps"
 	| "packet_boundaries_preserved";
 
-export type PromptBehaviorEvalCaseId =
+type PromptBehaviorEvalCaseId =
 	| "review-full-depth-downgrades-spot-check"
 	| "review-overclaims-full-depth"
 	| "review-confirmed-defect-grounded"
@@ -35,7 +35,7 @@ export type PromptBehaviorEvalCaseId =
 	| "captured-review-csv-memory-risk-calibrated"
 	| "captured-review-overconfident-validation-gap";
 
-export type PromptBehaviorEvalCaseOrigin = "calibration" | "captured";
+type PromptBehaviorEvalCaseOrigin = "calibration" | "captured";
 
 export type PromptBehaviorBehaviorRiskClass =
 	| "async_event_ordering"
@@ -66,7 +66,7 @@ export type PromptBehaviorPacketExpectations = {
 	requiredBehaviorChecks?: PromptBehaviorRequiredBehaviorCheck[];
 };
 
-export type PromptBehaviorEvalCase = {
+type PromptBehaviorEvalCase = {
 	id: PromptBehaviorEvalCaseId;
 	title: string;
 	origin?: PromptBehaviorEvalCaseOrigin;
@@ -78,13 +78,13 @@ export type PromptBehaviorEvalCase = {
 	expectedFailures?: PromptBehaviorCriterion[];
 };
 
-export type PromptBehaviorCriterionResult = {
+type PromptBehaviorCriterionResult = {
 	criterion: PromptBehaviorCriterion;
 	passed: boolean;
 	summary: string;
 };
 
-export type PromptBehaviorEvalResult = {
+type PromptBehaviorEvalResult = {
 	id: string;
 	title: string;
 	score: number;
@@ -96,7 +96,7 @@ export type PromptBehaviorEvalResult = {
 	criteria: PromptBehaviorCriterionResult[];
 };
 
-export type PromptBehaviorEvalSummary = {
+type PromptBehaviorEvalSummary = {
 	totalCases: number;
 	passingCases: number;
 	failingCases: number;
@@ -108,7 +108,7 @@ export type PromptBehaviorEvalSummary = {
 	markdownReport: string;
 };
 
-export const PROMPT_BEHAVIOR_EVAL_FIXTURE_DIR = join(
+const PROMPT_BEHAVIOR_EVAL_FIXTURE_DIR = join(
 	import.meta.dir,
 	"__fixtures__",
 	"prompt-behavior-evals",
@@ -239,7 +239,7 @@ export function validatePromptBehaviorPacketExpectations(
 	validateRequiredBehaviorChecks(value.requiredBehaviorChecks, caseId);
 }
 
-export function validatePromptBehaviorEvalCorpus(
+function validatePromptBehaviorEvalCorpus(
 	raw: unknown,
 ): PromptBehaviorEvalCase[] {
 	if (!Array.isArray(raw)) {

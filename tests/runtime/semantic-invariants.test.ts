@@ -19,8 +19,8 @@ import type {
 	WorkerResult,
 } from "../../src/runtime/schema";
 import {
+	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgsSchema,
 } from "../../src/runtime/schema";
 import { createSession } from "../../src/runtime/session";
 import {
@@ -176,7 +176,7 @@ describe("runtime semantic invariants", () => {
 			"src/runtime/summary.ts": ["explainSessionState", "summarizeSession"],
 			"src/runtime/schema.ts": [
 				"FlowReviewRecordFeatureArgsSchema",
-				"FlowReviewRecordFinalArgsSchema",
+				"FinalReviewerDecisionSchema",
 			],
 			"src/runtime/transitions/recovery.ts": ["buildCompletionRecovery"],
 			"src/adapters/opencode/tools.ts": ["createTools"],
@@ -447,7 +447,7 @@ describe("runtime semantic invariants", () => {
 		).toBe(false);
 
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalScope,
 				featureId: "setup-runtime",
 				reviewDepth: "detailed",
@@ -477,7 +477,7 @@ describe("runtime semantic invariants", () => {
 		).toBe(false);
 
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalScope,
 				reviewDepth: "detailed",
 				reviewedSurfaces: [

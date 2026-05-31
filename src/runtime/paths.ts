@@ -1,4 +1,4 @@
-import { dirname, join, relative } from "node:path";
+import { join, relative } from "node:path";
 
 export class InvalidFlowPathInputError extends Error {
 	readonly code = "INVALID_FLOW_PATH_INPUT";
@@ -22,7 +22,7 @@ export class InvalidFlowPathInputError extends Error {
 
 export type LiveSessionLocation = "active" | "stored";
 
-export function sanitizePathComponent(
+function sanitizePathComponent(
 	kind:
 		| "session"
 		| "feature"
@@ -77,10 +77,6 @@ export function getStoredSessionsDir(worktree: string): string {
 
 export function getCompletedSessionsDir(worktree: string): string {
 	return join(getFlowDir(worktree), "completed");
-}
-
-export function getPersistenceLocksDir(worktree: string): string {
-	return join(getFlowDir(worktree), "locks");
 }
 
 function getLiveSessionsDir(
@@ -165,7 +161,7 @@ export function getDocsDir(
 	return getDocsDirFromSessionDir(getSessionDir(worktree, sessionId, location));
 }
 
-export function getDocsDirFromSessionDir(sessionDir: string): string {
+function getDocsDirFromSessionDir(sessionDir: string): string {
 	return join(sessionDir, "docs");
 }
 
@@ -183,7 +179,7 @@ export function getReviewsDir(
 	);
 }
 
-export function getReviewsDirFromSessionDir(sessionDir: string): string {
+function getReviewsDirFromSessionDir(sessionDir: string): string {
 	return join(sessionDir, "reviews");
 }
 
@@ -211,13 +207,6 @@ export function getFeatureDocPath(
 		getSessionDir(worktree, sessionId, location),
 		featureId,
 	);
-}
-
-export function getFeatureDocPathFromSessionPath(
-	sessionPath: string,
-	featureId: string,
-): string {
-	return getFeatureDocPathFromSessionDir(dirname(sessionPath), featureId);
 }
 
 export function getFeatureDocPathFromSessionDir(

@@ -1,6 +1,6 @@
 type JsonObject = Record<string, unknown>;
 
-export type StrictJsonObjectParseErrorKind =
+type StrictJsonObjectParseErrorKind =
 	| "empty_payload"
 	| "invalid_json_syntax"
 	| "duplicate_json_key"
@@ -8,7 +8,7 @@ export type StrictJsonObjectParseErrorKind =
 	| "trailing_text"
 	| "schema_validation_failed";
 
-export type StrictJsonObjectParseResult =
+type StrictJsonObjectParseResult =
 	| { ok: true; value: JsonObject }
 	| {
 			ok: false;

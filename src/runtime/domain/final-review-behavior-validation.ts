@@ -1,7 +1,4 @@
-import {
-	type BehaviorValidationLedgerTarget,
-	behaviorValidationLedgerFailureReasons,
-} from "./final-review-behavior-ledger-validation";
+import { behaviorValidationLedgerFailureReasons } from "./final-review-behavior-ledger-validation";
 import type { FinalReviewBehaviorCoverageTarget } from "./final-review-behavior-risks";
 import {
 	artifactPathsForWorker,
@@ -15,7 +12,6 @@ import {
 } from "./final-review-coverage-paths";
 import type { ReviewContextPack } from "./review-content-discovery";
 
-export type { BehaviorValidationLedgerTarget };
 export { behaviorValidationLedgerFailureReasons };
 
 const FLOW_INFRASTRUCTURE_SRC_DOMAINS = new Set([
@@ -92,7 +88,7 @@ function concreteDeclaredReviewScopePath(
 	return target;
 }
 
-export function declaredReviewScopePaths(
+function declaredReviewScopePaths(
 	review: Pick<FinalReviewBehaviorCoverageTarget, "declaredReviewScope">,
 ): string[] {
 	return (review.declaredReviewScope ?? [])
