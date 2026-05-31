@@ -1,8 +1,3 @@
-export type {
-	CompletedSessionHistoryEntry,
-	SessionHistoryEntry,
-	StoredSessionLookup,
-} from "../session-history";
 export { listSessionHistory, loadStoredSession } from "../session-history";
 export {
 	activateSession,
@@ -20,14 +15,10 @@ export {
 } from "../session-persistence";
 export {
 	ensureWorkspace,
-	findStoredSessionDir,
 	readActiveSessionId,
-	resolveActiveSessionId,
 	writeSessionFile,
 } from "../session-workspace";
 export {
-	readSessionFromPath,
 	resetSessionWorkspaceFsForTests,
 	setSessionWorkspaceFsForTests,
-	writeSessionFileAtDir,
 } from "../session-workspace-io";

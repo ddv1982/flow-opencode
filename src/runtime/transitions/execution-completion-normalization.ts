@@ -1,13 +1,9 @@
 import { buildReviewContextPack } from "../domain";
 import type { FinalReviewBehaviorRiskClass } from "../domain/final-review-behavior-risks";
-import {
-	canonicalTestEvidenceRefs,
-	normalizeBehaviorRiskClassName,
-} from "../domain/final-review-canonicalization";
 import type { ReviewContextPackInput } from "../domain/review-content-discovery";
 import type { Session, WorkerResultArgs } from "../schema";
 
-export type NormalizedReview = Omit<
+type NormalizedReview = Omit<
 	NonNullable<WorkerResultArgs["featureReview"]>,
 	"blockingFindings"
 > & {
@@ -20,7 +16,7 @@ type PersistedFinalReview = NonNullable<
 	Session["execution"]["history"][number]["finalReview"]
 >;
 
-export type NormalizedFinalReview = PersistedFinalReview;
+type NormalizedFinalReview = PersistedFinalReview;
 
 type WorkerBehaviorCheckInput = {
 	riskClass: string;
@@ -31,7 +27,6 @@ type WorkerBehaviorCheckInput = {
 	lifecycleOwnerRefs?: string[] | undefined;
 	failurePath: string;
 	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
 	validationRefs?: string[] | undefined;
 	remainingGap?: string | undefined;
 };
@@ -42,10 +37,9 @@ type WorkerValidationCoverageInput = {
 	proves?: string[] | undefined;
 	gaps?: string[] | undefined;
 	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
 };
 
-export type NormalizedReviewFindingClosure = Omit<
+type NormalizedReviewFindingClosure = Omit<
 	NonNullable<WorkerResultArgs["reviewFindingClosures"]>[number],
 	"fixRefs" | "testRefs" | "validationRefs"
 > & {
@@ -54,7 +48,7 @@ export type NormalizedReviewFindingClosure = Omit<
 	validationRefs: string[];
 };
 
-export type NormalizedReviewScopeLedgerEntry = Omit<
+type NormalizedReviewScopeLedgerEntry = Omit<
 	NonNullable<WorkerResultArgs["reviewScopeLedger"]>[number],
 	"evidenceRefs" | "findingRefs" | "validationRefs"
 > & {
@@ -63,7 +57,7 @@ export type NormalizedReviewScopeLedgerEntry = Omit<
 	validationRefs: string[];
 };
 
-export type NormalizedWorkerResultBase = Omit<
+type NormalizedWorkerResultBase = Omit<
 	WorkerResultArgs,
 	| "artifactsChanged"
 	| "validationRun"
@@ -113,9 +107,7 @@ function normalizeReview(
 function normalizeBehaviorRiskClass(
 	riskClass: string,
 ): FinalReviewBehaviorRiskClass {
-	return normalizeBehaviorRiskClassName(
-		riskClass,
-	) as FinalReviewBehaviorRiskClass;
+	return riskClass as FinalReviewBehaviorRiskClass;
 }
 
 function normalizeFinalReview(
@@ -135,29 +127,27 @@ function normalizeFinalReview(
 		behaviorChecks: (
 			(review.behaviorChecks ?? []) as WorkerBehaviorCheckInput[]
 		).map((check) => {
-			const { oracleRefs: _legacyOracleRefs, ...canonicalCheck } = check;
 			return {
-				...canonicalCheck,
+				...check,
 				riskClass: normalizeBehaviorRiskClass(check.riskClass),
 				entrypointRefs: check.entrypointRefs ?? [],
 				stateOwnerRefs: check.stateOwnerRefs ?? [],
 				lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
-				testEvidenceRefs: canonicalTestEvidenceRefs(check),
+				testEvidenceRefs: check.testEvidenceRefs ?? [],
 				validationRefs: check.validationRefs ?? [],
 			};
 		}),
 		validationCoverage: (
 			(review.validationCoverage ?? []) as WorkerValidationCoverageInput[]
 		).map((coverage) => {
-			const { oracleRefs: _legacyOracleRefs, ...canonicalCoverage } = coverage;
 			return {
-				...canonicalCoverage,
+				...coverage,
 				behaviorClasses: (coverage.behaviorClasses ?? []).map(
 					normalizeBehaviorRiskClass,
 				),
 				proves: coverage.proves ?? [],
 				gaps: coverage.gaps ?? [],
-				testEvidenceRefs: canonicalTestEvidenceRefs(coverage),
+				testEvidenceRefs: coverage.testEvidenceRefs ?? [],
 			};
 		}),
 		reviewContextPack: review.reviewContextPack
@@ -209,7 +199,7 @@ export function normalizeWorkerResult(
 	};
 }
 
-export function inferWorkerOutcomeKind(
+function inferWorkerOutcomeKind(
 	worker: NormalizedWorkerResult,
 ): WorkerOutcomeKind | "completed" | "needs_input" {
 	return (

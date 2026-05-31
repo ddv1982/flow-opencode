@@ -11,10 +11,11 @@ import {
 	reviewContextPackHasSurfaceEvidence,
 } from "../../src/runtime/domain";
 import { behaviorValidationLedgerFailureReasons } from "../../src/runtime/domain/final-review-behavior-ledger-validation";
+import { detailedFinalReviewRequirementFailures } from "../../src/runtime/domain/final-review-detailed-requirements";
 import type { ReviewScopeRecoveryDetails } from "../../src/runtime/domain/review-scope-accounting";
 import {
+	FinalReviewerDecisionSchema,
 	FinalReviewSchema,
-	FlowReviewRecordFinalArgsSchema,
 	SessionSchema,
 } from "../../src/runtime/schema";
 import { createSession } from "../../src/runtime/session";
@@ -124,7 +125,7 @@ describe("runtime final review contracts", () => {
 			"tests",
 		]);
 
-		const parsedRuntimeReview = FlowReviewRecordFinalArgsSchema.safeParse({
+		const parsedRuntimeReview = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			status: "approved",
 			summary: "Final review approved.",
@@ -558,28 +559,28 @@ describe("runtime final review contracts", () => {
 		};
 
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse(liveFinalDecision).success,
+			FinalReviewerDecisionSchema.safeParse(liveFinalDecision).success,
 		).toBe(false);
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				...liveFinalDecision,
 				evidenceRefs: {},
 			}).success,
 		).toBe(false);
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				...liveFinalDecision,
 				evidenceRefs: { changedArtifacts: [] },
 			}).success,
 		).toBe(false);
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				...liveFinalDecision,
 				evidenceRefs: { validationCommands: [] },
 			}).success,
 		).toBe(false);
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				...liveFinalDecision,
 				evidenceRefs: { changedArtifacts: [], validationCommands: [] },
 			}).success,
@@ -602,6 +603,66 @@ describe("runtime final review contracts", () => {
 				evidenceRefs: { changedArtifacts: [], validationCommands: [] },
 			}).success,
 		).toBe(true);
+	});
+
+	test("requires meaningful detailed final-review integration and regression checks", () => {
+		const detailedReview = {
+			reviewDepth: "detailed",
+			reviewedSurfaces: ["validation_evidence", "shared_surfaces"],
+			integrationChecks: ["   "],
+			regressionChecks: ["\t"],
+		};
+
+		expect(detailedFinalReviewRequirementFailures(detailedReview)).toEqual([
+			"missing_integration_checks",
+			"missing_regression_checks",
+		]);
+		expect(
+			detailedFinalReviewRequirementFailures({
+				...detailedReview,
+				integrationChecks: [" checked integration path "],
+				regressionChecks: [" checked regression path "],
+			}),
+		).toEqual([]);
+
+		const schemaBase = {
+			scope: "final",
+			status: "approved",
+			summary: "Final review approved.",
+			reviewDepth: "detailed",
+			reviewedSurfaces: ["validation_evidence", "shared_surfaces"],
+			evidenceSummary: "Reviewed validation evidence.",
+			validationAssessment: "Validation evidence was reviewed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/session.ts"],
+				validationCommands: ["bun test"],
+			},
+		};
+
+		expect(
+			FinalReviewerDecisionSchema.safeParse({
+				...schemaBase,
+				integrationChecks: ["   "],
+				regressionChecks: ["Checked regression path."],
+			}).success,
+		).toBe(false);
+		expect(
+			FinalReviewerDecisionSchema.safeParse({
+				...schemaBase,
+				integrationChecks: ["Checked integration path."],
+				regressionChecks: ["\t"],
+			}).success,
+		).toBe(false);
+
+		const parsed = FinalReviewerDecisionSchema.safeParse({
+			...schemaBase,
+			integrationChecks: [" checked integration path "],
+			regressionChecks: [" checked regression path "],
+		});
+		expect(parsed.success).toBe(true);
+		if (!parsed.success) return;
+		expect(parsed.data.integrationChecks).toEqual(["checked integration path"]);
+		expect(parsed.data.regressionChecks).toEqual(["checked regression path"]);
 	});
 
 	test("review-mode approved final reviewer decisions require complete review scope ledger", () => {
@@ -1351,7 +1412,7 @@ describe("runtime final review contracts", () => {
 	});
 
 	test("accepts optional behavior and validation coverage fields and rejects approved needs_fix combinations", () => {
-		const withOptionalCoverage = FlowReviewRecordFinalArgsSchema.safeParse({
+		const withOptionalCoverage = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			status: "approved",
 			summary: "Final review approved.",
@@ -1877,7 +1938,7 @@ describe("runtime final review contracts", () => {
 	});
 
 	test("normalizes behavior path refs and rejects unsafe behavior refs", () => {
-		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+		const parsed = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			status: "approved",
 			summary: "Final review approved.",
@@ -1918,7 +1979,7 @@ describe("runtime final review contracts", () => {
 		expect(parsedBehaviorCheck).toBeDefined();
 		if (!parsedBehaviorCheck) return;
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				...parsed.data,
 				behaviorChecks: [
 					{
@@ -1998,7 +2059,7 @@ describe("runtime final review contracts", () => {
 			validationRefs: ["bun test"],
 		};
 
-		const duplicateCanonical = FlowReviewRecordFinalArgsSchema.safeParse({
+		const duplicateCanonical = FinalReviewerDecisionSchema.safeParse({
 			...baseFinalReview,
 			behaviorChecks: [behaviorCheck, behaviorCheck],
 		});
@@ -2010,26 +2071,10 @@ describe("runtime final review contracts", () => {
 				"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
 			);
 		}
-
-		const duplicateAlias = FlowReviewRecordFinalArgsSchema.safeParse({
-			...baseFinalReview,
-			behaviorChecks: [
-				{ ...behaviorCheck, riskClass: "test_oracle_authenticity" },
-				behaviorCheck,
-			],
-		});
-		expect(duplicateAlias.success).toBe(false);
-		if (!duplicateAlias.success) {
-			expect(
-				duplicateAlias.error.issues.map((issue) => issue.message),
-			).toContain(
-				"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
-			);
-		}
 	});
 
 	test("rejects duplicate validation coverage behavior classes after canonicalization", () => {
-		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+		const parsed = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			status: "approved",
 			summary: "Final review approved.",
@@ -2045,7 +2090,7 @@ describe("runtime final review contracts", () => {
 				{
 					command: "bun test",
 					behaviorClasses: [
-						"test_oracle_authenticity",
+						"test_evidence_authenticity",
 						"test_evidence_authenticity",
 					],
 					proves: ["Panel action ordering was exercised."],
@@ -2063,7 +2108,7 @@ describe("runtime final review contracts", () => {
 		}
 	});
 
-	test("accepts prior final-review terminology and emits canonical evidence fields", () => {
+	test("rejects prior final-review terminology", () => {
 		const priorFinalReview = {
 			status: "approved",
 			summary: "Final review approved.",
@@ -2082,84 +2127,48 @@ describe("runtime final review contracts", () => {
 					{
 						path: "tests/sessionPanelActions.test.ts",
 						reason: "test_oracle",
-						summary: "Prior discovery reason maps to test evidence.",
+						summary: "Prior discovery reason is no longer accepted.",
 					},
 				],
 			},
 			behaviorChecks: [
 				{
-					riskClass: "test_oracle_authenticity",
+					riskClass: "test_evidence_authenticity",
 					result: "passed",
 					invariant: "Tests exercise the product behavior path.",
 					entrypointRefs: ["src/shell/sessionPanels.ts"],
 					stateOwnerRefs: [],
 					lifecycleOwnerRefs: [],
 					failurePath: "Generic validation would miss stale action ordering.",
-					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 					validationRefs: ["bun test tests/sessionPanelActions.test.ts"],
 				},
 			],
 			validationCoverage: [
 				{
 					command: "bun test tests/sessionPanelActions.test.ts",
-					behaviorClasses: ["test_oracle_authenticity"],
+					behaviorClasses: ["test_evidence_authenticity"],
 					proves: ["Panel action ordering was exercised."],
 					gaps: [],
-					oracleRefs: ["tests/sessionPanelActions.test.ts"],
+					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
 				},
 			],
 		} as const;
-		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+		const parsed = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			...priorFinalReview,
 		});
 
-		expect(parsed.success).toBe(true);
+		expect(parsed.success).toBe(false);
 		const parsedFinalReview = FinalReviewSchema.safeParse({
 			...priorFinalReview,
 			status: "passed",
 		});
-		expect(parsedFinalReview.success).toBe(true);
-		if (!parsed.success || !parsedFinalReview.success) return;
-		const [behaviorCheck] = parsed.data.behaviorChecks ?? [];
-		const [coverage] = parsed.data.validationCoverage ?? [];
-		const [finalReviewBehaviorCheck] =
-			parsedFinalReview.data.behaviorChecks ?? [];
-		const [finalReviewCoverage] =
-			parsedFinalReview.data.validationCoverage ?? [];
-		expect(behaviorCheck?.riskClass).toBe("test_evidence_authenticity");
-		expect(behaviorCheck?.testEvidenceRefs).toEqual([
-			"tests/sessionPanelActions.test.ts",
-		]);
-		expect(
-			(behaviorCheck as { oracleRefs?: string[] } | undefined)?.oracleRefs,
-		).toBe(undefined);
-		expect(coverage?.behaviorClasses).toEqual(["test_evidence_authenticity"]);
-		expect(coverage?.testEvidenceRefs).toEqual([
-			"tests/sessionPanelActions.test.ts",
-		]);
-		expect(
-			(coverage as { oracleRefs?: string[] } | undefined)?.oracleRefs,
-		).toBe(undefined);
-		expect(finalReviewBehaviorCheck?.riskClass).toBe(
-			"test_evidence_authenticity",
-		);
-		expect(finalReviewBehaviorCheck?.testEvidenceRefs).toEqual([
-			"tests/sessionPanelActions.test.ts",
-		]);
-		expect(finalReviewCoverage?.behaviorClasses).toEqual([
-			"test_evidence_authenticity",
-		]);
-		expect(finalReviewCoverage?.testEvidenceRefs).toEqual([
-			"tests/sessionPanelActions.test.ts",
-		]);
-		expect(parsed.data.reviewContextPack?.includedContext[0]?.reason).toBe(
-			"test_evidence",
-		);
+		expect(parsedFinalReview.success).toBe(false);
 	});
 
-	test("rejects conflicting prior and canonical test evidence refs", () => {
-		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+	test("rejects prior oracleRefs evidence fields", () => {
+		const parsed = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			status: "approved",
 			summary: "Final review approved.",
@@ -2181,7 +2190,7 @@ describe("runtime final review contracts", () => {
 					lifecycleOwnerRefs: [],
 					failurePath: "Generic validation would miss stale action ordering.",
 					testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-					oracleRefs: ["tests/other.test.ts"],
+					oracleRefs: ["tests/sessionPanelActions.test.ts"],
 					validationRefs: ["bun test"],
 				},
 			],
@@ -2210,14 +2219,14 @@ describe("runtime final review contracts", () => {
 						lifecycleOwnerRefs: [],
 						failurePath: "Generic validation would miss stale action ordering.",
 						testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-						oracleRefs: ["tests/other.test.ts"],
+						oracleRefs: ["tests/sessionPanelActions.test.ts"],
 						validationRefs: ["bun test"],
 					},
 				],
 			}).success,
 		).toBe(false);
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse({
+			FinalReviewerDecisionSchema.safeParse({
 				scope: "final",
 				status: "approved",
 				summary: "Final review approved.",
@@ -2236,7 +2245,7 @@ describe("runtime final review contracts", () => {
 						proves: ["Tests exercise the product behavior path."],
 						gaps: [],
 						testEvidenceRefs: ["tests/sessionPanelActions.test.ts"],
-						oracleRefs: ["tests/other.test.ts"],
+						oracleRefs: ["tests/sessionPanelActions.test.ts"],
 					},
 				],
 			}).success,
@@ -2595,7 +2604,7 @@ describe("runtime final review contracts", () => {
 	});
 
 	test("trims review context pack schema fields and rejects unsafe paths", () => {
-		const parsed = FlowReviewRecordFinalArgsSchema.safeParse({
+		const parsed = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			status: "approved",
 			summary: "Final review approved.",
@@ -2677,7 +2686,7 @@ describe("runtime final review contracts", () => {
 			"C:/tmp/escape.ts",
 			"src//runtime/session.ts",
 		]) {
-			const unsafe = FlowReviewRecordFinalArgsSchema.safeParse({
+			const unsafe = FinalReviewerDecisionSchema.safeParse({
 				scope: "final",
 				status: "approved",
 				summary: "Final review approved.",

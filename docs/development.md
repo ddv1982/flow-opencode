@@ -27,6 +27,8 @@ Useful scripts:
 
 - `bun run build`
 - `bun run deadcode`
+- `bun run report:deadcode-exports`
+- `bun run check:deadcode-exports`
 - `bun run test`
 - `bun run test:fast`
 - `bun run test:deep`
@@ -49,8 +51,9 @@ Useful scripts:
 
 Gate status terms:
 
-- **Hard** gates fail the command and block merge/release readiness. Examples: `bun run check:dependency-contract`, `bun run check:architecture-seams:enforce`, `bun run check:generated-drift`, `bun run gate:completion-lane`, `bun run test:replay`, and `bun run bench:gate`.
-- **Advisory** gates are supplemental visibility and do not block by exit code. `bun run check:boundary-report` is advisory by design today: it exits `0` and reports prompt/tool boundary findings unless a future reviewed change promotes it with script, docs, and test updates.
+- **Hard** gates fail the command and block merge/release readiness. Examples: `bun run check:dependency-contract`, `bun run check:architecture-seams:enforce`, `bun run check:generated-drift`, `bun run deadcode`, `bun run gate:completion-lane`, `bun run test:replay`, and `bun run bench:gate`.
+- **Advisory** gates are supplemental visibility and do not block by exit code. `bun run check:boundary-report` and `bun run report:deadcode-exports` are advisory by design today: they exit `0` and report findings unless a future reviewed change promotes them with script, docs, and test updates.
+- **Ratcheted** gates fail on regression against the current reviewed budget while allowing known remaining cleanup debt to be handled incrementally. `bun run check:deadcode-exports` runs inside `bun run check` and fails if unused exported symbols or duplicate exports increase above the checked-in budget.
 - **Diagnostic/report** commands support investigation or planning. `bun run check:architecture-seams` is seam report mode; `bun run report:runtime-simplification-metrics` prints simplification metrics. Use the corresponding hard gate (`check:architecture-seams:enforce`) for pass/fail readiness.
 
 The full matrix, artifact owners, source-of-truth scripts, repeated-inside-`check` status, and CI/local no-weakening rules live in [`docs/maintainer-contract.md#gate-contract-matrix`](maintainer-contract.md#gate-contract-matrix).

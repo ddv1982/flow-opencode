@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "2.0.51",
+	"version": "2.0.52",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -37,7 +37,9 @@
 		"eval:review-capture:check": "bun run ./scripts/cross-area/review-prompt-capture.ts -- --check",
 		"eval:prompt-capture": "bun run ./scripts/cross-area/prompt-mode-capture.ts",
 		"eval:prompt-capture:check": "bun run ./scripts/cross-area/prompt-mode-capture.ts -- --check",
-		"deadcode": "knip --include files,dependencies",
+		"deadcode": "knip --include files,dependencies,unlisted,unresolved,binaries,catalog",
+		"report:deadcode-exports": "knip --exports --no-exit-code --reporter compact",
+		"check:deadcode-exports": "node ./scripts/cross-area/deadcode-export-budget.mjs",
 		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"test": "bun test",
 		"test:fast": "bun test tests/runtime/semantic-invariants.test.ts tests/runtime/final-completion-gates.test.ts",
@@ -47,7 +49,7 @@
 		"test:randomized": "bun test --randomize --timeout 30000",
 		"test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
 		"typecheck": "tsc --noEmit",
-		"check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate",
+		"check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run check:deadcode-exports && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate",
 		"install:opencode": "bun run ./src/install-opencode.ts",
 		"uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
 	},

@@ -6,8 +6,8 @@ import {
 } from "../../src/runtime/domain/planning-context";
 import {
 	EvidencePacketSchema,
+	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgsSchema,
 	PlanningContextArgsSchema,
 	WorkerResultArgsSchema,
 } from "../../src/runtime/schema";
@@ -331,7 +331,7 @@ describe("shared evidence packet primitives", () => {
 		});
 		expect(featureDecision.evidencePackets?.[0]?.contextLane).toBe("review");
 
-		const decision = FlowReviewRecordFinalArgsSchema.parse({
+		const decision = FinalReviewerDecisionSchema.parse({
 			scope: "final",
 			reviewPurpose: "completion_gate",
 			reviewDepth: "detailed",

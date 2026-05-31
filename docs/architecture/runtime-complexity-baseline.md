@@ -10,9 +10,9 @@ This document captures measurable simplification baselines and the recurring Pha
 - Collector: `bun run report:runtime-simplification-metrics`
 - Runtime subdomain breakdown: diagnostic-only `runtime.subdomains` in the metrics report (`application`, `domain`, `transitions`, `lifecycle`, `recovery`, `rendering`, `root`, and any future `src/runtime/<subdomain>/` directory)
 
-## KPI baseline table (captured 2026-05-14)
+## KPI baseline table (captured 2026-05-24)
 
-Current canonical snapshot (captured `2026-05-14T07:09:17.649Z`): runtime files `124`, runtime LOC `17,480`, runtime files >= 300 LOC `7`, top-5 LOC share `9.7%`, architecture seam violations `0`.
+Current canonical snapshot (captured `2026-05-24T12:31:45.180Z`): runtime files `128`, runtime LOC `17,850`, runtime files >= 300 LOC `3`, top-5 LOC share `8.5%`, architecture seam violations `0`. The May 24 simplification pass accepted a small runtime file-count and total-LOC increase to move review-gate, history-presenter, detailed-final-review, and behavior-schema internals behind stable facades while cutting hotspot concentration.
 
 Historical same-pass snapshots remain useful for trend comparison only. The 2026-05-13 current snapshot was runtime files `107`, runtime LOC `17,040`, runtime files >= 300 LOC `14`, top-5 LOC share `14.1%`, architecture seam violations `0`. The preceding 2026-05-13 baseline was runtime files `105`, runtime LOC `17,005`, runtime files >= 300 LOC `14`, top-5 LOC share `15.0%`, with `final-review-behavior-risks.ts` as the largest hotspot at `571` LOC.
 
@@ -21,37 +21,37 @@ Historical pass snapshots are retained in investigation logs; this document trac
 | KPI | Baseline | Target direction | Measurement method | Notes |
 | --- | --- | --- | --- | --- |
 | Architecture seam violations | `0` | Hold at `0` | `bun run check:architecture-seams:enforce` | Enforced in CI |
-| Runtime TypeScript file count | `124` | Down | `report:runtime-simplification-metrics` | Current refactors trade more files for smaller hotspots |
-| Runtime LOC | `17,480` | Down | `report:runtime-simplification-metrics` | Fresh local measurement on 2026-05-14 |
-| Runtime files >= 300 LOC | `7` | Down | `report:runtime-simplification-metrics` | Improved from 2026-05-13 snapshot |
-| Top-5 runtime-file LOC share | `9.7%` | Down | `report:runtime-simplification-metrics` | Improved from `14.1%` 2026-05-13 snapshot |
-| Runtime churn hotspot leader | `src/runtime/schema.ts` (26 touches / 30d) | Down | `git log` via metrics script | Next churn leaders: `session-lifecycle.ts` (18), `session-workspace.ts` (18), `transitions/plan.ts` (18), `domain/index.ts` (15) |
-| Runtime subdomain LOC/file distribution | See 2026-05-14 subdomain snapshot below | Down or localized by touched subdomain | `report:runtime-simplification-metrics` | Diagnostic-only; helps prove localized improvement without adding a hard gate |
+| Runtime TypeScript file count | `128` | Down | `report:runtime-simplification-metrics` | Current refactors trade more files for smaller hotspots |
+| Runtime LOC | `17,850` | Down | `report:runtime-simplification-metrics` | Fresh local measurement on 2026-05-24 |
+| Runtime files >= 300 LOC | `3` | Down | `report:runtime-simplification-metrics` | Improved from `7` on 2026-05-14 |
+| Top-5 runtime-file LOC share | `8.5%` | Down | `report:runtime-simplification-metrics` | Improved from `9.7%` on 2026-05-14 |
+| Runtime churn hotspot leader | `src/runtime/schema.ts` (17 touches / 30d) | Down | `git log` via metrics script | Next churn leaders: `session-presenters.ts` (13), `domain/index.ts` (13), `session-actions.ts` (11), `transitions/plan.ts` (11) |
+| Runtime subdomain LOC/file distribution | See 2026-05-24 subdomain snapshot below | Down or localized by touched subdomain | `report:runtime-simplification-metrics` | Diagnostic-only; helps prove localized improvement without adding a hard gate |
 | Fast test lane runtime | `~0.22s` local | Hold low | timed `bun run test:fast` | Keep this as refactor safety lane |
 | Replay/integration lane runtime | `~0.15s` local | Hold low | timed `bun run test:replay` | Keep replay lane stable |
 
-## 2026-05-14 runtime simplification snapshot
+## 2026-05-24 runtime simplification snapshot
 
 Largest runtime files after the latest runtime simplification pass:
 
-1. `src/runtime/schema-review-shared.ts` — `353` LOC
-2. `src/runtime/transitions/execution-completion-validation.ts` — `347` LOC
-3. `src/runtime/application/session-presenters.ts` — `341` LOC
-4. `src/runtime/domain/final-review-coverage.ts` — `332` LOC
-5. `src/runtime/application/session-actions.ts` — `326` LOC
+1. `src/runtime/application/session-actions.ts` — `326` LOC
+2. `src/runtime/transitions/completion-gates.ts` — `308` LOC
+3. `src/runtime/application/doctor-checks.ts` — `305` LOC
+4. `src/runtime/transitions/execution-completion-normalization.ts` — `295` LOC
+5. `src/runtime/transitions/plan.ts` — `292` LOC
 
 Runtime subdomain snapshot (`fileCount` / `totalLoc` / large files):
 
 | Subdomain | Files | LOC | Files >= 300 LOC |
 | --- | ---: | ---: | ---: |
-| `application` | `34` | `4,791` | `3` |
-| `domain` | `30` | `4,185` | `1` |
+| `application` | `35` | `4,885` | `2` |
+| `domain` | `31` | `4,254` | `0` |
 | `json` | `2` | `431` | `0` |
 | `lifecycle` | `1` | `34` | `0` |
 | `recovery` | `2` | `153` | `0` |
 | `rendering` | `1` | `8` | `0` |
-| `root` | `41` | `5,288` | `1` |
-| `transitions` | `13` | `2,590` | `2` |
+| `root` | `42` | `5,470` | `0` |
+| `transitions` | `14` | `2,615` | `1` |
 
 ## Phase 4 execution loop (delete-first simplification)
 
@@ -70,11 +70,11 @@ For each simplification phase, capture the metrics report immediately before and
 
 ## Current top hotspot candidates
 
-1. `src/runtime/schema-review-shared.ts` (largest file: `353` LOC)
-2. `src/runtime/transitions/execution-completion-validation.ts` (large file: `347` LOC)
-3. `src/runtime/application/session-presenters.ts` (large file: `341` LOC)
-4. `src/runtime/domain/final-review-coverage.ts` (large file: `332` LOC)
-5. `src/runtime/schema.ts` (highest churn: `26` touches / 30d)
+1. `src/runtime/application/session-actions.ts` (large file: `326` LOC)
+2. `src/runtime/transitions/completion-gates.ts` (large file: `308` LOC)
+3. `src/runtime/application/doctor-checks.ts` (large file: `305` LOC)
+4. `src/runtime/transitions/execution-completion-normalization.ts` (near-threshold file: `295` LOC)
+5. `src/runtime/schema.ts` (highest churn: `17` touches / 30d)
 
 ## Guardrails
 

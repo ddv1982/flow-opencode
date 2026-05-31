@@ -5,12 +5,12 @@ import type { CompletionRecoveryKind } from "../transitions/recovery";
 
 export type { SemanticInvariantId };
 
-export type SemanticInvariantOwnerReference = {
+type SemanticInvariantOwnerReference = {
 	file: string;
 	symbols: readonly string[];
 };
 
-export type SemanticInvariantDescriptor = {
+type SemanticInvariantDescriptor = {
 	id: SemanticInvariantId;
 	ownerSummary: string;
 	ownerReferences: readonly SemanticInvariantOwnerReference[];
@@ -83,13 +83,13 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 	"review.scope.payload_binding": {
 		id: "review.scope.payload_binding",
 		ownerSummary:
-			"src/runtime/schema.ts::FlowReviewRecordFeatureArgsSchema/FlowReviewRecordFinalArgsSchema",
+			"src/runtime/schema.ts::FlowReviewRecordFeatureArgsSchema/FinalReviewerDecisionSchema",
 		ownerReferences: [
 			{
 				file: "src/runtime/schema.ts",
 				symbols: [
 					"FlowReviewRecordFeatureArgsSchema",
-					"FlowReviewRecordFinalArgsSchema",
+					"FinalReviewerDecisionSchema",
 				],
 			},
 		],

@@ -1,8 +1,8 @@
 import type { z } from "zod";
 import type {
+	FinalReviewerDecisionSchema,
 	FlowPlanApplyArgsSchema,
 	FlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgsSchema,
 } from "../src/adapters/opencode/tool-surface/schemas";
 import type * as RuntimeSchemaBarrel from "../src/runtime/schema";
 import type {
@@ -23,71 +23,29 @@ type ExpectedFlowPlanApplyArgs = {
 };
 
 type ExpectedRuntimeSchemaBarrelValueExports =
-	| "ApprovalStatusSchema"
-	| "ArtifactSchema"
-	| "BehaviorCheckResultSchema"
 	| "BehaviorCheckSchema"
-	| "BehaviorRiskClassSchema"
-	| "ClosureSchema"
-	| "CompletionPolicySchema"
-	| "DecisionSchema"
-	| "DecompositionPolicySchema"
-	| "DeliveryPolicySchema"
-	| "EvidenceConfidenceSchema"
 	| "EvidencePacketArraySchema"
-	| "EvidencePacketPurposeSchema"
-	| "EvidencePacketReferenceArraySchema"
-	| "EvidencePacketReferenceSchema"
 	| "EvidencePacketSchema"
-	| "EvidencePacketValidationRunSchema"
-	| "EvidencePacketValidationStatusSchema"
-	| "ExecutionHistoryEntrySchema"
-	| "FeatureIdSchema"
-	| "FeatureResultSchema"
-	| "FeatureReviewerDecisionSchema"
 	| "FeatureSchema"
-	| "FeatureStatusSchema"
 	| "FinalReviewSchema"
 	| "FinalReviewerDecisionSchema"
-	| "FlowContextLaneSchema"
 	| "FlowReviewRecordFeatureArgsSchema"
-	| "FlowReviewRecordFinalArgsSchema"
-	| "GoalModeSchema"
-	| "ImplementationApproachSchema"
 	| "LatestFailedFlowAttemptSchema"
-	| "NoteSchema"
-	| "OutcomeKindSchema"
 	| "OutcomeSchema"
 	| "PackageManagerSchema"
-	| "PersistedFinalReviewSchema"
-	| "PersistedFinalReviewerDecisionSchema"
 	| "PlanArgsSchema"
 	| "PlanSchema"
 	| "PlanningContextArgsSchema"
 	| "PlanningContextSchema"
-	| "PlanningDecisionOptionSchema"
-	| "PlanningDecisionSchema"
-	| "ReplanRecordSchema"
 	| "ReviewFindingPlanningContextSchema"
-	| "ReviewScopeAccountingStatusSchema"
-	| "ReviewScopeLedgerEntrySchema"
-	| "ReviewScopeTargetSchema"
 	| "ReviewerDecisionSchema"
 	| "SessionSchema"
 	| "SessionStatusSchema"
-	| "StackProfileEntrySchema"
 	| "StackProfileSchema"
-	| "StandardsGapSchema"
 	| "StandardsProfileSchema"
-	| "StandardsRuleSchema"
-	| "StandardsSourceSchema"
 	| "ValidationCoverageSchema"
-	| "ValidationRunSchema"
-	| "ValidationStatusSchema"
 	| "WorkerResultArgsSchema"
 	| "WorkerResultBaseSchema"
-	| "WorkerResultNeedsInputArgsSchema"
-	| "WorkerResultOkArgsSchema"
 	| "WorkerResultSchema";
 
 export type _runtimeSchemaBarrelValueExportsStayExplicit = Expect<
@@ -132,10 +90,7 @@ export type _featureReviewArgsMatchExpected = Expect<
 >;
 
 export type _finalReviewArgsMatchExpected = Expect<
-	Equal<
-		z.input<typeof FlowReviewRecordFinalArgsSchema>,
-		FlowReviewRecordFinalArgs
-	>
+	Equal<z.input<typeof FinalReviewerDecisionSchema>, FlowReviewRecordFinalArgs>
 >;
 
 export type _reviewerDecisionFeatureSliceStaysAligned =

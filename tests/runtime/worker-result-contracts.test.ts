@@ -286,15 +286,12 @@ describe("runtime worker result contracts", () => {
 				integrationChecks: ["Checked runtime integration."],
 				regressionChecks: ["Checked runtime regression evidence."],
 				remainingGaps: [],
-				behaviorChecks: [
-					{ ...behaviorCheck, riskClass: "test_oracle_authenticity" },
-					behaviorCheck,
-				],
+				behaviorChecks: [behaviorCheck, behaviorCheck],
 				validationCoverage: [
 					{
 						command: "bun test",
 						behaviorClasses: [
-							"test_oracle_authenticity",
+							"test_evidence_authenticity",
 							"test_evidence_authenticity",
 						],
 						proves: ["Tests exercise the behavior path."],
@@ -422,24 +419,24 @@ describe("runtime worker result contracts", () => {
 				remainingGaps: [],
 				behaviorChecks: [
 					{
-						riskClass: "test_oracle_authenticity",
+						riskClass: "test_evidence_authenticity",
 						result: "passed",
-						invariant: "Prior test evidence payloads are normalized.",
+						invariant: "Test evidence payloads are preserved.",
 						entrypointRefs: ["src/runtime/session.ts"],
 						stateOwnerRefs: [],
 						lifecycleOwnerRefs: [],
-						failurePath: "Prior refs could leak into persisted history.",
-						oracleRefs: ["tests/runtime/worker-result-contracts.test.ts"],
+						failurePath: "Test refs could be omitted from persisted history.",
+						testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
 						validationRefs: ["bun test"],
 					},
 				],
 				validationCoverage: [
 					{
 						command: "bun test",
-						behaviorClasses: ["test_oracle_authenticity"],
-						proves: ["Prior worker final review payload was normalized."],
+						behaviorClasses: ["test_evidence_authenticity"],
+						proves: ["Worker final review payload was persisted."],
 						gaps: [],
-						oracleRefs: ["tests/runtime/worker-result-contracts.test.ts"],
+						testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
 					},
 				],
 				status: "needs_followup",
@@ -470,25 +467,11 @@ describe("runtime worker result contracts", () => {
 			["tests/runtime/worker-result-contracts.test.ts"],
 		);
 		expect(
-			(
-				persistedFinalReview?.behaviorChecks?.[0] as
-					| { oracleRefs?: string[] }
-					| undefined
-			)?.oracleRefs,
-		).toBeUndefined();
-		expect(
 			persistedFinalReview?.validationCoverage?.[0]?.behaviorClasses,
 		).toEqual(["test_evidence_authenticity"]);
 		expect(
 			persistedFinalReview?.validationCoverage?.[0]?.testEvidenceRefs,
 		).toEqual(["tests/runtime/worker-result-contracts.test.ts"]);
-		expect(
-			(
-				persistedFinalReview?.validationCoverage?.[0] as
-					| { oracleRefs?: string[] }
-					| undefined
-			)?.oracleRefs,
-		).toBeUndefined();
 		expect(
 			result.value.execution.history.at(-1)?.evidencePackets?.[0]?.id,
 		).toBe("packet:worker-context");

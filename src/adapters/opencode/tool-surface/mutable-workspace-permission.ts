@@ -29,7 +29,7 @@ function requiresHiddenRootApproval(root: string): boolean {
 	return name.startsWith(".") && name !== ".flow";
 }
 
-export function resolveMutableToolWorkspace(
+function resolveMutableToolWorkspace(
 	context: ToolContext,
 ): ResolvedMutableToolWorkspace {
 	const resolved = resolveMutableSessionRoot(context);

@@ -21,9 +21,9 @@ export type PromptModeBehaviorCriterion =
 	| "forbidden_behavior_absent"
 	| "next_step_calibrated";
 
-export type PromptModeBehaviorEvalCaseOrigin = "calibration" | "captured";
+type PromptModeBehaviorEvalCaseOrigin = "calibration" | "captured";
 
-export type PromptModeBehaviorEvalCase = {
+type PromptModeBehaviorEvalCase = {
 	id: string;
 	mode: PromptModeBehaviorMode;
 	title: string;
@@ -42,13 +42,13 @@ export type PromptModeBehaviorEvalCase = {
 	expectedFailures?: PromptModeBehaviorCriterion[];
 };
 
-export type PromptModeBehaviorCriterionResult = {
+type PromptModeBehaviorCriterionResult = {
 	criterion: PromptModeBehaviorCriterion;
 	passed: boolean;
 	summary: string;
 };
 
-export type PromptModeBehaviorEvalResult = {
+type PromptModeBehaviorEvalResult = {
 	id: string;
 	mode: PromptModeBehaviorMode;
 	title: string;
@@ -61,7 +61,7 @@ export type PromptModeBehaviorEvalResult = {
 	criteria: PromptModeBehaviorCriterionResult[];
 };
 
-export type PromptModeBehaviorEvalSummary = {
+type PromptModeBehaviorEvalSummary = {
 	totalCases: number;
 	passingCases: number;
 	failingCases: number;
@@ -73,7 +73,7 @@ export type PromptModeBehaviorEvalSummary = {
 	markdownReport: string;
 };
 
-export const PROMPT_MODE_BEHAVIOR_EVAL_FIXTURE_DIR = join(
+const PROMPT_MODE_BEHAVIOR_EVAL_FIXTURE_DIR = join(
 	import.meta.dir,
 	"__fixtures__",
 	"prompt-mode-behavior-evals",
@@ -119,7 +119,7 @@ function assertStringArray(
 	}
 }
 
-export function validatePromptModeBehaviorEvalCorpus(
+function validatePromptModeBehaviorEvalCorpus(
 	raw: unknown,
 ): PromptModeBehaviorEvalCase[] {
 	if (!Array.isArray(raw)) {

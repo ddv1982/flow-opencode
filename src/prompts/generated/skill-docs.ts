@@ -16,13 +16,13 @@ export { FLOW_SKILL_SPECS };
 export const FLOW_SKILL_GENERATED_MARKER = "flow-opencode-generated-skill";
 export const FLOW_SKILL_GENERATED_VERSION = "1";
 
-export type FlowSkillGeneratedMarker = {
+type FlowSkillGeneratedMarker = {
 	name: string;
 	version: string;
 	hash: string;
 };
 
-export type FlowSkillDocumentInspection =
+type FlowSkillDocumentInspection =
 	| { kind: "not_generated" }
 	| { kind: "valid_generated"; marker: FlowSkillGeneratedMarker }
 	| { kind: "invalid_generated"; reason: string };
@@ -84,11 +84,6 @@ export function inspectFlowSkillDocument(
 		kind: "valid_generated",
 		marker: { name, version, hash },
 	};
-}
-
-export function flowSkillManagedPayloadHash(document: string): string | null {
-	const inspection = inspectFlowSkillDocument(document);
-	return inspection.kind === "valid_generated" ? inspection.marker.hash : null;
 }
 
 function renderSkillFrontmatter(skill: FlowSkillSpec): string {

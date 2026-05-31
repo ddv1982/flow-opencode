@@ -1,5 +1,4 @@
 import {
-	type BehaviorValidationLedgerTarget,
 	behaviorRefGroundingFailureReasons,
 	behaviorValidationLedgerFailureReasons,
 	genericAppDomainForPath,
@@ -14,7 +13,7 @@ import { isTestPath } from "./final-review-coverage-paths";
 import type { ReviewContextPack } from "./review-content-discovery";
 import { describeReviewContextPackGroundingFailure } from "./review-context-grounding";
 
-export const FINAL_REVIEW_BEHAVIOR_RISK_CLASSES = [
+const FINAL_REVIEW_BEHAVIOR_RISK_CLASSES = [
 	"async_event_ordering",
 	"lifecycle_reentrancy",
 	"state_commit_rollback",
@@ -68,7 +67,6 @@ export type FinalReviewBehaviorCoverageTarget = {
 	reviewContextPack?: ReviewContextPack | undefined;
 };
 
-export type { BehaviorValidationLedgerTarget };
 export { behaviorValidationLedgerFailureReasons };
 
 function addRequired(
@@ -80,7 +78,7 @@ function addRequired(
 	}
 }
 
-export function deriveRequiredFinalReviewBehaviorRisks(
+function deriveRequiredFinalReviewBehaviorRisks(
 	worker: FinalReviewWorkerEvidence,
 	review: Pick<
 		FinalReviewBehaviorCoverageTarget,

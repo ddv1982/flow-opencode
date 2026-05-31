@@ -35,7 +35,7 @@ const FindingCategorySchema = z.enum([
 const FindingConfidenceSchema = z.enum(["confirmed", "likely", "speculative"]);
 const FindingSeveritySchema = z.enum(["high", "medium", "low"]);
 
-export const ReviewDiscoveredSurfaceSchema = z
+const ReviewDiscoveredSurfaceSchema = z
 	.object({
 		name: z.string().min(1),
 		category: SurfaceCategorySchema,
@@ -58,7 +58,7 @@ export const ReviewDiscoveredSurfaceSchema = z
 		}
 	});
 
-export const ReviewValidationRunSchema = z
+const ReviewValidationRunSchema = z
 	.object({
 		command: z.string().min(1),
 		status: ValidationStatusSchema,
@@ -66,7 +66,7 @@ export const ReviewValidationRunSchema = z
 	})
 	.strict();
 
-export const ReviewFindingSchema = z
+const ReviewFindingSchema = z
 	.object({
 		title: z.string().min(1),
 		category: FindingCategorySchema,

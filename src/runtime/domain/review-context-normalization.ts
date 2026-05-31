@@ -73,12 +73,11 @@ export type ReviewContextPackGroundingEvidence = {
 	validationCommands?: readonly string[] | undefined;
 };
 
-export function normalizeReviewDiscoveryReason(
+function normalizeReviewDiscoveryReason(
 	reason: string,
 ): ReviewDiscoveryReason | null {
-	const normalized = reason === "test_oracle" ? "test_evidence" : reason;
-	return REVIEW_DISCOVERY_REASONS.includes(normalized as ReviewDiscoveryReason)
-		? (normalized as ReviewDiscoveryReason)
+	return REVIEW_DISCOVERY_REASONS.includes(reason as ReviewDiscoveryReason)
+		? (reason as ReviewDiscoveryReason)
 		: null;
 }
 

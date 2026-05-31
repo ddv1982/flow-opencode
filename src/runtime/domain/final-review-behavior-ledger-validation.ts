@@ -4,9 +4,8 @@ import type {
 	FinalReviewBehaviorRiskClass,
 	FinalReviewValidationCoverage,
 } from "./final-review-behavior-risks";
-import { normalizeBehaviorRiskClassName } from "./final-review-canonicalization";
 
-export type BehaviorValidationLedgerTarget = Pick<
+type BehaviorValidationLedgerTarget = Pick<
 	FinalReviewBehaviorCoverageTarget,
 	| "evidenceRefs"
 	| "remainingGaps"
@@ -54,12 +53,11 @@ function duplicateRiskClasses(riskClasses: readonly string[]): string[] {
 	const seen = new Set<string>();
 	const duplicates = new Set<string>();
 	for (const riskClass of riskClasses) {
-		const normalized = normalizeBehaviorRiskClassName(riskClass);
-		if (seen.has(normalized)) {
-			duplicates.add(normalized);
+		if (seen.has(riskClass)) {
+			duplicates.add(riskClass);
 			continue;
 		}
-		seen.add(normalized);
+		seen.add(riskClass);
 	}
 	return [...duplicates];
 }

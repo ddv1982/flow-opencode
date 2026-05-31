@@ -20,7 +20,7 @@ import {
 } from "./schema-planning-profiles";
 import { ReviewScopeTargetSchema } from "./schema-review-shared";
 
-export const FeatureStatusSchema = z.enum([
+const FeatureStatusSchema = z.enum([
 	"pending",
 	"in_progress",
 	"completed",
@@ -34,11 +34,11 @@ export const SessionStatusSchema = z.enum([
 	"completed",
 ]);
 export const ApprovalStatusSchema = z.enum(["pending", "approved"]);
-export const GoalModeSchema = z.enum(GOAL_MODES);
-export const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
+const GoalModeSchema = z.enum(GOAL_MODES);
+const DecompositionPolicySchema = z.enum(DECOMPOSITION_POLICIES);
 export const PackageManagerSchema = z.enum(["npm", "pnpm", "yarn", "bun"]);
 
-export const FeatureIdSchema = z
+const FeatureIdSchema = z
 	.string()
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
 
@@ -56,11 +56,11 @@ export const FeatureSchema = z.object({
 	blockedBy: z.array(z.string().min(1)).optional(),
 });
 
-export const CompletionPolicySchema = z.object({
+const CompletionPolicySchema = z.object({
 	minCompletedFeatures: z.number().int().positive().optional(),
 });
 
-export const DeliveryPolicySchema = z.object({
+const DeliveryPolicySchema = z.object({
 	priorityMode: z.enum(PRIORITY_MODES).default("balanced"),
 	stopRule: z.enum(STOP_RULES).default("ship_when_clean"),
 	deferAllowed: z.boolean().default(false),

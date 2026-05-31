@@ -7,10 +7,6 @@ import type {
 	FinalReviewValidationCoverage,
 } from "./final-review-behavior-risks";
 import {
-	canonicalTestEvidenceRefs,
-	normalizeBehaviorRiskClassName,
-} from "./final-review-canonicalization";
-import {
 	buildReviewContextPack,
 	type ReviewContextPack,
 	type ReviewContextPackInput,
@@ -27,7 +23,6 @@ export type BehaviorCheckInput = {
 	lifecycleOwnerRefs?: string[] | undefined;
 	failurePath: string;
 	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
 	validationRefs?: string[] | undefined;
 	remainingGap?: string | undefined;
 };
@@ -38,7 +33,6 @@ export type ValidationCoverageInput = {
 	proves?: string[] | undefined;
 	gaps?: string[] | undefined;
 	testEvidenceRefs?: string[] | undefined;
-	oracleRefs?: string[] | undefined;
 };
 
 export type RecordReviewerDecisionInput = {
@@ -72,12 +66,10 @@ export type RecordReviewerDecisionInput = {
 	suggestedValidation?: ReviewerDecision["suggestedValidation"];
 };
 
-export function normalizeBehaviorRiskClass(
+function normalizeBehaviorRiskClass(
 	riskClass: string,
 ): FinalReviewBehaviorRiskClass {
-	return normalizeBehaviorRiskClassName(
-		riskClass,
-	) as FinalReviewBehaviorRiskClass;
+	return riskClass as FinalReviewBehaviorRiskClass;
 }
 
 export function normalizeBehaviorChecksForCoverage(
@@ -91,7 +83,7 @@ export function normalizeBehaviorChecksForCoverage(
 		stateOwnerRefs: check.stateOwnerRefs ?? [],
 		lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
 		failurePath: check.failurePath,
-		testEvidenceRefs: canonicalTestEvidenceRefs(check),
+		testEvidenceRefs: check.testEvidenceRefs ?? [],
 		validationRefs: check.validationRefs ?? [],
 		...(check.remainingGap ? { remainingGap: check.remainingGap } : {}),
 	}));
@@ -107,7 +99,7 @@ export function normalizeValidationCoverageForCoverage(
 		),
 		proves: item.proves ?? [],
 		gaps: item.gaps ?? [],
-		testEvidenceRefs: canonicalTestEvidenceRefs(item),
+		testEvidenceRefs: item.testEvidenceRefs ?? [],
 	}));
 }
 

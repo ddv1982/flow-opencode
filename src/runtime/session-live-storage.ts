@@ -16,7 +16,7 @@ import {
 } from "./session-workspace-io";
 import type { MutableWorkspaceRoot } from "./workspace-root";
 
-export type SessionActivationRollbackPhase =
+type SessionActivationRollbackPhase =
 	| "restore_prior_active"
 	| "sync_live_parent_directories";
 

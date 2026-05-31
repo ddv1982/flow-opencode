@@ -1,4 +1,4 @@
-export type ReviewFindingClosureEvidence = {
+type ReviewFindingClosureEvidence = {
 	findingRef: string;
 	status: string;
 	fixRefs?: readonly string[];
@@ -6,7 +6,7 @@ export type ReviewFindingClosureEvidence = {
 	validationRefs?: readonly string[];
 };
 
-export type ReviewFindingClosureValidationContext = {
+type ReviewFindingClosureValidationContext = {
 	plannedFindingRefs?: readonly string[];
 	closedFindingRefsForCompletion?: readonly string[];
 	validationCommands: readonly string[];

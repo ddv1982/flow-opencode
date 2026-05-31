@@ -11,7 +11,7 @@ export type CoreActionProjectionMetadata = Pick<
 	name: CoreActionName;
 };
 
-export function coreActionProjectionMetadata(
+function coreActionProjectionMetadata(
 	coreActionName: CoreActionName,
 ): CoreActionProjectionMetadata {
 	const coreAction = coreActionByName(coreActionName);

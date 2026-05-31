@@ -10,99 +10,13 @@ export const FLOW_FRAGMENT_INVARIANT_IDS = [
 	"tools.canonical_surface.no_raw_wrappers",
 ] as const satisfies readonly SemanticInvariantId[];
 
-export const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_RULE =
-	"- Treat Flow runtime tools as authoritative.";
-export const FLOW_RUNTIME_TOOLS_AUTHORITATIVE_WORKFLOW_RULE =
-	"- Treat Flow runtime tools as authoritative for workflow state.";
 export const FLOW_AUTHORITATIVE_TOOL_JSON_RULE =
 	"- Treat returned Flow tool JSON as authoritative. OpenCode row metadata is provisional request-time UI context only; when tool JSON returns status: error, do not retry the same final-review or completion payload unchanged.";
 export const FLOW_NEVER_WRITE_FLOW_FILES_RULE =
 	"- Never write .flow files directly.";
-export const FLOW_COORDINATOR_BOUNDARY_RULE =
-	"- Stay at the coordinator layer: decide whether planning, execution, review, reset, or recovery happens next, and rely on the specialized Flow roles for their detailed contracts.";
-export const FLOW_REVIEW_FINDINGS_LOOP_RULE =
-	"- Do not complete a feature while review findings remain. Fix them, record a finding-by-finding closure ledger with code/test/validation evidence and residual risk, rerun validation, and rereview until the feature is clean or a real blocker remains.";
-export const FLOW_REVIEW_FIRST_WITHOUT_FINDINGS_PLAN_RULE =
-	"- Broad review-and-fix/codebase-review goals with no concrete existing findings in planning.reviewFindings must start as goalMode: review for audit/discovery; replan to goalMode: review_and_fix only after concrete findings are recorded in planning.reviewFindings.";
-export const FLOW_FEATURE_REVIEW_APPROVAL_RULE =
-	"- Before persisting success, get flow-reviewer approval and record it through flow_review_record_feature.";
-export const FLOW_FINAL_COMPLETION_PATH_RULE =
-	"- Treat the active feature as the final completion path whenever completing it would satisfy the session completion policy, including completionPolicy.minCompletedFeatures even if other plan features remain pending. On the final completion path, switch to broad validation, get the runtime-owned final review matching deliveryPolicy.finalReviewPolicy, persist that approval through the canonical final-review runtime tool, and include a passing finalReview before completion.";
-export const FLOW_NEVER_ADVANCE_DIRTY_FEATURE_RULE =
-	"- Never advance to the next feature while the current feature still has review findings. Stay on the current feature until it is clean or truly blocked.";
-export const FLOW_FINAL_COMPLETION_REVIEW_RULE =
-	"- Before final completion, run broad repo validation, perform the runtime-owned final review matching deliveryPolicy.finalReviewPolicy, fix findings, rerun broad validation, and only then finish with a passing `finalReview`. Choose broad policy for low-risk localized implementation and detailed policy for high-risk, review/review-and-fix, or high-assurance work; the final completion path can be reached by satisfying completionPolicy.minCompletedFeatures even when other plan features remain pending.";
-export const FLOW_NO_INFERRED_GOAL_RULE =
-	"- Do not derive, infer, or invent a new goal from repository inspection when invoked without a goal and no active session exists.";
-export const FLOW_RESUME_ONLY_RULE =
-	"- When invoked with empty input or `resume`, treat the command as resume-only. If no active session exists, stop and request a goal instead of creating one.";
-export const FLOW_STRUCTURED_RECOVERY_RULE =
-	"- When tool errors include structured recovery metadata, satisfy `recovery.prerequisite` first. Only call canonical `recovery.nextRuntimeTool` values when present. Treat `recovery.nextCommand` as guidance. Recovery examples (including `exampleReviewScopeLedger`) are scaffold-only, never replay evidence. After repeated same-category reviewScopeLedger failures, inspect flow_status or recovery details and repair evidenceRefs before retrying.";
-export const FLOW_RUNTIME_STATE_TRANSITION_RULE =
-	"- Use Flow runtime tools for every state transition.";
-export const FLOW_COORDINATOR_ROLE_ROUTING_RULE =
-	"- Use flow-planner for plan creation, flow-worker for implementation plus validation, and flow-reviewer for approval instead of restating their full instructions yourself.";
-export const FLOW_SUBAGENT_SUBJECT_GROUP_SPLIT_RULE =
-	"- Use Task/subagent handoffs for independent, bounded, role-appropriate subject groups that benefit from isolated context. Do not split tiny sequential steps, same-file chains, or tightly shared-context work just to create extra subagents.";
 export const FLOW_HANDOFF_MODE_DECISION_RULE =
 	"- Handoff decision: for each planning, execution, and review phase that flow-auto owns, choose handoffMode exactly as `task_subagent`, `inline_role`, or `not_supported`. Use `task_subagent` only for an actual OpenCode Task/subagent handoff to the target role; use `inline_role` for tiny, sequential, or tightly shared-context work; use `not_supported` when Task is unavailable, denied, or not permission-allowed.";
 export const FLOW_HANDOFF_MODE_PROGRESS_RULE =
 	"- Handoff reporting: before each planning, execution, or review phase, report `Phase: <phase> — handoffMode: <task_subagent|inline_role|not_supported> — target: <role> — reason: <...>`. Prefer `task_subagent` for non-trivial bounded planning/execution/review when supported; prefer `inline_role` for tiny/sequential/shared-context work; use `not_supported` when Task is unavailable/denied; derived task-progress rows are runtime projections, not proof of actual child sessions.";
-export const FLOW_TASK_HANDOFF_RULE =
-	"- When OpenCode task/subagent invocation is available, use the Task tool to hand read-only planning research to flow-planning-researcher, bounded planning to flow-planner, implementation to flow-worker, and review to flow-reviewer so each role works in a fresh child context and reports back with artifacts, validation, and blockers. Apply the handoffMode vocabulary exactly: `task_subagent` for actual Task handoffs, `inline_role` for tiny sequential/shared-context work, and `not_supported` when Task is unavailable or denied. Treat flow-reviewer and audit/review surfaces as leaf reporting roles by default; do not recurse delegation unless a concrete independent subproblem materially benefits. Handoffs do not replace runtime ownership: persist state changes only through Flow runtime tools and never edit .flow files directly.";
 export const FLOW_WORKER_REVIEW_TASK_RULE =
 	"- When OpenCode task/subagent invocation is available, ask flow-reviewer through the Task tool for an independent review in a fresh child context instead of performing the approval gate in the same worker context. This is a direct approval handoff, not recursive delegation by default; if Task is unavailable or denied, report the review with handoffMode exactly as `inline_role` for inline approval fallback or `not_supported` when Task is unavailable or denied instead of implying a child session.";
-export const FLOW_PERSIST_REVIEWER_DECISIONS_RULE =
-	"- Persist every reviewer decision through the canonical feature or final review-record runtime tool before deciding whether to continue, fix, block, or complete.";
-export const FLOW_RESOLVE_RUNTIME_ERRORS_RULE =
-	"- Treat runtime contract errors, completion gating failures, and failing validation as work to resolve, not stop conditions.";
-export const FLOW_OPERATOR_PROGRESS_RULE =
-	"- Keep the user informed with concise operator progress updates at phase boundaries this mode owns: say the current phase, the immediate action, and why it matters in one short sentence before starting a major phase; after each phase, summarize the outcome/evidence and next step. Progress updates are assistant prose only; never include progress narration inside worker-result, reviewer-decision, or `finalReview` fields. Do not dump raw tool JSON or narrate every minor file read/tool call.";
-export const FLOW_OPERATOR_PROGRESS_CHECKPOINTS = `Operator progress checkpoints:
-- Start: classify the request or active session state.
-- Planning: summarize the repo evidence being gathered and the plan/approval outcome.
-- Execution: name the active feature and the implementation focus before edits.
-- Validation: state the validation command or evidence target before running it, then report pass/fail.
-- Review: state whether feature or final review is happening, then report approval/fix/blocker outcome.
-- Recovery/reset: explain the blocker, prerequisite, canonical runtime action, and retry plan.
-- Finalization: summarize completion status, remaining risk, and the runtime next step.`;
-
-export const FLOW_ENGINEERING_QUALITY_RULE =
-	"- Apply the repo's coding guidelines before completion: prefer deletion/reuse over new layers, keep diffs small, use existing scripts and utilities, inspect existing logging/telemetry/CLI-output patterns before changing `console.*`, classify each occurrence, remove only temporary debug noise, replace intentional operator/observability signals with the repo's existing logger, telemetry API, injected logger, or explicit stdout/stderr stream writes while preserving severity, message intent, and key context, if no facility exists add the smallest local injected adapter or report a blocker instead of inventing a dependency, and add or update tests for behavior changes.";
-export const FLOW_RELEASE_HYGIENE_REVIEW_RULE =
-	"- Treat release hygiene as a review gate: do not approve work that leaves raw console calls, debugger statements, or undocumented debug-only instrumentation in release-bound source or build artifacts, do not approve changes that delete intentional operator/observability signals without evidence of an equivalent logger, telemetry, or stdout/stderr replacement preserving severity, message intent, and key context, and do not approve a new logging or telemetry dependency unless it was explicitly approved.";
-export const FLOW_REVIEW_CONTEXT_DISCOVERY_RULE =
-	"- Treat changed files as the review seed, not the boundary: include connected context discovered through callers/callees, state or lifecycle owners, architectural neighbors, tests, and validation evidence; distinguish directly changed files from connected context and report coverage gaps/validation limits explicitly.";
-export const FLOW_CONTEXT_GATHERING_RUNTIME_RULE =
-	"- Treat context gathering as a Flow-wide runtime contract: gather or reuse source-backed evidence before planning, execution, or review claims; persist durable repo evidence through planning.evidencePackets/sourceRefs when it should survive across commands; changed files are seeds, not boundaries; control/status surfaces only report existing context.";
-export const FLOW_CONTEXT_GATHERING_READONLY_RULE =
-	"- Treat context gathering as a read-only evidence contract: gather or reuse source-backed evidence before planning or review claims; return durable repo evidence as evidencePackets/sourceRefs for the planner, coordinator, or runtime owner to persist; changed files are seeds, not boundaries; control/status surfaces only report existing context.";
-export const FLOW_ADVERSARIAL_FAILURE_MODE_REVIEW_RULE =
-	"- Review changed behavior through applicable adversarial failure-mode classes before approving: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-evidence authenticity. Treat changed files as review seeds, not boundaries. When a class is applicable, cite the concrete path checked in summary, integrationChecks, regressionChecks, blockingFindings, followUps, or suggestedValidation; when it is not applicable, do not force a finding. For final reviews, record truly required behavior classes in behaviorChecks as passed or gap_recorded, map relied-on validation through validationCoverage, and omit non-required behavior classes instead of padding them with not_applicable entries.";
-export const FLOW_STACK_STANDARDS_PROFILE_RUNTIME_RULE =
-	"- Treat planning.stackProfile and planning.standardsProfile as the runtime-owned stack and standards profile: local repo guidance outranks official docs, official docs outrank broader Exa/websearch guidance, resolve planning.standardsProfile.gaps by using available MCP tools first (Ref MCP for official docs, Exa for current ecosystem best-practice synthesis), and websearch/webfetch only as fallback; record researched sources and resulting rules through flow_plan_context_record; keep external guidance bounded to the detected stack and never change package/dependency versions from standards research alone.";
-export const FLOW_STACK_STANDARDS_PROFILE_READONLY_RULE =
-	"- Treat planning.stackProfile and planning.standardsProfile as runtime-owned stack and standards profiles: local repo guidance outranks official docs, official docs outrank broader Exa/websearch guidance, resolve standards gaps with available source-backed research, return researched sources and resulting rules for the planner, coordinator, or runtime owner to persist, keep external guidance bounded to the detected stack, and never change package/dependency versions from standards research alone.";
-
-export const FLOW_PACKAGE_MANAGER_PRIMARY_CONTRACT_RULE =
-	"- Treat existing package.json scripts as the primary execution contract; invoke them through the detected package manager or the repo's established script-running convention. Package-manager detection is supporting evidence. Do not assume Bun unless repo evidence says Bun.";
-export const FLOW_PACKAGE_MANAGER_AMBIGUITY_PLAN_RULE =
-	"- If package-manager evidence is ambiguous, do not guess. Prefer existing package.json scripts and call out the ambiguity in planning context.";
-export const FLOW_PACKAGE_MANAGER_PRIMARY_VALIDATION_RULE =
-	"- Use existing package.json scripts first for validation/build/test, invoked through the detected package manager or the repo's established script-running convention. Use raw manager-specific commands or direct tool binaries only when scripts do not cover the needed check. Do not default to Bun in non-Bun repos.";
-export const FLOW_PACKAGE_MANAGER_AMBIGUITY_EXECUTION_RULE =
-	"- If package-manager evidence is ambiguous, do not guess a manager-specific command when an existing package.json script covers the task.";
-export const FLOW_PACKAGE_MANAGER_PRIMARY_COORDINATOR_RULE =
-	"- Treat existing package.json scripts as primary and invoke them through the detected package manager or the repo's established script-running convention. Treat package-manager detection as supporting evidence instead of assuming Bun.";
-export const FLOW_PACKAGE_MANAGER_AMBIGUITY_COORDINATOR_RULE =
-	"- If package-manager evidence is ambiguous, do not invent a manager-specific command; use existing scripts first and surface the ambiguity clearly if scripts are insufficient.";
-export const FLOW_FINAL_COMPLETION_COMMAND_RULE =
-	"- On the final completion path, run broad validation, obtain the runtime-owned final approval matching deliveryPolicy.finalReviewPolicy through `flow_review_record_final`, include a passing `finalReview`, and only then persist the result through `flow_run_complete_feature`.";
-export const FLOW_FINAL_COMPLETION_WORKER_STEP_RULE =
-	"On the final completion path, run broad validation, ask flow-reviewer for the final review matching deliveryPolicy.finalReviewPolicy, and persist that approval with the canonical final-review runtime tool using the direct reviewer decision object.";
-export const FLOW_FINAL_COMPLETION_AUTO_STEP_RULE =
-	"On the final completion path, have flow-worker run broad validation, use flow-reviewer for the final review matching deliveryPolicy.finalReviewPolicy, persist it with the canonical final-review runtime tool using the direct reviewer decision object, and keep fixing/revalidating until the final review passes.";
-export const FLOW_FINAL_REVIEW_RERECORD_BOUNDED_RETRY_RULE =
-	"- After `flow_review_record_final` returns `ok`, do not re-record the same final review. Retry only when `flow_review_record_final` errors or `flow_run_complete_feature` recovery requires `final_reviewer_decision`; then submit a corrected evidence-grounded decision, never an identical decision or unchanged scaffold.";
-export const FLOW_SINGLETON_RUNTIME_RETRY_RULE =
-	"- Treat runtime tool metadata as request progress, not persisted state. After the singleton plan-approval, execution-start, or review state transition returns ok, do not repeat the same runtime call unless the tool response was lost, flow_status shows the state is still missing, or structured recovery explicitly requires that transition/artifact. For a lost-response execution-start retry, an implicit flow_run_start may return an already-running/no-state-change ok; treat that as confirmation and continue, not permission to start another feature. This does not apply to repeatable planning context/evidence recording such as flow_plan_context_record when new evidence should be persisted. Do not repeat history-appending completion calls without new worker evidence.";

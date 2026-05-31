@@ -87,7 +87,7 @@ export type SummarizedSessionDetails = {
 	featureLines: string[];
 };
 
-export type SessionViewModel = {
+type SessionViewModel = {
 	status: string;
 	summary: string;
 	session: SummarizedSessionDetails | null;
@@ -276,8 +276,4 @@ export function explainSessionState(session: Session | null): SessionGuidance {
 }
 
 export type { SessionOperatorState } from "./session-operator-state";
-export {
-	deriveExecutionLane,
-	deriveNextCommand,
-	deriveSessionOperatorState,
-} from "./session-operator-state";
+export { deriveNextCommand } from "./session-operator-state";

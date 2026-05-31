@@ -35,18 +35,18 @@ Usage:
 Options:
   --help           Show this message`;
 
-export interface ResolveInstallTargetOptions {
+interface ResolveInstallTargetOptions {
 	homeDir?: string;
 	filename?: string;
 }
 
-export interface InstallBuiltPluginOptions {
+interface InstallBuiltPluginOptions {
 	sourceFile: string;
 	destinationFile: string;
 	logger?: (message: string) => void;
 }
 
-export interface InstallCommandDependencies {
+interface InstallCommandDependencies {
 	build?: () => Promise<void>;
 	cwd?: string;
 	homeDir?: string;
@@ -87,7 +87,7 @@ export function resolveInstallTarget({
 	return join(homeDir, ...CANONICAL_OPENCODE_PLUGIN_DIRECTORY, filename);
 }
 
-export function writeStdoutLine(message: string): void {
+function writeStdoutLine(message: string): void {
 	process.stdout.write(`${message}\n`);
 }
 

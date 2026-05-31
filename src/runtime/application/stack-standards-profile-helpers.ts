@@ -34,7 +34,7 @@ export function addRule(
 	profile.rules.push({ summary, sourceRefs, priority });
 }
 
-export function addGap(
+function addGap(
 	profile: StandardsProfile,
 	stackItem: string,
 	reason: string,

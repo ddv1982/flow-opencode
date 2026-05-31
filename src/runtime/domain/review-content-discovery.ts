@@ -13,26 +13,14 @@ import {
 } from "./review-context-normalization";
 
 export {
-	deriveReviewContextPackSurfaces,
 	describeReviewContextPackGroundingFailure,
 	reviewContextPackHasSurfaceEvidence,
-	surfacesForReviewDiscoveryReason,
 } from "./review-context-grounding";
 export type {
 	ReviewContextPack,
-	ReviewContextPackGroundingEvidence,
 	ReviewContextPackInput,
-	ReviewContextRelationship,
-	ReviewDiscoveryReason,
-	ReviewDiscoverySurface,
-	ReviewIncludedContext,
-	ReviewIncludedContextInput,
-	ReviewValidationEvidence,
 } from "./review-context-normalization";
-export {
-	normalizeReviewDiscoveryReason,
-	REVIEW_DISCOVERY_REASONS,
-} from "./review-context-normalization";
+export { REVIEW_DISCOVERY_REASONS } from "./review-context-normalization";
 
 export function buildReviewContextPack(
 	input: ReviewContextPackInput,

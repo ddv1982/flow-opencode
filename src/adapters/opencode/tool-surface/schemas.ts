@@ -6,8 +6,8 @@ import {
 	FEATURE_ID_PATTERN,
 } from "../../../runtime/constants";
 import {
+	FinalReviewerDecisionSchema as RuntimeFinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgsSchema as RuntimeFlowReviewRecordFinalArgsSchema,
 	OutcomeSchema as RuntimeOutcomeSchema,
 	PlanArgsSchema as RuntimePlanArgsSchema,
 	PlanningContextArgsSchema as RuntimePlanningContextArgsSchema,
@@ -28,8 +28,8 @@ export type ToolContext = WorkspaceContext &
 		metadata?: OpenCodeToolContext["metadata"];
 		ask?: OpenCodeToolContext["ask"];
 	};
-export const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
-export const featureIdSchema = z
+const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
+const featureIdSchema = z
 	.string()
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
 
@@ -71,7 +71,7 @@ export const FlowRunCompleteFeatureArgsShape = {
 export const FlowReviewRecordFeatureArgsShape =
 	RuntimeFlowReviewRecordFeatureArgsSchema.shape;
 export const FlowReviewRecordFinalArgsShape =
-	RuntimeFlowReviewRecordFinalArgsSchema.shape;
+	RuntimeFinalReviewerDecisionSchema.shape;
 export const FlowReviewRenderArgsShape = {
 	...ReviewReportSchema.shape,
 	view: z.enum(["human", "structured", "both"]).optional(),
@@ -101,12 +101,6 @@ export const FlowResetFeatureArgsShape = {
 };
 
 export const WorkerResultArgsSchema = RuntimeWorkerResultArgsSchema;
-export const RuntimeWorkerResultBaseShape = RuntimeWorkerResultBaseSchema.shape;
-export const RuntimeFlowReviewRecordFeatureArgsShape =
-	RuntimeFlowReviewRecordFeatureArgsSchema.shape;
-export const RuntimeFlowReviewRecordFinalArgsShape =
-	RuntimeFlowReviewRecordFinalArgsSchema.shape;
-
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
 export const FlowDoctorArgsSchema = z.object(FlowDoctorArgsShape);
 export const FlowHistoryArgsSchema = z.object(FlowHistoryArgsShape);
@@ -120,13 +114,9 @@ export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
 export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
 export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
 export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
-export const FlowRunCompleteFeatureArgsSchema = z.object(
-	FlowRunCompleteFeatureArgsShape,
-);
 export const FlowReviewRecordFeatureArgsSchema =
 	RuntimeFlowReviewRecordFeatureArgsSchema;
-export const FlowReviewRecordFinalArgsSchema =
-	RuntimeFlowReviewRecordFinalArgsSchema;
+export const FinalReviewerDecisionSchema = RuntimeFinalReviewerDecisionSchema;
 export const FlowReviewRenderArgsSchema = z.object(FlowReviewRenderArgsShape);
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
 
@@ -231,7 +221,7 @@ export const FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY = {
 	},
 	flow_review_record_final: {
 		argsShape: FlowReviewRecordFinalArgsShape,
-		argsSchema: FlowReviewRecordFinalArgsSchema,
+		argsSchema: FinalReviewerDecisionSchema,
 		payloadSchemaOwners: [
 			"src/adapters/opencode/tool-surface/schemas.ts",
 			"src/runtime/schema.ts",

@@ -21,7 +21,7 @@ function isDirectlyReviewedWithEvidence(surface: ReviewSurface): boolean {
 	);
 }
 
-export type ReviewCoverageSummary = {
+type ReviewCoverageSummary = {
 	directlyReviewed: ReviewSurface[];
 	directlyReviewedWithEvidence: ReviewSurface[];
 	spotChecked: ReviewSurface[];

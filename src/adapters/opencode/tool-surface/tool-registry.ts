@@ -309,7 +309,7 @@ export function openCodeToolDescription(toolName: string): string {
 	return entry.hostDescription;
 }
 
-export function openCodeToolRuntimeBinding(
+function openCodeToolRuntimeBinding(
 	toolName: RuntimeBoundOpenCodeToolName,
 ): Exclude<RuntimeActionBinding, { kind: "none" }> {
 	const entry = getOpenCodeToolRegistryEntry(toolName);

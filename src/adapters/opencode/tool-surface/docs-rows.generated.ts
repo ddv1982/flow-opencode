@@ -23,7 +23,3 @@ export const FLOW_TOOL_DOCS_ROWS: readonly FlowToolDocsRow[] =
 				]
 			: [],
 	);
-
-export function renderFlowToolDocsRow(row: FlowToolDocsRow): string {
-	return `- \`${row.toolName}\` — ${row.description}`;
-}

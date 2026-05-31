@@ -61,27 +61,24 @@ export const FLOW_CORE_COMMAND_NAMES = [
 
 export const FLOW_CORE_QUERY_NAMES = SESSION_READ_ACTION_NAMES;
 
-export type FlowCoreCommandName =
+type FlowCoreCommandName =
 	| SessionWorkspaceActionName
 	| SessionMutationActionName;
-export type FlowCoreQueryName = SessionReadActionName;
+type FlowCoreQueryName = SessionReadActionName;
 
-export type FlowCoreCommandPayloadMap = SessionWorkspacePayloadMap &
-	SessionMutationPayloadMap;
-export type FlowCoreCommandValueMap = SessionWorkspaceValueMap &
-	SessionMutationValueMap;
-export type FlowCoreQueryPayloadMap = SessionReadPayloadMap;
-export type FlowCoreQueryValueMap = SessionReadValueMap;
+type FlowCoreQueryPayloadMap = SessionReadPayloadMap;
 
-export type FlowCoreCommandResult<Name extends FlowCoreCommandName> =
+type FlowCoreCommandResult<Name extends FlowCoreCommandName> =
 	Name extends SessionWorkspaceActionName
 		? SessionWorkspaceResult<SessionWorkspaceValueMap[Name], Name>
 		: Name extends SessionMutationActionName
 			? SessionMutationResult<SessionMutationValueMap[Name], Name>
 			: never;
 
-export type FlowCoreQueryResult<Name extends FlowCoreQueryName> =
-	SessionReadResult<SessionReadValueMap[Name], Name>;
+type FlowCoreQueryResult<Name extends FlowCoreQueryName> = SessionReadResult<
+	SessionReadValueMap[Name],
+	Name
+>;
 
 const FLOW_CORE_WORKSPACE_COMMAND_NAME_SET = new Set<string>(
 	SESSION_WORKSPACE_ACTION_NAMES,

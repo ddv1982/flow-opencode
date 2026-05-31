@@ -15,8 +15,8 @@ import { FLOW_SURFACE_DESCRIPTORS } from "../../src/adapters/opencode/tool-surfa
 import { FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY } from "../../src/adapters/opencode/tool-surface/schemas";
 import { type CoreActionName, coreActionByName } from "../../src/core/registry";
 import {
+	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
-	FlowReviewRecordFinalArgsSchema,
 	PlanArgsSchema,
 	PlanningContextArgsSchema,
 	WorkerResultArgsSchema,
@@ -397,13 +397,13 @@ describe("tool schema config contracts", () => {
 		};
 		expectAdapterRuntimeAgreement(
 			schemas.flow_review_record_final,
-			FlowReviewRecordFinalArgsSchema,
+			FinalReviewerDecisionSchema,
 			validFinalReview,
 			true,
 		);
 		expectAdapterRuntimeAgreement(
 			schemas.flow_review_record_final,
-			FlowReviewRecordFinalArgsSchema,
+			FinalReviewerDecisionSchema,
 			{ ...validFinalReview, evidenceRefs: undefined },
 			false,
 		);
@@ -642,7 +642,7 @@ describe("tool schema config contracts", () => {
 		expect(
 			schemas.flow_review_record_final.safeParse(finalReview).success,
 		).toBe(true);
-		expect(FlowReviewRecordFinalArgsSchema.safeParse(finalReview).success).toBe(
+		expect(FinalReviewerDecisionSchema.safeParse(finalReview).success).toBe(
 			true,
 		);
 		expect(
@@ -650,8 +650,7 @@ describe("tool schema config contracts", () => {
 				.success,
 		).toBe(false);
 		expect(
-			FlowReviewRecordFinalArgsSchema.safeParse(compactContextFinalReview)
-				.success,
+			FinalReviewerDecisionSchema.safeParse(compactContextFinalReview).success,
 		).toBe(false);
 		expect(
 			schemas.flow_run_complete_feature.safeParse(workerResultWithFinalReview)

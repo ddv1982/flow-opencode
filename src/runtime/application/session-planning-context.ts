@@ -1,4 +1,1 @@
-export {
-	mergeEvidencePackets,
-	mergePlanningContext,
-} from "../domain/planning-context";
+export { mergePlanningContext } from "../domain/planning-context";

@@ -9,11 +9,7 @@ export {
 	type ReviewScopeRecoveryDetails,
 } from "./review-scope-recovery";
 export {
-	declaredReviewScopeForCompletion,
-	declaredReviewScopeForFeature,
 	declaredReviewScopeForPlan,
 	isReviewScopeAccountingRequired,
-	type ReviewScopeLedgerEntry,
-	type ReviewScopeTarget,
 	validatePlanReviewScopeDeclaration,
 } from "./review-scope-targets";

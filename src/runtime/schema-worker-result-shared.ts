@@ -9,8 +9,8 @@ import {
 } from "./constants";
 import { FollowUpSchema } from "./schema-review-shared";
 
-export const ValidationStatusSchema = z.enum(VALIDATION_STATUSES);
-export const OutcomeKindSchema = z.enum(OUTCOME_KINDS);
+const ValidationStatusSchema = z.enum(VALIDATION_STATUSES);
+const OutcomeKindSchema = z.enum(OUTCOME_KINDS);
 
 export const ArtifactSchema = z.object({
 	path: z.string().min(1),
@@ -27,7 +27,7 @@ export const DecisionSchema = z.object({
 	summary: z.string().min(1),
 });
 
-export const NoteSchema = z.object({
+const NoteSchema = z.object({
 	note: z.string().min(1),
 });
 

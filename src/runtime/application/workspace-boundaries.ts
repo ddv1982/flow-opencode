@@ -38,10 +38,7 @@ export function resolveWorkspaceStartDirectory(
 		: resolvedRoot;
 }
 
-export function isWithinWorkspaceRoot(
-	root: string,
-	candidate: string,
-): boolean {
+function isWithinWorkspaceRoot(root: string, candidate: string): boolean {
 	const pathFromRoot = relative(root, candidate);
 	return (
 		pathFromRoot === "" ||

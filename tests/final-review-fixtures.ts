@@ -1,6 +1,6 @@
 import type { Session, WorkerResult } from "../src/runtime/schema";
 
-export const CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT =
+const CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT =
 	"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.";
 
 const DEFAULT_REVIEWED_SURFACES: NonNullable<
@@ -25,12 +25,6 @@ type FinalReviewOverrides = Partial<FinalReviewPayload> & {
 type FinalReviewerDecisionOverrides = Partial<FinalReviewerDecision> & {
 	evidenceRefs?: Partial<FinalReviewerDecision["evidenceRefs"]>;
 };
-
-type ReviewScopeLedgerEntry = NonNullable<
-	FinalReviewerDecision["reviewScopeLedger"]
->[number];
-
-type ReviewScopeLedgerEntryOverrides = Partial<ReviewScopeLedgerEntry>;
 
 function finalReviewBase(): Omit<FinalReviewPayload, "status"> {
 	return {
@@ -63,18 +57,6 @@ export function createFinalReviewPayload(
 			...DEFAULT_EVIDENCE_REFS,
 			...overrides.evidenceRefs,
 		},
-	};
-}
-
-export function createReviewScopeLedgerEntry(
-	overrides: ReviewScopeLedgerEntryOverrides = {},
-): ReviewScopeLedgerEntry {
-	return {
-		scopeId: "feature:runtime-session",
-		status: "reviewed_no_findings",
-		evidenceRefs: ["tests/final-review-fixtures.ts"],
-		residualRisk: "No additional risk identified by fixture coverage.",
-		...overrides,
 	};
 }
 

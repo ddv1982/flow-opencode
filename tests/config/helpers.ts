@@ -4,13 +4,13 @@ import { join } from "node:path";
 import { tool } from "../../src/adapters/opencode/sdk";
 import { createTools } from "../../src/adapters/opencode/tools";
 
-export type AgentTools = {
+type AgentTools = {
 	edit?: boolean;
 	write?: boolean;
 	bash?: boolean;
 };
 
-export type AgentPermission = {
+type AgentPermission = {
 	edit?: string;
 	bash?: string;
 	external_directory?: string;
@@ -38,7 +38,7 @@ export type MutableConfig = {
 	command?: Record<string, CommandConfigShape>;
 };
 
-export type ToolDefinition = {
+type ToolDefinition = {
 	args: Record<string, unknown>;
 };
 
@@ -83,18 +83,6 @@ export function getToolSchemas() {
 			]),
 		) as ToolSchemas,
 	};
-}
-
-export function expectInOrder(content: string, snippets: string[]) {
-	let previousIndex = -1;
-
-	for (const snippet of snippets) {
-		const index = content.indexOf(snippet);
-
-		expect(index).toBeGreaterThan(-1);
-		expect(index).toBeGreaterThan(previousIndex);
-		previousIndex = index;
-	}
 }
 
 export function expectNoFlowManagedCompaction(content: string) {

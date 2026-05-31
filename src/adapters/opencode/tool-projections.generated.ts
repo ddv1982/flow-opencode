@@ -1,9 +1,6 @@
 import type { CoreActionName } from "../../core/registry";
 import { renderOpenCodeToolCoreSummary } from "./tool-surface/core-action-projection";
-import {
-	OPENCODE_TOOL_REGISTRY,
-	openCodeToolDescription as registryToolDescription,
-} from "./tool-surface/tool-registry";
+import { OPENCODE_TOOL_REGISTRY } from "./tool-surface/tool-registry";
 
 // NOTE: kept as *.generated.ts for import stability; projections are registry-derived
 // and parity-tested in tests/descriptor-family-parity.test.ts.
@@ -57,10 +54,6 @@ export function getOpenCodeToolProjection(
 			(projection) => projection.toolName === toolName,
 		) ?? null
 	);
-}
-
-export function openCodeToolDescription(toolName: string): string {
-	return registryToolDescription(toolName);
 }
 
 export function openCodeToolCoreSummary(toolName: string): string | null {

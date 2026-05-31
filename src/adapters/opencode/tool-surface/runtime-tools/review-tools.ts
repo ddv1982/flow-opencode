@@ -8,9 +8,9 @@ import { toJson } from "../../../../runtime/application/workspace-runtime";
 import { tool } from "../../sdk";
 import { withParsedArgs } from "../parsed-tool";
 import {
+	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
 	FlowReviewRecordFeatureArgsShape,
-	FlowReviewRecordFinalArgsSchema,
 	FlowReviewRecordFinalArgsShape,
 	FlowReviewRenderArgsSchema,
 	FlowReviewRenderArgsShape,
@@ -72,7 +72,7 @@ export function createReviewRuntimeTools() {
 			description: openCodeToolDescription("flow_review_record_final"),
 			args: FlowReviewRecordFinalArgsShape,
 			execute: withParsedArgs(
-				FlowReviewRecordFinalArgsSchema,
+				FinalReviewerDecisionSchema,
 				async (input, context: ToolContext) => {
 					context.metadata?.({
 						title: `Final reviewer requested ${input.status} — pending Flow persistence`,

@@ -1,18 +1,18 @@
 import { z } from "zod";
 import { VALIDATION_STATUSES } from "./constants";
 
-export const EvidencePacketValidationStatusSchema = z.enum([
+const EvidencePacketValidationStatusSchema = z.enum([
 	...VALIDATION_STATUSES,
 	"not_run",
 ] as const);
 
-export const EvidencePacketValidationRunSchema = z.object({
+const EvidencePacketValidationRunSchema = z.object({
 	command: z.string().min(1),
 	status: EvidencePacketValidationStatusSchema,
 	summary: z.string().min(1),
 });
 
-export const EvidencePacketPurposeSchema = z.enum([
+const EvidencePacketPurposeSchema = z.enum([
 	"planning",
 	"review",
 	"audit",
@@ -20,14 +20,14 @@ export const EvidencePacketPurposeSchema = z.enum([
 	"general",
 ]);
 
-export const FLOW_CONTEXT_PRODUCER_LANES = [
+const FLOW_CONTEXT_PRODUCER_LANES = [
 	"planning",
 	"auto_planning",
 	"execution",
 	"review",
 ] as const;
 
-export const FLOW_CONTEXT_CONSUMER_LANES = [
+const FLOW_CONTEXT_CONSUMER_LANES = [
 	"status",
 	"history",
 	"session",
@@ -36,12 +36,12 @@ export const FLOW_CONTEXT_CONSUMER_LANES = [
 	"control",
 ] as const;
 
-export const FLOW_CONTEXT_LANES = [
+const FLOW_CONTEXT_LANES = [
 	...FLOW_CONTEXT_PRODUCER_LANES,
 	...FLOW_CONTEXT_CONSUMER_LANES,
 ] as const;
 
-export const FlowContextLaneSchema = z.enum(FLOW_CONTEXT_LANES);
+const FlowContextLaneSchema = z.enum(FLOW_CONTEXT_LANES);
 
 export const EvidencePacketSchema = z
 	.object({
@@ -66,7 +66,7 @@ export const EvidencePacketSchema = z
 
 export const EvidencePacketArraySchema = z.array(EvidencePacketSchema);
 
-export const EvidencePacketReferenceSchema = z
+const EvidencePacketReferenceSchema = z
 	.object({
 		id: z.string().min(1),
 		purpose: EvidencePacketPurposeSchema.optional(),

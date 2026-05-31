@@ -38,7 +38,7 @@ const REVIEW_DISCOVERY_REASON_SURFACES: Record<
 	validation_evidence: ["validation_evidence"],
 };
 
-export function surfacesForReviewDiscoveryReason(
+function surfacesForReviewDiscoveryReason(
 	reason: ReviewDiscoveryReason,
 ): ReviewDiscoverySurface[] {
 	return [...REVIEW_DISCOVERY_REASON_SURFACES[reason]];

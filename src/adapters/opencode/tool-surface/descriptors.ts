@@ -277,11 +277,3 @@ export const FLOW_HOST_TOOL_SURFACE_DESCRIPTORS =
 		(descriptor): descriptor is FlowHostToolSurfaceDescriptor =>
 			descriptor.hostToolName !== null,
 	);
-
-export function getFlowSurfaceDescriptor(
-	id: string,
-): FlowSurfaceDescriptor | null {
-	return (
-		FLOW_SURFACE_DESCRIPTORS.find((descriptor) => descriptor.id === id) ?? null
-	);
-}

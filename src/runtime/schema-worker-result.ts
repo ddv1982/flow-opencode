@@ -71,12 +71,12 @@ export const WorkerResultSchema = z
 		addReplanRequiredIssueIfNeeded(value, context);
 	});
 
-export const WorkerResultOkArgsSchema = WorkerResultBaseSchema.extend({
+const WorkerResultOkArgsSchema = WorkerResultBaseSchema.extend({
 	status: z.literal("ok"),
 	outcome: OutcomeSchema.optional(),
 });
 
-export const WorkerResultNeedsInputArgsSchema = WorkerResultBaseSchema.extend({
+const WorkerResultNeedsInputArgsSchema = WorkerResultBaseSchema.extend({
 	status: z.literal("needs_input"),
 	outcome: OutcomeSchema,
 });
