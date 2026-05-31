@@ -307,6 +307,9 @@ describe("plugin config surface", () => {
 				"Flow cached planning profile: stack TypeScript | standards cached rule",
 				"Flow runtime context (derived from persisted session state; authoritative for current workflow state):",
 				'- goal: "stale system goal"',
+				"- summary: stale implementation summary",
+				"- next step: stale next step",
+				"- standards profile: stale standards profile",
 				"- retained non-Flow system bullet.",
 			],
 		};
@@ -317,6 +320,10 @@ describe("plugin config surface", () => {
 				"Flow planning profile: stack TypeScript | standards stale rule",
 				"Flow runtime context (derived from persisted session state; authoritative for current workflow state):",
 				'- goal: "stale persisted goal"',
+				"- summary: stale compacting summary",
+				"- next step: stale compacting next step",
+				"- next command: /flow-run complete",
+				"- latest validation: stale validation",
 				'- next action: "stale action" | command: "/flow-status"',
 				"- retained non-Flow handoff bullet.",
 				"Retained handoff context.",
@@ -350,6 +357,12 @@ describe("plugin config surface", () => {
 			expect(injected).not.toContain("stale persisted goal");
 			expect(injected).not.toContain("stale system goal");
 			expect(injected).not.toContain("stale action");
+			expect(injected).not.toContain("stale implementation summary");
+			expect(injected).not.toContain("stale compacting summary");
+			expect(injected).not.toContain("stale next step");
+			expect(injected).not.toContain("stale compacting next step");
+			expect(injected).not.toContain("/flow-run complete");
+			expect(injected).not.toContain("stale validation");
 			expect(injected).not.toContain("Flow planning profile:");
 			expect(injected).not.toContain("stack profile");
 			expect(injected).not.toContain("standards profile");

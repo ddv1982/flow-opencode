@@ -45,6 +45,12 @@ const FLOW_RUNTIME_CONTEXT_BULLET_PREFIXES = [
 	"- blocker:",
 	"- recovery:",
 	"- next action:",
+	// Prior compact-context bullets emitted before the adapter-first rebuild.
+	"- summary:",
+	"- next step:",
+	"- next command:",
+	"- latest validation:",
+	"- standards profile:",
 ];
 
 function isFlowManagedContextLine(entry: string): boolean {
