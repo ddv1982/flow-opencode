@@ -34,6 +34,78 @@ const FindingCategorySchema = z.enum([
 ]);
 const FindingConfidenceSchema = z.enum(["confirmed", "likely", "speculative"]);
 const FindingSeveritySchema = z.enum(["high", "medium", "low"]);
+const ContextArtifactKindSchema = z.enum([
+	"file_map",
+	"selection",
+	"validation_log",
+	"other",
+]);
+
+function isSafeRelativeSourcePath(path: string): boolean {
+	if (path.trim() !== path || path.length === 0) {
+		return false;
+	}
+	if (
+		path.startsWith("/") ||
+		path.startsWith("~") ||
+		/^[a-zA-Z]:[\\/]/.test(path) ||
+		/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)
+	) {
+		return false;
+	}
+	const segments = path.split(/[\\/]+/);
+	return segments.every((segment) => segment.length > 0 && segment !== "..");
+}
+
+const RelativeSourcePathSchema = z
+	.string()
+	.min(1)
+	.refine(isSafeRelativeSourcePath, {
+		message:
+			"Source paths must be relative to the reviewed repository root and must not traverse outside it.",
+	});
+
+const ReviewTargetSchema = z
+	.object({
+		repoRoot: z.string().min(1),
+		repoName: z.string().min(1),
+		gitHead: z.string().min(1).optional(),
+		gitBranch: z.string().min(1).optional(),
+		generatedAt: z.string().min(1),
+		invokedFromCwd: z.string().min(1),
+	})
+	.strict();
+
+const ReviewContextArtifactSchema = z
+	.object({
+		kind: ContextArtifactKindSchema,
+		repoRoot: z.string().min(1),
+		source: z.string().min(1).optional(),
+		summary: z.string().min(1).optional(),
+	})
+	.strict();
+
+const FindingLocationSchema = z
+	.object({
+		path: RelativeSourcePathSchema,
+		startLine: z.number().int().positive().optional(),
+		endLine: z.number().int().positive().optional(),
+		reason: z.string().min(1).optional(),
+	})
+	.strict()
+	.superRefine((location, ctx) => {
+		if (
+			location.startLine !== undefined &&
+			location.endLine !== undefined &&
+			location.endLine < location.startLine
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["endLine"],
+				message: "Location endLine must be greater than or equal to startLine.",
+			});
+		}
+	});
 
 const ReviewDiscoveredSurfaceSchema = z
 	.object({
@@ -72,6 +144,8 @@ const ReviewFindingSchema = z
 		category: FindingCategorySchema,
 		confidence: FindingConfidenceSchema,
 		severity: FindingSeveritySchema.optional(),
+		primaryLocation: FindingLocationSchema.optional(),
+		relatedLocations: z.array(FindingLocationSchema).optional(),
 		evidence: z.array(z.string().min(1)).min(1),
 		impact: z.string().min(1),
 		remediation: z.string().min(1).optional(),
@@ -112,11 +186,13 @@ const ReviewFindingSchema = z
 
 export const ReviewReportSchema = z
 	.object({
+		reviewTarget: ReviewTargetSchema.optional(),
 		requestedDepth: ReviewDepthSchema,
 		achievedDepth: ReviewDepthSchema,
 		repoSummary: z.string().min(1),
 		overallVerdict: z.string().min(1),
 		discoveredSurfaces: z.array(ReviewDiscoveredSurfaceSchema),
+		contextArtifacts: z.array(ReviewContextArtifactSchema).optional(),
 		evidencePackets: EvidencePacketArraySchema.optional(),
 		coverageNotes: z.array(z.string().min(1)).optional(),
 		behaviorChecks: z.array(BehaviorCheckSchema).optional(),
@@ -145,6 +221,28 @@ export const ReviewReportSchema = z
 				code: "custom",
 				message: `Behavior validation coverage: ${reason}`,
 			});
+		}
+		if ((report.contextArtifacts?.length ?? 0) > 0 && !report.reviewTarget) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["reviewTarget"],
+				message:
+					"reviewTarget is required when contextArtifacts are present so artifact provenance can be validated.",
+			});
+		}
+		if (report.reviewTarget) {
+			for (const [index, artifact] of (
+				report.contextArtifacts ?? []
+			).entries()) {
+				if (artifact.repoRoot !== report.reviewTarget.repoRoot) {
+					ctx.addIssue({
+						code: "custom",
+						path: ["contextArtifacts", index, "repoRoot"],
+						message:
+							"Context artifacts must use the same repoRoot as reviewTarget so file maps and evidence cannot silently refer to another repository.",
+					});
+				}
+			}
 		}
 	});
 

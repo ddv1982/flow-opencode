@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "2.0.54",
+	"version": "2.0.55",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",

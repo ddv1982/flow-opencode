@@ -143,6 +143,59 @@ function renderConclusion(report: ReviewReport): string[] {
 	];
 }
 
+function renderReviewTarget(report: ReviewReport): string[] {
+	const target = report.reviewTarget;
+	if (!target) {
+		return [
+			"## Review target",
+			"- Review target metadata was not recorded; verify that file maps and evidence references belong to the intended repository before acting on this report.",
+		];
+	}
+	const contextArtifacts = report.contextArtifacts ?? [];
+	return [
+		"## Review target",
+		`- Repository: ${target.repoName}`,
+		`- Root: ${target.repoRoot}`,
+		...(target.gitBranch ? [`- Branch: ${target.gitBranch}`] : []),
+		...(target.gitHead ? [`- Commit: ${target.gitHead}`] : []),
+		`- Generated at: ${target.generatedAt}`,
+		`- Invoked from: ${target.invokedFromCwd}`,
+		...(contextArtifacts.length > 0
+			? [
+					"- Context artifacts:",
+					...contextArtifacts.map(
+						(artifact) =>
+							`  - ${artifact.kind}: ${artifact.repoRoot}${artifact.source ? ` (${artifact.source})` : ""}${artifact.summary ? ` — ${artifact.summary}` : ""}`,
+					),
+				]
+			: []),
+	];
+}
+
+function locationLabel(
+	location: NonNullable<ReviewReport["findings"][number]["primaryLocation"]>,
+): string {
+	if (location.startLine === undefined) {
+		return location.path;
+	}
+	if (
+		location.endLine === undefined ||
+		location.endLine === location.startLine
+	) {
+		return `${location.path}:${location.startLine}`;
+	}
+	return `${location.path}:${location.startLine}-${location.endLine}`;
+}
+
+function relatedLocationLabel(
+	location: NonNullable<
+		ReviewReport["findings"][number]["relatedLocations"]
+	>[number],
+): string {
+	const label = locationLabel(location);
+	return location.reason ? `${label} — ${location.reason}` : label;
+}
+
 function renderFindings(report: ReviewReport): string[] {
 	const findings = sortFindings(report);
 	if (findings.length === 0) {
@@ -161,6 +214,17 @@ function renderFindings(report: ReviewReport): string[] {
 				.join(" · ");
 			return [
 				`### ${index + 1}. ${finding.title}${labels ? ` — ${labels}` : ""}`,
+				...(finding.primaryLocation
+					? [`- Primary location: ${locationLabel(finding.primaryLocation)}`]
+					: []),
+				...(finding.relatedLocations && finding.relatedLocations.length > 0
+					? [
+							"- Related locations:",
+							...finding.relatedLocations.map(
+								(location) => `  - ${relatedLocationLabel(location)}`,
+							),
+						]
+					: []),
 				`- ${normalizedImpactLabel(finding.category)}: ${normalizedImpactText(finding)}`,
 				...(normalizedRemediation(finding)
 					? [`- Recommendation: ${normalizedRemediation(finding)}`]
@@ -264,6 +328,8 @@ function renderCoverageNotes(report: ReviewReport): string[] {
 function renderHumanReview(report: ReviewReport): string {
 	return [
 		...renderConclusion(report),
+		"",
+		...renderReviewTarget(report),
 		"",
 		...renderFindings(report),
 		"",

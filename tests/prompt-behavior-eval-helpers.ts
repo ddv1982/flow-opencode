@@ -352,6 +352,7 @@ function includesCaseInsensitive(
 function requiredSectionsInOrder(rendered: string): boolean {
 	const sections = [
 		"## Conclusion",
+		"## Review target",
 		"## Top findings",
 		"## Recommended next actions",
 		"## Coverage notes",

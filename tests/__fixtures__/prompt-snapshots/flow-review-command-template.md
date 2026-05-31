@@ -33,17 +33,19 @@ Behavior:
 
 Build an internal review/audit ledger using these fields so coverage stays explicit and internally consistent:
 
+- reviewTarget?: { repoRoot: string, repoName: string, gitHead?: string, gitBranch?: string, generatedAt: string, invokedFromCwd: string }
 - requestedDepth: broad_audit | deep_audit | full_audit
 - achievedDepth: broad_audit | deep_audit | full_audit
 - repoSummary: string
 - overallVerdict: string
 - discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]
+- contextArtifacts?: { kind: file_map | selection | validation_log | other, repoRoot: string, source?: string, summary?: string }[]
 - evidencePackets?: { id: string, purpose?: planning | review | audit | validation | general, summary: string, sourceRefs?: string[], highlights?: string[], selectedContext?: string[], excludedContext?: string[], codemapSummaries?: string[], sliceSummaries?: string[], relationshipHypotheses?: string[], ambiguities?: string[], knownExclusions?: string[], alreadyCoveredFindings?: string[], validationEvidence?: { command: string, status: passed | failed | failed_existing | partial | not_run, summary: string }[] }[]
 - coverageNotes?: string[]
 - behaviorChecks?: { riskClass: async_event_ordering | lifecycle_reentrancy | state_commit_rollback | persistence_recovery | interaction_geometry | accessibility_semantics | test_evidence_authenticity, result: passed | gap_recorded | not_applicable | needs_fix, invariant: string, entrypointRefs?: string[], stateOwnerRefs?: string[], lifecycleOwnerRefs?: string[], failurePath: string, testEvidenceRefs?: string[], validationRefs?: string[], remainingGap?: string }[]
 - validationCoverage?: { command: string, behaviorClasses: (async_event_ordering | lifecycle_reentrancy | state_commit_rollback | persistence_recovery | interaction_geometry | accessibility_semantics | test_evidence_authenticity)[], proves: string[], gaps?: string[], testEvidenceRefs?: string[] }[]
 - validationRun: { command: string, status: passed | failed | partial | not_run, summary: string }[]
-- findings: { title: string, category: confirmed_defect | risk | hardening_opportunity | process_gap, confidence: confirmed | likely | speculative, severity?: high | medium | low, evidence: string[], impact: string, remediation?: string }[]
+- findings: { title: string, category: confirmed_defect | risk | hardening_opportunity | process_gap, confidence: confirmed | likely | speculative, severity?: high | medium | low, primaryLocation?: { path: string, startLine?: number, endLine?: number }, relatedLocations?: { path: string, startLine?: number, endLine?: number, reason?: string }[], evidence: string[], impact: string, remediation?: string }[]
 - nextSteps?: string[]
 
 Review method:
@@ -53,6 +55,7 @@ Review method:
 - For each test surface you directly review, identify what behavior it proves, whether it exercises a normal product path rather than a shortcut-only setup, and what important behavior remains unproved.
 - Prefer findings that explain an observable failure mode, regression path, broken invariant, or missing evidence over generic maintainability advice.
 - Treat a surface as directly_reviewed only when the evidence cites concrete files/lines or artifacts inspected for that surface; use spot_checked when only representative files were sampled.
+- Record reviewTarget for the repository actually reviewed, and record any included file map/selection/validation-log context in contextArtifacts with the same repoRoot. If a file map or context artifact belongs to a different repository than the findings, stop and correct the report instead of mixing them.
 
 Finding taxonomy and confidence rules:
 - Use confirmed_defect only when cited evidence directly supports a current incorrect behavior, broken contract, or failing invariant.
@@ -64,16 +67,18 @@ Finding taxonomy and confidence rules:
 
 Final response rules:
 - Default to a human-readable markdown review, not raw JSON.
-- Begin with these sections in order: Conclusion, Top findings, Recommended next actions, Coverage notes.
+- Begin with these sections in order: Conclusion, Review target, Top findings, Recommended next actions, Coverage notes.
 - In Conclusion, state achieved depth, overall verdict, the main confirmed issue or highest risk, and a clear readiness recommendation when relevant.
 - In Top findings, sort findings by actionability: confirmed_defect first, then risk, then hardening_opportunity, then process_gap; within each category, show higher severity first.
 - Keep evidence concise in the main view: summarize each finding with short bullets and compact file/line references rather than dumping the full ledger.
+- For each code-backed finding, set primaryLocation to the main relative repo path and line range; use relatedLocations for secondary paths. Do not use absolute paths in finding locations.
 - Only include the full structured ledger as JSON when the user explicitly asks for raw/json/structured details.
 - For raw/json/structured-only requests, returning structured output without the human-readable review is allowed.
 - When the user asks for both readable and structured details, place the structured JSON after the human-readable review under a `Structured review data` heading.
 
 Audit rules:
 - treat requestedDepth as the user's requested review strength, but set achievedDepth from actual evidence gathered
+- reviewTarget and contextArtifacts are the provenance ledger for standalone review target identity; keep repoRoot consistent so file maps, selected context, validation logs, and findings cannot refer to different repositories
 - discoveredSurfaces is the canonical coverage ledger for standalone review coverage; derive human-readable coverage summaries from it instead of duplicating the same truth in extra structures
 - when async/lifecycle/state/test-evidence behavior classes are applicable, include behaviorChecks for checked paths or explicit not-applicable/gap outcomes
 - when validation outcomes support conclusions, map those commands through validationCoverage instead of relying on pass/fail labels alone

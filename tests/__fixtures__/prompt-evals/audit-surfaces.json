@@ -101,7 +101,7 @@
 			"discoveredSurfaces: { name: string, category: source_runtime | tests | ci_release | docs_config | tooling | other, reviewStatus: directly_reviewed | spot_checked | unreviewed, evidence?: string[], reason?: string }[]",
 			"coverageNotes?: string[]",
 			"findings: { title: string, category: confirmed_defect | risk | hardening_opportunity | process_gap",
-			"Begin with these sections in order: Conclusion, Top findings, Recommended next actions, Coverage notes.",
+			"Begin with these sections in order: Conclusion, Review target, Top findings, Recommended next actions, Coverage notes.",
 			"discoveredSurfaces is the canonical coverage ledger for standalone review coverage",
 			"adversarial failure-mode classes",
 			"normal product path rather than a shortcut-only setup"
