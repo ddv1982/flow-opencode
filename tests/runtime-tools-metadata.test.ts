@@ -112,6 +112,12 @@ describe("runtime tool metadata", () => {
 				summary: "Looks good.",
 			},
 			flow_review_render: {
+				reviewTarget: {
+					repoRoot: worktree,
+					repoName: "metadata-worktree",
+					generatedAt: "2026-06-01T00:00:00.000Z",
+					invokedFromCwd: worktree,
+				},
 				requestedDepth: "deep_audit",
 				achievedDepth: "deep_audit",
 				repoSummary: "Repo summary.",

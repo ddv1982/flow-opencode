@@ -6,6 +6,7 @@ import { FLOW_AUDIT_CONTRACT } from "./contracts";
 import {
 	FLOW_REVIEW_READONLY_BOUNDARY_RULE,
 	FLOW_REVIEW_SHARED_FAILURE_MODE_RULE,
+	FLOW_REVIEW_SHARED_RENDER_RULES,
 	FLOW_REVIEW_SHARED_RULES,
 	FLOW_REVIEW_SHARED_TAXONOMY_RULES,
 	FLOW_REVIEW_SHARED_VALIDATION_RULE,
@@ -46,6 +47,7 @@ ${FLOW_REVIEW_SHARED_FAILURE_MODE_RULE}
 - Do not edit \`.flow\` files directly.
 ${FLOW_REVIEW_SHARED_VALIDATION_RULE}
 ${FLOW_REVIEW_SHARED_TAXONOMY_RULES.join("\n")}
+${FLOW_REVIEW_SHARED_RENDER_RULES.join("\n")}
 - Do not dump the full structured ledger unless the user explicitly asks for raw or JSON output.`,
 	},
 	{
@@ -59,7 +61,7 @@ ${FLOW_REVIEW_SHARED_TAXONOMY_RULES.join("\n")}
 
 ${FLOW_AUDIT_CONTRACT}
 
-7. Present the final answer as a human-readable review first, and include structured details only when explicitly requested.`,
+7. Call \`flow_review_render\` with the completed ledger and return the renderer's \`report\` field verbatim; include structured details only when explicitly requested through the renderer view.`,
 	},
 	{
 		title: "Examples",

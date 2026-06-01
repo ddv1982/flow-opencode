@@ -118,6 +118,12 @@ export function sampleReviewReport(
 	overrides: Partial<ReviewReport> = {},
 ): ReviewReport {
 	return {
+		reviewTarget: {
+			repoRoot: "/tmp/flow-review-test-repo",
+			repoName: "flow-review-test-repo",
+			generatedAt: "2026-06-01T00:00:00.000Z",
+			invokedFromCwd: "/tmp/flow-review-test-repo",
+		},
 		requestedDepth: "deep_audit",
 		achievedDepth: "deep_audit",
 		repoSummary: "Repo summary.",

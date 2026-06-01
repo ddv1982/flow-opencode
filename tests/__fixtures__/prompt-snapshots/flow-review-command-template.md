@@ -5,7 +5,7 @@ Behavior:
 - Stay read-only with respect to repository code and Flow execution/review state; do not mutate Flow planning, execution, review, reset, or session state.
 - Maintain discoveredSurfaces as the canonical coverage ledger.
 - Keep findings taxonomy explicit: confirmed_defect, risk, hardening_opportunity, process_gap.
-- Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.
+- Default to a renderer-backed human-readable markdown review with sections for Conclusion, Review target, Top findings, Recommended next actions, and Coverage notes.
 - For each directly reviewed behavior surface, choose the applicable adversarial failure-mode classes before writing findings: lifecycle/reentrancy/idempotency, async races/event ordering, persistence failure and recovery, interaction geometry/hit-testing, accessibility semantics/live regions, and test-evidence authenticity. Treat changed files as review seeds, not boundaries. Record applicable async/lifecycle/state/test-evidence classes in behaviorChecks (passed, gap_recorded, or not_applicable), map relied-on validation through validationCoverage, and keep remaining gaps empty only when applicable classes are checked or not applicable; do not invent findings for classes that are not applicable.
 - If the arguments ask for an exhaustive or full review, treat requestedDepth as full_audit.
 - If the arguments ask for a detailed, deep, or in-depth review, treat requestedDepth as deep_audit.
@@ -24,11 +24,12 @@ Behavior:
 - Do not reopen known exclusions or already-covered findings unless new evidence connects them to a larger blocker; if an ambiguity is material, report it as a coverage/process gap rather than upgrading it into confirmed-defect language.
 - This command does not execute shell validation directly; if no validation evidence is already available, record status: not_run explicitly in the review output.
 - For long reviews, keep the user informed with concise read-only progress updates while mapping repository surfaces, inspecting evidence, calibrating coverage depth, and rendering the final report. Do not announce Flow planning, execution, validation runs, recovery/reset, or workflow finalization from this read-only command; do not dump raw tool JSON or narrate every minor file read/tool call.
-- Build the structured audit ledger described below, then call flow_review_render to render it.
+- Build the structured audit ledger described below, then call flow_review_render to render it; do not hand-write the final review text yourself.
 - Pass the ledger to flow_review_render by spreading the ledger fields directly, plus view when a non-default render view is selected.
+- Include reviewTarget for the repository actually reviewed before calling flow_review_render so the rendered report includes the Review target section.
 - Do not wrap the ledger in a JSON string field; flow_review_render validates the ledger object directly.
 - Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.
-- Return the renderer's report field verbatim as your final answer.
+- Return the renderer's report field verbatim as your final answer; if a tool failure prevents rendering, do not produce a full substitute review—report the tool failure, include only minimal Review target/provenance details, and ask to retry rendering.
 - Use this ledger contract for internal consistency and renderer input:
 
 Build an internal review/audit ledger using these fields so coverage stays explicit and internally consistent:

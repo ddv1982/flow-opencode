@@ -73,6 +73,8 @@ describe("runtime review rendering", () => {
 		expect(parsed.status).toBe("ok");
 		expect(parsed.view).toBe("human");
 		expect(parsed.report).toContain("## Conclusion");
+		expect(parsed.report).toContain("## Review target");
+		expect(parsed.report).toContain("Repository: flow-review-test-repo");
 		expect(parsed.report).toContain("## Top findings");
 		expect(parsed.report).toContain("## Recommended next actions");
 		expect(parsed.report).toContain("## Coverage notes");
@@ -114,6 +116,35 @@ describe("runtime review rendering", () => {
 		expect(parsed.report).toContain(
 			"Achieved depth was downgraded from full_audit because these major surface categories were not directly reviewed with evidence:",
 		);
+	});
+
+	test("flow_review_render requires reviewTarget for human-facing reports", async () => {
+		const tools = createTestTools();
+		const { reviewTarget: _reviewTarget, ...report } = sampleReviewReport();
+
+		const response = await tools.flow_review_render.execute(
+			report,
+			toolContext(makeTempDir()),
+		);
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain(
+			"reviewTarget is required when rendering a human-facing review report",
+		);
+	});
+
+	test("flow_review_render allows target-less structured reports", async () => {
+		const tools = createTestTools();
+		const { reviewTarget: _reviewTarget, ...report } = sampleReviewReport();
+
+		const response = await tools.flow_review_render.execute(
+			{ ...report, view: "structured" },
+			toolContext(makeTempDir()),
+		);
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("ok");
+		expect(parsed.view).toBe("structured");
 	});
 
 	test("flow_review_render rejects directly reviewed surfaces without evidence", async () => {

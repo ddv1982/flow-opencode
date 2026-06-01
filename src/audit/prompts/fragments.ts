@@ -1,7 +1,7 @@
 const SHARED_REVIEW_RULE_LINES = [
 	"- Maintain discoveredSurfaces as the canonical coverage ledger.",
 	"- Keep findings taxonomy explicit: confirmed_defect, risk, hardening_opportunity, process_gap.",
-	"- Default to a human-readable markdown review with sections for Conclusion, Top findings, Recommended next actions, and Coverage notes.",
+	"- Default to a renderer-backed human-readable markdown review with sections for Conclusion, Review target, Top findings, Recommended next actions, and Coverage notes.",
 ] as const;
 
 export const FLOW_REVIEW_READONLY_BOUNDARY_RULE =
@@ -21,9 +21,10 @@ export const FLOW_REVIEW_SHARED_TAXONOMY_RULES = [
 ] as const;
 
 export const FLOW_REVIEW_SHARED_RENDER_RULES = [
-	"- Build the structured audit ledger described below, then call flow_review_render to render it.",
+	"- Build the structured audit ledger described below, then call flow_review_render to render it; do not hand-write the final review text yourself.",
 	"- Pass the ledger to flow_review_render by spreading the ledger fields directly, plus view when a non-default render view is selected.",
+	"- Include reviewTarget for the repository actually reviewed before calling flow_review_render so the rendered report includes the Review target section.",
 	"- Do not wrap the ledger in a JSON string field; flow_review_render validates the ledger object directly.",
 	"- Use flow_review_render with view: human by default, view: structured when the user explicitly asks for raw/json output, and view: both when the user asks for both readable and structured details.",
-	"- Return the renderer's report field verbatim as your final answer.",
+	"- Return the renderer's report field verbatim as your final answer; if a tool failure prevents rendering, do not produce a full substitute review—report the tool failure, include only minimal Review target/provenance details, and ask to retry rendering.",
 ] as const;

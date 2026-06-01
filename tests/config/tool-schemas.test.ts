@@ -6,7 +6,10 @@ import type { ToolContext as OpenCodeToolContext } from "@opencode-ai/plugin/too
 import { z } from "zod";
 import { tool } from "../../src/adapters/opencode/sdk";
 import { renderOpenCodeToolCoreSummary } from "../../src/adapters/opencode/tool-surface/core-action-projection";
-import { FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY } from "../../src/adapters/opencode/tool-surface/schemas";
+import {
+	FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY,
+	FlowReviewRenderArgsSchema,
+} from "../../src/adapters/opencode/tool-surface/schemas";
 import {
 	getOpenCodeToolRegistryEntry,
 	OPENCODE_TOOL_NAMES_FROM_REGISTRY,
@@ -1032,18 +1035,39 @@ describe("tool schema config contracts", () => {
 		expect(
 			schemas.flow_reset_feature.safeParse({ featureId: "Bad Id" }).success,
 		).toBe(false);
+		const reviewTarget = {
+			repoRoot: "/tmp/flow-review-test-repo",
+			repoName: "flow-review-test-repo",
+			generatedAt: "2026-06-01T00:00:00.000Z",
+			invokedFromCwd: "/tmp/flow-review-test-repo",
+		};
+		const reviewRenderPayload = {
+			reviewTarget,
+			requestedDepth: "deep_audit",
+			achievedDepth: "deep_audit",
+			repoSummary: "Repo summary.",
+			overallVerdict: "Overall verdict.",
+			discoveredSurfaces: [],
+			evidencePackets: [{ ...evidencePacket, purpose: "audit" }],
+			coverageNotes: [],
+			validationRun: [],
+			findings: [],
+			view: "both",
+		};
 		expect(
-			schemas.flow_review_render.safeParse({
-				requestedDepth: "deep_audit",
-				achievedDepth: "deep_audit",
-				repoSummary: "Repo summary.",
-				overallVerdict: "Overall verdict.",
-				discoveredSurfaces: [],
-				evidencePackets: [{ ...evidencePacket, purpose: "audit" }],
-				coverageNotes: [],
-				validationRun: [],
-				findings: [],
-				view: "both",
+			schemas.flow_review_render.safeParse(reviewRenderPayload).success,
+		).toBe(true);
+		expect(
+			FlowReviewRenderArgsSchema.safeParse({
+				...reviewRenderPayload,
+				reviewTarget: undefined,
+			}).success,
+		).toBe(false);
+		expect(
+			FlowReviewRenderArgsSchema.safeParse({
+				...reviewRenderPayload,
+				reviewTarget: undefined,
+				view: "structured",
 			}).success,
 		).toBe(true);
 		expect(schemas.flow_review_render.safeParse({}).success).toBe(false);

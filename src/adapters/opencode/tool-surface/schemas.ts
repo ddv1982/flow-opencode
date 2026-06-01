@@ -117,7 +117,21 @@ export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
 export const FlowReviewRecordFeatureArgsSchema =
 	RuntimeFlowReviewRecordFeatureArgsSchema;
 export const FinalReviewerDecisionSchema = RuntimeFinalReviewerDecisionSchema;
-export const FlowReviewRenderArgsSchema = z.object(FlowReviewRenderArgsShape);
+export const FlowReviewRenderArgsSchema = z
+	.object(FlowReviewRenderArgsShape)
+	.superRefine((input, ctx) => {
+		if (input.view === "structured") {
+			return;
+		}
+		if (!input.reviewTarget) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["reviewTarget"],
+				message:
+					"reviewTarget is required when rendering a human-facing review report so target provenance cannot be omitted.",
+			});
+		}
+	});
 export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
 
 type FlowToolPayloadSchemaRegistration = {

@@ -82,6 +82,7 @@ export const FLOW_PROMPT_GUIDANCE_BY_ID = {
 	flow_review_render: `## Use when
 - Use to render an already-complete structured review ledger.
 - Provide the full review ledger fields directly as this tool's arguments.
+- Include \`reviewTarget\` unless \`view: structured\` is explicitly selected for raw JSON output without target provenance.
 - Use \`view: human\` for the default user-facing report, \`structured\` for raw JSON, or \`both\` to append structured details after the readable report.
 
 ## Avoid when

@@ -1,6 +1,7 @@
 // Owns prompt, command-template, and prompt fixture source-path coverage
 // previously grouped in tests/config.test.ts.
 import { describe, expect, test } from "bun:test";
+import { FLOW_PROMPT_GUIDANCE_BY_ID } from "../../src/adapters/opencode/tool-surface/descriptor-guidance";
 import { FLOW_AUDITOR_AGENT_PROMPT } from "../../src/audit/prompts/agents";
 import { FLOW_REVIEW_COMMAND_TEMPLATE } from "../../src/audit/prompts/commands";
 import { FLOW_AUDIT_CONTRACT } from "../../src/audit/prompts/contracts";
@@ -417,12 +418,35 @@ describe("prompt and command config contracts", () => {
 			"Pass the ledger to flow_review_render by spreading the ledger fields directly",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
+			"Include reviewTarget for the repository actually reviewed",
+		);
+		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
 			"Use flow_review_render with view: human by default",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).toContain(
-			"Return the renderer's report field verbatim as your final answer.",
+			"Return the renderer's report field verbatim as your final answer",
 		);
 		expect(FLOW_REVIEW_COMMAND_TEMPLATE).not.toContain("reviewJson");
+	});
+
+	test("flow review render tool guidance advertises conditional review target requirement", () => {
+		expect(FLOW_PROMPT_GUIDANCE_BY_ID.flow_review_render).toContain(
+			"Include `reviewTarget` unless `view: structured` is explicitly selected for raw JSON output without target provenance",
+		);
+	});
+
+	test("auditor agent cannot bypass renderer-backed review target output", () => {
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("flow_review_render");
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"do not hand-write the final review text yourself",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"Include reviewTarget for the repository actually reviewed",
+		);
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain("Review target");
+		expect(FLOW_AUDITOR_AGENT_PROMPT).toContain(
+			"return the renderer's `report` field verbatim",
+		);
 	});
 
 	test("generated prompts use structured sections and skill references where supported", () => {
