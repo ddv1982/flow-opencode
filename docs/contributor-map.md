@@ -91,14 +91,14 @@ Read first:
 - `src/prompts/agents.ts`
 - `src/prompts/skills.ts`
 - `src/prompts/generated/skill-docs.ts`
-- `src/adapters/opencode/skill-bundle.ts`
+- `src/distribution/skill-sync.ts`
 - `src/audit/prompts/`
 
 Required checks:
 
 - `bun run eval:prompt-capture:check`
 - `bun run eval:review-capture:check` when `/flow-review` changes
-- `bun test tests/config/prompt-contracts.test.ts tests/config/skill-bundle.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-behavior-eval.test.ts`
+- `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-behavior-eval.test.ts`
 
 Do not:
 
@@ -136,8 +136,9 @@ Read first:
 - `src/config.ts`
 - `src/audit/config.ts`
 - `src/install-opencode.ts`
-- `src/installer.ts`
-- `src/adapters/opencode/skill-bundle.ts`
+- `src/cli.ts`
+- `src/distribution/skill-sync.ts`
+- `src/distribution/uninstall.ts`
 - `scripts/cross-area/pack-invariants.mjs`
 
 Required checks:
@@ -148,7 +149,7 @@ Required checks:
 - `bun run smoke:release` for the standard release-candidate asset/evidence path; the generated manual-live checklist is evidence scaffolding only, not proof of live validation
 - `bun run smoke:opencode` for lower-level automated OpenCode smoke runner diagnosis
 - Still perform manual live OpenCode UI validation before claiming live host coverage
-- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/skill-bundle.test.ts tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts`
+- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts`
 Do not:
 
 - Ship debug-only artifacts in `src` or `dist`.

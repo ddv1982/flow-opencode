@@ -1,11 +1,14 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "2.0.56",
+	"version": "2.1.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
 	"exports": {
 		".": "./dist/index.js"
+	},
+	"bin": {
+		"opencode-plugin-flow": "./dist/cli.js"
 	},
 	"files": [
 		"dist",
@@ -14,7 +17,9 @@
 		"CHANGELOG.md"
 	],
 	"scripts": {
-		"build": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --minify-syntax --minify-whitespace --drop=console --sourcemap=external ./src/index.ts",
+		"build": "bun run build:plugin && bun run build:cli",
+		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --minify --drop=console --sourcemap=external ./src/index.ts",
+		"build:cli": "bun build --target=node --outdir=./dist --entry-naming=cli.js --banner='#!/usr/bin/env node' --minify ./src/cli.ts",
 		"bench": "bun run ./bench/index.ts",
 		"bench:smoke": "bun run ./bench/index.ts -- --filter transitions --warmup 0 --iterations 3",
 		"bench:gate": "node ./scripts/cross-area/bench-gate.mjs",
@@ -49,9 +54,8 @@
 		"test:randomized": "bun test --randomize --timeout 30000",
 		"test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
 		"typecheck": "tsc --noEmit",
-		"check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run check:deadcode-exports && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate",
-		"install:opencode": "bun run ./src/install-opencode.ts",
-		"uninstall:opencode": "bun run ./src/uninstall-opencode.ts"
+		"uninstall:opencode": "bun run ./src/cli.ts uninstall",
+		"check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run check:deadcode-exports && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate"
 	},
 	"keywords": [
 		"opencode",
@@ -63,15 +67,14 @@
 	"author": "Douwe de Vries",
 	"license": "MIT",
 	"peerDependencies": {
-		"@opencode-ai/plugin": "1.14.48"
+		"@opencode-ai/plugin": "1.17.3"
 	},
 	"dependencies": {
-		"effect": "4.0.0-beta.59",
 		"zod": "4.1.8"
 	},
 	"devDependencies": {
-		"@opencode-ai/plugin": "1.14.48",
 		"@biomejs/biome": "^2.2.6",
+		"@opencode-ai/plugin": "1.17.3",
 		"bun-types": "latest",
 		"knip": "^5.63.1",
 		"mitata": "^1.0.34",

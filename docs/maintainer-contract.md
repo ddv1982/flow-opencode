@@ -37,7 +37,7 @@ Primary ownership map:
 - Attachment ownership: native OpenCode owns image/file attachments; Flow must not add a Flow-owned capture/materialization surface without a new explicit product requirement and tests
 - Prompt-mode contracts: `src/prompts/mode-contracts.ts`
 - Prompt text and fallback surfaces: `src/prompts/`, `src/audit/prompts/`
-- Generated skills: `src/prompts/skills.ts`, `src/prompts/generated/skill-docs.ts`, `src/adapters/opencode/skill-bundle.ts`
+- Generated skills: `src/prompts/skills.ts`, `src/prompts/generated/skill-docs.ts`, `src/distribution/skill-sync.ts`
 
 ## Historical references
 
@@ -205,7 +205,7 @@ Prefer the narrowest useful check first, then run `bun run check` before release
 | `zod`, `@opencode-ai/plugin`, or tool arg shapes | `bun pm ls zod`; `bun run check:dependency-contract`; `bun test tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`; `bun run typecheck` |
 | Completion/finalization transitions | `bun run gate:completion-lane`; `bun test tests/runtime/final-completion-gates.test.ts tests/runtime/final-review-contracts.test.ts tests/completion-gates.test.ts` |
 | Runtime transitions or schema | `bun test tests/runtime.test.ts tests/runtime-replanning.test.ts tests/runtime-actionable-metadata.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/protocol-parity.test.ts` |
-| Prompt text, generated skills, or prompt-mode contracts | `bun run eval:prompt-capture:check`; `bun test tests/config/prompt-contracts.test.ts tests/config/skill-bundle.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts` |
+| Prompt text, generated skills, or prompt-mode contracts | `bun run eval:prompt-capture:check`; `bun test tests/config/prompt-contracts.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts` |
 | `/flow-review` audit prompt or renderer | `bun run eval:review-capture:check`; `bun test tests/review-prompt-capture.test.ts tests/prompt-behavior-eval.test.ts` |
 | Tool registration or tool schemas | `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime-tools-metadata.test.ts tests/docs-tool-parity.test.ts`; `bun run typecheck` |
 | Session paths, persistence, history, or migration | `bun test tests/runtime-session-persistence.test.ts tests/runtime-tool-persistence.test.ts tests/runtime-execution-history.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/runtime-summary.test.ts tests/workspace-root-guard.test.ts` |

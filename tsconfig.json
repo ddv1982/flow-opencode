@@ -13,6 +13,7 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noEmit": true,
+		"resolveJsonModule": true,
 		"allowSyntheticDefaultImports": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,

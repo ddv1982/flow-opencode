@@ -15,7 +15,7 @@ import {
 
 async function main() {
 	const repoRoot = resolve(import.meta.dir, "..", "..");
-	const outputDir = join(repoRoot, "prompt-exports");
+	const outputDir = join(repoRoot, ".release-artifacts", "prompt-exports");
 	const promptSurfaceSummary = buildPromptEvalCoverageSummary(
 		readPromptEvalCorpus(),
 	);

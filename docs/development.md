@@ -34,15 +34,16 @@ Useful scripts:
 - `bun run test:deep`
 - `bun run typecheck`
 - `bun run check`
-- `bun run smoke:release` for the standard release-candidate smoke path; it prepares candidate assets and writes evidence under `prompt-exports/release-smoke/` by default
-- `bun run smoke:opencode` for the lower-level automated OpenCode-oriented smoke runner; this does not replace manual live OpenCode UI validation
+- `bun run smoke:release` for the standard release-candidate smoke path; it builds, packs the npm tarball, runs the install smoke against it, and writes evidence under `.release-artifacts/release-smoke/` by default
+- `bun run smoke:opencode` for the lower-level npm install smoke runner (pack → extract → plugin startup → skill sync → uninstall CLI); this does not replace manual live OpenCode UI validation
 - `bun run report:prompt-eval`
 - `bun run eval:review-capture`
 - `bun run eval:review-capture:check`
 - `bun run eval:prompt-capture`
 - `bun run eval:prompt-capture:check`
-- `bun run install:opencode` to install the global OpenCode plugin and generated global Flow skills
-- `bun run uninstall:opencode` to clear the canonical global `flow.js` plugin slot, including stale or outdated Flow plugin files, and remove only intact generated global Flow-owned skills
+- `bun run uninstall:opencode` to remove Flow-owned global skills and a pre-npm `flow.js` copy (same logic as `bunx opencode-plugin-flow uninstall`)
+
+There is no local install script anymore: OpenCode installs the plugin from npm via the `plugin` array in `opencode.json`, and the plugin syncs its global skills at startup. For local development against an unpublished build, point a test project's `opencode.json` at a packed tarball or use `bun pm pack` plus the smoke runner.
 
 
 ## Gate contract quick reference
@@ -79,7 +80,7 @@ Hard gates block readiness. Advisory and diagnostic commands guide investigation
 ## Source map
 
 - `src/index.ts` — plugin entrypoint
-- `src/installer.ts` — local OpenCode plugin installer
+- `src/cli.ts` and `src/distribution/uninstall.ts` — `bunx opencode-plugin-flow uninstall` bin command
 - `src/config.ts` — command and agent injection
 - `src/adapters/opencode/tools.ts` — OpenCode runtime tool surface
 - Native OpenCode owns image/file attachments; Flow does not capture or materialize chat/command attachments by default and owns only workflow JSON/state under `.flow/**` plus derived docs
@@ -94,7 +95,7 @@ Hard gates block readiness. Advisory and diagnostic commands guide investigation
 - `src/prompts/commands.ts` — fallback slash-command templates
 - `src/prompts/mode-contracts.ts` — canonical prompt-mode boundaries used by prompts, tests, and capture tooling
 - `src/prompts/skills.ts` and `src/prompts/generated/skill-docs.ts` — generated Flow skill specs and renderers
-- `src/adapters/opencode/skill-bundle.ts` — installer/uninstaller support for generated Flow-owned `~/.config/opencode/skills/**`
+- `src/distribution/skill-sync.ts` and `src/distribution/skill-markers.ts` — startup sync and ownership markers for generated Flow-owned `~/.config/opencode/skills/**`
 
 ## Architecture in one view
 

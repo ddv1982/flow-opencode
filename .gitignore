@@ -3,4 +3,5 @@ node_modules/
 .flow/
 .omx/
 .factory/
-prompt-exports/
+.release-artifacts/
+*.tgz

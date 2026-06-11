@@ -1,9 +1,12 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
-import { homedir } from "node:os";
 import { applyFlowConfig } from "../../config";
 import { FLOW_REASONING, type FlowReasoningEffort } from "../../config-shared";
-import { resolveInstallTarget } from "../../installer";
+import {
+	detectPreNpmFlowPlugin,
+	inspectFlowSkillSyncState,
+	resolveFlowHomeDir,
+} from "../../distribution/skill-sync";
 import { getActiveSessionPath, getIndexDocPath } from "../paths";
 import type { Session } from "../schema";
 import type { SessionGuidance } from "../summary";
@@ -52,28 +55,55 @@ async function pathExists(target: string, mode = constants.F_OK) {
 }
 
 export async function buildInstallCheck(): Promise<DoctorCheck> {
-	const installPath = resolveInstallTarget({
-		homeDir: process.env.HOME ?? homedir(),
-	});
+	const homeDir = resolveFlowHomeDir();
+	const preNpmCopy = await detectPreNpmFlowPlugin(homeDir);
+	const skillState = await inspectFlowSkillSyncState(homeDir);
+	const unsyncedSkills = skillState.filter(
+		(entry) => entry.state === "missing" || entry.state === "stale",
+	);
+	const details = {
+		distribution: "npm",
+		preNpmPluginPath: preNpmCopy?.path ?? null,
+		skills: Object.fromEntries(
+			skillState.map((entry) => [entry.name, entry.state]),
+		),
+	};
 
-	return (await pathExists(installPath))
-		? {
-				id: "install",
-				label: "Canonical install path",
-				status: "pass",
-				summary: `Found the canonical Flow plugin install at ${installPath}.`,
-				remediation: null,
-				details: { installPath },
-			}
-		: {
-				id: "install",
-				label: "Canonical install path",
-				status: "warn",
-				summary: `The canonical Flow plugin file was not found at ${installPath}.`,
-				remediation:
-					"Run `bun run install:opencode` from the Flow repo or reinstall the latest release if OpenCode cannot load Flow.",
-				details: { installPath },
-			};
+	if (preNpmCopy) {
+		return {
+			id: "install",
+			label: "Plugin distribution",
+			status: "warn",
+			summary: `A pre-npm Flow plugin copy exists at ${preNpmCopy.path}; Flow now loads from npm via the opencode.json plugin array, so the stale copy risks loading Flow twice.`,
+			remediation:
+				"Run `bunx opencode-plugin-flow uninstall` (or delete the pre-npm file) and keep `opencode-plugin-flow` in the opencode.json plugin array.",
+			details,
+		};
+	}
+
+	if (unsyncedSkills.length > 0) {
+		return {
+			id: "install",
+			label: "Plugin distribution",
+			status: "warn",
+			summary: `Flow global skills are not in sync (${unsyncedSkills
+				.map((entry) => `${entry.name}: ${entry.state}`)
+				.join(", ")}).`,
+			remediation:
+				"Restart OpenCode so the Flow plugin re-syncs its global skills, and check that ~/.config/opencode/skills is writable.",
+			details,
+		};
+	}
+
+	return {
+		id: "install",
+		label: "Plugin distribution",
+		status: "pass",
+		summary:
+			"Flow is npm-distributed: no pre-npm plugin copy is present and the Flow global skills are in sync.",
+		remediation: null,
+		details,
+	};
 }
 
 export function buildConfigCheck(): DoctorCheck {

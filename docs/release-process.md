@@ -26,13 +26,13 @@ For release candidates, run the standard release-candidate smoke path:
 bun run smoke:release
 ```
 
-This prepares uploadable candidate assets, runs automated OpenCode-oriented smoke against those exact assets, and writes the evidence bundle under `prompt-exports/release-smoke/` by default. The default output directory is reusable: each run regenerates the fixed asset and evidence filenames there. Use `--no-keep-assets` only for disposable runs that must refuse pre-existing release-smoke outputs; that mode removes disposable assets but retains diagnostic evidence/checklist files. The lower-level runner remains available for focused diagnosis:
+This builds the distributable artifacts, packs the npm tarball with `bun pm pack`, runs the install smoke against that exact tarball, and writes the evidence bundle under `.release-artifacts/release-smoke/` by default. The lower-level runner remains available for focused diagnosis:
 
 ```bash
-bun run smoke:opencode -- --json prompt-exports/opencode-smoke-evidence.json --summary prompt-exports/opencode-smoke-evidence.md
+bun run smoke:opencode -- --evidence-dir .release-artifacts/release-smoke
 ```
 
-The release workflow runs equivalent artifact smoke after `bun run check` with prepared assets and uploads the JSON and Markdown evidence. This automated smoke validates the release shell install/uninstall flow against a temporary `HOME`, imports the installed plugin, checks command/agent/tool counts, checks generated skills, and exercises a minimal runtime tool session. It does not invoke a real OpenCode UI/CLI host.
+The release workflow runs the same tarball smoke after `bun run check` and uploads the JSON and Markdown evidence, then publishes the tarball to npm (requires the `NPM_TOKEN` repository secret) and attaches it to the GitHub release. The automated smoke extracts the packed tarball into a temporary install, starts the plugin against a temporary `HOME` (verifying skill sync markers and the pre-npm double-load warning), checks command/agent/tool counts, exercises a minimal runtime tool session, and runs the uninstall CLI. It does not invoke a real OpenCode UI/CLI host.
 
 Generated smoke artifacts and the manual-live checklist are evidence scaffolding for release/PR notes; do not commit them unless a maintainer intentionally archives a specific evidence record.
 
@@ -40,13 +40,13 @@ Generated smoke artifacts and the manual-live checklist are evidence scaffolding
 
 Automated smoke evidence, including the `bun run smoke:release` manual-live checklist, does not replace live OpenCode UI validation. The generated checklist is a template for collecting evidence, not proof that live validation happened. Before claiming a release was live-tested:
 
-1. Install the candidate with `bun run install:opencode` before tag, or the release install script after tag.
+1. Install the candidate by pointing `opencode.json`'s `plugin` array at the packed tarball (pre-tag) or at `opencode-plugin-flow@<version>` (post-publish), then restart OpenCode once.
 2. Open real OpenCode in a disposable project.
 3. Run `/flow-doctor detail`.
 4. Run `/flow-plan Live smoke: verify Flow can create a plan in OpenCode`.
 5. Run `/flow-status detail`.
 6. Run `/flow-session close abandoned`.
-7. Uninstall with `bun run uninstall:opencode` or the release uninstall script.
+7. Uninstall with `bunx opencode-plugin-flow uninstall` and remove the `opencode.json` plugin entry.
 
 Expected result: Flow commands are available, generated skills do not break fallback commands, `.flow/**` appears only in the disposable project, and OpenCode reports no UI/plugin errors.
 

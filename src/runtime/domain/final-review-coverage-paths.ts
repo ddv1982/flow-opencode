@@ -59,9 +59,9 @@ const REVIEW_SURFACE_PATH_RULES: readonly SurfacePathRule[] = [
 		exact: [
 			"CHANGELOG.md",
 			".github/workflows/release.yml",
-			"src/install-opencode.ts",
-			"src/uninstall-opencode.ts",
-			"src/installer.ts",
+			"src/cli.ts",
+			"src/distribution/skill-sync.ts",
+			"src/distribution/uninstall.ts",
 		],
 		prefixes: ["dist/", "docs/releases/", "scripts/release-"],
 	},

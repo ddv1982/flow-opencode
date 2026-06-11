@@ -1,3 +1,7 @@
+import {
+	resolveFlowPluginVersion,
+	runFlowStartupSync,
+} from "../../distribution/skill-sync";
 import { createConfigHook } from "./config";
 import type { Hooks, Plugin } from "./sdk";
 import {
@@ -39,9 +43,14 @@ function createFlowSystemTransformHook(
 }
 
 const FlowPlugin: Plugin = async (ctx) => {
-	(ctx as PluginLogContext).client?.app?.log?.({
+	const log = (ctx as PluginLogContext).client?.app?.log;
+	log?.({
 		level: "info",
 		message: "Flow plugin initialized.",
+	});
+
+	await runFlowStartupSync(resolveFlowPluginVersion(), (level, message) => {
+		log?.({ level, message });
 	});
 
 	return {

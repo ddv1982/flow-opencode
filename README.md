@@ -35,47 +35,39 @@ Skip Flow for disposable prompts, brainstorming, or experiments you do not want 
 
 ## Install
 
-### From the latest GitHub release
+Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/opencode/opencode.json` or per-project):
 
-```bash
-curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/install.sh | bash
+```json
+{
+  "plugin": ["opencode-plugin-flow@2"]
+}
 ```
 
-### From this repository
+OpenCode installs the package from npm on startup. Pin the major version (`@2`) so restarts pick up fixes without crossing a breaking release.
 
-```bash
-bun install
-bun run install:opencode
-```
-
-Both install paths install global OpenCode assets:
+On its first start the plugin syncs its global skills:
 
 ```text
-~/.config/opencode/plugins/flow.js
 ~/.config/opencode/skills/flow-plan/SKILL.md
 ~/.config/opencode/skills/flow-run/SKILL.md
 ~/.config/opencode/skills/flow-review/SKILL.md
 ```
 
+Restart OpenCode once after the first install or after an update so the freshly synced skills are discovered. Each synced skill folder carries a `.flow-skill-version` marker; folders without the marker are never touched, and if you edit a synced `SKILL.md` by hand the previous content is backed up to `SKILL.md.backup` before an update replaces it.
+
 The plugin provides the slash commands, agents, tools, and hooks. The skills provide on-demand guidance for Flow planning, running, and review work; they do not replace the plugin or create separate workflow state.
 
-Source install uses Bun to build this plugin. The project you use Flow on does not need to use Bun.
+### Upgrading from the pre-npm (curl) install
+
+Releases before 2.1.0 installed a bundled plugin file at `~/.config/opencode/plugins/flow.js`. That copy keeps working, but once you add the npm plugin entry it would load Flow twice — the plugin warns about this at startup and `/flow-doctor` flags it. Remove it with the uninstall command below.
 
 ### Uninstall
 
-From the latest release:
-
 ```bash
-curl -fsSL https://github.com/ddv1982/flow-opencode/releases/latest/download/uninstall.sh | bash
+bunx opencode-plugin-flow uninstall
 ```
 
-From this repository:
-
-```bash
-bun run uninstall:opencode
-```
-
-Uninstall removes the canonical global `flow.js` plugin and generated Flow skill files only when they are still Flow-owned. If you edited a generated skill by hand, Flow refuses to delete it silently.
+This removes the Flow-owned global skills (folders carrying the Flow marker) and a pre-npm `flow.js` copy if one exists, then reminds you to remove `"opencode-plugin-flow"` from the `plugin` array in `opencode.json`. Skills you edited by hand are kept, never deleted silently. Use `--dry-run` to preview.
 
 ## Main commands
 
@@ -192,7 +184,7 @@ Use `/flow-doctor detail` for a fuller structured view.
 
 `/flow-doctor` checks:
 
-- whether `~/.config/opencode/plugins/flow.js` is installed
+- distribution health: global Flow skills in sync, no stale pre-npm `flow.js` copy
 - whether Flow commands and agents are injected
 - whether the workspace root is writable and safe
 - active session artifact health

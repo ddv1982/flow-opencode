@@ -10,7 +10,7 @@ describe("biome adoption", () => {
 		};
 
 		expect(manifest.scripts?.lint).toContain("biome check");
-		expect(manifest.scripts?.build).toContain("--drop=console");
+		expect(manifest.scripts?.["build:plugin"]).toContain("--drop=console");
 		expect(manifest.scripts?.check).toContain("bun run check:release-hygiene");
 		expect(manifest.scripts?.check).toContain("bun run lint");
 	});

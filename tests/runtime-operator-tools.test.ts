@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fail, succeed, sync } from "effect/Effect";
 import { applyFlowConfig } from "../src/config";
-import { resolveInstallTarget } from "../src/installer";
+import { FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER } from "../src/distribution/skill-markers";
+import { syncFlowSkills } from "../src/distribution/skill-sync";
 import {
 	evaluateConfigCheck,
 	type MutableConfig,
@@ -53,12 +53,21 @@ function requireConfigEntry<T>(entry: T | undefined, label: string): T {
 }
 
 async function installDoctorPluginFixture(homeDir: string) {
-	const canonicalInstallPath = resolveInstallTarget({ homeDir });
+	// npm distribution: a healthy install means the global Flow skills are
+	// synced and no pre-npm plugin copy exists in this home directory.
+	await syncFlowSkills({ homeDir, version: "0.0.0-test" });
+}
+
+async function installPreNpmPluginFixture(homeDir: string) {
+	const preNpmPath = join(homeDir, ".config", "opencode", "plugins", "flow.js");
 	await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
 		recursive: true,
 	});
-	await writeFile(canonicalInstallPath, "// flow plugin");
-	return canonicalInstallPath;
+	await writeFile(
+		preNpmPath,
+		`${FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER}export default 'flow';\n`,
+	);
+	return preNpmPath;
 }
 
 async function withHomeEnv<T>(
@@ -517,10 +526,10 @@ describe("runtime operator tools", () => {
 			expect(parsed.status).toBe("warn");
 			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 			expect(parsed.operatorSummary).toContain(
-				"Flow doctor warn: The canonical Flow plugin file was not found",
+				"Flow doctor warn: Flow global skills are not in sync",
 			);
 			expect(parsed.operatorSummary).toContain(
-				"Fix: Run `bun run install:opencode` from the Flow repo or reinstall the latest release if OpenCode cannot load Flow.",
+				"Fix: Restart OpenCode so the Flow plugin re-syncs its global skills, and check that ~/.config/opencode/skills is writable.",
 			);
 			expect(parsed.operatorSummary).toContain(
 				"Next: Start a new Flow session with /flow-plan <goal>.",
@@ -538,7 +547,7 @@ describe("runtime operator tools", () => {
 		});
 	});
 
-	test("flow_doctor warns when the canonical install path is missing", async () => {
+	test("flow_doctor warns when the global Flow skills are not synced", async () => {
 		const worktree = makeTempDir();
 		const homeDir = makeTempDir();
 		await withHomeEnv(homeDir, async () => {
@@ -554,8 +563,32 @@ describe("runtime operator tools", () => {
 
 			expect(parsed.status).toBe("warn");
 			expect(installCheck?.status).toBe("warn");
+			expect(String(installCheck?.remediation)).toContain("Restart OpenCode");
+		});
+	});
+
+	test("flow_doctor warns when a pre-npm plugin copy risks double-loading Flow", async () => {
+		const worktree = makeTempDir();
+		const homeDir = makeTempDir();
+		await installDoctorPluginFixture(homeDir);
+		const preNpmPath = await installPreNpmPluginFixture(homeDir);
+
+		await withHomeEnv(homeDir, async () => {
+			const tools = createTestTools();
+			const response = await tools.flow_doctor.execute(
+				{},
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+			const installCheck = parsed.checks.find(
+				(check: { id: string }) => check.id === "install",
+			);
+
+			expect(parsed.status).toBe("warn");
+			expect(installCheck?.status).toBe("warn");
+			expect(String(installCheck?.summary)).toContain(preNpmPath);
 			expect(String(installCheck?.remediation)).toContain(
-				"bun run install:opencode",
+				"bunx opencode-plugin-flow uninstall",
 			);
 		});
 	});
@@ -794,12 +827,10 @@ describe("runtime operator tools", () => {
 	test("flow_plan_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		let permissionEffectRan = false;
-		const ask = mock(() =>
-			sync(() => {
-				permissionEffectRan = true;
-			}),
-		);
+		let permissionPromiseRan = false;
+		const ask = mock(async () => {
+			permissionPromiseRan = true;
+		});
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
@@ -813,7 +844,7 @@ describe("runtime operator tools", () => {
 			expect(parsed.status).toBe("ok");
 			expect(parsed.session.goal).toBe("Keep Flow inside the repo");
 			expect(ask).toHaveBeenCalledTimes(1);
-			expect(permissionEffectRan).toBe(true);
+			expect(permissionPromiseRan).toBe(true);
 			expect(ask).toHaveBeenCalledWith({
 				permission: "edit",
 				patterns: [join(hiddenWorkspace, ".flow", "**")],
@@ -829,12 +860,10 @@ describe("runtime operator tools", () => {
 	test("flow_run_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		let permissionEffectRan = false;
-		const ask = mock(() =>
-			sync(() => {
-				permissionEffectRan = true;
-			}),
-		);
+		let permissionPromiseRan = false;
+		const ask = mock(async () => {
+			permissionPromiseRan = true;
+		});
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
@@ -852,7 +881,7 @@ describe("runtime operator tools", () => {
 				"Flow blocked mutable workspace root",
 			);
 			expect(ask).toHaveBeenCalledTimes(1);
-			expect(permissionEffectRan).toBe(true);
+			expect(permissionPromiseRan).toBe(true);
 		});
 	});
 
@@ -860,7 +889,7 @@ describe("runtime operator tools", () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 		const denied = new Error("permission denied");
-		const ask = mock(() => fail(denied));
+		const ask = mock(() => Promise.reject(denied));
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
@@ -975,7 +1004,7 @@ describe("runtime operator tools", () => {
 	test("flow_plan_start at a normal project root does not ask just because hidden dirs exist inside it", async () => {
 		const worktree = makeTempDir();
 		const hiddenChild = join(worktree, ".hidden-workspace");
-		const ask = mock(() => succeed(undefined));
+		const ask = mock(() => Promise.resolve(undefined));
 		const tools = createTestTools();
 
 		await mkdir(hiddenChild, { recursive: true });
@@ -995,7 +1024,7 @@ describe("runtime operator tools", () => {
 	test("flow_plan_start does not ask when the mutable workspace root is .flow itself", async () => {
 		const worktree = makeTempDir();
 		const flowRoot = join(worktree, ".flow");
-		const ask = mock(() => succeed(undefined));
+		const ask = mock(() => Promise.resolve(undefined));
 		const tools = createTestTools();
 
 		await mkdir(flowRoot, { recursive: true });

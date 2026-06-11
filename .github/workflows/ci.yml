@@ -101,10 +101,10 @@ jobs:
         with:
           name: prompt-eval-summary
           path: |
-            prompt-exports/prompt-eval-summary.json
-            prompt-exports/prompt-eval-summary.txt
-            prompt-exports/prompt-behavior-eval-summary.md
-            prompt-exports/prompt-mode-behavior-eval-summary.md
+            .release-artifacts/prompt-exports/prompt-eval-summary.json
+            .release-artifacts/prompt-exports/prompt-eval-summary.txt
+            .release-artifacts/prompt-exports/prompt-behavior-eval-summary.md
+            .release-artifacts/prompt-exports/prompt-mode-behavior-eval-summary.md
           if-no-files-found: error
 
       - name: Run completion-lane invariants gate

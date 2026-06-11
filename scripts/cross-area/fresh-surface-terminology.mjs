@@ -31,7 +31,11 @@ const excludedFiles = new Set([
 	"scripts/cross-area/fresh-surface-terminology.mjs",
 ]);
 
-const excludedPrefixes = ["docs/releases/", "docs/investigations/"];
+const excludedPrefixes = [
+	"docs/plans/",
+	"docs/releases/",
+	"docs/investigations/",
+];
 
 const forbiddenPatterns = [
 	{ label: "legacy", regex: /\blegacy\b/gi },

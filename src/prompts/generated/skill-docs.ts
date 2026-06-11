@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
 	getOpenCodeToolRegistryEntry,
 	openCodeToolDescription,
@@ -7,31 +6,15 @@ import {
 	type CoreRoleProtocol,
 	getCoreRoleProtocol,
 } from "../../core/protocols/roles";
+import {
+	FLOW_SKILL_GENERATED_MARKER,
+	FLOW_SKILL_GENERATED_VERSION,
+	sha256,
+} from "../../distribution/skill-markers";
 import { FLOW_MODE_CONTRACTS, type FlowModeContract } from "../mode-contracts";
 import { FLOW_SKILL_SPECS, type FlowSkillSpec } from "../skills";
 
-export type { FlowSkillSpec };
 export { FLOW_SKILL_SPECS };
-
-export const FLOW_SKILL_GENERATED_MARKER = "flow-opencode-generated-skill";
-export const FLOW_SKILL_GENERATED_VERSION = "1";
-
-type FlowSkillGeneratedMarker = {
-	name: string;
-	version: string;
-	hash: string;
-};
-
-type FlowSkillDocumentInspection =
-	| { kind: "not_generated" }
-	| { kind: "valid_generated"; marker: FlowSkillGeneratedMarker }
-	| { kind: "invalid_generated"; reason: string };
-
-const FLOW_SKILL_GENERATED_MARKER_PREFIX = `<!-- ${FLOW_SKILL_GENERATED_MARKER} `;
-const FLOW_SKILL_GENERATED_MARKER_PATTERN = new RegExp(
-	`^<!-- ${FLOW_SKILL_GENERATED_MARKER} name=([a-z0-9]+(?:-[a-z0-9]+)*) version=([0-9]+) hash=sha256:([a-f0-9]{64}) -->$`,
-	"u",
-);
 
 export function renderFlowSkillDocument(skill: FlowSkillSpec): string {
 	const frontmatter = renderSkillFrontmatter(skill);
@@ -39,51 +22,6 @@ export function renderFlowSkillDocument(skill: FlowSkillSpec): string {
 	const managedPayload = `${frontmatter}${body}`;
 	const hash = sha256(managedPayload);
 	return `${frontmatter}<!-- ${FLOW_SKILL_GENERATED_MARKER} name=${skill.name} version=${FLOW_SKILL_GENERATED_VERSION} hash=sha256:${hash} -->\n${body}`;
-}
-
-export function inspectFlowSkillDocument(
-	document: string,
-): FlowSkillDocumentInspection {
-	const lines = document.split("\n");
-	const markerIndexes = lines.flatMap((line, index) =>
-		line.startsWith(FLOW_SKILL_GENERATED_MARKER_PREFIX) ? [index] : [],
-	);
-	if (markerIndexes.length === 0) {
-		return { kind: "not_generated" };
-	}
-	if (markerIndexes.length > 1) {
-		return { kind: "invalid_generated", reason: "duplicate_marker" };
-	}
-
-	const markerIndex = markerIndexes[0];
-	if (markerIndex === undefined) {
-		return { kind: "not_generated" };
-	}
-	const markerLine = lines[markerIndex];
-	if (markerLine === undefined) {
-		return { kind: "invalid_generated", reason: "malformed_marker" };
-	}
-	const match = markerLine.match(FLOW_SKILL_GENERATED_MARKER_PATTERN);
-	if (!match) {
-		return { kind: "invalid_generated", reason: "malformed_marker" };
-	}
-
-	const [, name, version, hash] = match;
-	if (name === undefined || version === undefined || hash === undefined) {
-		return { kind: "invalid_generated", reason: "malformed_marker" };
-	}
-	const managedPayload = [
-		...lines.slice(0, markerIndex),
-		...lines.slice(markerIndex + 1),
-	].join("\n");
-	if (sha256(managedPayload) !== hash) {
-		return { kind: "invalid_generated", reason: "hash_mismatch" };
-	}
-
-	return {
-		kind: "valid_generated",
-		marker: { name, version, hash },
-	};
 }
 
 function renderSkillFrontmatter(skill: FlowSkillSpec): string {
@@ -217,8 +155,4 @@ function renderInlineCodeList(items: readonly string[]): string {
 	return items.length > 0
 		? items.map((item) => `\`${item}\``).join(", ")
 		: "none";
-}
-
-function sha256(value: string): string {
-	return createHash("sha256").update(value).digest("hex");
 }

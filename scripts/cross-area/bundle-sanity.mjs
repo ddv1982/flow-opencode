@@ -1,5 +1,6 @@
 import {
 	copyFileSync,
+	cpSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -9,7 +10,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { sync } from "effect/Effect";
 
 const projectRoot = resolve(import.meta.dirname, "..", "..");
 const distPath = join(projectRoot, "dist", "index.js");
@@ -17,14 +17,15 @@ const sourcemapPath = join(projectRoot, "dist", "index.js.map");
 const bundleText = readFileSync(distPath, "utf8");
 const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
-// Attachment materialization adds one public tool plus root-safe data/file/http
-// decoding and write guards. Runtime attachment guidance adds availability
-// snapshots and coordinator instructions. Singleton retry/idempotency metadata adds
-// narrow runtime and prompt guidance. The OpenCode SDK 1.14 permission API
-// requires a small bundled Effect runner so release-installed single-file
-// plugins can execute permission prompts without external package resolution;
-// keep the bundle below 850 KiB.
-const BUNDLE_SIZE_BUDGET_BYTES = 870400; // 850 KiB
+// The bundle carries only Flow source: zod and @opencode-ai/plugin are
+// external (npm-resolved), and the OpenCode SDK ≥1.15.5 permission API is
+// Promise-based so no Effect runtime is bundled. The skills-first overhaul
+// plan budgeted ≤300 KB for Phase 1, but that assumed effect was ~1/3 of the
+// bundle; it tree-shook to ~20 KB, and the generated skill documents now ship
+// inside the bundle (startup sync) instead of a separate release tarball.
+// Phase 2 deletes the generated prompt surfaces and drops this far below
+// 100 KB; until then, hold the line at 320 KB.
+const BUNDLE_SIZE_BUDGET_BYTES = 327680; // 320 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
@@ -72,6 +73,15 @@ async function main() {
 				"}",
 				"tool.schema = z;",
 			].join("\n"),
+		);
+
+		// zod is an external runtime dependency of the bundle (resolved from the
+		// npm package's own dependencies in production); vendor it next to the
+		// copied bundle so the import resolves in this sandbox.
+		cpSync(
+			join(projectRoot, "node_modules", "zod"),
+			join(packageDir, "node_modules", "zod"),
+			{ recursive: true, dereference: true },
 		);
 
 		const packageDistPath = join(packageDir, "index.js");
@@ -130,16 +140,15 @@ async function main() {
 				{ goal: "Bundle permission sanity" },
 				{
 					worktree: hiddenWorktree,
-					ask: () =>
-						sync(() => {
-							permissionAskRuns += 1;
-						}),
+					ask: async () => {
+						permissionAskRuns += 1;
+					},
 				},
 			),
 		);
 		if (permissionSmoke.status !== "ok" || permissionAskRuns !== 1) {
 			throw new Error(
-				`Permission Effect smoke failed: ${JSON.stringify({
+				`Permission ask smoke failed: ${JSON.stringify({
 					status: permissionSmoke.status,
 					permissionAskRuns,
 				})}`,

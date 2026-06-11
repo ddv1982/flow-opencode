@@ -74,6 +74,7 @@ export const DEFAULT_PROMPT_MODE_CAPTURE_OUTPUT_DIR = resolve(
 	import.meta.dir,
 	"..",
 	"..",
+	".release-artifacts",
 	"prompt-exports",
 	"mode-capture-prompts",
 );

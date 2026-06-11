@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-12
+
+npm distribution, Promise-based permission API, and the skills-first overhaul Phase 1
+
+Flow 2.1.0 is the first release of the skills-first overhaul plan (`docs/plans/skills-first-overhaul-2026-06-12.md`) and changes how Flow is installed without changing workflow behavior.
+
+Flow is now distributed through npm: add `"plugin": ["opencode-plugin-flow@2"]` to `opencode.json` and OpenCode installs the package (with `zod` resolved as a regular dependency) at startup. The curl installer, the bundled `~/.config/opencode/plugins/flow.js` slot, the release skill tarball, and `src/installer.ts` are retired. A pre-npm `flow.js` copy keeps working for this minor cycle, but plugin startup and `/flow-doctor` warn about the double-load risk. `bunx opencode-plugin-flow uninstall` (new `dist/cli.js` bin) removes Flow-owned global skills and the pre-npm copy, and prints the `opencode.json` cleanup step.
+
+Generated global skills are now synced by the plugin at startup with folder marker files (`.flow-skill-version`) instead of being copied by an installer: folders without the Flow marker are never touched, pristine pre-npm hash-locked installs are adopted in place, and a user-edited `SKILL.md` is backed up to `SKILL.md.backup` before an update replaces it. Restart OpenCode once after the first install or an update so newly synced skills are discovered.
+
+The `effect` beta dependency is gone: `@opencode-ai/plugin` is pinned at 1.17.3, where `ToolContext.ask` returns a `Promise`, so the hidden-workspace permission flow now awaits the host directly and refuses the mutation if a pre-1.15.5 host hands back a non-Promise. With `zod` external and full minification the plugin bundle drops from 752 KB to ~307 KB (gate at 320 KB; the sub-100 KB target lands with the Phase 2/3 runtime simplification).
+
+The install smoke now runs against the packed npm tarball end-to-end (pack → extract → plugin startup → skill sync markers → tool session → uninstall CLI), the release workflow publishes to npm (requires the `NPM_TOKEN` secret) and attaches the tarball to the GitHub release, and smoke/eval evidence moved from `prompt-exports/` to the gitignored `.release-artifacts/`.
+
+Not-tested: Live OpenCode UI runtime interaction; npm registry installation through a real OpenCode host (publish-and-install spike pending).
+
 ## [2.0.56] - 2026-06-01
 
 Force review target rendering through the installed review surface

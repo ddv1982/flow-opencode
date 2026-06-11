@@ -65,6 +65,7 @@ export const DEFAULT_REVIEW_CAPTURE_OUTPUT_DIR = resolve(
 	import.meta.dir,
 	"..",
 	"..",
+	".release-artifacts",
 	"prompt-exports",
 	"review-capture-prompts",
 );
