@@ -1,0 +1,56 @@
+{
+	"version": 1,
+	"id": "golden-recovery-session",
+	"goal": "Add a subtract function to src/math.ts",
+	"status": "ready",
+	"approval": "approved",
+	"planning": {
+		"repoProfile": ["Tiny Bun TypeScript library with one module and one test"],
+		"packageManager": "bun",
+		"packageManagerAmbiguous": false,
+		"research": [],
+		"decisionLog": [],
+		"replanLog": [],
+		"reviewFindings": []
+	},
+	"plan": {
+		"summary": "Add subtract to the math module.",
+		"overview": "Implement subtract(a, b) in src/math.ts and cover it with a test in tests/math.test.ts.",
+		"requirements": ["subtract(a, b) returns a - b"],
+		"architectureDecisions": [],
+		"goalMode": "implementation",
+		"decompositionPolicy": "atomic_feature",
+		"features": [
+			{
+				"id": "subtract-function",
+				"title": "Add subtract",
+				"summary": "Implement subtract(a, b) in src/math.ts and add a test for it.",
+				"status": "pending",
+				"fileTargets": ["src/math.ts", "tests/math.test.ts"],
+				"verification": ["bun test"]
+			}
+		]
+	},
+	"execution": {
+		"activeFeatureId": null,
+		"lastFeatureId": null,
+		"lastSummary": null,
+		"lastOutcomeKind": null,
+		"lastOutcome": null,
+		"lastNextStep": null,
+		"lastFeatureResult": null,
+		"lastReviewerDecision": null,
+		"lastValidationRun": [],
+		"lastFailedMutation": null,
+		"history": []
+	},
+	"closure": null,
+	"notes": [],
+	"artifacts": [],
+	"timestamps": {
+		"createdAt": "2026-06-01T08:00:00.000Z",
+		"updatedAt": "2026-06-01T08:05:00.000Z",
+		"approvedAt": "2026-06-01T08:05:00.000Z",
+		"completedAt": null
+	}
+}
