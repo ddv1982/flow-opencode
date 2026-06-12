@@ -2,6 +2,7 @@ import {
 	resolveFlowPluginVersion,
 	runFlowStartupSync,
 } from "../../distribution/skill-sync";
+import { scheduleFlowUpdateNotice } from "../../distribution/update-notice";
 import { createConfigHook } from "./config";
 import type { Hooks, Plugin } from "./sdk";
 import {
@@ -38,7 +39,13 @@ const FlowPlugin: Plugin = async (ctx) => {
 		message: "Flow plugin initialized.",
 	});
 
-	await runFlowStartupSync(resolveFlowPluginVersion(), (level, message) => {
+	const pluginVersion = resolveFlowPluginVersion();
+	await runFlowStartupSync(pluginVersion, (level, message) => {
+		log?.({ level, message });
+	});
+	// Best-effort, non-blocking: OpenCode never re-resolves cached plugin
+	// installs, so tell the user when a newer release exists.
+	scheduleFlowUpdateNotice(pluginVersion, (level, message) => {
 		log?.({ level, message });
 	});
 

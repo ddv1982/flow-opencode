@@ -20,6 +20,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The packed plugin schedules a best-effort npm update check at startup;
+// keep the smoke deterministic and network-free.
+process.env.FLOW_DISABLE_UPDATE_CHECK = "1";
+
 const projectRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const packageJson = JSON.parse(
 	readFileSync(join(projectRoot, "package.json"), "utf8"),
