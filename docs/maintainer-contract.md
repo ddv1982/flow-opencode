@@ -77,17 +77,18 @@ Tool names are public contracts for skills and users. Every registered tool name
 
 ## Commands and agents
 
-- Commands are thin pointers (~1–2 lines) that load a skill; names are stable. They are injected via the config hook so the npm artifact stays self-contained. There is nothing in a command worth keeping in sync — if a command grows instruction text, move it into the skill.
+- Commands are thin pointers (~1–2 lines) that load a skill; names are stable. They are both injected via the config hook and synced as Flow-owned markdown command files under `~/.config/opencode/commands/` so OpenCode's normal slash-command discovery sees them. There is nothing in a command worth growing — if a command needs real instruction text, move it into the skill.
 - `flow-reviewer` is the one dedicated subagent: read-only, enforced by native per-agent permissions (tool-name glob denies), never by prompt text alone.
 
-## Skill sync ownership rules
+## Sync Ownership Rules
 
 - Skills install to `~/.config/opencode/skills/<name>/` at plugin startup; sync is idempotent and best-effort (it must never fail plugin init).
+- Commands install to `~/.config/opencode/commands/<name>.md`, and `flow-reviewer` installs to `~/.config/opencode/agents/flow-reviewer.md`, with Flow-owned sidecar marker files.
 - Each Flow-owned folder carries a `.flow-skill-version` marker recording the plugin version and a sha256 line per shipped file. Folders without the marker belong to the user or another plugin and are never touched.
-- A user-edited file in a Flow-owned folder (SKILL.md or a `references/` file) is backed up next to itself (`SKILL.md.backup`, `references/<name>.md.backup`) before being replaced — never refused, never silently lost.
+- A user-edited Flow-owned file is backed up next to itself (`SKILL.md.backup`, `references/<name>.md.backup`, or `<command>.md.backup`) before being replaced — never refused, never silently lost.
 - Project-local overrides under `.opencode/skills/<name>/` are a documented feature, not drift. The plugin never writes into project skill directories.
-- Skills written during init may only be discovered on the next OpenCode start; install/update docs must keep saying "restart once," and `flow_status` readiness should flag a missing or stale skill set.
-- Uninstall removes only marker-carrying folders and the pre-npm `flow.js` copy; it never writes under `.flow/**`.
+- Files written during init may only be discovered on the next OpenCode start; install/update docs must keep saying "restart once," and `flow_status` readiness should flag a missing or stale synced surface.
+- Uninstall removes only marker-carrying Flow-owned folders/files and the pre-npm `flow.js` copy; it never writes under `.flow/**`.
 
 ## State paths
 

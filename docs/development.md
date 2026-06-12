@@ -39,7 +39,7 @@ user / slash command / skill-guided agent
 - `skills/` — the four hand-authored skills plus `references/`. This is the instruction surface; commands and agents only point at it.
 - `src/runtime/` — schemas, transitions, the hard invariants, persistence, locking, path/workspace-root safety, rendering.
 - `src/adapters/opencode/` — thin adapter: plugin entry, config-hook injection of commands/agents, the tool surface, the compaction hook. Tools validate payloads and dispatch to runtime actions; they own no workflow policy.
-- `src/distribution/` — startup skill sync (marker files, backups) and the uninstall CLI.
+- `src/distribution/` — startup sync for skills, slash-command markdown files, and the review agent (marker files, backups), plus the uninstall CLI.
 
 Live persistence is snapshot-primary: `.flow/**/session.json` is the source of truth, rendered markdown is derived. The session schema stays at v1 so v2-created sessions resume under v3.
 
@@ -52,7 +52,8 @@ How they reach users:
 1. The files ship inside the npm package.
 2. On plugin startup, `src/distribution/skill-sync.ts` idempotently copies them to `~/.config/opencode/skills/<name>/`, writing a `.flow-skill-version` marker per folder (plugin version plus a sha256 line per shipped file).
 3. Folders without the marker are never touched. If a user edited a Flow-owned file (`SKILL.md` or a `references/` file), the old content is backed up next to it (`SKILL.md.backup`, `references/<name>.md.backup`) before being replaced.
-4. Skills synced during init may only be discovered on the next OpenCode start — keep the "restart once after install/update" line in user docs.
+4. The same startup path syncs thin command files to `~/.config/opencode/commands/` and `flow-reviewer.md` to `~/.config/opencode/agents/`, with sidecar Flow markers and `.backup` protection.
+5. Files synced during init may only be discovered on the next OpenCode start — keep the "restart once after install/update" line in user docs.
 
 Per-project overrides (`.opencode/skills/<name>/SKILL.md`) are a documented user feature; the plugin never writes there.
 
@@ -83,7 +84,7 @@ The suite is small (~40 files) and focused on what code actually owns:
 - session persistence, locking, activation, closure, and path/workspace-root safety
 - a v2-session resume fixture
 - tool arg shapes and registration
-- install lifecycle: pack, startup skill sync, uninstall
+- install lifecycle: pack, startup skill/command/agent sync, uninstall
 
 ```bash
 bun test

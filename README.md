@@ -35,18 +35,20 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 OpenCode installs the package from npm on startup. Pin the major version you install (currently `@3`) so restarts pick up fixes without crossing a breaking release.
 
-On startup the plugin syncs its global skills into `~/.config/opencode/skills/`:
+On startup the plugin syncs its global skills, commands, and review agent into OpenCode's normal discovery paths:
 
 ```text
-flow/SKILL.md          # the driving loop: status → plan → run → review → repeat
-flow-plan/SKILL.md     # decomposition heuristics, feature sizing, approval criteria
-flow-run/SKILL.md      # one-feature discipline, validation evidence standards
-flow-review/SKILL.md   # review depth criteria, finding taxonomy, report format
+~/.config/opencode/skills/flow/SKILL.md          # driving loop
+~/.config/opencode/skills/flow-plan/SKILL.md     # decomposition heuristics
+~/.config/opencode/skills/flow-run/SKILL.md      # validation discipline
+~/.config/opencode/skills/flow-review/SKILL.md   # review rubric
+~/.config/opencode/commands/flow-auto.md         # slash command pointers
+~/.config/opencode/agents/flow-reviewer.md       # read-only review agent
 ```
 
-**Restart OpenCode once after the first install or after an update** so freshly synced skills are discovered.
+**Restart OpenCode once after the first install or after an update** so freshly synced skills, commands, and agents are discovered.
 
-Skill sync is ownership-aware: each Flow-owned skill folder carries a `.flow-skill-version` marker with a sha256 line per shipped file. Folders without the marker are never touched, and if you edit a Flow-owned file by hand — `SKILL.md` or a `references/` file — the previous content is backed up next to it (`SKILL.md.backup`, `references/<name>.md.backup`) before an update replaces it.
+Sync is ownership-aware: each Flow-owned skill folder carries a `.flow-skill-version` marker with a sha256 line per shipped file, and each synced command/agent file has a sidecar `.flow-version` marker. Folders or files without Flow markers are never touched, and if you edit a Flow-owned file by hand the previous content is backed up next to it before an update replaces it.
 
 ### Per-project skill overrides
 
@@ -68,7 +70,7 @@ Releases before 2.1.0 installed a bundled plugin file at `~/.config/opencode/plu
 bunx opencode-plugin-flow uninstall
 ```
 
-This removes the Flow-owned global skill folders (those carrying the Flow marker) and a pre-npm `flow.js` copy if one exists, then reminds you to remove `"opencode-plugin-flow"` from the `plugin` array in `opencode.json`. Skills you created yourself are never deleted. Use `--dry-run` to preview.
+This removes the Flow-owned global skill folders, command files, agent files, and a pre-npm `flow.js` copy if one exists, then reminds you to remove `"opencode-plugin-flow"` from the `plugin` array in `opencode.json`. Files you created yourself are never deleted. Use `--dry-run` to preview.
 
 ## Skills, commands, and tools
 

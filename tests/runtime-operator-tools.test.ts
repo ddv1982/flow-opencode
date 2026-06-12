@@ -3,7 +3,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { applyFlowConfig } from "../src/config";
 import { FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER } from "../src/distribution/skill-markers";
-import { syncFlowSkills } from "../src/distribution/skill-sync";
+import {
+	syncFlowCommandsAndAgents,
+	syncFlowSkills,
+} from "../src/distribution/skill-sync";
 import {
 	evaluateConfigCheck,
 	type MutableConfig,
@@ -68,9 +71,10 @@ function findCheck(
 }
 
 async function installHealthyPluginFixture(homeDir: string) {
-	// npm distribution: a healthy install means the global Flow skills are
-	// synced and no pre-npm plugin copy exists in this home directory.
+	// npm distribution: a healthy install means the global Flow skills,
+	// commands, and agents are synced and no pre-npm plugin copy exists.
 	await syncFlowSkills({ homeDir, version: "0.0.0-test" });
+	await syncFlowCommandsAndAgents({ homeDir, version: "0.0.0-test" });
 }
 
 async function installPreNpmPluginFixture(homeDir: string) {
