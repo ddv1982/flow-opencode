@@ -56,7 +56,7 @@ describe("runtime recovery policy mapping", () => {
 		expect(failingValidation.recoveryStage).toBe("reset_feature");
 		expect(failingValidation.prerequisite).toBe("feature_reset_required");
 		expect(failingValidation.nextCommand).toBe(
-			"/flow-reset feature setup-runtime",
+			"flow_feature_complete reset setup-runtime",
 		);
 		expect(failingValidation.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(failingValidation.nextRuntimeArgs).toEqual({
@@ -72,7 +72,7 @@ describe("runtime recovery policy mapping", () => {
 		expect(failingFeatureReview.errorCode).toBe("failing_feature_review");
 		expect(failingFeatureReview.recoveryStage).toBe("reset_feature");
 		expect(failingFeatureReview.nextCommand).toBe(
-			"/flow-reset feature setup-runtime",
+			"flow_feature_complete reset setup-runtime",
 		);
 		expect(failingFeatureReview.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(failingFeatureReview.nextRuntimeArgs).toEqual({
@@ -88,7 +88,7 @@ describe("runtime recovery policy mapping", () => {
 		expect(failingFinalReview.errorCode).toBe("failing_final_review");
 		expect(failingFinalReview.recoveryStage).toBe("reset_feature");
 		expect(failingFinalReview.nextCommand).toBe(
-			"/flow-reset feature setup-runtime",
+			"flow_feature_complete reset setup-runtime",
 		);
 		expect(failingFinalReview.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(failingFinalReview.nextRuntimeArgs).toEqual({

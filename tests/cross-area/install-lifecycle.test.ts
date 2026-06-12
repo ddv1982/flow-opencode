@@ -38,7 +38,7 @@ describe("cross-area npm install lifecycle", () => {
 				configAgents: number;
 				configCommands: number;
 				toolCount: number;
-				compatToolCount: number;
+				extraToolCount: number;
 				preNpmWarningVerified: boolean;
 				uninstallVerified: boolean;
 			};
@@ -51,9 +51,9 @@ describe("cross-area npm install lifecycle", () => {
 				"flow-run",
 			]);
 			expect(report.configAgents).toBe(1);
-			expect(report.configCommands).toBe(9);
+			expect(report.configCommands).toBe(5);
 			expect(report.toolCount).toBe(7);
-			expect(report.compatToolCount).toBe(15);
+			expect(report.extraToolCount).toBe(0);
 			expect(report.preNpmWarningVerified).toBe(true);
 			expect(report.uninstallVerified).toBe(true);
 		},

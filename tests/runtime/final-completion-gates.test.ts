@@ -205,7 +205,7 @@ describe("runtime final completion gates", () => {
 		expect(completed.recovery?.recoveryStage).toBe("reset_feature");
 		expect(completed.recovery?.prerequisite).toBe("feature_reset_required");
 		expect(completed.recovery?.nextCommand).toBe(
-			"/flow-reset feature setup-runtime",
+			"flow_feature_complete reset setup-runtime",
 		);
 		expect(completed.recovery?.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(completed.recovery?.nextRuntimeArgs).toEqual({

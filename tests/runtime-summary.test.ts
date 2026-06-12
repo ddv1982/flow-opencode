@@ -557,14 +557,14 @@ describe("runtime summary", () => {
 
 		expect(
 			renderSessionStatusSummary(planning, {
-				nextCommand: "/flow-session activate test-session",
+				nextCommand: "flow_session activate test-session",
 			}),
 		).toBe(
 			[
 				"Flow: Flow has a draft plan that still needs the next planning step.",
 				"Blocker: The draft plan is not approved yet.",
 				"Next: Review or refine the draft plan, then approve it when ready.",
-				"Command: /flow-session activate test-session",
+				"Command: flow_session activate test-session",
 				"Progress: 0/2 completed",
 				"Task progress:",
 				"- flow-planner | planning | ready | Planning | next: Review or refine the draft plan, then approve it when ready.",

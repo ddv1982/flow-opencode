@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { V2_COMPAT_TOOL_NAMES } from "../../src/adapters/opencode/tool-surface/v2-compat-tools";
 import {
 	cleanupManagedTempDirs,
 	createToolContext,
@@ -27,7 +26,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes one agent, nine commands, and seven tools by default", async () => {
+	test("dist bundle exposes one agent, five commands, and seven tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -47,7 +46,7 @@ describe("built dist smoke load", () => {
 		);
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(1);
-		expect(Object.keys(config.command ?? {})).toHaveLength(9);
+		expect(Object.keys(config.command ?? {})).toHaveLength(5);
 		const canonicalToolNames = [
 			"flow_feature_complete",
 			"flow_plan_approve",
@@ -58,16 +57,10 @@ describe("built dist smoke load", () => {
 			"flow_status",
 		];
 		const registeredToolNames = Object.keys(plugin.tool ?? {}).sort();
-		const registeredCanonical = registeredToolNames.filter((name) =>
-			canonicalToolNames.includes(name),
-		);
-		const registeredCompat = registeredToolNames.filter(
-			(name) => !canonicalToolNames.includes(name),
-		);
-		expect(registeredCanonical).toEqual(canonicalToolNames);
-		expect(registeredCanonical).toHaveLength(7);
-		// v2 compat redirect stubs ride along until v3.1; they are not canonical.
-		expect(registeredCompat.sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
+		// The registered surface is exactly the canonical seven (the v2 compat
+		// redirect stubs were removed in v3.1).
+		expect(registeredToolNames).toEqual(canonicalToolNames);
+		expect(registeredToolNames).toHaveLength(7);
 
 		const context = createToolContext(worktree);
 		const planSaveResponse = JSON.parse(

@@ -12,10 +12,6 @@ import {
 	OPENCODE_TOOL_NAMES_FROM_REGISTRY,
 	OPENCODE_TOOL_REGISTRY,
 } from "../../src/adapters/opencode/tool-surface/tool-registry";
-import {
-	V2_COMPAT_TOOL_ALIASES,
-	V2_COMPAT_TOOL_NAMES,
-} from "../../src/adapters/opencode/tool-surface/v2-compat-tools";
 import { createTools } from "../../src/adapters/opencode/tools";
 import FlowPlugin from "../../src/index";
 import { CANONICAL_RUNTIME_TOOL_NAMES } from "../../src/runtime/constants";
@@ -344,9 +340,8 @@ describe("plugin config surface", () => {
 		expect(pluginWithHooks.hooks?.["chat.message"]).toBeUndefined();
 		expect(pluginWithHooks.hooks?.["command.execute.before"]).toBeUndefined();
 		expect(plugin.tool).not.toHaveProperty("flow_attachments_materialize");
-		// flow_auto_prepare survives only as a v2 compat redirect stub, never as
-		// a canonical tool.
-		expect(plugin.tool).toHaveProperty("flow_auto_prepare");
+		// flow_auto_prepare was a v2 tool; its redirect stub was removed in v3.1.
+		expect(plugin.tool).not.toHaveProperty("flow_auto_prepare");
 		expect(CANONICAL_RUNTIME_TOOL_NAMES).not.toContain("flow_auto_prepare");
 	});
 
@@ -383,20 +378,12 @@ describe("plugin config surface", () => {
 		});
 	});
 
-	test("adapter registers exactly the seven canonical runtime tools plus v2 compat stubs", () => {
+	test("adapter registers exactly the seven canonical runtime tools", () => {
 		const toolNames = Object.keys(createTools({}));
-		const canonicalNames = toolNames.filter((name) =>
-			(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
-		);
-		const compatNames = toolNames.filter(
-			(name) =>
-				!(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
-		);
 
-		expect(canonicalNames).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES]);
-		expect(canonicalNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
-		expect(canonicalNames).toHaveLength(7);
-		expect(compatNames.sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
+		expect(toolNames).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES]);
+		expect(toolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
+		expect(toolNames).toHaveLength(7);
 		expect(OPENCODE_TOOL_REGISTRY.map((entry) => entry.toolName)).toEqual([
 			...CANONICAL_RUNTIME_TOOL_NAMES,
 		]);
@@ -432,73 +419,25 @@ describe("plugin config surface", () => {
 		}
 	});
 
-	test("v2 compat stubs are executable and return redirect envelopes", async () => {
-		const tools = createTools({}) as Record<
-			string,
-			{
-				description: string;
-				execute: (args: unknown, context: unknown) => Promise<unknown>;
-			}
-		>;
-
-		for (const [compatName, replacement] of Object.entries(
-			V2_COMPAT_TOOL_ALIASES,
-		)) {
-			expect(CANONICAL_RUNTIME_TOOL_NAMES).not.toContain(compatName);
-			expect(OPENCODE_TOOL_NAMES_FROM_REGISTRY).not.toContain(compatName);
-
-			const stub = tools[compatName];
-			expect(stub).toBeDefined();
-			expect(stub?.description).toBe(`Retired v2 tool; use ${replacement}.`);
-
-			const output = await stub?.execute({ unexpected: "v2 args" }, {});
-			expect(typeof output).toBe("string");
-			const envelope = JSON.parse(output as string) as {
-				status: string;
-				summary: string;
-				replacement: string;
-				usage: string;
-			};
-			expect(envelope.status).toBe("error");
-			expect(envelope.summary).toBe(
-				`${compatName} was retired in v3; call ${replacement} instead`,
-			);
-			expect(envelope.replacement).toBe(replacement);
-			expect(envelope.usage).toContain(replacement);
-		}
-	});
-
 	test("records stable default command, agent, and tool counts", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 		const commandNames = Object.keys(config.command ?? {}).sort();
 		const agentNames = Object.keys(config.agent ?? {}).sort();
 		const toolNames = Object.keys(createTools({}));
-		const canonicalToolNames = toolNames.filter((name) =>
-			(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
-		);
-		const compatToolNames = toolNames.filter(
-			(name) =>
-				!(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
-		);
 
 		expect(commandNames).toEqual([
 			"flow-auto",
-			"flow-doctor",
-			"flow-history",
 			"flow-plan",
-			"flow-reset",
 			"flow-review",
 			"flow-run",
-			"flow-session",
 			"flow-status",
 		]);
 		expect(agentNames).toEqual(["flow-reviewer"]);
-		expect(canonicalToolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
-		expect(commandNames).toHaveLength(9);
+		expect(toolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
+		expect(commandNames).toHaveLength(5);
 		expect(agentNames).toHaveLength(1);
-		expect(canonicalToolNames).toHaveLength(7);
-		expect(compatToolNames.sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
+		expect(toolNames).toHaveLength(7);
 	});
 
 	test("keeps skills-first prompt surfaces compact", () => {
@@ -520,7 +459,7 @@ describe("plugin config surface", () => {
 
 		// Skills carry the instructions; agents and commands stay thin pointers.
 		expect(Object.keys(agent)).toHaveLength(1);
-		expect(Object.keys(command)).toHaveLength(9);
+		expect(Object.keys(command)).toHaveLength(5);
 		expect(largestAgentPrompt).toBeLessThan(300);
 		expect(largestCommandTemplate).toBeLessThan(300);
 		expect(agentPromptChars).toBeLessThan(600);
@@ -578,11 +517,12 @@ describe("plugin config surface", () => {
 			agent: "existing",
 		});
 		expect(config.agent?.["flow-reviewer"]).toBeDefined();
-		expect(config.command?.["flow-doctor"]).toBeDefined();
-		expect(config.command?.["flow-history"]).toBeDefined();
-		expect(config.command?.["flow-session"]).toBeDefined();
-		expect(config.command?.["flow-reset"]).toBeDefined();
+		expect(config.command?.["flow-auto"]).toBeDefined();
+		expect(config.command?.["flow-status"]).toBeDefined();
 		expect(config.command?.["flow-review"]).toBeDefined();
+		// Retired in v3.1: no longer injected.
+		expect(config.command?.["flow-doctor"]).toBeUndefined();
+		expect(config.command?.["flow-session"]).toBeUndefined();
 	});
 
 	test("injects fresh config objects instead of sharing mutable references across calls", () => {

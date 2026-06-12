@@ -25,9 +25,8 @@ const packageJson = JSON.parse(
 	readFileSync(join(projectRoot, "package.json"), "utf8"),
 );
 
-// toolCount tracks the canonical surface only; v2 compat redirect stubs
-// (see src/adapters/opencode/tool-surface/v2-compat-tools.ts) are registered
-// alongside but reported separately as compatToolCount.
+// The seven canonical tools are the whole registered surface as of v3.1;
+// extraToolCount asserts nothing else sneaks in.
 const CANONICAL_TOOL_NAMES = [
 	"flow_status",
 	"flow_plan_save",
@@ -335,7 +334,7 @@ async function main() {
 			configCommands: Object.keys(config.command).length,
 			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
 				.length,
-			compatToolCount: Object.keys(plugin.tool).filter(
+			extraToolCount: Object.keys(plugin.tool).filter(
 				(name) => !CANONICAL_TOOL_NAMES.includes(name),
 			).length,
 			startupLogCount: logs.length,
@@ -362,7 +361,7 @@ async function main() {
 					`- Synced skills: ${report.syncedSkills.join(", ")}`,
 					`- Synced commands: ${report.syncedCommands.join(", ")}`,
 					`- Synced agents: ${report.syncedAgents.join(", ")}`,
-					`- Tools: ${report.toolCount} canonical + ${report.compatToolCount} v2 compat stubs, agents: ${report.configAgents}, commands: ${report.configCommands}`,
+					`- Tools: ${report.toolCount} canonical (no extras), agents: ${report.configAgents}, commands: ${report.configCommands}`,
 					"- Pre-npm double-load warning verified",
 					"- Uninstall CLI verified",
 					"",

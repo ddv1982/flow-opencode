@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-06-12
+
+Only the v3 surface remains: five commands, seven tools, no v2 leftovers
+
+The command surface trims from nine to five: `/flow-auto`, `/flow-plan`, `/flow-run`, `/flow-review`, and `/flow-status`. The retired four (`/flow-doctor`, `/flow-history`, `/flow-session`, `/flow-reset`) were thin wrappers over a single tool call that work just as well as a plain request — "show the flow history", "close this session as completed", "reset feature X" — and `/flow-doctor` was the same `flow_status` view as `/flow-status`. Startup sync now also cleans up: Flow-owned files that a 3.0.x install synced for the retired names are removed from `~/.config/opencode/commands/` (user-edited copies are kept untouched), and `bunx opencode-plugin-flow uninstall` does the same.
+
+The 15 v2 tool-name redirect stubs (`flow_doctor`, `flow_run_complete_feature`, `flow_session_close`, …) are removed as scheduled — the seven canonical tools are now the entire registered surface. The session schema is still v1: v2-created `.flow/**` sessions continue to resume unchanged.
+
+Runtime next-step hints now reference things that exist: where a suggestion used to name a retired command (`/flow-reset feature <id>`, `/flow-history`, `/flow-session activate <id>`), it now names the tool call the skills teach (`flow_feature_complete reset <id>`, `flow_session history`, `flow_session activate <id>`). The five surviving commands are still suggested as slash commands.
+
+Restart OpenCode once after upgrading so the retired command files are cleaned up and the trimmed surface is discovered.
+
+Not-tested: Live OpenCode UI slash-command discovery after a real npm upgrade (verified via the packed-tarball install smoke).
+
 ## [3.0.1] - 2026-06-12
 
 Slash commands and the reviewer agent are now synced as real files so OpenCode discovers them

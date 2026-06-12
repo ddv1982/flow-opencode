@@ -1,7 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
 import flowPlanPlanningExamplesDoc from "../../skills/flow-plan/references/planning-examples.md" with {
 	type: "text",
@@ -26,6 +26,7 @@ import {
 	FLOW_CORE_COMMANDS,
 	type FlowAgentConfig,
 	type FlowCommandConfig,
+	RETIRED_FLOW_COMMANDS,
 } from "../config-shared";
 import {
 	FLOW_AGENTS_DIRECTORY,
@@ -116,7 +117,7 @@ type FlowSkillSyncResult = {
 type FlowManagedMarkdownSyncResult = {
 	name: string;
 	kind: FlowManagedMarkdownKind;
-	action: FlowSkillSyncAction;
+	action: FlowSkillSyncAction | "removed_retired";
 	path: string;
 };
 
@@ -346,7 +347,18 @@ export async function syncFlowCommandsAndAgents({
 	homeDir = resolveFlowHomeDir(),
 	version,
 }: FlowSkillSyncOptions): Promise<FlowManagedMarkdownSyncResult[]> {
+	const retired = await cleanupRetiredManagedMarkdownFiles({
+		kind: "command",
+		root: resolveFlowCommandsRoot(homeDir),
+		names: RETIRED_FLOW_COMMANDS,
+	});
 	return [
+		...retired.removed.map((path) => ({
+			name: retiredNameFromPath(path),
+			kind: "command" as const,
+			action: "removed_retired" as const,
+			path,
+		})),
 		...(await syncManagedMarkdownFiles({
 			homeDir,
 			version,
@@ -362,6 +374,50 @@ export async function syncFlowCommandsAndAgents({
 			files: flowAgentDefinitions(),
 		})),
 	];
+}
+
+function retiredNameFromPath(path: string): string {
+	const file = path.split(sep).at(-1) ?? path;
+	return file.endsWith(".md") ? file.slice(0, -".md".length) : file;
+}
+
+/**
+ * Removes files a previous release synced for since-retired names. Only
+ * marker-owned files whose content still matches the recorded hash are
+ * deleted; user-edited or foreign files stay untouched.
+ */
+export async function cleanupRetiredManagedMarkdownFiles(input: {
+	kind: FlowManagedMarkdownKind;
+	root: string;
+	names: readonly string[];
+	dryRun?: boolean;
+}): Promise<{ removed: string[]; keptUserEdited: string[] }> {
+	const removed: string[] = [];
+	const keptUserEdited: string[] = [];
+	for (const name of input.names) {
+		const path = join(input.root, `${name}.md`);
+		const markerPath = join(input.root, `.${name}.flow-version`);
+		const markerContent = await readOptionalFile(markerPath);
+		const marker =
+			markerContent === null
+				? null
+				: parseFlowManagedMarkdownMarker(markerContent, input.kind, name);
+		if (marker === null) {
+			continue;
+		}
+		const content = await readOptionalFile(path);
+		if (content !== null && sha256(content) !== marker.hash) {
+			keptUserEdited.push(path);
+			continue;
+		}
+		if (!input.dryRun) {
+			await rm(path, { force: true });
+			await rm(markerPath, { force: true });
+			await rm(`${path}.backup`, { force: true });
+		}
+		removed.push(path);
+	}
+	return { removed, keptUserEdited };
 }
 
 /**

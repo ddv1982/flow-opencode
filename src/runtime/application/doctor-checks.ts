@@ -1,7 +1,11 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { applyFlowConfig } from "../../config";
-import { FLOW_REASONING, type FlowReasoningEffort } from "../../config-shared";
+import {
+	FLOW_CORE_COMMANDS,
+	FLOW_REASONING,
+	type FlowReasoningEffort,
+} from "../../config-shared";
 import {
 	detectPreNpmFlowPlugin,
 	inspectFlowCommandAgentSyncState,
@@ -136,17 +140,7 @@ export function buildConfigCheck(): DoctorCheck {
 
 export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 	const requiredAgents = Object.keys(EXPECTED_FLOW_AGENT_REASONING);
-	const requiredCommands = [
-		"flow-plan",
-		"flow-run",
-		"flow-auto",
-		"flow-review",
-		"flow-status",
-		"flow-doctor",
-		"flow-history",
-		"flow-session",
-		"flow-reset",
-	];
+	const requiredCommands = Object.keys(FLOW_CORE_COMMANDS);
 	const missingAgents = requiredAgents.filter((name) => !config.agent?.[name]);
 	const missingCommands = requiredCommands.filter(
 		(name) => !config.command?.[name],

@@ -1,10 +1,12 @@
+// Next-step hints surfaced in tool responses: a slash command where one
+// exists (the five v3 commands), otherwise the tool call the skills teach.
 export const FLOW_PLAN_COMMAND = "/flow-plan";
 export const FLOW_PLAN_WITH_GOAL_COMMAND = "/flow-plan <goal>";
 export const FLOW_RUN_COMMAND = "/flow-run";
 export const FLOW_STATUS_COMMAND = "/flow-status";
-export const FLOW_HISTORY_COMMAND = "/flow-history";
-const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
-const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
+export const FLOW_HISTORY_COMMAND = "flow_session history";
+const FLOW_RESET_FEATURE_COMMAND = "flow_feature_complete reset";
+const FLOW_SESSION_ACTIVATE_COMMAND = "flow_session activate";
 
 export const CANONICAL_RUNTIME_TOOL_NAMES = [
 	"flow_status",

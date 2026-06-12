@@ -175,7 +175,7 @@ export const SEMANTIC_RECOVERY_EXPECTATIONS = {
 		"missing_final_review",
 	] as const satisfies readonly CompletionRecoveryKind[],
 	statusCommand: "/flow-status",
-	resetCommandPrefix: "/flow-reset feature ",
+	resetCommandPrefix: "flow_feature_complete reset ",
 	resetRuntimeTool: "flow_feature_complete",
 } as const;
 
