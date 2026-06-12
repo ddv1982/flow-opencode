@@ -8,17 +8,17 @@ import {
 	flowSessionActivateCommand,
 } from "../src/runtime/constants";
 import {
+	createSession,
+	loadSession,
+	saveSession,
+} from "../src/runtime/lifecycle";
+import {
 	getFeatureDocPath,
 	getFeatureDocPathFromSessionDir,
 	getSessionPath,
 	getStoredSessionDir,
 	getStoredSessionsDir,
 } from "../src/runtime/paths";
-import {
-	createSession,
-	loadSession,
-	saveSession,
-} from "../src/runtime/session";
 import {
 	activeSessionId,
 	createTempDirRegistry,
@@ -57,8 +57,8 @@ describe("runtime operator history and session lifecycle", () => {
 	test("flow_history returns a machine-readable missing-history summary", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const response = await tools.flow_history.execute(
-			{},
+		const response = await tools.flow_session.execute(
+			{ action: "history" },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -80,8 +80,8 @@ describe("runtime operator history and session lifecycle", () => {
 	test("flow_session_close requires an explicit closure kind", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const response = await tools.flow_session_close.execute(
-			undefined as never,
+		const response = await tools.flow_session.execute(
+			{ action: "close" } as never,
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -96,8 +96,8 @@ describe("runtime operator history and session lifecycle", () => {
 		const first = await saveSession(worktree, createSession("First goal"));
 		const second = await saveSession(worktree, createSession("Second goal"));
 
-		const resetResponse = await tools.flow_session_close.execute(
-			{ kind: "completed" },
+		const resetResponse = await tools.flow_session.execute(
+			{ action: "close", kind: "completed" },
 			toolContext(worktree),
 		);
 		const resetParsed = JSON.parse(resetResponse);
@@ -109,8 +109,8 @@ describe("runtime operator history and session lifecycle", () => {
 			readFile(join(worktree, resetParsed.completedTo, "session.json"), "utf8"),
 		).resolves.toContain('"goal": "Second goal"');
 
-		const response = await tools.flow_history.execute(
-			{},
+		const response = await tools.flow_session.execute(
+			{ action: "history" },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -265,12 +265,12 @@ describe("runtime operator history and session lifecycle", () => {
 		expect(await activeSessionId(worktree)).toBe(saved.id);
 	});
 
-	test("flow_status remains readable when drilldown enrichment source is malformed", async () => {
+	test("flow_status stays readable when the persisted session id is malformed", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const saved = await saveSession(
 			worktree,
-			createSessionWithActiveFeature("Malformed drilldown source"),
+			createSessionWithActiveFeature("Malformed persisted session id"),
 		);
 		const sessionPath = getSessionPath(worktree, saved.id, "active");
 		const session = JSON.parse(await readFile(sessionPath, "utf8"));
@@ -288,12 +288,11 @@ describe("runtime operator history and session lifecycle", () => {
 		const parsed = JSON.parse(response);
 
 		expect(parsed.status).toBe("ready");
-		expect(parsed.activeFeatureDrilldown).toBeUndefined();
-		expect(parsed.session.activeFeature.featureDrilldown).toBeUndefined();
-		const activeFeatureRow = parsed.session.taskProgress.find(
-			(row: { id: string }) => row.id === "feature:setup-runtime",
+		const artifactsCheck = parsed.readiness?.checks?.find(
+			(check: { id: string }) => check.id === "session_artifacts",
 		);
-		expect(activeFeatureRow?.featureDrilldown).toBeUndefined();
+		expect(artifactsCheck?.status).toBe("fail");
+		expect(artifactsCheck?.summary).toContain("malformed");
 		expect(await activeSessionId(worktree)).toBe(saved.id);
 	});
 
@@ -306,8 +305,8 @@ describe("runtime operator history and session lifecycle", () => {
 		);
 		await saveSession(worktree, createSession("Current active goal"));
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: stored.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: stored.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -358,8 +357,8 @@ describe("runtime operator history and session lifecycle", () => {
 			"utf8",
 		);
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: stored.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: stored.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -376,18 +375,25 @@ describe("runtime operator history and session lifecycle", () => {
 	test("flow_history_show resolves completed feature doc drilldowns", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const saved = await saveSession(
-			worktree,
-			createSessionWithActiveFeature("Completed drilldown goal"),
+		const finishedSession = createSessionWithActiveFeature(
+			"Completed drilldown goal",
 		);
-		const closeResponse = await tools.flow_session_close.execute(
-			{ kind: "completed" },
+		if (!finishedSession.plan) {
+			throw new Error("Expected sample plan to be present.");
+		}
+		// Finish every feature so the session can close as completed.
+		finishedSession.plan.features = finishedSession.plan.features.map(
+			(feature) => ({ ...feature, status: "completed" as const }),
+		);
+		const saved = await saveSession(worktree, finishedSession);
+		const closeResponse = await tools.flow_session.execute(
+			{ action: "close", kind: "completed" },
 			toolContext(worktree),
 		);
 		const closeParsed = JSON.parse(closeResponse);
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: saved.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: saved.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -422,8 +428,8 @@ describe("runtime operator history and session lifecycle", () => {
 		const first = await saveSession(worktree, createSession("First goal"));
 		const second = await saveSession(worktree, createSession("Second goal"));
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: first.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: first.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -457,7 +463,6 @@ describe("runtime operator history and session lifecycle", () => {
 				phase: "planning",
 				status: "active",
 				next: "Activate this session to continue it in the current worktree.",
-				handoffSource: "runtime_projection",
 			}),
 		]);
 		expect(parsed.guidance.nextCommand).toBe(
@@ -471,7 +476,7 @@ describe("runtime operator history and session lifecycle", () => {
 				`Command: ${flowSessionActivateCommand(first.id)}`,
 				"Progress: 0/0 completed",
 				"Task progress:",
-				"- flow-planner | planning | active | projection: runtime_projection | Planning | next: Activate this session to continue it in the current worktree.",
+				"- flow-planner | planning | active | Planning | next: Activate this session to continue it in the current worktree.",
 				"Goal: First goal",
 			].join("\n"),
 		);
@@ -494,8 +499,8 @@ describe("runtime operator history and session lifecycle", () => {
 		);
 		await rm(getSessionPath(worktree, session.id, "active"));
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: session.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: session.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -513,8 +518,8 @@ describe("runtime operator history and session lifecycle", () => {
 		await rm(getSessionPath(worktree, session.id, "active"));
 
 		await expect(
-			tools.flow_history_show.execute(
-				{ sessionId: session.id },
+			tools.flow_session.execute(
+				{ action: "show", sessionId: session.id },
 				toolContext(worktree),
 			),
 		).rejects.toThrow("ENOENT");
@@ -530,8 +535,8 @@ describe("runtime operator history and session lifecycle", () => {
 		const saved = await saveSession(worktree, readySession);
 		await saveSession(worktree, createSession("Current active goal"));
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: saved.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: saved.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -565,13 +570,13 @@ describe("runtime operator history and session lifecycle", () => {
 		const tools = createTestTools();
 		const saved = await saveSession(worktree, createSession("Completed goal"));
 
-		const resetResponse = await tools.flow_session_close.execute(
-			{ kind: "completed" },
+		const resetResponse = await tools.flow_session.execute(
+			{ action: "close", kind: "completed" },
 			toolContext(worktree),
 		);
 		const resetParsed = JSON.parse(resetResponse);
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: saved.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: saved.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -617,8 +622,8 @@ describe("runtime operator history and session lifecycle", () => {
 		});
 		await saveSession(worktree, createSession("Current active goal"));
 
-		const response = await tools.flow_history_show.execute(
-			{ sessionId: saved.id },
+		const response = await tools.flow_session.execute(
+			{ action: "show", sessionId: saved.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -638,8 +643,8 @@ describe("runtime operator history and session lifecycle", () => {
 
 		expect(await activeSessionId(worktree)).toBe(second.id);
 
-		const response = await tools.flow_session_activate.execute(
-			{ sessionId: first.id },
+		const response = await tools.flow_session.execute(
+			{ action: "activate", sessionId: first.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -667,8 +672,8 @@ describe("runtime operator history and session lifecycle", () => {
 			"utf8",
 		);
 
-		const response = await tools.flow_session_activate.execute(
-			{ sessionId: first.id },
+		const response = await tools.flow_session.execute(
+			{ action: "activate", sessionId: first.id },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -684,16 +689,16 @@ describe("runtime operator history and session lifecycle", () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		const showResponse = await tools.flow_history_show.execute(
-			{ sessionId: "missing-id" },
+		const showResponse = await tools.flow_session.execute(
+			{ action: "show", sessionId: "missing-id" },
 			toolContext(worktree),
 		);
 		const showParsed = JSON.parse(showResponse);
 		expect(showParsed.status).toBe("missing_session");
 		expect(showParsed.nextCommand).toBe(FLOW_HISTORY_COMMAND);
 
-		const activateResponse = await tools.flow_session_activate.execute(
-			{ sessionId: "missing-id" },
+		const activateResponse = await tools.flow_session.execute(
+			{ action: "activate", sessionId: "missing-id" },
 			toolContext(worktree),
 		);
 		const activateParsed = JSON.parse(activateResponse);
@@ -709,8 +714,8 @@ describe("runtime operator history and session lifecycle", () => {
 			createSession("Build a workflow plugin"),
 		);
 
-		const response = await tools.flow_session_close.execute(
-			{ kind: "completed" },
+		const response = await tools.flow_session.execute(
+			{ action: "close", kind: "completed" },
 			toolContext(worktree),
 		);
 		const parsed = JSON.parse(response);
@@ -742,8 +747,9 @@ describe("runtime operator history and session lifecycle", () => {
 			createSession("Defer a workflow plugin"),
 		);
 
-		const response = await tools.flow_session_close.execute(
+		const response = await tools.flow_session.execute(
 			{
+				action: "close",
 				kind: "deferred",
 				summary: "Deferred until the API contract is stable.",
 			},

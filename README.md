@@ -2,6 +2,8 @@
 
 `opencode-plugin-flow` adds a resumable planning, execution, validation, and review workflow to OpenCode. Use it when a task is important enough that you want a plan, recorded validation evidence, review gates, and a clear way to resume later.
 
+Flow is skills-first: four hand-authored skills carry the workflow guidance, and a small plugin provides durable `.flow/**` session state plus a few hard, code-enforced invariants.
+
 ## Quick start
 
 Install Flow, open OpenCode in the project you want to work on, then run:
@@ -19,19 +21,7 @@ Common examples:
 /flow-status
 ```
 
-For most implementation work, start with `/flow-auto`. Flow will create a tracked session under `.flow/**`, draft a plan, execute one feature at a time, validate, review, and either continue, recover, or stop with a concrete blocker.
-
-## When Flow is useful
-
-Flow is a good fit when you want:
-
-- a visible plan before code changes happen
-- one feature at a time instead of a broad untracked edit
-- validation commands and review decisions recorded with the work
-- resumable state on disk
-- a read-only repository review before or after implementation
-
-Skip Flow for disposable prompts, brainstorming, or experiments you do not want written to `.flow/**`.
+Flow creates a tracked session under `.flow/**`, drafts a plan, executes one feature at a time, records validation evidence, reviews, and either continues, recovers, or stops with a concrete blocker.
 
 ## Install
 
@@ -43,23 +33,34 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 }
 ```
 
-OpenCode installs the package from npm on startup. Pin the major version (`@2`) so restarts pick up fixes without crossing a breaking release.
+OpenCode installs the package from npm on startup. Pin the major version you install (currently `@2`; `@3` after the v3.0.0 release) so restarts pick up fixes without crossing a breaking release.
 
-On its first start the plugin syncs its global skills:
+On startup the plugin syncs its global skills into `~/.config/opencode/skills/`:
 
 ```text
-~/.config/opencode/skills/flow-plan/SKILL.md
-~/.config/opencode/skills/flow-run/SKILL.md
-~/.config/opencode/skills/flow-review/SKILL.md
+flow/SKILL.md          # the driving loop: status → plan → run → review → repeat
+flow-plan/SKILL.md     # decomposition heuristics, feature sizing, approval criteria
+flow-run/SKILL.md      # one-feature discipline, validation evidence standards
+flow-review/SKILL.md   # review depth criteria, finding taxonomy, report format
 ```
 
-Restart OpenCode once after the first install or after an update so the freshly synced skills are discovered. Each synced skill folder carries a `.flow-skill-version` marker; folders without the marker are never touched, and if you edit a synced `SKILL.md` by hand the previous content is backed up to `SKILL.md.backup` before an update replaces it.
+**Restart OpenCode once after the first install or after an update** so freshly synced skills are discovered.
 
-The plugin provides the slash commands, agents, tools, and hooks. The skills provide on-demand guidance for Flow planning, running, and review work; they do not replace the plugin or create separate workflow state.
+Skill sync is ownership-aware: each Flow-owned skill folder carries a `.flow-skill-version` marker with a sha256 line per shipped file. Folders without the marker are never touched, and if you edit a Flow-owned file by hand — `SKILL.md` or a `references/` file — the previous content is backed up next to it (`SKILL.md.backup`, `references/<name>.md.backup`) before an update replaces it.
+
+### Per-project skill overrides
+
+Skills are plain markdown and deliberately overridable. To customize Flow's behavior for one project — for example a team-specific planning or review rubric — place a project-local skill at:
+
+```text
+.opencode/skills/flow-plan/SKILL.md
+```
+
+OpenCode's project skill takes precedence over the global one. This is a supported feature, not a hack: edit the global synced copy for personal defaults (it will be backed up on update), or commit a project override for team conventions.
 
 ### Upgrading from the pre-npm (curl) install
 
-Releases before 2.1.0 installed a bundled plugin file at `~/.config/opencode/plugins/flow.js`. That copy keeps working, but once you add the npm plugin entry it would load Flow twice — the plugin warns about this at startup and `/flow-doctor` flags it. Remove it with the uninstall command below.
+Releases before 2.1.0 installed a bundled plugin file at `~/.config/opencode/plugins/flow.js`. Once you add the npm plugin entry, that copy would load Flow twice — the plugin warns about this at startup. Remove it with the uninstall command below.
 
 ### Uninstall
 
@@ -67,154 +68,109 @@ Releases before 2.1.0 installed a bundled plugin file at `~/.config/opencode/plu
 bunx opencode-plugin-flow uninstall
 ```
 
-This removes the Flow-owned global skills (folders carrying the Flow marker) and a pre-npm `flow.js` copy if one exists, then reminds you to remove `"opencode-plugin-flow"` from the `plugin` array in `opencode.json`. Skills you edited by hand are kept, never deleted silently. Use `--dry-run` to preview.
+This removes the Flow-owned global skill folders (those carrying the Flow marker) and a pre-npm `flow.js` copy if one exists, then reminds you to remove `"opencode-plugin-flow"` from the `plugin` array in `opencode.json`. Skills you created yourself are never deleted. Use `--dry-run` to preview.
 
-## Main commands
+## Skills, commands, and tools
+
+### The four skills
+
+| Skill | What it carries |
+| --- | --- |
+| `flow` | The driving loop: check status, plan, run, review, repeat; stop conditions, when to ask the user, recovery playbook. |
+| `flow-plan` | How to decompose work into features, size them, profile the repo, and when a plan is safe to auto-approve. |
+| `flow-run` | One-feature-at-a-time discipline and what counts as validation evidence. |
+| `flow-review` | Review depth criteria, finding taxonomy, and report format. |
+
+Deeper methodology (worked plan examples, validation and review rubrics) lives in `references/` files next to the `flow-plan`, `flow-run`, and `flow-review` skills and is loaded only when needed.
+
+### Commands
+
+Commands are thin pointers into the skills — the skill content is the real instruction surface. Command names are stable across the v2 → v3 upgrade.
 
 | Command | Use it when... |
 | --- | --- |
-| `/flow-auto <goal>` | You want Flow to plan, run, validate, review, and continue automatically. |
-| `/flow-auto` or `/flow-auto resume` | You want to resume the active Flow session. |
-| `/flow-plan <goal>` | You want to inspect or shape the plan before execution. |
-| `/flow-plan approve [feature-id...]` | You want to approve the current plan or selected features. |
+| `/flow-auto <goal>` | You want Flow to drive the whole loop — plan, run, validate, review — until completion or a real blocker. Run without a goal to resume. |
+| `/flow-plan <goal>` | You want to create, inspect, or shape the plan before execution. |
 | `/flow-run [feature-id]` | You want to execute exactly one approved feature. |
-| `/flow-review <goal>` | You want a read-only repository review and findings report. |
-| `/flow-status [detail]` | You want to see the active session, blocker, and next command. |
-| `/flow-doctor [detail]` | You want install/workspace/session readiness diagnostics. |
-| `/flow-history` | You want to list saved or completed sessions. |
-| `/flow-history show <session-id>` | You want details for a previous session. |
-| `/flow-session activate <session-id>` | You want to switch the active session. |
-| `/flow-session close <completed\|deferred\|abandoned>` | You want to close the active session. |
-| `/flow-reset feature <feature-id>` | You want to reset a feature and dependent work. |
+| `/flow-review <goal>` | You want a read-only review and findings report (runs in the fresh-context `flow-reviewer` subagent). |
+| `/flow-status` | You want session state, readiness checks, and the suggested next step. |
+| `/flow-doctor` | You want the workspace readiness checks with remediation steps (same `flow_status` view, doctor framing). |
+| `/flow-history` | You want to list saved sessions. |
+| `/flow-session activate <id>` / `close <completed\|deferred\|abandoned>` / `show <id>` | You want to switch, close, or inspect sessions. |
+| `/flow-reset <feature-id>` | You want to reset a feature back to pending (convenience over `flow_feature_complete` with `reset: true`). |
 
-## Recommended workflows
+### Tools
 
-### Let Flow drive implementation
+The plugin registers a small tool surface (7 tools) that owns all `.flow/**` mutations:
 
-```text
-/flow-auto Add a settings import/export feature
-```
+| Tool | Purpose |
+| --- | --- |
+| `flow_status` | Session state, doctor-style readiness, and a computed suggested next step. |
+| `flow_plan_save` | Create or update the draft plan (planning context plus features). |
+| `flow_plan_approve` | Approve the plan, optionally restricted to a feature subset. |
+| `flow_run_start` | Start the next runnable feature. |
+| `flow_feature_complete` | Record a validated feature result; also handles feature reset. |
+| `flow_review_record` | Record a reviewer decision (`scope: feature` or `final`). |
+| `flow_session` | Activate or close a session, list history, or show a stored session. |
 
-Flow will:
+These seven tools are the whole surface — there are no v2 tool-name aliases. Existing v2 sessions migrate seamlessly (the session schema is unchanged); transcripts or notes that reference old v2 tool names simply use the new names above.
 
-1. inspect the repository and local guidance
-2. create or refresh a plan
-3. run one feature at a time
-4. record validation evidence
-5. ask a review lane to approve or request fixes
-6. continue until the session completes or a real blocker appears
+### Agents
 
-For small tasks, Flow may auto-approve a safe single-feature plan. For larger work, it adds more planning, validation, and review gates.
+Flow ships one dedicated subagent: `flow-reviewer`, a read-only reviewer used for fresh-context review passes. Its read-only boundary is enforced by OpenCode's native per-agent permissions, not by prompt text. Everything else runs in your normal agent, guided by the skills.
 
-### Plan first, then run manually
+## What the plugin enforces vs. what skills guide
 
-```text
-/flow-plan Add a settings import/export feature
-/flow-plan approve
-/flow-run
-/flow-status
-```
+The plugin code enforces only hard invariants and persistence safety:
 
-Use this path when you want to inspect the plan before any implementation work starts. Repeat `/flow-run` until Flow reports the session complete.
+1. A feature cannot be completed without recorded validation evidence.
+2. A session cannot close as `completed` with unfinished features.
+3. An approved plan cannot be mutated without an explicit reset.
+4. If the session's review policy is strict, a reviewer decision must be recorded before completion.
 
-### Review without changing code
+Plus: atomic, locked, path-safe writes under `.flow/**`; schema validation of all tool payloads; and the compaction hook that keeps Flow state intact when OpenCode compacts a long session.
 
-```text
-/flow-review Review this repository for correctness and release risks
-```
-
-`/flow-review` is read-only. It returns a human-readable report with a conclusion, top findings, recommended next actions, and coverage notes.
-
-Review depth labels:
-
-- `default` — broad review across the major repository surfaces
-- `detailed` — deeper review with direct evidence across the major surfaces
-- `exhaustive` — strongest review claim, used only when coverage supports it
-
-Examples:
-
-```text
-/flow-review detailed Review this codebase for regressions and test gaps
-/flow-review exhaustive Review this repository before release and identify major risks
-```
-
-The command starts from changed or relevant files, then follows connected callers, callees, tests, prompts, tooling, release surfaces, and validation evidence when needed. It only claims the depth supported by inspected evidence.
-
-To fix findings under Flow's tracked gates, start a Flow implementation session with `/flow-auto` or `/flow-plan` and complete the fixes through `/flow-run`, validation, and review.
+Everything judgment-shaped — how to decompose a plan, how deep to review, what counts as good evidence, when to stop and ask — lives in the skills, where you can read and override it.
 
 ## What Flow writes
 
 Flow stores workflow state in the project/worktree where OpenCode is running:
 
 ```text
-.flow/active/<session-id>/session.json
-.flow/active/<session-id>/docs/index.md
-.flow/active/<session-id>/docs/features/<feature-id>.md
-.flow/stored/<session-id>/session.json
-.flow/completed/<session-id>-<timestamp>/session.json
+.flow/active/<session-id>/session.json        # active session (source of truth)
+.flow/active/<session-id>/docs/**             # readable derived views
+.flow/stored/<session-id>/session.json        # parked resumable sessions
+.flow/completed/<session-id>-<timestamp>/**   # closed session history
 .flow/locks/
-.flow/standards-profile.json
 ```
 
-The JSON session files are the source of truth. Markdown files are readable generated views of that state.
+The JSON session files are the source of truth; markdown files are derived views. There is one active session per worktree — activating another parks the current one under `.flow/stored/**`.
 
-There is one active Flow session per worktree. Activating another session parks the current one under `.flow/stored/**` and moves the requested one into `.flow/active/**`.
-
-Flow refuses to write session state at filesystem roots or directly in `$HOME`. If a hidden directory outside the normal project root would become the mutable workspace root, Flow asks before writing `.flow/**` there.
-
-## Agents and reasoning budgets
-
-Flow installs dedicated OpenCode agents for planning, execution, auto coordination, review, control commands, and standalone audit. In v2.0.29 and later, Flow emits OpenCode `reasoningEffort` hints for those agents:
-
-- high: planning, planning research, worker review, and standalone audit
-- medium: `/flow-auto` coordination
-- low: focused worker execution and control/status commands
-
-Flow does not set a default model or provider. Your OpenCode configuration still owns model choice. `reasoningEffort` is passed through as OpenCode agent metadata. To inspect the budgets Flow configured, run `/flow-doctor detail` and look at the `config` check's `agentReasoningEffort` details.
+Flow refuses to write session state at filesystem roots or directly in `$HOME`, and asks before writing `.flow/**` under unusual workspace roots. Existing v2 sessions resume under v3 (the session schema is unchanged).
 
 ## Troubleshooting
-
-Run:
 
 ```text
 /flow-doctor
 ```
 
-Use `/flow-doctor detail` for a fuller structured view.
-
-`/flow-doctor` checks:
-
-- distribution health: global Flow skills in sync, no stale pre-npm `flow.js` copy
-- whether Flow commands and agents are injected
-- whether the workspace root is writable and safe
-- active session artifact health
-- the current blocker and recommended next step
-
-If you are unsure where you are in a session, run:
-
-```text
-/flow-status detail
-```
+shows the workspace readiness checks (skills in sync, no stale pre-npm copy, workspace writable) with remediation steps; `/flow-status` adds the active session state, the current blocker, and the suggested next step.
 
 ## OpenCode references
 
-Flow follows the current OpenCode plugin, skill, and agent surfaces:
-
-- OpenCode plugins: https://dev.opencode.ai/docs/plugins/
-- OpenCode skills: https://dev.opencode.ai/docs/skills/
-- OpenCode agents and pass-through agent options: https://dev.opencode.ai/docs/agents/
+- Plugins: https://opencode.ai/docs/plugins
+- Skills: https://opencode.ai/docs/skills
+- Agents: https://opencode.ai/docs/agents
 
 ## Releases
 
-Release notes live in [`CHANGELOG.md`](CHANGELOG.md). Per-release notes also live under [`docs/releases/`](docs/releases/).
+Release notes live in [`CHANGELOG.md`](CHANGELOG.md) and under [`docs/releases/`](docs/releases/).
 
 ## Working on Flow itself
 
 - Development guide: [`docs/development.md`](docs/development.md)
-- Current maintainer contract: [`docs/maintainer-contract.md`](docs/maintainer-contract.md)
-- Risk-to-file map: [`docs/contributor-map.md`](docs/contributor-map.md)
-
-Prompt behavior is tested as a product surface. The maintainer workflow includes providerless prompt captures and behavior evaluations, so many prompt and command changes can be checked without a model API key.
+- Maintainer contract: [`docs/maintainer-contract.md`](docs/maintainer-contract.md)
+- Codebase map: [`docs/contributor-map.md`](docs/contributor-map.md)
 
 ### Package API boundary
 
@@ -224,7 +180,7 @@ Prompt behavior is tested as a product surface. The maintainer workflow includes
 import flowPlugin from "opencode-plugin-flow";
 ```
 
-Deep imports such as `opencode-plugin-flow/dist/...` or `opencode-plugin-flow/src/...` are intentionally not exported and are outside the public API.
+Deep imports such as `opencode-plugin-flow/dist/...` are intentionally not exported.
 
 ## License
 

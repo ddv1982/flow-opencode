@@ -22,29 +22,16 @@
 		"build:cli": "bun build --target=node --outdir=./dist --entry-naming=cli.js --banner='#!/usr/bin/env node' --minify ./src/cli.ts",
 		"bench": "bun run ./bench/index.ts",
 		"bench:smoke": "bun run ./bench/index.ts -- --filter transitions --warmup 0 --iterations 3",
-		"bench:gate": "node ./scripts/cross-area/bench-gate.mjs",
-		"gate:completion-lane": "bun run check:completion-lane",
-		"check:completion-lane": "node ./scripts/cross-area/check-completion-lane.mjs",
 		"check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
 		"check:architecture-seams": "node ./scripts/cross-area/architecture-seams.mjs",
 		"check:architecture-seams:enforce": "FLOW_ARCH_SEAMS_MODE=enforce node ./scripts/cross-area/architecture-seams.mjs",
 		"check:release-hygiene": "node ./scripts/cross-area/release-hygiene.mjs",
-		"check:fresh-surfaces": "node ./scripts/cross-area/fresh-surface-terminology.mjs",
 		"check:pack-invariants": "node ./scripts/cross-area/pack-invariants.mjs",
+		"check:bundle-sanity": "node ./scripts/cross-area/bundle-sanity.mjs",
 		"smoke:opencode": "node ./scripts/cross-area/opencode-smoke.mjs",
 		"smoke:release": "node ./scripts/cross-area/release-smoke.mjs",
-		"check:generated-drift": "bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun test --test-name-pattern 'workflow surface descriptor family'",
-		"check:boundary-report": "node ./scripts/cross-area/boundary-violations-report.mjs",
-		"report:runtime-simplification-metrics": "node ./scripts/cross-area/runtime-simplification-metrics.mjs",
-		"check:cold-start-budget": "node ./scripts/cross-area/cold-start-budget.mjs",
-		"report:prompt-eval": "bun run ./scripts/cross-area/prompt-eval-summary.ts",
-		"eval:review-capture": "bun run ./scripts/cross-area/review-prompt-capture.ts",
-		"eval:review-capture:check": "bun run ./scripts/cross-area/review-prompt-capture.ts -- --check",
-		"eval:prompt-capture": "bun run ./scripts/cross-area/prompt-mode-capture.ts",
-		"eval:prompt-capture:check": "bun run ./scripts/cross-area/prompt-mode-capture.ts -- --check",
 		"deadcode": "knip --include files,dependencies,unlisted,unresolved,binaries,catalog",
 		"report:deadcode-exports": "knip --exports --no-exit-code --reporter compact",
-		"check:deadcode-exports": "node ./scripts/cross-area/deadcode-export-budget.mjs",
 		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"test": "bun test",
 		"test:fast": "bun test tests/runtime/semantic-invariants.test.ts tests/runtime/final-completion-gates.test.ts",
@@ -55,7 +42,7 @@
 		"test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
 		"typecheck": "tsc --noEmit",
 		"uninstall:opencode": "bun run ./src/cli.ts uninstall",
-		"check": "bun run typecheck && bun run eval:review-capture:check && bun run eval:prompt-capture:check && bun run check:dependency-contract && bun run check:architecture-seams:enforce && bun run check:fresh-surfaces && bun run deadcode && bun run check:deadcode-exports && bun run build && bun run check:release-hygiene && bun run check:pack-invariants && bun run gate:completion-lane && bun run test:replay && bun run check:cold-start-budget && node ./scripts/cross-area/bundle-sanity.mjs && bun run test && bun run lint && bun run bench:smoke && bun run bench:gate"
+		"check": "bun run typecheck && bun run lint && bun run build && bun run test && bun run smoke:opencode && bun run check:bundle-sanity"
 	},
 	"keywords": [
 		"opencode",
@@ -95,9 +82,6 @@
 			"bench/**/*.ts",
 			"scripts/**/*.mjs",
 			"scripts/**/*.ts"
-		],
-		"ignore": [
-			"src/prompts/generated/index.ts"
 		]
 	}
 }

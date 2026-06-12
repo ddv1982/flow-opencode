@@ -3,9 +3,6 @@ export {
 	activateSession,
 	closeSession,
 	createSession,
-	deleteSession,
-	deleteSessionArtifacts,
-	deleteSessionState,
 } from "../session-lifecycle";
 export {
 	loadSession,
@@ -13,11 +10,7 @@ export {
 	saveSessionState,
 	syncSessionArtifacts,
 } from "../session-persistence";
-export {
-	ensureWorkspace,
-	readActiveSessionId,
-	writeSessionFile,
-} from "../session-workspace";
+export { readActiveSessionId } from "../session-workspace";
 export {
 	resetSessionWorkspaceFsForTests,
 	setSessionWorkspaceFsForTests,

@@ -1,5 +1,8 @@
-import { createRuntimeTools } from "./tool-surface/runtime-tools";
-import { createSessionTools } from "./tool-surface/session-tools";
+import { createPlanTools } from "./tool-surface/plan-tools";
+import { createReviewTool } from "./tool-surface/review-tool";
+import { createRunTools } from "./tool-surface/run-tools";
+import { createSessionTool } from "./tool-surface/session-tool";
+import { createStatusTool } from "./tool-surface/status-tool";
 import { OPENCODE_TOOL_NAMES_FROM_REGISTRY } from "./tool-surface/tool-registry";
 
 type PluginLogContext = {
@@ -55,8 +58,11 @@ function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 
 export function createCoreTools() {
 	return orderProjectedTools({
-		...createSessionTools(),
-		...createRuntimeTools(),
+		...createStatusTool(),
+		...createPlanTools(),
+		...createRunTools(),
+		...createReviewTool(),
+		...createSessionTool(),
 	});
 }
 

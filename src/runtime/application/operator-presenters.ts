@@ -1,10 +1,9 @@
 import type { LatestFailedFlowAttempt, Session } from "../schema";
-import { deriveSessionViewModel, type SessionGuidance } from "../summary";
+import { deriveSessionViewModel } from "../summary";
 import {
 	selectOperatorTaskProgressRows,
 	type TaskProgressRow,
 } from "../summary-projections";
-import type { DoctorCheck } from "./doctor-checks";
 
 function toInlineSummaryText(value: string, maxLength: number): string {
 	const inline = value
@@ -34,12 +33,6 @@ function renderLatestFailedAttemptLines(
 	];
 }
 
-function formatTaskProgressHandoff(row: TaskProgressRow): string {
-	return row.handoffMode
-		? `${row.handoffMode} (${row.handoffSource})`
-		: row.handoffSource;
-}
-
 function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
 	const selected = selectOperatorTaskProgressRows(rows);
 	if (selected.length === 0) {
@@ -51,7 +44,7 @@ function renderTaskProgressSummary(rows: TaskProgressRow[]): string[] {
 		...selected.map((row) => {
 			const subject = toInlineSummaryText(row.subject, 55);
 			const next = toInlineSummaryText(row.next, 75);
-			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | projection: ${formatTaskProgressHandoff(row)} | ${subject} | next: ${next}`;
+			return `- ${row.ownerRole} | ${row.phase} | ${row.status} | ${subject} | next: ${next}`;
 		}),
 	];
 }
@@ -106,40 +99,5 @@ export function renderSessionStatusSummary(
 		lines.push(`Goal: ${viewModel.session.goal}`);
 	}
 
-	return lines.join("\n");
-}
-
-export function renderDoctorSummary(
-	status: "ok" | "warn" | "fail",
-	checks: DoctorCheck[],
-	guidance: SessionGuidance,
-	nextStep: string,
-	nextCommand: string,
-	latestFailedAttempt?: LatestFailedFlowAttempt | null,
-) {
-	const firstIssue =
-		checks.find((check) => check.status === "fail") ??
-		checks.find((check) => check.status === "warn");
-
-	if (!firstIssue) {
-		return [
-			"Flow doctor: Ready.",
-			...(guidance.blocker ? [`Blocker: ${guidance.blocker}`] : []),
-			...renderLatestFailedAttemptLines(latestFailedAttempt),
-			`Next: ${nextStep}`,
-			`Command: ${nextCommand}`,
-		].join("\n");
-	}
-
-	const lines = [`Flow doctor ${status}: ${firstIssue.summary}`];
-	if (firstIssue.remediation) {
-		lines.push(`Fix: ${firstIssue.remediation}`);
-	}
-	if (guidance.blocker) {
-		lines.push(`Blocker: ${guidance.blocker}`);
-	}
-	lines.push(...renderLatestFailedAttemptLines(latestFailedAttempt));
-	lines.push(`Next: ${nextStep}`);
-	lines.push(`Command: ${nextCommand}`);
 	return lines.join("\n");
 }

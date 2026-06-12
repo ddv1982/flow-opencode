@@ -2,18 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTools } from "../../src/adapters/opencode/tools";
+import { CANONICAL_RUNTIME_TOOL_NAMES } from "../../src/runtime/constants";
 import {
-	SEMANTIC_COMPLETION_GATE_ORDER,
 	SEMANTIC_COMPLETION_POLICY_EXPECTATIONS,
 	SEMANTIC_DECISION_GATE_EXPECTATIONS,
 	SEMANTIC_INVARIANT_IDS,
 	SEMANTIC_INVARIANTS,
 	SEMANTIC_RECOVERY_EXPECTATIONS,
 	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
-	SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER,
-	SEMANTIC_TOOL_SURFACE_EXPECTATIONS,
 	semanticInvariantById,
 } from "../../src/runtime/domain";
+import { createSession } from "../../src/runtime/lifecycle";
 import type {
 	ReviewerDecision,
 	Session,
@@ -23,7 +22,6 @@ import {
 	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
 } from "../../src/runtime/schema";
-import { createSession } from "../../src/runtime/session";
 import {
 	explainSessionState,
 	summarizeSession,
@@ -34,6 +32,7 @@ import {
 } from "../../src/runtime/transitions/execution";
 import { applyPlan, approvePlan } from "../../src/runtime/transitions/plan";
 import { buildCompletionRecovery } from "../../src/runtime/transitions/recovery";
+import { recordReviewerDecision } from "../../src/runtime/transitions/review";
 import type { TransitionResult } from "../../src/runtime/transitions/shared";
 import { cloneSamplePlan } from "../fixtures";
 
@@ -90,12 +89,6 @@ function approvedReviewerDecision(
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Approved.",
@@ -166,8 +159,8 @@ describe("runtime semantic invariants", () => {
 	test("catalog owner references stay complete and resolvable", () => {
 		const repoRoot = join(import.meta.dir, "..", "..");
 		const expectedCoverage = {
-			"src/runtime/transitions/execution-completion.ts": [
-				"validateSuccessfulCompletion",
+			"src/runtime/transitions/execution-completion-validation.ts": [
+				"validateNormalizedSuccessfulCompletion",
 			],
 			"src/runtime/domain/completion.ts": ["summarizeCompletion"],
 			"src/runtime/domain/workflow-policy.ts": [
@@ -181,7 +174,9 @@ describe("runtime semantic invariants", () => {
 			],
 			"src/runtime/transitions/recovery.ts": ["buildCompletionRecovery"],
 			"src/adapters/opencode/tools.ts": ["createTools"],
-			"src/runtime/constants.ts": ["CANONICAL_RUNTIME_TOOL_NAMES"],
+			"src/adapters/opencode/tool-surface/tool-registry.ts": [
+				"OPENCODE_TOOL_REGISTRY",
+			],
 		} as const satisfies Record<string, readonly string[]>;
 
 		const referencedCoverage = new Map<string, Set<string>>();
@@ -269,39 +264,19 @@ describe("runtime semantic invariants", () => {
 				strictSession,
 				{
 					...withValidation,
+					validationScope: "targeted",
 					artifactsChanged: [{ path: "src/runtime/session.ts" }],
-					reviewScopeLedger: [
-						{
-							scopeId: "file_target:src/runtime/session.ts",
-							status: "reviewed_no_findings",
-							evidenceRefs: ["src/runtime/session.ts"],
-							validationRefs: ["bun test"],
-							residualRisk: "No known residual risk.",
-						},
-					],
+					featureReview: {
+						status: "passed",
+						summary: "Feature review passed.",
+						blockingFindings: [],
+					},
 				},
 				featureId,
 				false,
 			),
 			"missing_feature_reviewer_decision",
 		);
-
-		expect(SEMANTIC_COMPLETION_GATE_ORDER.feature).toEqual([
-			"missing_validation",
-			"failing_validation",
-			"missing_validation_scope",
-			"failing_feature_review",
-			"failing_final_review",
-		]);
-		expect(SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER.feature).toEqual([
-			"missing_validation",
-			"failing_validation",
-			"missing_review_scope_accounting",
-			"missing_reviewer_decision",
-			"missing_validation_scope",
-			"failing_feature_review",
-			"failing_final_review",
-		]);
 	});
 
 	test("completion.gates.required_order preserves final-path precedence", () => {
@@ -339,12 +314,6 @@ describe("runtime semantic invariants", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "failed",
 				summary: "Final review failed.",
@@ -375,15 +344,6 @@ describe("runtime semantic invariants", () => {
 			),
 			"missing_broad_validation",
 		);
-
-		expect(SEMANTIC_COMPLETION_GATE_ORDER.final).toEqual([
-			"missing_validation",
-			"failing_validation",
-			"missing_validation_scope",
-			"failing_feature_review",
-			"failing_final_review",
-			"missing_final_review",
-		]);
 	});
 
 	test("completion.policy.min_completed_features allows completion with pending work", () => {
@@ -459,50 +419,10 @@ describe("runtime semantic invariants", () => {
 		expect(
 			FlowReviewRecordFeatureArgsSchema.safeParse({
 				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.featureScope,
-				featureId: "setup-runtime",
 				status: "approved",
 				summary: "Approved.",
 			}).success,
-		).toBe(SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.featureRequiresFeatureId);
-		expect(
-			FlowReviewRecordFeatureArgsSchema.safeParse({
-				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.featureScope,
-				featureId: "setup-runtime",
-				status: "approved",
-				summary: "Approved.",
-				unexpected: true,
-			}).success,
-		).toBe(false);
-
-		expect(
-			FinalReviewerDecisionSchema.safeParse({
-				scope: SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalScope,
-				featureId: "setup-runtime",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
-				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
-				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
-				remainingGaps: [],
-				status: "approved",
-				summary: "Approved.",
-			}).success,
-		).toBe(false);
+		).toBe(!SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.featureRequiresFeatureId);
 
 		expect(
 			FinalReviewerDecisionSchema.safeParse({
@@ -521,17 +441,25 @@ describe("runtime semantic invariants", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "approved",
 				summary: "Approved.",
 			}).success,
 		).toBe(true);
+
+		// The featureId rejection for final-scope decisions lives in the
+		// transition layer (validateReviewerDecisionInput), not the zod schema:
+		// v2 payloads with retired keys must still parse.
+		const session = createRunningSession();
+		const rejected = recordReviewerDecision(session, {
+			...approvedReviewerDecision("final"),
+			featureId: "setup-runtime",
+		} as ReviewerDecision);
+		expect(rejected.ok).toBe(false);
+		if (rejected.ok) return;
+		expect(rejected.message).toContain(
+			"final-scope decisions must not name a single feature",
+		);
 		expect(SEMANTIC_REVIEW_SCOPE_EXPECTATIONS.finalRejectsFeatureId).toBe(true);
 	});
 
@@ -561,13 +489,10 @@ describe("runtime semantic invariants", () => {
 
 	test("tools.canonical_surface.no_raw_wrappers stays canonical-only", () => {
 		const tools = Object.keys(createTools({}));
-		for (const toolName of SEMANTIC_TOOL_SURFACE_EXPECTATIONS.canonicalRuntimeToolNames) {
+		for (const toolName of CANONICAL_RUNTIME_TOOL_NAMES) {
 			expect(tools).toContain(toolName);
 		}
-		expect(
-			tools.some((name) =>
-				name.includes(SEMANTIC_TOOL_SURFACE_EXPECTATIONS.forbiddenSubstring),
-			),
-		).toBe(false);
+		expect([...tools].sort()).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES].sort());
+		expect(tools.some((name) => name.includes("_from_raw"))).toBe(false);
 	});
 });

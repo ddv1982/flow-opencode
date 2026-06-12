@@ -7,11 +7,6 @@
 - active: no
 - goal: Benchmark 10-feature session
 
-## Task Progress
-
-- completed | flow-worker | execution | projection: runtime_projection | feature-3 — Feature feature-3 | next: No action needed. | evidence: file targets: 1, verification: 1, validation: 1, verification status: passed
-- completed | flow-worker | validation | projection: runtime_projection | Validation for feature-3 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
-
 ## Description
 
 > Implement feature-3.

@@ -3,8 +3,8 @@ import { mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { detectPackageManager } from "../src/runtime/application/package-manager";
+import { loadSession } from "../src/runtime/lifecycle";
 import { getIndexDocPath } from "../src/runtime/paths";
-import { loadSession } from "../src/runtime/session";
 import {
 	activeSessionId,
 	createTempDirRegistry,
@@ -179,7 +179,7 @@ describe("package manager detection", () => {
 			"lockfileVersion: '9.0'",
 		);
 
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Ship a workflow fix" },
 			{ worktree } as never,
 		);
@@ -193,15 +193,10 @@ describe("package manager detection", () => {
 		expect(parsed.status).toBe("ok");
 		expect(session?.planning.packageManager).toBeUndefined();
 		expect(session?.planning.packageManagerAmbiguous).toBe(true);
-		expect(
-			session?.planning.standardsProfile?.rules.some((rule) =>
-				rule.summary.includes("Package-manager evidence is ambiguous"),
-			),
-		).toBe(true);
 		expect(indexDoc).toContain("package manager evidence: ambiguous");
 	});
 
-	test("flow_plan_start persists the nearest detected package manager and stack profiles into session planning state", async () => {
+	test("flow_plan_save persists the nearest detected package manager into session planning state", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		await writeWorkspaceFile(worktree, "bun.lock", "# bun lockfile");
@@ -217,7 +212,7 @@ describe("package manager detection", () => {
 		await writeWorkspaceFile(worktree, "packages/app/tsconfig.json", "{}");
 		await writeWorkspaceFile(worktree, "AGENTS.md", "Use project rules.");
 
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Ship a workflow fix" },
 			{ worktree, directory: join(worktree, "packages/app/src") } as never,
 		);
@@ -230,67 +225,6 @@ describe("package manager detection", () => {
 
 		expect(parsed.status).toBe("ok");
 		expect(session?.planning.packageManager).toBe("yarn");
-		expect(
-			session?.planning.stackProfile?.languages.map((item) => item.name),
-		).toContain("TypeScript");
-		expect(
-			session?.planning.standardsProfile?.localGuidelines.some(
-				(item) => item.reference === "AGENTS.md",
-			),
-		).toBe(true);
 		expect(indexDoc).toContain("package manager: yarn");
-		expect(indexDoc).toContain("## Stack Profile");
-		expect(indexDoc).toContain("## Standards Profile");
-	});
-
-	test("flow_plan_context_record refreshes the standards cache with researched guidance", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		await writeWorkspaceFile(
-			worktree,
-			"package.json",
-			JSON.stringify({
-				name: "fixture",
-				devDependencies: { typescript: "^6.0.0" },
-			}),
-		);
-
-		await tools.flow_plan_start.execute({ goal: "Ship a workflow fix" }, {
-			worktree,
-		} as never);
-		await tools.flow_plan_context_record.execute(
-			{
-				standardsProfile: {
-					localGuidelines: [],
-					externalGuidance: [
-						{
-							title: "TypeScript Handbook",
-							sourceType: "official",
-							reference: "https://www.typescriptlang.org/docs/",
-							confidence: "high",
-						},
-					],
-					rules: [
-						{
-							summary:
-								"Prefer TypeScript official guidance for language semantics.",
-							sourceRefs: ["https://www.typescriptlang.org/docs/"],
-							priority: "official",
-						},
-					],
-					gaps: [],
-					precedence: [],
-				},
-			},
-			{ worktree } as never,
-		);
-
-		const cache = JSON.parse(
-			await readFile(join(worktree, ".flow", "standards-profile.json"), "utf8"),
-		);
-
-		expect(cache.profile.standardsProfile.externalGuidance).toEqual([
-			expect.objectContaining({ title: "TypeScript Handbook" }),
-		]);
 	});
 });

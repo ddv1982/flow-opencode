@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { FLOW_STATUS_COMMAND } from "../src/runtime/constants";
+import { createSession, saveSession } from "../src/runtime/lifecycle";
 import { getIndexDocPath } from "../src/runtime/paths";
-import {
-	createSession,
-	deleteSession,
-	loadSession,
-	saveSession,
-} from "../src/runtime/session";
 import {
 	applyPlan,
 	approvePlan,
@@ -62,15 +57,6 @@ describe("runtime reviewer decision and reset tools", () => {
 				},
 			],
 			validationScope: "targeted",
-			reviewScopeLedger: [
-				{
-					scopeId: "file_target:src/runtime/session.ts",
-					status: "reviewed_no_findings",
-					evidenceRefs: ["src/runtime/session.ts"],
-					validationRefs: ["bun test"],
-					residualRisk: "No known residual risk.",
-				},
-			],
 			reviewIterations: 1,
 			decisions: [],
 			nextStep: "Run the next feature.",
@@ -122,7 +108,7 @@ describe("runtime reviewer decision and reset tools", () => {
 		if (!started.ok) return;
 		await saveSession(worktree, started.value.session);
 
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "ok",
@@ -136,15 +122,6 @@ describe("runtime reviewer decision and reset tools", () => {
 					},
 				],
 				validationScope: "broad",
-				reviewScopeLedger: [
-					{
-						scopeId: "file_target:src/runtime/session.ts",
-						status: "reviewed_no_findings",
-						evidenceRefs: ["src/runtime/session.ts"],
-						validationRefs: ["bun test"],
-						residualRisk: "No known residual risk.",
-					},
-				],
 				reviewIterations: 1,
 				decisions: [],
 				nextStep: "Session should complete.",
@@ -173,12 +150,6 @@ describe("runtime reviewer decision and reset tools", () => {
 						changedArtifacts: ["src/runtime/session.ts"],
 						validationCommands: ["bun test"],
 					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
 					remainingGaps: [],
 					status: "passed",
 					summary: "Final review looks good.",
@@ -240,7 +211,7 @@ describe("runtime reviewer decision and reset tools", () => {
 		);
 	});
 
-	test("resets a feature and clears session files", async () => {
+	test("resets a feature back to pending", async () => {
 		const worktree = makeTempDir();
 		const session = createSession("Build a workflow plugin");
 		const applied = applyPlan(session, samplePlan());
@@ -265,12 +236,9 @@ describe("runtime reviewer decision and reset tools", () => {
 
 		await saveSession(worktree, reset.value);
 		const sessionId = await activeSessionId(worktree);
-		await deleteSession(worktree);
-		const loaded = await loadSession(worktree);
-		expect(loaded).toBeNull();
 		await expect(
 			readFile(getIndexDocPath(worktree, sessionId), "utf8"),
-		).rejects.toThrow();
+		).resolves.toContain("# Flow Session");
 	});
 
 	test("resetting a prerequisite also resets dependent features", () => {

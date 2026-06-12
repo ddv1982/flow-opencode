@@ -13,23 +13,12 @@ type TestTool = {
 };
 type FlowToolName =
 	| "flow_status"
-	| "flow_doctor"
-	| "flow_history"
-	| "flow_history_show"
-	| "flow_session_activate"
-	| "flow_plan_start"
-	| "flow_auto_prepare"
-	| "flow_session_close"
-	| "flow_plan_context_record"
-	| "flow_plan_apply"
+	| "flow_plan_save"
 	| "flow_plan_approve"
-	| "flow_plan_select_features"
 	| "flow_run_start"
-	| "flow_run_complete_feature"
-	| "flow_review_record_feature"
-	| "flow_review_record_final"
-	| "flow_review_render"
-	| "flow_reset_feature";
+	| "flow_feature_complete"
+	| "flow_review_record"
+	| "flow_session";
 type FlowSmokeTools = Record<FlowToolName, TestTool>;
 
 afterEach(() => {
@@ -37,7 +26,7 @@ afterEach(() => {
 });
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes seven agents, nine commands, and eighteen tools by default", async () => {
+	test("dist bundle exposes one agent, nine commands, and seven tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		const plugin = (await pluginFactory({
@@ -56,32 +45,33 @@ describe("built dist smoke load", () => {
 			config as Parameters<NonNullable<typeof plugin.config>>[0],
 		);
 
-		expect(Object.keys(config.agent ?? {})).toHaveLength(7);
+		expect(Object.keys(config.agent ?? {})).toHaveLength(1);
 		expect(Object.keys(config.command ?? {})).toHaveLength(9);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(18);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(7);
+		expect(Object.keys(plugin.tool ?? {}).sort()).toEqual([
+			"flow_feature_complete",
+			"flow_plan_approve",
+			"flow_plan_save",
+			"flow_review_record",
+			"flow_run_start",
+			"flow_session",
+			"flow_status",
+		]);
 
 		const context = createToolContext(worktree);
-		const planStartResponse = JSON.parse(
-			await tools.flow_plan_start.execute(
+		const planSaveResponse = JSON.parse(
+			await tools.flow_plan_save.execute(
 				{ goal: "Optimize the Flow bundle" },
 				context,
 			),
 		);
-		expect(planStartResponse.status).toBe("ok");
-		expect(planStartResponse.session.goal).toBe("Optimize the Flow bundle");
-		const sessionId = planStartResponse.session.id as string;
+		expect(planSaveResponse.status).toBe("ok");
+		expect(planSaveResponse.session.goal).toBe("Optimize the Flow bundle");
+		const sessionId = planSaveResponse.session.id as string;
 
-		const toolArgs: Record<string, unknown> = {
+		const toolArgs: Record<FlowToolName, unknown> = {
 			flow_status: {},
-			flow_doctor: {},
-			flow_history: {},
-			flow_history_show: { sessionId },
-			flow_session_activate: { sessionId },
-			flow_plan_start: { goal: "Optimize the Flow bundle" },
-			flow_auto_prepare: { argumentString: "resume" },
-			flow_session_close: { kind: "completed" },
-			flow_plan_context_record: { repoProfile: ["TypeScript"] },
-			flow_plan_apply: {
+			flow_plan_save: {
 				plan: {
 					summary: "Build the smoke path.",
 					overview: "Exercise the dist bundle end to end.",
@@ -97,9 +87,8 @@ describe("built dist smoke load", () => {
 				},
 			},
 			flow_plan_approve: {},
-			flow_plan_select_features: { featureIds: ["dist-smoke"] },
 			flow_run_start: {},
-			flow_run_complete_feature: {
+			flow_feature_complete: {
 				contractVersion: "1",
 				status: "needs_input",
 				summary: "Need to replan smoke coverage.",
@@ -122,55 +111,18 @@ describe("built dist smoke load", () => {
 					blockingFindings: [],
 				},
 			},
-			flow_review_record_feature: {
+			flow_review_record: {
 				scope: "feature",
 				featureId: "dist-smoke",
 				status: "approved",
 				summary: "Looks good.",
 			},
-			flow_review_record_final: {
-				scope: "final",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-					"release_surface",
-				],
-				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
-				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["dist/index.js"],
-					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
-				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
-				remainingGaps: [],
-				status: "approved",
-				summary: "Looks good.",
-			},
-			flow_review_render: {
-				requestedDepth: "deep_audit",
-				achievedDepth: "deep_audit",
-				repoSummary: "Dist smoke review.",
-				overallVerdict: "Looks coherent.",
-				discoveredSurfaces: [],
-				coverageNotes: [],
-				validationRun: [],
-				findings: [],
-			},
-			flow_reset_feature: { featureId: "dist-smoke" },
-		} satisfies Record<string, unknown>;
+			flow_session: { action: "show", sessionId },
+		};
 
 		for (const [toolName, toolImpl] of Object.entries(tools)) {
 			const response = await toolImpl.execute(
-				toolArgs[toolName] ?? {},
+				toolArgs[toolName as FlowToolName] ?? {},
 				context,
 			);
 			expect(typeof response).toBe("string");

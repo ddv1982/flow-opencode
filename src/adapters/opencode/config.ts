@@ -1,27 +1,4 @@
-import { applyFlowAuditConfig } from "../../audit/config";
-import {
-	FLOW_READ_ONLY_PERMISSION,
-	FLOW_REASONING,
-	type FlowAgentConfig,
-} from "../../config-shared";
-import {
-	FLOW_AUTO_AGENT_PROMPT,
-	FLOW_CONTROL_AGENT_PROMPT,
-	FLOW_PLANNER_AGENT_PROMPT,
-	FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
-	FLOW_REVIEWER_AGENT_PROMPT,
-	FLOW_WORKER_AGENT_PROMPT,
-} from "../../prompts/agents";
-import {
-	FLOW_AUTO_COMMAND_TEMPLATE,
-	FLOW_DOCTOR_COMMAND_TEMPLATE,
-	FLOW_HISTORY_COMMAND_TEMPLATE,
-	FLOW_PLAN_COMMAND_TEMPLATE,
-	FLOW_RESET_COMMAND_TEMPLATE,
-	FLOW_RUN_COMMAND_TEMPLATE,
-	FLOW_SESSION_COMMAND_TEMPLATE,
-	FLOW_STATUS_COMMAND_TEMPLATE,
-} from "../../prompts/commands";
+import { FLOW_REASONING, type FlowAgentConfig } from "../../config-shared";
 
 type MutableConfig = {
 	agent?: Record<string, unknown>;
@@ -30,131 +7,79 @@ type MutableConfig = {
 
 type FlowCommandConfig = {
 	description: string;
-	agent: string;
 	template: string;
+	agent?: string;
+	subtask?: boolean;
 };
 
-function createReadOnlyPrimaryAgent(
-	description: string,
-	prompt: string,
-	mode: FlowAgentConfig["mode"] = "primary",
-	reasoningEffort?: FlowAgentConfig["reasoningEffort"],
-): FlowAgentConfig {
-	return {
-		mode,
-		description,
-		prompt,
-		permission: FLOW_READ_ONLY_PERMISSION,
-		...(reasoningEffort ? { reasoningEffort } : {}),
-	};
-}
-
+// Skills are the instruction surface; agents and commands are thin pointers.
+// Every prompt payload stays well under ~200 chars by design.
 const FLOW_CORE_AGENTS = {
-	"flow-planning-researcher": createReadOnlyPrimaryAgent(
-		"Research repo evidence for phase-correct Flow planning without mutating runtime state.",
-		FLOW_PLANNING_RESEARCHER_AGENT_PROMPT,
-		"all",
-		FLOW_REASONING.deep,
-	),
-	"flow-planner": {
+	"flow-reviewer": {
 		mode: "all",
-		description:
-			"Create and refine compact Flow plans grounded in repo evidence.",
-		prompt: FLOW_PLANNER_AGENT_PROMPT,
+		description: "Review Flow work read-only and record a reviewer decision.",
+		prompt:
+			"You are the Flow reviewer. Load the `flow-review` skill, review the requested work read-only, then record your decision with flow_review_record.",
 		reasoningEffort: FLOW_REASONING.deep,
+		// Read-only is platform-enforced: no edits, no shell, no subagents, and
+		// no Flow tools except status reads and recording the review decision.
 		permission: {
 			edit: "deny",
 			bash: "deny",
-			task: {
-				"*": "deny",
-				"flow-planning-researcher": "allow",
-			},
+			task: { "*": "deny" },
+			"flow_*": "deny",
+			flow_status: "allow",
+			flow_review_record: "allow",
 		},
 	},
-	"flow-worker": {
-		mode: "all",
-		description:
-			"Execute one approved Flow feature with focused validation and review.",
-		prompt: FLOW_WORKER_AGENT_PROMPT,
-		reasoningEffort: FLOW_REASONING.fast,
-		permission: {
-			task: {
-				"*": "deny",
-				"flow-reviewer": "allow",
-			},
-		},
-	},
-	"flow-auto": {
-		mode: "primary",
-		description:
-			"Coordinate Flow planning, execution, review, and recovery autonomously.",
-		prompt: FLOW_AUTO_AGENT_PROMPT,
-		reasoningEffort: FLOW_REASONING.balanced,
-		permission: {
-			task: {
-				"*": "deny",
-				"flow-planning-researcher": "allow",
-				"flow-planner": "allow",
-				"flow-worker": "allow",
-				"flow-reviewer": "allow",
-			},
-		},
-	},
-	"flow-reviewer": createReadOnlyPrimaryAgent(
-		"Review Flow work and decide whether it may advance.",
-		FLOW_REVIEWER_AGENT_PROMPT,
-		"all",
-		FLOW_REASONING.deep,
-	),
-	"flow-control": createReadOnlyPrimaryAgent(
-		"Inspect or reset Flow runtime state without executing work.",
-		FLOW_CONTROL_AGENT_PROMPT,
-		"primary",
-		FLOW_REASONING.fast,
-	),
 } satisfies Record<string, FlowAgentConfig>;
 
 const FLOW_CORE_COMMANDS = {
 	"flow-plan": {
-		description: "Create, update, select, or approve a Flow plan",
-		agent: "flow-planner",
-		template: FLOW_PLAN_COMMAND_TEMPLATE,
+		description: "Create, update, or approve a Flow plan",
+		template: "Load the `flow-plan` skill and plan: $ARGUMENTS",
 	},
 	"flow-run": {
 		description: "Run one approved Flow feature",
-		agent: "flow-worker",
-		template: FLOW_RUN_COMMAND_TEMPLATE,
+		template:
+			"Load the `flow-run` skill and execute the next approved Flow feature. $ARGUMENTS",
 	},
 	"flow-auto": {
 		description:
-			"Coordinate Flow autonomously until completion or a real blocker",
-		agent: "flow-auto",
-		template: FLOW_AUTO_COMMAND_TEMPLATE,
+			"Drive the Flow loop autonomously until completion or a real blocker",
+		template:
+			"Load the `flow` skill and drive the Flow loop (status, plan, run, review) until completion or a real blocker: $ARGUMENTS",
 	},
 	"flow-status": {
-		description: "Inspect the active Flow session",
-		agent: "flow-control",
-		template: FLOW_STATUS_COMMAND_TEMPLATE,
+		description: "Inspect the active Flow session and workspace readiness",
+		template:
+			"Call flow_status (detailed) and report session state, readiness checks, and the suggested next step.",
 	},
 	"flow-doctor": {
 		description: "Check Flow readiness for the current workspace",
-		agent: "flow-control",
-		template: FLOW_DOCTOR_COMMAND_TEMPLATE,
+		template:
+			"Call flow_status (detailed) and report the readiness checks with any remediation steps.",
 	},
 	"flow-history": {
 		description: "Inspect stored Flow session history",
-		agent: "flow-control",
-		template: FLOW_HISTORY_COMMAND_TEMPLATE,
+		template:
+			"Call flow_session with action 'history' and summarize the sessions.",
 	},
 	"flow-session": {
-		description: "Activate or close a Flow session",
-		agent: "flow-control",
-		template: FLOW_SESSION_COMMAND_TEMPLATE,
+		description: "Activate, close, list, or show a Flow session",
+		template:
+			"Call flow_session with the requested action (activate, close, history, or show): $ARGUMENTS",
 	},
 	"flow-reset": {
-		description: "Reset a Flow feature",
-		agent: "flow-control",
-		template: FLOW_RESET_COMMAND_TEMPLATE,
+		description: "Reset a Flow feature to pending",
+		template:
+			"Call flow_feature_complete with reset=true for feature: $ARGUMENTS",
+	},
+	"flow-review": {
+		description: "Run a read-only Flow review with a fresh context",
+		agent: "flow-reviewer",
+		subtask: true,
+		template: "Load the `flow-review` skill and review: $ARGUMENTS",
 	},
 } satisfies Record<string, FlowCommandConfig>;
 
@@ -190,7 +115,7 @@ export function createFlowCoreConfigEntries() {
 	return { agent, command };
 }
 
-function applyFlowCoreConfig(config: MutableConfig): void {
+export function applyFlowConfig(config: MutableConfig): void {
 	const entries = createFlowCoreConfigEntries();
 	config.agent = {
 		...(config.agent ?? {}),
@@ -200,11 +125,6 @@ function applyFlowCoreConfig(config: MutableConfig): void {
 		...(config.command ?? {}),
 		...entries.command,
 	};
-}
-
-export function applyFlowConfig(config: MutableConfig): void {
-	applyFlowCoreConfig(config);
-	applyFlowAuditConfig(config);
 }
 
 export function createConfigHook(_ctx: unknown) {

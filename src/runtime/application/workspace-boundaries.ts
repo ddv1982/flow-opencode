@@ -22,7 +22,7 @@ export function candidateWorkspaceDirectories(
 	}
 }
 
-export function resolveWorkspaceStartDirectory(
+function resolveWorkspaceStartDirectory(
 	resolvedRoot: string,
 	startDirectory?: string,
 ): string {

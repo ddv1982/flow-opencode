@@ -1,28 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
-import { getActiveSessionDir, getReviewsDir, getSessionPath } from "./paths";
-import { type ClosedSessionResult, closeActiveSession } from "./recovery";
-import { deleteSessionDocs } from "./rendering";
-import { type PlanningContext, type Session, SessionSchema } from "./schema";
+import { getSessionPath } from "./paths";
 import {
-	activateStoredSessionBoundary,
-	resolveActiveSessionId,
-} from "./session-live-storage";
+	type BlockedSessionClosure,
+	type ClosedSessionResult,
+	closeActiveSession,
+} from "./recovery";
+import { type PlanningContext, type Session, SessionSchema } from "./schema";
+import { activateStoredSessionBoundary } from "./session-live-storage";
 import { readSessionFromPath } from "./session-workspace-io";
 import { withSessionSaveLock } from "./session-workspace-locks";
 import { nowIso } from "./util";
 import { assertMutableWorkspaceRoot } from "./workspace-root";
-
-async function withActiveSessionId(
-	worktree: string,
-	action: (sessionId: string) => Promise<void>,
-): Promise<void> {
-	const sessionId = await resolveActiveSessionId(worktree);
-	if (!sessionId) {
-		return;
-	}
-	await action(sessionId);
-}
 
 function readActiveSession(
 	worktree: string,
@@ -31,45 +19,11 @@ function readActiveSession(
 	return readSessionFromPath(getSessionPath(worktree, sessionId, "active"));
 }
 
-export async function deleteSessionState(worktree: string): Promise<void> {
-	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	await withSessionSaveLock(mutableWorktree, async () => {
-		await withActiveSessionId(mutableWorktree, async (sessionId) => {
-			await rm(getSessionPath(mutableWorktree, sessionId), { force: true });
-		});
-	});
-}
-
-export async function deleteSessionArtifacts(worktree: string): Promise<void> {
-	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	await withSessionSaveLock(mutableWorktree, async () => {
-		await withActiveSessionId(mutableWorktree, async (sessionId) => {
-			await deleteSessionDocs(mutableWorktree, sessionId, "active");
-			await rm(getReviewsDir(mutableWorktree, sessionId, "active"), {
-				recursive: true,
-				force: true,
-			});
-		});
-	});
-}
-
-export async function deleteSession(worktree: string): Promise<void> {
-	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
-	await withSessionSaveLock(mutableWorktree, async () => {
-		await withActiveSessionId(mutableWorktree, async (sessionId) => {
-			await rm(getActiveSessionDir(mutableWorktree, sessionId), {
-				recursive: true,
-				force: true,
-			});
-		});
-	});
-}
-
 export async function closeSession(
 	worktree: string,
 	kind: NonNullable<Session["closure"]>["kind"],
 	summary?: string,
-): Promise<ClosedSessionResult | null> {
+): Promise<ClosedSessionResult | BlockedSessionClosure | null> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
 	return withSessionSaveLock(mutableWorktree, async () =>
 		closeActiveSession(mutableWorktree, kind, summary),

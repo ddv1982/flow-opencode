@@ -8,7 +8,6 @@ import {
 	appendOpenCodeCompactCompactingContext,
 	appendOpenCodeCompactSystemContext,
 } from "./system-context";
-import { applyFlowToolDefinitionGuidance } from "./tool-guidance.generated";
 import type { ToolContext } from "./tool-surface/schemas";
 import { createTools } from "./tools";
 
@@ -22,16 +21,6 @@ type PluginLogContext = {
 			}): void;
 		};
 	};
-};
-
-const flowToolDefinitionHook: NonNullable<Hooks["tool.definition"]> = async (
-	input,
-	output,
-) => {
-	if (!input.toolID.startsWith("flow_")) {
-		return;
-	}
-	applyFlowToolDefinitionGuidance(input.toolID, output);
 };
 
 function createFlowSystemTransformHook(
@@ -57,7 +46,6 @@ const FlowPlugin: Plugin = async (ctx) => {
 		config: createConfigHook(ctx),
 		tool: createTools(ctx),
 		hooks: {
-			"tool.definition": flowToolDefinitionHook,
 			"experimental.chat.system.transform": createFlowSystemTransformHook(ctx),
 			"experimental.session.compacting": async (
 				_input: unknown,

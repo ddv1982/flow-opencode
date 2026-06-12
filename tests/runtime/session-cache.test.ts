@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { readFile, stat, utimes, writeFile } from "node:fs/promises";
-import { getSessionPath } from "../../src/runtime/paths";
 import {
 	loadSession,
 	saveSession,
 	saveSessionState,
-} from "../../src/runtime/session";
+} from "../../src/runtime/lifecycle";
+import { getSessionPath } from "../../src/runtime/paths";
 import { createTempDirRegistry, sampleSession } from "../runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(

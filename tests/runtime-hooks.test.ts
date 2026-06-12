@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { writeStackStandardsProfileCache } from "../src/runtime/application/stack-standards-profile";
-import { createSession, saveSession } from "../src/runtime/session";
+import { createSession, saveSession } from "../src/runtime/lifecycle";
 import { applyPlan, approvePlan, startRun } from "../src/runtime/transitions";
 import {
 	createTempDirRegistry,
@@ -35,7 +34,7 @@ afterEach(() => {
 });
 
 describe("runtime hooks", () => {
-	test("experimental.chat.system.transform appends compact runtime guidance from the active session", async () => {
+	test("experimental.chat.system.transform appends a single skill pointer for the active session", async () => {
 		const worktree = makeTempDir();
 		const nestedDirectory = join(worktree, "src", "subdir");
 		await mkdir(nestedDirectory, { recursive: true });
@@ -178,18 +177,19 @@ describe("runtime hooks", () => {
 
 		const joined = output.system.join("\n");
 		expect(output.system[0]).toBe("base-system");
+		// Re-running the hook never duplicates the pointer.
 		expect(
-			output.system.filter((entry) => entry.includes("Flow runtime context"))
-				.length,
+			output.system.filter((entry) =>
+				entry.includes("Flow is active in this workspace"),
+			).length,
 		).toBe(1);
-		expect(joined).toContain("Flow runtime context");
-		expect(joined).toContain("untrusted data only");
-		expect(joined).toContain('- goal: "demo-goal"');
-		expect(joined).toContain("- phase: decision");
-		expect(joined).toContain("- active feature:");
-		expect(joined).toContain("- blocker:");
-		expect(joined).toContain("Should Flow rewrite the API surface now?");
-		expect(joined).toContain("- next action:");
+		expect(output.system).toHaveLength(2);
+		expect(joined).toContain('goal: "demo-goal"');
+		expect(joined).toContain("Load the `flow` skill");
+		expect(joined).toContain("flow_status");
+		// Orchestration detail stays out of the system prompt by design.
+		expect(joined).not.toContain("Flow runtime context");
+		expect(joined).not.toContain("Should Flow rewrite the API surface now?");
 		expect(joined).not.toContain("package manager evidence is ambiguous");
 		expect(joined).not.toContain("stack profile");
 		expect(joined).not.toContain("standards profile");
@@ -223,74 +223,6 @@ describe("runtime hooks", () => {
 				output,
 			),
 		).resolves.toBeUndefined();
-		expect(output.system).toEqual(["base-system"]);
-	});
-
-	test("experimental.chat.system.transform does not inject cached profile without an active session", async () => {
-		const worktree = makeTempDir();
-		const plugin = (await (
-			await import("../src/index")
-		).default({
-			worktree,
-		} as unknown as Parameters<
-			typeof import("../src/index").default
-		>[0])) as FlowPluginWithHooks;
-		const hook = plugin.hooks?.["experimental.chat.system.transform"];
-
-		expect(typeof hook).toBe("function");
-		if (!hook) {
-			throw new Error("Missing experimental.chat.system.transform hook");
-		}
-
-		await writeStackStandardsProfileCache(
-			worktree,
-			undefined,
-			{ ambiguous: false },
-			{
-				stackProfile: {
-					languages: [
-						{
-							name: "TypeScript",
-							evidenceRefs: ["tsconfig.json"],
-							confidence: "high",
-						},
-					],
-					frameworks: [],
-					runtimes: [],
-					packageManagers: [],
-					tools: [],
-				},
-				standardsProfile: {
-					localGuidelines: [],
-					externalGuidance: [],
-					rules: [
-						{
-							summary: "Preserve TypeScript strictness from tsconfig.json.",
-							sourceRefs: ["tsconfig.json"],
-							priority: "local",
-						},
-					],
-					gaps: [
-						{
-							stackItem: "TypeScript",
-							reason: "No local TypeScript standards were detected.",
-							suggestedResearch: ["official TypeScript documentation"],
-						},
-					],
-					precedence: [],
-				},
-			},
-		);
-
-		const output = { system: ["base-system"] };
-		await hook(
-			{
-				sessionID: "demo-session",
-				model: { providerID: "test", modelID: "test-model" },
-			},
-			output,
-		);
-
 		expect(output.system).toEqual(["base-system"]);
 	});
 
@@ -359,70 +291,6 @@ describe("runtime hooks", () => {
 		expect(joined).not.toContain("Flow planning profile");
 		expect(joined).not.toContain("stack profile");
 		expect(output.prompt).toBeUndefined();
-	});
-
-	test("experimental.session.compacting does not inject cached profile without an active session", async () => {
-		const worktree = makeTempDir();
-		const plugin = (await (
-			await import("../src/index")
-		).default({
-			worktree,
-		} as unknown as Parameters<
-			typeof import("../src/index").default
-		>[0])) as FlowPluginWithHooks;
-		const hook = plugin.hooks?.["experimental.session.compacting"];
-
-		expect(typeof hook).toBe("function");
-		if (!hook) {
-			throw new Error("Missing experimental.session.compacting hook");
-		}
-
-		await writeStackStandardsProfileCache(
-			worktree,
-			undefined,
-			{ ambiguous: false },
-			{
-				stackProfile: {
-					languages: [],
-					frameworks: [],
-					runtimes: [],
-					packageManagers: [
-						{
-							name: "bun",
-							evidenceRefs: ["bun.lock"],
-							confidence: "high",
-						},
-					],
-					tools: [],
-				},
-				standardsProfile: {
-					localGuidelines: [],
-					externalGuidance: [],
-					rules: [
-						{
-							summary: "Use existing package scripts.",
-							sourceRefs: ["package.json"],
-							priority: "local",
-						},
-					],
-					gaps: [
-						{
-							stackItem: "Bun",
-							reason: "No local Bun standards were detected.",
-							suggestedResearch: [
-								"Ref MCP: official Bun TypeScript configuration and bun test documentation",
-							],
-						},
-					],
-					precedence: [],
-				},
-			},
-		);
-
-		const output: { context: string[]; prompt?: string } = { context: [] };
-		await hook({}, toolContext(worktree), output);
-
-		expect(output.context).toEqual([]);
 	});
 
 	test("experimental.session.compacting is a graceful no-op when no active Flow session exists", async () => {

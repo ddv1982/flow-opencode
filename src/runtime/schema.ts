@@ -12,10 +12,6 @@ import type {
 	ReviewFindingPlanningContextSchema,
 } from "./schema-plan";
 import type {
-	StackProfileSchema,
-	StandardsProfileSchema,
-} from "./schema-planning-profiles";
-import type {
 	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
 	ReviewerDecisionSchema,
@@ -41,19 +37,11 @@ export {
 	SessionStatusSchema,
 } from "./schema-plan";
 export {
-	StackProfileSchema,
-	StandardsProfileSchema,
-} from "./schema-planning-profiles";
-export {
 	FinalReviewerDecisionSchema,
 	FinalReviewSchema,
 	FlowReviewRecordFeatureArgsSchema,
 	ReviewerDecisionSchema,
 } from "./schema-review-decisions";
-export {
-	BehaviorCheckSchema,
-	ValidationCoverageSchema,
-} from "./schema-review-shared";
 export { type Session, SessionSchema } from "./schema-session";
 export {
 	LatestFailedFlowAttemptSchema,
@@ -78,8 +66,6 @@ export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
 export type ReviewFindingPlanningContext = z.infer<
 	typeof ReviewFindingPlanningContextSchema
 >;
-export type StackProfile = z.infer<typeof StackProfileSchema>;
-export type StandardsProfile = z.infer<typeof StandardsProfileSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 export type { EvidencePacket };
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;

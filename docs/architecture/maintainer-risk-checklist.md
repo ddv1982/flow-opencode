@@ -4,7 +4,7 @@ Use this as a compact merge-time risk pointer. It is intentionally **not** canon
 
 Canonical current-facing maps:
 
-- `docs/maintainer-contract.md` owns commands, tools, state paths, invariants, gate contracts, the surface-expansion freeze, and the compact "if you touch X, run Y" map.
+- `docs/maintainer-contract.md` owns commands, tools, state paths, hard invariants, frozen surfaces, and the compact "if you touch X, run Y" map.
 - `docs/contributor-map.md` owns contributor onboarding risk by area: read-first files, required checks, and "do not" rules.
 - `docs/release-process.md` owns the repeatable release-candidate smoke path and manual live OpenCode evidence protocol.
 
@@ -26,5 +26,5 @@ If this checklist conflicts with any canonical file above, update this checklist
 
 ## Quick docs checks
 
-- `bun test tests/docs-stale-reference-policy.test.ts tests/docs-semantic-parity.test.ts`
-- Add `bun test tests/docs-tool-parity.test.ts` when command/tool docs change.
+- Follow the "If you touch X, run Y" map in `docs/maintainer-contract.md` for the touched area.
+- Keep current-facing docs aligned with `docs/maintainer-contract.md`; historical records (including `docs/architecture/archive/**`) stay as-is.

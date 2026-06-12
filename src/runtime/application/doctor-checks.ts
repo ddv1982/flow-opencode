@@ -7,9 +7,12 @@ import {
 	inspectFlowSkillSyncState,
 	resolveFlowHomeDir,
 } from "../../distribution/skill-sync";
-import { getActiveSessionPath, getIndexDocPath } from "../paths";
+import {
+	getActiveSessionPath,
+	getIndexDocPath,
+	InvalidFlowPathInputError,
+} from "../paths";
 import type { Session } from "../schema";
-import type { SessionGuidance } from "../summary";
 import type { ResolvedSessionRoot } from "./workspace-runtime";
 
 export type DoctorCheckStatus = "pass" | "warn" | "fail" | "skip";
@@ -36,13 +39,7 @@ export type MutableConfig = {
 };
 
 const EXPECTED_FLOW_AGENT_REASONING = {
-	"flow-planning-researcher": FLOW_REASONING.deep,
-	"flow-planner": FLOW_REASONING.deep,
-	"flow-worker": FLOW_REASONING.fast,
-	"flow-auto": FLOW_REASONING.balanced,
 	"flow-reviewer": FLOW_REASONING.deep,
-	"flow-control": FLOW_REASONING.fast,
-	"flow-auditor": FLOW_REASONING.deep,
 } as const satisfies Record<string, FlowReasoningEffort>;
 
 async function pathExists(target: string, mode = constants.F_OK) {
@@ -129,7 +126,6 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 	const missingCommands = requiredCommands.filter(
 		(name) => !config.command?.[name],
 	);
-	const doctorAgent = config.command?.["flow-doctor"]?.agent;
 	const reviewAgent = config.command?.["flow-review"]?.agent;
 	const agentReasoningEffort = Object.fromEntries(
 		requiredAgents.map((name) => [
@@ -150,8 +146,7 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 	if (
 		missingAgents.length === 0 &&
 		missingCommands.length === 0 &&
-		doctorAgent === "flow-control" &&
-		reviewAgent === "flow-auditor" &&
+		reviewAgent === "flow-reviewer" &&
 		reasoningMismatches.length === 0
 	) {
 		return {
@@ -164,17 +159,10 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 			details: {
 				agentCount: Object.keys(config.agent ?? {}).length,
 				commandCount: Object.keys(config.command ?? {}).length,
-				doctorAgent,
 				commandRouting: {
-					"flow-doctor": doctorAgent,
 					"flow-review": reviewAgent,
 				},
 				agentReasoningEffort,
-				reasoningEffortDiagnostic: {
-					verifies: "flow_injected_config",
-					doesNotVerify: "opencode_host_effective_session_reasoning",
-					hostObservation: "unsupported_by_documented_api",
-				},
 			},
 		};
 	}
@@ -186,22 +174,15 @@ export function evaluateConfigCheck(config: MutableConfig): DoctorCheck {
 		summary:
 			"Flow's injected command, agent, or Flow-owned reasoningEffort surface is incomplete or misrouted.",
 		remediation:
-			"Rebuild or reinstall Flow, then confirm /flow-doctor is routed through flow-control, /flow-review is routed through flow-auditor, and Flow agents carry the expected Flow-injected reasoningEffort budgets. This does not verify OpenCode host-effective or session-persisted reasoning.",
+			"Rebuild or reinstall Flow, then confirm /flow-review is routed through flow-reviewer and Flow agents carry the expected Flow-injected reasoningEffort budgets.",
 		details: {
 			missingAgents,
 			missingCommands,
-			doctorAgent: doctorAgent ?? null,
 			commandRouting: {
-				"flow-doctor": doctorAgent ?? null,
 				"flow-review": reviewAgent ?? null,
 			},
 			agentReasoningEffort,
 			reasoningMismatches,
-			reasoningEffortDiagnostic: {
-				verifies: "flow_injected_config",
-				doesNotVerify: "opencode_host_effective_session_reasoning",
-				hostObservation: "unsupported_by_documented_api",
-			},
 		},
 	};
 }
@@ -252,8 +233,27 @@ export async function buildSessionArtifactsCheck(
 		};
 	}
 
-	const sessionPath = getActiveSessionPath(workspaceRoot, session.id);
-	const indexDocPath = getIndexDocPath(workspaceRoot, session.id);
+	let sessionPath: string;
+	let indexDocPath: string;
+	try {
+		sessionPath = getActiveSessionPath(workspaceRoot, session.id);
+		indexDocPath = getIndexDocPath(workspaceRoot, session.id);
+	} catch (error) {
+		// A persisted session with a malformed id must degrade to a failing
+		// check; throwing here would make flow_status itself unreadable.
+		if (error instanceof InvalidFlowPathInputError) {
+			return {
+				id: "session_artifacts",
+				label: "Active session artifacts",
+				status: "fail",
+				summary: `The active session has a malformed id ('${session.id}'), so Flow cannot resolve its persisted artifacts.`,
+				remediation:
+					"Inspect `.flow/active/` and repair the session file's id or remove the corrupted session before continuing.",
+				details: { sessionId: session.id },
+			};
+		}
+		throw error;
+	}
 	const hasSessionPath = await pathExists(sessionPath, constants.R_OK);
 	const hasIndexDocPath = await pathExists(indexDocPath, constants.R_OK);
 
@@ -285,30 +285,6 @@ export async function buildSessionArtifactsCheck(
 			};
 }
 
-export function buildGuidanceCheck(
-	session: Session | null,
-	sessionGuidance: SessionGuidance,
-): DoctorCheck {
-	return !session
-		? {
-				id: "guidance",
-				label: "Runtime guidance",
-				status: "skip",
-				summary:
-					"No active Flow session exists, so runtime blocker guidance is not needed yet.",
-				remediation: null,
-				details: sessionGuidance,
-			}
-		: {
-				id: "guidance",
-				label: "Runtime guidance",
-				status: "pass",
-				summary: sessionGuidance.summary,
-				remediation: null,
-				details: sessionGuidance,
-			};
-}
-
 export function summarizeDoctorChecks(checks: DoctorCheck[]) {
 	const counts = {
 		pass: checks.filter((check) => check.status === "pass").length,
@@ -329,6 +305,6 @@ export function summarizeDoctorChecks(checks: DoctorCheck[]) {
 
 	return {
 		status: status as "ok" | "warn" | "fail",
-		summary: `Flow doctor completed with ${parts.join(", ")}.`,
+		summary: `Flow readiness checks completed with ${parts.join(", ")}.`,
 	};
 }

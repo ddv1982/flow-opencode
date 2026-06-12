@@ -1,20 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { dispatchSessionMutationAction } from "../src/runtime/application/session-actions";
+import { runFlowCoreCommand } from "../src/runtime/application";
 import {
-	runSessionMutationActionAtRoot,
+	runMutationActionAtRoot,
 	type SessionMutationAction,
 	type SessionRuntimePort,
-} from "../src/runtime/application/session-engine";
-import {
-	createFeatureReviewerDecisionAction,
-	createFinalReviewerDecisionAction,
-} from "../src/runtime/application/session-review-actions";
+} from "../src/runtime/application/action-engine";
 import { FLOW_STATUS_COMMAND } from "../src/runtime/constants";
 import {
 	createSession,
 	loadSession,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
 import {
 	applyPlan,
 	approvePlan,
@@ -40,21 +36,9 @@ describe("runtime completion and recovery tools", () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const cases = [
-			[
-				"flow_plan_apply",
-				{ plan: samplePlan() },
-				"missing_session",
-				"/flow-plan <goal>",
-			],
 			["flow_plan_approve", {}, "missing_session", undefined],
 			[
-				"flow_plan_select_features",
-				{ featureIds: ["setup-runtime"] },
-				"missing_session",
-				undefined,
-			],
-			[
-				"flow_review_record_feature",
+				"flow_review_record",
 				{
 					scope: "feature",
 					featureId: "setup-runtime",
@@ -65,7 +49,7 @@ describe("runtime completion and recovery tools", () => {
 				undefined,
 			],
 			[
-				"flow_review_record_final",
+				"flow_review_record",
 				{
 					scope: "final",
 					reviewDepth: "detailed",
@@ -82,12 +66,6 @@ describe("runtime completion and recovery tools", () => {
 						changedArtifacts: ["src/runtime/session.ts"],
 						validationCommands: ["bun test"],
 					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
 					remainingGaps: [],
 					status: "approved",
 					summary: "Looks good.",
@@ -96,8 +74,8 @@ describe("runtime completion and recovery tools", () => {
 				undefined,
 			],
 			[
-				"flow_reset_feature",
-				{ featureId: "setup-runtime" },
+				"flow_feature_complete",
+				{ reset: true, featureId: "setup-runtime" },
 				"missing_session",
 				undefined,
 			],
@@ -163,12 +141,6 @@ describe("runtime completion and recovery tools", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
@@ -217,12 +189,6 @@ describe("runtime completion and recovery tools", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "passed",
 				summary: "Repo-wide validation is clean.",
@@ -261,7 +227,7 @@ describe("runtime completion and recovery tools", () => {
 
 		await saveSession(worktree, started.value.session);
 
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				result: {
@@ -309,7 +275,7 @@ describe("runtime completion and recovery tools", () => {
 
 		await saveSession(worktree, started.value.session);
 
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "needs_input",
@@ -341,7 +307,7 @@ describe("runtime completion and recovery tools", () => {
 	test("tool rejects malformed JSON-string worker transport fields", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{ workerJson: '{"contractVersion":"1",' },
 			toolContext(worktree),
 		);
@@ -354,7 +320,7 @@ describe("runtime completion and recovery tools", () => {
 	test("tool rejects syntactically valid JSON-string worker transport fields", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				workerJson:
 					'{"contractVersion":"1","status":"ok","summary":"Bad payload.","artifactsChanged":[],"validationRun":[],"decisions":[],"nextStep":"Stop.","outcome":{"kind":"completed"},"featureResult":{"featureId":"setup-runtime"},"featureReview":{"status":"passed","summary":"Looks good.","blockingFindings":[]}}',
@@ -393,7 +359,7 @@ describe("runtime completion and recovery tools", () => {
 		if (!started.ok) return;
 
 		await saveSession(worktree, started.value.session);
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "ok",
@@ -407,15 +373,6 @@ describe("runtime completion and recovery tools", () => {
 					},
 				],
 				validationScope: "broad",
-				reviewScopeLedger: [
-					{
-						scopeId: "file_target:src/runtime/session.ts",
-						status: "reviewed_no_findings",
-						evidenceRefs: ["src/runtime/session.ts"],
-						validationRefs: ["bun test"],
-						residualRisk: "No known residual risk.",
-					},
-				],
 				reviewIterations: 1,
 				decisions: [],
 				nextStep: "Session should complete.",
@@ -444,12 +401,6 @@ describe("runtime completion and recovery tools", () => {
 						changedArtifacts: ["src/runtime/session.ts"],
 						validationCommands: ["bun test"],
 					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
 					remainingGaps: [],
 					status: "passed",
 					summary: "Repo-wide validation is clean.",
@@ -508,11 +459,7 @@ describe("runtime completion and recovery tools", () => {
 			onNoopSuccess: () => ({ status: "ok", summary: "noop" }),
 		};
 
-		const result = await runSessionMutationActionAtRoot(
-			worktree,
-			action,
-			runtime,
-		);
+		const result = await runMutationActionAtRoot(worktree, action, runtime);
 
 		expect(result.kind).toBe("success");
 		expect(result.response.summary).toBe("saved");
@@ -545,11 +492,7 @@ describe("runtime completion and recovery tools", () => {
 			syncArtifacts: false,
 		};
 
-		const result = await runSessionMutationActionAtRoot(
-			worktree,
-			action,
-			runtime,
-		);
+		const result = await runMutationActionAtRoot(worktree, action, runtime);
 
 		expect(result.kind).toBe("success");
 		expect(result.response.summary).toBe("noop");
@@ -585,9 +528,10 @@ describe("runtime completion and recovery tools", () => {
 		};
 		const savedAfterFirst = currentSession;
 
-		const duplicate = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("approve_plan", { featureIds: [] }),
+		const duplicate = await runFlowCoreCommand(
+			{ worktree },
+			"approve_plan",
+			{ featureIds: [] },
 			runtime,
 		);
 
@@ -602,11 +546,12 @@ describe("runtime completion and recovery tools", () => {
 			expect(duplicate.savedSession).toBe(savedAfterFirst);
 		}
 
-		const changedSelection = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("approve_plan", {
+		const changedSelection = await runFlowCoreCommand(
+			{ worktree },
+			"approve_plan",
+			{
 				featureIds: ["execute-flow"],
-			}),
+			},
 			runtime,
 		);
 
@@ -668,11 +613,12 @@ describe("runtime completion and recovery tools", () => {
 			"document-runtime",
 		]);
 
-		const duplicateDifferentOrder = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("approve_plan", {
+		const duplicateDifferentOrder = await runFlowCoreCommand(
+			{ worktree },
+			"approve_plan",
+			{
 				featureIds: ["document-runtime", "setup-runtime"],
-			}),
+			},
 			runtime,
 		);
 
@@ -687,9 +633,10 @@ describe("runtime completion and recovery tools", () => {
 			expect(duplicateDifferentOrder.savedSession).toBe(savedAfterFirst);
 		}
 
-		const duplicateOmittedIds = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("approve_plan", { featureIds: [] }),
+		const duplicateOmittedIds = await runFlowCoreCommand(
+			{ worktree },
+			"approve_plan",
+			{ featureIds: [] },
 			runtime,
 		);
 
@@ -705,11 +652,12 @@ describe("runtime completion and recovery tools", () => {
 			"document-runtime",
 		]);
 
-		const changedSelection = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("approve_plan", {
+		const changedSelection = await runFlowCoreCommand(
+			{ worktree },
+			"approve_plan",
+			{
 				featureIds: ["setup-runtime"],
-			}),
+			},
 			runtime,
 		);
 
@@ -754,11 +702,12 @@ describe("runtime completion and recovery tools", () => {
 		};
 		const savedAfterFirst = currentSession;
 
-		const duplicate = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("start_run", {
+		const duplicate = await runFlowCoreCommand(
+			{ worktree },
+			"start_run",
+			{
 				featureId: "setup-runtime",
-			}),
+			},
 			runtime,
 		);
 
@@ -806,9 +755,10 @@ describe("runtime completion and recovery tools", () => {
 			},
 		};
 
-		const implicit = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("start_run", {}),
+		const implicit = await runFlowCoreCommand(
+			{ worktree },
+			"start_run",
+			{},
 			runtime,
 		);
 		expect(implicit.kind).toBe("success");
@@ -816,11 +766,12 @@ describe("runtime completion and recovery tools", () => {
 			"Feature 'setup-runtime' is already running; no state change.",
 		);
 
-		const differentFeature = await runSessionMutationActionAtRoot(
-			worktree,
-			dispatchSessionMutationAction("start_run", {
+		const differentFeature = await runFlowCoreCommand(
+			{ worktree },
+			"start_run",
+			{
 				featureId: "execute-flow",
-			}),
+			},
 			runtime,
 		);
 		expect(differentFeature.kind).toBe("failure");
@@ -873,9 +824,10 @@ describe("runtime completion and recovery tools", () => {
 			},
 		};
 		const savedAfterFirst = currentSession;
-		const duplicate = await runSessionMutationActionAtRoot(
-			worktree,
-			createFeatureReviewerDecisionAction(decision),
+		const duplicate = await runFlowCoreCommand(
+			{ worktree },
+			"record_feature_review",
+			{ decision },
 			runtime,
 		);
 		expect(duplicate.kind).toBe("success");
@@ -889,14 +841,17 @@ describe("runtime completion and recovery tools", () => {
 			expect(duplicate.savedSession).toBe(savedAfterFirst);
 		}
 
-		const changed = await runSessionMutationActionAtRoot(
-			worktree,
-			createFeatureReviewerDecisionAction({
-				...decision,
-				status: "needs_fix",
-				summary: "Needs one fix.",
-				blockingFindings: [{ summary: "Validation evidence is incomplete." }],
-			}),
+		const changed = await runFlowCoreCommand(
+			{ worktree },
+			"record_feature_review",
+			{
+				decision: {
+					...decision,
+					status: "needs_fix",
+					summary: "Needs one fix.",
+					blockingFindings: [{ summary: "Validation evidence is incomplete." }],
+				},
+			},
 			runtime,
 		);
 		expect(changed.kind).toBe("success");
@@ -947,12 +902,6 @@ describe("runtime completion and recovery tools", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved" as const,
 			summary: "Final review looks good.",
@@ -977,9 +926,10 @@ describe("runtime completion and recovery tools", () => {
 			},
 		};
 		const savedAfterFirst = currentSession;
-		const duplicate = await runSessionMutationActionAtRoot(
-			worktree,
-			createFinalReviewerDecisionAction(decision),
+		const duplicate = await runFlowCoreCommand(
+			{ worktree },
+			"record_final_review",
+			{ decision },
 			runtime,
 		);
 
@@ -993,95 +943,6 @@ describe("runtime completion and recovery tools", () => {
 		if (duplicate.kind === "success") {
 			expect(duplicate.savedSession).toBe(savedAfterFirst);
 		}
-	});
-
-	test("final review tool returns recovery details for review-scope accounting failures", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-		const basePlan = samplePlan();
-		const applied = applyPlan(createSession("Review runtime scope"), {
-			...basePlan,
-			goalMode: "review" as const,
-			completionPolicy: { minCompletedFeatures: 1 },
-			features: [
-				{
-					...basePlan.features[0],
-					fileTargets: ["src/runtime/session.ts"],
-				},
-			],
-		});
-		expect(applied.ok).toBe(true);
-		if (!applied.ok) return;
-		const approved = approvePlan(applied.value);
-		expect(approved.ok).toBe(true);
-		if (!approved.ok) return;
-		const started = startRun(approved.value);
-		expect(started.ok).toBe(true);
-		if (!started.ok) return;
-		await saveSession(worktree, started.value.session);
-
-		const response = await tools.flow_review_record_final.execute(
-			{
-				scope: "final",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary: "Checked final runtime state and validation evidence.",
-				validationAssessment: "bun test validates the reviewed runtime scope.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
-				},
-				integrationChecks: [
-					"Checked the runtime session boundary against completion behavior.",
-				],
-				regressionChecks: [
-					"Checked validation evidence for the runtime session boundary.",
-				],
-				remainingGaps: [],
-				status: "approved",
-				summary: "Looks good.",
-				reviewScopeLedger: [
-					{
-						scopeId: "audit:pointer-only-practice-controls",
-						status: "reviewed_no_findings",
-						evidenceRefs: ["src/runtime/session.ts"],
-						residualRisk: "No known residual risk.",
-					},
-				],
-			},
-			toolContext(worktree),
-		);
-
-		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("error");
-		expect(parsed.recovery.errorCode).toBe("missing_review_scope_accounting");
-		expect(parsed.recovery.recoveryStage).toBe("record_review");
-		expect(parsed.recovery.prerequisite).toBe("reviewer_result_required");
-		expect(parsed.recovery.requiredArtifact).toBe("final_reviewer_decision");
-		expect(
-			parsed.recovery.details.reviewScopeLedger.declaredScopes.map(
-				(scope: { scopeId: string }) => scope.scopeId,
-			),
-		).toContain("file_target:src/runtime/session.ts");
-		expect(
-			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedgerPurpose,
-		).toBe("scaffold_only");
-		expect(
-			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedger.map(
-				(entry: { scopeId: string }) => entry.scopeId,
-			),
-		).toContain("file_target:src/runtime/session.ts");
-		expect(
-			parsed.recovery.details.reviewScopeLedger.exampleReviewScopeLedger[0]
-				.residualRisk,
-		).toContain("Example scaffold only");
-		expect(
-			parsed.recovery.details.reviewScopeLedger.notes.join("\n"),
-		).toContain("do not replay unchanged");
 	});
 
 	test("tool does not persist worker evidence when success-gate recovery rejects ok completion", async () => {
@@ -1104,7 +965,7 @@ describe("runtime completion and recovery tools", () => {
 		if (!started.ok) return;
 
 		await saveSession(worktree, started.value.session);
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "ok",
@@ -1118,15 +979,6 @@ describe("runtime completion and recovery tools", () => {
 					},
 				],
 				validationScope: "targeted",
-				reviewScopeLedger: [
-					{
-						scopeId: "file_target:src/runtime/session.ts",
-						status: "reviewed_no_findings",
-						evidenceRefs: ["src/runtime/session.ts"],
-						validationRefs: ["bun test"],
-						residualRisk: "No known residual risk.",
-					},
-				],
 				reviewIterations: 1,
 				decisions: [{ summary: "Runtime wiring is complete." }],
 				nextStep: "Run the next feature.",
@@ -1201,12 +1053,6 @@ describe("runtime completion and recovery tools", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
@@ -1215,7 +1061,7 @@ describe("runtime completion and recovery tools", () => {
 		if (!reviewed.ok) return;
 
 		await saveSession(worktree, reviewed.value);
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "ok",
@@ -1229,15 +1075,6 @@ describe("runtime completion and recovery tools", () => {
 					},
 				],
 				validationScope: "targeted",
-				reviewScopeLedger: [
-					{
-						scopeId: "file_target:src/runtime/session.ts",
-						status: "reviewed_no_findings",
-						evidenceRefs: ["src/runtime/session.ts"],
-						validationRefs: ["bun test"],
-						residualRisk: "No known residual risk.",
-					},
-				],
 				reviewIterations: 1,
 				decisions: [],
 				nextStep: "Session should complete.",
@@ -1266,12 +1103,6 @@ describe("runtime completion and recovery tools", () => {
 						changedArtifacts: ["src/runtime/session.ts"],
 						validationCommands: ["bun test"],
 					},
-					integrationChecks: [
-						"Reviewed integration points across the active feature boundary.",
-					],
-					regressionChecks: [
-						"Checked for regressions in shared surfaces and validation evidence.",
-					],
 					remainingGaps: [],
 					status: "passed",
 					summary: "Repo-wide validation is clean.",
@@ -1322,15 +1153,6 @@ describe("runtime completion and recovery tools", () => {
 				},
 			],
 			validationScope: "targeted",
-			reviewScopeLedger: [
-				{
-					scopeId: "file_target:src/runtime/session.ts",
-					status: "reviewed_no_findings",
-					evidenceRefs: ["src/runtime/session.ts"],
-					validationRefs: ["bun test"],
-					residualRisk: "No known residual risk.",
-				},
-			],
 			reviewIterations: 1,
 			decisions: [],
 			nextStep: "Run the next feature.",
@@ -1464,12 +1286,6 @@ describe("runtime completion and recovery tools", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",

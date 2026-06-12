@@ -1,313 +1,70 @@
 # Development Guide
 
-This file is for contributors working on the plugin itself.
+This file is for contributors working on the plugin itself. If you are trying to use Flow inside OpenCode, start with the top-level `README.md`.
 
-If you are trying to use Flow inside OpenCode, start with the top-level `README.md` instead.
+Read [`docs/maintainer-contract.md`](maintainer-contract.md) first — it defines what is frozen (persistence safety, schema v1, the hard invariants, the compaction hook) and what is skill-owned. Use [`docs/contributor-map.md`](contributor-map.md) to find the right files and checks for a given change.
 
-Current maintainer contract lives in [`docs/maintainer-contract.md`](maintainer-contract.md). Use [`docs/contributor-map.md`](contributor-map.md) to pick the right source files and checks before touching high-risk areas. Ownership boundaries and cross-domain review/triage policy live in [`docs/architecture/ownership-operating-model.md`](architecture/ownership-operating-model.md).
-
-This repo's maintainer workflow is intentionally Bun-first. In target projects, Flow is script-first: existing package.json scripts are the primary contract, and package-manager detection is supporting evidence.
-
-For monorepos, package-manager detection starts from the current tool `directory` and walks upward to the mutable Flow workspace root, so subpackage-local evidence can override root-level defaults.
-
-`package.json#packageManager` is authoritative when present and takes precedence over conflicting lockfiles in the same directory.
-
-If one directory has conflicting lockfile families and no explicit `package.json#packageManager`, runtime records package-manager evidence as ambiguous instead of guessing. In that case prompts should continue on existing package.json scripts instead of manager-specific guesses.
+This repo's workflow is Bun-first.
 
 ## Local workflow
-
-Install dependencies and run the full local check:
 
 ```bash
 bun install
 bun run check
 ```
 
+`bun run check` is the canonical readiness gate and is intentionally small: typecheck, lint, build, tests, install smoke, and bundle sanity. There are no generation, capture, parity, or drift steps — nothing in this repo is generated from anything else.
+
 Useful scripts:
 
 - `bun run build`
-- `bun run deadcode`
-- `bun run report:deadcode-exports`
-- `bun run check:deadcode-exports`
-- `bun run test`
-- `bun run test:fast`
-- `bun run test:deep`
 - `bun run typecheck`
-- `bun run check`
-- `bun run smoke:release` for the standard release-candidate smoke path; it builds, packs the npm tarball, runs the install smoke against it, and writes evidence under `.release-artifacts/release-smoke/` by default
-- `bun run smoke:opencode` for the lower-level npm install smoke runner (pack → extract → plugin startup → skill sync → uninstall CLI); this does not replace manual live OpenCode UI validation
-- `bun run report:prompt-eval`
-- `bun run eval:review-capture`
-- `bun run eval:review-capture:check`
-- `bun run eval:prompt-capture`
-- `bun run eval:prompt-capture:check`
-- `bun run uninstall:opencode` to remove Flow-owned global skills and a pre-npm `flow.js` copy (same logic as `bunx opencode-plugin-flow uninstall`)
+- `bun run test` (focused suites live under `tests/`)
+- `bun run smoke:release` — builds, packs the npm tarball, and runs the install smoke against it (pack → extract → plugin startup → skill sync → uninstall CLI)
+- `bun run uninstall:opencode` — same logic as `bunx opencode-plugin-flow uninstall`
 
-There is no local install script anymore: OpenCode installs the plugin from npm via the `plugin` array in `opencode.json`, and the plugin syncs its global skills at startup. For local development against an unpublished build, point a test project's `opencode.json` at a packed tarball or use `bun pm pack` plus the smoke runner.
-
-
-## Gate contract quick reference
-
-`bun run check` is the canonical local/mainline readiness contract. Run focused scripts first when they help isolate a touched area, but do not treat focused CI preflights as replacements for the full local contract unless `docs/maintainer-contract.md` records a no-weakening proof.
-
-Gate status terms:
-
-- **Hard** gates fail the command and block merge/release readiness. Examples: `bun run check:dependency-contract`, `bun run check:architecture-seams:enforce`, `bun run check:generated-drift`, `bun run deadcode`, `bun run gate:completion-lane`, `bun run test:replay`, and `bun run bench:gate`.
-- **Advisory** gates are supplemental visibility and do not block by exit code. `bun run check:boundary-report` and `bun run report:deadcode-exports` are advisory by design today: they exit `0` and report findings unless a future reviewed change promotes them with script, docs, and test updates.
-- **Ratcheted** gates fail on regression against the current reviewed budget while allowing known remaining cleanup debt to be handled incrementally. `bun run check:deadcode-exports` runs inside `bun run check` and fails if unused exported symbols or duplicate exports increase above the checked-in budget.
-- **Diagnostic/report** commands support investigation or planning. `bun run check:architecture-seams` is seam report mode; `bun run report:runtime-simplification-metrics` prints simplification metrics. Use the corresponding hard gate (`check:architecture-seams:enforce`) for pass/fail readiness.
-
-The full matrix, artifact owners, source-of-truth scripts, repeated-inside-`check` status, and CI/local no-weakening rules live in [`docs/maintainer-contract.md#gate-contract-matrix`](maintainer-contract.md#gate-contract-matrix).
-
-Standing dependency/tool checklist: keep `zod` aligned with `@opencode-ai/plugin`, preserve raw `tool(...)` arg shapes at the SDK boundary, and run `bun run check:dependency-contract` for dependency, schema, or tool-surface changes.
-
-## Verification tiers
-
-Use the smallest tier that can prove the current change, then broaden before release or cross-surface merges.
-
-| Tier | When to run | Commands |
-| --- | --- | --- |
-| Focused touched-slice checks | While editing one risk area | Use [`docs/maintainer-contract.md#if-you-touch-x-run-y`](maintainer-contract.md#if-you-touch-x-run-y) |
-| Docs/projection checks | Current docs or OpenCode projection metadata changes | `bun test tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/docs-stale-reference-policy.test.ts`; add `bun test tests/config/tool-schemas.test.ts tests/descriptor-family-parity.test.ts` when projection behavior is affected |
-| Runtime invariant fast lane | Runtime/domain/transition confidence | `bun run test:fast`; `bun run test:replay` for snapshot/runtime invariant coverage |
-| Generated drift lane | Prompt, review, descriptor, or generated surface changes | `bun run check:generated-drift` |
-| Deep/randomized confidence | Broad regression confidence beyond focused tests | `bun run test:deep` or `bun run test:randomized` |
-| Install/release smoke | Before release candidates that touch OpenCode install, generated skills, or release packaging | `bun run smoke:release` for the standard release-candidate asset/evidence path; use `bun run smoke:opencode` for lower-level runner diagnosis; still perform manual live OpenCode UI validation before claiming live host coverage |
-| Mainline readiness | Before release or cross-surface merge | `bun run check` |
-
-Hard gates block readiness. Advisory and diagnostic commands guide investigation only unless the maintainer contract promotes them with script, docs, and test updates. Focused checks are isolation tools, not replacements for `bun run check` before release or cross-surface changes.
-
-## Source map
-
-- `src/index.ts` — plugin entrypoint
-- `src/cli.ts` and `src/distribution/uninstall.ts` — `bunx opencode-plugin-flow uninstall` bin command
-- `src/config.ts` — command and agent injection
-- `src/adapters/opencode/tools.ts` — OpenCode runtime tool surface
-- Native OpenCode owns image/file attachments; Flow does not capture or materialize chat/command attachments by default and owns only workflow JSON/state under `.flow/**` plus derived docs
-- `src/runtime/schema.ts` — session and contract schemas
-- `src/runtime/transitions/` — domain state transition rules split by lifecycle phase
-- `src/runtime/domain/completion.ts` — shared completion-policy calculations
-- `src/runtime/application/session-engine.ts` — root-scoped session mutation orchestration
-- `src/runtime/application/workspace-runtime.ts` — tool-argument parsing and workspace-root adapters
-- `src/runtime/session.ts` — persistence and lifecycle exports
-- `src/runtime/render.ts` — derived markdown rendering
-- `src/prompts/agents.ts` — fallback agent prompt surfaces
-- `src/prompts/commands.ts` — fallback slash-command templates
-- `src/prompts/mode-contracts.ts` — canonical prompt-mode boundaries used by prompts, tests, and capture tooling
-- `src/prompts/skills.ts` and `src/prompts/generated/skill-docs.ts` — generated Flow skill specs and renderers
-- `src/distribution/skill-sync.ts` and `src/distribution/skill-markers.ts` — startup sync and ownership markers for generated Flow-owned `~/.config/opencode/skills/**`
+There is no local install script: OpenCode installs the plugin from npm via the `plugin` array in `opencode.json`. To develop against an unpublished build, point a test project's `opencode.json` at a packed tarball (`bun pm pack`) or use the smoke runner.
 
 ## Architecture in one view
 
-Flow is built around a few stable responsibilities and authority boundaries:
-
 ```text
-user / slash command / agent
-  -> OpenCode adapter tool surface
+user / slash command / skill-guided agent
+  -> OpenCode adapter tool surface (7 tools)
   -> runtime application action
-  -> domain and transition policy
+  -> transition policy + hard invariants
   -> `.flow/**/session.json` snapshot persistence
   -> derived markdown rendering
 ```
 
-1. A plugin `config` hook injects commands and agents.
-2. Runtime tools are adapter entrypoints and delegate to application/domain runtime helpers; they do not own workflow policy.
-3. Session state is stored under `.flow/active/<session-id>/session.json`, with inactive resumable sessions under `.flow/stored/<session-id>/` and closed history under `.flow/completed/<session-id>-<timestamp>/`.
-4. Domain transitions and runtime policy helpers remain authoritative for workflow state changes.
-5. Prompted agents call runtime tools instead of mutating state directly.
-6. Coordinators report a per-phase `handoffMode` for planning, execution, and review: `task_subagent` means an actual OpenCode Task/subagent handoff, `inline_role` means the coordinator is applying that role contract inline for tiny/sequential/shared-context work, and `not_supported` means Task is unavailable, denied, or not permission-allowed. Prefer `task_subagent` for non-trivial bounded work when supported, while runtime tools remain the state authority.
-7. Generated OpenCode skills under `~/.config/opencode/skills/flow-{plan,run,review}/SKILL.md` provide on-demand guidance. Slash commands and agents remain fallback surfaces and must keep working when skills are absent, denied, or hidden by OpenCode permissions.
-8. Native OpenCode owns image/file attachments. Flow leaves host/model attachment context untouched and does not create Flow-owned workspace files from chat or command attachments by default.
-9. Readable markdown docs are rendered beside each saved session directory under `.flow/active/<session-id>/docs/`, `.flow/stored/<session-id>/docs/`, or `.flow/completed/<session-id>-<timestamp>/docs/`.
+- `skills/` — the four hand-authored skills plus `references/`. This is the instruction surface; commands and agents only point at it.
+- `src/runtime/` — schemas, transitions, the hard invariants, persistence, locking, path/workspace-root safety, rendering.
+- `src/adapters/opencode/` — thin adapter: plugin entry, config-hook injection of commands/agents, the tool surface, the compaction hook. Tools validate payloads and dispatch to runtime actions; they own no workflow policy.
+- `src/distribution/` — startup skill sync (marker files, backups) and the uninstall CLI.
 
-Live runtime persistence is snapshot-primary: runtime application ports load and save session snapshots, then sync derived artifacts. Rendered markdown docs are derived artifacts, not workflow truth. Core action and role-protocol metadata are projection/regression infrastructure; they are not live persistence. The core workflow event/replay stack is active semantic and regression infrastructure, but it is not the live persistence authority unless a future migration explicitly promotes it.
+Live persistence is snapshot-primary: `.flow/**/session.json` is the source of truth, rendered markdown is derived. The session schema stays at v1 so v2-created sessions resume under v3.
 
-OpenCode tool metadata is consolidated in `src/adapters/opencode/tool-surface/tool-registry.ts`. The registry describes core-backed mutation tools, workspace/control tools, read tools, and render-only tools without pretending every surface has both a runtime action and a core workflow action. Adapter implementation modules register tools from the registry and resolve dispatch names through registry helpers; `src/adapters/opencode/tool-surface/schemas.ts` owns the payload schema registry that co-locates each tool's raw arg shape, parser schema, and owner metadata. Parity tests compare registry metadata directly against runtime tool registration, runtime action catalogs, mode contracts, docs rows, and schema owners. Runtime transitions still enforce behavior; registry metadata, prompts, docs, and audit surfaces project or verify that behavior.
+## Editing skills
 
-## Current agent roles
+Skills are plain markdown checked into `skills/<name>/SKILL.md` (frontmatter: `name` + `description`), with deeper material in `skills/<name>/references/`. There is no build step, no generation, no hash locking — edit the file, that's it.
 
-- `flow-planner`
-- `flow-worker`
-- `flow-auto`
-- `flow-reviewer`
-- `flow-control`
+How they reach users:
 
-### Role intent
+1. The files ship inside the npm package.
+2. On plugin startup, `src/distribution/skill-sync.ts` idempotently copies them to `~/.config/opencode/skills/<name>/`, writing a `.flow-skill-version` marker per folder (plugin version plus a sha256 line per shipped file).
+3. Folders without the marker are never touched. If a user edited a Flow-owned file (`SKILL.md` or a `references/` file), the old content is backed up next to it (`SKILL.md.backup`, `references/<name>.md.backup`) before being replaced.
+4. Skills synced during init may only be discovered on the next OpenCode start — keep the "restart once after install/update" line in user docs.
 
-- `flow-planner` reads the repo and creates a compact execution-ready plan
-- `flow-worker` executes exactly one approved feature and, where OpenCode Task/subagent handoff is supported, asks `flow-reviewer` through Task for an independent fresh-context approval pass before persistence; when Task is unavailable or too much overhead, it reports inline/not-supported review fallback instead of implying a child session
-- `flow-reviewer` reviews either the execution gate (`feature`) or the completion gate (`final`); the final gate follows the runtime-owned final review policy (`detailed` cross-feature by default, `broad` when explicitly configured). Reviewers remain leaf-like and return one evidence-backed decision instead of recursively orchestrating.
-- `flow-auto` coordinates planning, execution, review, recovery, and continuation; before each planning/execution/review phase it reports `handoffMode`, target role, and reason, routing non-trivial bounded planning to `flow-planner`, implementation to `flow-worker`, and approval to `flow-reviewer` through Task when supported
-- `flow-control` handles status/history/session/reset requests and the review command surface
+Per-project overrides (`.opencode/skills/<name>/SKILL.md`) are a documented user feature; the plugin never writes there.
 
-Task/subagent handoffs are prompt-level orchestration only. Flow runtime tools remain authoritative for state transitions and persisted session data, and prompts must never edit `.flow` files directly. Derived task-progress rows in status/history/rendered docs are runtime projections; they are not proof that an actual OpenCode Task/subagent child session occurred.
+Guidelines for skill content:
 
-Read-only repo review stays separate from feature execution and is exposed through `/flow-review` on `flow-control`. User-facing depth tokens map to internal rigor:
-
-- `default` => `broad_audit`
-- `detailed` => `deep_audit`
-- `exhaustive` => `full_audit`
-
-`/flow-review` now returns a renderer-backed human report by default; the structured review ledger remains an internal contract behind `flow_review_render`.
-Flow may only claim achieved `full_audit` when every major discovered repo surface is directly reviewed with no major unreviewed gaps.
-
-## Prompt quality, skills, and evals
-
-Prompt behavior is part of the product contract. Keep prompt-mode boundaries in `src/prompts/mode-contracts.ts` and use that file as the canonical source for prompt visibility and mode behavior, not as the owner of runtime transition law:
-
-- which prompt surfaces exist
-- which source files define each mode
-- which runtime and repository mutations are allowed
-- which Flow tools are expected or forbidden
-- what each mode must do before stopping
-
-Generated skills are now part of the default OpenCode install lifecycle. Keep `flow-plan`, `flow-run`, and `flow-review` generated from Flow-owned specs; they may reference mode contracts, role protocols, and registered runtime tools, but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior. Command templates and role prompts should stay slim fallback surfaces with a fallback contract: mode title/boundary, allowed/forbidden Flow tools, stop condition, never edit `.flow/**`, one-sentence tool ordering, and recovery guidance when a skill is unavailable or denied.
-
-Providerless evals protect this contract without calling a model API:
-
-- `bun run eval:review-capture:check` validates `/flow-review` capture scenarios.
-- `bun run eval:prompt-capture:check` validates prompt-mode capture scenarios for planner, worker, auto, reviewer, run, and control behavior.
-- `bun run report:prompt-eval` writes the combined prompt-eval summary artifacts.
-
-To refresh manual prompt captures:
-
-1. Run `bun run eval:prompt-capture` to export capture prompts.
-2. Fill a capture JSON with the observed model/plugin output.
-3. Run `bun run eval:prompt-capture -- --score <capture-file.json>`.
-4. Promote calibrated outputs with `bun run eval:prompt-capture -- --promote <capture-file.json>`.
-
-The scorer accepts structured tool intent (`toolCalls`, `actualToolCalls`, `plannedToolCalls`, `toolPlan`, or `willCallTools`) when available and falls back to affirmative prose matching otherwise. Keep structured tool-call evidence when possible; it is less brittle than text-only assertions.
-
-Do not add model-provider credentials to this path. These checks are intentionally offline so prompt quality stays testable in CI and local development.
-
-## Current Runtime Tools
-
-Default OpenCode tool surface, in registry docs-row order:
-
-- `flow_status` — Show the active Flow session summary
-- `flow_doctor` — Run non-destructive readiness checks for Flow in the current workspace
-- `flow_history` — Show active, stored, and completed Flow session history
-- `flow_history_show` — Show a specific active, stored, or completed Flow session by id
-- `flow_session_activate` — Activate a stored Flow session by id
-- `flow_plan_start` — Create or refresh the active Flow planning session
-- `flow_auto_prepare` — Classify a flow-auto invocation and choose the next step
-- `flow_session_close` — Close the active Flow session as completed, deferred, or abandoned
-- `flow_plan_context_record` — Persist repo profile, research, implementation approach, and optional planning decisions into the active Flow session from a JSON payload
-- `flow_plan_apply` — Persist a Flow draft plan into the active session from a JSON payload
-- `flow_plan_approve` — Approve the active Flow draft plan
-- `flow_plan_select_features` — Keep only selected features in the active Flow draft plan
-- `flow_run_start` — Start the next runnable Flow feature
-- `flow_run_complete_feature` — Persist an already-validated Flow feature execution result from a JSON payload
-- `flow_reset_feature` — Reset a Flow feature to pending
-- `flow_review_record_feature` — Record an already-validated reviewer decision for the active feature from a JSON payload
-- `flow_review_record_final` — Record an already-validated reviewer decision for final cross-feature validation from a JSON payload
-- `flow_review_render` — Render a structured Flow review ledger into a human-readable report, structured JSON, or both
-
-
-Native OpenCode owns image/file attachment handling. Flow tools and prompts must not add a Flow-owned attachment materialization surface unless a new explicit product requirement, schema contract, docs update, and regression tests establish that ownership boundary.
-
-Keep operator-facing messaging simple. Runtime remains the single owner of workflow semantics and internal complexity.
-
-## Maintainer rules
-
-- Runtime owns workflow semantics; prompts and docs describe them.
-- Keep live runtime persistence snapshot-primary unless a dedicated event-first migration plan proves and stages a different authority.
-- Runtime transitions and snapshot persistence are the supported workflow authority. Do not reintroduce core workflow replay, event-store, checkpoint-store, or projection-store surfaces without an explicit product requirement and replacement tests.
-- Generated skills are instruction surfaces only; keep slash commands and agents usable as fallback surfaces when skills are absent or denied.
-- Package API is root-only (`opencode-plugin-flow` import). Internal paths are not public API and may change in any release.
-- Keep `zod` aligned with `@opencode-ai/plugin` unless a reviewed SDK-boundary change is intentional.
-- Preserve direct `tool(...)` arg shapes at the SDK boundary.
-- Use permission-only OpenCode agent restrictions; do not reintroduce boolean `tools` config for read-only Flow agents.
-- Prefer deletion over new helper layers.
-- Keep release-bound source free of debug-only artifacts. Do not leave ad-hoc `console.*` calls or `debugger` statements in `src` or the built release artifact. Inspect existing logging, telemetry, CLI-output, and test patterns before changing `console.*`; remove temporary debug noise, but preserve intentional operator or observability signals with an equivalent replacement that keeps severity, message intent, and key context.
-- Pair behavior changes with targeted tests and run the existing validation scripts before release.
-
-## Coding guidelines and release hygiene
-
-Flow treats engineering quality as part of the workflow contract, not just reviewer preference:
-
-- Planning records a runtime-owned stack and standards profile. Local repo guidance and configs outrank official docs, and official docs outrank broader Exa/websearch guidance.
-- Flow caches the generated stack and standards profile in `.flow/standards-profile.json`; the cache is ignored when the workspace, start directory, schema version, package-manager hint, or relevant source-file fingerprint changes, and external guidance expires after 30 days.
-- Prefer deletion and reuse over new abstraction layers.
-- Keep diffs small, reviewable, and reversible.
-- Use existing package scripts and repo utilities before adding new commands.
-- Validate at the smallest useful scope first, then use broader gates before release.
-- Keep production/release-bound code free of debug-only artifacts (`console.*` and `debugger`).
-- Preserve intentional observability: deleting a meaningful log, diagnostic event, or operator-facing message is only acceptable when an equivalent logger, telemetry, or stdout/stderr replacement remains and preserves severity, message intent, and key context.
-
-When changing `console.*` in release-bound code, use this decision tree:
-
-1. Temporary debug trace or local scratch output: remove it.
-2. CLI/operator output: route it through an injected logger or explicit `process.stdout.write` / `process.stderr.write` adapter.
-3. Application diagnostic signal: use the repo's existing structured logger with a level and contextual fields.
-4. Cross-service or performance diagnostic signal: use the repo's existing telemetry API for spans, events, metrics, or logs.
-5. No existing observability facility: add the smallest local injected adapter needed for the current surface, or report a blocker when an equivalent replacement would require a broader observability decision; do not add a dependency unless the change explicitly approves one.
-
-The release hygiene gate is enforced through these mechanisms:
-
-- `biome.json` enables Biome's `lint/suspicious/noConsole` rule for production source. Biome documents this rule as non-recommended by default, configurable as an error, and intended to keep console debugging out of shipped code.
-- The release build uses Bun's `--drop=console` setting so bundled dependency code cannot reintroduce console calls into `dist/index.js`.
-- `bun run check:release-hygiene` scans `src` and `dist/index.js` after build so release artifacts cannot silently reintroduce `console.*` or `debugger`.
-
-Development-only scripts and tests may still print to stdout/stderr when they are intentionally operator-facing. Release-bound CLI code should make that intent explicit with injectable logger functions or direct `process.stdout.write` / `process.stderr.write` adapters. The goal is to avoid shipping raw debug consoles, not to reduce production observability.
-
-## Recovery model
-
-Retryable runtime failures can include structured recovery metadata alongside the error summary.
-
-That metadata can include:
-
-- `errorCode`
-- `resolutionHint`
-- `recoveryStage`
-- `prerequisite`
-- optional `requiredArtifact`
-- `nextCommand`
-- optional `nextRuntimeTool`
-- optional `nextRuntimeArgs`
-
-The runtime uses this to distinguish between:
-
-- missing prerequisites
-- immediately executable recovery actions
-
-Examples:
-
-- missing reviewer approval reports a `reviewer_result_required` prerequisite
-- missing validation scope or evidence reports `validation_rerun_required`
-- missing final review payload reports `completion_payload_rebuild_required`
-- failing review or validation can point directly to `flow_reset_feature`
-
-## Workflow semantics
-
-Flow now persists a few higher-level concepts directly in runtime state:
-
-- planning decisions can be classified as `autonomous_choice`, `recommend_confirm`, or `human_required`
-- runtime summaries expose the latest blocking planning decision as `decisionGate`
-- runtime status/doctor structured payloads and detailed views include `laneReason` so lane selection remains auditable without overloading compact operator summaries
-- planning decisions also carry a domain such as `architecture`, `product`, `quality`, `scope`, or `delivery`
-- plans can declare a `deliveryPolicy` so completion can be driven by a clean finish, a core-work finish, or a threshold
-- `replan_required` outcomes must carry a structured reason, failed assumption, and recommended adjustment
-- closed sessions carry an explicit closure kind: `completed`, `deferred`, or `abandoned`
-
-## Deferred runtime parallelism
-
-True runtime-level parallel feature execution is intentionally deferred. Current behavior remains single-feature-at-a-time execution with improved lane and recovery visibility.
-
-## Performance direction
-
-Keep Flow prompts narrow and stable. Prefer platform-native efficiency controls before adding plugin-specific machinery:
-
-- keep orchestration prompts focused on routing and recovery, not duplicated workflow narration
-- enable OpenCode compaction and provider cache keys when sessions get long
-- treat `experimental.session.compacting` as optional escalation only if there is real evidence of Flow state loss
-- avoid introducing Flow-owned compaction or measurement plumbing unless a concrete failure mode justifies it
+- Keep `SKILL.md` tight (~1–2KB); move methodology and worked examples into `references/` (progressive disclosure).
+- Skills may reference registered tool names but must not invent tools, state transitions, persistence paths, or `.flow/**` write behavior — every state change goes through a tool.
+- The tool-name-coverage test fails if a registered tool name appears in no skill. There are no other mechanical skill checks; quality is owned by code review and the golden-transcript evals (manual lane, needs a model key).
 
 ## Tool schema note
 
-OpenCode plugin tools expect `args` to be provided as a raw Zod shape, not a top-level schema object.
-
-Example:
+OpenCode plugin tools take `args` as a raw zod shape, not a wrapped schema object:
 
 ```ts
 const FlowRunStartArgsShape = {
@@ -315,44 +72,21 @@ const FlowRunStartArgsShape = {
 };
 ```
 
-This plugin uses two validation layers:
-
-- SDK-facing tool `args` stay as raw shapes for OpenCode's plugin contract
-- stricter runtime validation happens later through schemas such as `WorkerResultSchema`
-
-For the heaviest payload tools (`flow_plan_context_record`, `flow_plan_apply`, `flow_run_complete_feature`, `flow_review_record_feature`, and `flow_review_record_final`), expose the current raw object-shape contract directly at the SDK boundary and let runtime schemas enforce the stricter semantic refinements. Do not reintroduce JSON-string transport fields or alternate direct-caller fallbacks.
+Validation is two-layered: raw shapes at the SDK boundary, stricter semantic schemas in `src/runtime/schema.ts`. Keep `zod` aligned with `@opencode-ai/plugin`.
 
 ## Testing
 
-The test suite covers:
+The suite is small (~40 files) and focused on what code actually owns:
 
-- command and agent injection
-- tool argument shapes
-- session creation, save, and load
-- markdown doc rendering
-- plan application, selection, and approval
-- feature execution and reviewer gating
-- blocked and replan-required outcomes
-- final-review completion rules
-- reset behavior
-- prerequisite-aware recovery metadata and autonomous recovery behavior
-
-Run tests with:
+- the four hard invariants (each rejection path unit-tested directly)
+- transitions and recovery metadata
+- session persistence, locking, activation, closure, and path/workspace-root safety
+- a v2-session resume fixture
+- tool arg shapes and registration
+- install lifecycle: pack, startup skill sync, uninstall
 
 ```bash
 bun test
 ```
 
-Fast lane for runtime invariant safety checks:
-
-```bash
-bun run test:fast
-```
-
-Deep lane for broad coverage (default CI depth):
-
-```bash
-bun run test:deep
-```
-
-Replay/event/checkpoint/projection persistence was removed during the 2026-05-07 simplification. The supported persistence contract is active/stored/completed session snapshots plus rendered session docs.
+Benchmarks under `bench/` stay runnable but are out of `check` and not a merge gate.

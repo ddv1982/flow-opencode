@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdirSync, statSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { join } from "node:path";
+import { saveSession } from "../src/runtime/lifecycle";
 import {
 	getCompletedSessionPath,
 	getFeatureDocPath,
@@ -9,7 +10,6 @@ import {
 	getSessionPath,
 	InvalidFlowPathInputError,
 } from "../src/runtime/paths";
-import { saveSession } from "../src/runtime/session";
 import * as sessionHistory from "../src/runtime/session-history";
 import * as sessionWorkspace from "../src/runtime/session-workspace";
 import { createSampleSession } from "./fixtures";
@@ -52,8 +52,8 @@ describe("path traversal hardening", () => {
 			"foo/bar",
 			"",
 		]) {
-			const response = await tools.flow_history_show.execute(
-				{ sessionId },
+			const response = await tools.flow_session.execute(
+				{ action: "show", sessionId },
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
@@ -76,8 +76,8 @@ describe("path traversal hardening", () => {
 		});
 
 		for (const sessionId of ["..", "foo/bar", "  ", "../a"]) {
-			const response = await tools.flow_session_activate.execute(
-				{ sessionId },
+			const response = await tools.flow_session.execute(
+				{ action: "activate", sessionId },
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
@@ -96,8 +96,8 @@ describe("path traversal hardening", () => {
 		const before = statSync(flowDir).mtimeMs;
 
 		for (const featureId of ["../foo", "FOO", "a/b", "  ", "a b", ""]) {
-			const response = await tools.flow_reset_feature.execute(
-				{ featureId },
+			const response = await tools.flow_feature_complete.execute(
+				{ reset: true, featureId },
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
@@ -211,7 +211,7 @@ describe("path traversal hardening", () => {
 		const before = await fsPromises.readdir(activeDir);
 
 		for (const goal of [" ", "\t", "\n\t "]) {
-			const response = await tools.flow_plan_start.execute(
+			const response = await tools.flow_plan_save.execute(
 				{ goal },
 				toolContext(worktree),
 			);

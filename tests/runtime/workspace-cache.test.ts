@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
+import { saveSession } from "../../src/runtime/lifecycle";
 import {
 	getActiveSessionsDir,
 	getCompletedSessionsDir,
 	getSessionPath,
 	getStoredSessionsDir,
 } from "../../src/runtime/paths";
-import { ensureWorkspace, saveSession } from "../../src/runtime/session";
 import { readSessionFromPath } from "../../src/runtime/session-workspace";
 import { createTempDirRegistry, sampleSession } from "../runtime-test-helpers";
 
@@ -37,7 +37,6 @@ describe("workspace mkdir caching", () => {
 	test("10 sequential saveSession calls re-ensure workspace roots on every save", async () => {
 		const worktree = makeTempDir();
 		const session = sampleSession("Workspace cache");
-		await ensureWorkspace(worktree);
 		await saveSession(worktree, session);
 
 		const mkdirSpy = spyOn(fsPromises, "mkdir");

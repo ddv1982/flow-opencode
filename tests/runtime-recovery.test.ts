@@ -58,8 +58,9 @@ describe("runtime recovery policy mapping", () => {
 		expect(failingValidation.nextCommand).toBe(
 			"/flow-reset feature setup-runtime",
 		);
-		expect(failingValidation.nextRuntimeTool).toBe("flow_reset_feature");
+		expect(failingValidation.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(failingValidation.nextRuntimeArgs).toEqual({
+			reset: true,
 			featureId: "setup-runtime",
 		});
 
@@ -73,8 +74,9 @@ describe("runtime recovery policy mapping", () => {
 		expect(failingFeatureReview.nextCommand).toBe(
 			"/flow-reset feature setup-runtime",
 		);
-		expect(failingFeatureReview.nextRuntimeTool).toBe("flow_reset_feature");
+		expect(failingFeatureReview.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(failingFeatureReview.nextRuntimeArgs).toEqual({
+			reset: true,
 			featureId: "setup-runtime",
 		});
 
@@ -88,8 +90,9 @@ describe("runtime recovery policy mapping", () => {
 		expect(failingFinalReview.nextCommand).toBe(
 			"/flow-reset feature setup-runtime",
 		);
-		expect(failingFinalReview.nextRuntimeTool).toBe("flow_reset_feature");
+		expect(failingFinalReview.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(failingFinalReview.nextRuntimeArgs).toEqual({
+			reset: true,
 			featureId: "setup-runtime",
 		});
 	});
@@ -104,21 +107,6 @@ describe("runtime recovery policy mapping", () => {
 		expect(missingValidation.recoveryStage).toBe("rerun_validation");
 		expect(missingValidation.nextCommand).toBe("/flow-status");
 		expect(missingValidation.nextRuntimeTool).toBeUndefined();
-
-		const missingReviewClosure = buildCompletionRecovery(
-			"setup-runtime",
-			false,
-			"missing_review_closure",
-		);
-		expect(missingReviewClosure.errorCode).toBe(
-			"missing_review_finding_closure",
-		);
-		expect(missingReviewClosure.recoveryStage).toBe("retry_completion");
-		expect(missingReviewClosure.requiredArtifact).toBe(
-			"review_finding_closure_ledger",
-		);
-		expect(missingReviewClosure.nextCommand).toBe("/flow-status");
-		expect(missingReviewClosure.nextRuntimeTool).toBeUndefined();
 
 		const missingFinalReview = buildCompletionRecovery(
 			"setup-runtime",
@@ -138,7 +126,6 @@ describe("runtime recovery policy mapping", () => {
 			"failing_validation",
 			"missing_reviewer_decision",
 			"missing_validation_scope",
-			"missing_review_closure",
 			"failing_feature_review",
 			"missing_final_review",
 			"failing_final_review",
@@ -160,7 +147,6 @@ describe("runtime recovery policy mapping", () => {
 			"failing_validation",
 			"missing_reviewer_decision",
 			"missing_validation_scope",
-			"missing_review_closure",
 			"failing_feature_review",
 			"missing_final_review",
 			"failing_final_review",

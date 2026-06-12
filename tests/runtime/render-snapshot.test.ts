@@ -10,7 +10,6 @@ import {
 } from "../../bench/fixtures";
 import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
 import { renderSessionDocs } from "../../src/runtime/render";
-import { ensureWorkspace } from "../../src/runtime/session";
 import { applyPlan } from "../../src/runtime/transitions";
 import { setNowIsoOverride } from "../../src/runtime/util";
 import { createTempDirRegistry } from "../runtime-test-helpers";
@@ -55,7 +54,6 @@ async function renderFixture(
 	worktree: string,
 	session: ReturnType<FixtureSpec["createSession"]>,
 ) {
-	await ensureWorkspace(worktree);
 	await renderSessionDocs(worktree, session);
 	const index = await readFile(getIndexDocPath(worktree, session.id), "utf8");
 	const featureDocs = await Promise.all(

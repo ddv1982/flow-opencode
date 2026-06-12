@@ -28,10 +28,7 @@ export type TransitionRecovery = {
 	requiredArtifact?:
 		| "feature_reviewer_decision"
 		| "final_reviewer_decision"
-		| "feature_review_payload"
 		| "final_review_payload"
-		| "review_finding_closure_ledger"
-		| "review_scope_ledger"
 		| "targeted_validation_result"
 		| "broad_validation_result";
 	nextCommand: string;

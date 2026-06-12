@@ -2,6 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { open, readdir, readFile, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+	resetSessionWorkspaceFsForTests,
+	saveSession,
+	setSessionWorkspaceFsForTests,
+} from "../src/runtime/lifecycle";
+import {
 	getActiveSessionsDir,
 	getFeatureDocPath,
 	getFlowDir,
@@ -10,14 +15,8 @@ import {
 	getSessionPath,
 	getStoredSessionsDir,
 } from "../src/runtime/paths";
-import { renderFeatureDoc } from "../src/runtime/render-feature-sections";
-import { renderIndexDoc } from "../src/runtime/render-index-sections";
+import { renderFeatureDoc, renderIndexDoc } from "../src/runtime/render";
 import { SessionSchema } from "../src/runtime/schema";
-import {
-	resetSessionWorkspaceFsForTests,
-	saveSession,
-	setSessionWorkspaceFsForTests,
-} from "../src/runtime/session";
 import { createTempDirRegistry, sampleSession } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry("flow-atomic-");

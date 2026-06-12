@@ -93,17 +93,57 @@ type FlowSkillFolderMarker = {
 };
 
 const FLOW_SKILL_MARKER_PLUGIN = "opencode-plugin-flow";
+const FLOW_SKILL_MARKER_FILE_PREFIX = "file=";
+const FLOW_SKILL_MARKER_FILE_HASH_SEPARATOR = "=sha256:";
 
+/**
+ * Renders the plugin-owned `.flow-skill-version` marker. The top-level `hash`
+ * stays the SKILL.md content hash (compatible with pre-existing markers and
+ * `parseFlowSkillFolderMarker`); each shipped file additionally gets a
+ * `file=<relative-path>=sha256:<hash>` line so sync and uninstall can detect
+ * user edits per file and know exactly which files the plugin owns.
+ */
 export function renderFlowSkillFolderMarker(marker: {
 	version: string;
 	hash: string;
+	files?: ReadonlyArray<{ relativePath: string; hash: string }>;
 }): string {
 	return [
 		`plugin=${FLOW_SKILL_MARKER_PLUGIN}`,
 		`version=${marker.version}`,
 		`hash=sha256:${marker.hash}`,
+		...(marker.files ?? []).map(
+			(file) =>
+				`${FLOW_SKILL_MARKER_FILE_PREFIX}${file.relativePath}${FLOW_SKILL_MARKER_FILE_HASH_SEPARATOR}${file.hash}`,
+		),
 		"",
 	].join("\n");
+}
+
+/**
+ * Extracts the per-file hash entries from a folder marker. Markers written
+ * before per-file tracking simply yield an empty map.
+ */
+export function parseFlowSkillFileHashes(content: string): Map<string, string> {
+	const hashes = new Map<string, string>();
+	for (const line of content.split("\n")) {
+		if (!line.startsWith(FLOW_SKILL_MARKER_FILE_PREFIX)) {
+			continue;
+		}
+		const entry = line.slice(FLOW_SKILL_MARKER_FILE_PREFIX.length);
+		const separator = entry.lastIndexOf(FLOW_SKILL_MARKER_FILE_HASH_SEPARATOR);
+		if (separator === -1) {
+			continue;
+		}
+		const relativePath = entry.slice(0, separator);
+		const hash = entry.slice(
+			separator + FLOW_SKILL_MARKER_FILE_HASH_SEPARATOR.length,
+		);
+		if (relativePath.length > 0 && /^[a-f0-9]{64}$/.test(hash)) {
+			hashes.set(relativePath, hash);
+		}
+	}
+	return hashes;
 }
 
 export function parseFlowSkillFolderMarker(

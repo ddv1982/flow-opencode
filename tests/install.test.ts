@@ -9,18 +9,18 @@ import {
 	FLOW_SKILL_BACKUP_FILENAME,
 	FLOW_SKILL_MARKER_FILENAME,
 	FLOW_SKILLS_DIRECTORY,
+	parseFlowSkillFileHashes,
 	parseFlowSkillFolderMarker,
+	sha256,
 } from "../src/distribution/skill-markers";
 import {
 	detectPreNpmFlowPlugin,
+	FLOW_SKILL_DEFINITIONS,
+	type FlowSkillDefinition,
 	inspectFlowSkillSyncState,
 	syncFlowSkills,
 } from "../src/distribution/skill-sync";
 import { uninstallFlow } from "../src/distribution/uninstall";
-import {
-	FLOW_SKILL_SPECS,
-	renderFlowSkillDocument,
-} from "../src/prompts/generated/skill-docs";
 
 const tempDirs: string[] = [];
 
@@ -52,12 +52,32 @@ function markerPath(homeDir: string, name: string): string {
 	return join(skillFolder(homeDir, name), FLOW_SKILL_MARKER_FILENAME);
 }
 
-function firstSkillName(): string {
-	const spec = FLOW_SKILL_SPECS[0];
-	if (!spec) {
-		throw new Error("Missing Flow skill specs.");
+function firstSkill(): FlowSkillDefinition {
+	const definition = FLOW_SKILL_DEFINITIONS[0];
+	if (!definition) {
+		throw new Error("Missing Flow skill definitions.");
 	}
-	return spec.name;
+	return definition;
+}
+
+function skillDocumentContent(definition: FlowSkillDefinition): string {
+	const document = definition.files.find(
+		(file) => file.relativePath === "SKILL.md",
+	);
+	if (!document) {
+		throw new Error(`Flow skill ${definition.name} is missing SKILL.md`);
+	}
+	return document.content;
+}
+
+/**
+ * Builds a pre-npm-era generated SKILL.md: a managed payload plus a valid
+ * in-document hash-locked marker line, exactly as the pre-npm installer wrote.
+ */
+function renderPreNpmGeneratedDocument(name: string): string {
+	const payload = `# Old generated ${name} skill\n`;
+	const marker = `<!-- flow-opencode-generated-skill name=${name} version=1 hash=sha256:${sha256(payload)} -->`;
+	return `${payload.slice(0, -1)}\n${marker}\n`;
 }
 
 describe("npm distribution stability surfaces", () => {
@@ -86,71 +106,145 @@ describe("npm distribution stability surfaces", () => {
 			join(".config", "opencode", "plugins", "flow.js"),
 		);
 	});
+
+	test("embeds the four hand-authored skills with their reference files", () => {
+		expect(FLOW_SKILL_DEFINITIONS.map((definition) => definition.name)).toEqual(
+			["flow", "flow-plan", "flow-run", "flow-review"],
+		);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			expect(
+				definition.files.some((file) => file.relativePath === "SKILL.md"),
+			).toBe(true);
+			for (const file of definition.files) {
+				expect(file.content.length).toBeGreaterThan(0);
+			}
+		}
+	});
 });
 
 describe("skill sync", () => {
-	test("installs all bundled skills with marker files on a fresh home", async () => {
+	test("installs all bundled skill files with per-file marker hashes on a fresh home", async () => {
 		const homeDir = makeTempDir();
 
-		const results = await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
 		expect(results.map((result) => result.action)).toEqual(
-			FLOW_SKILL_SPECS.map(() => "installed"),
+			FLOW_SKILL_DEFINITIONS.map(() => "installed"),
 		);
-		for (const skill of FLOW_SKILL_SPECS) {
-			const content = await readFile(skillPath(homeDir, skill.name), "utf8");
-			expect(content).toBe(renderFlowSkillDocument(skill));
-			const marker = parseFlowSkillFolderMarker(
-				await readFile(markerPath(homeDir, skill.name), "utf8"),
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			const folder = skillFolder(homeDir, definition.name);
+			for (const file of definition.files) {
+				const content = await readFile(
+					join(folder, ...file.relativePath.split("/")),
+					"utf8",
+				);
+				expect(content).toBe(file.content);
+			}
+
+			const markerContent = await readFile(
+				markerPath(homeDir, definition.name),
+				"utf8",
 			);
-			expect(marker?.version).toBe("2.1.0");
-			expect(marker?.hash).toMatch(/^[a-f0-9]{64}$/);
+			const marker = parseFlowSkillFolderMarker(markerContent);
+			expect(marker?.version).toBe("3.0.0");
+			expect(marker?.hash).toBe(sha256(skillDocumentContent(definition)));
+
+			const fileHashes = parseFlowSkillFileHashes(markerContent);
+			for (const file of definition.files) {
+				expect(fileHashes.get(file.relativePath)).toBe(sha256(file.content));
+			}
 		}
 	});
 
-	test("is idempotent: a second sync reports unchanged and rewrites nothing", async () => {
+	test("is idempotent: a second sync reports unchanged and stays synced", async () => {
 		const homeDir = makeTempDir();
-		await syncFlowSkills({ homeDir, version: "2.1.0" });
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
 
-		const results = await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
 		expect(results.map((result) => result.action)).toEqual(
-			FLOW_SKILL_SPECS.map(() => "unchanged"),
+			FLOW_SKILL_DEFINITIONS.map(() => "unchanged"),
 		);
 		const state = await inspectFlowSkillSyncState(homeDir);
 		expect(state.map((entry) => entry.state)).toEqual(
-			FLOW_SKILL_SPECS.map(() => "synced"),
+			FLOW_SKILL_DEFINITIONS.map(() => "synced"),
 		);
+	});
+
+	test("reports stale skills after a local edit and missing skills before any sync", async () => {
+		const homeDir = makeTempDir();
+		const name = firstSkill().name;
+
+		const beforeSync = await inspectFlowSkillSyncState(homeDir);
+		expect(beforeSync.map((entry) => entry.state)).toEqual(
+			FLOW_SKILL_DEFINITIONS.map(() => "missing"),
+		);
+
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		await writeFile(skillPath(homeDir, name), "# Edited\n", "utf8");
+
+		const state = await inspectFlowSkillSyncState(homeDir);
+		expect(state.find((entry) => entry.name === name)?.state).toBe("stale");
 	});
 
 	test("backs up a user-edited SKILL.md before replacing it", async () => {
 		const homeDir = makeTempDir();
-		const name = firstSkillName();
-		await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const definition = firstSkill();
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
 		const edited = "# My customized Flow skill\n";
-		await writeFile(skillPath(homeDir, name), edited, "utf8");
+		await writeFile(skillPath(homeDir, definition.name), edited, "utf8");
 
-		const results = await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
-		const result = results.find((entry) => entry.name === name);
+		const result = results.find((entry) => entry.name === definition.name);
 		expect(result?.action).toBe("updated_with_backup");
 		const backup = await readFile(
-			join(skillFolder(homeDir, name), FLOW_SKILL_BACKUP_FILENAME),
+			join(skillFolder(homeDir, definition.name), FLOW_SKILL_BACKUP_FILENAME),
 			"utf8",
 		);
 		expect(backup).toBe(edited);
-		const content = await readFile(skillPath(homeDir, name), "utf8");
-		expect(content).toContain("flow-opencode-generated-skill");
+		const content = await readFile(skillPath(homeDir, definition.name), "utf8");
+		expect(content).toBe(skillDocumentContent(definition));
+	});
+
+	test("backs up a user-edited reference file next to itself before replacing it", async () => {
+		const homeDir = makeTempDir();
+		const definition = FLOW_SKILL_DEFINITIONS.find((entry) =>
+			entry.files.some((file) => file.relativePath !== "SKILL.md"),
+		);
+		if (!definition) {
+			throw new Error("Expected at least one skill with reference files.");
+		}
+		const reference = definition.files.find(
+			(file) => file.relativePath !== "SKILL.md",
+		);
+		if (!reference) {
+			throw new Error("Expected a reference file.");
+		}
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		const referencePath = join(
+			skillFolder(homeDir, definition.name),
+			...reference.relativePath.split("/"),
+		);
+		const edited = "# Edited reference\n";
+		await writeFile(referencePath, edited, "utf8");
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const result = results.find((entry) => entry.name === definition.name);
+		expect(result?.action).toBe("updated_with_backup");
+		expect(await readFile(`${referencePath}.backup`, "utf8")).toBe(edited);
+		expect(await readFile(referencePath, "utf8")).toBe(reference.content);
 	});
 
 	test("never touches a skill folder without a Flow marker", async () => {
 		const homeDir = makeTempDir();
-		const name = firstSkillName();
-		const userContent = "---\nname: flow-plan\n---\nUser-managed skill.\n";
+		const name = firstSkill().name;
+		const userContent = "---\nname: flow\n---\nUser-managed skill.\n";
 		await mkdir(skillFolder(homeDir, name), { recursive: true });
 		await writeFile(skillPath(homeDir, name), userContent, "utf8");
 
-		const results = await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
 		const result = results.find((entry) => entry.name === name);
 		expect(result?.action).toBe("skipped_foreign");
@@ -162,50 +256,45 @@ describe("skill sync", () => {
 
 	test("adopts a pristine pre-npm hash-locked install without creating a backup", async () => {
 		const homeDir = makeTempDir();
-		const skill = FLOW_SKILL_SPECS[0];
-		if (!skill) {
-			throw new Error("Missing Flow skill specs.");
-		}
-		// A pristine pre-npm install is byte-identical to the rendered document
-		// but has no marker file (pre-npm installs were hash-locked in-document).
-		await mkdir(skillFolder(homeDir, skill.name), { recursive: true });
+		const definition = firstSkill();
+		await mkdir(skillFolder(homeDir, definition.name), { recursive: true });
 		await writeFile(
-			skillPath(homeDir, skill.name),
-			renderFlowSkillDocument(skill),
+			skillPath(homeDir, definition.name),
+			renderPreNpmGeneratedDocument(definition.name),
 			"utf8",
 		);
 
-		const results = await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
-		const result = results.find((entry) => entry.name === skill.name);
-		expect(result?.action).toBe("unchanged");
+		const result = results.find((entry) => entry.name === definition.name);
+		expect(result?.action).toBe("updated");
 		const marker = parseFlowSkillFolderMarker(
-			await readFile(markerPath(homeDir, skill.name), "utf8"),
+			await readFile(markerPath(homeDir, definition.name), "utf8"),
 		);
-		expect(marker?.version).toBe("2.1.0");
+		expect(marker?.version).toBe("3.0.0");
 		expect(
 			existsSync(
-				join(skillFolder(homeDir, skill.name), FLOW_SKILL_BACKUP_FILENAME),
+				join(skillFolder(homeDir, definition.name), FLOW_SKILL_BACKUP_FILENAME),
 			),
 		).toBe(false);
+		expect(await readFile(skillPath(homeDir, definition.name), "utf8")).toBe(
+			skillDocumentContent(definition),
+		);
 	});
 
 	test("backs up an edited pre-npm hash-locked install before replacing it", async () => {
 		const homeDir = makeTempDir();
-		const skill = FLOW_SKILL_SPECS[0];
-		if (!skill) {
-			throw new Error("Missing Flow skill specs.");
-		}
-		const edited = `${renderFlowSkillDocument(skill)}\nUser note appended.\n`;
-		await mkdir(skillFolder(homeDir, skill.name), { recursive: true });
-		await writeFile(skillPath(homeDir, skill.name), edited, "utf8");
+		const definition = firstSkill();
+		const edited = `${renderPreNpmGeneratedDocument(definition.name)}\nUser note appended.\n`;
+		await mkdir(skillFolder(homeDir, definition.name), { recursive: true });
+		await writeFile(skillPath(homeDir, definition.name), edited, "utf8");
 
-		const results = await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
-		const result = results.find((entry) => entry.name === skill.name);
+		const result = results.find((entry) => entry.name === definition.name);
 		expect(result?.action).toBe("updated_with_backup");
 		const backup = await readFile(
-			join(skillFolder(homeDir, skill.name), FLOW_SKILL_BACKUP_FILENAME),
+			join(skillFolder(homeDir, definition.name), FLOW_SKILL_BACKUP_FILENAME),
 			"utf8",
 		);
 		expect(backup).toBe(edited);
@@ -215,7 +304,7 @@ describe("skill sync", () => {
 describe("uninstall", () => {
 	test("removes pristine Flow skills, marker files, and the pre-npm plugin copy", async () => {
 		const homeDir = makeTempDir();
-		await syncFlowSkills({ homeDir, version: "2.1.0" });
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
 		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
 		await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
 			recursive: true,
@@ -232,10 +321,10 @@ describe("uninstall", () => {
 			logger: (message) => logs.push(message),
 		});
 
-		expect(result.removedSkills).toHaveLength(FLOW_SKILL_SPECS.length);
+		expect(result.removedSkills).toHaveLength(FLOW_SKILL_DEFINITIONS.length);
 		expect(result.removedPreNpmPlugin).toBe(preNpmPath);
-		for (const skill of FLOW_SKILL_SPECS) {
-			expect(existsSync(skillFolder(homeDir, skill.name))).toBe(false);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			expect(existsSync(skillFolder(homeDir, definition.name))).toBe(false);
 		}
 		expect(existsSync(preNpmPath)).toBe(false);
 		expect(logs.join("\n")).toContain(
@@ -245,8 +334,8 @@ describe("uninstall", () => {
 
 	test("keeps user-edited Flow skills and foreign plugin files", async () => {
 		const homeDir = makeTempDir();
-		const name = firstSkillName();
-		await syncFlowSkills({ homeDir, version: "2.1.0" });
+		const name = firstSkill().name;
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
 		const edited = "# Customized\n";
 		await writeFile(skillPath(homeDir, name), edited, "utf8");
 		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
@@ -277,13 +366,13 @@ describe("uninstall", () => {
 
 	test("dry-run removes nothing", async () => {
 		const homeDir = makeTempDir();
-		await syncFlowSkills({ homeDir, version: "2.1.0" });
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
 
 		const result = await uninstallFlow({ homeDir, dryRun: true });
 
-		expect(result.removedSkills).toHaveLength(FLOW_SKILL_SPECS.length);
-		for (const skill of FLOW_SKILL_SPECS) {
-			expect(existsSync(skillPath(homeDir, skill.name))).toBe(true);
+		expect(result.removedSkills).toHaveLength(FLOW_SKILL_DEFINITIONS.length);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			expect(existsSync(skillPath(homeDir, definition.name))).toBe(true);
 		}
 	});
 });

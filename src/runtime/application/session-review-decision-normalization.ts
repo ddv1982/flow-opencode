@@ -1,6 +1,4 @@
-import { buildReviewContextPack } from "../domain";
-import type { ReviewContextPackInput } from "../domain/review-content-discovery";
-import type { RecordReviewerDecisionInput } from "../domain/reviewer-decision";
+import type { RecordReviewerDecisionInput } from "../domain";
 import type {
 	FlowReviewRecordFeatureArgs,
 	FlowReviewRecordFinalArgs,
@@ -8,7 +6,7 @@ import type {
 
 export function normalizeFeatureReviewDecision(
 	decision: FlowReviewRecordFeatureArgs,
-) {
+): RecordReviewerDecisionInput {
 	return {
 		scope: "feature" as const,
 		featureId: decision.featureId,
@@ -39,31 +37,10 @@ export function normalizeFinalReviewDecision(
 			? { validationAssessment: decision.validationAssessment }
 			: {}),
 		evidenceRefs: {
-			changedArtifacts: decision.evidenceRefs.changedArtifacts,
-			validationCommands: decision.evidenceRefs.validationCommands,
+			changedArtifacts: decision.evidenceRefs?.changedArtifacts ?? [],
+			validationCommands: decision.evidenceRefs?.validationCommands ?? [],
 		},
-		...(decision.evidencePackets
-			? { evidencePackets: decision.evidencePackets }
-			: {}),
-		...(decision.reviewScopeLedger
-			? { reviewScopeLedger: decision.reviewScopeLedger }
-			: {}),
-		...(decision.reviewContextPack
-			? {
-					reviewContextPack: buildReviewContextPack(
-						decision.reviewContextPack as ReviewContextPackInput,
-					),
-				}
-			: {}),
-		integrationChecks: decision.integrationChecks ?? [],
-		regressionChecks: decision.regressionChecks ?? [],
 		remainingGaps: decision.remainingGaps ?? [],
-		behaviorChecks:
-			(decision.behaviorChecks as RecordReviewerDecisionInput["behaviorChecks"]) ??
-			[],
-		validationCoverage:
-			(decision.validationCoverage as RecordReviewerDecisionInput["validationCoverage"]) ??
-			[],
 		blockingFindings: decision.blockingFindings ?? [],
 		followUps: decision.followUps ?? [],
 		suggestedValidation: decision.suggestedValidation ?? [],

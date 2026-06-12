@@ -2,14 +2,14 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { getSessionPath } from "../src/runtime/paths";
 import {
 	closeSession,
 	createSession,
 	listSessionHistory,
 	loadStoredSession,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
+import { getSessionPath } from "../src/runtime/paths";
 import * as time from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";
 
@@ -81,7 +81,9 @@ describe("session history completed parsing", () => {
 		const session = createSession("Recoverable completed session");
 		await saveSession(worktree, session);
 		const completed = await closeSession(worktree, "completed");
-		expect(completed).not.toBeNull();
+		if (!completed || "blocked" in completed) {
+			throw new Error("Expected the close to complete.");
+		}
 		mkdirSync(dirname(getSessionPath(worktree, session.id)), {
 			recursive: true,
 		});
@@ -96,7 +98,7 @@ describe("session history completed parsing", () => {
 		expect(loaded?.source).toBe("completed");
 		expect(loaded?.active).toBe(false);
 		expect(loaded?.session.goal).toBe("Recoverable completed session");
-		expect(loaded?.completedPath).toBe(completed?.completedTo);
+		expect(loaded?.completedPath).toBe(completed.completedTo);
 	});
 
 	test("listSessionHistory parses millisecond completed timestamps and sorts descending", async () => {
@@ -109,11 +111,15 @@ describe("session history completed parsing", () => {
 			.mockReturnValueOnce("20250405T194213.483");
 		await saveSession(worktree, first);
 		const olderCompleted = await closeSession(worktree, "completed");
-		expect(olderCompleted).not.toBeNull();
+		if (!olderCompleted || "blocked" in olderCompleted) {
+			throw new Error("Expected the older close to complete.");
+		}
 
 		await saveSession(worktree, second);
 		const newerCompleted = await closeSession(worktree, "completed");
-		expect(newerCompleted).not.toBeNull();
+		if (!newerCompleted || "blocked" in newerCompleted) {
+			throw new Error("Expected the newer close to complete.");
+		}
 
 		const history = await listSessionHistory(worktree);
 		expect(history.activeSessionId).toBeNull();
@@ -133,10 +139,10 @@ describe("session history completed parsing", () => {
 			expect.any(String),
 		]);
 		expect(history.completed[0]?.completedPath).toBe(
-			newerCompleted?.completedTo,
+			newerCompleted.completedTo,
 		);
 		expect(history.completed[1]?.completedPath).toBe(
-			olderCompleted?.completedTo,
+			olderCompleted.completedTo,
 		);
 	});
 });

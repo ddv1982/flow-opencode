@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bench } from "mitata";
-import { loadSession, saveSession } from "../src/runtime/session";
+import { loadSession, saveSession } from "../src/runtime/lifecycle";
 import { createApprovedSession } from "./fixtures";
 
 function withTempDir<T>(

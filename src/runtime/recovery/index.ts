@@ -4,6 +4,7 @@ export {
 	parseCompletedDirectoryName,
 } from "../session-completed-storage";
 export {
+	type BlockedSessionClosure,
 	type ClosedSessionResult,
 	closeActiveSession,
 	persistCompletedSession,

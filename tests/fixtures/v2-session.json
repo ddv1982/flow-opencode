@@ -1,0 +1,238 @@
+{
+	"version": 1,
+	"id": "v2-era-session",
+	"goal": "Migrate the report generator to streaming output",
+	"status": "ready",
+	"approval": "approved",
+	"planning": {
+		"repoProfile": ["TypeScript service repo with bun test"],
+		"packageManager": "bun",
+		"packageManagerAmbiguous": false,
+		"stackProfile": {
+			"languages": [
+				{
+					"name": "TypeScript",
+					"evidenceRefs": ["tsconfig.json"],
+					"confidence": "high"
+				}
+			],
+			"frameworks": [],
+			"runtimes": [
+				{ "name": "Bun", "evidenceRefs": ["bun.lock"], "confidence": "high" }
+			],
+			"packageManagers": [],
+			"tools": []
+		},
+		"standardsProfile": {
+			"localGuidelines": [
+				{
+					"title": "AGENTS.md",
+					"sourceType": "local",
+					"reference": "AGENTS.md",
+					"confidence": "high"
+				}
+			],
+			"externalGuidance": [],
+			"rules": [
+				{
+					"summary": "Prefer existing package scripts.",
+					"sourceRefs": ["package.json"],
+					"priority": "local"
+				}
+			],
+			"gaps": [],
+			"precedence": ["local before external"]
+		},
+		"research": ["Streaming writer already exists in src/report/stream.ts"],
+		"decisionLog": [],
+		"replanLog": [],
+		"reviewFindings": [],
+		"evidencePackets": [
+			{
+				"id": "packet:planning-context",
+				"purpose": "planning",
+				"contextLane": "planning",
+				"summary": "Planning evidence captured by the v2 planner.",
+				"sourceRefs": ["src/report/stream.ts"]
+			}
+		]
+	},
+	"plan": {
+		"summary": "Stream report output end to end.",
+		"overview": "Convert the generator, then update the CLI consumer.",
+		"requirements": ["No buffering of full reports in memory"],
+		"architectureDecisions": ["Reuse the existing streaming writer"],
+		"goalMode": "implementation",
+		"decompositionPolicy": "atomic_feature",
+		"features": [
+			{
+				"id": "stream-generator",
+				"title": "Stream the generator",
+				"summary": "Convert report generation to a streaming pipeline.",
+				"fileTargets": ["src/report/generate.ts"],
+				"verification": ["bun test tests/report"],
+				"status": "completed",
+				"priority": "important",
+				"deferCandidate": false
+			},
+			{
+				"id": "stream-cli",
+				"title": "Stream the CLI consumer",
+				"summary": "Consume the streaming generator from the CLI.",
+				"fileTargets": ["src/cli/report.ts"],
+				"verification": ["bun test tests/cli"],
+				"dependsOn": ["stream-generator"],
+				"status": "pending",
+				"priority": "important",
+				"deferCandidate": false
+			}
+		]
+	},
+	"execution": {
+		"activeFeatureId": null,
+		"lastFeatureId": "stream-generator",
+		"lastSummary": "Streaming generator landed with passing targeted tests.",
+		"lastOutcomeKind": "completed",
+		"lastOutcome": null,
+		"lastNextStep": "Run the CLI consumer feature next.",
+		"lastFeatureResult": {
+			"featureId": "stream-generator",
+			"verificationStatus": "passed"
+		},
+		"lastReviewerDecision": {
+			"scope": "feature",
+			"featureId": "stream-generator",
+			"reviewPurpose": "execution_gate",
+			"status": "approved",
+			"summary": "Streaming generator review approved.",
+			"blockingFindings": [],
+			"followUps": [],
+			"suggestedValidation": [],
+			"reviewScopeLedger": [
+				{
+					"scopeId": "file_target:src/report/generate.ts",
+					"status": "reviewed_no_findings",
+					"evidenceRefs": ["src/report/generate.ts"],
+					"validationRefs": ["bun test tests/report"],
+					"residualRisk": "No known residual risk."
+				}
+			],
+			"evidencePackets": [
+				{
+					"id": "packet:review-context",
+					"purpose": "review",
+					"summary": "Reviewer packet recorded by the v2 reviewer.",
+					"sourceRefs": ["src/report/generate.ts"]
+				}
+			]
+		},
+		"lastValidationRun": [
+			{
+				"command": "bun test tests/report",
+				"status": "passed",
+				"summary": "Report tests passed."
+			}
+		],
+		"lastFailedMutation": {
+			"tool": "flow_run_complete_feature",
+			"phase": "execution",
+			"status": "error",
+			"failureCategory": "missing_review_scope_accounting",
+			"summary": "Completion failed under the v2 review accounting gate.",
+			"recoveryHint": "Repair reviewScopeLedger evidence.",
+			"occurredAt": "2025-11-02T09:30:00.000Z"
+		},
+		"history": [
+			{
+				"featureId": "stream-generator",
+				"status": "completed",
+				"summary": "Streaming generator landed with passing targeted tests.",
+				"recordedAt": "2025-11-02T10:15:00.000Z",
+				"outcomeKind": "completed",
+				"nextStep": "Run the CLI consumer feature next.",
+				"validationRun": [
+					{
+						"command": "bun test tests/report",
+						"status": "passed",
+						"summary": "Report tests passed."
+					}
+				],
+				"artifactsChanged": [{ "path": "src/report/generate.ts" }],
+				"decisions": [],
+				"featureResult": {
+					"featureId": "stream-generator",
+					"verificationStatus": "passed"
+				},
+				"reviewFindingClosures": [
+					{
+						"findingRef": "review: buffered writes",
+						"status": "completed",
+						"fixRefs": ["src/report/generate.ts"],
+						"testRefs": ["tests/report/generate.test.ts"],
+						"validationRefs": ["bun test tests/report"],
+						"residualRisk": "None."
+					}
+				],
+				"evidencePackets": [
+					{
+						"id": "packet:execution-context",
+						"purpose": "validation",
+						"contextLane": "execution",
+						"summary": "Worker packet recorded by the v2 worker.",
+						"sourceRefs": ["src/report/generate.ts"]
+					}
+				],
+				"featureReview": {
+					"status": "passed",
+					"summary": "Feature review passed.",
+					"blockingFindings": []
+				},
+				"finalReview": {
+					"status": "passed",
+					"summary": "Final review passed.",
+					"blockingFindings": [],
+					"reviewDepth": "detailed",
+					"reviewedSurfaces": ["changed_files", "validation_evidence"],
+					"evidenceSummary": "Reviewed the streaming pipeline change.",
+					"validationAssessment": "Targeted tests mapped to the change.",
+					"remainingGaps": [],
+					"evidenceRefs": {
+						"changedArtifacts": ["src/report/generate.ts"],
+						"validationCommands": ["bun test tests/report"]
+					},
+					"behaviorChecks": [
+						{
+							"riskClass": "test_evidence_authenticity",
+							"result": "passed",
+							"invariant": "Tests exercise the streaming path.",
+							"entrypointRefs": ["src/report/generate.ts"],
+							"stateOwnerRefs": [],
+							"lifecycleOwnerRefs": [],
+							"failurePath": "Buffered fallback could regress unnoticed.",
+							"testEvidenceRefs": ["tests/report/generate.test.ts"],
+							"validationRefs": ["bun test tests/report"]
+						}
+					],
+					"validationCoverage": [
+						{
+							"command": "bun test tests/report",
+							"behaviorClasses": ["test_evidence_authenticity"],
+							"proves": ["Streaming output is exercised."],
+							"gaps": [],
+							"testEvidenceRefs": ["tests/report/generate.test.ts"]
+						}
+					]
+				}
+			}
+		]
+	},
+	"closure": null,
+	"notes": ["Streaming generator landed cleanly."],
+	"artifacts": [{ "path": "src/report/generate.ts" }],
+	"timestamps": {
+		"createdAt": "2025-11-01T08:00:00.000Z",
+		"updatedAt": "2025-11-02T10:15:00.000Z",
+		"approvedAt": "2025-11-01T09:00:00.000Z",
+		"completedAt": null
+	}
+}

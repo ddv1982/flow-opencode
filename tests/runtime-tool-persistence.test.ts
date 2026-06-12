@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { loadSession } from "../src/runtime/lifecycle";
 import { getIndexDocPath } from "../src/runtime/paths";
-import { loadSession } from "../src/runtime/session";
 import {
 	activeSessionId,
 	createTempDirRegistry,
@@ -25,14 +25,14 @@ describe("runtime tool persistence", () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			toolContext(worktree),
 		);
 		const before = await readFile(await activeIndexDocPath(worktree), "utf8");
 		expect(before).toContain("summary: No plan yet.");
 
-		await tools.flow_plan_apply.execute(
+		await tools.flow_plan_save.execute(
 			{ plan: samplePlan() },
 			toolContext(worktree),
 		);

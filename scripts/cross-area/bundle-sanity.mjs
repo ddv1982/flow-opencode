@@ -18,14 +18,12 @@ const bundleText = readFileSync(distPath, "utf8");
 const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // The bundle carries only Flow source: zod and @opencode-ai/plugin are
-// external (npm-resolved), and the OpenCode SDK ≥1.15.5 permission API is
-// Promise-based so no Effect runtime is bundled. The skills-first overhaul
-// plan budgeted ≤300 KB for Phase 1, but that assumed effect was ~1/3 of the
-// bundle; it tree-shook to ~20 KB, and the generated skill documents now ship
-// inside the bundle (startup sync) instead of a separate release tarball.
-// Phase 2 deletes the generated prompt surfaces and drops this far below
-// 100 KB; until then, hold the line at 320 KB.
-const BUNDLE_SIZE_BUDGET_BYTES = 327680; // 320 KiB
+// external (npm-resolved). The generated prompt surfaces are gone after the
+// skills-first overhaul; what remains is the runtime plus the embedded skill
+// documents (synced at startup), which lands around 150-160 KB. Hold the
+// line at 200 KB to leave headroom for skill content growth without letting
+// prompt-surface regressions sneak back in.
+const BUNDLE_SIZE_BUDGET_BYTES = 204800; // 200 KiB
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
@@ -95,8 +93,8 @@ async function main() {
 		await plugin.config(config);
 
 		const toolResults = {
-			planStart: JSON.parse(
-				await plugin.tool.flow_plan_start.execute(
+			planSave: JSON.parse(
+				await plugin.tool.flow_plan_save.execute(
 					{ goal: "Bundle sanity" },
 					{ worktree },
 				),
@@ -105,12 +103,15 @@ async function main() {
 				await plugin.tool.flow_status.execute({}, { worktree }),
 			),
 			history: JSON.parse(
-				await plugin.tool.flow_history.execute({}, { worktree }),
+				await plugin.tool.flow_session.execute(
+					{ action: "history" },
+					{ worktree },
+				),
 			),
 		};
 
-		if (toolResults.planStart.status !== "ok") {
-			throw new Error("flow_plan_start failed in bundle sanity smoke.");
+		if (toolResults.planSave.status !== "ok") {
+			throw new Error("flow_plan_save failed in bundle sanity smoke.");
 		}
 		if (toolResults.status.status !== "planning") {
 			throw new Error(
@@ -126,7 +127,7 @@ async function main() {
 			...(toolResults.history.history?.completed ?? []),
 		].filter(Boolean);
 		if (!historyEntries.some((entry) => entry.goal === "Bundle sanity")) {
-			throw new Error("flow_history did not report the stored session.");
+			throw new Error("flow_session history did not report the stored session.");
 		}
 		if (plugin.tool.flow_status.__mockTag !== "flow-bundle-sanity-mock-v1") {
 			throw new Error(
@@ -136,7 +137,7 @@ async function main() {
 
 		let permissionAskRuns = 0;
 		const permissionSmoke = JSON.parse(
-			await plugin.tool.flow_plan_start.execute(
+			await plugin.tool.flow_plan_save.execute(
 				{ goal: "Bundle permission sanity" },
 				{
 					worktree: hiddenWorktree,
@@ -191,9 +192,9 @@ async function main() {
 			throw new Error("Source map is not valid v3 JSON with mappings.");
 		}
 		if (
-			report.configAgents !== 7 ||
+			report.configAgents !== 1 ||
 			report.configCommands !== 9 ||
-			report.toolCount !== 18
+			report.toolCount !== 7
 		) {
 			throw new Error(
 				`Plugin surface shape is incorrect after build: ${JSON.stringify({

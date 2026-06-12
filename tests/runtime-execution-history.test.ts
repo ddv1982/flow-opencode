@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import {
 	createSession,
 	loadSession,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
+import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import {
 	applyPlan,
 	approvePlan,
@@ -256,7 +256,7 @@ describe("runtime execution history rendering", () => {
 		await saveSession(worktree, completed.value);
 
 		const tools = createTestTools();
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Different goal" },
 			toolContext(worktree),
 		);

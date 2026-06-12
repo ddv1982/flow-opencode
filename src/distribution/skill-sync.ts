@@ -1,22 +1,92 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import {
-	FLOW_SKILL_SPECS,
-	renderFlowSkillDocument,
-} from "../prompts/generated/skill-docs";
+import { dirname, join } from "node:path";
+import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
+import flowPlanPlanningExamplesDoc from "../../skills/flow-plan/references/planning-examples.md" with {
+	type: "text",
+};
+import flowPlanSkillDoc from "../../skills/flow-plan/SKILL.md" with {
+	type: "text",
+};
+import flowReviewReviewRubricDoc from "../../skills/flow-review/references/review-rubric.md" with {
+	type: "text",
+};
+import flowReviewSkillDoc from "../../skills/flow-review/SKILL.md" with {
+	type: "text",
+};
+import flowRunValidationRubricDoc from "../../skills/flow-run/references/validation-rubric.md" with {
+	type: "text",
+};
+import flowRunSkillDoc from "../../skills/flow-run/SKILL.md" with {
+	type: "text",
+};
 import {
 	FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER,
 	FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH,
-	FLOW_SKILL_BACKUP_FILENAME,
 	FLOW_SKILL_MARKER_FILENAME,
 	FLOW_SKILLS_DIRECTORY,
 	inspectFlowSkillDocument,
+	parseFlowSkillFileHashes,
 	parseFlowSkillFolderMarker,
 	renderFlowSkillFolderMarker,
 	sha256,
 } from "./skill-markers";
+
+const SKILL_DOCUMENT_FILENAME = "SKILL.md";
+
+type FlowSkillFile = {
+	/** Path inside the installed skill folder, `/`-separated. */
+	relativePath: string;
+	content: string;
+};
+
+export type FlowSkillDefinition = {
+	name: string;
+	files: readonly FlowSkillFile[];
+};
+
+/**
+ * The hand-authored skills shipped with the plugin. The markdown is embedded
+ * at build time via Bun text imports so the bundled dist/index.js remains
+ * self-contained. Source of truth: the `skills/` directory in the repo.
+ */
+export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
+	{
+		name: "flow",
+		files: [{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowSkillDoc }],
+	},
+	{
+		name: "flow-plan",
+		files: [
+			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowPlanSkillDoc },
+			{
+				relativePath: "references/planning-examples.md",
+				content: flowPlanPlanningExamplesDoc,
+			},
+		],
+	},
+	{
+		name: "flow-run",
+		files: [
+			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowRunSkillDoc },
+			{
+				relativePath: "references/validation-rubric.md",
+				content: flowRunValidationRubricDoc,
+			},
+		],
+	},
+	{
+		name: "flow-review",
+		files: [
+			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowReviewSkillDoc },
+			{
+				relativePath: "references/review-rubric.md",
+				content: flowReviewReviewRubricDoc,
+			},
+		],
+	},
+];
 
 type FlowSkillSyncAction =
 	| "installed"
@@ -71,92 +141,178 @@ function resolveFlowSkillsRoot(homeDir: string): string {
 	return join(homeDir, FLOW_SKILLS_DIRECTORY);
 }
 
+function resolveSkillFilePath(folder: string, relativePath: string): string {
+	return join(folder, ...relativePath.split("/"));
+}
+
+function skillDocument(definition: FlowSkillDefinition): FlowSkillFile {
+	const document = definition.files.find(
+		(file) => file.relativePath === SKILL_DOCUMENT_FILENAME,
+	);
+	if (!document) {
+		throw new Error(`Flow skill ${definition.name} is missing SKILL.md`);
+	}
+	return document;
+}
+
+function renderDesiredMarker(
+	definition: FlowSkillDefinition,
+	version: string,
+): string {
+	return renderFlowSkillFolderMarker({
+		version,
+		hash: sha256(skillDocument(definition).content),
+		files: definition.files.map((file) => ({
+			relativePath: file.relativePath,
+			hash: sha256(file.content),
+		})),
+	});
+}
+
 /**
- * Idempotent startup sync of the bundled Flow skills into the global OpenCode
- * skill directory. Folder ownership is tracked with a plugin-owned marker file
- * (`.flow-skill-version`); pre-npm hash-locked installs (pre-npm distribution)
- * are recognized through their in-document marker and adopted. Folders without
- * either marker belong to the user (or another plugin) and are never touched.
- * A user-edited SKILL.md in a Flow-owned folder is backed up to
- * `SKILL.md.backup` before being replaced, never refused or silently lost.
+ * Idempotent startup sync of the embedded hand-authored Flow skills into the
+ * global OpenCode skill directory. Folder ownership is tracked with a
+ * plugin-owned marker file (`.flow-skill-version`); pre-npm hash-locked
+ * installs are recognized through their in-document marker and adopted.
+ * Folders without either marker belong to the user (or another plugin) and
+ * are never touched. A user-edited file in a Flow-owned folder is backed up
+ * next to itself (`SKILL.md.backup`, `references/<name>.backup`) before being
+ * replaced, never refused or silently lost. Reference files sync alongside
+ * SKILL.md.
  */
 export async function syncFlowSkills({
 	homeDir = resolveFlowHomeDir(),
 	version,
 }: FlowSkillSyncOptions): Promise<FlowSkillSyncResult[]> {
 	const results: FlowSkillSyncResult[] = [];
-	for (const skill of FLOW_SKILL_SPECS) {
-		const folder = join(resolveFlowSkillsRoot(homeDir), skill.name);
-		const skillPath = join(folder, "SKILL.md");
+	for (const definition of FLOW_SKILL_DEFINITIONS) {
+		const folder = join(resolveFlowSkillsRoot(homeDir), definition.name);
+		const skillPath = join(folder, SKILL_DOCUMENT_FILENAME);
 		const markerPath = join(folder, FLOW_SKILL_MARKER_FILENAME);
-		const desired = renderFlowSkillDocument(skill);
-		const desiredMarker = renderFlowSkillFolderMarker({
-			version,
-			hash: sha256(desired),
-		});
+		const desiredMarker = renderDesiredMarker(definition, version);
 
-		const existing = await readOptionalFile(skillPath);
+		const existingSkill = await readOptionalFile(skillPath);
 		const markerContent = await readOptionalFile(markerPath);
 		const marker =
 			markerContent === null ? null : parseFlowSkillFolderMarker(markerContent);
+		const recordedFileHashes =
+			markerContent === null
+				? new Map<string, string>()
+				: parseFlowSkillFileHashes(markerContent);
 
-		if (existing === null) {
-			await mkdir(folder, { recursive: true });
-			await writeFile(skillPath, desired, "utf8");
+		if (existingSkill === null && marker === null) {
+			await writeSkillFiles(folder, definition);
 			await writeFile(markerPath, desiredMarker, "utf8");
-			results.push({ name: skill.name, action: "installed", skillPath });
+			results.push({ name: definition.name, action: "installed", skillPath });
 			continue;
 		}
 
 		const owned =
 			marker !== null ||
-			inspectFlowSkillDocument(existing).kind !== "not_generated";
+			(existingSkill !== null &&
+				inspectFlowSkillDocument(existingSkill).kind !== "not_generated");
 		if (!owned) {
-			results.push({ name: skill.name, action: "skipped_foreign", skillPath });
+			results.push({
+				name: definition.name,
+				action: "skipped_foreign",
+				skillPath,
+			});
 			continue;
 		}
 
-		if (existing === desired) {
+		let changed = false;
+		let backedUp = false;
+		for (const file of definition.files) {
+			const filePath = resolveSkillFilePath(folder, file.relativePath);
+			const existing =
+				file.relativePath === SKILL_DOCUMENT_FILENAME
+					? existingSkill
+					: await readOptionalFile(filePath);
+			if (existing === file.content) {
+				continue;
+			}
+			changed = true;
+			if (
+				existing !== null &&
+				isUserEdited({
+					relativePath: file.relativePath,
+					existing,
+					recordedFileHashes,
+					markerHash: marker?.hash ?? null,
+				})
+			) {
+				await writeFile(`${filePath}.backup`, existing, "utf8");
+				backedUp = true;
+			}
+		}
+
+		if (!changed) {
 			if (markerContent !== desiredMarker) {
 				await writeFile(markerPath, desiredMarker, "utf8");
 			}
-			results.push({ name: skill.name, action: "unchanged", skillPath });
+			results.push({ name: definition.name, action: "unchanged", skillPath });
 			continue;
 		}
 
-		const pristine =
-			(marker?.hash !== null &&
-				marker?.hash !== undefined &&
-				sha256(existing) === marker.hash) ||
-			inspectFlowSkillDocument(existing).kind === "valid_generated";
-		if (!pristine) {
-			await writeFile(
-				join(folder, FLOW_SKILL_BACKUP_FILENAME),
-				existing,
-				"utf8",
-			);
-		}
-		await writeFile(skillPath, desired, "utf8");
+		await writeSkillFiles(folder, definition);
 		await writeFile(markerPath, desiredMarker, "utf8");
 		results.push({
-			name: skill.name,
-			action: pristine ? "updated" : "updated_with_backup",
+			name: definition.name,
+			action: backedUp ? "updated_with_backup" : "updated",
 			skillPath,
 		});
 	}
 	return results;
 }
 
+/**
+ * A file is user-edited when its on-disk content matches neither the hash the
+ * marker recorded at install time nor (for SKILL.md) a pristine pre-npm
+ * generated document. Markers without per-file hashes (pre per-file tracking)
+ * fall back to the top-level SKILL.md hash; anything unprovable is treated as
+ * user-edited, which costs at most a redundant backup.
+ */
+function isUserEdited(input: {
+	relativePath: string;
+	existing: string;
+	recordedFileHashes: ReadonlyMap<string, string>;
+	markerHash: string | null;
+}): boolean {
+	const existingHash = sha256(input.existing);
+	const recorded = input.recordedFileHashes.get(input.relativePath);
+	if (recorded !== undefined) {
+		return existingHash !== recorded;
+	}
+	if (input.relativePath === SKILL_DOCUMENT_FILENAME) {
+		if (input.markerHash !== null && existingHash === input.markerHash) {
+			return false;
+		}
+		return inspectFlowSkillDocument(input.existing).kind !== "valid_generated";
+	}
+	return true;
+}
+
+async function writeSkillFiles(
+	folder: string,
+	definition: FlowSkillDefinition,
+): Promise<void> {
+	for (const file of definition.files) {
+		const filePath = resolveSkillFilePath(folder, file.relativePath);
+		await mkdir(dirname(filePath), { recursive: true });
+		await writeFile(filePath, file.content, "utf8");
+	}
+}
+
 export async function inspectFlowSkillSyncState(
 	homeDir = resolveFlowHomeDir(),
 ): Promise<FlowSkillSyncStateEntry[]> {
 	const entries: FlowSkillSyncStateEntry[] = [];
-	for (const skill of FLOW_SKILL_SPECS) {
-		const folder = join(resolveFlowSkillsRoot(homeDir), skill.name);
-		const skillPath = join(folder, "SKILL.md");
-		const existing = await readOptionalFile(skillPath);
-		if (existing === null) {
-			entries.push({ name: skill.name, state: "missing", skillPath });
+	for (const definition of FLOW_SKILL_DEFINITIONS) {
+		const folder = join(resolveFlowSkillsRoot(homeDir), definition.name);
+		const skillPath = join(folder, SKILL_DOCUMENT_FILENAME);
+		const existingSkill = await readOptionalFile(skillPath);
+		if (existingSkill === null) {
+			entries.push({ name: definition.name, state: "missing", skillPath });
 			continue;
 		}
 		const markerContent = await readOptionalFile(
@@ -165,15 +321,27 @@ export async function inspectFlowSkillSyncState(
 		const owned =
 			(markerContent !== null &&
 				parseFlowSkillFolderMarker(markerContent) !== null) ||
-			inspectFlowSkillDocument(existing).kind !== "not_generated";
+			inspectFlowSkillDocument(existingSkill).kind !== "not_generated";
 		if (!owned) {
-			entries.push({ name: skill.name, state: "foreign", skillPath });
+			entries.push({ name: definition.name, state: "foreign", skillPath });
 			continue;
 		}
-		const desired = renderFlowSkillDocument(skill);
+		let synced = true;
+		for (const file of definition.files) {
+			const existing =
+				file.relativePath === SKILL_DOCUMENT_FILENAME
+					? existingSkill
+					: await readOptionalFile(
+							resolveSkillFilePath(folder, file.relativePath),
+						);
+			if (existing !== file.content) {
+				synced = false;
+				break;
+			}
+		}
 		entries.push({
-			name: skill.name,
-			state: existing === desired ? "synced" : "stale",
+			name: definition.name,
+			state: synced ? "synced" : "stale",
 			skillPath,
 		});
 	}

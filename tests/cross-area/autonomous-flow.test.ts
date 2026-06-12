@@ -25,15 +25,12 @@ describe("cross-area autonomous flow", () => {
 			{ execute: (args: unknown, context: unknown) => Promise<string> }
 		>;
 		const context = createToolContext(worktree);
-		const flowPlanStart = requireTool(tools, "flow_plan_start");
-		const flowPlanApply = requireTool(tools, "flow_plan_apply");
+		const flowPlanStart = requireTool(tools, "flow_plan_save");
+		const flowPlanApply = requireTool(tools, "flow_plan_save");
 		const flowPlanApprove = requireTool(tools, "flow_plan_approve");
 		const flowRunStart = requireTool(tools, "flow_run_start");
-		const flowRunCompleteFeature = requireTool(
-			tools,
-			"flow_run_complete_feature",
-		);
-		const flowResetFeature = requireTool(tools, "flow_reset_feature");
+		const flowRunCompleteFeature = requireTool(tools, "flow_feature_complete");
+		const flowResetFeature = requireTool(tools, "flow_feature_complete");
 
 		const planStart = JSON.parse(
 			await flowPlanStart.execute(
@@ -103,7 +100,7 @@ describe("cross-area autonomous flow", () => {
 
 		const reset = JSON.parse(
 			await flowResetFeature.execute(
-				{ featureId: "recover-autonomous" },
+				{ reset: true, featureId: "recover-autonomous" },
 				context,
 			),
 		);

@@ -81,10 +81,10 @@ describe("architecture seams script", () => {
 
 		expect(adr).toContain("Projection surfaces outside this seam checker");
 		expect(adr).toContain(
-			"`src/prompts/**` and `src/audit/**` are governed projection surfaces",
+			"`src/prompts/**` and `src/audit/**` were governed projection surfaces",
 		);
-		expect(adr).toContain("not part of the hard layer seam checker");
-		expect(adr).toContain("projection-specific tests");
+		expect(adr).toContain("deleted in the skills-first overhaul");
+		expect(adr).toContain("hand-authored `skills/**` content");
 	});
 
 	test("does not partially enforce prompts or audit projection imports", async () => {

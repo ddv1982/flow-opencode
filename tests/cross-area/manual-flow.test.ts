@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { loadStoredSession } from "../../src/runtime/lifecycle";
 import { SessionSchema } from "../../src/runtime/schema";
-import { loadStoredSession } from "../../src/runtime/session";
 import {
 	cleanupManagedTempDirs,
 	createToolContext,
@@ -115,7 +115,6 @@ const expectedEnvelopeSnapshot = {
 			lastOutcome: { kind: "completed" },
 			lastOutcomeKind: "completed",
 			lastReviewerDecision: {
-				behaviorChecks: [],
 				blockingFindings: [],
 				followUps: [],
 				scope: "final",
@@ -134,17 +133,10 @@ const expectedEnvelopeSnapshot = {
 					changedArtifacts: ["dist/index.js"],
 					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 				},
-				integrationChecks: [
-					"Checked dist/index.js release entrypoint against the plugin load boundary.",
-				],
-				regressionChecks: [
-					"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
-				],
 				remainingGaps: [],
 				status: "approved",
 				suggestedValidation: [],
 				summary: "Final review approved.",
-				validationCoverage: [],
 			},
 			lastValidationRun: [
 				{
@@ -258,7 +250,6 @@ const expectedEnvelopeSnapshot = {
 			lastOutcome: null,
 			lastOutcomeKind: null,
 			lastReviewerDecision: {
-				behaviorChecks: [],
 				blockingFindings: [],
 				followUps: [],
 				scope: "final",
@@ -277,17 +268,10 @@ const expectedEnvelopeSnapshot = {
 					changedArtifacts: ["dist/index.js"],
 					validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 				},
-				integrationChecks: [
-					"Checked dist/index.js release entrypoint against the plugin load boundary.",
-				],
-				regressionChecks: [
-					"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
-				],
 				remainingGaps: [],
 				status: "approved",
 				suggestedValidation: [],
 				summary: "Final review approved.",
-				validationCoverage: [],
 			},
 			lastValidationRun: [],
 			nextCommand: "/flow-run",
@@ -447,22 +431,13 @@ describe("cross-area manual flow", () => {
 			{ execute: (args: unknown, context: unknown) => Promise<string> }
 		>;
 		const context = createToolContext(worktree);
-		const flowPlanStart = requireTool(tools, "flow_plan_start");
-		const flowPlanApply = requireTool(tools, "flow_plan_apply");
+		const flowPlanStart = requireTool(tools, "flow_plan_save");
+		const flowPlanApply = requireTool(tools, "flow_plan_save");
 		const flowPlanApprove = requireTool(tools, "flow_plan_approve");
 		const flowRunStart = requireTool(tools, "flow_run_start");
-		const flowReviewRecordFeature = requireTool(
-			tools,
-			"flow_review_record_feature",
-		);
-		const flowReviewRecordFinal = requireTool(
-			tools,
-			"flow_review_record_final",
-		);
-		const flowRunCompleteFeature = requireTool(
-			tools,
-			"flow_run_complete_feature",
-		);
+		const flowReviewRecordFeature = requireTool(tools, "flow_review_record");
+		const flowReviewRecordFinal = requireTool(tools, "flow_review_record");
+		const flowRunCompleteFeature = requireTool(tools, "flow_feature_complete");
 
 		const planStart = JSON.parse(
 			await flowPlanStart.execute(
@@ -528,12 +503,6 @@ describe("cross-area manual flow", () => {
 						changedArtifacts: ["dist/index.js"],
 						validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 					},
-					integrationChecks: [
-						"Checked dist/index.js release entrypoint against the plugin load boundary.",
-					],
-					regressionChecks: [
-						"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
-					],
 					remainingGaps: [],
 					status: "approved",
 					summary: "Final review approved.",
@@ -585,12 +554,6 @@ describe("cross-area manual flow", () => {
 							changedArtifacts: ["dist/index.js"],
 							validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
 						},
-						integrationChecks: [
-							"Checked dist/index.js release entrypoint against the plugin load boundary.",
-						],
-						regressionChecks: [
-							"Checked dist-load smoke validation covers the bundle-load regression evidence cited by the fixture.",
-						],
 						remainingGaps: [],
 						status: "passed",
 						summary: "Final review is clean.",

@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import {
-	deriveFeatureDocDrilldownTarget,
-	resolveFeatureDocDrilldownTarget,
-} from "../src/runtime/feature-doc-drilldown";
+import { resolveFeatureDocDrilldownTarget } from "../src/runtime/feature-doc-drilldown";
 import {
 	getCompletedSessionDir,
 	getFeatureDocPath,
@@ -96,7 +93,7 @@ describe("feature doc drilldown resolver", () => {
 		}
 	});
 
-	test("derives targets from known session roots and session paths", () => {
+	test("derives targets from known session roots and session paths", async () => {
 		const worktree = makeTempDir();
 		const featureId = "feature-beta";
 		const storedDir = getStoredSessionDir(worktree, "session-stored");
@@ -106,7 +103,7 @@ describe("feature doc drilldown resolver", () => {
 		);
 
 		expect(
-			deriveFeatureDocDrilldownTarget({
+			await resolveFeatureDocDrilldownTarget({
 				featureId,
 				source: {
 					location: "stored",
@@ -123,7 +120,7 @@ describe("feature doc drilldown resolver", () => {
 		});
 
 		expect(
-			deriveFeatureDocDrilldownTarget({
+			await resolveFeatureDocDrilldownTarget({
 				featureId,
 				source: {
 					location: "completed",
@@ -220,13 +217,13 @@ describe("feature doc drilldown resolver", () => {
 		});
 	});
 
-	test("keeps unsafe feature and session inputs rejected by path builders", () => {
+	test("keeps unsafe feature and session inputs rejected by path builders", async () => {
 		const worktree = makeTempDir();
 		const storedDir = getStoredSessionDir(worktree, "safe-session");
 		const completedDirName = "session-complete-20260508T120000.000";
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "../escape",
 				source: {
 					location: "active",
@@ -234,10 +231,10 @@ describe("feature doc drilldown resolver", () => {
 					sessionId: "safe-session",
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "safe-feature",
 				source: {
 					location: "stored",
@@ -245,10 +242,10 @@ describe("feature doc drilldown resolver", () => {
 					sessionId: "../escape",
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "safe-feature",
 				source: {
 					location: "stored",
@@ -256,10 +253,10 @@ describe("feature doc drilldown resolver", () => {
 					sessionDir: "../outside",
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "safe-feature",
 				source: {
 					location: "stored",
@@ -267,10 +264,10 @@ describe("feature doc drilldown resolver", () => {
 					sessionPath: "../outside/session.json",
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "safe-feature",
 				source: {
 					location: "stored",
@@ -279,10 +276,10 @@ describe("feature doc drilldown resolver", () => {
 					sessionId: "other-session",
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "safe-feature",
 				source: {
 					location: "completed",
@@ -291,16 +288,16 @@ describe("feature doc drilldown resolver", () => {
 					completedDirName,
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 
-		expect(() =>
-			deriveFeatureDocDrilldownTarget({
+		await expect(
+			resolveFeatureDocDrilldownTarget({
 				featureId: "safe-feature",
 				source: {
 					location: "stored",
 					sessionDir: storedDir,
 				},
 			}),
-		).toThrow(InvalidFlowPathInputError);
+		).rejects.toThrow(InvalidFlowPathInputError);
 	});
 });

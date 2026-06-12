@@ -1,5 +1,7 @@
 # OpenCode Plugin Rebuild: Plan
 
+> **Superseded (2026-06-12).** This plan is retained as a historical record. The current direction — skills as the primary instruction surface, the plugin reduced to a thin state backend, tools consolidated to ~7, npm distribution — is defined in [`docs/plans/skills-first-overhaul-2026-06-12.md`](skills-first-overhaul-2026-06-12.md). Details below (mode contracts, generated prompt/skill projections, the gate matrix) describe surfaces that have since been removed.
+
 ## Goal
 
 Rebuild the OpenCode plugin directly on `main` as a lighter, faster adapter-first vNext: keep the load-bearing runtime/session safety that prevents corrupt sessions and false completion, but remove the current heavy orchestration posture from the default coding path so ordinary work feels closer to RepoPrompt/Codex-style assistance.

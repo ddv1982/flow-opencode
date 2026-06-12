@@ -3,6 +3,14 @@ import { mkdirSync } from "node:fs";
 import { open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+	activateSession,
+	createSession,
+	loadSession,
+	saveSession,
+	saveSessionState,
+	syncSessionArtifacts,
+} from "../src/runtime/lifecycle";
+import {
 	getActiveSessionDir,
 	getActiveSessionsDir,
 	getFeatureDocPath,
@@ -11,16 +19,6 @@ import {
 	getStoredSessionDir,
 	getStoredSessionsDir,
 } from "../src/runtime/paths";
-import {
-	activateSession,
-	createSession,
-	deleteSessionArtifacts,
-	deleteSessionState,
-	loadSession,
-	saveSession,
-	saveSessionState,
-	syncSessionArtifacts,
-} from "../src/runtime/session";
 import { SessionActivationRollbackError } from "../src/runtime/session-live-storage";
 import {
 	resetSessionWorkspaceFsForTests,
@@ -360,7 +358,7 @@ describe("runtime session persistence", () => {
 		const first = await saveSession(worktree, createSession("First goal"));
 		await rm(getStoredSessionsDir(worktree), { recursive: true, force: true });
 
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Second goal" },
 			{ worktree } as never,
 		);
@@ -496,26 +494,6 @@ describe("runtime session persistence", () => {
 		await expect(
 			readFile(await activeIndexDocPath(worktree), "utf8"),
 		).resolves.toContain("# Flow Session");
-	});
-
-	test("deleteSessionState and deleteSessionArtifacts can clean persistence and docs independently", async () => {
-		const worktree = makeTempDir();
-		const created = createSession("Build a workflow plugin");
-		const saved = await saveSession(worktree, created);
-		expect(saved.goal).toBe("Build a workflow plugin");
-
-		await deleteSessionState(worktree);
-		await expect(
-			readFile(await activeSessionPath(worktree), "utf8"),
-		).rejects.toThrow();
-		await expect(
-			readFile(await activeIndexDocPath(worktree), "utf8"),
-		).resolves.toContain("# Flow Session");
-
-		await deleteSessionArtifacts(worktree);
-		await expect(
-			readFile(await activeIndexDocPath(worktree), "utf8"),
-		).rejects.toThrow();
 	});
 
 	test("renders feature docs for planned work", async () => {

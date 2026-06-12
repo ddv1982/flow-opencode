@@ -1,5 +1,5 @@
 import { readdir, readFile, rm, rmdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, normalize, sep } from "node:path";
 import {
 	FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER,
 	FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH,
@@ -7,6 +7,7 @@ import {
 	FLOW_SKILL_MARKER_FILENAME,
 	FLOW_SKILLS_DIRECTORY,
 	inspectFlowSkillDocument,
+	parseFlowSkillFileHashes,
 	parseFlowSkillFolderMarker,
 	sha256,
 } from "./skill-markers";
@@ -107,7 +108,24 @@ async function classifySkillFolder(
 	const marker =
 		markerContent === null ? null : parseFlowSkillFolderMarker(markerContent);
 
-	if (marker !== null) {
+	if (marker !== null && markerContent !== null) {
+		// Any marker-listed reference file that exists but no longer matches its
+		// recorded hash carries user edits the uninstall must not destroy.
+		for (const [relativePath, hash] of parseFlowSkillFileHashes(
+			markerContent,
+		)) {
+			if (relativePath === "SKILL.md") {
+				continue;
+			}
+			const filePath = resolveMarkerFilePath(folder, relativePath);
+			if (filePath === null) {
+				continue;
+			}
+			const content = await readOptionalFile(filePath);
+			if (content !== null && sha256(content) !== hash) {
+				return "user_edited";
+			}
+		}
 		if (skillContent === null) {
 			return "pristine";
 		}
@@ -133,12 +151,56 @@ async function classifySkillFolder(
 	return "foreign";
 }
 
+/**
+ * Marker-recorded relative paths are written by the plugin itself, but the
+ * marker file on disk is still untrusted input: refuse anything absolute or
+ * escaping the skill folder.
+ */
+function resolveMarkerFilePath(
+	folder: string,
+	relativePath: string,
+): string | null {
+	const resolved = normalize(join(folder, ...relativePath.split("/")));
+	if (resolved !== folder && resolved.startsWith(`${folder}${sep}`)) {
+		return resolved;
+	}
+	return null;
+}
+
 async function removeSkillFolder(folder: string): Promise<void> {
+	const markerContent = await readOptionalFile(
+		join(folder, FLOW_SKILL_MARKER_FILENAME),
+	);
+	const subdirectories = new Set<string>();
+	if (markerContent !== null) {
+		for (const relativePath of parseFlowSkillFileHashes(markerContent).keys()) {
+			const filePath = resolveMarkerFilePath(folder, relativePath);
+			if (filePath === null) {
+				continue;
+			}
+			await rm(filePath, { force: true });
+			await rm(`${filePath}.backup`, { force: true });
+			const parent = dirname(filePath);
+			if (parent !== folder) {
+				subdirectories.add(parent);
+			}
+		}
+	}
 	await rm(join(folder, "SKILL.md"), { force: true });
 	await rm(join(folder, FLOW_SKILL_MARKER_FILENAME), { force: true });
 	await rm(join(folder, FLOW_SKILL_BACKUP_FILENAME), { force: true });
+	// Deepest first so nested marker-owned directories collapse bottom-up.
+	for (const subdirectory of [...subdirectories].sort(
+		(a, b) => b.length - a.length,
+	)) {
+		await removeDirectoryIfEmpty(subdirectory);
+	}
+	await removeDirectoryIfEmpty(folder);
+}
+
+async function removeDirectoryIfEmpty(path: string): Promise<void> {
 	try {
-		await rmdir(folder);
+		await rmdir(path);
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException).code;
 		if (code !== "ENOENT" && code !== "ENOTEMPTY") {

@@ -1,6 +1,3 @@
-import { buildReviewContextPack } from "../domain";
-import type { FinalReviewBehaviorRiskClass } from "../domain/final-review-behavior-risks";
-import type { ReviewContextPackInput } from "../domain/review-content-discovery";
 import type { Session, WorkerResultArgs } from "../schema";
 
 type NormalizedReview = Omit<
@@ -12,66 +9,21 @@ type NormalizedReview = Omit<
 	>;
 };
 
-type PersistedFinalReview = NonNullable<
+type NormalizedFinalReview = NonNullable<
 	Session["execution"]["history"][number]["finalReview"]
 >;
-
-type NormalizedFinalReview = PersistedFinalReview;
-
-type WorkerBehaviorCheckInput = {
-	riskClass: string;
-	result: "passed" | "gap_recorded" | "not_applicable" | "needs_fix";
-	invariant: string;
-	entrypointRefs?: string[] | undefined;
-	stateOwnerRefs?: string[] | undefined;
-	lifecycleOwnerRefs?: string[] | undefined;
-	failurePath: string;
-	testEvidenceRefs?: string[] | undefined;
-	validationRefs?: string[] | undefined;
-	remainingGap?: string | undefined;
-};
-
-type WorkerValidationCoverageInput = {
-	command: string;
-	behaviorClasses?: string[] | undefined;
-	proves?: string[] | undefined;
-	gaps?: string[] | undefined;
-	testEvidenceRefs?: string[] | undefined;
-};
-
-type NormalizedReviewFindingClosure = Omit<
-	NonNullable<WorkerResultArgs["reviewFindingClosures"]>[number],
-	"fixRefs" | "testRefs" | "validationRefs"
-> & {
-	fixRefs: string[];
-	testRefs: string[];
-	validationRefs: string[];
-};
-
-type NormalizedReviewScopeLedgerEntry = Omit<
-	NonNullable<WorkerResultArgs["reviewScopeLedger"]>[number],
-	"evidenceRefs" | "findingRefs" | "validationRefs"
-> & {
-	evidenceRefs: string[];
-	findingRefs: string[];
-	validationRefs: string[];
-};
 
 type NormalizedWorkerResultBase = Omit<
 	WorkerResultArgs,
 	| "artifactsChanged"
 	| "validationRun"
 	| "decisions"
-	| "reviewFindingClosures"
-	| "reviewScopeLedger"
 	| "featureReview"
 	| "finalReview"
 > & {
 	artifactsChanged: NonNullable<WorkerResultArgs["artifactsChanged"]>;
 	validationRun: NonNullable<WorkerResultArgs["validationRun"]>;
 	decisions: NonNullable<WorkerResultArgs["decisions"]>;
-	reviewFindingClosures: NormalizedReviewFindingClosure[];
-	reviewScopeLedger: NormalizedReviewScopeLedgerEntry[];
 	featureReview: NormalizedReview;
 	finalReview: NormalizedFinalReview | undefined;
 };
@@ -104,12 +56,6 @@ function normalizeReview(
 	};
 }
 
-function normalizeBehaviorRiskClass(
-	riskClass: string,
-): FinalReviewBehaviorRiskClass {
-	return riskClass as FinalReviewBehaviorRiskClass;
-}
-
 function normalizeFinalReview(
 	review: NonNullable<WorkerResultArgs["finalReview"]>,
 ): NormalizedFinalReview {
@@ -117,67 +63,12 @@ function normalizeFinalReview(
 		...review,
 		blockingFindings: review.blockingFindings ?? [],
 		reviewedSurfaces: review.reviewedSurfaces ?? [],
+		remainingGaps: review.remainingGaps ?? [],
 		evidenceRefs: {
 			changedArtifacts: review.evidenceRefs?.changedArtifacts ?? [],
 			validationCommands: review.evidenceRefs?.validationCommands ?? [],
 		},
-		integrationChecks: review.integrationChecks ?? [],
-		regressionChecks: review.regressionChecks ?? [],
-		remainingGaps: review.remainingGaps ?? [],
-		behaviorChecks: (
-			(review.behaviorChecks ?? []) as WorkerBehaviorCheckInput[]
-		).map((check) => {
-			return {
-				...check,
-				riskClass: normalizeBehaviorRiskClass(check.riskClass),
-				entrypointRefs: check.entrypointRefs ?? [],
-				stateOwnerRefs: check.stateOwnerRefs ?? [],
-				lifecycleOwnerRefs: check.lifecycleOwnerRefs ?? [],
-				testEvidenceRefs: check.testEvidenceRefs ?? [],
-				validationRefs: check.validationRefs ?? [],
-			};
-		}),
-		validationCoverage: (
-			(review.validationCoverage ?? []) as WorkerValidationCoverageInput[]
-		).map((coverage) => {
-			return {
-				...coverage,
-				behaviorClasses: (coverage.behaviorClasses ?? []).map(
-					normalizeBehaviorRiskClass,
-				),
-				proves: coverage.proves ?? [],
-				gaps: coverage.gaps ?? [],
-				testEvidenceRefs: coverage.testEvidenceRefs ?? [],
-			};
-		}),
-		reviewContextPack: review.reviewContextPack
-			? buildReviewContextPack(
-					review.reviewContextPack as ReviewContextPackInput,
-				)
-			: undefined,
 	};
-}
-
-function normalizeReviewFindingClosures(
-	closures: NonNullable<WorkerResultArgs["reviewFindingClosures"]> | undefined,
-): NormalizedReviewFindingClosure[] {
-	return (closures ?? []).map((closure) => ({
-		...closure,
-		fixRefs: closure.fixRefs ?? [],
-		testRefs: closure.testRefs ?? [],
-		validationRefs: closure.validationRefs ?? [],
-	}));
-}
-
-function normalizeReviewScopeLedger(
-	ledger: NonNullable<WorkerResultArgs["reviewScopeLedger"]> | undefined,
-): NormalizedReviewScopeLedgerEntry[] {
-	return (ledger ?? []).map((entry) => ({
-		...entry,
-		evidenceRefs: entry.evidenceRefs ?? [],
-		findingRefs: entry.findingRefs ?? [],
-		validationRefs: entry.validationRefs ?? [],
-	}));
 }
 
 export function normalizeWorkerResult(
@@ -188,10 +79,6 @@ export function normalizeWorkerResult(
 		artifactsChanged: worker.artifactsChanged ?? [],
 		validationRun: worker.validationRun ?? [],
 		decisions: worker.decisions ?? [],
-		reviewFindingClosures: normalizeReviewFindingClosures(
-			worker.reviewFindingClosures,
-		),
-		reviewScopeLedger: normalizeReviewScopeLedger(worker.reviewScopeLedger),
 		featureReview: normalizeReview(worker.featureReview),
 		finalReview: worker.finalReview
 			? normalizeFinalReview(worker.finalReview)
@@ -269,12 +156,9 @@ export function recordWorkerResult(
 					validationRun: worker.validationRun,
 					artifactsChanged: worker.artifactsChanged,
 					decisions: worker.decisions,
-					reviewFindingClosures: worker.reviewFindingClosures,
-					reviewScopeLedger: worker.reviewScopeLedger,
 					featureResult: worker.featureResult,
 					replanRecord: replanRecord ?? undefined,
 					reviewerDecision: session.execution.lastReviewerDecision,
-					evidencePackets: worker.evidencePackets,
 					featureReview: worker.featureReview,
 					finalReview: worker.finalReview,
 				},

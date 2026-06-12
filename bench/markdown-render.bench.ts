@@ -1,6 +1,5 @@
 import { bench } from "mitata";
-import { renderFeatureDoc } from "../src/runtime/render-feature-sections";
-import { renderIndexDoc } from "../src/runtime/render-index-sections";
+import { renderFeatureDoc, renderIndexDoc } from "../src/runtime/render";
 import { createApprovedSession, createMidExecutionSession } from "./fixtures";
 
 const midExecution = createMidExecutionSession(10);

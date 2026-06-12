@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { readdir, readFile } from "node:fs/promises";
+import { loadSession, saveSessionState } from "../../src/runtime/lifecycle";
 import { getSessionDir, getSessionPath } from "../../src/runtime/paths";
 import { SessionSchema } from "../../src/runtime/schema";
-import { loadSession, saveSessionState } from "../../src/runtime/session";
 import { createTempDirRegistry, sampleSession } from "../runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(

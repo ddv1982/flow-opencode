@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { createSession, saveSession } from "../src/runtime/lifecycle";
 import { getIndexDocPath } from "../src/runtime/paths";
-import { createSession, saveSession } from "../src/runtime/session";
 import { summarizeSession } from "../src/runtime/summary";
 import {
 	applyPlan,

@@ -42,13 +42,13 @@ Automated smoke evidence, including the `bun run smoke:release` manual-live chec
 
 1. Install the candidate by pointing `opencode.json`'s `plugin` array at the packed tarball (pre-tag) or at `opencode-plugin-flow@<version>` (post-publish), then restart OpenCode once.
 2. Open real OpenCode in a disposable project.
-3. Run `/flow-doctor detail`.
+3. Run `/flow-doctor`.
 4. Run `/flow-plan Live smoke: verify Flow can create a plan in OpenCode`.
-5. Run `/flow-status detail`.
+5. Run `/flow-status`.
 6. Run `/flow-session close abandoned`.
 7. Uninstall with `bunx opencode-plugin-flow uninstall` and remove the `opencode.json` plugin entry.
 
-Expected result: Flow commands are available, generated skills do not break fallback commands, `.flow/**` appears only in the disposable project, and OpenCode reports no UI/plugin errors.
+Expected result: Flow commands are available, the synced skills are discovered, `.flow/**` appears only in the disposable project, and OpenCode reports no UI/plugin errors.
 
 ## Release note expectations
 

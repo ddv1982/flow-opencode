@@ -203,13 +203,13 @@ async function main() {
 		const config = { agent: {}, command: {} };
 		await plugin.config(config);
 
-		const planStart = JSON.parse(
-			await plugin.tool.flow_plan_start.execute(
+		const planSave = JSON.parse(
+			await plugin.tool.flow_plan_save.execute(
 				{ goal: "npm smoke" },
 				{ worktree },
 			),
 		);
-		assert(planStart.status === "ok", "flow_plan_start failed in npm smoke.");
+		assert(planSave.status === "ok", "flow_plan_save failed in npm smoke.");
 		const status = JSON.parse(
 			await plugin.tool.flow_status.execute({}, { worktree }),
 		);

@@ -7,11 +7,6 @@
 - active: no
 - goal: Benchmark 5-feature session
 
-## Task Progress
-
-- completed | flow-worker | execution | projection: runtime_projection | feature-5 — Feature feature-5 | next: No action needed. | evidence: file targets: 1, verification: 1, validation: 1, verification status: passed
-- completed | flow-worker | validation | projection: runtime_projection | Validation for feature-5 | next: Validation is complete; continue review or completion. | evidence: passed: bun test — Targeted tests passed.
-
 ## Description
 
 > Implement feature-5.
@@ -62,8 +57,6 @@
 - validation assessment: bun test was mapped to the feature-5 regression evidence; no unchecked behavior gap remains in this fixture.
 - evidence changed artifacts: src/feature-5.ts
 - evidence validation commands: bun test
-- integration checks: Checked feature-5 entrypoint against the active feature boundary and state handoff.
-- regression checks: Checked bun test covers the feature-5 regression evidence cited by the fixture.
 - status: approved
 - summary: Approved final review.
 
@@ -89,6 +82,4 @@
 - validation assessment: bun test was mapped to the feature-5 regression evidence; no unchecked behavior gap remains in this fixture.
 - evidence changed artifacts: src/feature-5.ts
 - evidence validation commands: bun test
-- integration checks: Checked feature-5 entrypoint against the active feature boundary and state handoff.
-- regression checks: Checked bun test covers the feature-5 regression evidence cited by the fixture.
 - summary: Final review passed.

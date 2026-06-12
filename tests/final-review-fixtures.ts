@@ -34,12 +34,6 @@ function finalReviewBase(): Omit<FinalReviewPayload, "status"> {
 			"Checked src/runtime/session.ts entrypoint, session state owner, completion failure path, and validation evidence.",
 		validationAssessment: CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT,
 		evidenceRefs: DEFAULT_EVIDENCE_REFS,
-		integrationChecks: [
-			"Checked the session completion entrypoint against the runtime state/finalization boundary.",
-		],
-		regressionChecks: [
-			"Checked bun test covers the session-completion regression path cited by the fixture.",
-		],
 		remainingGaps: [],
 		summary: "Final review checked the runtime path and validation evidence.",
 		blockingFindings: [],

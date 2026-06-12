@@ -1,5 +1,5 @@
+import { createSession } from "../src/runtime/lifecycle";
 import type { Plan, Session } from "../src/runtime/schema";
-import { createSession } from "../src/runtime/session";
 
 export const samplePlan: Plan = {
 	summary: "Implement a small workflow feature set.",

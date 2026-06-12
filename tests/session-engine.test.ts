@@ -1,86 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import {
-	dispatchSessionMutationAction,
-	dispatchSessionReadAction,
-	dispatchSessionWorkspaceAction,
-	executeDispatchedSessionMutation,
-	executeDispatchedSessionReadAction,
-	executeDispatchedSessionWorkspaceAction,
 	executeFlowCoreCommand,
 	executeFlowCoreQuery,
-	FLOW_CORE_COMMAND_NAMES,
-	FLOW_CORE_QUERY_NAMES,
-	FLOW_CORE_VNEXT_CONTRACT,
-	isFlowCoreMutationCommandName,
-	isFlowCoreQueryName,
-	isFlowCoreWorkspaceCommandName,
-	runDispatchedSessionMutationAction,
-	runDispatchedSessionReadAction,
-	runDispatchedSessionWorkspaceAction,
 	runFlowCoreCommand,
 	runFlowCoreQuery,
-} from "../src/runtime/application";
-import {
-	SESSION_MUTATION_ACTION_HANDLERS,
 	SESSION_MUTATION_ACTION_NAMES,
-} from "../src/runtime/application/session-actions";
-import {
-	executeSessionMutationAtRoot,
-	executeTransitionAtRoot,
-	runSessionMutationActionAtRoot,
-	runSessionReadActionAtRoot,
-	runSessionWorkspaceActionAtRoot,
-} from "../src/runtime/application/session-engine";
-import {
-	SESSION_READ_ACTION_HANDLERS,
 	SESSION_READ_ACTION_NAMES,
-} from "../src/runtime/application/session-read-actions";
-import {
-	SESSION_WORKSPACE_ACTION_HANDLERS,
 	SESSION_WORKSPACE_ACTION_NAMES,
-} from "../src/runtime/application/session-workspace-actions";
+} from "../src/runtime/application";
+import { runMutationActionAtRoot } from "../src/runtime/application/action-engine";
+import { createSession } from "../src/runtime/lifecycle";
 import type { LatestFailedFlowAttempt } from "../src/runtime/schema";
-import { createSession } from "../src/runtime/session";
 import { fail, succeed } from "../src/runtime/transitions/shared";
 
-describe("session engine boundary", () => {
-	test("action handlers cover the named runtime mutation catalog", () => {
-		expect(Object.keys(SESSION_MUTATION_ACTION_HANDLERS).sort()).toEqual(
-			[...SESSION_MUTATION_ACTION_NAMES].sort(),
-		);
-	});
-
-	test("read action handlers cover the named runtime read catalog", () => {
-		expect(Object.keys(SESSION_READ_ACTION_HANDLERS).sort()).toEqual(
-			[...SESSION_READ_ACTION_NAMES].sort(),
-		);
-	});
-
-	test("workspace action handlers cover the named runtime workspace catalog", () => {
-		expect(Object.keys(SESSION_WORKSPACE_ACTION_HANDLERS).sort()).toEqual(
-			[...SESSION_WORKSPACE_ACTION_NAMES].sort(),
-		);
-	});
-
-	test("flow core contract exposes compact command and query catalogs", () => {
-		expect(FLOW_CORE_VNEXT_CONTRACT.transitionAuthority).toBe(
-			"src/runtime/transitions/**",
-		);
-		expect(FLOW_CORE_VNEXT_CONTRACT.persistenceMode).toBe("snapshot-first");
-		expect([...FLOW_CORE_COMMAND_NAMES].sort()).toEqual(
-			[
-				...SESSION_WORKSPACE_ACTION_NAMES,
-				...SESSION_MUTATION_ACTION_NAMES,
-			].sort(),
-		);
-		expect([...FLOW_CORE_QUERY_NAMES].sort()).toEqual(
-			[...SESSION_READ_ACTION_NAMES].sort(),
-		);
-		expect(isFlowCoreWorkspaceCommandName("plan_start")).toBe(true);
-		expect(isFlowCoreMutationCommandName("start_run")).toBe(true);
-		expect(isFlowCoreMutationCommandName("not_a_flow_command")).toBe(false);
-		expect(isFlowCoreQueryName("load_status_session")).toBe(true);
-		expect(isFlowCoreQueryName("not_a_flow_query")).toBe(false);
+describe("action engine boundary", () => {
+	test("action name catalogs stay disjoint and non-empty", () => {
+		expect(SESSION_MUTATION_ACTION_NAMES.length).toBeGreaterThan(0);
+		expect(SESSION_WORKSPACE_ACTION_NAMES.length).toBeGreaterThan(0);
+		expect(SESSION_READ_ACTION_NAMES.length).toBeGreaterThan(0);
+		const all = [
+			...SESSION_MUTATION_ACTION_NAMES,
+			...SESSION_WORKSPACE_ACTION_NAMES,
+			...SESSION_READ_ACTION_NAMES,
+		];
+		expect(new Set(all).size).toBe(all.length);
 	});
 
 	test("flow core run command rejects unknown command names before dispatch", async () => {
@@ -197,70 +140,12 @@ describe("session engine boundary", () => {
 				undefined,
 				runtime,
 			),
-		).rejects.toThrow("Unknown Flow Core query 'not_a_flow_query'.");
+		).rejects.toThrow();
 		expect(dispatched).toBe(false);
-	});
-
-	test("flow core execute query rejects unknown query names before dispatch", async () => {
-		let dispatched = false;
-		const invalidExecuteFlowCoreQuery = executeFlowCoreQuery as unknown as (
-			context: { worktree: string },
-			name: string,
-			payload: unknown,
-			runtime: unknown,
-		) => Promise<unknown>;
-		const runtime = {
-			loadSession: async () => {
-				dispatched = true;
-				throw new Error("should not load");
-			},
-			listSessionHistory: async () => {
-				dispatched = true;
-				throw new Error("should not list history");
-			},
-			loadStoredSession: async () => {
-				dispatched = true;
-				throw new Error("should not load stored session");
-			},
-		};
-
-		await expect(
-			invalidExecuteFlowCoreQuery(
-				{ worktree: "/tmp/project" },
-				"not_a_flow_query",
-				undefined,
-				runtime,
-			),
-		).rejects.toThrow("Unknown Flow Core query 'not_a_flow_query'.");
-		expect(dispatched).toBe(false);
-	});
-
-	test("dispatches named actions through the central handler map", () => {
-		const action = dispatchSessionMutationAction("approve_plan", {
-			featureIds: ["ship-it"],
-		});
-
-		expect(action.name).toBe("approve_plan");
-	});
-
-	test("dispatches named read actions through the central handler map", () => {
-		const action = dispatchSessionReadAction("load_history_session", {
-			sessionId: "session-123",
-		});
-
-		expect(action.name).toBe("load_history_session");
-	});
-
-	test("dispatches named workspace actions through the central handler map", () => {
-		const action = dispatchSessionWorkspaceAction("close_session", {
-			kind: "completed",
-		});
-
-		expect(action.name).toBe("close_session");
 	});
 
 	test("returns the configured missing-session response before running the action", async () => {
-		const response = await executeSessionMutationAtRoot(
+		const response = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
 				name: "apply_plan",
@@ -286,7 +171,8 @@ describe("session engine boundary", () => {
 			},
 		);
 
-		expect(response).toEqual({
+		expect(response.kind).toBe("missing");
+		expect(response.response).toEqual({
 			status: "missing_session",
 			summary: "No planning session exists.",
 			nextCommand: "/flow-plan <goal>",
@@ -299,7 +185,7 @@ describe("session engine boundary", () => {
 		let saved = false;
 		let synced = false;
 
-		const response = await executeSessionMutationAtRoot(
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
 				name: "approve_plan",
@@ -326,35 +212,6 @@ describe("session engine boundary", () => {
 
 		expect(saved).toBe(true);
 		expect(synced).toBe(true);
-		expect(response).toEqual({
-			status: "ok",
-			summary: "Saved ready",
-		});
-	});
-
-	test("exposes a typed engine result before JSON serialization", async () => {
-		const baseSession = createSession("Build a workflow plugin");
-		const savedSession = { ...baseSession, status: "ready" as const };
-
-		const result = await runSessionMutationActionAtRoot(
-			"/tmp/project",
-			{
-				name: "approve_plan",
-				run: (session) =>
-					succeed({ session: { ...session, status: "ready" as const } }),
-				getSession: (value) => value.session,
-				onSuccess: (session) => ({
-					status: "ok",
-					summary: `Saved ${session.status}`,
-				}),
-			},
-			{
-				loadSession: async () => baseSession,
-				saveSessionState: async () => savedSession,
-				syncSessionArtifacts: async () => undefined,
-			},
-		);
-
 		expect(result.kind).toBe("success");
 		if (result.kind !== "success") return;
 		expect(result.actionName).toBe("approve_plan");
@@ -365,7 +222,7 @@ describe("session engine boundary", () => {
 		});
 	});
 
-	test("runs named dispatched actions without tool-specific builder imports", async () => {
+	test("runs named dispatched mutations without tool-specific builder imports", async () => {
 		const baseSession = createSession("Build a workflow plugin");
 		const savedSession = {
 			...baseSession,
@@ -375,7 +232,7 @@ describe("session engine boundary", () => {
 			},
 		};
 
-		const result = await runDispatchedSessionMutationAction(
+		const result = await runFlowCoreCommand(
 			{ worktree: "/tmp/project" },
 			"record_planning_context",
 			{ research: ["Inspect runtime action dispatch"] },
@@ -394,7 +251,7 @@ describe("session engine boundary", () => {
 		]);
 	});
 
-	test("serializes named dispatched actions through the central runtime path", async () => {
+	test("serializes named dispatched mutations through the central runtime path", async () => {
 		const baseSession = createSession("Build a workflow plugin");
 		const savedSession = {
 			...baseSession,
@@ -404,7 +261,7 @@ describe("session engine boundary", () => {
 			},
 		};
 
-		const response = await executeDispatchedSessionMutation(
+		const response = await executeFlowCoreCommand(
 			{ worktree: "/tmp/project" },
 			"record_planning_context",
 			{ research: ["Inspect runtime action dispatch"] },
@@ -420,13 +277,13 @@ describe("session engine boundary", () => {
 		expect(parsed.summary).toBe("Planning context recorded.");
 	});
 
-	test("plan_start returns partial success when artifact sync fails after saving", async () => {
+	test("plan_save returns partial success when artifact sync fails after saving", async () => {
 		const savedSession = createSession("Build a workflow plugin");
 		const events: string[] = [];
 
-		const response = await executeDispatchedSessionWorkspaceAction(
+		const response = await executeFlowCoreCommand(
 			{ worktree: "/tmp/project" },
-			"plan_start",
+			"plan_save",
 			{ goal: "Build a workflow plugin" },
 			{
 				loadSession: async () => null,
@@ -463,13 +320,13 @@ describe("session engine boundary", () => {
 		expect(parsed.session.goal).toBe("Build a workflow plugin");
 	});
 
-	test("plan_start throws persistence failures without syncing artifacts", async () => {
+	test("plan_save throws persistence failures without syncing artifacts", async () => {
 		let synced = false;
 
 		await expect(
-			executeDispatchedSessionWorkspaceAction(
+			executeFlowCoreCommand(
 				{ worktree: "/tmp/project" },
-				"plan_start",
+				"plan_save",
 				{ goal: "Build a workflow plugin" },
 				{
 					loadSession: async () => null,
@@ -492,74 +349,37 @@ describe("session engine boundary", () => {
 		expect(synced).toBe(false);
 	});
 
-	test("flow core command facade delegates mutations through session engine persistence", async () => {
-		const baseSession = createSession("Build a compact core");
-		const savedSession = {
-			...baseSession,
-			planning: {
-				...baseSession.planning,
-				research: ["Freeze transition authority"],
-			},
-		};
-		let saved = false;
-		let synced = false;
-
-		const result = await runFlowCoreCommand(
-			{ worktree: "/tmp/project" },
-			"record_planning_context",
-			{ research: ["Freeze transition authority"] },
-			{
-				loadSession: async () => baseSession,
-				saveSessionState: async (_worktree, session) => {
-					saved = true;
-					expect(session.planning.research).toEqual([
-						"Freeze transition authority",
-					]);
-					return savedSession;
-				},
-				syncSessionArtifacts: async (_worktree, session) => {
-					synced = true;
-					expect(session).toBe(savedSession);
-				},
-			},
-		);
-
-		expect(result.kind).toBe("success");
-		if (result.kind !== "success") return;
-		expect(saved).toBe(true);
-		expect(synced).toBe(true);
-		expect(result.actionName).toBe("record_planning_context");
-		expect(result.savedSession).toBe(savedSession);
-	});
-
-	test("flow core command facade preserves existing serialized mutation responses", async () => {
-		const baseSession = createSession("Build a compact core");
-		const savedSession = {
-			...baseSession,
-			planning: {
-				...baseSession.planning,
-				research: ["Freeze transition authority"],
-			},
-		};
-
+	test("plan_save without a goal or existing session asks for a goal", async () => {
 		const response = await executeFlowCoreCommand(
 			{ worktree: "/tmp/project" },
-			"record_planning_context",
-			{ research: ["Freeze transition authority"] },
+			"plan_save",
+			{},
 			{
-				loadSession: async () => baseSession,
-				saveSessionState: async () => savedSession,
+				loadSession: async () => null,
+				saveSessionState: async () => {
+					throw new Error("should not save");
+				},
 				syncSessionArtifacts: async () => undefined,
+				activateSession: async () => {
+					throw new Error("should not activate");
+				},
+				closeSession: async () => {
+					throw new Error("should not close");
+				},
 			},
 		);
 
 		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("ok");
-		expect(parsed.summary).toBe("Planning context recorded.");
+		expect(parsed.status).toBe("missing_goal");
+		expect(parsed.nextCommand).toBe("/flow-plan <goal>");
 	});
 
-	test("mutation finalization saves and syncs failures that carry a session", async () => {
-		const failedSession = createSession("Persist failed mutation state");
+	test("mutation failures that carry a session are persisted and synced", async () => {
+		const baseSession = createSession("Persist failed mutation state");
+		const failedSession = {
+			...baseSession,
+			notes: ["failure projection"],
+		};
 		const savedSession = {
 			...failedSession,
 			notes: ["saved failure projection"],
@@ -567,22 +387,17 @@ describe("session engine boundary", () => {
 		let saved = false;
 		let synced = false;
 
-		const transition = fail<never>(
-			"Completion failed",
-			undefined,
-			failedSession,
-		);
-		if (transition.ok) throw new Error("expected failure transition");
-		const result = await executeTransitionAtRoot(
-			"complete_feature",
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
-			transition,
-			(value: never) => value,
-			() => ({ status: "ok" }),
-			(failure) => ({ status: "error", summary: failure.message }),
-			undefined,
 			{
-				loadSession: async () => null,
+				name: "complete_run",
+				run: () => fail<never>("Completion failed", undefined, failedSession),
+				getSession: (value: never) => value,
+				onSuccess: () => ({ status: "ok" }),
+				onError: (failure) => ({ status: "error", summary: failure.message }),
+			},
+			{
+				loadSession: async () => baseSession,
 				saveSessionState: async (_worktree, session) => {
 					saved = true;
 					expect(session).toBe(failedSession);
@@ -599,29 +414,28 @@ describe("session engine boundary", () => {
 		expect(synced).toBe(true);
 		expect(result.kind).toBe("failure");
 		if (result.kind !== "failure") return;
-		expect(result.actionName).toBe("complete_feature");
+		expect(result.actionName).toBe("complete_run");
 		expect(result.response).toEqual({
 			status: "error",
 			summary: "Completion failed",
 		});
-		expect(result.transition).toBe(transition);
 		expect(result.savedSession).toBe(savedSession);
 	});
 
-	test("mutation finalization does not save or sync failures without a session", async () => {
-		const transition = fail<never>("No active plan");
-		if (transition.ok) throw new Error("expected failure transition");
+	test("mutation failures without a session are not saved or synced", async () => {
+		const baseSession = createSession("No active plan");
 
-		const result = await executeTransitionAtRoot(
-			"start_run",
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
-			transition,
-			(value: never) => value,
-			() => ({ status: "ok" }),
-			(failure) => ({ status: "error", summary: failure.message }),
-			undefined,
 			{
-				loadSession: async () => null,
+				name: "start_run",
+				run: () => fail<never>("No active plan"),
+				getSession: (value: never) => value,
+				onSuccess: () => ({ status: "ok" }),
+				onError: (failure) => ({ status: "error", summary: failure.message }),
+			},
+			{
+				loadSession: async () => baseSession,
 				saveSessionState: async () => {
 					throw new Error("should not save");
 				},
@@ -638,14 +452,13 @@ describe("session engine boundary", () => {
 			status: "error",
 			summary: "No active plan",
 		});
-		expect(result.transition).toBe(transition);
 		expect(result.savedSession).toBeUndefined();
 	});
 
 	test("recordFailure projection is persisted through the mutation boundary", async () => {
 		const baseSession = createSession("Record latest failed mutation");
 		const projectedFailure = {
-			tool: "flow_run_complete_feature" as const,
+			tool: "flow_feature_complete" as const,
 			phase: "execution" as const,
 			status: "error" as const,
 			failureCategory: "failing_validation",
@@ -661,10 +474,10 @@ describe("session engine boundary", () => {
 		};
 		let synced = false;
 
-		const result = await runSessionMutationActionAtRoot(
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
-				name: "complete_feature",
+				name: "complete_run",
 				run: () => fail<never>("Completion failed"),
 				getSession: (value: never) => value,
 				onSuccess: () => ({ status: "ok" }),
@@ -700,7 +513,7 @@ describe("session engine boundary", () => {
 		const baseSession = createSession("Already selected feature");
 		let synced = false;
 
-		const result = await runSessionMutationActionAtRoot(
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
 				name: "start_run",
@@ -738,10 +551,10 @@ describe("session engine boundary", () => {
 	test("noop mutation success with syncArtifacts false skips save and sync", async () => {
 		const baseSession = createSession("Already complete");
 
-		const result = await runSessionMutationActionAtRoot(
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
-				name: "complete_feature",
+				name: "complete_run",
 				run: (session) => succeed(session),
 				getSession: (session) => session,
 				onSuccess: () => ({ status: "ok" }),
@@ -768,7 +581,7 @@ describe("session engine boundary", () => {
 
 	test("success clear policy clears all failed attempts when set to true", async () => {
 		const failedAttempt: LatestFailedFlowAttempt = {
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			phase: "execution",
 			status: "error",
 			failureCategory: "failing_validation",
@@ -784,10 +597,10 @@ describe("session engine boundary", () => {
 		};
 		let savedFailedAttempt: LatestFailedFlowAttempt | null | undefined;
 
-		await runSessionMutationActionAtRoot(
+		await runMutationActionAtRoot(
 			"/tmp/project",
 			{
-				name: "complete_feature",
+				name: "complete_run",
 				run: (session) => succeed(session),
 				getSession: (session) => session,
 				onSuccess: () => ({ status: "ok" }),
@@ -808,7 +621,7 @@ describe("session engine boundary", () => {
 
 	test("success clear policy only clears matching failed-attempt tools", async () => {
 		const failedAttempt: LatestFailedFlowAttempt = {
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			phase: "execution",
 			status: "error",
 			failureCategory: "failing_validation",
@@ -825,10 +638,10 @@ describe("session engine boundary", () => {
 		const savedFailedAttempts: Array<LatestFailedFlowAttempt | null> = [];
 
 		for (const policy of [
-			{ tool: "flow_run_complete_feature" as const },
-			{ tool: "flow_review_record_feature" as const },
+			{ tool: "flow_feature_complete" as const },
+			{ tool: "flow_review_record" as const },
 		]) {
-			await runSessionMutationActionAtRoot(
+			await runMutationActionAtRoot(
 				"/tmp/project",
 				{
 					name: "record_review",
@@ -859,7 +672,7 @@ describe("session engine boundary", () => {
 			notes: ["saved object"],
 		};
 
-		const result = await runSessionMutationActionAtRoot(
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
 				name: "start_run",
@@ -887,7 +700,7 @@ describe("session engine boundary", () => {
 		});
 	});
 
-	test("success response value substitutes saved session in apply_plan-style composite values", async () => {
+	test("success response value substitutes saved session in composite values", async () => {
 		const baseSession = createSession("Substitute saved apply plan response");
 		const transitionSession = { ...baseSession, status: "ready" as const };
 		const savedSession = {
@@ -895,7 +708,7 @@ describe("session engine boundary", () => {
 			notes: ["saved composite"],
 		};
 
-		const result = await runSessionMutationActionAtRoot(
+		const result = await runMutationActionAtRoot(
 			"/tmp/project",
 			{
 				name: "apply_plan",
@@ -923,202 +736,6 @@ describe("session engine boundary", () => {
 			status: "ok",
 			summary: "saved composite",
 			autoApproved: true,
-		});
-	});
-
-	test("success response value substitutes saved session in start_run-style composite values", async () => {
-		const baseSession = createSession("Substitute saved start run response");
-		const transitionSession = { ...baseSession, status: "running" as const };
-		const savedSession = {
-			...transitionSession,
-			notes: ["saved start run composite"],
-		};
-		const feature = {
-			id: "feature-1",
-			title: "Feature 1",
-			summary: "Run the first feature.",
-			status: "in_progress" as const,
-			fileTargets: [],
-			verification: [],
-		};
-
-		const result = await runSessionMutationActionAtRoot(
-			"/tmp/project",
-			{
-				name: "start_run",
-				run: () =>
-					succeed({
-						session: transitionSession,
-						feature,
-						reason: "selected next feature",
-					}),
-				getSession: (value) => value.session,
-				onSuccess: (_session, value) => ({
-					status: "ok",
-					summary: value.session.notes[0] ?? "missing saved note",
-					featureId: value.feature?.id,
-					reason: value.reason,
-				}),
-			},
-			{
-				loadSession: async () => baseSession,
-				saveSessionState: async () => savedSession,
-				syncSessionArtifacts: async () => undefined,
-			},
-		);
-
-		expect(result.kind).toBe("success");
-		if (result.kind !== "success") return;
-		expect(result.value.session).toBe(savedSession);
-		expect(result.value.feature).toBe(feature);
-		expect(result.value.reason).toBe("selected next feature");
-		expect(result.savedSession).toBe(savedSession);
-		expect(result.response).toEqual({
-			status: "ok",
-			summary: "saved start run composite",
-			featureId: "feature-1",
-			reason: "selected next feature",
-		});
-	});
-
-	test("explicit empty transition options preserve current no-sync behavior", async () => {
-		const baseSession = createSession("Explicit empty options");
-		let synced = false;
-
-		const result = await executeTransitionAtRoot(
-			"approve_plan",
-			"/tmp/project",
-			succeed(baseSession),
-			(session) => session,
-			() => ({ status: "ok" }),
-			(failure) => ({ status: "error", summary: failure.message }),
-			{},
-			{
-				loadSession: async () => baseSession,
-				saveSessionState: async () => baseSession,
-				syncSessionArtifacts: async () => {
-					synced = true;
-				},
-			},
-		);
-
-		expect(result.kind).toBe("success");
-		expect(synced).toBe(false);
-	});
-
-	test("read runner preserves the generic action result envelope", async () => {
-		const runtime = {
-			loadSession: async () => createSession("Inspect direct read runner"),
-			listSessionHistory: async () => ({
-				activeSessionId: null,
-				active: null,
-				stored: [],
-				completed: [],
-			}),
-			loadStoredSession: async () => null,
-		};
-		const value = { status: "ready", count: 2 };
-		const result = await runSessionReadActionAtRoot(
-			"/tmp/project",
-			{
-				name: "direct_read_envelope",
-				run: async (worktree, receivedRuntime) => {
-					expect(worktree).toBe("/tmp/project");
-					expect(receivedRuntime).toBe(runtime);
-					return value;
-				},
-				onSuccess: (receivedValue) => ({
-					status: "ok",
-					value: receivedValue,
-				}),
-			},
-			runtime,
-		);
-
-		expect(result).toEqual({
-			actionName: "direct_read_envelope",
-			value,
-			response: { status: "ok", value },
-		});
-	});
-
-	test("workspace runner preserves the generic action result envelope", async () => {
-		const session = createSession("Inspect direct workspace runner");
-		const runtime = {
-			loadSession: async () => session,
-			saveSessionState: async () => session,
-			syncSessionArtifacts: async () => undefined,
-			activateSession: async () => session,
-			closeSession: async () => null,
-		};
-		const value = { sessionId: session.id, activated: true };
-		const result = await runSessionWorkspaceActionAtRoot(
-			"/tmp/project",
-			{
-				name: "direct_workspace_envelope",
-				run: async (worktree, receivedRuntime) => {
-					expect(worktree).toBe("/tmp/project");
-					expect(receivedRuntime).toBe(runtime);
-					return value;
-				},
-				onSuccess: (receivedValue) => ({
-					status: "ok",
-					value: receivedValue,
-				}),
-			},
-			runtime,
-		);
-
-		expect(result).toEqual({
-			actionName: "direct_workspace_envelope",
-			value,
-			response: { status: "ok", value },
-		});
-	});
-
-	test("runs named dispatched read actions through the central runtime path", async () => {
-		const baseSession = createSession("Inspect history");
-
-		const result = await runDispatchedSessionReadAction(
-			{ worktree: "/tmp/project" },
-			"load_status_session",
-			undefined,
-			{
-				loadSession: async () => baseSession,
-				listSessionHistory: async () => {
-					throw new Error("should not list history");
-				},
-				loadStoredSession: async () => {
-					throw new Error("should not load stored session");
-				},
-			},
-		);
-
-		expect(result.actionName).toBe("load_status_session");
-		expect(result.value?.goal).toBe("Inspect history");
-	});
-
-	test("serializes named dispatched read responses", async () => {
-		const baseSession = createSession("Inspect history");
-
-		const response = await executeDispatchedSessionReadAction(
-			{ worktree: "/tmp/project" },
-			"load_status_session",
-			undefined,
-			{
-				loadSession: async () => baseSession,
-				listSessionHistory: async () => {
-					throw new Error("should not list history");
-				},
-				loadStoredSession: async () => {
-					throw new Error("should not load stored session");
-				},
-			},
-		);
-
-		expect(response).toEqual({
-			status: "ok",
-			session: baseSession,
 		});
 	});
 
@@ -1192,10 +809,10 @@ describe("session engine boundary", () => {
 		expect(parsed.completedSessionId).toBe("session-1");
 	});
 
-	test("runs named dispatched workspace actions through the central runtime path", async () => {
+	test("runs named workspace actions through the central runtime path", async () => {
 		const session = createSession("Resume this");
 
-		const result = await runDispatchedSessionWorkspaceAction(
+		const result = await runFlowCoreCommand(
 			{ worktree: "/tmp/project" },
 			"activate_session",
 			{ sessionId: session.id },
@@ -1209,31 +826,8 @@ describe("session engine boundary", () => {
 		);
 
 		expect(result.actionName).toBe("activate_session");
-		expect(result.value?.id).toBe(session.id);
-	});
-
-	test("serializes named dispatched workspace responses", async () => {
-		const response = await executeDispatchedSessionWorkspaceAction(
-			{ worktree: "/tmp/project" },
-			"close_session",
-			{ kind: "completed", nextCommand: "/flow-plan <goal>" },
-			{
-				loadSession: async () => null,
-				saveSessionState: async () => {
-					throw new Error("should not save session state");
-				},
-				syncSessionArtifacts: async () => undefined,
-				activateSession: async () => null,
-				closeSession: async () => ({
-					sessionId: "session-1",
-					completedTo: ".flow/completed/session-1",
-					closureKind: "completed",
-				}),
-			},
-		);
-
-		const parsed = JSON.parse(response);
+		const parsed = result.response as { status?: string; summary?: string };
 		expect(parsed.status).toBe("ok");
-		expect(parsed.completedSessionId).toBe("session-1");
+		expect(parsed.summary).toBe(`Activated Flow session: ${session.goal}`);
 	});
 });

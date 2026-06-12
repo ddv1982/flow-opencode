@@ -66,20 +66,4 @@ export const EvidencePacketSchema = z
 
 export const EvidencePacketArraySchema = z.array(EvidencePacketSchema);
 
-const EvidencePacketReferenceSchema = z
-	.object({
-		id: z.string().min(1),
-		purpose: EvidencePacketPurposeSchema.optional(),
-		contextLane: FlowContextLaneSchema.optional(),
-		summary: z.string().min(1),
-		sourceRefs: z.array(z.string().min(1)).optional(),
-		highlights: z.array(z.string().min(1)).optional(),
-	})
-	.strict()
-	.readonly();
-
-export const EvidencePacketReferenceArraySchema = z.array(
-	EvidencePacketReferenceSchema,
-);
-
 export type EvidencePacket = z.infer<typeof EvidencePacketSchema>;

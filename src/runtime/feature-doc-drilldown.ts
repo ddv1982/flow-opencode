@@ -219,7 +219,7 @@ function deriveSessionFields(source: FeatureDocDrilldownSource): {
 	};
 }
 
-export function deriveFeatureDocDrilldownTarget(
+function deriveFeatureDocDrilldownTarget(
 	input: FeatureDocDrilldownInput,
 ): Omit<FeatureDocDrilldownTarget, "available" | "availability"> {
 	const source = input.source;

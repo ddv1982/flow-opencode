@@ -44,13 +44,14 @@ describe("cross-area npm install lifecycle", () => {
 
 			expect(report.packedVersion).toBe(report.expectedVersion);
 			expect(report.syncedSkills).toEqual([
+				"flow",
 				"flow-plan",
 				"flow-review",
 				"flow-run",
 			]);
-			expect(report.configAgents).toBe(7);
+			expect(report.configAgents).toBe(1);
 			expect(report.configCommands).toBe(9);
-			expect(report.toolCount).toBe(18);
+			expect(report.toolCount).toBe(7);
 			expect(report.preNpmWarningVerified).toBe(true);
 			expect(report.uninstallVerified).toBe(true);
 		},
