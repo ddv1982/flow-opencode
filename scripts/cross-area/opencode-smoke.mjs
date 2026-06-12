@@ -207,15 +207,38 @@ async function main() {
 		mkdirSync(homeDir, { recursive: true });
 		mkdirSync(worktree, { recursive: true });
 
-		const logs = [];
+		// Mirror the generated SDK shape: app.log is a prototype method reading
+		// this._client, with the entry in options.body. A plain-function fake
+		// would hide an unbound-call crash at plugin load.
+		class FakeSdkApp {
+			entries = [];
+			_client = {
+				post: (options) => {
+					this.entries.push(options.body);
+					return Promise.resolve({});
+				},
+			};
+			log(options) {
+				return (options?.client ?? this._client).post({
+					url: "/log",
+					...options,
+				});
+			}
+		}
+		const startupApp = new FakeSdkApp();
+		const logs = startupApp.entries;
 		const pluginModule = await import(
 			`file://${join(packageDir, "dist", "index.js")}`
 		);
 		const plugin = await withHome(homeDir, () =>
 			pluginModule.default({
 				worktree,
-				client: { app: { log: (entry) => logs.push(entry) } },
+				client: { app: startupApp },
 			}),
+		);
+		assert(
+			logs.length > 0 && logs[0]?.service === "opencode-plugin-flow",
+			"Plugin startup did not log through the SDK-shaped client.",
 		);
 
 		const skillsRoot = join(homeDir, ".config", "opencode", "skills");
@@ -290,11 +313,12 @@ async function main() {
 			join(preNpmPluginDir, "flow.js"),
 			"// Managed by flow-opencode install/uninstall\nexport default 'stale';\n",
 		);
-		const preNpmLogs = [];
+		const preNpmApp = new FakeSdkApp();
+		const preNpmLogs = preNpmApp.entries;
 		await withHome(preNpmHome, () =>
 			pluginModule.default({
 				worktree,
-				client: { app: { log: (entry) => preNpmLogs.push(entry) } },
+				client: { app: preNpmApp },
 			}),
 		);
 		assert(

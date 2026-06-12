@@ -21,14 +21,43 @@ type FlowToolName =
 	| "flow_session";
 type FlowSmokeTools = Record<FlowToolName, TestTool>;
 
+const originalHome = process.env.HOME;
+
 afterEach(() => {
+	process.env.HOME = originalHome;
 	cleanupManagedTempDirs();
 });
+
+// Mirrors the generated OpenCode SDK: app.log is a prototype method that
+// reads this._client and carries the entry in options.body. A plain-function
+// fake hides both the unbound-call crash and a wrong payload shape.
+type FlowLogBody = { service: string; level: string; message: string };
+type FakePoster = {
+	post: (options: { body: FlowLogBody } & Record<string, unknown>) => unknown;
+};
+
+class FakeSdkApp {
+	entries: FlowLogBody[] = [];
+	_client: FakePoster = {
+		post: (options) => {
+			this.entries.push(options.body);
+			return Promise.resolve({});
+		},
+	};
+	log(options: { client?: FakePoster; body: FlowLogBody }) {
+		return (options?.client ?? this._client).post({
+			url: "/log",
+			...options,
+		});
+	}
+}
 
 describe("built dist smoke load", () => {
 	test("dist bundle exposes one agent, five commands, and seven tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
+		// Startup sync writes global skills/commands: keep it off the real HOME.
+		process.env.HOME = makeManagedTempDir("flow-dist-home-");
 		const plugin = (await pluginFactory({
 			worktree,
 		} as Parameters<PluginFactory>[0])) as BuiltPlugin;
@@ -132,5 +161,28 @@ describe("built dist smoke load", () => {
 			expect(typeof response).toBe("string");
 			expect(() => JSON.parse(response)).not.toThrow();
 		}
+	});
+
+	test("plugin init survives an SDK-shaped host client and logs through it", async () => {
+		const pluginFactory = await importBuiltPlugin();
+		const worktree = makeManagedTempDir("flow-dist-worktree-");
+		process.env.HOME = makeManagedTempDir("flow-dist-home-");
+		const app = new FakeSdkApp();
+
+		// Regression: detaching app.log (an unbound class method) crashed init
+		// with "Cannot read properties of undefined (reading '_client')" and
+		// OpenCode dropped the whole plugin — no tools, no config, no sync.
+		const plugin = (await pluginFactory({
+			worktree,
+			client: { app },
+		} as unknown as Parameters<PluginFactory>[0])) as BuiltPlugin;
+
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(7);
+		expect(app.entries.length).toBeGreaterThanOrEqual(1);
+		expect(app.entries[0]).toEqual({
+			service: "opencode-plugin-flow",
+			level: "info",
+			message: "Flow plugin initialized.",
+		});
 	});
 });
