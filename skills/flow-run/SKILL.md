@@ -5,6 +5,8 @@ description: Execute one approved Flow feature - scoped implementation, real val
 
 # Flow execution
 
+If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell the user to check `opencode-plugin-flow` in the `plugin` array of `opencode.json` and restart OpenCode. Do not implement without recorded Flow state.
+
 ## One feature at a time
 
 - `flow_run_start` activates exactly one approved feature. It stays the sole target until it is cleanly complete, genuinely blocked, or reset — never drift into a second feature "while you're there".

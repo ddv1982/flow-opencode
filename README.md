@@ -29,7 +29,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.2.0"]
+  "plugin": ["opencode-plugin-flow@3.2.1"]
 }
 ```
 
@@ -56,7 +56,7 @@ OpenCode never auto-updates plugins: the cached install for a given spec string 
 
 To update with an exact pin (recommended):
 
-1. Change the pin in `opencode.json` to the new version, e.g. `"opencode-plugin-flow@3.2.0"`.
+1. Change the pin in `opencode.json` to the new version (same form as the install snippet above).
 2. Restart OpenCode once to install the new version, and a second time so the freshly re-synced skills, commands, and agents are discovered.
 
 If you pinned a range like `@3` instead, the spec string never changes, so the cache entry must be cleared by hand before restarting:

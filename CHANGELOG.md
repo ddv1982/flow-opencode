@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-06-13
+
+A missing Flow backend is now a stop condition in the skills, not a silent downgrade
+
+A real `/flow-auto` run in an environment where the plugin had not loaded showed the gap: the slash commands and skills are markdown files OpenCode discovers from disk, so they keep working even when the `flow_*` tools are absent — and with no instruction for that case, the model improvised an ad-hoc unrecorded review that looked like success while recording no session, plan, evidence, or decision.
+
+All four skills now treat missing `flow_*` tools as a stop-and-tell-the-user condition: the `flow` driving loop gets it as the first entry in its stop list (including the hint that a project-local `plugin` array overrides the global one), and `flow-plan`, `flow-run`, and `flow-review` each get a matching line at the point where they would first need their tool — each can be entered directly through its command without the driving loop. The instruction is explicit that substituting an unrecorded workflow is never acceptable.
+
+Skill content only; no plugin code changes. Bump the pin and restart twice so the re-synced skills are picked up.
+
 ## [3.2.0] - 2026-06-13
 
 Stale installs become visible: a passive update notice, the running version in `/flow-status`, and documented update steps
