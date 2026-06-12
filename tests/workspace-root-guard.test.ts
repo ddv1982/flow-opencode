@@ -10,10 +10,10 @@ import {
 import {
 	closeSession,
 	createSession,
-	ensureWorkspace,
 	listSessionHistory,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
+import { writeSessionFile } from "../src/runtime/session-workspace";
 
 async function makeTempDir(prefix: string) {
 	return mkdtemp(join(tmpdir(), prefix));
@@ -89,13 +89,16 @@ describe("workspace root guards", () => {
 		}
 	});
 
-	test("ensureWorkspace allows mutable roots under hidden home directories", async () => {
+	test("direct session writes allow mutable roots under hidden home directories", async () => {
 		const fakeHome = await makeTempDir("flow-home-");
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 
 		try {
 			await withHomeEnv(fakeHome, async () => {
-				await ensureWorkspace(hiddenWorkspace);
+				await writeSessionFile(
+					hiddenWorkspace,
+					createSession("Guard hidden workspace write"),
+				);
 				expect(existsSync(join(hiddenWorkspace, ".flow"))).toBe(true);
 			});
 		} finally {

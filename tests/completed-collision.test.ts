@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { getCompletedSessionsDir } from "../src/runtime/paths";
 import {
 	closeSession,
 	createSession,
 	loadStoredSession,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
+import { getCompletedSessionsDir } from "../src/runtime/paths";
 import * as time from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";
 
@@ -39,16 +39,20 @@ describe("completed timestamp handling", () => {
 
 		await saveSession(worktree, session);
 		const first = await closeSession(worktree, "completed");
-		expect(first).not.toBeNull();
+		if (!first || "blocked" in first) {
+			throw new Error("Expected the first close to complete.");
+		}
 
 		await saveSession(worktree, session);
 		const second = await closeSession(worktree, "completed");
-		expect(second).not.toBeNull();
+		if (!second || "blocked" in second) {
+			throw new Error("Expected the second close to complete.");
+		}
 
-		expect(first?.completedTo).toBe(
+		expect(first.completedTo).toBe(
 			`.flow/completed/${session.id}-20250405T194213.482`,
 		);
-		expect(second?.completedTo).toBe(
+		expect(second.completedTo).toBe(
 			`.flow/completed/${session.id}-20250405T194213.482-1`,
 		);
 

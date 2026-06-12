@@ -4,19 +4,23 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	FLOW_SKILL_BUNDLE_DIRECTORY,
-	resolveFlowSkillBundleFiles,
-} from "../src/adapters/opencode/skill-bundle";
+	FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER,
+	FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH,
+	FLOW_SKILL_BACKUP_FILENAME,
+	FLOW_SKILL_MARKER_FILENAME,
+	FLOW_SKILLS_DIRECTORY,
+	parseFlowSkillFileHashes,
+	parseFlowSkillFolderMarker,
+	sha256,
+} from "../src/distribution/skill-markers";
 import {
-	FLOW_PLUGIN_FILENAME,
-	FLOW_PLUGIN_OWNERSHIP_HEADER,
-	INSTALL_USAGE,
-	installBuiltPlugin,
-	resolveInstallTarget,
-	runInstallCommand,
-	runUninstallCommand,
-	UNINSTALL_USAGE,
-} from "../src/installer";
+	detectPreNpmFlowPlugin,
+	FLOW_SKILL_DEFINITIONS,
+	type FlowSkillDefinition,
+	inspectFlowSkillSyncState,
+	syncFlowSkills,
+} from "../src/distribution/skill-sync";
+import { uninstallFlow } from "../src/distribution/uninstall";
 
 const tempDirs: string[] = [];
 
@@ -24,30 +28,6 @@ function makeTempDir(): string {
 	const dir = mkdtempSync(join(tmpdir(), "flow-opencode-install-"));
 	tempDirs.push(dir);
 	return dir;
-}
-
-async function writeBuiltPlugin(
-	cwd: string,
-	content = "export default 'flow';\n",
-): Promise<string> {
-	const distDir = join(cwd, "dist");
-	const sourceFile = join(distDir, "index.js");
-	await mkdir(distDir, { recursive: true });
-	await writeFile(sourceFile, content, "utf8");
-	return sourceFile;
-}
-
-function getFlowSkillBundleFile(
-	cwd: string,
-	skillName: "flow-plan" | "flow-run" | "flow-review",
-) {
-	const file = resolveFlowSkillBundleFiles(cwd).find(
-		(item) => item.skill.name === skillName,
-	);
-	if (!file) {
-		throw new Error(`Missing generated skill fixture for ${skillName}.`);
-	}
-	return file;
 }
 
 afterEach(() => {
@@ -60,435 +40,364 @@ afterEach(() => {
 	}
 });
 
-describe("installer", () => {
-	test("preserves package and OpenCode install stability surfaces", async () => {
+function skillFolder(homeDir: string, name: string): string {
+	return join(homeDir, FLOW_SKILLS_DIRECTORY, name);
+}
+
+function skillPath(homeDir: string, name: string): string {
+	return join(skillFolder(homeDir, name), "SKILL.md");
+}
+
+function markerPath(homeDir: string, name: string): string {
+	return join(skillFolder(homeDir, name), FLOW_SKILL_MARKER_FILENAME);
+}
+
+function firstSkill(): FlowSkillDefinition {
+	const definition = FLOW_SKILL_DEFINITIONS[0];
+	if (!definition) {
+		throw new Error("Missing Flow skill definitions.");
+	}
+	return definition;
+}
+
+function skillDocumentContent(definition: FlowSkillDefinition): string {
+	const document = definition.files.find(
+		(file) => file.relativePath === "SKILL.md",
+	);
+	if (!document) {
+		throw new Error(`Flow skill ${definition.name} is missing SKILL.md`);
+	}
+	return document.content;
+}
+
+/**
+ * Builds a pre-npm-era generated SKILL.md: a managed payload plus a valid
+ * in-document hash-locked marker line, exactly as the pre-npm installer wrote.
+ */
+function renderPreNpmGeneratedDocument(name: string): string {
+	const payload = `# Old generated ${name} skill\n`;
+	const marker = `<!-- flow-opencode-generated-skill name=${name} version=1 hash=sha256:${sha256(payload)} -->`;
+	return `${payload.slice(0, -1)}\n${marker}\n`;
+}
+
+describe("npm distribution stability surfaces", () => {
+	test("package.json keeps the npm plugin and bin contract", async () => {
 		const packageJson = JSON.parse(
 			await readFile(join(import.meta.dir, "..", "package.json"), "utf8"),
 		) as {
 			name: string;
 			main: string;
 			exports: Record<string, string>;
+			bin: Record<string, string>;
+			files: string[];
+			dependencies: Record<string, string>;
 		};
-		const homeDir = "/tmp/flow-home";
 
 		expect(packageJson.name).toBe("opencode-plugin-flow");
 		expect(packageJson.main).toBe("dist/index.js");
 		expect(packageJson.exports).toEqual({ ".": "./dist/index.js" });
-		expect(FLOW_PLUGIN_FILENAME).toBe("flow.js");
-		expect(resolveInstallTarget({ homeDir })).toBe(
-			join(homeDir, ".config", "opencode", "plugins", "flow.js"),
+		expect(packageJson.bin).toEqual({
+			"opencode-plugin-flow": "./dist/cli.js",
+		});
+		expect(packageJson.files).toContain("dist");
+		expect(Object.keys(packageJson.dependencies)).toEqual(["zod"]);
+		expect(FLOW_SKILLS_DIRECTORY).toBe(join(".config", "opencode", "skills"));
+		expect(FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH).toBe(
+			join(".config", "opencode", "plugins", "flow.js"),
 		);
-		expect(FLOW_SKILL_BUNDLE_DIRECTORY).toBe(
-			join(".config", "opencode", "skills"),
+	});
+
+	test("embeds the four hand-authored skills with their reference files", () => {
+		expect(FLOW_SKILL_DEFINITIONS.map((definition) => definition.name)).toEqual(
+			["flow", "flow-plan", "flow-run", "flow-review"],
 		);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			expect(
+				definition.files.some((file) => file.relativePath === "SKILL.md"),
+			).toBe(true);
+			for (const file of definition.files) {
+				expect(file.content.length).toBeGreaterThan(0);
+			}
+		}
+	});
+});
+
+describe("skill sync", () => {
+	test("installs all bundled skill files with per-file marker hashes on a fresh home", async () => {
+		const homeDir = makeTempDir();
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		expect(results.map((result) => result.action)).toEqual(
+			FLOW_SKILL_DEFINITIONS.map(() => "installed"),
+		);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			const folder = skillFolder(homeDir, definition.name);
+			for (const file of definition.files) {
+				const content = await readFile(
+					join(folder, ...file.relativePath.split("/")),
+					"utf8",
+				);
+				expect(content).toBe(file.content);
+			}
+
+			const markerContent = await readFile(
+				markerPath(homeDir, definition.name),
+				"utf8",
+			);
+			const marker = parseFlowSkillFolderMarker(markerContent);
+			expect(marker?.version).toBe("3.0.0");
+			expect(marker?.hash).toBe(sha256(skillDocumentContent(definition)));
+
+			const fileHashes = parseFlowSkillFileHashes(markerContent);
+			for (const file of definition.files) {
+				expect(fileHashes.get(file.relativePath)).toBe(sha256(file.content));
+			}
+		}
+	});
+
+	test("is idempotent: a second sync reports unchanged and stays synced", async () => {
+		const homeDir = makeTempDir();
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		expect(results.map((result) => result.action)).toEqual(
+			FLOW_SKILL_DEFINITIONS.map(() => "unchanged"),
+		);
+		const state = await inspectFlowSkillSyncState(homeDir);
+		expect(state.map((entry) => entry.state)).toEqual(
+			FLOW_SKILL_DEFINITIONS.map(() => "synced"),
+		);
+	});
+
+	test("reports stale skills after a local edit and missing skills before any sync", async () => {
+		const homeDir = makeTempDir();
+		const name = firstSkill().name;
+
+		const beforeSync = await inspectFlowSkillSyncState(homeDir);
+		expect(beforeSync.map((entry) => entry.state)).toEqual(
+			FLOW_SKILL_DEFINITIONS.map(() => "missing"),
+		);
+
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		await writeFile(skillPath(homeDir, name), "# Edited\n", "utf8");
+
+		const state = await inspectFlowSkillSyncState(homeDir);
+		expect(state.find((entry) => entry.name === name)?.state).toBe("stale");
+	});
+
+	test("backs up a user-edited SKILL.md before replacing it", async () => {
+		const homeDir = makeTempDir();
+		const definition = firstSkill();
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		const edited = "# My customized Flow skill\n";
+		await writeFile(skillPath(homeDir, definition.name), edited, "utf8");
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const result = results.find((entry) => entry.name === definition.name);
+		expect(result?.action).toBe("updated_with_backup");
+		const backup = await readFile(
+			join(skillFolder(homeDir, definition.name), FLOW_SKILL_BACKUP_FILENAME),
+			"utf8",
+		);
+		expect(backup).toBe(edited);
+		const content = await readFile(skillPath(homeDir, definition.name), "utf8");
+		expect(content).toBe(skillDocumentContent(definition));
+	});
+
+	test("backs up a user-edited reference file next to itself before replacing it", async () => {
+		const homeDir = makeTempDir();
+		const definition = FLOW_SKILL_DEFINITIONS.find((entry) =>
+			entry.files.some((file) => file.relativePath !== "SKILL.md"),
+		);
+		if (!definition) {
+			throw new Error("Expected at least one skill with reference files.");
+		}
+		const reference = definition.files.find(
+			(file) => file.relativePath !== "SKILL.md",
+		);
+		if (!reference) {
+			throw new Error("Expected a reference file.");
+		}
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		const referencePath = join(
+			skillFolder(homeDir, definition.name),
+			...reference.relativePath.split("/"),
+		);
+		const edited = "# Edited reference\n";
+		await writeFile(referencePath, edited, "utf8");
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const result = results.find((entry) => entry.name === definition.name);
+		expect(result?.action).toBe("updated_with_backup");
+		expect(await readFile(`${referencePath}.backup`, "utf8")).toBe(edited);
+		expect(await readFile(referencePath, "utf8")).toBe(reference.content);
+	});
+
+	test("never touches a skill folder without a Flow marker", async () => {
+		const homeDir = makeTempDir();
+		const name = firstSkill().name;
+		const userContent = "---\nname: flow\n---\nUser-managed skill.\n";
+		await mkdir(skillFolder(homeDir, name), { recursive: true });
+		await writeFile(skillPath(homeDir, name), userContent, "utf8");
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const result = results.find((entry) => entry.name === name);
+		expect(result?.action).toBe("skipped_foreign");
+		expect(await readFile(skillPath(homeDir, name), "utf8")).toBe(userContent);
+		expect(existsSync(markerPath(homeDir, name))).toBe(false);
+		const state = await inspectFlowSkillSyncState(homeDir);
+		expect(state.find((entry) => entry.name === name)?.state).toBe("foreign");
+	});
+
+	test("adopts a pristine pre-npm hash-locked install without creating a backup", async () => {
+		const homeDir = makeTempDir();
+		const definition = firstSkill();
+		await mkdir(skillFolder(homeDir, definition.name), { recursive: true });
+		await writeFile(
+			skillPath(homeDir, definition.name),
+			renderPreNpmGeneratedDocument(definition.name),
+			"utf8",
+		);
+
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const result = results.find((entry) => entry.name === definition.name);
+		expect(result?.action).toBe("updated");
+		const marker = parseFlowSkillFolderMarker(
+			await readFile(markerPath(homeDir, definition.name), "utf8"),
+		);
+		expect(marker?.version).toBe("3.0.0");
 		expect(
-			resolveFlowSkillBundleFiles(homeDir).map((file) => file.relativePath),
-		).toEqual([
-			join(FLOW_SKILL_BUNDLE_DIRECTORY, "flow-plan", "SKILL.md"),
-			join(FLOW_SKILL_BUNDLE_DIRECTORY, "flow-run", "SKILL.md"),
-			join(FLOW_SKILL_BUNDLE_DIRECTORY, "flow-review", "SKILL.md"),
-		]);
-	});
-
-	test("runInstallCommand accepts help and rejects unknown arguments", async () => {
-		const logs: string[] = [];
-
-		await runInstallCommand(["--help"], {
-			build: async () => {
-				throw new Error("help must not build");
-			},
-			logger: (message) => logs.push(message),
-		});
-
-		expect(logs).toEqual([INSTALL_USAGE]);
-		await expect(
-			runInstallCommand(["--unknown"], {
-				build: async () => {},
-			}),
-		).rejects.toThrow("Unknown argument");
-		await expect(
-			runInstallCommand(["--project"], {
-				build: async () => {},
-			}),
-		).rejects.toThrow("Unknown argument: --project");
-	});
-
-	test("resolveInstallTarget defaults to the global OpenCode plugin directory", () => {
-		const homeDir = "/tmp/flow-home";
-
-		expect(resolveInstallTarget({ homeDir })).toBe(
-			join(homeDir, ".config", "opencode", "plugins", FLOW_PLUGIN_FILENAME),
+			existsSync(
+				join(skillFolder(homeDir, definition.name), FLOW_SKILL_BACKUP_FILENAME),
+			),
+		).toBe(false);
+		expect(await readFile(skillPath(homeDir, definition.name), "utf8")).toBe(
+			skillDocumentContent(definition),
 		);
 	});
 
-	test("installBuiltPlugin creates directories and copies the built artifact", async () => {
-		const sourceRoot = makeTempDir();
-		const targetRoot = makeTempDir();
-		const sourceFile = await writeBuiltPlugin(sourceRoot, "flow-build\n");
-		const destinationFile = join(
-			targetRoot,
-			".config",
-			"opencode",
-			"plugins",
-			FLOW_PLUGIN_FILENAME,
-		);
-		const logs: string[] = [];
-
-		const installedPath = await installBuiltPlugin({
-			sourceFile,
-			destinationFile,
-			logger: (message) => logs.push(message),
-		});
-
-		expect(installedPath).toBe(destinationFile);
-		expect(await readFile(destinationFile, "utf8")).toBe(
-			`${FLOW_PLUGIN_OWNERSHIP_HEADER}flow-build\n`,
-		);
-		expect(logs).toEqual([`Installed Flow plugin to ${destinationFile}`]);
-	});
-
-	test("runInstallCommand installs the global plugin and generated global skills", async () => {
-		const cwd = makeTempDir();
+	test("backs up an edited pre-npm hash-locked install before replacing it", async () => {
 		const homeDir = makeTempDir();
-		const logs: string[] = [];
-		let buildCalls = 0;
-		const canonicalPath = resolveInstallTarget({ homeDir });
+		const definition = firstSkill();
+		const edited = `${renderPreNpmGeneratedDocument(definition.name)}\nUser note appended.\n`;
+		await mkdir(skillFolder(homeDir, definition.name), { recursive: true });
+		await writeFile(skillPath(homeDir, definition.name), edited, "utf8");
 
-		await writeBuiltPlugin(cwd, "global-install\n");
+		const results = await syncFlowSkills({ homeDir, version: "3.0.0" });
 
-		const installedPath = await runInstallCommand([], {
-			cwd,
-			homeDir,
-			build: async () => {
-				buildCalls += 1;
-			},
-			logger: (message) => logs.push(message),
-		});
-
-		expect(buildCalls).toBe(1);
-		expect(installedPath).toBe(canonicalPath);
-		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
-			`${FLOW_PLUGIN_OWNERSHIP_HEADER}global-install\n`,
+		const result = results.find((entry) => entry.name === definition.name);
+		expect(result?.action).toBe("updated_with_backup");
+		const backup = await readFile(
+			join(skillFolder(homeDir, definition.name), FLOW_SKILL_BACKUP_FILENAME),
+			"utf8",
 		);
-		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
-			await expect(readFile(file.absolutePath, "utf8")).resolves.toBe(
-				file.content,
-			);
-		}
-		expect(existsSync(join(cwd, ".flow"))).toBe(false);
-		expect(existsSync(join(cwd, ".opencode"))).toBe(false);
-		expect(logs).toEqual([
-			`Installed Flow plugin to ${canonicalPath}`,
-			`Installed Flow skills to ${join(homeDir, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
-		]);
+		expect(backup).toBe(edited);
 	});
+});
 
-	test("runInstallCommand ignores cwd for generated skills and installs them globally", async () => {
-		const cwd = makeTempDir();
+describe("uninstall", () => {
+	test("removes pristine Flow skills, marker files, and the pre-npm plugin copy", async () => {
 		const homeDir = makeTempDir();
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		await writeBuiltPlugin(cwd, "global-install\n");
-
-		const installedPath = await runInstallCommand([], {
-			cwd,
-			homeDir,
-			build: async () => {},
-			logger: () => {},
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
+		await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
+			recursive: true,
 		});
-
-		expect(installedPath).toBe(canonicalPath);
-		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
-			await expect(readFile(file.absolutePath, "utf8")).resolves.toBe(
-				file.content,
-			);
-		}
-		for (const file of resolveFlowSkillBundleFiles(cwd)) {
-			expect(existsSync(file.absolutePath)).toBe(false);
-		}
-	});
-
-	test("runInstallCommand preflights skill conflicts before global plugin mutation", async () => {
-		const cwd = makeTempDir();
-		const homeDir = makeTempDir();
-		let buildCalls = 0;
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		const flowPlanSkill = getFlowSkillBundleFile(homeDir, "flow-plan");
-		await mkdir(join(flowPlanSkill.absolutePath, ".."), { recursive: true });
 		await writeFile(
-			flowPlanSkill.absolutePath,
-			"# user-managed flow-plan\n",
+			preNpmPath,
+			`${FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER}export default 'flow';\n`,
+			"utf8",
+		);
+		const logs: string[] = [];
+
+		const result = await uninstallFlow({
+			homeDir,
+			logger: (message) => logs.push(message),
+		});
+
+		expect(result.removedSkills).toHaveLength(FLOW_SKILL_DEFINITIONS.length);
+		expect(result.removedPreNpmPlugin).toBe(preNpmPath);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			expect(existsSync(skillFolder(homeDir, definition.name))).toBe(false);
+		}
+		expect(existsSync(preNpmPath)).toBe(false);
+		expect(logs.join("\n")).toContain(
+			'remove "opencode-plugin-flow" from the plugin array in opencode.json',
+		);
+	});
+
+	test("keeps user-edited Flow skills and foreign plugin files", async () => {
+		const homeDir = makeTempDir();
+		const name = firstSkill().name;
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		const edited = "# Customized\n";
+		await writeFile(skillPath(homeDir, name), edited, "utf8");
+		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
+		await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
+			recursive: true,
+		});
+		await writeFile(preNpmPath, "// user-managed plugin\n", "utf8");
+
+		const result = await uninstallFlow({ homeDir });
+
+		expect(result.keptUserEditedSkills).toEqual([skillFolder(homeDir, name)]);
+		expect(await readFile(skillPath(homeDir, name), "utf8")).toBe(edited);
+		expect(result.keptForeignPreNpmPlugin).toBe(preNpmPath);
+		expect(existsSync(preNpmPath)).toBe(true);
+	});
+
+	test("ignores non-Flow skill folders entirely", async () => {
+		const homeDir = makeTempDir();
+		const foreignFolder = join(homeDir, FLOW_SKILLS_DIRECTORY, "my-skill");
+		await mkdir(foreignFolder, { recursive: true });
+		await writeFile(join(foreignFolder, "SKILL.md"), "# Mine\n", "utf8");
+
+		const result = await uninstallFlow({ homeDir });
+
+		expect(result.removedSkills).toEqual([]);
+		expect(existsSync(join(foreignFolder, "SKILL.md"))).toBe(true);
+	});
+
+	test("dry-run removes nothing", async () => {
+		const homeDir = makeTempDir();
+		await syncFlowSkills({ homeDir, version: "3.0.0" });
+
+		const result = await uninstallFlow({ homeDir, dryRun: true });
+
+		expect(result.removedSkills).toHaveLength(FLOW_SKILL_DEFINITIONS.length);
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			expect(existsSync(skillPath(homeDir, definition.name))).toBe(true);
+		}
+	});
+});
+
+describe("pre-npm plugin detection", () => {
+	test("reports a Flow-owned stale pre-npm copy", async () => {
+		const homeDir = makeTempDir();
+		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
+		await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
+			recursive: true,
+		});
+		await writeFile(
+			preNpmPath,
+			`${FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER}export default 'flow';\n`,
 			"utf8",
 		);
 
-		await expect(
-			runInstallCommand([], {
-				cwd,
-				homeDir,
-				build: async () => {
-					buildCalls += 1;
-				},
-				logger: () => {},
-			}),
-		).rejects.toThrow("Refusing to overwrite user-managed OpenCode skill");
-
-		expect(buildCalls).toBe(0);
-		expect(existsSync(canonicalPath)).toBe(false);
-		await expect(readFile(flowPlanSkill.absolutePath, "utf8")).resolves.toBe(
-			"# user-managed flow-plan\n",
-		);
+		expect(await detectPreNpmFlowPlugin(homeDir)).toEqual({
+			path: preNpmPath,
+			flowOwned: true,
+		});
 	});
 
-	test("runInstallCommand preflights unowned plugin conflicts before build or skill writes", async () => {
-		const cwd = makeTempDir();
+	test("returns null when no stale pre-npm copy exists", async () => {
 		const homeDir = makeTempDir();
-		let buildCalls = 0;
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		await mkdir(join(canonicalPath, ".."), { recursive: true });
-		await writeFile(canonicalPath, "// not flow managed\n", "utf8");
-
-		await expect(
-			runInstallCommand([], {
-				cwd,
-				homeDir,
-				build: async () => {
-					buildCalls += 1;
-				},
-				logger: () => {},
-			}),
-		).rejects.toThrow("Refusing to overwrite user-managed OpenCode plugin");
-
-		expect(buildCalls).toBe(0);
-		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
-			"// not flow managed\n",
-		);
-		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
-			expect(existsSync(file.absolutePath)).toBe(false);
-		}
-	});
-
-	test("runInstallCommand does not install the global plugin when skill installation fails", async () => {
-		const cwd = makeTempDir();
-		const homeDir = makeTempDir();
-		let buildCalls = 0;
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		const flowPlanSkill = getFlowSkillBundleFile(homeDir, "flow-plan");
-		await writeBuiltPlugin(cwd, "global-install\n");
-
-		await expect(
-			runInstallCommand([], {
-				cwd,
-				homeDir,
-				build: async () => {
-					buildCalls += 1;
-					await mkdir(join(flowPlanSkill.absolutePath, ".."), {
-						recursive: true,
-					});
-					await writeFile(
-						flowPlanSkill.absolutePath,
-						"# user-managed flow-plan\n",
-						"utf8",
-					);
-				},
-				logger: () => {},
-			}),
-		).rejects.toThrow("Refusing to overwrite user-managed OpenCode skill");
-
-		expect(buildCalls).toBe(1);
-		expect(existsSync(canonicalPath)).toBe(false);
-		await expect(readFile(flowPlanSkill.absolutePath, "utf8")).resolves.toBe(
-			"# user-managed flow-plan\n",
-		);
-	});
-
-	test("installBuiltPlugin reports a clear error when the build artifact is missing", async () => {
-		const destinationFile = join(makeTempDir(), FLOW_PLUGIN_FILENAME);
-
-		await expect(
-			installBuiltPlugin({
-				sourceFile: join(makeTempDir(), "dist", "index.js"),
-				destinationFile,
-				logger: () => {},
-			}),
-		).rejects.toThrow("Run `bun run build` first");
-	});
-
-	test("installBuiltPlugin refuses to overwrite an unowned flow.js", async () => {
-		const sourceRoot = makeTempDir();
-		const targetRoot = makeTempDir();
-		const sourceFile = await writeBuiltPlugin(sourceRoot, "flow-build\n");
-		const destinationFile = join(
-			targetRoot,
-			".config",
-			"opencode",
-			"plugins",
-			FLOW_PLUGIN_FILENAME,
-		);
-		await mkdir(join(destinationFile, ".."), { recursive: true });
-		await writeFile(
-			destinationFile,
-			"// stale or third-party flow.js\n",
-			"utf8",
-		);
-
-		await expect(
-			installBuiltPlugin({
-				sourceFile,
-				destinationFile,
-				logger: () => {},
-			}),
-		).rejects.toThrow("Refusing to overwrite user-managed OpenCode plugin");
-
-		expect(await readFile(destinationFile, "utf8")).toBe(
-			"// stale or third-party flow.js\n",
-		);
-	});
-
-	test("installBuiltPlugin can replace an existing Flow-owned flow.js", async () => {
-		const sourceRoot = makeTempDir();
-		const targetRoot = makeTempDir();
-		const sourceFile = await writeBuiltPlugin(sourceRoot, "flow-build\n");
-		const destinationFile = join(
-			targetRoot,
-			".config",
-			"opencode",
-			"plugins",
-			FLOW_PLUGIN_FILENAME,
-		);
-		await mkdir(join(destinationFile, ".."), { recursive: true });
-		await writeFile(
-			destinationFile,
-			`${FLOW_PLUGIN_OWNERSHIP_HEADER}old-flow-build\n`,
-			"utf8",
-		);
-
-		const installedPath = await installBuiltPlugin({
-			sourceFile,
-			destinationFile,
-			logger: () => {},
-		});
-
-		expect(installedPath).toBe(destinationFile);
-		expect(await readFile(destinationFile, "utf8")).toBe(
-			`${FLOW_PLUGIN_OWNERSHIP_HEADER}flow-build\n`,
-		);
-	});
-
-	test("runUninstallCommand removes the installed canonical plugin file and generated skills", async () => {
-		const cwd = makeTempDir();
-		const homeDir = makeTempDir();
-		const logs: string[] = [];
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		await writeBuiltPlugin(cwd, "installed\n");
-		await runInstallCommand([], {
-			cwd,
-			homeDir,
-			build: async () => {},
-			logger: () => {},
-		});
-
-		const removedPath = await runUninstallCommand([], {
-			homeDir,
-			logger: (message) => logs.push(message),
-		});
-
-		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
-		expect(removedPath).toBe(canonicalPath);
-		for (const file of resolveFlowSkillBundleFiles(homeDir)) {
-			expect(existsSync(file.absolutePath)).toBe(false);
-		}
-		expect(logs).toEqual([
-			`Removed Flow skills from ${join(homeDir, FLOW_SKILL_BUNDLE_DIRECTORY)}`,
-			`Removed Flow plugin from ${canonicalPath}`,
-		]);
-	});
-
-	test("runUninstallCommand removes an outdated canonical flow.js", async () => {
-		const homeDir = makeTempDir();
-		const logs: string[] = [];
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		await mkdir(join(canonicalPath, ".."), { recursive: true });
-		await writeFile(canonicalPath, "// stale outdated flow plugin\n", "utf8");
-
-		const removedPath = await runUninstallCommand([], {
-			homeDir,
-			logger: (message) => logs.push(message),
-		});
-
-		await expect(readFile(canonicalPath, "utf8")).rejects.toThrow();
-		expect(removedPath).toBe(canonicalPath);
-		expect(logs).toEqual([`Removed Flow plugin from ${canonicalPath}`]);
-	});
-
-	test("runUninstallCommand preflights skill conflicts before global plugin removal", async () => {
-		const cwd = makeTempDir();
-		const homeDir = makeTempDir();
-		const canonicalPath = resolveInstallTarget({ homeDir });
-		await mkdir(join(canonicalPath, ".."), { recursive: true });
-		await writeFile(
-			canonicalPath,
-			`${FLOW_PLUGIN_OWNERSHIP_HEADER}installed\n`,
-			"utf8",
-		);
-		await writeBuiltPlugin(cwd, "installed\n");
-		await runInstallCommand([], {
-			cwd,
-			homeDir,
-			build: async () => {},
-			logger: () => {},
-		});
-		const flowRunSkill = getFlowSkillBundleFile(homeDir, "flow-run");
-		await writeFile(
-			flowRunSkill.absolutePath,
-			`${await readFile(flowRunSkill.absolutePath, "utf8")}\nuser edit\n`,
-			"utf8",
-		);
-
-		await expect(
-			runUninstallCommand([], {
-				homeDir,
-				logger: () => {},
-			}),
-		).rejects.toThrow("Refusing to remove user-edited OpenCode skill");
-
-		await expect(readFile(canonicalPath, "utf8")).resolves.toBe(
-			`${FLOW_PLUGIN_OWNERSHIP_HEADER}installed\n`,
-		);
-		expect(existsSync(flowRunSkill.absolutePath)).toBe(true);
-	});
-
-	test("runUninstallCommand accepts help and ignores missing files", async () => {
-		const homeDir = makeTempDir();
-		const logs: string[] = [];
-
-		await expect(
-			runUninstallCommand(["--project"], { homeDir }),
-		).rejects.toThrow("Unknown argument: --project");
-		await expect(
-			runInstallCommand(["--with-skills"], {
-				homeDir,
-				build: async () => {},
-			}),
-		).rejects.toThrow("Unknown argument");
-		await expect(
-			runInstallCommand(["--skills-only"], {
-				homeDir,
-				build: async () => {},
-			}),
-		).rejects.toThrow("Unknown argument");
-
-		const removedPath = await runUninstallCommand([], {
-			homeDir,
-			logger: (message) => logs.push(message),
-		});
-
-		expect(removedPath).toBeUndefined();
-
-		logs.length = 0;
-		await runUninstallCommand(["--help"], {
-			homeDir,
-			logger: (message) => logs.push(message),
-		});
-
-		expect(logs).toEqual([UNINSTALL_USAGE]);
+		expect(await detectPreNpmFlowPlugin(homeDir)).toBeNull();
 	});
 });

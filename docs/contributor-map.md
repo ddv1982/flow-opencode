@@ -1,221 +1,93 @@
 # Contributor Map
 
-Start with [`docs/maintainer-contract.md`](maintainer-contract.md). It is the non-historical ownership map for commands, tools, state paths, and release-critical invariants.
+Start with [`docs/maintainer-contract.md`](maintainer-contract.md) — it defines the hard invariants, the frozen persistence surfaces, and the skills-vs-code split. This map points each area of the codebase at its files, risks, and checks.
 
-## Runtime schema
+The layout in one line: `skills/` is the brain, `src/runtime/` is the safe state backend, `src/adapters/opencode/` is a thin adapter, `src/distribution/` ships and syncs it.
 
-Risk: high
+## Skills (`skills/`)
 
-Read first:
+Risk: medium — wrong guidance degrades output quality but cannot corrupt state.
 
-- `docs/maintainer-contract.md`
-- `src/runtime/schema.ts`
-- `tests/runtime/worker-result-contracts.test.ts tests/runtime/final-completion-gates.test.ts tests/runtime/final-review-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts`
-- `tests/schema-equivalence.test-d.ts`
+- `skills/flow/SKILL.md` — the driving loop, stop conditions, recovery playbook
+- `skills/flow-plan/SKILL.md` + `references/` — decomposition, sizing, approval criteria
+- `skills/flow-run/SKILL.md` + `references/` — one-feature discipline, validation evidence standards
+- `skills/flow-review/SKILL.md` + `references/` — review depth, finding taxonomy, report format
 
-Required checks:
-
-- `bun run typecheck`
-- `bun test tests/runtime/worker-result-contracts.test.ts tests/runtime/plan-and-tool-schema-contracts.test.ts tests/schema-equivalence.test-d.ts`
-- `bun run check:dependency-contract` when tool payload shape may be affected
+Required checks: tool-name-coverage test; careful diff review (skill quality is review-owned).
 
 Do not:
 
-- Change persisted state shape without migration/recovery consideration.
-- Add cast bridges around schema mismatch without reviewing the `zod` / plugin SDK alignment.
+- Instruct direct edits of `.flow/**` — every state change goes through a registered tool.
+- Reference tools, paths, or behavior the runtime does not provide.
+- Reintroduce generated or hash-locked skill content; these files are hand-authored.
 
-## Simplification and change-map playbook
+## Runtime: schema, persistence, invariants (`src/runtime/`)
 
-Risk: medium-high
+Risk: high — this is the half that must never lie or lose data.
 
-Before editing, read the runtime mental model and gate matrix in `docs/maintainer-contract.md`, then capture `bun run report:runtime-simplification-metrics` and identify one target hotspot or projection boundary. Prefer a stable facade plus moved internals over public API churn: keep existing exports, tool names, schemas, docs rows, generated guidance/projections, and persisted `.flow/**` shapes unchanged unless the maintainer contract explicitly changes.
+- `src/runtime/schema.ts` — session and tool-payload schemas (persisted schema v1 is frozen)
+- `src/runtime/transitions/` — state transitions and the hard invariants
+- `src/runtime/domain/` — workflow policy helpers; invariant catalog in `semantic-invariants.ts`
+- `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts` — persistence, locking, activation, path-traversal and workspace-root guards
+- `src/runtime/application/` — session mutation actions behind the tool surface
+- rendering of derived markdown views beside each session
 
-Required checks by slice:
-
-- Runtime hotspot extraction: targeted behavior tests for the touched area, `bun run report:runtime-simplification-metrics`, `bun run check:architecture-seams:enforce`, and `bun run typecheck`.
-- Adapter projection changes: read `docs/architecture/role-protocol-projections.md` for the strict descriptor metadata vs tolerant public host summary boundary, then run `bun test tests/descriptor-family-parity.test.ts tests/docs-tool-parity.test.ts tests/config/tool-schemas.test.ts`, `bun run check:generated-drift`, and `bun run typecheck`.
-- Persistence-boundary changes: the session/path checks listed below plus `bun run check:architecture-seams:enforce`.
-
-Record before/after metric deltas in the PR and call out any accepted file-count tradeoff. Treat `runtime.subdomains` as diagnostic evidence only; seam enforcement remains the hard boundary gate.
-
-## Runtime transitions and workflow policy
-
-Risk: high
-
-Read first:
-
-- `src/runtime/transitions/`
-- `src/runtime/domain/`
-- `docs/architecture/invariant-matrix.md`
-- `docs/architecture/strictness-contract.md`
-
-Required checks:
-
-- `bun run gate:completion-lane`
-- `bun test tests/runtime.test.ts tests/runtime-replanning.test.ts tests/runtime-actionable-metadata.test.ts tests/runtime-recovery.test.ts tests/runtime/semantic-invariants.test.ts tests/transitions-consolidation.test.ts`
+Required checks: invariant/transition/persistence tests under `tests/`, the v2-session resume fixture, `bun run typecheck`.
 
 Do not:
 
-- Let prompts define transition behavior that runtime does not enforce.
-- Loosen completion/reviewer gates without updating contract tests and release notes.
+- Change persisted state shape without migration/recovery consideration (v2 sessions must resume).
+- Weaken a hard invariant, locking, or a path guard without updating the maintainer contract and its direct tests.
+- Grow the invariant set back into a gate matrix — judgment belongs in skill rubrics.
 
-## Tool schemas and OpenCode boundary
+## Adapter: plugin entry and tool surface (`src/adapters/opencode/`)
 
-Risk: high
+Risk: medium-high — public names and payload shapes are contracts.
 
-Read first:
+- `src/adapters/opencode/plugin.ts` — plugin entry: config hook (command/agent injection), tool registration, compaction hook
+- `src/adapters/opencode/tools.ts`, `src/adapters/opencode/tool-surface/` — the 7 tools and their zod arg shapes (no v2 tool-name aliases; the new names are the whole surface)
+- `src/adapters/opencode/sdk.ts` — the `@opencode-ai/plugin` boundary
 
-- `src/adapters/opencode/tool-surface/schemas.ts`
-- `src/adapters/opencode/tool-surface/runtime-tools/`
-- `src/adapters/opencode/tool-surface/session-tools/`
-- `src/adapters/opencode/tool-guidance.generated.ts`
-
-Required checks:
-
-- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/runtime-tools.test.ts tests/runtime-tools-metadata.test.ts tests/docs-tool-parity.test.ts`
-- `bun run typecheck`
+Required checks: tool/schema tests, tool-name-coverage test, `bun run typecheck`.
 
 Do not:
 
-- Rename tools casually; tool names are prompt and operator contracts.
-- Change direct `tool(...)` arg shapes without dependency-contract verification.
+- Rename tools casually — names are referenced by skills, users, and docs; change all together.
+- Put workflow policy in a tool — tools validate and dispatch to runtime actions.
+- Wrap SDK `tool(...)` args in anything other than raw zod shapes.
+- Loosen the read-only enforcement on the `flow-reviewer` agent (native per-agent permissions, not prompt text).
 
-## Prompts, command templates, skills, and mode contracts
+## Distribution: skill sync, uninstall, packaging (`src/distribution/`, `src/cli.ts`)
 
-Risk: medium-high
+Risk: medium-high — this code writes to the user's home directory.
 
-Read first:
+- `src/distribution/skill-sync.ts` — idempotent startup sync of `skills/` into `~/.config/opencode/skills/`
+- `src/distribution/skill-markers.ts` — `.flow-skill-version` ownership markers (folder version plus a sha256 line per shipped file)
+- `src/distribution/uninstall.ts`, `src/cli.ts` — `bunx opencode-plugin-flow uninstall`
 
-- `src/prompts/mode-contracts.ts`
-- `src/prompts/commands.ts`
-- `src/prompts/agents.ts`
-- `src/prompts/skills.ts`
-- `src/prompts/generated/skill-docs.ts`
-- `src/adapters/opencode/skill-bundle.ts`
-- `src/audit/prompts/`
-
-Required checks:
-
-- `bun run eval:prompt-capture:check`
-- `bun run eval:review-capture:check` when `/flow-review` changes
-- `bun test tests/config/prompt-contracts.test.ts tests/config/skill-bundle.test.ts tests/mode-contracts.test.ts tests/protocol-parity.test.ts tests/prompt-snapshot.test.ts tests/prompt-mode-behavior-eval.test.ts tests/prompt-behavior-eval.test.ts`
+Required checks: `bun run build`, install smoke against the packed tarball (`bun run smoke:release`), install/uninstall tests.
 
 Do not:
 
-- Add a prompt-only workflow rule unless runtime already owns it or the runtime change ships with it.
-- Treat generated skills as runtime authorities; skills may reference existing tools and contracts but must not define new tools, state transitions, completion gates, persistence paths, review semantics, or `.flow/**` write behavior.
-- Remove public command/agent names or fallback contracts when slimming prompts.
-- Expand command/agent/skill surfaces during the surface freeze unless an explicit replacement/removal tradeoff is recorded.
+- Touch skill folders that lack the Flow marker — they belong to the user or another plugin.
+- Replace a user-edited Flow-owned file (SKILL.md or a `references/` file) without writing a `.backup` beside it first.
+- Let sync failures break plugin startup — sync is best-effort.
+- Write under `.flow/**` from any install/uninstall path.
 
-## Session persistence, paths, and workspace root handling
+## Tests (`tests/`)
 
-Risk: high
+Risk: medium.
 
-Read first:
-
-- `src/runtime/paths.ts`
-- `src/runtime/session*.ts`
-- `src/runtime/workspace-root.ts`
-- `README.md` state-path section
-
-Required checks:
-
-- `bun test tests/runtime-session-persistence.test.ts tests/runtime-tool-persistence.test.ts tests/runtime-execution-history.test.ts tests/session-history.test.ts tests/runtime/render-snapshot.test.ts tests/workspace-root-guard.test.ts tests/path-traversal.test.ts`
-
-Do not:
-
-- Introduce a new `.flow/**` path without updating `docs/maintainer-contract.md` and path traversal tests.
-- Treat rendered markdown docs as authoritative state.
-
-## Config injection, install, and release package
-
-Risk: medium-high
-
-Read first:
-
-- `src/config.ts`
-- `src/audit/config.ts`
-- `src/install-opencode.ts`
-- `src/installer.ts`
-- `src/adapters/opencode/skill-bundle.ts`
-- `scripts/cross-area/pack-invariants.mjs`
-
-Required checks:
-
-- `bun run build`
-- `bun run check:release-hygiene`
-- `bun run check:pack-invariants`
-- `bun run smoke:release` for the standard release-candidate asset/evidence path; the generated manual-live checklist is evidence scaffolding only, not proof of live validation
-- `bun run smoke:opencode` for lower-level automated OpenCode smoke runner diagnosis
-- Still perform manual live OpenCode UI validation before claiming live host coverage
-- `bun test tests/config/plugin-surface.test.ts tests/config/tool-schemas.test.ts tests/config/skill-bundle.test.ts tests/install.test.ts tests/cross-area/install-lifecycle.test.ts tests/smoke/dist-load.test.ts`
-Do not:
-
-- Ship debug-only artifacts in `src` or `dist`.
-- Add package files without updating pack/release invariants.
-- Overwrite user-edited `~/.config/opencode/skills/**` files silently or mutate the global plugin before skill-conflict preflight passes.
-
-## Performance-sensitive paths
-
-Risk: medium
-
-Read first:
-
-- `bench/BASELINE.md`
-- `bench/RESULTS.md`
-- `src/runtime/session-persistence.ts`
-- `src/runtime/render.ts`
-- `src/runtime/json/strict-object.ts`
-
-Required checks:
-
-- `bun run bench:smoke`
-- targeted tests for the changed path
-
-Do not:
-
-- Add repeated parse/normalize steps on hot save/render/schema paths without measurement.
-
-## Test organization
-
-Risk: medium
-
-Read first:
-
-- `tests/runtime.test.ts`
-- `tests/runtime-*.test.ts`
-- `tests/runtime/`
-- `tests/config/`
-
-Required checks:
-
-- Run the focused suite you add or move coverage into.
-- Run the previous broad suite plus the new focused suite when splitting tests.
-
-Do not:
-
-- Add unrelated behavior to broad catch-all files when a focused suite exists.
-- Split tests by implementation module when the review concern is behavioral contract ownership.
+Coverage is focused: hard invariants, transitions and recovery, persistence/locking/path safety, v2-session resume, tool shapes, install lifecycle. Add new coverage to the narrowest matching suite. Golden-transcript evals (model-driven, manual lane) own end-to-end skill effectiveness — do not try to test skill quality mechanically.
 
 ## Documentation and historical evidence
 
-Risk: medium
+Risk: low-medium.
 
-Read first:
-
-- `docs/maintainer-contract.md`
-- `docs/architecture/maintainer-risk-checklist.md`
-- `docs/investigations/`
-- `docs/releases/`
-
-Required checks:
-
-- `bun test tests/docs-tool-parity.test.ts tests/docs-semantic-parity.test.ts tests/docs-stale-reference-policy.test.ts`
-- Add the projection checks from the simplification playbook when docs describe OpenCode projection behavior.
-- Use the verification tiers in `docs/development.md` to decide whether focused docs checks are enough for the current slice or whether generated drift, runtime invariant, deep, or mainline readiness lanes are needed.
-- Compare historical version references with `package.json` before presenting them as current facts.
+- Current contracts: `docs/maintainer-contract.md`, `docs/development.md`, this file, `README.md`
+- Archives: `docs/releases/`, `docs/investigations/`, superseded plans under `docs/plans/`
 
 Do not:
 
-- Update prior investigation evidence as if it were current contract unless the evidence is re-run.
-- Leave historical docs unlabeled when they can be mistaken for current contracts.
+- Update archived investigations or superseded plans as if they were current contracts.
+- Leave historical docs unlabeled when they could be mistaken for current contracts.

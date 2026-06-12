@@ -1,16 +1,17 @@
-import { ReviewReportSchema } from "../../../audit/report-schema";
+import type { z as zod } from "zod";
 import type { WorkspaceContext } from "../../../runtime/application";
 import {
 	CLOSURE_KINDS,
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
+	REVIEWER_DECISION_STATUSES,
 } from "../../../runtime/constants";
 import {
 	FinalReviewerDecisionSchema as RuntimeFinalReviewerDecisionSchema,
-	FlowReviewRecordFeatureArgsSchema as RuntimeFlowReviewRecordFeatureArgsSchema,
 	OutcomeSchema as RuntimeOutcomeSchema,
 	PlanArgsSchema as RuntimePlanArgsSchema,
 	PlanningContextArgsSchema as RuntimePlanningContextArgsSchema,
+	ReviewerDecisionSchema as RuntimeReviewerDecisionSchema,
 	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
 	WorkerResultBaseSchema as RuntimeWorkerResultBaseSchema,
 } from "../../../runtime/schema";
@@ -28,234 +29,125 @@ export type ToolContext = WorkspaceContext &
 		metadata?: OpenCodeToolContext["metadata"];
 		ask?: OpenCodeToolContext["ask"];
 	};
+
 const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
 const featureIdSchema = z
 	.string()
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
+const sessionIdSchema = z
+	.string()
+	.min(1)
+	.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case");
 
+// flow_status
 export const FlowStatusArgsShape = {
 	view: FlowStatusViewSchema.optional(),
 };
-export const FlowDoctorArgsShape = {
-	view: FlowStatusViewSchema.optional(),
-};
-export const FlowHistoryArgsShape = {};
-export const FlowHistoryShowArgsShape = {
-	sessionId: z
-		.string()
-		.min(1)
-		.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case"),
-};
-export const FlowSessionActivateArgsShape = {
-	sessionId: z
-		.string()
-		.min(1)
-		.regex(FEATURE_ID_PATTERN, "Session ids must be lowercase kebab-case"),
-};
-export const FlowSessionCloseArgsShape = {
-	kind: z.enum(CLOSURE_KINDS),
-	summary: z.string().trim().min(1).optional(),
-};
-export const FlowPlanContextRecordArgsShape =
-	RuntimePlanningContextArgsSchema.shape;
+export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
 
-export const FlowPlanApplyArgsShape = {
-	plan: RuntimePlanArgsSchema,
-	planning: RuntimePlanningContextArgsSchema.optional(),
-};
-export const FlowRunCompleteFeatureArgsShape = {
-	...RuntimeWorkerResultBaseSchema.shape,
-	status: z.enum(["ok", "needs_input"]),
-	outcome: RuntimeOutcomeSchema.optional(),
-};
-export const FlowReviewRecordFeatureArgsShape =
-	RuntimeFlowReviewRecordFeatureArgsSchema.shape;
-export const FlowReviewRecordFinalArgsShape =
-	RuntimeFinalReviewerDecisionSchema.shape;
-export const FlowReviewRenderArgsShape = {
-	...ReviewReportSchema.shape,
-	view: z.enum(["human", "structured", "both"]).optional(),
-};
-export const FlowAutoPrepareArgsShape = {
-	argumentString: z.string().optional(),
-};
-export const FlowPlanStartArgsShape = {
+// flow_plan_save
+export const FlowPlanSaveArgsShape = {
 	goal: z.string().trim().min(1).optional(),
-	repoProfile: z.array(z.string().min(1)).optional(),
+	planning: RuntimePlanningContextArgsSchema.optional(),
+	plan: RuntimePlanArgsSchema.optional(),
 };
-export const FlowPlanContextRecordArgsSchema = RuntimePlanningContextArgsSchema;
-export const FlowPlanApplyArgsSchema = z
-	.object(FlowPlanApplyArgsShape)
-	.strict();
+export const FlowPlanSaveArgsSchema = z.object(FlowPlanSaveArgsShape);
+
+// flow_plan_approve
 export const FlowPlanApproveArgsShape = {
 	featureIds: z.array(featureIdSchema).optional(),
 };
-export const FlowPlanSelectArgsShape = {
-	featureIds: z.array(featureIdSchema),
-};
+export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
+
+// flow_run_start
 export const FlowRunStartArgsShape = {
 	featureId: featureIdSchema.optional(),
 };
-export const FlowResetFeatureArgsShape = {
-	featureId: featureIdSchema,
+export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
+
+// flow_feature_complete — either a worker completion payload or a reset request.
+export const FlowFeatureCompleteArgsShape = {
+	...RuntimeWorkerResultBaseSchema.partial().shape,
+	status: z.enum(["ok", "needs_input"]).optional(),
+	outcome: RuntimeOutcomeSchema.optional(),
+	reset: z.boolean().optional(),
+	featureId: featureIdSchema.optional(),
 };
 
-export const WorkerResultArgsSchema = RuntimeWorkerResultArgsSchema;
-export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
-export const FlowDoctorArgsSchema = z.object(FlowDoctorArgsShape);
-export const FlowHistoryArgsSchema = z.object(FlowHistoryArgsShape);
-export const FlowHistoryShowArgsSchema = z.object(FlowHistoryShowArgsShape);
-export const FlowSessionActivateArgsSchema = z.object(
-	FlowSessionActivateArgsShape,
-);
-export const FlowSessionCloseArgsSchema = z.object(FlowSessionCloseArgsShape);
-export const FlowAutoPrepareArgsSchema = z.object(FlowAutoPrepareArgsShape);
-export const FlowPlanStartArgsSchema = z.object(FlowPlanStartArgsShape);
-export const FlowPlanApproveArgsSchema = z.object(FlowPlanApproveArgsShape);
-export const FlowPlanSelectArgsSchema = z.object(FlowPlanSelectArgsShape);
-export const FlowRunStartArgsSchema = z.object(FlowRunStartArgsShape);
-export const FlowReviewRecordFeatureArgsSchema =
-	RuntimeFlowReviewRecordFeatureArgsSchema;
-export const FinalReviewerDecisionSchema = RuntimeFinalReviewerDecisionSchema;
-export const FlowReviewRenderArgsSchema = z
-	.object(FlowReviewRenderArgsShape)
-	.superRefine((input, ctx) => {
-		if (input.view === "structured") {
-			return;
+const FlowFeatureCompleteResetArgsSchema = z
+	.object({
+		reset: z.literal(true),
+		featureId: featureIdSchema,
+	})
+	.strict();
+
+type FlowFeatureCompleteArgs =
+	| { reset: true; featureId: string }
+	| {
+			reset: false;
+			worker: zod.output<typeof RuntimeWorkerResultArgsSchema>;
+	  };
+
+export const FlowFeatureCompleteArgsSchema = {
+	parse(input: unknown): FlowFeatureCompleteArgs {
+		if (
+			input !== null &&
+			typeof input === "object" &&
+			(input as { reset?: unknown }).reset === true
+		) {
+			const parsed = FlowFeatureCompleteResetArgsSchema.parse(input);
+			return { reset: true, featureId: parsed.featureId };
 		}
-		if (!input.reviewTarget) {
+		const { reset: _reset, ...workerInput } = (input ?? {}) as Record<
+			string,
+			unknown
+		>;
+		return {
+			reset: false,
+			worker: RuntimeWorkerResultArgsSchema.parse(workerInput),
+		};
+	},
+};
+
+// flow_review_record — one tool for both feature and final reviewer decisions,
+// discriminated by `scope`. Validation is structural only; review quality
+// judgment lives in the flow-review skill.
+export const FlowReviewRecordArgsShape = {
+	scope: z.enum(["feature", "final"]),
+	featureId: featureIdSchema.optional(),
+	...RuntimeFinalReviewerDecisionSchema.omit({ scope: true }).partial().shape,
+	status: z.enum(REVIEWER_DECISION_STATUSES),
+	summary: z.string().min(1),
+};
+export const FlowReviewRecordArgsSchema = RuntimeReviewerDecisionSchema;
+
+// flow_session
+const FLOW_SESSION_ACTIONS = ["activate", "close", "history", "show"] as const;
+export const FlowSessionArgsShape = {
+	action: z.enum(FLOW_SESSION_ACTIONS),
+	sessionId: sessionIdSchema.optional(),
+	kind: z.enum(CLOSURE_KINDS).optional(),
+	summary: z.string().trim().min(1).optional(),
+};
+export const FlowSessionArgsSchema = z
+	.object(FlowSessionArgsShape)
+	.superRefine((input, ctx) => {
+		if (
+			(input.action === "activate" || input.action === "show") &&
+			!input.sessionId
+		) {
 			ctx.addIssue({
 				code: "custom",
-				path: ["reviewTarget"],
+				path: ["sessionId"],
+				message: `sessionId is required when action is '${input.action}'.`,
+			});
+		}
+		if (input.action === "close" && !input.kind) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["kind"],
 				message:
-					"reviewTarget is required when rendering a human-facing review report so target provenance cannot be omitted.",
+					"kind ('completed', 'deferred', or 'abandoned') is required when action is 'close'.",
 			});
 		}
 	});
-export const FlowResetFeatureArgsSchema = z.object(FlowResetFeatureArgsShape);
-
-type FlowToolPayloadSchemaRegistration = {
-	argsShape: object;
-	argsSchema: object;
-	payloadSchemaOwners: readonly string[];
-};
-
-export const FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY = {
-	flow_status: {
-		argsShape: FlowStatusArgsShape,
-		argsSchema: FlowStatusArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_doctor: {
-		argsShape: FlowDoctorArgsShape,
-		argsSchema: FlowDoctorArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_history: {
-		argsShape: FlowHistoryArgsShape,
-		argsSchema: FlowHistoryArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_history_show: {
-		argsShape: FlowHistoryShowArgsShape,
-		argsSchema: FlowHistoryShowArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_session_activate: {
-		argsShape: FlowSessionActivateArgsShape,
-		argsSchema: FlowSessionActivateArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_plan_start: {
-		argsShape: FlowPlanStartArgsShape,
-		argsSchema: FlowPlanStartArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_auto_prepare: {
-		argsShape: FlowAutoPrepareArgsShape,
-		argsSchema: FlowAutoPrepareArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_session_close: {
-		argsShape: FlowSessionCloseArgsShape,
-		argsSchema: FlowSessionCloseArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_plan_context_record: {
-		argsShape: FlowPlanContextRecordArgsShape,
-		argsSchema: FlowPlanContextRecordArgsSchema,
-		payloadSchemaOwners: [
-			"src/adapters/opencode/tool-surface/schemas.ts",
-			"src/runtime/schema.ts",
-		],
-	},
-	flow_plan_apply: {
-		argsShape: FlowPlanApplyArgsShape,
-		argsSchema: FlowPlanApplyArgsSchema,
-		payloadSchemaOwners: [
-			"src/adapters/opencode/tool-surface/schemas.ts",
-			"src/runtime/schema.ts",
-		],
-	},
-	flow_plan_approve: {
-		argsShape: FlowPlanApproveArgsShape,
-		argsSchema: FlowPlanApproveArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_plan_select_features: {
-		argsShape: FlowPlanSelectArgsShape,
-		argsSchema: FlowPlanSelectArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_run_start: {
-		argsShape: FlowRunStartArgsShape,
-		argsSchema: FlowRunStartArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_run_complete_feature: {
-		argsShape: FlowRunCompleteFeatureArgsShape,
-		argsSchema: WorkerResultArgsSchema,
-		payloadSchemaOwners: [
-			"src/adapters/opencode/tool-surface/schemas.ts",
-			"src/runtime/schema.ts",
-		],
-	},
-	flow_reset_feature: {
-		argsShape: FlowResetFeatureArgsShape,
-		argsSchema: FlowResetFeatureArgsSchema,
-		payloadSchemaOwners: ["src/adapters/opencode/tool-surface/schemas.ts"],
-	},
-	flow_review_record_feature: {
-		argsShape: FlowReviewRecordFeatureArgsShape,
-		argsSchema: FlowReviewRecordFeatureArgsSchema,
-		payloadSchemaOwners: [
-			"src/adapters/opencode/tool-surface/schemas.ts",
-			"src/runtime/schema.ts",
-		],
-	},
-	flow_review_record_final: {
-		argsShape: FlowReviewRecordFinalArgsShape,
-		argsSchema: FinalReviewerDecisionSchema,
-		payloadSchemaOwners: [
-			"src/adapters/opencode/tool-surface/schemas.ts",
-			"src/runtime/schema.ts",
-		],
-	},
-	flow_review_render: {
-		argsShape: FlowReviewRenderArgsShape,
-		argsSchema: FlowReviewRenderArgsSchema,
-		payloadSchemaOwners: [
-			"src/adapters/opencode/tool-surface/schemas.ts",
-			"src/audit/report-schema.ts",
-		],
-	},
-} as const satisfies Record<string, FlowToolPayloadSchemaRegistration>;
-
-export const FLOW_TOOL_PAYLOAD_SCHEMA_OWNERS: Record<
-	string,
-	readonly string[]
-> = Object.fromEntries(
-	Object.entries(FLOW_TOOL_PAYLOAD_SCHEMA_REGISTRY).map(
-		([toolName, registration]) => [toolName, registration.payloadSchemaOwners],
-	),
-);

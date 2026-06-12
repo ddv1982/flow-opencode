@@ -2,6 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Build the test bundle into a cache dir, never into ./dist — overwriting the
+// real artifact with test-build flags breaks bundle-sanity and release checks.
+const TEST_DIST_DIR = "node_modules/.cache/flow-test-dist";
 let builtDistReady = false;
 
 function ensureBuiltDist(projectRoot: string): void {
@@ -14,9 +17,10 @@ function ensureBuiltDist(projectRoot: string): void {
 			"bun",
 			"build",
 			"--target=node",
-			"--outdir=./dist",
+			`--outdir=./${TEST_DIST_DIR}`,
 			"--entry-naming=index.js",
 			"--external=@opencode-ai/plugin",
+			"--external=zod",
 			"--minify-syntax",
 			"--minify-whitespace",
 			"--sourcemap=external",
@@ -44,8 +48,7 @@ type ToolExecutor = {
 	execute: (args: unknown, context: ToolContext) => Promise<string>;
 };
 
-export type BuiltPlugin = Awaited<ReturnType<PluginFactory>>;
-export type BuiltToolMap = Record<string, ToolExecutor>;
+type BuiltToolMap = Record<string, ToolExecutor>;
 
 const tempDirs: string[] = [];
 
@@ -105,7 +108,7 @@ export async function importBuiltPlugin(): Promise<PluginFactory> {
 		].join("\n"),
 	);
 
-	const entryPath = join(projectRoot, "dist", "index.js");
+	const entryPath = join(projectRoot, TEST_DIST_DIR, "index.js");
 	const module = (await import(
 		`file://${entryPath}?t=${Date.now()}-${Math.random()}`
 	)) as {

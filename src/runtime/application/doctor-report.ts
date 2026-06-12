@@ -1,30 +1,34 @@
-import { deriveSessionViewModel } from "../summary";
+import type { Session } from "../schema";
 import { InvalidFlowWorkspaceRootError } from "../workspace-root";
 import {
 	buildConfigCheck,
-	buildGuidanceCheck,
 	buildInstallCheck,
 	buildSessionArtifactsCheck,
 	buildWorkspaceCheck,
 	type DoctorCheck,
 	summarizeDoctorChecks,
 } from "./doctor-checks";
-import { renderDoctorSummary } from "./operator-presenters";
-import { runDispatchedSessionReadAction } from "./session-read-actions";
 import {
 	inspectWorkspaceContext,
 	resolveMutableSessionRoot,
-	toCompactJson,
-	toJson,
 	type WorkspaceContext,
 } from "./workspace-runtime";
 
-type FlowDoctorView = "detailed" | "compact";
+export type WorkspaceReadiness = {
+	status: "ok" | "warn" | "fail";
+	summary: string;
+	checks: DoctorCheck[];
+};
 
-export async function buildDoctorReport(
+/**
+ * Doctor-style readiness checks folded into `flow_status` output: install
+ * state, config injection, writable workspace root, and active session
+ * artifacts. Non-destructive.
+ */
+export async function buildWorkspaceReadiness(
 	context: WorkspaceContext,
-	args: { view?: FlowDoctorView } = {},
-): Promise<string> {
+	session: Session | null,
+): Promise<WorkspaceReadiness> {
 	const installCheck = await buildInstallCheck();
 	const configCheck = buildConfigCheck();
 	const workspace = inspectWorkspaceContext(context);
@@ -71,82 +75,33 @@ export async function buildDoctorReport(
 		};
 	}
 
-	const session = workspaceRoot
-		? (
-				await runDispatchedSessionReadAction(
-					{ worktree: workspaceRoot },
-					"load_status_session",
-					undefined,
-				)
-			).value
-		: null;
-	const sessionViewModel = deriveSessionViewModel(session);
-	const sessionSummary = sessionViewModel.session;
-	const latestFailedAttempt = sessionSummary?.latestFailedAttempt ?? null;
-	const sessionGuidance = sessionViewModel.guidance;
 	const sessionArtifactsCheck = await buildSessionArtifactsCheck(
 		workspaceRoot,
 		session,
 	);
-	const guidanceCheck = buildGuidanceCheck(session, sessionGuidance);
 
 	const checks = [
 		installCheck,
 		configCheck,
 		workspaceCheck,
 		sessionArtifactsCheck,
-		guidanceCheck,
 	];
 	const overall = summarizeDoctorChecks(checks);
-	const operatorSummary = renderDoctorSummary(
-		overall.status,
-		checks,
-		sessionGuidance,
-		sessionGuidance.nextStep,
-		sessionGuidance.nextCommand,
-		latestFailedAttempt,
-	);
+	return { status: overall.status, summary: overall.summary, checks };
+}
 
-	if ((args.view ?? "detailed") === "compact") {
-		return toCompactJson({
-			status: overall.status,
-			summary: overall.summary,
-			phase: sessionGuidance.phase,
-			lane: sessionGuidance.lane,
-			blocker: sessionGuidance.blocker,
-			reason: sessionGuidance.reason,
-			guidance: sessionGuidance,
-			latestFailedAttempt,
-			operatorSummary,
-			nextCommand: sessionGuidance.nextCommand,
-			workspaceRoot: workspace.root,
-			workspace,
-			issues: checks
-				.filter((check) => check.status === "warn" || check.status === "fail")
-				.map((check) => ({
-					id: check.id,
-					label: check.label,
-					status: check.status,
-					summary: check.summary,
-					remediation: check.remediation,
-				})),
-		});
-	}
-
-	return toJson({
-		status: overall.status,
-		summary: overall.summary,
-		phase: sessionGuidance.phase,
-		lane: sessionGuidance.lane,
-		blocker: sessionGuidance.blocker,
-		reason: sessionGuidance.reason,
-		workspaceRoot: workspace.root,
-		workspace,
-		checks,
-		session: sessionSummary,
-		latestFailedAttempt,
-		guidance: sessionGuidance,
-		operatorSummary,
-		nextCommand: sessionGuidance.nextCommand,
-	});
+export function compactWorkspaceReadiness(readiness: WorkspaceReadiness) {
+	return {
+		status: readiness.status,
+		summary: readiness.summary,
+		issues: readiness.checks
+			.filter((check) => check.status === "warn" || check.status === "fail")
+			.map((check) => ({
+				id: check.id,
+				label: check.label,
+				status: check.status,
+				summary: check.summary,
+				remediation: check.remediation,
+			})),
+	};
 }

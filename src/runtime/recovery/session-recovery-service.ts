@@ -1,5 +1,6 @@
+import { sessionCompletionReached } from "../domain";
 import { getActiveSessionDir, getSessionPath } from "../paths";
-import { renderSessionDocsAtDir } from "../rendering";
+import { renderSessionDocsAtDir } from "../render";
 import { type Session, SessionSchema } from "../schema";
 import {
 	allocateCompletedSessionLocation,
@@ -63,11 +64,18 @@ export type ClosedSessionResult = {
 	closureKind: NonNullable<Session["closure"]>["kind"];
 };
 
+export type BlockedSessionClosure = {
+	blocked: true;
+	sessionId: string;
+	summary: string;
+	unfinishedFeatureIds: string[];
+};
+
 export async function closeActiveSession(
 	worktree: MutableWorkspaceRoot,
 	kind: NonNullable<Session["closure"]>["kind"],
 	summary?: string,
-): Promise<ClosedSessionResult | null> {
+): Promise<ClosedSessionResult | BlockedSessionClosure | null> {
 	const sessionId = await resolveActiveSessionId(worktree);
 	if (!sessionId) {
 		return null;
@@ -77,6 +85,23 @@ export async function closeActiveSession(
 	const session = await readSessionFromPath(
 		getSessionPath(worktree, sessionId, "active"),
 	);
+
+	// Hard invariant: a session cannot close as completed while planned
+	// features remain below the plan's completion target.
+	if (kind === "completed" && session?.plan) {
+		const plan = session.plan;
+		if (!sessionCompletionReached(plan, plan.features)) {
+			const unfinishedFeatureIds = plan.features
+				.filter((feature) => feature.status !== "completed")
+				.map((feature) => feature.id);
+			return {
+				blocked: true,
+				sessionId,
+				summary: `Cannot close the session as completed: ${unfinishedFeatureIds.length} planned feature${unfinishedFeatureIds.length === 1 ? " is" : "s are"} unfinished (${unfinishedFeatureIds.join(", ")}). Finish or defer the remaining features, or close the session as 'deferred' or 'abandoned'.`,
+				unfinishedFeatureIds,
+			};
+		}
+	}
 	const recordedAt = nowIso();
 	const closedSession: Session = SessionSchema.parse({
 		...session,

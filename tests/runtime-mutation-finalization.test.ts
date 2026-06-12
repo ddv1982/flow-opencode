@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
-	executeTransitionAtRoot,
-	runSessionMutationActionAtRoot,
-} from "../src/runtime/application/session-engine";
+	runMutationActionAtRoot,
+	type SessionMutationAction,
+} from "../src/runtime/application/action-engine";
+import { createSession } from "../src/runtime/lifecycle";
 import type { Session } from "../src/runtime/schema";
-import { createSession } from "../src/runtime/session";
 import { fail, succeed } from "../src/runtime/transitions/shared";
 
 describe("runtime mutation finalization", () => {
@@ -17,28 +17,26 @@ describe("runtime mutation finalization", () => {
 		};
 		let savedState: Session | undefined;
 
-		const result = await runSessionMutationActionAtRoot(
-			"/tmp/project",
-			{
-				name: "approve_plan",
-				run: () => succeed({ session: transitionSession }),
-				getSession: (value) => value.session,
-				onSuccess: (_session, value) => ({
-					status: "ok",
-					summary: value.session.notes[0] ?? "missing saved note",
-				}),
+		const action: SessionMutationAction<{ session: Session }> = {
+			name: "approve_plan",
+			run: () => succeed({ session: transitionSession }),
+			getSession: (value) => value.session,
+			onSuccess: (_session, value) => ({
+				status: "ok",
+				summary: value.session.notes[0] ?? "missing saved note",
+			}),
+		};
+
+		const result = await runMutationActionAtRoot("/tmp/project", action, {
+			loadSession: async () => baseSession,
+			saveSessionState: async (_worktree, session) => {
+				savedState = session;
+				return savedSession;
 			},
-			{
-				loadSession: async () => baseSession,
-				saveSessionState: async (_worktree, session) => {
-					savedState = session;
-					return savedSession;
-				},
-				syncSessionArtifacts: async () => {
-					throw new Error("injected artifact sync failure");
-				},
+			syncSessionArtifacts: async () => {
+				throw new Error("injected artifact sync failure");
 			},
-		);
+		});
 
 		expect(savedState?.status).toBe("ready");
 		expect(result.kind).toBe("success_artifact_sync_failed");
@@ -61,36 +59,33 @@ describe("runtime mutation finalization", () => {
 	});
 
 	test("preserves mutation failure while reporting artifact sync failure after saving failure state", async () => {
-		const failureSession = createSession(
+		const baseSession = createSession(
 			"Persist failure before artifact sync fails",
 		);
-		const transition = fail<never>(
-			"Completion failed",
-			undefined,
-			failureSession,
-		);
-		if (transition.ok) throw new Error("expected failure transition");
+		const failureSession = {
+			...baseSession,
+			notes: ["failure state recorded"],
+		};
 		let savedState: Session | undefined;
 
-		const result = await executeTransitionAtRoot(
-			"complete_feature",
-			"/tmp/project",
-			transition,
-			(value: never) => value,
-			() => ({ status: "ok" }),
-			(failure) => ({ status: "error", summary: failure.message }),
-			undefined,
-			{
-				loadSession: async () => null,
-				saveSessionState: async (_worktree, session) => {
-					savedState = session;
-					return session;
-				},
-				syncSessionArtifacts: async () => {
-					throw new Error("injected artifact sync failure");
-				},
+		const action: SessionMutationAction<Session> = {
+			name: "complete_run",
+			run: () => fail("Completion failed", undefined, failureSession),
+			getSession: (value) => value,
+			onSuccess: () => ({ status: "ok" }),
+			onError: (failure) => ({ status: "error", summary: failure.message }),
+		};
+
+		const result = await runMutationActionAtRoot("/tmp/project", action, {
+			loadSession: async () => baseSession,
+			saveSessionState: async (_worktree, session) => {
+				savedState = session;
+				return session;
 			},
-		);
+			syncSessionArtifacts: async () => {
+				throw new Error("injected artifact sync failure");
+			},
+		});
 
 		expect(savedState).toBe(failureSession);
 		expect(result.kind).toBe("failure");
@@ -115,30 +110,31 @@ describe("runtime mutation finalization", () => {
 		const baseSession = createSession("Noop artifact sync fails");
 		let saved = false;
 
-		const result = await runSessionMutationActionAtRoot(
-			"/tmp/project",
-			{
-				name: "start_run",
-				run: (session) => succeed({ alreadyRunning: true, session }),
-				getSession: (value) => value.session,
-				onSuccess: () => ({ status: "ok", summary: "saved" }),
-				isNoopSuccess: () => true,
-				onNoopSuccess: (session, value) => ({
-					status: "ok",
-					summary: `${session.goal}: ${value.alreadyRunning}`,
-				}),
+		const action: SessionMutationAction<{
+			alreadyRunning: boolean;
+			session: Session;
+		}> = {
+			name: "start_run",
+			run: (session) => succeed({ alreadyRunning: true, session }),
+			getSession: (value) => value.session,
+			onSuccess: () => ({ status: "ok", summary: "saved" }),
+			isNoopSuccess: () => true,
+			onNoopSuccess: (session, value) => ({
+				status: "ok",
+				summary: `${session.goal}: ${value.alreadyRunning}`,
+			}),
+		};
+
+		const result = await runMutationActionAtRoot("/tmp/project", action, {
+			loadSession: async () => baseSession,
+			saveSessionState: async () => {
+				saved = true;
+				throw new Error("should not save noop success");
 			},
-			{
-				loadSession: async () => baseSession,
-				saveSessionState: async () => {
-					saved = true;
-					throw new Error("should not save noop success");
-				},
-				syncSessionArtifacts: async () => {
-					throw new Error("injected artifact sync failure");
-				},
+			syncSessionArtifacts: async () => {
+				throw new Error("injected artifact sync failure");
 			},
-		);
+		});
 
 		expect(saved).toBe(false);
 		expect(result.kind).toBe("success_artifact_sync_failed");

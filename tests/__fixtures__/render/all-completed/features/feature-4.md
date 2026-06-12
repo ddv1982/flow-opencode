@@ -7,10 +7,6 @@
 - active: no
 - goal: Benchmark 5-feature session
 
-## Task Progress
-
-- completed | flow-worker | execution | projection: runtime_projection | feature-4 — Feature feature-4 | next: No action needed. | evidence: file targets: 1, verification: 1
-
 ## Description
 
 > Implement feature-4.

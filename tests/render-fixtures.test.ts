@@ -8,8 +8,8 @@ import {
 	createPlan,
 	createSession,
 } from "../bench/fixtures";
+import { loadStoredSession, saveSession } from "../src/runtime/lifecycle";
 import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
-import { loadStoredSession, saveSession } from "../src/runtime/session";
 import { applyPlan } from "../src/runtime/transitions";
 import { setNowIsoOverride } from "../src/runtime/util";
 import { createTempDirRegistry } from "./runtime-test-helpers";

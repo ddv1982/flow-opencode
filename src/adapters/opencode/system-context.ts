@@ -1,4 +1,3 @@
-import { FLOW_RUNTIME_CONTEXT_MARKER } from "../../prompt-system-context";
 import { resolveSessionRoot } from "../../runtime/application";
 import { loadSession } from "../../runtime/lifecycle";
 import type { Session } from "../../runtime/schema";
@@ -18,6 +17,11 @@ type SystemOutput = {
 	system: string[];
 };
 
+const FLOW_RUNTIME_CONTEXT_MARKER =
+	"Flow runtime context (derived from persisted session state; authoritative for current workflow state):";
+
+const FLOW_SYSTEM_POINTER_PREFIX = "Flow is active in this workspace";
+
 function quoted(value: string): string {
 	return JSON.stringify(value);
 }
@@ -32,6 +36,7 @@ function hasWorkspaceRoot(ctx: OpenCodeRootContext): boolean {
 
 const FLOW_MANAGED_COMPACTION_PREFIXES = [
 	FLOW_RUNTIME_CONTEXT_MARKER,
+	FLOW_SYSTEM_POINTER_PREFIX,
 	"Flow cached planning profile:",
 	"Flow session context:",
 	"Flow planning profile:",
@@ -159,6 +164,19 @@ async function buildOpenCodeCompactSystemContext(
 	return buildOpenCodeCompactSessionContext(await loadOpenCodeSession(ctx));
 }
 
+/**
+ * Chat system transform: a minimal pointer only. Orchestration guidance lives
+ * in the `flow` skill; authoritative state comes from `flow_status`.
+ */
+function buildOpenCodeSystemPointer(session: Session | null): string[] {
+	if (!session) {
+		return [];
+	}
+	return [
+		`${FLOW_SYSTEM_POINTER_PREFIX} (goal: ${quoted(compact(session.goal))}). Load the \`flow\` skill for the driving loop and call flow_status for authoritative session state before any Flow action.`,
+	];
+}
+
 export async function appendOpenCodeCompactSystemContext(
 	ctx: OpenCodeRootContext,
 	output: SystemOutput,
@@ -171,15 +189,15 @@ export async function appendOpenCodeCompactSystemContext(
 		return;
 	}
 
-	const context = await buildOpenCodeCompactSystemContext(ctx);
-	if (context.length === 0) {
+	const pointer = buildOpenCodeSystemPointer(await loadOpenCodeSession(ctx));
+	if (pointer.length === 0) {
 		if (retained.changed) {
 			output.system = retained.lines;
 		}
 		return;
 	}
 
-	output.system = [...retained.lines, ...context];
+	output.system = [...retained.lines, ...pointer];
 }
 
 export async function appendOpenCodeCompactCompactingContext(

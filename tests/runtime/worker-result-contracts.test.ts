@@ -1,11 +1,8 @@
 // Owns worker-result payload contract coverage previously grouped in
 // tests/runtime-completion-contracts.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-	type WorkerResult,
-	WorkerResultArgsSchema,
-} from "../../src/runtime/schema";
-import { createSession, saveSession } from "../../src/runtime/session";
+import { createSession, saveSession } from "../../src/runtime/lifecycle";
+import type { WorkerResult } from "../../src/runtime/schema";
 import {
 	applyPlan,
 	approvePlan,
@@ -29,7 +26,7 @@ afterEach(() => {
 describe("runtime worker result contracts", () => {
 	test("rejects replan_required outcomes without structured replan fields", async () => {
 		const tools = createTestTools();
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "needs_input",
@@ -149,7 +146,7 @@ describe("runtime worker result contracts", () => {
 		if (!reviewed.ok) return;
 
 		await saveSession(worktree, reviewed.value);
-		const response = await tools.flow_run_complete_feature.execute(
+		const response = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "ok",
@@ -237,86 +234,6 @@ describe("runtime worker result contracts", () => {
 		expect(parsed.ok).toBe(true);
 	});
 
-	test("worker finalReview input rejects duplicate behavior and validation coverage classes", () => {
-		const behaviorCheck = {
-			riskClass: "test_evidence_authenticity" as const,
-			result: "passed" as const,
-			invariant: "Tests exercise the product behavior path.",
-			entrypointRefs: ["src/runtime/session.ts"],
-			stateOwnerRefs: [],
-			lifecycleOwnerRefs: [],
-			failurePath: "Generic validation would miss stale action ordering.",
-			testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
-			validationRefs: ["bun test"],
-		};
-		const parsed = WorkerResultArgsSchema.safeParse({
-			contractVersion: "1",
-			status: "ok",
-			summary: "Completed runtime setup.",
-			artifactsChanged: [{ path: "src/runtime/session.ts" }],
-			validationRun: [
-				{ command: "bun test", status: "passed", summary: "Tests passed." },
-			],
-			validationScope: "broad",
-			decisions: [],
-			nextStep: "Complete the session.",
-			outcome: { kind: "completed" },
-			featureResult: {
-				featureId: "setup-runtime",
-				verificationStatus: "passed",
-			},
-			featureReview: {
-				status: "passed",
-				summary: "Looks good.",
-				blockingFindings: [],
-			},
-			finalReview: {
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary: "Reviewed changed files and validation evidence.",
-				validationAssessment: "Validation evidence was reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
-				},
-				integrationChecks: ["Checked runtime integration."],
-				regressionChecks: ["Checked runtime regression evidence."],
-				remainingGaps: [],
-				behaviorChecks: [behaviorCheck, behaviorCheck],
-				validationCoverage: [
-					{
-						command: "bun test",
-						behaviorClasses: [
-							"test_evidence_authenticity",
-							"test_evidence_authenticity",
-						],
-						proves: ["Tests exercise the behavior path."],
-						gaps: [],
-						testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
-					},
-				],
-				status: "passed",
-				summary: "Final review passed.",
-				blockingFindings: [],
-			},
-		});
-
-		expect(parsed.success).toBe(false);
-		if (!parsed.success) {
-			const messages = parsed.error.issues.map((issue) => issue.message);
-			expect(messages).toContain(
-				"behaviorChecks must contain at most one entry per riskClass: test_evidence_authenticity",
-			);
-			expect(messages).toContain(
-				"validationCoverage[0].behaviorClasses must contain at most one entry per riskClass: test_evidence_authenticity",
-			);
-		}
-	});
-
 	test("completeRun preserves optional worker-result fields without adapters", () => {
 		const session = createSession("Build a workflow plugin");
 		const applied = applyPlan(session, samplePlan());
@@ -355,25 +272,6 @@ describe("runtime worker result contracts", () => {
 			validationScope: "broad",
 			reviewIterations: 2,
 			decisions: [{ summary: "Stopped before unsafe completion." }],
-			reviewFindingClosures: [
-				{
-					findingRef: "review: unsafe migration timing",
-					status: "blocked",
-					fixRefs: [],
-					testRefs: [],
-					validationRefs: ["bun test"],
-					residualRisk: "Rollout timing still needs operator approval.",
-				},
-			],
-			evidencePackets: [
-				{
-					id: "packet:worker-context",
-					purpose: "validation",
-					contextLane: "execution",
-					summary: "Worker reused planning evidence during execution.",
-					sourceRefs: ["src/runtime/session.ts"],
-				},
-			],
 			nextStep: "Ask the operator to confirm migration timing.",
 			outcome: {
 				kind: "needs_operator_input",
@@ -410,35 +308,7 @@ describe("runtime worker result contracts", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
-				behaviorChecks: [
-					{
-						riskClass: "test_evidence_authenticity",
-						result: "passed",
-						invariant: "Test evidence payloads are preserved.",
-						entrypointRefs: ["src/runtime/session.ts"],
-						stateOwnerRefs: [],
-						lifecycleOwnerRefs: [],
-						failurePath: "Test refs could be omitted from persisted history.",
-						testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
-						validationRefs: ["bun test"],
-					},
-				],
-				validationCoverage: [
-					{
-						command: "bun test",
-						behaviorClasses: ["test_evidence_authenticity"],
-						proves: ["Worker final review payload was persisted."],
-						gaps: [],
-						testEvidenceRefs: ["tests/runtime/worker-result-contracts.test.ts"],
-					},
-				],
 				status: "needs_followup",
 				summary: "Final approval still pending.",
 				blockingFindings: [{ summary: "Awaiting operator sign-off." }],
@@ -458,26 +328,11 @@ describe("runtime worker result contracts", () => {
 		expect(result.value.execution.history.at(-1)?.finalReview?.status).toBe(
 			"needs_followup",
 		);
-		const persistedFinalReview =
-			result.value.execution.history.at(-1)?.finalReview;
-		expect(persistedFinalReview?.behaviorChecks?.[0]?.riskClass).toBe(
-			"test_evidence_authenticity",
-		);
-		expect(persistedFinalReview?.behaviorChecks?.[0]?.testEvidenceRefs).toEqual(
-			["tests/runtime/worker-result-contracts.test.ts"],
-		);
 		expect(
-			persistedFinalReview?.validationCoverage?.[0]?.behaviorClasses,
-		).toEqual(["test_evidence_authenticity"]);
-		expect(
-			persistedFinalReview?.validationCoverage?.[0]?.testEvidenceRefs,
-		).toEqual(["tests/runtime/worker-result-contracts.test.ts"]);
-		expect(
-			result.value.execution.history.at(-1)?.evidencePackets?.[0]?.id,
-		).toBe("packet:worker-context");
-		expect(
-			result.value.execution.history.at(-1)?.reviewFindingClosures?.[0]
-				?.findingRef,
-		).toBe("review: unsafe migration timing");
+			result.value.execution.history.at(-1)?.finalReview?.evidenceRefs,
+		).toEqual({
+			changedArtifacts: ["src/runtime/session.ts"],
+			validationCommands: ["bun test"],
+		});
 	});
 });

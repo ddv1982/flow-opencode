@@ -1,5 +1,5 @@
+import { createSession } from "../src/runtime/lifecycle";
 import type { Plan, Session, WorkerResult } from "../src/runtime/schema";
-import { createSession } from "../src/runtime/session";
 import {
 	applyPlan,
 	approvePlan,
@@ -88,12 +88,6 @@ function createFinalReviewFixture<TStatus extends "approved" | "passed">({
 			changedArtifacts: [`src/${featureId}.ts`],
 			validationCommands: ["bun test"],
 		},
-		integrationChecks: [
-			`Checked ${featureId} entrypoint against the active feature boundary and state handoff.`,
-		],
-		regressionChecks: [
-			`Checked bun test covers the ${featureId} regression evidence cited by the fixture.`,
-		],
 		remainingGaps: [],
 		status,
 		summary,

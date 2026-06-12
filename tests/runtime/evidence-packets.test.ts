@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { ReviewReportSchema } from "../../src/audit/report-schema";
 import {
 	describeReviewFindingsMutationFailure,
 	mergePlanningContext,
 } from "../../src/runtime/domain/planning-context";
+import { createSession } from "../../src/runtime/lifecycle";
 import {
 	EvidencePacketSchema,
 	FinalReviewerDecisionSchema,
@@ -11,7 +11,6 @@ import {
 	PlanningContextArgsSchema,
 	WorkerResultArgsSchema,
 } from "../../src/runtime/schema";
-import { createSession } from "../../src/runtime/session";
 import {
 	applyPlan,
 	approvePlan,
@@ -260,7 +259,7 @@ describe("shared evidence packet primitives", () => {
 		expect(merged.reviewFindings).toEqual([]);
 	});
 
-	test("final review and reviewer decision payloads can carry packet metadata", () => {
+	test("worker and reviewer payloads strip retired v2 packet accounting keys on parse", () => {
 		const workerResult = WorkerResultArgsSchema.parse({
 			contractVersion: "1",
 			status: "ok",
@@ -307,10 +306,8 @@ describe("shared evidence packet primitives", () => {
 				blockingFindings: [],
 			},
 		});
-		expect(workerResult.evidencePackets?.[0]?.contextLane).toBe("execution");
-		expect(workerResult.finalReview?.evidencePackets?.[0]?.purpose).toBe(
-			"review",
-		);
+		expect(workerResult).not.toHaveProperty("evidencePackets");
+		expect(workerResult.finalReview).not.toHaveProperty("evidencePackets");
 
 		const featureDecision = FlowReviewRecordFeatureArgsSchema.parse({
 			scope: "feature",
@@ -329,7 +326,7 @@ describe("shared evidence packet primitives", () => {
 				},
 			],
 		});
-		expect(featureDecision.evidencePackets?.[0]?.contextLane).toBe("review");
+		expect(featureDecision).not.toHaveProperty("evidencePackets");
 
 		const decision = FinalReviewerDecisionSchema.parse({
 			scope: "final",
@@ -349,15 +346,9 @@ describe("shared evidence packet primitives", () => {
 				changedArtifacts: ["src/runtime/schema.ts"],
 				validationCommands: ["bun test tests/runtime/evidence-packets.test.ts"],
 			},
-			integrationChecks: [
-				"Checked packet attachment across planning and review surfaces.",
-			],
-			regressionChecks: ["Checked packet schema contract coverage."],
 			evidencePackets: [{ ...sampleEvidencePacket, purpose: "review" }],
 		});
-		expect(decision.evidencePackets?.[0]?.selectedContext).toEqual([
-			"src/runtime/schema.ts:386-407",
-		]);
+		expect(decision).not.toHaveProperty("evidencePackets");
 
 		const applied = applyPlan(
 			createSession("Build a workflow plugin"),
@@ -375,152 +366,9 @@ describe("shared evidence packet primitives", () => {
 		const recorded = recordReviewerDecision(started.value.session, decision);
 		expect(recorded.ok).toBe(true);
 		if (!recorded.ok) return;
-		expect(
-			recorded.value.execution.lastReviewerDecision?.scope === "final" &&
-				recorded.value.execution.lastReviewerDecision.evidencePackets?.[0]?.id,
-		).toBe("packet:planning-context");
+		expect(recorded.value.execution.lastReviewerDecision?.scope).toBe("final");
 	});
-
-	test("audit reports can attach packet metadata without replacing ledgers", () => {
-		const report = ReviewReportSchema.parse({
-			requestedDepth: "deep_audit",
-			achievedDepth: "deep_audit",
-			repoSummary: "Repo summary.",
-			overallVerdict: "No blocker found.",
-			discoveredSurfaces: [
-				{
-					name: "Runtime schema",
-					category: "source_runtime",
-					reviewStatus: "directly_reviewed",
-					evidence: ["src/runtime/schema.ts"],
-				},
-			],
-			evidencePackets: [{ ...sampleEvidencePacket, purpose: "audit" }],
-			validationRun: [],
-			findings: [],
-		});
-
-		expect(report.evidencePackets?.[0]?.purpose).toBe("audit");
-		const auditPacketWithNotRun = ReviewReportSchema.parse({
-			...report,
-			evidencePackets: [
-				{
-					...sampleEvidencePacket,
-					purpose: "audit",
-					validationEvidence: [
-						{
-							command: "not_run",
-							status: "not_run",
-							summary: "No validation evidence was available.",
-						},
-					],
-				},
-			],
-		});
-		expect(
-			auditPacketWithNotRun.evidencePackets?.[0]?.validationEvidence?.[0]
-				?.status,
-		).toBe("not_run");
-		expect(report.discoveredSurfaces[0]?.evidence).toEqual([
-			"src/runtime/schema.ts",
-		]);
-	});
-
-	test("audit report behavior checks and coverage commands must be grounded in validationRun", () => {
-		const base = {
-			requestedDepth: "deep_audit" as const,
-			achievedDepth: "deep_audit" as const,
-			repoSummary: "Repo summary.",
-			overallVerdict: "No blocker found.",
-			discoveredSurfaces: [
-				{
-					name: "Runtime schema",
-					category: "source_runtime" as const,
-					reviewStatus: "directly_reviewed" as const,
-					evidence: ["src/runtime/schema.ts"],
-				},
-			],
-			findings: [],
-		};
-
-		expect(
-			ReviewReportSchema.safeParse({
-				...base,
-				validationRun: [
-					{
-						command: "bun test tests/runtime/evidence-packets.test.ts",
-						status: "passed",
-						summary: "Targeted audit tests passed.",
-					},
-				],
-				behaviorChecks: [
-					{
-						riskClass: "test_evidence_authenticity",
-						result: "needs_fix",
-						invariant: "Validation exposes a behavior gap needing follow-up.",
-						entrypointRefs: ["src/runtime/schema.ts"],
-						stateOwnerRefs: [],
-						lifecycleOwnerRefs: [],
-						failurePath:
-							"Observed gap requires a fix before confidence increases.",
-						testEvidenceRefs: [],
-						validationRefs: ["bun test tests/runtime/evidence-packets.test.ts"],
-					},
-				],
-				validationCoverage: [
-					{
-						command: "bun test tests/runtime/evidence-packets.test.ts",
-						behaviorClasses: ["test_evidence_authenticity"],
-						proves: [],
-						gaps: ["Behavior regression still reproduces."],
-						testEvidenceRefs: [],
-					},
-				],
-			}).success,
-		).toBe(true);
-
-		expect(
-			ReviewReportSchema.safeParse({
-				...base,
-				validationRun: [],
-				behaviorChecks: [
-					{
-						riskClass: "test_evidence_authenticity",
-						result: "not_applicable",
-						invariant: "No behavior-risk assertion claimed.",
-						entrypointRefs: ["src/runtime/schema.ts"],
-						stateOwnerRefs: [],
-						lifecycleOwnerRefs: [],
-						failurePath: "No validation-backed behavior claim.",
-						testEvidenceRefs: [],
-						validationRefs: ["bun test tests/runtime/evidence-packets.test.ts"],
-					},
-				],
-				validationCoverage: [],
-			}).success,
-		).toBe(false);
-
-		expect(
-			ReviewReportSchema.safeParse({
-				...base,
-				validationRun: [
-					{
-						command: "bun test tests/runtime/evidence-packets.test.ts",
-						status: "passed",
-						summary: "Targeted audit tests passed.",
-					},
-				],
-				behaviorChecks: [],
-				validationCoverage: [
-					{
-						command: "bun test tests/runtime/final-review-contracts.test.ts",
-						behaviorClasses: ["test_evidence_authenticity"],
-						proves: [],
-						gaps: [],
-						testEvidenceRefs: [],
-					},
-				],
-			}).success,
-		).toBe(false);
-	});
+	// The audit ReviewReport schema (src/audit/report-schema.ts) was deleted in
+	// the v3 skills-first overhaul; audit-report packet attachment tests went
+	// with it. Runtime packet attachment coverage above is the surviving scope.
 });

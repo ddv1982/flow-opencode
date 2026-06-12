@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { loadSession, saveSession } from "../src/runtime/session";
+import { loadSession, saveSession } from "../src/runtime/lifecycle";
 import {
 	createTempDirRegistry,
 	createTestTools,
@@ -17,10 +17,10 @@ describe("flow_plan_start idempotency", () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		await tools.flow_plan_start.execute({ goal: "Build a workflow plugin" }, {
+		await tools.flow_plan_save.execute({ goal: "Build a workflow plugin" }, {
 			worktree,
 		} as never);
-		await tools.flow_plan_apply.execute({ plan: samplePlan() }, {
+		await tools.flow_plan_save.execute({ plan: samplePlan() }, {
 			worktree,
 		} as never);
 		await tools.flow_plan_approve.execute({}, { worktree } as never);
@@ -41,7 +41,7 @@ describe("flow_plan_start idempotency", () => {
 		};
 		await saveSession(worktree, seeded);
 
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			{ worktree } as never,
 		);

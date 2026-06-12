@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fail, succeed, sync } from "effect/Effect";
 import { applyFlowConfig } from "../src/config";
-import { resolveInstallTarget } from "../src/installer";
+import { FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER } from "../src/distribution/skill-markers";
+import { syncFlowSkills } from "../src/distribution/skill-sync";
 import {
 	evaluateConfigCheck,
 	type MutableConfig,
@@ -12,12 +12,12 @@ import {
 	FLOW_PLAN_WITH_GOAL_COMMAND,
 	FLOW_RUN_COMMAND,
 } from "../src/runtime/constants";
-import { getIndexDocPath } from "../src/runtime/paths";
 import {
 	createSession,
 	loadSession,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
+import { getIndexDocPath } from "../src/runtime/paths";
 import { applyPlan, approvePlan } from "../src/runtime/transitions";
 import { createFinalReviewPayload } from "./final-review-fixtures";
 import {
@@ -52,13 +52,37 @@ function requireConfigEntry<T>(entry: T | undefined, label: string): T {
 	return entry;
 }
 
-async function installDoctorPluginFixture(homeDir: string) {
-	const canonicalInstallPath = resolveInstallTarget({ homeDir });
+type ReadinessCheck = {
+	id: string;
+	status: string;
+	summary?: string;
+	remediation?: string | null;
+	details?: Record<string, unknown>;
+};
+
+function findCheck(
+	parsed: { readiness?: { checks?: ReadinessCheck[] } },
+	id: string,
+) {
+	return parsed.readiness?.checks?.find((check) => check.id === id);
+}
+
+async function installHealthyPluginFixture(homeDir: string) {
+	// npm distribution: a healthy install means the global Flow skills are
+	// synced and no pre-npm plugin copy exists in this home directory.
+	await syncFlowSkills({ homeDir, version: "0.0.0-test" });
+}
+
+async function installPreNpmPluginFixture(homeDir: string) {
+	const preNpmPath = join(homeDir, ".config", "opencode", "plugins", "flow.js");
 	await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
 		recursive: true,
 	});
-	await writeFile(canonicalInstallPath, "// flow plugin");
-	return canonicalInstallPath;
+	await writeFile(
+		preNpmPath,
+		`${FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER}export default 'flow';\n`,
+	);
+	return preNpmPath;
 }
 
 async function withHomeEnv<T>(
@@ -169,74 +193,40 @@ describe("runtime operator tools", () => {
 		expect(compact.finalReviewPolicy).toBe("detailed");
 	});
 
-	test("flow_doctor reports install, config, workspace, and session readiness without mutating session state", async () => {
+	test("flow_status readiness reports install, config, workspace, and session checks without mutating session state", async () => {
 		const worktree = makeTempDir();
 		const homeDir = makeTempDir();
-		await installDoctorPluginFixture(homeDir);
+		await installHealthyPluginFixture(homeDir);
 
 		await withHomeEnv(homeDir, async () => {
 			const tools = createTestTools();
-			const response = await tools.flow_doctor.execute(
+			const response = await tools.flow_status.execute(
 				{},
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
 
-			expect(parsed.status).toBe("ok");
-			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+			expect(parsed.status).toBe("missing");
+			expect(parsed.readiness.status).toBe("ok");
+			expect(parsed.guidance.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
 			expect(parsed.workspaceRoot).toBe(worktree);
-			expect(parsed.session).toBeNull();
-			expect(parsed.operatorSummary).toContain("Flow doctor: Ready.");
-			expect(parsed.operatorSummary).toContain(
-				"Blocker: No active Flow session exists for this workspace.",
-			);
-			expect(parsed.operatorSummary).toContain(
-				"Next: Start a new Flow session with /flow-plan <goal>.",
-			);
-			expect(parsed.operatorSummary).toContain("Command: /flow-plan <goal>");
+			expect(parsed.session).toBeUndefined();
 
-			const configCheck = parsed.checks.find(
-				(check: { id: string }) => check.id === "config",
-			);
-			expect(configCheck?.details.commandRouting).toEqual({
-				"flow-doctor": "flow-control",
-				"flow-review": "flow-auditor",
+			const configCheck = findCheck(parsed, "config");
+			expect(configCheck?.details?.commandRouting).toEqual({
+				"flow-review": "flow-reviewer",
 			});
-			expect(configCheck?.details.agentReasoningEffort).toEqual({
-				"flow-planning-researcher": "high",
-				"flow-planner": "high",
-				"flow-worker": "low",
-				"flow-auto": "medium",
+			expect(configCheck?.details?.agentReasoningEffort).toEqual({
 				"flow-reviewer": "high",
-				"flow-control": "low",
-				"flow-auditor": "high",
-			});
-			expect(configCheck?.details.reasoningEffortDiagnostic).toEqual({
-				verifies: "flow_injected_config",
-				doesNotVerify: "opencode_host_effective_session_reasoning",
-				hostObservation: "unsupported_by_documented_api",
 			});
 
-			expect(parsed.checks).toEqual(
+			expect(parsed.readiness.checks).toEqual(
 				expect.arrayContaining([
-					expect.objectContaining({
-						id: "install",
-						status: "pass",
-					}),
-					expect.objectContaining({
-						id: "config",
-						status: "pass",
-					}),
-					expect.objectContaining({
-						id: "workspace",
-						status: "pass",
-					}),
+					expect.objectContaining({ id: "install", status: "pass" }),
+					expect.objectContaining({ id: "config", status: "pass" }),
+					expect.objectContaining({ id: "workspace", status: "pass" }),
 					expect.objectContaining({
 						id: "session_artifacts",
-						status: "skip",
-					}),
-					expect.objectContaining({
-						id: "guidance",
 						status: "skip",
 					}),
 				]),
@@ -244,13 +234,13 @@ describe("runtime operator tools", () => {
 		});
 	});
 
-	test("flow_doctor config check reports reasoning and command route failures", () => {
+	test("config readiness check reports reasoning and command route failures", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 		requireConfigEntry(
-			config.agent?.["flow-worker"],
-			"flow-worker agent",
-		).reasoningEffort = "high";
+			config.agent?.["flow-reviewer"],
+			"flow-reviewer agent",
+		).reasoningEffort = "low";
 		requireConfigEntry(
 			config.command?.["flow-review"],
 			"flow-review command",
@@ -260,30 +250,17 @@ describe("runtime operator tools", () => {
 
 		expect(check.status).toBe("fail");
 		expect(check.remediation).toContain(
-			"/flow-doctor is routed through flow-control",
+			"/flow-review is routed through flow-reviewer",
 		);
-		expect(check.remediation).toContain(
-			"/flow-review is routed through flow-auditor",
-		);
-		expect(check.details?.doctorAgent).toBe("flow-control");
 		expect(check.details?.commandRouting).toEqual({
-			"flow-doctor": "flow-control",
 			"flow-review": "flow-control",
 		});
 		expect(check.details?.reasoningMismatches).toEqual([
-			{ agent: "flow-worker", expected: "low", actual: "high" },
+			{ agent: "flow-reviewer", expected: "high", actual: "low" },
 		]);
-		expect(check.details?.reasoningEffortDiagnostic).toEqual({
-			verifies: "flow_injected_config",
-			doesNotVerify: "opencode_host_effective_session_reasoning",
-			hostObservation: "unsupported_by_documented_api",
-		});
-		expect(check.remediation).toContain(
-			"does not verify OpenCode host-effective or session-persisted reasoning",
-		);
 	});
 
-	test("flow_doctor config check reports missing flow-review routing", () => {
+	test("config readiness check reports missing flow-review routing", () => {
 		const config: MutableConfig = {};
 		applyFlowConfig(config);
 		delete requireConfigEntry(config.command, "commands")["flow-review"];
@@ -292,14 +269,12 @@ describe("runtime operator tools", () => {
 
 		expect(check.status).toBe("fail");
 		expect(check.details?.missingCommands).toContain("flow-review");
-		expect(check.details?.doctorAgent).toBe("flow-control");
 		expect(check.details?.commandRouting).toEqual({
-			"flow-doctor": "flow-control",
 			"flow-review": null,
 		});
 	});
 
-	test("failed completion attempts are persisted and surfaced in status, doctor, and history", async () => {
+	test("failed completion attempts are persisted and surfaced in status and history", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const [feature] = samplePlan().features;
@@ -317,12 +292,12 @@ describe("runtime operator tools", () => {
 			],
 		};
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Surface failed completion" },
 			toolContext(worktree),
 		);
 		const applyResponse = JSON.parse(
-			await tools.flow_plan_apply.execute(
+			await tools.flow_plan_save.execute(
 				{
 					plan: {
 						...samplePlan(),
@@ -334,10 +309,12 @@ describe("runtime operator tools", () => {
 			),
 		);
 		expect(applyResponse.status).toBe("ok");
-		const approveResponse = JSON.parse(
-			await tools.flow_plan_approve.execute({}, toolContext(worktree)),
-		);
-		expect(approveResponse.status).toBe("ok");
+		if (!applyResponse.autoApproved) {
+			const approveResponse = JSON.parse(
+				await tools.flow_plan_approve.execute({}, toolContext(worktree)),
+			);
+			expect(approveResponse.status).toBe("ok");
+		}
 		const startResponse = JSON.parse(
 			await tools.flow_run_start.execute({}, toolContext(worktree)),
 		);
@@ -346,7 +323,7 @@ describe("runtime operator tools", () => {
 		const completionPayload = {
 			contractVersion: "1",
 			status: "ok",
-			summary: "Tried to complete with incomplete final review evidence.",
+			summary: "Tried to complete with a failing final review.",
 			artifactsChanged: [{ path: "src/runtime/session.ts" }],
 			validationRun: [
 				{
@@ -369,11 +346,16 @@ describe("runtime operator tools", () => {
 				summary: "Feature review passed.",
 				blockingFindings: [],
 			},
-			finalReview: createFinalReviewPayload(),
+			finalReview: createFinalReviewPayload({
+				status: "failed",
+				blockingFindings: [
+					{ summary: "Final review found a blocking regression." },
+				],
+			}),
 		};
 
 		const failedCompletion = JSON.parse(
-			await tools.flow_run_complete_feature.execute(
+			await tools.flow_feature_complete.execute(
 				completionPayload,
 				toolContext(worktree),
 			),
@@ -382,7 +364,7 @@ describe("runtime operator tools", () => {
 		expect(failedCompletion.status).toBe("error");
 		expect(failedCompletion.recovery.errorCode).toBe("failing_final_review");
 		expect(failedCompletion.latestFailedAttempt).toMatchObject({
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			phase: "execution",
 			status: "error",
 			failureCategory: "failing_final_review",
@@ -392,12 +374,12 @@ describe("runtime operator tools", () => {
 		expect(saved?.status).toBe("running");
 		expect(saved?.closure).toBeNull();
 		expect(saved?.execution.lastFailedMutation).toMatchObject({
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			failureCategory: "failing_final_review",
 		});
 
 		const unrelatedReviewSuccess = JSON.parse(
-			await tools.flow_review_record_feature.execute(
+			await tools.flow_review_record.execute(
 				{
 					scope: "feature",
 					featureId: scopedFeature.id,
@@ -415,26 +397,26 @@ describe("runtime operator tools", () => {
 		expect(
 			savedAfterUnrelatedSuccess?.execution.lastFailedMutation,
 		).toMatchObject({
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			failureCategory: "failing_final_review",
 		});
 
 		const repeatedFailedCompletion = JSON.parse(
-			await tools.flow_run_complete_feature.execute(
+			await tools.flow_feature_complete.execute(
 				completionPayload,
 				toolContext(worktree),
 			),
 		);
 		expect(repeatedFailedCompletion.status).toBe("error");
 		expect(repeatedFailedCompletion.latestFailedAttempt).toMatchObject({
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			failureCategory: "failing_final_review",
 			sameCategoryFailureCount: 2,
 		});
 
 		const savedAfterRepeat = await loadSession(worktree);
 		expect(savedAfterRepeat?.execution.lastFailedMutation).toMatchObject({
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			failureCategory: "failing_final_review",
 			sameCategoryFailureCount: 2,
 		});
@@ -443,11 +425,11 @@ describe("runtime operator tools", () => {
 			await tools.flow_status.execute({}, toolContext(worktree)),
 		);
 		expect(status.latestFailedAttempt).toMatchObject({
-			tool: "flow_run_complete_feature",
+			tool: "flow_feature_complete",
 			failureCategory: "failing_final_review",
 		});
 		expect(status.operatorSummary).toContain(
-			"Latest failed attempt: flow_run_complete_feature — failing_final_review (2 same-category attempts).",
+			"Latest failed attempt: flow_feature_complete — failing_final_review (2 same-category attempts).",
 		);
 		expect(status.operatorSummary).toContain(
 			"Fix: Fix the final review findings, rerun broad validation",
@@ -455,32 +437,25 @@ describe("runtime operator tools", () => {
 		expect(status.session.taskProgress).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					id: "failed:flow_run_complete_feature:failing_final_review",
+					id: "failed:flow_feature_complete:failing_final_review",
 					status: "blocked",
 					evidence: expect.arrayContaining(["same-category attempts: 2"]),
 				}),
 			]),
 		);
 
-		const doctor = JSON.parse(
-			await tools.flow_doctor.execute({}, toolContext(worktree)),
-		);
-		expect(doctor.latestFailedAttempt).toMatchObject({
-			failureCategory: "failing_final_review",
-		});
-		expect(doctor.operatorSummary).toContain(
-			"Latest failed attempt: flow_run_complete_feature — failing_final_review (2 same-category attempts).",
-		);
-
 		const history = JSON.parse(
-			await tools.flow_history.execute({}, toolContext(worktree)),
+			await tools.flow_session.execute(
+				{ action: "history" },
+				toolContext(worktree),
+			),
 		);
 		expect(history.latestFailedAttempt).toMatchObject({
 			failureCategory: "failing_final_review",
 		});
 		expect(history.failedAttemptGroups).toEqual([
 			expect.objectContaining({
-				tool: "flow_run_complete_feature",
+				tool: "flow_feature_complete",
 				failureCategory: "failing_final_review",
 				count: 2,
 				sessionIds: [savedAfterRepeat?.id],
@@ -488,8 +463,8 @@ describe("runtime operator tools", () => {
 		]);
 
 		const reset = JSON.parse(
-			await tools.flow_reset_feature.execute(
-				{ featureId: scopedFeature.id },
+			await tools.flow_feature_complete.execute(
+				{ reset: true, featureId: scopedFeature.id },
 				toolContext(worktree),
 			),
 		);
@@ -503,59 +478,75 @@ describe("runtime operator tools", () => {
 		);
 	});
 
-	test("flow_doctor supports a compact view for easier operator scanning", async () => {
+	test("flow_status compact view surfaces readiness issues for unsynced skills", async () => {
 		const worktree = makeTempDir();
 		const homeDir = makeTempDir();
 		await withHomeEnv(homeDir, async () => {
 			const tools = createTestTools();
-			const response = await tools.flow_doctor.execute(
+			const response = await tools.flow_status.execute(
 				{ view: "compact" },
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
 
-			expect(parsed.status).toBe("warn");
+			expect(parsed.readiness.status).toBe("warn");
 			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
-			expect(parsed.operatorSummary).toContain(
-				"Flow doctor warn: The canonical Flow plugin file was not found",
-			);
-			expect(parsed.operatorSummary).toContain(
-				"Fix: Run `bun run install:opencode` from the Flow repo or reinstall the latest release if OpenCode cannot load Flow.",
-			);
-			expect(parsed.operatorSummary).toContain(
-				"Next: Start a new Flow session with /flow-plan <goal>.",
-			);
-			expect(parsed.operatorSummary).toContain("Command: /flow-plan <goal>");
-			expect(parsed.checks).toBeUndefined();
-			expect(parsed.session).toBeUndefined();
-			expect(parsed.issues).toEqual([
+			expect(parsed.readiness.issues).toEqual([
 				expect.objectContaining({
 					id: "install",
 					status: "warn",
 				}),
 			]);
+			expect(parsed.readiness.issues[0].summary).toContain(
+				"Flow global skills are not in sync",
+			);
+			expect(parsed.readiness.issues[0].remediation).toContain(
+				"Restart OpenCode so the Flow plugin re-syncs its global skills",
+			);
+			expect(parsed.readiness.checks).toBeUndefined();
+			expect(parsed.session).toBeUndefined();
 			expect(response.includes("\n")).toBe(false);
 		});
 	});
 
-	test("flow_doctor warns when the canonical install path is missing", async () => {
+	test("flow_status readiness warns when the global Flow skills are not synced", async () => {
 		const worktree = makeTempDir();
 		const homeDir = makeTempDir();
 		await withHomeEnv(homeDir, async () => {
 			const tools = createTestTools();
-			const response = await tools.flow_doctor.execute(
+			const response = await tools.flow_status.execute(
 				{},
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
-			const installCheck = parsed.checks.find(
-				(check: { id: string }) => check.id === "install",
-			);
+			const installCheck = findCheck(parsed, "install");
 
-			expect(parsed.status).toBe("warn");
+			expect(parsed.readiness.status).toBe("warn");
 			expect(installCheck?.status).toBe("warn");
+			expect(String(installCheck?.remediation)).toContain("Restart OpenCode");
+		});
+	});
+
+	test("flow_status readiness warns when a pre-npm plugin copy risks double-loading Flow", async () => {
+		const worktree = makeTempDir();
+		const homeDir = makeTempDir();
+		await installHealthyPluginFixture(homeDir);
+		const preNpmPath = await installPreNpmPluginFixture(homeDir);
+
+		await withHomeEnv(homeDir, async () => {
+			const tools = createTestTools();
+			const response = await tools.flow_status.execute(
+				{},
+				toolContext(worktree),
+			);
+			const parsed = JSON.parse(response);
+			const installCheck = findCheck(parsed, "install");
+
+			expect(parsed.readiness.status).toBe("warn");
+			expect(installCheck?.status).toBe("warn");
+			expect(String(installCheck?.summary)).toContain(preNpmPath);
 			expect(String(installCheck?.remediation)).toContain(
-				"bun run install:opencode",
+				"bunx opencode-plugin-flow uninstall",
 			);
 		});
 	});
@@ -571,54 +562,44 @@ describe("runtime operator tools", () => {
 		const statusParsed = JSON.parse(statusResponse);
 		expect(statusParsed.status).toBe("missing");
 
-		const doctorResponse = await tools.flow_doctor.execute(
-			undefined as never,
-			toolContext(worktree),
-		);
-		const doctorParsed = JSON.parse(doctorResponse);
-		expect(typeof doctorParsed.status).toBe("string");
-
-		const historyResponse = await tools.flow_history.execute(
-			undefined as never,
+		const historyResponse = await tools.flow_session.execute(
+			{ action: "history" },
 			toolContext(worktree),
 		);
 		const historyParsed = JSON.parse(historyResponse);
 		expect(historyParsed.status).toBe("missing");
 	});
 
-	test("flow_doctor reports missing rendered docs for an active session", async () => {
+	test("flow_status readiness reports missing rendered docs for an active session", async () => {
 		const worktree = makeTempDir();
 		const homeDir = makeTempDir();
-		await installDoctorPluginFixture(homeDir);
+		await installHealthyPluginFixture(homeDir);
 
 		await withHomeEnv(homeDir, async () => {
 			const saved = await saveSession(
 				worktree,
-				createSession("Doctor fixture"),
+				createSession("Readiness fixture"),
 			);
 			await rm(getIndexDocPath(worktree, saved.id), { force: true });
 
 			const tools = createTestTools();
-			const response = await tools.flow_doctor.execute(
+			const response = await tools.flow_status.execute(
 				{},
 				toolContext(worktree),
 			);
 			const parsed = JSON.parse(response);
-			const artifactCheck = parsed.checks.find(
-				(check: { id: string }) => check.id === "session_artifacts",
-			);
+			const artifactCheck = findCheck(parsed, "session_artifacts");
 
-			expect(parsed.status).toBe("fail");
-			expect(parsed.nextCommand).toBe(FLOW_PLAN_WITH_GOAL_COMMAND);
+			expect(parsed.readiness.status).toBe("fail");
 			expect(artifactCheck?.status).toBe("fail");
-			expect(artifactCheck?.details.indexDocReadable).toBe(false);
-			expect(parsed.operatorSummary).toContain(
-				"Flow doctor fail: Flow found an active session, but one or more persisted session artifacts are missing.",
+			expect(artifactCheck?.details?.indexDocReadable).toBe(false);
+			expect(String(artifactCheck?.summary)).toContain(
+				"one or more persisted session artifacts are missing",
 			);
 		});
 	});
 
-	test("flow_plan_start accepts an OpenCode-like context payload and persists under directory", async () => {
+	test("flow_plan_save accepts an OpenCode-like context payload and persists under directory", async () => {
 		const directory = makeTempDir();
 		const tools = createTestTools();
 		const context = {
@@ -630,7 +611,7 @@ describe("runtime operator tools", () => {
 			ReturnType<typeof createTestTools>["flow_status"]["execute"]
 		>[1];
 
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			context,
 		);
@@ -645,7 +626,7 @@ describe("runtime operator tools", () => {
 		).resolves.toContain(parsed.session.id);
 	});
 
-	test("flow_plan_apply auto-approves lite single-feature drafts", async () => {
+	test("flow_plan_save auto-approves lite single-feature drafts", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const liteFeature = samplePlan().features[0];
@@ -653,11 +634,11 @@ describe("runtime operator tools", () => {
 			throw new Error("Missing lite feature fixture.");
 		}
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Ship a tiny fix" },
 			toolContext(worktree),
 		);
-		const response = await tools.flow_plan_apply.execute(
+		const response = await tools.flow_plan_save.execute(
 			{
 				plan: {
 					...samplePlan(),
@@ -681,15 +662,15 @@ describe("runtime operator tools", () => {
 		expect(session?.status).toBe("ready");
 	});
 
-	test("flow_plan_apply keeps standard multi-feature drafts pending approval", async () => {
+	test("flow_plan_save keeps standard multi-feature drafts pending approval", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			toolContext(worktree),
 		);
-		const response = await tools.flow_plan_apply.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ plan: samplePlan() },
 			toolContext(worktree),
 		);
@@ -706,15 +687,15 @@ describe("runtime operator tools", () => {
 		expect(session?.status).toBe("planning");
 	});
 
-	test("flow_plan_apply rejects completion thresholds above feature count", async () => {
+	test("flow_plan_save rejects completion thresholds above feature count", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Reject impossible completion threshold" },
 			toolContext(worktree),
 		);
-		const response = await tools.flow_plan_apply.execute(
+		const response = await tools.flow_plan_save.execute(
 			{
 				plan: {
 					...samplePlan(),
@@ -731,45 +712,15 @@ describe("runtime operator tools", () => {
 		);
 	});
 
-	test("flow_plan_select_features rejects subsets that make completion thresholds impossible", async () => {
-		const worktree = makeTempDir();
-		const tools = createTestTools();
-
-		await tools.flow_plan_start.execute(
-			{ goal: "Reject impossible narrowed threshold" },
-			toolContext(worktree),
-		);
-		await tools.flow_plan_apply.execute(
-			{
-				plan: {
-					...samplePlan(),
-					completionPolicy: { minCompletedFeatures: 2 },
-				},
-			},
-			toolContext(worktree),
-		);
-
-		const response = await tools.flow_plan_select_features.execute(
-			{ featureIds: ["setup-runtime"] },
-			toolContext(worktree),
-		);
-		const parsed = JSON.parse(response);
-
-		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain(
-			"completionPolicy.minCompletedFeatures (2) cannot exceed the plan feature count (1)",
-		);
-	});
-
 	test("flow_plan_approve rejects selected subsets that make completion thresholds impossible", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Reject impossible approval threshold" },
 			toolContext(worktree),
 		);
-		await tools.flow_plan_apply.execute(
+		await tools.flow_plan_save.execute(
 			{
 				plan: {
 					...samplePlan(),
@@ -791,20 +742,18 @@ describe("runtime operator tools", () => {
 		);
 	});
 
-	test("flow_plan_start asks permission before mutating a hidden workspace root", async () => {
+	test("flow_plan_save asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		let permissionEffectRan = false;
-		const ask = mock(() =>
-			sync(() => {
-				permissionEffectRan = true;
-			}),
-		);
+		let permissionPromiseRan = false;
+		const ask = mock(async () => {
+			permissionPromiseRan = true;
+		});
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
 			await mkdir(hiddenWorkspace, { recursive: true });
-			const response = await tools.flow_plan_start.execute(
+			const response = await tools.flow_plan_save.execute(
 				{ goal: "Keep Flow inside the repo" },
 				toolContext("/", hiddenWorkspace, { ask }),
 			);
@@ -813,7 +762,7 @@ describe("runtime operator tools", () => {
 			expect(parsed.status).toBe("ok");
 			expect(parsed.session.goal).toBe("Keep Flow inside the repo");
 			expect(ask).toHaveBeenCalledTimes(1);
-			expect(permissionEffectRan).toBe(true);
+			expect(permissionPromiseRan).toBe(true);
 			expect(ask).toHaveBeenCalledWith({
 				permission: "edit",
 				patterns: [join(hiddenWorkspace, ".flow", "**")],
@@ -829,12 +778,10 @@ describe("runtime operator tools", () => {
 	test("flow_run_start asks permission before mutating a hidden workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		let permissionEffectRan = false;
-		const ask = mock(() =>
-			sync(() => {
-				permissionEffectRan = true;
-			}),
-		);
+		let permissionPromiseRan = false;
+		const ask = mock(async () => {
+			permissionPromiseRan = true;
+		});
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
@@ -852,21 +799,21 @@ describe("runtime operator tools", () => {
 				"Flow blocked mutable workspace root",
 			);
 			expect(ask).toHaveBeenCalledTimes(1);
-			expect(permissionEffectRan).toBe(true);
+			expect(permissionPromiseRan).toBe(true);
 		});
 	});
 
-	test("flow_plan_start rejects when hidden workspace permission is denied", async () => {
+	test("flow_plan_save rejects when hidden workspace permission is denied", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
 		const denied = new Error("permission denied");
-		const ask = mock(() => fail(denied));
+		const ask = mock(() => Promise.reject(denied));
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
 			await mkdir(hiddenWorkspace, { recursive: true });
 			await expect(
-				tools.flow_plan_start.execute(
+				tools.flow_plan_save.execute(
 					{ goal: "Do not write without permission" },
 					toolContext("/", hiddenWorkspace, { ask }),
 				),
@@ -883,11 +830,11 @@ describe("runtime operator tools", () => {
 			throw new Error("Missing lite feature fixture.");
 		}
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Ship a tiny fix" },
 			toolContext(worktree),
 		);
-		await tools.flow_plan_apply.execute(
+		await tools.flow_plan_save.execute(
 			{
 				plan: {
 					...samplePlan(),
@@ -904,7 +851,7 @@ describe("runtime operator tools", () => {
 		const started = JSON.parse(startResponse);
 		expect(started.status).toBe("ok");
 
-		const completeResponse = await tools.flow_run_complete_feature.execute(
+		const completeResponse = await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "needs_input",
@@ -942,23 +889,19 @@ describe("runtime operator tools", () => {
 		expect(parsed.session.nextCommand).toBe(FLOW_RUN_COMMAND);
 	});
 
-	test("flow_doctor accepts hidden home workspace roots", async () => {
+	test("flow_status accepts hidden home workspace roots", async () => {
 		const fakeHome = makeTempDir();
 		const hiddenWorkspace = join(fakeHome, ".hidden-workspace");
-		const homeDir = makeTempDir();
-		await installDoctorPluginFixture(homeDir);
 
 		await withHomeEnv(fakeHome, async () => {
 			await mkdir(hiddenWorkspace, { recursive: true });
 			const tools = createTestTools();
-			const response = await tools.flow_doctor.execute(
+			const response = await tools.flow_status.execute(
 				{},
 				toolContext("/", hiddenWorkspace),
 			);
 			const parsed = JSON.parse(response);
-			const workspaceCheck = parsed.checks.find(
-				(check: { id: string }) => check.id === "workspace",
-			);
+			const workspaceCheck = findCheck(parsed, "workspace");
 
 			expect(parsed.workspaceRoot).toBe(hiddenWorkspace);
 			expect(parsed.workspace).toEqual(
@@ -972,14 +915,14 @@ describe("runtime operator tools", () => {
 		});
 	});
 
-	test("flow_plan_start at a normal project root does not ask just because hidden dirs exist inside it", async () => {
+	test("flow_plan_save at a normal project root does not ask just because hidden dirs exist inside it", async () => {
 		const worktree = makeTempDir();
 		const hiddenChild = join(worktree, ".hidden-workspace");
-		const ask = mock(() => succeed(undefined));
+		const ask = mock(() => Promise.resolve(undefined));
 		const tools = createTestTools();
 
 		await mkdir(hiddenChild, { recursive: true });
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Use project root state" },
 			toolContext(worktree, hiddenChild, { ask }),
 		);
@@ -992,14 +935,14 @@ describe("runtime operator tools", () => {
 		expect(ask).not.toHaveBeenCalled();
 	});
 
-	test("flow_plan_start does not ask when the mutable workspace root is .flow itself", async () => {
+	test("flow_plan_save does not ask when the mutable workspace root is .flow itself", async () => {
 		const worktree = makeTempDir();
 		const flowRoot = join(worktree, ".flow");
-		const ask = mock(() => succeed(undefined));
+		const ask = mock(() => Promise.resolve(undefined));
 		const tools = createTestTools();
 
 		await mkdir(flowRoot, { recursive: true });
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Use flow root directly" },
 			toolContext("/", flowRoot, { ask }),
 		);
@@ -1009,12 +952,12 @@ describe("runtime operator tools", () => {
 		expect(ask).not.toHaveBeenCalled();
 	});
 
-	test("flow_plan_start still rejects using $HOME itself as the mutable workspace root", async () => {
+	test("flow_plan_save still rejects using $HOME itself as the mutable workspace root", async () => {
 		const fakeHome = makeTempDir();
 		const tools = createTestTools();
 
 		await withHomeEnv(fakeHome, async () => {
-			const response = await tools.flow_plan_start.execute(
+			const response = await tools.flow_plan_save.execute(
 				{ goal: "Keep Flow out of home root" },
 				toolContext("/", fakeHome),
 			);

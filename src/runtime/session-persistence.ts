@@ -3,7 +3,7 @@ import {
 	persistCompletedSession,
 	syncCompletedSessionArtifacts,
 } from "./recovery";
-import { renderSessionDocs } from "./rendering";
+import { renderSessionDocs } from "./render";
 import type { Session } from "./schema";
 import {
 	makeSessionActive,

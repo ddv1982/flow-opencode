@@ -3,15 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "../src/adapters/opencode/tool-surface/schemas";
 import { createTools } from "../src/adapters/opencode/tools";
-import type { ReviewReport } from "../src/audit/report-schema";
-import { readActiveSessionId } from "../src/runtime/session";
+import { readActiveSessionId } from "../src/runtime/lifecycle";
 import {
 	sampleSession as canonicalSampleSession,
 	cloneSamplePlan,
 	createSampleSession,
 } from "./fixtures";
 
-export type TestToolContext = Partial<ToolContext> & {
+type TestToolContext = Partial<ToolContext> & {
 	worktree?: string;
 	directory?: string;
 };
@@ -23,7 +22,7 @@ type TestToolDefinition = {
 
 type ToolSurface = ReturnType<typeof createTools>;
 
-export type TestTools = {
+type TestTools = {
 	[K in keyof ToolSurface]: TestToolDefinition;
 } & Record<string, TestToolDefinition>;
 
@@ -76,62 +75,4 @@ export function sampleSession(goal?: string) {
 	return goal === undefined
 		? structuredClone(canonicalSampleSession)
 		: createSampleSession(goal);
-}
-
-export function reviewSurface(
-	overrides: Partial<ReviewReport["discoveredSurfaces"][number]> = {},
-): ReviewReport["discoveredSurfaces"][number] {
-	return {
-		name: "Surface",
-		category: "source_runtime",
-		reviewStatus: "directly_reviewed",
-		evidence: ["src/runtime/session.ts:1"],
-		...overrides,
-	};
-}
-
-export function validationEntry(
-	overrides: Partial<ReviewReport["validationRun"][number]> = {},
-): ReviewReport["validationRun"][number] {
-	return {
-		command: "cargo test",
-		status: "not_run",
-		summary: "Not run during this read-only review.",
-		...overrides,
-	};
-}
-
-export function reviewFinding(
-	overrides: Partial<ReviewReport["findings"][number]> = {},
-): ReviewReport["findings"][number] {
-	return {
-		title: "Finding",
-		category: "risk",
-		confidence: "likely",
-		evidence: ["src/runtime/session.ts:1"],
-		impact: "Finding impact.",
-		...overrides,
-	};
-}
-
-export function sampleReviewReport(
-	overrides: Partial<ReviewReport> = {},
-): ReviewReport {
-	return {
-		reviewTarget: {
-			repoRoot: "/tmp/flow-review-test-repo",
-			repoName: "flow-review-test-repo",
-			generatedAt: "2026-06-01T00:00:00.000Z",
-			invokedFromCwd: "/tmp/flow-review-test-repo",
-		},
-		requestedDepth: "deep_audit",
-		achievedDepth: "deep_audit",
-		repoSummary: "Repo summary.",
-		overallVerdict: "Review summary.",
-		discoveredSurfaces: [],
-		coverageNotes: [],
-		validationRun: [],
-		findings: [],
-		...overrides,
-	};
 }

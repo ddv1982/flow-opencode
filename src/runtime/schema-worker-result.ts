@@ -1,17 +1,11 @@
 import { z } from "zod";
 import { VALIDATION_SCOPES } from "./constants";
-import { EvidencePacketReferenceArraySchema } from "./schema-evidence-packets";
 import { ReplanRecordSchema } from "./schema-plan";
 import {
 	FinalReviewSchema,
-	PersistedFinalReviewSchema,
 	ReviewerDecisionSchema,
 } from "./schema-review-decisions";
-import {
-	ReviewFindingClosureSchema,
-	ReviewSchema,
-	ReviewScopeLedgerEntrySchema,
-} from "./schema-review-shared";
+import { ReviewSchema } from "./schema-review-shared";
 import {
 	addReplanRequiredIssueIfNeeded,
 	isNeedsInputOutcomeKind,
@@ -32,9 +26,6 @@ export const WorkerResultBaseSchema = z.object({
 	validationScope: z.enum(VALIDATION_SCOPES).optional(),
 	reviewIterations: z.number().int().nonnegative().optional(),
 	decisions: z.array(DecisionSchema).default([]),
-	reviewFindingClosures: z.array(ReviewFindingClosureSchema).optional(),
-	reviewScopeLedger: z.array(ReviewScopeLedgerEntrySchema).optional(),
-	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 	nextStep: z.string().min(1),
 	featureResult: FeatureResultSchema,
 	featureReview: ReviewSchema,
@@ -90,13 +81,11 @@ export const WorkerResultArgsSchema = z
 		addReplanRequiredIssueIfNeeded(value, context);
 	});
 
+// `tool` stays a free string so failed-attempt records written by Flow v2
+// (old tool names) keep loading under the consolidated tool surface.
 export const LatestFailedFlowAttemptSchema = z
 	.object({
-		tool: z.enum([
-			"flow_review_record_final",
-			"flow_run_complete_feature",
-			"flow_review_record_feature",
-		]),
+		tool: z.string().min(1),
 		phase: z.enum(["review", "final_review", "execution"]),
 		status: z.literal("error"),
 		failureCategory: z.string().min(1),
@@ -118,12 +107,9 @@ export const ExecutionHistoryEntrySchema = z.object({
 	validationRun: z.array(ValidationRunSchema).default([]),
 	artifactsChanged: z.array(ArtifactSchema).default([]),
 	decisions: z.array(DecisionSchema).default([]),
-	reviewFindingClosures: z.array(ReviewFindingClosureSchema).default([]),
-	reviewScopeLedger: z.array(ReviewScopeLedgerEntrySchema).optional(),
 	featureResult: FeatureResultSchema.optional(),
 	replanRecord: ReplanRecordSchema.optional(),
 	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
-	evidencePackets: EvidencePacketReferenceArraySchema.optional(),
 	featureReview: ReviewSchema.optional(),
-	finalReview: PersistedFinalReviewSchema.optional(),
+	finalReview: FinalReviewSchema.optional(),
 });

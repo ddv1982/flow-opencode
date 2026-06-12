@@ -1,7 +1,7 @@
 // Owns plan graph, feature-id, reviewer-tool, and response-shape coverage
 // previously grouped in tests/runtime-completion-contracts.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
-import { createSession, saveSession } from "../../src/runtime/session";
+import { createSession, saveSession } from "../../src/runtime/lifecycle";
 import {
 	applyPlan,
 	approvePlan,
@@ -49,7 +49,7 @@ describe("runtime plan and tool schema contracts", () => {
 		const runtimeTools = createTestTools();
 
 		return expect(
-			runtimeTools.flow_plan_apply.execute(
+			runtimeTools.flow_plan_save.execute(
 				{
 					plan: {
 						...samplePlan(),
@@ -125,7 +125,7 @@ describe("runtime plan and tool schema contracts", () => {
 
 		await saveSession(worktree, started.value.session);
 
-		const response = await tools.flow_review_record_final.execute(
+		const response = await tools.flow_review_record.execute(
 			{
 				scope: "final",
 				reviewDepth: "detailed",
@@ -142,21 +142,6 @@ describe("runtime plan and tool schema contracts", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				evidencePackets: [
-					{
-						id: "packet:final-review-tool",
-						purpose: "review",
-						summary: "Final reviewer packet survives the tool path.",
-						sourceRefs: ["src/runtime/session.ts"],
-						selectedContext: ["src/runtime/session.ts"],
-					},
-				],
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "approved",
 				summary: "Final state looks good.",
@@ -173,12 +158,9 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(parsed.session.lastReviewerDecision.suggestedValidation).toEqual([
 			"bun run check",
 		]);
-		expect(parsed.session.lastReviewerDecision.evidencePackets[0].id).toBe(
-			"packet:final-review-tool",
-		);
 	});
 
-	test("reviewer decision tool rejects featureId on final review at parse time", async () => {
+	test("reviewer decision tool strips featureId from final review payloads for v2 compatibility", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Build a workflow plugin");
@@ -196,7 +178,7 @@ describe("runtime plan and tool schema contracts", () => {
 
 		await saveSession(worktree, started.value.session);
 
-		const response = await tools.flow_review_record_final.execute(
+		const response = await tools.flow_review_record.execute(
 			{
 				scope: "final",
 				featureId: "some-feature",
@@ -214,12 +196,6 @@ describe("runtime plan and tool schema contracts", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "approved",
 				summary: "Final state looks good.",
@@ -231,18 +207,16 @@ describe("runtime plan and tool schema contracts", () => {
 		);
 
 		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("error");
-		expect(parsed.summary).toContain("featureId");
-		expect(parsed.summary).not.toContain(
-			"Final review decisions cannot target",
-		);
+		expect(parsed.status).toBe("ok");
+		expect(parsed.session.lastReviewerDecision.scope).toBe("final");
+		expect(parsed.session.lastReviewerDecision.featureId).toBeUndefined();
 	});
 
 	test("tools keep representative top-level response shapes across the split helpers", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 
-		const planStartResponse = await tools.flow_plan_start.execute(
+		const planStartResponse = await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			toolContext(worktree),
 		);
@@ -255,7 +229,7 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(planStartParsed.status).toBe("ok");
 		expect(planStartParsed.session.goal).toBe("Build a workflow plugin");
 
-		const planApplyResponse = await tools.flow_plan_apply.execute(
+		const planApplyResponse = await tools.flow_plan_save.execute(
 			{ plan: samplePlan() },
 			toolContext(worktree),
 		);

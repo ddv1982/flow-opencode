@@ -1,107 +1,62 @@
 #!/usr/bin/env node
 
+// npm distribution smoke: packs the package exactly as it would be published,
+// extracts the tarball, vendors runtime dependencies the way OpenCode's
+// Bun-based plugin install would resolve them, then exercises plugin startup
+// (skill sync, pre-npm-copy warning), the tool surface, and the uninstall CLI.
+
 import { spawnSync } from "node:child_process";
 import {
-	copyFileSync,
 	cpSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const packageJson = JSON.parse(
 	readFileSync(join(projectRoot, "package.json"), "utf8"),
 );
-const releaseInstallScript = join(projectRoot, "scripts", "release-install.sh");
-const releaseUninstallScript = join(
-	projectRoot,
-	"scripts",
-	"release-uninstall.sh",
-);
-const distPath = join(projectRoot, "dist", "index.js");
-const generatedSkillNames = ["flow-plan", "flow-run", "flow-review"];
-const manualStep =
-	"Run real OpenCode manually in a disposable project to verify /flow-doctor, /flow-plan, /flow-status, and /flow-session UI/runtime behavior.";
+
+// toolCount tracks the canonical surface only; v2 compat redirect stubs
+// (see src/adapters/opencode/tool-surface/v2-compat-tools.ts) are registered
+// alongside but reported separately as compatToolCount.
+const CANONICAL_TOOL_NAMES = [
+	"flow_status",
+	"flow_plan_save",
+	"flow_plan_approve",
+	"flow_run_start",
+	"flow_feature_complete",
+	"flow_review_record",
+	"flow_session",
+];
 
 function parseArgs(argv) {
-	const options = {
-		skipBuild: false,
-		jsonPath: undefined,
-		summaryPath: undefined,
-		keepTemp: false,
-		flowJsPath: undefined,
-		skillBundlePath: undefined,
-		installScriptPath: undefined,
-		uninstallScriptPath: undefined,
-	};
+	const options = { tarball: null, evidenceDir: null };
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
-		if (arg === "--skip-build") {
-			options.skipBuild = true;
-			continue;
-		}
-		if (arg === "--keep-temp") {
-			options.keepTemp = true;
-			continue;
-		}
-		if (arg === "--json") {
+		if (arg === "--tarball") {
 			const value = argv[index + 1];
 			if (!value || value.startsWith("--")) {
-				throw new Error("--json requires an output path.");
+				throw new Error("--tarball requires a path.");
 			}
-			options.jsonPath = resolve(value);
+			options.tarball = resolve(value);
 			index += 1;
 			continue;
 		}
-		if (arg === "--summary") {
+		if (arg === "--evidence-dir") {
 			const value = argv[index + 1];
 			if (!value || value.startsWith("--")) {
-				throw new Error("--summary requires an output path.");
+				throw new Error("--evidence-dir requires a path.");
 			}
-			options.summaryPath = resolve(value);
-			index += 1;
-			continue;
-		}
-		if (arg === "--flow-js") {
-			const value = argv[index + 1];
-			if (!value || value.startsWith("--")) {
-				throw new Error("--flow-js requires a path.");
-			}
-			options.flowJsPath = resolve(value);
-			index += 1;
-			continue;
-		}
-		if (arg === "--skill-bundle") {
-			const value = argv[index + 1];
-			if (!value || value.startsWith("--")) {
-				throw new Error("--skill-bundle requires a path.");
-			}
-			options.skillBundlePath = resolve(value);
-			index += 1;
-			continue;
-		}
-		if (arg === "--install-script") {
-			const value = argv[index + 1];
-			if (!value || value.startsWith("--")) {
-				throw new Error("--install-script requires a path.");
-			}
-			options.installScriptPath = resolve(value);
-			index += 1;
-			continue;
-		}
-		if (arg === "--uninstall-script") {
-			const value = argv[index + 1];
-			if (!value || value.startsWith("--")) {
-				throw new Error("--uninstall-script requires a path.");
-			}
-			options.uninstallScriptPath = resolve(value);
+			options.evidenceDir = resolve(value);
 			index += 1;
 			continue;
 		}
@@ -110,138 +65,85 @@ function parseArgs(argv) {
 	return options;
 }
 
-function run(command, args, options = {}) {
-	const result = spawnSync(command, args, {
-		cwd: options.cwd ?? projectRoot,
-		env: options.env ?? process.env,
+function run(cmd, args, options = {}) {
+	const result = spawnSync(cmd, args, {
 		encoding: "utf8",
-		stdio: ["ignore", "pipe", "pipe"],
+		...options,
 	});
 	if (result.status !== 0) {
 		throw new Error(
-			`${command} ${args.join(" ")} failed with exit ${result.status}: ${result.stderr || result.stdout}`,
+			`${cmd} ${args.join(" ")} failed (${result.status}): ${result.stderr}`,
 		);
 	}
 	return result;
 }
 
-function ensureParent(path) {
-	mkdirSync(dirname(path), { recursive: true });
-}
-
-function writeJson(path, evidence) {
-	if (!path) {
-		return;
+function packTarball(destination) {
+	for (const artifact of ["index.js", "cli.js"]) {
+		if (!existsSync(join(projectRoot, "dist", artifact))) {
+			throw new Error(
+				`dist/${artifact} is missing. Run \`bun run build\` before the smoke.`,
+			);
+		}
 	}
-	ensureParent(path);
-	writeFileSync(path, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-}
-
-function writeSummary(path, evidence) {
-	if (!path) {
-		return;
-	}
-	ensureParent(path);
-	writeFileSync(
-		path,
-		[
-			"# OpenCode-oriented Flow smoke evidence",
-			"",
-			`- Status: ${evidence.status}`,
-			`- Package version: ${evidence.packageVersion}`,
-			`- Release install mode: ${evidence.releaseInstall.assetMode}`,
-			`- Surface: ${evidence.surface.agents} agents, ${evidence.surface.commands} commands, ${evidence.surface.tools} tools`,
-			`- Real OpenCode CLI invoked: ${evidence.hostBoundary.realOpenCodeCliInvoked}`,
-			`- Manual live OpenCode required: ${evidence.hostBoundary.manualLiveOpenCodeRequired}`,
-			"",
-			"## Runtime smoke",
-			...evidence.runtimeSmoke.map(
-				(item) => `- ${item.tool}: ${item.assertion} (${item.status})`,
-			),
-			"",
-			`Remaining manual live OpenCode validation: ${evidence.remainingManualStep}`,
-			"",
-		].join("\n"),
-		"utf8",
-	);
-}
-
-function createBaseEvidence(tempRoot) {
-	return {
-		schemaVersion: 1,
-		status: "failed",
-		generatedAt: new Date().toISOString(),
-		packageVersion: packageJson.version,
-		environment: {
-			node: process.version,
-			bun: undefined,
-			platform: process.platform,
-		},
-		releaseInstall: {
-			assetMode: "local-file-url",
-			pluginPath: join(
-				tempRoot,
-				"home",
-				".config",
-				"opencode",
-				"plugins",
-				"flow.js",
-			),
-			skillsPath: join(tempRoot, "home", ".config", "opencode", "skills"),
-			installed: false,
-			uninstalled: false,
-		},
-		hostBoundary: {
-			mode: "local-import-with-project-sdk-peer",
-			realOpenCodeCliInvoked: false,
-			manualLiveOpenCodeRequired: true,
-		},
-		surface: {
-			agents: 0,
-			commands: 0,
-			tools: 0,
-			expectedAgentsPresent: [],
-			expectedCommandsPresent: [],
-			expectedToolsPresent: [],
-			generatedSkillsPresent: [],
-		},
-		runtimeSmoke: [],
-		remainingManualStep: manualStep,
-	};
-}
-
-function prepareSkillBundle(tempRoot) {
-	const bundleRoot = join(tempRoot, "skill-bundle-root");
-	const archivePath = join(tempRoot, "assets", "flow-skills.tar.gz");
-	mkdirSync(dirname(archivePath), { recursive: true });
-	run("bun", [
-		"run",
-		"./scripts/cross-area/write-release-skill-bundle.ts",
-		bundleRoot,
-	]);
-	run("tar", ["-czf", archivePath, "-C", bundleRoot, ".config"]);
-	return archivePath;
-}
-
-function installPeerForLocalImport(pluginPath) {
-	const pluginDir = dirname(pluginPath);
-	const peerTarget = join(pluginDir, "node_modules", "@opencode-ai", "plugin");
-	const zodTarget = join(pluginDir, "node_modules", "zod");
-	mkdirSync(dirname(peerTarget), { recursive: true });
-	cpSync(
-		join(projectRoot, "node_modules", "@opencode-ai", "plugin"),
-		peerTarget,
-		{
-			recursive: true,
-		},
-	);
-	cpSync(join(projectRoot, "node_modules", "zod"), zodTarget, {
-		recursive: true,
+	run("bun", ["pm", "pack", "--destination", destination], {
+		cwd: projectRoot,
 	});
-	writeFileSync(
-		join(pluginDir, "package.json"),
-		JSON.stringify({ type: "module" }, null, 2),
+	const tarball = readdirSync(destination).find((name) =>
+		name.endsWith(".tgz"),
 	);
+	if (!tarball) {
+		throw new Error("bun pm pack did not produce a tarball.");
+	}
+	return join(destination, tarball);
+}
+
+function vendorRuntimeDependencies(packageDir) {
+	// OpenCode installs npm plugins with Bun and resolves their dependencies;
+	// vendor zod (a real dependency) and a minimal @opencode-ai/plugin peer mock.
+	cpSync(
+		join(projectRoot, "node_modules", "zod"),
+		join(packageDir, "node_modules", "zod"),
+		{ recursive: true, dereference: true },
+	);
+	const peerDir = join(packageDir, "node_modules", "@opencode-ai", "plugin");
+	mkdirSync(peerDir, { recursive: true });
+	writeFileSync(
+		join(peerDir, "package.json"),
+		JSON.stringify(
+			{
+				name: "@opencode-ai/plugin",
+				version: "0.0.0-smoke",
+				type: "module",
+				exports: "./index.js",
+			},
+			null,
+			2,
+		),
+	);
+	writeFileSync(
+		join(peerDir, "index.js"),
+		[
+			"import { createRequire } from 'node:module';",
+			`const require = createRequire(${JSON.stringify(join(projectRoot, "package.json"))});`,
+			"const zodModule = require('zod');",
+			"const z = zodModule.z ?? zodModule;",
+			"export function tool(definition) {",
+			"  return definition;",
+			"}",
+			"tool.schema = z;",
+		].join("\n"),
+	);
+}
+
+async function withHome(homeDir, fn) {
+	const originalHome = process.env.HOME;
+	process.env.HOME = homeDir;
+	try {
+		return await fn();
+	} finally {
+		process.env.HOME = originalHome;
+	}
 }
 
 function assert(condition, message) {
@@ -250,304 +152,176 @@ function assert(condition, message) {
 	}
 }
 
-function assertFileExists(path, label) {
-	assert(existsSync(path), `Missing smoke asset ${label}: ${path}`);
-}
-
-function toolOutput(result) {
-	return typeof result === "string" ? result : result.output;
-}
-
-function parseToolJson(result) {
-	return JSON.parse(toolOutput(result));
-}
-
-function validateGeneratedSkills(homeDir) {
-	const present = [];
-	for (const name of generatedSkillNames) {
-		const skillPath = join(
-			homeDir,
-			".config",
-			"opencode",
-			"skills",
-			name,
-			"SKILL.md",
-		);
-		assert(existsSync(skillPath), `Missing generated skill ${name}`);
-		const text = readFileSync(skillPath, "utf8");
-		assert(
-			new RegExp(
-				`^<!-- flow-opencode-generated-skill name=${name} version=[0-9]+ hash=sha256:[a-f0-9]{64} -->`,
-				"m",
-			).test(text),
-			`Generated skill ${name} is missing its intact marker.`,
-		);
-		present.push(name);
-	}
-	return present;
-}
-
-async function runSmoke(options) {
-	const tempRoot = mkdtempSync(join(tmpdir(), "flow-opencode-smoke-"));
-	const homeDir = join(tempRoot, "home");
-	const worktree = join(tempRoot, "worktree");
-	const assetsDir = join(tempRoot, "assets");
-	mkdirSync(homeDir, { recursive: true });
-	mkdirSync(worktree, { recursive: true });
-	mkdirSync(assetsDir, { recursive: true });
-
-	const evidence = createBaseEvidence(tempRoot);
+async function main() {
+	const options = parseArgs(process.argv.slice(2));
+	const tempRoot = mkdtempSync(join(tmpdir(), "flow-npm-smoke-"));
 	try {
-		const bunVersion = spawnSync("bun", ["--version"], { encoding: "utf8" });
-		if (bunVersion.status === 0) {
-			evidence.environment.bun = bunVersion.stdout.trim();
-		}
+		const tarball = options.tarball ?? packTarball(tempRoot);
 
-		if (!options.skipBuild) {
-			run("bun", ["run", "build"]);
-		}
+		const installDir = join(tempRoot, "install");
+		mkdirSync(installDir, { recursive: true });
+		run("tar", ["-xzf", tarball, "-C", installDir]);
+		const packageDir = join(installDir, "package");
+
+		const packedManifest = JSON.parse(
+			readFileSync(join(packageDir, "package.json"), "utf8"),
+		);
 		assert(
-			existsSync(distPath),
-			"dist/index.js is missing; run bun run build first or omit --skip-build.",
+			packedManifest.name === "opencode-plugin-flow",
+			"Packed package has the wrong name.",
 		);
-
-		const explicitAssetProvided = Boolean(
-			options.flowJsPath ||
-				options.skillBundlePath ||
-				options.installScriptPath ||
-				options.uninstallScriptPath,
-		);
-		const flowAssetPath = options.flowJsPath ?? join(assetsDir, "flow.js");
-		if (!options.flowJsPath) {
-			copyFileSync(distPath, flowAssetPath);
-		}
-		const skillBundlePath = options.skillBundlePath ?? prepareSkillBundle(tempRoot);
-		const installScriptPath = options.installScriptPath ?? releaseInstallScript;
-		const uninstallScriptPath =
-			options.uninstallScriptPath ?? releaseUninstallScript;
-		assertFileExists(flowAssetPath, "--flow-js path");
-		assertFileExists(skillBundlePath, "--skill-bundle path");
-		assertFileExists(installScriptPath, "--install-script path");
-		assertFileExists(uninstallScriptPath, "--uninstall-script path");
-		evidence.releaseInstall.assetSource = explicitAssetProvided
-			? "explicit-or-mixed"
-			: "generated-defaults";
-		evidence.releaseInstall.assets = {
-			flowJs: flowAssetPath,
-			skillBundle: skillBundlePath,
-			installScript: installScriptPath,
-			uninstallScript: uninstallScriptPath,
-		};
-		evidence.workspaceIsolation = {
-			repoRoot: projectRoot,
-			worktree,
-			worktreeFlowPath: join(worktree, ".flow"),
-			repoRootFlowPath: join(projectRoot, ".flow"),
-			repoRootFlowExistedBefore: existsSync(join(projectRoot, ".flow")),
-			repoRootFlowExistedAfter: undefined,
-			worktreeFlowCreated: false,
-		};
-
-		run("bash", [installScriptPath], {
-			env: {
-				...process.env,
-				HOME: homeDir,
-				FLOW_RELEASE_DOWNLOAD_URL: pathToFileURL(flowAssetPath).href,
-				FLOW_RELEASE_SKILL_BUNDLE_URL: pathToFileURL(skillBundlePath).href,
-			},
-			cwd: worktree,
-		});
-		evidence.releaseInstall.installed = true;
 		assert(
-			existsSync(evidence.releaseInstall.pluginPath),
-			"Release install did not write the canonical plugin path.",
+			existsSync(join(packageDir, "dist", "index.js")),
+			"Tarball is missing dist/index.js.",
+		);
+		assert(
+			existsSync(join(packageDir, "dist", "cli.js")),
+			"Tarball is missing dist/cli.js.",
+		);
+		assert(
+			!existsSync(join(packageDir, "src")),
+			"Tarball unexpectedly contains src/.",
 		);
 
-		evidence.surface.generatedSkillsPresent = validateGeneratedSkills(homeDir);
-		installPeerForLocalImport(evidence.releaseInstall.pluginPath);
+		vendorRuntimeDependencies(packageDir);
+
+		const homeDir = join(tempRoot, "home");
+		const worktree = join(tempRoot, "worktree");
+		mkdirSync(homeDir, { recursive: true });
+		mkdirSync(worktree, { recursive: true });
 
 		const logs = [];
 		const pluginModule = await import(
-			`${pathToFileURL(evidence.releaseInstall.pluginPath).href}?t=${Date.now()}`
+			`file://${join(packageDir, "dist", "index.js")}`
 		);
-		const plugin = await pluginModule.default({
-			worktree,
-			client: {
-				app: {
-					log(entry) {
-						logs.push(entry);
-					},
-				},
-			},
-		});
-		assert(
-			logs.some((entry) => entry.message === "Flow plugin initialized."),
-			"Plugin initialization log was not emitted.",
-		);
-		assert(
-			logs.some((entry) => entry.message === "Creating Flow tool surface."),
-			"Tool surface log was not emitted.",
+		const plugin = await withHome(homeDir, () =>
+			pluginModule.default({
+				worktree,
+				client: { app: { log: (entry) => logs.push(entry) } },
+			}),
 		);
 
-		const config = { agent: {}, command: {} };
-		await plugin.config(config);
-		const agentNames = Object.keys(config.agent).sort();
-		const commandNames = Object.keys(config.command).sort();
-		const toolNames = Object.keys(plugin.tool ?? {}).sort();
-		evidence.surface = {
-			...evidence.surface,
-			agents: agentNames.length,
-			commands: commandNames.length,
-			tools: toolNames.length,
-			expectedAgentsPresent: agentNames,
-			expectedCommandsPresent: commandNames,
-			expectedToolsPresent: toolNames,
-		};
-		assert(
-			agentNames.length === 7,
-			`Expected 7 agents, found ${agentNames.length}.`,
-		);
-		assert(
-			commandNames.length === 9,
-			`Expected 9 commands, found ${commandNames.length}.`,
-		);
-		assert(
-			toolNames.length === 18,
-			`Expected 18 tools, found ${toolNames.length}.`,
-		);
-		assert(
-			typeof plugin.hooks?.["tool.definition"] === "function",
-			"Missing tool.definition hook.",
-		);
-		assert(
-			typeof plugin.hooks?.["experimental.chat.system.transform"] ===
-				"function",
-			"Missing system transform hook.",
-		);
-		assert(
-			typeof plugin.hooks?.["experimental.session.compacting"] === "function",
-			"Missing session compacting hook.",
-		);
-		assert(
-			plugin.hooks?.["experimental.attachment"] === undefined,
-			"Unexpected attachment hook is present.",
-		);
-
-		const missingStatus = parseToolJson(
-			await plugin.tool.flow_status.execute({}, { worktree }),
-		);
-		assert(
-			missingStatus.status === "missing",
-			"flow_status did not report missing before plan start.",
-		);
-		evidence.runtimeSmoke.push({
-			tool: "flow_status",
-			assertion: "missing before plan start",
-			status: "passed",
-		});
-
-		const planStart = parseToolJson(
-			await plugin.tool.flow_plan_start.execute(
-				{ goal: "OpenCode smoke automation" },
-				{ worktree },
-			),
-		);
-		assert(planStart.status === "ok", "flow_plan_start did not return ok.");
-		evidence.workspaceIsolation.worktreeFlowCreated = existsSync(
-			evidence.workspaceIsolation.worktreeFlowPath,
-		);
-		assert(
-			evidence.workspaceIsolation.worktreeFlowCreated,
-			"flow_plan_start did not create state under the temp worktree.",
-		);
-		evidence.runtimeSmoke.push({
-			tool: "flow_plan_start",
-			assertion: "starts a temp-worktree planning session",
-			status: "passed",
-		});
-
-		const detailedStatus = parseToolJson(
-			await plugin.tool.flow_status.execute({ view: "detailed" }, { worktree }),
-		);
-		assert(
-			detailedStatus.status === "planning",
-			"flow_status did not report planning after plan start.",
-		);
-		assert(
-			detailedStatus.session?.goal === "OpenCode smoke automation",
-			"flow_status did not expose the smoke goal.",
-		);
-		evidence.runtimeSmoke.push({
-			tool: "flow_status",
-			assertion: "planning after plan start",
-			status: "passed",
-		});
-
-		const history = parseToolJson(
-			await plugin.tool.flow_history.execute({}, { worktree }),
-		);
-		const entries = [
-			history.history?.active,
-			...(history.history?.stored ?? []),
-			...(history.history?.completed ?? []),
-		].filter(Boolean);
-		assert(
-			entries.some((entry) => entry.goal === "OpenCode smoke automation"),
-			"flow_history did not expose the smoke session.",
-		);
-		evidence.runtimeSmoke.push({
-			tool: "flow_history",
-			assertion: "includes smoke session",
-			status: "passed",
-		});
-
-		evidence.workspaceIsolation.repoRootFlowExistedAfter = existsSync(
-			evidence.workspaceIsolation.repoRootFlowPath,
-		);
-
-		run("bash", [uninstallScriptPath], {
-			env: { ...process.env, HOME: homeDir },
-			cwd: worktree,
-		});
-		evidence.releaseInstall.uninstalled = true;
-		assert(
-			!existsSync(evidence.releaseInstall.pluginPath),
-			"Release uninstall did not remove the canonical plugin path.",
-		);
-		for (const name of generatedSkillNames) {
+		const skillsRoot = join(homeDir, ".config", "opencode", "skills");
+		const syncedSkills = existsSync(skillsRoot)
+			? readdirSync(skillsRoot).sort()
+			: [];
+		assert(syncedSkills.length > 0, "Plugin startup did not sync any skills.");
+		for (const name of syncedSkills) {
 			assert(
-				!existsSync(
-					join(homeDir, ".config", "opencode", "skills", name, "SKILL.md"),
-				),
-				`Release uninstall did not remove ${name}.`,
+				existsSync(join(skillsRoot, name, ".flow-skill-version")),
+				`Synced skill ${name} is missing its marker file.`,
 			);
 		}
 
-		evidence.status = "passed";
-		writeJson(options.jsonPath, evidence);
-		writeSummary(options.summaryPath, evidence);
-		console.log(JSON.stringify(evidence, null, 2));
-		return evidence;
-	} catch (error) {
-		evidence.status = "failed";
-		evidence.failure = {
-			message: error instanceof Error ? error.message : String(error),
+		const config = { agent: {}, command: {} };
+		await plugin.config(config);
+
+		const planSave = JSON.parse(
+			await plugin.tool.flow_plan_save.execute(
+				{ goal: "npm smoke" },
+				{ worktree },
+			),
+		);
+		assert(planSave.status === "ok", "flow_plan_save failed in npm smoke.");
+		const status = JSON.parse(
+			await plugin.tool.flow_status.execute({}, { worktree }),
+		);
+		assert(
+			status.status === "planning" && status.session?.goal === "npm smoke",
+			"flow_status did not report the smoke session.",
+		);
+
+		// Pre-npm double-load warning: a stale pre-npm plugin copy must be flagged.
+		const preNpmHome = join(tempRoot, "pre-npm-home");
+		const preNpmPluginDir = join(preNpmHome, ".config", "opencode", "plugins");
+		mkdirSync(preNpmPluginDir, { recursive: true });
+		writeFileSync(
+			join(preNpmPluginDir, "flow.js"),
+			"// Managed by flow-opencode install/uninstall\nexport default 'stale';\n",
+		);
+		const preNpmLogs = [];
+		await withHome(preNpmHome, () =>
+			pluginModule.default({
+				worktree,
+				client: { app: { log: (entry) => preNpmLogs.push(entry) } },
+			}),
+		);
+		assert(
+			preNpmLogs.some(
+				(entry) =>
+					entry.level === "warn" &&
+					String(entry.message).includes("Stale pre-npm Flow plugin copy"),
+			),
+			"Plugin startup did not warn about the pre-npm plugin copy.",
+		);
+
+		const uninstall = spawnSync(
+			"node",
+			[join(packageDir, "dist", "cli.js"), "uninstall"],
+			{
+				encoding: "utf8",
+				env: { ...process.env, HOME: homeDir },
+			},
+		);
+		assert(uninstall.status === 0, `uninstall CLI failed: ${uninstall.stderr}`);
+		assert(
+			uninstall.stdout.includes("opencode-plugin-flow"),
+			"uninstall CLI did not print the opencode.json cleanup step.",
+		);
+		const remainingSkills = existsSync(skillsRoot)
+			? readdirSync(skillsRoot).filter((name) => name.startsWith("flow"))
+			: [];
+		assert(
+			remainingSkills.length === 0,
+			`uninstall CLI left Flow skills behind: ${remainingSkills.join(", ")}`,
+		);
+
+		const report = {
+			packedVersion: packedManifest.version,
+			expectedVersion: packageJson.version,
+			tarball,
+			syncedSkills,
+			configAgents: Object.keys(config.agent).length,
+			configCommands: Object.keys(config.command).length,
+			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
+				.length,
+			compatToolCount: Object.keys(plugin.tool).filter(
+				(name) => !CANONICAL_TOOL_NAMES.includes(name),
+			).length,
+			startupLogCount: logs.length,
+			preNpmWarningVerified: true,
+			uninstallVerified: true,
 		};
-		writeJson(options.jsonPath, evidence);
-		writeSummary(options.summaryPath, evidence);
-		throw error;
-	} finally {
-		if (options.keepTemp) {
-			console.error(`Kept temp directory: ${tempRoot}`);
-		} else {
-			rmSync(tempRoot, { recursive: true, force: true });
+		assert(
+			report.packedVersion === report.expectedVersion,
+			"Packed version does not match package.json.",
+		);
+
+		if (options.evidenceDir) {
+			mkdirSync(options.evidenceDir, { recursive: true });
+			writeFileSync(
+				join(options.evidenceDir, "opencode-smoke-evidence.json"),
+				`${JSON.stringify(report, null, 2)}\n`,
+			);
+			writeFileSync(
+				join(options.evidenceDir, "opencode-smoke-evidence.md"),
+				[
+					"# npm install smoke evidence",
+					"",
+					`- Packed version: ${report.packedVersion}`,
+					`- Synced skills: ${report.syncedSkills.join(", ")}`,
+					`- Tools: ${report.toolCount} canonical + ${report.compatToolCount} v2 compat stubs, agents: ${report.configAgents}, commands: ${report.configCommands}`,
+					"- Pre-npm double-load warning verified",
+					"- Uninstall CLI verified",
+					"",
+				].join("\n"),
+			);
 		}
+
+		console.log(JSON.stringify(report, null, 2));
+	} finally {
+		rmSync(tempRoot, { recursive: true, force: true });
 	}
 }
 
-try {
-	await runSmoke(parseArgs(process.argv.slice(2)));
-} catch (error) {
-	console.error(error instanceof Error ? error.message : String(error));
-	process.exit(1);
-}
+await main();

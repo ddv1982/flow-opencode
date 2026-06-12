@@ -1,20 +1,14 @@
 // Flow runtime schema public barrel: stable exports for runtime-owned schema subdomains.
 
 import type { z } from "zod";
-import type { EvidencePacket } from "./schema-evidence-packets";
 import type {
 	FeatureSchema,
 	PackageManagerSchema,
 	PlanArgsSchema,
-	PlanningContextArgsSchema,
 	PlanningContextSchema,
 	PlanSchema,
 	ReviewFindingPlanningContextSchema,
 } from "./schema-plan";
-import type {
-	StackProfileSchema,
-	StandardsProfileSchema,
-} from "./schema-planning-profiles";
 import type {
 	FinalReviewerDecisionSchema,
 	FlowReviewRecordFeatureArgsSchema,
@@ -26,10 +20,7 @@ import type {
 	WorkerResultSchema,
 } from "./schema-worker-result";
 
-export {
-	EvidencePacketArraySchema,
-	EvidencePacketSchema,
-} from "./schema-evidence-packets";
+export { EvidencePacketSchema } from "./schema-evidence-packets";
 export {
 	FeatureSchema,
 	PackageManagerSchema,
@@ -41,19 +32,10 @@ export {
 	SessionStatusSchema,
 } from "./schema-plan";
 export {
-	StackProfileSchema,
-	StandardsProfileSchema,
-} from "./schema-planning-profiles";
-export {
 	FinalReviewerDecisionSchema,
-	FinalReviewSchema,
 	FlowReviewRecordFeatureArgsSchema,
 	ReviewerDecisionSchema,
 } from "./schema-review-decisions";
-export {
-	BehaviorCheckSchema,
-	ValidationCoverageSchema,
-} from "./schema-review-shared";
 export { type Session, SessionSchema } from "./schema-session";
 export {
 	LatestFailedFlowAttemptSchema,
@@ -74,14 +56,10 @@ export type Plan = z.infer<typeof PlanSchema>;
 export type PlanInput = z.input<typeof PlanSchema>;
 export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
-export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
 export type ReviewFindingPlanningContext = z.infer<
 	typeof ReviewFindingPlanningContextSchema
 >;
-export type StackProfile = z.infer<typeof StackProfileSchema>;
-export type StandardsProfile = z.infer<typeof StandardsProfileSchema>;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
-export type { EvidencePacket };
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
 export type LatestFailedFlowAttempt = z.infer<
 	typeof LatestFailedFlowAttemptSchema

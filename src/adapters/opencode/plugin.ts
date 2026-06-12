@@ -1,10 +1,13 @@
+import {
+	resolveFlowPluginVersion,
+	runFlowStartupSync,
+} from "../../distribution/skill-sync";
 import { createConfigHook } from "./config";
 import type { Hooks, Plugin } from "./sdk";
 import {
 	appendOpenCodeCompactCompactingContext,
 	appendOpenCodeCompactSystemContext,
 } from "./system-context";
-import { applyFlowToolDefinitionGuidance } from "./tool-guidance.generated";
 import type { ToolContext } from "./tool-surface/schemas";
 import { createTools } from "./tools";
 
@@ -20,16 +23,6 @@ type PluginLogContext = {
 	};
 };
 
-const flowToolDefinitionHook: NonNullable<Hooks["tool.definition"]> = async (
-	input,
-	output,
-) => {
-	if (!input.toolID.startsWith("flow_")) {
-		return;
-	}
-	applyFlowToolDefinitionGuidance(input.toolID, output);
-};
-
 function createFlowSystemTransformHook(
 	ctx: Pick<Parameters<Plugin>[0], "worktree" | "directory">,
 ): NonNullable<Hooks["experimental.chat.system.transform"]> {
@@ -39,16 +32,20 @@ function createFlowSystemTransformHook(
 }
 
 const FlowPlugin: Plugin = async (ctx) => {
-	(ctx as PluginLogContext).client?.app?.log?.({
+	const log = (ctx as PluginLogContext).client?.app?.log;
+	log?.({
 		level: "info",
 		message: "Flow plugin initialized.",
+	});
+
+	await runFlowStartupSync(resolveFlowPluginVersion(), (level, message) => {
+		log?.({ level, message });
 	});
 
 	return {
 		config: createConfigHook(ctx),
 		tool: createTools(ctx),
 		hooks: {
-			"tool.definition": flowToolDefinitionHook,
 			"experimental.chat.system.transform": createFlowSystemTransformHook(ctx),
 			"experimental.session.compacting": async (
 				_input: unknown,

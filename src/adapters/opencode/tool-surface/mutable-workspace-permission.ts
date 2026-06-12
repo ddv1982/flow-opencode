@@ -1,9 +1,8 @@
 import { basename, join } from "node:path";
-import { runPromise } from "effect/Effect";
 import { resolveMutableSessionRoot } from "../../../runtime/application";
 import type { ToolContext } from "./schemas";
 
-export type ResolvedMutableToolWorkspace = {
+type ResolvedMutableToolWorkspace = {
 	root: string;
 	source: string;
 	requiresHiddenRootApproval: boolean;
@@ -22,6 +21,14 @@ export class MutableWorkspacePermissionError extends Error {
 		this.root = resolved.root;
 		this.source = resolved.source;
 	}
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as PromiseLike<unknown>).then === "function"
+	);
 }
 
 function requiresHiddenRootApproval(root: string): boolean {
@@ -52,7 +59,7 @@ export async function ensureMutableWorkspacePermission(
 		throw new MutableWorkspacePermissionError(resolved);
 	}
 
-	const askEffect = context.ask({
+	const askResult = context.ask({
 		permission: "edit",
 		patterns: [join(resolved.root, ".flow", "**")],
 		always: [join(resolved.root, ".flow", "**")],
@@ -63,6 +70,12 @@ export async function ensureMutableWorkspacePermission(
 				"Flow is about to persist state inside a hidden workspace root outside its own .flow directory.",
 		},
 	});
-	await runPromise(askEffect);
+	if (!isThenable(askResult)) {
+		// Hosts older than OpenCode SDK 1.15.5 return a lazy Effect here; without
+		// the effect runtime we cannot run it, so refuse the mutation instead of
+		// silently skipping the approval prompt.
+		throw new MutableWorkspacePermissionError(resolved);
+	}
+	await askResult;
 	return resolved.root;
 }

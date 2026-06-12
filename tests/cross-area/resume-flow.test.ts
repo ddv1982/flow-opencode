@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
 	cleanupManagedTempDirs,
 	createToolContext,
@@ -14,7 +12,7 @@ afterEach(() => {
 });
 
 describe("cross-area resume flow", () => {
-	test("re-importing dist preserves resumable state and completed sessions return missing_goal", async () => {
+	test("re-importing dist preserves resumable state and closed sessions return missing_goal", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-resume-cross-area-");
 		const context = createToolContext(worktree);
@@ -25,19 +23,15 @@ describe("cross-area resume flow", () => {
 			string,
 			{ execute: (args: unknown, context: unknown) => Promise<string> }
 		>;
-		const flowPlanStart = requireTool(tools, "flow_plan_start");
-		const flowPlanApply = requireTool(tools, "flow_plan_apply");
+		const flowPlanSave = requireTool(tools, "flow_plan_save");
 		const flowPlanApprove = requireTool(tools, "flow_plan_approve");
 		const flowRunStart = requireTool(tools, "flow_run_start");
 		const flowStatus = requireTool(tools, "flow_status");
 
 		const planStart = JSON.parse(
-			await flowPlanStart.execute(
-				{ goal: "Resume the dist workflow" },
-				context,
-			),
+			await flowPlanSave.execute({ goal: "Resume the dist workflow" }, context),
 		);
-		await flowPlanApply.execute(
+		await flowPlanSave.execute(
 			{
 				plan: {
 					summary: "Resume after a reload.",
@@ -67,45 +61,39 @@ describe("cross-area resume flow", () => {
 			string,
 			{ execute: (args: unknown, context: unknown) => Promise<string> }
 		>;
-		const reloadedAutoPrepare = requireTool(reloadedTools, "flow_auto_prepare");
 		const reloadedStatus = requireTool(reloadedTools, "flow_status");
+		const reloadedSession = requireTool(reloadedTools, "flow_session");
+		const reloadedPlanSave = requireTool(reloadedTools, "flow_plan_save");
 
-		const resumed = JSON.parse(
-			await reloadedAutoPrepare.execute({ argumentString: "" }, context),
-		);
 		const afterReload = JSON.parse(await reloadedStatus.execute({}, context));
 
 		expect(reloadedPlugin).not.toBe(plugin);
 		expect(reloadedTools).not.toBe(tools);
-		expect(resumed).toMatchObject({
-			status: "ok",
-			mode: "resume",
-			goal: "Resume the dist workflow",
-			nextCommand: "/flow-auto resume",
-		});
+		expect(afterReload.session.id).toBe(planStart.session.id);
+		expect(afterReload.session.goal).toBe("Resume the dist workflow");
 		expect(afterReload.session.features).toEqual(beforeReload.session.features);
 		expect(afterReload.session.nextCommand).toBe(
 			beforeReload.session.nextCommand,
 		);
 
-		const sessionPath = join(
-			worktree,
-			".flow",
-			"active",
-			planStart.session.id,
-			"session.json",
+		const closed = JSON.parse(
+			await reloadedSession.execute(
+				{ action: "close", kind: "abandoned" },
+				context,
+			),
 		);
-		const session = JSON.parse(await readFile(sessionPath, "utf8"));
-		session.status = "completed";
-		session.timestamps.completedAt = "2026-01-01T00:00:00.000Z";
-		await writeFile(sessionPath, JSON.stringify(session, null, 2), "utf8");
+		expect(closed.status).toBe("ok");
+		expect(closed.completedSessionId).toBe(planStart.session.id);
 
-		const completedResume = JSON.parse(
-			await reloadedAutoPrepare.execute({ argumentString: "" }, context),
+		const statusAfterClose = JSON.parse(
+			await reloadedStatus.execute({}, context),
 		);
-		expect(completedResume).toMatchObject({
+		expect(statusAfterClose.status).toBe("missing");
+
+		const missingGoal = JSON.parse(await reloadedPlanSave.execute({}, context));
+		expect(missingGoal).toMatchObject({
 			status: "missing_goal",
-			nextCommand: "/flow-auto <goal>",
+			nextCommand: "/flow-plan <goal>",
 		});
 	});
 });

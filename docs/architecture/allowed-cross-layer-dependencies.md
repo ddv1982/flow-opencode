@@ -51,15 +51,10 @@ Use report mode for diagnosis and local inventory only. Use enforce mode when pr
 
 ## Projection surfaces outside this seam checker
 
-`src/prompts/**` and `src/audit/**` are governed projection surfaces, but they are not part of the hard layer seam checker defined by this ADR.
-
-- `src/prompts/**` projects role, command, skill, and mode guidance from core/runtime/tool contracts. Its import policy is governed by prompt, mode-contract, snapshot, and semantic parity tests rather than by blocked layer-edge rules.
-- `src/audit/**` projects audit prompts, report schemas, and presenter contracts. Its import policy is governed by audit/report schema and projection parity tests rather than by the `core`/`workflow`/`runtime`/`adapters` seam checker.
-
-These surfaces are not silently exempt from architecture policy. They are controlled by projection-specific tests because their job is to render and validate cross-cutting governance surfaces, not to define a runtime layer in the hard seam graph.
+`src/prompts/**` and `src/audit/**` were governed projection surfaces outside this checker; both were deleted in the skills-first overhaul (`docs/plans/skills-first-overhaul-2026-06-12.md`). Guidance now lives in hand-authored `skills/**` content, which is not a code layer in this seam graph.
 
 ## Notes and limitations
 
 - The checker currently resolves **relative** imports; non-relative alias imports are ignored.
 - Type-only imports still count as layer dependencies by design.
-- This ADR scopes only `core`/`workflow`/`runtime`/`adapters` seams. `src/prompts/**` and `src/audit/**` are explicitly governed projection surfaces outside this checker; other areas (for example `persistence`) are unchanged in this policy.
+- This ADR scopes only `core`/`workflow`/`runtime`/`adapters` seams; other areas (for example `persistence`) are unchanged in this policy.

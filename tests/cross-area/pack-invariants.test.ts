@@ -78,6 +78,7 @@ describe("pack invariants script", () => {
 		"CHANGELOG.md",
 		"LICENSE",
 		"README.md",
+		"dist/cli.js",
 		"dist/index.js",
 		"dist/index.js.map",
 		"package.json",

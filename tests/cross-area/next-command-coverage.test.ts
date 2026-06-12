@@ -6,8 +6,8 @@ import {
 	FLOW_STATUS_COMMAND,
 	flowResetFeatureCommand,
 } from "../../src/runtime/constants";
+import { createSession } from "../../src/runtime/lifecycle";
 import { SessionStatusSchema } from "../../src/runtime/schema";
-import { createSession } from "../../src/runtime/session";
 import { deriveNextCommand } from "../../src/runtime/summary";
 import { cloneSamplePlan } from "../fixtures";
 

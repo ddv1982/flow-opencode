@@ -1,7 +1,7 @@
 // Owns final completion gate ordering and recovery coverage previously grouped in
 // tests/runtime-completion-contracts.test.ts.
 import { describe, expect, test } from "bun:test";
-import { createSession } from "../../src/runtime/session";
+import { createSession } from "../../src/runtime/lifecycle";
 import {
 	applyPlan,
 	approvePlan,
@@ -162,12 +162,6 @@ describe("runtime final completion gates", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
@@ -213,8 +207,9 @@ describe("runtime final completion gates", () => {
 		expect(completed.recovery?.nextCommand).toBe(
 			"/flow-reset feature setup-runtime",
 		);
-		expect(completed.recovery?.nextRuntimeTool).toBe("flow_reset_feature");
+		expect(completed.recovery?.nextRuntimeTool).toBe("flow_feature_complete");
 		expect(completed.recovery?.nextRuntimeArgs).toEqual({
+			reset: true,
 			featureId: "setup-runtime",
 		});
 	});
@@ -381,12 +376,6 @@ describe("runtime final completion gates", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
@@ -435,12 +424,6 @@ describe("runtime final completion gates", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "passed",
 				summary: "Feature review is clean.",
@@ -517,12 +500,6 @@ describe("runtime final completion gates", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "passed",
 				summary: "Repo-wide validation is clean.",
@@ -572,12 +549,6 @@ describe("runtime final completion gates", () => {
 				changedArtifacts: ["src/runtime/session.ts"],
 				validationCommands: ["bun test"],
 			},
-			integrationChecks: [
-				"Reviewed integration points across the active feature boundary.",
-			],
-			regressionChecks: [
-				"Checked for regressions in shared surfaces and validation evidence.",
-			],
 			remainingGaps: [],
 			status: "approved",
 			summary: "Final review looks good.",
@@ -626,12 +597,6 @@ describe("runtime final completion gates", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "passed",
 				summary: "Repo-wide validation is clean.",

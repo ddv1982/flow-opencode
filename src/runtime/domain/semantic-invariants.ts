@@ -1,9 +1,5 @@
 import type { SemanticInvariantId } from "../../core/protocols/semantic-invariants";
-import { CANONICAL_RUNTIME_TOOL_NAMES } from "../constants";
-import { completionRecoveryKindOrderFor } from "../transitions/completion-gates";
 import type { CompletionRecoveryKind } from "../transitions/recovery";
-
-export type { SemanticInvariantId };
 
 type SemanticInvariantOwnerReference = {
 	file: string;
@@ -23,22 +19,18 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 	"completion.gates.required_order": {
 		id: "completion.gates.required_order",
 		ownerSummary:
-			"src/runtime/transitions/execution-completion.ts::validateSuccessfulCompletion",
+			"src/runtime/transitions/execution-completion-validation.ts::validateNormalizedSuccessfulCompletion",
 		ownerReferences: [
 			{
-				file: "src/runtime/transitions/execution-completion.ts",
-				symbols: ["validateSuccessfulCompletion"],
-			},
-			{
-				file: "src/runtime/transitions/completion-gates.ts",
-				symbols: ["COMPLETION_GATE_DESCRIPTORS", "COMPLETION_GATE_ORDER"],
+				file: "src/runtime/transitions/execution-completion-validation.ts",
+				symbols: ["validateNormalizedSuccessfulCompletion"],
 			},
 		],
 		semanticClaim:
-			"Completion path enforces validation, review payload, final-path, and strict-review governance gates in runtime-defined order.",
+			"A feature cannot complete without recorded passing validation evidence, a passing featureReview, and — on the final completion path — a passing finalReview.",
 		assertionType: "transition outcome assertions",
 		stabilityRule:
-			"Stable across refactors; behavior changes require ADR updates and semantic-suite updates.",
+			"Stable across refactors; behavior changes require semantic-suite updates.",
 	},
 	"completion.policy.min_completed_features": {
 		id: "completion.policy.min_completed_features",
@@ -118,22 +110,21 @@ const SEMANTIC_INVARIANT_REGISTRY = {
 	"tools.canonical_surface.no_raw_wrappers": {
 		id: "tools.canonical_surface.no_raw_wrappers",
 		ownerSummary:
-			"src/adapters/opencode/tools.ts::createTools + src/runtime/constants.ts::CANONICAL_RUNTIME_TOOL_NAMES",
+			"src/adapters/opencode/tools.ts::createTools + src/adapters/opencode/tool-surface/tool-registry.ts",
 		ownerReferences: [
 			{
 				file: "src/adapters/opencode/tools.ts",
 				symbols: ["createTools"],
 			},
 			{
-				file: "src/runtime/constants.ts",
-				symbols: ["CANONICAL_RUNTIME_TOOL_NAMES"],
+				file: "src/adapters/opencode/tool-surface/tool-registry.ts",
+				symbols: ["OPENCODE_TOOL_REGISTRY"],
 			},
 		],
 		semanticClaim:
-			"The public tool surface remains canonical-only and excludes string-transport alias tools.",
+			"The public tool surface remains registry-defined; only canonical tools and declared transition aliases are registered.",
 		assertionType: "tool registration assertions",
-		stabilityRule:
-			"Stable; tool additions require matrix updates and parity verification.",
+		stabilityRule: "Stable; tool additions require registry updates.",
 	},
 } as const satisfies Record<SemanticInvariantId, SemanticInvariantDescriptor>;
 
@@ -144,22 +135,6 @@ export const SEMANTIC_INVARIANTS = Object.values(
 export const SEMANTIC_INVARIANT_IDS = Object.keys(
 	SEMANTIC_INVARIANT_REGISTRY,
 ) as SemanticInvariantId[];
-
-export const SEMANTIC_COMPLETION_GATE_ORDER = {
-	feature: completionRecoveryKindOrderFor("feature"),
-	final: completionRecoveryKindOrderFor("final"),
-} as const satisfies {
-	feature: readonly CompletionRecoveryKind[];
-	final: readonly CompletionRecoveryKind[];
-};
-
-export const SEMANTIC_STRICT_REVIEW_COMPLETION_GATE_ORDER = {
-	feature: completionRecoveryKindOrderFor("feature", { strictReview: true }),
-	final: completionRecoveryKindOrderFor("final", { strictReview: true }),
-} as const satisfies {
-	feature: readonly CompletionRecoveryKind[];
-	final: readonly CompletionRecoveryKind[];
-};
 
 export const SEMANTIC_COMPLETION_POLICY_EXPECTATIONS = {
 	pendingAllowedWhenTargetLessThanTotal: true,
@@ -197,17 +172,11 @@ export const SEMANTIC_RECOVERY_EXPECTATIONS = {
 		"missing_validation",
 		"missing_reviewer_decision",
 		"missing_validation_scope",
-		"missing_review_closure",
 		"missing_final_review",
 	] as const satisfies readonly CompletionRecoveryKind[],
 	statusCommand: "/flow-status",
 	resetCommandPrefix: "/flow-reset feature ",
-	resetRuntimeTool: "flow_reset_feature",
-} as const;
-
-export const SEMANTIC_TOOL_SURFACE_EXPECTATIONS = {
-	canonicalRuntimeToolNames: CANONICAL_RUNTIME_TOOL_NAMES,
-	forbiddenSubstring: "_from_raw",
+	resetRuntimeTool: "flow_feature_complete",
 } as const;
 
 export function semanticInvariantById(id: SemanticInvariantId) {

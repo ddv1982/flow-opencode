@@ -153,34 +153,12 @@ export function getSessionPathFromDir(sessionDir: string): string {
 	return join(sessionDir, "session.json");
 }
 
-export function getDocsDir(
-	worktree: string,
-	sessionId: string,
-	location: LiveSessionLocation = "active",
-): string {
-	return getDocsDirFromSessionDir(getSessionDir(worktree, sessionId, location));
-}
-
 function getDocsDirFromSessionDir(sessionDir: string): string {
 	return join(sessionDir, "docs");
 }
 
 export function getFeaturesDocsDirFromSessionDir(sessionDir: string): string {
 	return join(getDocsDirFromSessionDir(sessionDir), "features");
-}
-
-export function getReviewsDir(
-	worktree: string,
-	sessionId: string,
-	location: LiveSessionLocation = "active",
-): string {
-	return getReviewsDirFromSessionDir(
-		getSessionDir(worktree, sessionId, location),
-	);
-}
-
-function getReviewsDirFromSessionDir(sessionDir: string): string {
-	return join(sessionDir, "reviews");
 }
 
 export function getIndexDocPath(

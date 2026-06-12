@@ -1,18 +1,19 @@
 export const FLOW_PLAN_COMMAND = "/flow-plan";
 export const FLOW_PLAN_WITH_GOAL_COMMAND = "/flow-plan <goal>";
 export const FLOW_RUN_COMMAND = "/flow-run";
-export const FLOW_AUTO_WITH_GOAL_COMMAND = "/flow-auto <goal>";
-export const FLOW_AUTO_RESUME_COMMAND = "/flow-auto resume";
 export const FLOW_STATUS_COMMAND = "/flow-status";
 export const FLOW_HISTORY_COMMAND = "/flow-history";
 const FLOW_RESET_FEATURE_COMMAND = "/flow-reset feature";
 const FLOW_SESSION_ACTIVATE_COMMAND = "/flow-session activate";
 
 export const CANONICAL_RUNTIME_TOOL_NAMES = [
-	"flow_review_record_feature",
-	"flow_review_record_final",
-	"flow_run_complete_feature",
-	"flow_reset_feature",
+	"flow_status",
+	"flow_plan_save",
+	"flow_plan_approve",
+	"flow_run_start",
+	"flow_feature_complete",
+	"flow_review_record",
+	"flow_session",
 ] as const;
 
 export type CanonicalRuntimeToolName =
@@ -86,12 +87,6 @@ export const REVIEWER_DECISION_STATUSES = [
 	"needs_fix",
 	"blocked",
 ] as const;
-export const REVIEW_FINDING_CLOSURE_STATUSES = [
-	"closed",
-	"partially_closed",
-	"not_closed",
-	"blocked",
-] as const;
 export const REVIEW_SCOPE_TARGET_KINDS = [
 	"file",
 	"glob",
@@ -99,13 +94,6 @@ export const REVIEW_SCOPE_TARGET_KINDS = [
 	"surface",
 	"workflow",
 	"custom",
-] as const;
-export const REVIEW_SCOPE_ACCOUNTING_STATUSES = [
-	"reviewed_no_findings",
-	"finding_closed",
-	"deferred",
-	"out_of_scope",
-	"blocked",
 ] as const;
 export const REPLAN_REASONS = [
 	"plan_too_broad",

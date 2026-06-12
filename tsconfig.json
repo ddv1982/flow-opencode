@@ -13,10 +13,11 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noEmit": true,
+		"resolveJsonModule": true,
 		"allowSyntheticDefaultImports": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"types": ["bun-types"]
 	},
-	"include": ["src/**/*.ts", "tests/**/*.ts"]
+	"include": ["src/**/*.ts", "tests/**/*.ts", "evals/golden/*.ts"]
 }

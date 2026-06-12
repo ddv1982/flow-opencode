@@ -1,6 +1,10 @@
-import { createRuntimeTools } from "./tool-surface/runtime-tools";
-import { createSessionTools } from "./tool-surface/session-tools";
+import { createPlanTools } from "./tool-surface/plan-tools";
+import { createReviewTool } from "./tool-surface/review-tool";
+import { createRunTools } from "./tool-surface/run-tools";
+import { createSessionTool } from "./tool-surface/session-tool";
+import { createStatusTool } from "./tool-surface/status-tool";
 import { OPENCODE_TOOL_NAMES_FROM_REGISTRY } from "./tool-surface/tool-registry";
+import { createV2CompatTools } from "./tool-surface/v2-compat-tools";
 
 type PluginLogContext = {
 	client?: {
@@ -53,10 +57,13 @@ function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 	) as T;
 }
 
-export function createCoreTools() {
+function createCoreTools() {
 	return orderProjectedTools({
-		...createSessionTools(),
-		...createRuntimeTools(),
+		...createStatusTool(),
+		...createPlanTools(),
+		...createRunTools(),
+		...createReviewTool(),
+		...createSessionTool(),
 	});
 }
 
@@ -68,5 +75,8 @@ export function createTools(ctx: unknown) {
 	});
 	return {
 		...createCoreTools(),
+		// v2 compat redirect stubs; excluded from the canonical registry and
+		// scheduled for removal after one minor cycle (v3.1).
+		...createV2CompatTools(),
 	};
 }

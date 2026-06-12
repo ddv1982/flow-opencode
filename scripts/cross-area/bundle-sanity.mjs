@@ -1,5 +1,6 @@
 import {
 	copyFileSync,
+	cpSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -9,7 +10,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { sync } from "effect/Effect";
 
 const projectRoot = resolve(import.meta.dirname, "..", "..");
 const distPath = join(projectRoot, "dist", "index.js");
@@ -17,14 +17,26 @@ const sourcemapPath = join(projectRoot, "dist", "index.js.map");
 const bundleText = readFileSync(distPath, "utf8");
 const sourcemap = JSON.parse(readFileSync(sourcemapPath, "utf8"));
 const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
-// Attachment materialization adds one public tool plus root-safe data/file/http
-// decoding and write guards. Runtime attachment guidance adds availability
-// snapshots and coordinator instructions. Singleton retry/idempotency metadata adds
-// narrow runtime and prompt guidance. The OpenCode SDK 1.14 permission API
-// requires a small bundled Effect runner so release-installed single-file
-// plugins can execute permission prompts without external package resolution;
-// keep the bundle below 850 KiB.
-const BUNDLE_SIZE_BUDGET_BYTES = 870400; // 850 KiB
+// The bundle carries only Flow source: zod and @opencode-ai/plugin are
+// external (npm-resolved). The generated prompt surfaces are gone after the
+// skills-first overhaul; what remains is the runtime plus the embedded skill
+// documents (synced at startup), which lands around 150-160 KB. Hold the
+// line at 200 KB to leave headroom for skill content growth without letting
+// prompt-surface regressions sneak back in.
+const BUNDLE_SIZE_BUDGET_BYTES = 204800; // 200 KiB
+
+// toolCount tracks the canonical surface only; v2 compat redirect stubs
+// (see src/adapters/opencode/tool-surface/v2-compat-tools.ts) are registered
+// alongside but deliberately excluded from this metric.
+const CANONICAL_TOOL_NAMES = [
+	"flow_status",
+	"flow_plan_save",
+	"flow_plan_approve",
+	"flow_run_start",
+	"flow_feature_complete",
+	"flow_review_record",
+	"flow_session",
+];
 
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
@@ -74,6 +86,15 @@ async function main() {
 			].join("\n"),
 		);
 
+		// zod is an external runtime dependency of the bundle (resolved from the
+		// npm package's own dependencies in production); vendor it next to the
+		// copied bundle so the import resolves in this sandbox.
+		cpSync(
+			join(projectRoot, "node_modules", "zod"),
+			join(packageDir, "node_modules", "zod"),
+			{ recursive: true, dereference: true },
+		);
+
 		const packageDistPath = join(packageDir, "index.js");
 		const packageSourcemapPath = join(packageDir, "index.js.map");
 		copyFileSync(distPath, packageDistPath);
@@ -85,8 +106,8 @@ async function main() {
 		await plugin.config(config);
 
 		const toolResults = {
-			planStart: JSON.parse(
-				await plugin.tool.flow_plan_start.execute(
+			planSave: JSON.parse(
+				await plugin.tool.flow_plan_save.execute(
 					{ goal: "Bundle sanity" },
 					{ worktree },
 				),
@@ -95,12 +116,15 @@ async function main() {
 				await plugin.tool.flow_status.execute({}, { worktree }),
 			),
 			history: JSON.parse(
-				await plugin.tool.flow_history.execute({}, { worktree }),
+				await plugin.tool.flow_session.execute(
+					{ action: "history" },
+					{ worktree },
+				),
 			),
 		};
 
-		if (toolResults.planStart.status !== "ok") {
-			throw new Error("flow_plan_start failed in bundle sanity smoke.");
+		if (toolResults.planSave.status !== "ok") {
+			throw new Error("flow_plan_save failed in bundle sanity smoke.");
 		}
 		if (toolResults.status.status !== "planning") {
 			throw new Error(
@@ -116,7 +140,9 @@ async function main() {
 			...(toolResults.history.history?.completed ?? []),
 		].filter(Boolean);
 		if (!historyEntries.some((entry) => entry.goal === "Bundle sanity")) {
-			throw new Error("flow_history did not report the stored session.");
+			throw new Error(
+				"flow_session history did not report the stored session.",
+			);
 		}
 		if (plugin.tool.flow_status.__mockTag !== "flow-bundle-sanity-mock-v1") {
 			throw new Error(
@@ -126,23 +152,36 @@ async function main() {
 
 		let permissionAskRuns = 0;
 		const permissionSmoke = JSON.parse(
-			await plugin.tool.flow_plan_start.execute(
+			await plugin.tool.flow_plan_save.execute(
 				{ goal: "Bundle permission sanity" },
 				{
 					worktree: hiddenWorktree,
-					ask: () =>
-						sync(() => {
-							permissionAskRuns += 1;
-						}),
+					ask: async () => {
+						permissionAskRuns += 1;
+					},
 				},
 			),
 		);
 		if (permissionSmoke.status !== "ok" || permissionAskRuns !== 1) {
 			throw new Error(
-				`Permission Effect smoke failed: ${JSON.stringify({
+				`Permission ask smoke failed: ${JSON.stringify({
 					status: permissionSmoke.status,
 					permissionAskRuns,
 				})}`,
+			);
+		}
+
+		const compatRedirect = JSON.parse(
+			await plugin.tool.flow_doctor.execute({}, { worktree }),
+		);
+		if (
+			compatRedirect.status !== "error" ||
+			compatRedirect.replacement !== "flow_status"
+		) {
+			throw new Error(
+				`v2 compat stub did not return the expected redirect envelope: ${JSON.stringify(
+					compatRedirect,
+				)}`,
 			);
 		}
 
@@ -157,7 +196,8 @@ async function main() {
 				: 0,
 			configAgents: Object.keys(config.agent).length,
 			configCommands: Object.keys(config.command).length,
-			toolCount: Object.keys(plugin.tool).length,
+			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
+				.length,
 			nodeMajor: Number.parseInt(
 				process.versions.node.split(".")[0] ?? "0",
 				10,
@@ -182,9 +222,9 @@ async function main() {
 			throw new Error("Source map is not valid v3 JSON with mappings.");
 		}
 		if (
-			report.configAgents !== 7 ||
+			report.configAgents !== 1 ||
 			report.configCommands !== 9 ||
-			report.toolCount !== 18
+			report.toolCount !== 7
 		) {
 			throw new Error(
 				`Plugin surface shape is incorrect after build: ${JSON.stringify({

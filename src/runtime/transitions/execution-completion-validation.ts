@@ -1,9 +1,20 @@
+/**
+ * Hard completion invariants. Everything judgment-shaped (coverage
+ * proportionality, scope accounting, evidence quality) moved to the
+ * flow-review skill rubric in v3; what remains here is binary and cheap:
+ *
+ * 1. A feature cannot complete without recorded, passing validation evidence
+ *    with the scope the completion path requires (targeted vs broad).
+ * 2. A feature cannot complete without a passing featureReview payload; the
+ *    final completion path additionally requires a passing finalReview whose
+ *    depth matches deliveryPolicy.finalReviewPolicy.
+ * 3. Strict review governance (goalMode review/review_and_fix or
+ *    deliveryPolicy.strictReview) requires a recorded approved reviewer
+ *    decision whose scope matches the completion path.
+ */
 import {
-	buildFinalReviewerReviewScopeRecoveryDetails,
-	buildReviewScopeRecoveryDetails,
-	closedReviewFindingRefsForCompletion,
-	describeReviewFindingClosureLedgerFailure,
-	describeReviewScopeLedgerFailure,
+	finalReviewPolicyForPlan,
+	strictReviewGovernanceRequiredForPlan,
 } from "../domain";
 import type { Session, WorkerResultArgs } from "../schema";
 import {
@@ -11,15 +22,68 @@ import {
 	normalizeWorkerResult,
 } from "./execution-completion-normalization";
 import {
-	finalReviewerDecisionFailureMessage,
-	finalReviewFailureMessage,
-	isReviewPassing,
-} from "./execution-completion-review-gates";
-import {
 	buildCompletionRecovery,
 	type CompletionRecoveryKind,
 } from "./recovery";
 import { fail, succeed, type TransitionResult } from "./shared";
+
+function isReviewPassing(
+	review:
+		| NormalizedWorkerResult["featureReview"]
+		| NormalizedWorkerResult["finalReview"]
+		| undefined,
+): boolean {
+	return Boolean(
+		review &&
+			review.status === "passed" &&
+			review.blockingFindings.length === 0,
+	);
+}
+
+function reviewerDecisionFailureMessage(
+	session: Session,
+	featureId: string,
+	wasFinalFeature: boolean,
+): string | null {
+	if (!strictReviewGovernanceRequiredForPlan(session.plan)) {
+		return null;
+	}
+
+	const decision = session.execution.lastReviewerDecision;
+	if (!decision || decision.status !== "approved") {
+		return "Worker result cannot complete without a recorded approved reviewer decision.";
+	}
+	if (!wasFinalFeature) {
+		return decision.scope === "feature" && decision.featureId === featureId
+			? null
+			: "Worker result cannot complete without a recorded approved reviewer decision.";
+	}
+	if (decision.scope !== "final") {
+		return "Worker result cannot complete the session without a final-scope approved reviewer decision.";
+	}
+	if (decision.reviewDepth !== finalReviewPolicyForPlan(session.plan)) {
+		return "Worker result cannot complete the session because the recorded final reviewer decision does not match deliveryPolicy.finalReviewPolicy.";
+	}
+	return null;
+}
+
+function finalReviewFailureMessage(
+	session: Session,
+	worker: NormalizedWorkerResult,
+): string | null {
+	if (!worker.finalReview) {
+		return null;
+	}
+	if (!isReviewPassing(worker.finalReview)) {
+		return "Worker result cannot complete the feature because finalReview is not passing.";
+	}
+	if (
+		worker.finalReview.reviewDepth !== finalReviewPolicyForPlan(session.plan)
+	) {
+		return "Worker result cannot complete the feature because finalReview does not match deliveryPolicy.finalReviewPolicy.";
+	}
+	return null;
+}
 
 function isValidationPassing(
 	validationRun: NormalizedWorkerResult["validationRun"],
@@ -35,11 +99,10 @@ function failCompletion(
 	wasFinalFeature: boolean,
 	message: string,
 	kind: CompletionRecoveryKind,
-	details?: Record<string, unknown>,
 ): TransitionResult<void> {
 	return fail(
 		message,
-		buildCompletionRecovery(featureId, wasFinalFeature, kind, details),
+		buildCompletionRecovery(featureId, wasFinalFeature, kind),
 	);
 }
 
@@ -89,79 +152,27 @@ export function validateNormalizedSuccessfulCompletion(
 		);
 	}
 
-	if (session.plan?.goalMode === "review_and_fix") {
-		const closureFailure = describeReviewFindingClosureLedgerFailure(
-			normalizedWorker.reviewFindingClosures,
-			{
-				plannedFindingRefs: session.planning.reviewFindings.map((finding) =>
-					finding.findingRef.trim(),
-				),
-				closedFindingRefsForCompletion: closedReviewFindingRefsForCompletion(
-					session,
-					normalizedWorker,
-				),
-				validationCommands: normalizedWorker.validationRun.map(
-					(item) => item.command,
-				),
-				requireEveryPlannedFinding: wasFinalFeature,
-			},
-		);
-		if (closureFailure) {
-			return failCompletion(
-				featureId,
-				wasFinalFeature,
-				closureFailure,
-				"missing_review_closure",
-			);
-		}
-	}
-
-	const reviewScopeFailure = describeReviewScopeLedgerFailure(
+	const reviewerDecisionFailure = reviewerDecisionFailureMessage(
 		session,
-		normalizedWorker,
 		featureId,
 		wasFinalFeature,
 	);
-	if (reviewScopeFailure) {
+	if (reviewerDecisionFailure) {
 		return failCompletion(
 			featureId,
 			wasFinalFeature,
-			`Worker result cannot complete because ${reviewScopeFailure}`,
-			"missing_review_scope_accounting",
-			{
-				reviewScopeLedger: buildReviewScopeRecoveryDetails(
-					session,
-					normalizedWorker,
-					featureId,
-					wasFinalFeature,
-				),
-			},
+			reviewerDecisionFailure,
+			"missing_reviewer_decision",
 		);
 	}
 
-	if (!wasFinalFeature) {
-		const reviewerDecisionFailure = finalReviewerDecisionFailureMessage(
-			session,
-			normalizedWorker,
+	if (!wasFinalFeature && normalizedWorker.validationScope !== "targeted") {
+		return failCompletion(
 			featureId,
 			false,
+			"Worker result cannot complete the feature without targeted validation.",
+			"missing_validation_scope",
 		);
-		if (reviewerDecisionFailure) {
-			return failCompletion(
-				featureId,
-				false,
-				reviewerDecisionFailure.message,
-				"missing_reviewer_decision",
-			);
-		}
-		if (normalizedWorker.validationScope !== "targeted") {
-			return failCompletion(
-				featureId,
-				false,
-				"Worker result cannot complete the feature without targeted validation.",
-				"missing_validation_scope",
-			);
-		}
 	}
 	if (wasFinalFeature && normalizedWorker.validationScope !== "broad") {
 		return failCompletion(
@@ -171,6 +182,7 @@ export function validateNormalizedSuccessfulCompletion(
 			"missing_validation_scope",
 		);
 	}
+
 	if (!isReviewPassing(normalizedWorker.featureReview)) {
 		return failCompletion(
 			featureId,
@@ -195,47 +207,10 @@ export function validateNormalizedSuccessfulCompletion(
 	if (wasFinalFeature && !normalizedWorker.finalReview) {
 		return failCompletion(
 			featureId,
-			wasFinalFeature,
+			true,
 			"Worker result cannot complete the session without a finalReview.",
 			"missing_final_review",
 		);
-	}
-
-	if (wasFinalFeature) {
-		const reviewerDecisionFailure = finalReviewerDecisionFailureMessage(
-			session,
-			normalizedWorker,
-			featureId,
-			true,
-		);
-		if (reviewerDecisionFailure) {
-			const recoveryKind =
-				reviewerDecisionFailure.kind === "review_scope_accounting"
-					? "missing_final_reviewer_review_scope_accounting"
-					: "missing_reviewer_decision";
-			const decision = session.execution.lastReviewerDecision;
-			return failCompletion(
-				featureId,
-				true,
-				reviewerDecisionFailure.message,
-				recoveryKind,
-				reviewerDecisionFailure.kind === "review_scope_accounting" &&
-					decision?.scope === "final"
-					? {
-							reviewScopeLedger: buildFinalReviewerReviewScopeRecoveryDetails(
-								session,
-								decision,
-								{
-									closedFindingRefs: closedReviewFindingRefsForCompletion(
-										session,
-										normalizedWorker,
-									),
-								},
-							),
-						}
-					: undefined,
-			);
-		}
 	}
 
 	return succeed(undefined);

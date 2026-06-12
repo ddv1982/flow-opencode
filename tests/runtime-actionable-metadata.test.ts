@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import {
 	createSession,
 	loadSession,
 	saveSession,
-} from "../src/runtime/session";
+} from "../src/runtime/lifecycle";
+import { getFeatureDocPath, getIndexDocPath } from "../src/runtime/paths";
 import { summarizeSession } from "../src/runtime/summary";
 import {
 	applyPlan,
@@ -127,19 +127,11 @@ describe("runtime actionable metadata", () => {
 			"utf8",
 		);
 
-		expect(indexDoc).toContain("## Task Progress");
-		expect(indexDoc).toContain(
-			"blocked | flow-worker | execution | projection: runtime_projection | setup-runtime — Create runtime helpers",
-		);
 		expect(indexDoc).toContain(
 			"next step: Ask the operator to provide API credentials.",
 		);
 		expect(indexDoc).toContain(
 			"resolution hint: Set the API token and rerun the feature.",
-		);
-		expect(featureDoc).toContain("## Task Progress");
-		expect(featureDoc).toContain(
-			"blocked | flow-worker | execution | projection: runtime_projection | setup-runtime — Create runtime helpers",
 		);
 		expect(featureDoc).toContain("#### Outcome");
 		expect(featureDoc).toContain("needs human: yes");
@@ -198,7 +190,7 @@ describe("runtime actionable metadata", () => {
 		if (!blocked.ok) return;
 
 		await saveSession(worktree, blocked.value);
-		const response = await tools.flow_plan_start.execute(
+		const response = await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			toolContext(worktree),
 		);

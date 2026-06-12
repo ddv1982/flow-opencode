@@ -3,7 +3,6 @@ import {
 	mergePlanningContext,
 	selectProjectedFeatureSubset,
 	validatePlanGraph,
-	validatePlanReviewScopeDeclaration,
 	validateReviewAndFixFindingPrerequisite,
 } from "../domain";
 import type { Plan, PlanInput, PlanningContext, Session } from "../schema";
@@ -120,10 +119,6 @@ export function applyPlan(
 	if (completionPolicyError) {
 		return fail(completionPolicyError);
 	}
-	const reviewScopeError = validatePlanReviewScopeDeclaration(plan);
-	if (reviewScopeError) {
-		return fail(reviewScopeError);
-	}
 
 	const next: Session = {
 		...session,
@@ -229,10 +224,6 @@ export function approvePlan(
 		if (completionPolicyError) {
 			return fail(completionPolicyError);
 		}
-		const reviewScopeError = validatePlanReviewScopeDeclaration(next.plan);
-		if (reviewScopeError) {
-			return fail(reviewScopeError);
-		}
 	}
 
 	return succeed({
@@ -278,10 +269,6 @@ export function selectPlanFeatures(
 	const completionPolicyError = completionPolicyTargetError(next.plan);
 	if (completionPolicyError) {
 		return fail(completionPolicyError);
-	}
-	const reviewScopeError = validatePlanReviewScopeDeclaration(next.plan);
-	if (reviewScopeError) {
-		return fail(reviewScopeError);
 	}
 	return succeed({
 		...clearExecution(next),

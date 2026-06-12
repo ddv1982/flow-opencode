@@ -77,15 +77,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp dist/index.js flow.js
-          cp scripts/release-install.sh install.sh
-          escaped_tag="$(printf '%s' "${GITHUB_REF_NAME}" | sed -e 's/[\/&]/\\&/g')"
-          sed -i "s/__FLOW_RELEASE_TAG__/${escaped_tag}/g" install.sh
-          cp scripts/release-uninstall.sh uninstall.sh
-          skill_bundle_root="$(mktemp -d)"
-          bun run ./scripts/cross-area/write-release-skill-bundle.ts "$skill_bundle_root"
-          tar -czf flow-skills.tar.gz -C "$skill_bundle_root" .config
-          shasum -a 256 flow.js > flow.js.sha256
+          bun pm pack --destination .
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
+          shasum -a 256 "$tarball" > "${tarball}.sha256"
 
           version="${GITHUB_REF_NAME#v}"
           package_version="$(node -p "require('./package.json').version")"
@@ -98,21 +92,20 @@ jobs:
             echo "package_version=${package_version}"
             echo "changelog_heading=${changelog_heading}"
             echo "release_notes_bytes=${release_notes_bytes}"
+            echo "tarball=${tarball}"
             echo "opencode_smoke=passed"
-            echo "opencode_smoke_evidence=opencode-smoke-evidence.json"
+            echo "opencode_smoke_evidence=.release-artifacts/release-smoke/opencode-smoke-evidence.json"
             echo "manual_live_opencode_required=true"
           } > release-evidence.txt
 
-      - name: Run OpenCode smoke evidence
-        run: >-
-          bun run smoke:opencode --
-          --skip-build
-          --flow-js "$PWD/flow.js"
-          --skill-bundle "$PWD/flow-skills.tar.gz"
-          --install-script "$PWD/install.sh"
-          --uninstall-script "$PWD/uninstall.sh"
-          --json opencode-smoke-evidence.json
-          --summary opencode-smoke-evidence.md
+      - name: Run npm install smoke evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
+          node scripts/cross-area/opencode-smoke.mjs \
+            --tarball "$tarball" \
+            --evidence-dir .release-artifacts/release-smoke
 
       - name: Upload release evidence artifact
         if: success()
@@ -122,11 +115,25 @@ jobs:
           path: |
             release-evidence.txt
             release-notes.md
-            flow.js.sha256
-            flow-skills.tar.gz
-            opencode-smoke-evidence.json
-            opencode-smoke-evidence.md
+            opencode-plugin-flow-*.tgz
+            opencode-plugin-flow-*.tgz.sha256
+            .release-artifacts/release-smoke/opencode-smoke-evidence.json
+            .release-artifacts/release-smoke/opencode-smoke-evidence.md
           if-no-files-found: error
+
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${NPM_TOKEN}" ]]; then
+            echo "NPM_TOKEN secret is not configured; cannot publish to npm." >&2
+            exit 1
+          fi
+          printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "$HOME/.npmrc"
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
+          npm publish "$tarball" --access public
 
       - name: Publish GitHub release assets
         env:
@@ -135,10 +142,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --notes-file release-notes.md
-            gh release upload "$tag" flow.js flow.js.sha256 flow-skills.tar.gz install.sh uninstall.sh --clobber
+            gh release upload "$tag" "$tarball" "${tarball}.sha256" --clobber
           else
-            gh release create "$tag" flow.js flow.js.sha256 flow-skills.tar.gz install.sh uninstall.sh --title "$tag" --notes-file release-notes.md
+            gh release create "$tag" "$tarball" "${tarball}.sha256" --title "$tag" --notes-file release-notes.md
           fi

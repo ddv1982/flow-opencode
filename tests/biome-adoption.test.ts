@@ -10,9 +10,10 @@ describe("biome adoption", () => {
 		};
 
 		expect(manifest.scripts?.lint).toContain("biome check");
-		expect(manifest.scripts?.build).toContain("--drop=console");
-		expect(manifest.scripts?.check).toContain("bun run check:release-hygiene");
+		expect(manifest.scripts?.["build:plugin"]).toContain("--drop=console");
+		expect(manifest.scripts?.check).toContain("bun run typecheck");
 		expect(manifest.scripts?.check).toContain("bun run lint");
+		expect(manifest.scripts?.check).toContain("bun run test");
 	});
 
 	test("biome.json enables formatter, recommended lint, and source no-console release hygiene", async () => {

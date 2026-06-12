@@ -35,7 +35,7 @@ describe("runtime tool metadata", () => {
 			client: { app: { log: () => {} } },
 		};
 
-		const seededResponse = await tools.flow_plan_start.execute(
+		const seededResponse = await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			context,
 		);
@@ -44,17 +44,10 @@ describe("runtime tool metadata", () => {
 
 		const toolArgs: Record<string, unknown> = {
 			flow_status: {},
-			flow_history: {},
-			flow_history_show: { sessionId: currentSessionId },
-			flow_session_activate: { sessionId: currentSessionId },
-			flow_plan_start: { goal: "Build a workflow plugin" },
-			flow_auto_prepare: { argumentString: "resume" },
-			flow_session_close: { kind: "completed" },
-			flow_plan_apply: { plan: samplePlan() },
+			flow_plan_save: { goal: "Build a workflow plugin" },
 			flow_plan_approve: {},
-			flow_plan_select_features: { featureIds: ["setup-runtime"] },
 			flow_run_start: {},
-			flow_run_complete_feature: {
+			flow_feature_complete: {
 				contractVersion: "1",
 				status: "needs_input",
 				summary: "Need a follow-up plan.",
@@ -79,55 +72,13 @@ describe("runtime tool metadata", () => {
 					blockingFindings: [],
 				},
 			},
-			flow_review_record_feature: {
+			flow_review_record: {
 				scope: "feature",
 				featureId: "setup-runtime",
 				status: "approved",
 				summary: "Looks good.",
 			},
-			flow_review_record_final: {
-				scope: "final",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
-				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
-				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
-				remainingGaps: [],
-				status: "approved",
-				summary: "Looks good.",
-			},
-			flow_review_render: {
-				reviewTarget: {
-					repoRoot: worktree,
-					repoName: "metadata-worktree",
-					generatedAt: "2026-06-01T00:00:00.000Z",
-					invokedFromCwd: worktree,
-				},
-				requestedDepth: "deep_audit",
-				achievedDepth: "deep_audit",
-				repoSummary: "Repo summary.",
-				overallVerdict: "Looks coherent.",
-				discoveredSurfaces: [],
-				coverageNotes: [],
-				validationRun: [],
-				findings: [],
-			},
-			flow_reset_feature: { featureId: "setup-runtime" },
+			flow_session: { action: "show", sessionId: currentSessionId },
 		};
 
 		for (const toolName of Object.keys(tools)) {
@@ -165,25 +116,24 @@ describe("runtime tool metadata", () => {
 			client: { app: { log: () => {} } },
 		};
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			context,
 		);
-		await tools.flow_plan_apply.execute({ plan: samplePlan() }, context);
+		await tools.flow_plan_save.execute({ plan: samplePlan() }, context);
 		metadata.mockClear();
 		await tools.flow_plan_approve.execute({}, context);
 		let latestCall = latestMetadataCall(metadata);
 		expect(latestCall.title).toBe("Plan approval requested");
-		expect(latestCall.metadata?.requestedTaskStatus).toBe("completed");
 		expect(latestCall.metadata?.requestedApprovalStatus).toBe("approved");
-		expect(latestCall.metadata?.persistedTaskStatus).toBeNull();
-		expect(latestCall.metadata?.persistedApprovalStatus).toBeNull();
+		expect(latestCall.metadata?.taskOwner).toBe("flow-plan");
+		expect(latestCall.metadata?.taskPhase).toBe("planning");
 
 		metadata.mockClear();
 		await tools.flow_run_start.execute({}, context);
 		latestCall = latestMetadataCall(metadata);
 		expect(latestCall.title).toBe("Run start requested: next approved feature");
-		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
+		expect(latestCall.metadata?.taskOwner).toBe("flow-run");
 		expect(latestCall.metadata?.taskPhase).toBe("execution");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 
@@ -204,7 +154,7 @@ describe("runtime tool metadata", () => {
 		expect(typeof drilldown?.availability).toBe("string");
 
 		metadata.mockClear();
-		await tools.flow_run_complete_feature.execute(
+		await tools.flow_feature_complete.execute(
 			{
 				contractVersion: "1",
 				status: "needs_input",
@@ -239,7 +189,7 @@ describe("runtime tool metadata", () => {
 			"tool_result_json",
 		);
 		expect(latestCall.metadata?.mutationState).toBe("pending_guarded_mutation");
-		expect(latestCall.metadata?.taskOwner).toBe("flow-worker");
+		expect(latestCall.metadata?.taskOwner).toBe("flow-run");
 		expect(latestCall.metadata?.taskPhase).toBe("execution");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
 		expect(latestCall.metadata?.requestedTaskStatus).toBe("needs_input");
@@ -257,8 +207,8 @@ describe("runtime tool metadata", () => {
 		expect(drilldown?.featureId).toBe("setup-runtime");
 
 		metadata.mockClear();
-		await tools.flow_reset_feature.execute(
-			{ featureId: "setup-runtime" },
+		await tools.flow_feature_complete.execute(
+			{ reset: true, featureId: "setup-runtime" },
 			context,
 		);
 		latestCall = latestMetadataCall(metadata);
@@ -271,7 +221,7 @@ describe("runtime tool metadata", () => {
 		expect(drilldown?.featureId).toBe("setup-runtime");
 
 		metadata.mockClear();
-		await tools.flow_review_record_feature.execute(
+		await tools.flow_review_record.execute(
 			{
 				scope: "feature",
 				featureId: "setup-runtime",
@@ -292,7 +242,6 @@ describe("runtime tool metadata", () => {
 		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
 		expect(latestCall.metadata?.taskPhase).toBe("review");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
-		expect(latestCall.metadata?.requestedTaskStatus).toBe("approved");
 		expect(latestCall.metadata?.requestedReviewStatus).toBe("approved");
 		expect(latestCall.metadata?.persistedReviewStatus).toBeNull();
 		expect(latestCall.metadata?.status).toBeUndefined();
@@ -304,7 +253,7 @@ describe("runtime tool metadata", () => {
 		expect(drilldown?.featureId).toBe("setup-runtime");
 
 		metadata.mockClear();
-		await tools.flow_review_record_final.execute(
+		await tools.flow_review_record.execute(
 			{
 				scope: "final",
 				reviewDepth: "detailed",
@@ -321,12 +270,6 @@ describe("runtime tool metadata", () => {
 					changedArtifacts: ["src/runtime/session.ts"],
 					validationCommands: ["bun test"],
 				},
-				integrationChecks: [
-					"Reviewed integration points across the active feature boundary.",
-				],
-				regressionChecks: [
-					"Checked for regressions in shared surfaces and validation evidence.",
-				],
 				remainingGaps: [],
 				status: "approved",
 				summary: "Final review looks good.",
@@ -345,7 +288,6 @@ describe("runtime tool metadata", () => {
 		expect(latestCall.metadata?.taskOwner).toBe("flow-reviewer");
 		expect(latestCall.metadata?.taskPhase).toBe("final_review");
 		expect(latestCall.metadata?.taskStatus).toBe("active");
-		expect(latestCall.metadata?.requestedTaskStatus).toBe("approved");
 		expect(latestCall.metadata?.requestedReviewStatus).toBe("approved");
 		expect(latestCall.metadata?.persistedReviewStatus).toBeNull();
 		expect(latestCall.metadata?.status).toBeUndefined();
@@ -370,24 +312,26 @@ describe("runtime tool metadata", () => {
 			client: { app: { log: () => {} } },
 		};
 
-		await tools.flow_plan_start.execute(
+		await tools.flow_plan_save.execute(
 			{ goal: "Build a workflow plugin" },
 			context,
 		);
-		await tools.flow_plan_apply.execute({ plan: samplePlan() }, context);
+		await tools.flow_plan_save.execute({ plan: samplePlan() }, context);
 		await tools.flow_plan_approve.execute({}, context);
-		await tools.flow_plan_context_record.execute(
+		await tools.flow_plan_save.execute(
 			{
-				decisionLog: [
-					{
-						question: "Should Flow pause for approval?",
-						decisionMode: "recommend_confirm",
-						decisionDomain: "architecture",
-						options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
-						recommendation: "Pause and ask before changing the architecture.",
-						rationale: ["The architecture choice affects multiple files."],
-					},
-				],
+				planning: {
+					decisionLog: [
+						{
+							question: "Should Flow pause for approval?",
+							decisionMode: "recommend_confirm",
+							decisionDomain: "architecture",
+							options: [{ label: "Pause and ask", tradeoffs: ["safer"] }],
+							recommendation: "Pause and ask before changing the architecture.",
+							rationale: ["The architecture choice affects multiple files."],
+						},
+					],
+				},
 			},
 			context,
 		);

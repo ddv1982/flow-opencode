@@ -24,7 +24,7 @@ import {
 	type TaskProgressRow,
 } from "./summary-task-progress";
 
-export type SessionGuidance = {
+type SessionGuidance = {
 	category:
 		| "no_session"
 		| "planning"

@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-06-12
+
+The skills-first inversion: skills carry the workflow, the plugin shrinks to a state backend
+
+Flow 3.0.0 completes Phases 2–4 of the skills-first overhaul plan (`docs/plans/skills-first-overhaul-2026-06-12.md`). Four hand-authored skills (`flow`, `flow-plan`, `flow-run`, `flow-review`, with `references/` rubrics, worked examples, and a recovery playbook) are now the primary instruction surface; they are checked into the repo, synced at startup, user-editable, and per-project overridable. The generated prompt/skill/contract projections, mode contracts, capture scripts, and parity tests are deleted — there is no generated source left.
+
+The tool surface consolidates from 18 tools to 7: `flow_status` (state, readiness, and a computed next step — absorbing `flow_doctor` and `flow_auto_prepare`), `flow_plan_save`, `flow_plan_approve`, `flow_run_start`, `flow_feature_complete`, `flow_review_record`, and `flow_session`. The 15 retired v2 tool names stay registered for one minor cycle as hidden redirect stubs that return an error naming the replacement tool and its key arguments, so resumed v2 sessions degrade gracefully; the stubs are scheduled for removal in v3.1. Agents collapse from 6 to 1 (`flow-reviewer`, read-only via native per-agent permissions); the 9 command names are unchanged and are now thin pointers into the skills. The session schema stays at v1, so existing `.flow/**` sessions resume under 3.0.0 unchanged (covered by a v2-session fixture test).
+
+The runtime now enforces four hard invariants directly instead of a nine-gate matrix: a feature cannot complete without recorded validation evidence; a session cannot close as `completed` while planned features are below the plan's completion target (the close returns a structured `unfinished_features` error); an approved plan cannot be mutated without an explicit reset; and a strict review policy requires a recorded reviewer decision before completion. `flow_status` stays readable when a persisted session id is malformed — the `session_artifacts` readiness check degrades to a failing check with remediation instead of crashing. Stack-standards profiling, the review scope/coverage accounting layers, and the `flow-auto` coordination lane are deleted; repo profiling and review judgment move to the skills.
+
+The check pipeline drops from ~20 gate steps to 6 (typecheck, lint, build, test, install smoke, bundle sanity); the bench suite stays runnable outside `check`. A new manual golden-transcript eval lane (`bun run evals:golden`) drives `opencode run` headless against fixture repos and asserts outcomes from the persisted `.flow/**` state — it needs a model key and is not part of CI. The minified bundle is ~166 KB (budget 200 KiB), down from 752 KB at v2.0.56.
+
+Install pin changes to `"plugin": ["opencode-plugin-flow@3"]`. Restart OpenCode once after upgrading so re-synced skills are discovered.
+
+Not-tested: Live OpenCode UI runtime interaction; the golden-transcript eval lane against a real model (harness dry-run only).
+
+## [2.1.0] - 2026-06-12
+
+npm distribution, Promise-based permission API, and the skills-first overhaul Phase 1
+
+Flow 2.1.0 is the first release of the skills-first overhaul plan (`docs/plans/skills-first-overhaul-2026-06-12.md`) and changes how Flow is installed without changing workflow behavior.
+
+Flow is now distributed through npm: add `"plugin": ["opencode-plugin-flow@2"]` to `opencode.json` and OpenCode installs the package (with `zod` resolved as a regular dependency) at startup. The curl installer, the bundled `~/.config/opencode/plugins/flow.js` slot, the release skill tarball, and `src/installer.ts` are retired. A pre-npm `flow.js` copy keeps working for this minor cycle, but plugin startup and `/flow-doctor` warn about the double-load risk. `bunx opencode-plugin-flow uninstall` (new `dist/cli.js` bin) removes Flow-owned global skills and the pre-npm copy, and prints the `opencode.json` cleanup step.
+
+Generated global skills are now synced by the plugin at startup with folder marker files (`.flow-skill-version`) instead of being copied by an installer: folders without the Flow marker are never touched, pristine pre-npm hash-locked installs are adopted in place, and a user-edited `SKILL.md` is backed up to `SKILL.md.backup` before an update replaces it. Restart OpenCode once after the first install or an update so newly synced skills are discovered.
+
+The `effect` beta dependency is gone: `@opencode-ai/plugin` is pinned at 1.17.3, where `ToolContext.ask` returns a `Promise`, so the hidden-workspace permission flow now awaits the host directly and refuses the mutation if a pre-1.15.5 host hands back a non-Promise. With `zod` external and full minification the plugin bundle drops from 752 KB to ~307 KB (gate at 320 KB; the sub-100 KB target lands with the Phase 2/3 runtime simplification).
+
+The install smoke now runs against the packed npm tarball end-to-end (pack → extract → plugin startup → skill sync markers → tool session → uninstall CLI), the release workflow publishes to npm (requires the `NPM_TOKEN` secret) and attaches the tarball to the GitHub release, and smoke/eval evidence moved from `prompt-exports/` to the gitignored `.release-artifacts/`.
+
+Not-tested: Live OpenCode UI runtime interaction; npm registry installation through a real OpenCode host (publish-and-install spike pending).
+
 ## [2.0.56] - 2026-06-01
 
 Force review target rendering through the installed review surface

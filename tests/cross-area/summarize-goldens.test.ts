@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createSession } from "../../src/runtime/lifecycle";
 import type { Session } from "../../src/runtime/schema";
-import { createSession } from "../../src/runtime/session";
 import { summarizeSession } from "../../src/runtime/summary";
 import { cloneSamplePlan } from "../fixtures";
 

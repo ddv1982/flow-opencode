@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createSession } from "../src/runtime/session";
+import { createSession } from "../src/runtime/lifecycle";
 import { summarizeSession } from "../src/runtime/summary";
 import {
 	applyPlan,

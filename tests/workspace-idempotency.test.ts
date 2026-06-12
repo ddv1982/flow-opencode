@@ -2,8 +2,8 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ensureWorkspace } from "../src/runtime/session-workspace";
-import { createTempDirRegistry } from "./runtime-test-helpers";
+import { writeSessionFile } from "../src/runtime/session-workspace";
+import { createTempDirRegistry, sampleSession } from "./runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } =
 	createTempDirRegistry("flow-workspace-");
@@ -14,18 +14,19 @@ afterEach(() => {
 });
 
 describe("workspace idempotency", () => {
-	test("ensureWorkspace skips .gitignore writes on a second call within the same process", async () => {
+	test("workspace preparation skips .gitignore writes on a second session write within the same process", async () => {
 		const worktree = makeTempDir();
+		const session = sampleSession("Workspace idempotency");
 		const gitignorePath = join(worktree, ".flow", ".gitignore");
 		const writeSpy = spyOn(fsPromises, "writeFile");
 
-		await ensureWorkspace(worktree);
+		await writeSessionFile(worktree, session);
 		const writesAfterFirstCall = writeSpy.mock.calls.filter(
 			([path]) => String(path) === gitignorePath,
 		).length;
 		const bytesAfterFirstCall = await readFile(gitignorePath, "utf8");
 
-		await ensureWorkspace(worktree);
+		await writeSessionFile(worktree, session);
 
 		const writesAfterSecondCall = writeSpy.mock.calls.filter(
 			([path]) => String(path) === gitignorePath,
@@ -37,18 +38,19 @@ describe("workspace idempotency", () => {
 		expect(bytesAfterSecondCall).toBe(bytesAfterFirstCall);
 	});
 
-	test("ensureWorkspace restores missing required entries while preserving custom line order", async () => {
+	test("workspace preparation restores missing required entries while preserving custom line order", async () => {
 		const worktree = makeTempDir();
+		const session = sampleSession("Workspace gitignore restore");
 		const gitignorePath = join(worktree, ".flow", ".gitignore");
 
-		await ensureWorkspace(worktree);
+		await writeSessionFile(worktree, session);
 		await writeFile(
 			gitignorePath,
 			"# local overrides\n/my-temp\nactive/\nstored/\n",
 			"utf8",
 		);
 
-		await ensureWorkspace(worktree);
+		await writeSessionFile(worktree, session);
 
 		await expect(readFile(gitignorePath, "utf8")).resolves.toBe(
 			"# local overrides\n/my-temp\nactive/\nstored/\ncompleted/\nevents/\ncheckpoints/\nprojections/\nlocks/\nstandards-profile.json\n",

@@ -73,10 +73,6 @@ async function ensureWorkspaceAtRoot(
 	preparedWorkspaceGitignoreCache.set(gitignorePath, nextContents);
 }
 
-export async function ensureWorkspace(worktree: string): Promise<void> {
-	await ensureWorkspaceAtRoot(assertMutableWorkspaceRoot(worktree));
-}
-
 export async function writeSessionFile(
 	worktree: string,
 	session: Session,

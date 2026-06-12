@@ -11,9 +11,9 @@ import * as fsPromises from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createMidExecutionSession } from "../../bench/fixtures";
+import { saveSession } from "../../src/runtime/lifecycle";
 import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
 import { renderSessionDocs } from "../../src/runtime/render";
-import { ensureWorkspace, saveSession } from "../../src/runtime/session";
 import { setNowIsoOverride } from "../../src/runtime/util";
 import { createTempDirRegistry } from "../runtime-test-helpers";
 
@@ -42,7 +42,6 @@ describe("cross-area markdown parity", () => {
 	test("10-feature fixture preserves golden bytes and rewrites only the changed feature doc plus index", async () => {
 		const worktree = makeTempDir();
 		const session = createMidExecutionSession(10);
-		await ensureWorkspace(worktree);
 		await renderSessionDocs(worktree, session);
 		const fixtureRoot = path.resolve(
 			import.meta.dir,

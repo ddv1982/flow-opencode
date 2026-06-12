@@ -5,13 +5,13 @@ import {
 	createApprovedSession,
 	createCompletedSession,
 } from "../../bench/fixtures";
-import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
 import {
 	createSession,
 	loadStoredSession,
 	saveSession,
 	syncSessionArtifacts,
-} from "../../src/runtime/session";
+} from "../../src/runtime/lifecycle";
+import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
 import { createTempDirRegistry } from "../runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(

@@ -6,9 +6,6 @@ export type CompletionRecoveryKind =
 	| "failing_validation"
 	| "missing_reviewer_decision"
 	| "missing_validation_scope"
-	| "missing_review_closure"
-	| "missing_review_scope_accounting"
-	| "missing_final_reviewer_review_scope_accounting"
 	| "failing_feature_review"
 	| "missing_final_review"
 	| "failing_final_review";
@@ -19,8 +16,6 @@ function buildStatusRecovery(
 		"nextCommand" | "nextRuntimeTool" | "nextRuntimeArgs"
 	> & {
 		nextCommand?: TransitionRecovery["nextCommand"];
-		nextRuntimeTool?: TransitionRecovery["nextRuntimeTool"];
-		nextRuntimeArgs?: TransitionRecovery["nextRuntimeArgs"];
 	},
 ): TransitionRecovery {
 	return {
@@ -32,14 +27,6 @@ function buildStatusRecovery(
 			? { requiredArtifact: recovery.requiredArtifact }
 			: {}),
 		nextCommand: recovery.nextCommand ?? FLOW_STATUS_COMMAND,
-		...(recovery.nextRuntimeTool
-			? {
-					nextRuntimeTool: recovery.nextRuntimeTool,
-					...(recovery.nextRuntimeArgs
-						? { nextRuntimeArgs: recovery.nextRuntimeArgs }
-						: {}),
-				}
-			: {}),
 		...(recovery.details ? { details: recovery.details } : {}),
 		...(recovery.retryable !== undefined
 			? { retryable: recovery.retryable }
@@ -63,8 +50,8 @@ function buildResetFeatureRecovery(
 		recoveryStage: recovery.recoveryStage,
 		prerequisite: recovery.prerequisite,
 		nextCommand: flowResetFeatureCommand(featureId),
-		nextRuntimeTool: "flow_reset_feature",
-		nextRuntimeArgs: { featureId },
+		nextRuntimeTool: "flow_feature_complete",
+		nextRuntimeArgs: { reset: true, featureId },
 		...(recovery.details ? { details: recovery.details } : {}),
 		...(recovery.retryable !== undefined
 			? { retryable: recovery.retryable }
@@ -176,48 +163,6 @@ const COMPLETION_RECOVERY_DESCRIPTORS: Record<
 				retryable: true,
 				autoResolvable: true,
 			},
-		},
-	},
-	missing_review_closure: {
-		mode: "status",
-		recovery: {
-			errorCode: "missing_review_finding_closure",
-			resolutionHint:
-				"Record a reviewFindingClosures ledger that maps each remediated finding to fix, test, validation evidence, and residual risk, then retry completion.",
-			recoveryStage: "retry_completion",
-			prerequisite: "completion_payload_rebuild_required",
-			requiredArtifact: "review_finding_closure_ledger",
-			nextCommand: FLOW_STATUS_COMMAND,
-			retryable: true,
-			autoResolvable: true,
-		},
-	},
-	missing_review_scope_accounting: {
-		mode: "status",
-		recovery: {
-			errorCode: "missing_review_scope_accounting",
-			resolutionHint:
-				"Treat declaredScopes/exampleReviewScopeLedger as scaffold-only. Submit evidence-grounded reviewScopeLedger with truthful residualRisk for each declared review target/domain, then retry.",
-			recoveryStage: "retry_completion",
-			prerequisite: "completion_payload_rebuild_required",
-			requiredArtifact: "review_scope_ledger",
-			nextCommand: FLOW_STATUS_COMMAND,
-			retryable: true,
-			autoResolvable: true,
-		},
-	},
-	missing_final_reviewer_review_scope_accounting: {
-		mode: "status",
-		recovery: {
-			errorCode: "missing_review_scope_accounting",
-			resolutionHint:
-				"Re-record final reviewer decision with evidence-grounded reviewScopeLedger for each declared review target/domain. Treat exampleReviewScopeLedger as scaffold-only, replace scaffold residualRisk, and use only findingRefs mapped to closed findings for that scope before retry.",
-			recoveryStage: "record_review",
-			prerequisite: "reviewer_result_required",
-			requiredArtifact: "final_reviewer_decision",
-			nextCommand: FLOW_STATUS_COMMAND,
-			retryable: true,
-			autoResolvable: true,
 		},
 	},
 	failing_feature_review: {
