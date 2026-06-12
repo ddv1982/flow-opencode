@@ -13,6 +13,7 @@ import {
 	FLOW_SKILLS_DIRECTORY,
 	parseFlowSkillFileHashes,
 	parseFlowSkillFolderMarker,
+	renderFlowManagedMarkdownMarker,
 	sha256,
 } from "../src/distribution/skill-markers";
 import {
@@ -391,6 +392,79 @@ describe("command and agent sync", () => {
 		expect(await readFile(commandPath(homeDir, "flow-auto"), "utf8")).toContain(
 			"Load the `flow` skill",
 		);
+	});
+
+	async function seedRetiredCommand(
+		homeDir: string,
+		content: string,
+		markerHash: string,
+	) {
+		await mkdir(join(homeDir, FLOW_COMMANDS_DIRECTORY), { recursive: true });
+		await writeFile(commandPath(homeDir, "flow-doctor"), content, "utf8");
+		await writeFile(
+			commandMarkerPath(homeDir, "flow-doctor"),
+			renderFlowManagedMarkdownMarker({
+				kind: "command",
+				name: "flow-doctor",
+				version: "3.0.1",
+				hash: markerHash,
+			}),
+			"utf8",
+		);
+	}
+
+	test("removes Flow-owned files left behind by retired command names", async () => {
+		const homeDir = makeTempDir();
+		const pristine =
+			'---\ndescription: "Check Flow readiness"\n---\n\nCall flow_status.\n';
+		await seedRetiredCommand(homeDir, pristine, sha256(pristine));
+
+		const results = await syncFlowCommandsAndAgents({
+			homeDir,
+			version: "3.1.0",
+		});
+
+		expect(
+			results.find((result) => result.name === "flow-doctor")?.action,
+		).toBe("removed_retired");
+		expect(existsSync(commandPath(homeDir, "flow-doctor"))).toBe(false);
+		expect(existsSync(commandMarkerPath(homeDir, "flow-doctor"))).toBe(false);
+	});
+
+	test("keeps a user-edited retired command file in place", async () => {
+		const homeDir = makeTempDir();
+		const pristine =
+			'---\ndescription: "Check Flow readiness"\n---\n\nCall flow_status.\n';
+		const edited = "---\ndescription: Custom doctor\n---\n\nMy own checks.\n";
+		await seedRetiredCommand(homeDir, edited, sha256(pristine));
+
+		const results = await syncFlowCommandsAndAgents({
+			homeDir,
+			version: "3.1.0",
+		});
+
+		expect(results.some((result) => result.name === "flow-doctor")).toBe(false);
+		expect(await readFile(commandPath(homeDir, "flow-doctor"), "utf8")).toBe(
+			edited,
+		);
+	});
+
+	test("uninstall removes retired Flow-owned command files", async () => {
+		const homeDir = makeTempDir();
+		await syncFlowSkills({ homeDir, version: "3.1.0" });
+		await syncFlowCommandsAndAgents({ homeDir, version: "3.1.0" });
+		// Seed after sync: simulates an install that never restarted after the
+		// upgrade, so startup cleanup has not run yet.
+		const pristine =
+			'---\ndescription: "Check Flow readiness"\n---\n\nCall flow_status.\n';
+		await seedRetiredCommand(homeDir, pristine, sha256(pristine));
+
+		const result = await uninstallFlow({ homeDir });
+
+		expect(result.removedCommands).toContain(
+			commandPath(homeDir, "flow-doctor"),
+		);
+		expect(existsSync(commandPath(homeDir, "flow-doctor"))).toBe(false);
 	});
 
 	test("never touches a foreign command with the same name", async () => {

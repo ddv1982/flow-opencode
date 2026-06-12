@@ -25,9 +25,7 @@ const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // prompt-surface regressions sneak back in.
 const BUNDLE_SIZE_BUDGET_BYTES = 204800; // 200 KiB
 
-// toolCount tracks the canonical surface only; v2 compat redirect stubs
-// (see src/adapters/opencode/tool-surface/v2-compat-tools.ts) are registered
-// alongside but deliberately excluded from this metric.
+// The seven canonical tools are the whole registered surface as of v3.1.
 const CANONICAL_TOOL_NAMES = [
 	"flow_status",
 	"flow_plan_save",
@@ -171,20 +169,6 @@ async function main() {
 			);
 		}
 
-		const compatRedirect = JSON.parse(
-			await plugin.tool.flow_doctor.execute({}, { worktree }),
-		);
-		if (
-			compatRedirect.status !== "error" ||
-			compatRedirect.replacement !== "flow_status"
-		) {
-			throw new Error(
-				`v2 compat stub did not return the expected redirect envelope: ${JSON.stringify(
-					compatRedirect,
-				)}`,
-			);
-		}
-
 		const report = {
 			sizeBytes: statSync(distPath).size,
 			hasExternalPeerImport: bundleText.includes("@opencode-ai/plugin"),
@@ -198,6 +182,9 @@ async function main() {
 			configCommands: Object.keys(config.command).length,
 			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
 				.length,
+			extraToolCount: Object.keys(plugin.tool).filter(
+				(name) => !CANONICAL_TOOL_NAMES.includes(name),
+			).length,
 			nodeMajor: Number.parseInt(
 				process.versions.node.split(".")[0] ?? "0",
 				10,
@@ -223,8 +210,9 @@ async function main() {
 		}
 		if (
 			report.configAgents !== 1 ||
-			report.configCommands !== 9 ||
-			report.toolCount !== 7
+			report.configCommands !== 5 ||
+			report.toolCount !== 7 ||
+			report.extraToolCount !== 0
 		) {
 			throw new Error(
 				`Plugin surface shape is incorrect after build: ${JSON.stringify({

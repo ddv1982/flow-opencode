@@ -1,5 +1,6 @@
 import { readdir, readFile, rm, rmdir } from "node:fs/promises";
 import { dirname, join, normalize, sep } from "node:path";
+import { RETIRED_FLOW_COMMANDS } from "../config-shared";
 import {
 	FLOW_AGENTS_DIRECTORY,
 	FLOW_COMMANDS_DIRECTORY,
@@ -15,7 +16,11 @@ import {
 	parseFlowSkillFolderMarker,
 	sha256,
 } from "./skill-markers";
-import { flowAgentDefinitions, flowCommandDefinitions } from "./skill-sync";
+import {
+	cleanupRetiredManagedMarkdownFiles,
+	flowAgentDefinitions,
+	flowCommandDefinitions,
+} from "./skill-sync";
 
 type FlowUninstallOptions = {
 	homeDir: string;
@@ -81,6 +86,27 @@ export async function uninstallFlow({
 		}
 		result.removedSkills.push(folder);
 		logger?.(`${dryRun ? "Would remove" : "Removed"} Flow skill at ${folder}.`);
+	}
+
+	// Files synced by releases that still shipped the since-retired commands;
+	// removed first so the directory-if-empty sweep below can collapse the root.
+	const retiredCommands = await cleanupRetiredManagedMarkdownFiles({
+		kind: "command",
+		root: join(homeDir, FLOW_COMMANDS_DIRECTORY),
+		names: RETIRED_FLOW_COMMANDS,
+		dryRun,
+	});
+	for (const path of retiredCommands.removed) {
+		result.removedCommands.push(path);
+		logger?.(
+			`${dryRun ? "Would remove" : "Removed"} retired Flow command at ${path}.`,
+		);
+	}
+	for (const path of retiredCommands.keptUserEdited) {
+		result.keptUserEditedCommands.push(path);
+		logger?.(
+			`Kept user-edited Flow command at ${path}; remove it manually if it is no longer needed.`,
+		);
 	}
 
 	await removeManagedMarkdownFiles({

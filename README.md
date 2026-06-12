@@ -87,7 +87,7 @@ Deeper methodology (worked plan examples, validation and review rubrics) lives i
 
 ### Commands
 
-Commands are thin pointers into the skills — the skill content is the real instruction surface. Command names are stable across the v2 → v3 upgrade.
+Commands are thin pointers into the skills — the skill content is the real instruction surface.
 
 | Command | Use it when... |
 | --- | --- |
@@ -96,10 +96,8 @@ Commands are thin pointers into the skills — the skill content is the real ins
 | `/flow-run [feature-id]` | You want to execute exactly one approved feature. |
 | `/flow-review <goal>` | You want a read-only review and findings report (runs in the fresh-context `flow-reviewer` subagent). |
 | `/flow-status` | You want session state, readiness checks, and the suggested next step. |
-| `/flow-doctor` | You want the workspace readiness checks with remediation steps (same `flow_status` view, doctor framing). |
-| `/flow-history` | You want to list saved sessions. |
-| `/flow-session activate <id>` / `close <completed\|deferred\|abandoned>` / `show <id>` | You want to switch, close, or inspect sessions. |
-| `/flow-reset <feature-id>` | You want to reset a feature back to pending (convenience over `flow_feature_complete` with `reset: true`). |
+
+These five are the whole command surface since v3.1. The v2/v3.0 convenience commands (`/flow-doctor`, `/flow-history`, `/flow-session`, `/flow-reset`) were retired: each was a thin wrapper over a single tool call that works as a plain request — "show the flow history", "close this session as completed", "reset feature X" — and `/flow-doctor` duplicated `/flow-status`. Startup sync removes the retired command files from earlier installs (user-edited copies are kept).
 
 ### Tools
 
@@ -115,7 +113,7 @@ The plugin registers a small tool surface (7 tools) that owns all `.flow/**` mut
 | `flow_review_record` | Record a reviewer decision (`scope: feature` or `final`). |
 | `flow_session` | Activate or close a session, list history, or show a stored session. |
 
-These seven tools are the whole canonical surface. For one minor cycle, the retired v2 tool names (for example `flow_run_complete_feature` or `flow_session_close`) remain registered as hidden redirect stubs: calling one returns an error naming its replacement and the key arguments, so resumed v2 sessions and old transcripts degrade gracefully instead of failing on an unknown tool. The stubs are scheduled for removal in v3.1. Existing v2 sessions migrate seamlessly (the session schema is unchanged).
+These seven tools are the whole registered surface — the v2 tool-name redirect stubs that shipped in 3.0 were removed in v3.1 as scheduled. Existing v2 sessions still migrate seamlessly (the session schema is unchanged).
 
 ### Agents
 
@@ -153,10 +151,10 @@ Flow refuses to write session state at filesystem roots or directly in `$HOME`, 
 ## Troubleshooting
 
 ```text
-/flow-doctor
+/flow-status
 ```
 
-shows the workspace readiness checks (skills in sync, no stale pre-npm copy, workspace writable) with remediation steps; `/flow-status` adds the active session state, the current blocker, and the suggested next step.
+shows the workspace readiness checks (skills in sync, no stale pre-npm copy, workspace writable) with remediation steps, plus the active session state, the current blocker, and the suggested next step.
 
 ## OpenCode references
 

@@ -73,26 +73,6 @@ export const FLOW_CORE_COMMANDS = {
 		template:
 			"Call flow_status (detailed) and report session state, readiness checks, and the suggested next step.",
 	},
-	"flow-doctor": {
-		description: "Check Flow readiness for the current workspace",
-		template:
-			"Call flow_status (detailed) and report the readiness checks with any remediation steps.",
-	},
-	"flow-history": {
-		description: "Inspect stored Flow session history",
-		template:
-			"Call flow_session with action 'history' and summarize the sessions.",
-	},
-	"flow-session": {
-		description: "Activate, close, list, or show a Flow session",
-		template:
-			"Call flow_session with the requested action (activate, close, history, or show): $ARGUMENTS",
-	},
-	"flow-reset": {
-		description: "Reset a Flow feature to pending",
-		template:
-			"Call flow_feature_complete with reset=true for feature: $ARGUMENTS",
-	},
 	"flow-review": {
 		description: "Run a read-only Flow review with a fresh context",
 		agent: "flow-reviewer",
@@ -100,3 +80,14 @@ export const FLOW_CORE_COMMANDS = {
 		template: "Load the `flow-review` skill and review: $ARGUMENTS",
 	},
 } satisfies Record<string, FlowCommandConfig>;
+
+// Commands retired in v3.1: each was either a duplicate of /flow-status or a
+// thin wrapper over a single tool call the skills already teach (flow_session
+// history/activate/close/show, flow_feature_complete reset). Startup sync and
+// uninstall remove the Flow-owned files earlier releases synced for them.
+export const RETIRED_FLOW_COMMANDS = [
+	"flow-doctor",
+	"flow-history",
+	"flow-reset",
+	"flow-session",
+] as const;
