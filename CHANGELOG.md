@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-06-13
+
+Critical fix: plugin failed to load on current OpenCode hosts (unbound SDK log method)
+
+Every plugin load since the host SDK moved to generated client classes crashed at init with `Cannot read properties of undefined (reading '_client')`: plugin startup detached `app.log` from the host client (`const log = ctx.client?.app?.log`), and the SDK's `app.log` is a class method that reads `this._client`. OpenCode caught the throw, reported "failed to load plugin", and dropped Flow entirely — no tools, no config injection, no skill sync. This is the real cause behind `/flow-auto` reporting that `flow_status` was unavailable. The log call also passed the entry as top-level options where the SDK expects it under `body`; both are fixed — logging now goes through a bound, fail-silent wrapper posting `{ body: { service: "opencode-plugin-flow", level, message } }`.
+
+The bug was invisible to every gate because all of them faked `app.log` as a plain function. The install smoke, bundle sanity, and the dist-load test now drive plugin init through an SDK-shaped fake client (a class whose `log` prototype method reads `this._client` and expects the `body` payload) and assert the startup log arrives through it.
+
+Also fixed: bundle sanity and the dist-load test invoked the real plugin factory without sandboxing `$HOME`, so every `bun run check` silently synced dev-versioned skills, commands, and agents into the developer's real `~/.config/opencode` (the `version=0.0.0` markers some installs ended up with). Both now run against a temp home like the install smoke always did.
+
+Upgrade by bumping the pin and restarting twice; the synced surface then re-syncs with real version markers.
+
 ## [3.2.1] - 2026-06-13
 
 A missing Flow backend is now a stop condition in the skills, not a silent downgrade

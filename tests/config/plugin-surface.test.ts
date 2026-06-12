@@ -358,21 +358,40 @@ describe("plugin config surface", () => {
 	});
 
 	test("plugin entrypoint logs through ctx.client.app.log", async () => {
-		const logCalls: Array<Record<string, unknown>> = [];
+		// Mirror the generated SDK: app.log is a prototype method reading
+		// this._client with the entry in options.body. Detaching it crashed
+		// plugin load on real hosts; a plain-function fake hides that.
+		type LogBody = { service: string; level: string; message: string };
+		class FakeSdkApp {
+			entries: LogBody[] = [];
+			_client = {
+				post: (options: { body: LogBody } & Record<string, unknown>) => {
+					this.entries.push(options.body);
+					return Promise.resolve({});
+				},
+			};
+			log(options: { body: LogBody }) {
+				return this._client.post({ url: "/log", ...options });
+			}
+		}
+		const app = new FakeSdkApp();
 		const ctx = {
 			worktree: "/tmp/flow-plugin-test",
-			client: {
-				app: {
-					log(entry: Record<string, unknown>) {
-						logCalls.push(entry);
-					},
-				},
-			},
+			client: { app },
 		} as unknown as Parameters<typeof FlowPlugin>[0];
 
-		await FlowPlugin(ctx);
+		// Startup sync writes global skills/commands under $HOME: keep the
+		// test off the developer's real ~/.config/opencode.
+		const originalHome = process.env.HOME;
+		process.env.HOME = makeTempDir();
+		try {
+			await FlowPlugin(ctx);
+		} finally {
+			process.env.HOME = originalHome;
+		}
 
-		expect(logCalls).toContainEqual({
+		expect(app.entries).toContainEqual({
+			service: "opencode-plugin-flow",
 			level: "info",
 			message: "Flow plugin initialized.",
 		});

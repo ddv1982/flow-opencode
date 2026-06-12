@@ -103,7 +103,50 @@ async function main() {
 		copyFileSync(sourcemapPath, packageSourcemapPath);
 
 		const pluginModule = await import(`file://${packageDistPath}`);
-		const plugin = await pluginModule.default({ worktree });
+		// Startup sync writes global skills/commands under $HOME: sandbox it so
+		// the smoke never touches the developer's real ~/.config/opencode.
+		const sandboxHome = join(tempRoot, "home");
+		mkdirSync(sandboxHome, { recursive: true });
+		const originalHome = process.env.HOME;
+		process.env.HOME = sandboxHome;
+		// Mirror the generated SDK shape: app.log is a prototype method reading
+		// this._client, with the entry in options.body. A plain-function fake
+		// would hide an unbound-call crash at plugin load.
+		class FakeSdkApp {
+			entries = [];
+			_client = {
+				post: (options) => {
+					this.entries.push(options.body);
+					return Promise.resolve({});
+				},
+			};
+			log(options) {
+				return (options?.client ?? this._client).post({
+					url: "/log",
+					...options,
+				});
+			}
+		}
+		const fakeApp = new FakeSdkApp();
+		let plugin;
+		try {
+			plugin = await pluginModule.default({
+				worktree,
+				client: { app: fakeApp },
+			});
+		} finally {
+			process.env.HOME = originalHome;
+		}
+		const startupLogCount = fakeApp.entries.length;
+		if (
+			startupLogCount < 1 ||
+			fakeApp.entries[0]?.service !== "opencode-plugin-flow" ||
+			typeof fakeApp.entries[0]?.message !== "string"
+		) {
+			throw new Error(
+				`Plugin did not log through the SDK-shaped client: ${JSON.stringify(fakeApp.entries[0] ?? null)}`,
+			);
+		}
 		const config = { agent: {}, command: {} };
 		await plugin.config(config);
 
@@ -196,6 +239,7 @@ async function main() {
 			mockTagVerified:
 				plugin.tool.flow_status.__mockTag === "flow-bundle-sanity-mock-v1",
 			permissionAskRuns,
+			startupLogCount,
 		};
 
 		if (report.sizeBytes > BUNDLE_SIZE_BUDGET_BYTES) {
