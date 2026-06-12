@@ -29,11 +29,15 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3"]
+  "plugin": ["opencode-plugin-flow@3.1.0"]
 }
 ```
 
-OpenCode installs the package from npm on startup. Pin the major version you install (currently `@3`) so restarts pick up fixes without crossing a breaking release.
+OpenCode installs the package from npm on the first startup and caches it per spec string under `~/.cache/opencode/packages/<spec>/` — it does **not** re-resolve the version on later startups. Pin an exact version and bump the pin to upgrade: a changed spec string installs fresh. If you pin a range like `@3` instead, upgrading requires clearing the cache entry first:
+
+```bash
+rm -rf ~/.cache/opencode/packages/opencode-plugin-flow@3
+```
 
 On startup the plugin syncs its global skills, commands, and review agent into OpenCode's normal discovery paths:
 
