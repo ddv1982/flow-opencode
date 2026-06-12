@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-06-12
+
+The skills-first inversion: skills carry the workflow, the plugin shrinks to a state backend
+
+Flow 3.0.0 completes Phases 2–4 of the skills-first overhaul plan (`docs/plans/skills-first-overhaul-2026-06-12.md`). Four hand-authored skills (`flow`, `flow-plan`, `flow-run`, `flow-review`, with `references/` rubrics, worked examples, and a recovery playbook) are now the primary instruction surface; they are checked into the repo, synced at startup, user-editable, and per-project overridable. The generated prompt/skill/contract projections, mode contracts, capture scripts, and parity tests are deleted — there is no generated source left.
+
+The tool surface consolidates from 18 tools to 7: `flow_status` (state, readiness, and a computed next step — absorbing `flow_doctor` and `flow_auto_prepare`), `flow_plan_save`, `flow_plan_approve`, `flow_run_start`, `flow_feature_complete`, `flow_review_record`, and `flow_session`. The 15 retired v2 tool names stay registered for one minor cycle as hidden redirect stubs that return an error naming the replacement tool and its key arguments, so resumed v2 sessions degrade gracefully; the stubs are scheduled for removal in v3.1. Agents collapse from 6 to 1 (`flow-reviewer`, read-only via native per-agent permissions); the 9 command names are unchanged and are now thin pointers into the skills. The session schema stays at v1, so existing `.flow/**` sessions resume under 3.0.0 unchanged (covered by a v2-session fixture test).
+
+The runtime now enforces four hard invariants directly instead of a nine-gate matrix: a feature cannot complete without recorded validation evidence; a session cannot close as `completed` while planned features are below the plan's completion target (the close returns a structured `unfinished_features` error); an approved plan cannot be mutated without an explicit reset; and a strict review policy requires a recorded reviewer decision before completion. `flow_status` stays readable when a persisted session id is malformed — the `session_artifacts` readiness check degrades to a failing check with remediation instead of crashing. Stack-standards profiling, the review scope/coverage accounting layers, and the `flow-auto` coordination lane are deleted; repo profiling and review judgment move to the skills.
+
+The check pipeline drops from ~20 gate steps to 6 (typecheck, lint, build, test, install smoke, bundle sanity); the bench suite stays runnable outside `check`. A new manual golden-transcript eval lane (`bun run evals:golden`) drives `opencode run` headless against fixture repos and asserts outcomes from the persisted `.flow/**` state — it needs a model key and is not part of CI. The minified bundle is ~166 KB (budget 200 KiB), down from 752 KB at v2.0.56.
+
+Install pin changes to `"plugin": ["opencode-plugin-flow@3"]`. Restart OpenCode once after upgrading so re-synced skills are discovered.
+
+Not-tested: Live OpenCode UI runtime interaction; the golden-transcript eval lane against a real model (harness dry-run only).
+
 ## [2.1.0] - 2026-06-12
 
 npm distribution, Promise-based permission API, and the skills-first overhaul Phase 1

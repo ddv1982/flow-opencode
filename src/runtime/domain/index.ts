@@ -21,7 +21,6 @@ export {
 	SEMANTIC_INVARIANTS,
 	SEMANTIC_RECOVERY_EXPECTATIONS,
 	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
-	type SemanticInvariantId,
 	semanticInvariantById,
 } from "./semantic-invariants";
 export {

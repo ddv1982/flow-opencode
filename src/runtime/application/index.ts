@@ -1,17 +1,11 @@
 export { InvalidFlowWorkspaceRootError } from "../workspace-root";
 export type {
 	RuntimeToolResponse,
-	SessionMutationResult,
-	SessionReadResult,
-	SessionReadRuntimePort,
-	SessionRuntimePort,
 	SessionWorkspaceResult,
-	SessionWorkspaceRuntimePort,
 } from "./action-engine";
 export type {
 	SessionMutationActionName,
 	SessionMutationPayloadMap,
-	SessionMutationValueMap,
 	SessionReadActionName,
 	SessionReadPayloadMap,
 	SessionReadValueMap,
@@ -28,10 +22,7 @@ export {
 	SESSION_READ_ACTION_NAMES,
 	SESSION_WORKSPACE_ACTION_NAMES,
 } from "./actions";
-export {
-	buildWorkspaceReadiness,
-	type WorkspaceReadiness,
-} from "./doctor-report";
+export { buildWorkspaceReadiness } from "./doctor-report";
 export { renderSessionStatusSummary } from "./operator-presenters";
 export {
 	historyResponse,

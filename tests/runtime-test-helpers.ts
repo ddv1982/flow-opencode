@@ -10,7 +10,7 @@ import {
 	createSampleSession,
 } from "./fixtures";
 
-export type TestToolContext = Partial<ToolContext> & {
+type TestToolContext = Partial<ToolContext> & {
 	worktree?: string;
 	directory?: string;
 };
@@ -22,7 +22,7 @@ type TestToolDefinition = {
 
 type ToolSurface = ReturnType<typeof createTools>;
 
-export type TestTools = {
+type TestTools = {
 	[K in keyof ToolSurface]: TestToolDefinition;
 } & Record<string, TestToolDefinition>;
 

@@ -1,4 +1,4 @@
-import type { Session, WorkerResult } from "../src/runtime/schema";
+import type { WorkerResult } from "../src/runtime/schema";
 
 const CANONICAL_FINAL_REVIEW_VALIDATION_ASSESSMENT =
 	"bun test was mapped to the session-completion regression evidence; no unchecked behavior gap remains for this runtime-only fixture.";
@@ -13,17 +13,9 @@ const DEFAULT_EVIDENCE_REFS = {
 };
 
 type FinalReviewPayload = NonNullable<WorkerResult["finalReview"]>;
-type FinalReviewerDecision = Extract<
-	NonNullable<Session["execution"]["lastReviewerDecision"]>,
-	{ scope: "final" }
->;
 
 type FinalReviewOverrides = Partial<FinalReviewPayload> & {
 	evidenceRefs?: Partial<FinalReviewPayload["evidenceRefs"]>;
-};
-
-type FinalReviewerDecisionOverrides = Partial<FinalReviewerDecision> & {
-	evidenceRefs?: Partial<FinalReviewerDecision["evidenceRefs"]>;
 };
 
 function finalReviewBase(): Omit<FinalReviewPayload, "status"> {
@@ -46,23 +38,6 @@ export function createFinalReviewPayload(
 	return {
 		...finalReviewBase(),
 		status: "passed",
-		...overrides,
-		evidenceRefs: {
-			...DEFAULT_EVIDENCE_REFS,
-			...overrides.evidenceRefs,
-		},
-	};
-}
-
-export function createApprovedFinalReviewerDecision(
-	overrides: FinalReviewerDecisionOverrides = {},
-): FinalReviewerDecision {
-	return {
-		scope: "final",
-		...finalReviewBase(),
-		status: "approved",
-		followUps: [],
-		suggestedValidation: [],
 		...overrides,
 		evidenceRefs: {
 			...DEFAULT_EVIDENCE_REFS,

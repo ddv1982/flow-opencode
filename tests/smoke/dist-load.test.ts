@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { V2_COMPAT_TOOL_NAMES } from "../../src/adapters/opencode/tool-surface/v2-compat-tools";
 import {
 	cleanupManagedTempDirs,
 	createToolContext,
@@ -47,8 +48,7 @@ describe("built dist smoke load", () => {
 
 		expect(Object.keys(config.agent ?? {})).toHaveLength(1);
 		expect(Object.keys(config.command ?? {})).toHaveLength(9);
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(7);
-		expect(Object.keys(plugin.tool ?? {}).sort()).toEqual([
+		const canonicalToolNames = [
 			"flow_feature_complete",
 			"flow_plan_approve",
 			"flow_plan_save",
@@ -56,7 +56,18 @@ describe("built dist smoke load", () => {
 			"flow_run_start",
 			"flow_session",
 			"flow_status",
-		]);
+		];
+		const registeredToolNames = Object.keys(plugin.tool ?? {}).sort();
+		const registeredCanonical = registeredToolNames.filter((name) =>
+			canonicalToolNames.includes(name),
+		);
+		const registeredCompat = registeredToolNames.filter(
+			(name) => !canonicalToolNames.includes(name),
+		);
+		expect(registeredCanonical).toEqual(canonicalToolNames);
+		expect(registeredCanonical).toHaveLength(7);
+		// v2 compat redirect stubs ride along until v3.1; they are not canonical.
+		expect(registeredCompat.sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
 
 		const context = createToolContext(worktree);
 		const planSaveResponse = JSON.parse(

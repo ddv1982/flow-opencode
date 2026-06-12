@@ -204,7 +204,7 @@ export type SessionMutationPayloadMap = {
 	};
 };
 
-export type SessionMutationValueMap = {
+type SessionMutationValueMap = {
 	record_planning_context: Session;
 	apply_plan: {
 		session: Session;

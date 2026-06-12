@@ -25,6 +25,19 @@ const packageJson = JSON.parse(
 	readFileSync(join(projectRoot, "package.json"), "utf8"),
 );
 
+// toolCount tracks the canonical surface only; v2 compat redirect stubs
+// (see src/adapters/opencode/tool-surface/v2-compat-tools.ts) are registered
+// alongside but reported separately as compatToolCount.
+const CANONICAL_TOOL_NAMES = [
+	"flow_status",
+	"flow_plan_save",
+	"flow_plan_approve",
+	"flow_run_start",
+	"flow_feature_complete",
+	"flow_review_record",
+	"flow_session",
+];
+
 function parseArgs(argv) {
 	const options = { tarball: null, evidenceDir: null };
 	for (let index = 0; index < argv.length; index += 1) {
@@ -270,7 +283,11 @@ async function main() {
 			syncedSkills,
 			configAgents: Object.keys(config.agent).length,
 			configCommands: Object.keys(config.command).length,
-			toolCount: Object.keys(plugin.tool).length,
+			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
+				.length,
+			compatToolCount: Object.keys(plugin.tool).filter(
+				(name) => !CANONICAL_TOOL_NAMES.includes(name),
+			).length,
 			startupLogCount: logs.length,
 			preNpmWarningVerified: true,
 			uninstallVerified: true,
@@ -293,7 +310,7 @@ async function main() {
 					"",
 					`- Packed version: ${report.packedVersion}`,
 					`- Synced skills: ${report.syncedSkills.join(", ")}`,
-					`- Tools: ${report.toolCount}, agents: ${report.configAgents}, commands: ${report.configCommands}`,
+					`- Tools: ${report.toolCount} canonical + ${report.compatToolCount} v2 compat stubs, agents: ${report.configAgents}, commands: ${report.configCommands}`,
 					"- Pre-npm double-load warning verified",
 					"- Uninstall CLI verified",
 					"",

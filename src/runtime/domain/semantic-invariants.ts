@@ -1,8 +1,6 @@
 import type { SemanticInvariantId } from "../../core/protocols/semantic-invariants";
 import type { CompletionRecoveryKind } from "../transitions/recovery";
 
-export type { SemanticInvariantId };
-
 type SemanticInvariantOwnerReference = {
 	file: string;
 	symbols: readonly string[];

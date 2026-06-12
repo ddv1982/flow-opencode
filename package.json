@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "2.1.0",
+	"version": "3.0.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -22,6 +22,7 @@
 		"build:cli": "bun build --target=node --outdir=./dist --entry-naming=cli.js --banner='#!/usr/bin/env node' --minify ./src/cli.ts",
 		"bench": "bun run ./bench/index.ts",
 		"bench:smoke": "bun run ./bench/index.ts -- --filter transitions --warmup 0 --iterations 3",
+		"evals:golden": "bun run evals/golden/runner.ts",
 		"check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
 		"check:architecture-seams": "node ./scripts/cross-area/architecture-seams.mjs",
 		"check:architecture-seams:enforce": "FLOW_ARCH_SEAMS_MODE=enforce node ./scripts/cross-area/architecture-seams.mjs",

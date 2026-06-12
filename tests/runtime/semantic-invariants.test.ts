@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { V2_COMPAT_TOOL_NAMES } from "../../src/adapters/opencode/tool-surface/v2-compat-tools";
 import { createTools } from "../../src/adapters/opencode/tools";
 import { CANONICAL_RUNTIME_TOOL_NAMES } from "../../src/runtime/constants";
 import {
@@ -492,7 +493,13 @@ describe("runtime semantic invariants", () => {
 		for (const toolName of CANONICAL_RUNTIME_TOOL_NAMES) {
 			expect(tools).toContain(toolName);
 		}
-		expect([...tools].sort()).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES].sort());
+		// The registered surface is the canonical seven plus the v2 compat
+		// redirect stubs (removed after one minor cycle, v3.1).
+		const nonCanonical = tools.filter(
+			(name) =>
+				!(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
+		);
+		expect([...nonCanonical].sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
 		expect(tools.some((name) => name.includes("_from_raw"))).toBe(false);
 	});
 });

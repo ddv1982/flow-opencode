@@ -3,9 +3,9 @@ import {
 	type CanonicalRuntimeToolName,
 } from "../../../runtime/constants";
 
-export type OpenCodeToolName = CanonicalRuntimeToolName;
+type OpenCodeToolName = CanonicalRuntimeToolName;
 
-export type OpenCodeToolRegistryEntry = {
+type OpenCodeToolRegistryEntry = {
 	toolName: OpenCodeToolName;
 	hostDescription: string;
 };
@@ -35,7 +35,7 @@ export const OPENCODE_TOOL_REGISTRY: readonly OpenCodeToolRegistryEntry[] =
 export const OPENCODE_TOOL_NAMES_FROM_REGISTRY: readonly OpenCodeToolName[] =
 	OPENCODE_TOOL_REGISTRY.map((entry) => entry.toolName);
 
-export function getOpenCodeToolRegistryEntry(
+function getOpenCodeToolRegistryEntry(
 	toolName: string,
 ): OpenCodeToolRegistryEntry | null {
 	return (

@@ -12,6 +12,10 @@ import {
 	OPENCODE_TOOL_NAMES_FROM_REGISTRY,
 	OPENCODE_TOOL_REGISTRY,
 } from "../../src/adapters/opencode/tool-surface/tool-registry";
+import {
+	V2_COMPAT_TOOL_ALIASES,
+	V2_COMPAT_TOOL_NAMES,
+} from "../../src/adapters/opencode/tool-surface/v2-compat-tools";
 import { createTools } from "../../src/adapters/opencode/tools";
 import FlowPlugin from "../../src/index";
 import { CANONICAL_RUNTIME_TOOL_NAMES } from "../../src/runtime/constants";
@@ -340,7 +344,10 @@ describe("plugin config surface", () => {
 		expect(pluginWithHooks.hooks?.["chat.message"]).toBeUndefined();
 		expect(pluginWithHooks.hooks?.["command.execute.before"]).toBeUndefined();
 		expect(plugin.tool).not.toHaveProperty("flow_attachments_materialize");
-		expect(plugin.tool).not.toHaveProperty("flow_auto_prepare");
+		// flow_auto_prepare survives only as a v2 compat redirect stub, never as
+		// a canonical tool.
+		expect(plugin.tool).toHaveProperty("flow_auto_prepare");
+		expect(CANONICAL_RUNTIME_TOOL_NAMES).not.toContain("flow_auto_prepare");
 	});
 
 	test("core modules stay independent of OpenCode adapter packages", async () => {
@@ -376,17 +383,88 @@ describe("plugin config surface", () => {
 		});
 	});
 
-	test("adapter registers exactly the seven canonical runtime tools", () => {
+	test("adapter registers exactly the seven canonical runtime tools plus v2 compat stubs", () => {
 		const toolNames = Object.keys(createTools({}));
+		const canonicalNames = toolNames.filter((name) =>
+			(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
+		);
+		const compatNames = toolNames.filter(
+			(name) =>
+				!(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
+		);
 
-		expect(toolNames).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES]);
-		expect(toolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
-		expect(toolNames).toHaveLength(7);
+		expect(canonicalNames).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES]);
+		expect(canonicalNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
+		expect(canonicalNames).toHaveLength(7);
+		expect(compatNames.sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
 		expect(OPENCODE_TOOL_REGISTRY.map((entry) => entry.toolName)).toEqual([
 			...CANONICAL_RUNTIME_TOOL_NAMES,
 		]);
 		for (const entry of OPENCODE_TOOL_REGISTRY) {
 			expect(entry.hostDescription.length).toBeGreaterThan(0);
+		}
+	});
+
+	test("every canonical tool name is documented in at least one skill file", async () => {
+		const skillsRoot = join(import.meta.dir, "..", "..", "skills");
+		const skillDirs = ["flow", "flow-plan", "flow-run", "flow-review"];
+		const skillSources: string[] = [];
+
+		for (const skillDir of skillDirs) {
+			const skillRoot = join(skillsRoot, skillDir);
+			skillSources.push(await readFile(join(skillRoot, "SKILL.md"), "utf8"));
+			const referencesDir = join(skillRoot, "references");
+			const referenceEntries = await readdir(referencesDir, {
+				withFileTypes: true,
+			}).catch(() => []);
+			for (const entry of referenceEntries) {
+				if (entry.isFile()) {
+					skillSources.push(
+						await readFile(join(referencesDir, entry.name), "utf8"),
+					);
+				}
+			}
+		}
+
+		const combined = skillSources.join("\n");
+		for (const toolName of CANONICAL_RUNTIME_TOOL_NAMES) {
+			expect(combined).toContain(toolName);
+		}
+	});
+
+	test("v2 compat stubs are executable and return redirect envelopes", async () => {
+		const tools = createTools({}) as Record<
+			string,
+			{
+				description: string;
+				execute: (args: unknown, context: unknown) => Promise<unknown>;
+			}
+		>;
+
+		for (const [compatName, replacement] of Object.entries(
+			V2_COMPAT_TOOL_ALIASES,
+		)) {
+			expect(CANONICAL_RUNTIME_TOOL_NAMES).not.toContain(compatName);
+			expect(OPENCODE_TOOL_NAMES_FROM_REGISTRY).not.toContain(compatName);
+
+			const stub = tools[compatName];
+			expect(stub).toBeDefined();
+			expect(stub?.description).toBe(`Retired v2 tool; use ${replacement}.`);
+
+			const output = await stub?.execute({ unexpected: "v2 args" }, {});
+			expect(typeof output).toBe("string");
+			const envelope = JSON.parse(output as string) as {
+				status: string;
+				summary: string;
+				replacement: string;
+				usage: string;
+			};
+			expect(envelope.status).toBe("error");
+			expect(envelope.summary).toBe(
+				`${compatName} was retired in v3; call ${replacement} instead`,
+			);
+			expect(envelope.replacement).toBe(replacement);
+			expect(envelope.usage).toContain(replacement);
 		}
 	});
 
@@ -396,6 +474,13 @@ describe("plugin config surface", () => {
 		const commandNames = Object.keys(config.command ?? {}).sort();
 		const agentNames = Object.keys(config.agent ?? {}).sort();
 		const toolNames = Object.keys(createTools({}));
+		const canonicalToolNames = toolNames.filter((name) =>
+			(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
+		);
+		const compatToolNames = toolNames.filter(
+			(name) =>
+				!(CANONICAL_RUNTIME_TOOL_NAMES as readonly string[]).includes(name),
+		);
 
 		expect(commandNames).toEqual([
 			"flow-auto",
@@ -409,10 +494,11 @@ describe("plugin config surface", () => {
 			"flow-status",
 		]);
 		expect(agentNames).toEqual(["flow-reviewer"]);
-		expect(toolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
+		expect(canonicalToolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
 		expect(commandNames).toHaveLength(9);
 		expect(agentNames).toHaveLength(1);
-		expect(toolNames).toHaveLength(7);
+		expect(canonicalToolNames).toHaveLength(7);
+		expect(compatToolNames.sort()).toEqual([...V2_COMPAT_TOOL_NAMES].sort());
 	});
 
 	test("keeps skills-first prompt surfaces compact", () => {

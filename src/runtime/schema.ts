@@ -1,12 +1,10 @@
 // Flow runtime schema public barrel: stable exports for runtime-owned schema subdomains.
 
 import type { z } from "zod";
-import type { EvidencePacket } from "./schema-evidence-packets";
 import type {
 	FeatureSchema,
 	PackageManagerSchema,
 	PlanArgsSchema,
-	PlanningContextArgsSchema,
 	PlanningContextSchema,
 	PlanSchema,
 	ReviewFindingPlanningContextSchema,
@@ -22,10 +20,7 @@ import type {
 	WorkerResultSchema,
 } from "./schema-worker-result";
 
-export {
-	EvidencePacketArraySchema,
-	EvidencePacketSchema,
-} from "./schema-evidence-packets";
+export { EvidencePacketSchema } from "./schema-evidence-packets";
 export {
 	FeatureSchema,
 	PackageManagerSchema,
@@ -38,7 +33,6 @@ export {
 } from "./schema-plan";
 export {
 	FinalReviewerDecisionSchema,
-	FinalReviewSchema,
 	FlowReviewRecordFeatureArgsSchema,
 	ReviewerDecisionSchema,
 } from "./schema-review-decisions";
@@ -62,12 +56,10 @@ export type Plan = z.infer<typeof PlanSchema>;
 export type PlanInput = z.input<typeof PlanSchema>;
 export type PlanArgs = z.input<typeof PlanArgsSchema>;
 export type PlanningContext = z.infer<typeof PlanningContextSchema>;
-export type PlanningContextArgs = z.input<typeof PlanningContextArgsSchema>;
 export type ReviewFindingPlanningContext = z.infer<
 	typeof ReviewFindingPlanningContextSchema
 >;
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
-export type { EvidencePacket };
 export type ReviewerDecision = z.infer<typeof ReviewerDecisionSchema>;
 export type LatestFailedFlowAttempt = z.infer<
 	typeof LatestFailedFlowAttemptSchema

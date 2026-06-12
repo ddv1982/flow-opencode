@@ -17,8 +17,7 @@ export const FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH = join(
 export const FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER =
 	"// Managed by flow-opencode install/uninstall\n";
 
-export const FLOW_SKILL_GENERATED_MARKER = "flow-opencode-generated-skill";
-export const FLOW_SKILL_GENERATED_VERSION = "1";
+const FLOW_SKILL_GENERATED_MARKER = "flow-opencode-generated-skill";
 
 type FlowSkillGeneratedMarker = {
 	name: string;

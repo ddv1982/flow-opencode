@@ -81,7 +81,7 @@ const FlowFeatureCompleteResetArgsSchema = z
 	})
 	.strict();
 
-export type FlowFeatureCompleteArgs =
+type FlowFeatureCompleteArgs =
 	| { reset: true; featureId: string }
 	| {
 			reset: false;

@@ -25,6 +25,19 @@ const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // prompt-surface regressions sneak back in.
 const BUNDLE_SIZE_BUDGET_BYTES = 204800; // 200 KiB
 
+// toolCount tracks the canonical surface only; v2 compat redirect stubs
+// (see src/adapters/opencode/tool-surface/v2-compat-tools.ts) are registered
+// alongside but deliberately excluded from this metric.
+const CANONICAL_TOOL_NAMES = [
+	"flow_status",
+	"flow_plan_save",
+	"flow_plan_approve",
+	"flow_run_start",
+	"flow_feature_complete",
+	"flow_review_record",
+	"flow_session",
+];
+
 function cleanup() {
 	rmSync(tempRoot, { recursive: true, force: true });
 }
@@ -127,7 +140,9 @@ async function main() {
 			...(toolResults.history.history?.completed ?? []),
 		].filter(Boolean);
 		if (!historyEntries.some((entry) => entry.goal === "Bundle sanity")) {
-			throw new Error("flow_session history did not report the stored session.");
+			throw new Error(
+				"flow_session history did not report the stored session.",
+			);
 		}
 		if (plugin.tool.flow_status.__mockTag !== "flow-bundle-sanity-mock-v1") {
 			throw new Error(
@@ -156,6 +171,20 @@ async function main() {
 			);
 		}
 
+		const compatRedirect = JSON.parse(
+			await plugin.tool.flow_doctor.execute({}, { worktree }),
+		);
+		if (
+			compatRedirect.status !== "error" ||
+			compatRedirect.replacement !== "flow_status"
+		) {
+			throw new Error(
+				`v2 compat stub did not return the expected redirect envelope: ${JSON.stringify(
+					compatRedirect,
+				)}`,
+			);
+		}
+
 		const report = {
 			sizeBytes: statSync(distPath).size,
 			hasExternalPeerImport: bundleText.includes("@opencode-ai/plugin"),
@@ -167,7 +196,8 @@ async function main() {
 				: 0,
 			configAgents: Object.keys(config.agent).length,
 			configCommands: Object.keys(config.command).length,
-			toolCount: Object.keys(plugin.tool).length,
+			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
+				.length,
 			nodeMajor: Number.parseInt(
 				process.versions.node.split(".")[0] ?? "0",
 				10,

@@ -23,6 +23,59 @@ Worked examples for decomposing goals into Flow features. Each feature in a save
 
 **Why this is good:** each feature ships alone (1 is useful without 2), each has its own validation story, dependency order is explicit, the risky/unknown part (shared state) is isolated in feature 2, and docs ride as a real feature with a real outcome instead of "cleanup".
 
+**As a `flow_plan_save` payload** (abridged — feature ids are lowercase kebab-case; `verification` is each feature's validation plan; `fileTargets` is its scope):
+
+```json
+{
+  "goal": "Add rate limiting to our public API",
+  "planning": {
+    "packageManager": "pnpm",
+    "repoProfile": [
+      "Node 22 / TypeScript, Fastify 4",
+      "tests: pnpm test (vitest); lint: pnpm lint (biome)",
+      "CI gate: pnpm typecheck && pnpm test",
+      "Redis already a dependency (sessions)"
+    ]
+  },
+  "plan": {
+    "summary": "Per-API-key rate limiting with Redis-backed counters",
+    "overview": "Middleware-based limiting: in-memory store first, Redis store for multi-instance, operator docs last.",
+    "requirements": [
+      "Requests beyond N/min per API key get 429 with Retry-After",
+      "No behavior change under the limit"
+    ],
+    "architectureDecisions": [
+      "Counters in Redis; in-memory store stays as the dev fallback"
+    ],
+    "features": [
+      {
+        "id": "rate-limit-middleware",
+        "title": "Rate-limit middleware with in-memory store",
+        "summary": "Requests beyond N/min per key receive 429 with Retry-After; under the limit, no behavior change.",
+        "fileTargets": ["src/middleware/rate-limit.ts", "src/app.ts", "src/config.ts"],
+        "verification": ["pnpm test middleware (new limit/reset/header cases)", "pnpm typecheck"]
+      },
+      {
+        "id": "redis-store",
+        "title": "Redis-backed store for multi-instance deployments",
+        "summary": "Counters shared across instances; in-memory remains the dev fallback.",
+        "dependsOn": ["rate-limit-middleware"],
+        "fileTargets": ["src/middleware/stores/redis.ts"],
+        "verification": ["pnpm test stores (redis mock)", "manual two-process check, recorded in evidence"]
+      },
+      {
+        "id": "operator-docs",
+        "title": "Operator documentation and limits tuning",
+        "summary": "README section + env var reference for limits; defaults justified.",
+        "priority": "nice_to_have",
+        "fileTargets": ["README.md"],
+        "verification": ["pnpm lint", "reviewer reads for accuracy"]
+      }
+    ]
+  }
+}
+```
+
 ## Example 2 — Bad: too coarse
 
 > 1. **Implement rate limiting** — add middleware, Redis store, config, docs, tests.
@@ -45,6 +98,18 @@ The planner invented findings — none of these were verified to exist. **Fix (r
 
 > 1. **Audit auth module** — outcome: a findings list with severity and file/line evidence; validation: every finding cites code actually read.
 > 2. **Fix blocking findings from the audit** — scope set by feature 1's output; validation: regression test per fix.
+
+## Example 5 — Bad: vague acceptance and hidden coupling
+
+> 1. **Improve API robustness** — summary: "make the API more resilient"; verification: `["manual testing"]`.
+> 2. **Add limits config** — fileTargets: `["src/config.ts"]`.
+> 3. **Enforce limits in middleware** — fileTargets: `["src/middleware/rate-limit.ts", "src/config.ts"]`; no `dependsOn`.
+
+Three distinct failure modes:
+
+- **Vague acceptance (1):** "more resilient" is not a done condition — no one can say when it is finished, so it never is. "Manual testing" with no recipe is not a validation plan. Sharpen until a teammate could verify the outcome line alone.
+- **Hidden coupling (2+3):** both touch `src/config.ts`, and 3 cannot be validated without 2 — yet the plan declares them independent. Interruption between them leaves nothing completable. **Fix:** merge them into one feature, or declare `dependsOn` and give 2 a validation story of its own (it has none — "config exists" is not validation, see Example 3).
+- **Scope smuggling (1):** a catch-all feature alongside specific ones becomes the dumping ground for whatever comes up. Cut it; new scope goes through a plan revision, not a vague bucket.
 
 ## Sizing heuristics, condensed
 

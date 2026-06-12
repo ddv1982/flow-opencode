@@ -4,6 +4,7 @@ import { createRunTools } from "./tool-surface/run-tools";
 import { createSessionTool } from "./tool-surface/session-tool";
 import { createStatusTool } from "./tool-surface/status-tool";
 import { OPENCODE_TOOL_NAMES_FROM_REGISTRY } from "./tool-surface/tool-registry";
+import { createV2CompatTools } from "./tool-surface/v2-compat-tools";
 
 type PluginLogContext = {
 	client?: {
@@ -56,7 +57,7 @@ function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 	) as T;
 }
 
-export function createCoreTools() {
+function createCoreTools() {
 	return orderProjectedTools({
 		...createStatusTool(),
 		...createPlanTools(),
@@ -74,5 +75,8 @@ export function createTools(ctx: unknown) {
 	});
 	return {
 		...createCoreTools(),
+		// v2 compat redirect stubs; excluded from the canonical registry and
+		// scheduled for removal after one minor cycle (v3.1).
+		...createV2CompatTools(),
 	};
 }

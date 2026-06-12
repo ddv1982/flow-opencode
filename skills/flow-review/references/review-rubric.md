@@ -22,6 +22,16 @@ Severity rules:
 - When genuinely uncertain whether a finding is real, say so in the finding and rate by the realistic worst case — but verify first; do not pad reports with speculative findings.
 - Do not inflate advisory style nits into blockers to look thorough; do not wave through a blocker because the feature "mostly works".
 
+## Depth escalation
+
+Starting depth comes from the skill's risk table (quick / standard / deep). Escalate mid-review when reality outgrows the label — and never the reverse:
+
+- A "docs-only" or "mechanical" change turns out to touch behavior → quick becomes standard.
+- Any security, data-safety, or concurrency finding at standard depth → finish at deep for the affected surface; trace beyond the diff.
+- Validation evidence below the rubric tier the change requires → at minimum a finding; if the change is behavioral, also escalate, because you can no longer lean on the evidence.
+
+Record the depth you finished at, not the one you started with.
+
 ## Every finding needs
 
 1. Class and severity.
@@ -41,6 +51,47 @@ findings:
 evidence-check: verdict on the validation evidence vs the validation rubric
 (final scope only) done-condition: does the completed work deliver the planned outcome? broad validation run?
 ```
+
+## Recording the decision: `flow_review_record` shapes
+
+A feature decision (`scope: "feature"`) names the feature and carries the findings:
+
+```json
+{
+  "scope": "feature",
+  "featureId": "rate-limit-middleware",
+  "status": "needs_fix",
+  "summary": "Limit logic correct; concurrent-refill race loses tokens under load.",
+  "blockingFindings": [
+    { "summary": "correctness — src/middleware/rate-limit.ts:84 — read-modify-write on the counter is not atomic; parallel requests under-count. Fixed looks like: single atomic INCR with TTL." }
+  ],
+  "followUps": [
+    { "summary": "Retry-After rounds down to 0s near window end", "severity": "advisory" }
+  ],
+  "suggestedValidation": ["pnpm test middleware --repeat 20 (race is timing-sensitive)"]
+}
+```
+
+A final decision (`scope: "final"`) omits `featureId` and adds the session-level fields — `reviewDepth` must equal the plan's `deliveryPolicy.finalReviewPolicy` (`broad` or `detailed`) or the runtime rejects completion:
+
+```json
+{
+  "scope": "final",
+  "status": "approved",
+  "summary": "All three features deliver the done condition; broad gate green.",
+  "reviewDepth": "detailed",
+  "reviewedSurfaces": ["changed_files", "tests", "validation_evidence", "docs_and_prompts"],
+  "evidenceSummary": "Re-ran pnpm typecheck && pnpm test (212 passed); spot-checked rate-limit cases fail on main.",
+  "validationAssessment": "Tier 1 on both code features; docs feature tier 3 as the rubric allows.",
+  "remainingGaps": ["No live two-instance Redis check in this environment"],
+  "evidenceRefs": {
+    "changedArtifacts": ["src/middleware/rate-limit.ts", "src/middleware/stores/redis.ts", "README.md"],
+    "validationCommands": ["pnpm typecheck && pnpm test", "pnpm test middleware"]
+  }
+}
+```
+
+`blockingFindings` entries are `{summary}` — pack class, location, what/why, and the fix shape into that summary as the report format shows. `followUps` are the advisory ledger so nothing is lost. List only `reviewedSurfaces` you actually covered; `remainingGaps` is where honesty about coverage lives.
 
 ## Honesty rules
 

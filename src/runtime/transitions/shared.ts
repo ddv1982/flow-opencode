@@ -1,8 +1,6 @@
 import type { CanonicalRuntimeToolName } from "../constants";
 import type { Session } from "../schema";
 
-export { validateSuccessfulCompletion } from "./execution";
-
 export type TransitionResult<T> =
 	| { ok: true; value: T }
 	| {

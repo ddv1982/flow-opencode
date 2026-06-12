@@ -2,7 +2,7 @@ import { basename, join } from "node:path";
 import { resolveMutableSessionRoot } from "../../../runtime/application";
 import type { ToolContext } from "./schemas";
 
-export type ResolvedMutableToolWorkspace = {
+type ResolvedMutableToolWorkspace = {
 	root: string;
 	source: string;
 	requiresHiddenRootApproval: boolean;

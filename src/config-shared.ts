@@ -24,11 +24,3 @@ export const FLOW_REASONING = {
 	balanced: "medium",
 	deep: "high",
 } as const satisfies Record<string, FlowReasoningEffort>;
-
-export const FLOW_READ_ONLY_PERMISSION = {
-	edit: "deny",
-	bash: "deny",
-	task: {
-		"*": "deny",
-	},
-} as const satisfies FlowPermissionConfig;

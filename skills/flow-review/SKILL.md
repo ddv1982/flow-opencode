@@ -13,7 +13,7 @@ Review is read-only. You report findings and a decision; you never implement fix
 - **needs_fix** — blocking findings exist but are fixable within the same feature; this routes back to execution.
 - **blocked** — a human decision, missing requirement, or external dependency prevents a verdict.
 
-Record the decision with `flow_review_record`: `scope: feature` for one feature's work, `scope: final` for the whole session before close. Under a strict review policy the runtime refuses completion without a recorded decision — so record honestly rather than reverse-engineering an "approved".
+Record the decision with `flow_review_record`: `scope: feature` for one feature's work, `scope: final` for the whole session before close (a final decision also needs `reviewDepth` matching the plan's `deliveryPolicy.finalReviewPolicy`, plus `evidenceRefs`). Under a strict review policy the runtime refuses completion without a recorded decision — so record honestly rather than reverse-engineering an "approved".
 
 ## Depth: match it to risk, then tell the truth about coverage
 
@@ -25,4 +25,6 @@ Missing evidence is a finding, not an inconvenience: absence of proof is never p
 
 A final review (`scope: final`) additionally checks the session's done condition: do the completed features together deliver the planned outcome, and was broad validation run?
 
-Read `references/review-rubric.md` for the finding taxonomy, severity rules, and report format before recording any decision.
+Read `references/review-rubric.md` for the finding taxonomy, severity rules, report format, and decision payload shapes before recording any decision.
+
+Never: record `approved` to unblock completion; fix findings yourself in the review pass; review the completion summary instead of the diff and evidence.

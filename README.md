@@ -29,11 +29,11 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@2"]
+  "plugin": ["opencode-plugin-flow@3"]
 }
 ```
 
-OpenCode installs the package from npm on startup. Pin the major version you install (currently `@2`; `@3` after the v3.0.0 release) so restarts pick up fixes without crossing a breaking release.
+OpenCode installs the package from npm on startup. Pin the major version you install (currently `@3`) so restarts pick up fixes without crossing a breaking release.
 
 On startup the plugin syncs its global skills into `~/.config/opencode/skills/`:
 
@@ -113,7 +113,7 @@ The plugin registers a small tool surface (7 tools) that owns all `.flow/**` mut
 | `flow_review_record` | Record a reviewer decision (`scope: feature` or `final`). |
 | `flow_session` | Activate or close a session, list history, or show a stored session. |
 
-These seven tools are the whole surface — there are no v2 tool-name aliases. Existing v2 sessions migrate seamlessly (the session schema is unchanged); transcripts or notes that reference old v2 tool names simply use the new names above.
+These seven tools are the whole canonical surface. For one minor cycle, the retired v2 tool names (for example `flow_run_complete_feature` or `flow_session_close`) remain registered as hidden redirect stubs: calling one returns an error naming its replacement and the key arguments, so resumed v2 sessions and old transcripts degrade gracefully instead of failing on an unknown tool. The stubs are scheduled for removal in v3.1. Existing v2 sessions migrate seamlessly (the session schema is unchanged).
 
 ### Agents
 

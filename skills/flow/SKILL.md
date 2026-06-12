@@ -31,9 +31,12 @@ Flow persists planning and execution state under `.flow/**` so work survives com
 - An approved plan cannot be mutated without an explicit reset.
 - Under a strict review policy, completion requires a recorded reviewer decision.
 
+Never: fabricate validation evidence; close `deferred`/`abandoned` to dodge a review or unfinished-features blocker; re-plan approved features without a reset.
+
 ## Recovery playbook
 
-- Confused, or a tool result contradicts your memory: `flow_status` (detailed) and re-anchor on it.
-- Feature stuck, half-done, or built on a wrong assumption: reset it via `flow_feature_complete`'s reset parameter, then re-run or replan. Resetting is cheap; piling fixes on a broken feature is not.
-- Wrong or stale session active: `flow_session` `history`/`show` to find the right one, then `activate`.
-- Approved plan turned out wrong: reset the affected features, `flow_plan_save` a revised plan, get it approved again, and tell the user why.
+- Confused, or a result contradicts memory: `flow_status` (detailed), re-anchor.
+- Feature stuck or built on a wrong assumption: reset (`flow_feature_complete` `reset: true` + `featureId`), then re-run or replan. Resetting is cheap; piling fixes on a broken feature is not.
+- Wrong or stale session active: `flow_session` `history`/`show`, then `activate`.
+- Approved plan wrong: reset the affected features, `flow_plan_save` a revision, re-approve, tell the user why.
+- Structured errors (`errorCode`/`blocker` fields — e.g. `unfinished_features` on close, a failing `session_artifacts` check in detailed `flow_status`): follow the `resolutionHint`; full catalog in `references/recovery-playbook.md`.

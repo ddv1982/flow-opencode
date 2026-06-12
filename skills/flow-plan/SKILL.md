@@ -34,3 +34,5 @@ Read `references/planning-examples.md` whenever you draft a multi-feature plan o
 - `flow_plan_save` persists the draft: goal, constraints, done condition, stack profile, and per-feature outcome, scope, and validation plan.
 - `flow_plan_approve` locks it (optionally approving only a subset of features). After approval the plan is immutable except by explicit reset.
 - Auto-approve only when ALL hold: the user asked for autonomous execution or pre-approved the work; nothing destructive, migratory, or security-sensitive; scope matches what the user literally asked for; the plan is small (roughly ≤3 features). Otherwise present the draft and ask.
+
+Never: auto-approve to keep momentum; pad the plan with scope the user did not ask for; edit an approved plan in place — reset the affected features and save a revision instead.

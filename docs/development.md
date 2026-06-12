@@ -90,3 +90,16 @@ bun test
 ```
 
 Benchmarks under `bench/` stay runnable but are out of `check` and not a merge gate.
+
+### Golden-transcript evals
+
+The driving loop itself is checked by five golden-transcript evals under `evals/golden/`: each one runs `opencode run` headless against a tiny fixture workspace that loads the plugin from this checkout (built `dist/index.js` dropped into the workspace's `.opencode/plugins/`), then asserts observable outcomes from the persisted `.flow/**` state — parsed with the runtime's own `SessionSchema`, never from transcript text.
+
+```bash
+bun run build
+bun run evals:golden                        # needs the opencode CLI and a model key
+bun run evals/golden/runner.ts --list
+bun run evals/golden/runner.ts --dry-run    # harness check, no model key needed
+```
+
+This is a manual/scheduled lane — it tests effectiveness, not synchronization, and is never part of `bun run check` or default CI. The CI-safe piece is `tests/evals-golden-harness.test.ts`, which shape-checks scenarios and fixtures without invoking opencode. Requirements and caveats live in `evals/golden/README.md`.
