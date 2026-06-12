@@ -18,6 +18,7 @@ Flow persists planning and execution state under `.flow/**` so work survives com
 
 ## Stop and ask the user
 
+- The `flow_*` tools are unavailable: the Flow plugin is not loaded in this environment. Stop and tell the user to check that `opencode-plugin-flow` is in the `plugin` array of `opencode.json` (a project-local `plugin` array overrides the global one) and restart OpenCode. Never substitute an unrecorded workflow — work without persisted state defeats Flow's purpose while looking like success.
 - No active session and no stated goal (a bare "resume" with nothing to resume).
 - Plan approval, unless the auto-approve criteria in `flow-plan` are all met.
 - Destructive or hard-to-reverse actions: deleting data, force-pushing, schema migrations, publishing, touching secrets or money.

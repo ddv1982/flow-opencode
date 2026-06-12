@@ -7,6 +7,8 @@ description: Plan Flow work - profile the repo, decompose a goal into right-size
 
 Planning never implements. This skill ends at a saved or approved plan — implementation starts only from the `flow-run` skill.
 
+If `flow_plan_save` is unavailable, the Flow plugin is not loaded: stop and tell the user to check `opencode-plugin-flow` in the `plugin` array of `opencode.json` and restart OpenCode. Do not plan without persistence.
+
 ## Profile the repo yourself, first
 
 No tool does this for you. Before drafting features, establish:
