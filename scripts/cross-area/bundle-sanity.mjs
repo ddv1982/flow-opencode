@@ -11,6 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+// The packed plugin schedules a best-effort npm update check at startup;
+// keep the smoke deterministic and network-free.
+process.env.FLOW_DISABLE_UPDATE_CHECK = "1";
+
 const projectRoot = resolve(import.meta.dirname, "..", "..");
 const distPath = join(projectRoot, "dist", "index.js");
 const sourcemapPath = join(projectRoot, "dist", "index.js.map");

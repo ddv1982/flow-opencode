@@ -29,15 +29,11 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.1.0"]
+  "plugin": ["opencode-plugin-flow@3.2.0"]
 }
 ```
 
-OpenCode installs the package from npm on the first startup and caches it per spec string under `~/.cache/opencode/packages/<spec>/` — it does **not** re-resolve the version on later startups. Pin an exact version and bump the pin to upgrade: a changed spec string installs fresh. If you pin a range like `@3` instead, upgrading requires clearing the cache entry first:
-
-```bash
-rm -rf ~/.cache/opencode/packages/opencode-plugin-flow@3
-```
+OpenCode installs the package from npm on the first startup and caches it per spec string under `~/.cache/opencode/packages/<spec>/` — it does **not** re-resolve the version on later startups. Pin an exact version and bump the pin to upgrade: a changed spec string installs fresh. See [Updating](#updating) below.
 
 On startup the plugin syncs its global skills, commands, and review agent into OpenCode's normal discovery paths:
 
@@ -53,6 +49,23 @@ On startup the plugin syncs its global skills, commands, and review agent into O
 **Restart OpenCode once after the first install or after an update** so freshly synced skills, commands, and agents are discovered.
 
 Sync is ownership-aware: each Flow-owned skill folder carries a `.flow-skill-version` marker with a sha256 line per shipped file, and each synced command/agent file has a sidecar `.flow-version` marker. Folders or files without Flow markers are never touched, and if you edit a Flow-owned file by hand the previous content is backed up next to it before an update replaces it.
+
+### Updating
+
+OpenCode never auto-updates plugins: the cached install for a given spec string is reused as-is on every startup. Flow therefore checks npm in the background after startup and logs a one-line notice when a newer release exists — it only notifies and never edits your `opencode.json`. Set `FLOW_DISABLE_UPDATE_CHECK=1` to turn the check off.
+
+To update with an exact pin (recommended):
+
+1. Change the pin in `opencode.json` to the new version, e.g. `"opencode-plugin-flow@3.2.0"`.
+2. Restart OpenCode once to install the new version, and a second time so the freshly re-synced skills, commands, and agents are discovered.
+
+If you pinned a range like `@3` instead, the spec string never changes, so the cache entry must be cleared by hand before restarting:
+
+```bash
+rm -rf ~/.cache/opencode/packages/opencode-plugin-flow@3
+```
+
+`/flow-status` shows the running plugin version in its install check, so you can always confirm which version OpenCode actually loaded.
 
 ### Per-project skill overrides
 

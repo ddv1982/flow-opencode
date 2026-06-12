@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-06-13
+
+Stale installs become visible: a passive update notice, the running version in `/flow-status`, and documented update steps
+
+OpenCode caches plugin installs per spec string and never re-resolves them, so a user can keep running an old Flow version with no signal anywhere. Plugin startup now schedules a background check against the npm `latest` dist-tag and logs a one-line notice when a newer release exists, including the exact pin to set. The notice is best-effort and fire-and-forget: a 3-second timeout, fail-silent on any network or registry error, never blocking startup, and never touching the user's `opencode.json` — the pin is the user's intent and is only ever reported, not rewritten. Set `FLOW_DISABLE_UPDATE_CHECK=1` to opt out (the test suite, install smoke, and bundle sanity set it so they stay network-free).
+
+`flow_status` now reports the running plugin version in its install check — `details.pluginVersion` plus the passing summary line — so "which version did OpenCode actually load?" has a first-class answer instead of requiring a dig through the cache directory.
+
+The README gains an "Updating" section documenting the two-restart exact-pin bump workflow, the cache-clear step required for range pins, and the update-notice opt-out.
+
+Not-tested: The live notice against the real npm registry from inside an OpenCode host (the check path is covered by dependency-injected tests; the registry endpoint and payload shape were verified by hand).
+
 ## [3.1.0] - 2026-06-12
 
 Only the v3 surface remains: five commands, seven tools, no v2 leftovers

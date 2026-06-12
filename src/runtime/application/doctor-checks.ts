@@ -11,6 +11,7 @@ import {
 	inspectFlowCommandAgentSyncState,
 	inspectFlowSkillSyncState,
 	resolveFlowHomeDir,
+	resolveFlowPluginVersion,
 } from "../../distribution/skill-sync";
 import {
 	getActiveSessionPath,
@@ -69,6 +70,9 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 	);
 	const details = {
 		distribution: "npm",
+		// OpenCode caches plugin installs per spec string and never re-resolves,
+		// so the running version is the one fact a stale install can't hide.
+		pluginVersion: resolveFlowPluginVersion(),
 		preNpmPluginPath: preNpmCopy?.path ?? null,
 		skills: Object.fromEntries(
 			skillState.map((entry) => [entry.name, entry.state]),
@@ -125,8 +129,7 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 		id: "install",
 		label: "Plugin distribution",
 		status: "pass",
-		summary:
-			"Flow is npm-distributed: no pre-npm plugin copy is present and Flow global skills, commands, and agents are in sync.",
+		summary: `Flow ${details.pluginVersion} is npm-distributed: no pre-npm plugin copy is present and Flow global skills, commands, and agents are in sync.`,
 		remediation: null,
 		details,
 	};
