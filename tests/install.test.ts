@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	FLOW_AGENTS_DIRECTORY,
+	FLOW_COMMANDS_DIRECTORY,
 	FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER,
 	FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH,
 	FLOW_SKILL_BACKUP_FILENAME,
@@ -17,7 +19,11 @@ import {
 	detectPreNpmFlowPlugin,
 	FLOW_SKILL_DEFINITIONS,
 	type FlowSkillDefinition,
+	flowAgentDefinitions,
+	flowCommandDefinitions,
+	inspectFlowCommandAgentSyncState,
 	inspectFlowSkillSyncState,
+	syncFlowCommandsAndAgents,
 	syncFlowSkills,
 } from "../src/distribution/skill-sync";
 import { uninstallFlow } from "../src/distribution/uninstall";
@@ -50,6 +56,22 @@ function skillPath(homeDir: string, name: string): string {
 
 function markerPath(homeDir: string, name: string): string {
 	return join(skillFolder(homeDir, name), FLOW_SKILL_MARKER_FILENAME);
+}
+
+function commandPath(homeDir: string, name: string): string {
+	return join(homeDir, FLOW_COMMANDS_DIRECTORY, `${name}.md`);
+}
+
+function commandMarkerPath(homeDir: string, name: string): string {
+	return join(homeDir, FLOW_COMMANDS_DIRECTORY, `.${name}.flow-version`);
+}
+
+function agentPath(homeDir: string, name: string): string {
+	return join(homeDir, FLOW_AGENTS_DIRECTORY, `${name}.md`);
+}
+
+function agentMarkerPath(homeDir: string, name: string): string {
+	return join(homeDir, FLOW_AGENTS_DIRECTORY, `.${name}.flow-version`);
 }
 
 function firstSkill(): FlowSkillDefinition {
@@ -102,6 +124,10 @@ describe("npm distribution stability surfaces", () => {
 		expect(packageJson.files).toContain("dist");
 		expect(Object.keys(packageJson.dependencies)).toEqual(["zod"]);
 		expect(FLOW_SKILLS_DIRECTORY).toBe(join(".config", "opencode", "skills"));
+		expect(FLOW_COMMANDS_DIRECTORY).toBe(
+			join(".config", "opencode", "commands"),
+		);
+		expect(FLOW_AGENTS_DIRECTORY).toBe(join(".config", "opencode", "agents"));
 		expect(FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH).toBe(
 			join(".config", "opencode", "plugins", "flow.js"),
 		);
@@ -301,10 +327,97 @@ describe("skill sync", () => {
 	});
 });
 
+describe("command and agent sync", () => {
+	test("installs Flow command and agent markdown files on a fresh home", async () => {
+		const homeDir = makeTempDir();
+
+		const results = await syncFlowCommandsAndAgents({
+			homeDir,
+			version: "3.0.0",
+		});
+
+		expect(results.filter((result) => result.kind === "command")).toHaveLength(
+			flowCommandDefinitions().size,
+		);
+		expect(results.filter((result) => result.kind === "agent")).toHaveLength(
+			flowAgentDefinitions().size,
+		);
+		expect(results.every((result) => result.action === "installed")).toBe(true);
+		expect(await readFile(commandPath(homeDir, "flow-auto"), "utf8")).toContain(
+			"Load the `flow` skill",
+		);
+		expect(
+			await readFile(commandMarkerPath(homeDir, "flow-auto"), "utf8"),
+		).toContain("kind=command");
+		expect(
+			await readFile(agentPath(homeDir, "flow-reviewer"), "utf8"),
+		).toContain("permission:");
+		expect(
+			await readFile(agentMarkerPath(homeDir, "flow-reviewer"), "utf8"),
+		).toContain("kind=agent");
+	});
+
+	test("is idempotent and exposes command/agent sync state", async () => {
+		const homeDir = makeTempDir();
+		await syncFlowCommandsAndAgents({ homeDir, version: "3.0.0" });
+
+		const results = await syncFlowCommandsAndAgents({
+			homeDir,
+			version: "3.0.0",
+		});
+
+		expect(results.every((result) => result.action === "unchanged")).toBe(true);
+		const state = await inspectFlowCommandAgentSyncState(homeDir);
+		expect(state.every((entry) => entry.state === "synced")).toBe(true);
+	});
+
+	test("backs up user-edited Flow-owned command files before replacing them", async () => {
+		const homeDir = makeTempDir();
+		await syncFlowCommandsAndAgents({ homeDir, version: "3.0.0" });
+		const edited = "---\ndescription: Custom\n---\nCustom body.\n";
+		await writeFile(commandPath(homeDir, "flow-auto"), edited, "utf8");
+
+		const results = await syncFlowCommandsAndAgents({
+			homeDir,
+			version: "3.0.0",
+		});
+
+		expect(results.find((result) => result.name === "flow-auto")?.action).toBe(
+			"updated_with_backup",
+		);
+		expect(
+			await readFile(`${commandPath(homeDir, "flow-auto")}.backup`, "utf8"),
+		).toBe(edited);
+		expect(await readFile(commandPath(homeDir, "flow-auto"), "utf8")).toContain(
+			"Load the `flow` skill",
+		);
+	});
+
+	test("never touches a foreign command with the same name", async () => {
+		const homeDir = makeTempDir();
+		const userContent = "---\ndescription: Mine\n---\nUser command.\n";
+		await mkdir(join(homeDir, FLOW_COMMANDS_DIRECTORY), { recursive: true });
+		await writeFile(commandPath(homeDir, "flow-auto"), userContent, "utf8");
+
+		const results = await syncFlowCommandsAndAgents({
+			homeDir,
+			version: "3.0.0",
+		});
+
+		expect(results.find((result) => result.name === "flow-auto")?.action).toBe(
+			"skipped_foreign",
+		);
+		expect(await readFile(commandPath(homeDir, "flow-auto"), "utf8")).toBe(
+			userContent,
+		);
+	});
+});
+
 describe("uninstall", () => {
 	test("removes pristine Flow skills, marker files, and the pre-npm plugin copy", async () => {
 		const homeDir = makeTempDir();
 		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		await syncFlowCommandsAndAgents({ homeDir, version: "3.0.0" });
 		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
 		await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
 			recursive: true,
@@ -322,10 +435,14 @@ describe("uninstall", () => {
 		});
 
 		expect(result.removedSkills).toHaveLength(FLOW_SKILL_DEFINITIONS.length);
+		expect(result.removedCommands).toHaveLength(flowCommandDefinitions().size);
+		expect(result.removedAgents).toHaveLength(flowAgentDefinitions().size);
 		expect(result.removedPreNpmPlugin).toBe(preNpmPath);
 		for (const definition of FLOW_SKILL_DEFINITIONS) {
 			expect(existsSync(skillFolder(homeDir, definition.name))).toBe(false);
 		}
+		expect(existsSync(commandPath(homeDir, "flow-auto"))).toBe(false);
+		expect(existsSync(agentPath(homeDir, "flow-reviewer"))).toBe(false);
 		expect(existsSync(preNpmPath)).toBe(false);
 		expect(logs.join("\n")).toContain(
 			'remove "opencode-plugin-flow" from the plugin array in opencode.json',
@@ -336,8 +453,11 @@ describe("uninstall", () => {
 		const homeDir = makeTempDir();
 		const name = firstSkill().name;
 		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		await syncFlowCommandsAndAgents({ homeDir, version: "3.0.0" });
 		const edited = "# Customized\n";
 		await writeFile(skillPath(homeDir, name), edited, "utf8");
+		const editedCommand = "---\ndescription: Mine\n---\nEdited.\n";
+		await writeFile(commandPath(homeDir, "flow-auto"), editedCommand, "utf8");
 		const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
 		await mkdir(join(homeDir, ".config", "opencode", "plugins"), {
 			recursive: true,
@@ -347,7 +467,13 @@ describe("uninstall", () => {
 		const result = await uninstallFlow({ homeDir });
 
 		expect(result.keptUserEditedSkills).toEqual([skillFolder(homeDir, name)]);
+		expect(result.keptUserEditedCommands).toEqual([
+			commandPath(homeDir, "flow-auto"),
+		]);
 		expect(await readFile(skillPath(homeDir, name), "utf8")).toBe(edited);
+		expect(await readFile(commandPath(homeDir, "flow-auto"), "utf8")).toBe(
+			editedCommand,
+		);
 		expect(result.keptForeignPreNpmPlugin).toBe(preNpmPath);
 		expect(existsSync(preNpmPath)).toBe(true);
 	});
@@ -367,13 +493,29 @@ describe("uninstall", () => {
 	test("dry-run removes nothing", async () => {
 		const homeDir = makeTempDir();
 		await syncFlowSkills({ homeDir, version: "3.0.0" });
+		await syncFlowCommandsAndAgents({ homeDir, version: "3.0.0" });
 
 		const result = await uninstallFlow({ homeDir, dryRun: true });
 
 		expect(result.removedSkills).toHaveLength(FLOW_SKILL_DEFINITIONS.length);
+		expect(result.removedCommands).toHaveLength(flowCommandDefinitions().size);
+		expect(result.removedAgents).toHaveLength(flowAgentDefinitions().size);
 		for (const definition of FLOW_SKILL_DEFINITIONS) {
 			expect(existsSync(skillPath(homeDir, definition.name))).toBe(true);
 		}
+		expect(existsSync(commandPath(homeDir, "flow-auto"))).toBe(true);
+		expect(existsSync(agentPath(homeDir, "flow-reviewer"))).toBe(true);
+	});
+
+	test("dry-run leaves pre-existing empty command/agent directories in place", async () => {
+		const homeDir = makeTempDir();
+		await mkdir(join(homeDir, FLOW_COMMANDS_DIRECTORY), { recursive: true });
+		await mkdir(join(homeDir, FLOW_AGENTS_DIRECTORY), { recursive: true });
+
+		await uninstallFlow({ homeDir, dryRun: true });
+
+		expect(existsSync(join(homeDir, FLOW_COMMANDS_DIRECTORY))).toBe(true);
+		expect(existsSync(join(homeDir, FLOW_AGENTS_DIRECTORY))).toBe(true);
 	});
 });
 

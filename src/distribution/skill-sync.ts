@@ -22,13 +22,25 @@ import flowRunSkillDoc from "../../skills/flow-run/SKILL.md" with {
 	type: "text",
 };
 import {
+	FLOW_CORE_AGENTS,
+	FLOW_CORE_COMMANDS,
+	type FlowAgentConfig,
+	type FlowCommandConfig,
+} from "../config-shared";
+import {
+	FLOW_AGENTS_DIRECTORY,
+	FLOW_COMMANDS_DIRECTORY,
 	FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER,
 	FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH,
 	FLOW_SKILL_MARKER_FILENAME,
 	FLOW_SKILLS_DIRECTORY,
+	type FlowManagedMarkdownKind,
+	type FlowManagedMarkdownMarker,
 	inspectFlowSkillDocument,
+	parseFlowManagedMarkdownMarker,
 	parseFlowSkillFileHashes,
 	parseFlowSkillFolderMarker,
+	renderFlowManagedMarkdownMarker,
 	renderFlowSkillFolderMarker,
 	sha256,
 } from "./skill-markers";
@@ -101,6 +113,13 @@ type FlowSkillSyncResult = {
 	skillPath: string;
 };
 
+type FlowManagedMarkdownSyncResult = {
+	name: string;
+	kind: FlowManagedMarkdownKind;
+	action: FlowSkillSyncAction;
+	path: string;
+};
+
 type FlowSkillSyncOptions = {
 	homeDir?: string;
 	version: string;
@@ -110,6 +129,13 @@ type FlowSkillSyncStateEntry = {
 	name: string;
 	state: "synced" | "stale" | "missing" | "foreign";
 	skillPath: string;
+};
+
+type FlowManagedMarkdownSyncStateEntry = {
+	name: string;
+	kind: FlowManagedMarkdownKind;
+	state: "synced" | "stale" | "missing" | "foreign";
+	path: string;
 };
 
 type PreNpmFlowPluginCopy = {
@@ -139,6 +165,14 @@ export function resolveFlowPluginVersion(): string {
 
 function resolveFlowSkillsRoot(homeDir: string): string {
 	return join(homeDir, FLOW_SKILLS_DIRECTORY);
+}
+
+function resolveFlowCommandsRoot(homeDir: string): string {
+	return join(homeDir, FLOW_COMMANDS_DIRECTORY);
+}
+
+function resolveFlowAgentsRoot(homeDir: string): string {
+	return join(homeDir, FLOW_AGENTS_DIRECTORY);
 }
 
 function resolveSkillFilePath(folder: string, relativePath: string): string {
@@ -265,6 +299,71 @@ export async function syncFlowSkills({
 	return results;
 }
 
+export function renderFlowCommandMarkdown(command: FlowCommandConfig): string {
+	const frontmatter = [
+		"---",
+		`description: ${JSON.stringify(command.description)}`,
+		...(command.agent ? [`agent: ${JSON.stringify(command.agent)}`] : []),
+		...(command.subtask === undefined ? [] : [`subtask: ${command.subtask}`]),
+		"---",
+	];
+	return `${frontmatter.join("\n")}\n\n${command.template}\n`;
+}
+
+export function renderFlowAgentMarkdown(agent: FlowAgentConfig): string {
+	const frontmatter = [
+		"---",
+		`description: ${JSON.stringify(agent.description)}`,
+		`mode: ${agent.mode}`,
+		...(agent.reasoningEffort
+			? [`reasoningEffort: ${agent.reasoningEffort}`]
+			: []),
+		...(agent.permission ? renderPermissionFrontmatter(agent.permission) : []),
+		"---",
+	];
+	return `${frontmatter.join("\n")}\n\n${agent.prompt}\n`;
+}
+
+export function flowCommandDefinitions(): Map<string, string> {
+	return new Map(
+		Object.entries(FLOW_CORE_COMMANDS).map(([name, command]) => [
+			name,
+			renderFlowCommandMarkdown(command),
+		]),
+	);
+}
+
+export function flowAgentDefinitions(): Map<string, string> {
+	return new Map(
+		Object.entries(FLOW_CORE_AGENTS).map(([name, agent]) => [
+			name,
+			renderFlowAgentMarkdown(agent),
+		]),
+	);
+}
+
+export async function syncFlowCommandsAndAgents({
+	homeDir = resolveFlowHomeDir(),
+	version,
+}: FlowSkillSyncOptions): Promise<FlowManagedMarkdownSyncResult[]> {
+	return [
+		...(await syncManagedMarkdownFiles({
+			homeDir,
+			version,
+			kind: "command",
+			root: resolveFlowCommandsRoot(homeDir),
+			files: flowCommandDefinitions(),
+		})),
+		...(await syncManagedMarkdownFiles({
+			homeDir,
+			version,
+			kind: "agent",
+			root: resolveFlowAgentsRoot(homeDir),
+			files: flowAgentDefinitions(),
+		})),
+	];
+}
+
 /**
  * A file is user-edited when its on-disk content matches neither the hash the
  * marker recorded at install time nor (for SKILL.md) a pristine pre-npm
@@ -348,6 +447,23 @@ export async function inspectFlowSkillSyncState(
 	return entries;
 }
 
+export async function inspectFlowCommandAgentSyncState(
+	homeDir = resolveFlowHomeDir(),
+): Promise<FlowManagedMarkdownSyncStateEntry[]> {
+	return [
+		...(await inspectManagedMarkdownSyncState({
+			kind: "command",
+			root: resolveFlowCommandsRoot(homeDir),
+			files: flowCommandDefinitions(),
+		})),
+		...(await inspectManagedMarkdownSyncState({
+			kind: "agent",
+			root: resolveFlowAgentsRoot(homeDir),
+			files: flowAgentDefinitions(),
+		})),
+	];
+}
+
 export async function detectPreNpmFlowPlugin(
 	homeDir = resolveFlowHomeDir(),
 ): Promise<PreNpmFlowPluginCopy | null> {
@@ -391,6 +507,26 @@ export async function runFlowStartupSync(
 	}
 
 	try {
+		const results = await syncFlowCommandsAndAgents({ version });
+		const changed = results.filter(
+			(result) =>
+				result.action !== "unchanged" && result.action !== "skipped_foreign",
+		);
+		if (changed.length > 0) {
+			log(
+				"info",
+				`Flow synced global commands/agents (${changed
+					.map((result) => `${result.name}: ${result.action}`)
+					.join(
+						", ",
+					)}). Restart OpenCode once if commands were just installed.`,
+			);
+		}
+	} catch (error) {
+		log("warn", `Flow command/agent sync failed: ${describeError(error)}`);
+	}
+
+	try {
 		const preNpmCopy = await detectPreNpmFlowPlugin();
 		if (preNpmCopy) {
 			log(
@@ -416,4 +552,144 @@ async function readOptionalFile(path: string): Promise<string | null> {
 
 function describeError(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function renderPermissionFrontmatter(
+	permission: FlowAgentConfig["permission"],
+) {
+	if (!permission) {
+		return [];
+	}
+	const lines = ["permission:"];
+	for (const [key, value] of Object.entries(permission)) {
+		if (typeof value === "string") {
+			lines.push(`  ${JSON.stringify(key)}: ${JSON.stringify(value)}`);
+			continue;
+		}
+		if (value && typeof value === "object") {
+			lines.push(`  ${JSON.stringify(key)}:`);
+			for (const [nestedKey, nestedValue] of Object.entries(value)) {
+				lines.push(
+					`    ${JSON.stringify(nestedKey)}: ${JSON.stringify(nestedValue)}`,
+				);
+			}
+		}
+	}
+	return lines;
+}
+
+type SyncManagedMarkdownFilesInput = {
+	homeDir: string;
+	version: string;
+	kind: FlowManagedMarkdownKind;
+	root: string;
+	files: ReadonlyMap<string, string>;
+};
+
+async function syncManagedMarkdownFiles({
+	version,
+	kind,
+	root,
+	files,
+}: SyncManagedMarkdownFilesInput): Promise<FlowManagedMarkdownSyncResult[]> {
+	const results: FlowManagedMarkdownSyncResult[] = [];
+	for (const [name, content] of files) {
+		const path = join(root, `${name}.md`);
+		const markerPath = join(root, `.${name}.flow-version`);
+		const marker = await readManagedMarkdownMarker(markerPath, kind, name);
+		const existing = await readOptionalFile(path);
+		const desiredMarker = renderFlowManagedMarkdownMarker({
+			kind,
+			name,
+			version,
+			hash: sha256(content),
+		});
+
+		if (existing === null && marker === null) {
+			await mkdir(root, { recursive: true });
+			await writeFile(path, content, "utf8");
+			await writeFile(markerPath, desiredMarker, "utf8");
+			results.push({ name, kind, action: "installed", path });
+			continue;
+		}
+
+		const owned = marker !== null || existing === content;
+		if (!owned) {
+			results.push({ name, kind, action: "skipped_foreign", path });
+			continue;
+		}
+
+		if (existing === content) {
+			if ((await readOptionalFile(markerPath)) !== desiredMarker) {
+				await mkdir(root, { recursive: true });
+				await writeFile(markerPath, desiredMarker, "utf8");
+			}
+			results.push({ name, kind, action: "unchanged", path });
+			continue;
+		}
+
+		let backedUp = false;
+		if (
+			existing !== null &&
+			marker !== null &&
+			sha256(existing) !== marker.hash
+		) {
+			await writeFile(`${path}.backup`, existing, "utf8");
+			backedUp = true;
+		}
+		await mkdir(root, { recursive: true });
+		await writeFile(path, content, "utf8");
+		await writeFile(markerPath, desiredMarker, "utf8");
+		results.push({
+			name,
+			kind,
+			action: backedUp ? "updated_with_backup" : "updated",
+			path,
+		});
+	}
+	return results;
+}
+
+async function inspectManagedMarkdownSyncState(input: {
+	kind: FlowManagedMarkdownKind;
+	root: string;
+	files: ReadonlyMap<string, string>;
+}): Promise<FlowManagedMarkdownSyncStateEntry[]> {
+	const entries: FlowManagedMarkdownSyncStateEntry[] = [];
+	for (const [name, content] of input.files) {
+		const path = join(input.root, `${name}.md`);
+		const markerPath = join(input.root, `.${name}.flow-version`);
+		const existing = await readOptionalFile(path);
+		const marker = await readManagedMarkdownMarker(
+			markerPath,
+			input.kind,
+			name,
+		);
+		if (existing === null) {
+			entries.push({ name, kind: input.kind, state: "missing", path });
+			continue;
+		}
+		if (marker === null && existing !== content) {
+			entries.push({ name, kind: input.kind, state: "foreign", path });
+			continue;
+		}
+		entries.push({
+			name,
+			kind: input.kind,
+			state: existing === content ? "synced" : "stale",
+			path,
+		});
+	}
+	return entries;
+}
+
+async function readManagedMarkdownMarker(
+	path: string,
+	kind: FlowManagedMarkdownKind,
+	name: string,
+): Promise<FlowManagedMarkdownMarker | null> {
+	const content = await readOptionalFile(path);
+	return content === null
+		? null
+		: parseFlowManagedMarkdownMarker(content, kind, name);
 }

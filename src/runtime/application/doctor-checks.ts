@@ -4,6 +4,7 @@ import { applyFlowConfig } from "../../config";
 import { FLOW_REASONING, type FlowReasoningEffort } from "../../config-shared";
 import {
 	detectPreNpmFlowPlugin,
+	inspectFlowCommandAgentSyncState,
 	inspectFlowSkillSyncState,
 	resolveFlowHomeDir,
 } from "../../distribution/skill-sync";
@@ -55,7 +56,11 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 	const homeDir = resolveFlowHomeDir();
 	const preNpmCopy = await detectPreNpmFlowPlugin(homeDir);
 	const skillState = await inspectFlowSkillSyncState(homeDir);
+	const commandAgentState = await inspectFlowCommandAgentSyncState(homeDir);
 	const unsyncedSkills = skillState.filter(
+		(entry) => entry.state === "missing" || entry.state === "stale",
+	);
+	const unsyncedCommandsAndAgents = commandAgentState.filter(
 		(entry) => entry.state === "missing" || entry.state === "stale",
 	);
 	const details = {
@@ -63,6 +68,12 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 		preNpmPluginPath: preNpmCopy?.path ?? null,
 		skills: Object.fromEntries(
 			skillState.map((entry) => [entry.name, entry.state]),
+		),
+		commandsAndAgents: Object.fromEntries(
+			commandAgentState.map((entry) => [
+				`${entry.kind}:${entry.name}`,
+				entry.state,
+			]),
 		),
 	};
 
@@ -92,12 +103,26 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 		};
 	}
 
+	if (unsyncedCommandsAndAgents.length > 0) {
+		return {
+			id: "install",
+			label: "Plugin distribution",
+			status: "warn",
+			summary: `Flow global commands or agents are not in sync (${unsyncedCommandsAndAgents
+				.map((entry) => `${entry.kind}:${entry.name}: ${entry.state}`)
+				.join(", ")}).`,
+			remediation:
+				"Restart OpenCode so the Flow plugin re-syncs its global commands and agents, and check that ~/.config/opencode/commands and ~/.config/opencode/agents are writable.",
+			details,
+		};
+	}
+
 	return {
 		id: "install",
 		label: "Plugin distribution",
 		status: "pass",
 		summary:
-			"Flow is npm-distributed: no pre-npm plugin copy is present and the Flow global skills are in sync.",
+			"Flow is npm-distributed: no pre-npm plugin copy is present and Flow global skills, commands, and agents are in sync.",
 		remediation: null,
 		details,
 	};

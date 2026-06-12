@@ -3,6 +3,10 @@ import { join } from "node:path";
 
 export const FLOW_SKILLS_DIRECTORY = join(".config", "opencode", "skills");
 
+export const FLOW_COMMANDS_DIRECTORY = join(".config", "opencode", "commands");
+
+export const FLOW_AGENTS_DIRECTORY = join(".config", "opencode", "agents");
+
 export const FLOW_SKILL_MARKER_FILENAME = ".flow-skill-version";
 
 export const FLOW_SKILL_BACKUP_FILENAME = "SKILL.md.backup";
@@ -143,6 +147,64 @@ export function parseFlowSkillFileHashes(content: string): Map<string, string> {
 		}
 	}
 	return hashes;
+}
+
+export type FlowManagedMarkdownKind = "command" | "agent";
+
+export type FlowManagedMarkdownMarker = {
+	kind: FlowManagedMarkdownKind;
+	name: string;
+	version: string;
+	hash: string;
+};
+
+/**
+ * Renders the sidecar `.{name}.flow-version` marker that records ownership of
+ * a synced command or agent markdown file.
+ */
+export function renderFlowManagedMarkdownMarker(
+	marker: FlowManagedMarkdownMarker,
+): string {
+	return [
+		`plugin=${FLOW_SKILL_MARKER_PLUGIN}`,
+		`kind=${marker.kind}`,
+		`name=${marker.name}`,
+		`version=${marker.version}`,
+		`hash=sha256:${marker.hash}`,
+		"",
+	].join("\n");
+}
+
+export function parseFlowManagedMarkdownMarker(
+	content: string,
+	kind: FlowManagedMarkdownKind,
+	name: string,
+): FlowManagedMarkdownMarker | null {
+	const entries = new Map<string, string>();
+	for (const line of content.split("\n")) {
+		const separator = line.indexOf("=");
+		if (separator === -1) {
+			continue;
+		}
+		entries.set(line.slice(0, separator), line.slice(separator + 1));
+	}
+	const version = entries.get("version");
+	const hash = entries.get("hash");
+	if (
+		entries.get("plugin") !== FLOW_SKILL_MARKER_PLUGIN ||
+		entries.get("kind") !== kind ||
+		entries.get("name") !== name ||
+		!version ||
+		!hash?.startsWith("sha256:")
+	) {
+		return null;
+	}
+	return {
+		kind,
+		name,
+		version,
+		hash: hash.slice("sha256:".length),
+	};
 }
 
 export function parseFlowSkillFolderMarker(

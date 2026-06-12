@@ -212,6 +212,40 @@ async function main() {
 				`Synced skill ${name} is missing its marker file.`,
 			);
 		}
+		const commandsRoot = join(homeDir, ".config", "opencode", "commands");
+		const syncedCommands = existsSync(commandsRoot)
+			? readdirSync(commandsRoot)
+					.filter((name) => name.endsWith(".md"))
+					.sort()
+			: [];
+		assert(
+			syncedCommands.includes("flow-auto.md"),
+			"Plugin startup did not sync /flow-auto as a command file.",
+		);
+		for (const file of syncedCommands) {
+			const commandName = file.slice(0, -".md".length);
+			assert(
+				existsSync(join(commandsRoot, `.${commandName}.flow-version`)),
+				`Synced command ${file} is missing its marker file.`,
+			);
+		}
+		const agentsRoot = join(homeDir, ".config", "opencode", "agents");
+		const syncedAgents = existsSync(agentsRoot)
+			? readdirSync(agentsRoot)
+					.filter((name) => name.endsWith(".md"))
+					.sort()
+			: [];
+		assert(
+			syncedAgents.includes("flow-reviewer.md"),
+			"Plugin startup did not sync flow-reviewer as an agent file.",
+		);
+		for (const file of syncedAgents) {
+			const agentName = file.slice(0, -".md".length);
+			assert(
+				existsSync(join(agentsRoot, `.${agentName}.flow-version`)),
+				`Synced agent ${file} is missing its marker file.`,
+			);
+		}
 
 		const config = { agent: {}, command: {} };
 		await plugin.config(config);
@@ -275,12 +309,28 @@ async function main() {
 			remainingSkills.length === 0,
 			`uninstall CLI left Flow skills behind: ${remainingSkills.join(", ")}`,
 		);
+		const remainingCommands = existsSync(commandsRoot)
+			? readdirSync(commandsRoot).filter((name) => name.startsWith("flow"))
+			: [];
+		assert(
+			remainingCommands.length === 0,
+			`uninstall CLI left Flow commands behind: ${remainingCommands.join(", ")}`,
+		);
+		const remainingAgents = existsSync(agentsRoot)
+			? readdirSync(agentsRoot).filter((name) => name.startsWith("flow"))
+			: [];
+		assert(
+			remainingAgents.length === 0,
+			`uninstall CLI left Flow agents behind: ${remainingAgents.join(", ")}`,
+		);
 
 		const report = {
 			packedVersion: packedManifest.version,
 			expectedVersion: packageJson.version,
 			tarball,
 			syncedSkills,
+			syncedCommands,
+			syncedAgents,
 			configAgents: Object.keys(config.agent).length,
 			configCommands: Object.keys(config.command).length,
 			toolCount: CANONICAL_TOOL_NAMES.filter((name) => name in plugin.tool)
@@ -310,6 +360,8 @@ async function main() {
 					"",
 					`- Packed version: ${report.packedVersion}`,
 					`- Synced skills: ${report.syncedSkills.join(", ")}`,
+					`- Synced commands: ${report.syncedCommands.join(", ")}`,
+					`- Synced agents: ${report.syncedAgents.join(", ")}`,
 					`- Tools: ${report.toolCount} canonical + ${report.compatToolCount} v2 compat stubs, agents: ${report.configAgents}, commands: ${report.configCommands}`,
 					"- Pre-npm double-load warning verified",
 					"- Uninstall CLI verified",

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-06-12
+
+Slash commands and the reviewer agent are now synced as real files so OpenCode discovers them
+
+In 3.0.0 the nine `/flow-*` commands and the `flow-reviewer` agent were injected only through the plugin config hook, and OpenCode did not surface them as slash commands. Plugin startup now also writes them to OpenCode's normal discovery paths: thin command markdown files to `~/.config/opencode/commands/<name>.md` and the reviewer agent to `~/.config/opencode/agents/flow-reviewer.md`, rendered from the same definitions the config hook injects so the two surfaces cannot drift. Restart OpenCode once after upgrading so the new files are discovered.
+
+The sync follows the same ownership rules as skills: each file gets a sidecar `.{name}.flow-version` marker (plugin version plus content sha256), files without a Flow marker are never touched, and a user-edited Flow-owned file is backed up next to itself before an update replaces it. `bunx opencode-plugin-flow uninstall` removes the Flow-owned command/agent files (keeping user-edited ones), and `/flow-doctor` warns when the synced command/agent surface is missing or stale.
+
+Not-tested: Live OpenCode UI slash-command discovery after a real npm upgrade (verified via the packed-tarball install smoke).
+
 ## [3.0.0] - 2026-06-12
 
 The skills-first inversion: skills carry the workflow, the plugin shrinks to a state backend

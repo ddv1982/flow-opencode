@@ -1,16 +1,21 @@
 import { readdir, readFile, rm, rmdir } from "node:fs/promises";
 import { dirname, join, normalize, sep } from "node:path";
 import {
+	FLOW_AGENTS_DIRECTORY,
+	FLOW_COMMANDS_DIRECTORY,
 	FLOW_PRE_NPM_PLUGIN_OWNERSHIP_HEADER,
 	FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH,
 	FLOW_SKILL_BACKUP_FILENAME,
 	FLOW_SKILL_MARKER_FILENAME,
 	FLOW_SKILLS_DIRECTORY,
+	type FlowManagedMarkdownKind,
 	inspectFlowSkillDocument,
+	parseFlowManagedMarkdownMarker,
 	parseFlowSkillFileHashes,
 	parseFlowSkillFolderMarker,
 	sha256,
 } from "./skill-markers";
+import { flowAgentDefinitions, flowCommandDefinitions } from "./skill-sync";
 
 type FlowUninstallOptions = {
 	homeDir: string;
@@ -21,6 +26,10 @@ type FlowUninstallOptions = {
 type FlowUninstallResult = {
 	removedSkills: string[];
 	keptUserEditedSkills: string[];
+	removedCommands: string[];
+	keptUserEditedCommands: string[];
+	removedAgents: string[];
+	keptUserEditedAgents: string[];
 	removedPreNpmPlugin: string | null;
 	keptForeignPreNpmPlugin: string | null;
 };
@@ -42,6 +51,10 @@ export async function uninstallFlow({
 	const result: FlowUninstallResult = {
 		removedSkills: [],
 		keptUserEditedSkills: [],
+		removedCommands: [],
+		keptUserEditedCommands: [],
+		removedAgents: [],
+		keptUserEditedAgents: [],
 		removedPreNpmPlugin: null,
 		keptForeignPreNpmPlugin: null,
 	};
@@ -69,6 +82,27 @@ export async function uninstallFlow({
 		result.removedSkills.push(folder);
 		logger?.(`${dryRun ? "Would remove" : "Removed"} Flow skill at ${folder}.`);
 	}
+
+	await removeManagedMarkdownFiles({
+		homeDir,
+		dryRun,
+		logger,
+		kind: "command",
+		root: join(homeDir, FLOW_COMMANDS_DIRECTORY),
+		files: flowCommandDefinitions(),
+		removed: result.removedCommands,
+		keptUserEdited: result.keptUserEditedCommands,
+	});
+	await removeManagedMarkdownFiles({
+		homeDir,
+		dryRun,
+		logger,
+		kind: "agent",
+		root: join(homeDir, FLOW_AGENTS_DIRECTORY),
+		files: flowAgentDefinitions(),
+		removed: result.removedAgents,
+		keptUserEdited: result.keptUserEditedAgents,
+	});
 
 	const preNpmPath = join(homeDir, FLOW_PRE_NPM_PLUGIN_RELATIVE_PATH);
 	const preNpmContent = await readOptionalFile(preNpmPath);
@@ -232,5 +266,57 @@ async function readOptionalFile(path: string): Promise<string | null> {
 			return null;
 		}
 		throw error;
+	}
+}
+
+async function removeManagedMarkdownFiles(input: {
+	homeDir: string;
+	dryRun: boolean;
+	logger: ((message: string) => void) | undefined;
+	kind: FlowManagedMarkdownKind;
+	root: string;
+	files: ReadonlyMap<string, string>;
+	removed: string[];
+	keptUserEdited: string[];
+}): Promise<void> {
+	for (const [name, desiredContent] of input.files) {
+		const path = join(input.root, `${name}.md`);
+		const markerPath = join(input.root, `.${name}.flow-version`);
+		const content = await readOptionalFile(path);
+		const markerContent = await readOptionalFile(markerPath);
+		const marker =
+			markerContent === null
+				? null
+				: parseFlowManagedMarkdownMarker(markerContent, input.kind, name);
+		if (content === null && marker === null) {
+			continue;
+		}
+		const owned = marker !== null || content === desiredContent;
+		if (!owned) {
+			continue;
+		}
+		if (
+			content !== null &&
+			marker !== null &&
+			sha256(content) !== marker.hash
+		) {
+			input.keptUserEdited.push(path);
+			input.logger?.(
+				`Kept user-edited Flow ${input.kind} at ${path}; remove it manually if it is no longer needed.`,
+			);
+			continue;
+		}
+		if (!input.dryRun) {
+			await rm(path, { force: true });
+			await rm(markerPath, { force: true });
+			await rm(`${path}.backup`, { force: true });
+		}
+		input.removed.push(path);
+		input.logger?.(
+			`${input.dryRun ? "Would remove" : "Removed"} Flow ${input.kind} at ${path}.`,
+		);
+	}
+	if (!input.dryRun) {
+		await removeDirectoryIfEmpty(input.root);
 	}
 }

@@ -57,12 +57,12 @@ Do not:
 - Wrap SDK `tool(...)` args in anything other than raw zod shapes.
 - Loosen the read-only enforcement on the `flow-reviewer` agent (native per-agent permissions, not prompt text).
 
-## Distribution: skill sync, uninstall, packaging (`src/distribution/`, `src/cli.ts`)
+## Distribution: skill/command sync, uninstall, packaging (`src/distribution/`, `src/cli.ts`)
 
 Risk: medium-high — this code writes to the user's home directory.
 
-- `src/distribution/skill-sync.ts` — idempotent startup sync of `skills/` into `~/.config/opencode/skills/`
-- `src/distribution/skill-markers.ts` — `.flow-skill-version` ownership markers (folder version plus a sha256 line per shipped file)
+- `src/distribution/skill-sync.ts` — idempotent startup sync of `skills/` into `~/.config/opencode/skills/`, commands into `~/.config/opencode/commands/`, and `flow-reviewer` into `~/.config/opencode/agents/`
+- `src/distribution/skill-markers.ts` — `.flow-skill-version` and command/agent path ownership constants
 - `src/distribution/uninstall.ts`, `src/cli.ts` — `bunx opencode-plugin-flow uninstall`
 
 Required checks: `bun run build`, install smoke against the packed tarball (`bun run smoke:release`), install/uninstall tests.
