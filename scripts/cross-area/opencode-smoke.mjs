@@ -184,6 +184,20 @@ async function main() {
 
 		vendorRuntimeDependencies(packageDir);
 
+		// OpenCode caches plugin installs per spec string and never re-resolves,
+		// so the README recommends an exact-version pin; keep it current with
+		// every release by failing the gate when it drifts from package.json.
+		const readme = readFileSync(join(projectRoot, "README.md"), "utf8");
+		const readmePin = readme.match(/"opencode-plugin-flow@(\d+\.\d+\.\d+)"/);
+		assert(
+			readmePin !== null,
+			"README.md install snippet no longer pins an exact opencode-plugin-flow version.",
+		);
+		assert(
+			readmePin[1] === packageJson.version,
+			`README.md pins opencode-plugin-flow@${readmePin[1]} but package.json is ${packageJson.version}; bump the README install snippet.`,
+		);
+
 		const homeDir = join(tempRoot, "home");
 		const worktree = join(tempRoot, "worktree");
 		mkdirSync(homeDir, { recursive: true });
@@ -326,6 +340,7 @@ async function main() {
 		const report = {
 			packedVersion: packedManifest.version,
 			expectedVersion: packageJson.version,
+			readmePinnedVersion: readmePin[1],
 			tarball,
 			syncedSkills,
 			syncedCommands,

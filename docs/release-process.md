@@ -10,6 +10,8 @@ Flow had rapid stabilization churn across the `1.0.46` through `1.0.50` release 
 
 ## Before release
 
+Bump the version in `package.json` **and** the exact-version pin in the README install snippet (`"opencode-plugin-flow@X.Y.Z"`) together — OpenCode caches plugin installs per spec string and never re-resolves, so the README must always recommend the release being cut. The install smoke inside `bun run check` fails if the two drift.
+
 Run the full gate:
 
 ```bash

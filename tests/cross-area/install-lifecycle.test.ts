@@ -34,6 +34,7 @@ describe("cross-area npm install lifecycle", () => {
 			const report = JSON.parse(stdout) as {
 				packedVersion: string;
 				expectedVersion: string;
+				readmePinnedVersion: string;
 				syncedSkills: string[];
 				configAgents: number;
 				configCommands: number;
@@ -44,6 +45,7 @@ describe("cross-area npm install lifecycle", () => {
 			};
 
 			expect(report.packedVersion).toBe(report.expectedVersion);
+			expect(report.readmePinnedVersion).toBe(report.expectedVersion);
 			expect(report.syncedSkills).toEqual([
 				"flow",
 				"flow-plan",
