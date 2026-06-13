@@ -96,7 +96,7 @@ Goal: "Review the auth module and fix what's wrong."
 
 The planner invented findings — none of these were verified to exist. **Fix (review-first decomposition):**
 
-> 1. **Audit auth module** — outcome: a findings list with severity and file/line evidence; validation: every finding cites code actually read.
+> 1. **Audit auth module** — outcome: a findings list with severity and file/line evidence; validation: every finding cites code actually read, and every blocking finding records the mitigating paths checked (flow-run's audit rubric).
 > 2. **Fix blocking findings from the audit** — scope set by feature 1's output; validation: regression test per fix.
 
 ## Example 5 — Bad: vague acceptance and hidden coupling

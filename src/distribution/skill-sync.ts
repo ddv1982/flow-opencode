@@ -15,6 +15,9 @@ import flowReviewReviewRubricDoc from "../../skills/flow-review/references/revie
 import flowReviewSkillDoc from "../../skills/flow-review/SKILL.md" with {
 	type: "text",
 };
+import flowRunAuditRubricDoc from "../../skills/flow-run/references/audit-rubric.md" with {
+	type: "text",
+};
 import flowRunValidationRubricDoc from "../../skills/flow-run/references/validation-rubric.md" with {
 	type: "text",
 };
@@ -83,6 +86,10 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 		name: "flow-run",
 		files: [
 			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowRunSkillDoc },
+			{
+				relativePath: "references/audit-rubric.md",
+				content: flowRunAuditRubricDoc,
+			},
 			{
 				relativePath: "references/validation-rubric.md",
 				content: flowRunValidationRubricDoc,

@@ -25,6 +25,10 @@ Record the decision with `flow_review_record`: `scope: feature` for one feature'
 
 Missing evidence is a finding, not an inconvenience: absence of proof is never proof of safety. If you could not cover something to the depth it deserves, downgrade your claimed depth and say what was not covered — never vouch beyond what you actually read.
 
+## Audit deliverables get adversarial review, not citation-checking
+
+When the work under review is itself a findings report (an audit feature, a `goalMode: review` deliverable), verifying that the cited lines exist is not a review — wrong findings cite real code. Your job is to attempt to **refute** each blocking-severity finding by tracing the mitigating paths the author should have checked: callers, the cross-layer counterpart, surrounding guards and resets. A finding you refute, or that carries no guards-checked line, is a blocking finding *against the report* (`needs_fix`: drop or downgrade it before the report ships). The procedure and verdicts are in `references/review-rubric.md` under "Reviewing audit deliverables".
+
 A final review (`scope: final`) additionally checks the session's done condition: do the completed features together deliver the planned outcome, and was broad validation run?
 
 Read `references/review-rubric.md` for the finding taxonomy, severity rules, report format, and decision payload shapes before recording any decision.
