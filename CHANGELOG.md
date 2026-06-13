@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [3.3.3] - 2026-06-13
+
+Split the action hotspot without changing Flow's runtime contract
+
+Flow's largest runtime application hotspot was `src/runtime/application/actions.ts`: one file owned mutation registries, workspace lifecycle handlers, read handlers, dispatch overloads, and local recovery helpers. That made the state boundary harder to review than it needed to be, even though the underlying action engine and public tool surface were already stable.
+
+This release splits that hotspot by runtime responsibility. Mutation actions now live with mutation-only recovery helpers, workspace lifecycle actions own planning-session construction and activation/close responses, read actions stay isolated, and dispatch owns only command/query routing. The original `actions.ts` path remains as a compatibility facade, so adapters and tests keep importing the same public application surface.
+
+No commands, tools, state paths, schemas, synced file ownership rules, runtime transitions, completion gates, review policy defaults, validation strictness, package exports, or public payloads changed.
+
+Constraint: Improve maintainability by reducing the highest-risk application hotspot while preserving the existing Flow action facade
+Constraint: Keep helpers local to their owning action boundary; do not create a new shared utility dumping ground
+Rejected: Change public application imports or package exports as part of the split | this is an internal maintainability release, not a surface release
+Rejected: Refactor `render.ts` or `skill-sync.ts` in the same patch | mixing hotspots would make review and rollback less precise
+Confidence: high
+Scope-risk: low
+Reversibility: clean — the split is mechanical and the compatibility facade preserves callers
+Directive: Future action work should add handlers in the owning action module and keep `actions.ts` as the stable facade unless a release explicitly changes the public runtime application surface
+Tested: `bun run check` (typecheck, lint, build, full test suite, npm-tarball install smoke asserting the 3.3.3 README pin, bundle sanity); `bun run smoke:release` (packed candidate tarball install smoke and release evidence bundle); `bun run check:pack-invariants`; `bun run check:architecture-seams:enforce`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes internal module boundaries and release metadata only.
+
 ## [3.3.2] - 2026-06-13
 
 Document the real completion contract: Flow's public docs now match the runtime gates
