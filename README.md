@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.7"]
+  "plugin": ["opencode-plugin-flow@3.3.8"]
 }
 ```
 
@@ -152,7 +152,7 @@ Plus: atomic, locked, path-safe writes under `.flow/**`; schema validation of al
 
 Everything judgment-shaped — how to decompose a plan, how deep to review, what counts as good evidence, when to stop and ask — lives in the skills, where you can read and override it.
 
-`/flow-status` also reports advisory `contextDiagnostics` when the planned context is weak, such as missing repo profile entries, empty feature file targets, or missing validation plans. These warnings do not replace review judgment, but they make context gaps visible before they become unverifiable completion claims.
+`/flow-status` also reports advisory `workflowReadiness`, `contextTraceability`, and `contextDiagnostics`. These fields show whether the session is ready for planning, execution, feature review, final review, or release; which planned targets changed; which validation and review evidence exists; and where planned context is weak. They do not replace review judgment, but they make context gaps visible before they become unverifiable completion claims.
 
 ## What Flow writes
 
@@ -161,7 +161,7 @@ Flow stores workflow state in the project/worktree where OpenCode is running:
 ```text
 .flow/active/<session-id>/session.json        # active session (source of truth)
 .flow/active/<session-id>/docs/**             # readable derived views
-.flow/active/<session-id>/docs/context.md     # derived context pack and diagnostics
+.flow/active/<session-id>/docs/context.md     # derived context pack, readiness, traceability, and diagnostics
 .flow/stored/<session-id>/session.json        # parked resumable sessions
 .flow/completed/<session-id>-<timestamp>/**   # closed session history
 .flow/locks/

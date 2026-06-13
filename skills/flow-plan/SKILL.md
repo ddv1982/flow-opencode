@@ -31,7 +31,7 @@ Before decomposing, identify the context that makes the plan reviewable:
 
 Record this with existing plan fields: `planning.repoProfile` for repo facts, `planning.research` for inspected references, `plan.requirements` for external/user-visible constraints, `plan.architectureDecisions` for chosen boundaries, feature `fileTargets` / `reviewScope` for owned surfaces, and `plan.notes` for scoped-out or unknown context. Do not invent a new `contextPack` payload field.
 
-After saving the plan, `flow_status` and `.flow/active/<session-id>/docs/context.md` expose the derived context pack plus diagnostics for weak context. Treat warnings as planning defects unless you can explain why the missing context is irrelevant for the requested work.
+After saving the plan, `flow_status` and `.flow/active/<session-id>/docs/context.md` expose derived `workflowReadiness`, `contextTraceability`, and diagnostics for weak context. Treat blocked readiness and warnings as planning defects unless you can explain why the missing context is irrelevant for the requested work.
 
 ## Decompose the goal
 

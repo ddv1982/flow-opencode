@@ -106,7 +106,7 @@ Tool names are public contracts for skills and users. Every registered tool name
 
 - `.flow/active/<session-id>/session.json` — active mutable session state
 - `.flow/active/<session-id>/docs/**` — derived renders
-- `.flow/active/<session-id>/docs/context.md` — derived context pack and advisory context diagnostics
+- `.flow/active/<session-id>/docs/context.md` — derived context pack with advisory workflow readiness, traceability, and context diagnostics
 - `.flow/stored/<session-id>/**` — inactive resumable sessions
 - `.flow/completed/<session-id>-<timestamp>/**` — closed history
 - `.flow/locks/` — lock files

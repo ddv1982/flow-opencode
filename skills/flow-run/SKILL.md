@@ -11,7 +11,7 @@ If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell
 
 - `flow_run_start` activates exactly one approved feature. It stays the sole target until it is cleanly complete, genuinely blocked, or reset — never drift into a second feature "while you're there".
 - Keep edits scoped to the feature plus strictly necessary support changes. Out-of-scope problems you discover get noted for the user or a plan change, not fixed inline.
-- Apply the stack profile and context pack recorded in the plan (commands, conventions, house rules, file targets, review scope). `flow_status` may surface `contextDiagnostics`; resolve or explicitly account for them before claiming the feature is ready.
+- Apply the stack profile and context pack recorded in the plan (commands, conventions, house rules, file targets, review scope). `flow_status` may surface `workflowReadiness`, `contextTraceability`, and `contextDiagnostics`; resolve blocked readiness or explicitly account for warnings before claiming the feature is ready.
 - Leave the codebase shippable: no debug prints, commented-out blocks, or temporary flags. Preserve intentional logging and observability — removing it is a regression, not a cleanup.
 
 ## Validate before claiming success
@@ -25,6 +25,7 @@ If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell
 ## Complete, or report honestly
 
 - Clean: `flow_feature_complete` with the validation evidence. The runtime rejects evidence-free completion: every recorded check must have passed, and `validationScope` must be `targeted` (or `broad` on the session's last feature). Gather evidence first; payload shape and worked examples are in `references/validation-rubric.md`.
+- If `contextTraceability` shows changed artifacts outside feature targets/review scope, stop and recheck scope before completing; reset/replan when the change is legitimate but unplanned.
 - If the session's review policy requires a per-feature review, load the `flow-review` skill and record it via `flow_review_record` (`scope: feature`) before moving on.
 - Blocked: stop and report a structured blocker — what failed, why, what you tried. Never report partial success as success.
 - A feature built on a wrong assumption is reset (the reset parameter on `flow_feature_complete`), not patched into shape. Two failed attempts on the same feature for the same reason means stop and ask the user.

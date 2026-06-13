@@ -597,18 +597,45 @@ export function renderContextPackDoc(session: Session): string {
 - session id: ${contextPack.sessionId}
 - goal: ${toInlineText(contextPack.goal)}
 - features: ${contextPack.features.length}
-- diagnostics: ${contextPack.diagnostics.length}`,
+- diagnostics: ${contextPack.diagnostics.length}
+- readiness: ${contextPack.workflowReadiness.state}
+- readiness blocking: ${contextPack.workflowReadiness.blocking.length}
+- readiness warnings: ${contextPack.workflowReadiness.warnings.length}
+- next action: ${toInlineText(contextPack.workflowReadiness.nextAction)}`,
+		contextPack.workflowReadiness.blocking.length > 0
+			? `## Workflow Readiness
+
+${bulletList(
+	contextPack.workflowReadiness.blocking.map((item) =>
+		[
+			item.id,
+			item.featureId ? `feature: ${item.featureId}` : "",
+			toInlineText(item.summary),
+			`remediation: ${toInlineText(item.remediation)}`,
+		]
+			.filter(Boolean)
+			.join(" | "),
+	),
+)}`
+			: "",
 		maybeSection("Repo Profile", contextPack.repoProfile),
 		maybeSection("Research", contextPack.research),
 		maybeSection("Requirements", contextPack.requirements),
 		maybeSection("Architecture Decisions", contextPack.architectureDecisions),
 		maybeSection("Notes", contextPack.notes),
+		`## Traceability Summary
+
+- planned targets: ${contextPack.traceability.plannedTargetCount}
+- changed artifacts: ${contextPack.traceability.changedArtifactCount}
+- validation commands: ${contextPack.traceability.validationCommandCount}
+- reviewed features: ${contextPack.traceability.reviewedFeatureCount}
+- unplanned changed artifacts: ${contextPack.traceability.unplannedChangedArtifacts.length > 0 ? contextPack.traceability.unplannedChangedArtifacts.map(toInlineText).join(", ") : "none"}`,
 		`## Feature Context
 
 ${
-	contextPack.features.length === 0
+	contextPack.traceability.features.length === 0
 		? "- none"
-		: contextPack.features
+		: contextPack.traceability.features
 				.map((feature) =>
 					[
 						`### ${feature.id}`,
@@ -617,6 +644,12 @@ ${
 						`- file targets: ${feature.fileTargets.length > 0 ? feature.fileTargets.map(toInlineText).join(", ") : "none"}`,
 						`- review scope: ${feature.reviewScope.length > 0 ? feature.reviewScope.map(toInlineText).join(", ") : "none"}`,
 						`- verification: ${feature.verification.length > 0 ? feature.verification.map(toInlineText).join(", ") : "none"}`,
+						`- changed artifacts: ${feature.changedArtifacts.length > 0 ? feature.changedArtifacts.map(toInlineText).join(", ") : "none"}`,
+						`- validation commands: ${feature.validationCommands.length > 0 ? feature.validationCommands.map(toInlineText).join(", ") : "none"}`,
+						`- reviewer decision: ${feature.reviewerDecisionStatus ?? "none"}`,
+						`- feature review: ${feature.featureReviewStatus ?? "none"}`,
+						`- final review: ${feature.finalReviewStatus ?? "none"}`,
+						`- gaps: ${feature.gaps.length > 0 ? feature.gaps.map((gap) => `${gap.id}: ${toInlineText(gap.summary)}`).join("; ") : "none"}`,
 					].join("\n"),
 				)
 				.join("\n\n")

@@ -72,7 +72,7 @@ Guidelines for skill content:
 
 - Keep `SKILL.md` tight (~1–2KB); move methodology and worked examples into `references/` (progressive disclosure).
 - Skills may reference registered tool names but must not invent tools, state transitions, persistence paths, or `.flow/**` write behavior — every state change goes through a tool.
-- Planning/review skills should preserve the context-pack discipline: record inspected files, tests, docs, contracts, risks, and out-of-scope surfaces using existing plan fields (`repoProfile`, `research`, `requirements`, `architectureDecisions`, `fileTargets`, `reviewScope`, `notes`), not a new payload field.
+- Planning/review skills should preserve the context-pack discipline: record inspected files, tests, docs, contracts, risks, and out-of-scope surfaces using existing plan fields (`repoProfile`, `research`, `requirements`, `architectureDecisions`, `fileTargets`, `reviewScope`, `notes`), not a new payload field. `workflowReadiness` and `contextTraceability` are derived from those fields plus execution evidence; do not persist duplicate readiness state.
 - The tool-name-coverage test fails if a registered tool name appears in no skill. There are no other mechanical skill checks; quality is owned by code review and the golden-transcript evals (manual lane, needs a model key).
 
 ## Tool schema note

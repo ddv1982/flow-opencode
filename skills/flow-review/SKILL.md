@@ -27,7 +27,7 @@ Missing evidence is a finding, not an inconvenience: absence of proof is never p
 
 ## Review the context pack, not just the diff
 
-Compare the completed work against the context recorded during planning: `repoProfile`, `research`, `requirements`, `architectureDecisions`, feature `fileTargets` / `reviewScope`, and `notes`. Use the derived `.flow/active/<session-id>/docs/context.md` view or the `flow_status.contextDiagnostics` field as the reviewable handoff, but remember the session JSON remains authoritative. A review should catch both code defects and context defects:
+Compare the completed work against the context recorded during planning: `repoProfile`, `research`, `requirements`, `architectureDecisions`, feature `fileTargets` / `reviewScope`, and `notes`. Use the derived `.flow/active/<session-id>/docs/context.md` view or the `flow_status.workflowReadiness`, `flow_status.contextTraceability`, and `flow_status.contextDiagnostics` fields as the reviewable handoff, but remember the session JSON remains authoritative. A review should catch both code defects and context defects:
 
 - A touched file, schema, command/tool, state path, permission boundary, release script, or docs contract was missing from the plan's context.
 - Validation evidence does not cover the file targets or review scope the plan named.
@@ -36,11 +36,13 @@ Compare the completed work against the context recorded during planning: `repoPr
 
 Treat context defects as review findings. They are blocking when they make the success claim unverifiable or hide changed behavior behind an unreviewed surface.
 
+For final review, explicitly compare the planned scope with actual changed artifacts, validation commands, recorded feature reviewer decisions, and remaining traceability gaps. Do not approve final review while `workflowReadiness.state` is `blocked_by_context`, `blocked_by_validation`, or `blocked_by_review` unless the finding explains why the block is a false positive and cites the evidence that resolves it.
+
 ## Audit deliverables get adversarial review, not citation-checking
 
 When the work under review is itself a findings report (an audit feature, a `goalMode: review` deliverable), verifying that the cited lines exist is not a review — wrong findings cite real code. Your job is to attempt to **refute** each blocking-severity finding by tracing the mitigating paths the author should have checked: callers, the cross-layer counterpart, surrounding guards and resets. A finding you refute, or that carries no guards-checked line, is a blocking finding *against the report* (`needs_fix`: drop or downgrade it before the report ships). The procedure and verdicts are in `references/review-rubric.md` under "Reviewing audit deliverables".
 
-A final review (`scope: final`) additionally checks the session's done condition: do the completed features together deliver the planned outcome, and was broad validation run?
+A final review (`scope: final`) additionally checks the session's done condition: do the completed features together deliver the planned outcome, was broad validation run, and does the traceability view show no unexplained scope or evidence gaps?
 
 Read `references/review-rubric.md` for the finding taxonomy, severity rules, report format, and decision payload shapes before recording any decision.
 

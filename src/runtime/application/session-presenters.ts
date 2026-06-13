@@ -235,6 +235,45 @@ function contextDiagnosticFields(
 	return { contextDiagnostics: diagnostics };
 }
 
+function workflowReadinessFields(
+	session: Session | null,
+	view: StatusView = "detailed",
+) {
+	if (!session) {
+		return {};
+	}
+	const contextPack = buildContextPackProjection(session);
+	if (view === "compact") {
+		return {
+			workflowReadiness: {
+				state: contextPack.workflowReadiness.state,
+				blockingCount: contextPack.workflowReadiness.blocking.length,
+				warningCount: contextPack.workflowReadiness.warnings.length,
+				blocking: contextPack.workflowReadiness.blocking
+					.slice(0, 3)
+					.map((item) => ({
+						id: item.id,
+						featureId: item.featureId ?? null,
+						summary: item.summary,
+					})),
+				nextAction: contextPack.workflowReadiness.nextAction,
+			},
+			contextTraceability: {
+				plannedTargetCount: contextPack.traceability.plannedTargetCount,
+				changedArtifactCount: contextPack.traceability.changedArtifactCount,
+				validationCommandCount: contextPack.traceability.validationCommandCount,
+				unplannedChangedArtifactCount:
+					contextPack.traceability.unplannedChangedArtifacts.length,
+				reviewedFeatureCount: contextPack.traceability.reviewedFeatureCount,
+			},
+		};
+	}
+	return {
+		workflowReadiness: contextPack.workflowReadiness,
+		contextTraceability: contextPack.traceability,
+	};
+}
+
 export function missingStoredSessionResponse(
 	sessionId: string,
 	nextCommand: string,
@@ -294,6 +333,7 @@ export async function storedSessionResponse(
 		completedPath: found.completedPath ?? null,
 		completedAt: found.completedAt ?? null,
 		closure: found.session.closure ?? null,
+		...workflowReadinessFields(found.session),
 		...contextDiagnosticFields(found.session),
 		operator,
 		...guidanceFields(guidance),
@@ -338,6 +378,7 @@ export async function statusResponse(
 			status: viewModel.status,
 			summary: viewModel.summary,
 			...(readiness ? { readiness: compactWorkspaceReadiness(readiness) } : {}),
+			...workflowReadinessFields(normalizedSession, "compact"),
 			...contextDiagnosticFields(normalizedSession, "compact"),
 			finalReviewPolicy: presentedSession?.finalReviewPolicy ?? null,
 			...(presentedSession?.latestFailedAttempt
@@ -356,6 +397,7 @@ export async function statusResponse(
 		status: viewModel.status,
 		summary: viewModel.summary,
 		...(readiness ? { readiness } : {}),
+		...workflowReadinessFields(normalizedSession),
 		...contextDiagnosticFields(normalizedSession),
 		finalReviewPolicy: presentedSession?.finalReviewPolicy ?? null,
 		...(presentedSession?.latestFailedAttempt
