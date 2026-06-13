@@ -8,7 +8,11 @@ import {
 	createPlan,
 	createSession,
 } from "../../bench/fixtures";
-import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
+import {
+	getContextDocPath,
+	getFeatureDocPath,
+	getIndexDocPath,
+} from "../../src/runtime/paths";
 import { renderSessionDocs } from "../../src/runtime/render";
 import { applyPlan } from "../../src/runtime/transitions";
 import { setNowIsoOverride } from "../../src/runtime/util";
@@ -56,6 +60,10 @@ async function renderFixture(
 ) {
 	await renderSessionDocs(worktree, session);
 	const index = await readFile(getIndexDocPath(worktree, session.id), "utf8");
+	const context = await readFile(
+		getContextDocPath(worktree, session.id),
+		"utf8",
+	);
 	const featureDocs = await Promise.all(
 		(session.plan?.features ?? []).map(
 			async (feature) =>
@@ -69,7 +77,7 @@ async function renderFixture(
 		),
 	);
 
-	return { index, featureDocs: new Map(featureDocs) };
+	return { index, context, featureDocs: new Map(featureDocs) };
 }
 
 describe("render snapshot parity", () => {
@@ -159,6 +167,9 @@ describe("render snapshot parity", () => {
 
 			expect(rendered.index).toBe(
 				await readFile(`${fixtureRoot}/index.md`, "utf8"),
+			);
+			expect(rendered.context).toBe(
+				await readFile(`${fixtureRoot}/context.md`, "utf8"),
 			);
 
 			expect([...rendered.featureDocs.keys()].sort()).toEqual(

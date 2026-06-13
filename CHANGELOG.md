@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [3.3.7] - 2026-06-14
+
+Make the planned context visible enough to review
+
+Flow's v3 workflow already asked agents to record the files, contracts, risks, and validation checks they relied on, but that context lived inside the session payload and scattered status summaries. It was durable, yet not easy to inspect after compaction, handoff, or review. That left an avoidable gap between the plan the agent believed it was following and the surfaces a reviewer could quickly verify.
+
+This release turns the existing plan context into a first-class derived view. Every rendered session now includes `.flow/active/<session-id>/docs/context.md`, a compact context pack assembled from the existing repo profile, research, requirements, architecture decisions, feature file targets, review scope, changed artifacts, validation commands, and notes. The session JSON remains the source of truth; the new markdown is a readable projection like the existing index and feature docs.
+
+`/flow-status` now also reports advisory `contextDiagnostics` when the planned context is weak or contradicted by execution evidence. It flags missing repo profile or research, feature slices with no file targets, no reviewable scope, no verification plan, completed work without recorded validation commands, and changed artifacts that fall outside the planned file targets or review scope. The skills were updated to use those diagnostics as planning/review prompts without treating them as new hard gates.
+
+No commands, tools, schemas, package exports, synced file ownership rules, runtime transitions, completion gates, review policy defaults, validation strictness, or public mutation payloads changed. The only `.flow/**` path added is a derived markdown view under the existing session docs directory.
+
+Constraint: Make context selection reviewable after compaction without adding a new command, tool, schema field, or runtime payload
+Constraint: Keep the session JSON authoritative and make `docs/context.md` a derived projection only
+Rejected: Add a persisted `contextPack` field | the existing plan and planning fields already contain the source data, and a new field would widen the schema for a rendering problem
+Rejected: Turn context diagnostics into completion blockers immediately | weak context is often judgment-shaped, so the right first step is visible evidence for planning and review
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the derived renderer, status diagnostics, skill wording, and snapshots can be reverted without touching persisted sessions or public tools
+Directive: Reviewers should compare changed artifacts and validation evidence against `.flow/**/docs/context.md` or `flow_status.contextDiagnostics` before accepting completion claims
+Tested: `bun run check` (typecheck, lint, build, 431-test suite, architecture seam enforcement, npm-tarball install smoke asserting the 3.3.7 README pin, bundle sanity); `bun run smoke:release` (packed candidate tarball retained under release-smoke evidence, install smoke run against that tarball, manual live OpenCode checklist generated with the retained tarball install spec); `bun run report:architecture-metrics`; focused context-pack/status/render tests; `git diff --check`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes derived session docs, status diagnostics, skill guidance, docs, tests, and release metadata only.
+
 ## [3.3.6] - 2026-06-14
 
 Make operational maturity visible without widening Flow's surface

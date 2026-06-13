@@ -11,7 +11,11 @@ import {
 	saveSession,
 	syncSessionArtifacts,
 } from "../../src/runtime/lifecycle";
-import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
+import {
+	getContextDocPath,
+	getFeatureDocPath,
+	getIndexDocPath,
+} from "../../src/runtime/paths";
 import { createTempDirRegistry } from "../runtime-test-helpers";
 
 const { makeTempDir, cleanupTempDirs } = createTempDirRegistry(
@@ -44,7 +48,7 @@ describe("incremental markdown rendering", () => {
 		expect(docWrites).toHaveLength(0);
 	});
 
-	test("single-feature mutation rewrites only index.md and the changed feature doc", async () => {
+	test("single-feature mutation rewrites only index.md, context.md, and the changed feature doc", async () => {
 		const worktree = makeTempDir();
 		const session = createApprovedSession(5);
 		const saved = await saveSession(worktree, session);
@@ -78,13 +82,30 @@ describe("incremental markdown rendering", () => {
 					target.endsWith(".md"),
 			);
 
-		expect(docWrites).toHaveLength(2);
+		expect(docWrites).toHaveLength(3);
 		expect(docWrites.sort()).toEqual(
 			[
 				getIndexDocPath(worktree, saved.id),
+				getContextDocPath(worktree, saved.id),
 				getFeatureDocPath(worktree, saved.id, changedFeatureId),
 			].sort(),
 		);
+	});
+
+	test("save renders a reviewable context pack doc", async () => {
+		const worktree = makeTempDir();
+		const session = createApprovedSession(2);
+		const saved = await saveSession(worktree, session);
+
+		const contextDoc = await readFile(
+			getContextDocPath(worktree, saved.id),
+			"utf8",
+		);
+
+		expect(contextDoc).toContain("# Flow Context Pack");
+		expect(contextDoc).toContain("## Feature Context");
+		expect(contextDoc).toContain("## Context Diagnostics");
+		expect(contextDoc).toContain("missing_repo_profile");
 	});
 
 	test("post-replan sync prunes all stale feature docs when the plan becomes null", async () => {

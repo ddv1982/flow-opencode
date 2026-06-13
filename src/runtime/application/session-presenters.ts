@@ -3,6 +3,7 @@
  * stored-session, and history responses, plus the best-effort feature doc
  * drilldown decoration.
  */
+import { buildContextPackProjection } from "../context-pack";
 import {
 	type FeatureDocDrilldownSource,
 	type FeatureDocDrilldownTarget,
@@ -204,6 +205,36 @@ function parkedStoredTaskProgressRows(
 	);
 }
 
+function contextDiagnosticFields(
+	session: Session | null,
+	view: StatusView = "detailed",
+) {
+	if (!session) {
+		return {};
+	}
+	const diagnostics = buildContextPackProjection(session).diagnostics;
+	if (diagnostics.length === 0) {
+		return {};
+	}
+	if (view === "compact") {
+		return {
+			contextDiagnostics: {
+				count: diagnostics.length,
+				warnings: diagnostics.filter(
+					(diagnostic) => diagnostic.severity === "warn",
+				).length,
+				issues: diagnostics.slice(0, 3).map((diagnostic) => ({
+					id: diagnostic.id,
+					severity: diagnostic.severity,
+					featureId: diagnostic.featureId ?? null,
+					summary: diagnostic.summary,
+				})),
+			},
+		};
+	}
+	return { contextDiagnostics: diagnostics };
+}
+
 export function missingStoredSessionResponse(
 	sessionId: string,
 	nextCommand: string,
@@ -263,6 +294,7 @@ export async function storedSessionResponse(
 		completedPath: found.completedPath ?? null,
 		completedAt: found.completedAt ?? null,
 		closure: found.session.closure ?? null,
+		...contextDiagnosticFields(found.session),
 		operator,
 		...guidanceFields(guidance),
 		session: parkedAwareSession,
@@ -306,6 +338,7 @@ export async function statusResponse(
 			status: viewModel.status,
 			summary: viewModel.summary,
 			...(readiness ? { readiness: compactWorkspaceReadiness(readiness) } : {}),
+			...contextDiagnosticFields(normalizedSession, "compact"),
 			finalReviewPolicy: presentedSession?.finalReviewPolicy ?? null,
 			...(presentedSession?.latestFailedAttempt
 				? { latestFailedAttempt: presentedSession.latestFailedAttempt }
@@ -323,6 +356,7 @@ export async function statusResponse(
 		status: viewModel.status,
 		summary: viewModel.summary,
 		...(readiness ? { readiness } : {}),
+		...contextDiagnosticFields(normalizedSession),
 		finalReviewPolicy: presentedSession?.finalReviewPolicy ?? null,
 		...(presentedSession?.latestFailedAttempt
 			? { latestFailedAttempt: presentedSession.latestFailedAttempt }

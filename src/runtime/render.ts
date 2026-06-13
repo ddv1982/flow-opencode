@@ -13,12 +13,14 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
+import { buildContextPackProjection } from "./context-pack";
 import {
 	activeDecisionGate,
 	decisionRequiresPause,
 	summarizeCompletion,
 } from "./domain";
 import {
+	getContextDocPathFromSessionDir,
 	getFeatureDocPathFromSessionDir,
 	getFeaturesDocsDirFromSessionDir,
 	getIndexDocPathFromSessionDir,
@@ -582,6 +584,66 @@ export function renderIndexDoc(session: Session): string {
 }
 
 // ---------------------------------------------------------------------------
+// Context pack doc
+// ---------------------------------------------------------------------------
+
+export function renderContextPackDoc(session: Session): string {
+	const contextPack = buildContextPackProjection(session);
+
+	return joinSections([
+		"# Flow Context Pack",
+		`## Summary
+
+- session id: ${contextPack.sessionId}
+- goal: ${toInlineText(contextPack.goal)}
+- features: ${contextPack.features.length}
+- diagnostics: ${contextPack.diagnostics.length}`,
+		maybeSection("Repo Profile", contextPack.repoProfile),
+		maybeSection("Research", contextPack.research),
+		maybeSection("Requirements", contextPack.requirements),
+		maybeSection("Architecture Decisions", contextPack.architectureDecisions),
+		maybeSection("Notes", contextPack.notes),
+		`## Feature Context
+
+${
+	contextPack.features.length === 0
+		? "- none"
+		: contextPack.features
+				.map((feature) =>
+					[
+						`### ${feature.id}`,
+						`- title: ${toInlineText(feature.title)}`,
+						`- status: ${feature.status}`,
+						`- file targets: ${feature.fileTargets.length > 0 ? feature.fileTargets.map(toInlineText).join(", ") : "none"}`,
+						`- review scope: ${feature.reviewScope.length > 0 ? feature.reviewScope.map(toInlineText).join(", ") : "none"}`,
+						`- verification: ${feature.verification.length > 0 ? feature.verification.map(toInlineText).join(", ") : "none"}`,
+					].join("\n"),
+				)
+				.join("\n\n")
+}`,
+		maybeSection("Changed Artifacts", contextPack.changedArtifacts),
+		maybeSection("Validation Commands", contextPack.validationCommands),
+		contextPack.diagnostics.length > 0
+			? `## Context Diagnostics
+
+${bulletList(
+	contextPack.diagnostics.map((diagnostic) =>
+		[
+			diagnostic.severity,
+			diagnostic.id,
+			diagnostic.featureId ? `feature: ${diagnostic.featureId}` : "",
+			toInlineText(diagnostic.summary),
+			`remediation: ${toInlineText(diagnostic.remediation)}`,
+		]
+			.filter(Boolean)
+			.join(" | "),
+	),
+)}`
+			: "",
+	]);
+}
+
+// ---------------------------------------------------------------------------
 // Doc IO
 // ---------------------------------------------------------------------------
 
@@ -680,6 +742,10 @@ export async function renderSessionDocsAtDir(
 	await writeDocIfChanged({
 		path: getIndexDocPathFromSessionDir(sessionDir),
 		content: renderIndexDoc(session),
+	});
+	await writeDocIfChanged({
+		path: getContextDocPathFromSessionDir(sessionDir),
+		content: renderContextPackDoc(session),
 	});
 
 	await Promise.all(

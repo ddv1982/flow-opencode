@@ -12,7 +12,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createMidExecutionSession } from "../../bench/fixtures";
 import { saveSession } from "../../src/runtime/lifecycle";
-import { getFeatureDocPath, getIndexDocPath } from "../../src/runtime/paths";
+import {
+	getContextDocPath,
+	getFeatureDocPath,
+	getIndexDocPath,
+} from "../../src/runtime/paths";
 import { renderSessionDocs } from "../../src/runtime/render";
 import { setNowIsoOverride } from "../../src/runtime/util";
 import { createTempDirRegistry } from "../runtime-test-helpers";
@@ -39,7 +43,7 @@ beforeEach(() => {
 });
 
 describe("cross-area markdown parity", () => {
-	test("10-feature fixture preserves golden bytes and rewrites only the changed feature doc plus index", async () => {
+	test("10-feature fixture preserves golden bytes and rewrites only changed feature, context, and index docs", async () => {
 		const worktree = makeTempDir();
 		const session = createMidExecutionSession(10);
 		await renderSessionDocs(worktree, session);
@@ -54,6 +58,9 @@ describe("cross-area markdown parity", () => {
 		expect(await readFile(getIndexDocPath(worktree, session.id), "utf8")).toBe(
 			await readFile(`${fixtureRoot}/index.md`, "utf8"),
 		);
+		expect(
+			await readFile(getContextDocPath(worktree, session.id), "utf8"),
+		).toBe(await readFile(`${fixtureRoot}/context.md`, "utf8"));
 
 		for (const feature of session.plan?.features ?? []) {
 			expect(
@@ -95,10 +102,11 @@ describe("cross-area markdown parity", () => {
 					target.endsWith(".md"),
 			);
 
-		expect(docWrites).toHaveLength(2);
+		expect(docWrites).toHaveLength(3);
 		expect(docWrites.sort()).toEqual(
 			[
 				getIndexDocPath(worktree, session.id),
+				getContextDocPath(worktree, session.id),
 				getFeatureDocPath(worktree, session.id, changedFeatureId),
 			].sort(),
 		);

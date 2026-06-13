@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { saveSession } from "../src/runtime/lifecycle";
 import {
 	getCompletedSessionPath,
+	getContextDocPath,
 	getFeatureDocPath,
 	getFlowDir,
 	getSessionPath,
@@ -128,6 +129,9 @@ describe("path traversal hardening", () => {
 			expect(() => getSessionPath(worktree, sessionId, "stored")).toThrow(
 				InvalidFlowPathInputError,
 			);
+			expect(() => getContextDocPath(worktree, sessionId)).toThrow(
+				InvalidFlowPathInputError,
+			);
 		}
 
 		for (const featureId of [
@@ -161,6 +165,7 @@ describe("path traversal hardening", () => {
 			"safe-session",
 			"safe-feature",
 		);
+		const validContextPath = getContextDocPath(worktree, "safe-session");
 		expect(validActiveSessionPath).toBe(
 			join(worktree, ".flow", "active", "safe-session", "session.json"),
 		);
@@ -186,6 +191,9 @@ describe("path traversal hardening", () => {
 				"features",
 				"safe-feature.md",
 			),
+		);
+		expect(validContextPath).toBe(
+			join(worktree, ".flow", "active", "safe-session", "docs", "context.md"),
 		);
 		expect(getSessionPath(worktree, "dot.dot")).toBe(
 			join(worktree, ".flow", "active", "dot.dot", "session.json"),

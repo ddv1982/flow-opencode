@@ -317,6 +317,7 @@ function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 		reason,
 		finalReviewPolicy,
 		readiness,
+		contextDiagnostics,
 		...rest
 	} = summary;
 	void finalReviewPolicy;
@@ -328,6 +329,7 @@ function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 	void laneReason;
 	void reason;
 	void readiness;
+	void contextDiagnostics;
 	return normalizeSummaryFixture(
 		stripFeatureDrilldownFields(rest) as ReturnType<typeof summarizeSession>,
 	);

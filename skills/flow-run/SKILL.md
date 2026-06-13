@@ -11,7 +11,7 @@ If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell
 
 - `flow_run_start` activates exactly one approved feature. It stays the sole target until it is cleanly complete, genuinely blocked, or reset — never drift into a second feature "while you're there".
 - Keep edits scoped to the feature plus strictly necessary support changes. Out-of-scope problems you discover get noted for the user or a plan change, not fixed inline.
-- Apply the stack profile recorded in the plan (commands, conventions, house rules). Do not re-derive or contradict it silently.
+- Apply the stack profile and context pack recorded in the plan (commands, conventions, house rules, file targets, review scope). `flow_status` may surface `contextDiagnostics`; resolve or explicitly account for them before claiming the feature is ready.
 - Leave the codebase shippable: no debug prints, commented-out blocks, or temporary flags. Preserve intentional logging and observability — removing it is a regression, not a cleanup.
 
 ## Validate before claiming success

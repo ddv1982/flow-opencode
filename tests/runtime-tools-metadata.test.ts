@@ -340,4 +340,140 @@ describe("runtime tool metadata", () => {
 		const latestCall = latestMetadataCall(metadata);
 		expect(latestCall.metadata?.blockedTaskCount).toBeGreaterThanOrEqual(1);
 	});
+
+	test("flow_status surfaces context diagnostics for weak planned context", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const context = toolContext(worktree);
+
+		await tools.flow_plan_save.execute(
+			{ goal: "Improve context visibility" },
+			context,
+		);
+		await tools.flow_plan_save.execute(
+			{
+				plan: {
+					...samplePlan(),
+					features: [
+						{
+							id: "context-pack",
+							title: "Render context pack",
+							summary: "Make planned context visible.",
+							fileTargets: [],
+							verification: [],
+							status: "pending",
+						},
+					],
+				},
+			},
+			context,
+		);
+
+		const detailed = JSON.parse(
+			await tools.flow_status.execute({}, context),
+		) as {
+			contextDiagnostics?: Array<{ id: string; featureId?: string }>;
+		};
+		expect(detailed.contextDiagnostics?.map((item) => item.id)).toContain(
+			"feature_missing_file_targets",
+		);
+		expect(detailed.contextDiagnostics?.map((item) => item.id)).toContain(
+			"feature_missing_verification",
+		);
+		expect(
+			detailed.contextDiagnostics?.some(
+				(item) => item.featureId === "context-pack",
+			),
+		).toBe(true);
+
+		const compact = JSON.parse(
+			await tools.flow_status.execute({ view: "compact" }, context),
+		) as {
+			contextDiagnostics?: { count: number; warnings: number };
+		};
+		expect(compact.contextDiagnostics?.count).toBeGreaterThanOrEqual(1);
+		expect(compact.contextDiagnostics?.warnings).toBeGreaterThanOrEqual(1);
+	});
+
+	test("flow_status warns when changed artifacts fall outside planned context", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const context = toolContext(worktree);
+
+		await tools.flow_plan_save.execute(
+			{ goal: "Detect context drift" },
+			context,
+		);
+		await tools.flow_plan_save.execute(
+			{
+				planning: {
+					repoProfile: ["TypeScript plugin with bun test"],
+					research: ["Inspected src/planned.ts"],
+				},
+				plan: {
+					...samplePlan(),
+					features: [
+						{
+							id: "planned-change",
+							title: "Change planned file",
+							summary: "Update the planned runtime file.",
+							fileTargets: ["src/planned.ts"],
+							verification: ["bun test"],
+							status: "pending",
+						},
+						{
+							id: "follow-up",
+							title: "Keep session active",
+							summary: "Leave a second feature pending for status inspection.",
+							fileTargets: ["src/follow-up.ts"],
+							verification: ["bun test"],
+							status: "pending",
+						},
+					],
+				},
+			},
+			context,
+		);
+		await tools.flow_plan_approve.execute({}, context);
+		await tools.flow_run_start.execute({}, context);
+		await tools.flow_feature_complete.execute(
+			{
+				contractVersion: "1",
+				status: "ok",
+				summary: "Changed an unplanned file.",
+				artifactsChanged: [{ path: "src/unplanned.ts" }],
+				validationRun: [
+					{
+						command: "bun test",
+						status: "passed",
+						summary: "Tests passed.",
+					},
+				],
+				decisions: [],
+				nextStep: "Review context drift.",
+				validationScope: "targeted",
+				featureResult: {
+					featureId: "planned-change",
+					verificationStatus: "passed",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "No blocking feature findings.",
+					blockingFindings: [],
+				},
+			},
+			context,
+		);
+
+		const detailed = JSON.parse(
+			await tools.flow_status.execute({}, context),
+		) as {
+			contextDiagnostics?: Array<{ id: string; summary: string }>;
+		};
+
+		const drift = detailed.contextDiagnostics?.find(
+			(item) => item.id === "changed_artifacts_outside_planned_context",
+		);
+		expect(drift?.summary).toContain("src/unplanned.ts");
+	});
 });

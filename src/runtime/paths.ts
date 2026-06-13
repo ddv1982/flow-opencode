@@ -171,8 +171,22 @@ export function getIndexDocPath(
 	);
 }
 
+export function getContextDocPath(
+	worktree: string,
+	sessionId: string,
+	location: LiveSessionLocation = "active",
+): string {
+	return getContextDocPathFromSessionDir(
+		getSessionDir(worktree, sessionId, location),
+	);
+}
+
 export function getIndexDocPathFromSessionDir(sessionDir: string): string {
 	return join(getDocsDirFromSessionDir(sessionDir), "index.md");
+}
+
+export function getContextDocPathFromSessionDir(sessionDir: string): string {
+	return join(getDocsDirFromSessionDir(sessionDir), "context.md");
 }
 
 export function getFeatureDocPath(
