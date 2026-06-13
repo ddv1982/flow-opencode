@@ -184,5 +184,11 @@ describe("built dist smoke load", () => {
 			level: "info",
 			message: "Flow plugin initialized.",
 		});
+		expect(app.entries).toContainEqual({
+			service: "opencode-plugin-flow",
+			level: "info",
+			message: "Creating Flow tool surface.",
+		});
+		expect(app.entries).not.toContain(undefined);
 	});
 });

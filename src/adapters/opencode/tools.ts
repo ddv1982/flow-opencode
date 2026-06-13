@@ -1,32 +1,10 @@
+import { createFlowLog } from "./logging";
 import { createPlanTools } from "./tool-surface/plan-tools";
 import { createReviewTool } from "./tool-surface/review-tool";
 import { createRunTools } from "./tool-surface/run-tools";
 import { createSessionTool } from "./tool-surface/session-tool";
 import { createStatusTool } from "./tool-surface/status-tool";
 import { OPENCODE_TOOL_NAMES_FROM_REGISTRY } from "./tool-surface/tool-registry";
-
-type PluginLogContext = {
-	client?: {
-		app?: {
-			log(entry: {
-				level: "info" | "warn" | "error";
-				message: string;
-				[key: string]: unknown;
-			}): void;
-		};
-	};
-};
-
-function logPluginEvent(
-	ctx: PluginLogContext,
-	entry: {
-		level: "info" | "warn" | "error";
-		message: string;
-		[key: string]: unknown;
-	},
-) {
-	ctx.client?.app?.log?.(entry);
-}
 
 function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 	const toolNames = new Set(Object.keys(tools));
@@ -67,10 +45,6 @@ function createCoreTools() {
 }
 
 export function createTools(ctx: unknown) {
-	const pluginContext = ctx as PluginLogContext;
-	logPluginEvent(pluginContext, {
-		level: "info",
-		message: "Creating Flow tool surface.",
-	});
+	createFlowLog(ctx)("info", "Creating Flow tool surface.");
 	return createCoreTools();
 }

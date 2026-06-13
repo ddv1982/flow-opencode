@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-06-13
+
+Finish the SDK log-contract fix: tool-surface logging now uses the same safe wrapper as plugin startup
+
+The 3.2.2 release fixed the startup log call that could crash plugin init on generated OpenCode SDK clients, but a second log path remained in `createTools`: it called `ctx.client.app.log` directly with top-level `{ level, message }` fields. That path did not currently crash because it was not detached, but it still violated the host contract (`app.log` expects `{ body: ... }`) and could record an `undefined` entry or become the next plugin-load footgun if the SDK tightens validation.
+
+Flow now has one adapter logging helper. Both plugin startup and tool-surface creation call through `createFlowLog`, which keeps host logging best-effort, invokes the SDK method through the app object, and always posts `{ body: { service: "opencode-plugin-flow", level, message } }`. The duplicate ad-hoc logger in `tools.ts` is gone.
+
+The SDK-shaped regression tests now assert the tool-surface log entry itself, not only the startup entry, and reject `undefined` log bodies. The distributed bundle smoke carries the same assertion so the packaged path stays covered.
+
+No commands, tools, state paths, schemas, skills, or user-facing workflow behavior changed.
+
+Tested: `bun run check`; `bun run smoke:release`.
+
+Not-tested: Live OpenCode UI restart against the release candidate; covered by SDK-shaped unit/dist smoke and packed-tarball install smoke.
+
 ## [3.3.0] - 2026-06-13
 
 Audit findings must now survive refutation: a new audit rubric for the run lane, and adversarial review of findings reports

@@ -395,6 +395,12 @@ describe("plugin config surface", () => {
 			level: "info",
 			message: "Flow plugin initialized.",
 		});
+		expect(app.entries).toContainEqual({
+			service: "opencode-plugin-flow",
+			level: "info",
+			message: "Creating Flow tool surface.",
+		});
+		expect(app.entries).not.toContain(undefined);
 	});
 
 	test("adapter registers exactly the seven canonical runtime tools", () => {
