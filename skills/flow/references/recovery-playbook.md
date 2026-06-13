@@ -22,7 +22,7 @@ All of these are persisted-state-safe: nothing was recorded, fix the input and r
 - `missing_targeted_validation` / `missing_broad_validation` — wrong or missing `validationScope`. Non-final features need `validationScope: "targeted"`; the feature that completes the session needs `"broad"` (the repo's full standard gate), run and recorded.
 - `failing_validation` — a `validationRun` entry is not `passed`. Fix the failure, re-run, and reset the feature first if the recovery says so (`nextRuntimeArgs: { reset: true, featureId }`). Do not relabel a failing run as passed.
 - `missing_feature_reviewer_decision` / `missing_final_reviewer_decision` — strict review policy: record an approved decision via `flow_review_record` (`scope: "feature"` with the matching `featureId`, or `scope: "final"` with `reviewDepth` matching the plan's `deliveryPolicy.finalReviewPolicy`), then retry completion.
-- `failing_feature_review` / `failing_final_review` — the review payload has `status` ≠ `passed` or blocking findings. Fix the findings through execution, re-validate, re-review; reset the feature when the recovery directs it.
+- `failing_feature_review` / `failing_final_review` — the runtime-required review payload has `status` ≠ `passed` or blocking findings. Fix the findings through execution, re-validate, re-review; reset the feature when the recovery directs it.
 - `missing_final_review_payload` — last feature of the session: include a passing `finalReview` (with `reviewDepth` matching the policy) in the completion payload.
 
 If the same feature fails completion twice for the same `errorCode`, stop and ask the user instead of looping (the runtime tracks `sameCategoryFailureCount` for exactly this).

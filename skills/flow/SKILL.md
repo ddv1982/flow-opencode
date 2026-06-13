@@ -5,7 +5,7 @@ description: Drive a Flow session end to end - check status, plan, execute featu
 
 # Flow driving loop
 
-Flow persists planning and execution state under `.flow/**` so work survives compaction and restarts. The plugin owns state and a few hard invariants; you own all judgment. Never edit `.flow/**` directly.
+Flow persists planning and execution state under `.flow/**` so work survives compaction and restarts. The plugin owns state and binary completion gates; you own all judgment. Never edit `.flow/**` directly.
 
 ## The loop
 
@@ -27,10 +27,10 @@ Flow persists planning and execution state under `.flow/**` so work survives com
 
 ## Hard invariants (runtime-enforced — work with them, not around them)
 
-- A feature cannot complete without recorded validation evidence.
-- A session cannot close as completed while features are unfinished.
+- A feature cannot complete without recorded passing validation evidence, the correct `validationScope`, and passing review payloads (`featureReview`, plus `finalReview` on the final path).
+- A session cannot close as completed while target work is unfinished.
 - An approved plan cannot be mutated without an explicit reset.
-- Under a strict review policy, completion requires a recorded reviewer decision.
+- Under a strict review policy, completion requires a recorded approved reviewer decision.
 
 Never: fabricate validation evidence; close `deferred`/`abandoned` to dodge a review or unfinished-features blocker; re-plan approved features without a reset.
 

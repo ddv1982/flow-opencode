@@ -77,9 +77,9 @@ Validation is two-layered: raw shapes at the SDK boundary, stricter semantic sch
 
 ## Testing
 
-The suite is small (~40 files) and focused on what code actually owns:
+The suite is focused on what code actually owns:
 
-- the four hard invariants (each rejection path unit-tested directly)
+- the hard invariants and completion payload gates (validation evidence/scope, `featureReview`, final `finalReview`, strict reviewer decisions)
 - transitions and recovery metadata
 - session persistence, locking, activation, closure, and path/workspace-root safety
 - a v2-session resume fixture

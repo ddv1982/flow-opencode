@@ -1,6 +1,7 @@
-// Acceptance coverage for the four runtime-enforced hard invariants the
-// skills document (skills/flow/SKILL.md, "Hard invariants"):
-//   1. A feature cannot complete without recorded validation evidence.
+// Acceptance coverage for the runtime-enforced hard invariants and completion
+// payload gates the skills document (skills/flow/SKILL.md, "Hard invariants"):
+//   1. A feature cannot complete without recorded passing validation evidence,
+//      correct validation scope, and passing review payloads.
 //   2. A session cannot reach completion while features are unfinished.
 //   3. An approved plan cannot be mutated without an explicit reset.
 //   4. Under a strict review policy, completion requires a recorded reviewer

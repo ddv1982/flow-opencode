@@ -29,7 +29,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.1"]
+  "plugin": ["opencode-plugin-flow@3.3.2"]
 }
 ```
 
@@ -138,12 +138,13 @@ Flow ships one dedicated subagent: `flow-reviewer`, a read-only reviewer used fo
 
 ## What the plugin enforces vs. what skills guide
 
-The plugin code enforces only hard invariants and persistence safety:
+The plugin code enforces only binary runtime gates and persistence safety:
 
-1. A feature cannot be completed without recorded validation evidence.
-2. A session cannot close as `completed` with unfinished features.
-3. An approved plan cannot be mutated without an explicit reset.
-4. If the session's review policy is strict, a reviewer decision must be recorded before completion.
+1. Completion payloads must carry recorded passing validation evidence. Non-final features require `validationScope: "targeted"`; the feature that completes the session requires `validationScope: "broad"`.
+2. Completion payloads must carry a passing `featureReview`. The final completion payload must also carry a passing `finalReview` whose `reviewDepth` matches the plan's `deliveryPolicy.finalReviewPolicy`.
+3. A session cannot close as `completed` with unfinished target work.
+4. An approved plan cannot be mutated without an explicit reset.
+5. If the session's review policy is strict, a recorded approved reviewer decision is required before completion.
 
 Plus: atomic, locked, path-safe writes under `.flow/**`; schema validation of all tool payloads; and the compaction hook that keeps Flow state intact when OpenCode compacts a long session.
 

@@ -31,14 +31,16 @@ user / slash command / skill-guided agent
 
 ## Hard invariants (code-enforced)
 
-These are the only behavioral gates the plugin enforces. They are release-critical and must stay covered by direct unit tests:
+These session/state invariants are release-critical and must stay covered by direct unit tests:
 
-1. A feature cannot be completed without recorded validation evidence.
-2. A session cannot close as `completed` with unfinished features.
+1. A feature cannot be completed without recorded passing validation evidence.
+2. A session cannot close as `completed` with unfinished target work.
 3. An approved plan cannot be mutated without an explicit reset.
-4. If the session's review policy is strict, a reviewer decision must be recorded before completion.
+4. If the session's review policy is strict, a recorded approved reviewer decision must exist before completion.
 
-Judgment-heavy quality expectations (scope proportionality, review depth, evidence quality) live in skill rubrics, not validators. Do not grow the invariant set back into a gate matrix; a new hard invariant needs to be binary, cheap, and something a skill cannot guarantee.
+The completion path also validates the binary payload gates that make invariant 1 meaningful: non-final completions require `validationScope: "targeted"`, final completions require `validationScope: "broad"`, every successful completion requires a passing `featureReview`, and the final completion path requires a passing `finalReview` whose `reviewDepth` matches the plan's `deliveryPolicy.finalReviewPolicy`.
+
+Judgment-heavy quality expectations (scope proportionality, review depth beyond the declared policy, evidence quality beyond pass/fail structure) live in skill rubrics, not validators. Do not grow the invariant set back into a gate matrix; a new hard invariant needs to be binary, cheap, and something a skill cannot guarantee.
 
 ## Frozen surfaces
 

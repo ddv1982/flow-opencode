@@ -12,6 +12,7 @@ What counts as validation evidence when completing a Flow feature, strongest fir
 ## Rules
 
 - **Targeted before completing any feature; broad on the last one.** Targeted = the checks that exercise changed code. Broad = the repo's full standard gate (the commands recorded in the plan's stack profile, e.g. `pnpm typecheck && pnpm test`). The runtime enforces this via `validationScope`: `"targeted"` on a normal feature, `"broad"` on the one that completes the session.
+- **Review payloads are binary completion gates.** Every successful completion needs a passing `featureReview` that reflects a real self-review of the diff. The final completion also needs a passing `finalReview` whose `reviewDepth` matches the plan's `deliveryPolicy.finalReviewPolicy`.
 - **Evidence is concrete.** Command, scope, outcome. "Tests pass" is not evidence; `bun test tests/run/ → 23 pass 0 fail` is.
 - **Failures are evidence too.** A known-flaky or pre-existing failure must be recorded and identified as pre-existing (verify against an unmodified baseline before claiming that). On a completing call every `validationRun` entry must have `status: "passed"`, so pre-existing failures live in the summary and `featureResult.notes`, never relabeled as passes.
 - **Gaps are first-class.** When a check cannot run, record: what should have run, why it could not, what you ran instead, and the residual risk. Never silently downgrade.
@@ -26,7 +27,7 @@ What counts as validation evidence when completing a Flow feature, strongest fir
 
 ## Recording evidence in `flow_feature_complete`
 
-Evidence lands in the completion payload: `validationRun` entries of `{command, status, summary}` (summary = scope + observed outcome, e.g. `"18 passed / 0 failed, includes 4 new rate-limit cases"`), `validationScope`, and a `featureReview` you only mark `passed` after genuinely re-reading your own diff. Abridged:
+Evidence lands in the completion payload: `validationRun` entries of `{command, status, summary}` (summary = scope + observed outcome, e.g. `"18 passed / 0 failed, includes 4 new rate-limit cases"`), `validationScope`, and a runtime-required `featureReview` you only mark `passed` after genuinely re-reading your own diff. On the feature that completes the session, also include the runtime-required passing `finalReview`. Abridged:
 
 ```json
 {
