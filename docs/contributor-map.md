@@ -85,9 +85,11 @@ Coverage is focused: hard invariants, transitions and recovery, persistence/lock
 Risk: low-medium.
 
 - Current contracts: `docs/maintainer-contract.md`, `docs/development.md`, this file, `README.md`
-- Archives: `docs/releases/`, `docs/investigations/`, superseded plans under `docs/plans/`
+- Archives: `docs/releases/` and `CHANGELOG.md`
+
+Release notes are historical records and may mention deleted plans or investigations; use ADRs, current docs, source, and tests for present-day contracts.
 
 Do not:
 
-- Update archived investigations or superseded plans as if they were current contracts.
+- Update release history as if it were a current contract.
 - Leave historical docs unlabeled when they could be mistaken for current contracts.

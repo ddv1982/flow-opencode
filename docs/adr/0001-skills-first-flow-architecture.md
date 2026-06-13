@@ -1,0 +1,3 @@
+# Skills-First Flow Architecture
+
+Flow uses four hand-authored skills as its primary planning, execution, review, and recovery guidance, while the plugin code stays a small state backend that owns durable `.flow/**` persistence, schema validation, hard binary invariants, status projection, and compaction context. This replaced the pre-v3 generated prompt/mode/skill projection stack because OpenCode's native skills and per-agent permissions made the duplicate guidance layers more costly than useful; the trade-off is that skill quality is review-owned rather than mechanically parity-tested, while the runtime still enforces the invariants a skill cannot guarantee.

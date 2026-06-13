@@ -51,7 +51,7 @@ Use report mode for diagnosis and local inventory only. Use enforce mode when pr
 
 ## Projection surfaces outside this seam checker
 
-`src/prompts/**` and `src/audit/**` were governed projection surfaces outside this checker; both were deleted in the skills-first overhaul (`docs/plans/skills-first-overhaul-2026-06-12.md`). Guidance now lives in hand-authored `skills/**` content, which is not a code layer in this seam graph.
+`src/prompts/**` and `src/audit/**` were governed projection surfaces outside this checker; both were deleted in the skills-first overhaul ([ADR 0001](../adr/0001-skills-first-flow-architecture.md)). Guidance now lives in hand-authored `skills/**` content, which is not a code layer in this seam graph.
 
 ## Notes and limitations
 

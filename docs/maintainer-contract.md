@@ -48,8 +48,17 @@ These stay untouched regardless of other refactors:
 
 - Atomic writes, file locking, path-traversal guards, and workspace-root safety (`src/runtime/paths.ts`, `src/runtime/workspace-root.ts`, `src/runtime/session*.ts`).
 - Snapshot-primary persistence: `.flow/**/session.json` at schema v1. v2-created sessions must activate and resume under v3.
-- Zod validation of tool payloads at the SDK boundary, with `zod` kept aligned to `@opencode-ai/plugin`.
+- Zod validation of tool payloads at the SDK boundary, with raw SDK tool argument shapes preserved and `zod` kept aligned to `@opencode-ai/plugin` by `bun run check:dependency-contract`.
 - The compaction hook (`experimental.session.compacting`) — Flow state surviving compaction is the differentiator.
+
+## Workspace write gates
+
+Flow uses two separate gates before mutating `.flow/**`; keep their names and responsibilities distinct:
+
+- **Workspace root guard**: runtime-owned validation that decides whether a resolved workspace root may ever receive Flow state. It rejects missing/root-like paths and `$HOME` itself before any session mutation.
+- **Hidden-root edit approval**: adapter-owned host permission for otherwise-valid workspace roots whose basename is hidden, such as `~/.workspace`. It asks OpenCode for explicit edit permission to write that root's `.flow/**` state.
+
+Use **trusted workspace root** only for metadata derived from `FLOW_TRUSTED_WORKSPACE_ROOTS`. Do not use "trusted" as a blanket synonym for "writable" or "approved"; it does not describe every write gate.
 
 ## Ownership map
 
@@ -105,9 +114,9 @@ State shape changes require schema, persistence, recovery, and migration conside
 
 ## Historical references
 
-`CHANGELOG.md`, `docs/releases/**`, `docs/investigations/**`, and superseded plans under `docs/plans/**` are archive records. They may reference deleted files and retired doctrine (mode contracts, generated skills, gate matrices); do not mass-edit them to chase current terminology. Current behavior is defined by this contract, current source, and current tests.
+`CHANGELOG.md` and `docs/releases/**` are archive records. They may reference deleted files and retired doctrine (mode contracts, generated skills, gate matrices); do not mass-edit them to chase current terminology. Current behavior is defined by this contract, current source, ADRs, and current tests.
 
-`docs/architecture/archive/**` holds pre-v3 architecture contracts (projection/parity-era ADRs, gate matrices, and complexity baselines) retired by the skills-first overhaul; treat them as the same kind of archive record.
+Historical implementation plans, investigations, and pre-v3 architecture archives were removed after their still-current lessons were promoted into this contract, `docs/skill-review-checklist.md`, or ADRs.
 
 ## If you touch X, run Y
 
@@ -115,8 +124,8 @@ Prefer the narrowest useful check first; run `bun run check` before release or c
 
 | Area touched | Required checks |
 | --- | --- |
-| Hard invariants, transitions, or schema | invariant/transition unit tests under `tests/`, plus the v2-session resume fixture test |
+| Hard invariants, transitions, or schema | `bun run check:completion-lane` for completion-lane changes; otherwise the narrow invariant/transition unit tests under `tests/`, plus the v2-session resume fixture test |
 | Tool registration or payload schemas | tool/schema tests, tool-name-coverage test, `bun run typecheck` |
 | Persistence, paths, or workspace root | persistence/locking/path-traversal tests |
-| Skills (`skills/**`) | tool-name-coverage test; read the diff — skill quality is review-owned, not test-owned |
+| Skills (`skills/**`) | tool-name-coverage test; review against `docs/skill-review-checklist.md` — skill quality is review-owned, not test-owned |
 | Install, sync, uninstall, packaging | `bun run build`, install smoke against the packed tarball, uninstall CLI test |

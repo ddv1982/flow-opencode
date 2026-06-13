@@ -23,9 +23,9 @@ If this checklist conflicts with any canonical file above, update this checklist
 - Keep detailed command, tool, state-path, gate, and invariant guidance in the canonical docs above.
 - Keep completion-gate wording aligned with `src/runtime/domain/semantic-invariants.ts`; canonical docs must mention validation evidence, validation scope, `featureReview`, final `finalReview`, strict reviewer decisions, and unfinished-feature close blocking.
 - Do not duplicate boundary-hotspot tables here; point readers back to the canonical maps.
-- Keep historical evidence (`docs/releases/**`, `docs/investigations/**`, generated `release-notes.md`, and `CHANGELOG.md`) labeled as historical unless evidence is freshly re-run and promoted to current guidance.
+- Keep historical evidence (`docs/releases/**`, generated `release-notes.md`, and `CHANGELOG.md`) labeled as historical unless evidence is freshly re-run and promoted to current guidance.
 
 ## Quick docs checks
 
 - Follow the "If you touch X, run Y" map in `docs/maintainer-contract.md` for the touched area.
-- Keep current-facing docs aligned with `docs/maintainer-contract.md`; historical records (including `docs/architecture/archive/**`) stay as-is.
+- Keep current-facing docs aligned with `docs/maintainer-contract.md`; release history stays historical.
