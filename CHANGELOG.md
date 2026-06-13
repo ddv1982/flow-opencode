@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-06-13
+
+Audit findings must now survive refutation: a new audit rubric for the run lane, and adversarial review of findings reports
+
+A real Flow audit session (a `goalMode: review` codebase audit, externally verified finding-by-finding) showed the gap this release closes: six of nine findings held up, and the three that did not all failed the same way — the auditor stopped at the suspicious call site without reading the mitigating path (the backend handler that already enforced one-to-one mapping, the workflow that validated before returning, the effect that already reset the stale state). Every one of those wrong findings cited real code accurately, and every gate passed, because the quality bar for audit deliverables was "findings cite code actually read" — citation accuracy, which wrong findings satisfy just fine.
+
+The run lane gains `flow-run/references/audit-rubric.md`, which governs the findings themselves when a feature's deliverable is a findings report. Blocking-severity findings must survive the author's own refutation attempt (trace callers, cross the layer boundary, check surrounding lifecycle guards) and record a "guards checked" line naming the mitigating paths traced and why they fall short — no guards-checked line means the finding is downgraded to advisory. Hypothesized findings ("if the backend ever returns…") are capped at advisory defense-in-depth notes; the review rubric always banned hypothesizing, but that rule lived in the review lane and never reached the lane that writes audits. Reports also state the product's actual deployment model in the header and rate severity within it, so single-user desktop processes stop collecting shared-server severities.
+
+The review lane stops citation-checking audit deliverables: `flow-review` now reviews a findings report by attempting to refute every blocking finding and recording a confirmed / refuted / uncertain verdict. A refuted finding — or a blocking finding with no guards-checked line — is a blocking finding against the report itself, so the decision is `needs_fix` and the report sheds it before shipping. The planning example for review-first decomposition raises its validation bar to match.
+
+Skill content plus one sync registration (the new reference file is embedded and synced like the others). Bump the pin and restart twice so the re-synced skills are picked up.
+
+Not-tested: a live end-to-end audit session under the new rubric; the rubric was validated against the verified audit transcript that motivated it (all three refuted findings fail its checks, all six confirmed ones pass).
+
 ## [3.2.2] - 2026-06-13
 
 Critical fix: plugin failed to load on current OpenCode hosts (unbound SDK log method)

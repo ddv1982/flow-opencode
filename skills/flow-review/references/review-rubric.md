@@ -93,6 +93,16 @@ A final decision (`scope: "final"`) omits `featureId` and adds the session-level
 
 `blockingFindings` entries are `{summary}` — pack class, location, what/why, and the fix shape into that summary as the report format shows. `followUps` are the advisory ledger so nothing is lost. List only `reviewedSurfaces` you actually covered; `remainingGaps` is where honesty about coverage lives.
 
+## Reviewing audit deliverables
+
+When the artifact under review is a findings report (produced under the flow-run audit rubric), the review is an adversarial verification pass over the findings, not a read of the prose:
+
+1. **Attempt to refute every blocking-severity finding.** For each, trace what the author should have: the callers of the cited site, the cross-layer counterpart (a frontend finding is unverified until the backend handler it calls has been read, and vice versa), and the surrounding guards, resets, and validation. Spot-checking that cited lines exist catches nothing — wrong findings cite real code accurately.
+2. **Give each a verdict**: *confirmed* (the failure is reachable and no traced guard prevents it), *refuted* (a mitigating path the report missed already covers it), or *uncertain* (state what you could not trace). Refuted findings, and blocking findings with no guards-checked line, are blocking findings against the report itself — the decision is `needs_fix` so they are dropped or downgraded before the report ships.
+3. **Check the report-level requirements** from the audit rubric: deployment context stated in the header and severities rated within it; no hypothesized blocking findings ("if X ever…"); validation commands actually run.
+
+Advisory findings get a plausibility read, not full refutation — but promote anything that looks confirmed-blocking under tracing.
+
 ## Honesty rules
 
 - Approve only on evidence you have seen, at the depth you claim. Re-runnable checks beat trust.

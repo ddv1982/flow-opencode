@@ -20,6 +20,7 @@ If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell
 - Evidence means commands actually run and their observed results — never "should work" or test code that was written but not executed.
 - If a check cannot run (missing tool, no network, broken baseline), record that as an explicit gap plus the next-best check you did run. An honest gap is acceptable; a fabricated pass is not.
 - Read `references/validation-rubric.md` before recording evidence — it defines what counts and what does not.
+- When the feature's deliverable is a findings report (an audit, or the review-first feature of a `goalMode: review` plan), also read `references/audit-rubric.md` before writing any finding: every blocking-severity finding must survive your own refutation attempt and record the mitigating paths you checked.
 
 ## Complete, or report honestly
 
