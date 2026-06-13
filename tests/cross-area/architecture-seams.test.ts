@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe("architecture seams script", () => {
-	test("documents prompts and audit as governed projection surfaces outside the checker", () => {
+	test("documents source owners and projection surfaces outside the checker", () => {
 		const adr = readFileSync(
 			join(
 				repoRoot,
@@ -79,6 +79,11 @@ describe("architecture seams script", () => {
 			"utf8",
 		);
 
+		expect(adr).toContain("`shared` (`src/config-shared.ts`)");
+		expect(adr).toContain("`distribution` owns package startup sync");
+		expect(adr).toContain(
+			"Root entrypoints (`src/index.ts`, `src/config.ts`, `src/cli.ts`)",
+		);
 		expect(adr).toContain("Projection surfaces outside this seam checker");
 		expect(adr).toContain(
 			"`src/prompts/**` and `src/audit/**` were governed projection surfaces",
@@ -156,6 +161,176 @@ describe("architecture seams script", () => {
 		const stdout = await new Response(process.stdout).text();
 		expect(stdout).toContain("Architecture seam contract violations detected.");
 		expect(stdout).toContain("runtime->adapters");
+	});
+
+	test("fails in enforce mode when runtime imports distribution", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/runtime/application/a.ts",
+					content:
+						'import { x } from "../../distribution/skill-sync";\nexport const y = x;\n',
+				},
+				{
+					path: "src/distribution/skill-sync.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("runtime->distribution");
+	});
+
+	test("fails in enforce mode when runtime imports a root entrypoint facade", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/runtime/application/a.ts",
+					content: 'import { x } from "../../config";\nexport const y = x;\n',
+				},
+				{
+					path: "src/config.ts",
+					content: 'export { x } from "./adapters/opencode/config";\n',
+				},
+				{
+					path: "src/adapters/opencode/config.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("runtime->entrypoints");
+		expect(stdout).toContain("src/runtime/application/a.ts");
+	});
+
+	test("fails in enforce mode when shared config imports adapter implementation", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/config-shared.ts",
+					content:
+						'import { x } from "./adapters/opencode/config";\nexport const y = x;\n',
+				},
+				{
+					path: "src/adapters/opencode/config.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("shared->adapters");
+		expect(stdout).toContain("src/config-shared.ts");
+	});
+
+	test("fails in enforce mode when distribution imports runtime", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/distribution/skill-sync.ts",
+					content:
+						'import { x } from "../runtime/application/index";\nexport const y = x;\n',
+				},
+				{
+					path: "src/runtime/application/index.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("distribution->runtime");
+	});
+
+	test("fails in enforce mode when distribution imports adapters", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/distribution/skill-sync.ts",
+					content:
+						'import { x } from "../adapters/opencode/config";\nexport const y = x;\n',
+				},
+				{
+					path: "src/adapters/opencode/config.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("distribution->adapters");
+	});
+
+	test("fails in enforce mode when adapters import root entrypoint facades", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/adapters/opencode/plugin.ts",
+					content: 'import { x } from "../../config";\nexport const y = x;\n',
+				},
+				{
+					path: "src/config.ts",
+					content: 'export { x } from "./config-shared";\n',
+				},
+				{
+					path: "src/config-shared.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("adapters->entrypoints");
+	});
+
+	test("resolves extension-bearing imports before layer classification", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/runtime/application/a.ts",
+					content:
+						'import { x } from "../../config.js";\nexport const y = x;\n',
+				},
+				{
+					path: "src/config.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("runtime->entrypoints");
+		expect(stdout).toContain("src/config.ts");
+	});
+
+	test("resolves directory index imports before layer classification", async () => {
+		const process = runArchitectureSeams({
+			mode: "enforce",
+			layout: [
+				{
+					path: "src/distribution/skill-sync.ts",
+					content:
+						'import { x } from "../runtime/application";\nexport const y = x;\n',
+				},
+				{
+					path: "src/runtime/application/index.ts",
+					content: "export const x = 1;\n",
+				},
+			],
+		});
+		expect(await process.exited).toBe(1);
+		const stdout = await new Response(process.stdout).text();
+		expect(stdout).toContain("distribution->runtime");
+		expect(stdout).toContain("src/runtime/application/index.ts");
 	});
 
 	test("fails in enforce mode when core imports workflow facade", async () => {
@@ -267,6 +442,25 @@ describe("architecture seams script", () => {
 					path: "src/runtime/domain/b.ts",
 					content:
 						'import { y } from "../../core/workflow/a";\nexport const z = y;\n',
+				},
+				{
+					path: "src/adapters/opencode/plugin.ts",
+					content:
+						'import { z } from "../../runtime/domain/b";\nimport { sync } from "../../distribution/skill-sync";\nimport { shared } from "../../config-shared";\nexport const plugin = [z, sync, shared];\n',
+				},
+				{
+					path: "src/distribution/skill-sync.ts",
+					content:
+						'import { shared } from "../config-shared";\nexport const sync = shared;\n',
+				},
+				{
+					path: "src/config-shared.ts",
+					content: "export const shared = 1;\n",
+				},
+				{
+					path: "src/index.ts",
+					content:
+						'export { plugin as default } from "./adapters/opencode/plugin";\n',
 				},
 			],
 		});

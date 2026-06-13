@@ -2,7 +2,6 @@ import type { Session } from "../schema";
 import { InvalidFlowWorkspaceRootError } from "../workspace-root";
 import {
 	buildConfigCheck,
-	buildInstallCheck,
 	buildSessionArtifactsCheck,
 	buildWorkspaceCheck,
 	type DoctorCheck,
@@ -20,6 +19,10 @@ export type WorkspaceReadiness = {
 	checks: DoctorCheck[];
 };
 
+export type WorkspaceReadinessPorts = {
+	buildInstallCheck: () => Promise<DoctorCheck>;
+};
+
 /**
  * Doctor-style readiness checks folded into `flow_status` output: install
  * state, config injection, writable workspace root, and active session
@@ -28,8 +31,9 @@ export type WorkspaceReadiness = {
 export async function buildWorkspaceReadiness(
 	context: WorkspaceContext,
 	session: Session | null,
+	ports: WorkspaceReadinessPorts,
 ): Promise<WorkspaceReadiness> {
-	const installCheck = await buildInstallCheck();
+	const installCheck = await ports.buildInstallCheck();
 	const configCheck = buildConfigCheck();
 	const workspace = inspectWorkspaceContext(context);
 

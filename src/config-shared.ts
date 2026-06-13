@@ -26,6 +26,11 @@ export type FlowCommandConfig = {
 	subtask?: boolean;
 };
 
+export type MutableFlowConfig = {
+	agent?: Record<string, unknown>;
+	command?: Record<string, unknown>;
+};
+
 export const FLOW_REASONING = {
 	fast: "low",
 	balanced: "medium",
@@ -91,3 +96,47 @@ export const RETIRED_FLOW_COMMANDS = [
 	"flow-reset",
 	"flow-session",
 ] as const;
+
+function cloneAgentConfig(agent: FlowAgentConfig) {
+	return {
+		...agent,
+		...(agent.permission
+			? {
+					permission: {
+						...agent.permission,
+						...(agent.permission.task
+							? { task: { ...agent.permission.task } }
+							: {}),
+					},
+				}
+			: {}),
+	};
+}
+
+export function createFlowCoreConfigEntries() {
+	const agent = Object.fromEntries(
+		Object.entries(FLOW_CORE_AGENTS).map(([name, item]) => [
+			name,
+			cloneAgentConfig(item),
+		]),
+	);
+	const command = Object.fromEntries(
+		Object.entries(FLOW_CORE_COMMANDS).map(([name, item]) => [
+			name,
+			{ ...item },
+		]),
+	);
+	return { agent, command };
+}
+
+export function applyFlowConfig(config: MutableFlowConfig): void {
+	const entries = createFlowCoreConfigEntries();
+	config.agent = {
+		...(config.agent ?? {}),
+		...entries.agent,
+	};
+	config.command = {
+		...(config.command ?? {}),
+		...entries.command,
+	};
+}

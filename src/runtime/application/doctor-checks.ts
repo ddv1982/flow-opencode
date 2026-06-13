@@ -1,18 +1,11 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
-import { applyFlowConfig } from "../../config";
 import {
+	applyFlowConfig,
 	FLOW_CORE_COMMANDS,
 	FLOW_REASONING,
 	type FlowReasoningEffort,
 } from "../../config-shared";
-import {
-	detectPreNpmFlowPlugin,
-	inspectFlowCommandAgentSyncState,
-	inspectFlowSkillSyncState,
-	resolveFlowHomeDir,
-	resolveFlowPluginVersion,
-} from "../../distribution/skill-sync";
 import {
 	getActiveSessionPath,
 	getIndexDocPath,
@@ -30,6 +23,26 @@ export type DoctorCheck = {
 	summary: string;
 	remediation: string | null;
 	details?: Record<string, unknown>;
+};
+
+export type InstallSyncEntry = {
+	name: string;
+	state: string;
+	kind?: string;
+};
+
+export type InstallCheckInspectors = {
+	detectPreNpmFlowPlugin: (
+		homeDir: string,
+	) => Promise<{ path: string } | null> | { path: string } | null;
+	inspectFlowCommandAgentSyncState: (
+		homeDir: string,
+	) => Promise<InstallSyncEntry[]> | InstallSyncEntry[];
+	inspectFlowSkillSyncState: (
+		homeDir: string,
+	) => Promise<InstallSyncEntry[]> | InstallSyncEntry[];
+	resolveFlowHomeDir: () => string;
+	resolveFlowPluginVersion: () => string;
 };
 
 export type MutableConfig = {
@@ -57,11 +70,14 @@ async function pathExists(target: string, mode = constants.F_OK) {
 	}
 }
 
-export async function buildInstallCheck(): Promise<DoctorCheck> {
-	const homeDir = resolveFlowHomeDir();
-	const preNpmCopy = await detectPreNpmFlowPlugin(homeDir);
-	const skillState = await inspectFlowSkillSyncState(homeDir);
-	const commandAgentState = await inspectFlowCommandAgentSyncState(homeDir);
+export async function buildInstallCheck(
+	inspectors: InstallCheckInspectors,
+): Promise<DoctorCheck> {
+	const homeDir = inspectors.resolveFlowHomeDir();
+	const preNpmCopy = await inspectors.detectPreNpmFlowPlugin(homeDir);
+	const skillState = await inspectors.inspectFlowSkillSyncState(homeDir);
+	const commandAgentState =
+		await inspectors.inspectFlowCommandAgentSyncState(homeDir);
 	const unsyncedSkills = skillState.filter(
 		(entry) => entry.state === "missing" || entry.state === "stale",
 	);
@@ -72,7 +88,7 @@ export async function buildInstallCheck(): Promise<DoctorCheck> {
 		distribution: "npm",
 		// OpenCode caches plugin installs per spec string and never re-resolves,
 		// so the running version is the one fact a stale install can't hide.
-		pluginVersion: resolveFlowPluginVersion(),
+		pluginVersion: inspectors.resolveFlowPluginVersion(),
 		preNpmPluginPath: preNpmCopy?.path ?? null,
 		skills: Object.fromEntries(
 			skillState.map((entry) => [entry.name, entry.state]),

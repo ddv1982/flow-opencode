@@ -1,1 +1,1 @@
-export { applyFlowConfig } from "./adapters/opencode/config";
+export { applyFlowConfig, createFlowCoreConfigEntries } from "./config-shared";

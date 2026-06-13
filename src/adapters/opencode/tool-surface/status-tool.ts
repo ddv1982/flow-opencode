@@ -3,7 +3,16 @@
  * next step in one read-only tool (replaces flow_status + flow_doctor +
  * flow_auto_prepare).
  */
+
 import {
+	detectPreNpmFlowPlugin,
+	inspectFlowCommandAgentSyncState,
+	inspectFlowSkillSyncState,
+	resolveFlowHomeDir,
+	resolveFlowPluginVersion,
+} from "../../../distribution/skill-sync";
+import {
+	buildInstallCheck,
 	buildWorkspaceReadiness,
 	statusResponse,
 } from "../../../runtime/application";
@@ -22,6 +31,16 @@ import {
 } from "./shared";
 import { openCodeToolDescription } from "./tool-registry";
 
+function buildOpenCodeInstallCheck() {
+	return buildInstallCheck({
+		detectPreNpmFlowPlugin,
+		inspectFlowCommandAgentSyncState,
+		inspectFlowSkillSyncState,
+		resolveFlowHomeDir,
+		resolveFlowPluginVersion,
+	});
+}
+
 export function createStatusTool() {
 	return {
 		flow_status: tool({
@@ -36,7 +55,9 @@ export function createStatusTool() {
 						undefined,
 					);
 					const workspace = inspectToolWorkspace(context);
-					const readiness = await buildWorkspaceReadiness(context, session);
+					const readiness = await buildWorkspaceReadiness(context, session, {
+						buildInstallCheck: buildOpenCodeInstallCheck,
+					});
 					const taskProgress = session ? projectTaskProgress(session) : [];
 					recordToolMetadata(context, "Flow status", {
 						sessionId: session?.id ?? null,

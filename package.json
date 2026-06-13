@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "3.3.4",
+	"version": "3.3.5",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -44,7 +44,7 @@
 		"test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
 		"typecheck": "tsc --noEmit",
 		"uninstall:opencode": "bun run ./src/cli.ts uninstall",
-		"check": "bun run typecheck && bun run lint && bun run build && bun run test && bun run smoke:opencode && bun run check:bundle-sanity"
+		"check": "bun run typecheck && bun run lint && bun run build && bun run test && bun run check:architecture-seams:enforce && bun run smoke:opencode && bun run check:bundle-sanity"
 	},
 	"keywords": [
 		"opencode",

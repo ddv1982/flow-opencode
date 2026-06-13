@@ -22,6 +22,7 @@ export {
 	SESSION_READ_ACTION_NAMES,
 	SESSION_WORKSPACE_ACTION_NAMES,
 } from "./actions";
+export { buildInstallCheck } from "./doctor-checks";
 export { buildWorkspaceReadiness } from "./doctor-report";
 export { renderSessionStatusSummary } from "./operator-presenters";
 export {

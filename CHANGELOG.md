@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [3.3.5] - 2026-06-13
+
+Make the source ownership map executable
+
+Flow's current maintainer docs already described a simple architecture: skills carry judgment, runtime owns safe session state, distribution owns install and sync, and the OpenCode adapter binds host surfaces to those internals. The existing architecture guardrail did not fully enforce that map. It still watched the older `core` / `workflow` / `runtime` / `adapters` graph, which left current owners such as `src/distribution`, `src/config-shared.ts`, and root package entrypoints outside the hard check.
+
+This release broadens the seam guardrail to match the living codebase. `scripts/cross-area/architecture-seams.mjs` now scans `src/**`, classifies shared config, runtime, distribution, adapters, root entrypoints, core protocols, and the reserved workflow bucket, and rejects the dependency shortcuts that would blur those owners. Runtime can no longer import distribution, adapters, or root entrypoint facades; distribution cannot import runtime or adapters; shared config must stay implementation-free; adapters can compose runtime, distribution, shared config, and core without importing root entrypoint facades. The default `bun run check` now runs the enforced seam gate.
+
+The code was adjusted to satisfy that stricter contract instead of documenting an exception. Flow's config projection moved into `src/config-shared.ts`, leaving the OpenCode config adapter as thin hook wiring. Runtime readiness no longer reaches into distribution install-sync helpers directly; the OpenCode status tool injects the install-check provider when it asks runtime for workspace readiness. The seam checker also resolves common TypeScript/JavaScript extensions and directory `index.*` imports before classifying edges, so the guardrail is harder to bypass by import spelling.
+
+No commands, tools, state paths, schemas, synced file ownership rules, runtime transitions, completion gates, review policy defaults, validation strictness, package exports, public payloads, or skill guidance changed.
+
+Constraint: Make the documented source ownership map executable without widening Flow's public workflow surface
+Constraint: Keep distribution and adapter facts injected into runtime instead of imported from runtime code
+Rejected: Leave the guardrail scoped to historical layer buckets | that would keep the current distribution and shared-config owners unenforced
+Rejected: Add a new runtime exception for install readiness | the cleaner boundary is adapter-provided install diagnostics
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the refactor preserves public imports and can be reverted with the seam rules if needed
+Directive: Future source-owner changes must update the ADR, seam checker, and cross-area seam tests together
+Tested: `bun run check` (typecheck, lint, build, full test suite, architecture seam enforcement, npm-tarball install smoke asserting the 3.3.5 README pin, bundle sanity); `bun run smoke:release` (packed candidate tarball install smoke and release evidence bundle)
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes internal source boundaries, maintainer guardrails, docs, tests, and release metadata only.
+
 ## [3.3.4] - 2026-06-13
 
 Prune the historical maze and promote the living contracts

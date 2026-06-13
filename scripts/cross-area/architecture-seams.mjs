@@ -11,18 +11,42 @@ const enforce =
 	process.env.FLOW_ARCH_SEAMS_MODE === "enforce" ||
 	process.env.FLOW_ARCH_SEAMS_ENFORCE === "1";
 
-const seamRoot = path.join(repoRoot, "src");
-const sourceRoots = ["core", "workflow", "runtime", "adapters"].map((segment) =>
-	path.join(seamRoot, segment),
-);
+const sourceRoots = [path.join(repoRoot, "src")];
+const moduleFileExtensions = [
+	".ts",
+	".tsx",
+	".mts",
+	".cts",
+	".js",
+	".jsx",
+	".mjs",
+	".cjs",
+];
 
 const deniedEdges = new Set([
+	"shared->workflow",
+	"shared->runtime",
+	"shared->distribution",
+	"shared->adapters",
+	"shared->entrypoints",
+	"core->shared",
 	"core->workflow",
 	"core->runtime",
+	"core->distribution",
 	"core->adapters",
+	"core->entrypoints",
+	"workflow->shared",
 	"workflow->runtime",
+	"workflow->distribution",
 	"workflow->adapters",
+	"workflow->entrypoints",
+	"runtime->distribution",
 	"runtime->adapters",
+	"runtime->entrypoints",
+	"distribution->runtime",
+	"distribution->adapters",
+	"distribution->entrypoints",
+	"adapters->entrypoints",
 ]);
 
 function toPosix(filePath) {
@@ -59,9 +83,19 @@ function listTsFiles(root) {
 
 function layerFromPath(filePath) {
 	const relative = toPosix(path.relative(repoRoot, filePath));
+	const withoutExtension = relative.replace(/\.[mc]?[tj]sx?$/, "");
+	if (withoutExtension === "src/config-shared") return "shared";
+	if (
+		withoutExtension === "src/index" ||
+		withoutExtension === "src/config" ||
+		withoutExtension === "src/cli"
+	) {
+		return "entrypoints";
+	}
 	if (relative.startsWith("src/core/")) return "core";
 	if (relative.startsWith("src/workflow/")) return "workflow";
 	if (relative.startsWith("src/runtime/")) return "runtime";
+	if (relative.startsWith("src/distribution/")) return "distribution";
 	if (relative.startsWith("src/adapters/")) return "adapters";
 	return null;
 }
@@ -92,6 +126,38 @@ function resolveRelativeImport(sourceFile, specifier) {
 		return null;
 	}
 	const resolved = path.resolve(path.dirname(sourceFile), specifier);
+	return resolveModulePath(resolved);
+}
+
+function candidateModulePaths(resolved) {
+	const extension = path.extname(resolved);
+	const paths = [];
+	if (extension) {
+		paths.push(resolved);
+		const withoutExtension = resolved.slice(0, -extension.length);
+		for (const candidateExtension of moduleFileExtensions) {
+			paths.push(`${withoutExtension}${candidateExtension}`);
+		}
+	} else {
+		paths.push(resolved);
+		for (const candidateExtension of moduleFileExtensions) {
+			paths.push(`${resolved}${candidateExtension}`);
+		}
+		for (const candidateExtension of moduleFileExtensions) {
+			paths.push(path.join(resolved, `index${candidateExtension}`));
+		}
+	}
+	return paths;
+}
+
+function resolveModulePath(resolved) {
+	for (const candidate of candidateModulePaths(resolved)) {
+		if (!existsSync(candidate)) continue;
+		const stats = statSync(candidate);
+		if (stats.isFile()) {
+			return candidate;
+		}
+	}
 	return resolved;
 }
 
