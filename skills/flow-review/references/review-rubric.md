@@ -40,12 +40,24 @@ Record the depth you finished at, not the one you started with.
 4. Why it matters — the concrete failure it causes.
 5. For blocking findings: what fixed looks like (one sentence, not an implementation).
 
+## Context-pack checks
+
+Before approving, compare the implementation and validation evidence to the plan context:
+
+- `planning.repoProfile` and `planning.research`: were the relevant files, tests, docs, CI scripts, and local rules actually inspected?
+- `plan.requirements`: did the work satisfy the user-visible constraints without adding undeclared scope?
+- `plan.architectureDecisions`: did the implementation keep the chosen boundaries, or did it introduce a shortcut the plan did not discuss?
+- Feature `fileTargets` and `reviewScope`: were all named surfaces changed or intentionally left alone, and did validation cover them?
+- `plan.notes`: did the implementation respect the out-of-scope and unknown-context entries?
+
+Missing or stale context is not a documentation nit when it changes the review claim. Mark it blocking when it means the reviewer cannot tell what was inspected, what changed, or why the validation evidence applies.
+
 ## Report format
 
 ```
 decision: approved | needs_fix | blocked
 depth: quick | standard | deep        (the depth you actually achieved)
-coverage: what you read/ran; what you did NOT cover and why
+coverage: what you read/ran, including plan context checked; what you did NOT cover and why
 findings:
   - [blocking|advisory] class — file:line — what / why it matters / (if blocking) what fixed looks like
 evidence-check: verdict on the validation evidence vs the validation rubric

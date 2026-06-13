@@ -25,6 +25,17 @@ Record the decision with `flow_review_record`: `scope: feature` for one feature'
 
 Missing evidence is a finding, not an inconvenience: absence of proof is never proof of safety. If you could not cover something to the depth it deserves, downgrade your claimed depth and say what was not covered — never vouch beyond what you actually read.
 
+## Review the context pack, not just the diff
+
+Compare the completed work against the context recorded during planning: `repoProfile`, `research`, `requirements`, `architectureDecisions`, feature `fileTargets` / `reviewScope`, and `notes`. A review should catch both code defects and context defects:
+
+- A touched file, schema, command/tool, state path, permission boundary, release script, or docs contract was missing from the plan's context.
+- Validation evidence does not cover the file targets or review scope the plan named.
+- The implementation drifted into a surface the plan marked out of scope.
+- The plan claimed context was inspected, but the completion evidence does not show the relevant file, test, or contract was actually read or exercised.
+
+Treat context defects as review findings. They are blocking when they make the success claim unverifiable or hide changed behavior behind an unreviewed surface.
+
 ## Audit deliverables get adversarial review, not citation-checking
 
 When the work under review is itself a findings report (an audit feature, a `goalMode: review` deliverable), verifying that the cited lines exist is not a review — wrong findings cite real code. Your job is to attempt to **refute** each blocking-severity finding by tracing the mitigating paths the author should have checked: callers, the cross-layer counterpart, surrounding guards and resets. A finding you refute, or that carries no guards-checked line, is a blocking finding *against the report* (`needs_fix`: drop or downgrade it before the report ships). The procedure and verdicts are in `references/review-rubric.md` under "Reviewing audit deliverables".

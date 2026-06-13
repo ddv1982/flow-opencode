@@ -4,7 +4,7 @@ Worked examples for decomposing goals into Flow features. Each feature in a save
 
 ## Example 1 — Good: "Add rate limiting to our public API"
 
-**Stack profile recorded with the plan:** Node 22 / TypeScript, Fastify 4, pnpm (`pnpm-lock.yaml`), tests via `pnpm test` (vitest), lint via `pnpm lint` (biome), CI runs `pnpm typecheck && pnpm test`. Redis already a dependency (sessions).
+**Context recorded with the plan:** Node 22 / TypeScript, Fastify 4, pnpm (`pnpm-lock.yaml`), tests via `pnpm test` (vitest), lint via `pnpm lint` (biome), CI runs `pnpm typecheck && pnpm test`. Relevant surfaces: `src/app.ts`, `src/config.ts`, existing API-key auth middleware, existing session Redis dependency, README env-var docs. Out of scope: changing auth semantics or adding a new billing tier.
 
 **Features:**
 
@@ -35,6 +35,11 @@ Worked examples for decomposing goals into Flow features. Each feature in a save
       "tests: pnpm test (vitest); lint: pnpm lint (biome)",
       "CI gate: pnpm typecheck && pnpm test",
       "Redis already a dependency (sessions)"
+    ],
+    "research": [
+      "Read src/app.ts middleware registration order",
+      "Read existing API-key auth middleware and config loader",
+      "Checked README env-var documentation pattern"
     ]
   },
   "plan": {
@@ -47,12 +52,19 @@ Worked examples for decomposing goals into Flow features. Each feature in a save
     "architectureDecisions": [
       "Counters in Redis; in-memory store stays as the dev fallback"
     ],
+    "notes": [
+      "Out of scope: auth semantics, billing-tier limits, and unrelated API hardening"
+    ],
     "features": [
       {
         "id": "rate-limit-middleware",
         "title": "Rate-limit middleware with in-memory store",
         "summary": "Requests beyond N/min per key receive 429 with Retry-After; under the limit, no behavior change.",
         "fileTargets": ["src/middleware/rate-limit.ts", "src/app.ts", "src/config.ts"],
+        "reviewScope": [
+          { "id": "middleware-order", "kind": "file", "target": "src/app.ts", "description": "Verify rate limiting runs after API-key identity is known." },
+          { "id": "config-contract", "kind": "file", "target": "src/config.ts", "description": "Verify defaults and env parsing are explicit." }
+        ],
         "verification": ["pnpm test middleware (new limit/reset/header cases)", "pnpm typecheck"]
       },
       {
@@ -113,6 +125,7 @@ Three distinct failure modes:
 
 ## Sizing heuristics, condensed
 
+- Can a reviewer see which files, tests, docs, contracts, and risks shaped the plan? If not, add context before features.
 - Can you state how this feature alone gets validated? If not, it is not a feature.
 - Would a teammate understand "done" from the outcome line alone? If not, sharpen it.
 - Two unrelated validation stories → split. Cannot validate alone → merge.

@@ -20,6 +20,17 @@ No tool does this for you. Before drafting features, establish:
 
 Record these findings in the `flow_plan_save` payload so execution and review later work from the same profile instead of re-deriving (or contradicting) it.
 
+## Build a context pack before features
+
+Before decomposing, identify the context that makes the plan reviewable:
+
+- Relevant source files, tests, docs, configs, CI/release scripts, and prior decisions.
+- Contracts that must not drift: public commands/tools, state paths, package exports, schemas, permissions, install/update behavior.
+- Risks and unknowns that need inspection before implementation, not after.
+- Files or surfaces deliberately out of scope.
+
+Record this with existing plan fields: `planning.repoProfile` for repo facts, `planning.research` for inspected references, `plan.requirements` for external/user-visible constraints, `plan.architectureDecisions` for chosen boundaries, feature `fileTargets` / `reviewScope` for owned surfaces, and `plan.notes` for scoped-out or unknown context. Do not invent a new `contextPack` payload field.
+
 ## Decompose the goal
 
 - Normalize the request into: outcome, constraints, done condition, and open questions. Keep unknowns as named gaps, not invented scope.

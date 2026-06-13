@@ -15,15 +15,26 @@ bun run check
 
 `bun run check` is the canonical readiness gate and is intentionally small: typecheck, lint, build, tests, install smoke, and bundle sanity. There are no generation, capture, parity, or drift steps — nothing in this repo is generated from anything else.
 
+Before committing or pushing, use the repository-local contribution preflight when available:
+
+```bash
+.agents/skills/flow-contribution-check/scripts/preflight.sh commit
+.agents/skills/flow-contribution-check/scripts/preflight.sh push
+```
+
+The preflight checks whitespace, staged diff hygiene, optional redacted secret scanning when `gitleaks` is installed, architecture seams, release hygiene, and path-sensitive focused checks for outgoing commits. It is a contributor safety rail, not a replacement for the evidence matrix in `.agents/skills/flow-contribution-check/references/validation-matrix.md`.
+
 Useful scripts:
 
 - `bun run build`
 - `bun run typecheck`
 - `bun run test` (focused suites live under `tests/`)
 - `bun run smoke:release` — builds, packs the npm tarball, and runs the install smoke against it (pack → extract → plugin startup → skill sync → uninstall CLI)
+- `bun run checklist:live-opencode` — writes the manual live OpenCode validation checklist under `.release-artifacts/release-smoke/`
+- `bun run report:architecture-metrics` — report-only source-owner, surface, seam, test-count, and built-bundle metrics
 - `bun run uninstall:opencode` — same logic as `bunx opencode-plugin-flow uninstall`
 
-There is no local install script: OpenCode installs the plugin from npm via the `plugin` array in `opencode.json`. To develop against an unpublished build, point a test project's `opencode.json` at a packed tarball (`bun pm pack`) or use the smoke runner.
+There is no local install script: OpenCode installs the plugin from npm via the `plugin` array in `opencode.json`. To develop against an unpublished build, point a test project's `opencode.json` at a packed tarball (`bun pm pack`) or use the smoke runner. Use the live checklist when you test the actual OpenCode UI/CLI host; generated checklist files are local evidence scaffolding and are not committed by default.
 
 ## Architecture in one view
 
@@ -61,6 +72,7 @@ Guidelines for skill content:
 
 - Keep `SKILL.md` tight (~1–2KB); move methodology and worked examples into `references/` (progressive disclosure).
 - Skills may reference registered tool names but must not invent tools, state transitions, persistence paths, or `.flow/**` write behavior — every state change goes through a tool.
+- Planning/review skills should preserve the context-pack discipline: record inspected files, tests, docs, contracts, risks, and out-of-scope surfaces using existing plan fields (`repoProfile`, `research`, `requirements`, `architectureDecisions`, `fileTargets`, `reviewScope`, `notes`), not a new payload field.
 - The tool-name-coverage test fails if a registered tool name appears in no skill. There are no other mechanical skill checks; quality is owned by code review and the golden-transcript evals (manual lane, needs a model key).
 
 ## Tool schema note

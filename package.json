@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "3.3.5",
+	"version": "3.3.6",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -32,6 +32,8 @@
 		"check:completion-lane": "bun test tests/runtime/final-completion-gates.test.ts tests/runtime/semantic-invariants.test.ts tests/runtime/hard-invariants.test.ts tests/runtime-recovery.test.ts",
 		"smoke:opencode": "node ./scripts/cross-area/opencode-smoke.mjs",
 		"smoke:release": "node ./scripts/cross-area/release-smoke.mjs",
+		"checklist:live-opencode": "node ./scripts/cross-area/live-opencode-checklist.mjs",
+		"report:architecture-metrics": "node ./scripts/cross-area/architecture-metrics.mjs",
 		"deadcode": "knip --include files,dependencies,unlisted,unresolved,binaries,catalog",
 		"report:deadcode-exports": "knip --exports --no-exit-code --reporter compact",
 		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",

@@ -6,6 +6,8 @@ The layout in one line: `skills/` is the brain, `src/config-shared.ts` is host-n
 
 The source-ownership guardrail lives in [`docs/architecture/allowed-cross-layer-dependencies.md`](architecture/allowed-cross-layer-dependencies.md) and is enforced by `bun run check:architecture-seams:enforce`. In short: runtime must not import adapters, distribution, or root entrypoint facades; distribution must not import runtime or adapters; shared config must not import implementation layers; root entrypoints are package/binary composition points, not implementation dependencies.
 
+Before commit/push, the optional repo-local preflight lives at `.agents/skills/flow-contribution-check/scripts/preflight.sh`. Use `commit` mode after staging and `push` mode before pushing. For simplification claims or release notes, capture `bun run report:architecture-metrics`; it is report-only and not a merge gate.
+
 ## Skills (`skills/`)
 
 Risk: medium — wrong guidance degrades output quality but cannot corrupt state.
