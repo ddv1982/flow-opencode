@@ -9,6 +9,7 @@ import type {
 	SessionArtifactSyncFailure,
 	SessionWorkspaceAction,
 } from "./action-engine";
+import { runSessionMutationAtRoot } from "./action-engine";
 import { detectPackageManager } from "./package-manager";
 
 type ClosedSessionResult = Awaited<ReturnType<typeof closeSession>>;
@@ -86,48 +87,53 @@ const WORKSPACE_ACTION_HANDLERS: SessionWorkspaceActionHandlerMap = {
 		return {
 			name: "plan_save",
 			run: async (worktree, runtime) => {
-				const existing = await runtime.loadSession(worktree);
-				const resolvedGoal = goal ?? existing?.goal;
-				if (!resolvedGoal) {
-					return {
-						status: "missing_goal",
-						nextCommand: missingGoalNextCommand ?? FLOW_PLAN_WITH_GOAL_COMMAND,
-					};
-				}
-
-				const packageManagerDetection = await detectPackageManager(
+				return runSessionMutationAtRoot(
 					worktree,
-					directory,
-				);
+					runtime,
+					async (existing, transaction) => {
+						const resolvedGoal = goal ?? existing?.goal;
+						if (!resolvedGoal) {
+							return {
+								status: "missing_goal",
+								nextCommand:
+									missingGoalNextCommand ?? FLOW_PLAN_WITH_GOAL_COMMAND,
+							};
+						}
 
-				const session = await runtime.saveSessionState(
-					worktree,
-					buildPlannedSession(existing, resolvedGoal, {
-						...(planning ?? {}),
-						...(packageManagerDetection.packageManager
-							? {
-									packageManager: packageManagerDetection.packageManager,
-								}
-							: {}),
-						packageManagerAmbiguous: packageManagerDetection.ambiguous,
-					}),
+						const packageManagerDetection = await detectPackageManager(
+							worktree,
+							directory,
+						);
+
+						const session = await transaction.saveSessionState(
+							buildPlannedSession(existing, resolvedGoal, {
+								...(planning ?? {}),
+								...(packageManagerDetection.packageManager
+									? {
+											packageManager: packageManagerDetection.packageManager,
+										}
+									: {}),
+								packageManagerAmbiguous: packageManagerDetection.ambiguous,
+							}),
+						);
+						try {
+							await transaction.syncSessionArtifacts(session);
+							return { status: "ok", session };
+						} catch (error) {
+							return {
+								status: "ok",
+								session,
+								artifactSync: {
+									status: "failed",
+									error:
+										error instanceof Error && error.message
+											? error.message
+											: String(error),
+								},
+							};
+						}
+					},
 				);
-				try {
-					await runtime.syncSessionArtifacts(worktree, session);
-					return { status: "ok", session };
-				} catch (error) {
-					return {
-						status: "ok",
-						session,
-						artifactSync: {
-							status: "failed",
-							error:
-								error instanceof Error && error.message
-									? error.message
-									: String(error),
-						},
-					};
-				}
 			},
 			onSuccess: (value) =>
 				value.status === "missing_goal"

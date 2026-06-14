@@ -34,6 +34,7 @@ Keep Flow's status projections useful without turning them into hidden runtime p
 
 - `.flow/**/session.json` is the source of truth; markdown under `.flow/**/docs/` is derived.
 - Keep atomic writes, file locking, duplicate-key rejection, path traversal guards, and workspace-root guards intact.
+- Mutating Flow tools must serialize load -> transition -> source-of-truth save -> artifact sync through the session mutation transaction. Direct `saveSessionState` calls only guarantee atomic replacement, not semantic merge behavior.
 - The runtime rejects filesystem roots and `$HOME` as mutable workspace roots.
 - Hidden-root edit approval is adapter-owned host permission, separate from runtime workspace-root validation.
 - Unsupported persisted session schema versions must fail clearly. Do not carry legacy session compatibility unless there is a current user-backed reason.

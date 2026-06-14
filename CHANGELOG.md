@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.16] - 2026-06-14
+
+Serialize Flow tool mutations through a session transaction so concurrent planning and execution updates compose instead of racing stale reads or stale docs.
+
 ## [3.3.15] - 2026-06-14
 
 Clarify derived signal authority so readiness blockers stay operational, context quality stays advisory, and context packs carry the same handoff contract.

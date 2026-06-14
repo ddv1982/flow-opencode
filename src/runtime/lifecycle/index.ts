@@ -6,6 +6,7 @@ export {
 } from "../session-lifecycle";
 export {
 	loadSession,
+	runSessionMutation,
 	saveSession,
 	saveSessionState,
 	syncSessionArtifacts,

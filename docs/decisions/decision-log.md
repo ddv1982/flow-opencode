@@ -4,6 +4,29 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.16] - 2026-06-14
+
+Serialize session mutations instead of just writes
+
+Flow's persistence lock guaranteed atomic JSON replacement, but it did not guarantee semantic mutation consistency. Two state-changing tools could both load the same session snapshot before either write acquired the lock, compute valid transitions from stale state, then let the later save replace the earlier one. The same split meant derived markdown could briefly or permanently reflect whichever stale mutation synced last.
+
+This release adds a session mutation transaction around the real mutation boundary: load the active session, run the transition, save the source-of-truth JSON, and sync derived artifacts while holding the same per-worktree lock. The default action-engine runtime now uses that transaction for mutating Flow tools, and `plan_save` uses the same path so concurrent planning context updates compose instead of replacing each other. Direct `saveSessionState` stays available as a low-level atomic replacement API; it does not claim to merge concurrent semantic edits.
+
+The regression tests exercise the failure mode directly. Concurrent action-engine note updates now both survive in persisted state and rendered docs, and concurrent `plan_save` calls merge planning context into the active session and its docs.
+
+No commands, tools, agents, state paths, persisted schemas, package exports, public payloads, completion gates, review policy defaults, validation strictness, sync ownership markers, install behavior, or skill guidance changed. The public workflow surface remains five commands, one agent, and eight tools.
+
+Constraint: Preserve the public Flow surface while making the existing mutation backend semantically serialized
+Constraint: Keep low-level direct save APIs atomic and explicit instead of pretending they merge concurrent semantic updates
+Rejected: Add persisted revision/conflict state | serializing the existing single-session workflow is simpler and avoids a schema migration
+Rejected: Patch each transition with local locking | the action boundary owns load, transition, persistence, and artifact sync
+Confidence: high
+Scope-risk: medium
+Reversibility: clean - transaction wrapper and regression tests can be reverted without migrating persisted sessions
+Directive: State-changing Flow tool paths must use the session mutation transaction; use direct `saveSessionState` only for raw persistence replacement tests or fixtures
+Tested: `bun run check`; `bun run smoke:release`; `bun run report:architecture-metrics`; `git diff --check`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes runtime mutation serialization, derived artifact sync ordering, maintainer docs, tests, and release metadata, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.15] - 2026-06-14
 
 Name the authority of Flow's derived signals

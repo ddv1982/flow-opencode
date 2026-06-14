@@ -18,6 +18,11 @@ import {
 	type MutableWorkspaceRoot,
 } from "./workspace-root";
 
+export type SessionMutationTransaction = {
+	saveSessionState: (session: Session) => Promise<Session>;
+	syncSessionArtifacts: (session: Session) => Promise<void>;
+};
+
 function refreshUpdatedAt(session: Session): Session {
 	return {
 		...session,
@@ -65,10 +70,22 @@ async function saveSessionWithArtifactsOption(
 	includeArtifacts: boolean,
 ): Promise<Session> {
 	return withSessionSaveLock(worktree, async () => {
-		const normalized = refreshUpdatedAt(session);
-		await persistSessionByStatus(worktree, normalized, includeArtifacts);
-		return normalized;
+		return saveSessionWithArtifactsOptionUnlocked(
+			worktree,
+			session,
+			includeArtifacts,
+		);
 	});
+}
+
+async function saveSessionWithArtifactsOptionUnlocked(
+	worktree: MutableWorkspaceRoot,
+	session: Session,
+	includeArtifacts: boolean,
+): Promise<Session> {
+	const normalized = refreshUpdatedAt(session);
+	await persistSessionByStatus(worktree, normalized, includeArtifacts);
+	return normalized;
 }
 
 export async function loadSession(worktree: string): Promise<Session | null> {
@@ -103,12 +120,19 @@ export async function syncSessionArtifacts(
 	session: Session,
 ): Promise<void> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	await syncSessionArtifactsUnlocked(mutableWorktree, session);
+}
+
+async function syncSessionArtifactsUnlocked(
+	worktree: MutableWorkspaceRoot,
+	session: Session,
+): Promise<void> {
 	if (session.status === "completed") {
-		await syncCompletedSessionArtifacts(mutableWorktree, session);
+		await syncCompletedSessionArtifacts(worktree, session);
 		return;
 	}
 
-	await renderSessionDocs(mutableWorktree, session, "active");
+	await renderSessionDocs(worktree, session, "active");
 }
 
 export async function saveSession(
@@ -117,4 +141,27 @@ export async function saveSession(
 ): Promise<Session> {
 	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
 	return saveSessionWithArtifactsOption(mutableWorktree, session, true);
+}
+
+export async function runSessionMutation<T>(
+	worktree: string,
+	task: (
+		session: Session | null,
+		transaction: SessionMutationTransaction,
+	) => Promise<T>,
+): Promise<T> {
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
+	return withSessionSaveLock(mutableWorktree, async () => {
+		const session = await loadSession(mutableWorktree);
+		return task(session, {
+			saveSessionState: (nextSession) =>
+				saveSessionWithArtifactsOptionUnlocked(
+					mutableWorktree,
+					nextSession,
+					false,
+				),
+			syncSessionArtifacts: (nextSession) =>
+				syncSessionArtifactsUnlocked(mutableWorktree, nextSession),
+		});
+	});
 }

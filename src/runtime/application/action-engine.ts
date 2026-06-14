@@ -11,6 +11,7 @@ import {
 	listSessionHistory,
 	loadSession,
 	loadStoredSession,
+	runSessionMutation,
 	saveSessionState,
 	syncSessionArtifacts,
 } from "../lifecycle";
@@ -19,10 +20,22 @@ import type { TransitionResult } from "../transitions";
 
 export type RuntimeToolResponse = Record<string, unknown>;
 
+export type SessionMutationTransactionPort = {
+	saveSessionState: (session: Session) => Promise<Session>;
+	syncSessionArtifacts: (session: Session) => Promise<void>;
+};
+
 export interface SessionRuntimePort {
 	loadSession: (worktree: string) => Promise<Session | null>;
 	saveSessionState: (worktree: string, session: Session) => Promise<Session>;
 	syncSessionArtifacts: (worktree: string, session: Session) => Promise<void>;
+	runSessionMutation?: <T>(
+		worktree: string,
+		task: (
+			session: Session | null,
+			transaction: SessionMutationTransactionPort,
+		) => Promise<T>,
+	) => Promise<T>;
 }
 
 export interface SessionReadRuntimePort {
@@ -40,6 +53,7 @@ export const DEFAULT_SESSION_RUNTIME_PORT: SessionRuntimePort = {
 	loadSession,
 	saveSessionState,
 	syncSessionArtifacts,
+	runSessionMutation,
 };
 
 export const DEFAULT_SESSION_READ_RUNTIME_PORT: SessionReadRuntimePort = {
@@ -53,6 +67,7 @@ export const DEFAULT_SESSION_WORKSPACE_RUNTIME_PORT: SessionWorkspaceRuntimePort
 		loadSession,
 		saveSessionState,
 		syncSessionArtifacts,
+		runSessionMutation,
 		activateSession,
 		closeSession,
 	};
@@ -203,39 +218,47 @@ function valueWithSavedSession<T>(
 }
 
 async function syncArtifactsAfterPersistence(
-	worktree: string,
 	session: Session,
 	syncArtifacts: boolean,
-	runtime: SessionRuntimePort,
+	transaction: SessionMutationTransactionPort,
 ): Promise<SessionArtifactSyncFailure | null> {
 	if (!syncArtifacts) {
 		return null;
 	}
 	try {
-		await runtime.syncSessionArtifacts(worktree, session);
+		await transaction.syncSessionArtifacts(session);
 		return null;
 	} catch (error) {
 		return { status: "failed", error: errorMessage(error) };
 	}
 }
 
-export async function runMutationActionAtRoot<T, Name extends string>(
+export async function runSessionMutationAtRoot<T>(
 	worktree: string,
-	action: SessionMutationAction<T, Name>,
-	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
-): Promise<SessionMutationResult<T, Name>> {
-	const session = await runtime.loadSession(worktree);
-	if (!session) {
-		return {
-			kind: "missing",
-			actionName: action.name,
-			response: action.missingResponse ?? {
-				status: "missing_session",
-				summary: "No active Flow session exists.",
-			},
-		};
+	runtime: SessionRuntimePort,
+	task: (
+		session: Session | null,
+		transaction: SessionMutationTransactionPort,
+	) => Promise<T>,
+): Promise<T> {
+	if (runtime.runSessionMutation) {
+		return runtime.runSessionMutation(worktree, task);
 	}
 
+	const session = await runtime.loadSession(worktree);
+	return task(session, {
+		saveSessionState: (nextSession) =>
+			runtime.saveSessionState(worktree, nextSession),
+		syncSessionArtifacts: (nextSession) =>
+			runtime.syncSessionArtifacts(worktree, nextSession),
+	});
+}
+
+async function runLoadedMutationAction<T, Name extends string>(
+	action: SessionMutationAction<T, Name>,
+	session: Session,
+	tx: SessionMutationTransactionPort,
+): Promise<SessionMutationResult<T, Name>> {
 	let result = action.run(session);
 	if (!result.ok && action.recordFailure) {
 		const failureSession = action.recordFailure(
@@ -259,10 +282,9 @@ export async function runMutationActionAtRoot<T, Name extends string>(
 		action.isNoopSuccess?.(result.value, session) === true
 	) {
 		const artifactSync = await syncArtifactsAfterPersistence(
-			worktree,
 			session,
 			syncArtifacts,
-			runtime,
+			tx,
 		);
 		const response = action.onNoopSuccess(session, result.value);
 		if (artifactSync) {
@@ -298,12 +320,11 @@ export async function runMutationActionAtRoot<T, Name extends string>(
 				transition: result,
 			};
 		}
-		const saved = await runtime.saveSessionState(worktree, result.session);
+		const saved = await tx.saveSessionState(result.session);
 		const artifactSync = await syncArtifactsAfterPersistence(
-			worktree,
 			saved,
 			syncArtifacts,
-			runtime,
+			tx,
 		);
 		const response = onError(result);
 		return {
@@ -323,17 +344,16 @@ export async function runMutationActionAtRoot<T, Name extends string>(
 		resultSession,
 		action.clearFailedAttemptOnSuccess,
 	);
-	const saved = await runtime.saveSessionState(worktree, nextSession);
+	const saved = await tx.saveSessionState(nextSession);
 	const responseValue = valueWithSavedSession(
 		result.value,
 		resultSession,
 		saved,
 	);
 	const artifactSync = await syncArtifactsAfterPersistence(
-		worktree,
 		saved,
 		syncArtifacts,
-		runtime,
+		tx,
 	);
 	const response = action.onSuccess(saved, responseValue);
 	if (artifactSync) {
@@ -358,4 +378,25 @@ export async function runMutationActionAtRoot<T, Name extends string>(
 		savedSession: saved,
 		response,
 	};
+}
+
+export async function runMutationActionAtRoot<T, Name extends string>(
+	worktree: string,
+	action: SessionMutationAction<T, Name>,
+	runtime: SessionRuntimePort = DEFAULT_SESSION_RUNTIME_PORT,
+): Promise<SessionMutationResult<T, Name>> {
+	return runSessionMutationAtRoot(worktree, runtime, async (session, tx) => {
+		if (!session) {
+			return {
+				kind: "missing",
+				actionName: action.name,
+				response: action.missingResponse ?? {
+					status: "missing_session",
+					summary: "No active Flow session exists.",
+				},
+			};
+		}
+
+		return runLoadedMutationAction(action, session, tx);
+	});
 }
