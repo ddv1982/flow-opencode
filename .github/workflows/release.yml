@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Validate release tag and changelog evidence
+      - name: Validate release tag and changelog
         shell: bash
         run: |
           set -euo pipefail
@@ -41,85 +41,30 @@ jobs:
             exit 1
           fi
 
-          changelog_heading_pattern="^##[[:space:]]+\\[?${version}\\]?([[:space:]]+-[[:space:]].*)?$"
-          if ! grep -Eq "${changelog_heading_pattern}" CHANGELOG.md; then
-            echo "Missing changelog heading for version ${version} in CHANGELOG.md" >&2
+          if ! grep -Eq "^##[[:space:]]+\\[?${version}\\]?" CHANGELOG.md; then
+            echo "Missing changelog heading for version ${version}" >&2
             exit 1
           fi
 
           awk -v version="$version" '
             BEGIN { in_section = 0 }
-            $0 ~ ("^## \\[?" version "\\]?") {
-              in_section = 1
-            }
+            $0 ~ ("^## \\[?" version "\\]?") { in_section = 1 }
             in_section {
-              if ($0 ~ /^## / && $0 !~ ("^## \\[?" version "\\]?")) {
-                exit
-              }
+              if ($0 ~ /^## / && $0 !~ ("^## \\[?" version "\\]?")) exit
               print
             }
           ' CHANGELOG.md > release-notes.md
 
-          if [ ! -s release-notes.md ]; then
-            echo "Changelog section for ${version} is empty; refusing to publish without release-note evidence." >&2
-            exit 1
-          fi
-
-          if ! grep -Ev '^[[:space:]]*$|^##[[:space:]]' release-notes.md | grep -q .; then
-            echo "Changelog section for ${version} contains no release-note body; refusing to publish heading-only notes." >&2
-            exit 1
-          fi
-
-      - name: Run typecheck, tests, and build
+      - name: Run checks
         run: bun run check
 
-      - name: Prepare release assets
+      - name: Prepare package
         shell: bash
         run: |
           set -euo pipefail
           bun pm pack --destination .
           tarball="$(ls opencode-plugin-flow-*.tgz)"
           shasum -a 256 "$tarball" > "${tarball}.sha256"
-
-          version="${GITHUB_REF_NAME#v}"
-          package_version="$(node -p "require('./package.json').version")"
-          changelog_heading="$(grep -En "^##[[:space:]]+\\[?${version}\\]?([[:space:]]+-[[:space:]].*)?$" CHANGELOG.md | head -n1 | cut -d: -f1)"
-          release_notes_bytes="$(wc -c < release-notes.md | tr -d " ")"
-
-          {
-            echo "tag=${GITHUB_REF_NAME}"
-            echo "version=${version}"
-            echo "package_version=${package_version}"
-            echo "changelog_heading=${changelog_heading}"
-            echo "release_notes_bytes=${release_notes_bytes}"
-            echo "tarball=${tarball}"
-            echo "opencode_smoke=passed"
-            echo "opencode_smoke_evidence=.release-artifacts/release-smoke/opencode-smoke-evidence.json"
-            echo "manual_live_opencode_required=true"
-          } > release-evidence.txt
-
-      - name: Run npm install smoke evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          tarball="$(ls opencode-plugin-flow-*.tgz)"
-          node scripts/cross-area/opencode-smoke.mjs \
-            --tarball "$tarball" \
-            --evidence-dir .release-artifacts/release-smoke
-
-      - name: Upload release evidence artifact
-        if: success()
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-evidence-${{ github.ref_name }}
-          path: |
-            release-evidence.txt
-            release-notes.md
-            opencode-plugin-flow-*.tgz
-            opencode-plugin-flow-*.tgz.sha256
-            .release-artifacts/release-smoke/opencode-smoke-evidence.json
-            .release-artifacts/release-smoke/opencode-smoke-evidence.md
-          if-no-files-found: error
 
       - name: Publish to npm
         env:
@@ -132,8 +77,7 @@ jobs:
             exit 1
           fi
           printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "$HOME/.npmrc"
-          tarball="$(ls opencode-plugin-flow-*.tgz)"
-          npm publish "$tarball" --access public
+          npm publish opencode-plugin-flow-*.tgz --access public
 
       - name: Publish GitHub release assets
         env:

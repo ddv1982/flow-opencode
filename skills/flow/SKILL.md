@@ -1,45 +1,51 @@
 ---
 name: flow
-description: Drive a Flow session end to end - check status, plan, execute features one at a time, review, and close. Load when starting, resuming, or unblocking Flow work.
+description: Main Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided planning, autonomous execution, resumable implementation, session status, or end-to-end delivery with validation and review gates.
 ---
 
-# Flow driving loop
+# Flow
 
-Flow persists planning and execution state under `.flow/**` so work survives compaction and restarts. The plugin owns state and binary completion gates; you own all judgment. Never edit `.flow/**` directly.
+Use Flow as a minimal state ledger, not as a framework. Skills provide judgment; the runtime only records the approved plan, active feature, validation evidence, review evidence, and closure.
 
-## The loop
+## Loop
 
-1. `flow_status` first, always. It returns current state plus a suggested next step. Trust it over conversation memory, especially after compaction.
-2. No active session: with a goal, load the `flow-plan` skill, then `flow_plan_save` and `flow_plan_approve`. Without a goal, stop and ask — never invent one.
-3. Approved plan: load the `flow-run` skill, `flow_run_start` one feature, implement, then `flow_feature_complete` with validation evidence.
-4. Review when the session policy requires it: load the `flow-review` skill, record decisions with `flow_review_record` (`scope: feature` + `featureReview` per feature, `scope: final` + `finalReview` before close).
-5. All features complete and final review recorded: close via `flow_session` (`action: close`). Its `history`, `show`, and `activate` actions inspect or switch sessions.
-6. Back to step 1, until the session is closed or a stop condition hits.
+1. Call `flow_status` first. Trust its active session and next action over conversation memory.
+2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve`. If there is no goal, ask for one.
+3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload.
+4. Load `flow-review` for the required feature review. The reviewer reports a `featureReview` payload; the manager records it inside `flow_feature_complete`.
+5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
+6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
-For broad splittable planning, review, audit, research, or validation, use `references/parallel-orchestration.md`; workers gather evidence, the manager owns synthesis and every state-changing `flow_*` call.
+Use `references/parallel-orchestration.md` for broad read-only discovery, audit, or review. The manager owns every `flow_*` state change.
 
-## Stop and ask the user
+## Runtime Surface
 
-- The `flow_*` tools are unavailable: the Flow plugin is not loaded in this environment. Stop and tell the user to check that `opencode-plugin-flow` is in the `plugin` array of `opencode.json` (a project-local `plugin` array overrides the global one) and restart OpenCode. Never substitute an unrecorded workflow — work without persisted state defeats Flow's purpose while looking like success.
-- No active session and no stated goal (a bare "resume" with nothing to resume).
-- Plan approval, unless the auto-approve criteria in `flow-plan` are all met.
-- Destructive or hard-to-reverse actions: deleting data, force-pushing, schema migrations, publishing, touching secrets or money.
-- The same feature fails or blocks twice for the same reason — do not loop a third time.
-- Real scope has grown beyond the approved plan. Do not quietly absorb it; propose a plan change.
+- `flow_status`: read the active session.
+- `flow_plan_save`: create a session and/or save a draft plan.
+- `flow_plan_approve`: lock the draft plan.
+- `flow_run_start`: start one runnable feature.
+- `flow_feature_complete`: record completion or a real blocker with validation and review evidence.
+- `flow_feature_reset`: reset one feature and its dependents.
+- `flow_session_close`: archive the active session as `completed`, `deferred`, or `abandoned`.
 
-## Hard invariants (runtime-enforced — work with them, not around them)
+There is no `flow_context`, no separate review-record tool, and no multi-session activation surface. The single active source of truth is `.flow/session.json`; closed sessions are archived under `.flow/history/`.
 
-- A feature cannot complete without recorded passing validation evidence, the correct `validationScope`, and passing review payloads (`featureReview`, plus `finalReview` on the final path).
-- A session cannot close as completed while target work is unfinished.
-- An approved plan cannot be mutated without an explicit reset.
-- Under a strict review policy, completion requires a recorded approved reviewer decision.
+## Hard Gates
 
-Never: fabricate validation evidence; close `deferred`/`abandoned` to dodge a review or unfinished-features blocker; re-plan approved features without a reset.
+- Approved plans are immutable. To change direction, reset affected features or close the session and start a new goal.
+- Only one feature can be active at a time.
+- Completion requires at least one passing `validationRun` entry.
+- Non-final completion requires `validationScope: "targeted"`.
+- Final completion requires `validationScope: "broad"` and a passing `finalReview`.
+- Every completed feature requires a passing `featureReview` with no blocking findings.
+- `flow_session_close` accepts `kind: "completed"` only after an approved plan has passed final completion.
 
-## Recovery playbook
+## Recovery
 
-- Confused, or a result contradicts memory: `flow_status` (detailed), then `flow_context` if you need the full context pack, re-anchor.
-- Feature stuck or built on a wrong assumption: reset (`flow_feature_complete` `reset: true` + `featureId`), then re-run or replan. Resetting is cheap; piling fixes on a broken feature is not.
-- Wrong or stale session active: `flow_session` `history`/`show`, then `activate`.
-- Approved plan wrong: reset the affected features, `flow_plan_save` a revision, re-approve, tell the user why.
-- Structured errors (`errorCode`/`blocker` fields — e.g. `unfinished_features` on close, a failing `session_artifacts` check in detailed `flow_status`): follow the `resolutionHint`; full catalog in `references/recovery-playbook.md`.
+- Confused state: call `flow_status` and follow `nextAction`.
+- Wrong assumption or failed implementation path: use `flow_feature_reset` for the feature and dependents, then rerun from the corrected plan.
+- Missing validation or review evidence: gather real evidence, then call `flow_feature_complete`.
+- Approved plan is materially wrong: reset the affected features, save a revised plan if the session is back in planning; otherwise close and start a new goal.
+- Unknown runtime error: read `summary` and `recovery`; see `references/recovery-playbook.md` for common cases.
+
+Never fabricate validation output, backfill review approval you did not perform, or close as `deferred`/`abandoned` merely to avoid an unfinished-work blocker.

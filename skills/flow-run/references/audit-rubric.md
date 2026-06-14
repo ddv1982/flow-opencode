@@ -1,6 +1,6 @@
 # Audit findings rubric
 
-What counts as a valid finding when the feature's deliverable is a findings report — a codebase audit, the review-first feature of a `goalMode: review` plan, or any report whose findings a later feature will fix. The commands you run are still governed by `validation-rubric.md`; this rubric governs the findings themselves.
+What counts as a valid finding when the feature's deliverable is a findings report: a codebase audit, a review-first feature, or any report whose findings a later feature will fix. The commands you run are still governed by `validation-rubric.md`; this rubric governs the findings themselves.
 
 A findings report is a set of claims about code you did not write. Its failure mode is not "missed something" — it is the confident, accurately-cited finding that is wrong because the mitigating code path was never read. Accurate citations are necessary, never sufficient: a citation proves you found the suspicious site, not that the suspicion survives contact with the rest of the codebase.
 

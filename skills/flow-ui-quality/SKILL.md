@@ -13,7 +13,7 @@ Use this skill when Flow work changes what a user sees or how they interact with
 - Choose a clear design direction that fits the product context. Distinctive does not mean decorative; utilitarian tools can be excellent through restraint, hierarchy, and speed.
 - Load `references/ui-rubric.md` for design and UX review criteria.
 - Load `references/visual-verification.md` before completing meaningful UI changes to capture visual evidence. During review, use it to assess recorded evidence; only run browser checks yourself if the current agent and tools permit it.
-- Record design constraints and verification expectations in existing Flow plan fields; do not add new Flow payload fields.
+- Record design constraints and verification expectations in Flow plan fields: `requirements`, `decisions`, feature `targets`, and feature `validation`. Do not add new Flow payload fields.
 
 ## Build with visual intent
 

@@ -1,77 +1,56 @@
 # Validation evidence rubric
 
-What counts as validation evidence when completing a Flow feature, strongest first. Record the strongest tier you can actually reach, and name the tier honestly.
+Use this before recording `flow_feature_complete`.
 
 ## Evidence tiers
 
-1. **Executed checks with observed output.** Tests, typecheck, lint, build — actually run, with the command and outcome recorded (e.g. `pnpm test middleware` → 14 passed). New behavior needs at least one check that *fails without the change and passes with it*; a suite that was already green proves nothing about your change.
-2. **Manual verification with a reproducible recipe.** You ran the app/CLI/endpoint and observed the new behavior; the evidence records the exact steps and observed result so a reviewer can repeat them. Use when behavior is not practically unit-testable (TUI output, external service wiring).
-3. **Indirect verification.** Typecheck/lint/build pass but nothing exercises the changed behavior itself. Acceptable alone only for changes with no behavior (comments, docs, renames fully covered by the compiler).
-4. **Inspection only.** You read the code carefully. This is not validation. Record it only as a gap entry: what could not run and why.
+1. **Behavioral automated test**: a targeted unit/integration/e2e test exercises the changed behavior and fails without the change.
+2. **Manual reproducible check**: you ran the app, CLI, endpoint, or workflow and recorded exact steps plus observed result.
+3. **Indirect automated check**: typecheck, lint, build, or compile proves shape but not behavior. Acceptable alone only for docs, comments, renames fully covered by tooling, or purely mechanical changes.
+4. **Static inspection**: reading code without running anything. This is a gap, not completion evidence for behavioral work.
 
-## Rules
+Use the strongest practical tier. For risky work, combine tiers.
 
-- **Targeted before completing any feature; broad on the last one.** Targeted = the checks that exercise changed code. Broad = the repo's full standard gate (the commands recorded in the plan's stack profile, e.g. `pnpm typecheck && pnpm test`). The runtime enforces this via `validationScope`: `"targeted"` on a normal feature, `"broad"` on the one that completes the session.
-- **Review payloads are binary completion gates.** Every successful completion needs a passing `featureReview` that reflects a real self-review of the diff. The final completion also needs a passing `finalReview` whose `reviewDepth` matches the plan's `deliveryPolicy.finalReviewPolicy`.
-- **Evidence is concrete.** Command, scope, outcome. "Tests pass" is not evidence; `bun test tests/run/ → 23 pass 0 fail` is.
-- **Failures are evidence too.** A known-flaky or pre-existing failure must be recorded and identified as pre-existing (verify against an unmodified baseline before claiming that). On a completing call every `validationRun` entry must have `status: "passed"`, so pre-existing failures live in the summary and `featureResult.notes`, never relabeled as passes.
-- **Gaps are first-class.** When a check cannot run, record: what should have run, why it could not, what you ran instead, and the residual risk. Never silently downgrade.
-- **Never fabricate.** No invented outputs, no trimming failures from results, no claiming a run you did not perform. A fabricated pass poisons the session's whole evidence chain.
+## Recording rules
 
-## Parallel validation
+- Each `validationRun` entry has `command`, `status`, and `summary`.
+- Completion accepts only passing entries. Failed or skipped checks belong in the summary/notes and must be resolved or explained as blockers.
+- Do not claim a command was run unless it was run in this session or directly reported by a trusted worker with raw output.
+- Include scope in the summary: what behavior, files, routes, or states the check covered.
+- UI work should include browser or screenshot evidence when the app can run locally.
+- Cleanup/refactor work should show behavior preservation, not only formatting success.
 
-Parallelize only independent checks: disjoint package tests, docs/link checks,
-isolated install smoke, or read-only triage. Skip shared ports, databases,
-fixtures, snapshots, generated files, or writable caches.
+## Scope
 
-Worker runs count only with command/recipe, slice/environment, outcome, and
-skipped setup preserved. The manager owns `flow_feature_complete`, reconciles
-conflicts, and never hides worker failures.
+- Use `validationScope: "targeted"` for ordinary feature completion.
+- Use `validationScope: "broad"` only when the session is on its final feature and the project-level gate was run.
 
-## Required tier by change type
+Broad validation usually means the repo's full check command, full relevant test suite, build, or equivalent release gate. If the broad gate cannot run, do not mark the final feature complete; report `needs_input` or fix the blocker.
 
-- **Behavior change (code paths, APIs, logic):** tier 1, including at least one check that fails without the change.
-- **Wiring to externals (services, processes, TUI/CLI surfaces):** tier 1 where mockable, plus tier 2 for the live edge — or an explicit gap.
-- **Config / build / CI changes:** tier 2 — actually exercise the configured path (run the build, the affected script, the lint with the new rule) and record what you observed; "the file parses" is tier 3.
-- **Docs, comments, renames fully covered by the compiler:** tier 3 suffices (typecheck/lint/build clean).
-
-## Recording evidence in `flow_feature_complete`
-
-Evidence lands in the completion payload: `validationRun` entries of `{command, status, summary}` (summary = scope + observed outcome, e.g. `"18 passed / 0 failed, includes 4 new rate-limit cases"`), `validationScope`, and a runtime-required `featureReview` you only mark `passed` after genuinely re-reading your own diff. On the feature that completes the session, also include the runtime-required passing `finalReview`. Abridged:
+## Good payload fragment
 
 ```json
 {
-  "contractVersion": "1",
-  "status": "ok",
-  "summary": "Rate-limit middleware: 429 + Retry-After beyond N/min per key.",
-  "artifactsChanged": [{ "path": "src/middleware/rate-limit.ts" }],
   "validationRun": [
-    { "command": "pnpm test middleware", "status": "passed", "summary": "18 passed / 0 failed; 4 new cases fail on main" },
-    { "command": "pnpm typecheck", "status": "passed", "summary": "clean" }
+    {
+      "command": "bun test tests/runtime-gates.test.ts",
+      "status": "passed",
+      "summary": "12 pass; covered approval immutability, active feature, and completion gates"
+    },
+    {
+      "command": "bun run typecheck",
+      "status": "passed",
+      "summary": "TypeScript accepted runtime and adapter changes"
+    }
   ],
-  "validationScope": "targeted",
-  "nextStep": "Start redis-store",
-  "featureResult": { "featureId": "rate-limit-middleware", "verificationStatus": "passed" },
-  "featureReview": { "status": "passed", "summary": "Diff re-read; scope clean, no debug artifacts.", "blockingFindings": [] }
+  "validationScope": "broad"
 }
 ```
 
-## When validation fails mid-feature
+## Blockers and resets
 
-- **First failure:** diagnose and fix within the feature, re-run the failed check plus anything the fix touched. A fix-then-revalidate cycle is normal, not a blocker.
-- **The failure reveals a wrong assumption** (wrong design, wrong interface, plan-level miss): do not pile patches on it. Reset via `flow_feature_complete` with `{ "reset": true, "featureId": "..." }`, then re-run with the corrected approach or propose a plan revision.
-- **Second failure for the same reason:** stop and report to the user — what failed, why, what you tried. Looping a third time burns budget on a problem that needs a human or a replan.
-- **Genuinely blocked** (external dependency, missing access, ambiguous requirement): report `status: "needs_input"` with an honest `outcome` (e.g. `kind: "blocked_external"` or `"needs_operator_input"`) instead of forcing a completion.
+- If validation fails due to a code bug, fix it and rerun.
+- If validation reveals a wrong design or interface assumption, call `flow_feature_reset` and rerun from the corrected approach.
+- If validation needs external access, missing credentials, or ambiguous user input, record `status: "needs_input"` with an honest `outcome`.
 
-## Worked examples
-
-**Acceptable (tier 1):**
-> Added `RateLimiter.reset()`. New tests in `tests/middleware/rate-limit.test.ts` (4 cases, fail on main, pass here). Ran `pnpm test middleware` → 18 passed / 0 failed; `pnpm typecheck` → clean.
-
-**Acceptable with gap (tier 2 + gap):**
-> Wired Redis store. Unit tests with mocked client pass (`pnpm test stores` → 9/9). Gap: no live two-instance check — no Redis in this environment; verified instead that the same mock sequence drives the in-memory store identically. Residual risk: real-Redis serialization differences.
-
-**Not acceptable:**
-> Implemented the feature and reviewed the code carefully; it follows existing patterns and should work.
-
-No execution, no recipe, no gap analysis — this is tier 4 and the runtime-recorded evidence must not dress it up as more.
+Never trim failing output, relabel a failed command as passed, or use "not run" as completion evidence.

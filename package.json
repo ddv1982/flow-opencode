@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "3.3.22",
+	"version": "4.0.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -20,33 +20,11 @@
 		"build": "bun run build:plugin && bun run build:cli",
 		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --minify --drop=console --sourcemap=external ./src/index.ts",
 		"build:cli": "bun build --target=node --outdir=./dist --entry-naming=cli.js --banner='#!/usr/bin/env node' --minify ./src/cli.ts",
-		"bench": "bun run ./bench/index.ts",
-		"bench:smoke": "bun run ./bench/index.ts -- --filter transitions --warmup 0 --iterations 3",
-		"evals:golden": "bun run evals/golden/runner.ts",
-		"check:dependency-contract": "node ./scripts/cross-area/dependency-contract.mjs",
-		"check:architecture-seams": "node ./scripts/cross-area/architecture-seams.mjs",
-		"check:architecture-seams:enforce": "FLOW_ARCH_SEAMS_MODE=enforce node ./scripts/cross-area/architecture-seams.mjs",
-		"check:release-hygiene": "node ./scripts/cross-area/release-hygiene.mjs",
-		"check:pack-invariants": "node ./scripts/cross-area/pack-invariants.mjs",
-		"check:bundle-sanity": "node ./scripts/cross-area/bundle-sanity.mjs",
-		"check:completion-lane": "bun test tests/runtime/final-completion-gates.test.ts tests/runtime/semantic-invariants.test.ts tests/runtime/hard-invariants.test.ts tests/runtime-recovery.test.ts",
-		"smoke:opencode": "node ./scripts/cross-area/opencode-smoke.mjs",
-		"smoke:release": "node ./scripts/cross-area/release-smoke.mjs",
-		"checklist:live-opencode": "node ./scripts/cross-area/live-opencode-checklist.mjs",
-		"report:architecture-metrics": "node ./scripts/cross-area/architecture-metrics.mjs",
-		"deadcode": "knip --include files,dependencies,unlisted,unresolved,binaries,catalog",
-		"report:deadcode-exports": "knip --exports --no-exit-code --reporter compact",
-		"lint": "bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true",
-		"test": "bun test",
-		"test:fast": "bun test tests/runtime/semantic-invariants.test.ts tests/runtime/final-completion-gates.test.ts",
-		"test:deep": "bun run test && bun run test:replay && bun run test:randomized",
-		"test:replay": "bun test tests/runtime/semantic-invariants.test.ts tests/runtime/final-completion-gates.test.ts",
-		"test:ci": "bun run build && bun run test:randomized",
-		"test:randomized": "bun test --randomize --timeout 30000",
-		"test:randomized:regression": "bun run build && bun test --randomize --timeout 30000 && bun test --randomize --timeout 30000 --seed=1 && bun test --randomize --timeout 30000 --seed=42",
+		"lint": "bunx biome check src tests --files-ignore-unknown=true --vcs-use-ignore-file=true",
+		"test": "bun test tests",
 		"typecheck": "tsc --noEmit",
 		"uninstall:opencode": "bun run ./src/cli.ts uninstall",
-		"check": "bun run typecheck && bun run lint && bun run build && bun run test && bun run check:architecture-seams:enforce && bun run smoke:opencode && bun run check:bundle-sanity"
+		"check": "bun run typecheck && bun run lint && bun run build && bun run test"
 	},
 	"keywords": [
 		"opencode",
@@ -61,32 +39,12 @@
 		"@opencode-ai/plugin": "1.17.3"
 	},
 	"dependencies": {
-		"ignore": "^7.0.5",
 		"zod": "4.1.8"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.2.6",
 		"@opencode-ai/plugin": "1.17.3",
 		"bun-types": "latest",
-		"knip": "^5.63.1",
-		"mitata": "^1.0.34",
 		"typescript": "^6.0.2"
-	},
-	"knip": {
-		"entry": [
-			"src/index.ts",
-			"tests/**/*.test.ts",
-			"tests/**/*.test-d.ts",
-			"bench/**/*.ts",
-			"scripts/**/*.mjs",
-			"scripts/**/*.ts"
-		],
-		"project": [
-			"src/**/*.ts",
-			"tests/**/*.ts",
-			"bench/**/*.ts",
-			"scripts/**/*.mjs",
-			"scripts/**/*.ts"
-		]
 	}
 }

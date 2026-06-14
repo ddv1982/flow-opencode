@@ -1,133 +1,85 @@
-# Planning examples: good and bad plans
+# Planning examples
 
-Worked examples for decomposing goals into Flow features. Each feature in a saved plan needs an outcome, a scope, and a validation plan; the plan as a whole needs a stack profile and a done condition.
+## Rate limiting feature set
 
-## Example 1 — Good: "Add rate limiting to our public API"
+Human summary:
 
-**Context recorded with the plan:** Node 22 / TypeScript, Fastify 4, pnpm (`pnpm-lock.yaml`), tests via `pnpm test` (vitest), lint via `pnpm lint` (biome), CI runs `pnpm typecheck && pnpm test`. Relevant surfaces: `src/app.ts`, `src/config.ts`, existing API-key auth middleware, existing session Redis dependency, README env-var docs. Out of scope: changing auth semantics or adding a new billing tier.
+1. **In-memory rate limit middleware** - add request counting and response headers for one-process deployments.
+2. **Redis-backed limiter** - add shared store adapter for multi-instance deployments.
+3. **Operator docs** - document configuration and rollout notes.
 
-**Features:**
-
-1. **Rate-limit middleware with in-memory store**
-   - Outcome: requests beyond N/min per API key receive 429 with `Retry-After`; under the limit, no behavior change.
-   - Scope: new `src/middleware/rate-limit.ts`, registration in `src/app.ts`, config knob in `src/config.ts`.
-   - Validation: new vitest unit tests for limit/reset/headers; `pnpm typecheck`; targeted run `pnpm test middleware`.
-2. **Redis-backed store for multi-instance deployments**
-   - Outcome: counters shared across instances; in-memory remains the dev fallback.
-   - Scope: `src/middleware/stores/redis.ts`, store selection by config.
-   - Validation: unit tests with redis mock; manual two-process check documented in evidence.
-3. **Operator documentation and limits tuning**
-   - Outcome: README section + env var reference for limits; defaults justified.
-   - Scope: docs only.
-   - Validation: `pnpm lint` (docs pass markdown checks); reviewer reads for accuracy.
-
-**Why this is good:** each feature ships alone (1 is useful without 2), each has its own validation story, dependency order is explicit, the risky/unknown part (shared state) is isolated in feature 2, and docs ride as a real feature with a real outcome instead of "cleanup".
-
-**As a `flow_plan_save` payload** (abridged — feature ids are lowercase kebab-case; `verification` is each feature's validation plan; `fileTargets` is its scope):
+Payload:
 
 ```json
 {
-  "goal": "Add rate limiting to our public API",
-  "planning": {
-    "packageManager": "pnpm",
-    "repoProfile": [
-      "Node 22 / TypeScript, Fastify 4",
-      "tests: pnpm test (vitest); lint: pnpm lint (biome)",
-      "CI gate: pnpm typecheck && pnpm test",
-      "Redis already a dependency (sessions)"
-    ],
-    "research": [
-      "Read src/app.ts middleware registration order",
-      "Read existing API-key auth middleware and config loader",
-      "Checked README env-var documentation pattern"
-    ]
-  },
+  "goal": "Add API rate limiting with local and Redis-backed stores",
   "plan": {
-    "summary": "Per-API-key rate limiting with Redis-backed counters",
-    "overview": "Middleware-based limiting: in-memory store first, Redis store for multi-instance, operator docs last.",
+    "summary": "Add configurable rate limiting for API routes.",
+    "overview": "Implement middleware first, then a Redis store, then document rollout.",
     "requirements": [
-      "Requests beyond N/min per API key get 429 with Retry-After",
-      "No behavior change under the limit"
+      "Preserve existing route behavior except rate-limit responses.",
+      "Expose deterministic headers for limit, remaining, and reset time."
     ],
-    "architectureDecisions": [
-      "Counters in Redis; in-memory store stays as the dev fallback"
+    "decisions": [
+      "Start with an in-memory store for single-process deployments.",
+      "Keep Redis behind a store interface so tests can use a mock."
     ],
-    "notes": [
-      "Out of scope: auth semantics, billing-tier limits, and unrelated API hardening"
-    ],
+    "finalReviewPolicy": "detailed",
     "features": [
       {
         "id": "rate-limit-middleware",
-        "title": "Rate-limit middleware with in-memory store",
-        "summary": "Requests beyond N/min per key receive 429 with Retry-After; under the limit, no behavior change.",
-        "fileTargets": ["src/middleware/rate-limit.ts", "src/app.ts", "src/config.ts"],
-        "reviewScope": [
-          { "id": "middleware-order", "kind": "file", "target": "src/app.ts", "description": "Verify rate limiting runs after API-key identity is known." },
-          { "id": "config-contract", "kind": "file", "target": "src/config.ts", "description": "Verify defaults and env parsing are explicit." }
-        ],
-        "verification": ["pnpm test middleware (new limit/reset/header cases)", "pnpm typecheck"]
+        "title": "In-memory limiter",
+        "summary": "Add middleware, config, and tests for single-process rate limiting.",
+        "targets": ["src/middleware/rate-limit.ts", "src/app.ts", "src/config.ts"],
+        "validation": ["route tests for limit/reset/header behavior", "typecheck"],
+        "dependsOn": []
       },
       {
         "id": "redis-store",
-        "title": "Redis-backed store for multi-instance deployments",
-        "summary": "Counters shared across instances; in-memory remains the dev fallback.",
-        "dependsOn": ["rate-limit-middleware"],
-        "fileTargets": ["src/middleware/stores/redis.ts"],
-        "verification": ["pnpm test stores (redis mock)", "manual two-process check, recorded in evidence"]
+        "title": "Redis store",
+        "summary": "Add a Redis-backed rate limit store without changing middleware behavior.",
+        "targets": ["src/middleware/stores/redis.ts", "src/middleware/rate-limit.ts"],
+        "validation": ["store tests with Redis mock", "manual two-process recipe if practical"],
+        "dependsOn": ["rate-limit-middleware"]
       },
       {
         "id": "operator-docs",
-        "title": "Operator documentation and limits tuning",
-        "summary": "README section + env var reference for limits; defaults justified.",
-        "priority": "nice_to_have",
-        "fileTargets": ["README.md"],
-        "verification": ["pnpm lint", "reviewer reads for accuracy"]
+        "title": "Operator docs",
+        "summary": "Document configuration, headers, and rollout guidance.",
+        "targets": ["README.md", "docs/operations.md"],
+        "validation": ["lint docs if available", "review examples against implemented config"],
+        "dependsOn": ["redis-store"]
       }
     ]
   }
 }
 ```
 
-## Example 2 — Bad: too coarse
+## Review-first cleanup
 
-> 1. **Implement rate limiting** — add middleware, Redis store, config, docs, tests.
+Bad plan:
 
-One mega-feature with four unrelated validation stories. When validation fails you cannot tell what is broken; when the session is interrupted, nothing is completable. **Fix:** split along validation boundaries, as in Example 1.
+```text
+1. Simplify services
+2. Remove duplication
+3. Improve tests
+```
 
-## Example 3 — Bad: too granular / phase-shaped
+Why it is bad: no evidence names which services are actually tangled, what duplication exists, or which behavior needs test coverage.
 
-> 1. Create rate-limit file. 2. Add config type. 3. Register middleware. 4. Write tests. 5. Run lint. 6. Update docs.
+Better plan:
 
-These are steps, not features: 1–3 cannot be validated independently ("file exists" is not validation), and 4–5 are validation activities that belong *inside* features. Ten micro-features create ten completion ceremonies with no checkpoint value. **Fix:** collapse 1–5 into one feature whose validation plan includes the tests and lint.
+```text
+1. Audit service layer - produce evidence-backed findings with file:line citations, guards checked, and follow-up order.
+2. Consolidate confirmed config parsing duplication - only if the audit proves the duplication exists and is safe to merge.
+3. Add behavior-preservation tests for the changed service paths.
+```
 
-## Example 4 — Bad: planning fixes without findings
+## Decomposition anti-patterns
 
-Goal: "Review the auth module and fix what's wrong."
-
-> 1. Fix SQL injection in login. 2. Fix session fixation. 3. Fix weak hashing.
-
-The planner invented findings — none of these were verified to exist. **Fix (review-first decomposition):**
-
-> 1. **Audit auth module** — outcome: a findings list with severity and file/line evidence; validation: every finding cites code actually read, and every blocking finding records the mitigating paths checked (flow-run's audit rubric).
-> 2. **Fix blocking findings from the audit** — scope set by feature 1's output; validation: regression test per fix.
-
-## Example 5 — Bad: vague acceptance and hidden coupling
-
-> 1. **Improve API robustness** — summary: "make the API more resilient"; verification: `["manual testing"]`.
-> 2. **Add limits config** — fileTargets: `["src/config.ts"]`.
-> 3. **Enforce limits in middleware** — fileTargets: `["src/middleware/rate-limit.ts", "src/config.ts"]`; no `dependsOn`.
-
-Three distinct failure modes:
-
-- **Vague acceptance (1):** "more resilient" is not a done condition — no one can say when it is finished, so it never is. "Manual testing" with no recipe is not a validation plan. Sharpen until a teammate could verify the outcome line alone.
-- **Hidden coupling (2+3):** both touch `src/config.ts`, and 3 cannot be validated without 2 — yet the plan declares them independent. Interruption between them leaves nothing completable. **Fix:** merge them into one feature, or declare `dependsOn` and give 2 a validation story of its own (it has none — "config exists" is not validation, see Example 3).
-- **Scope smuggling (1):** a catch-all feature alongside specific ones becomes the dumping ground for whatever comes up. Cut it; new scope goes through a plan revision, not a vague bucket.
-
-## Sizing heuristics, condensed
-
-- Can a reviewer see which files, tests, docs, contracts, and risks shaped the plan? If not, add context before features.
-- Can you state how this feature alone gets validated? If not, it is not a feature.
-- Would a teammate understand "done" from the outcome line alone? If not, sharpen it.
-- Two unrelated validation stories → split. Cannot validate alone → merge.
-- Riskiest first: unknowns surface while the plan is still cheap to change.
-- 1–5 features for most goals. More than ~7 usually means the goal needs splitting into sessions.
+- Feature per file when behavior crosses files.
+- Feature per implementation step with no user-visible or reviewable outcome.
+- Plan fixes for findings not yet verified.
+- Validation that only says "manual testing".
+- Targets that name the entire repo.
+- Features with hidden dependencies instead of `dependsOn`.

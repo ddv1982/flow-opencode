@@ -1,59 +1,61 @@
 ---
 name: flow-plan
-description: Plan Flow work - profile the repo, decompose a goal into right-sized features, then save and approve the plan. Load before calling flow_plan_save.
+description: Plan Flow work for the v4 skills-first runtime: inspect the repo, decompose a user goal into right-sized features, save a draft with flow_plan_save, and approve it with flow_plan_approve.
 ---
 
-# Flow planning
+# Flow Plan
 
-Planning never implements. This skill ends at a saved or approved plan — implementation starts only from the `flow-run` skill.
+Use this skill before implementation. The output is a compact plan the runtime can enforce and future agents can execute without rediscovering the goal.
 
-If `flow_plan_save` is unavailable, the Flow plugin is not loaded: stop and tell the user to check `opencode-plugin-flow` in the `plugin` array of `opencode.json` and restart OpenCode. Do not plan without persistence.
+If `flow_plan_save` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode.
 
-## Profile the repo yourself, first
+## Inspect first
 
-No tool does this for you. Before drafting features, establish:
+- Read the files, docs, tests, package scripts, and local conventions that determine the work.
+- For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass.
+- For cleanup/refactor goals, load `flow-deslop`.
+- For UI/frontend goals, load `flow-ui-quality`.
+- Do not invent findings. Broad "review and fix" goals start with a review-first feature whose deliverable is evidence-backed findings.
 
-- Package manager (lockfile wins over docs) and language/runtime versions.
-- The real build, test, lint, and typecheck commands — read `package.json` scripts, `Makefile`, CI config; do not guess.
-- Frameworks, test layout, and module conventions actually in use.
-- House rules: `CONTRIBUTING`, `AGENTS.md`/`CLAUDE.md`, lint/format config.
+## Plan shape
 
-Record these findings in the `flow_plan_save` payload so execution and review later work from the same profile instead of re-deriving (or contradicting) it.
+Call `flow_plan_save` with:
 
-## Build a context pack before features
+```json
+{
+  "goal": "user-visible goal",
+  "plan": {
+    "summary": "one-sentence outcome",
+    "overview": "implementation strategy and boundaries",
+    "requirements": ["constraints, acceptance criteria, user promises"],
+    "decisions": ["architecture or scope decisions already made"],
+    "finalReviewPolicy": "detailed",
+    "features": [
+      {
+        "id": "lowercase-kebab-case",
+        "title": "Short title",
+        "summary": "Outcome this feature delivers",
+        "targets": ["files, modules, routes, commands, or docs in scope"],
+        "validation": ["focused checks expected before completion"],
+        "dependsOn": []
+      }
+    ]
+  }
+}
+```
 
-Before decomposing, identify the context that makes the plan reviewable:
+Use `finalReviewPolicy: "broad"` only for low-risk, narrow work. Use `"detailed"` for behavioral changes, cross-module edits, migrations, releases, security-sensitive code, or large refactors.
 
-- Relevant source files, tests, docs, configs, CI/release scripts, and prior decisions.
-- Contracts that must not drift: public commands/tools, state paths, package exports, schemas, permissions, install/update behavior.
-- Risks and unknowns that need inspection before implementation, not after.
-- Files or surfaces deliberately out of scope.
+## Feature sizing
 
-Choose `planning.workflowProfile` when the work has a clear shape: `bugfix`, `refactor`, `release`, `review`, or `migration`; otherwise use `default`. The profile tunes readiness diagnostics, not permissions or hard gates.
+- Each feature should have one owner, one coherent outcome, and a validation story.
+- Split by dependency order: foundations before callers, schema before consumers, implementation before docs when docs depend on behavior.
+- Avoid "misc cleanup" features. Tie cleanup to evidence and targets.
+- Keep feature ids stable once the plan is approved.
+- Put scope boundaries in `targets` and expected checks in `validation`.
 
-Record this with existing plan fields: `planning.workflowProfile` for workflow shape, `planning.repoProfile` for repo facts, `planning.research` for inspected references, `plan.requirements` for external/user-visible constraints, `plan.architectureDecisions` for chosen boundaries, feature `fileTargets` / `reviewScope` for owned surfaces, and `plan.notes` for scoped-out or unknown context. Do not invent a new `contextPack` payload field.
+## Approval
 
-After saving the plan, `flow_status`, `flow_context`, and `.flow/active/<session-id>/docs/context.md` expose derived `workflowReadiness`, `contextQuality`, `contextTraceability`, and diagnostics for weak context. Use `flow_context` when you also need the project structure map. Treat `workflowReadiness.state` values starting with `blocked_by_` as workflow blockers that must be resolved or explicitly justified. Treat `contextQuality` as advisory: weak quality should sharpen the plan, but it is not a runtime completion gate.
+After saving, summarize the plan to the user or proceed if they already authorized implementation. Then call `flow_plan_approve`. Approved plans are immutable; changing them later requires reset/closure rather than silent edits.
 
-For broad review, audit, migration, or research-heavy goals, read `../flow/references/parallel-orchestration.md` and `references/parallel-discovery.md` after the serial repo profile. Use read-only workers only for independent slices; synthesize evidence into existing Flow fields, never a new context-pack field or worker-owned Flow state.
-
-For cleanup, refactor, code smell, or "deslop" goals, load the `flow-deslop` skill before decomposing. Its rubrics keep cleanup evidence-backed, behavior-preserving, and scoped to existing Flow plan fields. For frontend, UX, UI, visual polish, responsive layout, or accessibility goals, load the `flow-ui-quality` skill before decomposing so the plan captures design intent and visual verification expectations.
-
-## Decompose the goal
-
-- Normalize the request into: outcome, constraints, done condition, and open questions. Keep unknowns as named gaps, not invented scope.
-- A feature is a vertical slice that is independently completable and independently validatable. If you cannot say how a feature alone will be validated, it is not a feature yet.
-- Typical plans are 1–5 features. Split a feature that hides two unrelated validation stories; merge features that can only be validated together.
-- Order by dependency, riskiest or most unknown first.
-- Validation and tests live inside each feature. Never plan a separate "write tests" or "cleanup" feature.
-- Broad "review and fix the codebase" goals with no concrete findings yet: plan a review-first feature that produces findings, then fix features driven by those findings. Do not plan fixes you have not seen evidence for.
-
-Read `references/planning-examples.md` whenever you draft a multi-feature plan or are unsure about sizing — it shows good and bad plans side by side.
-
-## Save and approve
-
-- `flow_plan_save` persists the draft: goal, constraints, done condition, stack profile, and per-feature outcome, scope, and validation plan.
-- `flow_plan_approve` locks it (optionally approving only a subset of features). After approval the plan is immutable except by explicit reset.
-- Auto-approve only when ALL hold: the user asked for autonomous execution or pre-approved the work; nothing destructive, migratory, or security-sensitive; scope matches what the user literally asked for; the plan is small (roughly ≤3 features). Otherwise present the draft and ask.
-
-Never: auto-approve to keep momentum; pad the plan with scope the user did not ask for; edit an approved plan in place — reset the affected features and save a revision instead.
+See `references/planning-examples.md` for payload examples and decomposition anti-patterns.

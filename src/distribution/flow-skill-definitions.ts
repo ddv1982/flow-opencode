@@ -47,24 +47,22 @@ import flowUiQualityVisualVerificationDoc from "../../skills/flow-ui-quality/ref
 import flowUiQualitySkillDoc from "../../skills/flow-ui-quality/SKILL.md" with {
 	type: "text",
 };
-import {
-	type FlowSkillDefinition,
-	type FlowSkillFile,
-	SKILL_DOCUMENT_FILENAME,
-} from "./sync-types";
 
-export type { FlowSkillDefinition, FlowSkillFile };
+export type FlowSkillFile = {
+	relativePath: string;
+	content: string;
+};
 
-/**
- * The hand-authored skills shipped with the plugin. The markdown is embedded
- * at build time via Bun text imports so the bundled dist/index.js remains
- * self-contained. Source of truth: the `skills/` directory in the repo.
- */
+export type FlowSkillDefinition = {
+	name: string;
+	files: FlowSkillFile[];
+};
+
 export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 	{
 		name: "flow",
 		files: [
-			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowSkillDoc },
+			{ relativePath: "SKILL.md", content: flowSkillDoc },
 			{
 				relativePath: "references/recovery-playbook.md",
 				content: flowRecoveryPlaybookDoc,
@@ -76,23 +74,9 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 		],
 	},
 	{
-		name: "flow-deslop",
-		files: [
-			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowDeslopSkillDoc },
-			{
-				relativePath: "references/smell-rubric.md",
-				content: flowDeslopSmellRubricDoc,
-			},
-			{
-				relativePath: "references/refactor-workflow.md",
-				content: flowDeslopRefactorWorkflowDoc,
-			},
-		],
-	},
-	{
 		name: "flow-plan",
 		files: [
-			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowPlanSkillDoc },
+			{ relativePath: "SKILL.md", content: flowPlanSkillDoc },
 			{
 				relativePath: "references/planning-examples.md",
 				content: flowPlanPlanningExamplesDoc,
@@ -106,21 +90,21 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 	{
 		name: "flow-run",
 		files: [
-			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowRunSkillDoc },
-			{
-				relativePath: "references/audit-rubric.md",
-				content: flowRunAuditRubricDoc,
-			},
+			{ relativePath: "SKILL.md", content: flowRunSkillDoc },
 			{
 				relativePath: "references/validation-rubric.md",
 				content: flowRunValidationRubricDoc,
+			},
+			{
+				relativePath: "references/audit-rubric.md",
+				content: flowRunAuditRubricDoc,
 			},
 		],
 	},
 	{
 		name: "flow-review",
 		files: [
-			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowReviewSkillDoc },
+			{ relativePath: "SKILL.md", content: flowReviewSkillDoc },
 			{
 				relativePath: "references/review-rubric.md",
 				content: flowReviewReviewRubricDoc,
@@ -128,9 +112,23 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 		],
 	},
 	{
+		name: "flow-deslop",
+		files: [
+			{ relativePath: "SKILL.md", content: flowDeslopSkillDoc },
+			{
+				relativePath: "references/smell-rubric.md",
+				content: flowDeslopSmellRubricDoc,
+			},
+			{
+				relativePath: "references/refactor-workflow.md",
+				content: flowDeslopRefactorWorkflowDoc,
+			},
+		],
+	},
+	{
 		name: "flow-ui-quality",
 		files: [
-			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowUiQualitySkillDoc },
+			{ relativePath: "SKILL.md", content: flowUiQualitySkillDoc },
 			{
 				relativePath: "references/ui-rubric.md",
 				content: flowUiQualityUiRubricDoc,

@@ -1,49 +1,39 @@
-# Recovery Playbook
+# Recovery playbook
 
-Flow errors are structured: `status: "error"` plus `summary`, usually
-`errorCode`, `resolutionHint`, `nextCommand`, or `nextRuntimeTool` /
-`nextRuntimeArgs`. Follow the live hint first.
+Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction` that conflicts with memory.
 
-## Close blocked: `unfinished_features`
+## First response
 
-Recover by finishing the listed features, revising the plan if delivery policy
-truly allows deferral, or closing as `deferred`/`abandoned` only when work is
-honestly parked or dropped. Never use alternate closure kinds to dodge work the
-user still expects completed.
+1. Re-anchor with `flow_status`.
+2. Read the returned `summary`, `recovery`, `lastError`, and active feature.
+3. Fix the cause, then retry the smallest valid Flow action.
 
-## Completion rejected
+## Common cases
 
-No state was recorded; fix input and retry. Codes:
+- `missing_session`: start with `flow_plan_save` using the user's goal.
+- `missing_goal`: ask for a concrete goal before planning.
+- `Approved plans cannot be changed`: use `flow_feature_reset` when only affected features need another pass; otherwise close and start a new goal.
+- `No feature is currently running`: call `flow_run_start` before completing.
+- `already in progress`: finish, reset, or block the active feature before starting another.
+- `Completion requires recorded validation evidence`: run real validation and include at least one passing `validationRun`.
+- `Completion requires all recorded validation to pass`: fix failures and rerun. Do not relabel failed checks as passed.
+- `Non-final feature completion requires targeted validation`: use `validationScope: "targeted"` for ordinary features.
+- `Final feature completion requires broad validation`: run the project-level gate and use `validationScope: "broad"`.
+- `Completion requires a passing featureReview`: run or request a real review and include a passing `featureReview` only when there are no blocking findings.
+- `Final feature completion requires a finalReview`: perform final review and include `finalReview`.
+- `Final review depth must match the plan policy`: use `reviewDepth` equal to the approved plan's `finalReviewPolicy`.
+- `Cannot close ... unfinished features`: complete, reset, defer, or abandon honestly. Do not mark completed while work remains.
 
-- `missing_validation_evidence`: run real checks; include command, status,
-  summary.
-- `missing_targeted_validation` / `missing_broad_validation`: set
-  `validationScope` to `targeted` for normal features or `broad` for the final
-  target feature.
-- `failing_validation`: fix, rerun, and reset first when recovery says so.
-- `missing_feature_reviewer_decision` / `missing_final_reviewer_decision`:
-  record the required approved `flow_review_record`.
-- `failing_feature_review` / `failing_final_review`: fix findings, revalidate,
-  rereview, and reset when directed.
-- `missing_final_review_payload`: include a passing `finalReview` on the final
-  target feature.
+## Reset guidance
 
-Do not relabel failures as passes. Same feature, same `errorCode` twice: stop.
+Use `flow_feature_reset` when the active or completed work was built on the wrong assumption, validation revealed a design issue, dependencies need to be rerun, or dependent features must be invalidated. Resetting a feature also resets its dependents.
 
-## `session_artifacts` check failed
+## Closure guidance
 
-Detailed `flow_status` could not load active artifacts. Read the check's
-`summary`, `remediation`, and `details`; inspect `.flow/active/<session-id>/`
-only for this repair case; if unsalvageable, follow remediation, then use
-`flow_session` history/show or start fresh.
+Use `flow_session_close`:
 
-## Approved-plan mutation rejected
+- `completed`: only after all planned features are complete.
+- `deferred`: the user intentionally postpones unfinished work.
+- `abandoned`: the session should be archived without claiming delivery.
 
-Reset affected features, save a revised plan with `flow_plan_save`, reapprove,
-and tell the user what changed.
-
-## General rules
-
-- After any error, re-anchor with `flow_status`.
-- Retry only after fixing the named prerequisite.
-- If this playbook and `resolutionHint` disagree, the hint wins.
+After closure, the active `.flow/session.json` is removed and the archived JSON is stored under `.flow/history/`.

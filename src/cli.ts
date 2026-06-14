@@ -1,65 +1,27 @@
-import { homedir } from "node:os";
-import { uninstallFlow } from "./distribution/uninstall";
+import { uninstallFlowSkills } from "./distribution/sync";
 
-const USAGE = `opencode-plugin-flow — Flow plugin lifecycle commands
-
-Usage:
-  bunx opencode-plugin-flow uninstall [--dry-run]
-
-Commands:
-  uninstall   Remove Flow-owned global skills from ~/.config/opencode/skills/
-              and the pre-npm plugin copy at ~/.config/opencode/plugins/flow.js.
-              Prints the opencode.json cleanup step; never touches files that
-              are not Flow-owned.
-
-Options:
-  --dry-run   Show what would be removed without deleting anything
-  --help      Show this message`;
-
-function writeLine(message: string): void {
-	process.stdout.write(`${message}\n`);
-}
-
-function writeErrorLine(message: string): void {
-	process.stderr.write(`${message}\n`);
-}
-
-async function runCli(argv: string[]): Promise<number> {
-	const args = [...argv];
-	if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-		writeLine(USAGE);
-		return 0;
-	}
-
-	const command = args.shift();
+async function main(argv: string[]): Promise<void> {
+	const command = argv[2];
 	if (command !== "uninstall") {
-		writeErrorLine(`Unknown command: ${command}\n\n${USAGE}`);
-		return 1;
+		process.stderr.write("usage: opencode-plugin-flow uninstall\n");
+		process.exitCode = 2;
+		return;
 	}
-
-	let dryRun = false;
-	for (const argument of args) {
-		if (argument === "--dry-run") {
-			dryRun = true;
-			continue;
-		}
-		writeErrorLine(`Unknown argument: ${argument}\n\n${USAGE}`);
-		return 1;
+	const result = await uninstallFlowSkills();
+	for (const path of result.removed) {
+		process.stdout.write(`Removed Flow skill: ${path}\n`);
 	}
-
-	await uninstallFlow({
-		homeDir: process.env.HOME ?? homedir(),
-		dryRun,
-		logger: writeLine,
-	});
-	return 0;
+	for (const path of result.kept) {
+		process.stdout.write(`Kept non-Flow or user-edited skill: ${path}\n`);
+	}
+	process.stdout.write(
+		'Remove "opencode-plugin-flow" from opencode.json and restart OpenCode.\n',
+	);
 }
 
-// This module is only ever executed as the package bin entry (dist/cli.js);
-// the reusable logic lives in adapters/opencode/uninstall.ts.
-try {
-	process.exitCode = await runCli(process.argv.slice(2));
-} catch (error) {
-	writeErrorLine(error instanceof Error ? error.message : String(error));
+main(process.argv).catch((error) => {
+	process.stderr.write(
+		`${error instanceof Error ? error.message : String(error)}\n`,
+	);
 	process.exitCode = 1;
-}
+});

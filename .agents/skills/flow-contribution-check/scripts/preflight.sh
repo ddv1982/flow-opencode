@@ -122,11 +122,8 @@ git diff --cached --stat
 log "Scan staged index blobs for secrets"
 scan_staged_index_blobs
 
-log "Run architecture seam enforcement"
-bun run check:architecture-seams:enforce
-
-log "Run release hygiene"
-bun run check:release-hygiene
+log "Run full project check"
+bun run check
 
 if [[ "$mode" == "commit" ]]; then
   cat <<'EOF'
@@ -161,23 +158,18 @@ files="$tmp_root/range-files.z"
 write_range_files "$files"
 
 if range_contains "$files" '^(src/runtime/|tests/runtime|tests/completion|tests/.*runtime.*\.test\.ts)'; then
-  log "Run completion-lane focused check"
-  bun run check:completion-lane
+  log "Run runtime focused checks"
+  bun test tests/runtime-gates.test.ts tests/workspace-persistence.test.ts
 fi
 
 if range_contains "$files" '^(src/adapters/opencode/|src/config-shared\.ts|src/config\.ts|tests/config/)'; then
-  log "Run typecheck for adapter/config-sensitive changes"
-  bun run typecheck
+  log "Run distribution and surface focused checks"
+  bun test tests/distribution-and-surface.test.ts
 fi
 
 if range_contains "$files" '^(src/distribution/|src/cli\.ts|package\.json|README\.md|scripts/cross-area/(opencode-smoke|release-smoke|pack-invariants)\.mjs)'; then
-  log "Run build for distribution-sensitive changes"
-  bun run build
-fi
-
-if range_contains "$files" '^(scripts/cross-area/|package\.json|docs/release-process\.md)'; then
-  log "Run architecture metrics report"
-  bun run report:architecture-metrics >/dev/null
+	log "Run build for distribution-sensitive changes"
+	bun run build
 fi
 
 cat <<'EOF'

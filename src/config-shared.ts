@@ -1,23 +1,16 @@
-export type FlowReasoningEffort = "low" | "medium" | "high";
-
 export type FlowPermissionConfig = {
 	edit?: string;
 	bash?: string;
-	external_directory?: string;
 	task?: Record<string, string>;
-} & {
-	// OpenCode per-agent permissions accept glob patterns against tool names
-	// (e.g. "flow_*": "deny"), which platform-enforces read-only subagents.
 	[toolPattern: string]: string | Record<string, string> | undefined;
 };
 
 export type FlowAgentConfig = {
-	mode: "primary" | "all" | "subagent";
+	mode: "subagent";
 	description: string;
 	prompt: string;
 	hidden?: boolean;
 	permission?: FlowPermissionConfig;
-	reasoningEffort?: FlowReasoningEffort;
 };
 
 export type FlowCommandConfig = {
@@ -32,114 +25,82 @@ export type MutableFlowConfig = {
 	command?: Record<string, unknown>;
 };
 
-export const FLOW_REASONING = {
-	fast: "low",
-	balanced: "medium",
-	deep: "high",
-} as const satisfies Record<string, FlowReasoningEffort>;
-
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
 		mode: "subagent",
 		hidden: true,
-		description:
-			"Internal read-only Flow review subagent. Use /flow-review or /flow-auto.",
+		description: "Internal read-only reviewer for Flow-guided work.",
 		prompt:
-			"You are the Flow reviewer, a hidden read-only subagent. Load `flow-review`; call flow_status first. If no active compatible Flow session exists, do advisory review only and do not call flow_review_record. After one successful/no-op flow_review_record, report the verdict and stop.",
-		reasoningEffort: FLOW_REASONING.deep,
-		// Read-only is platform-enforced: no edits, no shell, no subagents, and
-		// no Flow tools except status reads and recording the review decision.
+			"Load `flow-review`. Inspect the current work read-only, report findings, and do not mutate Flow state.",
 		permission: {
 			edit: "deny",
 			bash: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
-			flow_review_record: "allow",
 		},
 	},
 } satisfies Record<string, FlowAgentConfig>;
 
 export const FLOW_CORE_COMMANDS = {
+	"flow-auto": {
+		description: "Drive Flow skills against the minimal runtime ledger",
+		template:
+			"Load the `flow` skill and drive the Flow loop until completion or a real blocker: $ARGUMENTS",
+	},
 	"flow-plan": {
-		description: "Create, update, or approve a Flow plan",
+		description: "Create or approve a Flow plan",
 		template: "Load the `flow-plan` skill and plan: $ARGUMENTS",
 	},
 	"flow-run": {
 		description: "Run one approved Flow feature",
 		template:
-			"Load the `flow-run` skill and execute the next approved Flow feature. $ARGUMENTS",
-	},
-	"flow-auto": {
-		description:
-			"Drive the Flow loop autonomously until completion or a real blocker",
-		template:
-			"Load the `flow` skill and drive the Flow loop (status, plan, run, review) until completion or a real blocker: $ARGUMENTS",
-	},
-	"flow-status": {
-		description: "Inspect the active Flow session and workspace readiness",
-		template:
-			"Call flow_status (detailed) and report session state, readiness checks, and the suggested next step.",
+			"Load the `flow-run` skill and execute the next approved feature. $ARGUMENTS",
 	},
 	"flow-review": {
-		description: "Run a read-only Flow review with a fresh context",
+		description: "Run a read-only Flow review",
 		agent: "flow-reviewer",
 		subtask: true,
 		template: "Load the `flow-review` skill and review: $ARGUMENTS",
 	},
+	"flow-status": {
+		description: "Inspect the active Flow session",
+		template: "Call flow_status and report the session state and next action.",
+	},
 } satisfies Record<string, FlowCommandConfig>;
 
-// Commands retired in v3.1: each was either a duplicate of /flow-status or a
-// thin wrapper over a single tool call the skills already teach (flow_session
-// history/activate/close/show, flow_feature_complete reset). Startup sync and
-// uninstall remove the Flow-owned files earlier releases synced for them.
-export const RETIRED_FLOW_COMMANDS = [
-	"flow-doctor",
-	"flow-history",
-	"flow-reset",
-	"flow-session",
-] as const;
-
-function cloneAgentConfig(agent: FlowAgentConfig) {
-	return {
-		...agent,
-		...(agent.permission
-			? {
-					permission: {
-						...agent.permission,
-						...(agent.permission.task
-							? { task: { ...agent.permission.task } }
-							: {}),
-					},
-				}
-			: {}),
-	};
-}
-
 export function createFlowCoreConfigEntries() {
-	const agent = Object.fromEntries(
-		Object.entries(FLOW_CORE_AGENTS).map(([name, item]) => [
-			name,
-			cloneAgentConfig(item),
-		]),
-	);
-	const command = Object.fromEntries(
-		Object.entries(FLOW_CORE_COMMANDS).map(([name, item]) => [
-			name,
-			{ ...item },
-		]),
-	);
-	return { agent, command };
+	return {
+		agent: Object.fromEntries(
+			Object.entries(FLOW_CORE_AGENTS).map(([name, value]) => {
+				const permission = value.permission
+					? {
+							...value.permission,
+							...(value.permission.task
+								? { task: { ...value.permission.task } }
+								: {}),
+						}
+					: undefined;
+				return [
+					name,
+					{
+						...value,
+						...(permission ? { permission } : {}),
+					},
+				];
+			}),
+		),
+		command: Object.fromEntries(
+			Object.entries(FLOW_CORE_COMMANDS).map(([name, value]) => [
+				name,
+				{ ...value },
+			]),
+		),
+	};
 }
 
 export function applyFlowConfig(config: MutableFlowConfig): void {
 	const entries = createFlowCoreConfigEntries();
-	config.agent = {
-		...(config.agent ?? {}),
-		...entries.agent,
-	};
-	config.command = {
-		...(config.command ?? {}),
-		...entries.command,
-	};
+	config.agent = { ...(config.agent ?? {}), ...entries.agent };
+	config.command = { ...(config.command ?? {}), ...entries.command };
 }

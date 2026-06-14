@@ -1,48 +1,61 @@
 import {
 	resolveFlowPluginVersion,
-	runFlowStartupSync,
-} from "../../distribution/skill-sync";
-import { scheduleFlowUpdateNotice } from "../../distribution/update-notice";
+	runFlowSkillSync,
+} from "../../distribution/sync";
+import { loadSession } from "../../runtime/workspace";
 import { createConfigHook } from "./config";
 import { createFlowLog } from "./logging";
-import type { Hooks, Plugin } from "./sdk";
-import {
-	appendOpenCodeCompactCompactingContext,
-	appendOpenCodeCompactSystemContext,
-} from "./system-context";
-import type { ToolContext } from "./tool-surface/schemas";
+import type { Hooks, Plugin, ToolContext } from "./sdk";
 import { createTools } from "./tools";
 
-function createFlowSystemTransformHook(
-	ctx: Pick<Parameters<Plugin>[0], "worktree" | "directory">,
+async function compactSessionFacts(
+	context: Pick<ToolContext, "worktree" | "directory">,
+): Promise<string | null> {
+	const root = context.worktree ?? context.directory;
+	if (!root) return null;
+	try {
+		const session = await loadSession(root);
+		if (!session) return null;
+		return [
+			"Flow session facts:",
+			`- goal: ${session.goal}`,
+			`- status: ${session.status}`,
+			`- approval: ${session.approval}`,
+			`- active feature: ${session.activeFeatureId ?? "none"}`,
+			`- progress: ${
+				session.plan?.features.filter(
+					(feature) => feature.status === "completed",
+				).length ?? 0
+			}/${session.plan?.features.length ?? 0}`,
+			"Call flow_status before any Flow action.",
+		].join("\n");
+	} catch {
+		return null;
+	}
+}
+
+function createSystemTransformHook(
+	ctx: Pick<ToolContext, "worktree" | "directory">,
 ): NonNullable<Hooks["experimental.chat.system.transform"]> {
 	return async (_input, output) => {
-		await appendOpenCodeCompactSystemContext(ctx, output);
+		const facts = await compactSessionFacts(ctx);
+		if (facts) output.system.push(facts);
 	};
 }
 
 const FlowPlugin: Plugin = async (ctx) => {
 	const log = createFlowLog(ctx);
-	log("info", "Flow plugin initialized.");
-
-	const pluginVersion = resolveFlowPluginVersion();
-	await runFlowStartupSync(pluginVersion, log);
-	// Best-effort, non-blocking: OpenCode never re-resolves cached plugin
-	// installs, so tell the user when a newer release exists.
-	scheduleFlowUpdateNotice(pluginVersion, log);
+	log("info", "Flow v4 plugin initialized.");
+	await runFlowSkillSync(resolveFlowPluginVersion(), log);
 
 	return {
 		config: createConfigHook(ctx),
 		tool: createTools(ctx),
-		hooks: {
-			"experimental.chat.system.transform": createFlowSystemTransformHook(ctx),
-			"experimental.session.compacting": async (
-				_input: unknown,
-				context: ToolContext,
-				output: { context?: string[]; prompt?: string },
-			) => {
-				await appendOpenCodeCompactCompactingContext(context, output);
-			},
+		"experimental.chat.system.transform": createSystemTransformHook(ctx),
+		"experimental.session.compacting": async (_input, output) => {
+			const facts = await compactSessionFacts(ctx);
+			if (!facts) return;
+			output.context = [...(output.context ?? []), facts];
 		},
 	};
 };

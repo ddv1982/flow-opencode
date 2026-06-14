@@ -13,7 +13,7 @@ Use this skill when the Flow work is about improving code quality rather than ad
 - Load `references/smell-rubric.md` when classifying findings or deciding what is worth fixing.
 - Load `references/refactor-workflow.md` before implementing or reviewing non-trivial cleanup.
 - Treat scanner output, metrics, and model impressions as candidates only. A smell becomes actionable after reading the surrounding code, callers, tests, and relevant contracts.
-- Record cleanup context in existing Flow plan fields: `planning.research`, `plan.requirements`, `plan.architectureDecisions`, feature `fileTargets` / `reviewScope`, and `plan.notes`. Do not invent new Flow payload fields.
+- Record cleanup context in existing Flow plan fields: `requirements`, `decisions`, feature `targets`, and feature `validation`. Do not invent new Flow payload fields.
 
 ## Plan cleanup work
 

@@ -1,119 +1,37 @@
-# Development Guide
+# Development
 
-This file is for contributors working on the plugin itself. If you are trying to use Flow inside OpenCode, start with the top-level `README.md`.
-
-Read [`docs/maintainer-contract.md`](maintainer-contract.md) first — it defines what is frozen (persistence safety, schema v1, the hard invariants, the compaction hook) and what is skill-owned. Use [`docs/contributor-map.md`](contributor-map.md) to find the right files and checks for a given change.
-
-This repo's workflow is Bun-first.
-
-## Local workflow
+Flow v4 is intentionally small. The canonical local gate is:
 
 ```bash
 bun install
 bun run check
 ```
 
-`bun run check` is the canonical readiness gate and is intentionally small: typecheck, lint, build, tests, install smoke, and bundle sanity. There are no generation, capture, parity, or drift steps — nothing in this repo is generated from anything else.
+`bun run check` runs typecheck, Biome, build, and the focused test suite.
 
-Before committing or pushing, use the repository-local contribution preflight when available:
-
-```bash
-.agents/skills/flow-contribution-check/scripts/preflight.sh commit
-.agents/skills/flow-contribution-check/scripts/preflight.sh push
-```
-
-The preflight checks whitespace, staged diff hygiene, optional redacted secret scanning when `gitleaks` is installed, architecture seams, release hygiene, and path-sensitive focused checks for outgoing commits. It is a contributor safety rail, not a replacement for the evidence matrix in `.agents/skills/flow-contribution-check/references/validation-matrix.md`.
-
-Useful scripts:
-
-- `bun run build`
-- `bun run typecheck`
-- `bun run test` (focused suites live under `tests/`)
-- `bun run smoke:release` — builds, packs the npm tarball, and runs the install smoke against it (pack → extract → plugin startup → skill sync → uninstall CLI)
-- `bun run checklist:live-opencode` — writes the manual live OpenCode validation checklist under `.release-artifacts/release-smoke/`
-- `bun run report:architecture-metrics` — report-only source-owner, surface, seam, test-count, and built-bundle metrics
-- `bun run uninstall:opencode` — same logic as `bunx opencode-plugin-flow uninstall`
-
-There is no local install script: OpenCode installs the plugin from npm via the `plugin` array in `opencode.json`. To develop against an unpublished build, point a test project's `opencode.json` at a packed tarball (`bun pm pack`) or use the smoke runner. Use the live checklist when you test the actual OpenCode UI/CLI host; generated checklist files are local evidence scaffolding and are not committed by default.
-
-## Architecture in one view
+## Architecture
 
 ```text
-user / slash command / skill-guided agent
-  -> OpenCode adapter tool surface (8 tools)
-  -> runtime application action
-  -> transition policy + hard invariants
-  -> `.flow/**/session.json` snapshot persistence
-  -> derived markdown rendering
+OpenCode command / skill-guided agent
+  -> seven Flow tools
+  -> runtime transitions
+  -> locked atomic .flow/session.json write
 ```
 
-- `skills/` — the six hand-authored skills plus `references/`. This is the instruction surface; commands and agents only point at it.
-- `src/runtime/` — schemas, transitions, the hard invariants, persistence, locking, path/workspace-root safety, rendering.
-- `src/adapters/opencode/` — thin adapter: plugin entry, config-hook injection of commands/agents, the tool surface, the compaction hook. Tools validate payloads and dispatch to runtime actions; they own no workflow policy.
-- `src/distribution/` — startup sync for skills, slash-command markdown files, and the review agent (marker files, backups), plus the uninstall CLI.
+The skills are the product experience. The runtime is only the ledger and hard gate layer.
 
-Live persistence is snapshot-primary: `.flow/**/session.json` is the source of truth, rendered markdown is derived. Unsupported persisted schema versions fail clearly instead of being migrated silently.
+## Editing Skills
 
-## Editing skills
+Skills are source files under `skills/<name>/`. On plugin startup they sync to `~/.config/opencode/skills/<name>/` with a `.flow-skill-version` marker.
 
-Skills are plain markdown checked into `skills/<name>/SKILL.md` (frontmatter: `name` + `description`), with deeper material in `skills/<name>/references/`. There is no build step, no generation, no hash locking — edit the file, that's it.
+Skill changes should preserve the v4 tool surface:
 
-How they reach users:
+- `flow_status`
+- `flow_plan_save`
+- `flow_plan_approve`
+- `flow_run_start`
+- `flow_feature_complete`
+- `flow_feature_reset`
+- `flow_session_close`
 
-1. The files ship inside the npm package.
-2. On plugin startup, `src/distribution/skill-sync.ts` idempotently copies them to `~/.config/opencode/skills/<name>/`, writing a `.flow-skill-version` marker per folder (plugin version plus a sha256 line per shipped file).
-3. Folders without the marker are never touched. If a user edited a Flow-owned file (`SKILL.md` or a `references/` file), the old content is backed up next to it (`SKILL.md.backup`, `references/<name>.md.backup`) before being replaced.
-4. The same startup path syncs thin command files to `~/.config/opencode/commands/` and hidden `flow-reviewer.md` to `~/.config/opencode/agents/`, with sidecar Flow markers and `.backup` protection.
-5. Files synced during init may only be discovered on the next OpenCode start — keep the "restart once after install/update" line in user docs.
-
-Per-project overrides (`.opencode/skills/<name>/SKILL.md`) are a documented user feature; the plugin never writes there.
-
-Guidelines for skill content:
-
-- Keep `SKILL.md` tight (~1–2KB); move methodology and worked examples into `references/` (progressive disclosure).
-- Skills may reference registered tool names but must not invent tools, state transitions, persistence paths, or `.flow/**` write behavior — every state change goes through a tool.
-- Planning/review skills should preserve the context-pack discipline: record inspected files, tests, docs, contracts, risks, workflow profile, and out-of-scope surfaces using existing plan fields (`workflowProfile`, `repoProfile`, `research`, `requirements`, `architectureDecisions`, `fileTargets`, `reviewScope`, `notes`), not a new payload field. `workflowReadiness`, `contextQuality`, and `contextTraceability` are derived from those fields plus execution evidence; do not persist duplicate readiness state.
-- Preserve the signal-authority split from `docs/maintainer-contract.md`: hard gates belong in runtime, `workflowReadiness.state` values starting with `blocked_by_` are workflow blockers that require resolution or explicit justification, and `contextQuality` remains an advisory diagnostic.
-- Parallel orchestration belongs in skill guidance and reference files, not runtime code. It may gather read-only evidence through independent workers, but the manager must synthesize results into existing Flow fields and keep execution one active feature at a time.
-- The tool-name-coverage test fails if a registered tool name appears in no skill. There are no other mechanical skill checks; quality is owned by code review and the golden-transcript evals (manual lane, needs a model key).
-
-## Tool schema note
-
-OpenCode plugin tools take `args` as a raw zod shape, not a wrapped schema object:
-
-```ts
-const FlowRunStartArgsShape = {
-  featureId: z.string().optional(),
-};
-```
-
-Validation is two-layered: raw shapes at the SDK boundary, stricter semantic schemas in `src/runtime/schema.ts`. Keep `zod` aligned with `@opencode-ai/plugin`.
-
-## Testing
-
-The suite is focused on what code actually owns:
-
-- the hard invariants and completion payload gates (validation evidence/scope, `featureReview`, final `finalReview`, strict reviewer decisions)
-- transitions and recovery metadata
-- session persistence, locking, activation, closure, and path/workspace-root safety
-- tool arg shapes and registration
-- install lifecycle: pack, startup skill/command/agent sync, uninstall
-
-```bash
-bun test
-```
-
-Benchmarks under `bench/` stay runnable but are out of `check` and not a merge gate.
-
-### Golden-transcript evals
-
-The driving loop itself is checked by five golden-transcript evals under `evals/golden/`: each one runs `opencode run` headless against a tiny fixture workspace that loads the plugin from this checkout (built `dist/index.js` dropped into the workspace's `.opencode/plugins/`), then asserts observable outcomes from the persisted `.flow/**` state — parsed with the runtime's own `SessionSchema`, never from transcript text.
-
-```bash
-bun run build
-bun run evals:golden                        # needs the opencode CLI and a model key
-bun run evals/golden/runner.ts --list
-bun run evals/golden/runner.ts --dry-run    # harness check, no model key needed
-```
-
-This is a manual/scheduled lane — it tests effectiveness, not synchronization, and is never part of `bun run check` or default CI. The CI-safe piece is `tests/evals-golden-harness.test.ts`, which shape-checks scenarios and fixtures without invoking opencode. Requirements and caveats live in `evals/golden/README.md`.
+Do not teach direct `.flow/**` edits.

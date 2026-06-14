@@ -1,6 +1,19 @@
-# Design note: skills-first architecture
+# ADR 0001: Skills-First Minimal Runtime
 
-This records why Flow is built the way it is, so the reasoning survives even when the
-code moves on.
+Date: 2026-06-14
 
-Flow uses six hand-authored skills as its primary planning, execution, review, recovery, cleanup, and UI-quality guidance, while the plugin code stays a small state backend that owns durable `.flow/**` persistence, schema validation, hard binary invariants, status projection, and compaction context. This replaced the pre-v3 generated prompt/mode/skill projection stack because OpenCode's native skills and per-agent permissions made the duplicate guidance layers more costly than useful; the trade-off is that skill quality is review-owned rather than mechanically parity-tested, while the runtime still enforces the invariants a skill cannot guarantee.
+## Status
+
+Accepted.
+
+## Decision
+
+Flow v4 is a breaking simplification. The plugin keeps only a minimal runtime ledger and hard completion gates. Planning quality, context gathering, validation judgment, review depth, cleanup guidance, UI quality, and recovery choices live in skills.
+
+## Consequences
+
+- v3 sessions and retired tools are not migrated.
+- Runtime exposes seven tools.
+- `.flow/session.json` replaces the v3 active/stored/completed directory layout.
+- `flow_context`, context quality, readiness projections, project maps, feature doc drilldowns, lanes, and decision gates are removed.
+- Review decisions are no longer recorded independently; completion payloads carry `featureReview` and final `finalReview`.

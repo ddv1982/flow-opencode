@@ -1,0 +1,138 @@
+import { describe, expect, test } from "bun:test";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+	flowFeatureComplete,
+	flowPlanApprove,
+	flowPlanSave,
+	flowRunStart,
+	flowSessionClose,
+} from "../src/runtime/api";
+import {
+	assertMutableWorkspaceRoot,
+	loadSession,
+	sessionPath,
+} from "../src/runtime/workspace";
+
+async function tempWorkspace(): Promise<string> {
+	const root = join(tmpdir(), `flow-workspace-${crypto.randomUUID()}`);
+	await mkdir(root, { recursive: true });
+	return root;
+}
+
+function oneFeaturePlan() {
+	return {
+		summary: "Deliver one feature.",
+		overview: "Single feature session.",
+		requirements: [],
+		decisions: [],
+		finalReviewPolicy: "broad" as const,
+		features: [
+			{
+				id: "only-feature",
+				title: "Only feature",
+				summary: "Complete the goal.",
+				targets: ["src/only.ts"],
+				validation: ["full check"],
+				dependsOn: [],
+			},
+		],
+	};
+}
+
+function finalPayload() {
+	return {
+		status: "ok" as const,
+		featureId: "only-feature",
+		summary: "Completed the goal.",
+		artifactsChanged: [{ path: "src/only.ts" }],
+		validationRun: [
+			{
+				command: "bun run check",
+				status: "passed" as const,
+				summary: "Full check passed.",
+			},
+		],
+		validationScope: "broad" as const,
+		featureReview: {
+			status: "passed" as const,
+			summary: "Feature review passed.",
+			blockingFindings: [],
+		},
+		finalReview: {
+			status: "passed" as const,
+			summary: "Final review passed.",
+			blockingFindings: [],
+			reviewDepth: "broad" as const,
+		},
+	};
+}
+
+describe("Flow workspace persistence", () => {
+	test("rejects unsafe workspace roots", () => {
+		expect(() => assertMutableWorkspaceRoot("/")).toThrow();
+		expect(() => assertMutableWorkspaceRoot(homedir())).toThrow();
+	});
+
+	test("rejects duplicate keys in session JSON", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(join(workspace, ".flow"), { recursive: true });
+		await writeFile(
+			sessionPath(workspace),
+			'{"version":2,"version":2}\n',
+			"utf8",
+		);
+
+		await expect(loadSession(workspace)).rejects.toThrow(/duplicate/i);
+	});
+
+	test("archives and clears completed sessions", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Complete and archive one feature",
+			plan: oneFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+		await flowRunStart(workspace, {});
+		await flowFeatureComplete(workspace, finalPayload());
+
+		const close = await flowSessionClose(workspace, {
+			kind: "completed",
+			summary: "Archived.",
+		});
+		expect(close.status).toBe("ok");
+		await expect(stat(sessionPath(workspace))).rejects.toThrow();
+		expect(await loadSession(workspace)).toBeNull();
+
+		const historyFiles = await readdir(join(workspace, ".flow", "history"));
+		expect(historyFiles).toHaveLength(1);
+		expect(historyFiles[0]?.endsWith(".json")).toBe(true);
+		await expect(
+			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
+		).resolves.toContain("session.lock/");
+	});
+
+	test("starting a new goal archives an active completed session", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Complete first goal",
+			plan: oneFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+		await flowRunStart(workspace, {});
+		await flowFeatureComplete(workspace, finalPayload());
+
+		const next = await flowPlanSave(workspace, {
+			goal: "Start next goal",
+			plan: {
+				...oneFeaturePlan(),
+				summary: "Deliver the next goal.",
+			},
+		});
+
+		expect(next.status).toBe("ok");
+		expect((await loadSession(workspace))?.goal).toBe("Start next goal");
+		expect(await readdir(join(workspace, ".flow", "history"))).toHaveLength(1);
+	});
+});

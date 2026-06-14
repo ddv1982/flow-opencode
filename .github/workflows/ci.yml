@@ -6,19 +6,12 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      run_randomized_regression:
-        description: 'Run randomized regression-strength test suite'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
-  workflow-lint:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -28,57 +21,6 @@ jobs:
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspaces" -w /workspaces rhysd/actionlint:1.7.7
 
-  detect-relevant-changes:
-    needs: workflow-lint
-    runs-on: ubuntu-latest
-    outputs:
-      run_ci: ${{ steps.change_flags.outputs.run_ci }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Detect CI-relevant changes
-        if: github.event_name != 'workflow_dispatch'
-        id: change_filter
-        uses: dorny/paths-filter@v4
-        with:
-          filters: |
-            relevant:
-              - 'src/**'
-              - 'tests/**'
-              - 'bench/**'
-              - 'docs/**'
-              - 'scripts/**'
-              - '.github/workflows/**'
-              - 'README.md'
-              - 'CHANGELOG.md'
-              - 'biome.json'
-              - 'package.json'
-              - 'bun.lock'
-              - 'tsconfig.json'
-
-      - name: Resolve CI gate
-        id: change_flags
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "run_ci=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ steps.change_filter.outputs.relevant }}" == "true" ]]; then
-            echo "run_ci=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_ci=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  validate:
-    needs:
-      - workflow-lint
-      - detect-relevant-changes
-    if: needs.detect-relevant-changes.outputs.run_ci == 'true' || github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -92,40 +34,5 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Enforce architecture seams
-        run: bun run check:architecture-seams:enforce
-
-      - name: Run replay/property release gate
-        run: bun run test:replay
-
-      - name: Run typecheck, tests, and build
+      - name: Run checks
         run: bun run check
-
-  randomized-regression:
-    needs:
-      - workflow-lint
-      - detect-relevant-changes
-      - validate
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_randomized_regression == 'true')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.5
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Run randomized regression-strength tests
-        run: bun run test:randomized:regression
