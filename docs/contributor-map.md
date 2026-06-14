@@ -32,7 +32,7 @@ Risk: high — this is the half that must never lie or lose data.
 
 - `src/runtime/schema.ts` — session and tool-payload schemas (persisted schema v1 is frozen)
 - `src/runtime/transitions/` — state transitions, hard invariants, and completion payload gates
-- `src/runtime/domain/` — workflow policy helpers; invariant catalog in `semantic-invariants.ts`
+- `src/runtime/domain/` — workflow policy helpers used by transition and status behavior
 - `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts` — persistence, locking, activation, path-traversal and workspace-root guards
 - `src/runtime/application/` — session mutation actions behind the tool surface
 - rendering of derived markdown views beside each session

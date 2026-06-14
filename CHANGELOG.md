@@ -6,6 +6,8 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.11] - 2026-06-14
+
 Trim-down pass: fix the dead workspace-root guard branch and mark the trusted-roots flag as advisory; remove the self-referential semantic-invariant registries (keeping the behavioral tests); shrink the strict-object JSON scanner to JSON.parse plus a focused duplicate-key check; and right-size the docs (changelog split into a lean log plus a decision journal, release notes consolidated, single-author framing).
 
 ## [3.3.10] - 2026-06-14
@@ -20,7 +22,7 @@ Add `flow_context`, a read-only eighth tool that inspects the active session's c
 
 Derive `workflowReadiness` and `contextTraceability` so status answers whether a session is ready to move and flags scope drift.
 
-## [3.3.7] - 2026-06-13
+## [3.3.7] - 2026-06-14
 
 Render the planned context as a derived `docs/context.md` pack and surface advisory context diagnostics in `/flow-status`.
 

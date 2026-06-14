@@ -21,7 +21,7 @@ If this checklist conflicts with any canonical file above, update this checklist
 ## Current-facing docs hygiene
 
 - Keep detailed command, tool, state-path, gate, and invariant guidance in the canonical docs above.
-- Keep completion-gate wording aligned with `src/runtime/domain/semantic-invariants.ts`; canonical docs must mention validation evidence, validation scope, `featureReview`, final `finalReview`, strict reviewer decisions, and unfinished-feature close blocking.
+- Keep completion-gate wording aligned with the direct runtime invariant tests; canonical docs must mention validation evidence, validation scope, `featureReview`, final `finalReview`, strict reviewer decisions, and unfinished-feature close blocking.
 - Do not duplicate boundary-hotspot tables here; point readers back to the canonical maps.
 - Keep historical evidence (`CHANGELOG.md`, `docs/decisions/decision-log.md`, and `docs/releases/README.md`) labeled as historical unless evidence is freshly re-run and promoted to current guidance.
 

@@ -4,6 +4,29 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.11] - 2026-06-14
+
+Trim the runtime ceremony and make release history lighter
+
+Flow had accumulated two different kinds of maintenance weight: a self-referential semantic-invariant registry that mostly fed tests asserting the registry back against itself, and release documentation that repeated the same long-form notes across `CHANGELOG.md` and one file per release under `docs/releases/`. The workspace-root guard also carried a dead branch that looked like a safety gate but returned `null` on both sides; the actual hidden-root protection lives in the OpenCode adapter permission prompt.
+
+This release removes that ceremony without changing the public workflow surface. The semantic-invariant catalog files are gone, while the direct behavioral tests remain and now carry their small expectation fixtures locally. The strict-object parser delegates syntax and trailing-text validation to `JSON.parse`, keeping only the extra duplicate-key scan that session persistence needs because `JSON.parse` silently keeps the last repeated key. The workspace-root guard now documents that `FLOW_TRUSTED_WORKSPACE_ROOTS` is advisory metadata only; runtime mutation rejects `$HOME` itself, while hidden workspace roots remain gated by the adapter ask-prompt before state-changing tools write `.flow/**`.
+
+The documentation is also right-sized. `CHANGELOG.md` is now a short release index, full release rationale lives in this decision log, and the duplicated per-release files under `docs/releases/` are consolidated into an index. The current-facing maintainer docs no longer point at the deleted semantic-invariant catalog, and the v3.3.7 changelog date is restored to match the historical decision entry.
+
+No commands, tools, agents, state paths, persisted schemas, runtime transition behavior, completion gates, review policy defaults, package exports, public payloads, or skill guidance changed.
+
+Constraint: Remove self-referential maintainer machinery while preserving direct behavioral coverage for runtime-owned invariants
+Constraint: Preserve release history in one long-form journal while keeping the package changelog small enough to scan
+Rejected: Keep the invariant catalog as a source-owned registry | after the direct behavior tests existed, the registry mostly made tests prove registry completeness instead of runtime behavior
+Rejected: Keep one release-note file per version plus the decision journal | duplicating the same Lore entries made documentation heavier without adding release evidence
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the deleted docs and registry files remain recoverable from git history, and the runtime behavior surfaces are unchanged
+Directive: Future invariant changes should update transition/domain behavior and the narrow runtime tests directly; do not reintroduce a registry unless another production caller needs it
+Tested: `bun run report:architecture-metrics`; `bun run check`; `bun run smoke:release`; `bun run check:completion-lane`; `bun run check:release-hygiene`; `bun run check:pack-invariants`; `git diff --check`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes runtime internals, tests, maintainer docs, and release metadata, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.10] - 2026-06-14
 
 Teach Flow to fan out discovery without making execution parallel

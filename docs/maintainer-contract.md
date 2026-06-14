@@ -69,7 +69,7 @@ Use **trusted workspace root** only for metadata derived from `FLOW_TRUSTED_WORK
 - Plugin registration and config injection: `src/index.ts`, `src/adapters/opencode/plugin.ts`, `src/adapters/opencode/config.ts`
 - Tool surface and schemas: `src/adapters/opencode/tools.ts`, `src/adapters/opencode/tool-surface/`
 - Runtime schemas and persisted state: `src/runtime/schema.ts`
-- Transitions and hard invariants: `src/runtime/transitions/`, `src/runtime/domain/` (catalog in `src/runtime/domain/semantic-invariants.ts`)
+- Transitions and hard invariants: `src/runtime/transitions/`, `src/runtime/domain/`, with direct behavior coverage in `tests/runtime/hard-invariants.test.ts`, `tests/runtime/semantic-invariants.test.ts`, and `tests/runtime/final-completion-gates.test.ts`
 - Persistence and workspace-root rules: `src/runtime/session*.ts`, `src/runtime/paths.ts`, `src/runtime/workspace-root.ts`
 - Skills: `skills/<name>/SKILL.md` plus `references/` (checked into the repo, shipped as package files)
 - Skill sync and uninstall: `src/distribution/skill-sync.ts`, `src/distribution/skill-markers.ts`, `src/distribution/uninstall.ts`, `src/cli.ts`
