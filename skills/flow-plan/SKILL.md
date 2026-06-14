@@ -37,6 +37,8 @@ After saving the plan, `flow_status`, `flow_context`, and `.flow/active/<session
 
 For broad review, audit, migration, or research-heavy goals, read `../flow/references/parallel-orchestration.md` and `references/parallel-discovery.md` after the serial repo profile. Use read-only workers only for independent slices; synthesize evidence into existing Flow fields, never a new context-pack field or worker-owned Flow state.
 
+For cleanup, refactor, code smell, or "deslop" goals, load the `flow-deslop` skill before decomposing. Its rubrics keep cleanup evidence-backed, behavior-preserving, and scoped to existing Flow plan fields. For frontend, UX, UI, visual polish, responsive layout, or accessibility goals, load the `flow-ui-quality` skill before decomposing so the plan captures design intent and visual verification expectations.
+
 ## Decompose the goal
 
 - Normalize the request into: outcome, constraints, done condition, and open questions. Keep unknowns as named gaps, not invented scope.

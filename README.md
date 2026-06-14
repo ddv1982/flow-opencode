@@ -2,7 +2,7 @@
 
 `opencode-plugin-flow` adds a resumable planning, execution, validation, and review workflow to OpenCode. Use it when a task is important enough that you want a plan, recorded validation evidence, review gates, and a clear way to resume later.
 
-Flow is skills-first: four hand-authored skills carry the workflow guidance, and a small plugin provides durable `.flow/**` session state plus a few hard, code-enforced invariants.
+Flow is skills-first: six hand-authored skills carry the workflow guidance, and a small plugin provides durable `.flow/**` session state plus a few hard, code-enforced invariants.
 
 ## Quick start
 
@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.18"]
+  "plugin": ["opencode-plugin-flow@3.3.19"]
 }
 ```
 
@@ -41,9 +41,11 @@ On startup the plugin syncs its global skills, commands, and review agent into O
 
 ```text
 ~/.config/opencode/skills/flow/SKILL.md          # driving loop
+~/.config/opencode/skills/flow-deslop/SKILL.md   # cleanup and code-smell discipline
 ~/.config/opencode/skills/flow-plan/SKILL.md     # decomposition heuristics
 ~/.config/opencode/skills/flow-run/SKILL.md      # validation discipline
 ~/.config/opencode/skills/flow-review/SKILL.md   # review rubric
+~/.config/opencode/skills/flow-ui-quality/SKILL.md # UX/UI quality and visual verification
 ~/.config/opencode/commands/flow-auto.md         # slash command pointers
 ~/.config/opencode/agents/flow-reviewer.md       # read-only review agent
 ```
@@ -93,16 +95,18 @@ This removes the Flow-owned global skill folders, command files, agent files, an
 
 ## Skills, commands, and tools
 
-### The four skills
+### The six skills
 
 | Skill | What it carries |
 | --- | --- |
 | `flow` | The driving loop: check status, plan, run, review, repeat; stop conditions, when to ask the user, recovery playbook. |
+| `flow-deslop` | Evidence-backed cleanup, code-smell classification, safe refactor workflow, and AI-slop removal guidance. |
 | `flow-plan` | How to decompose work into features, size them, profile the repo, and when a plan is safe to auto-approve. |
 | `flow-run` | One-feature-at-a-time discipline and what counts as validation evidence. |
 | `flow-review` | Review depth criteria, finding taxonomy, and report format. |
+| `flow-ui-quality` | UX/UI design intent, frontend polish, accessibility, responsive states, and visual verification guidance. |
 
-Deeper methodology (recovery, shared parallel orchestration, worked plan examples, validation, audit, and review rubrics) lives in `references/` files next to the skills and is loaded only when needed.
+Deeper methodology (recovery, shared parallel orchestration, worked plan examples, validation, audit, review, deslop, refactor, UI, and visual verification rubrics) lives in `references/` files next to the skills and is loaded only when needed.
 
 ### Commands
 

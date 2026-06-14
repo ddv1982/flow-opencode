@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.19] - 2026-06-14
+
+Ship deslop and UI-quality skills so cleanup and frontend work get evidence-backed rubrics without adding commands, tools, agents, or runtime state.
+
 ## [3.3.18] - 2026-06-14
 
 Split the context-pack, markdown render, and distribution sync hotspots into smaller owner-named modules while preserving the public package, runtime, and workflow surfaces.

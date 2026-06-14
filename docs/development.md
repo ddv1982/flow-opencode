@@ -47,7 +47,7 @@ user / slash command / skill-guided agent
   -> derived markdown rendering
 ```
 
-- `skills/` — the four hand-authored skills plus `references/`. This is the instruction surface; commands and agents only point at it.
+- `skills/` — the six hand-authored skills plus `references/`. This is the instruction surface; commands and agents only point at it.
 - `src/runtime/` — schemas, transitions, the hard invariants, persistence, locking, path/workspace-root safety, rendering.
 - `src/adapters/opencode/` — thin adapter: plugin entry, config-hook injection of commands/agents, the tool surface, the compaction hook. Tools validate payloads and dispatch to runtime actions; they own no workflow policy.
 - `src/distribution/` — startup sync for skills, slash-command markdown files, and the review agent (marker files, backups), plus the uninstall CLI.

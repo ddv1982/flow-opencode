@@ -4,6 +4,30 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.19] - 2026-06-14
+
+Ship cleanup and UI quality as skills, not runtime policy
+
+Flow's existing planning, execution, and review skills were strong at workflow discipline, validation honesty, and adversarial findings review, but two high-frequency quality lanes still relied on generic model judgment: cleanup/code-smell work and frontend UX/UI polish. That left room for plausible "refactors" that changed behavior, broad style churn disguised as cleanup, and frontend claims that were never checked visually.
+
+This release adds two shipped skills. `flow-deslop` gives Flow an evidence-backed cleanup lane for code smells, AI-slop removal, overengineering reduction, and behavior-preserving refactors. Its references classify actionable smells, name non-smells until proven, and require safe refactor evidence such as callers checked, behavior invariants, validation commands, and refutation of compatibility/generated-code explanations. `flow-ui-quality` gives Flow a frontend quality lane for design intent, visual polish, responsive behavior, accessibility basics, interaction states, and visual verification.
+
+The existing `flow-plan`, `flow-run`, and `flow-review` skills now load those rubrics when the active work is cleanup/refactor or UI/UX. Review stays read-only: UI review assesses recorded browser/screenshot evidence, and read-only reviewers are told not to recreate visual evidence when they lack browser or shell access. Missing or insufficient visual evidence becomes a finding or coverage gap instead of a permission contradiction.
+
+The release deliberately keeps the public runtime surface frozen. No slash commands, tools, agents, state paths, persisted schemas, package exports, runtime transitions, completion gates, review policy defaults, validation strictness, sync ownership marker formats, or dependency versions changed. The only size tradeoff is the intentionally embedded skill/rubric text; bundle sanity now holds the line at 240 KiB and the built bundle is below that cap.
+
+Constraint: Add reusable cleanup and UI methodology without expanding Flow's public command/tool/agent surface
+Constraint: Keep review read-only while making visual evidence requirements explicit
+Rejected: Add `/flow-deslop` or `/flow-ui-review` commands | skill triggering and existing Flow commands cover the workflow without public-surface churn
+Rejected: Add dedicated deslop/UI reviewer agents | new agents would widen config and permission surface for judgment-owned guidance
+Rejected: Convert smell or UI quality into runtime gates | these checks are contextual and belong in skills and review, not hard validators
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the new skills, references, docs, tests, and bundle budget can be reverted without migrating sessions or changing public tools
+Directive: Keep deslop and UI quality in skills/references; runtime should only enforce binary Flow invariants, not subjective cleanup or visual design quality
+Tested: `bun test tests/install.test.ts tests/config/plugin-surface.test.ts`; `bun test tests/cross-area/install-lifecycle.test.ts`; `bun run typecheck`; `bun run lint`; `bun run build`; `bun run check`; `bun run smoke:release`; `bun run report:architecture-metrics`; `git diff --check`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes shipped skill guidance, docs, tests, and release metadata, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.18] - 2026-06-14
 
 Split the maintenance hotspots without changing the contract

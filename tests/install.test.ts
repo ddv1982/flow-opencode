@@ -137,9 +137,16 @@ describe("npm distribution stability surfaces", () => {
 		);
 	});
 
-	test("embeds the four hand-authored skills with their reference files", () => {
+	test("embeds the six hand-authored skills with their reference files", () => {
 		expect(FLOW_SKILL_DEFINITIONS.map((definition) => definition.name)).toEqual(
-			["flow", "flow-plan", "flow-run", "flow-review"],
+			[
+				"flow",
+				"flow-deslop",
+				"flow-plan",
+				"flow-run",
+				"flow-review",
+				"flow-ui-quality",
+			],
 		);
 		for (const definition of FLOW_SKILL_DEFINITIONS) {
 			expect(

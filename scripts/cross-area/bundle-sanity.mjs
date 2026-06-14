@@ -25,9 +25,10 @@ const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // external (npm-resolved). The generated prompt surfaces are gone after the
 // skills-first overhaul; what remains is the runtime plus the embedded skill
 // documents (synced at startup) and the read-only flow_context projection.
-// Hold the line at 215 KB to leave headroom for this product surface without
-// letting prompt-surface or dependency regressions sneak back in.
-const BUNDLE_SIZE_BUDGET_BYTES = 220160; // 215 KiB
+// Hold the line at 240 KB: this includes the intentionally shipped deslop and
+// UI-quality skill rubrics without leaving room for prompt-surface or
+// dependency regressions to sneak back in.
+const BUNDLE_SIZE_BUDGET_BYTES = 245760; // 240 KiB
 
 // The eight canonical tools are the whole registered surface.
 const CANONICAL_TOOL_NAMES = [

@@ -48,9 +48,11 @@ describe("cross-area npm install lifecycle", () => {
 			expect(report.readmePinnedVersion).toBe(report.expectedVersion);
 			expect(report.syncedSkills).toEqual([
 				"flow",
+				"flow-deslop",
 				"flow-plan",
 				"flow-review",
 				"flow-run",
+				"flow-ui-quality",
 			]);
 			expect(report.configAgents).toBe(1);
 			expect(report.configCommands).toBe(5);

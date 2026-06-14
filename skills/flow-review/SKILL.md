@@ -40,6 +40,8 @@ For final review, explicitly compare the planned scope with actual changed artif
 
 For very large reviews, use the read-only pattern in `../flow/references/parallel-orchestration.md`; split independent modules or risk lenses, then synthesize yourself. The reviewer owns severity, dedupe, refutation, and `flow_review_record`.
 
+For cleanup, refactor, code smell, or AI-slop removal claims, load `flow-deslop` and verify the smell was real, the refutation paths were checked, behavior was preserved, and the cleanup did not become unrelated churn. For frontend UX/UI, responsive, accessibility, or visual polish claims, load `flow-ui-quality` and verify the interface against its UI rubric plus recorded browser/screenshot evidence when a local target was available. If the read-only reviewer lacks browser or shell access, do not recreate visual evidence; record missing or insufficient evidence as a finding or coverage gap.
+
 ## Audit deliverables get adversarial review, not citation-checking
 
 When the work under review is itself a findings report (an audit feature, a `goalMode: review` deliverable), verifying that the cited lines exist is not a review — wrong findings cite real code. Your job is to attempt to **refute** each blocking-severity finding by tracing the mitigating paths the author should have checked: callers, the cross-layer counterpart, surrounding guards and resets. A finding you refute, or that carries no guards-checked line, is a blocking finding *against the report* (`needs_fix`: drop or downgrade it before the report ships). The procedure and verdicts are in `references/review-rubric.md` under "Reviewing audit deliverables".

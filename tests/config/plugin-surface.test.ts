@@ -393,7 +393,14 @@ describe("plugin config surface", () => {
 
 	test("every canonical tool name is documented in at least one skill file", async () => {
 		const skillsRoot = join(import.meta.dir, "..", "..", "skills");
-		const skillDirs = ["flow", "flow-plan", "flow-run", "flow-review"];
+		const skillDirs = [
+			"flow",
+			"flow-deslop",
+			"flow-plan",
+			"flow-run",
+			"flow-review",
+			"flow-ui-quality",
+		];
 		const skillSources: string[] = [];
 
 		for (const skillDir of skillDirs) {

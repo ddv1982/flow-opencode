@@ -5,6 +5,15 @@ import flowRecoveryPlaybookDoc from "../../skills/flow/references/recovery-playb
 	type: "text",
 };
 import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
+import flowDeslopRefactorWorkflowDoc from "../../skills/flow-deslop/references/refactor-workflow.md" with {
+	type: "text",
+};
+import flowDeslopSmellRubricDoc from "../../skills/flow-deslop/references/smell-rubric.md" with {
+	type: "text",
+};
+import flowDeslopSkillDoc from "../../skills/flow-deslop/SKILL.md" with {
+	type: "text",
+};
 import flowPlanParallelDiscoveryDoc from "../../skills/flow-plan/references/parallel-discovery.md" with {
 	type: "text",
 };
@@ -27,6 +36,15 @@ import flowRunValidationRubricDoc from "../../skills/flow-run/references/validat
 	type: "text",
 };
 import flowRunSkillDoc from "../../skills/flow-run/SKILL.md" with {
+	type: "text",
+};
+import flowUiQualityUiRubricDoc from "../../skills/flow-ui-quality/references/ui-rubric.md" with {
+	type: "text",
+};
+import flowUiQualityVisualVerificationDoc from "../../skills/flow-ui-quality/references/visual-verification.md" with {
+	type: "text",
+};
+import flowUiQualitySkillDoc from "../../skills/flow-ui-quality/SKILL.md" with {
 	type: "text",
 };
 import {
@@ -54,6 +72,20 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 			{
 				relativePath: "references/parallel-orchestration.md",
 				content: flowParallelOrchestrationDoc,
+			},
+		],
+	},
+	{
+		name: "flow-deslop",
+		files: [
+			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowDeslopSkillDoc },
+			{
+				relativePath: "references/smell-rubric.md",
+				content: flowDeslopSmellRubricDoc,
+			},
+			{
+				relativePath: "references/refactor-workflow.md",
+				content: flowDeslopRefactorWorkflowDoc,
 			},
 		],
 	},
@@ -92,6 +124,20 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 			{
 				relativePath: "references/review-rubric.md",
 				content: flowReviewReviewRubricDoc,
+			},
+		],
+	},
+	{
+		name: "flow-ui-quality",
+		files: [
+			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowUiQualitySkillDoc },
+			{
+				relativePath: "references/ui-rubric.md",
+				content: flowUiQualityUiRubricDoc,
+			},
+			{
+				relativePath: "references/visual-verification.md",
+				content: flowUiQualityVisualVerificationDoc,
 			},
 		],
 	},
