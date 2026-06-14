@@ -45,7 +45,7 @@ Keep Flow's status projections useful without turning them into hidden runtime p
 The supported user/tool surface is:
 
 - Commands: `flow-auto`, `flow-plan`, `flow-run`, `flow-review`, `flow-status`
-- Agent: `flow-reviewer`
+- Agent: hidden/internal `flow-reviewer` subagent
 - Tools: `flow_status`, `flow_context`, `flow_plan_save`, `flow_plan_approve`, `flow_run_start`, `flow_feature_complete`, `flow_review_record`, `flow_session`
 
 Tool names are public contracts. Rename or add them only with matching skill, docs, registration, and tests.

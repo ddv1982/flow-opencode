@@ -44,6 +44,15 @@ const MISSING_SESSION_RESPONSE = {
 	nextCommand: FLOW_PLAN_WITH_GOAL_COMMAND,
 } as const;
 
+const MISSING_REVIEW_SESSION_RESPONSE = {
+	status: "missing_session",
+	summary:
+		"No active Flow session exists, so this reviewer decision cannot be recorded.",
+	recovery:
+		"Use /flow-auto <goal> for gated session-backed work, or /flow-review <goal> for an advisory read-only review.",
+	nextCommand: "/flow-auto <goal>",
+} as const;
+
 type FailedMutationActionName =
 	| "complete_run"
 	| "record_feature_review"
@@ -220,6 +229,7 @@ function reviewerDecisionAction(
 		clearFailedAttemptOnSuccess: {
 			tool: "flow_review_record",
 		},
+		missingResponse: MISSING_REVIEW_SESSION_RESPONSE,
 	};
 }
 

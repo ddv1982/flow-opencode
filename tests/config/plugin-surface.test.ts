@@ -487,7 +487,11 @@ describe("plugin config surface", () => {
 		applyFlowConfig(config);
 
 		expect(config.command?.["flow-review"]?.agent).toBe("flow-reviewer");
-		expect(config.agent?.["flow-reviewer"]?.mode).toBe("all");
+		expect(config.agent?.["flow-reviewer"]?.mode).toBe("subagent");
+		expect(config.agent?.["flow-reviewer"]?.hidden).toBe(true);
+		expect(config.agent?.["flow-reviewer"]?.description).toContain(
+			"Internal read-only",
+		);
 		expect(config.agent?.["flow-reviewer"]?.reasoningEffort).toBe("high");
 		expect(config.agent?.["flow-reviewer"]?.permission?.edit).toBe("deny");
 		expect(config.agent?.["flow-reviewer"]?.permission?.bash).toBe("deny");

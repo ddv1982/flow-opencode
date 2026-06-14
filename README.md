@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.19"]
+  "plugin": ["opencode-plugin-flow@3.3.20"]
 }
 ```
 
@@ -47,7 +47,7 @@ On startup the plugin syncs its global skills, commands, and review agent into O
 ~/.config/opencode/skills/flow-review/SKILL.md   # review rubric
 ~/.config/opencode/skills/flow-ui-quality/SKILL.md # UX/UI quality and visual verification
 ~/.config/opencode/commands/flow-auto.md         # slash command pointers
-~/.config/opencode/agents/flow-reviewer.md       # read-only review agent
+~/.config/opencode/agents/flow-reviewer.md       # hidden read-only review subagent
 ```
 
 **Restart OpenCode once after the first install or after an update** so freshly synced skills, commands, and agents are discovered.
@@ -141,7 +141,7 @@ These eight tools are the whole registered surface — the v2 tool-name redirect
 
 ### Agents
 
-Flow ships one dedicated subagent: `flow-reviewer`, a read-only reviewer used for fresh-context review passes. Its read-only boundary is enforced by OpenCode's native per-agent permissions, not by prompt text. Everything else runs in your normal agent, guided by the skills.
+Flow ships one dedicated hidden subagent: `flow-reviewer`, a read-only reviewer used behind `/flow-review` and Flow's review gates. Its read-only boundary is enforced by OpenCode's native per-agent permissions, not by prompt text. Start user-facing work with `/flow-auto` or `/flow-review`; everything else runs in your normal agent, guided by the skills.
 
 ## What the plugin enforces vs. what skills guide
 

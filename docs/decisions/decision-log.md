@@ -4,6 +4,30 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.20] - 2026-06-14
+
+Hide the reviewer behind the review commands
+
+Flow's dedicated `flow-reviewer` agent is a useful safety boundary: OpenCode enforces it as read-only, and Flow can route `/flow-review` and review gates through a fresh context. Exposing that same agent as a normal selectable mode beside `Build` and `Plan` made it look like a workflow entry point, even though direct selection bypasses the manager loop that creates sessions, plans, validation evidence, and completion gates. In a repository with no active Flow session, that produced only an advisory review and could invite repeated `flow_review_record` attempts against no compatible target.
+
+This release keeps the reviewer, but makes it command-owned infrastructure. The agent config now marks `flow-reviewer` as a hidden `subagent`, the synced markdown emits `hidden: true`, and the description points users to `/flow-review` or `/flow-auto` instead of manual selection. `/flow-review` still routes to the same read-only reviewer with `subtask: true`, while `/flow-auto` remains the managed session-backed entry point for planning, validation, review gates, fixes, and resumability.
+
+The direct-invocation fallback is also clearer. The reviewer prompt and skill now start with `flow_status`; if no active compatible Flow session exists, the reviewer produces an advisory read-only report and does not call `flow_review_record`. If a record call succeeds or is an idempotent no-op, the reviewer is told to report the verdict and stop. The missing-session response for `flow_review_record` now explains that no reviewer decision can be persisted without an active session and points to `/flow-auto <goal>` or `/flow-review <goal>`.
+
+No commands, tools, state paths, persisted schemas, package exports, runtime completion gates, review policy defaults, validation strictness, sync ownership marker formats, or dependency versions changed. The public command and tool surface stays fixed at five commands and eight tools; the single reviewer agent remains installed only so command routing and review gates have the read-only permission boundary they need.
+
+Constraint: Preserve the read-only reviewer safety boundary while removing it as a confusing normal agent-picker entry point
+Constraint: Keep `/flow-review` as the direct user-facing review command and `/flow-auto` as the session-backed workflow entry point
+Rejected: Remove `flow-reviewer` entirely | `/flow-review` and Flow review gates still need a fresh-context read-only agent with platform-enforced permissions
+Rejected: Leave `mode: "all"` and rely on description text | the picker would still present the reviewer as a normal starting mode beside Build and Plan
+Rejected: Add another review command or runtime mode | the existing commands already express the intended entry points
+Confidence: medium-high
+Scope-risk: low
+Reversibility: clean - the agent mode/hidden flag, prompt guidance, docs, tests, and recovery copy can be reverted without migrating sessions or changing tools
+Directive: Keep Flow-owned role agents command-routed and permission-scoped; do not expose internal review lanes as normal user starting modes unless the release note records the tradeoff
+Tested: `bun test tests/config/plugin-surface.test.ts tests/install.test.ts tests/runtime-tools.test.ts tests/runtime-operator-tools.test.ts`; `bun run check`; `bun run smoke:release`; `bun run check:release-hygiene`; `bun run check:pack-invariants`; `git diff --check`
+Not-tested: Live OpenCode UI restart against the release candidate to prove the host hides `flow-reviewer` from the picker; this release changes agent config, synced markdown, reviewer guidance, docs, tests, and release metadata with automated package/build validation only.
+
 ## [3.3.19] - 2026-06-14
 
 Ship cleanup and UI quality as skills, not runtime policy

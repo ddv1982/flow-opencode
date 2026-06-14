@@ -360,9 +360,13 @@ describe("command and agent sync", () => {
 		expect(
 			await readFile(commandMarkerPath(homeDir, "flow-auto"), "utf8"),
 		).toContain("kind=command");
-		expect(
-			await readFile(agentPath(homeDir, "flow-reviewer"), "utf8"),
-		).toContain("permission:");
+		const reviewerAgent = await readFile(
+			agentPath(homeDir, "flow-reviewer"),
+			"utf8",
+		);
+		expect(reviewerAgent).toContain("mode: subagent");
+		expect(reviewerAgent).toContain("hidden: true");
+		expect(reviewerAgent).toContain("permission:");
 		expect(
 			await readFile(agentMarkerPath(homeDir, "flow-reviewer"), "utf8"),
 		).toContain("kind=agent");

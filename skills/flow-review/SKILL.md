@@ -9,6 +9,8 @@ Review is read-only. You report findings and a decision; you never implement fix
 
 If `flow_review_record` is unavailable, the Flow plugin is not loaded: stop and tell the user to check `opencode-plugin-flow` in the `plugin` array of `opencode.json` and restart OpenCode. A review that cannot record its decision must not pose as a Flow review.
 
+Start with `flow_status`. If no active compatible Flow session exists, this is an advisory read-only review only: do not call `flow_review_record`, say that no gated Flow approval was recorded, and recommend `/flow-auto <goal>` when the user wants session-backed planning, validation, review gates, or resumability.
+
 ## Decisions
 
 - **approved** — zero blocking findings, and the evidence actually supports the depth you claim.

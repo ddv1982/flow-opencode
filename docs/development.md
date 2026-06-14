@@ -63,7 +63,7 @@ How they reach users:
 1. The files ship inside the npm package.
 2. On plugin startup, `src/distribution/skill-sync.ts` idempotently copies them to `~/.config/opencode/skills/<name>/`, writing a `.flow-skill-version` marker per folder (plugin version plus a sha256 line per shipped file).
 3. Folders without the marker are never touched. If a user edited a Flow-owned file (`SKILL.md` or a `references/` file), the old content is backed up next to it (`SKILL.md.backup`, `references/<name>.md.backup`) before being replaced.
-4. The same startup path syncs thin command files to `~/.config/opencode/commands/` and `flow-reviewer.md` to `~/.config/opencode/agents/`, with sidecar Flow markers and `.backup` protection.
+4. The same startup path syncs thin command files to `~/.config/opencode/commands/` and hidden `flow-reviewer.md` to `~/.config/opencode/agents/`, with sidecar Flow markers and `.backup` protection.
 5. Files synced during init may only be discovered on the next OpenCode start — keep the "restart once after install/update" line in user docs.
 
 Per-project overrides (`.opencode/skills/<name>/SKILL.md`) are a documented user feature; the plugin never writes there.

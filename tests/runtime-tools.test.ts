@@ -46,7 +46,7 @@ describe("runtime completion and recovery tools", () => {
 					summary: "Looks good.",
 				},
 				"missing_session",
-				undefined,
+				"/flow-auto <goal>",
 			],
 			[
 				"flow_review_record",
@@ -71,7 +71,7 @@ describe("runtime completion and recovery tools", () => {
 					summary: "Looks good.",
 				},
 				"missing_session",
-				undefined,
+				"/flow-auto <goal>",
 			],
 			[
 				"flow_feature_complete",
@@ -98,6 +98,13 @@ describe("runtime completion and recovery tools", () => {
 			expect(parsed.summary).toContain("No active Flow");
 			if (expectedNextCommand) {
 				expect(parsed.nextCommand).toBe(expectedNextCommand);
+			}
+			if (toolName === "flow_review_record") {
+				expect(parsed.summary).toContain(
+					"reviewer decision cannot be recorded",
+				);
+				expect(parsed.recovery).toContain("/flow-auto <goal>");
+				expect(parsed.recovery).toContain("/flow-review <goal>");
 			}
 		}
 	});

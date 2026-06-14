@@ -12,9 +12,10 @@ export type FlowPermissionConfig = {
 };
 
 export type FlowAgentConfig = {
-	mode: "primary" | "all";
+	mode: "primary" | "all" | "subagent";
 	description: string;
 	prompt: string;
+	hidden?: boolean;
 	permission?: FlowPermissionConfig;
 	reasoningEffort?: FlowReasoningEffort;
 };
@@ -39,10 +40,12 @@ export const FLOW_REASONING = {
 
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
-		mode: "all",
-		description: "Review Flow work read-only and record a reviewer decision.",
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Internal read-only Flow review subagent. Use /flow-review or /flow-auto.",
 		prompt:
-			"You are the Flow reviewer. Load the `flow-review` skill, review the requested work read-only, then record your decision with flow_review_record.",
+			"You are the Flow reviewer, a hidden read-only subagent. Load `flow-review`; call flow_status first. If no active compatible Flow session exists, do advisory review only and do not call flow_review_record. After one successful/no-op flow_review_record, report the verdict and stop.",
 		reasoningEffort: FLOW_REASONING.deep,
 		// Read-only is platform-enforced: no edits, no shell, no subagents, and
 		// no Flow tools except status reads and recording the review decision.

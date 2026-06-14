@@ -42,6 +42,7 @@ export function renderFlowAgentMarkdown(agent: FlowAgentConfig): string {
 		"---",
 		`description: ${JSON.stringify(agent.description)}`,
 		`mode: ${agent.mode}`,
+		...(agent.hidden === undefined ? [] : [`hidden: ${agent.hidden}`]),
 		...(agent.reasoningEffort
 			? [`reasoningEffort: ${agent.reasoningEffort}`]
 			: []),

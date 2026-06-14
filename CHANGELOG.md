@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.20] - 2026-06-14
+
+Hide the Flow reviewer behind `/flow-review` and `/flow-auto`, keeping direct reviewer selection advisory instead of a confusing session entry point.
+
 ## [3.3.19] - 2026-06-14
 
 Ship deslop and UI-quality skills so cleanup and frontend work get evidence-backed rubrics without adding commands, tools, agents, or runtime state.
