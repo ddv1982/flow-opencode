@@ -1,6 +1,13 @@
 # Changelog
 
+One short line per release. For the full rationale behind each entry, see the
+commit history and review evidence.
+
 ## [Unreleased]
+
+## [4.0.1] - 2026-06-15
+
+Teach Flow to fan out through named evidence, validation, audit, review, and candidate workers while keeping runtime state changes manager-owned.
 
 ## [4.0.0] - 2026-06-14
 

@@ -55,6 +55,10 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 - Cleanup/refactor: load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved.
 - UI/frontend: load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available.
 - Audit reports: use `flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
-- Large reviews: use `../flow/references/parallel-orchestration.md` for read-only slices, then synthesize and own the verdict yourself.
+- Large reviews: use `../flow/references/parallel-orchestration.md` for
+  read-only slices by changed-file group, risk lens, or validation surface.
+  Use the named review, audit, evidence, or validation agents from that
+  reference instead of generic subagents. Synthesize the handoffs yourself; only
+  the manager returns the final `featureReview` or `finalReview` payload.
 
 Never approve to unblock completion, fix findings in the review pass, or vouch for validation you did not inspect.

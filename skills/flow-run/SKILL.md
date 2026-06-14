@@ -32,6 +32,17 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Non-final features complete with `validationScope: "targeted"`.
 - The final feature must run a broad project-level gate and use `validationScope: "broad"`.
 
+For broad validation research, risky changes, or unclear coverage, use
+`../flow/references/parallel-orchestration.md` to fan out named Flow workers.
+Use the mode-to-agent mapping in that reference instead of generic subagents.
+Workers may report command output they actually ran or propose focused checks;
+the manager decides what is strong enough to record.
+
+For independent implementation attempts, use candidate workers only with
+explicit user authorization plus isolated worktrees or exact non-overlapping
+path ownership. Treat their output as candidate patches. The manager inspects,
+merges, validates, and records Flow state serially.
+
 ## Review and complete
 
 Before `flow_feature_complete`, obtain a `featureReview` payload. Load `flow-review`; for read-only subagent reviews, the manager receives the payload and records it.

@@ -29,6 +29,14 @@ function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
 }
 
+const FLOW_AGENT_NAMES = [
+	"flow-audit-worker",
+	"flow-candidate-worker",
+	"flow-evidence-worker",
+	"flow-reviewer",
+	"flow-validation-worker",
+] as const;
+
 describe("Flow distribution and plugin surface", () => {
 	test("exposes the seven-tool v4 surface", () => {
 		expect(Object.keys(createTools({})).sort()).toEqual([
@@ -42,8 +50,11 @@ describe("Flow distribution and plugin surface", () => {
 		]);
 	});
 
-	test("injects only minimal commands and a read-only reviewer", () => {
+	test("injects only minimal commands and hidden Flow workers", () => {
 		const config = createFlowCoreConfigEntries();
+		expect(Object.keys(config.agent).sort()).toEqual(
+			[...FLOW_AGENT_NAMES].sort(),
+		);
 		expect(Object.keys(config.command).sort()).toEqual([
 			"flow-auto",
 			"flow-plan",
@@ -56,10 +67,67 @@ describe("Flow distribution and plugin surface", () => {
 			permission: {
 				edit: "deny",
 				bash: "deny",
+				task: { "*": "deny" },
 				"flow_*": "deny",
 				flow_status: "allow",
 			},
 		});
+		expect(config.agent["flow-evidence-worker"]).toMatchObject({
+			mode: "subagent",
+			hidden: true,
+			permission: {
+				edit: "deny",
+				bash: "deny",
+				task: { "*": "deny" },
+				"flow_*": "deny",
+				flow_status: "allow",
+			},
+		});
+		expect(config.agent["flow-validation-worker"]).toMatchObject({
+			mode: "subagent",
+			hidden: true,
+			permission: {
+				edit: "deny",
+				bash: "ask",
+				task: { "*": "deny" },
+				"flow_*": "deny",
+				flow_status: "allow",
+			},
+		});
+		expect(config.agent["flow-audit-worker"]).toMatchObject({
+			mode: "subagent",
+			hidden: true,
+			permission: {
+				edit: "deny",
+				bash: "ask",
+				task: { "*": "deny" },
+				"flow_*": "deny",
+				flow_status: "allow",
+			},
+		});
+		expect(config.agent["flow-candidate-worker"]).toMatchObject({
+			mode: "subagent",
+			hidden: true,
+			permission: {
+				edit: "ask",
+				bash: "ask",
+				task: { "*": "deny" },
+				"flow_*": "deny",
+				flow_status: "allow",
+			},
+		});
+	});
+
+	test("documents every injected Flow worker for parallel orchestration", async () => {
+		const config = createFlowCoreConfigEntries();
+		const orchestration = await readFile(
+			"skills/flow/references/parallel-orchestration.md",
+			"utf8",
+		);
+
+		for (const agentName of Object.keys(config.agent)) {
+			expect(orchestration).toContain(`\`${agentName}\``);
+		}
 	});
 
 	test("appends session facts in system and compaction hooks", async () => {
@@ -180,7 +248,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.0.0");
+			expect(resolveFlowPluginVersion()).toBe("4.0.1");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

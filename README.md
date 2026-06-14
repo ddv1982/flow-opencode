@@ -10,7 +10,7 @@ Add Flow to your OpenCode config:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.0.0"]
+  "plugin": ["opencode-plugin-flow@4.0.1"]
 }
 ```
 

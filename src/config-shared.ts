@@ -40,6 +40,66 @@ export const FLOW_CORE_AGENTS = {
 			flow_status: "allow",
 		},
 	},
+	"flow-evidence-worker": {
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Internal read-only evidence worker for Flow planning and execution support.",
+		prompt:
+			"Use Flow evidence mode. Inspect only the assigned slice, do not edit files, do not call state-changing Flow tools, and return scope, evidence inspected, findings or facts, gaps, and suggested Flow follow-ups.",
+		permission: {
+			edit: "deny",
+			bash: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+			flow_status: "allow",
+		},
+	},
+	"flow-validation-worker": {
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Internal validation worker for Flow check selection and command evidence.",
+		prompt:
+			"Use Flow validation mode. Run only manager-specified commands or propose focused checks, do not edit files, do not call state-changing Flow tools, and report exact command, status, raw outcome summary, coverage, and gaps.",
+		permission: {
+			edit: "deny",
+			bash: "ask",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+			flow_status: "allow",
+		},
+	},
+	"flow-audit-worker": {
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Internal read-only audit worker for refuted or surviving finding candidates.",
+		prompt:
+			"Use Flow audit mode. Inspect only the assigned slice, actively refute candidate findings before reporting them, do not edit files, do not call state-changing Flow tools, and return evidence, guards checked, gaps, and follow-ups.",
+		permission: {
+			edit: "deny",
+			bash: "ask",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+			flow_status: "allow",
+		},
+	},
+	"flow-candidate-worker": {
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Internal candidate implementation worker for isolated Flow worktrees or exact non-overlapping path ownership.",
+		prompt:
+			"Use Flow candidate-implementation mode only when the manager assigned an isolated worktree or exact non-overlapping path ownership. Do not edit .flow/**, do not call state-changing Flow tools, do not complete Flow state, and return changed or proposed patch, verification run, merge risks, and manager follow-ups.",
+		permission: {
+			edit: "ask",
+			bash: "ask",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+			flow_status: "allow",
+		},
+	},
 } satisfies Record<string, FlowAgentConfig>;
 
 export const FLOW_CORE_COMMANDS = {
