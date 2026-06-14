@@ -71,7 +71,19 @@ function stackProfileEntry(name: string) {
 }
 
 async function collectTypeScriptFiles(directory: string): Promise<string[]> {
-	const entries = await readdir(directory, { withFileTypes: true });
+	let entries: Array<{
+		name: string;
+		isDirectory: () => boolean;
+		isFile: () => boolean;
+	}>;
+	try {
+		entries = await readdir(directory, { withFileTypes: true });
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return [];
+		}
+		throw error;
+	}
 	const nested = await Promise.all(
 		entries.map(async (entry) => {
 			const path = join(directory, entry.name);

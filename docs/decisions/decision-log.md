@@ -4,6 +4,27 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.12] - 2026-06-14
+
+Fix-forward the clean-checkout release failure
+
+The `v3.3.11` tag correctly carried the trim-down release metadata and local validation passed, but the hosted release workflow failed during `bun run check` on GitHub. The failure was a clean-checkout difference: the deleted `src/core/protocols/semantic-invariants.ts` file left an empty `src/core` directory locally, but Git does not materialize empty directories, so the plugin-surface guard tried to scan a missing `src/core` path and failed with `ENOENT`.
+
+This release fixes that guard to treat a missing source-owner directory the same as an empty directory. That matches the actual invariant after the trim-down: `src/core` is a reserved seam with no current files, and future files under it should still be scanned for adapter imports when the directory exists.
+
+No runtime behavior, commands, tools, agents, state paths, persisted schemas, completion gates, review policy defaults, package exports, public payloads, or skill guidance changed beyond the `3.3.11` trim-down release contents.
+
+Constraint: Preserve immutable release tags by publishing a fix-forward patch instead of moving `v3.3.11`
+Constraint: Keep the core/adapters dependency guard active for future `src/core` files while allowing today's empty clean checkout
+Rejected: Force-move or delete `v3.3.11` | released tags are audit evidence even when the hosted workflow fails
+Rejected: Recreate `src/core` with a placeholder file | that would preserve a directory solely for a test helper and make the source tree noisier after deleting the protocol module
+Confidence: high
+Scope-risk: low
+Reversibility: clean - this is a test-helper tolerance plus version and release-note metadata
+Directive: Directory-scanning guard tests must tolerate missing reserved source-owner directories when those owners are intentionally empty
+Tested: `bun test tests/config/plugin-surface.test.ts`; `bun run check`; `bun run smoke:release`; `bun run check:pack-invariants`; `git diff --check`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; the hosted `v3.3.11` release workflow failed before publish, and this fix-forward is verified by automated local and hosted release gates.
+
 ## [3.3.11] - 2026-06-14
 
 Trim the runtime ceremony and make release history lighter
