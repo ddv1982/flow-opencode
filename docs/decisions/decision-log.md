@@ -4,6 +4,29 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.18] - 2026-06-14
+
+Split the maintenance hotspots without changing the contract
+
+Flow's runtime had three source files that had become harder to review than their responsibilities required. `src/runtime/context-pack.ts` mixed context facts, traceability, diagnostics, quality scoring, readiness projection, and final projection assembly. `src/runtime/render.ts` mixed markdown text helpers, evidence formatting, feature/index/context rendering, and filesystem writes. `src/distribution/skill-sync.ts` mixed embedded skill definitions, path/version helpers, skill-folder sync, command/agent markdown sync, startup logging, and pre-npm detection.
+
+This release splits those files by reason to change while keeping their old import paths as compatibility facades. Context-pack internals now live under `src/runtime/context-pack/**` as facts, traceability, diagnostics, quality, readiness, projection, and types. Rendering internals now live under `src/runtime/render/**` as markdown helpers, evidence formatting, feature/index/context-pack renderers, and session doc IO. Distribution sync internals now live under focused distribution modules for embedded skill definitions, skill folder sync, managed markdown sync, startup sync, path/version helpers, and shared sync types/utilities.
+
+The simplification is intentionally internal. The public package export remains root-only, the OpenCode-facing surface remains five commands, one agent, and eight tools, and the stable internal import facades still expose `buildContextPackProjection`, the render functions, and the distribution sync helpers used by adapters, tests, and uninstall. No commands, tools, agents, state paths, persisted schemas, package exports, runtime transitions, completion gates, review policy defaults, validation strictness, sync ownership marker formats, installed skill content, or command/agent generated markdown changed.
+
+The architecture metrics now show the prior hotspots gone from the largest-file list: the facade files are small, and the largest extracted files are owner-named modules around the 260-300 line range. The bundle grows only from splitting modules, not from new runtime dependencies or public surface.
+
+Constraint: Reduce review and maintenance complexity without widening the public workflow surface or package API
+Constraint: Preserve existing import routes through compatibility facades so adapters, tests, and uninstall behavior do not churn
+Rejected: Keep the large files and rely on comments | the file boundaries themselves now encode ownership and make future changes easier to localize
+Rejected: Add new architecture owners or public deep imports | this is an internal organization change, not a package-boundary change
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the extracted modules can be folded back into the facades without migrating state or changing public tools
+Directive: Keep context-pack policy changes in the context-pack projection modules, markdown rendering changes in render modules, and install/sync lifecycle changes in distribution sync modules; preserve facade exports unless there is a deliberate public-surface review
+Tested: `bun run check`; `bun run smoke:release`; `bun run report:architecture-metrics`; `git diff --check`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes internal module layout and release metadata, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.17] - 2026-06-14
 
 Make parallel skill work one shared protocol

@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.18] - 2026-06-14
+
+Split the context-pack, markdown render, and distribution sync hotspots into smaller owner-named modules while preserving the public package, runtime, and workflow surfaces.
+
 ## [3.3.17] - 2026-06-14
 
 Teach every Flow skill to use one shared read-only parallel orchestration protocol, bundle the shared references, and lock recovery-code documentation to the runtime matrix.
