@@ -4,6 +4,31 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.22] - 2026-06-14
+
+Let strict hosts require both reviewer envelopes without weakening runtime parsing
+
+The nested reviewer-record envelope from `3.3.21` made the two review payload families explicit, but it exposed a second host/runtime mismatch. A strict OpenCode schema path can require every property in a tool's generated argument object. That means `flow_review_record` may arrive with both top-level envelope keys present even though only one review decision is valid for the selected `scope`. When the inactive key was omitted, the host could reject the call before Flow saw it; when the inactive key was filled with an object, Flow correctly rejected the wrong-scope object. In a strict final-review policy this left `lastReviewerDecision` unset and completion blocked with `missing_final_reviewer_decision`, even when the reviewer had a valid final verdict and validation evidence.
+
+This release keeps the single reviewer-record tool and the explicit nested payloads, but gives strict hosts one harmless value for the inactive sibling: `null`. The host-facing schema now describes both `featureReview` and `finalReview` as nullable optional envelopes. The runtime parser still branches on `scope`, still requires the matching active envelope, still validates through the strict runtime reviewer schemas, and still rejects an object in the inactive envelope. The skill and rubric examples now teach callers to omit the inactive envelope when the host allows omission, or set it to `null` when the host requires both keys.
+
+The fix deliberately does not make reviewer decisions looser. Feature review payloads cannot carry final-only fields, final review payloads cannot name a feature, legacy flat reviewer payloads remain rejected, and cross-scope object envelopes still fail before persistence. The only new accepted shape is `finalReview: null` beside a valid feature review, or `featureReview: null` beside a valid final review.
+
+No commands, tools, agents, state paths, persisted session schemas, package exports, runtime completion gates, review policy defaults, sync ownership marker formats, install behavior, or dependency versions changed. The public behavior change is limited to the `flow_review_record` argument schema and the shipped review guidance for strict hosts.
+
+Constraint: Unblock strict OpenCode host schemas without splitting the public reviewer tool or weakening strict runtime reviewer schemas
+Constraint: Preserve one active review payload per call and reject wrong-scope object envelopes before persistence
+Rejected: Keep inactive envelopes optional only | strict generated host schemas can require both properties and block the call before runtime parsing
+Rejected: Accept and ignore object-valued inactive envelopes | that would hide cross-scope payload confusion and make review evidence ambiguous
+Rejected: Split the tool into separate feature and final review tools | that would widen the public tool surface again for a host-schema workaround
+Rejected: Replace the structured payloads with an opaque JSON blob | that would weaken host hints and move schema errors farther from the call site
+Confidence: high
+Scope-risk: medium
+Reversibility: clean - the nullable inactive-envelope allowance, skill wording, and focused tests can be reverted without migrating persisted sessions because stored reviewer decisions keep the same runtime shape
+Directive: When one OpenCode tool fronts multiple strict runtime payload families, keep the active payload strict and use `null` rather than ignored objects for host-required inactive siblings
+Tested: `bun test tests/runtime/plan-and-tool-schema-contracts.test.ts`; `bun test tests/runtime-tools.test.ts tests/runtime-tools-metadata.test.ts`; `bun run typecheck`; `bun run check:completion-lane`; `bun run build`; `bun run check`; `bun run smoke:release`; `git diff --check`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate to exercise a host-required nullable inactive envelope in the real UI; this release changes tool argument schema, review skill guidance, tests, and release metadata with automated package/build validation only.
+
 ## [3.3.21] - 2026-06-14
 
 Nest reviewer-record payloads instead of teaching a flat schema to guess

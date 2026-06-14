@@ -75,7 +75,8 @@ evidence-check: verdict on the validation evidence vs the validation rubric
 ## Recording the decision: `flow_review_record` shapes
 
 A feature decision uses `scope: "feature"` and puts the feature payload under
-`featureReview`:
+`featureReview`. Omit `finalReview`, or set it to `null` if the host schema
+requires the inactive envelope:
 
 ```json
 {
@@ -96,9 +97,10 @@ A feature decision uses `scope: "feature"` and puts the feature payload under
 ```
 
 A final decision uses `scope: "final"` and puts the session-level payload under
-`finalReview`. It omits `featureId`; `reviewDepth` must equal the plan's
-`deliveryPolicy.finalReviewPolicy` (`broad` or `detailed`) or the runtime
-rejects completion:
+`finalReview`. Omit `featureReview`, or set it to `null` if the host schema
+requires the inactive envelope. It omits `featureId`; `reviewDepth` must equal
+the plan's `deliveryPolicy.finalReviewPolicy` (`broad` or `detailed`) or the
+runtime rejects completion:
 
 ```json
 {

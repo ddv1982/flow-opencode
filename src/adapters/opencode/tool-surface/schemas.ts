@@ -151,8 +151,8 @@ const FlowReviewRecordFinalPayloadSchema =
 // structural only; review quality judgment lives in the flow-review skill.
 export const FlowReviewRecordArgsShape = {
 	scope: z.enum(["feature", "final"]),
-	featureReview: FlowReviewRecordFeaturePayloadSchema.optional(),
-	finalReview: FlowReviewRecordFinalPayloadSchema.optional(),
+	featureReview: FlowReviewRecordFeaturePayloadSchema.nullable().optional(),
+	finalReview: FlowReviewRecordFinalPayloadSchema.nullable().optional(),
 };
 
 const FlowReviewRecordScopeSchema = z.object({
@@ -163,12 +163,14 @@ const FlowReviewRecordFeatureEnvelopeSchema = z
 	.object({
 		scope: z.literal("feature"),
 		featureReview: FlowReviewRecordFeaturePayloadSchema,
+		finalReview: z.null().optional(),
 	})
 	.strict();
 
 const FlowReviewRecordFinalEnvelopeSchema = z
 	.object({
 		scope: z.literal("final"),
+		featureReview: z.null().optional(),
 		finalReview: FlowReviewRecordFinalPayloadSchema,
 	})
 	.strict();

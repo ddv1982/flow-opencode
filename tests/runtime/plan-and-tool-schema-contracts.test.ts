@@ -1,7 +1,11 @@
 // Owns plan graph, feature-id, reviewer-tool, and response-shape coverage
 // previously grouped in tests/runtime-completion-contracts.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
-import { FlowReviewRecordArgsSchema } from "../../src/adapters/opencode/tool-surface/schemas";
+import { z } from "zod";
+import {
+	FlowReviewRecordArgsSchema,
+	FlowReviewRecordArgsShape,
+} from "../../src/adapters/opencode/tool-surface/schemas";
 import { createSession, saveSession } from "../../src/runtime/lifecycle";
 import {
 	applyPlan,
@@ -216,6 +220,72 @@ describe("runtime plan and tool schema contracts", () => {
 		);
 	});
 
+	test("reviewer decision tool accepts null inactive envelopes from strict hosts", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		await saveSession(worktree, started.value.session);
+
+		const featureResponse = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Feature state looks good.",
+				},
+				finalReview: null,
+			},
+			toolContext(worktree),
+		);
+
+		const featureParsed = JSON.parse(featureResponse);
+		expect(featureParsed.status).toBe("ok");
+		expect(featureParsed.session.lastReviewerDecision).toMatchObject({
+			scope: "feature",
+			featureId: "setup-runtime",
+			status: "approved",
+		});
+
+		const finalResponse = await tools.flow_review_record.execute(
+			{
+				scope: "final",
+				featureReview: null,
+				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: ["changed_files", "validation_evidence"],
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					status: "approved",
+					summary: "Final state looks good.",
+				},
+			},
+			toolContext(worktree),
+		);
+
+		const finalParsed = JSON.parse(finalResponse);
+		expect(finalParsed.status).toBe("ok");
+		expect(finalParsed.session.lastReviewerDecision).toMatchObject({
+			scope: "final",
+			status: "approved",
+			reviewDepth: "detailed",
+		});
+	});
+
 	test("reviewer decision adapter returns feature decisions from nested payloads", () => {
 		const parsed = FlowReviewRecordArgsSchema.parse({
 			scope: "feature",
@@ -232,6 +302,52 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(parsed).not.toHaveProperty("reviewDepth");
 		expect(parsed).not.toHaveProperty("reviewedSurfaces");
 		expect(parsed).not.toHaveProperty("evidenceRefs");
+	});
+
+	test("reviewer decision host schema permits null inactive envelopes", () => {
+		const jsonSchema = z.toJSONSchema(z.object(FlowReviewRecordArgsShape));
+		const properties = jsonSchema.properties ?? {};
+		const featureReview = properties.featureReview as
+			| { anyOf?: Array<{ type?: string }> }
+			| undefined;
+		const finalReview = properties.finalReview as
+			| { anyOf?: Array<{ type?: string }> }
+			| undefined;
+
+		expect(featureReview?.anyOf?.some((item) => item.type === "null")).toBe(
+			true,
+		);
+		expect(finalReview?.anyOf?.some((item) => item.type === "null")).toBe(true);
+	});
+
+	test("reviewer decision tool rejects object-valued inactive envelopes", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Feature state looks good.",
+				},
+				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: ["changed_files"],
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					status: "approved",
+					summary: "Wrong inactive envelope.",
+				},
+			} as never,
+			toolContext(makeTempDir()),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("finalReview");
 	});
 
 	test("reviewer decision tool rejects legacy flat feature review payloads", async () => {

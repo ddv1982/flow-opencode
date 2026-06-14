@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.22] - 2026-06-14
+
+Let strict OpenCode hosts require both `flow_review_record` envelopes by accepting `null` for the inactive sibling while preserving wrong-scope rejection.
+
 ## [3.3.21] - 2026-06-14
 
 Nest `flow_review_record` payloads under `featureReview` or `finalReview` so the host schema is simple and the runtime reviewer schemas stay strict.
