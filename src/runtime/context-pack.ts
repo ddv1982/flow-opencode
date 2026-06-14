@@ -1,3 +1,9 @@
+import {
+	artifactMatchesAnyTarget,
+	isCatchAllContextTarget,
+	normalizeContextPath,
+} from "./context-paths";
+import type { ProjectStructureMapProjection } from "./project-structure-map";
 import type { Feature, Session } from "./schema";
 
 export type ContextDiagnosticSeverity = "info" | "warn";
@@ -53,6 +59,20 @@ export type ContextTraceabilityProjection = {
 	features: FeatureTraceabilityProjection[];
 };
 
+export type ContextQualityCheckStatus = "pass" | "warn" | "fail";
+export type ContextQualityCheck = {
+	id: string;
+	status: ContextQualityCheckStatus;
+	weight: number;
+	summary: string;
+};
+
+export type ContextQualityProjection = {
+	score: number;
+	rating: "strong" | "adequate" | "weak";
+	checks: ContextQualityCheck[];
+};
+
 export type WorkflowReadinessProjection = {
 	state: WorkflowReadinessState;
 	blocking: Array<{
@@ -72,6 +92,7 @@ export type WorkflowReadinessProjection = {
 export type ContextPackProjection = {
 	sessionId: string;
 	goal: string;
+	workflowProfile: string;
 	repoProfile: string[];
 	research: string[];
 	requirements: string[];
@@ -81,8 +102,10 @@ export type ContextPackProjection = {
 	changedArtifacts: string[];
 	validationCommands: string[];
 	diagnostics: ContextDiagnostic[];
+	quality: ContextQualityProjection;
 	traceability: ContextTraceabilityProjection;
 	workflowReadiness: WorkflowReadinessProjection;
+	projectStructure?: ProjectStructureMapProjection;
 };
 
 function uniqueStrings(values: string[]): string[] {
@@ -137,33 +160,12 @@ function plannedContextTargets(features: Feature[]): Set<string> {
 	return new Set(features.flatMap((feature) => featureContextTargets(feature)));
 }
 
-function artifactMatchesTarget(path: string, target: string): boolean {
-	if (path === target) {
-		return true;
-	}
-	if (target.endsWith("/") && path.startsWith(target)) {
-		return true;
-	}
-	if (target.includes("*")) {
-		const escaped = target
-			.split("*")
-			.map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-			.join(".*");
-		return new RegExp(`^${escaped}$`).test(path);
-	}
-	return false;
-}
-
-function artifactMatchesAnyTarget(
-	path: string,
-	targets: Iterable<string>,
-): boolean {
-	for (const target of targets) {
-		if (artifactMatchesTarget(path, target)) {
-			return true;
-		}
-	}
-	return false;
+function isBroadContextTarget(target: string): boolean {
+	const normalizedTarget = normalizeContextPath(target);
+	return (
+		isCatchAllContextTarget(normalizedTarget) ||
+		normalizedTarget.endsWith("/**")
+	);
 }
 
 function featureHistoryEntries(session: Session, featureId: string) {
@@ -305,6 +307,7 @@ function contextDiagnostics(
 	commands: string[],
 ): ContextDiagnostic[] {
 	const diagnostics: ContextDiagnostic[] = [];
+	const workflowProfile = session.planning.workflowProfile;
 
 	if (session.planning.repoProfile.length === 0) {
 		diagnostics.push({
@@ -327,6 +330,7 @@ function contextDiagnostics(
 	}
 
 	for (const feature of features) {
+		const targets = featureContextTargets(feature);
 		if (feature.fileTargets.length === 0) {
 			diagnostics.push({
 				id: "feature_missing_file_targets",
@@ -357,6 +361,26 @@ function contextDiagnostics(
 				summary: `Feature '${feature.id}' has no planned verification commands or checks.`,
 				remediation:
 					"Record targeted validation checks on the feature before approving or running it.",
+			});
+		}
+
+		if (
+			session.planning.research.length > 0 &&
+			targets.length > 0 &&
+			targets.every(
+				(target) =>
+					!session.planning.research.some((entry) =>
+						entry.toLowerCase().includes(target.toLowerCase()),
+					),
+			)
+		) {
+			diagnostics.push({
+				id: "feature_targets_not_inspected",
+				severity: "info",
+				featureId: feature.id,
+				summary: `Feature '${feature.id}' names planned targets that are not visible in planning research notes.`,
+				remediation:
+					"Record the files, tests, docs, or contracts inspected for this feature target, or explain why direct inspection was unnecessary.",
 			});
 		}
 	}
@@ -404,7 +428,224 @@ function contextDiagnostics(
 		});
 	}
 
+	for (const feature of features) {
+		const history = featureHistoryEntries(session, feature.id);
+		const featureChangedArtifacts = history.flatMap((entry) =>
+			entry.artifactsChanged.map((artifact) => artifact.path),
+		);
+		const featureValidationCommands = uniqueStrings(
+			history.flatMap((entry) =>
+				entry.validationRun.map((validation) => validation.command),
+			),
+		);
+		const hasChangedArtifacts = featureChangedArtifacts.length > 0;
+		const matchingValidation = feature.verification.some((plannedCheck) =>
+			featureValidationCommands.some((command) => {
+				const normalizedCommand = command.toLowerCase();
+				const normalizedPlannedCheck = plannedCheck.toLowerCase();
+				return (
+					normalizedCommand.includes(normalizedPlannedCheck) ||
+					normalizedPlannedCheck.includes(normalizedCommand)
+				);
+			}),
+		);
+		if (
+			hasChangedArtifacts &&
+			feature.verification.length > 0 &&
+			featureValidationCommands.length > 0 &&
+			!matchingValidation
+		) {
+			diagnostics.push({
+				id: "feature_validation_not_matched_to_plan",
+				severity: "warn",
+				featureId: feature.id,
+				summary: `Feature '${feature.id}' has changed artifacts, but recorded validation does not match the planned verification commands.`,
+				remediation:
+					"Run the planned targeted check, update the plan through reset/replan, or explain why a different command covers the same behavior.",
+			});
+		}
+	}
+
+	if (
+		features.some((feature) => {
+			const targets = featureContextTargets(feature);
+			return (
+				targets.some(isBroadContextTarget) &&
+				!targets.some((target) => !isBroadContextTarget(target))
+			);
+		})
+	) {
+		diagnostics.push({
+			id: "broad_target_without_narrowed_scope",
+			severity: "warn",
+			summary:
+				"At least one feature uses a broad planned target without an obviously narrowed review scope.",
+			remediation:
+				"Name the expected files, directories, or reviewScope surfaces so changed artifacts can be compared to intent.",
+		});
+	}
+
+	if (
+		workflowProfile === "bugfix" &&
+		features.some(
+			(feature) =>
+				!feature.verification.some((check) =>
+					/(test|spec|repro|regression)/i.test(check),
+				),
+		)
+	) {
+		diagnostics.push({
+			id: "bugfix_profile_missing_regression_validation",
+			severity: "warn",
+			summary:
+				"Bugfix workflow profile expects regression-oriented validation in the feature plan.",
+			remediation:
+				"Record the failing/regression test, reproduction command, or targeted check that proves the bug is fixed.",
+		});
+	}
+
+	if (
+		workflowProfile === "release" &&
+		features.some(
+			(feature) =>
+				!feature.verification.some((check) =>
+					/check|smoke|pack|release/i.test(check),
+				),
+		)
+	) {
+		diagnostics.push({
+			id: "release_profile_missing_release_validation",
+			severity: "warn",
+			summary:
+				"Release workflow profile expects release, smoke, pack, or full-check validation in the plan.",
+			remediation:
+				"Record the release hygiene, smoke, packaging, or broad validation command before treating the session as release-ready.",
+		});
+	}
+
+	if (
+		workflowProfile === "review" &&
+		features.some((feature) => (feature.reviewScope ?? []).length === 0)
+	) {
+		diagnostics.push({
+			id: "review_profile_missing_review_scope",
+			severity: "warn",
+			summary:
+				"Review workflow profile expects explicit reviewScope entries for the surfaces under review.",
+			remediation:
+				"Record the files, domains, workflows, or contracts the review is expected to inspect.",
+		});
+	}
+
+	if (
+		(workflowProfile === "migration" || workflowProfile === "refactor") &&
+		session.plan &&
+		session.plan.architectureDecisions.length === 0
+	) {
+		diagnostics.push({
+			id:
+				workflowProfile === "migration"
+					? "migration_profile_missing_migration_decisions"
+					: "refactor_profile_missing_invariant_context",
+			severity: "warn",
+			summary: `${workflowProfile} workflow profile expects architecture decisions or invariants to be recorded.`,
+			remediation:
+				"Record the compatibility, migration, or behavior-preservation constraints that review should protect.",
+		});
+	}
+
 	return diagnostics;
+}
+
+function buildContextQualityProjection(
+	session: Session,
+	features: Feature[],
+	diagnostics: ContextDiagnostic[],
+	traceability: ContextTraceabilityProjection,
+): ContextQualityProjection {
+	const hasFeatures = features.length > 0;
+	const check = (
+		id: string,
+		status: ContextQualityCheckStatus,
+		weight: number,
+		summary: string,
+	): ContextQualityCheck => ({ id, status, weight, summary });
+	const diagnosticsById = new Set(
+		diagnostics.map((diagnostic) => diagnostic.id),
+	);
+	const checks: ContextQualityCheck[] = [
+		check(
+			"repo_profile",
+			session.planning.repoProfile.length > 0 ? "pass" : "fail",
+			2,
+			"Repo profile records package, command, framework, or convention context.",
+		),
+		check(
+			"research",
+			session.planning.research.length > 0 ? "pass" : "fail",
+			2,
+			"Planning research names inspected files, docs, tests, configs, or contracts.",
+		),
+		check(
+			"feature_targets",
+			hasFeatures &&
+				features.every((feature) => featureContextTargets(feature).length > 0)
+				? "pass"
+				: "fail",
+			2,
+			"Every feature has planned file targets or review scope.",
+		),
+		check(
+			"planned_verification",
+			hasFeatures &&
+				features.every((feature) => feature.verification.length > 0)
+				? "pass"
+				: "fail",
+			2,
+			"Every feature has planned verification.",
+		),
+		check(
+			"scope_traceability",
+			traceability.unplannedChangedArtifacts.length === 0 ? "pass" : "fail",
+			3,
+			"Changed artifacts stay within planned file targets or review scope.",
+		),
+		check(
+			"validation_traceability",
+			traceability.features.some((feature) =>
+				feature.gaps.some(
+					(gap) => gap.id === "feature_changed_without_validation",
+				),
+			)
+				? "fail"
+				: diagnosticsById.has("feature_validation_not_matched_to_plan")
+					? "warn"
+					: "pass",
+			3,
+			"Changed artifacts have recorded validation evidence aligned to the plan.",
+		),
+		check(
+			"context_specificity",
+			diagnosticsById.has("broad_target_without_narrowed_scope")
+				? "warn"
+				: "pass",
+			1,
+			"Planned targets are specific enough for reviewable handoff.",
+		),
+	];
+	const totalWeight = checks.reduce((total, item) => total + item.weight, 0);
+	const earnedWeight = checks.reduce((total, item) => {
+		if (item.status === "pass") return total + item.weight;
+		if (item.status === "warn") return total + item.weight / 2;
+		return total;
+	}, 0);
+	const score =
+		totalWeight === 0 ? 100 : Math.round((earnedWeight / totalWeight) * 100);
+	return {
+		score,
+		rating: score >= 85 ? "strong" : score >= 65 ? "adequate" : "weak",
+		checks,
+	};
 }
 
 function diagnosticSummary(
@@ -483,7 +724,6 @@ function buildWorkflowReadinessProjection(
 				remediation: gap.remediation,
 			})),
 	);
-
 	if (contextBlockingDiagnostics.length > 0) {
 		return {
 			state: "blocked_by_context",
@@ -588,6 +828,9 @@ function buildWorkflowReadinessProjection(
 
 export function buildContextPackProjection(
 	session: Session,
+	options: {
+		projectStructure?: ProjectStructureMapProjection | undefined;
+	} = {},
 ): ContextPackProjection {
 	const features = session.plan?.features ?? [];
 	const changedArtifacts = changedArtifactPaths(session);
@@ -604,6 +847,12 @@ export function buildContextPackProjection(
 		changedArtifacts,
 		commands,
 	);
+	const quality = buildContextQualityProjection(
+		session,
+		features,
+		diagnostics,
+		traceability,
+	);
 	const workflowReadiness = buildWorkflowReadinessProjection(
 		session,
 		features,
@@ -614,6 +863,7 @@ export function buildContextPackProjection(
 	return {
 		sessionId: session.id,
 		goal: session.goal,
+		workflowProfile: session.planning.workflowProfile,
 		repoProfile: session.planning.repoProfile,
 		research: session.planning.research,
 		requirements: session.plan?.requirements ?? [],
@@ -630,7 +880,11 @@ export function buildContextPackProjection(
 		changedArtifacts,
 		validationCommands: commands,
 		diagnostics,
+		quality,
 		traceability,
 		workflowReadiness,
+		...(options.projectStructure
+			? { projectStructure: options.projectStructure }
+			: {}),
 	};
 }

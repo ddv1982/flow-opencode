@@ -29,9 +29,11 @@ Before decomposing, identify the context that makes the plan reviewable:
 - Risks and unknowns that need inspection before implementation, not after.
 - Files or surfaces deliberately out of scope.
 
-Record this with existing plan fields: `planning.repoProfile` for repo facts, `planning.research` for inspected references, `plan.requirements` for external/user-visible constraints, `plan.architectureDecisions` for chosen boundaries, feature `fileTargets` / `reviewScope` for owned surfaces, and `plan.notes` for scoped-out or unknown context. Do not invent a new `contextPack` payload field.
+Choose `planning.workflowProfile` when the work has a clear shape: `bugfix`, `refactor`, `release`, `review`, or `migration`; otherwise use `default`. The profile tunes readiness diagnostics, not permissions or hard gates.
 
-After saving the plan, `flow_status` and `.flow/active/<session-id>/docs/context.md` expose derived `workflowReadiness`, `contextTraceability`, and diagnostics for weak context. Treat blocked readiness and warnings as planning defects unless you can explain why the missing context is irrelevant for the requested work.
+Record this with existing plan fields: `planning.workflowProfile` for workflow shape, `planning.repoProfile` for repo facts, `planning.research` for inspected references, `plan.requirements` for external/user-visible constraints, `plan.architectureDecisions` for chosen boundaries, feature `fileTargets` / `reviewScope` for owned surfaces, and `plan.notes` for scoped-out or unknown context. Do not invent a new `contextPack` payload field.
+
+After saving the plan, `flow_status`, `flow_context`, and `.flow/active/<session-id>/docs/context.md` expose derived `workflowReadiness`, `contextQuality`, `contextTraceability`, and diagnostics for weak context. Use `flow_context` when you also need the project structure map. Treat blocked readiness and warnings as planning defects unless you can explain why the missing context is irrelevant for the requested work.
 
 ## Decompose the goal
 

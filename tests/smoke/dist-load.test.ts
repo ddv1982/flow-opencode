@@ -13,6 +13,7 @@ type TestTool = {
 };
 type FlowToolName =
 	| "flow_status"
+	| "flow_context"
 	| "flow_plan_save"
 	| "flow_plan_approve"
 	| "flow_run_start"
@@ -53,7 +54,7 @@ class FakeSdkApp {
 }
 
 describe("built dist smoke load", () => {
-	test("dist bundle exposes one agent, five commands, and seven tools by default", async () => {
+	test("dist bundle exposes one agent, five commands, and eight tools by default", async () => {
 		const pluginFactory = await importBuiltPlugin();
 		const worktree = makeManagedTempDir("flow-dist-worktree-");
 		// Startup sync writes global skills/commands: keep it off the real HOME.
@@ -77,6 +78,7 @@ describe("built dist smoke load", () => {
 		expect(Object.keys(config.agent ?? {})).toHaveLength(1);
 		expect(Object.keys(config.command ?? {})).toHaveLength(5);
 		const canonicalToolNames = [
+			"flow_context",
 			"flow_feature_complete",
 			"flow_plan_approve",
 			"flow_plan_save",
@@ -86,10 +88,10 @@ describe("built dist smoke load", () => {
 			"flow_status",
 		];
 		const registeredToolNames = Object.keys(plugin.tool ?? {}).sort();
-		// The registered surface is exactly the canonical seven (the v2 compat
+		// The registered surface is exactly the canonical eight (the v2 compat
 		// redirect stubs were removed in v3.1).
 		expect(registeredToolNames).toEqual(canonicalToolNames);
-		expect(registeredToolNames).toHaveLength(7);
+		expect(registeredToolNames).toHaveLength(8);
 
 		const context = createToolContext(worktree);
 		const planSaveResponse = JSON.parse(
@@ -104,6 +106,7 @@ describe("built dist smoke load", () => {
 
 		const toolArgs: Record<FlowToolName, unknown> = {
 			flow_status: {},
+			flow_context: {},
 			flow_plan_save: {
 				plan: {
 					summary: "Build the smoke path.",
@@ -177,7 +180,7 @@ describe("built dist smoke load", () => {
 			client: { app },
 		} as unknown as Parameters<PluginFactory>[0])) as BuiltPlugin;
 
-		expect(Object.keys(plugin.tool ?? {})).toHaveLength(7);
+		expect(Object.keys(plugin.tool ?? {})).toHaveLength(8);
 		expect(app.entries.length).toBeGreaterThanOrEqual(1);
 		expect(app.entries[0]).toEqual({
 			service: "opencode-plugin-flow",

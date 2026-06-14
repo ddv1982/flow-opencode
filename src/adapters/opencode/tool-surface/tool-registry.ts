@@ -13,6 +13,8 @@ type OpenCodeToolRegistryEntry = {
 const OPENCODE_TOOL_DESCRIPTIONS: Record<OpenCodeToolName, string> = {
 	flow_status:
 		"Show the active Flow session state, workspace readiness checks, and the suggested next step",
+	flow_context:
+		"Inspect the active Flow context pack, quality score, traceability, and project structure map without mutating session state",
 	flow_plan_save:
 		"Create or refresh the active Flow planning session and persist planning context and/or a draft plan from a JSON payload",
 	flow_plan_approve:

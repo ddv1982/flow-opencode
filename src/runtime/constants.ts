@@ -10,6 +10,7 @@ const FLOW_SESSION_ACTIVATE_COMMAND = "flow_session activate";
 
 export const CANONICAL_RUNTIME_TOOL_NAMES = [
 	"flow_status",
+	"flow_context",
 	"flow_plan_save",
 	"flow_plan_approve",
 	"flow_run_start",
@@ -55,6 +56,14 @@ export const DECISION_DOMAINS = [
 	"quality",
 	"scope",
 	"delivery",
+] as const;
+export const WORKFLOW_PROFILES = [
+	"default",
+	"bugfix",
+	"refactor",
+	"release",
+	"review",
+	"migration",
 ] as const;
 export const FEATURE_PRIORITIES = [
 	"critical",

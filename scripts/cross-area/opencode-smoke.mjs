@@ -29,10 +29,11 @@ const packageJson = JSON.parse(
 	readFileSync(join(projectRoot, "package.json"), "utf8"),
 );
 
-// The seven canonical tools are the whole registered surface as of v3.1;
+// The eight canonical tools are the whole registered surface;
 // extraToolCount asserts nothing else sneaks in.
 const CANONICAL_TOOL_NAMES = [
 	"flow_status",
+	"flow_context",
 	"flow_plan_save",
 	"flow_plan_approve",
 	"flow_run_start",

@@ -32,7 +32,7 @@ describe("architecture metrics script", () => {
 			"Commands: 5 (flow-auto, flow-plan, flow-review, flow-run, flow-status)",
 		);
 		expect(stdout).toContain("Agents: 1 (flow-reviewer)");
-		expect(stdout).toContain("Tools: 7 (");
+		expect(stdout).toContain("Tools: 8 (");
 		expect(stdout).toContain("Architecture seam violations: 0");
 	});
 
@@ -43,7 +43,7 @@ describe("architecture metrics script", () => {
 		const metrics = JSON.parse(await new Response(process.stdout).text());
 		expect(metrics.surface.commands).toBe(5);
 		expect(metrics.surface.agents).toBe(1);
-		expect(metrics.surface.tools).toBe(7);
+		expect(metrics.surface.tools).toBe(8);
 		expect(metrics.seams.count).toBe(0);
 		expect(metrics.source.byOwner.runtime.files).toBeGreaterThan(0);
 	});

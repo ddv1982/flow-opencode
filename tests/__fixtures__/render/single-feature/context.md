@@ -4,12 +4,24 @@
 
 - session id: render-single-feature
 - goal: Single feature fixture
+- workflow profile: default
 - features: 1
 - diagnostics: 2
+- context quality: 73/100 (adequate)
 - readiness: blocked_by_context
 - readiness blocking: 2
 - readiness warnings: 2
 - next action: Resolve or explicitly account for the context diagnostics before relying on the next workflow phase.
+
+## Context Quality
+
+- fail | repo_profile | weight: 2 | Repo profile records package, command, framework, or convention context.
+- fail | research | weight: 2 | Planning research names inspected files, docs, tests, configs, or contracts.
+- pass | feature_targets | weight: 2 | Every feature has planned file targets or review scope.
+- pass | planned_verification | weight: 2 | Every feature has planned verification.
+- pass | scope_traceability | weight: 3 | Changed artifacts stay within planned file targets or review scope.
+- pass | validation_traceability | weight: 3 | Changed artifacts have recorded validation evidence aligned to the plan.
+- pass | context_specificity | weight: 1 | Planned targets are specific enough for reviewable handoff.
 
 ## Workflow Readiness
 

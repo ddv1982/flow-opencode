@@ -4,12 +4,24 @@
 
 - session id: bench-session-5
 - goal: Benchmark 5-feature session
+- workflow profile: default
 - features: 5
 - diagnostics: 2
+- context quality: 73/100 (adequate)
 - readiness: release_ready
 - readiness blocking: 0
 - readiness warnings: 2
 - next action: Use final review, validation evidence, and release hygiene checks to decide whether to cut a release.
+
+## Context Quality
+
+- fail | repo_profile | weight: 2 | Repo profile records package, command, framework, or convention context.
+- fail | research | weight: 2 | Planning research names inspected files, docs, tests, configs, or contracts.
+- pass | feature_targets | weight: 2 | Every feature has planned file targets or review scope.
+- pass | planned_verification | weight: 2 | Every feature has planned verification.
+- pass | scope_traceability | weight: 3 | Changed artifacts stay within planned file targets or review scope.
+- pass | validation_traceability | weight: 3 | Changed artifacts have recorded validation evidence aligned to the plan.
+- pass | context_specificity | weight: 1 | Planned targets are specific enough for reviewable handoff.
 
 ## Requirements
 

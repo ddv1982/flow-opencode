@@ -61,6 +61,7 @@ export function createSession(
 		status: "planning",
 		approval: "pending",
 		planning: {
+			workflowProfile: planning?.workflowProfile ?? "default",
 			repoProfile: planning?.repoProfile ?? [],
 			packageManager: planning?.packageManager,
 			packageManagerAmbiguous: planning?.packageManagerAmbiguous ?? false,

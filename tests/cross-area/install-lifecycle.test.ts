@@ -54,7 +54,7 @@ describe("cross-area npm install lifecycle", () => {
 			]);
 			expect(report.configAgents).toBe(1);
 			expect(report.configCommands).toBe(5);
-			expect(report.toolCount).toBe(7);
+			expect(report.toolCount).toBe(8);
 			expect(report.extraToolCount).toBe(0);
 			expect(report.preNpmWarningVerified).toBe(true);
 			expect(report.uninstallVerified).toBe(true);

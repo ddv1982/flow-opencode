@@ -1,7 +1,13 @@
 import { z } from "zod";
-import { DECISION_DOMAINS, DECISION_MODES } from "./constants";
+import {
+	DECISION_DOMAINS,
+	DECISION_MODES,
+	WORKFLOW_PROFILES,
+} from "./constants";
 
 const EvidenceConfidenceSchema = z.enum(["low", "medium", "high"]);
+
+export const WorkflowProfileSchema = z.enum(WORKFLOW_PROFILES);
 
 const StackProfileEntrySchema = z
 	.object({

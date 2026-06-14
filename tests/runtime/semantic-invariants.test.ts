@@ -492,7 +492,7 @@ describe("runtime semantic invariants", () => {
 		for (const toolName of CANONICAL_RUNTIME_TOOL_NAMES) {
 			expect(tools).toContain(toolName);
 		}
-		// The registered surface is exactly the canonical seven (the v2 compat
+		// The registered surface is exactly the canonical eight (the v2 compat
 		// redirect stubs were removed in v3.1).
 		expect(tools.sort()).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES].sort());
 		expect(tools.some((name) => name.includes("_from_raw"))).toBe(false);

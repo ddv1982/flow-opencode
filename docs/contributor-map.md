@@ -50,7 +50,7 @@ Do not:
 Risk: medium-high — public names and payload shapes are contracts.
 
 - `src/adapters/opencode/plugin.ts` — plugin entry: config hook (command/agent injection), tool registration, compaction hook
-- `src/adapters/opencode/tools.ts`, `src/adapters/opencode/tool-surface/` — the 7 tools and their zod arg shapes (no v2 tool-name aliases; the new names are the whole surface)
+- `src/adapters/opencode/tools.ts`, `src/adapters/opencode/tool-surface/` — the 8 tools and their zod arg shapes (no v2 tool-name aliases; the new names are the whole surface)
 - `src/adapters/opencode/sdk.ts` — the `@opencode-ai/plugin` boundary
 
 Required checks: tool/schema tests, tool-name-coverage test, `bun run typecheck`, and `bun run check:architecture-seams:enforce` when touching imports or exported facades.

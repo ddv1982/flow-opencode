@@ -318,6 +318,7 @@ function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 		finalReviewPolicy,
 		readiness,
 		workflowReadiness,
+		contextQuality,
 		contextTraceability,
 		contextDiagnostics,
 		...rest
@@ -332,6 +333,7 @@ function normalizeFlowStatusFixture(summary: Record<string, unknown>) {
 	void reason;
 	void readiness;
 	void workflowReadiness;
+	void contextQuality;
 	void contextTraceability;
 	void contextDiagnostics;
 	return normalizeSummaryFixture(

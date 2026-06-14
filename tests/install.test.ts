@@ -123,7 +123,10 @@ describe("npm distribution stability surfaces", () => {
 			"opencode-plugin-flow": "./dist/cli.js",
 		});
 		expect(packageJson.files).toContain("dist");
-		expect(Object.keys(packageJson.dependencies)).toEqual(["zod"]);
+		expect(Object.keys(packageJson.dependencies).sort()).toEqual([
+			"ignore",
+			"zod",
+		]);
 		expect(FLOW_SKILLS_DIRECTORY).toBe(join(".config", "opencode", "skills"));
 		expect(FLOW_COMMANDS_DIRECTORY).toBe(
 			join(".config", "opencode", "commands"),

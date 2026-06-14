@@ -5,7 +5,7 @@
 Flow is a workflow plugin for OpenCode with two clearly separated halves:
 
 1. **Skills are the brain.** Four hand-authored skills (`skills/flow`, `skills/flow-plan`, `skills/flow-run`, `skills/flow-review`, plus their `references/` files) are the single guidance surface. They own all orchestration judgment: what to do next, how to plan, how deep to review, how to recover, when to stop and ask the user.
-2. **The plugin is a dumb-but-safe state backend.** It owns durable, atomic, schema-validated persistence of `.flow/**` session state, a small set of hard invariants, the compaction hook, and a small tool surface (7 tools) through which all state mutations flow.
+2. **The plugin is a dumb-but-safe state backend.** It owns durable, atomic, schema-validated persistence of `.flow/**` session state, a small set of hard invariants, the compaction hook, and a small tool surface (8 tools) through which all state mutations and read-side projections flow.
 
 Authoring effort goes into skill content. Code defends only what a skill can never guarantee.
 
@@ -22,7 +22,7 @@ Earlier versions of this contract required three synchronized guidance layers (r
 
 ```text
 user / slash command / skill-guided agent
-  -> OpenCode adapter tool surface (7 tools)
+  -> OpenCode adapter tool surface (8 tools)
   -> runtime application action
   -> transition policy + hard invariants
   -> `.flow/**/session.json` snapshot persistence
@@ -72,11 +72,12 @@ Use **trusted workspace root** only for metadata derived from `FLOW_TRUSTED_WORK
 
 ## Tools
 
-The public tool surface is exactly 7 tools; all `.flow/**` mutations go through them. The adapter registers only these names — there are no v2 tool-name aliases. v2 sessions still load (schema v1 is unchanged, and old tool names inside persisted failed-attempt records are harmless); anything referencing old v2 tool names just uses the new ones.
+The public tool surface is exactly 8 tools; all `.flow/**` mutations go through the state-changing tools. `flow_context` is read-only. The adapter registers only these names — there are no v2 tool-name aliases. v2 sessions still load (schema v1 is unchanged, and old tool names inside persisted failed-attempt records are harmless); anything referencing old v2 tool names just uses the new ones.
 
 | Tool | Purpose |
 | --- | --- |
 | `flow_status` | State, readiness diagnostics, and a computed suggested next step (the only "what next" authority in code). |
+| `flow_context` | Read-only context pack, quality score, traceability, and project structure map. |
 | `flow_plan_save` | Create/update the draft plan (context + features). |
 | `flow_plan_approve` | Approve the plan, optionally a feature subset. |
 | `flow_run_start` | Start the next runnable feature. |
@@ -106,7 +107,7 @@ Tool names are public contracts for skills and users. Every registered tool name
 
 - `.flow/active/<session-id>/session.json` — active mutable session state
 - `.flow/active/<session-id>/docs/**` — derived renders
-- `.flow/active/<session-id>/docs/context.md` — derived context pack with advisory workflow readiness, traceability, and context diagnostics
+- `.flow/active/<session-id>/docs/context.md` — derived context pack with advisory workflow readiness, context quality, traceability, and context diagnostics
 - `.flow/stored/<session-id>/**` — inactive resumable sessions
 - `.flow/completed/<session-id>-<timestamp>/**` — closed history
 - `.flow/locks/` — lock files

@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "3.3.8",
+	"version": "3.3.9",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"main": "dist/index.js",
@@ -61,6 +61,7 @@
 		"@opencode-ai/plugin": "1.17.3"
 	},
 	"dependencies": {
+		"ignore": "^7.0.5",
 		"zod": "4.1.8"
 	},
 	"devDependencies": {

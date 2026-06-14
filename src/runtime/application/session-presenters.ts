@@ -258,6 +258,16 @@ function workflowReadinessFields(
 					})),
 				nextAction: contextPack.workflowReadiness.nextAction,
 			},
+			contextQuality: {
+				score: contextPack.quality.score,
+				rating: contextPack.quality.rating,
+				failingCheckCount: contextPack.quality.checks.filter(
+					(check) => check.status === "fail",
+				).length,
+				warningCheckCount: contextPack.quality.checks.filter(
+					(check) => check.status === "warn",
+				).length,
+			},
 			contextTraceability: {
 				plannedTargetCount: contextPack.traceability.plannedTargetCount,
 				changedArtifactCount: contextPack.traceability.changedArtifactCount,
@@ -270,6 +280,7 @@ function workflowReadinessFields(
 	}
 	return {
 		workflowReadiness: contextPack.workflowReadiness,
+		contextQuality: contextPack.quality,
 		contextTraceability: contextPack.traceability,
 	};
 }

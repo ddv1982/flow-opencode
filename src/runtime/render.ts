@@ -27,6 +27,7 @@ import {
 	getSessionDir,
 	type LiveSessionLocation,
 } from "./paths";
+import type { ProjectStructureMapProjection } from "./project-structure-map";
 import type { Feature, Session } from "./schema";
 import { deriveNextCommand } from "./session-operator-state";
 import { assertMutableWorkspaceRoot } from "./workspace-root";
@@ -587,8 +588,44 @@ export function renderIndexDoc(session: Session): string {
 // Context pack doc
 // ---------------------------------------------------------------------------
 
-export function renderContextPackDoc(session: Session): string {
-	const contextPack = buildContextPackProjection(session);
+function renderProjectStructureMap(
+	projectStructure: ProjectStructureMapProjection | undefined,
+): string {
+	if (!projectStructure || projectStructure.entries.length === 0) {
+		return "";
+	}
+	return `## Project Structure Map
+
+- root: ${toInlineText(projectStructure.rootName)}
+- entries: ${projectStructure.entryCount}
+- truncated: ${projectStructure.truncated ? "yes" : "no"}
+- ignore sources: ${projectStructure.ignoreSources.join(", ")}
+- planned targets: ${projectStructure.focus.plannedTargets.length > 0 ? projectStructure.focus.plannedTargets.map(toInlineText).join(", ") : "none"}
+- planned targets redacted: ${projectStructure.focus.plannedTargetsRedacted}
+- changed artifacts: ${projectStructure.focus.changedArtifacts.length > 0 ? projectStructure.focus.changedArtifacts.map(toInlineText).join(", ") : "none"}
+- changed artifacts redacted: ${projectStructure.focus.changedArtifactsRedacted}
+
+${
+	projectStructure.entries.length === 0
+		? "- none"
+		: bulletList(
+				projectStructure.entries.map((entry) =>
+					[
+						`${"  ".repeat(Math.max(0, entry.depth - 1))}${entry.kind === "directory" ? `${entry.path}/` : entry.path}`,
+						entry.role !== "other" ? `role: ${entry.role}` : "",
+					]
+						.filter(Boolean)
+						.join(" | "),
+				),
+			)
+}`;
+}
+
+export function renderContextPackDoc(
+	session: Session,
+	projectStructure?: ProjectStructureMapProjection,
+): string {
+	const contextPack = buildContextPackProjection(session, { projectStructure });
 
 	return joinSections([
 		"# Flow Context Pack",
@@ -596,12 +633,22 @@ export function renderContextPackDoc(session: Session): string {
 
 - session id: ${contextPack.sessionId}
 - goal: ${toInlineText(contextPack.goal)}
+- workflow profile: ${contextPack.workflowProfile}
 - features: ${contextPack.features.length}
 - diagnostics: ${contextPack.diagnostics.length}
+- context quality: ${contextPack.quality.score}/100 (${contextPack.quality.rating})
 - readiness: ${contextPack.workflowReadiness.state}
 - readiness blocking: ${contextPack.workflowReadiness.blocking.length}
 - readiness warnings: ${contextPack.workflowReadiness.warnings.length}
 - next action: ${toInlineText(contextPack.workflowReadiness.nextAction)}`,
+		`## Context Quality
+
+${bulletList(
+	contextPack.quality.checks.map(
+		(check) =>
+			`${check.status} | ${check.id} | weight: ${check.weight} | ${toInlineText(check.summary)}`,
+	),
+)}`,
 		contextPack.workflowReadiness.blocking.length > 0
 			? `## Workflow Readiness
 
@@ -623,6 +670,7 @@ ${bulletList(
 		maybeSection("Requirements", contextPack.requirements),
 		maybeSection("Architecture Decisions", contextPack.architectureDecisions),
 		maybeSection("Notes", contextPack.notes),
+		renderProjectStructureMap(contextPack.projectStructure),
 		`## Traceability Summary
 
 - planned targets: ${contextPack.traceability.plannedTargetCount}
@@ -768,6 +816,9 @@ async function pruneFeatureDocs(
 export async function renderSessionDocsAtDir(
 	sessionDir: string,
 	session: Session,
+	options: {
+		projectStructure?: ProjectStructureMapProjection | undefined;
+	} = {},
 ): Promise<void> {
 	const features = session.plan?.features ?? [];
 
@@ -778,7 +829,7 @@ export async function renderSessionDocsAtDir(
 	});
 	await writeDocIfChanged({
 		path: getContextDocPathFromSessionDir(sessionDir),
-		content: renderContextPackDoc(session),
+		content: renderContextPackDoc(session, options.projectStructure),
 	});
 
 	await Promise.all(
@@ -800,8 +851,9 @@ export async function renderSessionDocs(
 	session: Session,
 	location: LiveSessionLocation = "active",
 ): Promise<void> {
+	const mutableWorktree = assertMutableWorkspaceRoot(worktree);
 	await renderSessionDocsAtDir(
-		getSessionDir(assertMutableWorkspaceRoot(worktree), session.id, location),
+		getSessionDir(mutableWorktree, session.id, location),
 		session,
 	);
 }

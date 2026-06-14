@@ -44,6 +44,7 @@ describe("runtime tool metadata", () => {
 
 		const toolArgs: Record<string, unknown> = {
 			flow_status: {},
+			flow_context: {},
 			flow_plan_save: { goal: "Build a workflow plugin" },
 			flow_plan_approve: {},
 			flow_run_start: {},

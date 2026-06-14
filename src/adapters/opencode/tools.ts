@@ -1,4 +1,5 @@
 import { createFlowLog } from "./logging";
+import { createContextTool } from "./tool-surface/context-tool";
 import { createPlanTools } from "./tool-surface/plan-tools";
 import { createReviewTool } from "./tool-surface/review-tool";
 import { createRunTools } from "./tool-surface/run-tools";
@@ -37,6 +38,7 @@ function orderProjectedTools<T extends Record<string, unknown>>(tools: T): T {
 function createCoreTools() {
 	return orderProjectedTools({
 		...createStatusTool(),
+		...createContextTool(),
 		...createPlanTools(),
 		...createRunTools(),
 		...createReviewTool(),

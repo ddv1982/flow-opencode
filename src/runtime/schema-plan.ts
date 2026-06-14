@@ -17,6 +17,7 @@ import {
 	PlanningDecisionSchema,
 	StackProfileSchema,
 	StandardsProfileSchema,
+	WorkflowProfileSchema,
 } from "./schema-planning-profiles";
 import { ReviewScopeTargetSchema } from "./schema-review-shared";
 
@@ -103,6 +104,7 @@ export const PlanSchema = z.object({
 });
 
 export const PlanningContextSchema = z.object({
+	workflowProfile: WorkflowProfileSchema.default("default"),
 	repoProfile: z.array(z.string().min(1)).default([]),
 	packageManager: PackageManagerSchema.optional(),
 	packageManagerAmbiguous: z.boolean().default(false),

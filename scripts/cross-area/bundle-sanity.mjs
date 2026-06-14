@@ -24,14 +24,15 @@ const tempRoot = mkdtempSync(join(tmpdir(), "flow-bundle-sanity-"));
 // The bundle carries only Flow source: zod and @opencode-ai/plugin are
 // external (npm-resolved). The generated prompt surfaces are gone after the
 // skills-first overhaul; what remains is the runtime plus the embedded skill
-// documents (synced at startup), which lands around 150-160 KB. Hold the
-// line at 200 KB to leave headroom for skill content growth without letting
-// prompt-surface regressions sneak back in.
-const BUNDLE_SIZE_BUDGET_BYTES = 204800; // 200 KiB
+// documents (synced at startup) and the read-only flow_context projection.
+// Hold the line at 215 KB to leave headroom for this product surface without
+// letting prompt-surface or dependency regressions sneak back in.
+const BUNDLE_SIZE_BUDGET_BYTES = 220160; // 215 KiB
 
-// The seven canonical tools are the whole registered surface as of v3.1.
+// The eight canonical tools are the whole registered surface.
 const CANONICAL_TOOL_NAMES = [
 	"flow_status",
+	"flow_context",
 	"flow_plan_save",
 	"flow_plan_approve",
 	"flow_run_start",
@@ -259,7 +260,7 @@ async function main() {
 		if (
 			report.configAgents !== 1 ||
 			report.configCommands !== 5 ||
-			report.toolCount !== 7 ||
+			report.toolCount !== 8 ||
 			report.extraToolCount !== 0
 		) {
 			throw new Error(

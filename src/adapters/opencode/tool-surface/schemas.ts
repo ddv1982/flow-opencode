@@ -31,6 +31,7 @@ export type ToolContext = WorkspaceContext &
 	};
 
 const FlowStatusViewSchema = z.enum(["compact", "detailed"]);
+const FlowContextViewSchema = z.enum(["summary", "features", "full"]);
 const featureIdSchema = z
 	.string()
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
@@ -44,6 +45,13 @@ export const FlowStatusArgsShape = {
 	view: FlowStatusViewSchema.optional(),
 };
 export const FlowStatusArgsSchema = z.object(FlowStatusArgsShape);
+
+// flow_context
+export const FlowContextArgsShape = {
+	view: FlowContextViewSchema.optional(),
+	includeProjectStructure: z.boolean().optional(),
+};
+export const FlowContextArgsSchema = z.object(FlowContextArgsShape);
 
 // flow_plan_save
 export const FlowPlanSaveArgsShape = {

@@ -104,23 +104,28 @@ export function describeReviewFindingsMutationFailure(
 }
 
 export function mergePlanningContext(
-	current: PlanningContext,
+	current: Partial<PlanningContext>,
 	next: Partial<PlanningContext> = {},
 ): PlanningContext {
 	return {
-		repoProfile: mergeUniqueStrings(current.repoProfile, next.repoProfile),
+		workflowProfile:
+			next.workflowProfile ?? current.workflowProfile ?? "default",
+		repoProfile: mergeUniqueStrings(
+			current.repoProfile ?? [],
+			next.repoProfile,
+		),
 		packageManager: next.packageManager ?? current.packageManager,
 		packageManagerAmbiguous:
-			next.packageManagerAmbiguous ?? current.packageManagerAmbiguous,
+			next.packageManagerAmbiguous ?? current.packageManagerAmbiguous ?? false,
 		stackProfile: next.stackProfile ?? current.stackProfile,
 		standardsProfile: next.standardsProfile ?? current.standardsProfile,
-		research: mergeUniqueStrings(current.research, next.research),
+		research: mergeUniqueStrings(current.research ?? [], next.research),
 		implementationApproach:
 			next.implementationApproach ?? current.implementationApproach,
-		decisionLog: next.decisionLog ?? current.decisionLog,
-		replanLog: mergeUniqueBySerialized(current.replanLog, next.replanLog),
+		decisionLog: next.decisionLog ?? current.decisionLog ?? [],
+		replanLog: mergeUniqueBySerialized(current.replanLog ?? [], next.replanLog),
 		reviewFindings: mergeReviewFindings(
-			current.reviewFindings,
+			current.reviewFindings ?? [],
 			next.reviewFindings,
 		),
 		evidencePackets: mergeEvidencePackets(

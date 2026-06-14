@@ -403,12 +403,12 @@ describe("plugin config surface", () => {
 		expect(app.entries).not.toContain(undefined);
 	});
 
-	test("adapter registers exactly the seven canonical runtime tools", () => {
+	test("adapter registers exactly the eight canonical runtime tools", () => {
 		const toolNames = Object.keys(createTools({}));
 
 		expect(toolNames).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES]);
 		expect(toolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
-		expect(toolNames).toHaveLength(7);
+		expect(toolNames).toHaveLength(8);
 		expect(OPENCODE_TOOL_REGISTRY.map((entry) => entry.toolName)).toEqual([
 			...CANONICAL_RUNTIME_TOOL_NAMES,
 		]);
@@ -462,7 +462,7 @@ describe("plugin config surface", () => {
 		expect(toolNames).toEqual([...OPENCODE_TOOL_NAMES_FROM_REGISTRY]);
 		expect(commandNames).toHaveLength(5);
 		expect(agentNames).toHaveLength(1);
-		expect(toolNames).toHaveLength(7);
+		expect(toolNames).toHaveLength(8);
 	});
 
 	test("keeps skills-first prompt surfaces compact", () => {

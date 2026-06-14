@@ -36,7 +36,7 @@ Never: fabricate validation evidence; close `deferred`/`abandoned` to dodge a re
 
 ## Recovery playbook
 
-- Confused, or a result contradicts memory: `flow_status` (detailed), re-anchor.
+- Confused, or a result contradicts memory: `flow_status` (detailed), then `flow_context` if you need the full context pack, re-anchor.
 - Feature stuck or built on a wrong assumption: reset (`flow_feature_complete` `reset: true` + `featureId`), then re-run or replan. Resetting is cheap; piling fixes on a broken feature is not.
 - Wrong or stale session active: `flow_session` `history`/`show`, then `activate`.
 - Approved plan wrong: reset the affected features, `flow_plan_save` a revision, re-approve, tell the user why.

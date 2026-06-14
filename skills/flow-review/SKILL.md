@@ -27,7 +27,7 @@ Missing evidence is a finding, not an inconvenience: absence of proof is never p
 
 ## Review the context pack, not just the diff
 
-Compare the completed work against the context recorded during planning: `repoProfile`, `research`, `requirements`, `architectureDecisions`, feature `fileTargets` / `reviewScope`, and `notes`. Use the derived `.flow/active/<session-id>/docs/context.md` view or the `flow_status.workflowReadiness`, `flow_status.contextTraceability`, and `flow_status.contextDiagnostics` fields as the reviewable handoff, but remember the session JSON remains authoritative. A review should catch both code defects and context defects:
+Compare the completed work against the context recorded during planning: `workflowProfile`, `repoProfile`, `research`, `requirements`, `architectureDecisions`, feature `fileTargets` / `reviewScope`, and `notes`. Use the derived `.flow/active/<session-id>/docs/context.md` view, `flow_context`, or the `flow_status.workflowReadiness`, `flow_status.contextQuality`, `flow_status.contextTraceability`, and `flow_status.contextDiagnostics` fields as the reviewable handoff, but remember the session JSON remains authoritative. A review should catch both code defects and context defects:
 
 - A touched file, schema, command/tool, state path, permission boundary, release script, or docs contract was missing from the plan's context.
 - Validation evidence does not cover the file targets or review scope the plan named.

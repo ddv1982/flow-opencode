@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.8"]
+  "plugin": ["opencode-plugin-flow@3.3.9"]
 }
 ```
 
@@ -120,11 +120,12 @@ These five are the whole command surface since v3.1. The v2/v3.0 convenience com
 
 ### Tools
 
-The plugin registers a small tool surface (7 tools) that owns all `.flow/**` mutations:
+The plugin registers a small tool surface (8 tools). All `.flow/**` mutations go through the state-changing tools; `flow_context` is read-only:
 
 | Tool | Purpose |
 | --- | --- |
 | `flow_status` | Session state, doctor-style readiness, and a computed suggested next step. |
+| `flow_context` | Read-only context pack, quality score, traceability, and project structure map for planning/review handoff. |
 | `flow_plan_save` | Create or update the draft plan (planning context plus features). |
 | `flow_plan_approve` | Approve the plan, optionally restricted to a feature subset. |
 | `flow_run_start` | Start the next runnable feature. |
@@ -132,7 +133,7 @@ The plugin registers a small tool surface (7 tools) that owns all `.flow/**` mut
 | `flow_review_record` | Record a reviewer decision (`scope: feature` or `final`). |
 | `flow_session` | Activate or close a session, list history, or show a stored session. |
 
-These seven tools are the whole registered surface — the v2 tool-name redirect stubs that shipped in 3.0 were removed in v3.1 as scheduled. Existing v2 sessions still migrate seamlessly (the session schema is unchanged).
+These eight tools are the whole registered surface — the v2 tool-name redirect stubs that shipped in 3.0 were removed in v3.1 as scheduled. Existing v2 sessions still migrate seamlessly (the session schema is unchanged).
 
 ### Agents
 
@@ -152,7 +153,7 @@ Plus: atomic, locked, path-safe writes under `.flow/**`; schema validation of al
 
 Everything judgment-shaped — how to decompose a plan, how deep to review, what counts as good evidence, when to stop and ask — lives in the skills, where you can read and override it.
 
-`/flow-status` also reports advisory `workflowReadiness`, `contextTraceability`, and `contextDiagnostics`. These fields show whether the session is ready for planning, execution, feature review, final review, or release; which planned targets changed; which validation and review evidence exists; and where planned context is weak. They do not replace review judgment, but they make context gaps visible before they become unverifiable completion claims.
+`/flow-status` also reports advisory `workflowReadiness`, `contextQuality`, `contextTraceability`, and `contextDiagnostics`. These fields show whether the session is ready for planning, execution, feature review, final review, or release; how strong the planned context is; which planned targets changed; which validation and review evidence exists; and where planned context is weak. `flow_context` exposes the same derived handoff in summary, feature, or full views, optionally with a lightweight project structure map. They do not replace review judgment, but they make context gaps visible before they become unverifiable completion claims.
 
 ## What Flow writes
 
@@ -161,7 +162,7 @@ Flow stores workflow state in the project/worktree where OpenCode is running:
 ```text
 .flow/active/<session-id>/session.json        # active session (source of truth)
 .flow/active/<session-id>/docs/**             # readable derived views
-.flow/active/<session-id>/docs/context.md     # derived context pack, readiness, traceability, and diagnostics
+.flow/active/<session-id>/docs/context.md     # derived context pack, readiness, quality, traceability, and diagnostics
 .flow/stored/<session-id>/session.json        # parked resumable sessions
 .flow/completed/<session-id>-<timestamp>/**   # closed session history
 .flow/locks/
