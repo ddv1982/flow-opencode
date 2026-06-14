@@ -88,8 +88,7 @@ describe("built dist smoke load", () => {
 			"flow_status",
 		];
 		const registeredToolNames = Object.keys(plugin.tool ?? {}).sort();
-		// The registered surface is exactly the canonical eight (the v2 compat
-		// redirect stubs were removed in v3.1).
+		// The registered surface is exactly the canonical eight.
 		expect(registeredToolNames).toEqual(canonicalToolNames);
 		expect(registeredToolNames).toHaveLength(8);
 

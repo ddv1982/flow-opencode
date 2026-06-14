@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.12"]
+  "plugin": ["opencode-plugin-flow@3.3.13"]
 }
 ```
 
@@ -133,7 +133,7 @@ The plugin registers a small tool surface (8 tools). All `.flow/**` mutations go
 | `flow_review_record` | Record a reviewer decision (`scope: feature` or `final`). |
 | `flow_session` | Activate or close a session, list history, or show a stored session. |
 
-These eight tools are the whole registered surface — the v2 tool-name redirect stubs that shipped in 3.0 were removed in v3.1 as scheduled. Existing v2 sessions still migrate seamlessly (the session schema is unchanged).
+These eight tools are the whole registered surface — the v2 tool-name redirect stubs that shipped in 3.0 were removed in v3.1 as scheduled.
 
 ### Agents
 
@@ -170,7 +170,7 @@ Flow stores workflow state in the project/worktree where OpenCode is running:
 
 The JSON session files are the source of truth; markdown files are derived views. There is one active session per worktree — activating another parks the current one under `.flow/stored/**`.
 
-Flow refuses to write session state at filesystem roots or directly in `$HOME`, and asks before writing `.flow/**` under unusual workspace roots. Existing v2 sessions resume under v3 (the session schema is unchanged).
+Flow refuses to write session state at filesystem roots or directly in `$HOME`, and asks before writing `.flow/**` under unusual workspace roots. Unsupported persisted session schema versions fail clearly instead of being migrated silently.
 
 ## Troubleshooting
 

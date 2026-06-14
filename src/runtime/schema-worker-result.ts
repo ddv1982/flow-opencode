@@ -18,19 +18,21 @@ import {
 	ValidationRunSchema,
 } from "./schema-worker-result-shared";
 
-export const WorkerResultBaseSchema = z.object({
-	contractVersion: z.literal("1"),
-	summary: z.string().min(1),
-	artifactsChanged: z.array(ArtifactSchema).default([]),
-	validationRun: z.array(ValidationRunSchema).default([]),
-	validationScope: z.enum(VALIDATION_SCOPES).optional(),
-	reviewIterations: z.number().int().nonnegative().optional(),
-	decisions: z.array(DecisionSchema).default([]),
-	nextStep: z.string().min(1),
-	featureResult: FeatureResultSchema,
-	featureReview: ReviewSchema,
-	finalReview: FinalReviewSchema.optional(),
-});
+export const WorkerResultBaseSchema = z
+	.object({
+		contractVersion: z.literal("1"),
+		summary: z.string().min(1),
+		artifactsChanged: z.array(ArtifactSchema).default([]),
+		validationRun: z.array(ValidationRunSchema).default([]),
+		validationScope: z.enum(VALIDATION_SCOPES).optional(),
+		reviewIterations: z.number().int().nonnegative().optional(),
+		decisions: z.array(DecisionSchema).default([]),
+		nextStep: z.string().min(1),
+		featureResult: FeatureResultSchema,
+		featureReview: ReviewSchema,
+		finalReview: FinalReviewSchema.optional(),
+	})
+	.strict();
 
 export const WorkerResultSchema = z
 	.discriminatedUnion("status", [
@@ -81,8 +83,6 @@ export const WorkerResultArgsSchema = z
 		addReplanRequiredIssueIfNeeded(value, context);
 	});
 
-// `tool` stays a free string so failed-attempt records written by Flow v2
-// (old tool names) keep loading under the consolidated tool surface.
 export const LatestFailedFlowAttemptSchema = z
 	.object({
 		tool: z.string().min(1),
@@ -96,20 +96,22 @@ export const LatestFailedFlowAttemptSchema = z
 	})
 	.strict();
 
-export const ExecutionHistoryEntrySchema = z.object({
-	featureId: z.string().min(1),
-	status: z.string().min(1),
-	summary: z.string().min(1),
-	recordedAt: z.string().min(1),
-	outcomeKind: z.string().min(1).nullable().optional(),
-	outcome: OutcomeSchema.nullable().optional(),
-	nextStep: z.string().min(1).nullable().optional(),
-	validationRun: z.array(ValidationRunSchema).default([]),
-	artifactsChanged: z.array(ArtifactSchema).default([]),
-	decisions: z.array(DecisionSchema).default([]),
-	featureResult: FeatureResultSchema.optional(),
-	replanRecord: ReplanRecordSchema.optional(),
-	reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
-	featureReview: ReviewSchema.optional(),
-	finalReview: FinalReviewSchema.optional(),
-});
+export const ExecutionHistoryEntrySchema = z
+	.object({
+		featureId: z.string().min(1),
+		status: z.string().min(1),
+		summary: z.string().min(1),
+		recordedAt: z.string().min(1),
+		outcomeKind: z.string().min(1).nullable().optional(),
+		outcome: OutcomeSchema.nullable().optional(),
+		nextStep: z.string().min(1).nullable().optional(),
+		validationRun: z.array(ValidationRunSchema).default([]),
+		artifactsChanged: z.array(ArtifactSchema).default([]),
+		decisions: z.array(DecisionSchema).default([]),
+		featureResult: FeatureResultSchema.optional(),
+		replanRecord: ReplanRecordSchema.optional(),
+		reviewerDecision: ReviewerDecisionSchema.nullable().optional(),
+		featureReview: ReviewSchema.optional(),
+		finalReview: FinalReviewSchema.optional(),
+	})
+	.strict();

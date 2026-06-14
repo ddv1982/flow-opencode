@@ -150,6 +150,7 @@ describe("runtime worker result contracts", () => {
 			{
 				contractVersion: "1",
 				status: "ok",
+				featureId: "setup-runtime",
 				summary: "Completed runtime setup.",
 				artifactsChanged: [{ path: "src/runtime/session.ts" }],
 				validationRun: [
@@ -181,6 +182,47 @@ describe("runtime worker result contracts", () => {
 		const parsed = JSON.parse(response);
 		expect(parsed.status).toBe("ok");
 		expect(parsed.session.lastOutcomeKind).toBe("completed");
+	});
+
+	test("tool rejects conflicting top-level worker feature ids", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_feature_complete.execute(
+			{
+				contractVersion: "1",
+				status: "ok",
+				featureId: "other-feature",
+				summary: "Completed runtime setup.",
+				artifactsChanged: [{ path: "src/runtime/session.ts" }],
+				validationRun: [
+					{
+						command: "bun test",
+						status: "passed",
+						summary: "Runtime tests passed.",
+					},
+				],
+				validationScope: "targeted",
+				reviewIterations: 1,
+				decisions: [],
+				nextStep: "Run the next feature.",
+				outcome: { kind: "completed" },
+				featureResult: {
+					featureId: "setup-runtime",
+					verificationStatus: "passed",
+				},
+				featureReview: {
+					status: "passed",
+					summary: "Looks good.",
+					blockingFindings: [],
+				},
+			},
+			toolContext(makeTempDir()),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("featureId");
+		expect(parsed.summary).toContain("featureResult.featureId");
 	});
 
 	test("completeRun accepts the documented top-level worker payload directly", () => {

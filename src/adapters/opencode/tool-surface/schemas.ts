@@ -96,6 +96,27 @@ type FlowFeatureCompleteArgs =
 			worker: zod.output<typeof RuntimeWorkerResultArgsSchema>;
 	  };
 
+function parseWorkerFeatureIdEnvelope(
+	topLevelFeatureId: unknown,
+	workerFeatureId: string,
+): void {
+	z.object({ featureId: featureIdSchema.optional() })
+		.superRefine((input, ctx) => {
+			if (
+				input.featureId !== undefined &&
+				input.featureId !== workerFeatureId
+			) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["featureId"],
+					message:
+						"top-level featureId must match featureResult.featureId for worker completions.",
+				});
+			}
+		})
+		.parse({ featureId: topLevelFeatureId });
+}
+
 export const FlowFeatureCompleteArgsSchema = {
 	parse(input: unknown): FlowFeatureCompleteArgs {
 		if (
@@ -106,14 +127,17 @@ export const FlowFeatureCompleteArgsSchema = {
 			const parsed = FlowFeatureCompleteResetArgsSchema.parse(input);
 			return { reset: true, featureId: parsed.featureId };
 		}
-		const { reset: _reset, ...workerInput } = (input ?? {}) as Record<
-			string,
-			unknown
-		>;
-		return {
-			reset: false,
-			worker: RuntimeWorkerResultArgsSchema.parse(workerInput),
-		};
+		const {
+			reset: _reset,
+			featureId: topLevelFeatureId,
+			...workerInput
+		} = (input ?? {}) as Record<string, unknown>;
+		const worker = RuntimeWorkerResultArgsSchema.parse(workerInput);
+		parseWorkerFeatureIdEnvelope(
+			topLevelFeatureId,
+			worker.featureResult.featureId,
+		);
+		return { reset: false, worker };
 	},
 };
 

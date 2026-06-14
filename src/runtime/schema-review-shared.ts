@@ -24,11 +24,13 @@ export const ReviewFindingSchema = z.object({
 	summary: z.string().min(1),
 });
 
-export const ReviewSchema = z.object({
-	status: z.enum(REVIEW_STATUSES),
-	summary: z.string().min(1),
-	blockingFindings: z.array(ReviewFindingSchema).default([]),
-});
+export const ReviewSchema = z
+	.object({
+		status: z.enum(REVIEW_STATUSES),
+		summary: z.string().min(1),
+		blockingFindings: z.array(ReviewFindingSchema).default([]),
+	})
+	.strict();
 
 export const FinalReviewEvidenceRefsSchema = z
 	.object({
@@ -37,9 +39,6 @@ export const FinalReviewEvidenceRefsSchema = z
 	})
 	.default({ changedArtifacts: [], validationCommands: [] });
 
-// Sessions persisted by Flow v2 carry richer final-review payloads
-// (behaviorChecks, validationCoverage, reviewContextPack, ...). Those keys are
-// stripped on load because this object is non-strict.
 export const FinalReviewSchema = ReviewSchema.extend({
 	reviewDepth: z.enum(FINAL_REVIEW_POLICIES),
 	reviewedSurfaces: z.array(z.enum(FINAL_REVIEW_SURFACES)).default([]),
@@ -48,4 +47,4 @@ export const FinalReviewSchema = ReviewSchema.extend({
 	remainingGaps: z.array(z.string().min(1)).default([]),
 	suggestedValidation: z.array(z.string().min(1)).optional(),
 	evidenceRefs: FinalReviewEvidenceRefsSchema,
-});
+}).strict();

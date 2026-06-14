@@ -37,11 +37,11 @@ Risk: high — this is the half that must never lie or lose data.
 - `src/runtime/application/` — session mutation actions behind the tool surface
 - rendering of derived markdown views beside each session
 
-Required checks: invariant/transition/persistence tests under `tests/`, the v2-session resume fixture, `bun run typecheck`, and `bun run check:architecture-seams:enforce` for dependency-boundary-sensitive changes.
+Required checks: invariant/transition/persistence tests under `tests/`, `bun run typecheck`, and `bun run check:architecture-seams:enforce` for dependency-boundary-sensitive changes.
 
 Do not:
 
-- Change persisted state shape without migration/recovery consideration (v2 sessions must resume).
+- Change persisted state shape without migration/recovery consideration.
 - Weaken a hard invariant, locking, or a path guard without updating the maintainer contract and its direct tests.
 - Import from `src/adapters/**`, `src/distribution/**`, or root entrypoints such as `src/config.ts`; inject those concerns from the adapter instead.
 - Grow the invariant set back into a gate matrix — judgment belongs in skill rubrics.
@@ -86,7 +86,7 @@ Do not:
 
 Risk: medium.
 
-Coverage is focused: hard invariants, transitions and recovery, persistence/locking/path safety, v2-session resume, tool shapes, install lifecycle. Add new coverage to the narrowest matching suite. Golden-transcript evals (model-driven, manual lane) own end-to-end skill effectiveness — do not try to test skill quality mechanically.
+Coverage is focused: hard invariants, transitions and recovery, persistence/locking/path safety, tool shapes, install lifecycle. Add new coverage to the narrowest matching suite. Golden-transcript evals (model-driven, manual lane) own end-to-end skill effectiveness — do not try to test skill quality mechanically.
 
 ## Documentation and historical evidence
 

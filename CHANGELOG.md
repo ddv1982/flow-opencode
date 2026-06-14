@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.13] - 2026-06-14
+
+Remove v2 session-resume compatibility, tighten retired-key payload parsing, shrink the current maintainer contract, and drop empty `core`/`workflow` owners from seam enforcement.
+
 ## [3.3.12] - 2026-06-14
 
 Fix-forward the hosted release by making the empty `src/core` guard pass on clean checkouts where Git does not materialize empty directories.

@@ -52,7 +52,7 @@ user / slash command / skill-guided agent
 - `src/adapters/opencode/` — thin adapter: plugin entry, config-hook injection of commands/agents, the tool surface, the compaction hook. Tools validate payloads and dispatch to runtime actions; they own no workflow policy.
 - `src/distribution/` — startup sync for skills, slash-command markdown files, and the review agent (marker files, backups), plus the uninstall CLI.
 
-Live persistence is snapshot-primary: `.flow/**/session.json` is the source of truth, rendered markdown is derived. The session schema stays at v1 so v2-created sessions resume under v3.
+Live persistence is snapshot-primary: `.flow/**/session.json` is the source of truth, rendered markdown is derived. Unsupported persisted schema versions fail clearly instead of being migrated silently.
 
 ## Editing skills
 
@@ -95,7 +95,6 @@ The suite is focused on what code actually owns:
 - the hard invariants and completion payload gates (validation evidence/scope, `featureReview`, final `finalReview`, strict reviewer decisions)
 - transitions and recovery metadata
 - session persistence, locking, activation, closure, and path/workspace-root safety
-- a v2-session resume fixture
 - tool arg shapes and registration
 - install lifecycle: pack, startup skill/command/agent sync, uninstall
 

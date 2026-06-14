@@ -4,6 +4,32 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.13] - 2026-06-14
+
+Retire compatibility weight that no longer pays rent
+
+Flow's v3 surface is now stable enough that the repository can stop carrying v2-era resume promises as active engineering requirements. The remaining compatibility code was not a user-facing workflow feature anymore; it mostly kept retired accounting fields parseable, preserved a large historical fixture, and made current runtime schemas silently strip fields that the runtime no longer owns.
+
+This release removes explicit v2 session-resume compatibility. The v2-era persisted-session fixture and tests are deleted, current docs stop promising that v2-created sessions resume under v3, and retired payload keys such as worker/reviewer `evidencePackets`, reviewer `reviewScopeLedger`, history `reviewFindingClosures`, and final-review `behaviorChecks`/`validationCoverage` now fail schema parsing instead of being stripped. The persisted schema version remains `1`, but unsupported or retired shapes are treated as unsupported data instead of being migrated silently.
+
+The runtime contracts are correspondingly tighter. Worker results, reviewer decisions, shared review payloads, final reviews, and execution-history entries now reject unknown fields. The OpenCode adapter still absorbs the one current overloaded tool-shape wrinkle: `flow_feature_complete` may receive a top-level `featureId` for normal worker completions, but it must match `featureResult.featureId` before the adapter normalizes the payload into the strict runtime schema.
+
+The architecture and maintainer docs are also right-sized to the code that exists. Empty `src/core` and `src/workflow` owners are removed from architecture seam enforcement and metrics, the vacuous empty-core adapter-import test is deleted, and the maintainer contract is reduced to the current invariants, persistence/write rules, public surface, source ownership, sync ownership, and useful checks. Historical decision-log entries remain append-only evidence and may still mention retired v2 surfaces.
+
+No command names, tool names, agents, state paths, package exports, sync ownership markers, runtime completion gates, review policy defaults, or skill guidance changed. The intentional behavior change is narrower but real: v2-era sessions or tool payloads that depend on retired fields now fail clearly instead of resuming or parsing by omission.
+
+Constraint: Remove compatibility paths and speculative architecture owners only where they no longer describe current code or current user-backed behavior
+Constraint: Keep the v3 public command/tool surface and completion gates stable while tightening runtime-owned state contracts
+Rejected: Keep v2 session resume as an active promise | it forces current schemas to tolerate retired fields and hides payload drift by stripping data the runtime no longer understands
+Rejected: Delete all historical v2 references from the decision log | append-only release history is evidence, not current-facing product documentation
+Rejected: Make the adapter strict in the same way as runtime schemas | the public `flow_feature_complete` args are intentionally overloaded, so the adapter must normalize known current convenience fields before runtime parsing
+Confidence: high
+Scope-risk: medium
+Reversibility: clean - the deleted fixture/tests and looser schema behavior can be restored from git history if user-backed compatibility demand returns
+Directive: Keep runtime persistence and domain schemas strict; tolerate only current adapter convenience fields at the OpenCode boundary, validate them, then normalize into strict runtime payloads
+Tested: `bun run report:architecture-metrics`; `bun test tests/runtime/worker-result-contracts.test.ts`; `bun run check`; `bun run smoke:release`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes runtime schema strictness, compatibility behavior, architecture enforcement, maintainer docs, tests, and release metadata with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.12] - 2026-06-14
 
 Fix-forward the clean-checkout release failure

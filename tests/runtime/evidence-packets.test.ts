@@ -259,8 +259,8 @@ describe("shared evidence packet primitives", () => {
 		expect(merged.reviewFindings).toEqual([]);
 	});
 
-	test("worker and reviewer payloads strip retired v2 packet accounting keys on parse", () => {
-		const workerResult = WorkerResultArgsSchema.parse({
+	test("worker and reviewer payloads reject packet fields outside planning context", () => {
+		const workerResult = WorkerResultArgsSchema.safeParse({
 			contractVersion: "1",
 			status: "ok",
 			summary: "Completed feature safely.",
@@ -306,10 +306,9 @@ describe("shared evidence packet primitives", () => {
 				blockingFindings: [],
 			},
 		});
-		expect(workerResult).not.toHaveProperty("evidencePackets");
-		expect(workerResult.finalReview).not.toHaveProperty("evidencePackets");
+		expect(workerResult.success).toBe(false);
 
-		const featureDecision = FlowReviewRecordFeatureArgsSchema.parse({
+		const featureDecision = FlowReviewRecordFeatureArgsSchema.safeParse({
 			scope: "feature",
 			featureId: "setup-runtime",
 			reviewPurpose: "execution_gate",
@@ -326,9 +325,9 @@ describe("shared evidence packet primitives", () => {
 				},
 			],
 		});
-		expect(featureDecision).not.toHaveProperty("evidencePackets");
+		expect(featureDecision.success).toBe(false);
 
-		const decision = FinalReviewerDecisionSchema.parse({
+		const invalidFinalDecision = FinalReviewerDecisionSchema.safeParse({
 			scope: "final",
 			reviewPurpose: "completion_gate",
 			reviewDepth: "detailed",
@@ -348,7 +347,27 @@ describe("shared evidence packet primitives", () => {
 			},
 			evidencePackets: [{ ...sampleEvidencePacket, purpose: "review" }],
 		});
-		expect(decision).not.toHaveProperty("evidencePackets");
+		expect(invalidFinalDecision.success).toBe(false);
+
+		const decision = FinalReviewerDecisionSchema.parse({
+			scope: "final",
+			reviewPurpose: "completion_gate",
+			reviewDepth: "detailed",
+			status: "approved",
+			summary: "Final reviewer approved.",
+			blockingFindings: [],
+			reviewedSurfaces: [
+				"changed_files",
+				"validation_evidence",
+				"shared_surfaces",
+			],
+			evidenceSummary: "Reviewed packet schema changes.",
+			validationAssessment: "Targeted tests passed.",
+			evidenceRefs: {
+				changedArtifacts: ["src/runtime/schema.ts"],
+				validationCommands: ["bun test tests/runtime/evidence-packets.test.ts"],
+			},
+		});
 
 		const applied = applyPlan(
 			createSession("Build a workflow plugin"),

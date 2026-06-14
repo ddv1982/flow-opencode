@@ -160,7 +160,7 @@ describe("runtime plan and tool schema contracts", () => {
 		]);
 	});
 
-	test("reviewer decision tool strips featureId from final review payloads for v2 compatibility", async () => {
+	test("reviewer decision tool rejects final review payloads that name a feature", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Build a workflow plugin");
@@ -207,9 +207,9 @@ describe("runtime plan and tool schema contracts", () => {
 		);
 
 		const parsed = JSON.parse(response);
-		expect(parsed.status).toBe("ok");
-		expect(parsed.session.lastReviewerDecision.scope).toBe("final");
-		expect(parsed.session.lastReviewerDecision.featureId).toBeUndefined();
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("featureId");
 	});
 
 	test("tools keep representative top-level response shapes across the split helpers", async () => {

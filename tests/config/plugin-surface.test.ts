@@ -70,32 +70,6 @@ function stackProfileEntry(name: string) {
 	return { name, evidenceRefs: [], confidence: "medium" as const };
 }
 
-async function collectTypeScriptFiles(directory: string): Promise<string[]> {
-	let entries: Array<{
-		name: string;
-		isDirectory: () => boolean;
-		isFile: () => boolean;
-	}>;
-	try {
-		entries = await readdir(directory, { withFileTypes: true });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return [];
-		}
-		throw error;
-	}
-	const nested = await Promise.all(
-		entries.map(async (entry) => {
-			const path = join(directory, entry.name);
-			if (entry.isDirectory()) {
-				return collectTypeScriptFiles(path);
-			}
-			return entry.isFile() && path.endsWith(".ts") ? [path] : [];
-		}),
-	);
-	return nested.flat();
-}
-
 describe("plugin config surface", () => {
 	test("plugin entrypoint returns Flow config and tool hooks", async () => {
 		const appLog = {
@@ -355,20 +329,6 @@ describe("plugin config surface", () => {
 		// flow_auto_prepare was a v2 tool; its redirect stub was removed in v3.1.
 		expect(plugin.tool).not.toHaveProperty("flow_auto_prepare");
 		expect(CANONICAL_RUNTIME_TOOL_NAMES).not.toContain("flow_auto_prepare");
-	});
-
-	test("core modules stay independent of OpenCode adapter packages", async () => {
-		const coreRoot = join(import.meta.dir, "..", "..", "src", "core");
-		const files = await collectTypeScriptFiles(coreRoot);
-
-		// src/core is currently empty (its only protocol module was removed), so
-		// this guard is vacuously true today. It stays in place so that any
-		// future host-agnostic core module is held to the no-adapter-imports rule.
-		for (const file of files) {
-			const source = await readFile(file, "utf8");
-			expect(source).not.toContain("@opencode-ai/plugin");
-			expect(source).not.toContain("adapters/opencode");
-		}
 	});
 
 	test("plugin entrypoint logs through ctx.client.app.log", async () => {

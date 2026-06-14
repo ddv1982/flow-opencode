@@ -24,22 +24,10 @@ const moduleFileExtensions = [
 ];
 
 const deniedEdges = new Set([
-	"shared->workflow",
 	"shared->runtime",
 	"shared->distribution",
 	"shared->adapters",
 	"shared->entrypoints",
-	"core->shared",
-	"core->workflow",
-	"core->runtime",
-	"core->distribution",
-	"core->adapters",
-	"core->entrypoints",
-	"workflow->shared",
-	"workflow->runtime",
-	"workflow->distribution",
-	"workflow->adapters",
-	"workflow->entrypoints",
 	"runtime->distribution",
 	"runtime->adapters",
 	"runtime->entrypoints",
@@ -92,8 +80,6 @@ function layerFromPath(filePath) {
 	) {
 		return "entrypoints";
 	}
-	if (relative.startsWith("src/core/")) return "core";
-	if (relative.startsWith("src/workflow/")) return "workflow";
 	if (relative.startsWith("src/runtime/")) return "runtime";
 	if (relative.startsWith("src/distribution/")) return "distribution";
 	if (relative.startsWith("src/adapters/")) return "adapters";

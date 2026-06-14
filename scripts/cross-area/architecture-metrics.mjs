@@ -17,8 +17,6 @@ const repoRoot = process.env.FLOW_ARCH_METRICS_ROOT
 
 const sourceOwners = [
 	"shared",
-	"core",
-	"workflow",
 	"runtime",
 	"distribution",
 	"adapters",
@@ -83,8 +81,6 @@ function sourceOwner(filePath) {
 	) {
 		return "entrypoints";
 	}
-	if (relative.startsWith("src/core/")) return "core";
-	if (relative.startsWith("src/workflow/")) return "workflow";
 	if (relative.startsWith("src/runtime/")) return "runtime";
 	if (relative.startsWith("src/distribution/")) return "distribution";
 	if (relative.startsWith("src/adapters/")) return "adapters";

@@ -393,9 +393,13 @@ describe("runtime semantic invariants", () => {
 			}).success,
 		).toBe(true);
 
-		// The featureId rejection for final-scope decisions lives in the
-		// transition layer (validateReviewerDecisionInput), not the zod schema:
-		// v2 payloads with retired keys must still parse.
+		expect(
+			FinalReviewerDecisionSchema.safeParse({
+				...approvedReviewerDecision("final"),
+				featureId: "setup-runtime",
+			}).success,
+		).toBe(false);
+
 		const session = createRunningSession();
 		const rejected = recordReviewerDecision(session, {
 			...approvedReviewerDecision("final"),
@@ -438,8 +442,7 @@ describe("runtime semantic invariants", () => {
 		for (const toolName of CANONICAL_RUNTIME_TOOL_NAMES) {
 			expect(tools).toContain(toolName);
 		}
-		// The registered surface is exactly the canonical eight (the v2 compat
-		// redirect stubs were removed in v3.1).
+		// The registered surface is exactly the canonical eight.
 		expect(tools.sort()).toEqual([...CANONICAL_RUNTIME_TOOL_NAMES].sort());
 		expect(tools.some((name) => name.includes("_from_raw"))).toBe(false);
 	});
