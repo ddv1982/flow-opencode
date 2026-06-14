@@ -13,7 +13,7 @@ Before commit/push, the optional repo-local preflight lives at `.agents/skills/f
 
 Risk: medium — wrong guidance degrades output quality but cannot corrupt state.
 
-- `skills/flow/SKILL.md` — the driving loop, stop conditions, recovery playbook
+- `skills/flow/SKILL.md` + `references/` — the driving loop, stop conditions, recovery playbook, shared parallel orchestration protocol
 - `skills/flow-plan/SKILL.md` + `references/` — decomposition, sizing, approval criteria
 - `skills/flow-run/SKILL.md` + `references/` — one-feature discipline, validation evidence standards
 - `skills/flow-review/SKILL.md` + `references/` — review depth, finding taxonomy, report format

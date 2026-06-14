@@ -2,6 +2,12 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, sep } from "node:path";
+import flowParallelOrchestrationDoc from "../../skills/flow/references/parallel-orchestration.md" with {
+	type: "text",
+};
+import flowRecoveryPlaybookDoc from "../../skills/flow/references/recovery-playbook.md" with {
+	type: "text",
+};
 import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
 import flowPlanParallelDiscoveryDoc from "../../skills/flow-plan/references/parallel-discovery.md" with {
 	type: "text",
@@ -73,7 +79,17 @@ export type FlowSkillDefinition = {
 export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 	{
 		name: "flow",
-		files: [{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowSkillDoc }],
+		files: [
+			{ relativePath: SKILL_DOCUMENT_FILENAME, content: flowSkillDoc },
+			{
+				relativePath: "references/recovery-playbook.md",
+				content: flowRecoveryPlaybookDoc,
+			},
+			{
+				relativePath: "references/parallel-orchestration.md",
+				content: flowParallelOrchestrationDoc,
+			},
+		],
 	},
 	{
 		name: "flow-plan",

@@ -18,6 +18,16 @@ What counts as validation evidence when completing a Flow feature, strongest fir
 - **Gaps are first-class.** When a check cannot run, record: what should have run, why it could not, what you ran instead, and the residual risk. Never silently downgrade.
 - **Never fabricate.** No invented outputs, no trimming failures from results, no claiming a run you did not perform. A fabricated pass poisons the session's whole evidence chain.
 
+## Parallel validation
+
+Parallelize only independent checks: disjoint package tests, docs/link checks,
+isolated install smoke, or read-only triage. Skip shared ports, databases,
+fixtures, snapshots, generated files, or writable caches.
+
+Worker runs count only with command/recipe, slice/environment, outcome, and
+skipped setup preserved. The manager owns `flow_feature_complete`, reconciles
+conflicts, and never hides worker failures.
+
 ## Required tier by change type
 
 - **Behavior change (code paths, APIs, logic):** tier 1, including at least one check that fails without the change.

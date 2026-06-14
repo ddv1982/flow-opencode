@@ -16,6 +16,8 @@ Flow persists planning and execution state under `.flow/**` so work survives com
 5. All features complete and final review recorded: close via `flow_session` (`action: close`). Its `history`, `show`, and `activate` actions inspect or switch sessions.
 6. Back to step 1, until the session is closed or a stop condition hits.
 
+For broad splittable planning, review, audit, research, or validation, use `references/parallel-orchestration.md`; workers gather evidence, the manager owns synthesis and every state-changing `flow_*` call.
+
 ## Stop and ask the user
 
 - The `flow_*` tools are unavailable: the Flow plugin is not loaded in this environment. Stop and tell the user to check that `opencode-plugin-flow` is in the `plugin` array of `opencode.json` (a project-local `plugin` array overrides the global one) and restart OpenCode. Never substitute an unrecorded workflow — work without persisted state defeats Flow's purpose while looking like success.

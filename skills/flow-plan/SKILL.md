@@ -35,7 +35,7 @@ Record this with existing plan fields: `planning.workflowProfile` for workflow s
 
 After saving the plan, `flow_status`, `flow_context`, and `.flow/active/<session-id>/docs/context.md` expose derived `workflowReadiness`, `contextQuality`, `contextTraceability`, and diagnostics for weak context. Use `flow_context` when you also need the project structure map. Treat `workflowReadiness.state` values starting with `blocked_by_` as workflow blockers that must be resolved or explicitly justified. Treat `contextQuality` as advisory: weak quality should sharpen the plan, but it is not a runtime completion gate.
 
-For broad review, audit, migration, or research-heavy goals, read `references/parallel-discovery.md` after the initial serial repo profile. Use host-native read-only workers only for independent discovery slices. The manager still synthesizes the evidence and records it in existing Flow fields (`planning.research`, `planning.reviewFindings`, requirements, architecture decisions, feature `fileTargets` / `reviewScope`, and notes). Parallel discovery must not create a new context-pack field or mutate Flow state from workers.
+For broad review, audit, migration, or research-heavy goals, read `../flow/references/parallel-orchestration.md` and `references/parallel-discovery.md` after the serial repo profile. Use read-only workers only for independent slices; synthesize evidence into existing Flow fields, never a new context-pack field or worker-owned Flow state.
 
 ## Decompose the goal
 

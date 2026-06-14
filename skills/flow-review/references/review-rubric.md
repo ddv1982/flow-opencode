@@ -52,6 +52,14 @@ Before approving, compare the implementation and validation evidence to the plan
 
 Missing or stale context is not a documentation nit when it changes the review claim. Mark it blocking when it means the reviewer cannot tell what was inspected, what changed, or why the validation evidence applies.
 
+## Parallel review synthesis
+
+For very large reviews, read `../../flow/references/parallel-orchestration.md`;
+split read-only discovery by module, changed surface, or risk lens. Workers
+gather candidates; the reviewer owns the verdict. Before `flow_review_record`,
+reconcile duplicates, verify blocking findings at the claimed depth, and treat
+missing worker coverage as a gap.
+
 ## Report format
 
 ```

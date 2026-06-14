@@ -4,6 +4,29 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.17] - 2026-06-14
+
+Make parallel skill work one shared protocol
+
+Flow already had planning and review guidance for read-only parallel discovery, but the pattern was split across discipline-specific prose. That made it too easy for each skill to drift on the important boundary: workers may gather evidence, but the manager owns synthesis and every state-changing `flow_*` call.
+
+This release consolidates that rule into a shared `flow` reference. Planning, execution, validation, audit, and review guidance now point at one parallel orchestration protocol: profile serially first, split independent read-only slices, require structured worker handoffs, treat worker output as candidate evidence, and synthesize into existing Flow fields. Execution remains one active feature at a time; parallel implementation experiments require isolated worktrees or disjoint ownership and still route the chosen result through the active feature.
+
+The release also ships the shared `flow` references through the npm sync path. `recovery-playbook.md` is now bundled alongside `parallel-orchestration.md`, so installed skills can actually load the recovery catalog and shared orchestration protocol they reference. The recovery playbook was tightened, but it still names every runtime completion `errorCode`; the docs contract test now derives that required list from `buildCompletionRecovery()` so future runtime recovery changes cannot silently drop playbook coverage.
+
+No commands, tools, agents, state paths, persisted schemas, package exports, runtime transitions, completion gates, review policy defaults, validation strictness, or sync ownership marker formats changed. The public workflow surface remains five commands, one agent, and eight tools. This is a skill-methodology and distribution release, not a new runtime mode.
+
+Constraint: Make parallel work available across Flow disciplines without making Flow execution or persisted state parallel
+Constraint: Keep worker output read-only and manager-synthesized so existing Flow fields remain the source of truth
+Rejected: Add runtime-level parallel feature execution | it would require new scheduler/state semantics and weaken the one-active-feature completion model
+Rejected: Leave planning, review, validation, and audit with separate parallel rules | duplicated guidance invites drift around state-changing tools and evidence synthesis
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the skill references, bundled file list, docs, and docs-contract test can be reverted without migrating sessions or changing public tools
+Directive: Use `references/parallel-orchestration.md` for broad splittable Flow work; workers gather evidence, managers synthesize and own all `flow_*` mutations
+Tested: `bun test tests/install.test.ts tests/config/plugin-surface.test.ts`; `bun test tests/cross-area/completion-contract-docs.test.ts`; `bun run typecheck`; `git diff --check`; `bun run check`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes skills, bundled references, docs, tests, and release metadata, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.16] - 2026-06-14
 
 Serialize session mutations instead of just writes

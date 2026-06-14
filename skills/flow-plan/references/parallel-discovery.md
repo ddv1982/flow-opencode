@@ -1,108 +1,35 @@
-# Parallel Discovery
+# Parallel Discovery for Planning
 
-Use this when planning or review is too broad for one read. Flow uses
-parallelism only for read-only discovery. The manager still owns the session,
-synthesis, plan payload, reviewer decision, and every `flow_*` call.
+Use after `../../flow/references/parallel-orchestration.md`.
 
-## When to use it
+Use for broad audits, migrations, review-first goals, or large codebases where
+serial inspection would leave shallow `planning.research`. Skip small tasks,
+overlapping slices, or one local unknown.
 
-- Broad repository audits with independent areas or risk lenses.
-- Research across APIs, packages, designs, or migrations.
-- Large codebases with clear module or workflow boundaries.
-- Review-first goals where the first feature is a findings report.
+## Workflow
 
-Skip small tasks, cross-talk-heavy slices, shared edits, or Flow state mutation.
+1. Profile serially first: package manager, scripts, framework, state paths,
+   tests, docs, local rules, representative files.
+2. Choose `planning.workflowProfile`: `bugfix`, `refactor`, `release`,
+   `review`, `migration`, or `default`.
+3. Split read-only questions by module/path, risk lens, dependency/API,
+   migration target, validation, or CI surface.
+4. Give workers the goal as context, one slice, paths or commands, exclusions,
+   and the shared handoff.
+5. Synthesize before saving; do not paste raw handoffs into the plan.
 
-## Discover serially first
+## Synthesis rules
 
-Profile before spawning workers:
-
-- Identify package manager, scripts, tests, and framework conventions.
-- List modules, state paths, commands, docs, and contracts.
-- Sample representative files before deciding the split axis.
-- Name any surfaces that are out of scope.
-- Name the workflow shape: implementation, review, migration, release, refactor.
-
-Record synthesis in existing fields: `planning.repoProfile`,
+Save evidence only in existing fields: `planning.repoProfile`,
 `planning.workflowProfile`, `planning.research`, `planning.reviewFindings`,
-requirements, architecture decisions, feature `fileTargets` / `reviewScope`,
-and notes. Do not invent a context-pack or worker-results field.
+requirements, decisions, feature `fileTargets` / `reviewScope`, and notes. Do
+not create `contextPack`, `workerResults`, or parallel-discovery state.
 
-## Decompose by ownership
+Convert only evidence-backed work into features. Broad "review and fix" with no
+findings starts with a review-first feature. Split by validation story, not
+worker slice. Resolve done-condition gaps and conflicts before saving.
 
-Good split axes:
-
-- Path or module: `src/runtime`, `src/adapters/opencode`, `skills`, `tests`.
-- Risk lens: correctness, security, persistence, concurrency, release/install,
-  API compatibility, validation coverage.
-- Research stream: one API, dependency, migration target, or design option per
-  worker.
-- Data slice: disjoint files, log ranges, ticket ranges, or transcript ranges.
-
-Keep prompts self-contained: goal, slice, paths or commands, out-of-scope
-surfaces, and handoff format.
-
-## Worker rules
-
-- Workers are read-only unless isolated worktrees or non-Flow experiments are
-  explicitly chosen.
-- Workers must not call state-changing Flow tools. The manager owns
-  `flow_plan_save`, `flow_plan_approve`, `flow_run_start`,
-  `flow_feature_complete`, `flow_review_record`, and `flow_session`.
-- Workers must not complete features, approve plans, record reviews, or edit
-  `.flow/**`.
-- One worker inspects one slice and returns one handoff. The manager compares
-  slices and writes the final plan, report, or recommendation.
-- Parallel implementation is outside normal Flow execution. Use separate
-  worktrees, then route the chosen result through one active feature.
-
-## Research / review handoff
-
-Ask each read-only worker to return exactly this structure:
-
-```markdown
-## Status
-success | partial | blocked
-
-## Scope
-<exact slice: paths, module, risk lens, data range, or question>
-
-## Findings and evidence
-- <finding with evidence: file:line, command summary, URL, version, metric>
-- <finding ...>
-
-## Sources
-- <paths read, commands run, docs fetched, data covered>
-
-## Open questions / gaps
-- <ambiguity, missing source, contradiction, or out-of-scope item>
-
-## Suggested Flow follow-ups
-- <planning context, review finding, feature, validation check, or note>
-```
-
-For audit work, blocking findings follow
-`../../flow-run/references/audit-rubric.md`: name guards or mitigations checked.
-Without that grounding, a finding is a candidate.
-
-## Manager synthesis
-
-After workers return:
-
-- Treat worker findings as candidate evidence. Reconcile contradictions first.
-- Deduplicate overlapping findings and downgrade unverified hypotheses.
-- Preserve useful paths, URLs, commands, and data ranges in `planning.research`,
-  `planning.reviewFindings`, requirements, decisions, targets, scopes, or notes.
-- Convert only evidence-backed work into features. Broad "fix the repo" plans
-  start with review-first discovery unless concrete findings already exist.
-- Spawn a second read-only wave only for gaps that affect the plan, review
-  decision, or done condition.
-
-The final output is a synthesized Flow artifact: saved plan, review decision, or
-findings report. Do not forward raw handoffs as the final answer.
-
-## Execution boundary
-
-Flow execution remains serial. `flow_run_start` activates one approved feature
-until it is completed, blocked, or reset. Parallel workers must not mutate the
-same active session or complete separate features concurrently.
+Release-risk slices: runtime/persistence, adapter/tool compatibility,
+distribution/install, skill/review quality, validation coverage. Save a
+review-first feature if no blockers are confirmed; save fix features only for
+confirmed findings grouped by validation story.

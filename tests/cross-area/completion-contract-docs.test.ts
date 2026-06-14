@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+	buildCompletionRecovery,
+	type CompletionRecoveryKind,
+} from "../../src/runtime/transitions/recovery";
 
 const repoRoot = join(import.meta.dir, "..", "..");
 
@@ -12,6 +16,31 @@ function expectAllTerms(source: string, terms: readonly string[]): void {
 	for (const term of terms) {
 		expect(source).toContain(term);
 	}
+}
+
+const completionRecoveryKinds = {
+	missing_validation: true,
+	failing_validation: true,
+	missing_reviewer_decision: true,
+	missing_validation_scope: true,
+	failing_feature_review: true,
+	missing_final_review: true,
+	failing_final_review: true,
+} satisfies Record<CompletionRecoveryKind, true>;
+
+function completionRecoveryErrorCodes(): string[] {
+	const errorCodes = new Set<string>();
+	for (const kind of Object.keys(
+		completionRecoveryKinds,
+	) as CompletionRecoveryKind[]) {
+		for (const wasFinalFeature of [false, true] as const) {
+			errorCodes.add(
+				buildCompletionRecovery("docs-contract", wasFinalFeature, kind)
+					.errorCode,
+			);
+		}
+	}
+	return [...errorCodes].sort();
 }
 
 describe("completion contract documentation", () => {
@@ -43,13 +72,7 @@ describe("completion contract documentation", () => {
 		);
 		expectAllTerms(
 			readRepoFile("skills/flow/references/recovery-playbook.md"),
-			[
-				"missing_targeted_validation",
-				"missing_broad_validation",
-				"failing_feature_review",
-				"failing_final_review",
-				"missing_final_review_payload",
-			],
+			completionRecoveryErrorCodes(),
 		);
 	});
 

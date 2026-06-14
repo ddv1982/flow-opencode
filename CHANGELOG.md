@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.17] - 2026-06-14
+
+Teach every Flow skill to use one shared read-only parallel orchestration protocol, bundle the shared references, and lock recovery-code documentation to the runtime matrix.
+
 ## [3.3.16] - 2026-06-14
 
 Serialize Flow tool mutations through a session transaction so concurrent planning and execution updates compose instead of racing stale reads or stale docs.

@@ -14,6 +14,13 @@ Before any finding earns blocking severity (P1/P2 or equivalent), actively try t
 
 A finding that survives this pass is worth reporting. A finding you did not try to refute is a guess with a citation.
 
+## Parallel audit slices
+
+For broad audits, use `../../flow/references/parallel-orchestration.md` to split
+read-only slices by module, data flow, or risk lens. Workers surface candidates;
+the audit author owns the report. Before blocking severity, dedupe, trace
+guards, fill cross-layer checks, and downgrade missing context.
+
 ## Every blocking finding records "guards checked"
 
 In addition to evidence, why-it-matters, and fix shape, every blocking finding names the mitigating paths you traced and why they do not cover this case ("`suggest_mappings()` enforces one-to-one via `used_a`/`used_b` — but nothing dedupes after the frontend re-sorts" reads very differently from silence). No guards-checked line means the finding is unverified: downgrade it to advisory and say what you did not trace.

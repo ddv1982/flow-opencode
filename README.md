@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.16"]
+  "plugin": ["opencode-plugin-flow@3.3.17"]
 }
 ```
 
@@ -102,7 +102,7 @@ This removes the Flow-owned global skill folders, command files, agent files, an
 | `flow-run` | One-feature-at-a-time discipline and what counts as validation evidence. |
 | `flow-review` | Review depth criteria, finding taxonomy, and report format. |
 
-Deeper methodology (worked plan examples, validation and review rubrics) lives in `references/` files next to the `flow-plan`, `flow-run`, and `flow-review` skills and is loaded only when needed.
+Deeper methodology (recovery, shared parallel orchestration, worked plan examples, validation, audit, and review rubrics) lives in `references/` files next to the skills and is loaded only when needed.
 
 ### Commands
 
