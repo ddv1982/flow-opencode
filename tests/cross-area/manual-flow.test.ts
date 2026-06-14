@@ -477,9 +477,11 @@ describe("cross-area manual flow", () => {
 			await flowReviewRecordFeature.execute(
 				{
 					scope: "feature",
-					featureId: "dist-smoke",
-					status: "approved",
-					summary: "Feature review approved.",
+					featureReview: {
+						featureId: "dist-smoke",
+						status: "approved",
+						summary: "Feature review approved.",
+					},
 				},
 				context,
 			),
@@ -488,24 +490,26 @@ describe("cross-area manual flow", () => {
 			await flowReviewRecordFinal.execute(
 				{
 					scope: "final",
-					reviewDepth: "detailed",
-					reviewedSurfaces: [
-						"changed_files",
-						"shared_surfaces",
-						"validation_evidence",
-						"release_surface",
-					],
-					evidenceSummary:
-						"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
-					validationAssessment:
-						"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression evidence; no unchecked behavior gap remains for this release-surface fixture.",
-					evidenceRefs: {
-						changedArtifacts: ["dist/index.js"],
-						validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+					finalReview: {
+						reviewDepth: "detailed",
+						reviewedSurfaces: [
+							"changed_files",
+							"shared_surfaces",
+							"validation_evidence",
+							"release_surface",
+						],
+						evidenceSummary:
+							"Checked dist/index.js release entrypoint, bundle load boundary, failure path, and smoke validation evidence.",
+						validationAssessment:
+							"bun test tests/smoke/dist-load.test.ts was mapped to the dist-load regression evidence; no unchecked behavior gap remains for this release-surface fixture.",
+						evidenceRefs: {
+							changedArtifacts: ["dist/index.js"],
+							validationCommands: ["bun test tests/smoke/dist-load.test.ts"],
+						},
+						remainingGaps: [],
+						status: "approved",
+						summary: "Final review approved.",
 					},
-					remainingGaps: [],
-					status: "approved",
-					summary: "Final review approved.",
 				},
 				context,
 			),

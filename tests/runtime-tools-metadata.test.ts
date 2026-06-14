@@ -75,9 +75,11 @@ describe("runtime tool metadata", () => {
 			},
 			flow_review_record: {
 				scope: "feature",
-				featureId: "setup-runtime",
-				status: "approved",
-				summary: "Looks good.",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Looks good.",
+				},
 			},
 			flow_session: { action: "show", sessionId: currentSessionId },
 		};
@@ -225,9 +227,11 @@ describe("runtime tool metadata", () => {
 		await tools.flow_review_record.execute(
 			{
 				scope: "feature",
-				featureId: "setup-runtime",
-				status: "approved",
-				summary: "Looks good.",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Looks good.",
+				},
 			},
 			context,
 		);
@@ -257,23 +261,25 @@ describe("runtime tool metadata", () => {
 		await tools.flow_review_record.execute(
 			{
 				scope: "final",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
-				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
+				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					remainingGaps: [],
+					status: "approved",
+					summary: "Final review looks good.",
 				},
-				remainingGaps: [],
-				status: "approved",
-				summary: "Final review looks good.",
 			},
 			context,
 		);

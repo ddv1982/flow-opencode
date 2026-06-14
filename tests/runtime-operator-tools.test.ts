@@ -386,12 +386,14 @@ describe("runtime operator tools", () => {
 			await tools.flow_review_record.execute(
 				{
 					scope: "feature",
-					featureId: scopedFeature.id,
-					status: "approved",
-					summary: "Feature review recorded after the failed completion.",
-					blockingFindings: [],
-					followUps: [],
-					suggestedValidation: [],
+					featureReview: {
+						featureId: scopedFeature.id,
+						status: "approved",
+						summary: "Feature review recorded after the failed completion.",
+						blockingFindings: [],
+						followUps: [],
+						suggestedValidation: [],
+					},
 				},
 				toolContext(worktree),
 			),

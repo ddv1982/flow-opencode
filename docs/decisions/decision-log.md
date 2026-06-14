@@ -4,6 +4,30 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.21] - 2026-06-14
+
+Nest reviewer-record payloads instead of teaching a flat schema to guess
+
+The `flow_review_record` tool had one public name for two different reviewer decisions: feature-scoped approval and final session approval. The runtime modeled that correctly as strict discriminated schemas, but the OpenCode host saw one flat argument surface. That made the feature-review path brittle: final-only fields such as `reviewDepth`, `reviewedSurfaces`, `evidenceSummary`, `remainingGaps`, and `evidenceRefs` could appear in the host-facing shape even though the strict feature runtime schema must reject them. The previous unblock path was to tolerate and strip those known final-only fields for feature calls, but that made the adapter clever in exactly the part of Flow that should stay obvious.
+
+This release changes the public reviewer-record contract to an explicit envelope: `flow_review_record` now accepts `{scope: "feature", featureReview: {...}}` for feature decisions and `{scope: "final", finalReview: {...}}` for final decisions. The adapter branches on `scope`, injects the matching runtime scope into the nested payload, and then parses through the existing strict runtime reviewer schemas. Legacy flat feature and final payloads are rejected, final-only fields inside `featureReview` are rejected, `featureId` inside `finalReview` is rejected, mismatched envelopes are rejected, and unknown top-level review keys still fail before persistence.
+
+The skill and rubric examples now teach the nested shape directly, and the representative tool, metadata, smoke, and manual-flow tests use the same envelope. This keeps the public tool count fixed at eight while removing the overloaded flat shape that caused the review-record gate to fail for schema reasons rather than code reasons.
+
+No commands, tools, agents, state paths, persisted session schemas, package exports, runtime completion gates, review policy defaults, sync ownership marker formats, install behavior, or dependency versions changed. The intentional public behavior change is the `flow_review_record` argument shape: callers must use `featureReview` or `finalReview` instead of placing reviewer fields beside `scope`.
+
+Constraint: Keep one reviewer-record tool while making its two payload families structurally unambiguous
+Constraint: Preserve strict runtime reviewer schemas and reject wrong-scope fields before persistence
+Rejected: Keep the tolerant adapter that strips known final-only fields from feature calls | it unblocked the gate but made the adapter responsible for silently interpreting a confused payload
+Rejected: Split the surface back into `flow_review_record_feature` and `flow_review_record_final` | strict schemas would be simple, but the public tool surface would grow again
+Rejected: Accept an opaque JSON blob and validate only after execution starts | that would weaken host hints and make bad tool calls travel farther through the runtime path
+Confidence: high
+Scope-risk: medium
+Reversibility: clean - the nested envelope parser, skill examples, and tests can be reverted or bridged without migrating persisted sessions because stored reviewer decisions keep the same runtime shape
+Directive: Prefer explicit nested envelopes over flat overloaded tool schemas when one OpenCode tool fronts multiple strict runtime payload families
+Tested: `bun test tests/runtime/plan-and-tool-schema-contracts.test.ts tests/runtime-tools.test.ts tests/runtime-tools-metadata.test.ts tests/runtime-operator-tools.test.ts tests/cross-area/manual-flow.test.ts tests/smoke/dist-load.test.ts`; `bun run check`; `bun run smoke:release`; `bun run check:release-hygiene`; `bun run check:pack-invariants`; `bun run report:architecture-metrics` (six skills, five commands, one agent, eight tools, zero seam violations, `dist/index.js` 239337 bytes); `git diff --check`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate to exercise `flow_review_record` from the host UI; this release changes tool argument shape, skills, docs, tests, and release metadata with automated package/build validation only.
+
 ## [3.3.20] - 2026-06-14
 
 Hide the reviewer behind the review commands

@@ -23,7 +23,7 @@ const OPENCODE_TOOL_DESCRIPTIONS: Record<OpenCodeToolName, string> = {
 	flow_feature_complete:
 		"Persist an already-validated Flow feature execution result, or reset a feature to pending with reset=true",
 	flow_review_record:
-		"Record an already-validated reviewer decision (scope: feature or final) from a JSON payload",
+		"Record an already-validated reviewer decision with scope plus featureReview or finalReview payload",
 	flow_session:
 		"Manage Flow sessions: activate or close a session, list history, or show a stored session by id",
 };

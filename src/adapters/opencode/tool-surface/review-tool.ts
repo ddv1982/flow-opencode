@@ -26,16 +26,16 @@ export function createReviewTool() {
 			args: FlowReviewRecordArgsShape,
 			execute: withParsedArgs(
 				FlowReviewRecordArgsSchema,
-				async (input, context: ToolContext) => {
-					if (input.scope === "feature") {
+				async (decision, context: ToolContext) => {
+					if (decision.scope === "feature") {
 						const featureDocDrilldown =
 							await resolveFeatureDocDrilldownFromCurrentSession(
 								context,
-								input.featureId,
+								decision.featureId,
 							);
 						recordToolMetadata(
 							context,
-							`Feature review requested ${input.status} — pending Flow persistence: ${input.featureId}`,
+							`Feature review requested ${decision.status} — pending Flow persistence: ${decision.featureId}`,
 							{
 								sessionId: null,
 								metadataAuthority: "requested_only",
@@ -43,24 +43,24 @@ export function createReviewTool() {
 								mutationState: "pending_guarded_mutation",
 								taskOwner: "flow-reviewer",
 								taskPhase: "review",
-								taskSubject: `Feature review: ${input.featureId}`,
+								taskSubject: `Feature review: ${decision.featureId}`,
 								taskStatus: "active",
-								requestedReviewStatus: input.status,
+								requestedReviewStatus: decision.status,
 								persistedReviewStatus: null,
-								featureId: input.featureId,
+								featureId: decision.featureId,
 								...(featureDocDrilldown ? { featureDocDrilldown } : {}),
 							},
 						);
 						return executeGuardedSessionMutation(
 							context,
 							"record_feature_review",
-							{ decision: input },
+							{ decision },
 						);
 					}
 
 					recordToolMetadata(
 						context,
-						`Final reviewer requested ${input.status} — pending Flow persistence`,
+						`Final reviewer requested ${decision.status} — pending Flow persistence`,
 						{
 							sessionId: null,
 							metadataAuthority: "requested_only",
@@ -70,17 +70,17 @@ export function createReviewTool() {
 							taskPhase: "final_review",
 							taskSubject: "Final session review",
 							taskStatus: "active",
-							requestedReviewStatus: input.status,
+							requestedReviewStatus: decision.status,
 							persistedReviewStatus: null,
-							reviewDepth: input.reviewDepth,
-							reviewedSurfaces: input.reviewedSurfaces,
-							...(input.evidenceSummary
-								? { evidenceSummary: input.evidenceSummary }
+							reviewDepth: decision.reviewDepth,
+							reviewedSurfaces: decision.reviewedSurfaces,
+							...(decision.evidenceSummary
+								? { evidenceSummary: decision.evidenceSummary }
 								: {}),
 						},
 					);
 					return executeGuardedSessionMutation(context, "record_final_review", {
-						decision: input,
+						decision,
 					});
 				},
 			),

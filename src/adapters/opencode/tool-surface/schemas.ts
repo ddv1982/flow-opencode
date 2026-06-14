@@ -4,14 +4,14 @@ import {
 	CLOSURE_KINDS,
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
-	REVIEWER_DECISION_STATUSES,
 } from "../../../runtime/constants";
 import {
+	type ReviewerDecision,
+	FlowReviewRecordFeatureArgsSchema as RuntimeFeatureReviewerDecisionSchema,
 	FinalReviewerDecisionSchema as RuntimeFinalReviewerDecisionSchema,
 	OutcomeSchema as RuntimeOutcomeSchema,
 	PlanArgsSchema as RuntimePlanArgsSchema,
 	PlanningContextArgsSchema as RuntimePlanningContextArgsSchema,
-	ReviewerDecisionSchema as RuntimeReviewerDecisionSchema,
 	WorkerResultArgsSchema as RuntimeWorkerResultArgsSchema,
 	WorkerResultBaseSchema as RuntimeWorkerResultBaseSchema,
 } from "../../../runtime/schema";
@@ -141,17 +141,56 @@ export const FlowFeatureCompleteArgsSchema = {
 	},
 };
 
+const FlowReviewRecordFeaturePayloadSchema =
+	RuntimeFeatureReviewerDecisionSchema.omit({ scope: true });
+const FlowReviewRecordFinalPayloadSchema =
+	RuntimeFinalReviewerDecisionSchema.omit({ scope: true });
+
 // flow_review_record — one tool for both feature and final reviewer decisions,
-// discriminated by `scope`. Validation is structural only; review quality
-// judgment lives in the flow-review skill.
+// discriminated by `scope`, with the matching nested payload. Validation is
+// structural only; review quality judgment lives in the flow-review skill.
 export const FlowReviewRecordArgsShape = {
 	scope: z.enum(["feature", "final"]),
-	featureId: featureIdSchema.optional(),
-	...RuntimeFinalReviewerDecisionSchema.omit({ scope: true }).partial().shape,
-	status: z.enum(REVIEWER_DECISION_STATUSES),
-	summary: z.string().min(1),
+	featureReview: FlowReviewRecordFeaturePayloadSchema.optional(),
+	finalReview: FlowReviewRecordFinalPayloadSchema.optional(),
 };
-export const FlowReviewRecordArgsSchema = RuntimeReviewerDecisionSchema;
+
+const FlowReviewRecordScopeSchema = z.object({
+	scope: z.enum(["feature", "final"]),
+});
+
+const FlowReviewRecordFeatureEnvelopeSchema = z
+	.object({
+		scope: z.literal("feature"),
+		featureReview: FlowReviewRecordFeaturePayloadSchema,
+	})
+	.strict();
+
+const FlowReviewRecordFinalEnvelopeSchema = z
+	.object({
+		scope: z.literal("final"),
+		finalReview: FlowReviewRecordFinalPayloadSchema,
+	})
+	.strict();
+
+export const FlowReviewRecordArgsSchema = {
+	parse(input: unknown): ReviewerDecision {
+		const { scope } = FlowReviewRecordScopeSchema.parse(input);
+		if (scope === "feature") {
+			const parsed = FlowReviewRecordFeatureEnvelopeSchema.parse(input);
+			return RuntimeFeatureReviewerDecisionSchema.parse({
+				scope,
+				...parsed.featureReview,
+			});
+		}
+
+		const parsed = FlowReviewRecordFinalEnvelopeSchema.parse(input);
+		return RuntimeFinalReviewerDecisionSchema.parse({
+			scope,
+			...parsed.finalReview,
+		});
+	},
+};
 
 // flow_session
 const FLOW_SESSION_ACTIONS = ["activate", "close", "history", "show"] as const;

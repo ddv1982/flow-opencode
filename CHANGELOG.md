@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.21] - 2026-06-14
+
+Nest `flow_review_record` payloads under `featureReview` or `finalReview` so the host schema is simple and the runtime reviewer schemas stay strict.
+
 ## [3.3.20] - 2026-06-14
 
 Hide the Flow reviewer behind `/flow-review` and `/flow-auto`, keeping direct reviewer selection advisory instead of a confusing session entry point.

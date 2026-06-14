@@ -29,7 +29,7 @@ If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell
 
 - Clean: `flow_feature_complete` with the validation evidence. The runtime rejects evidence-free completion: every recorded check must have passed, and `validationScope` must be `targeted` (or `broad` on the session's last feature). Gather evidence first; payload shape and worked examples are in `references/validation-rubric.md`.
 - If `contextTraceability` shows changed artifacts outside feature targets/review scope, stop and recheck scope before completing; reset/replan when the change is legitimate but unplanned.
-- If the session's review policy requires a per-feature review, load the `flow-review` skill and record it via `flow_review_record` (`scope: feature`) before moving on.
+- If the session's review policy requires a per-feature review, load the `flow-review` skill and record it via `flow_review_record` (`scope: feature` with a `featureReview` payload) before moving on.
 - Blocked: stop and report a structured blocker — what failed, why, what you tried. Never report partial success as success.
 - A feature built on a wrong assumption is reset (the reset parameter on `flow_feature_complete`), not patched into shape. Two failed attempts on the same feature for the same reason means stop and ask the user.
 

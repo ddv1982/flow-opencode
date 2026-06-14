@@ -148,9 +148,11 @@ describe("built dist smoke load", () => {
 			},
 			flow_review_record: {
 				scope: "feature",
-				featureId: "dist-smoke",
-				status: "approved",
-				summary: "Looks good.",
+				featureReview: {
+					featureId: "dist-smoke",
+					status: "approved",
+					summary: "Looks good.",
+				},
 			},
 			flow_session: { action: "show", sessionId },
 		};

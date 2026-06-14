@@ -17,7 +17,7 @@ Start with `flow_status`. If no active compatible Flow session exists, this is a
 - **needs_fix** — blocking findings exist but are fixable within the same feature; this routes back to execution.
 - **blocked** — a human decision, missing requirement, or external dependency prevents a verdict.
 
-Record the decision with `flow_review_record`: `scope: feature` for one feature's work, `scope: final` for the whole session before close (a final decision also needs `reviewDepth` matching the plan's `deliveryPolicy.finalReviewPolicy`, plus `evidenceRefs`). Under a strict review policy the runtime refuses completion without a recorded decision — so record honestly rather than reverse-engineering an "approved".
+Record the decision with `flow_review_record`: use `{scope: "feature", featureReview: {...}}` for one feature's work, or `{scope: "final", finalReview: {...}}` for the whole session before close (a final decision also needs `reviewDepth` matching the plan's `deliveryPolicy.finalReviewPolicy`, plus `evidenceRefs`). Under a strict review policy the runtime refuses completion without a recorded decision — so record honestly rather than reverse-engineering an "approved".
 
 ## Depth: match it to risk, then tell the truth about coverage
 

@@ -41,9 +41,11 @@ describe("runtime completion and recovery tools", () => {
 				"flow_review_record",
 				{
 					scope: "feature",
-					featureId: "setup-runtime",
-					status: "approved",
-					summary: "Looks good.",
+					featureReview: {
+						featureId: "setup-runtime",
+						status: "approved",
+						summary: "Looks good.",
+					},
 				},
 				"missing_session",
 				"/flow-auto <goal>",
@@ -52,23 +54,25 @@ describe("runtime completion and recovery tools", () => {
 				"flow_review_record",
 				{
 					scope: "final",
-					reviewDepth: "detailed",
-					reviewedSurfaces: [
-						"changed_files",
-						"shared_surfaces",
-						"validation_evidence",
-					],
-					evidenceSummary:
-						"Checked final cross-feature integration and validation evidence.",
-					validationAssessment:
-						"Validation coverage and cross-feature interactions were reviewed.",
-					evidenceRefs: {
-						changedArtifacts: ["src/runtime/session.ts"],
-						validationCommands: ["bun test"],
+					finalReview: {
+						reviewDepth: "detailed",
+						reviewedSurfaces: [
+							"changed_files",
+							"shared_surfaces",
+							"validation_evidence",
+						],
+						evidenceSummary:
+							"Checked final cross-feature integration and validation evidence.",
+						validationAssessment:
+							"Validation coverage and cross-feature interactions were reviewed.",
+						evidenceRefs: {
+							changedArtifacts: ["src/runtime/session.ts"],
+							validationCommands: ["bun test"],
+						},
+						remainingGaps: [],
+						status: "approved",
+						summary: "Looks good.",
 					},
-					remainingGaps: [],
-					status: "approved",
-					summary: "Looks good.",
 				},
 				"missing_session",
 				"/flow-auto <goal>",

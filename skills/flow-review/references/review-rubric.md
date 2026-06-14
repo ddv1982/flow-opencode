@@ -74,39 +74,47 @@ evidence-check: verdict on the validation evidence vs the validation rubric
 
 ## Recording the decision: `flow_review_record` shapes
 
-A feature decision (`scope: "feature"`) names the feature and carries the findings:
+A feature decision uses `scope: "feature"` and puts the feature payload under
+`featureReview`:
 
 ```json
 {
   "scope": "feature",
-  "featureId": "rate-limit-middleware",
-  "status": "needs_fix",
-  "summary": "Limit logic correct; concurrent-refill race loses tokens under load.",
-  "blockingFindings": [
-    { "summary": "correctness — src/middleware/rate-limit.ts:84 — read-modify-write on the counter is not atomic; parallel requests under-count. Fixed looks like: single atomic INCR with TTL." }
-  ],
-  "followUps": [
-    { "summary": "Retry-After rounds down to 0s near window end", "severity": "advisory" }
-  ],
-  "suggestedValidation": ["pnpm test middleware --repeat 20 (race is timing-sensitive)"]
+  "featureReview": {
+    "featureId": "rate-limit-middleware",
+    "status": "needs_fix",
+    "summary": "Limit logic correct; concurrent-refill race loses tokens under load.",
+    "blockingFindings": [
+      { "summary": "correctness — src/middleware/rate-limit.ts:84 — read-modify-write on the counter is not atomic; parallel requests under-count. Fixed looks like: single atomic INCR with TTL." }
+    ],
+    "followUps": [
+      { "summary": "Retry-After rounds down to 0s near window end", "severity": "advisory" }
+    ],
+    "suggestedValidation": ["pnpm test middleware --repeat 20 (race is timing-sensitive)"]
+  }
 }
 ```
 
-A final decision (`scope: "final"`) omits `featureId` and adds the session-level fields — `reviewDepth` must equal the plan's `deliveryPolicy.finalReviewPolicy` (`broad` or `detailed`) or the runtime rejects completion:
+A final decision uses `scope: "final"` and puts the session-level payload under
+`finalReview`. It omits `featureId`; `reviewDepth` must equal the plan's
+`deliveryPolicy.finalReviewPolicy` (`broad` or `detailed`) or the runtime
+rejects completion:
 
 ```json
 {
   "scope": "final",
-  "status": "approved",
-  "summary": "All three features deliver the done condition; broad gate green.",
-  "reviewDepth": "detailed",
-  "reviewedSurfaces": ["changed_files", "tests", "validation_evidence", "docs_and_prompts"],
-  "evidenceSummary": "Re-ran pnpm typecheck && pnpm test (212 passed); spot-checked rate-limit cases fail on main.",
-  "validationAssessment": "Tier 1 on both code features; docs feature tier 3 as the rubric allows.",
-  "remainingGaps": ["No live two-instance Redis check in this environment"],
-  "evidenceRefs": {
-    "changedArtifacts": ["src/middleware/rate-limit.ts", "src/middleware/stores/redis.ts", "README.md"],
-    "validationCommands": ["pnpm typecheck && pnpm test", "pnpm test middleware"]
+  "finalReview": {
+    "status": "approved",
+    "summary": "All three features deliver the done condition; broad gate green.",
+    "reviewDepth": "detailed",
+    "reviewedSurfaces": ["changed_files", "tests", "validation_evidence", "docs_and_prompts"],
+    "evidenceSummary": "Re-ran pnpm typecheck && pnpm test (212 passed); spot-checked rate-limit cases fail on main.",
+    "validationAssessment": "Tier 1 on both code features; docs feature tier 3 as the rubric allows.",
+    "remainingGaps": ["No live two-instance Redis check in this environment"],
+    "evidenceRefs": {
+      "changedArtifacts": ["src/middleware/rate-limit.ts", "src/middleware/stores/redis.ts", "README.md"],
+      "validationCommands": ["pnpm typecheck && pnpm test", "pnpm test middleware"]
+    }
   }
 }
 ```

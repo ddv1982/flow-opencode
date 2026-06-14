@@ -12,7 +12,7 @@ Flow persists planning and execution state under `.flow/**` so work survives com
 1. `flow_status` first, always. It returns current state plus a suggested next step. Trust it over conversation memory, especially after compaction.
 2. No active session: with a goal, load the `flow-plan` skill, then `flow_plan_save` and `flow_plan_approve`. Without a goal, stop and ask — never invent one.
 3. Approved plan: load the `flow-run` skill, `flow_run_start` one feature, implement, then `flow_feature_complete` with validation evidence.
-4. Review when the session policy requires it: load the `flow-review` skill, record decisions with `flow_review_record` (`scope: feature` per feature, `scope: final` before close).
+4. Review when the session policy requires it: load the `flow-review` skill, record decisions with `flow_review_record` (`scope: feature` + `featureReview` per feature, `scope: final` + `finalReview` before close).
 5. All features complete and final review recorded: close via `flow_session` (`action: close`). Its `history`, `show`, and `activate` actions inspect or switch sessions.
 6. Back to step 1, until the session is closed or a stop condition hits.
 

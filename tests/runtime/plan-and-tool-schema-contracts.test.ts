@@ -1,6 +1,7 @@
 // Owns plan graph, feature-id, reviewer-tool, and response-shape coverage
 // previously grouped in tests/runtime-completion-contracts.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
+import { FlowReviewRecordArgsSchema } from "../../src/adapters/opencode/tool-surface/schemas";
 import { createSession, saveSession } from "../../src/runtime/lifecycle";
 import {
 	applyPlan,
@@ -107,7 +108,7 @@ describe("runtime plan and tool schema contracts", () => {
 		).toBe("Rerun targeted tests");
 	});
 
-	test("reviewer decision tool accepts the top-level payload for final review", async () => {
+	test("reviewer decision tool accepts the nested final review payload", async () => {
 		const worktree = makeTempDir();
 		const tools = createTestTools();
 		const session = createSession("Build a workflow plugin");
@@ -128,26 +129,28 @@ describe("runtime plan and tool schema contracts", () => {
 		const response = await tools.flow_review_record.execute(
 			{
 				scope: "final",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
-				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
+				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					remainingGaps: [],
+					status: "approved",
+					summary: "Final state looks good.",
+					blockingFindings: [],
+					followUps: [],
+					suggestedValidation: ["bun run check"],
 				},
-				remainingGaps: [],
-				status: "approved",
-				summary: "Final state looks good.",
-				blockingFindings: [],
-				followUps: [],
-				suggestedValidation: ["bun run check"],
 			},
 			toolContext(worktree),
 		);
@@ -158,6 +161,176 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(parsed.session.lastReviewerDecision.suggestedValidation).toEqual([
 			"bun run check",
 		]);
+	});
+
+	test("reviewer decision tool accepts the nested feature review payload", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		await saveSession(worktree, started.value.session);
+
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Feature state looks good.",
+					blockingFindings: [],
+					followUps: [],
+					suggestedValidation: ["bun test tests/runtime/session.test.ts"],
+				},
+			},
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("ok");
+		expect(parsed.session.lastReviewerDecision).toMatchObject({
+			scope: "feature",
+			featureId: "setup-runtime",
+			status: "approved",
+			summary: "Feature state looks good.",
+			suggestedValidation: ["bun test tests/runtime/session.test.ts"],
+		});
+		expect(parsed.session.lastReviewerDecision).not.toHaveProperty(
+			"reviewDepth",
+		);
+		expect(parsed.session.lastReviewerDecision).not.toHaveProperty(
+			"reviewedSurfaces",
+		);
+		expect(parsed.session.lastReviewerDecision).not.toHaveProperty(
+			"evidenceSummary",
+		);
+	});
+
+	test("reviewer decision adapter returns feature decisions from nested payloads", () => {
+		const parsed = FlowReviewRecordArgsSchema.parse({
+			scope: "feature",
+			featureReview: {
+				featureId: "setup-runtime",
+				status: "approved",
+				summary: "Feature state looks good.",
+			},
+		});
+
+		expect(parsed.scope).toBe("feature");
+		if (parsed.scope !== "feature") return;
+		expect(parsed.featureId).toBe("setup-runtime");
+		expect(parsed).not.toHaveProperty("reviewDepth");
+		expect(parsed).not.toHaveProperty("reviewedSurfaces");
+		expect(parsed).not.toHaveProperty("evidenceRefs");
+	});
+
+	test("reviewer decision tool rejects legacy flat feature review payloads", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				featureId: "setup-runtime",
+				status: "approved",
+				summary: "Looks good.",
+			} as never,
+			toolContext(makeTempDir()),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("featureReview");
+	});
+
+	test("reviewer decision tool rejects final-only fields in feature review payloads", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Looks good.",
+					reviewDepth: "detailed",
+				},
+			} as never,
+			toolContext(makeTempDir()),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("reviewDepth");
+	});
+
+	test("reviewer decision tool rejects mismatched nested review payloads", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				finalReview: {
+					reviewDepth: "detailed",
+					reviewedSurfaces: ["changed_files"],
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					status: "approved",
+					summary: "Wrong envelope.",
+				},
+			} as never,
+			toolContext(makeTempDir()),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("featureReview");
+	});
+
+	test("reviewer decision tool still rejects final review payloads missing final fields", async () => {
+		const worktree = makeTempDir();
+		const tools = createTestTools();
+		const session = createSession("Build a workflow plugin");
+		const applied = applyPlan(session, samplePlan());
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+
+		const approved = approvePlan(applied.value);
+		expect(approved.ok).toBe(true);
+		if (!approved.ok) return;
+
+		const started = startRun(approved.value);
+		expect(started.ok).toBe(true);
+		if (!started.ok) return;
+
+		await saveSession(worktree, started.value.session);
+
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "final",
+				finalReview: {
+					status: "approved",
+					summary: "Missing final review evidence.",
+				},
+			},
+			toolContext(worktree),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("reviewDepth");
 	});
 
 	test("reviewer decision tool rejects final review payloads that name a feature", async () => {
@@ -181,27 +354,29 @@ describe("runtime plan and tool schema contracts", () => {
 		const response = await tools.flow_review_record.execute(
 			{
 				scope: "final",
-				featureId: "some-feature",
-				reviewDepth: "detailed",
-				reviewedSurfaces: [
-					"changed_files",
-					"shared_surfaces",
-					"validation_evidence",
-				],
-				evidenceSummary:
-					"Checked final cross-feature integration and validation evidence.",
-				validationAssessment:
-					"Validation coverage and cross-feature interactions were reviewed.",
-				evidenceRefs: {
-					changedArtifacts: ["src/runtime/session.ts"],
-					validationCommands: ["bun test"],
+				finalReview: {
+					featureId: "some-feature",
+					reviewDepth: "detailed",
+					reviewedSurfaces: [
+						"changed_files",
+						"shared_surfaces",
+						"validation_evidence",
+					],
+					evidenceSummary:
+						"Checked final cross-feature integration and validation evidence.",
+					validationAssessment:
+						"Validation coverage and cross-feature interactions were reviewed.",
+					evidenceRefs: {
+						changedArtifacts: ["src/runtime/session.ts"],
+						validationCommands: ["bun test"],
+					},
+					remainingGaps: [],
+					status: "approved",
+					summary: "Final state looks good.",
+					blockingFindings: [],
+					followUps: [],
+					suggestedValidation: ["bun run check"],
 				},
-				remainingGaps: [],
-				status: "approved",
-				summary: "Final state looks good.",
-				blockingFindings: [],
-				followUps: [],
-				suggestedValidation: ["bun run check"],
 			} as never,
 			toolContext(worktree),
 		);
@@ -210,6 +385,27 @@ describe("runtime plan and tool schema contracts", () => {
 		expect(parsed.status).toBe("error");
 		expect(parsed.summary).toContain("Tool argument validation failed");
 		expect(parsed.summary).toContain("featureId");
+	});
+
+	test("reviewer decision tool rejects unknown review payload keys", async () => {
+		const tools = createTestTools();
+		const response = await tools.flow_review_record.execute(
+			{
+				scope: "feature",
+				featureReview: {
+					featureId: "setup-runtime",
+					status: "approved",
+					summary: "Looks good.",
+				},
+				unexpectedReviewLedger: [],
+			} as never,
+			toolContext(makeTempDir()),
+		);
+
+		const parsed = JSON.parse(response);
+		expect(parsed.status).toBe("error");
+		expect(parsed.summary).toContain("Tool argument validation failed");
+		expect(parsed.summary).toContain("unexpectedReviewLedger");
 	});
 
 	test("tools keep representative top-level response shapes across the split helpers", async () => {
