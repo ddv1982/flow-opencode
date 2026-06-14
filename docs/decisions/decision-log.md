@@ -4,6 +4,27 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.14] - 2026-06-14
+
+Remove guardrails that were guarding the past
+
+Flow's current architecture had already moved past the old prompt/audit projection model and the schema module identity concern, but a few tests and docs still treated those retired shapes as active maintenance concerns. That left the repository carrying small but real process weight: tests proving that deleted `src/prompts/**` and `src/audit/**` paths were outside the seam checker, a schema suite asserting module object identity after re-import, a comment explaining an audit schema that no longer exists, and a non-canonical maintainer checklist whose main job was to redirect back to the canonical docs.
+
+This release removes that leftover scaffolding. The seam tests now focus on the current source owners and blocked dependency edges. The source-ownership ADR no longer describes deleted prompt/audit projection surfaces as a current limitation. The module-scope schema identity suite is deleted because current schema parsing and unsupported future persisted-session versions are already covered by fixture and persistence tests. The duplicate maintainer risk checklist is deleted so the current contract remains in `docs/maintainer-contract.md`, `docs/contributor-map.md`, and `docs/release-process.md`.
+
+No runtime code, commands, tools, agents, state paths, persisted schemas, completion gates, review policy defaults, sync ownership markers, package exports, adapter payload behavior, or skill guidance changed. The public workflow surface remains five commands, one agent, and eight tools. This is intentionally a maintenance release: fewer current-facing files and tests, while keeping the active safety gates intact.
+
+Constraint: Remove only guardrails that protect deleted history or implementation shape, not current runtime behavior
+Constraint: Keep historical decision-log entries append-only even when they mention deleted files or tests
+Rejected: Rewrite old decision-log entries to remove references to deleted files | the decision log is historical evidence and explicitly may mention retired doctrine
+Rejected: Keep the non-canonical maintainer checklist as a convenience pointer | duplicating pointers creates another file to reconcile without adding a product or release safeguard
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the deleted docs and tests can be restored from git history if a current maintainer workflow needs them again
+Directive: Keep current-facing guardrails tied to active source owners, runtime contracts, release checks, or public tool behavior; leave retired architecture history in the decision log only
+Tested: `bun test tests/cross-area/architecture-seams.test.ts tests/runtime/evidence-packets.test.ts tests/fixtures-contract.test.ts tests/runtime-session-persistence.test.ts`; `bun run check:architecture-seams:enforce`; `git diff --check`; `bun run report:architecture-metrics`; `bun run check`; `bun run smoke:release`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes docs and tests only, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.13] - 2026-06-14
 
 Retire compatibility weight that no longer pays rent

@@ -387,7 +387,4 @@ describe("shared evidence packet primitives", () => {
 		if (!recorded.ok) return;
 		expect(recorded.value.execution.lastReviewerDecision?.scope).toBe("final");
 	});
-	// The audit ReviewReport schema (src/audit/report-schema.ts) was deleted in
-	// the v3 skills-first overhaul; audit-report packet attachment tests went
-	// with it. Runtime packet attachment coverage above is the surviving scope.
 });

@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.14] - 2026-06-14
+
+Delete stale architecture/test/docs scaffolding that only protected retired prompt/audit history or implementation-shape assertions, with no runtime or public surface change.
+
 ## [3.3.13] - 2026-06-14
 
 Remove v2 session-resume compatibility, tighten retired-key payload parsing, shrink the current maintainer contract, and drop empty `core`/`workflow` owners from seam enforcement.

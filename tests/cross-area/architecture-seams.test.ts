@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-	mkdirSync,
-	mkdtempSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -68,62 +62,6 @@ afterEach(() => {
 });
 
 describe("architecture seams script", () => {
-	test("documents source owners and projection surfaces outside the checker", () => {
-		const adr = readFileSync(
-			join(
-				repoRoot,
-				"docs",
-				"architecture",
-				"allowed-cross-layer-dependencies.md",
-			),
-			"utf8",
-		);
-
-		expect(adr).toContain("`shared` (`src/config-shared.ts`)");
-		expect(adr).toContain("`distribution` owns package startup sync");
-		expect(adr).toContain(
-			"Root entrypoints (`src/index.ts`, `src/config.ts`, `src/cli.ts`)",
-		);
-		expect(adr).toContain("Projection surfaces outside this seam checker");
-		expect(adr).toContain(
-			"`src/prompts/**` and `src/audit/**` were governed projection surfaces",
-		);
-		expect(adr).toContain("deleted in the skills-first overhaul");
-		expect(adr).toContain("hand-authored `skills/**` content");
-	});
-
-	test("does not partially enforce prompts or audit projection imports", async () => {
-		const process = runArchitectureSeams({
-			mode: "enforce",
-			layout: [
-				{
-					path: "src/prompts/contracts.ts",
-					content:
-						'import { runtimeValue } from "../runtime/domain/value";\nexport const promptValue = runtimeValue;\n',
-				},
-				{
-					path: "src/audit/report-schema.ts",
-					content:
-						'import { adapterValue } from "../adapters/opencode/value";\nexport const auditValue = adapterValue;\n',
-				},
-				{
-					path: "src/runtime/domain/value.ts",
-					content: "export const runtimeValue = 1;\n",
-				},
-				{
-					path: "src/adapters/opencode/value.ts",
-					content: "export const adapterValue = 2;\n",
-				},
-			],
-		});
-
-		expect(await process.exited).toBe(0);
-		const stdout = await new Response(process.stdout).text();
-		expect(stdout).toContain("Architecture seams OK");
-		expect(stdout).not.toContain("prompts");
-		expect(stdout).not.toContain("audit");
-	});
-
 	test("reports violations but stays green in report mode", async () => {
 		const process = runArchitectureSeams({
 			mode: "report",
