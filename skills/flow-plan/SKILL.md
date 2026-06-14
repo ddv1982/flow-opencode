@@ -35,6 +35,8 @@ Record this with existing plan fields: `planning.workflowProfile` for workflow s
 
 After saving the plan, `flow_status`, `flow_context`, and `.flow/active/<session-id>/docs/context.md` expose derived `workflowReadiness`, `contextQuality`, `contextTraceability`, and diagnostics for weak context. Use `flow_context` when you also need the project structure map. Treat blocked readiness and warnings as planning defects unless you can explain why the missing context is irrelevant for the requested work.
 
+For broad review, audit, migration, or research-heavy goals, read `references/parallel-discovery.md` after the initial serial repo profile. Use host-native read-only workers only for independent discovery slices. The manager still synthesizes the evidence and records it in existing Flow fields (`planning.research`, `planning.reviewFindings`, requirements, architecture decisions, feature `fileTargets` / `reviewScope`, and notes). Parallel discovery must not create a new context-pack field or mutate Flow state from workers.
+
 ## Decompose the goal
 
 - Normalize the request into: outcome, constraints, done condition, and open questions. Keep unknowns as named gaps, not invented scope.

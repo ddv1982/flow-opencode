@@ -38,6 +38,8 @@ Treat context defects as review findings. They are blocking when they make the s
 
 For final review, explicitly compare the planned scope with actual changed artifacts, validation commands, recorded feature reviewer decisions, and remaining traceability gaps. Do not approve final review while `workflowReadiness.state` is `blocked_by_context`, `blocked_by_validation`, or `blocked_by_review` unless the finding explains why the block is a false positive and cites the evidence that resolves it.
 
+For very large reviews, you may use the read-only parallel discovery pattern in `../flow-plan/references/parallel-discovery.md`: split independent modules or risk lenses across workers, require structured handoffs, and synthesize the result yourself. The reviewer owns severity, deduplication, refutation, and the final `flow_review_record`; workers do not record Flow decisions or mutate state.
+
 ## Audit deliverables get adversarial review, not citation-checking
 
 When the work under review is itself a findings report (an audit feature, a `goalMode: review` deliverable), verifying that the cited lines exist is not a review — wrong findings cite real code. Your job is to attempt to **refute** each blocking-severity finding by tracing the mitigating paths the author should have checked: callers, the cross-layer counterpart, surrounding guards and resets. A finding you refute, or that carries no guards-checked line, is a blocking finding *against the report* (`needs_fix`: drop or downgrade it before the report ships). The procedure and verdicts are in `references/review-rubric.md` under "Reviewing audit deliverables".

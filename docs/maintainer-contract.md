@@ -91,6 +91,7 @@ Tool names are public contracts for skills and users. Every registered tool name
 
 - Commands are thin pointers (~1–2 lines) that load a skill. The surface is the five v3.1 commands (`flow-auto`, `flow-plan`, `flow-run`, `flow-review`, `flow-status`); a command earns its slot only if it loads a skill or is the universal status entry point — single-tool wrappers were retired in v3.1 because a plain request does the same job. They are both injected via the config hook and synced as Flow-owned markdown command files under `~/.config/opencode/commands/` so OpenCode's normal slash-command discovery sees them. There is nothing in a command worth growing — if a command needs real instruction text, move it into the skill.
 - `flow-reviewer` is the one dedicated subagent: read-only, enforced by native per-agent permissions (tool-name glob denies), never by prompt text alone.
+- Skills may use host-native parallel workers for read-only planning or review discovery when the task is broad and slices are independent. Those workers are not Flow-owned agents, do not add runtime state, and must not call state-changing Flow tools. The manager agent synthesizes their handoffs into existing planning/review fields, then execution continues one active feature at a time.
 
 ## Sync Ownership Rules
 

@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.9"]
+  "plugin": ["opencode-plugin-flow@3.3.10"]
 }
 ```
 

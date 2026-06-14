@@ -10,6 +10,7 @@ If `flow_run_start` is unavailable, the Flow plugin is not loaded: stop and tell
 ## One feature at a time
 
 - `flow_run_start` activates exactly one approved feature. It stays the sole target until it is cleanly complete, genuinely blocked, or reset — never drift into a second feature "while you're there".
+- Parallel discovery may have informed the plan, but execution stays serial. Do not ask parallel workers to mutate the active Flow session, complete sibling features, or record Flow tool results. If parallel implementation experiments are useful, keep them in isolated worktrees and route the chosen result back through this one active feature.
 - Keep edits scoped to the feature plus strictly necessary support changes. Out-of-scope problems you discover get noted for the user or a plan change, not fixed inline.
 - Apply the workflow profile, stack profile, and context pack recorded in the plan (commands, conventions, house rules, file targets, review scope). `flow_status` may surface `workflowReadiness`, `contextQuality`, `contextTraceability`, and `contextDiagnostics`; call `flow_context` when you need the full context pack or project map. Resolve blocked readiness or explicitly account for warnings before claiming the feature is ready.
 - Leave the codebase shippable: no debug prints, commented-out blocks, or temporary flags. Preserve intentional logging and observability — removing it is a regression, not a cleanup.

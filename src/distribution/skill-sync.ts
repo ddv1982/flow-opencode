@@ -3,6 +3,9 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, sep } from "node:path";
 import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
+import flowPlanParallelDiscoveryDoc from "../../skills/flow-plan/references/parallel-discovery.md" with {
+	type: "text",
+};
 import flowPlanPlanningExamplesDoc from "../../skills/flow-plan/references/planning-examples.md" with {
 	type: "text",
 };
@@ -79,6 +82,10 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 			{
 				relativePath: "references/planning-examples.md",
 				content: flowPlanPlanningExamplesDoc,
+			},
+			{
+				relativePath: "references/parallel-discovery.md",
+				content: flowPlanParallelDiscoveryDoc,
 			},
 		],
 	},
