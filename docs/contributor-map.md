@@ -1,6 +1,7 @@
-# Contributor Map
+# Codebase map
 
-Start with [`docs/maintainer-contract.md`](maintainer-contract.md) — it defines the hard invariants, the frozen persistence surfaces, and the skills-vs-code split. This map points each area of the codebase at its files, risks, and checks.
+A map of the codebase for whoever is working on it (today, that's me). Start with
+[`docs/maintainer-contract.md`](maintainer-contract.md) — it captures the hard invariants, the frozen persistence surfaces, and the skills-vs-code split. This map points each area of the codebase at its files, risks, and checks.
 
 The layout in one line: `skills/` is the brain, `src/config-shared.ts` is host-neutral config projection, `src/runtime/` is the safe state backend, `src/adapters/opencode/` is a thin adapter, `src/distribution/` ships and syncs it.
 
@@ -91,10 +92,10 @@ Coverage is focused: hard invariants, transitions and recovery, persistence/lock
 
 Risk: low-medium.
 
-- Current contracts: `docs/maintainer-contract.md`, `docs/development.md`, this file, `README.md`
-- Archives: `docs/releases/` and `CHANGELOG.md`
+- Current notes: `docs/maintainer-contract.md`, `docs/development.md`, this file, `README.md`
+- History: `CHANGELOG.md` (one line per release), `docs/decisions/decision-log.md` (full rationale), and `docs/releases/README.md` (consolidated note index)
 
-Release notes are historical records and may mention deleted plans or investigations; use ADRs, current docs, source, and tests for present-day contracts.
+Release history is a record and may mention deleted plans or investigations; use the design notes, current docs, source, and tests for present-day behavior.
 
 Do not:
 

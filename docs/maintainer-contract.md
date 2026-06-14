@@ -1,4 +1,8 @@
-# Maintainer Contract
+# Design notes and invariants
+
+These are my notes-to-self for keeping Flow honest: what the project is, which
+invariants the code must never break, and which checks to run when I touch a given
+area. "Must" and "do not" below are rules I hold myself to, not a contract with a team.
 
 ## What this project is
 
@@ -11,7 +15,7 @@ Authoring effort goes into skill content. Code defends only what a skill can nev
 
 ## Retired doctrine: three-tier resilience
 
-Earlier versions of this contract required three synchronized guidance layers (runtime mode contracts → generated fallback prompts → generated hash-locked skills), with capture scripts and parity tests keeping them aligned. **That doctrine is retired as of v3.** OpenCode's native skills and per-agent permissions made the fallback tiers redundant; the generation, capture, parity, and hash-locking apparatus is deleted, not dormant. Do not reintroduce a second projection of skill guidance (generated prompts, mirrored mode contracts, fallback prompt templates). If a command or agent needs instruction text, it points at a skill.
+Earlier versions of this document required three synchronized guidance layers (runtime mode contracts → generated fallback prompts → generated hash-locked skills), with capture scripts and parity tests keeping them aligned. **That doctrine is retired as of v3.** OpenCode's native skills and per-agent permissions made the fallback tiers redundant; the generation, capture, parity, and hash-locking apparatus is deleted, not dormant. Do not reintroduce a second projection of skill guidance (generated prompts, mirrored mode contracts, fallback prompt templates). If a command or agent needs instruction text, it points at a skill.
 
 ## Source of truth
 
@@ -117,9 +121,9 @@ State shape changes require schema, persistence, recovery, and migration conside
 
 ## Historical references
 
-`CHANGELOG.md` and `docs/releases/**` are archive records. They may reference deleted files and retired doctrine (mode contracts, generated skills, gate matrices); do not mass-edit them to chase current terminology. Current behavior is defined by this contract, current source, ADRs, and current tests.
+`CHANGELOG.md`, `docs/decisions/decision-log.md`, and `docs/releases/README.md` are history. They may reference deleted files and retired doctrine (mode contracts, generated skills, gate matrices); do not mass-edit them to chase current terminology. Current behavior is defined by these design notes, current source, design decisions, and current tests.
 
-Historical implementation plans, investigations, and pre-v3 architecture archives were removed after their still-current lessons were promoted into this contract, `docs/skill-review-checklist.md`, or ADRs.
+Historical implementation plans, investigations, and pre-v3 architecture archives were removed after their still-current lessons were promoted into these design notes, `docs/skill-review-checklist.md`, or `docs/adr/`.
 
 ## If you touch X, run Y
 

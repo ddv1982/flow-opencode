@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { delimiter, isAbsolute, parse, relative, resolve } from "node:path";
+import { delimiter, isAbsolute, parse, resolve } from "node:path";
 
 declare const mutableWorkspaceRootBrand: unique symbol;
 
@@ -16,6 +16,10 @@ type MutableWorkspaceRootDetails = {
 	usedFallback?: boolean;
 };
 
+// FLOW_TRUSTED_WORKSPACE_ROOTS is advisory only: the resulting `trusted` flag
+// is surfaced in doctor diagnostics and the workspace guidance message, but it
+// does NOT gate any mutation. The only behavioral guards are the $HOME check in
+// suspiciousWorkspaceReason and the ask-prompt in mutable-workspace-permission.
 const TRUSTED_WORKSPACE_ROOTS_ENV = "FLOW_TRUSTED_WORKSPACE_ROOTS";
 
 export class InvalidFlowWorkspaceRootError extends Error {
@@ -76,20 +80,14 @@ function getTrustedWorkspaceRoots(): Set<string> {
 }
 
 function suspiciousWorkspaceReason(root: string): string | null {
+	// The only hard runtime rejection here is using $HOME itself as a mutable
+	// root. Hidden roots *under* $HOME (e.g. a `~/.something` workspace) are
+	// intentionally allowed at this layer — approval for them is gated at the
+	// tool-surface ask-prompt (mutable-workspace-permission.ts), which fails
+	// closed when the host cannot prompt. See workspace-root-guard.test.ts.
 	const normalizedHome = resolve(process.env.HOME ?? homedir());
 	if (root === normalizedHome) {
 		return "Flow blocks using your home directory itself as a mutable workspace root.";
-	}
-
-	const rel = relative(normalizedHome, root);
-	if (
-		rel === "" ||
-		rel === ".." ||
-		rel.startsWith(`..${"/"}`) ||
-		rel.startsWith(`..${"\\"}`) ||
-		parse(rel).root === rel
-	) {
-		return null;
 	}
 
 	return null;

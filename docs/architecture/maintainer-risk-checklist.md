@@ -5,7 +5,7 @@ Use this as a compact merge-time risk pointer. It is intentionally **not** canon
 Canonical current-facing maps:
 
 - `docs/maintainer-contract.md` owns commands, tools, state paths, hard invariants, frozen surfaces, and the compact "if you touch X, run Y" map.
-- `docs/contributor-map.md` owns contributor onboarding risk by area: read-first files, required checks, and "do not" rules.
+- `docs/contributor-map.md` maps risk by area: read-first files, required checks, and "do not" rules.
 - `docs/release-process.md` owns the repeatable release-candidate smoke path and manual live OpenCode evidence protocol.
 
 If this checklist conflicts with any canonical file above, update this checklist or delete the duplicate guidance. Do not treat this file as a second source of truth.
@@ -23,7 +23,7 @@ If this checklist conflicts with any canonical file above, update this checklist
 - Keep detailed command, tool, state-path, gate, and invariant guidance in the canonical docs above.
 - Keep completion-gate wording aligned with `src/runtime/domain/semantic-invariants.ts`; canonical docs must mention validation evidence, validation scope, `featureReview`, final `finalReview`, strict reviewer decisions, and unfinished-feature close blocking.
 - Do not duplicate boundary-hotspot tables here; point readers back to the canonical maps.
-- Keep historical evidence (`docs/releases/**`, generated `release-notes.md`, and `CHANGELOG.md`) labeled as historical unless evidence is freshly re-run and promoted to current guidance.
+- Keep historical evidence (`CHANGELOG.md`, `docs/decisions/decision-log.md`, and `docs/releases/README.md`) labeled as historical unless evidence is freshly re-run and promoted to current guidance.
 
 ## Quick docs checks
 

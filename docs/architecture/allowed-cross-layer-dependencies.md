@@ -5,7 +5,7 @@ Status: accepted (enforced baseline with diagnostic report mode; broadened 2026-
 
 ## Context
 
-Flow currently has meaningful code in `src/runtime`, `src/adapters`, `src/distribution`, shared root config files, and a small `src/core` protocol surface. The seam checker also classifies `src/workflow` so removed facade paths cannot return as hidden bridges. We need explicit seams that can be checked mechanically so drift is visible before it becomes expensive. The repository has already reached the zero-violation baseline, so seam enforcement is part of the hard maintainer gate.
+Flow currently has meaningful code in `src/runtime`, `src/adapters`, `src/distribution`, and shared root config files. The seam checker also classifies `src/core` and `src/workflow` — both currently empty — so the protocol/workflow seams stay enforceable and removed facade paths cannot return as hidden bridges. We need explicit seams that can be checked mechanically so drift is visible before it becomes expensive. The repository has already reached the zero-violation baseline, so seam enforcement is part of the hard maintainer gate.
 
 ## Decision
 

@@ -15,15 +15,6 @@ export {
 	validateReviewerDecisionInput,
 } from "./review-decision";
 export {
-	SEMANTIC_COMPLETION_POLICY_EXPECTATIONS,
-	SEMANTIC_DECISION_GATE_EXPECTATIONS,
-	SEMANTIC_INVARIANT_IDS,
-	SEMANTIC_INVARIANTS,
-	SEMANTIC_RECOVERY_EXPECTATIONS,
-	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
-	semanticInvariantById,
-} from "./semantic-invariants";
-export {
 	activeDecisionGate,
 	completionPolicyTargetError,
 	decisionRequiresPause,

@@ -1,17 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { createTools } from "../../src/adapters/opencode/tools";
 import { CANONICAL_RUNTIME_TOOL_NAMES } from "../../src/runtime/constants";
-import {
-	SEMANTIC_COMPLETION_POLICY_EXPECTATIONS,
-	SEMANTIC_DECISION_GATE_EXPECTATIONS,
-	SEMANTIC_INVARIANT_IDS,
-	SEMANTIC_INVARIANTS,
-	SEMANTIC_RECOVERY_EXPECTATIONS,
-	SEMANTIC_REVIEW_SCOPE_EXPECTATIONS,
-	semanticInvariantById,
-} from "../../src/runtime/domain";
 import { createSession } from "../../src/runtime/lifecycle";
 import type {
 	ReviewerDecision,
@@ -31,28 +20,58 @@ import {
 	validateSuccessfulCompletion,
 } from "../../src/runtime/transitions/execution";
 import { applyPlan, approvePlan } from "../../src/runtime/transitions/plan";
-import { buildCompletionRecovery } from "../../src/runtime/transitions/recovery";
+import {
+	buildCompletionRecovery,
+	type CompletionRecoveryKind,
+} from "../../src/runtime/transitions/recovery";
 import { recordReviewerDecision } from "../../src/runtime/transitions/review";
 import type { TransitionResult } from "../../src/runtime/transitions/shared";
 import { cloneSamplePlan } from "../fixtures";
 
-function escapeRegExp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+// Expected-value fixtures for the behavioral invariants below. These were
+// previously a src/ "semantic expectations" module consumed only by this test;
+// inlined here so the expectations live with the assertions that use them.
+const SEMANTIC_COMPLETION_POLICY_EXPECTATIONS = {
+	pendingAllowedWhenTargetLessThanTotal: true,
+	activeFeatureCanTriggerCompletion: true,
+	thresholdStopRule: "ship_when_threshold_met",
+} as const;
 
-function sourceDefinesSymbol(source: string, symbol: string): boolean {
-	const escapedSymbol = escapeRegExp(symbol);
-	const patterns = [
-		new RegExp(
-			String.raw`(?:export\s+(?:async\s+)?function|function)\s+${escapedSymbol}\b`,
-		),
-		new RegExp(String.raw`(?:export\s+)?const\s+${escapedSymbol}\b`),
-		new RegExp(String.raw`(?:export\s+)?type\s+${escapedSymbol}\b`),
-		new RegExp(String.raw`export\s*\{[^}]*\b${escapedSymbol}\b[^}]*\}`),
-	];
+const SEMANTIC_DECISION_GATE_EXPECTATIONS = {
+	surfaceKeys: [
+		"status",
+		"domain",
+		"question",
+		"recommendation",
+		"rationale",
+	] as const,
+	pauseModes: ["recommend_confirm", "human_required"] as const,
+	guidanceCategory: "decision_gate",
+} as const;
 
-	return patterns.some((pattern) => pattern.test(source));
-}
+const SEMANTIC_REVIEW_SCOPE_EXPECTATIONS = {
+	featureScope: "feature",
+	finalScope: "final",
+	featureRequiresFeatureId: true,
+	finalRejectsFeatureId: true,
+} as const;
+
+const SEMANTIC_RECOVERY_EXPECTATIONS = {
+	resetFeatureKinds: [
+		"failing_validation",
+		"failing_feature_review",
+		"failing_final_review",
+	] as const satisfies readonly CompletionRecoveryKind[],
+	statusOnlyKinds: [
+		"missing_validation",
+		"missing_reviewer_decision",
+		"missing_validation_scope",
+		"missing_final_review",
+	] as const satisfies readonly CompletionRecoveryKind[],
+	statusCommand: "/flow-status",
+	resetCommandPrefix: "flow_feature_complete reset ",
+	resetRuntimeTool: "flow_feature_complete",
+} as const;
 
 function assertOk<T>(result: TransitionResult<T>): T {
 	if (!result.ok) {
@@ -141,79 +160,6 @@ function expectFailureKind(
 }
 
 describe("runtime semantic invariants", () => {
-	test("exposes a stable invariant catalog", () => {
-		expect(SEMANTIC_INVARIANTS.map((descriptor) => descriptor.id)).toEqual([
-			"completion.gates.required_order",
-			"completion.policy.min_completed_features",
-			"decision_gate.planning_surface.binding",
-			"review.scope.payload_binding",
-			"recovery.next_action.binding",
-			"tools.canonical_surface.no_raw_wrappers",
-		]);
-		expect(
-			semanticInvariantById("decision_gate.planning_surface.binding")
-				?.ownerSummary,
-		).toContain("activeDecisionGate");
-	});
-
-	test("catalog owner references stay complete and resolvable", () => {
-		const repoRoot = join(import.meta.dir, "..", "..");
-		const expectedCoverage = {
-			"src/runtime/transitions/execution-completion-validation.ts": [
-				"validateNormalizedSuccessfulCompletion",
-			],
-			"src/runtime/domain/completion.ts": ["summarizeCompletion"],
-			"src/runtime/domain/workflow-policy.ts": [
-				"targetCompletedFeatureCount",
-				"activeDecisionGate",
-			],
-			"src/runtime/summary.ts": ["explainSessionState", "summarizeSession"],
-			"src/runtime/schema.ts": [
-				"FlowReviewRecordFeatureArgsSchema",
-				"FinalReviewerDecisionSchema",
-			],
-			"src/runtime/transitions/recovery.ts": ["buildCompletionRecovery"],
-			"src/adapters/opencode/tools.ts": ["createTools"],
-			"src/adapters/opencode/tool-surface/tool-registry.ts": [
-				"OPENCODE_TOOL_REGISTRY",
-			],
-		} as const satisfies Record<string, readonly string[]>;
-
-		const referencedCoverage = new Map<string, Set<string>>();
-		for (const descriptor of SEMANTIC_INVARIANTS) {
-			for (const reference of descriptor.ownerReferences) {
-				const existing =
-					referencedCoverage.get(reference.file) ?? new Set<string>();
-				for (const symbol of reference.symbols) {
-					existing.add(symbol);
-				}
-				referencedCoverage.set(reference.file, existing);
-
-				const source = readFileSync(join(repoRoot, reference.file), "utf8");
-				for (const symbol of reference.symbols) {
-					expect(sourceDefinesSymbol(source, symbol)).toBe(true);
-				}
-			}
-		}
-
-		expect(SEMANTIC_INVARIANT_IDS).toEqual([
-			"completion.gates.required_order",
-			"completion.policy.min_completed_features",
-			"decision_gate.planning_surface.binding",
-			"review.scope.payload_binding",
-			"recovery.next_action.binding",
-			"tools.canonical_surface.no_raw_wrappers",
-		]);
-
-		for (const [file, symbols] of Object.entries(expectedCoverage)) {
-			const referencedSymbols = referencedCoverage.get(file);
-			expect(referencedSymbols).toBeDefined();
-			for (const symbol of symbols) {
-				expect(referencedSymbols?.has(symbol)).toBe(true);
-			}
-		}
-	});
-
 	test("completion.gates.required_order preserves feature-path precedence", () => {
 		const session = createRunningSession();
 		const featureId = session.execution.activeFeatureId ?? "setup-runtime";

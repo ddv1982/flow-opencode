@@ -4,9 +4,7 @@ type StrictJsonObjectParseErrorKind =
 	| "empty_payload"
 	| "invalid_json_syntax"
 	| "duplicate_json_key"
-	| "non_object_payload"
-	| "trailing_text"
-	| "schema_validation_failed";
+	| "non_object_payload";
 
 type StrictJsonObjectParseResult =
 	| { ok: true; value: JsonObject }
@@ -16,189 +14,83 @@ type StrictJsonObjectParseResult =
 			kind: StrictJsonObjectParseErrorKind;
 	  };
 
-function isWhitespace(char: string | undefined): boolean {
-	return char === " " || char === "\n" || char === "\r" || char === "\t";
-}
+/**
+ * Scan the raw payload for a duplicate key within any single object scope.
+ *
+ * JSON.parse validates syntax and trailing text for us, but it silently keeps
+ * the last value when a key repeats. We reject duplicate keys outright because
+ * a session file with repeated keys is a tamper/corruption signal, so we need
+ * this focused pass in addition to JSON.parse. Only structural characters and
+ * string literals matter here; every other character (whitespace, primitives)
+ * is skipped one char at a time, which is why this stays small.
+ */
+function findDuplicateKey(input: string): string | null {
+	type Frame = { object: boolean; keys: Set<string>; awaitingKey: boolean };
+	const stack: Frame[] = [];
+	let index = 0;
 
-function skipWhitespace(input: string, start: number): number {
-	let index = start;
-	while (index < input.length && isWhitespace(input[index])) {
-		index += 1;
-	}
-	return index;
-}
-
-function scanJsonString(
-	input: string,
-	start: number,
-): { ok: true; end: number; value: string } | { ok: false; error: string } {
-	if (input[start] !== '"') {
-		return { ok: false, error: "Expected string." };
-	}
-
-	let index = start + 1;
 	while (index < input.length) {
 		const char = input[index];
-		if (char === '"') {
-			try {
-				return {
-					ok: true,
-					end: index + 1,
-					value: JSON.parse(input.slice(start, index + 1)) as string,
-				};
-			} catch {
-				return { ok: false, error: "Invalid JSON string literal." };
-			}
-		}
-		if (char === "\\") {
-			index += 2;
+
+		if (char === "{") {
+			stack.push({ object: true, keys: new Set(), awaitingKey: true });
+			index += 1;
 			continue;
 		}
+		if (char === "[") {
+			stack.push({ object: false, keys: new Set(), awaitingKey: false });
+			index += 1;
+			continue;
+		}
+		if (char === "}" || char === "]") {
+			stack.pop();
+			index += 1;
+			continue;
+		}
+		if (char === ",") {
+			const top = stack[stack.length - 1];
+			if (top?.object) {
+				top.awaitingKey = true;
+			}
+			index += 1;
+			continue;
+		}
+		if (char === ":") {
+			const top = stack[stack.length - 1];
+			if (top?.object) {
+				top.awaitingKey = false;
+			}
+			index += 1;
+			continue;
+		}
+		if (char === '"') {
+			let cursor = index + 1;
+			while (cursor < input.length) {
+				if (input[cursor] === "\\") {
+					cursor += 2;
+					continue;
+				}
+				if (input[cursor] === '"') {
+					break;
+				}
+				cursor += 1;
+			}
+			const top = stack[stack.length - 1];
+			if (top?.object && top.awaitingKey) {
+				const key = JSON.parse(input.slice(index, cursor + 1)) as string;
+				if (top.keys.has(key)) {
+					return key;
+				}
+				top.keys.add(key);
+			}
+			index = cursor + 1;
+			continue;
+		}
+
 		index += 1;
 	}
 
-	return { ok: false, error: "Unterminated JSON string literal." };
-}
-
-function scanJsonValue(
-	input: string,
-	start: number,
-):
-	| { ok: true; end: number }
-	| { ok: false; error: string; kind: StrictJsonObjectParseErrorKind } {
-	const index = skipWhitespace(input, start);
-	const char = input[index];
-
-	if (char === "{") {
-		return scanJsonObject(input, index);
-	}
-	if (char === "[") {
-		let cursor = skipWhitespace(input, index + 1);
-		if (input[cursor] === "]") {
-			return { ok: true, end: cursor + 1 };
-		}
-		while (cursor < input.length) {
-			const value = scanJsonValue(input, cursor);
-			if (!value.ok) {
-				return value;
-			}
-			cursor = skipWhitespace(input, value.end);
-			if (input[cursor] === ",") {
-				cursor = skipWhitespace(input, cursor + 1);
-				continue;
-			}
-			if (input[cursor] === "]") {
-				return { ok: true, end: cursor + 1 };
-			}
-			return {
-				ok: false,
-				error: "Invalid JSON syntax inside array.",
-				kind: "invalid_json_syntax",
-			};
-		}
-		return {
-			ok: false,
-			error: "Unterminated JSON array.",
-			kind: "invalid_json_syntax",
-		};
-	}
-	if (char === '"') {
-		const scanned = scanJsonString(input, index);
-		return scanned.ok
-			? { ok: true, end: scanned.end }
-			: {
-					ok: false,
-					error: scanned.error,
-					kind: "invalid_json_syntax",
-				};
-	}
-
-	const primitiveMatch = input
-		.slice(index)
-		.match(/^(true|false|null|-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?)/);
-	if (!primitiveMatch) {
-		return {
-			ok: false,
-			error: "Invalid JSON value.",
-			kind: "invalid_json_syntax",
-		};
-	}
-
-	return { ok: true, end: index + primitiveMatch[0].length };
-}
-
-function scanJsonObject(
-	input: string,
-	start: number,
-):
-	| { ok: true; end: number }
-	| { ok: false; error: string; kind: StrictJsonObjectParseErrorKind } {
-	if (input[start] !== "{") {
-		return {
-			ok: false,
-			error: "Expected JSON object.",
-			kind: "non_object_payload",
-		};
-	}
-
-	let index = skipWhitespace(input, start + 1);
-	const seenKeys = new Set<string>();
-	if (input[index] === "}") {
-		return { ok: true, end: index + 1 };
-	}
-
-	while (index < input.length) {
-		const key = scanJsonString(input, index);
-		if (!key.ok) {
-			return {
-				ok: false,
-				error: key.error,
-				kind: "invalid_json_syntax",
-			};
-		}
-		if (seenKeys.has(key.value)) {
-			return {
-				ok: false,
-				error: `Duplicate JSON key '${key.value}'.`,
-				kind: "duplicate_json_key",
-			};
-		}
-		seenKeys.add(key.value);
-
-		index = skipWhitespace(input, key.end);
-		if (input[index] !== ":") {
-			return {
-				ok: false,
-				error: "Expected ':' after object key.",
-				kind: "invalid_json_syntax",
-			};
-		}
-
-		const value = scanJsonValue(input, index + 1);
-		if (!value.ok) {
-			return value;
-		}
-
-		index = skipWhitespace(input, value.end);
-		if (input[index] === ",") {
-			index = skipWhitespace(input, index + 1);
-			continue;
-		}
-		if (input[index] === "}") {
-			return { ok: true, end: index + 1 };
-		}
-		return {
-			ok: false,
-			error: "Invalid JSON syntax inside object.",
-			kind: "invalid_json_syntax",
-		};
-	}
-
-	return {
-		ok: false,
-		error: "Unterminated JSON object.",
-		kind: "invalid_json_syntax",
-	};
+	return null;
 }
 
 export function parseStrictJsonObject(
@@ -213,49 +105,10 @@ export function parseStrictJsonObject(
 		};
 	}
 
-	const start = skipWhitespace(raw, 0);
-	if (raw[start] !== "{") {
-		return {
-			ok: false,
-			error: `${label} payload must be a JSON object.`,
-			kind: "non_object_payload",
-		};
-	}
-
-	const scanned = scanJsonObject(raw, start);
-	if (!scanned.ok) {
-		return {
-			ok: false,
-			error: `${label} payload ${scanned.error}`,
-			kind: scanned.kind,
-		};
-	}
-
-	const trailingStart = skipWhitespace(raw, scanned.end);
-	if (trailingStart !== raw.length) {
-		return {
-			ok: false,
-			error: `${label} payload has trailing non-JSON text.`,
-			kind: "trailing_text",
-		};
-	}
-
-	const normalized = raw.slice(start, scanned.end);
+	let parsed: unknown;
 	try {
-		const parsed = JSON.parse(normalized);
-		if (
-			parsed === null ||
-			typeof parsed !== "object" ||
-			Array.isArray(parsed)
-		) {
-			return {
-				ok: false,
-				error: `${label} payload must be a JSON object.`,
-				kind: "non_object_payload",
-			};
-		}
-
-		return { ok: true, value: parsed as JsonObject };
+		// JSON.parse rejects syntax errors and any trailing non-whitespace text.
+		parsed = JSON.parse(raw);
 	} catch (error) {
 		return {
 			ok: false,
@@ -266,4 +119,23 @@ export function parseStrictJsonObject(
 			kind: "invalid_json_syntax",
 		};
 	}
+
+	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+		return {
+			ok: false,
+			error: `${label} payload must be a JSON object.`,
+			kind: "non_object_payload",
+		};
+	}
+
+	const duplicate = findDuplicateKey(raw);
+	if (duplicate !== null) {
+		return {
+			ok: false,
+			error: `${label} payload has a Duplicate JSON key '${duplicate}'.`,
+			kind: "duplicate_json_key",
+		};
+	}
+
+	return { ok: true, value: parsed as JsonObject };
 }

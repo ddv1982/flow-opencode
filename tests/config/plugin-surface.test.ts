@@ -349,7 +349,9 @@ describe("plugin config surface", () => {
 		const coreRoot = join(import.meta.dir, "..", "..", "src", "core");
 		const files = await collectTypeScriptFiles(coreRoot);
 
-		expect(files.length).toBeGreaterThan(0);
+		// src/core is currently empty (its only protocol module was removed), so
+		// this guard is vacuously true today. It stays in place so that any
+		// future host-agnostic core module is held to the no-adapter-imports rule.
 		for (const file of files) {
 			const source = await readFile(file, "utf8");
 			expect(source).not.toContain("@opencode-ai/plugin");

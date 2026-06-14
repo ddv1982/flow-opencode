@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { semanticInvariantById } from "../../src/runtime/domain";
 
 const repoRoot = join(import.meta.dir, "..", "..");
 
@@ -17,13 +16,6 @@ function expectAllTerms(source: string, terms: readonly string[]): void {
 
 describe("completion contract documentation", () => {
 	test("current-facing docs cover the runtime-owned completion gates", () => {
-		const completionGate = semanticInvariantById(
-			"completion.gates.required_order",
-		);
-		expect(completionGate?.semanticClaim).toContain("validation evidence");
-		expect(completionGate?.semanticClaim).toContain("featureReview");
-		expect(completionGate?.semanticClaim).toContain("finalReview");
-
 		const requiredTerms = [
 			"validation evidence",
 			"validationScope",
