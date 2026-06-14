@@ -20,6 +20,16 @@ These are release-critical and need direct tests:
 
 Judgment-heavy expectations such as evidence quality, proportional review scope, and review depth beyond the declared policy belong in `skills/flow-review`, not runtime validators.
 
+## Derived Signal Authority
+
+Keep Flow's status projections useful without turning them into hidden runtime policy:
+
+- **Hard gate**: runtime refuses the action. Completion payload gates, close-as-completed checks, approved-plan mutation rejection, workspace-root guards, and persistence safety checks live here.
+- **Workflow blocker**: derived status says the next workflow phase should not proceed until the issue is resolved or explicitly justified. `workflowReadiness.state` values such as `blocked_by_context`, `blocked_by_validation`, and `blocked_by_review` live here.
+- **Advisory diagnostic**: planning/review signal that informs judgment but does not block by itself. `contextQuality` and weak-context diagnostics live here unless they expose concrete scope, validation, or review drift that `workflowReadiness` reports as blocked.
+
+`contextTraceability` is a factual projection over persisted plan targets, changed artifacts, validation commands, and review records. Keep it derivable from the session snapshot; do not persist a separate readiness ledger.
+
 ## Persistence And Writes
 
 - `.flow/**/session.json` is the source of truth; markdown under `.flow/**/docs/` is derived.

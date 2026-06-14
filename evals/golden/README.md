@@ -27,6 +27,19 @@ bun run evals/golden/runner.ts --keep                 # keep passing workspaces 
 
 Expected runtime: roughly 5–15 minutes per scenario depending on the model, 30–60 minutes for all five. Each scenario has a 10-minute timeout by default.
 
+## Coverage Targets
+
+Prefer adding scenarios for behavior the unit suite cannot prove from pure runtime calls:
+
+- validation honesty: the model must not complete a feature with fabricated or missing validation evidence
+- scope drift: changed artifacts outside the approved plan must be reset, replanned, or explicitly justified before continuing
+- stale session recovery: a seeded active session must be resumed instead of duplicated
+- failed validation: the model should report a structured blocker instead of trimming failed checks from evidence
+- review refutation: audit findings should be tested against mitigating paths before being recorded as blocking
+- small-task ergonomics: tiny changes should stay one-feature, minimally scoped, and proportionate
+
+Keep these as persisted-state assertions wherever possible. Transcript-only assertions are too brittle for this lane.
+
 ## How the plugin is loaded from the checkout
 
 Same local-build loading the npm install smoke (`scripts/cross-area/opencode-smoke.mjs`) exercises in-process, adapted to a real `opencode run`:

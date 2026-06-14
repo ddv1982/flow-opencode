@@ -31,7 +31,7 @@ Add Flow to the `plugin` array in your `opencode.json` (global `~/.config/openco
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@3.3.14"]
+  "plugin": ["opencode-plugin-flow@3.3.15"]
 }
 ```
 
@@ -153,7 +153,13 @@ Plus: atomic, locked, path-safe writes under `.flow/**`; schema validation of al
 
 Everything judgment-shaped — how to decompose a plan, how deep to review, what counts as good evidence, when to stop and ask — lives in the skills, where you can read and override it.
 
-`/flow-status` also reports advisory `workflowReadiness`, `contextQuality`, `contextTraceability`, and `contextDiagnostics`. These fields show whether the session is ready for planning, execution, feature review, final review, or release; how strong the planned context is; which planned targets changed; which validation and review evidence exists; and where planned context is weak. `flow_context` exposes the same derived handoff in summary, feature, or full views, optionally with a lightweight project structure map. They do not replace review judgment, but they make context gaps visible before they become unverifiable completion claims.
+Flow uses three authority levels for derived status signals:
+
+- **Hard gate** — runtime rejects the action. The completion and persistence gates above are hard gates.
+- **Workflow blocker** — derived status says the agent should not proceed until the issue is resolved or explicitly justified. `workflowReadiness.state` values such as `blocked_by_context`, `blocked_by_validation`, and `blocked_by_review` are workflow blockers, not persisted state or runtime invariants.
+- **Advisory diagnostic** — useful planning or review signal, but judgment-owned. `contextQuality` and broad/weak-context diagnostics are advisory unless they expose concrete drift that readiness reports as blocked.
+
+`/flow-status` also reports derived `workflowReadiness`, `contextQuality`, `contextTraceability`, and `contextDiagnostics`. These fields show whether the session is ready for planning, execution, feature review, final review, or release; how strong the planned context is; which planned targets changed; which validation and review evidence exists; and where planned context is weak. `flow_context` exposes the same derived handoff in summary, feature, or full views, optionally with a lightweight project structure map. They do not replace review judgment, but they make context gaps visible before they become unverifiable completion claims.
 
 ## What Flow writes
 

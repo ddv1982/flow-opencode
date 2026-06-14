@@ -13,6 +13,13 @@
 - readiness warnings: 2
 - next action: Continue the approved plan one feature at a time and keep validation and review evidence aligned with scope.
 
+## Signal Authority
+
+- hard gate: runtime refuses the action
+- workflow blocker: `workflowReadiness.state` values starting with `blocked_by_` require resolution or explicit justification before proceeding
+- advisory diagnostic: `contextQuality` and weak-context diagnostics inform review judgment but do not block by themselves
+- factual projection: `contextTraceability` records persisted plan targets, changed artifacts, validation commands, and review records
+
 ## Context Quality
 
 - fail | repo_profile | weight: 2 | Repo profile records package, command, framework, or convention context.

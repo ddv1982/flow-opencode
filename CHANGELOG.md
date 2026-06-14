@@ -6,6 +6,10 @@ the rejected alternatives, and the validation that was run — see
 
 ## [Unreleased]
 
+## [3.3.15] - 2026-06-14
+
+Clarify derived signal authority so readiness blockers stay operational, context quality stays advisory, and context packs carry the same handoff contract.
+
 ## [3.3.14] - 2026-06-14
 
 Delete stale architecture/test/docs scaffolding that only protected retired prompt/audit history or implementation-shape assertions, with no runtime or public surface change.

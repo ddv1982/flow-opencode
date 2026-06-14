@@ -4,6 +4,29 @@ This is the full decision journal for Flow: every release recorded with its rati
 
 ## [Unreleased]
 
+## [3.3.15] - 2026-06-14
+
+Name the authority of Flow's derived signals
+
+Flow's context projections had become more useful than the old wording admitted. `workflowReadiness` is not a hard runtime invariant, but treating every derived field as merely advisory weakens the thing operators need most: a compact answer to whether the next workflow phase should proceed. At the same time, treating `contextQuality` like a gate would push judgment-heavy planning quality into runtime-shaped language.
+
+This release makes the authority split explicit across the README, maintainer contract, skills, and rendered context pack. Flow now names three levels: hard gates, where runtime refuses an action; workflow blockers, where `workflowReadiness.state` values such as `blocked_by_context`, `blocked_by_validation`, and `blocked_by_review` require resolution or explicit justification; and advisory diagnostics, where `contextQuality` and weak-context warnings inform planning and review without blocking by themselves. `contextTraceability` is documented as a factual projection over persisted plan targets, changed artifacts, validation commands, and review records.
+
+The generated `.flow/**/docs/context.md` handoff now carries the same signal-authority legend so compaction, review, and resumed sessions do not lose that distinction. The planning, run, and review skills were tightened to act on blocked readiness without pretending weak context quality is a runtime completion gate. The golden-eval README now records the next model-behavior targets — validation honesty, scope drift, stale session recovery, failed validation, review refutation, and small-task ergonomics — while keeping those evals in the manual lane.
+
+No commands, tools, agents, state paths, persisted schemas, package exports, runtime transitions, completion gates, review policy defaults, validation strictness, sync ownership markers, public mutation payloads, or install behavior changed. The only runtime code change is rendered markdown text for the derived context pack.
+
+Constraint: Preserve the distinction between runtime hard gates, derived workflow blockers, and advisory judgment signals
+Constraint: Keep readiness operational without persisting a readiness ledger or widening the public tool surface
+Rejected: Label every derived signal advisory | that would make `blocked_by_*` readiness states too easy to ignore during execution and review
+Rejected: Promote context quality to a runtime gate | quality scoring is heuristic and judgment-shaped, so it belongs in skills and review
+Confidence: high
+Scope-risk: low
+Reversibility: clean - the wording, rendered context section, fixtures, and docs tests can be reverted without migrating sessions or changing public tools
+Directive: Use `workflowReadiness.state` as the operator signal for repair-before-proceed decisions, keep `contextQuality` advisory, and keep `contextTraceability` factual and derived from the session snapshot
+Tested: `bun test tests/cross-area/completion-contract-docs.test.ts tests/runtime/render-snapshot.test.ts tests/render-fixtures.test.ts tests/runtime/render-incremental.test.ts`; `bun run typecheck`; `bunx biome check src tests bench --files-ignore-unknown=true --vcs-use-ignore-file=true`; `bun run check`; `bun run report:architecture-metrics`; `bun run smoke:release`; `.agents/skills/flow-contribution-check/scripts/preflight.sh commit`; `.agents/skills/flow-contribution-check/scripts/preflight.sh push`
+Not-tested: Live OpenCode UI restart against the release candidate; this release changes docs, skills, rendered context markdown, tests, and release metadata, with automated package smoke but no manual UI checklist completion.
+
 ## [3.3.14] - 2026-06-14
 
 Remove guardrails that were guarding the past

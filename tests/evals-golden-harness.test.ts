@@ -35,6 +35,24 @@ describe("golden eval harness", () => {
 		}
 	});
 
+	test("README records the next behavior coverage targets", () => {
+		const readme = readFileSync(
+			join(import.meta.dir, "..", "evals", "golden", "README.md"),
+			"utf8",
+		);
+		for (const term of [
+			"validation honesty",
+			"scope drift",
+			"stale session recovery",
+			"failed validation",
+			"review refutation",
+			"small-task ergonomics",
+			"persisted-state assertions",
+		]) {
+			expect(readme).toContain(term);
+		}
+	});
+
 	test("pre-seeded .flow sessions in fixtures parse with the runtime schema", () => {
 		const seededFixtures = new Set(
 			GOLDEN_SCENARIOS.map((scenario) => scenario.fixture),

@@ -52,4 +52,33 @@ describe("completion contract documentation", () => {
 			],
 		);
 	});
+
+	test("current-facing docs preserve derived signal authority levels", () => {
+		expectAllTerms(readRepoFile("README.md"), [
+			"Hard gate",
+			"Workflow blocker",
+			"Advisory diagnostic",
+			"blocked_by_context",
+			"contextQuality",
+			"contextTraceability",
+		]);
+		expectAllTerms(readRepoFile("docs/maintainer-contract.md"), [
+			"Derived Signal Authority",
+			"Hard gate",
+			"Workflow blocker",
+			"Advisory diagnostic",
+			"do not persist a separate readiness ledger",
+		]);
+		for (const path of [
+			"skills/flow-plan/SKILL.md",
+			"skills/flow-run/SKILL.md",
+			"skills/flow-review/SKILL.md",
+		]) {
+			expectAllTerms(readRepoFile(path), [
+				"workflowReadiness.state",
+				"blocked_by_",
+				"contextQuality",
+			]);
+		}
+	});
 });

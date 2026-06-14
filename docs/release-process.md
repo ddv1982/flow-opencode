@@ -20,11 +20,13 @@ bun run check
 
 For high-risk areas, run the targeted checks from [`docs/maintainer-contract.md`](maintainer-contract.md#if-you-touch-x-run-y) before the full gate so failures are easier to localize.
 
-For releases that claim simplification or architecture cleanup, capture the report-only metrics baseline:
+For releases that claim simplification or architecture cleanup, or that materially grow runtime, distribution, command/tool, or bundle size, capture the report-only metrics baseline:
 
 ```bash
 bun run report:architecture-metrics
 ```
+
+Treat the metrics as release review evidence, not a merge gate. Growth is acceptable when the release note explains the tradeoff; unexplained growth should trigger a design review before publishing.
 
 ## Release-candidate smoke evidence
 
