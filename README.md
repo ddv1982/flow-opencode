@@ -1,8 +1,18 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` is a skills-first workflow helper for OpenCode. The skills carry the planning, execution, validation, cleanup, UI, and review guidance. The plugin code is deliberately small: it keeps a durable `.flow/session.json` ledger and enforces the few binary gates that prompts cannot reliably enforce.
+`opencode-plugin-flow` is a skills-first workflow helper for OpenCode. The skills carry planning, execution, validation, cleanup, UI quality, review, and orchestration judgment. The plugin code stays deliberately small: it keeps a durable `.flow/session.json` ledger and enforces the hard gates prompts should not be trusted to remember.
 
 Flow v4 is a breaking simplification. It does not preserve v3 session layouts or retired tool aliases.
+
+## What Flow adds
+
+- A resumable one-feature-at-a-time loop for larger coding work.
+- Skill-guided planning, running, validation, review, cleanup, and UI quality.
+- Hidden evidence, review, validation, audit, verifier, and candidate workers for broad work.
+- Structured handoffs with coverage, evidence, confidence, and gaps.
+- Runtime gates for approval immutability, validation evidence, review evidence, and safe session closure.
+
+The manager still owns every Flow state change. Workers gather evidence; they do not approve plans, complete features, or close sessions.
 
 ## Install
 
@@ -45,7 +55,7 @@ Commands are thin pointers into skills:
 
 ## Tools
 
-The v4 runtime exposes seven tools:
+The runtime exposes seven tools:
 
 | Tool | Purpose |
 | --- | --- |
@@ -58,8 +68,6 @@ The v4 runtime exposes seven tools:
 | `flow_session_close` | Archive the active session as completed, deferred, or abandoned. |
 
 There is no `flow_context` and no separate review-record tool. Review evidence is part of `flow_feature_complete`: every completed feature needs a passing `featureReview`, and the final feature also needs a passing `finalReview`.
-
-Broad Flow work can fan out through hidden evidence, review, validation, audit, verifier, and candidate workers. Those workers return structured handoffs with coverage, evidence, confidence, and gaps; the manager still owns all Flow state changes and no extra user command is required.
 
 ## Runtime Contract
 
@@ -76,7 +84,7 @@ The runtime owns only safety:
 - Final completion requires `validationScope: "broad"` and a passing final review matching the plan's `finalReviewPolicy`.
 - `flow_session_close` accepts `kind: "completed"` only after an approved plan has passed final completion.
 
-Planning quality, decomposition, review depth, validation adequacy, and recovery judgment live in the skills.
+Planning quality, decomposition, review depth, validation adequacy, orchestration, and recovery judgment live in the skills.
 
 ## State Layout
 
@@ -98,6 +106,12 @@ The package exports only the OpenCode plugin entrypoint:
 ```ts
 import flowPlugin from "opencode-plugin-flow";
 ```
+
+## Credits
+
+Flow's parallel orchestration guidance was inspired by Ray Fernando's skill work on parallel agent workflows. Flow also draws conceptual inspiration from [RepoPrompt CE](https://github.com/repoprompt/repoprompt-ce), especially its emphasis on codebase orientation, context engineering, agent orchestration, and reviewable handoffs.
+
+The Flow version is its own OpenCode-native design: skills-first, manager-owned state, hidden workers, and no extra runtime ledger.
 
 ## Uninstall
 
