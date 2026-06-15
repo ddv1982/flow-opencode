@@ -18,8 +18,9 @@ A finding that survives this pass is worth reporting. A finding you did not try 
 
 For broad audits, use `../../flow/references/parallel-orchestration.md` to split
 read-only slices by module, data flow, or risk lens. Workers surface candidates;
-the audit author owns the report. Before blocking severity, dedupe, trace
-guards, fill cross-layer checks, and downgrade missing context.
+the audit author owns the report. Apply its handoff format and verification
+gates. Before blocking severity, dedupe, trace guards, fill cross-layer checks,
+verify contested or high-stakes claims, and downgrade missing context.
 
 ## Every blocking finding records "guards checked"
 

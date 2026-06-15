@@ -35,6 +35,7 @@ const FLOW_AGENT_NAMES = [
 	"flow-evidence-worker",
 	"flow-reviewer",
 	"flow-validation-worker",
+	"flow-verifier-worker",
 ] as const;
 
 describe("Flow distribution and plugin surface", () => {
@@ -116,6 +117,17 @@ describe("Flow distribution and plugin surface", () => {
 				flow_status: "allow",
 			},
 		});
+		expect(config.agent["flow-verifier-worker"]).toMatchObject({
+			mode: "subagent",
+			hidden: true,
+			permission: {
+				edit: "deny",
+				bash: "ask",
+				task: { "*": "deny" },
+				"flow_*": "deny",
+				flow_status: "allow",
+			},
+		});
 	});
 
 	test("documents every injected Flow worker for parallel orchestration", async () => {
@@ -190,6 +202,47 @@ describe("Flow distribution and plugin surface", () => {
 		await expect(readFile(flowSkillPath, "utf8")).resolves.toContain(
 			"skills-first",
 		);
+		await expect(
+			readFile(
+				join(
+					home,
+					".config",
+					"opencode",
+					"skills",
+					"flow",
+					"references",
+					"handoff-format.md",
+				),
+				"utf8",
+			),
+		).resolves.toContain("Flow worker handoff contract");
+		await expect(
+			readFile(
+				join(
+					home,
+					".config",
+					"opencode",
+					"skills",
+					"flow",
+					"references",
+					"verification-gates.md",
+				),
+				"utf8",
+			),
+		).resolves.toContain("Verification gates");
+		const marker = await readFile(
+			join(
+				home,
+				".config",
+				"opencode",
+				"skills",
+				"flow",
+				".flow-skill-version",
+			),
+			"utf8",
+		);
+		expect(marker).toContain("file=references/handoff-format.md sha256=");
+		expect(marker).toContain("file=references/verification-gates.md sha256=");
 
 		const removed = await uninstallFlowSkills(home);
 		expect(removed.removed.some((path) => path.endsWith("/flow"))).toBe(true);
@@ -248,7 +301,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.0.1");
+			expect(resolveFlowPluginVersion()).toBe("4.1.0");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

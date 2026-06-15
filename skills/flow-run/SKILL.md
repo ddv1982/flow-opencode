@@ -35,8 +35,9 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 For broad validation research, risky changes, or unclear coverage, use
 `../flow/references/parallel-orchestration.md` to fan out named Flow workers.
 Use the mode-to-agent mapping in that reference instead of generic subagents.
-Workers may report command output they actually ran or propose focused checks;
-the manager decides what is strong enough to record.
+Workers must use the handoff format and verification gates from that reference.
+They may report command output they actually ran or propose focused checks; the
+manager decides what is strong enough to record.
 
 For independent implementation attempts, use candidate workers only with
 explicit user authorization plus isolated worktrees or exact non-overlapping

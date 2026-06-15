@@ -2,6 +2,10 @@
 
 Use this only after a serial orientation pass has identified the repo shape and the likely slices. Workers are read-only evidence gatherers; the planner owns the plan.
 
+For broad waves, also load `../../flow/references/parallel-orchestration.md`.
+Use its pre-fan-out coverage gate and
+`../../flow/references/handoff-format.md` response shapes.
+
 ## Good slices
 
 - Independent modules or packages.
@@ -27,11 +31,18 @@ For this repository, good first-wave slices are:
   `bun.lock`, `README.md`, and `CHANGELOG.md`.
 - Docs and operator contract: `docs/**`, `README.md`, and skill references.
 
+## Coverage gate
+
+Before spawning workers, state the total discovery scope and one line per slice.
+For countable scopes, confirm that slice counts add back to the total and that
+there are no overlaps, gaps, or empty slices. If the scope is not countable,
+state the completeness rule, such as "all changed files plus callers."
+
 ## Worker prompt
 
 ```text
 Inspect <slice> for <goal>. Read-only. Do not edit files or call Flow tools.
-Return: scope inspected; files/commands checked; evidence-backed facts or findings; gaps; suggested feature targets and validation.
+Return the evidence/review/validation/audit handoff shape from ../../flow/references/handoff-format.md.
 ```
 
 For validation-oriented discovery:
@@ -39,8 +50,8 @@ For validation-oriented discovery:
 ```text
 Inspect <slice> for validation risk. Read-only. Do not edit files or call Flow
 tools. You may report commands that should be run, and include raw output only
-for commands you actually ran. Return: scope inspected; validation-relevant
-facts; suggested targeted checks; broad-gate implications; gaps.
+for commands you actually ran. Return the evidence/review/validation/audit
+handoff shape from ../../flow/references/handoff-format.md.
 ```
 
 ## Synthesis

@@ -5,6 +5,10 @@ commit history and review evidence.
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-06-15
+
+- Add Flow-native orchestration handoffs, verification gates, and a hidden verifier worker while keeping the public runtime surface unchanged.
+
 ## [4.0.1] - 2026-06-15
 
 Teach Flow to fan out through named evidence, validation, audit, review, and candidate workers while keeping runtime state changes manager-owned.

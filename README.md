@@ -10,7 +10,7 @@ Add Flow to your OpenCode config:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.0.1"]
+  "plugin": ["opencode-plugin-flow@4.1.0"]
 }
 ```
 
@@ -58,6 +58,8 @@ The v4 runtime exposes seven tools:
 | `flow_session_close` | Archive the active session as completed, deferred, or abandoned. |
 
 There is no `flow_context` and no separate review-record tool. Review evidence is part of `flow_feature_complete`: every completed feature needs a passing `featureReview`, and the final feature also needs a passing `finalReview`.
+
+Broad Flow work can fan out through hidden evidence, review, validation, audit, verifier, and candidate workers. Those workers return structured handoffs with coverage, evidence, confidence, and gaps; the manager still owns all Flow state changes and no extra user command is required.
 
 ## Runtime Contract
 

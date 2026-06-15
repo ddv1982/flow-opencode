@@ -12,7 +12,7 @@ If `flow_plan_save` is unavailable, stop and tell the user to check that `openco
 ## Inspect first
 
 - Read the files, docs, tests, package scripts, and local conventions that determine the work.
-- For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass.
+- For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass. Use `../flow/references/parallel-orchestration.md` when discovery needs multiple workers, and apply its coverage gate before fan-out.
 - For cleanup/refactor goals, load `flow-deslop`.
 - For UI/frontend goals, load `flow-ui-quality`.
 - Do not invent findings. Broad "review and fix" goals start with a review-first feature whose deliverable is evidence-backed findings.

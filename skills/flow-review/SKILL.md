@@ -58,7 +58,8 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 - Large reviews: use `../flow/references/parallel-orchestration.md` for
   read-only slices by changed-file group, risk lens, or validation surface.
   Use the named review, audit, evidence, or validation agents from that
-  reference instead of generic subagents. Synthesize the handoffs yourself; only
-  the manager returns the final `featureReview` or `finalReview` payload.
+  reference instead of generic subagents. Apply its handoff format and
+  verification gates; only the manager returns the final `featureReview` or
+  `finalReview` payload.
 
 Never approve to unblock completion, fix findings in the review pass, or vouch for validation you did not inspect.

@@ -16,6 +16,7 @@ Use the strongest practical tier. For risky work, combine tiers.
 - Each `validationRun` entry has `command`, `status`, and `summary`.
 - Completion accepts only passing entries. Failed or skipped checks belong in the summary/notes and must be resolved or explained as blockers.
 - Do not claim a command was run unless it was run in this session or directly reported by a trusted worker with raw output.
+- Worker-reported command output must satisfy `../../flow/references/verification-gates.md`: exact command, status, raw outcome summary, coverage, and manager acceptance.
 - Include scope in the summary: what behavior, files, routes, or states the check covered.
 - UI work should include browser or screenshot evidence when the app can run locally.
 - Cleanup/refactor work should show behavior preservation, not only formatting success.

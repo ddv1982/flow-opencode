@@ -16,7 +16,7 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
 5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
-Use `references/parallel-orchestration.md` for broad read-only discovery, audit, or review. The manager owns every `flow_*` state change.
+Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation waves. Its `references/handoff-format.md` and `references/verification-gates.md` companions define the worker contracts. The manager owns every `flow_*` state change.
 
 ## Runtime Surface
 

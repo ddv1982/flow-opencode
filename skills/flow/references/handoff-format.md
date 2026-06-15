@@ -1,0 +1,119 @@
+# Flow worker handoff contract
+
+Flow managers merge only the worker's final response. Treat that response as the
+worker report of record: it must include the assigned scope, what was actually
+covered, the evidence for each useful claim, and the remaining gaps. End worker
+prompts with "Return only this Flow handoff."
+
+## Evidence, review, validation, or audit worker report
+
+Use this for `flow-evidence-worker`, `flow-reviewer`,
+`flow-validation-worker`, and `flow-audit-worker`.
+
+```markdown
+## Status
+success | partial | blocked
+
+## Scope
+<owned slice: path set, module, command, risk lens, route, data range, or question set>
+
+## Coverage
+- Expected: <files, ranges, questions, commands, or findings assigned>
+- Checked: <actual coverage, for example "12/12 files" or "command not run">
+- Not checked: <items skipped with reason, or "none">
+
+## Findings or facts
+- [high|med|low] <claim>; evidence: <file:line | command summary | screenshot path | URL | metric>; corroboration: <N sources or "single source">
+- [high|med|low] <claim>; evidence: <...>; corroboration: <...>
+
+## Sources
+- <paths read, commands run, docs fetched, data ranges covered, screenshots inspected>
+
+## Confidence and verification
+- Verified: <claims directly re-run, recounted, traced, or cross-checked>
+- Single-source: <claims with exactly one supporting source>
+- Inferred: <claims derived from surrounding evidence rather than directly observed>
+- Unsettled: <claims, sources, or citations that could not be resolved>
+- Falsifier or missing input: <what would overturn or materially change the result>
+
+## Open questions / gaps
+- <ambiguity, missing source, contradiction, skipped item, or out-of-scope dependency>
+
+## Manager follow-ups
+- <concrete next tasks, verifier claims, validation commands, or Flow plan targets>
+```
+
+Validation workers must include exact command names and raw outcome summaries
+for commands they actually ran. Audit workers must include guards checked for
+any blocking-severity candidate. Review workers must separate blocking findings
+from advisory notes.
+
+## Verifier worker report
+
+Use this for `flow-verifier-worker`. Give it atomic claims and the cited sources
+or commands. Do not include the generator's reasoning unless that reasoning is
+the thing being verified.
+
+```markdown
+## Status
+success | partial | blocked
+
+## Scope
+<claim ids, sources or commands checked, and the acceptance question>
+
+## Verdict per claim
+- <claim id>: verdict=<supported | partly-supported | unsupported | source-not-found>
+  - claim: <claim text>
+  - evidence: <supporting snippet, path plus line, measured value, command result, or "none">
+  - source resolution: <URL, path, or command plus whether it resolved>
+  - confidence level: high | med | low
+  - recommended action: <keep, narrow, rewrite, or remove>
+
+## Overall
+<accept | revise | reject> because <brief reason>
+
+## Gaps
+- <unavailable source, ambiguous claim wording, missing oracle, or check not run>
+
+## Manager follow-ups
+- <narrow recheck, plan adjustment, review finding, or none>
+```
+
+## Candidate implementation worker report
+
+Use this only for isolated worktrees or exact non-overlapping path ownership
+authorized by the manager.
+
+```markdown
+## Status
+success | partial | blocked
+
+## Scope
+<isolated worktree or exact path-owned slice>
+
+## Changed or proposed patch
+- <path>: <what changed and why>
+
+## Coverage
+- Assigned: <owned files/modules>
+- Touched: <files changed or proposed>
+- Skipped: <anything assigned but not changed and why, or "none">
+
+## Verification
+live-verified | test-verified | type-check-only | not-verified
+- <command, observed outcome, pass/fail counts, or manual check>
+
+## Confidence and risk
+- Checked directly: <behavior, files, or commands verified by the worker>
+- Still open: <tests, review paths, or integration points the manager must cover>
+- Risk: low | medium | high -- <why>
+
+## Merge notes
+- <conflicts, nearby user changes, assumptions, or deviations>
+
+## Manager follow-ups
+- <merge, reject, rerun check, verifier pass, or replan task>
+```
+
+The manager must inspect and validate any candidate patch before recording Flow
+completion.
