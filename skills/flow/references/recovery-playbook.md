@@ -21,7 +21,7 @@ Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction
 - `Final feature completion requires broad validation`: run the project-level gate and use `validationScope: "broad"`.
 - `Completion requires a passing featureReview`: run or request a real review and include a passing `featureReview` only when there are no blocking findings.
 - `Final feature completion requires a finalReview`: perform final review and include `finalReview`.
-- `Final review depth must match the plan policy`: use `reviewDepth` equal to the approved plan's `finalReviewPolicy`.
+- `Final review depth must match the plan policy`: use `reviewDepth` equal to the approved plan's `finalReviewPolicy`; valid final-review values are `broad` and `detailed`.
 - `Cannot close ... unfinished features`: complete, reset, defer, or abandon honestly. Do not mark completed while work remains.
 
 ## Reset guidance

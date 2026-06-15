@@ -7,7 +7,7 @@ description: Plan Flow work for the v4 skills-first runtime: inspect the repo, d
 
 Use this skill before implementation. The output is a compact plan the runtime can enforce and future agents can execute without rediscovering the goal.
 
-If `flow_plan_save` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode.
+If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode. Planning requires the loaded Flow runtime.
 
 ## Inspect first
 
@@ -44,7 +44,7 @@ Call `flow_plan_save` with:
 }
 ```
 
-Use `finalReviewPolicy: "broad"` only for low-risk, narrow work. Use `"detailed"` for behavioral changes, cross-module edits, migrations, releases, security-sensitive code, or large refactors.
+Use only `finalReviewPolicy: "broad"` or `"detailed"`. These are the canonical final-review policy and `reviewDepth` enum values. Use `"broad"` only for low-risk, narrow work. Use `"detailed"` for behavioral changes, cross-module edits, migrations, releases, security-sensitive code, or large refactors.
 
 ## Feature sizing
 
@@ -56,6 +56,6 @@ Use `finalReviewPolicy: "broad"` only for low-risk, narrow work. Use `"detailed"
 
 ## Approval
 
-After saving, summarize the plan to the user or proceed if they already authorized implementation. Then call `flow_plan_approve`. Approved plans are immutable; changing them later requires reset/closure rather than silent edits.
+After saving, summarize the plan to the user. Call `flow_plan_approve` only after explicit user approval, unless the user already authorized autonomous implementation. Approved plans are immutable; changing them later requires reset/closure rather than silent edits.
 
 See `references/planning-examples.md` for payload examples and decomposition anti-patterns.

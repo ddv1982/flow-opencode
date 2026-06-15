@@ -6,9 +6,9 @@ Use this after the scripted preflight when the touched boundary needs focused ev
 | --- | --- |
 | Any contribution | `git diff --check`, staged-index review, `bun run check` |
 | `src/runtime/**`, session schema, transitions, persistence, or hard invariants | Narrow runtime tests for the touched module; usually `bun test tests/runtime-gates.test.ts tests/workspace-persistence.test.ts` |
-| `src/adapters/opencode/**`, tool schemas, tool registration, or config projection | `bun test tests/distribution-and-surface.test.ts`; `bun run typecheck` |
+| `src/adapters/opencode/**`, tool schemas, tool registration, or config projection | Push preflight runs `bun test tests/distribution-and-surface.test.ts`; also run `bun run typecheck` when validating manually |
 | `src/distribution/**`, `src/cli.ts`, package files, install/update/uninstall behavior | `bun run build`; `bun test tests/distribution-and-surface.test.ts` |
-| `skills/**` | Review the relevant skill and references directly; make sure tool names still match `tests/distribution-and-surface.test.ts` |
+| `skills/**` | Push preflight runs `bun test tests/distribution-and-surface.test.ts`; review the relevant skill and references directly |
 | Package scripts, workflow files, or release process | Focused script/workflow review; `bun run check` before merge/release |
 | Release notes, README install snippet, or package version | Verify `package.json`, `bun.lock`, `CHANGELOG.md`, README snippets, and tag name all agree |
 | Public surface change: command, tool, agent, `.flow/**` path, package export, or schema | Update `docs/maintainer-contract.md`, README, skills, tests, and release notes together; treat as release-sensitive |

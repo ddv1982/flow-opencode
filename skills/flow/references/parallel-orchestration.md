@@ -40,9 +40,10 @@ Read these companion references before a broad wave:
 
 ## Modes
 
-When fanning out Flow work, select the matching hidden Flow agent by name. Do
-not use generic subagents for Flow slices because Flow workers carry the
-permission boundaries for each mode.
+When fanning out Flow work, select the matching hidden Flow agent by name. These
+workers are injected by the plugin config; invoke the named worker when it is
+available. Do not use generic subagents for Flow slices because Flow workers
+carry the permission boundaries for each mode.
 
 | Mode | Use agent | Worker output | Write access | Flow tools |
 | --- | --- | --- | --- | --- |

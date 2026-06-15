@@ -105,6 +105,38 @@ describe("Flow runtime gates", () => {
 		});
 		expect(result.status).toBe("error");
 		expect(String(result.summary)).toContain("cycle");
+
+		const unknownDependency = await flowPlanSave(await tempWorkspace(), {
+			goal: "Reject unknown dependency",
+			plan: {
+				...twoFeaturePlan(),
+				features: [
+					twoFeaturePlan().features[0],
+					{
+						...twoFeaturePlan().features[1],
+						dependsOn: ["missing-feature"],
+					},
+				],
+			},
+		});
+		expect(unknownDependency.status).toBe("error");
+		expect(String(unknownDependency.summary)).toContain("unknown feature");
+
+		const selfDependency = await flowPlanSave(await tempWorkspace(), {
+			goal: "Reject self dependency",
+			plan: {
+				...twoFeaturePlan(),
+				features: [
+					{
+						...twoFeaturePlan().features[0],
+						dependsOn: ["first-feature"],
+					},
+					twoFeaturePlan().features[1],
+				],
+			},
+		});
+		expect(selfDependency.status).toBe("error");
+		expect(String(selfDependency.summary)).toContain("itself");
 	});
 
 	test("approved plans are immutable and only one feature can run", async () => {
@@ -139,6 +171,25 @@ describe("Flow runtime gates", () => {
 		});
 		expect(missingValidation.status).toBe("error");
 		expect(String(missingValidation.summary)).toContain("validation evidence");
+
+		const failedValidation = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			validationRun: [
+				{
+					command: "bun test first-feature",
+					status: "failed" as const,
+					summary: "Focused check failed.",
+				},
+			],
+		});
+		expect(failedValidation.status).toBe("error");
+		expect(String(failedValidation.summary)).toContain("validation to pass");
+
+		const broadNonFinal = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "broad"),
+		});
+		expect(broadNonFinal.status).toBe("error");
+		expect(String(broadNonFinal.summary)).toContain("targeted validation");
 
 		const failedReview = await flowFeatureComplete(workspace, {
 			...completePayload("first-feature", "targeted"),
@@ -183,6 +234,28 @@ describe("Flow runtime gates", () => {
 		expect(withoutFinalReview.status).toBe("error");
 		expect(String(withoutFinalReview.summary)).toContain("finalReview");
 
+		const failedFinalReview = await flowFeatureComplete(workspace, {
+			...completePayload("final-feature", "broad"),
+			finalReview: {
+				...finalReview(),
+				status: "failed" as const,
+				summary: "Final review found a blocker.",
+				blockingFindings: [{ summary: "Project gate is incomplete." }],
+			},
+		});
+		expect(failedFinalReview.status).toBe("error");
+		expect(String(failedFinalReview.summary)).toContain("passing finalReview");
+
+		const wrongReviewDepth = await flowFeatureComplete(workspace, {
+			...completePayload("final-feature", "broad"),
+			finalReview: {
+				...finalReview(),
+				reviewDepth: "broad" as const,
+			},
+		});
+		expect(wrongReviewDepth.status).toBe("error");
+		expect(String(wrongReviewDepth.summary)).toContain("plan policy");
+
 		const completed = await flowFeatureComplete(workspace, {
 			...completePayload("final-feature", "broad"),
 			finalReview: finalReview(),
@@ -215,6 +288,16 @@ describe("Flow runtime gates", () => {
 	});
 
 	test("needs_input outcomes cannot default to completed", () => {
+		expect(
+			WorkerResultSchema.safeParse({
+				...completePayload("first-feature", "targeted"),
+				outcome: {
+					kind: "blocked",
+					summary: "Blocked outcomes must not be reported as ok.",
+				},
+			}).success,
+		).toBe(false);
+
 		expect(
 			WorkerResultSchema.safeParse({
 				status: "needs_input",
@@ -324,5 +407,48 @@ describe("Flow runtime gates", () => {
 		expect(
 			features.find((feature) => feature.id === "final-feature")?.status,
 		).toBe("pending");
+	});
+
+	test("resetting a completed session reopens the approved plan", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+		await flowFeatureComplete(
+			workspace,
+			completePayload("first-feature", "targeted"),
+		);
+		await flowRunStart(workspace, {});
+		await flowFeatureComplete(workspace, {
+			...completePayload("final-feature", "broad"),
+			finalReview: finalReview(),
+		});
+
+		const completed = await flowStatus(workspace);
+		expect(completed.status).toBe("completed");
+		expect(
+			(completed.session as { closure: { kind: string } }).closure.kind,
+		).toBe("completed");
+
+		const reset = await flowFeatureReset(workspace, {
+			featureId: "first-feature",
+		});
+		expect(reset.status).toBe("ok");
+
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("ready");
+		expect(
+			(status.session as { closure: null; timestamps: { completedAt: null } })
+				.closure,
+		).toBeNull();
+		expect(
+			(status.session as { timestamps: { completedAt: string | null } })
+				.timestamps.completedAt,
+		).toBeNull();
+		const features = (
+			status.session as { features: Array<{ id: string; status: string }> }
+		).features;
+		expect(features.every((feature) => feature.status === "pending")).toBe(
+			true,
+		);
 	});
 });

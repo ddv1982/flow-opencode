@@ -87,6 +87,18 @@ describe("Flow workspace persistence", () => {
 		await expect(loadSession(workspace)).rejects.toThrow(/duplicate/i);
 	});
 
+	test("rejects nested duplicate keys in session JSON", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(join(workspace, ".flow"), { recursive: true });
+		await writeFile(
+			sessionPath(workspace),
+			'{"version":2,"timestamps":{"createdAt":"now","createdAt":"later"}}\n',
+			"utf8",
+		);
+
+		await expect(loadSession(workspace)).rejects.toThrow(/duplicate/i);
+	});
+
 	test("upgrades generated Flow gitignore to ignore runtime state", async () => {
 		const workspace = await tempWorkspace();
 		await mkdir(join(workspace, ".flow"), { recursive: true });
@@ -97,6 +109,37 @@ describe("Flow workspace persistence", () => {
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
 		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+	});
+
+	test("deferred and abandoned close archives and clears the active session", async () => {
+		for (const kind of ["deferred", "abandoned"] as const) {
+			const workspace = await tempWorkspace();
+			await flowPlanSave(workspace, {
+				goal: `Close ${kind} without completing`,
+				plan: oneFeaturePlan(),
+			});
+
+			const close = await flowSessionClose(workspace, {
+				kind,
+				summary: `Archived as ${kind}.`,
+			});
+			expect(close.status).toBe("ok");
+			expect((close.closure as { kind: string }).kind).toBe(kind);
+			await expect(stat(sessionPath(workspace))).rejects.toThrow();
+			expect(await loadSession(workspace)).toBeNull();
+
+			const historyFiles = await readdir(join(workspace, ".flow", "history"));
+			expect(historyFiles).toHaveLength(1);
+			const archived = JSON.parse(
+				await readFile(
+					join(workspace, ".flow", "history", historyFiles[0] ?? ""),
+					"utf8",
+				),
+			) as { closure: { kind: string; summary: string }; status: string };
+			expect(archived.closure.kind).toBe(kind);
+			expect(archived.closure.summary).toBe(`Archived as ${kind}.`);
+			expect(archived.status).toBe("planning");
+		}
 	});
 
 	test("archives and clears completed sessions", async () => {

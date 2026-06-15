@@ -2,6 +2,8 @@
 * @ddv1982
 
 # Flow v4 ownership boundaries
+/.github/ @ddv1982
+/.agents/ @ddv1982
 /src/runtime/ @ddv1982
 /src/distribution/ @ddv1982
 /src/adapters/ @ddv1982

@@ -162,7 +162,7 @@ if range_contains "$files" '^(src/runtime/|tests/runtime|tests/completion|tests/
   bun test tests/runtime-gates.test.ts tests/workspace-persistence.test.ts
 fi
 
-if range_contains "$files" '^(src/adapters/opencode/|src/config-shared\.ts|src/config\.ts|tests/config/)'; then
+if range_contains "$files" '^(src/adapters/opencode/|src/config-shared\.ts|src/config\.ts|tests/config/|skills/)'; then
   log "Run distribution and surface focused checks"
   bun test tests/distribution-and-surface.test.ts
 fi

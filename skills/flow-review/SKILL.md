@@ -7,7 +7,7 @@ description: Review Flow work in the v4 runtime: inspect feature or final-sessio
 
 Use this skill for review. The reviewer is usually read-only and does not mutate Flow state. The manager records the returned review payload inside `flow_feature_complete`.
 
-If Flow tools are unavailable, perform an advisory review and say that no Flow-gated review payload was recorded.
+If Flow tools or required Flow skills are unavailable or stale, perform an advisory review and say that no Flow-gated review payload was recorded.
 
 ## Start
 
@@ -17,13 +17,13 @@ If Flow tools are unavailable, perform an advisory review and say that no Flow-g
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
 - Load `references/review-rubric.md` for severity, depth, and payload shape.
 
-## Depth
+## Feature Review Depth
 
 - **quick**: docs, comments, config-only changes, or mechanical changes fully covered by tooling.
 - **standard**: default feature review. Read every changed file and relevant tests.
-- **detailed**: final review, risky behavior, persistence, security, cross-module refactors, migrations, releases, or weak validation.
+- **detailed**: risky behavior, persistence, security, cross-module refactors, migrations, releases, or weak validation.
 
-Claim only the depth actually performed. Missing evidence is a finding, not a nuisance.
+`quick` and `standard` are feature-review depth descriptions only. Final reviews use `reviewDepth: "broad"` or `"detailed"` to match the plan's `finalReviewPolicy`; these runtime enum values are the canonical final-review terms. Claim only the depth actually performed. Missing evidence is a finding, not a nuisance.
 
 ## Output
 

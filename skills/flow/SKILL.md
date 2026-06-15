@@ -10,13 +10,13 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
 ## Loop
 
 1. Call `flow_status` first. Trust its active session and next action over conversation memory.
-2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve`. If there is no goal, ask for one.
+2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
 3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload.
 4. Load `flow-review` for the required feature review. The reviewer reports a `featureReview` payload; the manager records it inside `flow_feature_complete`.
 5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
-Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation waves. Its `references/handoff-format.md` and `references/verification-gates.md` companions define the worker contracts. The manager owns every `flow_*` state change.
+Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation waves. Hidden Flow workers are injected by plugin config; invoke the named worker when it is available. Its `references/handoff-format.md` and `references/verification-gates.md` companions define the worker contracts. The manager owns every `flow_*` state change.
 
 ## Runtime Surface
 
@@ -29,6 +29,8 @@ Use `references/parallel-orchestration.md` for broad read-only discovery, audit,
 - `flow_session_close`: archive the active session as `completed`, `deferred`, or `abandoned`.
 
 There is no `flow_context`, no separate review-record tool, and no multi-session activation surface. The single active source of truth is `.flow/session.json`; closed sessions are archived under `.flow/history/`.
+
+Planning and running require loaded Flow tools; do not simulate plan approval or feature completion when the runtime is unavailable. Review may still return advisory output when tools or skills are stale or unavailable, but the manager must not record it as Flow-gated evidence.
 
 ## Hard Gates
 

@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.3] - 2026-06-16
+
+Sharpen Flow's skill/runtime contract with aligned final-review language, broader gate coverage, CLI smoke tests, and skill-aware preflight routing.
+
 ## [4.1.2] - 2026-06-15
 
 Make Flow's skill registry lag visible with restart-aware setup warnings, a doctor command, and a bundled review fallback for stale OpenCode startups.

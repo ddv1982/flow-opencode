@@ -32,7 +32,7 @@ If unsure whether a finding is real, read more or downgrade it. Do not promote g
 
 - Every feature is complete and together they satisfy the original goal.
 - Broad validation ran and passed.
-- The final review depth equals the approved `finalReviewPolicy`.
+- The final `reviewDepth` equals the approved `finalReviewPolicy`; the only final-review enum values are `broad` and `detailed`.
 - Feature-level reviews have no unresolved blocking findings.
 - Docs, commands, package metadata, and release surfaces match the delivered behavior.
 - Remaining gaps are explicit and do not contradict `kind: "completed"`.

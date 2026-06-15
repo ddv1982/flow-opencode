@@ -20,7 +20,7 @@ Add Flow to your OpenCode config:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.2"]
+  "plugin": ["opencode-plugin-flow@4.1.3"]
 }
 ```
 
@@ -50,7 +50,7 @@ disk while still being unavailable to that process. Flow reports this through
 To inspect the installed skill set:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.2 doctor
+npx -y opencode-plugin-flow@4.1.3 doctor
 ```
 
 ## Commands

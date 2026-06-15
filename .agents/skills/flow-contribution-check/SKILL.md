@@ -33,6 +33,7 @@ Rerun commit preflight after any staging change, including partial staging. Comm
 4. Read `references/validation-matrix.md` and record any required evidence before pushing.
 
 Push mode validates only the current branch against its configured upstream, or `origin/main` for a non-`main` branch with no upstream. It does not validate tags, mirrors, or arbitrary refspecs.
+Push mode also runs focused checks for selected changed paths, including the distribution/surface test when `skills/**` changes are present.
 
 ## Escalate before risky operations
 
