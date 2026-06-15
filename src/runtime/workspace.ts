@@ -205,15 +205,24 @@ export async function archiveAndClearSession(
 	await ensureFlowGitignore(root);
 }
 
+const FLOW_GITIGNORE_CONTENT = [
+	"session.json",
+	"history/",
+	"session.lock/",
+	".gitignore",
+	"",
+].join("\n");
+
 async function ensureFlowGitignore(worktree: string): Promise<void> {
 	const path = join(flowDir(worktree), ".gitignore");
 	try {
 		const existing = await readFile(path, "utf8");
-		if (existing.includes("session.lock")) return;
-		await writeFile(path, `${existing.trimEnd()}\nsession.lock/\n`, "utf8");
+		if (existing.trim() === "session.lock/") {
+			await writeFile(path, FLOW_GITIGNORE_CONTENT, "utf8");
+		}
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-		await writeFile(path, "session.lock/\n", "utf8");
+		await writeFile(path, FLOW_GITIGNORE_CONTENT, "utf8");
 	}
 }
 

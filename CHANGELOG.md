@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.1] - 2026-06-15
+
+Keep Flow's local session ledger out of Git by default with a generated `.flow/.gitignore`, while preserving opt-in versioning for teams that intentionally archive session evidence.
+
 ## [4.1.0] - 2026-06-15
 
 Add Flow-native orchestration handoffs, verification gates, and a hidden verifier worker, inspired by Ray Fernando's parallel agent workflow skill work and RepoPrompt CE's context-engineering approach, while keeping the public runtime surface unchanged.

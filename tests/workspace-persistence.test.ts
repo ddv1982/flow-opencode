@@ -87,6 +87,18 @@ describe("Flow workspace persistence", () => {
 		await expect(loadSession(workspace)).rejects.toThrow(/duplicate/i);
 	});
 
+	test("upgrades generated Flow gitignore to ignore runtime state", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(join(workspace, ".flow"), { recursive: true });
+		await writeFile(join(workspace, ".flow", ".gitignore"), "session.lock/\n");
+
+		await flowPlanSave(workspace, { goal: "Use the new ignore defaults" });
+
+		await expect(
+			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
+		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+	});
+
 	test("archives and clears completed sessions", async () => {
 		const workspace = await tempWorkspace();
 		await flowPlanSave(workspace, {
@@ -110,7 +122,7 @@ describe("Flow workspace persistence", () => {
 		expect(historyFiles[0]?.endsWith(".json")).toBe(true);
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toContain("session.lock/");
+		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
 	});
 
 	test("starting a new goal archives an active completed session", async () => {

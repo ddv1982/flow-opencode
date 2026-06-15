@@ -24,7 +24,7 @@ Runtime must enforce:
 
 ## State
 
-`.flow/session.json` is the active source of truth. `.flow/history/<session-id>.json` stores archived sessions. Markdown docs, context views, readiness ledgers, and projection caches are intentionally not runtime state.
+`.flow/session.json` is the active source of truth. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state is ignored by Git unless a repository intentionally opts in. Markdown docs, context views, readiness ledgers, and projection caches are intentionally not runtime state.
 
 Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against filesystem roots and `$HOME`.
 

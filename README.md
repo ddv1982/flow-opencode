@@ -20,7 +20,7 @@ Add Flow to your OpenCode config:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.0"]
+  "plugin": ["opencode-plugin-flow@4.1.1"]
 }
 ```
 
@@ -76,6 +76,7 @@ The runtime owns only safety:
 - `.flow/session.json` is the active source of truth.
 - `.flow/history/<session-id>.json` stores closed sessions.
 - Session writes are locked and atomic.
+- Flow writes `.flow/.gitignore` so session state stays out of Git by default.
 - Mutable roots cannot be filesystem roots or `$HOME`.
 - Plans cannot be changed after approval.
 - Only one feature can be active at a time.
@@ -93,6 +94,10 @@ Planning quality, decomposition, review depth, validation adequacy, orchestratio
 .flow/history/<session-id>.json
 .flow/session.lock/
 ```
+
+Versioning `.flow` state is opt-in. Edit `.flow/.gitignore` or use
+`git add -f` only when a repository intentionally wants to archive Flow session
+evidence.
 
 ## Development
 
