@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.2] - 2026-06-15
+
+Make Flow's skill registry lag visible with restart-aware setup warnings, a doctor command, and a bundled review fallback for stale OpenCode startups.
+
 ## [4.1.1] - 2026-06-15
 
 Keep Flow's local session ledger out of Git by default with a generated `.flow/.gitignore`, while preserving opt-in versioning for teams that intentionally archive session evidence.

@@ -1,3 +1,4 @@
+import { getFlowSkillSetupStatus } from "../../distribution/sync";
 import {
 	flowFeatureComplete,
 	flowFeatureReset,
@@ -35,13 +36,27 @@ async function execute(
 	}
 }
 
+async function flowStatusWithSetup(
+	worktree: string,
+): Promise<Record<string, unknown>> {
+	const result = await flowStatus(worktree);
+	const setup = getFlowSkillSetupStatus();
+	if (!setup) return result;
+	return {
+		...result,
+		setup: {
+			skills: setup,
+		},
+	};
+}
+
 export function createTools(ctx: unknown) {
 	createFlowLog(ctx)("info", "Creating minimal Flow v4 tool surface.");
 	return {
 		flow_status: tool({
 			description: "Show the active Flow session and next action",
 			args: {},
-			execute: (_args, context) => execute(context, flowStatus),
+			execute: (_args, context) => execute(context, flowStatusWithSetup),
 		}),
 		flow_plan_save: tool({
 			description: "Create or update a draft Flow plan for the active goal",

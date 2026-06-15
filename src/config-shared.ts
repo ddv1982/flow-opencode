@@ -1,3 +1,10 @@
+import flowReviewReviewRubricDoc from "../skills/flow-review/references/review-rubric.md" with {
+	type: "text",
+};
+import flowReviewSkillDoc from "../skills/flow-review/SKILL.md" with {
+	type: "text",
+};
+
 export type FlowPermissionConfig = {
 	edit?: string;
 	bash?: string;
@@ -25,13 +32,23 @@ export type MutableFlowConfig = {
 	command?: Record<string, unknown>;
 };
 
+const FLOW_REVIEW_FALLBACK_PROMPT = [
+	"Use Flow review mode. Load `flow-review` when the skill registry is current. If Flow setup reports stale skills or the skill loader reports that `flow-review` is unavailable, continue with the bundled review instructions below instead.",
+	"",
+	"## Bundled Flow review fallback",
+	"",
+	"## Bundled flow-review/SKILL.md",
+	flowReviewSkillDoc,
+	"## Bundled flow-review/references/review-rubric.md",
+	flowReviewReviewRubricDoc,
+].join("\n\n");
+
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
 		mode: "subagent",
 		hidden: true,
 		description: "Internal read-only reviewer for Flow-guided work.",
-		prompt:
-			"Load `flow-review`. Inspect the current work read-only, report coverage, evidence-backed findings, confidence, gaps, and manager follow-ups, and do not mutate Flow state.",
+		prompt: FLOW_REVIEW_FALLBACK_PROMPT,
 		permission: {
 			edit: "deny",
 			bash: "deny",
@@ -136,7 +153,8 @@ export const FLOW_CORE_COMMANDS = {
 		description: "Run a read-only Flow review",
 		agent: "flow-reviewer",
 		subtask: true,
-		template: "Load the `flow-review` skill and review: $ARGUMENTS",
+		template:
+			"Load `flow-review`; if loading fails because the skill is unavailable, use the bundled review fallback. Review: $ARGUMENTS",
 	},
 	"flow-status": {
 		description: "Inspect the active Flow session",

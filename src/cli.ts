@@ -1,10 +1,20 @@
-import { uninstallFlowSkills } from "./distribution/sync";
+import {
+	formatFlowSkillDoctor,
+	inspectFlowSkillInstall,
+	uninstallFlowSkills,
+} from "./distribution/sync";
 
 async function main(argv: string[]): Promise<void> {
 	const command = argv[2];
-	if (command !== "uninstall") {
-		process.stderr.write("usage: opencode-plugin-flow uninstall\n");
+	if (command !== "uninstall" && command !== "doctor") {
+		process.stderr.write("usage: opencode-plugin-flow <doctor|uninstall>\n");
 		process.exitCode = 2;
+		return;
+	}
+	if (command === "doctor") {
+		process.stdout.write(
+			formatFlowSkillDoctor(await inspectFlowSkillInstall()),
+		);
 		return;
 	}
 	const result = await uninstallFlowSkills();

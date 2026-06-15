@@ -11,11 +11,71 @@ const MARKER_FILENAME = ".flow-skill-version";
 
 type FlowLog = (level: "info" | "warn" | "error", message: string) => void;
 
+export type FlowSkillSyncAction =
+	| "installed"
+	| "updated"
+	| "updated_with_backup"
+	| "marker_updated"
+	| "unchanged"
+	| "skipped_foreign";
+
+export type FlowSkillSyncResult = {
+	name: string;
+	action: FlowSkillSyncAction;
+};
+
+export type FlowSkillSyncHealth = {
+	status: "ok" | "restart_required" | "action_required" | "error";
+	version: string;
+	root: string;
+	checkedAt: string;
+	expectedSkills: string[];
+	results: FlowSkillSyncResult[];
+	changedSkills: string[];
+	actionRequiredSkills: string[];
+	restartRequired: boolean;
+	summary: string;
+	error?: string;
+};
+
+export type FlowSkillSetupStatus = {
+	status: "restart_required" | "action_required" | "sync_failed";
+	summary: string;
+	version: string;
+	root: string;
+	changed?: string[];
+	actionRequired?: string[];
+	error?: string;
+};
+
+export type FlowSkillDoctorSkill = {
+	name: string;
+	path: string;
+	status: "ok" | "missing" | "foreign" | "incomplete" | "edited" | "outdated";
+	markerVersion: string | null;
+	missingFiles: string[];
+	editedFiles: string[];
+	outdatedFiles: string[];
+};
+
+export type FlowSkillDoctorReport = {
+	status: "ok" | "sync_required" | "action_required";
+	version: string;
+	root: string;
+	expectedSkills: string[];
+	skills: FlowSkillDoctorSkill[];
+	syncRequiredSkills: string[];
+	actionRequiredSkills: string[];
+	unmanagedFlowSkills: string[];
+};
+
+let latestFlowSkillSyncHealth: FlowSkillSyncHealth | null = null;
+
 function homeDir(): string {
 	return process.env.HOME ?? process.env.USERPROFILE ?? "";
 }
 
-function skillsRoot(home = homeDir()): string {
+export function resolveFlowSkillsRoot(home = homeDir()): string {
 	return join(home, ".config", "opencode", "skills");
 }
 
@@ -58,6 +118,15 @@ function parseMarkerFiles(content: string | null): Map<string, string> {
 	return files;
 }
 
+function parseMarkerVersion(content: string | null): string | null {
+	if (!content) return null;
+	for (const line of content.split(/\r?\n/)) {
+		const match = /^version=(.+)$/.exec(line);
+		if (match?.[1]) return match[1];
+	}
+	return null;
+}
+
 function resolveSkillFile(folder: string, relativePath: string): string {
 	const resolved = normalize(join(folder, ...relativePath.split("/")));
 	if (resolved !== folder && resolved.startsWith(`${folder}${sep}`)) {
@@ -70,7 +139,7 @@ async function syncSkill(
 	definition: FlowSkillDefinition,
 	version: string,
 	root: string,
-) {
+): Promise<FlowSkillSyncResult> {
 	const folder = join(root, definition.name);
 	const markerPath = join(folder, MARKER_FILENAME);
 	const markerContent = await optionalRead(markerPath);
@@ -100,7 +169,12 @@ async function syncSkill(
 	}
 
 	if (!changed && markerContent === markerFor(definition, version)) {
-		return { name: definition.name, action: "unchanged" as const };
+		return { name: definition.name, action: "unchanged" };
+	}
+
+	if (!changed) {
+		await writeFile(markerPath, markerFor(definition, version), "utf8");
+		return { name: definition.name, action: "marker_updated" };
 	}
 
 	const managedSkillExists = markerContent !== null;
@@ -113,11 +187,116 @@ async function syncSkill(
 	return {
 		name: definition.name,
 		action: backedUp
-			? ("updated_with_backup" as const)
+			? "updated_with_backup"
 			: managedSkillExists
-				? ("updated" as const)
-				: ("installed" as const),
+				? "updated"
+				: "installed",
 	};
+}
+
+function expectedSkillNames(): string[] {
+	return FLOW_SKILL_DEFINITIONS.map((definition) => definition.name);
+}
+
+function createHealth(
+	version: string,
+	root: string,
+	results: FlowSkillSyncResult[],
+): FlowSkillSyncHealth {
+	const changedSkills = results
+		.filter((result) =>
+			["installed", "updated", "updated_with_backup"].includes(result.action),
+		)
+		.map((result) => result.name);
+	const actionRequiredSkills = results
+		.filter((result) => result.action === "skipped_foreign")
+		.map((result) => result.name);
+	const status =
+		actionRequiredSkills.length > 0
+			? "action_required"
+			: changedSkills.length > 0
+				? "restart_required"
+				: "ok";
+	const summary =
+		status === "restart_required"
+			? `Flow installed or updated skills during this startup (${changedSkills.join(", ")}). Restart OpenCode before loading Flow skills.`
+			: status === "action_required"
+				? `Flow found user-owned skill folders for managed skills (${actionRequiredSkills.join(", ")}). Run ${formatFlowDoctorCommand(version)} for repair guidance.`
+				: "Flow skills are synced.";
+	return {
+		status,
+		version,
+		root,
+		checkedAt: new Date().toISOString(),
+		expectedSkills: expectedSkillNames(),
+		results,
+		changedSkills,
+		actionRequiredSkills,
+		restartRequired: status === "restart_required",
+		summary,
+	};
+}
+
+function createErrorHealth(
+	version: string,
+	root: string,
+	error: unknown,
+): FlowSkillSyncHealth {
+	const message = error instanceof Error ? error.message : String(error);
+	return {
+		status: "error",
+		version,
+		root,
+		checkedAt: new Date().toISOString(),
+		expectedSkills: expectedSkillNames(),
+		results: [],
+		changedSkills: [],
+		actionRequiredSkills: [],
+		restartRequired: false,
+		summary: `Flow skill sync failed: ${message}`,
+		error: message,
+	};
+}
+
+export function getLatestFlowSkillSyncHealth(): FlowSkillSyncHealth | null {
+	return latestFlowSkillSyncHealth;
+}
+
+export function formatFlowDoctorCommand(version: string): string {
+	return `npx -y opencode-plugin-flow@${version} doctor`;
+}
+
+export function getFlowSkillSetupStatus(
+	health = latestFlowSkillSyncHealth,
+): FlowSkillSetupStatus | null {
+	if (!health || health.status === "ok") return null;
+	const status = health.status === "error" ? "sync_failed" : health.status;
+	return {
+		status,
+		summary: health.summary,
+		version: health.version,
+		root: health.root,
+		...(health.changedSkills.length > 0
+			? { changed: health.changedSkills }
+			: {}),
+		...(health.actionRequiredSkills.length > 0
+			? { actionRequired: health.actionRequiredSkills }
+			: {}),
+		...(health.error ? { error: health.error } : {}),
+	};
+}
+
+export function formatFlowSkillSetupWarning(
+	health = latestFlowSkillSyncHealth,
+): string | null {
+	const setup = getFlowSkillSetupStatus(health);
+	if (!setup) return null;
+	return [
+		"Flow setup warning:",
+		setup.summary,
+		`Skills root: ${setup.root}`,
+		`Use \`${formatFlowDoctorCommand(setup.version)}\` for details.`,
+	].join("\n");
 }
 
 export function resolveFlowPluginVersion(): string {
@@ -139,7 +318,7 @@ export function resolveFlowPluginVersion(): string {
 }
 
 export async function syncFlowSkills(version: string, home = homeDir()) {
-	const root = skillsRoot(home);
+	const root = resolveFlowSkillsRoot(home);
 	return Promise.all(
 		FLOW_SKILL_DEFINITIONS.map((definition) =>
 			syncSkill(definition, version, root),
@@ -150,12 +329,17 @@ export async function syncFlowSkills(version: string, home = homeDir()) {
 export async function runFlowSkillSync(
 	version: string,
 	log: FlowLog,
+	home = homeDir(),
 ): Promise<void> {
+	const root = resolveFlowSkillsRoot(home);
 	try {
-		const results = await syncFlowSkills(version);
+		const results = await syncFlowSkills(version, home);
+		latestFlowSkillSyncHealth = createHealth(version, root, results);
 		const changed = results.filter(
 			(result) =>
-				result.action !== "unchanged" && result.action !== "skipped_foreign",
+				result.action === "installed" ||
+				result.action === "updated" ||
+				result.action === "updated_with_backup",
 		);
 		if (changed.length > 0) {
 			log(
@@ -163,16 +347,191 @@ export async function runFlowSkillSync(
 				`Flow synced skills (${changed.map((item) => `${item.name}:${item.action}`).join(", ")}). Restart OpenCode if skills were just installed.`,
 			);
 		}
+		if (latestFlowSkillSyncHealth.status === "action_required") {
+			log("warn", latestFlowSkillSyncHealth.summary);
+		}
 	} catch (error) {
-		log(
-			"warn",
-			`Flow skill sync failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		latestFlowSkillSyncHealth = createErrorHealth(version, root, error);
+		log("warn", latestFlowSkillSyncHealth.summary);
 	}
 }
 
+export async function inspectFlowSkillInstall(
+	version = resolveFlowPluginVersion(),
+	home = homeDir(),
+): Promise<FlowSkillDoctorReport> {
+	const root = resolveFlowSkillsRoot(home);
+	const expected = new Set(expectedSkillNames());
+	const skills = await Promise.all(
+		FLOW_SKILL_DEFINITIONS.map(async (definition) => {
+			const folder = join(root, definition.name);
+			const markerContent = await optionalRead(join(folder, MARKER_FILENAME));
+			const markerVersion = parseMarkerVersion(markerContent);
+			const markerHashes = parseMarkerFiles(markerContent);
+			const existingSkill = await optionalRead(join(folder, "SKILL.md"));
+			if (existingSkill === null) {
+				return {
+					name: definition.name,
+					path: folder,
+					status: "missing" as const,
+					markerVersion,
+					missingFiles: definition.files.map((file) => file.relativePath),
+					editedFiles: [],
+					outdatedFiles: [],
+				};
+			}
+			if (markerContent === null) {
+				return {
+					name: definition.name,
+					path: folder,
+					status: "foreign" as const,
+					markerVersion,
+					missingFiles: [],
+					editedFiles: [],
+					outdatedFiles: [],
+				};
+			}
+			const missingFiles: string[] = [];
+			const editedFiles: string[] = [];
+			const outdatedFiles: string[] = [];
+			for (const file of definition.files) {
+				const existing = await optionalRead(
+					resolveSkillFile(folder, file.relativePath),
+				);
+				if (existing === null) {
+					missingFiles.push(file.relativePath);
+					continue;
+				}
+				if (existing === file.content) continue;
+				const recordedHash = markerHashes.get(file.relativePath);
+				if (recordedHash && sha256(existing) !== recordedHash) {
+					editedFiles.push(file.relativePath);
+					continue;
+				}
+				outdatedFiles.push(file.relativePath);
+			}
+			const markerDrift = markerContent !== markerFor(definition, version);
+			const status: FlowSkillDoctorSkill["status"] =
+				missingFiles.length > 0
+					? "incomplete"
+					: editedFiles.length > 0
+						? "edited"
+						: markerDrift || outdatedFiles.length > 0
+							? "outdated"
+							: "ok";
+			return {
+				name: definition.name,
+				path: folder,
+				status,
+				markerVersion,
+				missingFiles,
+				editedFiles,
+				outdatedFiles,
+			};
+		}),
+	);
+
+	let entries: string[] = [];
+	try {
+		entries = await readdir(root);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+	const unmanagedFlowSkills = entries
+		.filter(
+			(name) =>
+				(name === "flow" || name.startsWith("flow-")) && !expected.has(name),
+		)
+		.map((name) => join(root, name));
+
+	const syncRequiredSkills = skills
+		.filter((skill) =>
+			["missing", "incomplete", "outdated"].includes(skill.status),
+		)
+		.map((skill) => skill.name);
+	const actionRequiredSkills = skills
+		.filter((skill) => ["foreign", "edited"].includes(skill.status))
+		.map((skill) => skill.name);
+	const actionRequired = actionRequiredSkills.length > 0;
+	const syncRequired = syncRequiredSkills.length > 0;
+	return {
+		status: actionRequired
+			? "action_required"
+			: syncRequired
+				? "sync_required"
+				: "ok",
+		version,
+		root,
+		expectedSkills: [...expected],
+		skills,
+		syncRequiredSkills,
+		actionRequiredSkills,
+		unmanagedFlowSkills,
+	};
+}
+
+function appendSkillList(
+	lines: string[],
+	label: string,
+	skills: string[],
+): void {
+	if (skills.length === 0) return;
+	lines.push(`- ${label}: ${skills.join(", ")}`);
+}
+
+export function formatFlowSkillDoctor(report: FlowSkillDoctorReport): string {
+	const lines = [
+		"Flow doctor",
+		`- status: ${report.status}`,
+		`- plugin version: ${report.version}`,
+		`- skills root: ${report.root}`,
+		`- expected skills: ${report.expectedSkills.join(", ")}`,
+	];
+	appendSkillList(
+		lines,
+		"startup sync can install/update",
+		report.syncRequiredSkills,
+	);
+	appendSkillList(lines, "needs user decision", report.actionRequiredSkills);
+	lines.push("", "Skills:");
+	for (const skill of report.skills) {
+		lines.push(
+			`- ${skill.name}: ${skill.status} (${skill.path})${
+				skill.markerVersion ? ` marker=${skill.markerVersion}` : ""
+			}`,
+		);
+		if (skill.missingFiles.length > 0) {
+			lines.push(`  missing: ${skill.missingFiles.join(", ")}`);
+		}
+		if (skill.editedFiles.length > 0) {
+			lines.push(`  edited: ${skill.editedFiles.join(", ")}`);
+		}
+		if (skill.outdatedFiles.length > 0) {
+			lines.push(`  outdated: ${skill.outdatedFiles.join(", ")}`);
+		}
+	}
+	if (report.unmanagedFlowSkills.length > 0) {
+		lines.push("", "Unmanaged Flow-like skill folders:");
+		for (const path of report.unmanagedFlowSkills) lines.push(`- ${path}`);
+	}
+	lines.push("", "Recommendation:");
+	if (report.status === "ok") {
+		lines.push("- Flow skills are present and current.");
+	} else if (report.status === "sync_required") {
+		lines.push(
+			"- Start or restart OpenCode with opencode-plugin-flow enabled so startup sync can install or update the listed skills. If Flow then reports restart_required, restart OpenCode once more so the refreshed skill registry is used.",
+		);
+	} else {
+		lines.push(
+			"- Resolve user-owned or edited managed skill folders, then restart OpenCode. Move a folder aside to let Flow recreate it, or keep it intentionally as a local override.",
+		);
+	}
+	lines.push(`- Details command: ${formatFlowDoctorCommand(report.version)}`);
+	return `${lines.join("\n")}\n`;
+}
+
 export async function uninstallFlowSkills(home = homeDir()) {
-	const root = skillsRoot(home);
+	const root = resolveFlowSkillsRoot(home);
 	const removed: string[] = [];
 	const kept: string[] = [];
 	let entries: string[];

@@ -20,7 +20,7 @@ Add Flow to your OpenCode config:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.1"]
+  "plugin": ["opencode-plugin-flow@4.1.2"]
 }
 ```
 
@@ -39,6 +39,18 @@ Project-local skill overrides still work through OpenCode's normal lookup:
 
 ```text
 .opencode/skills/flow-plan/SKILL.md
+```
+
+If Flow installs or updates skills during the current OpenCode startup, restart
+OpenCode once more before using Flow commands. OpenCode may have already scanned
+the skill registry for the running process, so a just-synced skill can exist on
+disk while still being unavailable to that process. Flow reports this through
+`flow_status` as `setup.skills.status: "restart_required"`.
+
+To inspect the installed skill set:
+
+```bash
+npx -y opencode-plugin-flow@4.1.2 doctor
 ```
 
 ## Commands

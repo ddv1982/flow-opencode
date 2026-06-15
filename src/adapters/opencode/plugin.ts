@@ -1,4 +1,6 @@
+import { FLOW_CORE_COMMANDS } from "../../config-shared";
 import {
+	formatFlowSkillSetupWarning,
 	resolveFlowPluginVersion,
 	runFlowSkillSync,
 } from "../../distribution/sync";
@@ -38,8 +40,33 @@ function createSystemTransformHook(
 	ctx: Pick<ToolContext, "worktree" | "directory">,
 ): NonNullable<Hooks["experimental.chat.system.transform"]> {
 	return async (_input, output) => {
+		const setupWarning = formatFlowSkillSetupWarning();
+		if (setupWarning) output.system.push(setupWarning);
 		const facts = await compactSessionFacts(ctx);
 		if (facts) output.system.push(facts);
+	};
+}
+
+function createCommandPreflightHook(): NonNullable<
+	Hooks["command.execute.before"]
+> {
+	const flowCommands = new Set(Object.keys(FLOW_CORE_COMMANDS));
+	return async (input, output) => {
+		const command = input.command.replace(/^\/+/, "");
+		if (!flowCommands.has(command)) return;
+		const setupWarning = formatFlowSkillSetupWarning();
+		if (!setupWarning) return;
+		(
+			output.parts as unknown as Array<{
+				type: "text";
+				text: string;
+				synthetic?: boolean;
+			}>
+		).push({
+			type: "text",
+			text: setupWarning,
+			synthetic: true,
+		});
 	};
 }
 
@@ -51,8 +78,12 @@ const FlowPlugin: Plugin = async (ctx) => {
 	return {
 		config: createConfigHook(ctx),
 		tool: createTools(ctx),
+		"command.execute.before": createCommandPreflightHook(),
 		"experimental.chat.system.transform": createSystemTransformHook(ctx),
 		"experimental.session.compacting": async (_input, output) => {
+			const setupWarning = formatFlowSkillSetupWarning();
+			if (setupWarning)
+				output.context = [...(output.context ?? []), setupWarning];
 			const facts = await compactSessionFacts(ctx);
 			if (!facts) return;
 			output.context = [...(output.context ?? []), facts];

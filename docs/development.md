@@ -24,6 +24,12 @@ The skills are the product experience. The runtime is only the ledger and hard g
 
 Skills are source files under `skills/<name>/`. On plugin startup they sync to `~/.config/opencode/skills/<name>/` with a `.flow-skill-version` marker.
 
+When startup sync installs or updates managed skills, the running OpenCode
+process may still have the old skill registry. Flow records that as sync health
+and surfaces `restart_required` through `flow_status`, system context, and Flow
+command preflight. Use `npx -y opencode-plugin-flow@<version> doctor` to
+inspect missing, foreign, edited, or outdated managed skill folders.
+
 Skill changes should preserve the v4 tool surface:
 
 - `flow_status`
