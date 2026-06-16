@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.5] - 2026-06-16
+
+Make Flow installation follow OpenCode's native plugin installer, with pre-start skill sync and older-version fallback.
+
 ## [4.1.4] - 2026-06-16
 
 Make Flow skill loading restart-aware across every command, add manual sync repair, and treat missing optional helpers as explicit coverage gaps.

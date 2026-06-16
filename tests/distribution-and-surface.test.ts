@@ -645,7 +645,7 @@ describe("Flow distribution and plugin surface", () => {
 		expect(result.stdout).toContain("Removed Flow skill:");
 		expect(result.stdout).toContain("Kept non-Flow or user-edited skill:");
 		expect(result.stdout).toContain(
-			'Remove "opencode-plugin-flow" from opencode.json',
+			"Remove opencode-plugin-flow from your OpenCode plugin config",
 		);
 		await expect(
 			readFile(
@@ -671,7 +671,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.4");
+			expect(resolveFlowPluginVersion()).toBe("4.1.5");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

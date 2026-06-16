@@ -66,6 +66,12 @@ uninstall must treat the managed set uniformly. Missing, incomplete, or outdated
 Flow-owned folders are sync-repairable. Foreign or edited managed folders
 require user action and must not be overwritten silently.
 
+Install and update guidance should use OpenCode's native plugin installer as the
+primary config mutation path when available:
+`opencode plugin opencode-plugin-flow@<version> --global`, with `--force` for
+replacing a pinned version. Flow's own CLI should remain a skill sync, doctor,
+and uninstall helper; it must not silently mutate OpenCode plugin config.
+
 Runtime setup health is surfaced through `flow_status`:
 
 - `restart_required`: startup sync changed skills and OpenCode should restart

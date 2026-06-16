@@ -16,15 +16,19 @@ The manager still owns every Flow state change. Workers gather evidence; they do
 
 ## Install
 
-Add Flow to your OpenCode config:
+Use OpenCode's plugin installer when your OpenCode version supports it:
 
-```json
-{
-  "plugin": ["opencode-plugin-flow@4.1.4"]
-}
+```bash
+opencode plugin opencode-plugin-flow@4.1.5 --global
+npx -y opencode-plugin-flow@4.1.5 sync
 ```
 
-Restart OpenCode once. On startup, the plugin syncs its global skills into:
+The first command adds Flow to your global OpenCode plugin config. The `sync`
+command pre-installs Flow's managed skills so the next OpenCode startup can load
+the refreshed skill registry.
+
+Then start or restart OpenCode. On startup, the plugin syncs its global skills
+into:
 
 ```text
 ~/.config/opencode/skills/flow/SKILL.md
@@ -33,6 +37,21 @@ Restart OpenCode once. On startup, the plugin syncs its global skills into:
 ~/.config/opencode/skills/flow-review/SKILL.md
 ~/.config/opencode/skills/flow-deslop/SKILL.md
 ~/.config/opencode/skills/flow-ui-quality/SKILL.md
+```
+
+If your OpenCode version does not have `opencode plugin`, add Flow to your
+OpenCode config manually instead:
+
+```json
+{
+  "plugin": ["opencode-plugin-flow@4.1.5"]
+}
+```
+
+Then run the same pre-start skill sync and start or restart OpenCode:
+
+```bash
+npx -y opencode-plugin-flow@4.1.5 sync
 ```
 
 Project-local skill overrides still work through OpenCode's normal lookup:
@@ -47,10 +66,18 @@ the skill registry for the running process, so a just-synced skill can exist on
 disk while still being unavailable to that process. Flow reports this through
 `flow_status` as `setup.skills.status: "restart_required"`.
 
+To update a pinned Flow version, replace the existing OpenCode plugin entry and
+sync the matching skill bundle:
+
+```bash
+opencode plugin opencode-plugin-flow@4.1.5 --global --force
+npx -y opencode-plugin-flow@4.1.5 sync
+```
+
 To inspect the installed skill set:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.4 doctor
+npx -y opencode-plugin-flow@4.1.5 doctor
 ```
 
 If a command reports `Skill "flow-review" not found. Available skills...` or a
@@ -58,7 +85,7 @@ similar Flow skill-loading error, run `/flow-status` or the doctor command above
 first. Missing, incomplete, or outdated managed skills can be repaired with:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.4 sync
+npx -y opencode-plugin-flow@4.1.5 sync
 ```
 
 Then restart OpenCode so the refreshed registry is loaded. `sync` manages all
@@ -146,8 +173,12 @@ The Flow version is its own OpenCode-native design: skills-first, manager-owned 
 
 ## Uninstall
 
+First remove `opencode-plugin-flow` from your OpenCode plugin config so future
+OpenCode startups stop loading Flow. Then remove Flow-owned synced skills:
+
 ```bash
-bunx opencode-plugin-flow uninstall
+npx -y opencode-plugin-flow@4.1.5 uninstall
 ```
 
-This removes Flow-owned synced skills when they are pristine. User-edited or foreign skill folders are kept.
+Restart OpenCode after both steps. This removes Flow-owned synced skills when
+they are pristine. User-edited or foreign skill folders are kept.

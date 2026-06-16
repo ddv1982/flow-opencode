@@ -54,7 +54,7 @@ async function main(argv: string[]): Promise<void> {
 		process.stdout.write(`Kept non-Flow or user-edited skill: ${path}\n`);
 	}
 	process.stdout.write(
-		'Remove "opencode-plugin-flow" from opencode.json and restart OpenCode.\n',
+		"Remove opencode-plugin-flow from your OpenCode plugin config and restart OpenCode.\n",
 	);
 }
 
