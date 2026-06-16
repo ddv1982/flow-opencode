@@ -33,7 +33,7 @@ export type MutableFlowConfig = {
 };
 
 const FLOW_REVIEW_FALLBACK_PROMPT = [
-	"Use Flow review mode. Load `flow-review` when the skill registry is current. If Flow setup reports stale skills or the skill loader reports that `flow-review` is unavailable, continue with the bundled review instructions below instead.",
+	"Use Flow review mode. Call `flow_status` before loading review skills. If Flow setup reports stale/unavailable skills or the skill loader reports that `flow-review` is unavailable, continue with the bundled review instructions below as advisory review only. Do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
 	"",
 	"## Bundled Flow review fallback",
 	"",
@@ -42,6 +42,13 @@ const FLOW_REVIEW_FALLBACK_PROMPT = [
 	"## Bundled flow-review/references/review-rubric.md",
 	flowReviewReviewRubricDoc,
 ].join("\n\n");
+
+const FLOW_SKILL_LOAD_PREFLIGHT =
+	"Call `flow_status` first. If the result includes `setup.skills`, report the setup status and do not load Flow skills in this startup.";
+
+function flowSkillCommandTemplate(skillName: string, action: string): string {
+	return `${FLOW_SKILL_LOAD_PREFLIGHT} Otherwise load the \`${skillName}\` skill and ${action}`;
+}
 
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
@@ -137,24 +144,27 @@ export const FLOW_CORE_AGENTS = {
 export const FLOW_CORE_COMMANDS = {
 	"flow-auto": {
 		description: "Drive Flow skills against the minimal runtime ledger",
-		template:
-			"Load the `flow` skill and drive the Flow loop until completion or a real blocker: $ARGUMENTS",
+		template: flowSkillCommandTemplate(
+			"flow",
+			"drive the Flow loop until completion or a real blocker: $ARGUMENTS",
+		),
 	},
 	"flow-plan": {
 		description: "Create or approve a Flow plan",
-		template: "Load the `flow-plan` skill and plan: $ARGUMENTS",
+		template: flowSkillCommandTemplate("flow-plan", "plan: $ARGUMENTS"),
 	},
 	"flow-run": {
 		description: "Run one approved Flow feature",
-		template:
-			"Load the `flow-run` skill and execute the next approved feature. $ARGUMENTS",
+		template: flowSkillCommandTemplate(
+			"flow-run",
+			"execute the next approved feature. $ARGUMENTS",
+		),
 	},
 	"flow-review": {
 		description: "Run a read-only Flow review",
 		agent: "flow-reviewer",
 		subtask: true,
-		template:
-			"Load `flow-review`; if loading fails because the skill is unavailable, use the bundled review fallback. Review: $ARGUMENTS",
+		template: `${FLOW_SKILL_LOAD_PREFLIGHT} If setup is clear, load \`flow-review\`; if loading fails because the skill is unavailable, use the bundled review fallback as advisory review only. Review: $ARGUMENTS`,
 	},
 	"flow-status": {
 		description: "Inspect the active Flow session",

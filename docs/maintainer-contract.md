@@ -50,6 +50,36 @@ Tools:
 
 No compatibility aliases are required for v3 sessions or retired tools.
 
+## Managed Skills And Setup Health
+
+The managed skill set is:
+
+- `flow`
+- `flow-plan`
+- `flow-run`
+- `flow-review`
+- `flow-deslop`
+- `flow-ui-quality`
+
+Startup sync, `opencode-plugin-flow doctor`, `opencode-plugin-flow sync`, and
+uninstall must treat the managed set uniformly. Missing, incomplete, or outdated
+Flow-owned folders are sync-repairable. Foreign or edited managed folders
+require user action and must not be overwritten silently.
+
+Runtime setup health is surfaced through `flow_status`:
+
+- `restart_required`: startup sync changed skills and OpenCode should restart
+  before Flow skills are loaded.
+- `action_required`: at least one managed skill folder is foreign or edited and
+  needs a user decision.
+- `sync_failed`: skill sync raised an error and the runtime should not assume
+  skill instructions are current.
+
+Public Flow commands must call `flow_status` before loading Flow skills. If
+`setup.skills` is present, report that setup state and stop skill loading in the
+current startup. `/flow-status` remains tool-only. Missing optional helpers such
+as `flow-deslop` or `flow-ui-quality` are coverage gaps, not bundled fallbacks.
+
 ## Source Ownership
 
 - `runtime`: schema, transitions, persistence, and tool-facing runtime API.

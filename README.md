@@ -20,7 +20,7 @@ Add Flow to your OpenCode config:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.3"]
+  "plugin": ["opencode-plugin-flow@4.1.4"]
 }
 ```
 
@@ -50,8 +50,22 @@ disk while still being unavailable to that process. Flow reports this through
 To inspect the installed skill set:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.3 doctor
+npx -y opencode-plugin-flow@4.1.4 doctor
 ```
+
+If a command reports `Skill "flow-review" not found. Available skills...` or a
+similar Flow skill-loading error, run `/flow-status` or the doctor command above
+first. Missing, incomplete, or outdated managed skills can be repaired with:
+
+```bash
+npx -y opencode-plugin-flow@4.1.4 sync
+```
+
+Then restart OpenCode so the refreshed registry is loaded. `sync` manages all
+bundled Flow skills: `flow`, `flow-plan`, `flow-run`, `flow-review`,
+`flow-deslop`, and `flow-ui-quality`. If doctor reports a foreign or edited
+managed skill folder, Flow leaves it in place and asks for a user decision
+instead of overwriting local work.
 
 ## Commands
 

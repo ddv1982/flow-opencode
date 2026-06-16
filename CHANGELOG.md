@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.4] - 2026-06-16
+
+Make Flow skill loading restart-aware across every command, add manual sync repair, and treat missing optional helpers as explicit coverage gaps.
+
 ## [4.1.3] - 2026-06-16
 
 Sharpen Flow's skill/runtime contract with aligned final-review language, broader gate coverage, CLI smoke tests, and skill-aware preflight routing.

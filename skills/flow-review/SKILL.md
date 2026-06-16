@@ -7,7 +7,9 @@ description: Review Flow work in the v4 runtime: inspect feature or final-sessio
 
 Use this skill for review. The reviewer is usually read-only and does not mutate Flow state. The manager records the returned review payload inside `flow_feature_complete`.
 
-If Flow tools or required Flow skills are unavailable or stale, perform an advisory review and say that no Flow-gated review payload was recorded.
+If Flow tools, required Flow skills, or required references are unavailable or
+stale, perform an advisory review and say that no Flow-gated review payload was
+recorded.
 
 ## Start
 
@@ -52,8 +54,8 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 
 ## Special cases
 
-- Cleanup/refactor: load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved.
-- UI/frontend: load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available.
+- Cleanup/refactor: load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved. If unavailable, record a coverage gap instead of approving cleanup claims.
+- UI/frontend: load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available. If unavailable, record a coverage gap and do not claim visual polish was verified.
 - Audit reports: use `flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
 - Large reviews: use `../flow/references/parallel-orchestration.md` for
   read-only slices by changed-file group, risk lens, or validation surface.

@@ -14,8 +14,9 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Call `flow_status`.
 - Call `flow_run_start` with no `featureId` unless the user or plan requires a specific runnable feature.
 - Treat the returned feature as the sole scope until it is completed, blocked, or reset.
-- Load `flow-deslop` for cleanup/refactor features.
-- Load `flow-ui-quality` for frontend, UX, responsive, accessibility, or visual work.
+- Load `flow-deslop` for cleanup/refactor features. If it is unavailable,
+  record the gap and do not overclaim cleanup quality.
+- Load `flow-ui-quality` for frontend, UX, responsive, accessibility, or visual work. If it is unavailable, record the gap and use next-best UI evidence.
 
 ## Implement
 
@@ -46,7 +47,14 @@ merges, validates, and records Flow state serially.
 
 ## Review and complete
 
-Before `flow_feature_complete`, obtain a `featureReview` payload. Load `flow-review`; for read-only subagent reviews, the manager receives the payload and records it.
+Before `flow_feature_complete`, obtain a `featureReview` payload. Load
+`flow-review`; for read-only subagent reviews, the manager receives the payload
+and records it.
+
+If `flow_status` reports `setup.skills` or `flow-review` cannot be loaded, do
+not record a Flow-gated `featureReview` or `finalReview`. You may perform an
+advisory review using available context or bundled reviewer fallback text, then
+complete with `status: "needs_input"` if review evidence is required to proceed.
 
 For the final feature, also obtain a `finalReview` payload whose `reviewDepth` equals the approved plan's `finalReviewPolicy`.
 

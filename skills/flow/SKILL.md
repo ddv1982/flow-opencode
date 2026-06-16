@@ -10,6 +10,9 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
 ## Loop
 
 1. Call `flow_status` first. Trust its active session and next action over conversation memory.
+   If the result includes `setup.skills`, report that setup status and do not
+   load Flow skills in this startup. A just-synced skill can be on disk while
+   unavailable to the running OpenCode process.
 2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
 3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload.
 4. Load `flow-review` for the required feature review. The reviewer reports a `featureReview` payload; the manager records it inside `flow_feature_complete`.
@@ -17,6 +20,17 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
 Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation waves. Hidden Flow workers are injected by plugin config; invoke the named worker when it is available. Its `references/handoff-format.md` and `references/verification-gates.md` companions define the worker contracts. The manager owns every `flow_*` state change.
+
+## Skill Availability
+
+If `flow_status` returns `setup.skills`, report that setup status and stop
+loading Flow skills in the current OpenCode startup. Missing, incomplete, or
+outdated managed skills require a sync/restart cycle before their instructions
+can be trusted by the running process.
+
+If optional helper skills such as `flow-deslop` or `flow-ui-quality` are
+unavailable, continue only with explicit coverage gaps. Do not copy their
+rubrics into another skill and do not claim their quality checks were completed.
 
 ## Runtime Surface
 
@@ -30,7 +44,7 @@ Use `references/parallel-orchestration.md` for broad read-only discovery, audit,
 
 There is no `flow_context`, no separate review-record tool, and no multi-session activation surface. The single active source of truth is `.flow/session.json`; closed sessions are archived under `.flow/history/`.
 
-Planning and running require loaded Flow tools; do not simulate plan approval or feature completion when the runtime is unavailable. Review may still return advisory output when tools or skills are stale or unavailable, but the manager must not record it as Flow-gated evidence.
+Planning and running require loaded Flow tools; do not simulate plan approval or feature completion when the runtime is unavailable. Review may still return advisory output when tools, skills, or references are stale or unavailable, but the manager must not record it as Flow-gated evidence.
 
 ## Hard Gates
 

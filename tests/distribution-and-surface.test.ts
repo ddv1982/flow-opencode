@@ -7,6 +7,7 @@ import { join } from "node:path";
 import FlowPlugin from "../src";
 import { createTools } from "../src/adapters/opencode/tools";
 import { createFlowCoreConfigEntries } from "../src/config-shared";
+import { FLOW_SKILL_DEFINITIONS } from "../src/distribution/flow-skill-definitions";
 import {
 	formatFlowSkillDoctor,
 	getFlowSkillSetupStatus,
@@ -35,6 +36,13 @@ function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
 }
 
+function expectSameMembers(
+	actual: readonly string[] | undefined,
+	expected: readonly string[],
+): void {
+	expect([...(actual ?? [])].sort()).toEqual([...expected].sort());
+}
+
 const FLOW_AGENT_NAMES = [
 	"flow-audit-worker",
 	"flow-candidate-worker",
@@ -51,6 +59,35 @@ const FLOW_COMMAND_NAMES = [
 	"flow-run",
 	"flow-status",
 ] as const;
+
+const FLOW_MANAGED_SKILL_NAMES = FLOW_SKILL_DEFINITIONS.map(
+	(definition) => definition.name,
+);
+
+function flowSkillFolder(home: string, skillName: string): string {
+	return join(home, ".config", "opencode", "skills", skillName);
+}
+
+function flowSkillFile(
+	home: string,
+	skillName: string,
+	relativePath: string,
+): string {
+	return join(flowSkillFolder(home, skillName), ...relativePath.split("/"));
+}
+
+function flowSkillMarker(
+	version: string,
+	files: Array<{ relativePath: string; content: string }>,
+): string {
+	return [
+		`version=${version}`,
+		...files.map(
+			(file) => `file=${file.relativePath} sha256=${sha256(file.content)}`,
+		),
+		"",
+	].join("\n");
+}
 
 async function runFlowCli(args: string[], home?: string) {
 	const cliHome = home ?? (await tempHome());
@@ -94,6 +131,9 @@ describe("Flow distribution and plugin surface", () => {
 		expect(
 			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
 		).toContain("Bundled Flow review fallback");
+		expect(
+			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
+		).toContain("advisory review only");
 		expect(
 			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
 		).toContain("Finding classes");
@@ -155,6 +195,32 @@ describe("Flow distribution and plugin surface", () => {
 				flow_status: "allow",
 			},
 		});
+	});
+
+	test("guards public Flow command skill loads with setup status checks", () => {
+		const config = createFlowCoreConfigEntries();
+		const expectedSkillLoads = {
+			"flow-auto": "flow",
+			"flow-plan": "flow-plan",
+			"flow-run": "flow-run",
+			"flow-review": "flow-review",
+			"flow-status": null,
+		} satisfies Record<(typeof FLOW_COMMAND_NAMES)[number], string | null>;
+
+		for (const command of FLOW_COMMAND_NAMES) {
+			const entry = config.command[command] as { template: string };
+			const expectedSkill = expectedSkillLoads[command];
+			if (expectedSkill === null) {
+				expect(entry.template).toBe(
+					"Call flow_status and report the session state and next action.",
+				);
+				continue;
+			}
+			expect(entry.template).toStartWith("Call `flow_status` first.");
+			expect(entry.template).toContain("setup.skills");
+			expect(entry.template).toContain("do not load Flow skills");
+			expect(entry.template).toContain(expectedSkill);
+		}
 	});
 
 	test("documents every injected Flow worker for parallel orchestration", async () => {
@@ -231,7 +297,7 @@ describe("Flow distribution and plugin surface", () => {
 
 			const health = getLatestFlowSkillSyncHealth();
 			expect(health?.status).toBe("restart_required");
-			expect(health?.changedSkills).toContain("flow-review");
+			expectSameMembers(health?.changedSkills, FLOW_MANAGED_SKILL_NAMES);
 
 			const setup = getFlowSkillSetupStatus();
 			expect(setup?.status).toBe("restart_required");
@@ -243,7 +309,10 @@ describe("Flow distribution and plugin surface", () => {
 			} as Parameters<typeof tools.flow_status.execute>[1]);
 			const parsedStatus = JSON.parse(String(statusOutput));
 			expect(parsedStatus.setup.skills.status).toBe("restart_required");
-			expect(parsedStatus.setup.skills.changed).toContain("flow-review");
+			expectSameMembers(
+				parsedStatus.setup.skills.changed,
+				FLOW_MANAGED_SKILL_NAMES,
+			);
 
 			const preflight = hooks["command.execute.before"];
 			expect(preflight).toBeDefined();
@@ -369,28 +438,30 @@ describe("Flow distribution and plugin surface", () => {
 		);
 	});
 
-	test("startup sync skips expected managed skill folders without Flow markers", async () => {
-		const home = await tempHome();
-		const folder = join(home, ".config", "opencode", "skills", "flow-review");
-		await mkdir(folder, { recursive: true });
-		await writeFile(join(folder, "SKILL.md"), "user skill\n", "utf8");
+	test("startup sync skips every expected managed skill folder without Flow markers", async () => {
+		for (const skillName of FLOW_MANAGED_SKILL_NAMES) {
+			const home = await tempHome();
+			const folder = flowSkillFolder(home, skillName);
+			await mkdir(folder, { recursive: true });
+			await writeFile(join(folder, "SKILL.md"), "user skill\n", "utf8");
 
-		const syncResults = await syncFlowSkills("4.0.0-test", home);
-		expect(
-			syncResults.find((result) => result.name === "flow-review"),
-		).toMatchObject({ action: "skipped_foreign" });
-		await expect(readFile(join(folder, "SKILL.md"), "utf8")).resolves.toBe(
-			"user skill\n",
-		);
-		await expect(
-			readFile(join(folder, ".flow-skill-version"), "utf8"),
-		).rejects.toMatchObject({ code: "ENOENT" });
+			const syncResults = await syncFlowSkills("4.0.0-test", home);
+			expect(
+				syncResults.find((result) => result.name === skillName),
+			).toMatchObject({ action: "skipped_foreign" });
+			await expect(readFile(join(folder, "SKILL.md"), "utf8")).resolves.toBe(
+				"user skill\n",
+			);
+			await expect(
+				readFile(join(folder, ".flow-skill-version"), "utf8"),
+			).rejects.toMatchObject({ code: "ENOENT" });
 
-		await runFlowSkillSync("4.0.0-test", () => {}, home);
-		const health = getLatestFlowSkillSyncHealth();
-		expect(health?.status).toBe("action_required");
-		expect(health?.actionRequiredSkills).toContain("flow-review");
-		expect(getFlowSkillSetupStatus()?.status).toBe("action_required");
+			await runFlowSkillSync("4.0.0-test", () => {}, home);
+			const health = getLatestFlowSkillSyncHealth();
+			expect(health?.status).toBe("action_required");
+			expectSameMembers(health?.actionRequiredSkills, [skillName]);
+			expect(getFlowSkillSetupStatus()?.status).toBe("action_required");
+		}
 	});
 
 	test("backs up edited skills with legacy managed markers", async () => {
@@ -422,71 +493,111 @@ describe("Flow distribution and plugin surface", () => {
 		).resolves.toBe(edited);
 	});
 
-	test("doctor reports missing managed skills", async () => {
-		const home = await tempHome();
-		await syncFlowSkills("4.0.0-test", home);
-		await rm(join(home, ".config", "opencode", "skills", "flow-review"), {
-			recursive: true,
-			force: true,
-		});
+	test("startup sync updates stale generated content for every managed skill", async () => {
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			const home = await tempHome();
+			await syncFlowSkills("4.0.0-old", home);
+			const staleFiles = definition.files.map((file) => ({
+				relativePath: file.relativePath,
+				content: `old generated content for ${definition.name}:${file.relativePath}\n`,
+			}));
+			for (const file of staleFiles) {
+				await writeFile(
+					flowSkillFile(home, definition.name, file.relativePath),
+					file.content,
+					"utf8",
+				);
+			}
+			await writeFile(
+				join(flowSkillFolder(home, definition.name), ".flow-skill-version"),
+				flowSkillMarker("4.0.0-old", staleFiles),
+				"utf8",
+			);
 
-		const report = await inspectFlowSkillInstall("4.0.0-test", home);
-		expect(report.status).toBe("sync_required");
-		expect(report.syncRequiredSkills).toContain("flow-review");
-		expect(
-			report.skills.find((skill) => skill.name === "flow-review")?.status,
-		).toBe("missing");
-		const formatted = formatFlowSkillDoctor(report);
-		expect(formatted).toContain("flow-review: missing");
-		expect(formatted).toContain("Start or restart OpenCode");
-		expect(formatted).toContain(
-			"npx -y opencode-plugin-flow@4.0.0-test doctor",
-		);
+			await runFlowSkillSync("4.0.0-test", () => {}, home);
+
+			const health = getLatestFlowSkillSyncHealth();
+			expect(health?.status).toBe("restart_required");
+			expectSameMembers(health?.changedSkills, [definition.name]);
+			expect(
+				health?.results.find((result) => result.name === definition.name),
+			).toMatchObject({ action: "updated" });
+
+			const report = await inspectFlowSkillInstall("4.0.0-test", home);
+			expect(report.status).toBe("ok");
+			expect(
+				report.skills.find((skill) => skill.name === definition.name),
+			).toMatchObject({ status: "ok" });
+		}
+	});
+
+	test("doctor reports missing managed skills", async () => {
+		for (const skillName of FLOW_MANAGED_SKILL_NAMES) {
+			const home = await tempHome();
+			await syncFlowSkills("4.0.0-test", home);
+			await rm(flowSkillFolder(home, skillName), {
+				recursive: true,
+				force: true,
+			});
+
+			const report = await inspectFlowSkillInstall("4.0.0-test", home);
+			expect(report.status).toBe("sync_required");
+			expectSameMembers(report.syncRequiredSkills, [skillName]);
+			expect(
+				report.skills.find((skill) => skill.name === skillName)?.status,
+			).toBe("missing");
+			const formatted = formatFlowSkillDoctor(report);
+			expect(formatted).toContain(`${skillName}: missing`);
+			expect(formatted).toContain("Start or restart OpenCode");
+			expect(formatted).toContain(
+				"npx -y opencode-plugin-flow@4.0.0-test doctor",
+			);
+		}
 	});
 
 	test("doctor treats stale markers for current files as sync repair", async () => {
-		const home = await tempHome();
-		await syncFlowSkills("4.0.0-test", home);
-		const markerPath = join(
-			home,
-			".config",
-			"opencode",
-			"skills",
-			"flow-review",
-			".flow-skill-version",
-		);
-		const marker = await readFile(markerPath, "utf8");
-		await writeFile(
-			markerPath,
-			marker.replace(
-				/file=SKILL\.md sha256=[a-f0-9]{64}/,
-				`file=SKILL.md sha256=${sha256("older generated content")}`,
-			),
-			"utf8",
-		);
+		for (const skillName of FLOW_MANAGED_SKILL_NAMES) {
+			const home = await tempHome();
+			await syncFlowSkills("4.0.0-test", home);
+			const markerPath = join(
+				flowSkillFolder(home, skillName),
+				".flow-skill-version",
+			);
+			const marker = await readFile(markerPath, "utf8");
+			await writeFile(
+				markerPath,
+				marker.replace(
+					/file=SKILL\.md sha256=[a-f0-9]{64}/,
+					`file=SKILL.md sha256=${sha256("older generated content")}`,
+				),
+				"utf8",
+			);
 
-		const report = await inspectFlowSkillInstall("4.0.0-test", home);
-		const skill = report.skills.find((skill) => skill.name === "flow-review");
-		expect(report.status).toBe("sync_required");
-		expect(report.syncRequiredSkills).toContain("flow-review");
-		expect(report.actionRequiredSkills).not.toContain("flow-review");
-		expect(skill?.status).toBe("outdated");
-		expect(skill?.editedFiles).toEqual([]);
+			const report = await inspectFlowSkillInstall("4.0.0-test", home);
+			const skill = report.skills.find((skill) => skill.name === skillName);
+			expect(report.status).toBe("sync_required");
+			expectSameMembers(report.syncRequiredSkills, [skillName]);
+			expect(report.actionRequiredSkills).not.toContain(skillName);
+			expect(skill?.status).toBe("outdated");
+			expect(skill?.editedFiles).toEqual([]);
+		}
 	});
 
 	test("doctor reports foreign managed skills as user action", async () => {
-		const home = await tempHome();
-		const folder = join(home, ".config", "opencode", "skills", "flow-review");
-		await mkdir(folder, { recursive: true });
-		await writeFile(join(folder, "SKILL.md"), "user skill\n", "utf8");
+		for (const skillName of FLOW_MANAGED_SKILL_NAMES) {
+			const home = await tempHome();
+			const folder = flowSkillFolder(home, skillName);
+			await mkdir(folder, { recursive: true });
+			await writeFile(join(folder, "SKILL.md"), "user skill\n", "utf8");
 
-		const report = await inspectFlowSkillInstall("4.0.0-test", home);
-		expect(report.status).toBe("action_required");
-		expect(report.actionRequiredSkills).toContain("flow-review");
-		expect(
-			report.skills.find((skill) => skill.name === "flow-review")?.status,
-		).toBe("foreign");
-		expect(formatFlowSkillDoctor(report)).toContain("needs user decision");
+			const report = await inspectFlowSkillInstall("4.0.0-test", home);
+			expect(report.status).toBe("action_required");
+			expectSameMembers(report.actionRequiredSkills, [skillName]);
+			expect(
+				report.skills.find((skill) => skill.name === skillName)?.status,
+			).toBe("foreign");
+			expect(formatFlowSkillDoctor(report)).toContain("needs user decision");
+		}
 	});
 
 	test("CLI reports doctor status", async () => {
@@ -497,6 +608,22 @@ describe("Flow distribution and plugin surface", () => {
 		expect(result.stdout).toContain("Flow doctor");
 		expect(result.stdout).toContain("- status: sync_required");
 		expect(result.stdout).toContain("flow-review: missing");
+	});
+
+	test("CLI sync installs managed skills and requests restart", async () => {
+		const home = await tempHome();
+		const version = resolveFlowPluginVersion();
+		const result = await runFlowCli(["sync"], home);
+		expect(result.status).toBe(0);
+		expect(result.stderr).toBe("");
+		expect(result.stdout).toContain("Flow skill sync (");
+		for (const skillName of FLOW_MANAGED_SKILL_NAMES) {
+			expect(result.stdout).toContain(`- ${skillName}: installed`);
+		}
+		expect(result.stdout).toContain("Restart OpenCode");
+
+		const report = await inspectFlowSkillInstall(version, home);
+		expect(report.status).toBe("ok");
 	});
 
 	test("CLI uninstalls managed skills and keeps foreign Flow-like skills", async () => {
@@ -536,7 +663,7 @@ describe("Flow distribution and plugin surface", () => {
 		expect(result.status).toBe(2);
 		expect(result.stdout).toBe("");
 		expect(result.stderr).toBe(
-			"usage: opencode-plugin-flow <doctor|uninstall>\n",
+			"usage: opencode-plugin-flow <doctor|sync|uninstall>\n",
 		);
 	});
 
@@ -544,7 +671,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.3");
+			expect(resolveFlowPluginVersion()).toBe("4.1.4");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;
