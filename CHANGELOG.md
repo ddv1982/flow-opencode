@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.6] - 2026-06-16
+
+Make Flow's pinned installer path force-aware, so OpenCode replaces older global plugin entries instead of leaving stale versions behind.
+
 ## [4.1.5] - 2026-06-16
 
 Make Flow installation follow OpenCode's native plugin installer, with pre-start skill sync and older-version fallback.

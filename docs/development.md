@@ -24,11 +24,13 @@ The skills are the product experience. The runtime is only the ledger and hard g
 
 Skills are source files under `skills/<name>/`. On plugin startup they sync to `~/.config/opencode/skills/<name>/` with a `.flow-skill-version` marker.
 
-Public install docs should prefer OpenCode's native installer when available:
-`opencode plugin opencode-plugin-flow@<version> --global`, followed by
+Public install docs should prefer OpenCode's native installer when available and
+use one pinned install-or-update command:
+`opencode plugin opencode-plugin-flow@<version> --global --force`, followed by
 `npx -y opencode-plugin-flow@<version> sync` before the next OpenCode startup.
 Keep a manual `opencode.json` fallback for older OpenCode versions that do not
-expose `opencode plugin`.
+expose `opencode plugin`; that fallback should tell users to replace older
+pinned Flow entries instead of adding duplicates.
 
 When startup sync installs or updates managed skills, the running OpenCode
 process may still have the old skill registry. Flow records that as sync health

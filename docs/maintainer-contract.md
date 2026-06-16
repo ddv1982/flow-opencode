@@ -67,10 +67,15 @@ Flow-owned folders are sync-repairable. Foreign or edited managed folders
 require user action and must not be overwritten silently.
 
 Install and update guidance should use OpenCode's native plugin installer as the
-primary config mutation path when available:
-`opencode plugin opencode-plugin-flow@<version> --global`, with `--force` for
-replacing a pinned version. Flow's own CLI should remain a skill sync, doctor,
-and uninstall helper; it must not silently mutate OpenCode plugin config.
+primary config mutation path when available, with one pinned install-or-update
+command:
+`opencode plugin opencode-plugin-flow@<version> --global --force`. OpenCode
+keeps an existing same-package plugin entry unless replacement is requested, so
+published Flow docs should include `--force` by default. Flow's own CLI should
+remain a skill sync, doctor, and uninstall helper; it must not silently mutate
+OpenCode plugin config. The manual `opencode.json` fallback for older OpenCode
+versions should tell users to replace older pinned Flow entries instead of
+adding duplicates.
 
 Runtime setup health is surfaced through `flow_status`:
 
