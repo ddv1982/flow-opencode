@@ -11,6 +11,9 @@ import flowVerificationGatesDoc from "../../skills/flow/references/verification-
 	type: "text",
 };
 import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
+import flowCommitSkillDoc from "../../skills/flow-commit/SKILL.md" with {
+	type: "text",
+};
 import flowDeslopRefactorWorkflowDoc from "../../skills/flow-deslop/references/refactor-workflow.md" with {
 	type: "text",
 };
@@ -42,6 +45,9 @@ import flowRunValidationRubricDoc from "../../skills/flow-run/references/validat
 	type: "text",
 };
 import flowRunSkillDoc from "../../skills/flow-run/SKILL.md" with {
+	type: "text",
+};
+import flowTestSkillDoc from "../../skills/flow-test/SKILL.md" with {
 	type: "text",
 };
 import flowUiQualityUiRubricDoc from "../../skills/flow-ui-quality/references/ui-rubric.md" with {
@@ -116,6 +122,10 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 		],
 	},
 	{
+		name: "flow-test",
+		files: [{ relativePath: "SKILL.md", content: flowTestSkillDoc }],
+	},
+	{
 		name: "flow-review",
 		files: [
 			{ relativePath: "SKILL.md", content: flowReviewSkillDoc },
@@ -152,5 +162,9 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 				content: flowUiQualityVisualVerificationDoc,
 			},
 		],
+	},
+	{
+		name: "flow-commit",
+		files: [{ relativePath: "SKILL.md", content: flowCommitSkillDoc }],
 	},
 ];

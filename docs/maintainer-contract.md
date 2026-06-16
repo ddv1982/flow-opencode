@@ -24,7 +24,7 @@ Runtime must enforce:
 
 ## State
 
-`.flow/session.json` is the active source of truth. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state is ignored by Git unless a repository intentionally opts in. Markdown docs, context views, readiness ledgers, and projection caches are intentionally not runtime state.
+`.flow/session.json` is the active source of truth. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state is ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, and projection caches are intentionally not runtime state.
 
 Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against filesystem roots and `$HOME`.
 
@@ -57,9 +57,11 @@ The managed skill set is:
 - `flow`
 - `flow-plan`
 - `flow-run`
+- `flow-test`
 - `flow-review`
 - `flow-deslop`
 - `flow-ui-quality`
+- `flow-commit`
 
 Startup sync, `opencode-plugin-flow doctor`, `opencode-plugin-flow sync`, and
 uninstall must treat the managed set uniformly. Missing, incomplete, or outdated
@@ -89,7 +91,9 @@ Runtime setup health is surfaced through `flow_status`:
 Public Flow commands must call `flow_status` before loading Flow skills. If
 `setup.skills` is present, report that setup state and stop skill loading in the
 current startup. `/flow-status` remains tool-only. Missing optional helpers such
-as `flow-deslop` or `flow-ui-quality` are coverage gaps, not bundled fallbacks.
+as `flow-test`, `flow-deslop`, `flow-ui-quality`, or user-triggered
+`flow-commit` are coverage gaps, not bundled fallbacks. `flow-commit` must not
+be loaded by the autonomous Flow loop and must not replace `flow_feature_complete`.
 
 ## Source Ownership
 

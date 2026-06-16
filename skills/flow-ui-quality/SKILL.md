@@ -1,6 +1,6 @@
 ---
 name: flow-ui-quality
-description: Flow guidance for UX/UI design, frontend polish, visual quality review, responsive and accessible interfaces, and avoiding generic AI-generated UI. Use when planning, executing, or reviewing frontend pages, components, dashboards, visual redesigns, interaction states, screenshots, or browser-verified UI work.
+description: Review and improve frontend UI quality for Flow work. Use for UX/UI design, frontend polish, visual quality review, responsive and accessible interfaces, interaction states, screenshots, browser-verified UI work, and avoiding generic AI-generated UI.
 ---
 
 # Flow UI quality
@@ -26,6 +26,9 @@ Use this skill when Flow work changes what a user sees or how they interact with
 ## Verify visually
 
 - For meaningful UI changes, run the app and capture screenshots when a local browser target is available.
+- For browser-driven QA, route selection, failure classification, and
+  `validationRun` summaries, load `flow-test`. Keep visual judgment, design
+  quality, and screenshot assessment in `flow-ui-quality`.
 - Check desktop and mobile breakpoints, not only the viewport you developed in.
 - Verify text does not overlap, truncate unintentionally, or escape controls; long labels and empty/error states must fit.
 - Compare against provided screenshots, design references, or the stated product intent. List meaningful differences and fix the ones that violate the goal.

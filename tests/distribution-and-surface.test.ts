@@ -63,6 +63,16 @@ const FLOW_COMMAND_NAMES = [
 const FLOW_MANAGED_SKILL_NAMES = FLOW_SKILL_DEFINITIONS.map(
 	(definition) => definition.name,
 );
+const EXPECTED_FLOW_MANAGED_SKILL_NAMES = [
+	"flow",
+	"flow-plan",
+	"flow-run",
+	"flow-test",
+	"flow-review",
+	"flow-deslop",
+	"flow-ui-quality",
+	"flow-commit",
+] as const;
 
 function flowSkillFolder(home: string, skillName: string): string {
 	return join(home, ".config", "opencode", "skills", skillName);
@@ -221,6 +231,12 @@ describe("Flow distribution and plugin surface", () => {
 			expect(entry.template).toContain("do not load Flow skills");
 			expect(entry.template).toContain(expectedSkill);
 		}
+	});
+
+	test("registers the expected managed Flow skill set", () => {
+		expect(FLOW_MANAGED_SKILL_NAMES).toEqual([
+			...EXPECTED_FLOW_MANAGED_SKILL_NAMES,
+		]);
 	});
 
 	test("documents every injected Flow worker for parallel orchestration", async () => {
@@ -400,6 +416,12 @@ describe("Flow distribution and plugin surface", () => {
 				"utf8",
 			),
 		).resolves.toContain("Verification gates");
+		await expect(
+			readFile(flowSkillFile(home, "flow-test", "SKILL.md"), "utf8"),
+		).resolves.toContain("validationRun");
+		await expect(
+			readFile(flowSkillFile(home, "flow-commit", "SKILL.md"), "utf8"),
+		).resolves.toContain("user explicitly asks");
 		const marker = await readFile(
 			join(
 				home,
@@ -608,6 +630,8 @@ describe("Flow distribution and plugin surface", () => {
 		expect(result.stdout).toContain("Flow doctor");
 		expect(result.stdout).toContain("- status: sync_required");
 		expect(result.stdout).toContain("flow-review: missing");
+		expect(result.stdout).toContain("flow-test: missing");
+		expect(result.stdout).toContain("flow-commit: missing");
 	});
 
 	test("CLI sync installs managed skills and requests restart", async () => {
@@ -671,7 +695,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.6");
+			expect(resolveFlowPluginVersion()).toBe("4.1.7");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

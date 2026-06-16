@@ -17,6 +17,9 @@ recorded.
 - Identify whether this is a feature review or final review.
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
+- Load `flow-test` for validation-heavy, regression-sensitive, browser/UI, or
+  unclear coverage reviews. If it is unavailable, record a coverage gap and
+  treat missing validation evidence as a gap or blocker based on user impact.
 - Load `references/review-rubric.md` for severity, depth, and payload shape.
 
 ## Feature Review Depth

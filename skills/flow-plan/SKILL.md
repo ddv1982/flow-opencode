@@ -13,6 +13,9 @@ If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the use
 
 - Read the files, docs, tests, package scripts, and local conventions that determine the work.
 - For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass. Use `../flow/references/parallel-orchestration.md` when discovery needs multiple workers, and apply its coverage gate before fan-out.
+- For complex validation, regression-sensitive changes, browser/UI workflows,
+  or uncertain test strategy, load `flow-test`. If it is unavailable, record a
+  planning gap and keep validation claims conservative.
 - For cleanup/refactor goals, load `flow-deslop`. If it is unavailable, record
   a planning gap and keep cleanup claims conservative.
 - For UI/frontend goals, load `flow-ui-quality`. If it is unavailable, record a
@@ -55,7 +58,10 @@ Use only `finalReviewPolicy: "broad"` or `"detailed"`. These are the canonical f
 - Split by dependency order: foundations before callers, schema before consumers, implementation before docs when docs depend on behavior.
 - Avoid "misc cleanup" features. Tie cleanup to evidence and targets.
 - Keep feature ids stable once the plan is approved.
-- Put scope boundaries in `targets` and expected checks in `validation`.
+- Put scope boundaries in `targets` and expected checks in `validation`. Each
+  validation entry should name the expected test level, such as targeted unit,
+  integration, browser/e2e, package/build, docs/static, cleanup preservation, or
+  broad project gate.
 
 ## Approval
 

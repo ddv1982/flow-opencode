@@ -1,6 +1,6 @@
 ---
 name: flow
-description: Main Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided planning, autonomous execution, resumable implementation, session status, or end-to-end delivery with validation and review gates.
+description: Run the end-to-end Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided planning through implementation, resumable autonomous delivery, session status, or completion with validation and review gates.
 ---
 
 # Flow
@@ -14,12 +14,16 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
    load Flow skills in this startup. A just-synced skill can be on disk while
    unavailable to the running OpenCode process.
 2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
-3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload.
+3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, or browser/UI work, use `flow-test` to choose and summarize evidence before completion.
 4. Load `flow-review` for the required feature review. The reviewer reports a `featureReview` payload; the manager records it inside `flow_feature_complete`.
 5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
 Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation waves. Hidden Flow workers are injected by plugin config; invoke the named worker when it is available. Its `references/handoff-format.md` and `references/verification-gates.md` companions define the worker contracts. The manager owns every `flow_*` state change.
+
+Do not commit, push, amend, rebase, publish, or mutate releases during the
+autonomous Flow loop. Load `flow-commit` only when the user explicitly asks for
+commit preparation or commit creation.
 
 ## Skill Availability
 
@@ -28,9 +32,10 @@ loading Flow skills in the current OpenCode startup. Missing, incomplete, or
 outdated managed skills require a sync/restart cycle before their instructions
 can be trusted by the running process.
 
-If optional helper skills such as `flow-deslop` or `flow-ui-quality` are
-unavailable, continue only with explicit coverage gaps. Do not copy their
-rubrics into another skill and do not claim their quality checks were completed.
+If optional helper skills such as `flow-test`, `flow-deslop`, or
+`flow-ui-quality` are unavailable, continue only with explicit coverage gaps. Do
+not copy their rubrics into another skill and do not claim their quality checks
+were completed.
 
 ## Runtime Surface
 

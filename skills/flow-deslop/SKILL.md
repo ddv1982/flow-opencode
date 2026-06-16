@@ -1,6 +1,6 @@
 ---
 name: flow-deslop
-description: Flow guidance for evidence-backed code smell cleanup, AI-slop removal, overengineering reduction, maintainability refactors, and behavior-preserving cleanup. Use when planning, executing, or reviewing broad cleanup/refactor work, code smell findings, duplicated or bloated code, speculative abstractions, dead code, or agent-introduced mess.
+description: Clean up and refactor code with evidence-backed code-smell analysis. Use for AI-slop removal, overengineering reduction, maintainability refactors, behavior-preserving cleanup, duplicated or bloated code, speculative abstractions, dead code, or broad cleanup/refactor review.
 ---
 
 # Flow deslop

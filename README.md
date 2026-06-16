@@ -1,6 +1,6 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` is a skills-first workflow helper for OpenCode. The skills carry planning, execution, validation, cleanup, UI quality, review, and orchestration judgment. The plugin code stays deliberately small: it keeps a durable `.flow/session.json` ledger and enforces the hard gates prompts should not be trusted to remember.
+`opencode-plugin-flow` is a skills-first workflow helper for OpenCode. The skills carry planning, execution, validation, cleanup, UI quality, review, safe commit preparation, and orchestration judgment. The plugin code stays deliberately small: it keeps a durable `.flow/session.json` ledger and enforces the hard gates prompts should not be trusted to remember.
 
 Flow v4 is a breaking simplification. It does not preserve v3 session layouts or retired tool aliases.
 
@@ -8,6 +8,8 @@ Flow v4 is a breaking simplification. It does not preserve v3 session layouts or
 
 - A resumable one-feature-at-a-time loop for larger coding work.
 - Skill-guided planning, running, validation, review, cleanup, and UI quality.
+- First-class validation guidance through `flow-test`, plus user-triggered safe
+  commit preparation through `flow-commit`.
 - Hidden evidence, review, validation, audit, verifier, and candidate workers for broad work.
 - Structured handoffs with coverage, evidence, confidence, and gaps.
 - Runtime gates for approval immutability, validation evidence, review evidence, and safe session closure.
@@ -19,8 +21,8 @@ The manager still owns every Flow state change. Workers gather evidence; they do
 Use OpenCode's plugin installer when your OpenCode version supports it:
 
 ```bash
-opencode plugin opencode-plugin-flow@4.1.6 --global --force
-npx -y opencode-plugin-flow@4.1.6 sync
+opencode plugin opencode-plugin-flow@4.1.7 --global --force
+npx -y opencode-plugin-flow@4.1.7 sync
 ```
 
 The first command adds Flow to your global OpenCode plugin config or replaces an
@@ -34,9 +36,11 @@ into:
 ~/.config/opencode/skills/flow/SKILL.md
 ~/.config/opencode/skills/flow-plan/SKILL.md
 ~/.config/opencode/skills/flow-run/SKILL.md
+~/.config/opencode/skills/flow-test/SKILL.md
 ~/.config/opencode/skills/flow-review/SKILL.md
 ~/.config/opencode/skills/flow-deslop/SKILL.md
 ~/.config/opencode/skills/flow-ui-quality/SKILL.md
+~/.config/opencode/skills/flow-commit/SKILL.md
 ```
 
 If your OpenCode version does not have `opencode plugin`, add Flow to your
@@ -44,7 +48,7 @@ OpenCode config manually instead:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.6"]
+  "plugin": ["opencode-plugin-flow@4.1.7"]
 }
 ```
 
@@ -55,7 +59,7 @@ duplicate entry.
 Then run the same pre-start skill sync and start or restart OpenCode:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.6 sync
+npx -y opencode-plugin-flow@4.1.7 sync
 ```
 
 Project-local skill overrides still work through OpenCode's normal lookup:
@@ -80,7 +84,7 @@ version in your global `opencode.json`.
 To inspect the installed skill set:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.6 doctor
+npx -y opencode-plugin-flow@4.1.7 doctor
 ```
 
 If a command reports `Skill "flow-review" not found. Available skills...` or a
@@ -88,14 +92,14 @@ similar Flow skill-loading error, run `/flow-status` or the doctor command above
 first. Missing, incomplete, or outdated managed skills can be repaired with:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.6 sync
+npx -y opencode-plugin-flow@4.1.7 sync
 ```
 
 Then restart OpenCode so the refreshed registry is loaded. `sync` manages all
-bundled Flow skills: `flow`, `flow-plan`, `flow-run`, `flow-review`,
-`flow-deslop`, and `flow-ui-quality`. If doctor reports a foreign or edited
-managed skill folder, Flow leaves it in place and asks for a user decision
-instead of overwriting local work.
+bundled Flow skills: `flow`, `flow-plan`, `flow-run`, `flow-test`,
+`flow-review`, `flow-deslop`, `flow-ui-quality`, and `flow-commit`. If doctor
+reports a foreign or edited managed skill folder, Flow leaves it in place and
+asks for a user decision instead of overwriting local work.
 
 ## Commands
 
@@ -108,6 +112,10 @@ Commands are thin pointers into skills:
 | `/flow-run` | Execute one approved feature. |
 | `/flow-review` | Run a read-only review. |
 | `/flow-status` | Show the active session and next action. |
+
+`flow-test` and `flow-commit` are managed helper skills, not public commands in
+this release. `flow-commit` is user-triggered only and stays outside the
+autonomous Flow runtime loop.
 
 ## Tools
 
@@ -151,9 +159,9 @@ Planning quality, decomposition, review depth, validation adequacy, orchestratio
 .flow/session.lock/
 ```
 
-Versioning `.flow` state is opt-in. Edit `.flow/.gitignore` or use
-`git add -f` only when a repository intentionally wants to archive Flow session
-evidence.
+Versioning `.flow` state is opt-in. Keep it ignored by default, and archive only
+exact Flow session artifacts when a maintainer intentionally asks for them; avoid
+broad forced adds of `.flow/**`.
 
 ## Development
 
@@ -180,7 +188,7 @@ First remove `opencode-plugin-flow` from your OpenCode plugin config so future
 OpenCode startups stop loading Flow. Then remove Flow-owned synced skills:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.6 uninstall
+npx -y opencode-plugin-flow@4.1.7 uninstall
 ```
 
 Restart OpenCode after both steps. This removes Flow-owned synced skills when

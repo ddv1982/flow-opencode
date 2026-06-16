@@ -24,9 +24,18 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Keep edits scoped to the active feature. If new scope appears, stop and replan or defer it to another feature.
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
+- Do not stage, commit, push, amend, rebase, publish, or mutate releases as part
+  of feature execution. If the user explicitly asks for commit preparation, load
+  `flow-commit` only after `flow_feature_complete` has been recorded, unless the
+  user explicitly asks for a WIP commit path. Keep Git boundaries separate from
+  Flow state recording.
 
 ## Validate
 
+- For complex validation, regression-sensitive changes, browser/UI workflows,
+  failure-prone checks, unclear coverage, route QA, exploratory QA, or
+  `validationRun` summarization, load `flow-test`. If it is unavailable, record
+  the coverage gap and keep validation claims conservative.
 - Read `references/validation-rubric.md` before completing.
 - Run the strongest practical checks for the changed behavior.
 - Record concrete command names, status, and observed results. "Tests pass" is not evidence.
@@ -53,8 +62,9 @@ and records it.
 
 If `flow_status` reports `setup.skills` or `flow-review` cannot be loaded, do
 not record a Flow-gated `featureReview` or `finalReview`. You may perform an
-advisory review using available context or bundled reviewer fallback text, then
-complete with `status: "needs_input"` if review evidence is required to proceed.
+advisory review using available context or the bundled review fallback provided
+by plugin config, then complete with `status: "needs_input"` if review evidence
+is required to proceed.
 
 For the final feature, also obtain a `finalReview` payload whose `reviewDepth` equals the approved plan's `finalReviewPolicy`.
 

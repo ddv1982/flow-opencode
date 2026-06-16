@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.7] - 2026-06-17
+
+Teach Flow's managed skill lore to test, commit, and trigger more precisely while keeping release state and `.flow/**` artifacts guarded by explicit maintainer intent.
+
 ## [4.1.6] - 2026-06-16
 
 Make Flow's pinned installer path force-aware, so OpenCode replaces older global plugin entries instead of leaving stale versions behind.

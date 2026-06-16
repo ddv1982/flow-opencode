@@ -1,11 +1,14 @@
 ---
 name: flow-contribution-check
-description: Validate Flow plugin contributions before committing or pushing. Use when preparing a commit, push, release branch, or any GitHub-visible repository change.
+description: Validate Flow plugin contribution readiness before committing, pushing, release branching, or making any GitHub-visible repository change. Runs repo-local preflight for staged/outgoing work; does not choose commit boundaries, stage files, or write commit messages.
 ---
 
 # Flow contribution check
 
 Run the repository-local preflight before every commit and before pushing. It is scaled to Flow's small plugin surface: staged diff hygiene, optional redacted secret scanning, architecture seams, package/version hygiene, and path-sensitive focused checks.
+
+This preflight validates staged or outgoing work; it does not choose commit
+boundaries, stage files, or write commit messages.
 
 ## Before committing
 

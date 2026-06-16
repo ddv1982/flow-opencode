@@ -40,10 +40,10 @@ inspect missing, foreign, edited, or outdated managed skill folders. Use
 `npx -y opencode-plugin-flow@<version> sync` to repair missing, incomplete, or
 outdated Flow-owned skill folders, then restart OpenCode.
 
-The managed skill set is `flow`, `flow-plan`, `flow-run`, `flow-review`,
-`flow-deslop`, and `flow-ui-quality`. Startup sync, `doctor`, and `sync` must
-cover all six uniformly. Foreign or edited folders require a user decision and
-must not be overwritten silently.
+The managed skill set is `flow`, `flow-plan`, `flow-run`, `flow-test`,
+`flow-review`, `flow-deslop`, `flow-ui-quality`, and `flow-commit`. Startup
+sync, `doctor`, and `sync` must cover all eight uniformly. Foreign or edited
+folders require a user decision and must not be overwritten silently.
 
 Flow commands must call `flow_status` before attempting to load a Flow skill. If
 the status includes `setup.skills`, commands should report setup state and stop
