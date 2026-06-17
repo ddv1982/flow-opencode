@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.10] - 2026-06-17
+
+Move Flow session lore onto stable OpenCode instructions so experimental chat hooks no longer shape the default runtime context.
+
 ## [4.1.9] - 2026-06-17
 
 Make public Flow command lore self-contained so stale native skill discovery cannot block the required loop.

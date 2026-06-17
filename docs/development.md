@@ -13,12 +13,21 @@ bun run check
 
 ```text
 OpenCode command / skill-guided agent
+  -> stable OpenCode instructions from .flow/opencode-instructions.md
   -> seven Flow tools
   -> runtime transitions
-  -> locked atomic .flow/session.json write
+  -> locked atomic .flow/session.json and instruction projection writes
 ```
 
 The skills are the product experience. The runtime is only the ledger and hard gate layer.
+
+The OpenCode adapter registers an absolute `.flow/opencode-instructions.md`
+path through stable `config.instructions`. The file is generated from
+`.flow/session.json`, refreshed on plugin config load and session saves, and
+removed when the active session is archived. It replaces the older default of
+injecting Flow context through OpenCode experimental chat or compaction hooks.
+The path is registered even before the file exists so a session created later in
+the same OpenCode process can be picked up without a config reload.
 
 ## Editing Skills
 
@@ -34,8 +43,8 @@ pinned Flow entries instead of adding duplicates.
 
 When startup sync installs or updates managed skills, the running OpenCode
 process may still have the old skill registry. Flow records that as sync health
-and surfaces `restart_required` through `flow_status`, system context, and Flow
-command preflight. Public Flow command preflight must still replace stale
+and surfaces `restart_required` through `flow_status` and Flow command
+preflight. Public Flow command preflight must still replace stale
 resolved command bodies with bundled public command instructions, so
 `flow-auto`, `flow-plan`, `flow-run`, and `flow-review` do not depend on native
 skill discovery for the required loop. Use

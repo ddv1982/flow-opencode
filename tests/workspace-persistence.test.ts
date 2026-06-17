@@ -11,6 +11,7 @@ import {
 } from "../src/runtime/api";
 import {
 	assertMutableWorkspaceRoot,
+	flowInstructionPath,
 	loadSession,
 	sessionPath,
 } from "../src/runtime/workspace";
@@ -108,7 +109,29 @@ describe("Flow workspace persistence", () => {
 
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+		).resolves.toBe(
+			"session.json\nopencode-instructions.md\nhistory/\nsession.lock/\n.gitignore\n",
+		);
+	});
+
+	test("writes and refreshes the generated instruction projection", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Use stable OpenCode instructions",
+			plan: oneFeaturePlan(),
+		});
+
+		const instructionPath = flowInstructionPath(workspace);
+		const initial = await readFile(instructionPath, "utf8");
+		expect(initial).toContain("# Flow Runtime Context");
+		expect(initial).toContain("Use stable OpenCode instructions");
+		expect(initial).toContain('- status: "planning"');
+		expect(initial).toContain("- completedFeatures: 0");
+		expect(initial).toContain("- totalFeatures: 1");
+
+		await flowPlanApprove(workspace);
+		const approved = await readFile(instructionPath, "utf8");
+		expect(approved).toContain('- status: "ready"');
 	});
 
 	test("deferred and abandoned close archives and clears the active session", async () => {
@@ -126,6 +149,7 @@ describe("Flow workspace persistence", () => {
 			expect(close.status).toBe("ok");
 			expect((close.closure as { kind: string }).kind).toBe(kind);
 			await expect(stat(sessionPath(workspace))).rejects.toThrow();
+			await expect(stat(flowInstructionPath(workspace))).rejects.toThrow();
 			expect(await loadSession(workspace)).toBeNull();
 
 			const historyFiles = await readdir(join(workspace, ".flow", "history"));
@@ -165,7 +189,10 @@ describe("Flow workspace persistence", () => {
 		expect(historyFiles[0]?.endsWith(".json")).toBe(true);
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+		).resolves.toBe(
+			"session.json\nopencode-instructions.md\nhistory/\nsession.lock/\n.gitignore\n",
+		);
+		await expect(stat(flowInstructionPath(workspace))).rejects.toThrow();
 	});
 
 	test("starting a new goal archives an active completed session", async () => {

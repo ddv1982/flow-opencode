@@ -59,6 +59,7 @@ export type FlowCommandConfig = {
 export type MutableFlowConfig = {
 	agent?: Record<string, unknown>;
 	command?: Record<string, unknown>;
+	instructions?: string[];
 };
 
 function bundledFlowInstructions(
@@ -383,8 +384,21 @@ export function createFlowCoreConfigEntries() {
 	};
 }
 
-export function applyFlowConfig(config: MutableFlowConfig): void {
+function appendUnique(values: readonly string[], value: string): string[] {
+	return values.includes(value) ? [...values] : [...values, value];
+}
+
+export function applyFlowConfig(
+	config: MutableFlowConfig,
+	options?: { flowInstructionPath?: string },
+): void {
 	const entries = createFlowCoreConfigEntries();
 	config.agent = { ...(config.agent ?? {}), ...entries.agent };
 	config.command = { ...(config.command ?? {}), ...entries.command };
+	if (options?.flowInstructionPath) {
+		config.instructions = appendUnique(
+			config.instructions ?? [],
+			options.flowInstructionPath,
+		);
+	}
 }

@@ -21,8 +21,8 @@ The manager still owns every Flow state change. Workers gather evidence; they do
 Use OpenCode's plugin installer when your OpenCode version supports it:
 
 ```bash
-opencode plugin opencode-plugin-flow@4.1.9 --global --force
-npx -y opencode-plugin-flow@4.1.9 sync
+opencode plugin opencode-plugin-flow@4.1.10 --global --force
+npx -y opencode-plugin-flow@4.1.10 sync
 ```
 
 The first command adds Flow to your global OpenCode plugin config or replaces an
@@ -48,7 +48,7 @@ OpenCode config manually instead:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.9"]
+  "plugin": ["opencode-plugin-flow@4.1.10"]
 }
 ```
 
@@ -59,7 +59,7 @@ duplicate entry.
 Then run the same pre-start skill sync and start or restart OpenCode:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.9 sync
+npx -y opencode-plugin-flow@4.1.10 sync
 ```
 
 Project-local skill overrides still work through OpenCode's normal lookup:
@@ -84,7 +84,7 @@ version in your global `opencode.json`.
 To inspect the installed skill set:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.9 doctor
+npx -y opencode-plugin-flow@4.1.10 doctor
 ```
 
 If a command reports `Skill "flow-review" not found. Available skills...` or a
@@ -99,7 +99,7 @@ above first. Missing, incomplete, or outdated managed skills can still be
 repaired with:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.9 sync
+npx -y opencode-plugin-flow@4.1.10 sync
 ```
 
 Then restart OpenCode so the refreshed registry is loaded. `sync` manages all
@@ -147,6 +147,9 @@ There is no `flow_context` and no separate review-record tool. Review evidence i
 The runtime owns only safety:
 
 - `.flow/session.json` is the active source of truth.
+- `.flow/opencode-instructions.md` is a generated OpenCode instruction
+  projection of the active session. It is refreshed from `session.json`; do not
+  edit it.
 - `.flow/history/<session-id>.json` stores closed sessions.
 - Session writes are locked and atomic.
 - Flow writes `.flow/.gitignore` so session state stays out of Git by default.
@@ -164,6 +167,7 @@ Planning quality, decomposition, review depth, validation adequacy, orchestratio
 
 ```text
 .flow/session.json
+.flow/opencode-instructions.md
 .flow/history/<session-id>.json
 .flow/session.lock/
 ```
@@ -197,7 +201,7 @@ First remove `opencode-plugin-flow` from your OpenCode plugin config so future
 OpenCode startups stop loading Flow. Then remove Flow-owned synced skills:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.9 uninstall
+npx -y opencode-plugin-flow@4.1.10 uninstall
 ```
 
 Restart OpenCode after both steps. This removes Flow-owned synced skills when

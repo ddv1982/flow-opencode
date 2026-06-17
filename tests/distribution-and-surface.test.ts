@@ -19,6 +19,7 @@ import {
 	uninstallFlowSkills,
 } from "../src/distribution/sync";
 import { flowPlanSave } from "../src/runtime/api";
+import { flowInstructionPath } from "../src/runtime/workspace";
 
 async function tempHome(): Promise<string> {
 	const home = join(tmpdir(), `flow-home-${crypto.randomUUID()}`);
@@ -267,12 +268,15 @@ describe("Flow distribution and plugin surface", () => {
 		}
 	});
 
-	test("appends session facts in system and compaction hooks", async () => {
+	test("registers generated instructions without experimental hooks by default", async () => {
 		const previousHome = process.env.HOME;
 		process.env.HOME = await tempHome();
 		try {
 			const workspace = await tempWorkspace();
-			await flowPlanSave(workspace, { goal: "Inspect hook context" });
+			const instructionPath = flowInstructionPath(workspace);
+			await flowPlanSave(workspace, {
+				goal: "Inspect stable instruction context",
+			});
 			const hooks = await FlowPlugin({
 				client: { app: { log() {} } },
 				project: {},
@@ -282,26 +286,53 @@ describe("Flow distribution and plugin surface", () => {
 				serverUrl: new URL("http://localhost"),
 				$: {},
 			} as unknown as Parameters<typeof FlowPlugin>[0]);
-			const systemHook = hooks["experimental.chat.system.transform"];
-			const compactingHook = hooks["experimental.session.compacting"];
-			expect(systemHook).toBeDefined();
-			expect(compactingHook).toBeDefined();
-			if (!systemHook || !compactingHook) {
-				throw new Error("Expected Flow hooks to be registered.");
-			}
+			expect(hooks["experimental.chat.system.transform"]).toBeUndefined();
+			expect(hooks["experimental.session.compacting"]).toBeUndefined();
 
-			const systemOutput = { system: [] as string[] };
-			await systemHook(
-				{ sessionID: "test-session", model: {} } as Parameters<
-					typeof systemHook
-				>[0],
-				systemOutput,
+			const config = { instructions: ["AGENTS.md"] };
+			const configHook = hooks.config;
+			expect(configHook).toBeDefined();
+			if (!configHook) throw new Error("Expected config hook.");
+			await configHook(config);
+			await configHook(config);
+
+			expect(config.instructions).toEqual(["AGENTS.md", instructionPath]);
+			await expect(readFile(instructionPath, "utf8")).resolves.toContain(
+				"Inspect stable instruction context",
 			);
-			expect(systemOutput.system.at(-1)).toContain("Inspect hook context");
+		} finally {
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
 
-			const compactOutput = { context: [] as string[] };
-			await compactingHook({ sessionID: "test-session" }, compactOutput);
-			expect(compactOutput.context.at(-1)).toContain("Inspect hook context");
+	test("registers the generated instruction path before a session exists", async () => {
+		const previousHome = process.env.HOME;
+		process.env.HOME = await tempHome();
+		try {
+			const workspace = await tempWorkspace();
+			const instructionPath = flowInstructionPath(workspace);
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+
+			const config = { instructions: ["AGENTS.md"] };
+			const configHook = hooks.config;
+			expect(configHook).toBeDefined();
+			if (!configHook) throw new Error("Expected config hook.");
+			await configHook(config);
+
+			expect(config.instructions).toEqual(["AGENTS.md", instructionPath]);
+			await expect(readFile(instructionPath, "utf8")).rejects.toThrow();
 		} finally {
 			if (previousHome === undefined) {
 				delete process.env.HOME;
@@ -868,7 +899,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.9");
+			expect(resolveFlowPluginVersion()).toBe("4.1.10");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

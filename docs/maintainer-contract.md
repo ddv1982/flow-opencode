@@ -24,7 +24,7 @@ Runtime must enforce:
 
 ## State
 
-`.flow/session.json` is the active source of truth. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state is ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, and projection caches are intentionally not runtime state.
+`.flow/session.json` is the active source of truth. `.flow/opencode-instructions.md` is an ignored generated projection for OpenCode's stable `config.instructions` path; it must always be rebuildable from the active session and never becomes authoritative state. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state and generated projections are ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, and other projection caches are intentionally not runtime state.
 
 Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against filesystem roots and `$HOME`.
 
@@ -102,6 +102,14 @@ tool-only. Missing optional helpers such as `flow-test`, `flow-deslop`,
 `flow-ui-quality`, or user-triggered `flow-commit` are coverage gaps, not
 bundled fallbacks. `flow-commit` must not be loaded by the autonomous Flow loop
 and must not replace `flow_feature_complete`.
+
+Ambient Flow session context must use stable OpenCode configuration by default:
+the adapter registers `.flow/opencode-instructions.md` through
+`config.instructions`, and the runtime keeps that file synchronized with
+`.flow/session.json`. Default behavior must not depend on OpenCode experimental
+chat system, message transform, or session compaction hooks. Experimental hooks
+may only return as explicit compatibility code with tests proving the stable
+default remains hook-free.
 
 ## Source Ownership
 
