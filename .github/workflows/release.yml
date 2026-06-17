@@ -46,6 +46,18 @@ jobs:
             exit 1
           fi
 
+          mapfile -t readme_versions < <(grep -Eo 'opencode-plugin-flow@[0-9]+\.[0-9]+\.[0-9]+' README.md | sed 's/.*@//' | sort -u)
+          if [[ "${#readme_versions[@]}" -eq 0 ]]; then
+            echo "README.md does not contain version-pinned opencode-plugin-flow install snippets" >&2
+            exit 1
+          fi
+          for readme_version in "${readme_versions[@]}"; do
+            if [[ "${readme_version}" != "${package_version}" ]]; then
+              echo "README.md pins opencode-plugin-flow@${readme_version}, expected ${package_version}" >&2
+              exit 1
+            fi
+          done
+
           awk -v version="$version" '
             BEGIN { in_section = 0 }
             $0 ~ ("^## \\[?" version "\\]?") { in_section = 1 }
@@ -57,6 +69,9 @@ jobs:
 
       - name: Run checks
         run: bun run check
+
+      - name: Run package smoke
+        run: bun run package:smoke
 
       - name: Prepare package
         shell: bash

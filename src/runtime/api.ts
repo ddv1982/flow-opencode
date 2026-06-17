@@ -1,5 +1,17 @@
 import { z } from "zod";
-import { PlanInputSchema, WorkerResultSchema } from "./schema";
+import {
+	ArtifactSchema,
+	FEATURE_ID_MESSAGE,
+	FEATURE_ID_PATTERN,
+	FinalReviewSchema,
+	NeedsInputOutcomeSchema,
+	PlanInputSchema,
+	ReviewSchema,
+	ValidationRunSchema,
+	ValidationScopeSchema,
+	WorkerOutcomeSchema,
+	WorkerResultSchema,
+} from "./schema";
 import {
 	applyPlan,
 	approvePlan,
@@ -12,6 +24,7 @@ import {
 } from "./transitions";
 import {
 	archiveAndClearSession,
+	assertMutableWorkspaceRoot,
 	loadSession,
 	saveSession,
 	withSessionLock,
@@ -45,6 +58,20 @@ export const FlowSessionCloseSchema = z
 	})
 	.strict();
 
+export const FlowFeatureCompleteToolSchema = z
+	.object({
+		status: z.enum(["ok", "needs_input"]),
+		featureId: z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
+		summary: z.string().min(1),
+		artifactsChanged: z.array(ArtifactSchema).optional(),
+		validationRun: z.array(ValidationRunSchema).optional(),
+		validationScope: ValidationScopeSchema.optional(),
+		featureReview: ReviewSchema.optional(),
+		finalReview: FinalReviewSchema.optional(),
+		outcome: z.union([WorkerOutcomeSchema, NeedsInputOutcomeSchema]).optional(),
+	})
+	.strict();
+
 function responseFromFailure(result: {
 	message: string;
 	recovery?: string;
@@ -62,9 +89,8 @@ async function mutate(
 		session: Awaited<ReturnType<typeof loadSession>>,
 	) => Promise<RuntimeResponse>,
 ): Promise<RuntimeResponse> {
-	return withSessionLock(worktree, async () =>
-		task(await loadSession(worktree)),
-	);
+	const root = assertMutableWorkspaceRoot(worktree);
+	return withSessionLock(root, async () => task(await loadSession(root)));
 }
 
 export async function flowStatus(worktree: string): Promise<RuntimeResponse> {

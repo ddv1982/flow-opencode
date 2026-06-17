@@ -1,4 +1,5 @@
 import {
+	type FlowSkillDoctorReport,
 	formatFlowSkillDoctor,
 	inspectFlowSkillInstall,
 	resolveFlowPluginVersion,
@@ -6,19 +7,77 @@ import {
 	uninstallFlowSkills,
 } from "./distribution/sync";
 
+function usage(): string {
+	return [
+		"usage: opencode-plugin-flow <doctor|sync|uninstall> [options]",
+		"",
+		"commands:",
+		"  doctor              Inspect managed Flow skills",
+		"  sync                Install or refresh managed Flow skills",
+		"  uninstall           Remove pristine Flow-owned managed skills",
+		"",
+		"doctor options:",
+		"  --json              Write the doctor report as JSON",
+		"  --check, --strict   Exit nonzero when doctor status is not ok",
+		"",
+		"global options:",
+		"  --help              Show this help",
+		"  --version           Print the plugin version",
+	].join("\n");
+}
+
+function hasOnlyKnownFlags(flags: string[], known: Set<string>): boolean {
+	return flags.every((flag) => known.has(flag));
+}
+
+function writeDoctorReport(
+	report: FlowSkillDoctorReport,
+	options: { json: boolean },
+): void {
+	if (options.json) {
+		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+		return;
+	}
+	process.stdout.write(formatFlowSkillDoctor(report));
+}
+
 async function main(argv: string[]): Promise<void> {
 	const command = argv[2];
+	const flags = argv.slice(3);
+	if (command === "--help" || command === "-h") {
+		process.stdout.write(`${usage()}\n`);
+		return;
+	}
+	if (command === "--version" || command === "-v") {
+		process.stdout.write(`${resolveFlowPluginVersion()}\n`);
+		return;
+	}
 	if (command !== "uninstall" && command !== "doctor" && command !== "sync") {
-		process.stderr.write(
-			"usage: opencode-plugin-flow <doctor|sync|uninstall>\n",
-		);
+		process.stderr.write(`${usage()}\n`);
 		process.exitCode = 2;
 		return;
 	}
 	if (command === "doctor") {
-		process.stdout.write(
-			formatFlowSkillDoctor(await inspectFlowSkillInstall()),
-		);
+		const knownDoctorFlags = new Set(["--json", "--check", "--strict"]);
+		if (!hasOnlyKnownFlags(flags, knownDoctorFlags)) {
+			process.stderr.write(`${usage()}\n`);
+			process.exitCode = 2;
+			return;
+		}
+		const report = await inspectFlowSkillInstall();
+		writeDoctorReport(report, { json: flags.includes("--json") });
+		if (
+			(report.status === "sync_required" ||
+				report.status === "action_required") &&
+			(flags.includes("--check") || flags.includes("--strict"))
+		) {
+			process.exitCode = 1;
+		}
+		return;
+	}
+	if (flags.length > 0) {
+		process.stderr.write(`${usage()}\n`);
+		process.exitCode = 2;
 		return;
 	}
 	if (command === "sync") {
@@ -33,6 +92,9 @@ async function main(argv: string[]): Promise<void> {
 		process.stdout.write(`Flow skill sync (${version})\n`);
 		for (const result of results) {
 			process.stdout.write(`- ${result.name}: ${result.action}\n`);
+			for (const backupPath of result.backupPaths ?? []) {
+				process.stdout.write(`  backup: ${backupPath}\n`);
+			}
 		}
 		if (changed.length > 0) {
 			process.stdout.write(

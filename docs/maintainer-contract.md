@@ -38,6 +38,21 @@ Commands:
 - `flow-review`
 - `flow-status`
 
+These command IDs are reserved while the plugin is enabled. Flow injects them
+after existing OpenCode config so public command preflight stays authoritative.
+
+Internal worker agents are also reserved:
+
+- `flow-reviewer`
+- `flow-evidence-worker`
+- `flow-validation-worker`
+- `flow-audit-worker`
+- `flow-candidate-worker`
+- `flow-verifier-worker`
+
+Every hidden Flow worker must explicitly deny native skill loading by default;
+future helper-skill access must be an intentional worker-specific allowlist.
+
 Tools:
 
 - `flow_status`

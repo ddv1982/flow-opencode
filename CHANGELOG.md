@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.12] - 2026-06-18
+
+Harden Flow's hidden worker lore, scriptable doctor checks, typed package smoke, and session edge contracts without widening the v4 runtime surface.
+
 ## [4.1.11] - 2026-06-17
 
 Give bundled Flow command lore a real title seed so OpenCode can name new chats while keeping the heavy instructions synthetic.

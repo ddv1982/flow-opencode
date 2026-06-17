@@ -6,23 +6,12 @@ import {
 } from "../../distribution/sync";
 import { createConfigHook } from "./config";
 import { createFlowLog } from "./logging";
-import type { Hooks, Plugin } from "./sdk";
+import type { Hooks, Part, Plugin } from "./sdk";
 import { createTools } from "./tools";
 
 type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
-
-type FlowCommandTextPart = {
-	type: "text";
-	text: string;
-	synthetic?: boolean;
-};
-
-type FlowCommandSubtaskPart = {
-	type: "subtask";
-	prompt: string;
-};
-
-type FlowCommandPart = FlowCommandTextPart | FlowCommandSubtaskPart;
+type FlowTextPart = Extract<Part, { type: "text" }>;
+type FlowSubtaskPart = Extract<Part, { type: "subtask" }>;
 
 const FLOW_COMMAND_TITLE_SEEDS = {
 	"flow-auto": "Flow auto",
@@ -71,26 +60,37 @@ function renderFlowCommandTitleSeed(
 	return `${FLOW_COMMAND_TITLE_SEEDS[command]}: ${truncatedArgs}`;
 }
 
+function isFlowSubtaskPart(part: Part | undefined): part is FlowSubtaskPart {
+	return part?.type === "subtask" && typeof part.prompt === "string";
+}
+
+function createFlowTextPart(
+	text: string,
+	options?: Pick<FlowTextPart, "synthetic">,
+): Part {
+	return {
+		type: "text",
+		text,
+		...(options?.synthetic ? { synthetic: options.synthetic } : {}),
+	} as FlowTextPart;
+}
+
 function replaceFlowCommandParts(
 	output: Parameters<NonNullable<Hooks["command.execute.before"]>>[1],
 	titleSeed: string,
 	text: string,
 ): void {
-	const parts = output.parts as unknown as FlowCommandPart[];
+	const { parts } = output;
 	const subtask = parts[0];
-	if (parts.length === 1 && subtask?.type === "subtask") {
+	if (parts.length === 1 && isFlowSubtaskPart(subtask)) {
 		subtask.prompt = text;
 		return;
 	}
 	parts.splice(
 		0,
 		parts.length,
-		{ type: "text", text: titleSeed },
-		{
-			type: "text",
-			text,
-			synthetic: true,
-		},
+		createFlowTextPart(titleSeed),
+		createFlowTextPart(text, { synthetic: true }),
 	);
 }
 

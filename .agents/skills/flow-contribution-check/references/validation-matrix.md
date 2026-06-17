@@ -4,7 +4,8 @@ Use this after the scripted preflight when the touched boundary needs focused ev
 
 | Changed boundary | Minimum focused evidence before push |
 | --- | --- |
-| Any contribution | `git diff --check`, staged-index review, `bun run check` |
+| Any commit boundary | Commit preflight: staged whitespace, staged-index review, optional staged secret scan |
+| Any push or whole-worktree gate | Push preflight or clean-worktree `bun run check` |
 | `src/runtime/**`, session schema, transitions, persistence, or hard invariants | Narrow runtime tests for the touched module; usually `bun test tests/runtime-gates.test.ts tests/workspace-persistence.test.ts` |
 | `src/adapters/opencode/**`, tool schemas, tool registration, or config projection | Push preflight runs `bun test tests/distribution-and-surface.test.ts`; also run `bun run typecheck` when validating manually |
 | `src/distribution/**`, `src/cli.ts`, package files, install/update/uninstall behavior | `bun run build`; `bun test tests/distribution-and-surface.test.ts` |

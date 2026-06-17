@@ -22,6 +22,7 @@ export type FlowSkillSyncAction =
 export type FlowSkillSyncResult = {
 	name: string;
 	action: FlowSkillSyncAction;
+	backupPaths?: string[];
 };
 
 export type FlowSkillSyncHealth = {
@@ -135,6 +136,20 @@ function resolveSkillFile(folder: string, relativePath: string): string {
 	throw new Error(`Unsafe skill file path '${relativePath}'.`);
 }
 
+async function writeBackup(path: string, content: string): Promise<string> {
+	const basePath = `${path}.backup.${sha256(content).slice(0, 12)}`;
+	for (let index = 0; ; index += 1) {
+		const backupPath = index === 0 ? basePath : `${basePath}.${index}`;
+		try {
+			await writeFile(backupPath, content, { encoding: "utf8", flag: "wx" });
+			return backupPath;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+			throw error;
+		}
+	}
+}
+
 async function syncSkill(
 	definition: FlowSkillDefinition,
 	version: string,
@@ -150,7 +165,7 @@ async function syncSkill(
 	}
 
 	let changed = false;
-	let backedUp = false;
+	const backupPaths: string[] = [];
 	for (const file of definition.files) {
 		const path = resolveSkillFile(folder, file.relativePath);
 		const existing = await optionalRead(path);
@@ -163,8 +178,7 @@ async function syncSkill(
 				? sha256(existing) !== recordedHash
 				: markerContent !== null);
 		if (userEdited) {
-			await writeFile(`${path}.backup`, existing, "utf8");
-			backedUp = true;
+			backupPaths.push(await writeBackup(path, existing));
 		}
 	}
 
@@ -186,11 +200,13 @@ async function syncSkill(
 	await writeFile(markerPath, markerFor(definition, version), "utf8");
 	return {
 		name: definition.name,
-		action: backedUp
-			? "updated_with_backup"
-			: managedSkillExists
-				? "updated"
-				: "installed",
+		action:
+			backupPaths.length > 0
+				? "updated_with_backup"
+				: managedSkillExists
+					? "updated"
+					: "installed",
+		...(backupPaths.length > 0 ? { backupPaths } : {}),
 	};
 }
 
@@ -217,12 +233,21 @@ function createHealth(
 			: changedSkills.length > 0
 				? "restart_required"
 				: "ok";
+	const summaryParts: string[] = [];
+	if (changedSkills.length > 0) {
+		summaryParts.push(
+			`Flow installed or updated skills during this startup (${changedSkills.join(", ")}). Restart OpenCode before loading Flow skills.`,
+		);
+	}
+	if (actionRequiredSkills.length > 0) {
+		summaryParts.push(
+			`Flow found user-owned skill folders for managed skills (${actionRequiredSkills.join(", ")}). Run ${formatFlowDoctorCommand(version)} for repair guidance.`,
+		);
+	}
 	const summary =
-		status === "restart_required"
-			? `Flow installed or updated skills during this startup (${changedSkills.join(", ")}). Restart OpenCode before loading Flow skills.`
-			: status === "action_required"
-				? `Flow found user-owned skill folders for managed skills (${actionRequiredSkills.join(", ")}). Run ${formatFlowDoctorCommand(version)} for repair guidance.`
-				: "Flow skills are synced.";
+		summaryParts.length > 0
+			? summaryParts.join(" ")
+			: "Flow skills are synced.";
 	return {
 		status,
 		version,
@@ -232,7 +257,7 @@ function createHealth(
 		results,
 		changedSkills,
 		actionRequiredSkills,
-		restartRequired: status === "restart_required",
+		restartRequired: changedSkills.length > 0,
 		summary,
 	};
 }

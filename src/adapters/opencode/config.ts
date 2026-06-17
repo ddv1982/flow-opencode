@@ -15,12 +15,21 @@ export function createConfigHook(
 		let instructionPath: string | undefined;
 		try {
 			const root = resolveWorkspaceRoot(ctx);
-			await refreshFlowInstructionFile(root);
 			instructionPath = flowInstructionPath(root);
+			try {
+				await refreshFlowInstructionFile(root);
+			} catch (error) {
+				log(
+					"warn",
+					`Flow could not refresh generated instructions: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
 		} catch (error) {
 			log(
 				"warn",
-				`Flow could not register generated instructions: ${
+				`Flow could not resolve generated instruction path: ${
 					error instanceof Error ? error.message : String(error)
 				}`,
 			);

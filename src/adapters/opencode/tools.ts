@@ -1,5 +1,10 @@
 import { getFlowSkillSetupStatus } from "../../distribution/sync";
 import {
+	FlowFeatureCompleteToolSchema,
+	FlowFeatureResetSchema,
+	FlowPlanSaveSchema,
+	FlowRunStartSchema,
+	FlowSessionCloseSchema,
 	flowFeatureComplete,
 	flowFeatureReset,
 	flowPlanApprove,
@@ -11,8 +16,6 @@ import {
 import { resolveWorkspaceRoot } from "../../runtime/workspace";
 import { createFlowLog } from "./logging";
 import { type ToolContext, tool } from "./sdk";
-
-const z = tool.schema;
 
 function toJson(value: unknown): string {
 	return JSON.stringify(value, null, 2);
@@ -60,10 +63,7 @@ export function createTools(ctx: unknown) {
 		}),
 		flow_plan_save: tool({
 			description: "Create or update a draft Flow plan for the active goal",
-			args: {
-				goal: z.string().optional(),
-				plan: z.any().optional(),
-			},
+			args: FlowPlanSaveSchema.shape,
 			execute: (args, context) =>
 				execute(context, (worktree) => flowPlanSave(worktree, args)),
 		}),
@@ -74,51 +74,26 @@ export function createTools(ctx: unknown) {
 		}),
 		flow_run_start: tool({
 			description: "Start the next runnable approved Flow feature",
-			args: {
-				featureId: z.string().optional(),
-			},
+			args: FlowRunStartSchema.shape,
 			execute: (args, context) =>
 				execute(context, (worktree) => flowRunStart(worktree, args)),
 		}),
 		flow_feature_complete: tool({
 			description:
 				"Record a completed or blocked active feature with validation and review evidence",
-			args: {
-				status: z.enum(["ok", "needs_input"]),
-				featureId: z.string(),
-				summary: z.string(),
-				artifactsChanged: z.array(z.object({ path: z.string() })).optional(),
-				validationRun: z
-					.array(
-						z.object({
-							command: z.string(),
-							status: z.enum(["passed", "failed"]),
-							summary: z.string(),
-						}),
-					)
-					.optional(),
-				validationScope: z.enum(["targeted", "broad"]).optional(),
-				featureReview: z.any().optional(),
-				finalReview: z.any().optional(),
-				outcome: z.any().optional(),
-			},
+			args: FlowFeatureCompleteToolSchema.shape,
 			execute: (args, context) =>
 				execute(context, (worktree) => flowFeatureComplete(worktree, args)),
 		}),
 		flow_feature_reset: tool({
 			description: "Reset one feature and its dependents to pending",
-			args: {
-				featureId: z.string(),
-			},
+			args: FlowFeatureResetSchema.shape,
 			execute: (args, context) =>
 				execute(context, (worktree) => flowFeatureReset(worktree, args)),
 		}),
 		flow_session_close: tool({
 			description: "Close and archive the active Flow session",
-			args: {
-				kind: z.enum(["completed", "deferred", "abandoned"]),
-				summary: z.string().optional(),
-			},
+			args: FlowSessionCloseSchema.shape,
 			execute: (args, context) =>
 				execute(context, (worktree) => flowSessionClose(worktree, args)),
 		}),

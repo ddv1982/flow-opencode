@@ -5,7 +5,10 @@ description: Validate Flow plugin contribution readiness before committing, push
 
 # Flow contribution check
 
-Run the repository-local preflight before every commit and before pushing. It is scaled to Flow's small plugin surface: staged diff hygiene, optional redacted secret scanning, architecture seams, package/version hygiene, and path-sensitive focused checks.
+Run the repository-local preflight before every commit and before pushing. It is
+scaled to Flow's small plugin surface: staged diff hygiene, optional redacted
+secret scanning, architecture seams, package/version hygiene, and path-sensitive
+focused checks.
 
 This preflight validates staged or outgoing work; it does not choose commit
 boundaries, stage files, or write commit messages.
@@ -21,7 +24,11 @@ boundaries, stage files, or write commit messages.
 .agents/skills/flow-contribution-check/scripts/preflight.sh commit
 ```
 
-Rerun commit preflight after any staging change, including partial staging. Commit mode validates the staged index, not just the working tree.
+Rerun commit preflight after any staging change, including partial staging.
+Commit mode validates the staged index only: staged whitespace, staged diff
+summary, and optional redacted staged secret scanning. It intentionally does not
+run whole-worktree `bun run check`; run that separately from a clean worktree, or
+use push mode, when broad validation evidence is needed.
 
 ## Before pushing
 
@@ -35,8 +42,11 @@ Rerun commit preflight after any staging change, including partial staging. Comm
 3. Review the outgoing range printed by the script.
 4. Read `references/validation-matrix.md` and record any required evidence before pushing.
 
-Push mode validates only the current branch against its configured upstream, or `origin/main` for a non-`main` branch with no upstream. It does not validate tags, mirrors, or arbitrary refspecs.
-Push mode also runs focused checks for selected changed paths, including the distribution/surface test when `skills/**` changes are present.
+Push mode validates only the current branch against its configured upstream, or
+`origin/main` for a non-`main` branch with no upstream. It does not validate
+tags, mirrors, or arbitrary refspecs. Push mode requires a clean worktree before
+running whole-worktree `bun run check` and selected focused checks, including the
+distribution/surface test when `skills/**` changes are present.
 
 ## Escalate before risky operations
 

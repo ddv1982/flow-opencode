@@ -37,6 +37,7 @@ import flowRunSkillDoc from "../skills/flow-run/SKILL.md" with { type: "text" };
 export type FlowPermissionConfig = {
 	edit?: string;
 	bash?: string;
+	skill?: string | Record<string, string>;
 	task?: Record<string, string>;
 	[toolPattern: string]: string | Record<string, string> | undefined;
 };
@@ -248,6 +249,7 @@ export const FLOW_CORE_AGENTS = {
 		permission: {
 			edit: "deny",
 			bash: "deny",
+			skill: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
@@ -263,6 +265,7 @@ export const FLOW_CORE_AGENTS = {
 		permission: {
 			edit: "deny",
 			bash: "deny",
+			skill: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
@@ -278,6 +281,7 @@ export const FLOW_CORE_AGENTS = {
 		permission: {
 			edit: "deny",
 			bash: "ask",
+			skill: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
@@ -293,6 +297,7 @@ export const FLOW_CORE_AGENTS = {
 		permission: {
 			edit: "deny",
 			bash: "ask",
+			skill: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
@@ -308,6 +313,7 @@ export const FLOW_CORE_AGENTS = {
 		permission: {
 			edit: "ask",
 			bash: "ask",
+			skill: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
@@ -323,6 +329,7 @@ export const FLOW_CORE_AGENTS = {
 		permission: {
 			edit: "deny",
 			bash: "ask",
+			skill: "deny",
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",

@@ -437,6 +437,13 @@ describe("Flow runtime gates", () => {
 		const status = await flowStatus(workspace);
 		expect(status.status).toBe("ready");
 		expect(
+			(status.session as { activeFeature: unknown }).activeFeature,
+		).toBeNull();
+		expect(
+			(status.session as { progress: { completed: number; total: number } })
+				.progress,
+		).toEqual({ completed: 0, total: 2 });
+		expect(
 			(status.session as { closure: null; timestamps: { completedAt: null } })
 				.closure,
 		).toBeNull();
@@ -450,5 +457,10 @@ describe("Flow runtime gates", () => {
 		expect(features.every((feature) => feature.status === "pending")).toBe(
 			true,
 		);
+		expect((status.session as { historyCount: number }).historyCount).toBe(2);
+		expect(
+			(status.session as { latestHistoryEntry: { featureId: string } })
+				.latestHistoryEntry.featureId,
+		).toBe("final-feature");
 	});
 });

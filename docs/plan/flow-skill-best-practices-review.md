@@ -1,7 +1,11 @@
 # Flow skill best-practices review plan
 
-Status: draft
+Status: implemented / superseded
 Created: 2026-06-17
+
+Implementation note: this historical review drove the current trigger matrix,
+helper-skill wording, and commit/preflight boundary cleanup. Remaining optional
+UI metadata ideas are deferred under the current improvement roadmap.
 
 ## Purpose
 
@@ -301,15 +305,16 @@ Manual review:
 4. Align `.flow/**` archival language.
 5. Consider optional `agents/openai.yaml` only if real trigger/UI gaps remain.
 
-## Open decisions
+## Resolved decisions
 
-- Should `flow-test` target general validation prompts outside Flow sessions, or
-  only Flow completion evidence?
-- Should `flow-test` be loaded for every `flow-run` validation pass, or only for
-  complex/uncertain validation?
-- Is `flow-commit` intended for arbitrary repositories, Flow plugin
-  maintainers, or both?
-- Should commit preparation ever occur before `flow_feature_complete`, other
-  than explicit WIP commits?
-- Should README keep `.flow/**` archival guidance, or should that detail move
-  primarily to maintainer docs?
+- `flow-test` targets general validation, test-plan, failure-triage, browser QA,
+  and Flow validation-evidence prompts.
+- `flow-test` is loaded for complex, regression-sensitive, browser QA,
+  failure-prone, unclear, or evidence-summary work, not every trivial validation
+  pass by default.
+- `flow-commit` remains a general managed helper with repo-local preflight
+  delegation when present.
+- Commit preparation defaults to after `flow_feature_complete`; only explicit WIP
+  commit requests should happen earlier.
+- README keeps concise `.flow/**` guidance while maintainer docs carry the fuller
+  safety contract.

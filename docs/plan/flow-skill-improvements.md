@@ -1,7 +1,11 @@
 # Flow skill improvement plan
 
-Status: draft
+Status: implemented / superseded
 Created: 2026-06-16
+
+Implementation note: this historical plan was implemented by the Flow v4.1 skill
+layer. The current managed skill set includes `flow-test` and `flow-commit`, and
+the current improvement index is `docs/plan/opencode-plugin-improvement-roadmap.md`.
 
 ## Purpose
 
@@ -18,7 +22,7 @@ changes.
 The plan is based on the attached research plus a read-only verification pass
 over the repository.
 
-Verified baseline:
+Historical baseline at planning time:
 
 - Current managed skills are `flow`, `flow-plan`, `flow-run`, `flow-review`,
   `flow-deslop`, and `flow-ui-quality` (`docs/maintainer-contract.md`,
@@ -264,13 +268,11 @@ If this plan is implemented through Flow, use this dependency order:
    - Targets: no new source scope unless failures require fixes.
    - Validation: `bun run check`, doctor/sync smoke evidence, final review.
 
-## Open decisions
+## Resolved decisions
 
-- Confirm whether both new skills should be managed in the first implementation
-  pass. This plan recommends yes.
-- Confirm whether direct `/flow-test` and `/flow-commit` commands should be
-  deferred. This plan recommends deferring them.
-- Verify current official Playwright MCP/OpenCode browser guidance before
-  committing exact setup snippets in `flow-test`.
-- Decide whether the contribution-check clarification belongs in this change or
-  a separate docs cleanup.
+- Both `flow-test` and `flow-commit` are now managed skills.
+- Direct `/flow-test` and `/flow-commit` commands remain deferred.
+- `flow-test` keeps browser guidance generic instead of committing exact
+  Playwright setup snippets.
+- Contribution-check staged-boundary wording is handled by the current roadmap
+  implementation.

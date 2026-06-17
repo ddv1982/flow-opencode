@@ -17,7 +17,7 @@ recorded.
 - Identify whether this is a feature review or final review.
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
-- Load `flow-test` for validation-heavy, regression-sensitive, browser/UI, or
+- Load `flow-test` for validation-heavy, regression-sensitive, browser QA, or
   unclear coverage reviews. If it is unavailable, record a coverage gap and
   treat missing validation evidence as a gap or blocker based on user impact.
 - Load `references/review-rubric.md` for severity, depth, and payload shape.
@@ -59,7 +59,7 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 
 - Cleanup/refactor: load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved. If unavailable, record a coverage gap instead of approving cleanup claims.
 - UI/frontend: load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available. If unavailable, record a coverage gap and do not claim visual polish was verified.
-- Audit reports: use `flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
+- Audit reports: use `../flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
 - Large reviews: use `../flow/references/parallel-orchestration.md` for
   read-only slices by changed-file group, risk lens, or validation surface.
   Use the named review, audit, evidence, or validation agents from that

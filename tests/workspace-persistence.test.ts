@@ -11,7 +11,9 @@ import {
 } from "../src/runtime/api";
 import {
 	assertMutableWorkspaceRoot,
+	flowDir,
 	flowInstructionPath,
+	historyDir,
 	loadSession,
 	sessionPath,
 } from "../src/runtime/workspace";
@@ -86,6 +88,14 @@ describe("Flow workspace persistence", () => {
 		);
 
 		await expect(loadSession(workspace)).rejects.toThrow(/duplicate/i);
+	});
+
+	test("rejects malformed session JSON", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(join(workspace, ".flow"), { recursive: true });
+		await writeFile(sessionPath(workspace), '{"version":2,\n', "utf8");
+
+		await expect(loadSession(workspace)).rejects.toThrow(/not valid JSON/i);
 	});
 
 	test("rejects nested duplicate keys in session JSON", async () => {
@@ -164,6 +174,138 @@ describe("Flow workspace persistence", () => {
 			expect(archived.closure.summary).toBe(`Archived as ${kind}.`);
 			expect(archived.status).toBe("planning");
 		}
+	});
+
+	test("deferred and abandoned close preserve running and blocked archive state", async () => {
+		for (const kind of ["deferred", "abandoned"] as const) {
+			const runningWorkspace = await tempWorkspace();
+			await flowPlanSave(runningWorkspace, {
+				goal: `Close running as ${kind}`,
+				plan: oneFeaturePlan(),
+			});
+			await flowPlanApprove(runningWorkspace);
+			await flowRunStart(runningWorkspace, {});
+			expect(
+				(
+					await flowSessionClose(runningWorkspace, {
+						kind,
+						summary: `Archived running as ${kind}.`,
+					})
+				).status,
+			).toBe("ok");
+			const runningArchive = JSON.parse(
+				await readFile(
+					join(
+						historyDir(runningWorkspace),
+						(await readdir(historyDir(runningWorkspace)))[0] ?? "",
+					),
+					"utf8",
+				),
+			) as {
+				status: string;
+				activeFeatureId: string | null;
+				plan: { features: Array<{ id: string; status: string }> };
+			};
+			expect(runningArchive.status).toBe("running");
+			expect(runningArchive.activeFeatureId).toBeNull();
+			expect(runningArchive.plan.features[0]?.status).toBe("in_progress");
+
+			const blockedWorkspace = await tempWorkspace();
+			await flowPlanSave(blockedWorkspace, {
+				goal: `Close blocked as ${kind}`,
+				plan: oneFeaturePlan(),
+			});
+			await flowPlanApprove(blockedWorkspace);
+			await flowRunStart(blockedWorkspace, {});
+			await flowFeatureComplete(blockedWorkspace, {
+				status: "needs_input",
+				featureId: "only-feature",
+				summary: "Need operator input.",
+				outcome: {
+					kind: "needs_input",
+					summary: "Missing credentials.",
+				},
+			});
+			expect(
+				(
+					await flowSessionClose(blockedWorkspace, {
+						kind,
+						summary: `Archived blocked as ${kind}.`,
+					})
+				).status,
+			).toBe("ok");
+			const blockedArchive = JSON.parse(
+				await readFile(
+					join(
+						historyDir(blockedWorkspace),
+						(await readdir(historyDir(blockedWorkspace)))[0] ?? "",
+					),
+					"utf8",
+				),
+			) as {
+				status: string;
+				activeFeatureId: string | null;
+				history: Array<{ status: string }>;
+				plan: { features: Array<{ id: string; status: string }> };
+			};
+			expect(blockedArchive.status).toBe("blocked");
+			expect(blockedArchive.activeFeatureId).toBeNull();
+			expect(blockedArchive.plan.features[0]?.status).toBe("blocked");
+			expect(blockedArchive.history.at(-1)?.status).toBe("needs_input");
+		}
+	});
+
+	test("mutation APIs reject unsafe roots before acquiring a session lock", async () => {
+		const previousHome = process.env.HOME;
+		const workspace = await tempWorkspace();
+		process.env.HOME = workspace;
+		try {
+			await expect(
+				flowPlanSave(workspace, { goal: "Reject unsafe HOME workspace" }),
+			).rejects.toThrow(/HOME/);
+			await expect(stat(flowDir(workspace))).rejects.toThrow();
+		} finally {
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
+
+	test("archive failures keep the active session readable", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Keep active session when archive fails",
+			plan: oneFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+		await writeFile(historyDir(workspace), "not a directory\n", "utf8");
+
+		await expect(
+			flowSessionClose(workspace, {
+				kind: "deferred",
+				summary: "Archive should fail.",
+			}),
+		).rejects.toThrow();
+		expect((await loadSession(workspace))?.goal).toBe(
+			"Keep active session when archive fails",
+		);
+	});
+
+	test("projection write failures leave session JSON as authoritative state", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowInstructionPath(workspace), { recursive: true });
+
+		await expect(
+			flowPlanSave(workspace, {
+				goal: "Projection write fails after session save",
+				plan: oneFeaturePlan(),
+			}),
+		).rejects.toThrow();
+		expect((await loadSession(workspace))?.goal).toBe(
+			"Projection write fails after session save",
+		);
 	});
 
 	test("archives and clears completed sessions", async () => {

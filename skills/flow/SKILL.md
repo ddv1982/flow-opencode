@@ -11,10 +11,11 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
 
 1. Call `flow_status` first. Trust its active session and next action over conversation memory.
    If the result includes `setup.skills`, report that setup status and do not
-   load Flow skills in this startup. A just-synced skill can be on disk while
-   unavailable to the running OpenCode process.
+   native-load Flow skills in this startup. Public bundled Flow commands may
+   continue with their embedded instructions, but a just-synced native skill can
+   be on disk while unavailable to the running OpenCode process.
 2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
-3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, or browser/UI work, use `flow-test` to choose and summarize evidence before completion.
+3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, browser QA, route QA, or failure-prone work, use `flow-test` to choose and summarize evidence before completion.
 4. Load `flow-review` for the required feature review. The reviewer reports a `featureReview` payload; the manager records it inside `flow_feature_complete`.
 5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
@@ -28,9 +29,11 @@ commit preparation or commit creation.
 ## Skill Availability
 
 If `flow_status` returns `setup.skills`, report that setup status and stop
-loading Flow skills in the current OpenCode startup. Missing, incomplete, or
-outdated managed skills require a sync/restart cycle before their instructions
-can be trusted by the running process.
+native-loading Flow skills in the current OpenCode startup. Missing, incomplete,
+or outdated managed skills require a sync/restart cycle before their native skill
+instructions can be trusted by the running process. Public command bundles are
+self-contained and may continue when the command prompt already embeds the
+required Flow instructions.
 
 If optional helper skills such as `flow-test`, `flow-deslop`, or
 `flow-ui-quality` are unavailable, continue only with explicit coverage gaps. Do

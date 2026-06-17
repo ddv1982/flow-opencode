@@ -32,8 +32,8 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 
 ## Validate
 
-- For complex validation, regression-sensitive changes, browser/UI workflows,
-  failure-prone checks, unclear coverage, route QA, exploratory QA, or
+- For complex validation, regression-sensitive changes, browser QA, route QA,
+  failure-prone checks, unclear coverage, exploratory QA, or
   `validationRun` summarization, load `flow-test`. If it is unavailable, record
   the coverage gap and keep validation claims conservative.
 - Read `references/validation-rubric.md` before completing.

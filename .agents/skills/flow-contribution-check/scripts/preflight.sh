@@ -112,31 +112,32 @@ require_tool() {
 require_tool git
 require_tool bun
 
-log "Check whitespace"
-git diff --check
-git diff --cached --check
-
-log "Review staged diff summary"
-git diff --cached --stat
-
-log "Scan staged index blobs for secrets"
-scan_staged_index_blobs
-
-log "Run full project check"
-bun run check
-
 if [[ "$mode" == "commit" ]]; then
+  log "Check staged whitespace"
+  git diff --cached --check
+
+  log "Review staged diff summary"
+  git diff --cached --stat
+
+  log "Scan staged index blobs for secrets"
+  scan_staged_index_blobs
   cat <<'EOF'
 
 Commit preflight passed.
 Review `git diff --cached` before committing, and rerun this preflight after any staging change.
-Use `push` mode before pushing committed work.
+Commit mode validated the staged boundary only. Run `bun run check` separately from a clean worktree when broad whole-worktree evidence is needed, and use `push` mode before pushing committed work.
 EOF
   exit 0
 fi
 
 log "Require a clean working tree before push"
 require_clean_worktree
+
+log "Check working-tree whitespace"
+git diff --check
+
+log "Run full project check"
+bun run check
 
 resolve_outgoing_base
 log "Review current-branch outgoing range"
