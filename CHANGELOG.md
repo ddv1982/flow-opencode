@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.9] - 2026-06-17
+
+Make public Flow command lore self-contained so stale native skill discovery cannot block the required loop.
+
 ## [4.1.8] - 2026-06-17
 
 Make Flow command preflight overrule stale OpenCode command lore, with review instructions bundled where skill discovery can lag.

@@ -207,42 +207,45 @@ describe("Flow distribution and plugin surface", () => {
 		});
 	});
 
-	test("guards public Flow command skill loads with setup status checks", () => {
+	test("keeps public Flow commands self-contained from native skill loading", () => {
 		const config = createFlowCoreConfigEntries();
-		const expectedSkillLoads = {
-			"flow-auto": "flow",
-			"flow-plan": "flow-plan",
-			"flow-run": "flow-run",
-			"flow-review": null,
-			"flow-status": null,
-		} satisfies Record<(typeof FLOW_COMMAND_NAMES)[number], string | null>;
+		const expectedBundledSections = {
+			"flow-auto": ["Bundled flow/SKILL.md", "Bundled flow-run/SKILL.md"],
+			"flow-plan": [
+				"Bundled flow-plan/SKILL.md",
+				"Bundled flow/references/parallel-orchestration.md",
+			],
+			"flow-run": ["Bundled flow-run/SKILL.md", "Bundled flow-review/SKILL.md"],
+			"flow-review": [
+				"Bundled flow-review/SKILL.md",
+				"Bundled flow-review/references/review-rubric.md",
+			],
+		} satisfies Record<
+			Exclude<(typeof FLOW_COMMAND_NAMES)[number], "flow-status">,
+			string[]
+		>;
 
 		for (const command of FLOW_COMMAND_NAMES) {
 			const entry = config.command[command] as { template: string };
-			const expectedSkill = expectedSkillLoads[command];
-			if (command === "flow-review") {
-				expect(entry.template).toStartWith("Call `flow_status` first.");
-				expect(entry.template).toContain("setup.skills");
-				expect(entry.template).toContain("do not load Flow skills");
-				expect(entry.template).toContain(
-					"Do not call the native skill tool for `flow-review`",
-				);
-				expect(entry.template).toContain("Bundled flow-review/SKILL.md");
-				expect(entry.template).not.toContain(
-					"Otherwise load the `flow-review` skill",
-				);
-				continue;
-			}
-			if (expectedSkill === null) {
+			if (command === "flow-status") {
 				expect(entry.template).toBe(
 					"Call flow_status and report the session state and next action.",
 				);
 				continue;
 			}
+
 			expect(entry.template).toStartWith("Call `flow_status` first.");
 			expect(entry.template).toContain("setup.skills");
-			expect(entry.template).toContain("do not load Flow skills");
-			expect(entry.template).toContain(expectedSkill);
+			expect(entry.template).toContain("continue with the bundled public Flow");
+			expect(entry.template).toContain("Do not call native Flow skills");
+			expect(entry.template).toContain(
+				"In bundled sections, `load` means read and use",
+			);
+			expect(entry.template).toContain("Optional helper skills");
+			for (const section of expectedBundledSections[command]) {
+				expect(entry.template).toContain(section);
+			}
+			expect(entry.template).not.toContain("Otherwise load the `flow");
 		}
 	});
 
@@ -366,8 +369,18 @@ describe("Flow distribution and plugin surface", () => {
 				);
 				expect(output.parts).toHaveLength(1);
 				expect(output.parts[0]?.synthetic).toBe(true);
+				if (command === "flow-status") {
+					expect(output.parts[0]?.text).toBe(
+						"Call flow_status and report the session state and next action.",
+					);
+					continue;
+				}
 				expect(output.parts[0]?.text).toContain("Restart OpenCode");
 				expect(output.parts[0]?.text).toContain("npx -y opencode-plugin-flow@");
+				expect(output.parts[0]?.text).toContain("Call `flow_status` first.");
+				expect(output.parts[0]?.text).toContain(
+					"continue with the bundled public Flow",
+				);
 				expect(output.parts[0]?.text).not.toContain("review: stale");
 			}
 
@@ -412,30 +425,86 @@ describe("Flow distribution and plugin surface", () => {
 			expect(preflight).toBeDefined();
 			if (!preflight) throw new Error("Expected command preflight hook.");
 
-			const textOutput: {
+			const textCases = [
+				{
+					command: "/flow-auto",
+					arguments: "Ship canonical commands",
+					expectedAction:
+						"Drive the Flow loop until completion or a real blocker: Ship canonical commands",
+					expectedBundledSection: "Bundled flow/SKILL.md",
+				},
+				{
+					command: "/flow-plan",
+					arguments: "Ship canonical commands",
+					expectedAction: "Plan: Ship canonical commands",
+					expectedBundledSection: "Bundled flow-plan/SKILL.md",
+				},
+				{
+					command: "/flow-run",
+					arguments: "Ship canonical commands",
+					expectedAction:
+						"Execute the next approved feature. Ship canonical commands",
+					expectedBundledSection: "Bundled flow-run/SKILL.md",
+				},
+			];
+
+			for (const testCase of textCases) {
+				const textOutput: {
+					parts: Array<{ type: "text"; text: string; synthetic?: boolean }>;
+				} = {
+					parts: [
+						{
+							type: "text",
+							text: "Load the `flow-plan` skill and plan stale content.",
+						},
+					],
+				};
+				await preflight(
+					{
+						command: testCase.command,
+						sessionID: "test-session",
+						arguments: testCase.arguments,
+					},
+					textOutput as Parameters<typeof preflight>[1],
+				);
+				expect(textOutput.parts).toHaveLength(1);
+				expect(textOutput.parts[0]?.synthetic).toBe(true);
+				expect(textOutput.parts[0]?.text).toContain(
+					"Do not call native Flow skills",
+				);
+				expect(textOutput.parts[0]?.text).toContain(testCase.expectedAction);
+				expect(textOutput.parts[0]?.text).toContain(
+					testCase.expectedBundledSection,
+				);
+				expect(textOutput.parts[0]?.text).not.toContain("stale content");
+				expect(textOutput.parts[0]?.text).not.toContain(
+					"Otherwise load the `flow",
+				);
+			}
+
+			const statusOutput: {
 				parts: Array<{ type: "text"; text: string; synthetic?: boolean }>;
 			} = {
 				parts: [
 					{
 						type: "text",
-						text: "Load the `flow-plan` skill and plan stale content.",
+						text: "Restart OpenCode instead of calling flow_status.",
 					},
 				],
 			};
 			await preflight(
 				{
-					command: "/flow-plan",
+					command: "flow-status",
 					sessionID: "test-session",
-					arguments: "Ship canonical commands",
+					arguments: "",
 				},
-				textOutput as Parameters<typeof preflight>[1],
+				statusOutput as Parameters<typeof preflight>[1],
 			);
-			expect(textOutput.parts).toHaveLength(1);
-			expect(textOutput.parts[0]?.synthetic).toBe(true);
-			expect(textOutput.parts[0]?.text).toContain(
-				"Otherwise load the `flow-plan` skill and plan: Ship canonical commands",
+			expect(statusOutput.parts).toHaveLength(1);
+			expect(statusOutput.parts[0]?.synthetic).toBe(true);
+			expect(statusOutput.parts[0]?.text).toBe(
+				"Call flow_status and report the session state and next action.",
 			);
-			expect(textOutput.parts[0]?.text).not.toContain("stale content");
 
 			const reviewOutput: {
 				parts: Array<{ type: "subtask"; prompt: string; agent: string }>;
@@ -458,7 +527,7 @@ describe("Flow distribution and plugin surface", () => {
 			);
 			expect(reviewOutput.parts).toHaveLength(1);
 			expect(reviewOutput.parts[0]?.prompt).toContain(
-				"Do not call the native skill tool for `flow-review`",
+				"Do not call native Flow skills",
 			);
 			expect(reviewOutput.parts[0]?.prompt).toContain(
 				"Review: the changed Flow command path",
@@ -799,7 +868,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.8");
+			expect(resolveFlowPluginVersion()).toBe("4.1.9");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

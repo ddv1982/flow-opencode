@@ -88,17 +88,20 @@ Runtime setup health is surfaced through `flow_status`:
 - `sync_failed`: skill sync raised an error and the runtime should not assume
   skill instructions are current.
 
-Public Flow commands must call `flow_status` before loading Flow skills. If
-`setup.skills` is present, report that setup state and stop skill loading in the
-current startup. The OpenCode command preflight hook is authoritative for public
-Flow commands: it must replace resolved command parts with the current bundled
-template so stale command files or command registry cache cannot ask for old
-skill-loading behavior. `/flow-review` must stay self-contained and must not
-native-load `flow-review`; its bundled review instructions are advisory if setup
-health is not clean. `/flow-status` remains tool-only. Missing optional helpers
-such as `flow-test`, `flow-deslop`, `flow-ui-quality`, or user-triggered
-`flow-commit` are coverage gaps, not bundled fallbacks. `flow-commit` must not
-be loaded by the autonomous Flow loop and must not replace `flow_feature_complete`.
+Public Flow commands must call `flow_status` first. If `setup.skills` is
+present, they report that setup state and continue through bundled public Flow
+instructions instead of native-loading required public skills. The OpenCode
+command preflight hook is authoritative for public Flow commands: it must
+replace resolved command parts with the current bundled template so stale
+command files or command registry cache cannot ask for old skill-loading
+behavior. `/flow-auto`, `/flow-plan`, `/flow-run`, and `/flow-review` must stay
+self-contained and must not native-load `flow`, `flow-plan`, `flow-run`, or
+`flow-review`; synced skills remain useful for discoverability and manual
+loading, not as a public-command availability dependency. `/flow-status` remains
+tool-only. Missing optional helpers such as `flow-test`, `flow-deslop`,
+`flow-ui-quality`, or user-triggered `flow-commit` are coverage gaps, not
+bundled fallbacks. `flow-commit` must not be loaded by the autonomous Flow loop
+and must not replace `flow_feature_complete`.
 
 ## Source Ownership
 

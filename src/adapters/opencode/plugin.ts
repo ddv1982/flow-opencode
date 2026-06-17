@@ -73,6 +73,16 @@ function renderFlowCommandTemplate(
 	return FLOW_CORE_COMMANDS[command].template.replaceAll("$ARGUMENTS", args);
 }
 
+function renderFlowCommandPreflight(
+	command: FlowCommandName,
+	args: string,
+): string {
+	const renderedTemplate = renderFlowCommandTemplate(command, args);
+	const setupWarning = formatFlowSkillSetupWarning();
+	if (!setupWarning || command === "flow-status") return renderedTemplate;
+	return [setupWarning, renderedTemplate].join("\n\n");
+}
+
 function replaceFlowCommandParts(
 	output: Parameters<NonNullable<Hooks["command.execute.before"]>>[1],
 	text: string,
@@ -96,10 +106,9 @@ function createCommandPreflightHook(): NonNullable<
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
 		if (!isFlowCommandName(command)) return;
-		const setupWarning = formatFlowSkillSetupWarning();
 		replaceFlowCommandParts(
 			output,
-			setupWarning ?? renderFlowCommandTemplate(command, input.arguments),
+			renderFlowCommandPreflight(command, input.arguments),
 		);
 	};
 }
