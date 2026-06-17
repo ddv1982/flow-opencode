@@ -140,7 +140,7 @@ describe("Flow distribution and plugin surface", () => {
 		});
 		expect(
 			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
-		).toContain("Bundled Flow review fallback");
+		).toContain("Bundled Flow review instructions");
 		expect(
 			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
 		).toContain("advisory review only");
@@ -213,13 +213,26 @@ describe("Flow distribution and plugin surface", () => {
 			"flow-auto": "flow",
 			"flow-plan": "flow-plan",
 			"flow-run": "flow-run",
-			"flow-review": "flow-review",
+			"flow-review": null,
 			"flow-status": null,
 		} satisfies Record<(typeof FLOW_COMMAND_NAMES)[number], string | null>;
 
 		for (const command of FLOW_COMMAND_NAMES) {
 			const entry = config.command[command] as { template: string };
 			const expectedSkill = expectedSkillLoads[command];
+			if (command === "flow-review") {
+				expect(entry.template).toStartWith("Call `flow_status` first.");
+				expect(entry.template).toContain("setup.skills");
+				expect(entry.template).toContain("do not load Flow skills");
+				expect(entry.template).toContain(
+					"Do not call the native skill tool for `flow-review`",
+				);
+				expect(entry.template).toContain("Bundled flow-review/SKILL.md");
+				expect(entry.template).not.toContain(
+					"Otherwise load the `flow-review` skill",
+				);
+				continue;
+			}
 			if (expectedSkill === null) {
 				expect(entry.template).toBe(
 					"Call flow_status and report the session state and next action.",
@@ -337,7 +350,11 @@ describe("Flow distribution and plugin surface", () => {
 			for (const command of FLOW_COMMAND_NAMES) {
 				const output: { parts: Array<{ text: string; synthetic?: boolean }> } =
 					{
-						parts: [],
+						parts: [
+							{
+								text: "Load the `flow-review` skill and review: stale",
+							},
+						],
 					};
 				await preflight(
 					{
@@ -351,6 +368,7 @@ describe("Flow distribution and plugin surface", () => {
 				expect(output.parts[0]?.synthetic).toBe(true);
 				expect(output.parts[0]?.text).toContain("Restart OpenCode");
 				expect(output.parts[0]?.text).toContain("npx -y opencode-plugin-flow@");
+				expect(output.parts[0]?.text).not.toContain("review: stale");
 			}
 
 			const nonFlowOutput: { parts: Array<{ text: string }> } = { parts: [] };
@@ -363,6 +381,92 @@ describe("Flow distribution and plugin surface", () => {
 				nonFlowOutput as Parameters<typeof preflight>[1],
 			);
 			expect(nonFlowOutput.parts).toEqual([]);
+		} finally {
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
+
+	test("replaces stale resolved Flow command parts with canonical templates", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		try {
+			await syncFlowSkills(resolveFlowPluginVersion(), home);
+			const workspace = await tempWorkspace();
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			expect(getLatestFlowSkillSyncHealth()?.status).toBe("ok");
+
+			const preflight = hooks["command.execute.before"];
+			expect(preflight).toBeDefined();
+			if (!preflight) throw new Error("Expected command preflight hook.");
+
+			const textOutput: {
+				parts: Array<{ type: "text"; text: string; synthetic?: boolean }>;
+			} = {
+				parts: [
+					{
+						type: "text",
+						text: "Load the `flow-plan` skill and plan stale content.",
+					},
+				],
+			};
+			await preflight(
+				{
+					command: "/flow-plan",
+					sessionID: "test-session",
+					arguments: "Ship canonical commands",
+				},
+				textOutput as Parameters<typeof preflight>[1],
+			);
+			expect(textOutput.parts).toHaveLength(1);
+			expect(textOutput.parts[0]?.synthetic).toBe(true);
+			expect(textOutput.parts[0]?.text).toContain(
+				"Otherwise load the `flow-plan` skill and plan: Ship canonical commands",
+			);
+			expect(textOutput.parts[0]?.text).not.toContain("stale content");
+
+			const reviewOutput: {
+				parts: Array<{ type: "subtask"; prompt: string; agent: string }>;
+			} = {
+				parts: [
+					{
+						type: "subtask",
+						agent: "flow-reviewer",
+						prompt: "Load the `flow-review` skill and review: stale",
+					},
+				],
+			};
+			await preflight(
+				{
+					command: "flow-review",
+					sessionID: "test-session",
+					arguments: "the changed Flow command path",
+				},
+				reviewOutput as Parameters<typeof preflight>[1],
+			);
+			expect(reviewOutput.parts).toHaveLength(1);
+			expect(reviewOutput.parts[0]?.prompt).toContain(
+				"Do not call the native skill tool for `flow-review`",
+			);
+			expect(reviewOutput.parts[0]?.prompt).toContain(
+				"Review: the changed Flow command path",
+			);
+			expect(reviewOutput.parts[0]?.prompt).toContain(
+				"Bundled flow-review/SKILL.md",
+			);
+			expect(reviewOutput.parts[0]?.prompt).not.toContain("review: stale");
 		} finally {
 			if (previousHome === undefined) {
 				delete process.env.HOME;
@@ -695,7 +799,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.7");
+			expect(resolveFlowPluginVersion()).toBe("4.1.8");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

@@ -10,6 +10,21 @@ import { createFlowLog } from "./logging";
 import type { Hooks, Plugin, ToolContext } from "./sdk";
 import { createTools } from "./tools";
 
+type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
+
+type FlowCommandTextPart = {
+	type: "text";
+	text: string;
+	synthetic?: boolean;
+};
+
+type FlowCommandSubtaskPart = {
+	type: "subtask";
+	prompt: string;
+};
+
+type FlowCommandPart = FlowCommandTextPart | FlowCommandSubtaskPart;
+
 async function compactSessionFacts(
 	context: Pick<ToolContext, "worktree" | "directory">,
 ): Promise<string | null> {
@@ -47,26 +62,45 @@ function createSystemTransformHook(
 	};
 }
 
+function isFlowCommandName(command: string): command is FlowCommandName {
+	return command in FLOW_CORE_COMMANDS;
+}
+
+function renderFlowCommandTemplate(
+	command: FlowCommandName,
+	args: string,
+): string {
+	return FLOW_CORE_COMMANDS[command].template.replaceAll("$ARGUMENTS", args);
+}
+
+function replaceFlowCommandParts(
+	output: Parameters<NonNullable<Hooks["command.execute.before"]>>[1],
+	text: string,
+): void {
+	const parts = output.parts as unknown as FlowCommandPart[];
+	const subtask = parts[0];
+	if (parts.length === 1 && subtask?.type === "subtask") {
+		subtask.prompt = text;
+		return;
+	}
+	parts.splice(0, parts.length, {
+		type: "text",
+		text,
+		synthetic: true,
+	});
+}
+
 function createCommandPreflightHook(): NonNullable<
 	Hooks["command.execute.before"]
 > {
-	const flowCommands = new Set(Object.keys(FLOW_CORE_COMMANDS));
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
-		if (!flowCommands.has(command)) return;
+		if (!isFlowCommandName(command)) return;
 		const setupWarning = formatFlowSkillSetupWarning();
-		if (!setupWarning) return;
-		(
-			output.parts as unknown as Array<{
-				type: "text";
-				text: string;
-				synthetic?: boolean;
-			}>
-		).push({
-			type: "text",
-			text: setupWarning,
-			synthetic: true,
-		});
+		replaceFlowCommandParts(
+			output,
+			setupWarning ?? renderFlowCommandTemplate(command, input.arguments),
+		);
 	};
 }
 

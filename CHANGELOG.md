@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.8] - 2026-06-17
+
+Make Flow command preflight overrule stale OpenCode command lore, with review instructions bundled where skill discovery can lag.
+
 ## [4.1.7] - 2026-06-17
 
 Teach Flow's managed skill lore to test, commit, and trigger more precisely while keeping release state and `.flow/**` artifacts guarded by explicit maintainer intent.

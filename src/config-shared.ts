@@ -32,15 +32,19 @@ export type MutableFlowConfig = {
 	command?: Record<string, unknown>;
 };
 
-const FLOW_REVIEW_FALLBACK_PROMPT = [
-	"Use Flow review mode. Call `flow_status` before loading review skills. If Flow setup reports stale/unavailable skills or the skill loader reports that `flow-review` is unavailable, continue with the bundled review instructions below as advisory review only. Do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
-	"",
-	"## Bundled Flow review fallback",
-	"",
+const FLOW_REVIEW_BUNDLED_INSTRUCTIONS = [
 	"## Bundled flow-review/SKILL.md",
 	flowReviewSkillDoc,
 	"## Bundled flow-review/references/review-rubric.md",
 	flowReviewReviewRubricDoc,
+].join("\n\n");
+
+const FLOW_REVIEW_FALLBACK_PROMPT = [
+	"Use Flow review mode. Call `flow_status` first. Do not call the native skill tool for `flow-review`; the canonical Flow review instructions and rubric are already embedded below. If Flow setup reports stale/unavailable skills, continue as advisory review only and do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
+	"",
+	"## Bundled Flow review instructions",
+	"",
+	FLOW_REVIEW_BUNDLED_INSTRUCTIONS,
 ].join("\n\n");
 
 const FLOW_SKILL_LOAD_PREFLIGHT =
@@ -49,6 +53,13 @@ const FLOW_SKILL_LOAD_PREFLIGHT =
 function flowSkillCommandTemplate(skillName: string, action: string): string {
 	return `${FLOW_SKILL_LOAD_PREFLIGHT} Otherwise load the \`${skillName}\` skill and ${action}`;
 }
+
+const FLOW_REVIEW_COMMAND_TEMPLATE = [
+	FLOW_SKILL_LOAD_PREFLIGHT,
+	"Otherwise run the bundled Flow review instructions below. Do not call the native skill tool for `flow-review`; the full review skill and rubric are embedded in this command. Review: $ARGUMENTS",
+	"",
+	FLOW_REVIEW_BUNDLED_INSTRUCTIONS,
+].join("\n\n");
 
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
@@ -164,7 +175,7 @@ export const FLOW_CORE_COMMANDS = {
 		description: "Run a read-only Flow review",
 		agent: "flow-reviewer",
 		subtask: true,
-		template: `${FLOW_SKILL_LOAD_PREFLIGHT} If setup is clear, load \`flow-review\`; if loading fails because the skill is unavailable, use the bundled review fallback as advisory review only. Review: $ARGUMENTS`,
+		template: FLOW_REVIEW_COMMAND_TEMPLATE,
 	},
 	"flow-status": {
 		description: "Inspect the active Flow session",
