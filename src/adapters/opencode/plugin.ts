@@ -24,6 +24,16 @@ type FlowCommandSubtaskPart = {
 
 type FlowCommandPart = FlowCommandTextPart | FlowCommandSubtaskPart;
 
+const FLOW_COMMAND_TITLE_SEEDS = {
+	"flow-auto": "Flow auto",
+	"flow-plan": "Flow plan",
+	"flow-run": "Flow run",
+	"flow-review": "Flow review",
+	"flow-status": "Flow status",
+} satisfies Record<FlowCommandName, string>;
+
+const FLOW_COMMAND_TITLE_SEED_MAX_LENGTH = 240;
+
 function isFlowCommandName(command: string): command is FlowCommandName {
 	return command in FLOW_CORE_COMMANDS;
 }
@@ -45,8 +55,25 @@ function renderFlowCommandPreflight(
 	return [setupWarning, renderedTemplate].join("\n\n");
 }
 
+function renderFlowCommandTitleSeed(
+	command: FlowCommandName,
+	args: string,
+): string {
+	const normalizedArgs = args.trim().replace(/\s+/g, " ");
+	if (!normalizedArgs) return FLOW_COMMAND_TITLE_SEEDS[command];
+	if (normalizedArgs.length <= FLOW_COMMAND_TITLE_SEED_MAX_LENGTH) {
+		return `${FLOW_COMMAND_TITLE_SEEDS[command]}: ${normalizedArgs}`;
+	}
+	const truncatedArgs = `${normalizedArgs.slice(
+		0,
+		FLOW_COMMAND_TITLE_SEED_MAX_LENGTH - 3,
+	)}...`;
+	return `${FLOW_COMMAND_TITLE_SEEDS[command]}: ${truncatedArgs}`;
+}
+
 function replaceFlowCommandParts(
 	output: Parameters<NonNullable<Hooks["command.execute.before"]>>[1],
+	titleSeed: string,
 	text: string,
 ): void {
 	const parts = output.parts as unknown as FlowCommandPart[];
@@ -55,11 +82,16 @@ function replaceFlowCommandParts(
 		subtask.prompt = text;
 		return;
 	}
-	parts.splice(0, parts.length, {
-		type: "text",
-		text,
-		synthetic: true,
-	});
+	parts.splice(
+		0,
+		parts.length,
+		{ type: "text", text: titleSeed },
+		{
+			type: "text",
+			text,
+			synthetic: true,
+		},
+	);
 }
 
 function createCommandPreflightHook(): NonNullable<
@@ -70,6 +102,7 @@ function createCommandPreflightHook(): NonNullable<
 		if (!isFlowCommandName(command)) return;
 		replaceFlowCommandParts(
 			output,
+			renderFlowCommandTitleSeed(command, input.arguments),
 			renderFlowCommandPreflight(command, input.arguments),
 		);
 	};

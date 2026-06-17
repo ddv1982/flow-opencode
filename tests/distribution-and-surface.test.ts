@@ -44,6 +44,18 @@ function expectSameMembers(
 	expect([...(actual ?? [])].sort()).toEqual([...expected].sort());
 }
 
+function expectFlowCommandTextParts(
+	parts: Array<{ text: string; synthetic?: boolean }>,
+	expectedSeed: string,
+) {
+	expect(parts).toHaveLength(2);
+	expect(parts[0]?.synthetic).toBeUndefined();
+	expect(parts[0]?.text).toBe(expectedSeed);
+	expect(parts[1]?.synthetic).toBe(true);
+	expect(parts[1]?.text).toBeString();
+	return parts[1]?.text ?? "";
+}
+
 const FLOW_AGENT_NAMES = [
 	"flow-audit-worker",
 	"flow-candidate-worker",
@@ -398,21 +410,32 @@ describe("Flow distribution and plugin surface", () => {
 					},
 					output as Parameters<typeof preflight>[1],
 				);
-				expect(output.parts).toHaveLength(1);
-				expect(output.parts[0]?.synthetic).toBe(true);
+				const bundledPrompt = expectFlowCommandTextParts(
+					output.parts,
+					{
+						"flow-auto": "Flow auto",
+						"flow-plan": "Flow plan",
+						"flow-review": "Flow review",
+						"flow-run": "Flow run",
+						"flow-status": "Flow status",
+					}[command],
+				);
 				if (command === "flow-status") {
-					expect(output.parts[0]?.text).toBe(
+					expect(bundledPrompt).toBe(
 						"Call flow_status and report the session state and next action.",
 					);
 					continue;
 				}
-				expect(output.parts[0]?.text).toContain("Restart OpenCode");
-				expect(output.parts[0]?.text).toContain("npx -y opencode-plugin-flow@");
-				expect(output.parts[0]?.text).toContain("Call `flow_status` first.");
-				expect(output.parts[0]?.text).toContain(
+				expect(bundledPrompt).toContain("Restart OpenCode");
+				expect(bundledPrompt).toContain("npx -y opencode-plugin-flow@");
+				expect(bundledPrompt).toContain("Call `flow_status` first.");
+				expect(bundledPrompt).toContain(
 					"continue with the bundled public Flow",
 				);
-				expect(output.parts[0]?.text).not.toContain("review: stale");
+				expect(bundledPrompt).toContain(
+					"briefly state which bundled Flow command is running",
+				);
+				expect(bundledPrompt).not.toContain("review: stale");
 			}
 
 			const nonFlowOutput: { parts: Array<{ text: string }> } = { parts: [] };
@@ -460,6 +483,7 @@ describe("Flow distribution and plugin surface", () => {
 				{
 					command: "/flow-auto",
 					arguments: "Ship canonical commands",
+					expectedSeed: "Flow auto: Ship canonical commands",
 					expectedAction:
 						"Drive the Flow loop until completion or a real blocker: Ship canonical commands",
 					expectedBundledSection: "Bundled flow/SKILL.md",
@@ -467,12 +491,14 @@ describe("Flow distribution and plugin surface", () => {
 				{
 					command: "/flow-plan",
 					arguments: "Ship canonical commands",
+					expectedSeed: "Flow plan: Ship canonical commands",
 					expectedAction: "Plan: Ship canonical commands",
 					expectedBundledSection: "Bundled flow-plan/SKILL.md",
 				},
 				{
 					command: "/flow-run",
 					arguments: "Ship canonical commands",
+					expectedSeed: "Flow run: Ship canonical commands",
 					expectedAction:
 						"Execute the next approved feature. Ship canonical commands",
 					expectedBundledSection: "Bundled flow-run/SKILL.md",
@@ -498,19 +524,18 @@ describe("Flow distribution and plugin surface", () => {
 					},
 					textOutput as Parameters<typeof preflight>[1],
 				);
-				expect(textOutput.parts).toHaveLength(1);
-				expect(textOutput.parts[0]?.synthetic).toBe(true);
-				expect(textOutput.parts[0]?.text).toContain(
-					"Do not call native Flow skills",
+				const bundledPrompt = expectFlowCommandTextParts(
+					textOutput.parts,
+					testCase.expectedSeed,
 				);
-				expect(textOutput.parts[0]?.text).toContain(testCase.expectedAction);
-				expect(textOutput.parts[0]?.text).toContain(
-					testCase.expectedBundledSection,
+				expect(bundledPrompt).toContain("Do not call native Flow skills");
+				expect(bundledPrompt).toContain(testCase.expectedAction);
+				expect(bundledPrompt).toContain(testCase.expectedBundledSection);
+				expect(bundledPrompt).toContain(
+					"briefly state which bundled Flow command is running",
 				);
-				expect(textOutput.parts[0]?.text).not.toContain("stale content");
-				expect(textOutput.parts[0]?.text).not.toContain(
-					"Otherwise load the `flow",
-				);
+				expect(bundledPrompt).not.toContain("stale content");
+				expect(bundledPrompt).not.toContain("Otherwise load the `flow");
 			}
 
 			const statusOutput: {
@@ -531,9 +556,11 @@ describe("Flow distribution and plugin surface", () => {
 				},
 				statusOutput as Parameters<typeof preflight>[1],
 			);
-			expect(statusOutput.parts).toHaveLength(1);
-			expect(statusOutput.parts[0]?.synthetic).toBe(true);
-			expect(statusOutput.parts[0]?.text).toBe(
+			const statusPrompt = expectFlowCommandTextParts(
+				statusOutput.parts,
+				"Flow status",
+			);
+			expect(statusPrompt).toBe(
 				"Call flow_status and report the session state and next action.",
 			);
 
@@ -899,7 +926,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.10");
+			expect(resolveFlowPluginVersion()).toBe("4.1.11");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

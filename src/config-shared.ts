@@ -176,6 +176,7 @@ const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 
 const FLOW_SELF_CONTAINED_COMMAND_PREFLIGHT = [
 	"Call `flow_status` first. If the result includes `setup.skills`, report the setup status and continue with the bundled public Flow command instructions below.",
+	"After `flow_status`, briefly state which bundled Flow command is running and for what goal, then continue.",
 	"Do not call native Flow skills for `flow`, `flow-plan`, `flow-run`, or `flow-review` from public Flow commands. In bundled sections, `load` means read and use the corresponding bundled section in this command, and missing native public Flow skills are not blockers.",
 	"Optional helper skills (`flow-test`, `flow-deslop`, `flow-ui-quality`, and user-triggered `flow-commit`) are not bundled fallbacks. If one is unavailable, record the coverage gap exactly as the bundled instructions require.",
 ].join(" ");

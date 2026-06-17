@@ -21,8 +21,8 @@ The manager still owns every Flow state change. Workers gather evidence; they do
 Use OpenCode's plugin installer when your OpenCode version supports it:
 
 ```bash
-opencode plugin opencode-plugin-flow@4.1.10 --global --force
-npx -y opencode-plugin-flow@4.1.10 sync
+opencode plugin opencode-plugin-flow@4.1.11 --global --force
+npx -y opencode-plugin-flow@4.1.11 sync
 ```
 
 The first command adds Flow to your global OpenCode plugin config or replaces an
@@ -48,7 +48,7 @@ OpenCode config manually instead:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.1.10"]
+  "plugin": ["opencode-plugin-flow@4.1.11"]
 }
 ```
 
@@ -59,7 +59,7 @@ duplicate entry.
 Then run the same pre-start skill sync and start or restart OpenCode:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.10 sync
+npx -y opencode-plugin-flow@4.1.11 sync
 ```
 
 Project-local skill overrides still work through OpenCode's normal lookup:
@@ -84,7 +84,7 @@ version in your global `opencode.json`.
 To inspect the installed skill set:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.10 doctor
+npx -y opencode-plugin-flow@4.1.11 doctor
 ```
 
 If a command reports `Skill "flow-review" not found. Available skills...` or a
@@ -99,7 +99,7 @@ above first. Missing, incomplete, or outdated managed skills can still be
 repaired with:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.10 sync
+npx -y opencode-plugin-flow@4.1.11 sync
 ```
 
 Then restart OpenCode so the refreshed registry is loaded. `sync` manages all
@@ -201,7 +201,7 @@ First remove `opencode-plugin-flow` from your OpenCode plugin config so future
 OpenCode startups stop loading Flow. Then remove Flow-owned synced skills:
 
 ```bash
-npx -y opencode-plugin-flow@4.1.10 uninstall
+npx -y opencode-plugin-flow@4.1.11 uninstall
 ```
 
 Restart OpenCode after both steps. This removes Flow-owned synced skills when
