@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.13] - 2026-06-21
+
+Teach Flow's parallel orchestration lore to walk a full wave while pinning hidden worker permissions to tested docs.
+
 ## [4.1.12] - 2026-06-18
 
 Harden Flow's hidden worker lore, scriptable doctor checks, typed package smoke, and session edge contracts without widening the v4 runtime surface.

@@ -73,7 +73,7 @@ Candidate implementation patches are not Flow evidence until the manager
 inspects, merges or rejects them, and runs suitable validation in the main
 Flow-managed workspace.
 
-## Final synthesis
+## Manager synthesis barrier
 
 Before presenting or recording the result:
 
@@ -83,6 +83,8 @@ Before presenting or recording the result:
   instead of arbitrating from summaries.
 - Run the strongest practical local check for the deliverable.
 - Re-read critical files or docs that will be cited in the final decision.
+- Move only distilled, evidence-backed claims forward; raw handoffs remain
+  candidate evidence, not a plan, review, completion payload, or final answer.
 - Record gaps honestly instead of converting missing evidence into success
   language.
 

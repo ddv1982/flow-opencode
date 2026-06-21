@@ -11,6 +11,26 @@ Read these companion references before a broad wave:
 - `verification-gates.md` for coverage checks, handoff acceptance, verifier
   triggers, and synthesis rules.
 
+## Operational defaults
+
+- Prefer serial work when the scope is small, tightly coupled, or blocked by one
+  decision that must be made before slices are meaningful.
+- A normal first wave is two to five workers with independent slices. Use more
+  only when the coverage gate is countable and the slices remain non-overlapping.
+- Run at most one routine follow-up wave. Extra waves need an explicit manager
+  reason, such as a high-stakes verifier check or a newly discovered bounded
+  slice.
+- Do not fan out just to keep agents busy. Every worker should reduce a known
+  planning, validation, review, audit, or implementation uncertainty.
+
+Skip fan-out when:
+
+- one file, command, or design question determines the next step.
+- slices would share the same contracts, fixtures, or edit targets.
+- the manager can inspect the full scope faster than writing and checking
+  worker prompts.
+- the result would still need the same manual synthesis with no time saved.
+
 ## Manager sequence
 
 1. Call `flow_status` if a Flow session may already exist.
@@ -34,9 +54,10 @@ Read these companion references before a broad wave:
    claims to `flow-verifier-worker`.
 9. Run second waves only for material gaps, conflicts, narrowed scope, or
    verification needs.
-10. Synthesize one Flow artifact: plan fields, completion evidence, review
-    payload, audit report, or candidate patch decision. Do not paste worker
-    handoffs as the user-facing result.
+10. Apply the manager synthesis barrier: keep only distilled, evidence-backed
+    claims and synthesize one Flow artifact, such as plan fields, completion
+    evidence, review payload, audit report, or candidate patch decision. Do not
+    paste worker handoffs as the user-facing result.
 
 ## Modes
 
@@ -53,6 +74,36 @@ carry the permission boundaries for each mode.
 | `audit` | `flow-audit-worker` | Refuted or surviving finding candidates, guards checked, confidence, gaps | No | `flow_status` only if needed |
 | `verifier` | `flow-verifier-worker` | Per-claim verdicts against cited evidence or commands | No | `flow_status` only if needed |
 | `candidate-implementation` | `flow-candidate-worker` | Candidate patch summary from an isolated worktree or exact path-owned slice | Only with explicit user authorization plus isolation or exact non-overlapping path ownership | No state-changing Flow tools |
+
+Mode examples:
+
+- Use `flow-evidence-worker` when the repo shape is unclear and the output will
+  become plan requirements, decisions, targets, or validation entries.
+- Use `flow-reviewer` when changed files or risk lenses can be reviewed
+  independently before the manager returns one review payload.
+- Use `flow-validation-worker` when the manager needs command options or raw
+  output from an explicitly authorized command.
+- Use `flow-audit-worker` when candidate findings must be refuted before they
+  can become a report or follow-up feature.
+- Use `flow-verifier-worker` for atomic claims that are contested,
+  single-sourced, high-stakes, or destined for a Flow payload.
+- Use `flow-candidate-worker` only after explicit user authorization and only
+  with an isolated worktree or exact non-overlapping path ownership.
+
+## Permission contract
+
+The plugin injects these hidden workers with the following permission values.
+`Flow state tools` means the `flow_*` rule, while `Flow status` documents the
+explicit `flow_status` exception.
+
+| Worker | Edit | Bash | Task | Skill | Flow state tools | Flow status |
+| --- | --- | --- | --- | --- | --- | --- |
+| `flow-reviewer` | deny | deny | deny | deny | deny | allow |
+| `flow-evidence-worker` | deny | deny | deny | deny | deny | allow |
+| `flow-validation-worker` | deny | ask | deny | deny | deny | allow |
+| `flow-audit-worker` | deny | ask | deny | deny | deny | allow |
+| `flow-candidate-worker` | ask | ask | deny | deny | deny | allow |
+| `flow-verifier-worker` | deny | ask | deny | deny | deny | allow |
 
 Do not fan out parallel `flow_plan_save`, `flow_plan_approve`,
 `flow_run_start`, `flow_feature_complete`, `flow_feature_reset`, or
@@ -89,13 +140,78 @@ Mode: evidence | review | validation | audit | verifier | candidate-implementati
 Your exact slice: <paths, modules, command, claim ids, risk lens, or worktree>
 Expected coverage: <count, paths, range, or complete question set>
 Do: <bounded actions>
-Do not: call Flow state tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
+Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
 Return exactly the matching handoff shape from handoff-format.md.
 ```
 
 For research or current-doc slices, require source checks for versioned or
 time-sensitive facts. For implementation candidates, remind workers that other
 work may be active and that they must not revert unrelated changes.
+
+## Full-wave example
+
+Goal: review whether bundled Flow command guidance is self-contained and aligned
+with hidden worker permissions.
+
+Serial orientation: the manager reads `src/config-shared.ts` enough to identify
+five public command templates and six hidden worker configs. The manager keeps
+`flow-status` local because it is one line and does not need a worker.
+
+Coverage gate: ten countable items remain after the local check.
+
+- Slice A: `flow-auto`, `flow-plan`, and `flow-run` templates, expected 3/10.
+- Slice B: `flow-review` template plus `flow-reviewer` config, expected 2/10.
+- Slice C: remaining hidden worker permission blocks, expected 5/10 after
+  excluding the reviewer already covered by Slice B.
+
+Worker prompts:
+
+```text
+Overall goal, context only: confirm Flow public commands are self-contained.
+Mode: evidence
+Your exact slice: flow-auto, flow-plan, and flow-run templates in src/config-shared.ts.
+Expected coverage: 3/3 templates.
+Do: report bundled sections, setup preflight coverage, and any gaps with file:line evidence.
+Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
+Return exactly the matching handoff shape from handoff-format.md.
+```
+
+```text
+Overall goal, context only: confirm Flow review command and hidden reviewer behavior.
+Mode: review
+Your exact slice: flow-review command template and flow-reviewer config in src/config-shared.ts.
+Expected coverage: 2/2 surfaces.
+Do: separate blocking findings from advisory notes and cite file:line evidence.
+Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
+Return exactly the matching handoff shape from handoff-format.md.
+```
+
+```text
+Overall goal, context only: confirm hidden worker permissions match the orchestration model.
+Mode: audit
+Your exact slice: flow-evidence-worker, flow-validation-worker, flow-audit-worker, flow-candidate-worker, and flow-verifier-worker permissions in src/config-shared.ts.
+Expected coverage: 5/5 worker permission blocks.
+Do: report edit, bash, task, skill, flow_*, and flow_status permissions with evidence.
+Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
+Return exactly the matching handoff shape from handoff-format.md.
+```
+
+Handoff checks: the manager accepts only reports with terminal status, matching
+coverage counts, concrete file:line evidence, confidence tags, and claims inside
+the assigned slice. A claim such as `[high] validation workers may run commands;
+evidence: src/config-shared.ts:281-288; corroboration: single source` is usable.
+A claim such as `[high] permissions look safe; evidence: config reviewed` is
+dropped or retasked.
+
+Verifier pass: the manager sends any single-source claim that will enter the
+Flow payload to `flow-verifier-worker`, for example: `C1: validation, audit,
+candidate, and verifier workers have bash ask while evidence and review workers
+have bash deny; sources: src/config-shared.ts worker permission blocks`.
+
+Final synthesis: the manager re-reads the relevant config lines, keeps only
+verified or clearly labeled claims, and records one artifact such as a plan
+decision, review payload, or docs patch. Raw handoffs and unverified suggestions
+do not move into the next wave or user-facing answer.
 
 ## Where handoffs go
 
@@ -114,6 +230,10 @@ work may be active and that they must not revert unrelated changes.
 
 When worker results conflict, inspect the underlying artifact directly and rerun
 the smallest check that can settle the disagreement.
+
+The manager synthesis barrier means raw handoffs do not move forward by default.
+Only claims that survived coverage, evidence, confidence, and verifier checks may
+enter the next wave, Flow payload, patch decision, or user-facing answer.
 
 ## Second waves
 

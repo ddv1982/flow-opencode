@@ -31,6 +31,10 @@ For this repository, good first-wave slices are:
   `bun.lock`, `README.md`, and `CHANGELOG.md`.
 - Docs and operator contract: `docs/**`, `README.md`, and skill references.
 
+Treat these as starting points, not a simultaneous coverage map. Before fan-out,
+choose the relevant entries and de-overlap shared docs, skills, or release
+surfaces in the coverage gate.
+
 ## Coverage gate
 
 Before spawning workers, state the total discovery scope and one line per slice.
@@ -41,17 +45,19 @@ state the completeness rule, such as "all changed files plus callers."
 ## Worker prompt
 
 ```text
-Inspect <slice> for <goal>. Read-only. Do not edit files or call Flow tools.
-Return the evidence/review/validation/audit handoff shape from ../../flow/references/handoff-format.md.
+Inspect <slice> for <goal>. Read-only. Do not edit files or call
+state-changing Flow tools. Return the evidence/review/validation/audit handoff
+shape from ../../flow/references/handoff-format.md.
 ```
 
 For validation-oriented discovery:
 
 ```text
-Inspect <slice> for validation risk. Read-only. Do not edit files or call Flow
-tools. You may report commands that should be run, and include raw output only
-for commands you actually ran. Return the evidence/review/validation/audit
-handoff shape from ../../flow/references/handoff-format.md.
+Inspect <slice> for validation risk. Read-only. Do not edit files or call
+state-changing Flow tools. You may report commands that should be run, and
+include raw output only for commands you actually ran. Return the
+evidence/review/validation/audit handoff shape from
+../../flow/references/handoff-format.md.
 ```
 
 ## Synthesis
@@ -64,3 +70,7 @@ Convert only evidence-backed work into plan fields:
 - feature `validation`: checks expected to prove the feature.
 
 If workers disagree, inspect the source artifact yourself. If a candidate finding lacks a concrete citation or refutation pass, make it a review-first deliverable rather than a fix feature.
+
+Apply the manager synthesis barrier from
+`../../flow/references/verification-gates.md`: only distilled, evidence-backed
+claims become plan fields.

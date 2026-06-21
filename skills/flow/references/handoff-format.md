@@ -5,6 +5,15 @@ worker report of record: it must include the assigned scope, what was actually
 covered, the evidence for each useful claim, and the remaining gaps. End worker
 prompts with "Return only this Flow handoff."
 
+Status meanings:
+
+- `success`: the assigned scope was covered, or any skipped items are explicitly
+  immaterial to the assigned question.
+- `partial`: useful evidence was gathered, but material assigned scope remains
+  unchecked or unresolved.
+- `blocked`: the worker cannot answer the assigned question without missing
+  access, input, dependencies, or manager clarification.
+
 ## Evidence, review, validation, or audit worker report
 
 Use this for `flow-evidence-worker`, `flow-reviewer`,
@@ -46,7 +55,17 @@ success | partial | blocked
 Validation workers must include exact command names and raw outcome summaries
 for commands they actually ran. Audit workers must include guards checked for
 any blocking-severity candidate. Review workers must separate blocking findings
-from advisory notes.
+from advisory notes. In the shared `Findings or facts` section, review workers
+should prefix review items with `blocking:` or `advisory:` before the claim.
+
+Example evidence quality:
+
+- Good fact: `[high] public Flow command prompts include bundled instructions;
+  evidence: src/config-shared.ts:135; corroboration: single source`.
+- Weak fact: `[high] prompts look self-contained; evidence: read the config`.
+- Good validation: `bun test tests/distribution-and-surface.test.ts`, status
+  passed, summary `surface tests passed and covered bundled command prompts`.
+- Weak validation: `tests pass`, with no command, status, or raw outcome.
 
 ## Verifier worker report
 

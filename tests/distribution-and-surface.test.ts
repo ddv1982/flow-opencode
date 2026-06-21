@@ -73,6 +73,25 @@ const FLOW_COMMAND_NAMES = [
 	"flow-status",
 ] as const;
 
+type FlowPermissionSummary = {
+	edit: string;
+	bash: string;
+	task: string;
+	skill: string;
+	flowState: string;
+	flowStatus: string;
+};
+
+const EXPECTED_FLOW_PERMISSION_KEYS = [
+	"bash",
+	"edit",
+	"flow_*",
+	"flow_status",
+	"skill",
+	"task",
+] as const;
+const WILDCARD_PERMISSION_KEYS = ["*"] as const;
+
 const FLOW_MANAGED_SKILL_NAMES = FLOW_SKILL_DEFINITIONS.map(
 	(definition) => definition.name,
 );
@@ -110,6 +129,106 @@ function flowSkillMarker(
 		),
 		"",
 	].join("\n");
+}
+
+function requireExactKeys(
+	value: Record<string, unknown>,
+	expected: readonly string[],
+	context: string,
+): void {
+	const actualKeys = Object.keys(value).sort();
+	const expectedKeys = [...expected].sort();
+	if (
+		actualKeys.length !== expectedKeys.length ||
+		actualKeys.some((key, index) => key !== expectedKeys[index])
+	) {
+		throw new Error(
+			`Expected ${context} keys ${expectedKeys.join(", ")}, got ${actualKeys.join(", ")}`,
+		);
+	}
+}
+
+function summarizePermission(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (value && typeof value === "object" && !Array.isArray(value)) {
+		const permissionMap = value as Record<string, unknown>;
+		requireExactKeys(
+			permissionMap,
+			WILDCARD_PERMISSION_KEYS,
+			"wildcard permission map",
+		);
+		const wildcard = permissionMap["*"];
+		if (typeof wildcard === "string") return wildcard;
+	}
+	throw new Error(`Unsupported permission value: ${JSON.stringify(value)}`);
+}
+
+function permissionSummary(agent: unknown): FlowPermissionSummary {
+	const permission = (agent as { permission?: Record<string, unknown> })
+		.permission;
+	if (!permission) throw new Error("Expected agent permission config");
+	requireExactKeys(
+		permission,
+		EXPECTED_FLOW_PERMISSION_KEYS,
+		"agent permission",
+	);
+	return {
+		edit: summarizePermission(permission.edit),
+		bash: summarizePermission(permission.bash),
+		task: summarizePermission(permission.task),
+		skill: summarizePermission(permission.skill),
+		flowState: summarizePermission(permission["flow_*"]),
+		flowStatus: summarizePermission(permission.flow_status),
+	};
+}
+
+function parsePermissionContractDoc(
+	markdown: string,
+): Record<string, FlowPermissionSummary> {
+	const marker = "## Permission contract";
+	const markerIndex = markdown.indexOf(marker);
+	if (markerIndex === -1)
+		throw new Error("Missing permission contract section");
+	const nextSectionIndex = markdown.indexOf(
+		"\n## ",
+		markerIndex + marker.length,
+	);
+	const section = markdown.slice(
+		markerIndex,
+		nextSectionIndex === -1 ? undefined : nextSectionIndex,
+	);
+	const rows = section
+		.split("\n")
+		.filter((line) => line.startsWith("| `flow-"));
+	const contract: Record<string, FlowPermissionSummary> = {};
+
+	for (const row of rows) {
+		const cells = row
+			.split("|")
+			.slice(1, -1)
+			.map((cell) => cell.trim().replaceAll("`", ""));
+		if (cells.length !== 7) {
+			throw new Error(`Malformed permission contract row: ${row}`);
+		}
+		const [worker, edit, bash, task, skill, flowState, flowStatus] = cells;
+		if (
+			!worker ||
+			!edit ||
+			!bash ||
+			!task ||
+			!skill ||
+			!flowState ||
+			!flowStatus
+		) {
+			throw new Error(`Malformed permission contract row: ${row}`);
+		}
+		if (worker in contract) {
+			throw new Error(`Duplicate permission contract row: ${worker}`);
+		}
+		contract[worker] = { edit, bash, task, skill, flowState, flowStatus };
+	}
+
+	return contract;
 }
 
 async function runFlowCli(args: string[], home?: string) {
@@ -310,7 +429,7 @@ describe("Flow distribution and plugin surface", () => {
 		]);
 	});
 
-	test("documents every injected Flow worker for parallel orchestration", async () => {
+	test("documents every injected Flow worker and permission contract", async () => {
 		const config = createFlowCoreConfigEntries();
 		const orchestration = await readFile(
 			"skills/flow/references/parallel-orchestration.md",
@@ -320,6 +439,15 @@ describe("Flow distribution and plugin surface", () => {
 		for (const agentName of Object.keys(config.agent)) {
 			expect(orchestration).toContain(`\`${agentName}\``);
 		}
+
+		expect(parsePermissionContractDoc(orchestration)).toEqual(
+			Object.fromEntries(
+				Object.entries(config.agent).map(([agentName, agent]) => [
+					agentName,
+					permissionSummary(agent),
+				]),
+			),
+		);
 	});
 
 	test("registers generated instructions without experimental hooks by default", async () => {
@@ -1103,7 +1231,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.12");
+			expect(resolveFlowPluginVersion()).toBe("4.1.13");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;
