@@ -1,6 +1,6 @@
 ---
 name: flow-run
-description: Execute one approved Flow feature in the v4 runtime: start a feature with flow_run_start, make scoped changes, gather real validation evidence, obtain review payloads, and complete with flow_feature_complete.
+description: "Execute one approved Flow feature in the v4 runtime: start a feature with flow_run_start, make scoped changes, gather real validation evidence, obtain review payloads, and complete with flow_feature_complete."
 ---
 
 # Flow Run

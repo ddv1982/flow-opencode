@@ -1,6 +1,6 @@
 ---
 name: flow-review
-description: Review Flow work in the v4 runtime: inspect feature or final-session changes, classify findings, and return featureReview or finalReview payloads for flow_feature_complete.
+description: "Review Flow work in the v4 runtime: inspect feature or final-session changes, classify findings, and return featureReview or finalReview payloads for flow_feature_complete."
 ---
 
 # Flow Review

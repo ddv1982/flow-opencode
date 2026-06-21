@@ -1,6 +1,6 @@
 ---
 name: flow-plan
-description: Plan Flow work for the v4 skills-first runtime: inspect the repo, decompose a user goal into right-sized features, save a draft with flow_plan_save, and approve it with flow_plan_approve.
+description: "Plan Flow work for the v4 skills-first runtime: inspect the repo, decompose a user goal into right-sized features, save a draft with flow_plan_save, and approve it with flow_plan_approve."
 ---
 
 # Flow Plan

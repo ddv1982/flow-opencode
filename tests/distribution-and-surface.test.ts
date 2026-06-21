@@ -232,6 +232,37 @@ function parsePermissionContractDoc(
 	return contract;
 }
 
+function expectGithubSafeSkillFrontmatter(
+	path: string,
+	markdown: string,
+): void {
+	if (!markdown.startsWith("---\n")) {
+		throw new Error(`${path} is missing YAML frontmatter`);
+	}
+	const frontmatterEnd = markdown.indexOf("\n---", 4);
+	if (frontmatterEnd === -1) {
+		throw new Error(`${path} has unterminated YAML frontmatter`);
+	}
+	const unsafeLines = markdown
+		.slice(4, frontmatterEnd)
+		.split("\n")
+		.filter((line) => {
+			const match = line.match(/^[A-Za-z0-9_-]+:\s+(.*)$/);
+			if (!match) return false;
+			const value = match[1]?.trimStart() ?? "";
+			if (
+				value.startsWith('"') ||
+				value.startsWith("'") ||
+				value.startsWith("|") ||
+				value.startsWith(">")
+			) {
+				return false;
+			}
+			return /:\s/.test(value);
+		});
+	expect(unsafeLines, `${path} has unquoted frontmatter scalars`).toEqual([]);
+}
+
 async function runFlowCli(args: string[], home?: string) {
 	const cliHome = home ?? (await tempHome());
 	return spawnSync(process.execPath, ["run", "./src/cli.ts", ...args], {
@@ -485,6 +516,28 @@ describe("Flow distribution and plugin surface", () => {
 		expect(fullWaveExample).toContain("# Parallel full-wave example");
 		expect(fullWaveExample).toContain(
 			"Return exactly the matching handoff shape from handoff-format.md.",
+		);
+	});
+
+	test("keeps skill frontmatter compatible with GitHub YAML preview", async () => {
+		for (const definition of FLOW_SKILL_DEFINITIONS) {
+			const skillFile = definition.files.find(
+				(file) => file.relativePath === "SKILL.md",
+			);
+			if (!skillFile) {
+				throw new Error(`Missing SKILL.md for ${definition.name}`);
+			}
+			expectGithubSafeSkillFrontmatter(
+				`skills/${definition.name}/SKILL.md`,
+				skillFile.content,
+			);
+		}
+
+		const contributionSkillPath =
+			".agents/skills/flow-contribution-check/SKILL.md";
+		expectGithubSafeSkillFrontmatter(
+			contributionSkillPath,
+			await readFile(contributionSkillPath, "utf8"),
 		);
 	});
 
