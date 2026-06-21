@@ -1,6 +1,9 @@
 import flowHandoffFormatDoc from "../../skills/flow/references/handoff-format.md" with {
 	type: "text",
 };
+import flowParallelFullWaveExampleDoc from "../../skills/flow/references/parallel-full-wave-example.md" with {
+	type: "text",
+};
 import flowParallelOrchestrationDoc from "../../skills/flow/references/parallel-orchestration.md" with {
 	type: "text",
 };
@@ -82,6 +85,10 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 			{
 				relativePath: "references/parallel-orchestration.md",
 				content: flowParallelOrchestrationDoc,
+			},
+			{
+				relativePath: "references/parallel-full-wave-example.md",
+				content: flowParallelFullWaveExampleDoc,
 			},
 			{
 				relativePath: "references/handoff-format.md",

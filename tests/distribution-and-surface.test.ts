@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import packageJson from "../package.json";
 import FlowPlugin from "../src";
 import { createTools } from "../src/adapters/opencode/tools";
 import { createFlowCoreConfigEntries } from "../src/config-shared";
@@ -384,12 +385,21 @@ describe("Flow distribution and plugin surface", () => {
 	test("keeps public Flow commands self-contained from native skill loading", () => {
 		const config = createFlowCoreConfigEntries();
 		const expectedBundledSections = {
-			"flow-auto": ["Bundled flow/SKILL.md", "Bundled flow-run/SKILL.md"],
+			"flow-auto": [
+				"Bundled flow/SKILL.md",
+				"Bundled flow/references/parallel-full-wave-example.md",
+				"Bundled flow-run/SKILL.md",
+			],
 			"flow-plan": [
 				"Bundled flow-plan/SKILL.md",
 				"Bundled flow/references/parallel-orchestration.md",
+				"Bundled flow/references/parallel-full-wave-example.md",
 			],
-			"flow-run": ["Bundled flow-run/SKILL.md", "Bundled flow-review/SKILL.md"],
+			"flow-run": [
+				"Bundled flow-run/SKILL.md",
+				"Bundled flow/references/parallel-full-wave-example.md",
+				"Bundled flow-review/SKILL.md",
+			],
 			"flow-review": [
 				"Bundled flow-review/SKILL.md",
 				"Bundled flow-review/references/review-rubric.md",
@@ -447,6 +457,34 @@ describe("Flow distribution and plugin surface", () => {
 					permissionSummary(agent),
 				]),
 			),
+		);
+	});
+
+	test("keeps parallel skill docs linked and handoff statuses stable", async () => {
+		const [orchestration, discovery, handoff, fullWaveExample] =
+			await Promise.all([
+				readFile("skills/flow/references/parallel-orchestration.md", "utf8"),
+				readFile("skills/flow-plan/references/parallel-discovery.md", "utf8"),
+				readFile("skills/flow/references/handoff-format.md", "utf8"),
+				readFile(
+					"skills/flow/references/parallel-full-wave-example.md",
+					"utf8",
+				),
+			]);
+
+		expect(orchestration).toContain("handoff-format.md");
+		expect(orchestration).toContain("verification-gates.md");
+		expect(orchestration).toContain("parallel-full-wave-example.md");
+		expect(discovery).toContain("../../flow/references/handoff-format.md");
+		expect(discovery).toContain("../../flow/references/verification-gates.md");
+		expect(discovery).toContain("manager synthesis barrier");
+		expect(handoff).toContain("success | partial | blocked");
+		expect(handoff).toContain("- `success`:");
+		expect(handoff).toContain("- `partial`:");
+		expect(handoff).toContain("- `blocked`:");
+		expect(fullWaveExample).toContain("# Parallel full-wave example");
+		expect(fullWaveExample).toContain(
+			"Return exactly the matching handoff shape from handoff-format.md.",
 		);
 	});
 
@@ -877,6 +915,9 @@ describe("Flow distribution and plugin surface", () => {
 			"utf8",
 		);
 		expect(marker).toContain("file=references/handoff-format.md sha256=");
+		expect(marker).toContain(
+			"file=references/parallel-full-wave-example.md sha256=",
+		);
 		expect(marker).toContain("file=references/verification-gates.md sha256=");
 
 		const removed = await uninstallFlowSkills(home);
@@ -1231,7 +1272,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.14");
+			expect(resolveFlowPluginVersion()).toBe(packageJson.version);
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

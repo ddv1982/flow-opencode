@@ -1,6 +1,9 @@
 import flowHandoffFormatDoc from "../skills/flow/references/handoff-format.md" with {
 	type: "text",
 };
+import flowParallelFullWaveExampleDoc from "../skills/flow/references/parallel-full-wave-example.md" with {
+	type: "text",
+};
 import flowParallelOrchestrationDoc from "../skills/flow/references/parallel-orchestration.md" with {
 	type: "text",
 };
@@ -94,6 +97,10 @@ const FLOW_PLAN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 		content: flowParallelOrchestrationDoc,
 	},
 	{
+		label: "flow/references/parallel-full-wave-example.md",
+		content: flowParallelFullWaveExampleDoc,
+	},
+	{
 		label: "flow/references/handoff-format.md",
 		content: flowHandoffFormatDoc,
 	},
@@ -116,6 +123,10 @@ const FLOW_RUN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	{
 		label: "flow/references/parallel-orchestration.md",
 		content: flowParallelOrchestrationDoc,
+	},
+	{
+		label: "flow/references/parallel-full-wave-example.md",
+		content: flowParallelFullWaveExampleDoc,
 	},
 	{
 		label: "flow/references/handoff-format.md",
@@ -141,6 +152,10 @@ const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	{
 		label: "flow/references/parallel-orchestration.md",
 		content: flowParallelOrchestrationDoc,
+	},
+	{
+		label: "flow/references/parallel-full-wave-example.md",
+		content: flowParallelFullWaveExampleDoc,
 	},
 	{
 		label: "flow/references/handoff-format.md",

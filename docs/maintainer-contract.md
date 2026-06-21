@@ -135,6 +135,22 @@ default remains hook-free.
 
 Keep adapter/distribution concerns out of runtime.
 
+## Release Publishing
+
+Release tags drive `.github/workflows/release.yml`. Before tagging, make sure
+`package.json`, README install pins, `CHANGELOG.md`, and the tag name all use
+the same version.
+
+npm publishing uses trusted publishing through GitHub Actions OIDC. Do not add
+`NPM_TOKEN` back to the workflow for normal releases. The npm package settings
+must trust provider `GitHub Actions`, owner `ddv1982`, repository
+`flow-opencode`, and workflow `release.yml`; leave the npm trusted-publisher
+environment blank unless the GitHub workflow starts using an environment.
+
+The normal release path is: commit the versioned release changes, push `main`,
+then create and push a fresh `vX.Y.Z` tag. Avoid moving existing release tags
+unless a maintainer explicitly chooses that rollback or repair path.
+
 ## Checks
 
 Use focused tests for changed behavior, then run:

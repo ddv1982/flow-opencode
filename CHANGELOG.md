@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.15] - 2026-06-22
+
+Refine Flow's orchestration lore into a quick path, bundled wave example, tested doc links, and trusted-publishing release guidance.
+
 ## [4.1.14] - 2026-06-22
 
 Publish Flow through npm trusted publishing so release CI no longer depends on expiring npm tokens.
