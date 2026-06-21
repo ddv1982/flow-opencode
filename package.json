@@ -1,8 +1,12 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "4.1.13",
+	"version": "4.1.14",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ddv1982/flow-opencode.git"
+	},
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"exports": {

@@ -1231,7 +1231,7 @@ describe("Flow distribution and plugin surface", () => {
 		const previous = process.env.npm_package_version;
 		delete process.env.npm_package_version;
 		try {
-			expect(resolveFlowPluginVersion()).toBe("4.1.13");
+			expect(resolveFlowPluginVersion()).toBe("4.1.14");
 		} finally {
 			if (previous === undefined) {
 				delete process.env.npm_package_version;

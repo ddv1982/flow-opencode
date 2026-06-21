@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -18,7 +19,15 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Set up npm trusted publishing support
+        run: |
+          npm install --global npm@11
+          node --version
+          npm --version
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -82,16 +91,9 @@ jobs:
           shasum -a 256 "$tarball" > "${tarball}.sha256"
 
       - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NPM_TOKEN}" ]]; then
-            echo "NPM_TOKEN secret is not configured; cannot publish to npm." >&2
-            exit 1
-          fi
-          printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "$HOME/.npmrc"
           npm publish opencode-plugin-flow-*.tgz --access public
 
       - name: Publish GitHub release assets

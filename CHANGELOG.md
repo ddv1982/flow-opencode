@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.14] - 2026-06-22
+
+Publish Flow through npm trusted publishing so release CI no longer depends on expiring npm tokens.
+
 ## [4.1.13] - 2026-06-21
 
 Teach Flow's parallel orchestration lore to walk a full wave while pinning hidden worker permissions to tested docs.
