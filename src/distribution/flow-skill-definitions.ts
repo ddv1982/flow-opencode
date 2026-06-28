@@ -1,10 +1,13 @@
 import flowHandoffFormatDoc from "../../skills/flow/references/handoff-format.md" with {
 	type: "text",
 };
-import flowParallelFullWaveExampleDoc from "../../skills/flow/references/parallel-full-wave-example.md" with {
+import flowParallelOrchestrationDoc from "../../skills/flow/references/parallel-orchestration.md" with {
 	type: "text",
 };
-import flowParallelOrchestrationDoc from "../../skills/flow/references/parallel-orchestration.md" with {
+import flowParallelPassExampleDoc from "../../skills/flow/references/parallel-pass-example.md" with {
+	type: "text",
+};
+import flowParallelPassPatternsDoc from "../../skills/flow/references/parallel-pass-patterns.md" with {
 	type: "text",
 };
 import flowRecoveryPlaybookDoc from "../../skills/flow/references/recovery-playbook.md" with {
@@ -87,8 +90,12 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 				content: flowParallelOrchestrationDoc,
 			},
 			{
-				relativePath: "references/parallel-full-wave-example.md",
-				content: flowParallelFullWaveExampleDoc,
+				relativePath: "references/parallel-pass-patterns.md",
+				content: flowParallelPassPatternsDoc,
+			},
+			{
+				relativePath: "references/parallel-pass-example.md",
+				content: flowParallelPassExampleDoc,
 			},
 			{
 				relativePath: "references/handoff-format.md",

@@ -1,10 +1,13 @@
 import flowHandoffFormatDoc from "../skills/flow/references/handoff-format.md" with {
 	type: "text",
 };
-import flowParallelFullWaveExampleDoc from "../skills/flow/references/parallel-full-wave-example.md" with {
+import flowParallelOrchestrationDoc from "../skills/flow/references/parallel-orchestration.md" with {
 	type: "text",
 };
-import flowParallelOrchestrationDoc from "../skills/flow/references/parallel-orchestration.md" with {
+import flowParallelPassExampleDoc from "../skills/flow/references/parallel-pass-example.md" with {
+	type: "text",
+};
+import flowParallelPassPatternsDoc from "../skills/flow/references/parallel-pass-patterns.md" with {
 	type: "text",
 };
 import flowRecoveryPlaybookDoc from "../skills/flow/references/recovery-playbook.md" with {
@@ -97,8 +100,12 @@ const FLOW_PLAN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 		content: flowParallelOrchestrationDoc,
 	},
 	{
-		label: "flow/references/parallel-full-wave-example.md",
-		content: flowParallelFullWaveExampleDoc,
+		label: "flow/references/parallel-pass-patterns.md",
+		content: flowParallelPassPatternsDoc,
+	},
+	{
+		label: "flow/references/parallel-pass-example.md",
+		content: flowParallelPassExampleDoc,
 	},
 	{
 		label: "flow/references/handoff-format.md",
@@ -125,8 +132,12 @@ const FLOW_RUN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 		content: flowParallelOrchestrationDoc,
 	},
 	{
-		label: "flow/references/parallel-full-wave-example.md",
-		content: flowParallelFullWaveExampleDoc,
+		label: "flow/references/parallel-pass-patterns.md",
+		content: flowParallelPassPatternsDoc,
+	},
+	{
+		label: "flow/references/parallel-pass-example.md",
+		content: flowParallelPassExampleDoc,
 	},
 	{
 		label: "flow/references/handoff-format.md",
@@ -154,8 +165,12 @@ const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 		content: flowParallelOrchestrationDoc,
 	},
 	{
-		label: "flow/references/parallel-full-wave-example.md",
-		content: flowParallelFullWaveExampleDoc,
+		label: "flow/references/parallel-pass-patterns.md",
+		content: flowParallelPassPatternsDoc,
+	},
+	{
+		label: "flow/references/parallel-pass-example.md",
+		content: flowParallelPassExampleDoc,
 	},
 	{
 		label: "flow/references/handoff-format.md",
@@ -236,6 +251,7 @@ const FLOW_REVIEW_COMMAND_TEMPLATE = flowBundledCommandTemplate(
 
 const FLOW_REVIEW_AGENT_INSTRUCTIONS = [
 	"Use Flow review mode. Call `flow_status` first. Do not call the native skill tool for `flow-review`; the canonical Flow review instructions and rubric are already embedded below. If Flow setup reports stale/unavailable skills, continue as advisory review only and do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
+	"When the manager assigns a parallel review slice instead of a direct Flow review command, cite or drop every claim, label single-source, inferred, and unsettled claims, and return only the assigned Flow handoff. Report blocked if the assigned scope, expected coverage, or handoff shape is missing.",
 	"",
 	"## Bundled Flow review instructions",
 	"",
@@ -254,6 +270,9 @@ const FLOW_PUBLIC_COMMAND_TEMPLATES = {
 	"flow-review": FLOW_REVIEW_COMMAND_TEMPLATE,
 	"flow-status": FLOW_STATUS_COMMAND_TEMPLATE,
 } as const;
+
+const FLOW_WORKER_HANDOFF_CONTRACT =
+	"Return only the assigned Flow handoff. Cite or drop every claim, label single-source, inferred, and unsettled claims, and report blocked if the assigned scope, expected coverage, or handoff shape is missing.";
 
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
@@ -275,8 +294,7 @@ export const FLOW_CORE_AGENTS = {
 		hidden: true,
 		description:
 			"Internal read-only evidence worker for Flow planning and execution support.",
-		prompt:
-			"Use Flow evidence mode. Inspect only the assigned slice, do not edit files, do not call state-changing Flow tools, and return coverage, evidence inspected, confidence-tagged findings or facts, gaps, and manager follow-ups.",
+		prompt: `Use Flow evidence mode. Inspect only the assigned slice, do not edit files, do not call state-changing Flow tools, and return coverage, evidence inspected, confidence-tagged findings or facts, gaps, and manager follow-ups. ${FLOW_WORKER_HANDOFF_CONTRACT}`,
 		permission: {
 			edit: "deny",
 			bash: "deny",
@@ -291,8 +309,7 @@ export const FLOW_CORE_AGENTS = {
 		hidden: true,
 		description:
 			"Internal validation worker for Flow check selection and command evidence.",
-		prompt:
-			"Use Flow validation mode. Run only manager-specified commands or propose focused checks, do not edit files, do not call state-changing Flow tools, and report exact command, status, raw outcome summary, coverage, confidence, gaps, and manager follow-ups.",
+		prompt: `Use Flow validation mode. Run only manager-specified commands or propose focused checks, do not edit files, do not call state-changing Flow tools, and report exact command, status, raw outcome summary, coverage, confidence, gaps, and manager follow-ups. ${FLOW_WORKER_HANDOFF_CONTRACT}`,
 		permission: {
 			edit: "deny",
 			bash: "ask",
@@ -307,8 +324,7 @@ export const FLOW_CORE_AGENTS = {
 		hidden: true,
 		description:
 			"Internal read-only audit worker for refuted or surviving finding candidates.",
-		prompt:
-			"Use Flow audit mode. Inspect only the assigned slice, actively refute candidate findings before reporting them, do not edit files, do not call state-changing Flow tools, and return coverage, evidence, guards checked, confidence, gaps, and manager follow-ups.",
+		prompt: `Use Flow audit mode. Inspect only the assigned slice, actively refute candidate findings before reporting them, do not edit files, do not call state-changing Flow tools, and return coverage, evidence, guards checked, confidence, gaps, and manager follow-ups. ${FLOW_WORKER_HANDOFF_CONTRACT}`,
 		permission: {
 			edit: "deny",
 			bash: "ask",
@@ -323,8 +339,7 @@ export const FLOW_CORE_AGENTS = {
 		hidden: true,
 		description:
 			"Internal candidate implementation worker for isolated Flow worktrees or exact non-overlapping path ownership.",
-		prompt:
-			"Use Flow candidate-implementation mode only when the manager assigned an isolated worktree or exact non-overlapping path ownership. Do not edit .flow/**, do not call state-changing Flow tools, do not complete Flow state, and return changed or proposed patch, verification run, coverage, confidence, merge risks, and manager follow-ups.",
+		prompt: `Use Flow candidate-implementation mode only when the manager assigned an isolated worktree or exact non-overlapping path ownership. Do not edit .flow/**, do not call state-changing Flow tools, do not complete Flow state, and return changed or proposed patch, verification run, coverage, confidence, merge risks, and manager follow-ups. ${FLOW_WORKER_HANDOFF_CONTRACT}`,
 		permission: {
 			edit: "ask",
 			bash: "ask",
@@ -339,8 +354,7 @@ export const FLOW_CORE_AGENTS = {
 		hidden: true,
 		description:
 			"Internal verifier worker for checking Flow worker claims against cited evidence.",
-		prompt:
-			"Use Flow verifier mode. Verify only the assigned claims against the provided sources, commands, counts, or current docs. Do not generate new scope, do not edit files, do not call state-changing Flow tools, and return supported, partly-supported, unsupported, or source-not-found per claim with evidence, confidence, gaps, and manager follow-ups.",
+		prompt: `Use Flow verifier mode. Verify only the assigned claims against the provided sources, commands, counts, or current docs. Do not generate new scope, do not edit files, do not call state-changing Flow tools, and return supported, partly-supported, unsupported, or source-not-found per claim with evidence, confidence, gaps, and manager follow-ups. ${FLOW_WORKER_HANDOFF_CONTRACT}`,
 		permission: {
 			edit: "deny",
 			bash: "ask",

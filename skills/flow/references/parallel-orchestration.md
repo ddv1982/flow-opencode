@@ -5,12 +5,14 @@ evidence faster than one linear pass. The manager still owns the Flow session:
 only the manager calls state-changing Flow tools, approves plans, completes
 features, records reviews, or closes sessions.
 
-Read these companion references before a broad wave:
+Read these companion references before a broad parallel pass:
 
+- `parallel-pass-patterns.md` for pass selection, effort defaults, and stop or
+  follow-up rules.
 - `handoff-format.md` for the exact worker response shapes.
 - `verification-gates.md` for coverage checks, handoff acceptance, verifier
   triggers, and synthesis rules.
-- `parallel-full-wave-example.md` for a concrete end-to-end wave after the rules
+- `parallel-pass-example.md` for a concrete end-to-end pass after the rules
   below are clear.
 
 ## Quick path
@@ -31,9 +33,9 @@ Read these companion references before a broad wave:
 
 - Prefer serial work when the scope is small, tightly coupled, or blocked by one
   decision that must be made before slices are meaningful.
-- A normal first wave is two to five workers with independent slices. Use more
+- A normal first pass is two to five workers with independent slices. Use more
   only when the coverage gate is countable and the slices remain non-overlapping.
-- Run at most one routine follow-up wave. Extra waves need an explicit manager
+- Run at most one routine follow-up pass. Extra passes need an explicit manager
   reason, such as a high-stakes verifier check or a newly discovered bounded
   slice.
 - Do not fan out just to keep agents busy. Every worker should reduce a known
@@ -68,7 +70,7 @@ Skip fan-out when:
    scope, and carry confidence labels.
 8. Send important low-confidence, single-source, contested, or citation-heavy
    claims to `flow-verifier-worker`.
-9. Run second waves only for material gaps, conflicts, narrowed scope, or
+9. Run follow-up passes only for material gaps, conflicts, narrowed scope, or
    verification needs.
 10. Apply the manager synthesis barrier: keep only distilled, evidence-backed
     claims and synthesize one Flow artifact, such as plan fields, completion
@@ -157,7 +159,7 @@ Your exact slice: <paths, modules, command, claim ids, risk lens, or worktree>
 Expected coverage: <count, paths, range, or complete question set>
 Do: <bounded actions>
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
-Return exactly the matching handoff shape from handoff-format.md.
+Return only the matching Flow handoff from handoff-format.md.
 ```
 
 For research or current-doc slices, require source checks for versioned or
@@ -184,11 +186,11 @@ the smallest check that can settle the disagreement.
 
 The manager synthesis barrier means raw handoffs do not move forward by default.
 Only claims that survived coverage, evidence, confidence, and verifier checks may
-enter the next wave, Flow payload, patch decision, or user-facing answer.
+enter the next pass, Flow payload, patch decision, or user-facing answer.
 
-## Second waves
+## Follow-up passes
 
-Start a follow-up wave when first-wave handoffs reveal:
+Start a follow-up pass when first-pass handoffs reveal:
 
 - missing coverage in the original slice map.
 - conflicting findings that matter to the Flow decision.
@@ -197,4 +199,4 @@ Start a follow-up wave when first-wave handoffs reveal:
 - bounded implementation candidates after research converges.
 
 Do not recurse by default. If a worker says it needs another worker, the manager
-decides whether that is a second wave and writes the next bounded prompt.
+decides whether that is a follow-up pass and writes the next bounded prompt.

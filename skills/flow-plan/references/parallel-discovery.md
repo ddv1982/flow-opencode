@@ -2,7 +2,7 @@
 
 Use this only after a serial orientation pass has identified the repo shape and the likely slices. Workers are read-only evidence gatherers; the planner owns the plan.
 
-For broad waves, also load `../../flow/references/parallel-orchestration.md`.
+For broad parallel passes, also load `../../flow/references/parallel-orchestration.md`.
 Use its pre-fan-out coverage gate and
 `../../flow/references/handoff-format.md` response shapes.
 
@@ -16,7 +16,7 @@ Use its pre-fan-out coverage gate and
 
 ## Flow repo default slices
 
-For this repository, good first-wave slices are:
+For this repository, good first-pass slices are:
 
 - Runtime gates: `src/runtime/schema.ts`, `src/runtime/transitions.ts`,
   `src/runtime/api.ts`, and `tests/runtime-gates.test.ts`.

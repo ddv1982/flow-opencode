@@ -52,6 +52,9 @@ Internal worker agents are also reserved:
 
 Every hidden Flow worker must explicitly deny native skill loading by default;
 future helper-skill access must be an intentional worker-specific allowlist.
+Parallel workers produce candidate evidence only. Flow remains a serial state
+machine: the manager checks handoffs, verifies important claims, synthesizes one
+artifact, and owns every state-changing tool call.
 
 Tools:
 

@@ -52,6 +52,25 @@ Use `flow-verifier-worker` when a claim is:
 Give the verifier atomic claims, cited sources or commands, and the acceptance
 question. Do not ask it to redesign the work or review the whole feature.
 
+## Verification tiers
+
+Use the cheapest check that matches the risk:
+
+- **Accept locally**: low-risk claims with direct evidence that the manager can
+  cheaply inspect or recount.
+- **Verify once**: single-source, surprising, inferred, citation-heavy, or
+  Flow-payload-bound claims.
+- **Verify strongly**: claims that affect security, persistence, permissions,
+  public API behavior, release behavior, data loss, or blocking review outcome.
+  Use independent verifier checks, manager-run commands, or direct artifact
+  inspection strong enough to settle the claim.
+- **Do not accept**: claims without concrete evidence, claims outside the
+  assigned slice, claims contradicted by inspected artifacts, or claims where the
+  cited evidence supports only the topic rather than the assertion.
+
+Verifier prompts should use stable claim ids, one atomic assertion per id, the
+cited source or command for each id, and the exact acceptance question.
+
 ## Flow payload acceptance
 
 Planning fields may use worker evidence only when the source and scope are clear.

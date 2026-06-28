@@ -166,6 +166,9 @@ async function syncSkill(
 
 	let changed = false;
 	const backupPaths: string[] = [];
+	const currentRelativePaths = new Set(
+		definition.files.map((file) => file.relativePath),
+	);
 	for (const file of definition.files) {
 		const path = resolveSkillFile(folder, file.relativePath);
 		const existing = await optionalRead(path);
@@ -180,6 +183,17 @@ async function syncSkill(
 		if (userEdited) {
 			backupPaths.push(await writeBackup(path, existing));
 		}
+	}
+	for (const [relativePath, recordedHash] of existingMarkerHashes) {
+		if (currentRelativePaths.has(relativePath)) continue;
+		const path = resolveSkillFile(folder, relativePath);
+		const existing = await optionalRead(path);
+		if (existing === null) continue;
+		changed = true;
+		if (sha256(existing) !== recordedHash) {
+			backupPaths.push(await writeBackup(path, existing));
+		}
+		await rm(path, { force: true });
 	}
 
 	if (!changed && markerContent === markerFor(definition, version)) {

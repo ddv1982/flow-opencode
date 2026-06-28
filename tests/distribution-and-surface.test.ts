@@ -418,17 +418,20 @@ describe("Flow distribution and plugin surface", () => {
 		const expectedBundledSections = {
 			"flow-auto": [
 				"Bundled flow/SKILL.md",
-				"Bundled flow/references/parallel-full-wave-example.md",
+				"Bundled flow/references/parallel-pass-patterns.md",
+				"Bundled flow/references/parallel-pass-example.md",
 				"Bundled flow-run/SKILL.md",
 			],
 			"flow-plan": [
 				"Bundled flow-plan/SKILL.md",
 				"Bundled flow/references/parallel-orchestration.md",
-				"Bundled flow/references/parallel-full-wave-example.md",
+				"Bundled flow/references/parallel-pass-patterns.md",
+				"Bundled flow/references/parallel-pass-example.md",
 			],
 			"flow-run": [
 				"Bundled flow-run/SKILL.md",
-				"Bundled flow/references/parallel-full-wave-example.md",
+				"Bundled flow/references/parallel-pass-patterns.md",
+				"Bundled flow/references/parallel-pass-example.md",
 				"Bundled flow-review/SKILL.md",
 			],
 			"flow-review": [
@@ -489,23 +492,45 @@ describe("Flow distribution and plugin surface", () => {
 				]),
 			),
 		);
+
+		for (const [agentName, agent] of Object.entries(config.agent)) {
+			const prompt = (agent as { prompt: string }).prompt;
+			const normalizedPrompt = prompt.toLowerCase();
+			expect(
+				normalizedPrompt,
+				`${agentName} prompt cites or drops claims`,
+			).toContain("cite or drop every claim");
+			expect(
+				normalizedPrompt,
+				`${agentName} prompt preserves confidence gaps`,
+			).toContain("single-source, inferred, and unsettled");
+			expect(normalizedPrompt, `${agentName} prompt fails closed`).toContain(
+				"report blocked if",
+			);
+		}
 	});
 
 	test("keeps parallel skill docs linked and handoff statuses stable", async () => {
-		const [orchestration, discovery, handoff, fullWaveExample] =
-			await Promise.all([
-				readFile("skills/flow/references/parallel-orchestration.md", "utf8"),
-				readFile("skills/flow-plan/references/parallel-discovery.md", "utf8"),
-				readFile("skills/flow/references/handoff-format.md", "utf8"),
-				readFile(
-					"skills/flow/references/parallel-full-wave-example.md",
-					"utf8",
-				),
-			]);
+		const [
+			orchestration,
+			discovery,
+			handoff,
+			verificationGates,
+			passPatterns,
+			passExample,
+		] = await Promise.all([
+			readFile("skills/flow/references/parallel-orchestration.md", "utf8"),
+			readFile("skills/flow-plan/references/parallel-discovery.md", "utf8"),
+			readFile("skills/flow/references/handoff-format.md", "utf8"),
+			readFile("skills/flow/references/verification-gates.md", "utf8"),
+			readFile("skills/flow/references/parallel-pass-patterns.md", "utf8"),
+			readFile("skills/flow/references/parallel-pass-example.md", "utf8"),
+		]);
 
 		expect(orchestration).toContain("handoff-format.md");
 		expect(orchestration).toContain("verification-gates.md");
-		expect(orchestration).toContain("parallel-full-wave-example.md");
+		expect(orchestration).toContain("parallel-pass-patterns.md");
+		expect(orchestration).toContain("parallel-pass-example.md");
 		expect(discovery).toContain("../../flow/references/handoff-format.md");
 		expect(discovery).toContain("../../flow/references/verification-gates.md");
 		expect(discovery).toContain("manager synthesis barrier");
@@ -513,10 +538,28 @@ describe("Flow distribution and plugin surface", () => {
 		expect(handoff).toContain("- `success`:");
 		expect(handoff).toContain("- `partial`:");
 		expect(handoff).toContain("- `blocked`:");
-		expect(fullWaveExample).toContain("# Parallel full-wave example");
-		expect(fullWaveExample).toContain(
-			"Return exactly the matching handoff shape from handoff-format.md.",
+		expect(verificationGates).toContain("## Verification tiers");
+		expect(verificationGates).toContain("**Verify strongly**");
+		expect(verificationGates).toContain("stable claim ids");
+		expect(passPatterns).toContain("## Choose a pass");
+		expect(passPatterns).toContain("## Stop And Extend");
+		expect(passExample).toContain("# Parallel pass example");
+		expect(passExample).toContain(
+			"Return only the matching Flow handoff from handoff-format.md.",
 		);
+
+		const disallowedTerm = ["w", "a", "v", "e"].join("");
+		for (const [name, text] of [
+			["orchestration", orchestration],
+			["discovery", discovery],
+			["passPatterns", passPatterns],
+			["passExample", passExample],
+		] as const) {
+			expect(
+				text.toLowerCase(),
+				`${name} uses Flow-native terminology`,
+			).not.toContain(disallowedTerm);
+		}
 	});
 
 	test("keeps skill frontmatter compatible with GitHub YAML preview", async () => {
@@ -945,6 +988,20 @@ describe("Flow distribution and plugin surface", () => {
 					"skills",
 					"flow",
 					"references",
+					"parallel-pass-patterns.md",
+				),
+				"utf8",
+			),
+		).resolves.toContain("Parallel pass patterns");
+		await expect(
+			readFile(
+				join(
+					home,
+					".config",
+					"opencode",
+					"skills",
+					"flow",
+					"references",
 					"verification-gates.md",
 				),
 				"utf8",
@@ -969,7 +1026,10 @@ describe("Flow distribution and plugin surface", () => {
 		);
 		expect(marker).toContain("file=references/handoff-format.md sha256=");
 		expect(marker).toContain(
-			"file=references/parallel-full-wave-example.md sha256=",
+			"file=references/parallel-pass-patterns.md sha256=",
+		);
+		expect(marker).toContain(
+			"file=references/parallel-pass-example.md sha256=",
 		);
 		expect(marker).toContain("file=references/verification-gates.md sha256=");
 
@@ -995,6 +1055,60 @@ describe("Flow distribution and plugin surface", () => {
 		expect(await readFile(join(foreignSkill, "SKILL.md"), "utf8")).toBe(
 			"user skill\n",
 		);
+	});
+
+	test("startup sync prunes retired marker-owned skill files with backup", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-old", home);
+		const flowDefinition = FLOW_SKILL_DEFINITIONS.find(
+			(definition) => definition.name === "flow",
+		);
+		if (!flowDefinition) throw new Error("Expected flow skill definition.");
+
+		const retiredTerm = ["w", "a", "v", "e"].join("");
+		const retiredRelativePath = `references/parallel-full-${retiredTerm}-example.md`;
+		const retiredPath = flowSkillFile(home, "flow", retiredRelativePath);
+		const recordedRetiredContent = "old generated parallel example\n";
+		const editedRetiredContent = "old generated parallel example\nuser edit\n";
+		await writeFile(retiredPath, editedRetiredContent, "utf8");
+		await writeFile(
+			join(flowSkillFolder(home, "flow"), ".flow-skill-version"),
+			flowSkillMarker("4.0.0-old", [
+				...flowDefinition.files.map((file) => ({
+					relativePath: file.relativePath,
+					content: file.content,
+				})),
+				{
+					relativePath: retiredRelativePath,
+					content: recordedRetiredContent,
+				},
+			]),
+			"utf8",
+		);
+
+		await runFlowSkillSync("4.0.0-test", () => {}, home);
+
+		const flowResult = getLatestFlowSkillSyncHealth()?.results.find(
+			(result) => result.name === "flow",
+		);
+		expect(flowResult).toMatchObject({ action: "updated_with_backup" });
+		const backupPath = flowResult?.backupPaths?.[0];
+		if (!backupPath) throw new Error("Expected retired file backup path.");
+		await expect(readFile(backupPath, "utf8")).resolves.toBe(
+			editedRetiredContent,
+		);
+		await expect(readFile(retiredPath, "utf8")).rejects.toThrow();
+
+		const marker = await readFile(
+			join(flowSkillFolder(home, "flow"), ".flow-skill-version"),
+			"utf8",
+		);
+		expect(marker).not.toContain(retiredRelativePath);
+		const report = await inspectFlowSkillInstall("4.0.0-test", home);
+		expect(report.status).toBe("ok");
+		expect(report.skills.find((skill) => skill.name === "flow")).toMatchObject({
+			status: "ok",
+		});
 	});
 
 	test("startup sync skips every expected managed skill folder without Flow markers", async () => {

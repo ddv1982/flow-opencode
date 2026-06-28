@@ -3,13 +3,17 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.17] - 2026-06-28
+
+Teach Flow's parallel pass lore to verify worker handoffs, prune retired managed skill files, and keep manager-owned synthesis explicit.
+
 ## [4.1.16] - 2026-06-22
 
 Quote Flow skill frontmatter lore so GitHub previews parse cleanly and CI guards future YAML slips.
 
 ## [4.1.15] - 2026-06-22
 
-Refine Flow's orchestration lore into a quick path, bundled wave example, tested doc links, and trusted-publishing release guidance.
+Refine Flow's orchestration lore into a quick path, bundled parallel pass example, tested doc links, and trusted-publishing release guidance.
 
 ## [4.1.14] - 2026-06-22
 
@@ -17,7 +21,7 @@ Publish Flow through npm trusted publishing so release CI no longer depends on e
 
 ## [4.1.13] - 2026-06-21
 
-Teach Flow's parallel orchestration lore to walk a full wave while pinning hidden worker permissions to tested docs.
+Teach Flow's parallel orchestration lore to walk a full pass while pinning hidden worker permissions to tested docs.
 
 ## [4.1.12] - 2026-06-18
 
