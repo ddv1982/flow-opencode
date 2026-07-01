@@ -8,7 +8,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseStrictJsonObject } from "./json/strict-object";
@@ -120,14 +120,86 @@ async function writeFileAtomically(
 const inProcessLocks = new Map<string, Promise<void>>();
 const LOCK_TIMEOUT_MS = 30_000;
 const LOCK_RETRY_MS = 25;
+const LOCK_STALE_MS = 10 * 60_000;
 
-async function acquireLock(worktree: string): Promise<() => Promise<void>> {
+export type SessionLockOptions = {
+	timeoutMs?: number;
+	staleMs?: number;
+};
+
+type LockOwner = {
+	pid: number;
+	hostname: string;
+	createdAt: string;
+};
+
+const LOCK_OWNER_FILENAME = "owner.json";
+
+async function readLockOwner(lock: string): Promise<LockOwner | null> {
+	try {
+		const raw = await readFile(join(lock, LOCK_OWNER_FILENAME), "utf8");
+		const parsed = JSON.parse(raw) as Partial<LockOwner>;
+		if (
+			typeof parsed.pid === "number" &&
+			typeof parsed.hostname === "string" &&
+			typeof parsed.createdAt === "string"
+		) {
+			return parsed as LockOwner;
+		}
+	} catch {
+		// Missing or unreadable owner metadata falls back to age-based staleness.
+	}
+	return null;
+}
+
+function isProcessAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+async function isLockStale(lock: string, staleMs: number): Promise<boolean> {
+	const owner = await readLockOwner(lock);
+	if (owner && owner.hostname === hostname()) {
+		return !isProcessAlive(owner.pid);
+	}
+	let referenceMs: number;
+	if (owner) {
+		referenceMs = Date.parse(owner.createdAt);
+	} else {
+		try {
+			referenceMs = (await stat(lock)).mtimeMs;
+		} catch {
+			return false;
+		}
+	}
+	return Number.isFinite(referenceMs) && Date.now() - referenceMs > staleMs;
+}
+
+async function acquireLock(
+	worktree: string,
+	options: SessionLockOptions = {},
+): Promise<() => Promise<void>> {
+	const timeoutMs = options.timeoutMs ?? LOCK_TIMEOUT_MS;
+	const staleMs = options.staleMs ?? LOCK_STALE_MS;
 	const root = flowDir(worktree);
 	const lock = join(root, "session.lock");
 	const startedAt = Date.now();
 	while (true) {
 		try {
 			await mkdir(lock, { recursive: false });
+			await writeFile(
+				join(lock, LOCK_OWNER_FILENAME),
+				JSON.stringify({
+					pid: process.pid,
+					hostname: hostname(),
+					createdAt: new Date().toISOString(),
+				}),
+				"utf8",
+			);
 			return async () => {
 				await rm(lock, { recursive: true, force: true });
 			};
@@ -138,8 +210,17 @@ async function acquireLock(worktree: string): Promise<() => Promise<void>> {
 				continue;
 			}
 			if (code !== "EEXIST") throw error;
-			if (Date.now() - startedAt > LOCK_TIMEOUT_MS) {
-				throw new Error(`Timed out waiting for Flow session lock at ${lock}.`);
+			if (await isLockStale(lock, staleMs)) {
+				await rm(lock, { recursive: true, force: true });
+				continue;
+			}
+			if (Date.now() - startedAt > timeoutMs) {
+				throw new Error(
+					`Timed out waiting for Flow session lock at ${lock}. ` +
+						"Another OpenCode session may be using this workspace. " +
+						"If none is, the lock is likely left over from a crash; " +
+						`delete it manually with: rm -rf "${lock}"`,
+				);
 			}
 			await sleep(LOCK_RETRY_MS);
 		}
@@ -149,6 +230,7 @@ async function acquireLock(worktree: string): Promise<() => Promise<void>> {
 export async function withSessionLock<T>(
 	worktree: string,
 	task: () => Promise<T>,
+	lockOptions: SessionLockOptions = {},
 ): Promise<T> {
 	const previous = inProcessLocks.get(worktree) ?? Promise.resolve();
 	let releaseQueue = () => {};
@@ -161,7 +243,7 @@ export async function withSessionLock<T>(
 	let releaseFileLock: (() => Promise<void>) | null = null;
 	try {
 		await previous.catch(() => undefined);
-		releaseFileLock = await acquireLock(worktree);
+		releaseFileLock = await acquireLock(worktree, lockOptions);
 		return await task();
 	} finally {
 		try {
@@ -175,6 +257,25 @@ export async function withSessionLock<T>(
 	}
 }
 
+export class UnreadableFlowSessionError extends Error {
+	readonly code = "UNREADABLE_FLOW_SESSION";
+	constructor(
+		message: string,
+		readonly reason: string,
+	) {
+		super(message);
+		this.name = "UnreadableFlowSessionError";
+	}
+}
+
+function describeSessionSchemaFailure(value: Record<string, unknown>): string {
+	const version = value.version;
+	if (version !== 2) {
+		return `it uses session schema version ${JSON.stringify(version ?? null)}, but this plugin version requires version 2`;
+	}
+	return "it does not match the current session schema";
+}
+
 export async function loadSession(worktree: string): Promise<Session | null> {
 	const root = assertMutableWorkspaceRoot(worktree);
 	let raw: string;
@@ -185,8 +286,38 @@ export async function loadSession(worktree: string): Promise<Session | null> {
 		throw error;
 	}
 	const parsed = parseStrictJsonObject(raw, "Flow session file");
-	if (!parsed.ok) throw new Error(parsed.error);
-	return SessionSchema.parse(parsed.value);
+	if (!parsed.ok) {
+		throw new UnreadableFlowSessionError(parsed.error, parsed.error);
+	}
+	const result = SessionSchema.safeParse(parsed.value);
+	if (!result.success) {
+		const reason = describeSessionSchemaFailure(parsed.value);
+		throw new UnreadableFlowSessionError(
+			`Flow session file at ${sessionPath(root)} is unreadable: ${reason}.`,
+			reason,
+		);
+	}
+	return result.data;
+}
+
+export async function quarantineUnreadableSession(
+	worktree: string,
+): Promise<string | null> {
+	const root = assertMutableWorkspaceRoot(worktree);
+	const source = sessionPath(root);
+	const target = join(
+		historyDir(root),
+		`quarantine-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}.json`,
+	);
+	await mkdir(historyDir(root), { recursive: true });
+	try {
+		await rename(source, target);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+		throw error;
+	}
+	await rm(flowInstructionPath(root), { force: true });
+	return target;
 }
 
 function renderFlowInstructionFile(session: Session): string {

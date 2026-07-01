@@ -2,19 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json";
 import FlowPlugin from "../src";
+import { createFlowLog } from "../src/adapters/opencode/logging";
 import { createTools } from "../src/adapters/opencode/tools";
 import { createFlowCoreConfigEntries } from "../src/config-shared";
 import { FLOW_SKILL_DEFINITIONS } from "../src/distribution/flow-skill-definitions";
 import {
+	formatFlowDoctorCommand,
 	formatFlowSkillDoctor,
 	getFlowSkillSetupStatus,
 	getLatestFlowSkillSyncHealth,
 	inspectFlowSkillInstall,
 	resolveFlowPluginVersion,
+	resolveFlowSkillsRoot,
 	runFlowSkillSync,
 	syncFlowSkills,
 	uninstallFlowSkills,
@@ -1383,6 +1386,80 @@ describe("Flow distribution and plugin surface", () => {
 		expect(report.status).toBe("ok");
 	});
 
+	test("uninstall keeps a managed skill folder containing unknown user files", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const userNotes = join(
+			home,
+			".config",
+			"opencode",
+			"skills",
+			"flow",
+			"references",
+			"my-notes.md",
+		);
+		await writeFile(userNotes, "personal notes\n", "utf8");
+
+		const result = await uninstallFlowSkills(home);
+		expect(result.removed.some((path) => path.endsWith("/flow"))).toBe(false);
+		expect(result.kept.some((path) => path.endsWith("/flow"))).toBe(true);
+		await expect(readFile(userNotes, "utf8")).resolves.toBe("personal notes\n");
+	});
+
+	test("uninstall keeps a managed skill folder when the marker lists no files", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const markerPath = join(
+			home,
+			".config",
+			"opencode",
+			"skills",
+			"flow",
+			".flow-skill-version",
+		);
+		await writeFile(markerPath, "version=4.0.0-test\n", "utf8");
+
+		const result = await uninstallFlowSkills(home);
+		expect(result.removed.some((path) => path.endsWith("/flow"))).toBe(false);
+		expect(result.kept.some((path) => path.endsWith("/flow"))).toBe(true);
+		await expect(
+			readFile(
+				join(home, ".config", "opencode", "skills", "flow", "SKILL.md"),
+				"utf8",
+			),
+		).resolves.toContain("flow");
+	});
+
+	test("uninstall dry run reports removals without deleting anything", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+
+		const result = await uninstallFlowSkills(home, { dryRun: true });
+		expect(result.removed.some((path) => path.endsWith("/flow"))).toBe(true);
+		await expect(
+			readFile(
+				join(home, ".config", "opencode", "skills", "flow", "SKILL.md"),
+				"utf8",
+			),
+		).resolves.toContain("flow");
+	});
+
+	test("CLI uninstall --dry-run previews without deleting", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+
+		const result = await runFlowCli(["uninstall", "--dry-run"], home);
+		expect(result.status).toBe(0);
+		expect(result.stderr).toBe("");
+		expect(result.stdout).toContain("Would remove Flow skill:");
+		await expect(
+			readFile(
+				join(home, ".config", "opencode", "skills", "flow", "SKILL.md"),
+				"utf8",
+			),
+		).resolves.toContain("flow");
+	});
+
 	test("CLI uninstalls managed skills and keeps foreign Flow-like skills", async () => {
 		const home = await tempHome();
 		await syncFlowSkills("4.0.0-test", home);
@@ -1448,5 +1525,131 @@ describe("Flow distribution and plugin surface", () => {
 				process.env.npm_package_version = previous;
 			}
 		}
+	});
+});
+
+describe("adapter and distribution correctness", () => {
+	test("command preflight preserves literal dollar sequences in arguments", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		try {
+			const workspace = await tempWorkspace();
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			const preflight = hooks["command.execute.before"];
+			if (!preflight) throw new Error("Expected command preflight hook.");
+
+			const args = "fix the $$ escaping and $& capture in build.sh";
+			const output: { parts: Array<{ text: string; synthetic?: boolean }> } = {
+				parts: [{ text: "stale" }],
+			};
+			await preflight(
+				{ command: "flow-plan", sessionID: "test", arguments: args },
+				output as Parameters<typeof preflight>[1],
+			);
+			expect(output.parts[1]?.text).toContain(args);
+		} finally {
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
+
+	test("command preflight preserves non-text parts such as attachments", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		try {
+			const workspace = await tempWorkspace();
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			const preflight = hooks["command.execute.before"];
+			if (!preflight) throw new Error("Expected command preflight hook.");
+
+			const output: {
+				parts: Array<{ type?: string; text?: string; url?: string }>;
+			} = {
+				parts: [
+					{ type: "text", text: "stale" },
+					{ type: "file", url: "file:///spec.md" },
+				],
+			};
+			await preflight(
+				{ command: "flow-plan", sessionID: "test", arguments: "goal" },
+				output as Parameters<typeof preflight>[1],
+			);
+			expect(
+				output.parts.some(
+					(part) => part.type === "file" && part.url === "file:///spec.md",
+				),
+			).toBe(true);
+		} finally {
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
+
+	test("logging swallows rejected log transport promises", async () => {
+		const rejections: unknown[] = [];
+		const onRejection = (reason: unknown) => {
+			rejections.push(reason);
+		};
+		process.on("unhandledRejection", onRejection);
+		try {
+			const log = createFlowLog({
+				client: {
+					app: {
+						log: () => Promise.reject(new Error("transport down")),
+					},
+				},
+			});
+			log("info", "hello");
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(rejections).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", onRejection);
+		}
+	});
+
+	test("skills root falls back to os.homedir when HOME and USERPROFILE are unset", () => {
+		const previousHome = process.env.HOME;
+		const previousProfile = process.env.USERPROFILE;
+		delete process.env.HOME;
+		delete process.env.USERPROFILE;
+		try {
+			expect(resolveFlowSkillsRoot()).toBe(
+				join(homedir(), ".config", "opencode", "skills"),
+			);
+		} finally {
+			if (previousHome !== undefined) process.env.HOME = previousHome;
+			if (previousProfile !== undefined)
+				process.env.USERPROFILE = previousProfile;
+		}
+	});
+
+	test("doctor command guidance never pins the 0.0.0 sentinel", () => {
+		expect(formatFlowDoctorCommand("0.0.0")).toBe(
+			"npx -y opencode-plugin-flow@latest doctor",
+		);
 	});
 });

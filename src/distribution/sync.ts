@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { dirname, join, normalize, sep } from "node:path";
 import {
 	FLOW_SKILL_DEFINITIONS,
@@ -73,7 +74,7 @@ export type FlowSkillDoctorReport = {
 let latestFlowSkillSyncHealth: FlowSkillSyncHealth | null = null;
 
 function homeDir(): string {
-	return process.env.HOME ?? process.env.USERPROFILE ?? "";
+	return process.env.HOME ?? process.env.USERPROFILE ?? homedir();
 }
 
 export function resolveFlowSkillsRoot(home = homeDir()): string {
@@ -302,7 +303,8 @@ export function getLatestFlowSkillSyncHealth(): FlowSkillSyncHealth | null {
 }
 
 export function formatFlowDoctorCommand(version: string): string {
-	return `npx -y opencode-plugin-flow@${version} doctor`;
+	const pin = version === "0.0.0" ? "latest" : version;
+	return `npx -y opencode-plugin-flow@${pin} doctor`;
 }
 
 export function getFlowSkillSetupStatus(
@@ -569,7 +571,41 @@ export function formatFlowSkillDoctor(report: FlowSkillDoctorReport): string {
 	return `${lines.join("\n")}\n`;
 }
 
-export async function uninstallFlowSkills(home = homeDir()) {
+async function listSkillFolderFiles(folder: string): Promise<string[]> {
+	const entries = await readdir(folder, {
+		recursive: true,
+		withFileTypes: true,
+	});
+	return entries
+		.filter((entry) => entry.isFile())
+		.map((entry) =>
+			join(entry.parentPath, entry.name)
+				.slice(folder.length + 1)
+				.split(sep)
+				.join("/"),
+		);
+}
+
+async function isPristineManagedFolder(
+	folder: string,
+	markerContent: string,
+): Promise<boolean> {
+	const hashes = parseMarkerFiles(markerContent);
+	if (hashes.size === 0) return false;
+	for (const relativePath of await listSkillFolderFiles(folder)) {
+		if (relativePath === MARKER_FILENAME) continue;
+		const recordedHash = hashes.get(relativePath);
+		if (recordedHash === undefined) return false;
+		const content = await optionalRead(resolveSkillFile(folder, relativePath));
+		if (content === null || sha256(content) !== recordedHash) return false;
+	}
+	return true;
+}
+
+export async function uninstallFlowSkills(
+	home = homeDir(),
+	options: { dryRun?: boolean } = {},
+) {
 	const root = resolveFlowSkillsRoot(home);
 	const removed: string[] = [];
 	const kept: string[] = [];
@@ -586,26 +622,16 @@ export async function uninstallFlowSkills(home = homeDir()) {
 		if (name !== "flow" && !name.startsWith("flow-")) continue;
 		const folder = join(root, name);
 		const markerContent = await optionalRead(join(folder, MARKER_FILENAME));
-		if (markerContent === null) {
+		if (
+			markerContent === null ||
+			!(await isPristineManagedFolder(folder, markerContent))
+		) {
 			kept.push(folder);
 			continue;
 		}
-		const hashes = parseMarkerFiles(markerContent);
-		let userEdited = false;
-		for (const [relativePath, recordedHash] of hashes) {
-			const content = await optionalRead(
-				resolveSkillFile(folder, relativePath),
-			);
-			if (content !== null && sha256(content) !== recordedHash) {
-				userEdited = true;
-				break;
-			}
+		if (!options.dryRun) {
+			await rm(folder, { recursive: true, force: true });
 		}
-		if (userEdited) {
-			kept.push(folder);
-			continue;
-		}
-		await rm(folder, { recursive: true, force: true });
 		removed.push(folder);
 	}
 	return { removed, kept };

@@ -26,7 +26,9 @@ import {
 	archiveAndClearSession,
 	assertMutableWorkspaceRoot,
 	loadSession,
+	quarantineUnreadableSession,
 	saveSession,
+	UnreadableFlowSessionError,
 	withSessionLock,
 } from "./workspace";
 
@@ -83,6 +85,24 @@ function responseFromFailure(result: {
 	};
 }
 
+async function quarantineAndReport(
+	root: string,
+	error: UnreadableFlowSessionError,
+): Promise<RuntimeResponse> {
+	const quarantinedTo = await quarantineUnreadableSession(root);
+	return {
+		status: "error",
+		summary: `Flow could not read the active session file: ${error.reason}. ${
+			quarantinedTo
+				? `The unreadable file was preserved at ${quarantinedTo} and the active session was cleared.`
+				: "The unreadable file was already gone."
+		}`,
+		recovery:
+			"Start a new session with /flow-plan <goal>. Inspect the quarantined file if you need to recover details from the prior session.",
+		...(quarantinedTo ? { quarantinedSessionPath: quarantinedTo } : {}),
+	};
+}
+
 async function mutate(
 	worktree: string,
 	task: (
@@ -90,11 +110,28 @@ async function mutate(
 	) => Promise<RuntimeResponse>,
 ): Promise<RuntimeResponse> {
 	const root = assertMutableWorkspaceRoot(worktree);
-	return withSessionLock(root, async () => task(await loadSession(root)));
+	return withSessionLock(root, async () => {
+		try {
+			return await task(await loadSession(root));
+		} catch (error) {
+			if (error instanceof UnreadableFlowSessionError) {
+				return quarantineAndReport(root, error);
+			}
+			throw error;
+		}
+	});
 }
 
 export async function flowStatus(worktree: string): Promise<RuntimeResponse> {
-	return summarizeSession(await loadSession(worktree));
+	try {
+		return summarizeSession(await loadSession(worktree));
+	} catch (error) {
+		if (error instanceof UnreadableFlowSessionError) {
+			const root = assertMutableWorkspaceRoot(worktree);
+			return withSessionLock(root, () => quarantineAndReport(root, error));
+		}
+		throw error;
+	}
 }
 
 export async function flowPlanSave(
@@ -111,27 +148,30 @@ export async function flowPlanSave(
 				nextAction: "/flow-plan <goal>",
 			};
 		}
-		if (existing?.status === "completed") {
-			await archiveAndClearSession(worktree, existing);
+		const reuseExisting =
+			existing !== null &&
+			existing.status !== "completed" &&
+			existing.goal === goal;
+		if (
+			existing &&
+			existing.status !== "completed" &&
+			existing.goal !== goal &&
+			existing.approval === "approved"
+		) {
+			return {
+				status: "error",
+				summary:
+					"An approved Flow session already exists for a different goal. Close it before starting a new one.",
+			};
 		}
-		const base =
-			existing?.status === "completed"
-				? createSession(goal)
-				: (existing ?? createSession(goal));
-		if (base.goal !== goal) {
-			if (base.approval === "approved") {
-				return {
-					status: "error",
-					summary:
-						"An approved Flow session already exists for a different goal. Close it before starting a new one.",
-				};
-			}
-		}
-		const session = base.goal === goal ? base : createSession(goal);
+		const session = reuseExisting ? existing : createSession(goal);
 		const result = args.plan
 			? applyPlan(session, args.plan)
 			: { ok: true as const, value: session };
 		if (!result.ok) return responseFromFailure(result);
+		if (existing && !reuseExisting) {
+			await archiveAndClearSession(worktree, existing);
+		}
 		const saved = await saveSession(worktree, result.value);
 		return {
 			...summarizeSession(saved),

@@ -405,6 +405,7 @@ export function completeFeature(
 					),
 				},
 				history: [...session.history, entry],
+				lastError: null,
 			}),
 		);
 	}

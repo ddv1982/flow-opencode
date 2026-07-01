@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import {
+	mkdir,
+	readdir,
+	readFile,
+	stat,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
+import { homedir, hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	flowFeatureComplete,
@@ -8,6 +16,7 @@ import {
 	flowPlanSave,
 	flowRunStart,
 	flowSessionClose,
+	flowStatus,
 } from "../src/runtime/api";
 import {
 	assertMutableWorkspaceRoot,
@@ -16,6 +25,7 @@ import {
 	historyDir,
 	loadSession,
 	sessionPath,
+	withSessionLock,
 } from "../src/runtime/workspace";
 
 async function tempWorkspace(): Promise<string> {
@@ -358,5 +368,195 @@ describe("Flow workspace persistence", () => {
 		expect(next.status).toBe("ok");
 		expect((await loadSession(workspace))?.goal).toBe("Start next goal");
 		expect(await readdir(join(workspace, ".flow", "history"))).toHaveLength(1);
+	});
+});
+
+describe("session lock recovery", () => {
+	test("breaks a stale lock left by a dead process on this host", async () => {
+		const workspace = await tempWorkspace();
+		const lockDir = join(flowDir(workspace), "session.lock");
+		await mkdir(lockDir, { recursive: true });
+		const deadProcess = spawnSync(process.execPath, ["--version"]);
+		await writeFile(
+			join(lockDir, "owner.json"),
+			JSON.stringify({
+				pid: deadProcess.pid,
+				hostname: hostname(),
+				createdAt: new Date().toISOString(),
+			}),
+			"utf8",
+		);
+
+		const result = await withSessionLock(workspace, async () => "acquired", {
+			timeoutMs: 2_000,
+		});
+		expect(result).toBe("acquired");
+	});
+
+	test("breaks an unowned lock older than the stale threshold", async () => {
+		const workspace = await tempWorkspace();
+		const lockDir = join(flowDir(workspace), "session.lock");
+		await mkdir(lockDir, { recursive: true });
+		const past = new Date(Date.now() - 60_000);
+		await utimes(lockDir, past, past);
+
+		const result = await withSessionLock(workspace, async () => "acquired", {
+			timeoutMs: 2_000,
+			staleMs: 500,
+		});
+		expect(result).toBe("acquired");
+	});
+
+	test("does not break a fresh lock held by a live process and names the remedy on timeout", async () => {
+		const workspace = await tempWorkspace();
+		const lockDir = join(flowDir(workspace), "session.lock");
+		await mkdir(lockDir, { recursive: true });
+		await writeFile(
+			join(lockDir, "owner.json"),
+			JSON.stringify({
+				pid: process.pid,
+				hostname: hostname(),
+				createdAt: new Date().toISOString(),
+			}),
+			"utf8",
+		);
+
+		const attempt = withSessionLock(workspace, async () => "acquired", {
+			timeoutMs: 300,
+		});
+		await expect(attempt).rejects.toThrow("session.lock");
+		await expect(
+			withSessionLock(workspace, async () => "acquired", { timeoutMs: 300 }),
+		).rejects.toThrow("delete it manually");
+	});
+});
+
+describe("unreadable session quarantine", () => {
+	test("flow_status quarantines a corrupt session file and gives recovery guidance", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowDir(workspace), { recursive: true });
+		await writeFile(sessionPath(workspace), "not json {", "utf8");
+
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("error");
+		expect(String(status.summary)).toContain("preserved");
+		expect(String(status.recovery)).toContain("/flow-plan");
+
+		await expect(stat(sessionPath(workspace))).rejects.toMatchObject({
+			code: "ENOENT",
+		});
+		const archived = await readdir(historyDir(workspace));
+		expect(archived.some((name) => name.startsWith("quarantine-"))).toBe(true);
+
+		const next = await flowPlanSave(workspace, { goal: "Recover cleanly" });
+		expect(next.status).toBe("ok");
+	});
+
+	test("a session file from an older schema version is quarantined with a curated message", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowDir(workspace), { recursive: true });
+		await writeFile(
+			sessionPath(workspace),
+			`${JSON.stringify({ version: 1, id: "legacy", goal: "old goal" })}\n`,
+			"utf8",
+		);
+
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("error");
+		expect(String(status.summary)).not.toContain('"code"');
+		expect(String(status.summary)).toContain("preserved");
+		expect(status.quarantinedSessionPath).toBeString();
+	});
+
+	test("mutating tools quarantine an unreadable session instead of dumping raw errors", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowDir(workspace), { recursive: true });
+		await writeFile(sessionPath(workspace), '{"version": 999}', "utf8");
+
+		const result = await flowPlanApprove(workspace);
+		expect(result.status).toBe("error");
+		expect(String(result.summary)).toContain("preserved");
+		expect(String(result.recovery)).toContain("/flow-plan");
+		await expect(stat(sessionPath(workspace))).rejects.toMatchObject({
+			code: "ENOENT",
+		});
+	});
+});
+
+describe("plan save and completion state invariants", () => {
+	test("a failed plan save does not archive the completed session", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "First goal",
+			plan: oneFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+		await flowRunStart(workspace, {});
+		await flowFeatureComplete(workspace, finalPayload());
+		expect((await loadSession(workspace))?.status).toBe("completed");
+
+		const invalidPlan = {
+			...oneFeaturePlan(),
+			features: [
+				{
+					id: "next-feature",
+					title: "Next feature",
+					summary: "Depends on a feature that does not exist.",
+					dependsOn: ["missing-feature"],
+				},
+			],
+		};
+		const result = await flowPlanSave(workspace, {
+			goal: "Second goal",
+			plan: invalidPlan,
+		});
+		expect(result.status).toBe("error");
+		expect((await loadSession(workspace))?.status).toBe("completed");
+		expect((await loadSession(workspace))?.goal).toBe("First goal");
+	});
+
+	test("replacing an unapproved draft with a new goal archives the draft", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Draft goal",
+			plan: oneFeaturePlan(),
+		});
+
+		const replaced = await flowPlanSave(workspace, { goal: "New goal" });
+		expect(replaced.status).toBe("ok");
+		expect((await loadSession(workspace))?.goal).toBe("New goal");
+
+		const files = await readdir(historyDir(workspace));
+		expect(files).toHaveLength(1);
+		const archived = JSON.parse(
+			await readFile(join(historyDir(workspace), files[0] ?? ""), "utf8"),
+		) as { goal: string };
+		expect(archived.goal).toBe("Draft goal");
+	});
+
+	test("needs_input clears a stale lastError from a prior failed completion", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Clear stale errors",
+			plan: oneFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+		await flowRunStart(workspace, {});
+
+		const gateFailed = await flowFeatureComplete(workspace, {
+			...finalPayload(),
+			validationScope: "targeted" as const,
+		});
+		expect(gateFailed.status).toBe("error");
+		expect((await loadSession(workspace))?.lastError).not.toBeNull();
+
+		const blocked = await flowFeatureComplete(workspace, {
+			status: "needs_input",
+			featureId: "only-feature",
+			summary: "Need operator input.",
+			outcome: { kind: "needs_input", summary: "Missing credentials." },
+		});
+		expect(blocked.status).toBe("ok");
+		expect((await loadSession(workspace))?.lastError).toBeNull();
 	});
 });

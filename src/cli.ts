@@ -20,6 +20,9 @@ function usage(): string {
 		"  --json              Write the doctor report as JSON",
 		"  --check, --strict   Exit nonzero when doctor status is not ok",
 		"",
+		"uninstall options:",
+		"  --dry-run           Preview removals without deleting anything",
+		"",
 		"global options:",
 		"  --help              Show this help",
 		"  --version           Print the plugin version",
@@ -75,7 +78,16 @@ async function main(argv: string[]): Promise<void> {
 		}
 		return;
 	}
-	if (flags.length > 0) {
+	const knownUninstallFlags = new Set(["--dry-run"]);
+	if (
+		command === "uninstall" &&
+		!hasOnlyKnownFlags(flags, knownUninstallFlags)
+	) {
+		process.stderr.write(`${usage()}\n`);
+		process.exitCode = 2;
+		return;
+	}
+	if (command === "sync" && flags.length > 0) {
 		process.stderr.write(`${usage()}\n`);
 		process.exitCode = 2;
 		return;
@@ -108,15 +120,20 @@ async function main(argv: string[]): Promise<void> {
 		}
 		return;
 	}
-	const result = await uninstallFlowSkills();
+	const dryRun = flags.includes("--dry-run");
+	const result = await uninstallFlowSkills(undefined, { dryRun });
 	for (const path of result.removed) {
-		process.stdout.write(`Removed Flow skill: ${path}\n`);
+		process.stdout.write(
+			`${dryRun ? "Would remove" : "Removed"} Flow skill: ${path}\n`,
+		);
 	}
 	for (const path of result.kept) {
 		process.stdout.write(`Kept non-Flow or user-edited skill: ${path}\n`);
 	}
 	process.stdout.write(
-		"Remove opencode-plugin-flow from your OpenCode plugin config and restart OpenCode.\n",
+		dryRun
+			? "Dry run: no files were removed.\n"
+			: "Remove opencode-plugin-flow from your OpenCode plugin config and restart OpenCode.\n",
 	);
 }
 

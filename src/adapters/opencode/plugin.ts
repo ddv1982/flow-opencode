@@ -31,7 +31,10 @@ function renderFlowCommandTemplate(
 	command: FlowCommandName,
 	args: string,
 ): string {
-	return FLOW_CORE_COMMANDS[command].template.replaceAll("$ARGUMENTS", args);
+	return FLOW_CORE_COMMANDS[command].template.replaceAll(
+		"$ARGUMENTS",
+		() => args,
+	);
 }
 
 function renderFlowCommandPreflight(
@@ -86,11 +89,16 @@ function replaceFlowCommandParts(
 		subtask.prompt = text;
 		return;
 	}
+	const preserved = parts.filter((part) => {
+		const type = (part as { type?: string }).type;
+		return type !== undefined && type !== "text";
+	});
 	parts.splice(
 		0,
 		parts.length,
 		createFlowTextPart(titleSeed),
 		createFlowTextPart(text, { synthetic: true }),
+		...preserved,
 	);
 }
 
