@@ -10,7 +10,10 @@ import packageJson from "../package.json";
 // an `opencode` binary on PATH and network access for plugin install, so
 // it only runs when explicitly requested: FLOW_LIVE_SMOKE=1.
 const LIVE = process.env.FLOW_LIVE_SMOKE === "1";
-const STARTUP_TIMEOUT_MS = 120_000;
+// First boot bun-installs the plugin's dependencies over the network, so the
+// health endpoint can stall for a while before the server responds.
+const STARTUP_TIMEOUT_MS = 180_000;
+const REQUEST_TIMEOUT_MS = 5_000;
 
 const EXPECTED_COMMANDS = [
 	"flow-auto",
@@ -29,7 +32,11 @@ const EXPECTED_AGENTS = [
 ];
 
 async function fetchJson(url: string): Promise<unknown> {
-	const response = await fetch(url);
+	// A per-request timeout keeps a stalling server from hanging the poll
+	// loop past its deadline check.
+	const response = await fetch(url, {
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+	});
 	if (!response.ok) {
 		throw new Error(`GET ${url} failed with ${response.status}`);
 	}
