@@ -10,10 +10,14 @@ import packageJson from "../package.json";
 // an `opencode` binary on PATH and network access for plugin install, so
 // it only runs when explicitly requested: FLOW_LIVE_SMOKE=1.
 const LIVE = process.env.FLOW_LIVE_SMOKE === "1";
-// First boot bun-installs the plugin's dependencies over the network, so the
-// health endpoint can stall for a while before the server responds.
+// The server reports healthy before plugins finish loading, and the first
+// data request blocks while it bun-installs the plugin's dependencies over
+// the network — so health polls retry on a short timeout while data
+// requests get a generous but bounded one (a hung request must not stall
+// the test past its own failure reporting).
 const STARTUP_TIMEOUT_MS = 180_000;
-const REQUEST_TIMEOUT_MS = 5_000;
+const HEALTH_POLL_TIMEOUT_MS = 3_000;
+const DATA_REQUEST_TIMEOUT_MS = 120_000;
 
 const EXPECTED_COMMANDS = [
 	"flow-auto",
@@ -31,11 +35,12 @@ const EXPECTED_AGENTS = [
 	"flow-verifier-worker",
 ];
 
-async function fetchJson(url: string): Promise<unknown> {
-	// A per-request timeout keeps a stalling server from hanging the poll
-	// loop past its deadline check.
+async function fetchJson(
+	url: string,
+	timeoutMs = DATA_REQUEST_TIMEOUT_MS,
+): Promise<unknown> {
 	const response = await fetch(url, {
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		signal: AbortSignal.timeout(timeoutMs),
 	});
 	if (!response.ok) {
 		throw new Error(`GET ${url} failed with ${response.status}`);
@@ -46,7 +51,10 @@ async function fetchJson(url: string): Promise<unknown> {
 async function waitForHealth(baseUrl: string, deadline: number): Promise<void> {
 	while (Date.now() < deadline) {
 		try {
-			const health = (await fetchJson(`${baseUrl}/global/health`)) as {
+			const health = (await fetchJson(
+				`${baseUrl}/global/health`,
+				HEALTH_POLL_TIMEOUT_MS,
+			)) as {
 				healthy?: boolean;
 			};
 			if (health.healthy) return;
@@ -146,6 +154,6 @@ describe.skipIf(!LIVE)("live OpenCode smoke", () => {
 			}
 			stopServer(server);
 		},
-		STARTUP_TIMEOUT_MS + 60_000,
+		STARTUP_TIMEOUT_MS + 2 * DATA_REQUEST_TIMEOUT_MS,
 	);
 });
