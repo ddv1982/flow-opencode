@@ -1,6 +1,8 @@
 # Codebase Review — July 2026 Improvement Plan
 
-Status: proposed
+Status: implemented (July 2026, all four phases; Phase 3 item 6 — review-depth
+enum unification — deliberately skipped as a breaking change, and the
+ecosystem-listing PRs are drafted in `ecosystem-listing.md` but not submitted)
 Source: full-codebase review (runtime source, skills/docs, tests/CI/packaging) plus
 ecosystem research against opencode.ai docs and competing workflow plugins.
 

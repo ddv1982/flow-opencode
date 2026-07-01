@@ -1,130 +1,63 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` is a skills-first workflow helper for OpenCode. The skills carry planning, execution, validation, cleanup, UI quality, review, safe commit preparation, and orchestration judgment. The plugin code stays deliberately small: it keeps a durable `.flow/session.json` ledger and enforces the hard gates prompts should not be trusted to remember.
+`opencode-plugin-flow` gives OpenCode a durable, resumable planning-and-execution
+loop for larger coding work: plan a goal as discrete features, approve the plan,
+then implement one feature at a time with enforced validation and review
+evidence. State lives in `.flow/session.json`, so a session survives restarts,
+model switches, and context loss.
 
-Flow v4 is a breaking simplification. It does not preserve v3 session layouts or retired tool aliases.
+The design is skills-first: the skills carry planning, execution, validation,
+review, and orchestration judgment, while the plugin runtime stays deliberately
+small — it keeps the session ledger and enforces the hard gates prompts should
+not be trusted to remember.
 
-## What Flow adds
-
-- A resumable one-feature-at-a-time loop for larger coding work.
-- Skill-guided planning, running, validation, review, cleanup, and UI quality.
-- First-class validation guidance through `flow-test`, plus user-triggered safe
-  commit preparation through `flow-commit`.
-- Hidden evidence, review, validation, audit, verifier, and candidate workers for broad parallel evidence passes.
-- Structured handoffs with coverage, evidence, confidence, and gaps.
-- Runtime gates for approval immutability, validation evidence, review evidence, and safe session closure.
-
-The manager still owns every Flow state change. Workers gather evidence; they do not approve plans, complete features, or close sessions. Flow may use parallel workers to reduce uncertainty, but Flow remains a serial state machine: parallel work produces candidate evidence, and only the manager records state.
-
-## Install or update
-
-Use OpenCode's plugin installer when your OpenCode version supports it:
+## Quick start
 
 ```bash
 opencode plugin opencode-plugin-flow@4.1.18 --global --force
 npx -y opencode-plugin-flow@4.1.18 sync
 ```
 
-The first command adds Flow to your global OpenCode plugin config or replaces an
-older pinned Flow entry. The `sync` command pre-installs Flow's managed skills so
-the next OpenCode startup can load the refreshed skill registry.
-
-Then start or restart OpenCode. On startup, the plugin syncs its global skills
-into:
+Restart OpenCode, then give Flow a goal:
 
 ```text
-~/.config/opencode/skills/flow/SKILL.md
-~/.config/opencode/skills/flow-plan/SKILL.md
-~/.config/opencode/skills/flow-run/SKILL.md
-~/.config/opencode/skills/flow-test/SKILL.md
-~/.config/opencode/skills/flow-review/SKILL.md
-~/.config/opencode/skills/flow-deslop/SKILL.md
-~/.config/opencode/skills/flow-ui-quality/SKILL.md
-~/.config/opencode/skills/flow-commit/SKILL.md
+/flow-auto add rate limiting to the public API
 ```
 
-If your OpenCode version does not have `opencode plugin`, add Flow to your
-OpenCode config manually instead:
+Flow inspects the repo, saves a plan of features, asks for approval (or
+proceeds if you already authorized autonomous work), then runs the loop:
+implement one feature → validate it → review it → record evidence → next
+feature. `/flow-status` shows where you are at any point, including after a
+restart.
 
-```json
-{
-  "plugin": ["opencode-plugin-flow@4.1.18"]
-}
-```
-
-When updating through this fallback, replace the older
-`opencode-plugin-flow@...` entry with the new pinned version instead of adding a
-duplicate entry.
-
-Then run the same pre-start skill sync and start or restart OpenCode:
-
-```bash
-npx -y opencode-plugin-flow@4.1.18 sync
-```
-
-Project-local skill overrides still work through OpenCode's normal lookup:
+## What a session looks like
 
 ```text
-.opencode/skills/flow-plan/SKILL.md
+> /flow-auto add rate limiting to the public API
+
+  flow_plan_save    goal: "add rate limiting to the public API"
+                    features: rate-limit-middleware, per-route-config, docs-update
+  (you approve the plan)
+  flow_plan_approve plan locked — features are now immutable
+  flow_run_start    feature: rate-limit-middleware
+  ... implementation, tests ...
+  flow_feature_complete
+                    validationRun: "bun test tests/middleware.test.ts" passed
+                    featureReview: passed
+  flow_run_start    feature: per-route-config
+  ...
+
+> /flow-status
+  status: running, 1/3 features completed
+  nextAction: complete feature "per-route-config"
 ```
 
-If Flow installs or updates skills during the current OpenCode startup, restart
-OpenCode once more before using Flow commands. OpenCode may have already scanned
-the skill registry for the running process, so a just-synced skill can exist on
-disk while still being unavailable to that process. Flow reports this through
-`flow_status` as `setup.skills.status: "restart_required"`.
-
-To update a pinned Flow version later, rerun the same install command with the
-new version.
-
-`--force` is intentional here: OpenCode keeps an existing same-package plugin
-entry unless replacement is requested, so the flag avoids leaving an older pinned
-version in your global `opencode.json`.
-
-To inspect the installed skill set:
-
-```bash
-npx -y opencode-plugin-flow@4.1.18 doctor
-```
-
-For automation, keep the default human-readable `doctor` output and opt into
-machine behavior explicitly:
-
-```bash
-npx -y opencode-plugin-flow@4.1.18 doctor --json
-npx -y opencode-plugin-flow@4.1.18 doctor --check
-```
-
-`doctor --check` and `doctor --strict` exit nonzero when the health status is
-`sync_required` or `action_required`; plain `doctor` remains advisory and exits
-successfully.
-
-If a command reports `Skill "flow-review" not found. Available skills...` or a
-similar Flow skill-loading error after upgrading, it is usually an older
-OpenCode process or stale resolved command body. Flow command preflight replaces
-public Flow command bodies in the running process, and `/flow-review` no longer
-asks OpenCode to native-load required public Flow skills. Public Flow command
-preflight replaces stale command bodies with bundled command instructions, so
-`/flow-auto`, `/flow-plan`, `/flow-run`, and `/flow-review` can continue even
-when native skill discovery lags. Run `/flow-status` or the doctor command
-above first. Missing, incomplete, or outdated managed skills can still be
-repaired with:
-
-```bash
-npx -y opencode-plugin-flow@4.1.18 sync
-```
-
-Then restart OpenCode so the refreshed registry is loaded. `sync` manages all
-bundled Flow skills: `flow`, `flow-plan`, `flow-run`, `flow-test`,
-`flow-review`, `flow-deslop`, `flow-ui-quality`, and `flow-commit`. If doctor
-reports a foreign or edited managed skill folder, Flow leaves it in place and
-asks for a user decision instead of overwriting local work.
+Interrupt at any point; `/flow-run` resumes the next approved feature. On the
+final feature Flow requires broad project-level validation and a final review
+whose depth matches the approved plan before the session can close as
+completed.
 
 ## Commands
-
-Commands are bundled entrypoints. OpenCode still syncs the Flow skills for
-discoverability and manual use, but public command execution does not depend on
-native skill discovery for the required Flow loop:
 
 | Command | Purpose |
 | --- | --- |
@@ -134,16 +67,12 @@ native skill discovery for the required Flow loop:
 | `/flow-review` | Run a read-only review. |
 | `/flow-status` | Show the active session and next action. |
 
-Flow reserves its public command IDs (`flow-auto`, `flow-plan`, `flow-run`,
-`flow-review`, `flow-status`) and internal worker IDs (`flow-reviewer`,
-`flow-evidence-worker`, `flow-validation-worker`, `flow-audit-worker`,
-`flow-candidate-worker`, `flow-verifier-worker`) while the plugin is enabled.
-The plugin injects those entries to keep command preflight and worker permission
-boundaries safe.
+Commands are bundled entrypoints: they carry their own instructions, so they
+keep working even when OpenCode's native skill discovery lags behind a fresh
+install (see [docs/troubleshooting.md](docs/troubleshooting.md)).
 
-`flow-test` and `flow-commit` are managed helper skills, not public commands in
-this release. `flow-commit` is user-triggered only and stays outside the
-autonomous Flow runtime loop.
+`flow-test` and `flow-commit` are managed helper skills, not public commands.
+`flow-commit` is user-triggered only and stays outside the autonomous loop.
 
 ## Tools
 
@@ -159,53 +88,66 @@ The runtime exposes seven tools:
 | `flow_feature_reset` | Reset one feature and its dependents. |
 | `flow_session_close` | Archive the active session as completed, deferred, or abandoned. |
 
-There is no `flow_context` and no separate review-record tool. Review evidence is part of `flow_feature_complete`: every completed feature needs a passing `featureReview`, and the final feature also needs a passing `finalReview`.
+Review evidence is part of `flow_feature_complete`: every completed feature
+needs a passing `featureReview`, and the final feature also needs a passing
+`finalReview`.
 
-## Runtime Contract
+## What the runtime enforces
 
-The runtime owns only safety:
+The runtime owns only safety; judgment lives in the skills:
 
-- `.flow/session.json` is the active source of truth.
-- `.flow/opencode-instructions.md` is a generated OpenCode instruction
-  projection of the active session. It is refreshed from `session.json`; do not
-  edit it.
-- `.flow/history/<session-id>.json` stores closed sessions.
-- Session writes are locked and atomic.
-- Flow writes `.flow/.gitignore` so session state stays out of Git by default.
-- Mutable roots cannot be filesystem roots or `$HOME`.
+- `.flow/session.json` is the single source of truth; writes are locked and
+  atomic, and closed sessions are archived under `.flow/history/`.
 - Plans cannot be changed after approval.
 - Only one feature can be active at a time.
-- Completion requires passing validation evidence.
-- Non-final completion requires `validationScope: "targeted"`.
-- Final completion requires `validationScope: "broad"` and a passing final review matching the plan's `finalReviewPolicy`.
-- `flow_session_close` accepts `kind: "completed"` only after an approved plan has passed final completion.
-- Reset keeps prior history entries as audit/provenance data. Current state comes
-  from `features`, `activeFeature`, `status`, `progress`, and `closure`, not from
-  old completion summaries.
-- Deferred and abandoned closures archive the session with its status at the time
-  of closure, clear the active session file, and remove the generated instruction
-  projection.
+- Completion requires passing validation evidence: `targeted` scope for
+  ordinary features, `broad` scope plus a passing final review for the last
+  one.
+- A session can close as `completed` only after final completion has passed.
+- Crash recovery is built in: stale session locks expire automatically and
+  unreadable session files are quarantined with recovery guidance, never
+  silently deleted.
+- Flow writes `.flow/.gitignore` so session state stays out of Git by default.
+- `.flow/opencode-instructions.md` is a generated projection of the active
+  session that keeps ambient context accurate; do not edit it.
 
-Planning quality, decomposition, review depth, validation adequacy, orchestration, and recovery judgment live in the skills.
+## Hidden workers
 
-## State Layout
+For broad work, Flow's manager can fan out read-only workers
+(`flow-evidence-worker`, `flow-validation-worker`, `flow-audit-worker`,
+`flow-candidate-worker`, `flow-verifier-worker`, and the `flow-reviewer`) with
+locked-down permissions. Workers gather evidence; they never approve plans,
+complete features, or close sessions. Flow reserves those agent ids and the
+public command ids while the plugin is enabled, and warns if they collide with
+your own config.
 
-```text
-.flow/session.json
-.flow/opencode-instructions.md
-.flow/history/<session-id>.json
-.flow/session.lock/
+## Install details, doctor, repair, uninstall
+
+See [docs/troubleshooting.md](docs/troubleshooting.md) for skill sync
+mechanics, the `doctor`/`sync` CLI, older-OpenCode install fallback, stuck
+session recovery, and uninstall (`uninstall --dry-run` previews removals).
+
+To update a pinned Flow version, rerun the install command with the new
+version. To inspect skill health:
+
+```bash
+npx -y opencode-plugin-flow@4.1.18 doctor
 ```
 
-Versioning `.flow` state is opt-in. Keep it ignored by default, and archive only
-exact Flow session artifacts when a maintainer intentionally asks for them; avoid
-broad forced adds of `.flow/**`.
+## Experimental: compaction context
+
+Flow's ambient context uses stable OpenCode configuration by default. If you
+want the active session summary injected into OpenCode's session compaction as
+well, opt in with the environment variable `FLOW_EXPERIMENTAL_COMPACTION=1`.
+This uses OpenCode's experimental compaction hook and may change with OpenCode
+versions; the default remains hook-free.
 
 ## Development
 
 ```bash
 bun install
-bun run check
+bun run check        # typecheck + lint + build + tests
+bun run smoke:live   # boots a real OpenCode server against the packed tarball
 ```
 
 The package exports only the OpenCode plugin entrypoint:
@@ -214,20 +156,17 @@ The package exports only the OpenCode plugin entrypoint:
 import flowPlugin from "opencode-plugin-flow";
 ```
 
+See [docs/development.md](docs/development.md) and
+[docs/maintainer-contract.md](docs/maintainer-contract.md) for the
+runtime/skills split and release process.
+
 ## Credits
 
-Flow's parallel orchestration guidance was inspired by Ray Fernando's skill work on parallel agent workflows. Flow also draws conceptual inspiration from [RepoPrompt CE](https://github.com/repoprompt/repoprompt-ce), especially its emphasis on codebase orientation, context engineering, agent orchestration, and reviewable handoffs.
+Flow's parallel orchestration guidance was inspired by Ray Fernando's skill
+work on parallel agent workflows. Flow also draws conceptual inspiration from
+[RepoPrompt CE](https://github.com/repoprompt/repoprompt-ce), especially its
+emphasis on codebase orientation, context engineering, agent orchestration,
+and reviewable handoffs.
 
-The Flow version is its own OpenCode-native design: skills-first, manager-owned state, hidden workers, and no extra runtime ledger.
-
-## Uninstall
-
-First remove `opencode-plugin-flow` from your OpenCode plugin config so future
-OpenCode startups stop loading Flow. Then remove Flow-owned synced skills:
-
-```bash
-npx -y opencode-plugin-flow@4.1.18 uninstall
-```
-
-Restart OpenCode after both steps. This removes Flow-owned synced skills when
-they are pristine. User-edited or foreign skill folders are kept.
+The Flow version is its own OpenCode-native design: skills-first,
+manager-owned state, hidden workers, and no extra runtime ledger.

@@ -1680,3 +1680,91 @@ describe("config collision reporting", () => {
 		).toBe("Internal read-only reviewer for Flow-guided work.");
 	});
 });
+
+describe("opt-in compaction context", () => {
+	test("stable default registers no experimental hooks", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		delete process.env.FLOW_EXPERIMENTAL_COMPACTION;
+		try {
+			const workspace = await tempWorkspace();
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			expect(
+				Object.keys(hooks).filter((name) => name.startsWith("experimental")),
+			).toEqual([]);
+		} finally {
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
+
+	test("FLOW_EXPERIMENTAL_COMPACTION=1 injects active session context on compaction", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		process.env.FLOW_EXPERIMENTAL_COMPACTION = "1";
+		try {
+			const workspace = await tempWorkspace();
+			await flowPlanSave(workspace, { goal: "Survive compaction" });
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			const compacting = hooks["experimental.session.compacting"];
+			expect(compacting).toBeDefined();
+			if (!compacting) throw new Error("Expected compaction hook.");
+
+			const output: { context: string[] } = { context: [] };
+			await compacting(
+				{ sessionID: "test-session" },
+				output as Parameters<typeof compacting>[1],
+			);
+			expect(output.context).toHaveLength(1);
+			expect(output.context[0]).toContain("Survive compaction");
+			expect(output.context[0]).toContain("flow_status");
+
+			const emptyWorkspace = await tempWorkspace();
+			const emptyHooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: emptyWorkspace,
+				worktree: emptyWorkspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			const emptyCompacting = emptyHooks["experimental.session.compacting"];
+			if (!emptyCompacting) throw new Error("Expected compaction hook.");
+			const emptyOutput: { context: string[] } = { context: [] };
+			await emptyCompacting(
+				{ sessionID: "test-session" },
+				emptyOutput as Parameters<typeof emptyCompacting>[1],
+			);
+			expect(emptyOutput.context).toEqual([]);
+		} finally {
+			delete process.env.FLOW_EXPERIMENTAL_COMPACTION;
+			if (previousHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = previousHome;
+			}
+		}
+	});
+});

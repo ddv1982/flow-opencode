@@ -126,8 +126,12 @@ the adapter registers `.flow/opencode-instructions.md` through
 `config.instructions`, and the runtime keeps that file synchronized with
 `.flow/session.json`. Default behavior must not depend on OpenCode experimental
 chat system, message transform, or session compaction hooks. Experimental hooks
-may only return as explicit compatibility code with tests proving the stable
-default remains hook-free.
+may only exist as explicit compatibility code with tests proving the stable
+default remains hook-free. The one such opt-in today is
+`FLOW_EXPERIMENTAL_COMPACTION=1`, which registers
+`experimental.session.compacting` to inject a short active-session summary into
+compaction context; it is best-effort, read-only, and covered by tests that
+assert the default registers no experimental hooks.
 
 ## Source Ownership
 

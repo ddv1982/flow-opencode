@@ -1,88 +1,148 @@
 # Changelog
 
-One short line per release. For the full rationale behind each entry, see the
-commit history and review evidence.
+One short entry per release, written for users deciding whether to upgrade.
+
+## [Unreleased]
+
+Safety and usability overhaul across the runtime, packaging, skills, and docs:
+
+- Uninstall no longer deletes managed skill folders that contain your own
+  files or have a damaged version marker; `uninstall --dry-run` previews
+  removals.
+- Crashed sessions recover: stale session locks expire automatically and the
+  lock timeout error names the manual fix; corrupt or older-version
+  `session.json` files are quarantined into `.flow/history/` with recovery
+  guidance instead of failing every tool with a raw validation dump.
+- Fixed a batch of small correctness bugs: `$`-sequences in goals no longer
+  get mangled, attachments to Flow commands are preserved, failed plan saves
+  no longer discard the previous session, replacing a draft plan archives it,
+  and `needs_input` no longer reports a stale prior error.
+- OpenCode compatibility: the peer dependency is now a range
+  (`>=1.17.3 <2`) so newer OpenCode versions install cleanly; a live smoke
+  test boots a real OpenCode server against the packed tarball in CI; CI runs
+  on macOS and Node 20/22/24; published bundles are no longer minified and
+  ship sourcemaps.
+- Skills: repo-specific content removed from distributed skills, duplicated
+  orchestration rules consolidated (smaller command prompts), the read-only
+  reviewer no longer receives instructions it cannot execute, and managers
+  are told to paste handoff templates into worker prompts.
+- New opt-in `FLOW_EXPERIMENTAL_COMPACTION=1` injects the active session
+  summary into OpenCode session compaction; the default stays hook-free.
+- README rewritten around a quick start; install/repair depth moved to
+  `docs/troubleshooting.md`.
 
 ## [4.1.18] - 2026-07-01
 
-Teach Flow's skill review lore to keep audit fallback bundled, commit preflight staged-only, and long references navigable.
+Review-skill guidance: keep the audit rubric bundled with `/flow-review`,
+restrict commit preflight to the staged boundary, and make long reference
+docs easier to navigate.
 
 ## [4.1.17] - 2026-06-28
 
-Teach Flow's parallel pass lore to verify worker handoffs, prune retired managed skill files, and keep manager-owned synthesis explicit.
+Parallel-pass guidance: verify worker handoffs before use, prune retired
+managed skill files during sync, and state explicitly that only the manager
+synthesizes worker output.
 
 ## [4.1.16] - 2026-06-22
 
-Quote Flow skill frontmatter lore so GitHub previews parse cleanly and CI guards future YAML slips.
+Quote skill frontmatter values so GitHub renders SKILL.md previews correctly;
+CI now guards against future YAML frontmatter regressions.
 
 ## [4.1.15] - 2026-06-22
 
-Refine Flow's orchestration lore into a quick path, bundled parallel pass example, tested doc links, and trusted-publishing release guidance.
+Add a condensed "quick path" to the orchestration guidance, bundle a worked
+parallel-pass example, test that skill doc links resolve, and document the
+trusted-publishing release process.
 
 ## [4.1.14] - 2026-06-22
 
-Publish Flow through npm trusted publishing so release CI no longer depends on expiring npm tokens.
+Publish through npm trusted publishing (GitHub Actions OIDC) so releases no
+longer depend on expiring npm tokens.
 
 ## [4.1.13] - 2026-06-21
 
-Teach Flow's parallel orchestration lore to walk a full pass while pinning hidden worker permissions to tested docs.
+Walk a full parallel pass in the orchestration guidance and pin hidden worker
+permissions to a tested documentation table.
 
 ## [4.1.12] - 2026-06-18
 
-Harden Flow's hidden worker lore, scriptable doctor checks, typed package smoke, and session edge contracts without widening the v4 runtime surface.
+Harden hidden worker prompts, add scriptable `doctor --check`/`--strict`
+modes, type the package smoke test, and tighten session edge-case contracts
+without changing the v4 runtime surface.
 
 ## [4.1.11] - 2026-06-17
 
-Give bundled Flow command lore a real title seed so OpenCode can name new chats while keeping the heavy instructions synthetic.
+Give bundled Flow commands a real title seed so OpenCode can name new chats,
+while keeping the heavy command instructions out of the visible prompt.
 
 ## [4.1.10] - 2026-06-17
 
-Move Flow session lore onto stable OpenCode instructions so experimental chat hooks no longer shape the default runtime context.
+Move ambient Flow session context onto stable OpenCode `config.instructions`;
+experimental chat hooks no longer shape default runtime context.
 
 ## [4.1.9] - 2026-06-17
 
-Make public Flow command lore self-contained so stale native skill discovery cannot block the required loop.
+Make public Flow commands fully self-contained so stale native skill
+discovery cannot block the required loop.
 
 ## [4.1.8] - 2026-06-17
 
-Make Flow command preflight overrule stale OpenCode command lore, with review instructions bundled where skill discovery can lag.
+Command preflight now replaces stale resolved Flow command bodies with
+current bundled instructions; review instructions are bundled where skill
+discovery can lag.
 
 ## [4.1.7] - 2026-06-17
 
-Teach Flow's managed skill lore to test, commit, and trigger more precisely while keeping release state and `.flow/**` artifacts guarded by explicit maintainer intent.
+Sharpen the flow-test and flow-commit skills' triggers, and require explicit
+maintainer intent before any `.flow/**` artifacts are committed.
 
 ## [4.1.6] - 2026-06-16
 
-Make Flow's pinned installer path force-aware, so OpenCode replaces older global plugin entries instead of leaving stale versions behind.
+Recommend `--force` in the pinned installer command so OpenCode replaces
+older global plugin entries instead of leaving stale versions behind.
 
 ## [4.1.5] - 2026-06-16
 
-Make Flow installation follow OpenCode's native plugin installer, with pre-start skill sync and older-version fallback.
+Adopt OpenCode's native plugin installer as the primary install path, with a
+pre-start skill sync and a manual-config fallback for older versions.
 
 ## [4.1.4] - 2026-06-16
 
-Make Flow skill loading restart-aware across every command, add manual sync repair, and treat missing optional helpers as explicit coverage gaps.
+Make skill loading restart-aware across every command, add manual sync
+repair, and treat missing optional helper skills as explicit coverage gaps.
 
 ## [4.1.3] - 2026-06-16
 
-Sharpen Flow's skill/runtime contract with aligned final-review language, broader gate coverage, CLI smoke tests, and skill-aware preflight routing.
+Align final-review language between skills and runtime, broaden gate test
+coverage, add CLI smoke tests, and route command preflight through skill
+awareness.
 
 ## [4.1.2] - 2026-06-15
 
-Make Flow's skill registry lag visible with restart-aware setup warnings, a doctor command, and a bundled review fallback for stale OpenCode startups.
+Surface skill-registry lag with restart-aware setup warnings, add the
+`doctor` command, and bundle a review fallback for stale OpenCode startups.
 
 ## [4.1.1] - 2026-06-15
 
-Keep Flow's local session ledger out of Git by default with a generated `.flow/.gitignore`, while preserving opt-in versioning for teams that intentionally archive session evidence.
+Keep local session state out of Git by default with a generated
+`.flow/.gitignore`, while preserving opt-in versioning for teams that
+intentionally archive session evidence.
 
 ## [4.1.0] - 2026-06-15
 
-Add Flow-native orchestration handoffs, verification gates, and a hidden verifier worker, inspired by Ray Fernando's parallel agent workflow skill work and RepoPrompt CE's context-engineering approach, while keeping the public runtime surface unchanged.
+Add Flow-native orchestration handoffs, verification gates, and a hidden
+verifier worker, inspired by Ray Fernando's parallel agent workflow skill
+work and RepoPrompt CE's context-engineering approach. Public runtime surface
+unchanged.
 
 ## [4.0.1] - 2026-06-15
 
-Teach Flow to fan out through named evidence, validation, audit, review, and candidate workers while keeping runtime state changes manager-owned.
+Fan out through named evidence, validation, audit, review, and candidate
+workers while keeping runtime state changes manager-owned.
 
 ## [4.0.0] - 2026-06-14
 
-Breaking overhaul: Flow is now a skills-first plugin with a minimal v4 runtime ledger, seven tools, one active `.flow/session.json`, archived history, embedded review evidence on completion, and no context-pack or separate review-decision framework.
+Breaking overhaul: Flow is now a skills-first plugin with a minimal v4
+runtime ledger, seven tools, one active `.flow/session.json`, archived
+history, review evidence embedded in completion, and no context-pack or
+separate review-decision framework.
