@@ -2,7 +2,7 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
-## [Unreleased]
+## [4.2.0] - 2026-07-01
 
 Safety and usability overhaul across the runtime, packaging, skills, and docs:
 
