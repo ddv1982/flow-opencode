@@ -138,6 +138,18 @@ default remains hook-free.
 
 Keep adapter/distribution concerns out of runtime.
 
+## Dependencies
+
+- `@opencode-ai/plugin` is a peer range (`>=1.17.3 <2`) so users on newer
+  OpenCode versions install without resolution friction; the exact version CI
+  verifies against stays pinned in `devDependencies`. Widen the lower bound
+  only after testing, and cap at the next major.
+- `zod` is exact-pinned and externalized on purpose: Zod schema objects cross
+  the plugin/host boundary (they are handed to the host's `tool()` runner), so
+  the pin prevents instanceof/shape drift between the plugin's schemas and the
+  host's Zod copy. Bump it deliberately alongside the tested
+  `@opencode-ai/plugin` version, not automatically.
+
 ## Release Publishing
 
 Release tags drive `.github/workflows/release.yml`. Before tagging, make sure

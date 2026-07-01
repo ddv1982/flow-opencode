@@ -109,11 +109,15 @@ async function writeFileAtomically(
 		await rm(tempPath, { force: true });
 		throw error;
 	}
-	const directory = await open(dirname(path), "r");
-	try {
-		await directory.sync();
-	} finally {
-		await directory.close();
+	if (process.platform !== "win32") {
+		// Directory-handle fsync is POSIX-only; Windows cannot open a
+		// directory for reading and the rename above is already durable there.
+		const directory = await open(dirname(path), "r");
+		try {
+			await directory.sync();
+		} finally {
+			await directory.close();
+		}
 	}
 }
 
