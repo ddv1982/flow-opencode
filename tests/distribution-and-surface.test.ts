@@ -437,6 +437,7 @@ describe("Flow distribution and plugin surface", () => {
 			"flow-review": [
 				"Bundled flow-review/SKILL.md",
 				"Bundled flow-review/references/review-rubric.md",
+				"Bundled flow-run/references/audit-rubric.md",
 			],
 		} satisfies Record<
 			Exclude<(typeof FLOW_COMMAND_NAMES)[number], "flow-status">,

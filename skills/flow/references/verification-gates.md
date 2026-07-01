@@ -5,6 +5,9 @@ guesswork. Worker handoffs are candidate evidence; the manager decides what can
 enter the plan, validation record, review payload, audit report, or final
 answer.
 
+Sections: before fan-out, every handoff, verifier triggers, verification tiers,
+Flow payload acceptance, and manager synthesis barrier.
+
 ## Before fan-out
 
 Run a pre-fan-out gate after serial orientation and before spawning workers:

@@ -110,7 +110,6 @@ require_tool() {
 }
 
 require_tool git
-require_tool bun
 
 if [[ "$mode" == "commit" ]]; then
   log "Check staged whitespace"
@@ -129,6 +128,8 @@ Commit mode validated the staged boundary only. Run `bun run check` separately f
 EOF
   exit 0
 fi
+
+require_tool bun
 
 log "Require a clean working tree before push"
 require_clean_worktree

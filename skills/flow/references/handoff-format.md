@@ -5,6 +5,9 @@ worker report of record: it must include the assigned scope, what was actually
 covered, the evidence for each useful claim, and the remaining gaps. End worker
 prompts with "Return only this Flow handoff."
 
+Sections: evidence/review/validation/audit worker report, verifier worker report,
+and candidate implementation worker report.
+
 Status meanings:
 
 - `success`: the assigned scope was covered, or any skipped items are explicitly

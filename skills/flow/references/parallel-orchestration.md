@@ -5,6 +5,9 @@ evidence faster than one linear pass. The manager still owns the Flow session:
 only the manager calls state-changing Flow tools, approves plans, completes
 features, records reviews, or closes sessions.
 
+Sections: quick path, operational defaults, manager sequence, modes, permission
+contract, worker rules, prompt contract, handoff location, and follow-up passes.
+
 Read these companion references before a broad parallel pass:
 
 - `parallel-pass-patterns.md` for pass selection, effort defaults, and stop or

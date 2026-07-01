@@ -3,6 +3,10 @@
 One short line per release. For the full rationale behind each entry, see the
 commit history and review evidence.
 
+## [4.1.18] - 2026-07-01
+
+Teach Flow's skill review lore to keep audit fallback bundled, commit preflight staged-only, and long references navigable.
+
 ## [4.1.17] - 2026-06-28
 
 Teach Flow's parallel pass lore to verify worker handoffs, prune retired managed skill files, and keep manager-owned synthesis explicit.

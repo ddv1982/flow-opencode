@@ -83,6 +83,10 @@ const FLOW_REVIEW_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 		label: "flow-review/references/review-rubric.md",
 		content: flowReviewReviewRubricDoc,
 	},
+	{
+		label: "flow-run/references/audit-rubric.md",
+		content: flowRunAuditRubricDoc,
+	},
 ]);
 
 const FLOW_PLAN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([

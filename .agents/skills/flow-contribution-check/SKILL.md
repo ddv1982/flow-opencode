@@ -5,10 +5,10 @@ description: Validate Flow plugin contribution readiness before committing, push
 
 # Flow contribution check
 
-Run the repository-local preflight before every commit and before pushing. It is
-scaled to Flow's small plugin surface: staged diff hygiene, optional redacted
-secret scanning, architecture seams, package/version hygiene, and path-sensitive
-focused checks.
+Run the repository-local preflight before every commit and before pushing. Commit
+mode validates the staged boundary; push mode adds the broader Flow plugin checks
+for architecture seams, package/version hygiene, and path-sensitive focused
+validation.
 
 This preflight validates staged or outgoing work; it does not choose commit
 boundaries, stage files, or write commit messages.
