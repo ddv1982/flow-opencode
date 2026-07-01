@@ -560,3 +560,26 @@ describe("plan save and completion state invariants", () => {
 		expect((await loadSession(workspace))?.lastError).toBeNull();
 	});
 });
+
+describe("completion payload contract errors", () => {
+	test("flow_feature_complete reports schema violations as curated errors", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Curated contract errors",
+			plan: oneFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+		await flowRunStart(workspace, {});
+
+		const result = await flowFeatureComplete(workspace, {
+			status: "ok",
+			featureId: "only-feature",
+			summary: "claim done without evidence fields",
+		});
+		expect(result.status).toBe("error");
+		expect(String(result.summary)).toContain(
+			"flow_feature_complete payload is invalid",
+		);
+		expect(String(result.recovery)).toContain("validationScope");
+	});
+});

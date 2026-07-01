@@ -14,26 +14,17 @@ Use its pre-fan-out coverage gate and
 - Risk lenses such as security, persistence, accessibility, migration, or performance.
 - Documentation and operator-contract checks.
 
-## Flow repo default slices
+## Deriving first-pass slices
 
-For this repository, good first-pass slices are:
+Derive slices from the repo shape found during the serial orientation pass:
+top-level packages or source directories, the test tree, CI and release
+config, and docs. Name each slice by the paths it owns, for example "runtime:
+`src/core/**` plus its tests" or "release contract: CI workflows,
+`package.json`, and the changelog".
 
-- Runtime gates: `src/runtime/schema.ts`, `src/runtime/transitions.ts`,
-  `src/runtime/api.ts`, and `tests/runtime-gates.test.ts`.
-- Workspace persistence: `src/runtime/workspace.ts`,
-  `src/runtime/json/strict-object.ts`, and
-  `tests/workspace-persistence.test.ts`.
-- OpenCode adapter surface: `src/adapters/opencode/**`, `src/config-shared.ts`,
-  `src/config.ts`, `src/index.ts`, and surface tests.
-- Distribution and synced skills: `src/distribution/**`, `src/cli.ts`,
-  `skills/**`, and distribution tests.
-- CI, package, and release contract: `.github/workflows/**`, `package.json`,
-  `bun.lock`, `README.md`, and `CHANGELOG.md`.
-- Docs and operator contract: `docs/**`, `README.md`, and skill references.
-
-Treat these as starting points, not a simultaneous coverage map. Before fan-out,
-choose the relevant entries and de-overlap shared docs, skills, or release
-surfaces in the coverage gate.
+Treat derived slices as starting points, not a simultaneous coverage map.
+Before fan-out, choose the relevant entries and de-overlap shared docs,
+config, or release surfaces in the coverage gate.
 
 ## Coverage gate
 
@@ -46,8 +37,8 @@ state the completeness rule, such as "all changed files plus callers."
 
 ```text
 Inspect <slice> for <goal>. Read-only. Do not edit files or call
-state-changing Flow tools. Return the evidence/review/validation/audit handoff
-shape from ../../flow/references/handoff-format.md.
+state-changing Flow tools. Return only the Flow handoff in this exact shape:
+<matching handoff template copied verbatim from handoff-format.md>
 ```
 
 For validation-oriented discovery:
@@ -55,10 +46,13 @@ For validation-oriented discovery:
 ```text
 Inspect <slice> for validation risk. Read-only. Do not edit files or call
 state-changing Flow tools. You may report commands that should be run, and
-include raw output only for commands you actually ran. Return the
-evidence/review/validation/audit handoff shape from
-../../flow/references/handoff-format.md.
+include raw output only for commands you actually ran. Return only the Flow
+handoff in this exact shape:
+<matching handoff template copied verbatim from handoff-format.md>
 ```
+
+Workers cannot read reference files themselves; paste the matching handoff
+template from `../../flow/references/handoff-format.md` into the prompt.
 
 ## Synthesis
 

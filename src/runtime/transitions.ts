@@ -371,7 +371,18 @@ export function completeFeature(
 	) {
 		return fail("No feature is currently running.");
 	}
-	const worker = WorkerResultSchema.parse(input);
+	const parsed = WorkerResultSchema.safeParse(input);
+	if (!parsed.success) {
+		const issues = parsed.error.issues
+			.slice(0, 3)
+			.map((issue) => `${issue.path.join(".") || "payload"}: ${issue.message}`)
+			.join("; ");
+		return fail(
+			`flow_feature_complete payload is invalid: ${issues}.`,
+			'Provide status, featureId, and summary. Results with status "ok" also need validationScope, at least one validationRun entry, and a featureReview; final features add a finalReview.',
+		);
+	}
+	const worker = parsed.data;
 	if (worker.featureId !== session.activeFeatureId) {
 		return fail(
 			`Worker result feature '${worker.featureId}' does not match active feature '${session.activeFeatureId}'.`,

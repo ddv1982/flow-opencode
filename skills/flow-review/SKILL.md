@@ -11,15 +11,30 @@ If Flow tools, required Flow skills, or required references are unavailable or
 stale, perform an advisory review and say that no Flow-gated review payload was
 recorded.
 
+## Execution contexts
+
+These instructions run in two contexts, and only one of them can load helpers:
+
+- **Manager context**: the manager reviews inside `flow-run` or `flow-auto`
+  before recording evidence. The manager may load helper skills and fan out
+  read-only workers.
+- **Hidden reviewer context**: `/flow-review` runs as the `flow-reviewer`
+  subagent, whose permissions deny skill loading, shell commands, and
+  subagents. In this context, skip every "load" and "fan out" instruction
+  below: judge from the diff, the plan fields, and the recorded validation
+  evidence, and record a coverage gap for any judgment that would have needed
+  a helper skill or a command run.
+
 ## Start
 
 - Call `flow_status` when available.
 - Identify whether this is a feature review or final review.
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
-- Load `flow-test` for validation-heavy, regression-sensitive, browser QA, or
-  unclear coverage reviews. If it is unavailable, record a coverage gap and
-  treat missing validation evidence as a gap or blocker based on user impact.
+- In manager context, load `flow-test` for validation-heavy,
+  regression-sensitive, browser QA, or unclear coverage reviews. If it is
+  unavailable or you are the hidden reviewer, record a coverage gap and treat
+  missing validation evidence as a gap or blocker based on user impact.
 - Load `references/review-rubric.md` for severity, depth, and payload shape.
 
 ## Feature Review Depth
@@ -57,14 +72,16 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 
 ## Special cases
 
-- Cleanup/refactor: load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved. If unavailable, record a coverage gap instead of approving cleanup claims.
-- UI/frontend: load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available. If unavailable, record a coverage gap and do not claim visual polish was verified.
+- Cleanup/refactor: in manager context, load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved. If it is unavailable or you are the hidden reviewer, record a coverage gap instead of approving cleanup claims.
+- UI/frontend: in manager context, load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available. If it is unavailable or you are the hidden reviewer, record a coverage gap and do not claim visual polish was verified.
 - Audit reports: use `../flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
-- Large reviews: use `../flow/references/parallel-orchestration.md` for
-  read-only slices by changed-file group, risk lens, or validation surface.
-  Use the named review, audit, evidence, or validation agents from that
-  reference instead of generic subagents. Apply its handoff format and
-  verification gates; only the manager returns the final `featureReview` or
-  `finalReview` payload.
+- Large reviews (manager context only): use
+  `../flow/references/parallel-orchestration.md` for read-only slices by
+  changed-file group, risk lens, or validation surface. Use the named review,
+  audit, evidence, or validation agents from that reference instead of generic
+  subagents. Apply its handoff format and verification gates; only the manager
+  returns the final `featureReview` or `finalReview` payload. The hidden
+  reviewer cannot spawn workers; it reviews its assigned scope directly and
+  reports coverage gaps for the rest.
 
 Never approve to unblock completion, fix findings in the review pass, or vouch for validation you did not inspect.

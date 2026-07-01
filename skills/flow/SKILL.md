@@ -10,10 +10,8 @@ Use Flow as a minimal state ledger, not as a framework. Skills provide judgment;
 ## Loop
 
 1. Call `flow_status` first. Trust its active session and next action over conversation memory.
-   If the result includes `setup.skills`, report that setup status and do not
-   native-load Flow skills in this startup. Public bundled Flow commands may
-   continue with their embedded instructions, but a just-synced native skill can
-   be on disk while unavailable to the running OpenCode process.
+   If the result includes `setup.skills`, follow the Skill Availability rules
+   below before loading any Flow skill.
 2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
 3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, browser QA, route QA, or failure-prone work, use `flow-test` to choose and summarize evidence before completion.
 4. Load `flow-review` for the required feature review. The reviewer reports a `featureReview` payload; the manager records it inside `flow_feature_complete`.

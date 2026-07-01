@@ -70,18 +70,12 @@ Before commit creation, check the staged diff for:
 - Generated artifacts that are not normally versioned.
 - Package or version metadata drift unrelated to the requested change.
 
-When this repository-local contribution preflight exists, defer to it for staged
-or outgoing validation instead of duplicating its checks:
-
-```bash
-.agents/skills/flow-contribution-check/scripts/preflight.sh commit
-```
-
-Run it after staging and rerun it after any staging change. Commit mode validates
-the staged boundary for diff hygiene, staged review, and staged secret screening;
-it does not run a whole-worktree gate, choose commit boundaries, or write commit
-messages. If the script is absent, use the repository's documented commit
-preflight from package scripts, AGENTS/docs, or CI guidance.
+If the repository documents its own commit preflight (a package script, a
+repo-local preflight script, or guidance in AGENTS/docs or CI config), defer to
+it for staged validation instead of duplicating its checks. Run it after
+staging and rerun it after any staging change. A staged-boundary preflight
+validates diff hygiene and staged secret screening; it does not run a
+whole-worktree gate, choose commit boundaries, or write commit messages.
 
 Use the repository's documented broad validation gate when a full local check is
 appropriate, such as package scripts, AGENTS/docs, or CI guidance. Treat broad

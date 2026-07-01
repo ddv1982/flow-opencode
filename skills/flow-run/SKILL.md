@@ -14,9 +14,10 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Call `flow_status`.
 - Call `flow_run_start` with no `featureId` unless the user or plan requires a specific runnable feature.
 - Treat the returned feature as the sole scope until it is completed, blocked, or reset.
-- Load `flow-deslop` for cleanup/refactor features. If it is unavailable,
-  record the gap and do not overclaim cleanup quality.
-- Load `flow-ui-quality` for frontend, UX, responsive, accessibility, or visual work. If it is unavailable, record the gap and use next-best UI evidence.
+- Helper rule: when a named helper skill is unavailable, record the gap and
+  keep the corresponding claims conservative instead of simulating its checks.
+- Load `flow-deslop` for cleanup/refactor features.
+- Load `flow-ui-quality` for frontend, UX, responsive, accessibility, or visual work.
 
 ## Implement
 
@@ -34,8 +35,7 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 
 - For complex validation, regression-sensitive changes, browser QA, route QA,
   failure-prone checks, unclear coverage, exploratory QA, or
-  `validationRun` summarization, load `flow-test`. If it is unavailable, record
-  the coverage gap and keep validation claims conservative.
+  `validationRun` summarization, load `flow-test` (helper rule applies).
 - Read `references/validation-rubric.md` before completing.
 - Run the strongest practical checks for the changed behavior.
 - Record concrete command names, status, and observed results. "Tests pass" is not evidence.

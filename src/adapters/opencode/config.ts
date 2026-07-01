@@ -34,9 +34,14 @@ export function createConfigHook(
 				}`,
 			);
 		}
-		applyFlowConfig(
-			config,
-			instructionPath ? { flowInstructionPath: instructionPath } : undefined,
-		);
+		applyFlowConfig(config, {
+			...(instructionPath ? { flowInstructionPath: instructionPath } : {}),
+			onCollision: (kind, name) => {
+				log(
+					"warn",
+					`Flow replaced a user-defined ${kind} named '${name}'. Flow reserves this ${kind} id while the plugin is enabled; rename the local ${kind} to keep it.`,
+				);
+			},
+		});
 	};
 }

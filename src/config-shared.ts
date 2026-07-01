@@ -1,44 +1,4 @@
-import flowHandoffFormatDoc from "../skills/flow/references/handoff-format.md" with {
-	type: "text",
-};
-import flowParallelOrchestrationDoc from "../skills/flow/references/parallel-orchestration.md" with {
-	type: "text",
-};
-import flowParallelPassExampleDoc from "../skills/flow/references/parallel-pass-example.md" with {
-	type: "text",
-};
-import flowParallelPassPatternsDoc from "../skills/flow/references/parallel-pass-patterns.md" with {
-	type: "text",
-};
-import flowRecoveryPlaybookDoc from "../skills/flow/references/recovery-playbook.md" with {
-	type: "text",
-};
-import flowVerificationGatesDoc from "../skills/flow/references/verification-gates.md" with {
-	type: "text",
-};
-import flowSkillDoc from "../skills/flow/SKILL.md" with { type: "text" };
-import flowPlanParallelDiscoveryDoc from "../skills/flow-plan/references/parallel-discovery.md" with {
-	type: "text",
-};
-import flowPlanPlanningExamplesDoc from "../skills/flow-plan/references/planning-examples.md" with {
-	type: "text",
-};
-import flowPlanSkillDoc from "../skills/flow-plan/SKILL.md" with {
-	type: "text",
-};
-import flowReviewReviewRubricDoc from "../skills/flow-review/references/review-rubric.md" with {
-	type: "text",
-};
-import flowReviewSkillDoc from "../skills/flow-review/SKILL.md" with {
-	type: "text",
-};
-import flowRunAuditRubricDoc from "../skills/flow-run/references/audit-rubric.md" with {
-	type: "text",
-};
-import flowRunValidationRubricDoc from "../skills/flow-run/references/validation-rubric.md" with {
-	type: "text",
-};
-import flowRunSkillDoc from "../skills/flow-run/SKILL.md" with { type: "text" };
+import { FLOW_SKILL_DEFINITIONS } from "./distribution/flow-skill-definitions";
 
 export type FlowPermissionConfig = {
 	edit?: string;
@@ -69,144 +29,75 @@ export type MutableFlowConfig = {
 	instructions?: string[];
 };
 
+function flowSkillFileContent(skillName: string, relativePath: string): string {
+	const definition = FLOW_SKILL_DEFINITIONS.find(
+		(candidate) => candidate.name === skillName,
+	);
+	const file = definition?.files.find(
+		(candidate) => candidate.relativePath === relativePath,
+	);
+	if (!file) {
+		throw new Error(
+			`Missing bundled Flow skill file ${skillName}/${relativePath}.`,
+		);
+	}
+	return file.content;
+}
+
 function bundledFlowInstructions(
-	sections: Array<{ label: string; content: string }>,
+	sections: Array<readonly [skillName: string, relativePath: string]>,
 ): string {
 	return sections
-		.map((section) => `## Bundled ${section.label}\n\n${section.content}`)
+		.map(
+			([skillName, relativePath]) =>
+				`## Bundled ${skillName}/${relativePath}\n\n${flowSkillFileContent(skillName, relativePath)}`,
+		)
 		.join("\n\n");
 }
 
 const FLOW_REVIEW_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
-	{ label: "flow-review/SKILL.md", content: flowReviewSkillDoc },
-	{
-		label: "flow-review/references/review-rubric.md",
-		content: flowReviewReviewRubricDoc,
-	},
-	{
-		label: "flow-run/references/audit-rubric.md",
-		content: flowRunAuditRubricDoc,
-	},
+	["flow-review", "SKILL.md"],
+	["flow-review", "references/review-rubric.md"],
+	["flow-run", "references/audit-rubric.md"],
 ]);
 
 const FLOW_PLAN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
-	{ label: "flow-plan/SKILL.md", content: flowPlanSkillDoc },
-	{
-		label: "flow-plan/references/planning-examples.md",
-		content: flowPlanPlanningExamplesDoc,
-	},
-	{
-		label: "flow-plan/references/parallel-discovery.md",
-		content: flowPlanParallelDiscoveryDoc,
-	},
-	{
-		label: "flow/references/parallel-orchestration.md",
-		content: flowParallelOrchestrationDoc,
-	},
-	{
-		label: "flow/references/parallel-pass-patterns.md",
-		content: flowParallelPassPatternsDoc,
-	},
-	{
-		label: "flow/references/parallel-pass-example.md",
-		content: flowParallelPassExampleDoc,
-	},
-	{
-		label: "flow/references/handoff-format.md",
-		content: flowHandoffFormatDoc,
-	},
-	{
-		label: "flow/references/verification-gates.md",
-		content: flowVerificationGatesDoc,
-	},
+	["flow-plan", "SKILL.md"],
+	["flow-plan", "references/planning-examples.md"],
+	["flow-plan", "references/parallel-discovery.md"],
+	["flow", "references/parallel-orchestration.md"],
+	["flow", "references/parallel-pass-patterns.md"],
+	["flow", "references/handoff-format.md"],
+	["flow", "references/verification-gates.md"],
 ]);
 
 const FLOW_RUN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
-	{ label: "flow-run/SKILL.md", content: flowRunSkillDoc },
-	{
-		label: "flow-run/references/validation-rubric.md",
-		content: flowRunValidationRubricDoc,
-	},
-	{
-		label: "flow-run/references/audit-rubric.md",
-		content: flowRunAuditRubricDoc,
-	},
-	{
-		label: "flow/references/parallel-orchestration.md",
-		content: flowParallelOrchestrationDoc,
-	},
-	{
-		label: "flow/references/parallel-pass-patterns.md",
-		content: flowParallelPassPatternsDoc,
-	},
-	{
-		label: "flow/references/parallel-pass-example.md",
-		content: flowParallelPassExampleDoc,
-	},
-	{
-		label: "flow/references/handoff-format.md",
-		content: flowHandoffFormatDoc,
-	},
-	{
-		label: "flow/references/verification-gates.md",
-		content: flowVerificationGatesDoc,
-	},
-	{ label: "flow-review/SKILL.md", content: flowReviewSkillDoc },
-	{
-		label: "flow-review/references/review-rubric.md",
-		content: flowReviewReviewRubricDoc,
-	},
+	["flow-run", "SKILL.md"],
+	["flow-run", "references/validation-rubric.md"],
+	["flow-run", "references/audit-rubric.md"],
+	["flow", "references/parallel-orchestration.md"],
+	["flow", "references/parallel-pass-patterns.md"],
+	["flow", "references/handoff-format.md"],
+	["flow", "references/verification-gates.md"],
+	["flow-review", "SKILL.md"],
+	["flow-review", "references/review-rubric.md"],
 ]);
 
 const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
-	{ label: "flow/SKILL.md", content: flowSkillDoc },
-	{
-		label: "flow/references/recovery-playbook.md",
-		content: flowRecoveryPlaybookDoc,
-	},
-	{
-		label: "flow/references/parallel-orchestration.md",
-		content: flowParallelOrchestrationDoc,
-	},
-	{
-		label: "flow/references/parallel-pass-patterns.md",
-		content: flowParallelPassPatternsDoc,
-	},
-	{
-		label: "flow/references/parallel-pass-example.md",
-		content: flowParallelPassExampleDoc,
-	},
-	{
-		label: "flow/references/handoff-format.md",
-		content: flowHandoffFormatDoc,
-	},
-	{
-		label: "flow/references/verification-gates.md",
-		content: flowVerificationGatesDoc,
-	},
-	{ label: "flow-plan/SKILL.md", content: flowPlanSkillDoc },
-	{
-		label: "flow-plan/references/planning-examples.md",
-		content: flowPlanPlanningExamplesDoc,
-	},
-	{
-		label: "flow-plan/references/parallel-discovery.md",
-		content: flowPlanParallelDiscoveryDoc,
-	},
-	{ label: "flow-run/SKILL.md", content: flowRunSkillDoc },
-	{
-		label: "flow-run/references/validation-rubric.md",
-		content: flowRunValidationRubricDoc,
-	},
-	{
-		label: "flow-run/references/audit-rubric.md",
-		content: flowRunAuditRubricDoc,
-	},
-	{ label: "flow-review/SKILL.md", content: flowReviewSkillDoc },
-	{
-		label: "flow-review/references/review-rubric.md",
-		content: flowReviewReviewRubricDoc,
-	},
+	["flow", "SKILL.md"],
+	["flow", "references/recovery-playbook.md"],
+	["flow", "references/parallel-orchestration.md"],
+	["flow", "references/parallel-pass-patterns.md"],
+	["flow", "references/handoff-format.md"],
+	["flow", "references/verification-gates.md"],
+	["flow-plan", "SKILL.md"],
+	["flow-plan", "references/planning-examples.md"],
+	["flow-plan", "references/parallel-discovery.md"],
+	["flow-run", "SKILL.md"],
+	["flow-run", "references/validation-rubric.md"],
+	["flow-run", "references/audit-rubric.md"],
+	["flow-review", "SKILL.md"],
+	["flow-review", "references/review-rubric.md"],
 ]);
 
 const FLOW_SELF_CONTAINED_COMMAND_PREFLIGHT = [
@@ -265,8 +156,6 @@ const FLOW_REVIEW_AGENT_INSTRUCTIONS = [
 const FLOW_STATUS_COMMAND_TEMPLATE =
 	"Call flow_status and report the session state and next action.";
 
-const FLOW_REVIEW_FALLBACK_PROMPT = FLOW_REVIEW_AGENT_INSTRUCTIONS;
-
 const FLOW_PUBLIC_COMMAND_TEMPLATES = {
 	"flow-auto": FLOW_AUTO_COMMAND_TEMPLATE,
 	"flow-plan": FLOW_PLAN_COMMAND_TEMPLATE,
@@ -283,7 +172,7 @@ export const FLOW_CORE_AGENTS = {
 		mode: "subagent",
 		hidden: true,
 		description: "Internal read-only reviewer for Flow-guided work.",
-		prompt: FLOW_REVIEW_FALLBACK_PROMPT,
+		prompt: FLOW_REVIEW_AGENT_INSTRUCTIONS,
 		permission: {
 			edit: "deny",
 			bash: "deny",
@@ -431,9 +320,24 @@ function appendUnique(values: readonly string[], value: string): string[] {
 
 export function applyFlowConfig(
 	config: MutableFlowConfig,
-	options?: { flowInstructionPath?: string },
+	options?: {
+		flowInstructionPath?: string;
+		onCollision?: (kind: "agent" | "command", name: string) => void;
+	},
 ): void {
 	const entries = createFlowCoreConfigEntries();
+	if (options?.onCollision) {
+		for (const name of Object.keys(entries.agent)) {
+			if (config.agent && name in config.agent) {
+				options.onCollision("agent", name);
+			}
+		}
+		for (const name of Object.keys(entries.command)) {
+			if (config.command && name in config.command) {
+				options.onCollision("command", name);
+			}
+		}
+	}
 	config.agent = { ...(config.agent ?? {}), ...entries.agent };
 	config.command = { ...(config.command ?? {}), ...entries.command };
 	if (options?.flowInstructionPath) {

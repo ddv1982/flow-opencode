@@ -8,7 +8,10 @@ import packageJson from "../package.json";
 import FlowPlugin from "../src";
 import { createFlowLog } from "../src/adapters/opencode/logging";
 import { createTools } from "../src/adapters/opencode/tools";
-import { createFlowCoreConfigEntries } from "../src/config-shared";
+import {
+	applyFlowConfig,
+	createFlowCoreConfigEntries,
+} from "../src/config-shared";
 import { FLOW_SKILL_DEFINITIONS } from "../src/distribution/flow-skill-definitions";
 import {
 	formatFlowDoctorCommand,
@@ -422,19 +425,19 @@ describe("Flow distribution and plugin surface", () => {
 			"flow-auto": [
 				"Bundled flow/SKILL.md",
 				"Bundled flow/references/parallel-pass-patterns.md",
-				"Bundled flow/references/parallel-pass-example.md",
+				"Bundled flow/references/verification-gates.md",
 				"Bundled flow-run/SKILL.md",
 			],
 			"flow-plan": [
 				"Bundled flow-plan/SKILL.md",
 				"Bundled flow/references/parallel-orchestration.md",
 				"Bundled flow/references/parallel-pass-patterns.md",
-				"Bundled flow/references/parallel-pass-example.md",
+				"Bundled flow/references/verification-gates.md",
 			],
 			"flow-run": [
 				"Bundled flow-run/SKILL.md",
 				"Bundled flow/references/parallel-pass-patterns.md",
-				"Bundled flow/references/parallel-pass-example.md",
+				"Bundled flow/references/verification-gates.md",
 				"Bundled flow-review/SKILL.md",
 			],
 			"flow-review": [
@@ -549,7 +552,13 @@ describe("Flow distribution and plugin surface", () => {
 		expect(passPatterns).toContain("## Stop And Extend");
 		expect(passExample).toContain("# Parallel pass example");
 		expect(passExample).toContain(
-			"Return only the matching Flow handoff from handoff-format.md.",
+			"Return only the Flow handoff in this exact shape:",
+		);
+		expect(passExample).toContain(
+			"<matching handoff template copied verbatim from handoff-format.md>",
+		);
+		expect(orchestration).toContain(
+			"The\nmanager copies the matching handoff template into every worker prompt",
 		);
 
 		const disallowedTerm = ["w", "a", "v", "e"].join("");
@@ -1651,5 +1660,23 @@ describe("adapter and distribution correctness", () => {
 		expect(formatFlowDoctorCommand("0.0.0")).toBe(
 			"npx -y opencode-plugin-flow@latest doctor",
 		);
+	});
+});
+
+describe("config collision reporting", () => {
+	test("applyFlowConfig reports user-defined agents and commands it replaces", () => {
+		const collisions: Array<{ kind: string; name: string }> = [];
+		const config = {
+			agent: { "flow-reviewer": { description: "user reviewer" } },
+			command: { "flow-plan": { template: "user template" } },
+		};
+		applyFlowConfig(config, {
+			onCollision: (kind, name) => collisions.push({ kind, name }),
+		});
+		expect(collisions).toContainEqual({ kind: "agent", name: "flow-reviewer" });
+		expect(collisions).toContainEqual({ kind: "command", name: "flow-plan" });
+		expect(
+			(config.agent["flow-reviewer"] as { description: string }).description,
+		).toBe("Internal read-only reviewer for Flow-guided work.");
 	});
 });

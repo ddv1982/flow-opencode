@@ -87,6 +87,5 @@ Start a bounded follow-up pass only when:
 - a first pass exposes a narrower implementation or validation slice worth
   isolating.
 
-The manager synthesis barrier applies after every pass: raw handoffs remain
-candidate evidence until the manager checks coverage, resolves conflicts,
-preserves confidence, and records one Flow-owned artifact.
+After every pass, the manager synthesis barrier from `verification-gates.md`
+applies before any handoff content moves forward.

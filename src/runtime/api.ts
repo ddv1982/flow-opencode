@@ -10,7 +10,6 @@ import {
 	ValidationRunSchema,
 	ValidationScopeSchema,
 	WorkerOutcomeSchema,
-	WorkerResultSchema,
 } from "./schema";
 import {
 	applyPlan,
@@ -232,7 +231,7 @@ export async function flowFeatureComplete(
 	worktree: string,
 	input: unknown,
 ): Promise<RuntimeResponse> {
-	const worker = WorkerResultSchema.parse(input ?? {});
+	const worker = input ?? {};
 	return mutate(worktree, async (session) => {
 		if (!session) {
 			return {

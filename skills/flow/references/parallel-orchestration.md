@@ -13,10 +13,11 @@ Read these companion references before a broad parallel pass:
 - `parallel-pass-patterns.md` for pass selection, effort defaults, and stop or
   follow-up rules.
 - `handoff-format.md` for the exact worker response shapes.
-- `verification-gates.md` for coverage checks, handoff acceptance, verifier
-  triggers, and synthesis rules.
+- `verification-gates.md` for the pre-fan-out coverage gate, handoff
+  acceptance, verifier triggers, and the manager synthesis barrier. Those
+  definitions are canonical; this file only points at them.
 - `parallel-pass-example.md` for a concrete end-to-end pass after the rules
-  below are clear.
+  below are clear (synced with the `flow` skill; not bundled into commands).
 
 ## Quick path
 
@@ -59,13 +60,9 @@ Skip fan-out when:
    commands, or artifacts to identify real slices.
 3. Define the local manager task. Do not delegate the immediate blocker that
    determines whether fan-out is even valid.
-4. Build a pre-fan-out coverage gate:
-   - total files, modules, routes, commands, findings, rows, or claims in scope.
-   - one line per slice with path/range/lens and expected count.
-   - partition check showing slices add back to the total when the work is
-     countable.
-   - overlap/gap check showing no duplicate ownership, empty slices, or missing
-     target areas.
+4. Build the pre-fan-out coverage gate defined in `verification-gates.md`
+   ("Before fan-out"): total scope, one line per slice with expected count,
+   partition check, and overlap/gap check.
 5. Spawn only named Flow workers. Use exact slices and the required handoff
    shape. Keep each prompt self-contained.
 6. Continue non-overlapping manager work while workers run.
@@ -75,10 +72,9 @@ Skip fan-out when:
    claims to `flow-verifier-worker`.
 9. Run follow-up passes only for material gaps, conflicts, narrowed scope, or
    verification needs.
-10. Apply the manager synthesis barrier: keep only distilled, evidence-backed
-    claims and synthesize one Flow artifact, such as plan fields, completion
-    evidence, review payload, audit report, or candidate patch decision. Do not
-    paste worker handoffs as the user-facing result.
+10. Apply the manager synthesis barrier from `verification-gates.md`: keep
+    only distilled, evidence-backed claims and synthesize one Flow artifact.
+    Do not paste worker handoffs as the user-facing result.
 
 ## Modes
 
@@ -162,8 +158,13 @@ Your exact slice: <paths, modules, command, claim ids, risk lens, or worktree>
 Expected coverage: <count, paths, range, or complete question set>
 Do: <bounded actions>
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
-Return only the matching Flow handoff from handoff-format.md.
+Return only the Flow handoff in this exact shape:
+<matching handoff template copied verbatim from handoff-format.md>
 ```
+
+Hidden workers cannot load skills or read `handoff-format.md` themselves. The
+manager copies the matching handoff template into every worker prompt; a bare
+filename reference is not enough.
 
 For research or current-doc slices, require source checks for versioned or
 time-sensitive facts. For implementation candidates, remind workers that other
@@ -185,11 +186,8 @@ work may be active and that they must not revert unrelated changes.
   any Flow completion call.
 
 When worker results conflict, inspect the underlying artifact directly and rerun
-the smallest check that can settle the disagreement.
-
-The manager synthesis barrier means raw handoffs do not move forward by default.
-Only claims that survived coverage, evidence, confidence, and verifier checks may
-enter the next pass, Flow payload, patch decision, or user-facing answer.
+the smallest check that can settle the disagreement. The manager synthesis
+barrier in `verification-gates.md` applies before anything moves forward.
 
 ## Follow-up passes
 
