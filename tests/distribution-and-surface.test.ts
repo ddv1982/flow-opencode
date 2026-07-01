@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import packageJson from "../package.json";
 import FlowPlugin from "../src";
 import { createFlowLog } from "../src/adapters/opencode/logging";
@@ -1047,7 +1047,9 @@ describe("Flow distribution and plugin surface", () => {
 		expect(marker).toContain("file=references/verification-gates.md sha256=");
 
 		const removed = await uninstallFlowSkills(home);
-		expect(removed.removed.some((path) => path.endsWith("/flow"))).toBe(true);
+		expect(removed.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			true,
+		);
 
 		const foreignSkill = join(
 			home,
@@ -1410,8 +1412,10 @@ describe("Flow distribution and plugin surface", () => {
 		await writeFile(userNotes, "personal notes\n", "utf8");
 
 		const result = await uninstallFlowSkills(home);
-		expect(result.removed.some((path) => path.endsWith("/flow"))).toBe(false);
-		expect(result.kept.some((path) => path.endsWith("/flow"))).toBe(true);
+		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			false,
+		);
+		expect(result.kept.some((path) => path.endsWith(`${sep}flow`))).toBe(true);
 		await expect(readFile(userNotes, "utf8")).resolves.toBe("personal notes\n");
 	});
 
@@ -1429,8 +1433,10 @@ describe("Flow distribution and plugin surface", () => {
 		await writeFile(markerPath, "version=4.0.0-test\n", "utf8");
 
 		const result = await uninstallFlowSkills(home);
-		expect(result.removed.some((path) => path.endsWith("/flow"))).toBe(false);
-		expect(result.kept.some((path) => path.endsWith("/flow"))).toBe(true);
+		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			false,
+		);
+		expect(result.kept.some((path) => path.endsWith(`${sep}flow`))).toBe(true);
 		await expect(
 			readFile(
 				join(home, ".config", "opencode", "skills", "flow", "SKILL.md"),
@@ -1444,7 +1450,9 @@ describe("Flow distribution and plugin surface", () => {
 		await syncFlowSkills("4.0.0-test", home);
 
 		const result = await uninstallFlowSkills(home, { dryRun: true });
-		expect(result.removed.some((path) => path.endsWith("/flow"))).toBe(true);
+		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			true,
+		);
 		await expect(
 			readFile(
 				join(home, ".config", "opencode", "skills", "flow", "SKILL.md"),
