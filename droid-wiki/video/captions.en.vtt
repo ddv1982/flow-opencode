@@ -1,0 +1,437 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:02.482
+Flow for OpenCode is a workflow
+
+2
+00:00:02.482 --> 00:00:04.964
+plugin with a very small core.
+
+3
+00:00:04.964 --> 00:00:07.446
+It does not try to make
+
+4
+00:00:07.446 --> 00:00:09.927
+every judgment in TypeScript. Instead, it
+
+5
+00:00:09.927 --> 00:00:12.409
+saves the facts that must survive
+
+6
+00:00:12.409 --> 00:00:14.891
+restarts. The repository ships one npm
+
+7
+00:00:14.891 --> 00:00:17.373
+package, opencode-plugin-flow. It adds slash commands
+
+8
+00:00:17.373 --> 00:00:19.855
+, hidden worker agents, managed skills, and
+
+9
+00:00:19.855 --> 00:00:22.337
+seven runtime tools. Together they turn
+
+10
+00:00:22.337 --> 00:00:24.819
+a large coding goal into an
+
+11
+00:00:24.819 --> 00:00:27.300
+approved plan, one feature at a
+
+12
+00:00:27.300 --> 00:00:29.782
+time. The main split is simple.
+
+13
+00:00:29.782 --> 00:00:32.264
+The skills directory owns judgment. Source
+
+14
+00:00:32.264 --> 00:00:34.746
+files under src own safety. That
+
+15
+00:00:34.746 --> 00:00:37.228
+split is written into the maintainer
+
+16
+00:00:37.228 --> 00:00:39.710
+contract and ADR 0001. If a
+
+17
+00:00:39.710 --> 00:00:42.191
+rule needs interpretation, it belongs in
+
+18
+00:00:42.191 --> 00:00:44.673
+a skill. If a rule must
+
+19
+00:00:44.673 --> 00:00:47.155
+never be bypassed, it belongs in
+
+20
+00:00:47.155 --> 00:00:49.637
+the runtime. Startup begins in src
+
+21
+00:00:49.637 --> 00:00:52.119
+index dot ts. That file exports
+
+22
+00:00:52.119 --> 00:00:54.601
+the OpenCode adapter from src adapters
+
+23
+00:00:54.601 --> 00:00:57.083
+opencode plugin dot ts. The adapter
+
+24
+00:00:57.083 --> 00:00:59.564
+syncs managed skills, registers config, registers
+
+25
+00:00:59.564 --> 00:01:02.046
+tools, and rewrites Flow command bodies
+
+26
+00:01:02.046 --> 00:01:04.528
+before they run. This is how
+
+27
+00:01:04.528 --> 00:01:07.010
+public commands stay current even when
+
+28
+00:01:07.010 --> 00:01:09.492
+native skill discovery is stale. The
+
+29
+00:01:09.492 --> 00:01:11.974
+runtime API is the controlled doorway
+
+30
+00:01:11.974 --> 00:01:14.456
+into state. Tool handlers parse Zod
+
+31
+00:01:14.456 --> 00:01:16.937
+schemas, lock the workspace, load the
+
+32
+00:01:16.937 --> 00:01:19.419
+current session, call a pure transition
+
+33
+00:01:19.419 --> 00:01:21.901
+, and then save or archive the
+
+34
+00:01:21.901 --> 00:01:24.383
+result. The seven tool names are
+
+35
+00:01:24.383 --> 00:01:26.865
+flow status, flow plan save, flow
+
+36
+00:01:26.865 --> 00:01:29.347
+plan approve, flow run start, flow
+
+37
+00:01:29.347 --> 00:01:31.829
+feature complete, flow feature reset, and
+
+38
+00:01:31.829 --> 00:01:34.310
+flow session close. The session model
+
+39
+00:01:34.310 --> 00:01:36.792
+is the key primitive. It records
+
+40
+00:01:36.792 --> 00:01:39.274
+the goal, current status, approval state
+
+41
+00:01:39.274 --> 00:01:41.756
+, plan, active feature, history, closure, last
+
+42
+00:01:41.756 --> 00:01:44.238
+error, and timestamps. Plans contain requirements
+
+43
+00:01:44.238 --> 00:01:46.720
+, decisions, a final review policy, and
+
+44
+00:01:46.720 --> 00:01:49.201
+feature entries. Features use lowercase kebab
+
+45
+00:01:49.201 --> 00:01:51.683
+case ids, dependency lists, targets, validation
+
+46
+00:01:51.683 --> 00:01:54.165
+hints, and explicit status. The state
+
+47
+00:01:54.165 --> 00:01:56.647
+machine is intentionally strict. A plan
+
+48
+00:01:56.647 --> 00:01:59.129
+can be saved while a session
+
+49
+00:01:59.129 --> 00:02:01.611
+is planning. Once approved, the plan
+
+50
+00:02:01.611 --> 00:02:04.093
+is locked. Only one feature can
+
+51
+00:02:04.093 --> 00:02:06.574
+be in progress. Dependencies must be
+
+52
+00:02:06.574 --> 00:02:09.056
+complete before a feature can start.
+
+53
+00:02:09.056 --> 00:02:11.538
+Blocked features have to be reset
+
+54
+00:02:11.538 --> 00:02:14.020
+before they run again. Completion is
+
+55
+00:02:14.020 --> 00:02:16.502
+where Flow draws the hard line.
+
+56
+00:02:16.502 --> 00:02:18.984
+Every completed feature needs passing validation
+
+57
+00:02:18.984 --> 00:02:21.466
+evidence and a passing feature review.
+
+58
+00:02:21.466 --> 00:02:23.947
+Ordinary features use targeted validation. The
+
+59
+00:02:23.947 --> 00:02:26.429
+final feature uses broad validation and
+
+60
+00:02:26.429 --> 00:02:28.911
+also needs a final review. The
+
+61
+00:02:28.911 --> 00:02:31.393
+final review depth must match the
+
+62
+00:02:31.393 --> 00:02:33.875
+approved plan policy. Persistence lives under
+
+63
+00:02:33.875 --> 00:02:36.357
+dot flow. The active ledger is
+
+64
+00:02:36.357 --> 00:02:38.839
+dot flow slash session dot json.
+
+65
+00:02:38.839 --> 00:02:41.320
+Closed sessions move to dot flow
+
+66
+00:02:41.320 --> 00:02:43.802
+slash history. The generated OpenCode instruction
+
+67
+00:02:43.802 --> 00:02:46.284
+file is a projection, not a
+
+68
+00:02:46.284 --> 00:02:48.766
+source of truth. Workspace code writes
+
+69
+00:02:48.766 --> 00:02:51.248
+atomically, uses a session lock, rejects
+
+70
+00:02:51.248 --> 00:02:53.730
+unsafe roots, and quarantines unreadable sessions
+
+71
+00:02:53.730 --> 00:02:56.212
+instead of deleting them. Managed skills
+
+72
+00:02:56.212 --> 00:02:58.693
+make the plugin installable. The distribution
+
+73
+00:02:58.693 --> 00:03:01.175
+layer imports markdown from skills slash
+
+74
+00:03:01.175 --> 00:03:03.657
+flow, flow plan, flow run, flow
+
+75
+00:03:03.657 --> 00:03:06.139
+test, flow review, flow deslop, flow
+
+76
+00:03:06.139 --> 00:03:08.621
+UI quality, and flow commit. Sync
+
+77
+00:03:08.621 --> 00:03:11.103
+writes marked skill folders into the
+
+78
+00:03:11.103 --> 00:03:13.584
+OpenCode skills root. Doctor reports distinguish
+
+79
+00:03:13.584 --> 00:03:16.066
+missing, outdated, edited, and foreign folders.
+
+80
+00:03:16.066 --> 00:03:18.548
+Parallel orchestration is available, but state
+
+81
+00:03:18.548 --> 00:03:21.030
+remains serial. Hidden workers can gather
+
+82
+00:03:21.030 --> 00:03:23.512
+evidence, validate commands, audit findings, review
+
+83
+00:03:23.512 --> 00:03:25.994
+slices, propose candidate patches, or verify
+
+84
+00:03:25.994 --> 00:03:28.476
+claims. Their permission maps deny Flow
+
+85
+00:03:28.476 --> 00:03:30.957
+state changing tools. The manager checks
+
+86
+00:03:30.957 --> 00:03:33.439
+their handoffs and owns every state
+
+87
+00:03:33.439 --> 00:03:35.921
+transition. The test suite mirrors the
+
+88
+00:03:35.921 --> 00:03:38.403
+boundaries. Runtime gates cover planning, dependencies
+
+89
+00:03:38.403 --> 00:03:40.885
+, completion, blockers, reset, and final review
+
+90
+00:03:40.885 --> 00:03:43.367
+policy. Workspace tests cover JSON parsing
+
+91
+00:03:43.367 --> 00:03:45.849
+, locks, generated instructions, archive, and quarantine.
+
+92
+00:03:45.849 --> 00:03:48.330
+Distribution and surface tests cover commands
+
+93
+00:03:48.330 --> 00:03:50.812
+, agents, skill sync, permissions, setup health
+
+94
+00:03:50.812 --> 00:03:53.294
+, and optional compaction. The release path
+
+95
+00:03:53.294 --> 00:03:55.776
+is also guarded. Continuous integration runs
+
+96
+00:03:55.776 --> 00:03:58.258
+typecheck, Biome, build, and tests across
+
+97
+00:03:58.258 --> 00:04:00.740
+Node versions and operating systems. The
+
+98
+00:04:00.740 --> 00:04:03.222
+release workflow checks tag and changelog
+
+99
+00:04:03.222 --> 00:04:05.703
+consistency, runs package smoke, packs the
+
+100
+00:04:05.703 --> 00:04:08.185
+tarball, records a checksum, publishes to
+
+101
+00:04:08.185 --> 00:04:10.667
+npm, and updates GitHub release assets.
+
+102
+00:04:10.667 --> 00:04:13.149
+You can remember the repository as
+
+103
+00:04:13.149 --> 00:04:15.631
+three layers. OpenCode integration wires Flow
+
+104
+00:04:15.631 --> 00:04:18.113
+into the host. The runtime ledger
+
+105
+00:04:18.113 --> 00:04:20.594
+preserves safety and state. The skills
+
+106
+00:04:20.594 --> 00:04:23.076
+bundle supplies the operating judgment. That
+
+107
+00:04:23.076 --> 00:04:25.558
+is why Flow can be resumable
+
+108
+00:04:25.558 --> 00:04:28.040
+and strict without turning the runtime
+
+109
+00:04:28.040 --> 00:04:30.108
+into a large planning framework.

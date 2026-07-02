@@ -11,6 +11,9 @@ review, and orchestration judgment, while the plugin runtime stays deliberately
 small — it keeps the session ledger and enforces the hard gates prompts should
 not be trusted to remember.
 
+Full project documentation is available in the
+[Flow OpenCode wiki](https://github.com/ddv1982/flow-opencode/wiki).
+
 ## Quick start
 
 ```bash
