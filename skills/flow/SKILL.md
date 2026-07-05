@@ -1,6 +1,6 @@
 ---
 name: flow
-description: Manage the end-to-end Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided delivery from goal to completion, resumable autonomous delivery, or resuming, inspecting, or closing a Flow session. For plan-only work use flow-plan; for executing one approved feature use flow-run.
+description: Manage the end-to-end Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided delivery from goal to completion, resumable autonomous delivery, or resuming or closing a Flow session. For plan-only work use flow-plan; for executing one approved feature use flow-run.
 ---
 
 # Flow

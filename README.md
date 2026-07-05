@@ -74,7 +74,8 @@ Commands are bundled entrypoints: they carry their own instructions, so they
 keep working even when OpenCode's native skill discovery lags behind a fresh
 install (see [docs/troubleshooting.md](docs/troubleshooting.md)).
 
-`flow-test` and `flow-commit` are managed helper skills, not public commands.
+`flow-test`, `flow-deslop`, `flow-ui-quality`, and `flow-commit` are managed
+helper skills, not public commands.
 `flow-commit` is user-triggered only and stays outside the autonomous loop.
 
 ## Tools
