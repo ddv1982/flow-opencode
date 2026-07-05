@@ -1,11 +1,13 @@
 ---
 name: flow-deslop
-description: Clean up and refactor code with evidence-backed code-smell analysis. Use for AI-slop removal, overengineering reduction, maintainability refactors, behavior-preserving cleanup, duplicated or bloated code, speculative abstractions, dead code, or broad cleanup/refactor review.
+description: Clean up and refactor code with evidence-backed code-smell analysis. Use for AI-slop removal, overengineering reduction, maintainability refactors, behavior-preserving cleanup, duplicated or bloated code, speculative abstractions, and dead code. Review verdicts on cleanup work stay in flow-review, which loads this skill to judge cleanup claims.
 ---
 
 # Flow deslop
 
 Use this skill when the Flow work is about improving code quality rather than adding a new user-visible feature. The job is to make the code easier to change without changing behavior unless the approved plan explicitly says behavior changes.
+
+This is a helper skill: it produces cleanup findings and evidence only. The manager owns every state-changing `flow_*` call, and cleanup review verdicts are returned through `flow-review`.
 
 ## Ground the cleanup
 

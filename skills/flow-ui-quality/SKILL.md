@@ -1,11 +1,13 @@
 ---
 name: flow-ui-quality
-description: Review and improve frontend UI quality for Flow work. Use for UX/UI design, frontend polish, visual quality review, responsive and accessible interfaces, interaction states, screenshots, browser-verified UI work, and avoiding generic AI-generated UI.
+description: Review and improve frontend UI quality for Flow work. Use for UX/UI design, frontend polish, visual quality review, responsive and accessible interfaces, interaction states, screenshot assessment, and avoiding generic AI-generated UI. Browser-run mechanics and validationRun summaries stay in flow-test.
 ---
 
 # Flow UI quality
 
 Use this skill when Flow work changes what a user sees or how they interact with an interface. The goal is production UI quality: useful, coherent, accessible, responsive, and visually intentional.
+
+This is a helper skill: it contributes UI judgment and visual evidence only. The manager owns every state-changing `flow_*` call.
 
 ## Establish the interface intent
 

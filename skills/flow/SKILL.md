@@ -1,11 +1,13 @@
 ---
 name: flow
-description: Run the end-to-end Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided planning through implementation, resumable autonomous delivery, session status, or completion with validation and review gates.
+description: Manage the end-to-end Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided delivery from goal to completion, resumable autonomous delivery, or resuming, inspecting, or closing a Flow session. For plan-only work use flow-plan; for executing one approved feature use flow-run.
 ---
 
 # Flow
 
 Use Flow as a minimal state ledger, not as a framework. Skills provide judgment; the runtime only records the approved plan, active feature, validation evidence, review evidence, and closure.
+
+Routing: this manager skill owns the whole loop and every state-changing `flow_*` call. Load `flow-plan` alone for plan-only requests and `flow-run` alone when an approved plan needs one feature executed. Answer status-only questions with `flow_status`; no skill load is needed. `flow-test`, `flow-deslop`, and `flow-ui-quality` are optional helpers loaded from inside the loop; `flow-commit` is user-triggered only and never part of the autonomous loop.
 
 ## Loop
 

@@ -1,6 +1,6 @@
 ---
 name: flow-test
-description: Test, validate, make test plans, triage failures, and gather Flow validation evidence. Use when selecting checks, running tests, running browser QA for UI changes, classifying failures, or preparing validationRun evidence for flow_feature_complete.
+description: Choose, run, and summarize validation checks for Flow features. Use when selecting validation coverage, running tests or browser/e2e QA, classifying test failures, or preparing validationRun evidence for flow_feature_complete. Visual design judgment stays in flow-ui-quality and review verdicts stay in flow-review.
 ---
 
 # Flow Test

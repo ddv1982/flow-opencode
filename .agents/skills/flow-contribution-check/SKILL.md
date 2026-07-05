@@ -13,6 +13,11 @@ validation.
 This preflight validates staged or outgoing work; it does not choose commit
 boundaries, stage files, or write commit messages.
 
+This is a repo-local contributor skill, not a managed Flow runtime skill.
+Preflight output is commit/push readiness evidence only: it does not become
+Flow `validationRun`, `featureReview`, or `finalReview` evidence, and it never
+reads or mutates `.flow/**` session state.
+
 ## Before committing
 
 1. Review `git status --short` and inspect the intended working-tree diff.

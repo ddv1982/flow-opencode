@@ -15,9 +15,9 @@ recorded.
 
 These instructions run in two contexts, and only one of them can load helpers:
 
-- **Manager context**: the manager reviews inside `flow-run` or `flow-auto`
-  before recording evidence. The manager may load helper skills and fan out
-  read-only workers.
+- **Manager context**: the manager reviews inside the Flow loop (the `flow` or
+  `flow-run` skills, or a bundled public Flow command) before recording
+  evidence. The manager may load helper skills and fan out read-only workers.
 - **Hidden reviewer context**: `/flow-review` runs as the `flow-reviewer`
   subagent, whose permissions deny skill loading, shell commands, and
   subagents. In this context, skip every "load" and "fan out" instruction
