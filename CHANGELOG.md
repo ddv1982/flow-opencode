@@ -2,6 +2,26 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.2.1] - 2026-07-05
+
+Skill routing and boundary clarity across the managed skill set:
+
+- Frontmatter descriptions now route single-phase asks cleanly: `flow`
+  defers plan-only work to `flow-plan` and single-feature execution to
+  `flow-run`, `flow-test` no longer claims every testing intent,
+  `flow-deslop` leaves review verdicts to `flow-review`, and
+  `flow-ui-quality` hands browser-run mechanics to `flow-test`.
+- `flow-deslop` and `flow-ui-quality` now state explicitly that they are
+  helper skills: they contribute evidence only, and the manager owns every
+  state-changing `flow_*` call.
+- The `flow` skill gained a routing note covering plan-only, single-feature,
+  and status-only asks, and `flow-review` names its manager context
+  accurately (the `flow`/`flow-run` skills or a bundled public Flow command).
+- The repo-local contribution preflight now states its output is commit/push
+  readiness evidence only and never substitutes for Flow validation or
+  review evidence.
+- README lists all four managed non-command helper skills.
+
 ## [4.2.0] - 2026-07-01
 
 Safety and usability overhaul across the runtime, packaging, skills, and docs:
