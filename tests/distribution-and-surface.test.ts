@@ -1695,16 +1695,22 @@ describe("Flow distribution and plugin surface", () => {
 		expect(flowSkill?.outdatedFiles).toEqual([]);
 	});
 
-	test("resolveFlowSkillsRoot falls back to the OS home when HOME is empty", () => {
+	test("resolveFlowSkillsRoot skips an empty HOME instead of going cwd-relative", () => {
 		const originalHome = process.env.HOME;
 		const originalUserProfile = process.env.USERPROFILE;
 		try {
+			// An empty HOME must be skipped, not turned into the cwd-relative
+			// ".config/opencode/skills". Point USERPROFILE at a real absolute dir
+			// so the assertion holds cross-platform — on Windows os.homedir()
+			// itself throws when every home var is empty, so clearing both would
+			// test the OS, not our fallback.
+			const realHome = tmpdir();
 			process.env.HOME = "";
-			process.env.USERPROFILE = "";
+			process.env.USERPROFILE = realHome;
 			const root = resolveFlowSkillsRoot();
-			// Must be absolute, never the cwd-relative ".config/opencode/skills".
 			expect(isAbsolute(root)).toBe(true);
 			expect(root.startsWith(".config")).toBe(false);
+			expect(root.startsWith(realHome)).toBe(true);
 		} finally {
 			if (originalHome === undefined) delete process.env.HOME;
 			else process.env.HOME = originalHome;
