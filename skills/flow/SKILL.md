@@ -20,7 +20,7 @@ Routing: this manager skill owns the whole loop and every state-changing `flow_*
 5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
-Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation passes. Hidden Flow workers are injected by plugin config; invoke the named worker when it is available. Its `references/parallel-pass-patterns.md`, `references/handoff-format.md`, and `references/verification-gates.md` companions define pass selection, worker contracts, and claim acceptance. The manager owns every `flow_*` state change.
+Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation passes. It is the whole pass playbook — orient, slice, manifest, fan out, account, verify, synthesize, extend or stop — and its `references/handoff-format.md` companion holds the worker report templates the manager pastes into prompts. Hidden Flow workers are injected by plugin config; invoke the named worker when it is available. The manager owns every `flow_*` state change.
 
 Do not commit, push, amend, rebase, publish, or mutate releases during the
 autonomous Flow loop. Load `flow-commit` only when the user explicitly asks for

@@ -7,13 +7,7 @@ import flowParallelOrchestrationDoc from "../../skills/flow/references/parallel-
 import flowParallelPassExampleDoc from "../../skills/flow/references/parallel-pass-example.md" with {
 	type: "text",
 };
-import flowParallelPassPatternsDoc from "../../skills/flow/references/parallel-pass-patterns.md" with {
-	type: "text",
-};
 import flowRecoveryPlaybookDoc from "../../skills/flow/references/recovery-playbook.md" with {
-	type: "text",
-};
-import flowVerificationGatesDoc from "../../skills/flow/references/verification-gates.md" with {
 	type: "text",
 };
 import flowSkillDoc from "../../skills/flow/SKILL.md" with { type: "text" };
@@ -90,20 +84,12 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 				content: flowParallelOrchestrationDoc,
 			},
 			{
-				relativePath: "references/parallel-pass-patterns.md",
-				content: flowParallelPassPatternsDoc,
-			},
-			{
 				relativePath: "references/parallel-pass-example.md",
 				content: flowParallelPassExampleDoc,
 			},
 			{
 				relativePath: "references/handoff-format.md",
 				content: flowHandoffFormatDoc,
-			},
-			{
-				relativePath: "references/verification-gates.md",
-				content: flowVerificationGatesDoc,
 			},
 		],
 	},

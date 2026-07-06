@@ -74,7 +74,7 @@ Example evidence quality:
 
 Use this for `flow-verifier-worker`. Give it atomic claims and the cited sources
 or commands. Do not include the generator's reasoning unless that reasoning is
-the thing being verified.
+the thing being verified, and do not say which worker produced the claim.
 
 ```markdown
 ## Status
@@ -103,8 +103,8 @@ success | partial | blocked
 
 ## Candidate implementation worker report
 
-Use this only for isolated worktrees or exact non-overlapping path ownership
-authorized by the manager.
+Use this only with explicit user authorization, in an isolated worktree or an
+exact non-overlapping path-owned slice assigned by the manager.
 
 ```markdown
 ## Status

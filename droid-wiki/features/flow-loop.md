@@ -14,9 +14,8 @@ skills/flow/
 └── references/
     ├── recovery-playbook.md
     ├── parallel-orchestration.md
-    ├── parallel-pass-patterns.md
-    ├── handoff-format.md
-    └── verification-gates.md
+    ├── parallel-pass-example.md
+    └── handoff-format.md
 src/runtime/
 ├── api.ts
 ├── transitions.ts

@@ -1,6 +1,6 @@
 ---
 name: flow-plan
-description: "Plan Flow work for the v4 skills-first runtime: inspect the repo, decompose a user goal into right-sized features, save a draft with flow_plan_save, and approve it with flow_plan_approve."
+description: "Use when Flow work needs planning before implementation: a new goal to turn into an approved Flow feature plan, a draft plan to revise, or a decomposition or plan-approval decision in the v4 skills-first runtime. For executing an approved feature use flow-run; for the full goal-to-completion loop use flow."
 ---
 
 # Flow Plan
@@ -12,7 +12,7 @@ If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the use
 ## Inspect first
 
 - Read the files, docs, tests, package scripts, and local conventions that determine the work.
-- For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass. Use `../flow/references/parallel-orchestration.md` when discovery needs multiple workers, and apply its coverage gate before fan-out.
+- For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass. Use `../flow/references/parallel-orchestration.md` when discovery needs multiple workers, and write its pass manifest before fan-out.
 - Helper rule: when a named helper skill is unavailable, record a planning gap
   and keep the corresponding claims conservative instead of simulating its
   checks.
@@ -21,6 +21,25 @@ If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the use
 - For cleanup/refactor goals, load `flow-deslop`.
 - For UI/frontend goals, load `flow-ui-quality`.
 - Do not invent findings. Broad "review and fix" goals start with a review-first feature whose deliverable is evidence-backed findings.
+
+## Reduce uncertainty before decomposing
+
+A vague goal does not slice into reliable features yet. Name what is uncertain,
+because the two kinds resolve differently:
+
+- **Specification uncertainty** — what the user wants: ambiguous goal, missing
+  acceptance criteria, unstated constraints. Resolve by stating an explicit
+  assumption in `decisions` and proceeding, or by asking only when a wrong
+  guess would be expensive to undo.
+- **Environment uncertainty** — facts the repo, docs, commands, or data can
+  answer: code shape, schema, API behavior, current conventions. Resolve by
+  inspecting or by a discovery pass, never by asking the user.
+
+Spend the cheapest probe that removes the most uncertainty first: local reads
+before worker fan-out, fan-out before user questions. Decompose into features
+only once the remaining uncertainty is low enough that `targets` and
+`validation` can be stated concretely; otherwise the first feature is a
+review-first or discovery deliverable that produces the missing evidence.
 
 ## Plan shape
 

@@ -424,20 +424,19 @@ describe("Flow distribution and plugin surface", () => {
 		const expectedBundledSections = {
 			"flow-auto": [
 				"Bundled flow/SKILL.md",
-				"Bundled flow/references/parallel-pass-patterns.md",
-				"Bundled flow/references/verification-gates.md",
+				"Bundled flow/references/parallel-orchestration.md",
+				"Bundled flow/references/handoff-format.md",
 				"Bundled flow-run/SKILL.md",
 			],
 			"flow-plan": [
 				"Bundled flow-plan/SKILL.md",
 				"Bundled flow/references/parallel-orchestration.md",
-				"Bundled flow/references/parallel-pass-patterns.md",
-				"Bundled flow/references/verification-gates.md",
+				"Bundled flow/references/handoff-format.md",
 			],
 			"flow-run": [
 				"Bundled flow-run/SKILL.md",
-				"Bundled flow/references/parallel-pass-patterns.md",
-				"Bundled flow/references/verification-gates.md",
+				"Bundled flow/references/parallel-orchestration.md",
+				"Bundled flow/references/handoff-format.md",
 				"Bundled flow-review/SKILL.md",
 			],
 			"flow-review": [
@@ -518,38 +517,31 @@ describe("Flow distribution and plugin surface", () => {
 	});
 
 	test("keeps parallel skill docs linked and handoff statuses stable", async () => {
-		const [
-			orchestration,
-			discovery,
-			handoff,
-			verificationGates,
-			passPatterns,
-			passExample,
-		] = await Promise.all([
+		const [orchestration, discovery, handoff, passExample] = await Promise.all([
 			readFile("skills/flow/references/parallel-orchestration.md", "utf8"),
 			readFile("skills/flow-plan/references/parallel-discovery.md", "utf8"),
 			readFile("skills/flow/references/handoff-format.md", "utf8"),
-			readFile("skills/flow/references/verification-gates.md", "utf8"),
-			readFile("skills/flow/references/parallel-pass-patterns.md", "utf8"),
 			readFile("skills/flow/references/parallel-pass-example.md", "utf8"),
 		]);
 
 		expect(orchestration).toContain("handoff-format.md");
-		expect(orchestration).toContain("verification-gates.md");
-		expect(orchestration).toContain("parallel-pass-patterns.md");
 		expect(orchestration).toContain("parallel-pass-example.md");
 		expect(discovery).toContain("../../flow/references/handoff-format.md");
-		expect(discovery).toContain("../../flow/references/verification-gates.md");
+		expect(discovery).toContain(
+			"../../flow/references/parallel-orchestration.md",
+		);
 		expect(discovery).toContain("manager synthesis barrier");
 		expect(handoff).toContain("success | partial | blocked");
 		expect(handoff).toContain("- `success`:");
 		expect(handoff).toContain("- `partial`:");
 		expect(handoff).toContain("- `blocked`:");
-		expect(verificationGates).toContain("## Verification tiers");
-		expect(verificationGates).toContain("**Verify strongly**");
-		expect(verificationGates).toContain("stable claim ids");
-		expect(passPatterns).toContain("## Choose a pass");
-		expect(passPatterns).toContain("## Stop And Extend");
+		expect(orchestration).toContain("### Verification tiers");
+		expect(orchestration).toContain("**Verify strongly**");
+		expect(orchestration).toContain("stable claim ids");
+		expect(orchestration).toContain("## Choose a pass");
+		expect(orchestration).toContain("## Stage 8 — Extend or stop");
+		expect(orchestration).toContain("Stage 3 — Manifest");
+		expect(orchestration).toContain("Worker failure ladder");
 		expect(passExample).toContain("# Parallel pass example");
 		expect(passExample).toContain(
 			"Return only the Flow handoff in this exact shape:",
@@ -565,7 +557,6 @@ describe("Flow distribution and plugin surface", () => {
 		for (const [name, text] of [
 			["orchestration", orchestration],
 			["discovery", discovery],
-			["passPatterns", passPatterns],
 			["passExample", passExample],
 		] as const) {
 			expect(
@@ -1001,25 +992,11 @@ describe("Flow distribution and plugin surface", () => {
 					"skills",
 					"flow",
 					"references",
-					"parallel-pass-patterns.md",
+					"parallel-orchestration.md",
 				),
 				"utf8",
 			),
-		).resolves.toContain("Parallel pass patterns");
-		await expect(
-			readFile(
-				join(
-					home,
-					".config",
-					"opencode",
-					"skills",
-					"flow",
-					"references",
-					"verification-gates.md",
-				),
-				"utf8",
-			),
-		).resolves.toContain("Verification gates");
+		).resolves.toContain("Parallel orchestration");
 		await expect(
 			readFile(flowSkillFile(home, "flow-test", "SKILL.md"), "utf8"),
 		).resolves.toContain("validationRun");
@@ -1039,12 +1016,11 @@ describe("Flow distribution and plugin surface", () => {
 		);
 		expect(marker).toContain("file=references/handoff-format.md sha256=");
 		expect(marker).toContain(
-			"file=references/parallel-pass-patterns.md sha256=",
+			"file=references/parallel-orchestration.md sha256=",
 		);
 		expect(marker).toContain(
 			"file=references/parallel-pass-example.md sha256=",
 		);
-		expect(marker).toContain("file=references/verification-gates.md sha256=");
 
 		const removed = await uninstallFlowSkills(home);
 		expect(removed.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(

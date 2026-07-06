@@ -3,7 +3,7 @@
 Use this only after a serial orientation pass has identified the repo shape and the likely slices. Workers are read-only evidence gatherers; the planner owns the plan.
 
 For broad parallel passes, also load `../../flow/references/parallel-orchestration.md`.
-Use its pre-fan-out coverage gate and
+Use its pass manifest as the pre-fan-out coverage gate and
 `../../flow/references/handoff-format.md` response shapes.
 
 ## Good slices
@@ -24,35 +24,21 @@ config, and docs. Name each slice by the paths it owns, for example "runtime:
 
 Treat derived slices as starting points, not a simultaneous coverage map.
 Before fan-out, choose the relevant entries and de-overlap shared docs,
-config, or release surfaces in the coverage gate.
+config, or release surfaces in the pass manifest.
 
-## Coverage gate
+## Manifest and prompts
 
-Before spawning workers, state the total discovery scope and one line per slice.
-For countable scopes, confirm that slice counts add back to the total and that
-there are no overlaps, gaps, or empty slices. If the scope is not countable,
-state the completeness rule, such as "all changed files plus callers."
+Write the pass manifest and the worker prompts exactly as Stages 3 and 4 of
+`../../flow/references/parallel-orchestration.md` define them: one manifest row
+per slice with expected coverage and a verification tier, and a self-contained
+prompt per worker naming the mode (usually `evidence`), the exact slice, and
+the expected coverage. Discovery-specific rules:
 
-## Worker prompt
-
-```text
-Inspect <slice> for <goal>. Read-only. Do not edit files or call
-state-changing Flow tools. Return only the Flow handoff in this exact shape:
-<matching handoff template copied verbatim from handoff-format.md>
-```
-
-For validation-oriented discovery:
-
-```text
-Inspect <slice> for validation risk. Read-only. Do not edit files or call
-state-changing Flow tools. You may report commands that should be run, and
-include raw output only for commands you actually ran. Return only the Flow
-handoff in this exact shape:
-<matching handoff template copied verbatim from handoff-format.md>
-```
-
-Workers cannot read reference files themselves; paste the matching handoff
-template from `../../flow/references/handoff-format.md` into the prompt.
+- Workers are read-only. For validation-oriented discovery, workers may report
+  commands that should be run, and include raw output only for commands they
+  actually ran.
+- Workers cannot read reference files themselves; paste the matching handoff
+  template from `../../flow/references/handoff-format.md` into the prompt.
 
 ## Synthesis
 
@@ -66,5 +52,5 @@ Convert only evidence-backed work into plan fields:
 If workers disagree, inspect the source artifact yourself. If a candidate finding lacks a concrete citation or refutation pass, make it a review-first deliverable rather than a fix feature.
 
 Apply the manager synthesis barrier from
-`../../flow/references/verification-gates.md`: only distilled, evidence-backed
-claims become plan fields.
+`../../flow/references/parallel-orchestration.md`: only distilled,
+evidence-backed claims become plan fields.

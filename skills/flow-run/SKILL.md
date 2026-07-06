@@ -1,6 +1,6 @@
 ---
 name: flow-run
-description: "Execute one approved Flow feature in the v4 runtime: start a feature with flow_run_start, make scoped changes, gather real validation evidence, obtain review payloads, and complete with flow_feature_complete."
+description: "Use when an approved Flow plan has a feature to implement, validate, or complete in the v4 runtime, and the work is scoped to one active feature. For planning a goal first use flow-plan; for the full goal-to-completion loop or resuming a session use flow."
 ---
 
 # Flow Run
@@ -45,7 +45,9 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 For broad validation research, risky changes, or unclear coverage, use
 `../flow/references/parallel-orchestration.md` to fan out named Flow workers.
 Use the mode-to-agent mapping in that reference instead of generic subagents.
-Workers must use the handoff format and verification gates from that reference.
+Write its pass manifest before fan-out, paste the matching handoff template
+from `../flow/references/handoff-format.md` into every worker prompt, and
+apply its verification tiers to the handoffs that come back.
 They may report command output they actually ran or propose focused checks; the
 manager decides what is strong enough to record.
 

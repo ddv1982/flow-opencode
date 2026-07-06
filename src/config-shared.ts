@@ -66,9 +66,7 @@ const FLOW_PLAN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	["flow-plan", "references/planning-examples.md"],
 	["flow-plan", "references/parallel-discovery.md"],
 	["flow", "references/parallel-orchestration.md"],
-	["flow", "references/parallel-pass-patterns.md"],
 	["flow", "references/handoff-format.md"],
-	["flow", "references/verification-gates.md"],
 ]);
 
 const FLOW_RUN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
@@ -76,9 +74,7 @@ const FLOW_RUN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	["flow-run", "references/validation-rubric.md"],
 	["flow-run", "references/audit-rubric.md"],
 	["flow", "references/parallel-orchestration.md"],
-	["flow", "references/parallel-pass-patterns.md"],
 	["flow", "references/handoff-format.md"],
-	["flow", "references/verification-gates.md"],
 	["flow-review", "SKILL.md"],
 	["flow-review", "references/review-rubric.md"],
 ]);
@@ -87,9 +83,7 @@ const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	["flow", "SKILL.md"],
 	["flow", "references/recovery-playbook.md"],
 	["flow", "references/parallel-orchestration.md"],
-	["flow", "references/parallel-pass-patterns.md"],
 	["flow", "references/handoff-format.md"],
-	["flow", "references/verification-gates.md"],
 	["flow-plan", "SKILL.md"],
 	["flow-plan", "references/planning-examples.md"],
 	["flow-plan", "references/parallel-discovery.md"],

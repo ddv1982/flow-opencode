@@ -5,76 +5,60 @@ evidence faster than one linear pass. The manager still owns the Flow session:
 only the manager calls state-changing Flow tools, approves plans, completes
 features, records reviews, or closes sessions.
 
-Sections: quick path, operational defaults, manager sequence, modes, permission
-contract, worker rules, prompt contract, handoff location, and follow-up passes.
+Every parallel pass runs the same loop:
 
-Read these companion references before a broad parallel pass:
+**orient → slice → manifest → fan out → account → verify → synthesize →
+extend or stop.**
 
-- `parallel-pass-patterns.md` for pass selection, effort defaults, and stop or
-  follow-up rules.
-- `handoff-format.md` for the exact worker response shapes.
-- `verification-gates.md` for the pre-fan-out coverage gate, handoff
-  acceptance, verifier triggers, and the manager synthesis barrier. Those
-  definitions are canonical; this file only points at them.
-- `parallel-pass-example.md` for a concrete end-to-end pass after the rules
-  below are clear (synced with the `flow` skill; not bundled into commands).
+This file is the whole playbook; read it once and run the pass. Two companions
+stay separate:
 
-## Quick path
+- `handoff-format.md` holds the worker response templates. The manager pastes
+  the matching template verbatim into every worker prompt.
+- `parallel-pass-example.md` walks one concrete end-to-end pass (synced with
+  the `flow` skill; not bundled into commands).
 
-1. Orient serially and keep the immediate blocker local.
-2. Fan out only when two to five non-overlapping slices reduce known
-   uncertainty.
-3. Write a coverage gate before spawning workers: total scope, exact slices,
-   expected counts, and overlap/gap check.
-4. Give each worker a named mode, exact slice, expected coverage, and the
-   required handoff shape.
-5. Accept only scoped, evidenced, confidence-labeled claims; verify important
-   weak, contested, or single-source claims.
-6. Synthesize one manager-owned artifact. Raw handoffs do not become the answer,
-   Flow payload, or patch decision.
+## Choose a pass
 
-## Operational defaults
+| Situation | Flow pass | Output the manager may synthesize |
+| --- | --- | --- |
+| Repo shape is unclear before planning | Discovery pass | Requirements, decisions, targets, validation entries, or a review-first feature |
+| A broad finding set needs refutation | Audit pass | Surviving findings with guards checked and gaps named |
+| Changed files or risk lenses are too broad for one review pass | Review pass | One `featureReview` or `finalReview` payload owned by the manager |
+| Test strategy or route coverage is unclear | Validation pass | Candidate commands or authorized raw command evidence |
+| A claim is single-source, surprising, high-stakes, or payload-bound | Verification pass | Per-claim keep, narrow, rewrite, or remove decisions |
+| Multiple implementation paths are plausible | Candidate pass | Candidate patches inspected and validated by the manager before use |
 
-- Prefer serial work when the scope is small, tightly coupled, or blocked by one
-  decision that must be made before slices are meaningful.
-- A normal first pass is two to five workers with independent slices. Use more
-  only when the coverage gate is countable and the slices remain non-overlapping.
-- Run at most one routine follow-up pass. Extra passes need an explicit manager
-  reason, such as a high-stakes verifier check or a newly discovered bounded
-  slice.
-- Do not fan out just to keep agents busy. Every worker should reduce a known
-  planning, validation, review, audit, or implementation uncertainty.
+Pass notes:
 
-Skip fan-out when:
+- **Discovery**: workers read specific modules, routes, docs, commands, or risk
+  lenses; only evidenced claims become plan fields.
+- **Audit**: workers actively look for guards, lifecycle resets, deployment
+  constraints, and counterexamples before reporting a finding. A finding
+  without refutation work stays advisory or becomes a follow-up question.
+- **Review**: workers separate blocking findings from advisory notes; the
+  manager resolves conflicts and returns one review payload.
+- **Validation**: workers run only manager-authorized commands and report the
+  exact command, status, and raw outcome summary.
+- **Verification**: verifiers judge atomic claims against cited sources or
+  commands; do not ask a verifier to redesign the work or review the whole
+  feature.
+- **Candidate**: only with explicit user authorization plus isolated worktrees
+  or exact non-overlapping path ownership. Patches stay proposals until the
+  manager inspects, merges or rejects, and validates.
 
-- one file, command, or design question determines the next step.
-- slices would share the same contracts, fixtures, or edit targets.
-- the manager can inspect the full scope faster than writing and checking
+## When to stay serial
+
+- One file, command, or design question determines the next step.
+- Slices would share the same contracts, fixtures, or edit targets.
+- The manager can inspect the full scope faster than writing and checking
   worker prompts.
-- the result would still need the same manual synthesis with no time saved.
+- The result would still need the same manual synthesis with no time saved.
 
-## Manager sequence
-
-1. Call `flow_status` if a Flow session may already exist.
-2. Do a serial orientation pass. Read enough files, schemas, docs, tests,
-   commands, or artifacts to identify real slices.
-3. Define the local manager task. Do not delegate the immediate blocker that
-   determines whether fan-out is even valid.
-4. Build the pre-fan-out coverage gate defined in `verification-gates.md`
-   ("Before fan-out"): total scope, one line per slice with expected count,
-   partition check, and overlap/gap check.
-5. Spawn only named Flow workers. Use exact slices and the required handoff
-   shape. Keep each prompt self-contained.
-6. Continue non-overlapping manager work while workers run.
-7. Read every handoff. Keep only claims that have evidence, match the assigned
-   scope, and carry confidence labels.
-8. Send important low-confidence, single-source, contested, or citation-heavy
-   claims to `flow-verifier-worker`.
-9. Run follow-up passes only for material gaps, conflicts, narrowed scope, or
-   verification needs.
-10. Apply the manager synthesis barrier from `verification-gates.md`: keep
-    only distilled, evidence-backed claims and synthesize one Flow artifact.
-    Do not paste worker handoffs as the user-facing result.
+Do not fan out to keep agents busy. Every worker should reduce a named
+planning, validation, review, audit, or implementation uncertainty. A normal
+first pass is two to five workers with independent slices; use more only when
+the manifest stays countable and non-overlapping.
 
 ## Modes
 
@@ -92,20 +76,10 @@ carry the permission boundaries for each mode.
 | `verifier` | `flow-verifier-worker` | Per-claim verdicts against cited evidence or commands | No | `flow_status` only if needed |
 | `candidate-implementation` | `flow-candidate-worker` | Candidate patch summary from an isolated worktree or exact path-owned slice | Only with explicit user authorization plus isolation or exact non-overlapping path ownership | No state-changing Flow tools |
 
-Mode examples:
-
-- Use `flow-evidence-worker` when the repo shape is unclear and the output will
-  become plan requirements, decisions, targets, or validation entries.
-- Use `flow-reviewer` when changed files or risk lenses can be reviewed
-  independently before the manager returns one review payload.
-- Use `flow-validation-worker` when the manager needs command options or raw
-  output from an explicitly authorized command.
-- Use `flow-audit-worker` when candidate findings must be refuted before they
-  can become a report or follow-up feature.
-- Use `flow-verifier-worker` for atomic claims that are contested,
-  single-sourced, high-stakes, or destined for a Flow payload.
-- Use `flow-candidate-worker` only after explicit user authorization and only
-  with an isolated worktree or exact non-overlapping path ownership.
+If the runtime exposes per-worker model or effort choices, spend them where
+being wrong is expensive: read-heavy discovery slices tolerate the cheapest
+configured option, while verifier and review slices deserve the strongest.
+Otherwise route by scope: give weaker slices narrower, more countable scope.
 
 ## Permission contract
 
@@ -127,27 +101,56 @@ Do not fan out parallel `flow_plan_save`, `flow_plan_approve`,
 `flow_session_close` calls. Runtime locking protects files, but Flow accepts only
 one active feature result at a time.
 
-## Worker rules
-
 Workers may read files, inspect docs, run authorized read-only commands, and
 summarize evidence. Candidate implementation workers may edit only when the
 manager assigned an isolated worktree or exact path ownership that does not
-overlap sibling workers or manager edits.
+overlap sibling workers or manager edits. Workers must not edit `.flow/**`,
+must not call state-changing Flow tools, and must not approve work, close
+sessions, record Flow validation, or claim validation they did not run. A
+worker may report raw validation output it actually ran; the manager decides
+whether it is strong enough to record.
 
-Workers must not edit `.flow/**` and must not call:
+## Stage 1 — Orient (serial)
 
-- `flow_plan_save`
-- `flow_plan_approve`
-- `flow_run_start`
-- `flow_feature_complete`
-- `flow_feature_reset`
-- `flow_session_close`
+Call `flow_status` if a Flow session may already exist. Read enough files,
+schemas, docs, tests, commands, or artifacts to identify real slices. Keep the
+immediate blocker local: do not delegate the question that determines whether
+fan-out is even valid.
 
-Workers also must not approve work, close sessions, record Flow validation, or
-claim validation they did not run. A worker may report raw validation output it
-actually ran; the manager decides whether it is strong enough to record.
+## Stage 2 — Slice
 
-## Prompt contract
+Split along whichever axis keeps slices independent: modules or path sets,
+route or endpoint groups, risk lenses, command surfaces, data ranges, or claim
+sets. Each slice needs a one-line scope, expected coverage, and a defined
+output the manager can check.
+
+## Stage 3 — Manifest (the pre-fan-out coverage gate)
+
+Before spawning, write a pass manifest: one row per slice, plus a totals check.
+
+| # | Slice scope | Expected coverage | Mode | Verification tier |
+| --- | --- | --- | --- | --- |
+| 1 | `src/core/**` plus its tests | 14 files | `evidence` | accept locally |
+| 2 | release contract: CI workflows, `package.json`, changelog | 6 files | `evidence` | verify once |
+
+- Count the total work items when countable: files, modules, routes, commands,
+  rows, findings, screenshots, or claims. Confirm slice counts add back to the
+  total, with no overlaps, gaps, empty slices, or ambiguous shared contracts.
+- If the scope cannot be counted, state the completeness rule instead, such as
+  "all changed files plus callers" or "all public commands plus release docs."
+- Assign each slice's verification tier now (see Stage 6). Deciding where a
+  wrong claim is expensive belongs before handoffs arrive, not after.
+- Fix the slice map centrally before spawning if the gate does not reconcile.
+
+The manifest is also the accounting contract for the pass: N rows spawned means
+N handoffs collected and checked in Stage 5 before anything is synthesized.
+
+Write the manifest where it survives the pass: the conversation is enough for a
+single bounded pass, but when a follow-up pass or a session resume is
+plausible, persist it with the synthesis (Stage 7) so the accounting can be
+reconstructed.
+
+## Stage 4 — Fan out
 
 Every worker prompt includes:
 
@@ -164,40 +167,136 @@ Return only the Flow handoff in this exact shape:
 
 Hidden workers cannot load skills or read `handoff-format.md` themselves. The
 manager copies the matching handoff template into every worker prompt; a bare
-filename reference is not enough.
+filename reference is not enough. Workers also cannot read the conversation, so
+prompts cite file paths — including any synthesis file from an earlier pass —
+instead of restating chat history.
 
 For research or current-doc slices, require source checks for versioned or
 time-sensitive facts. For implementation candidates, remind workers that other
 work may be active and that they must not revert unrelated changes.
 
-## Where handoffs go
+Continue non-overlapping manager work while workers run.
+
+## Stage 5 — Account
+
+Check every manifest row off against a returned handoff before synthesis. A
+worker that never returns, errors out, or reports `partial` or `blocked` is a
+hole in the pass, and synthesizing around it silently drops a slice.
+
+Worker failure ladder:
+
+1. Re-spawn once with a narrower slice and a note about what the first attempt
+   returned.
+2. If it fails again, cover the slice directly in the manager session.
+3. If it stays blocked, carry the slice into the synthesis explicitly as
+   not-covered. Never present results as if coverage were complete.
+
+## Stage 6 — Verify
+
+`Status: success` only says the worker believes its slice is done. Accept a
+handoff only after a cheap manager-side pass:
+
+- `Status` is present and terminal: `success`, `partial`, or `blocked`.
+- Coverage matches the assigned slice, or skips are explicit.
+- Important claims have concrete evidence and confidence tags.
+- Cited paths, commands, screenshots, URLs, or metrics resolve.
+- The evidence supports the claim, not just the topic.
+- Findings stay inside the worker's slice.
+- Headline counts can be recounted or traced.
+- Contradictions between workers are either resolved or explicitly marked as
+  contested.
+
+Demote, drop, re-task, or verify claims that fail this pass.
+
+### Verification tiers
+
+One taxonomy decides how much verification a claim gets: the manifest assigns
+a default tier per slice, and this stage applies it per claim. Use the cheapest
+check that matches the risk:
+
+- **Accept locally**: low-risk claims with direct evidence that the manager can
+  cheaply inspect or recount.
+- **Verify once** with `flow-verifier-worker`: single-source, surprising,
+  inferred, low-confidence, citation-heavy, contested, or Flow-payload-bound
+  claims, including any count, benchmark, command result, or pass/fail claim a
+  Flow payload will rely on.
+- **Verify strongly**: blocking or release-sensitive claims and claims that
+  affect user data, security, persistence, permissions, public API behavior,
+  release behavior, or data loss. Use independent verifier checks, manager-run
+  commands, or direct artifact inspection strong enough to settle the claim.
+- **Do not accept**: claims without concrete evidence, claims outside the
+  assigned slice, claims contradicted by inspected artifacts, or claims where
+  the cited evidence supports only the topic rather than the assertion.
+
+Verifier prompts use stable claim ids, one atomic assertion per id, the cited
+source or command for each id, and the exact acceptance question. Do not
+include the generator's reasoning unless that reasoning is the thing being
+verified, do not say which worker produced the claim, and do not ask a
+verifier to redesign the work or review the whole feature.
+
+## Stage 7 — Synthesize
+
+Apply the manager synthesis barrier before presenting or recording anything:
+
+- Preserve confidence: verified, single-sourced, inferred, and unresolved claims
+  stay distinct when it matters.
+- When workers disagree, inspect the cited artifact or rerun the cited command
+  instead of arbitrating from summaries. Do not average conflicting claims.
+- Run the strongest practical local check for the deliverable.
+- Re-read critical files or docs that will be cited in the final decision.
+- Move only distilled, evidence-backed claims forward; raw handoffs remain
+  candidate evidence, not a plan, review, completion payload, or final answer.
+- Record gaps honestly instead of converting missing evidence into success
+  language.
+
+Where accepted evidence goes:
 
 - Planning evidence becomes `requirements`, `decisions`, feature `targets`,
-  feature `validation`, or plan notes in prose fields.
-- Execution evidence informs the active feature, but `flow_feature_complete` is
-  manager-owned.
-- Validation evidence may become `validationRun` only when the command, status,
-  and raw outcome are concrete enough to trust.
-- Review evidence informs `featureReview` or `finalReview`, but the manager owns
-  the pass/fail verdict.
-- Audit evidence becomes findings only after refutation and verification rules
-  in `verification-gates.md`.
-- Candidate patches are inspected, merged, and validated by the manager before
-  any Flow completion call.
+  feature `validation`, or plan notes — only when the source and scope are
+  clear. Unverified broad findings become a review-first feature, not a fix
+  plan.
+- Validation evidence may become `validationRun` only when the worker was
+  explicitly authorized to run the command and reported the exact command,
+  status, and raw outcome summary.
+- Review evidence informs `featureReview` or `finalReview`, but the manager
+  owns the pass/fail verdict and must resolve blockers, contradictions, and
+  coverage gaps before returning the payload.
+- Audit evidence becomes findings only after refutation; blocking findings need
+  guards checked, deployment context, and evidence that the current code
+  exhibits the behavior.
+- Candidate patches are not Flow evidence until the manager inspects, merges or
+  rejects them, and validates the main Flow-managed workspace.
 
-When worker results conflict, inspect the underlying artifact directly and rerun
-the smallest check that can settle the disagreement. The manager synthesis
-barrier in `verification-gates.md` applies before anything moves forward.
+Persist the manifest and the synthesis when another pass may follow or the
+session is long enough to be compacted or resumed: write the distilled result —
+the accounted manifest, accepted claims with evidence and confidence, dropped
+claims with one-line reasons, and open gaps — into plan prose fields or a
+manager-owned scratch file outside both `.flow/**` and the repository worktree,
+such as a file in the OS temporary directory. The runtime owns the `.flow/**`
+layout, and scratch files left in the worktree end up staged or reviewed as if
+they were project changes. Follow-up worker prompts cite that path; files are
+the only shared memory between passes.
 
-## Follow-up passes
+## Stage 8 — Extend or stop
 
-Start a follow-up pass when first-pass handoffs reveal:
+Stop after a pass when:
 
-- missing coverage in the original slice map.
-- conflicting findings that matter to the Flow decision.
-- a specialized follow-up that was intentionally out of scope.
-- high-stakes, low-confidence, or single-source claims needing verification.
-- bounded implementation candidates after research converges.
+- the manifest's coverage rule is satisfied and every row is accounted for.
+- accepted claims are evidenced, scoped, and confidence-labeled.
+- material single-source, contested, high-stakes, or payload-bound claims have
+  been verified or downgraded.
+- remaining gaps are explicit and do not block the Flow artifact being produced.
 
-Do not recurse by default. If a worker says it needs another worker, the manager
-decides whether that is a follow-up pass and writes the next bounded prompt.
+Start a bounded follow-up pass only when:
+
+- the original slice map missed material scope.
+- workers disagree on a claim that affects the Flow decision.
+- a high-stakes or payload-bound claim needs verification.
+- a first pass exposes a narrower implementation or validation slice worth
+  isolating.
+
+Run at most one routine follow-up pass. Extra passes need an explicit manager
+reason, such as a high-stakes verifier check or a newly discovered bounded
+slice. Do not recurse by default: if a worker says it needs another worker, the
+manager decides whether that is a follow-up pass and writes the next bounded
+prompt, starting again from the manifest.

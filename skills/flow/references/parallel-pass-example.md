@@ -12,11 +12,14 @@ twelve API route modules, one shared error middleware, and an integration test
 directory. The manager keeps the middleware local because it is one file and
 anchors every other judgment.
 
-Coverage gate: twelve countable route modules remain after the local check.
+Pass manifest: twelve countable route modules remain after the local check, and
+4 + 3 + 5 adds back to 12 with no overlaps or gaps.
 
-- Slice A: auth and account routes, expected 4/12.
-- Slice B: billing and subscription routes, expected 3/12.
-- Slice C: remaining content and admin routes, expected 5/12.
+| # | Slice scope | Expected coverage | Mode | Verification tier |
+| --- | --- | --- | --- | --- |
+| A | auth and account routes | 4/12 modules | `evidence` | accept locally |
+| B | billing and subscription routes | 3/12 modules | `review` | verify once |
+| C | remaining content and admin routes | 5/12 modules | `audit` | verify once |
 
 Worker prompts:
 
@@ -52,6 +55,11 @@ Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or ma
 Return only the Flow handoff in this exact shape:
 <matching handoff template copied verbatim from handoff-format.md>
 ```
+
+Accounting: three manifest rows spawned means three handoffs collected before
+synthesis. If slice B returned `partial`, the manager would re-spawn it once
+with a narrower scope, then cover it directly, and as a last resort carry it
+into the synthesis explicitly as not-covered.
 
 Handoff checks: the manager accepts only reports with terminal status, matching
 coverage counts, concrete file:line evidence, confidence tags, and claims inside

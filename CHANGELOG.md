@@ -2,6 +2,29 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.0] - 2026-07-06
+
+Parallel orchestration reworked into a single pass playbook, plus sharper
+planning and routing:
+
+- The parallel-orchestration references collapse into one playbook with an
+  explicit loop — orient, slice, manifest, fan out, account, verify,
+  synthesize, extend or stop — so a manager reads one file instead of four
+  cross-linked ones. Every bundled public Flow command got smaller as a result.
+- A new pass manifest doubles as the pre-fan-out coverage gate and the
+  accounting contract: one row per slice with its scope, expected coverage, and
+  verification tier, and N rows spawned means N handoffs accounted for before
+  synthesis.
+- A worker-failure ladder handles a slice that errors, blocks, or returns
+  partial: re-spawn once narrower, cover it directly, or carry it into the
+  synthesis explicitly as not-covered — never as if coverage were complete.
+- `flow-plan` gains uncertainty-typed decomposition: resolve specification
+  uncertainty by stating an assumption (or asking when a wrong guess is costly)
+  and environment uncertainty by inspecting, never by asking.
+- Frontmatter descriptions for `flow-plan`, `flow-run`, and `flow-review` now
+  describe only when to reach for each skill, so single-phase asks route
+  cleanly.
+
 ## [4.2.1] - 2026-07-05
 
 Skill routing and boundary clarity across the managed skill set:

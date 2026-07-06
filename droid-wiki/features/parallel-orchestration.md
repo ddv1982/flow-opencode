@@ -12,10 +12,8 @@ Parallel orchestration lets a Flow manager fan out evidence, validation, audit, 
 src/config-shared.ts
 skills/flow/references/
 ├── parallel-orchestration.md
-├── parallel-pass-patterns.md
 ├── parallel-pass-example.md
-├── handoff-format.md
-└── verification-gates.md
+└── handoff-format.md
 ```
 
 ## Key abstractions
@@ -41,9 +39,8 @@ The plugin injects hidden agents into OpenCode config through `applyFlowConfig` 
 | File | Purpose |
 | --- | --- |
 | `src/config-shared.ts` | Defines hidden Flow workers and permission maps. |
-| `skills/flow/references/parallel-orchestration.md` | When and how to fan out work. |
+| `skills/flow/references/parallel-orchestration.md` | The whole pass playbook: when to fan out, pass manifest, handoff acceptance, and claim verification tiers. |
 | `skills/flow/references/handoff-format.md` | Worker return contract. |
-| `skills/flow/references/verification-gates.md` | Claim acceptance rules. |
 | `tests/distribution-and-surface.test.ts` | Permission and prompt contract tests. |
 
 ## Entry points for modification

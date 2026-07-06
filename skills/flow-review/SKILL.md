@@ -1,6 +1,6 @@
 ---
 name: flow-review
-description: "Review Flow work in the v4 runtime: inspect feature or final-session changes, classify findings, and return featureReview or finalReview payloads for flow_feature_complete."
+description: "Use when Flow work needs a review verdict in the v4 runtime: a completed feature awaiting its featureReview, a final session review, or an assigned review slice. Validation evidence gathering stays in flow-test; cleanup judgment stays in flow-deslop."
 ---
 
 # Flow Review
@@ -79,8 +79,12 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
   `../flow/references/parallel-orchestration.md` for read-only slices by
   changed-file group, risk lens, or validation surface. Use the named review,
   audit, evidence, or validation agents from that reference instead of generic
-  subagents. Apply its handoff format and verification gates; only the manager
-  returns the final `featureReview` or `finalReview` payload. The hidden
+  subagents. Write its pass manifest before fan-out and apply its Stage 6
+  handoff acceptance and verification tiers; only the manager
+  returns the final `featureReview` or `finalReview` payload. If that reference
+  is unavailable in the current context (for example in a bundled public Flow
+  command that does not include it), review serially and record the skipped
+  fan-out as a coverage gap instead of improvising worker contracts. The hidden
   reviewer cannot spawn workers; it reviews its assigned scope directly and
   reports coverage gaps for the rest.
 
