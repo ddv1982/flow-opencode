@@ -11,11 +11,33 @@ import {
 const MARKER_FILENAME = ".flow-skill-version";
 
 // Matches the `<file>.backup.<12 hex>` names writeBackup creates, plus its
-// `.N` collision suffix. These files hold the user's earlier local edits.
-const BACKUP_FILE_PATTERN = /\.backup\.[0-9a-f]{12}(?:\.\d+)?$/;
+// `.N` collision suffix, and captures the embedded content hash. writeBackup
+// names a backup after sha256(content).slice(0, 12), so the hash is a
+// self-describing checksum we can verify against the file's actual content.
+const BACKUP_FILE_PATTERN = /\.backup\.([0-9a-f]{12})(?:\.\d+)?$/;
 
-function isFlowBackupFile(relativePath: string): boolean {
-	return BACKUP_FILE_PATTERN.test(relativePath);
+function backupHashFromName(relativePath: string): string | null {
+	return BACKUP_FILE_PATTERN.exec(relativePath)?.[1] ?? null;
+}
+
+// A file is Flow-created backup residue only when its name matches the pattern
+// AND its content hashes to the embedded checksum. This distinguishes Flow's
+// own backups from an unrelated user file that merely happens to be named like
+// one (e.g. `db.backup.20240115abcd`), which must never be treated as
+// removable residue.
+async function isFlowCreatedBackup(
+	folder: string,
+	relativePath: string,
+): Promise<boolean> {
+	const namedHash = backupHashFromName(relativePath);
+	if (!namedHash) return false;
+	const content = await optionalRead(resolveSkillFile(folder, relativePath));
+	if (content === null) return false;
+	return sha256(content).slice(0, 12) === namedHash;
+}
+
+function normalizeNewlines(value: string): string {
+	return value.replace(/\r\n/g, "\n");
 }
 
 type FlowLog = (level: "info" | "warn" | "error", message: string) => void;
@@ -33,6 +55,18 @@ export type FlowSkillSyncResult = {
 	action: FlowSkillSyncAction;
 	backupPaths?: string[];
 };
+
+// The sync actions that install or change on-disk skill content and therefore
+// require an OpenCode restart before the refreshed skills load.
+export const CHANGED_SYNC_ACTIONS: readonly FlowSkillSyncAction[] = [
+	"installed",
+	"updated",
+	"updated_with_backup",
+];
+
+export function isChangedSyncAction(action: FlowSkillSyncAction): boolean {
+	return CHANGED_SYNC_ACTIONS.includes(action);
+}
 
 export type FlowSkillSyncHealth = {
 	status: "ok" | "restart_required" | "action_required" | "error";
@@ -83,7 +117,12 @@ export type FlowSkillDoctorReport = {
 let latestFlowSkillSyncHealth: FlowSkillSyncHealth | null = null;
 
 function homeDir(): string {
-	return process.env.HOME ?? process.env.USERPROFILE ?? homedir();
+	// An empty or whitespace-only HOME/USERPROFILE must fall through to the OS
+	// home dir; otherwise the skills root becomes a cwd-relative path and sync
+	// writes into (and uninstall rm -rf's) the current directory.
+	const configured =
+		process.env.HOME?.trim() || process.env.USERPROFILE?.trim();
+	return configured || homedir();
 }
 
 export function resolveFlowSkillsRoot(home = homeDir()): string {
@@ -108,7 +147,11 @@ async function optionalRead(path: string): Promise<string | null> {
 	try {
 		return await readFile(path, "utf8");
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+		const code = (error as NodeJS.ErrnoException).code;
+		// ENOENT: nothing there. ENOTDIR: a path component is a regular file
+		// (e.g. a plain `flow-notes.md` sitting in the skills root), so the
+		// managed file cannot exist — both mean "absent", not a hard failure.
+		if (code === "ENOENT" || code === "ENOTDIR") return null;
 		throw error;
 	}
 }
@@ -169,9 +212,20 @@ async function syncSkill(
 	const markerPath = join(folder, MARKER_FILENAME);
 	const markerContent = await optionalRead(markerPath);
 	const existingMarkerHashes = parseMarkerFiles(markerContent);
-	const existingSkill = await optionalRead(join(folder, "SKILL.md"));
-	if (existingSkill !== null && markerContent === null) {
-		return { name: definition.name, action: "skipped_foreign" as const };
+	if (markerContent === null) {
+		// No Flow marker proving Flow created this folder: if any managed path
+		// already holds user content, treat the whole folder as user-owned and
+		// never overwrite it. Checking only SKILL.md would silently clobber a
+		// user file at a nested managed path (e.g. references/handoff-format.md)
+		// with no backup.
+		for (const file of definition.files) {
+			const existing = await optionalRead(
+				resolveSkillFile(folder, file.relativePath),
+			);
+			if (existing !== null) {
+				return { name: definition.name, action: "skipped_foreign" as const };
+			}
+		}
 	}
 
 	let changed = false;
@@ -206,7 +260,11 @@ async function syncSkill(
 		await rm(path, { force: true });
 	}
 
-	if (!changed && markerContent === markerFor(definition, version)) {
+	if (
+		!changed &&
+		markerContent !== null &&
+		normalizeNewlines(markerContent) === markerFor(definition, version)
+	) {
 		return { name: definition.name, action: "unchanged" };
 	}
 
@@ -244,9 +302,7 @@ function createHealth(
 	results: FlowSkillSyncResult[],
 ): FlowSkillSyncHealth {
 	const changedSkills = results
-		.filter((result) =>
-			["installed", "updated", "updated_with_backup"].includes(result.action),
-		)
+		.filter((result) => isChangedSyncAction(result.action))
 		.map((result) => result.name);
 	const actionRequiredSkills = results
 		.filter((result) => result.action === "skipped_foreign")
@@ -385,11 +441,8 @@ export async function runFlowSkillSync(
 	try {
 		const results = await syncFlowSkills(version, home);
 		latestFlowSkillSyncHealth = createHealth(version, root, results);
-		const changed = results.filter(
-			(result) =>
-				result.action === "installed" ||
-				result.action === "updated" ||
-				result.action === "updated_with_backup",
+		const changed = results.filter((result) =>
+			isChangedSyncAction(result.action),
 		);
 		if (changed.length > 0) {
 			log(
@@ -464,7 +517,11 @@ export async function inspectFlowSkillInstall(
 				}
 				outdatedFiles.push(file.relativePath);
 			}
-			const markerDrift = markerContent !== markerFor(definition, version);
+			// Compare newline-normalized: a CRLF-converted marker (Windows editor,
+			// autocrlf) still hashes every file correctly, so it must not be
+			// reported as drifted/outdated purely on line endings.
+			const markerDrift =
+				normalizeNewlines(markerContent) !== markerFor(definition, version);
 			const status: FlowSkillDoctorSkill["status"] =
 				missingFiles.length > 0
 					? "incomplete"
@@ -589,7 +646,7 @@ export function formatFlowSkillDoctor(report: FlowSkillDoctorReport): string {
 		);
 		if (report.skills.some((skill) => skill.backupFiles.length > 0)) {
 			lines.push(
-				"- Flow saved earlier local edits as .backup files; review each one and delete it once the saved copy is no longer needed. Sync ignores them, and they block a clean uninstall until removed.",
+				"- Flow saved earlier local edits as .backup files; review each one and delete it once the saved copy is no longer needed. Sync ignores them, and uninstall removes them (naming each) along with the folder.",
 			);
 		}
 	}
@@ -613,12 +670,18 @@ async function listSkillFolderFiles(folder: string): Promise<string[]> {
 }
 
 async function listFlowBackupFiles(folder: string): Promise<string[]> {
+	let names: string[];
 	try {
-		return (await listSkillFolderFiles(folder)).filter(isFlowBackupFile);
+		names = await listSkillFolderFiles(folder);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
 		throw error;
 	}
+	const backups: string[] = [];
+	for (const name of names) {
+		if (await isFlowCreatedBackup(folder, name)) backups.push(name);
+	}
+	return backups;
 }
 
 // A managed folder is removable when every non-marker file is either a pristine
@@ -634,16 +697,24 @@ async function inspectManagedFolderForUninstall(
 	const backups: string[] = [];
 	for (const relativePath of await listSkillFolderFiles(folder)) {
 		if (relativePath === MARKER_FILENAME) continue;
-		if (isFlowBackupFile(relativePath)) {
+		const recordedHash = hashes.get(relativePath);
+		if (recordedHash !== undefined) {
+			const content = await optionalRead(
+				resolveSkillFile(folder, relativePath),
+			);
+			if (content === null || sha256(content) !== recordedHash) {
+				return { pristine: false, backups };
+			}
+			continue;
+		}
+		// Not a managed file: removable only if it is genuinely Flow-created
+		// backup residue (name + content checksum). Any other unknown file is
+		// the user's own and keeps the folder.
+		if (await isFlowCreatedBackup(folder, relativePath)) {
 			backups.push(relativePath);
 			continue;
 		}
-		const recordedHash = hashes.get(relativePath);
-		if (recordedHash === undefined) return { pristine: false, backups };
-		const content = await optionalRead(resolveSkillFile(folder, relativePath));
-		if (content === null || sha256(content) !== recordedHash) {
-			return { pristine: false, backups };
-		}
+		return { pristine: false, backups };
 	}
 	return { pristine: true, backups };
 }

@@ -176,7 +176,11 @@ export const ExecutionHistoryEntrySchema = z
 export const SessionSchema = z
 	.object({
 		version: z.literal(2),
-		id: z.string().min(1),
+		// Constrained to the archive-safe charset so a hostile or hand-edited
+		// session.json with an exotic id (e.g. "session/1") fails to load and
+		// routes through quarantine recovery, instead of loading and then
+		// wedging every archive (flow_plan_save / flow_session_close) forever.
+		id: z.string().regex(/^[a-zA-Z0-9_-]+$/, "Invalid session id."),
 		goal: z.string().min(1),
 		status: SessionStatusSchema,
 		approval: z.enum(["pending", "approved"]),

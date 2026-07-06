@@ -407,6 +407,29 @@ describe("session lock recovery", () => {
 		expect(result).toBe("acquired");
 	});
 
+	test("reclaims a foreign-host lock with an implausible far-future timestamp", async () => {
+		const workspace = await tempWorkspace();
+		const lockDir = join(flowDir(workspace), "session.lock");
+		await mkdir(lockDir, { recursive: true });
+		// A committed/hostile owner.json dated far in the future must not wedge
+		// every call: without the fix its negative age never exceeds staleMs.
+		await writeFile(
+			join(lockDir, "owner.json"),
+			JSON.stringify({
+				pid: 999_999,
+				hostname: "some-other-host",
+				createdAt: "9999-01-01T00:00:00.000Z",
+			}),
+			"utf8",
+		);
+
+		const result = await withSessionLock(workspace, async () => "acquired", {
+			timeoutMs: 2_000,
+			staleMs: 500,
+		});
+		expect(result).toBe("acquired");
+	});
+
 	test("does not break a fresh lock held by a live process and names the remedy on timeout", async () => {
 		const workspace = await tempWorkspace();
 		const lockDir = join(flowDir(workspace), "session.lock");
@@ -448,6 +471,42 @@ describe("unreadable session quarantine", () => {
 		const archived = await readdir(historyDir(workspace));
 		expect(archived.some((name) => name.startsWith("quarantine-"))).toBe(true);
 
+		const next = await flowPlanSave(workspace, { goal: "Recover cleanly" });
+		expect(next.status).toBe("ok");
+	});
+
+	test("a session file with an archive-unsafe id is quarantined instead of wedging archive", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowDir(workspace), { recursive: true });
+		// "session/1" is valid against the loose old schema but can never be
+		// archived (archivedSessionPath rejects it), so it must fail to load and
+		// route through quarantine rather than load and wedge flow_plan_save.
+		const now = new Date().toISOString();
+		await writeFile(
+			sessionPath(workspace),
+			`${JSON.stringify({
+				version: 2,
+				id: "session/1",
+				goal: "exotic id",
+				status: "planning",
+				approval: "pending",
+				plan: null,
+				activeFeatureId: null,
+				history: [],
+				closure: null,
+				lastError: null,
+				timestamps: { createdAt: now, updatedAt: now, completedAt: null },
+			})}\n`,
+			"utf8",
+		);
+
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("error");
+		expect(String(status.recovery)).toContain("/flow-plan");
+		const archived = await readdir(historyDir(workspace));
+		expect(archived.some((name) => name.startsWith("quarantine-"))).toBe(true);
+
+		// Recovery works cleanly afterward.
 		const next = await flowPlanSave(workspace, { goal: "Recover cleanly" });
 		expect(next.status).toBe("ok");
 	});

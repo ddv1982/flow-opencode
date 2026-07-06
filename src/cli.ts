@@ -2,6 +2,7 @@ import {
 	type FlowSkillDoctorReport,
 	formatFlowSkillDoctor,
 	inspectFlowSkillInstall,
+	isChangedSyncAction,
 	resolveFlowPluginVersion,
 	syncFlowSkills,
 	uninstallFlowSkills,
@@ -96,7 +97,7 @@ async function main(argv: string[]): Promise<void> {
 		const version = resolveFlowPluginVersion();
 		const results = await syncFlowSkills(version);
 		const changed = results.filter((result) =>
-			["installed", "updated", "updated_with_backup"].includes(result.action),
+			isChangedSyncAction(result.action),
 		);
 		const actionRequired = results.filter(
 			(result) => result.action === "skipped_foreign",

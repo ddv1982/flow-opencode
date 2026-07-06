@@ -2,6 +2,38 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.2] - 2026-07-07
+
+Correctness and safety hardening from a full-project review, repairing two
+edges introduced in 4.3.1 and several older ones:
+
+- Uninstall no longer deletes a user file that merely resembles a backup name:
+  a file counts as removable Flow residue only when its name and its content
+  checksum both match Flow's backup format. Doctor applies the same check.
+- Sync no longer overwrites a user-owned skill folder that has files at managed
+  paths but no `SKILL.md` — any managed folder without a Flow marker is left
+  untouched, not clobbered without a backup.
+- An empty `HOME` no longer makes the skills root a current-directory-relative
+  path (which sync wrote into and uninstall removed); it falls back to the OS
+  home. `engines` now requires Node `>=20.12` (doctor/uninstall rely on it).
+- The CLI no longer aborts on a stray `flow-*` file in the skills root, and a
+  CRLF-converted skill marker is no longer misreported as outdated.
+- Session locks recover from more failure modes: a far-future or foreign-host
+  lock timestamp and a recycled process id are now reclaimable instead of
+  wedging every Flow call, and stale-lock reclamation no longer races two
+  waiters into holding the lock at once.
+- `flow_status` re-checks the session under the lock before quarantining, so a
+  session written by a concurrent process can't be quarantined by mistake; a
+  session file with an archive-unsafe id now routes to quarantine recovery
+  instead of wedging every archive; and its output is framed as data to blunt
+  instruction-injection from a cloned repo's session file.
+- A user command named like an object built-in (e.g. `/toString`) no longer
+  crashes command preflight, and a Flow command invoked with an attachment now
+  keeps its worker isolated instead of double-running the instructions.
+- Session history is bounded so long autonomous loops cannot grow the session
+  file without limit. Docs corrected to match the current uninstall/doctor
+  behavior.
+
 ## [4.3.1] - 2026-07-06
 
 Doctor and uninstall now account for the `.backup` files Flow writes when it

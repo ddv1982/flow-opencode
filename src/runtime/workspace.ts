@@ -9,7 +9,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { dirname, isAbsolute, join, parse, resolve } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseStrictJsonObject } from "./json/strict-object";
 import { type Session, SessionSchema } from "./schema";
@@ -165,10 +165,31 @@ function isProcessAlive(pid: number): boolean {
 	}
 }
 
+function lockOwnersEqual(a: LockOwner | null, b: LockOwner | null): boolean {
+	if (a === null || b === null) return a === b;
+	return (
+		a.pid === b.pid && a.hostname === b.hostname && a.createdAt === b.createdAt
+	);
+}
+
+// A timestamp is "implausible" if it sits more than the stale window away from
+// now in EITHER direction: far past means the holder hung, far future means a
+// hostile or clock-broken owner.json that must not wedge every call forever.
+function isTimestampStale(referenceMs: number, staleMs: number): boolean {
+	return (
+		Number.isFinite(referenceMs) && Math.abs(Date.now() - referenceMs) > staleMs
+	);
+}
+
 async function isLockStale(lock: string, staleMs: number): Promise<boolean> {
 	const owner = await readLockOwner(lock);
 	if (owner && owner.hostname === hostname()) {
-		return !isProcessAlive(owner.pid);
+		// Same host: a dead pid is definitively stale. A live pid is normally
+		// respected, but still reclaimable if the lock is far older than the
+		// window, since the pid may have been recycled onto an unrelated
+		// process after a crash/reboot.
+		if (!isProcessAlive(owner.pid)) return true;
+		return isTimestampStale(Date.parse(owner.createdAt), staleMs);
 	}
 	let referenceMs: number;
 	if (owner) {
@@ -180,7 +201,37 @@ async function isLockStale(lock: string, staleMs: number): Promise<boolean> {
 			return false;
 		}
 	}
-	return Number.isFinite(referenceMs) && Date.now() - referenceMs > staleMs;
+	return isTimestampStale(referenceMs, staleMs);
+}
+
+// Reclaim a lock judged stale without the check-then-blind-rm race that let two
+// waiters both delete and recreate the lock (double holders). We move the lock
+// aside atomically (rename), then only remove it if its owner still matches the
+// stale owner we judged; if it was refreshed in the meantime it may be live, so
+// we restore it best-effort and re-contend instead of assuming ownership.
+async function reclaimStaleLock(lock: string): Promise<void> {
+	const staleOwner = await readLockOwner(lock);
+	const aside = `${lock}.reclaim.${process.pid}.${randomUUID().slice(0, 8)}`;
+	try {
+		await rename(lock, aside);
+	} catch (error) {
+		// Someone else already moved or removed it — just re-contend.
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+		throw error;
+	}
+	const asideOwner = await readLockOwner(aside);
+	if (lockOwnersEqual(staleOwner, asideOwner)) {
+		await rm(aside, { recursive: true, force: true });
+		return;
+	}
+	// The lock was refreshed between our staleness check and the rename; it may
+	// now be live. Put it back so its owner is not silently displaced.
+	try {
+		await rename(aside, lock);
+	} catch {
+		await rm(aside, { recursive: true, force: true });
+	}
+	await sleep(LOCK_RETRY_MS);
 }
 
 async function acquireLock(
@@ -215,7 +266,7 @@ async function acquireLock(
 			}
 			if (code !== "EEXIST") throw error;
 			if (await isLockStale(lock, staleMs)) {
-				await rm(lock, { recursive: true, force: true });
+				await reclaimStaleLock(lock);
 				continue;
 			}
 			if (Date.now() - startedAt > timeoutMs) {
@@ -324,11 +375,21 @@ export async function quarantineUnreadableSession(
 	return target;
 }
 
+export function flowSessionProgress(session: Session): {
+	completed: number;
+	total: number;
+} {
+	const features = session.plan?.features ?? [];
+	return {
+		total: features.length,
+		completed: features.filter((feature) => feature.status === "completed")
+			.length,
+	};
+}
+
 function renderFlowInstructionFile(session: Session): string {
-	const totalFeatures = session.plan?.features.length ?? 0;
-	const completedFeatures =
-		session.plan?.features.filter((feature) => feature.status === "completed")
-			.length ?? 0;
+	const { completed: completedFeatures, total: totalFeatures } =
+		flowSessionProgress(session);
 	return [
 		"# Flow Runtime Context",
 		"",
@@ -432,8 +493,4 @@ async function ensureFlowGitignore(worktree: string): Promise<void> {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 		await writeFile(path, FLOW_GITIGNORE_CONTENT, "utf8");
 	}
-}
-
-export function isAbsoluteOrTraversal(value: string): boolean {
-	return isAbsolute(value) || value === ".." || value.startsWith("../");
 }

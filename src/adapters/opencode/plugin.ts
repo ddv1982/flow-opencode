@@ -4,7 +4,11 @@ import {
 	resolveFlowPluginVersion,
 	runFlowSkillSync,
 } from "../../distribution/sync";
-import { loadSession, resolveWorkspaceRoot } from "../../runtime/workspace";
+import {
+	flowSessionProgress,
+	loadSession,
+	resolveWorkspaceRoot,
+} from "../../runtime/workspace";
 import { createConfigHook } from "./config";
 import { createFlowLog } from "./logging";
 import type { Hooks, Part, Plugin } from "./sdk";
@@ -25,7 +29,10 @@ const FLOW_COMMAND_TITLE_SEEDS = {
 const FLOW_COMMAND_TITLE_SEED_MAX_LENGTH = 240;
 
 function isFlowCommandName(command: string): command is FlowCommandName {
-	return command in FLOW_CORE_COMMANDS;
+	// Object.hasOwn, not `in`: `in` walks the prototype chain, so a user command
+	// named `toString`/`constructor` would be misclassified as a Flow command
+	// and crash the preflight hook on the undefined template lookup.
+	return Object.hasOwn(FLOW_CORE_COMMANDS, command);
 }
 
 function renderFlowCommandTemplate(
@@ -85,8 +92,14 @@ function replaceFlowCommandParts(
 	text: string,
 ): void {
 	const { parts } = output;
-	const subtask = parts[0];
-	if (parts.length === 1 && isFlowSubtaskPart(subtask)) {
+	// A subtask-based command (e.g. /flow-review spawning the read-only
+	// reviewer) must have the rewritten instructions run INSIDE the subtask,
+	// never re-injected into the parent session. Rewrite the subtask prompt in
+	// place regardless of sibling parts (attachments), and leave those siblings
+	// untouched — otherwise an invocation with an attachment would both keep the
+	// stale subtask and run the instructions with the parent's permissions.
+	const subtask = parts.find(isFlowSubtaskPart);
+	if (subtask) {
 		subtask.prompt = text;
 		return;
 	}
@@ -126,11 +139,8 @@ function createCompactionHook(ctx: {
 			const root = resolveWorkspaceRoot(ctx);
 			const session = await loadSession(root);
 			if (!session) return;
-			const totalFeatures = session.plan?.features.length ?? 0;
-			const completedFeatures =
-				session.plan?.features.filter(
-					(feature) => feature.status === "completed",
-				).length ?? 0;
+			const { completed: completedFeatures, total: totalFeatures } =
+				flowSessionProgress(session);
 			output.context.push(
 				[
 					"## Flow session context",

@@ -73,6 +73,14 @@ export const FlowFeatureCompleteToolSchema = z
 	})
 	.strict();
 
+function missingSessionResponse(): RuntimeResponse {
+	return {
+		status: "missing_session",
+		summary: "No active Flow session exists.",
+		nextAction: "/flow-plan <goal>",
+	};
+}
+
 function responseFromFailure(result: {
 	message: string;
 	recovery?: string;
@@ -125,11 +133,22 @@ export async function flowStatus(worktree: string): Promise<RuntimeResponse> {
 	try {
 		return summarizeSession(await loadSession(worktree));
 	} catch (error) {
-		if (error instanceof UnreadableFlowSessionError) {
-			const root = assertMutableWorkspaceRoot(worktree);
-			return withSessionLock(root, () => quarantineAndReport(root, error));
-		}
-		throw error;
+		if (!(error instanceof UnreadableFlowSessionError)) throw error;
+		const root = assertMutableWorkspaceRoot(worktree);
+		return withSessionLock(root, async () => {
+			// Re-load under the lock before quarantining: the first read happened
+			// without the lock, so a concurrent writer may have already replaced
+			// the unreadable file with a valid session. Only quarantine if it is
+			// still unreadable now that we hold the lock.
+			try {
+				return summarizeSession(await loadSession(root));
+			} catch (lockedError) {
+				if (lockedError instanceof UnreadableFlowSessionError) {
+					return quarantineAndReport(root, lockedError);
+				}
+				throw lockedError;
+			}
+		});
 	}
 }
 
@@ -185,11 +204,7 @@ export async function flowPlanApprove(
 ): Promise<RuntimeResponse> {
 	return mutate(worktree, async (session) => {
 		if (!session) {
-			return {
-				status: "missing_session",
-				summary: "No active Flow session exists.",
-				nextAction: "/flow-plan <goal>",
-			};
+			return missingSessionResponse();
 		}
 		const result = approvePlan(session);
 		if (!result.ok) return responseFromFailure(result);
@@ -209,11 +224,7 @@ export async function flowRunStart(
 	const args = FlowRunStartSchema.parse(input ?? {});
 	return mutate(worktree, async (session) => {
 		if (!session) {
-			return {
-				status: "missing_session",
-				summary: "No active Flow session exists.",
-				nextAction: "/flow-plan <goal>",
-			};
+			return missingSessionResponse();
 		}
 		const result = startRun(session, args.featureId);
 		if (!result.ok) return responseFromFailure(result);
@@ -234,11 +245,7 @@ export async function flowFeatureComplete(
 	const worker = input ?? {};
 	return mutate(worktree, async (session) => {
 		if (!session) {
-			return {
-				status: "missing_session",
-				summary: "No active Flow session exists.",
-				nextAction: "/flow-plan <goal>",
-			};
+			return missingSessionResponse();
 		}
 		const result = completeFeature(session, worker);
 		if (!result.ok) {
@@ -261,11 +268,7 @@ export async function flowFeatureReset(
 	const args = FlowFeatureResetSchema.parse(input ?? {});
 	return mutate(worktree, async (session) => {
 		if (!session) {
-			return {
-				status: "missing_session",
-				summary: "No active Flow session exists.",
-				nextAction: "/flow-plan <goal>",
-			};
+			return missingSessionResponse();
 		}
 		const result = resetFeature(session, args.featureId);
 		if (!result.ok) return responseFromFailure(result);
@@ -285,11 +288,7 @@ export async function flowSessionClose(
 	const args = FlowSessionCloseSchema.parse(input ?? {});
 	return mutate(worktree, async (session) => {
 		if (!session) {
-			return {
-				status: "missing_session",
-				summary: "No active Flow session exists.",
-				nextAction: "/flow-plan <goal>",
-			};
+			return missingSessionResponse();
 		}
 		const result = closeSession(session, args.kind, args.summary);
 		if (!result.ok) return responseFromFailure(result);

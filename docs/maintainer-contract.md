@@ -84,7 +84,16 @@ The managed skill set is:
 Startup sync, `opencode-plugin-flow doctor`, `opencode-plugin-flow sync`, and
 uninstall must treat the managed set uniformly. Missing, incomplete, or outdated
 Flow-owned folders are sync-repairable. Foreign or edited managed folders
-require user action and must not be overwritten silently.
+require user action and must not be overwritten silently. A folder with no Flow
+marker is user-owned even when files sit at managed paths, so sync must skip it
+rather than overwrite it without a backup.
+
+Flow-created `.backup` residue — a file whose name and content checksum both
+match Flow's backup format — is reported by doctor as action-required and is
+removed by uninstall (naming each removed backup) when the folder is otherwise
+pristine. A file that merely resembles a backup name but whose content does not
+match the embedded checksum is the user's own file: it is never deleted and it
+keeps the folder.
 
 Install and update guidance should use OpenCode's native plugin installer as the
 primary config mutation path when available, with one pinned install-or-update

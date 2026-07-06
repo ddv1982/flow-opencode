@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { isAbsolute, join, sep } from "node:path";
 import packageJson from "../package.json";
 import FlowPlugin from "../src";
 import { createFlowLog } from "../src/adapters/opencode/logging";
@@ -136,6 +136,22 @@ function flowSkillMarker(
 		),
 		"",
 	].join("\n");
+}
+
+// Write a genuine Flow-format backup: writeBackup names files
+// `<base>.backup.<sha256(content).slice(0,12)>`, so the name is a checksum of
+// the content. Uninstall/doctor only treat a file as Flow residue when the two
+// agree, so tests must construct them the same way.
+async function writeFlowBackup(
+	home: string,
+	skillName: string,
+	baseRelativePath: string,
+	content: string,
+): Promise<{ relativePath: string; path: string }> {
+	const relativePath = `${baseRelativePath}.backup.${sha256(content).slice(0, 12)}`;
+	const path = flowSkillFile(home, skillName, relativePath);
+	await writeFile(path, content, "utf8");
+	return { relativePath, path };
 }
 
 function requireExactKeys(
@@ -953,6 +969,94 @@ describe("Flow distribution and plugin surface", () => {
 		}
 	});
 
+	test("rewrites the subtask prompt in place when a Flow command carries an attachment", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		try {
+			await syncFlowSkills(resolveFlowPluginVersion(), home);
+			const workspace = await tempWorkspace();
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			const preflight = hooks["command.execute.before"];
+			if (!preflight) throw new Error("Expected command preflight hook.");
+
+			const output = {
+				parts: [
+					{
+						type: "subtask",
+						agent: "flow-reviewer",
+						description: "Review Flow changes",
+						prompt: "Load the `flow-review` skill and review: stale",
+					},
+					{ type: "file", url: "file:///src/auth.ts" },
+				],
+			};
+			await preflight(
+				{ command: "flow-review", sessionID: "s", arguments: "check @auth" },
+				output as unknown as Parameters<typeof preflight>[1],
+			);
+
+			// The subtask prompt is rewritten in place (instructions run isolated in
+			// the reviewer), the attachment is preserved, and NO parent-session text
+			// part is injected — otherwise the instructions would run with the
+			// parent agent's permissions and the stale subtask would also execute.
+			expect(output.parts).toHaveLength(2);
+			const subtask = output.parts.find((part) => part.type === "subtask");
+			const file = output.parts.find((part) => part.type === "file");
+			expect(subtask?.prompt).toContain("Bundled flow-review/SKILL.md");
+			expect(subtask?.prompt).not.toContain("review: stale");
+			expect(file?.url).toBe("file:///src/auth.ts");
+			expect(output.parts.some((part) => part.type === "text")).toBe(false);
+		} finally {
+			if (previousHome === undefined) delete process.env.HOME;
+			else process.env.HOME = previousHome;
+		}
+	});
+
+	test("command preflight ignores a user command named like an Object prototype member", async () => {
+		const home = await tempHome();
+		const previousHome = process.env.HOME;
+		process.env.HOME = home;
+		try {
+			await syncFlowSkills(resolveFlowPluginVersion(), home);
+			const workspace = await tempWorkspace();
+			const hooks = await FlowPlugin({
+				client: { app: { log() {} } },
+				project: {},
+				directory: workspace,
+				worktree: workspace,
+				experimental_workspace: { register() {} },
+				serverUrl: new URL("http://localhost"),
+				$: {},
+			} as unknown as Parameters<typeof FlowPlugin>[0]);
+			const preflight = hooks["command.execute.before"];
+			if (!preflight) throw new Error("Expected command preflight hook.");
+
+			// `toString`/`constructor` live on Object.prototype; the `in` operator
+			// would misclassify them as Flow commands and crash on the template
+			// lookup. The hook must leave such commands untouched.
+			for (const command of ["toString", "constructor", "valueOf"]) {
+				const output = { parts: [{ type: "text", text: "user content" }] };
+				await preflight(
+					{ command, sessionID: "s", arguments: "" },
+					output as unknown as Parameters<typeof preflight>[1],
+				);
+				expect(output.parts).toEqual([{ type: "text", text: "user content" }]);
+			}
+		} finally {
+			if (previousHome === undefined) delete process.env.HOME;
+			else process.env.HOME = previousHome;
+		}
+	});
+
 	test("syncs managed skills and preserves foreign skill folders", async () => {
 		const home = await tempHome();
 		const results = await syncFlowSkills("4.0.0-test", home);
@@ -1448,11 +1552,12 @@ describe("Flow distribution and plugin surface", () => {
 	test("doctor flags leftover Flow backup files as action required", async () => {
 		const home = await tempHome();
 		await syncFlowSkills("4.0.0-test", home);
-		const backupRelativePath = `references/handoff-format.md.backup.${sha256(
-			"leftover",
-		).slice(0, 12)}`;
-		const backupPath = flowSkillFile(home, "flow", backupRelativePath);
-		await writeFile(backupPath, "earlier user edit\n", "utf8");
+		const backup = await writeFlowBackup(
+			home,
+			"flow",
+			"references/handoff-format.md",
+			"earlier user edit\n",
+		);
 
 		const report = await inspectFlowSkillInstall("4.0.0-test", home);
 		expect(report.status).toBe("action_required");
@@ -1460,28 +1565,55 @@ describe("Flow distribution and plugin surface", () => {
 		const flowSkill = report.skills.find((skill) => skill.name === "flow");
 		// The managed files are untouched; only the orphaned backup is the problem.
 		expect(flowSkill?.status).toBe("ok");
-		expect(flowSkill?.backupFiles).toContain(backupRelativePath);
+		expect(flowSkill?.backupFiles).toContain(backup.relativePath);
 		const text = formatFlowSkillDoctor(report);
-		expect(text).toContain(`backups: ${backupRelativePath}`);
+		expect(text).toContain(`backups: ${backup.relativePath}`);
 		expect(text).toContain(".backup files");
+	});
+
+	test("doctor and uninstall keep a user file that only resembles a backup name", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		// Name matches the backup pattern (12 hex chars) but the content does NOT
+		// hash to it — this is the user's own file, not Flow residue.
+		const userFile = flowSkillFile(
+			home,
+			"flow",
+			"references/db.backup.20240115abcd",
+		);
+		await writeFile(userFile, "my personal database notes\n", "utf8");
+
+		const report = await inspectFlowSkillInstall("4.0.0-test", home);
+		const flowSkill = report.skills.find((skill) => skill.name === "flow");
+		expect(flowSkill?.backupFiles).toEqual([]);
+
+		const result = await uninstallFlowSkills(home);
+		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			false,
+		);
+		expect(result.kept.some((path) => path.endsWith(`${sep}flow`))).toBe(true);
+		expect(result.removedBackups).toEqual([]);
+		await expect(readFile(userFile, "utf8")).resolves.toBe(
+			"my personal database notes\n",
+		);
 	});
 
 	test("uninstall removes a pristine managed folder with Flow backup residue and reports it", async () => {
 		const home = await tempHome();
 		await syncFlowSkills("4.0.0-test", home);
-		const backupPath = flowSkillFile(
+		const backup = await writeFlowBackup(
 			home,
 			"flow",
-			`references/handoff-format.md.backup.${sha256("leftover").slice(0, 12)}`,
+			"references/handoff-format.md",
+			"earlier user edit\n",
 		);
-		await writeFile(backupPath, "earlier user edit\n", "utf8");
 
 		const dryRun = await uninstallFlowSkills(home, { dryRun: true });
 		expect(dryRun.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
 			true,
 		);
-		expect(dryRun.removedBackups).toContain(backupPath);
-		await expect(readFile(backupPath, "utf8")).resolves.toBe(
+		expect(dryRun.removedBackups).toContain(backup.path);
+		await expect(readFile(backup.path, "utf8")).resolves.toBe(
 			"earlier user edit\n",
 		);
 
@@ -1489,8 +1621,8 @@ describe("Flow distribution and plugin surface", () => {
 		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
 			true,
 		);
-		expect(result.removedBackups).toContain(backupPath);
-		await expect(readFile(backupPath, "utf8")).rejects.toMatchObject({
+		expect(result.removedBackups).toContain(backup.path);
+		await expect(readFile(backup.path, "utf8")).rejects.toMatchObject({
 			code: "ENOENT",
 		});
 	});
@@ -1498,21 +1630,87 @@ describe("Flow distribution and plugin surface", () => {
 	test("CLI uninstall reports removed Flow backup files", async () => {
 		const home = await tempHome();
 		await syncFlowSkills("4.0.0-test", home);
-		const backupPath = flowSkillFile(
+		const backup = await writeFlowBackup(
 			home,
 			"flow",
-			`references/handoff-format.md.backup.${sha256("leftover").slice(0, 12)}`,
+			"references/handoff-format.md",
+			"earlier user edit\n",
 		);
-		await writeFile(backupPath, "earlier user edit\n", "utf8");
 
 		const result = await runFlowCli(["uninstall"], home);
 		expect(result.status).toBe(0);
 		expect(result.stderr).toBe("");
 		expect(result.stdout).toContain("Removed Flow-created backup files");
-		expect(result.stdout).toContain(backupPath);
-		await expect(readFile(backupPath, "utf8")).rejects.toMatchObject({
+		expect(result.stdout).toContain(backup.path);
+		await expect(readFile(backup.path, "utf8")).rejects.toMatchObject({
 			code: "ENOENT",
 		});
+	});
+
+	test("sync skips a folder holding a user file at a nested managed path without a marker", async () => {
+		const home = await tempHome();
+		const userContent = "my own handoff notes\n";
+		await mkdir(join(flowSkillFolder(home, "flow"), "references"), {
+			recursive: true,
+		});
+		const nested = flowSkillFile(home, "flow", "references/handoff-format.md");
+		await writeFile(nested, userContent, "utf8");
+		// No SKILL.md, no marker — the folder is the user's, not Flow's.
+
+		const results = await syncFlowSkills("4.0.0-test", home);
+		expect(results.find((result) => result.name === "flow")).toMatchObject({
+			action: "skipped_foreign",
+		});
+		await expect(readFile(nested, "utf8")).resolves.toBe(userContent);
+		await expect(
+			readFile(flowSkillFile(home, "flow", ".flow-skill-version"), "utf8"),
+		).rejects.toMatchObject({ code: "ENOENT" });
+	});
+
+	test("uninstall ignores a regular file named like a Flow skill in the skills root", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const strayFile = join(resolveFlowSkillsRoot(home), "flow-notes.md");
+		await writeFile(strayFile, "loose notes\n", "utf8");
+
+		const result = await uninstallFlowSkills(home);
+		// The stray file must not abort the command with ENOTDIR.
+		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			true,
+		);
+		expect(result.kept).toContain(strayFile);
+		await expect(readFile(strayFile, "utf8")).resolves.toBe("loose notes\n");
+	});
+
+	test("doctor treats a CRLF-converted marker as current, not outdated", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const markerPath = flowSkillFile(home, "flow", ".flow-skill-version");
+		const lf = await readFile(markerPath, "utf8");
+		await writeFile(markerPath, lf.replace(/\n/g, "\r\n"), "utf8");
+
+		const report = await inspectFlowSkillInstall("4.0.0-test", home);
+		const flowSkill = report.skills.find((skill) => skill.name === "flow");
+		expect(flowSkill?.status).toBe("ok");
+		expect(flowSkill?.outdatedFiles).toEqual([]);
+	});
+
+	test("resolveFlowSkillsRoot falls back to the OS home when HOME is empty", () => {
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		try {
+			process.env.HOME = "";
+			process.env.USERPROFILE = "";
+			const root = resolveFlowSkillsRoot();
+			// Must be absolute, never the cwd-relative ".config/opencode/skills".
+			expect(isAbsolute(root)).toBe(true);
+			expect(root.startsWith(".config")).toBe(false);
+		} finally {
+			if (originalHome === undefined) delete process.env.HOME;
+			else process.env.HOME = originalHome;
+			if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+			else process.env.USERPROFILE = originalUserProfile;
+		}
 	});
 
 	test("CLI uninstall --dry-run previews without deleting", async () => {
