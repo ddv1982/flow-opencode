@@ -10,6 +10,14 @@ import {
 
 const MARKER_FILENAME = ".flow-skill-version";
 
+// Matches the `<file>.backup.<12 hex>` names writeBackup creates, plus its
+// `.N` collision suffix. These files hold the user's earlier local edits.
+const BACKUP_FILE_PATTERN = /\.backup\.[0-9a-f]{12}(?:\.\d+)?$/;
+
+function isFlowBackupFile(relativePath: string): boolean {
+	return BACKUP_FILE_PATTERN.test(relativePath);
+}
+
 type FlowLog = (level: "info" | "warn" | "error", message: string) => void;
 
 export type FlowSkillSyncAction =
@@ -58,6 +66,7 @@ export type FlowSkillDoctorSkill = {
 	missingFiles: string[];
 	editedFiles: string[];
 	outdatedFiles: string[];
+	backupFiles: string[];
 };
 
 export type FlowSkillDoctorReport = {
@@ -410,6 +419,8 @@ export async function inspectFlowSkillInstall(
 			const markerVersion = parseMarkerVersion(markerContent);
 			const markerHashes = parseMarkerFiles(markerContent);
 			const existingSkill = await optionalRead(join(folder, "SKILL.md"));
+			const backupFiles =
+				markerContent === null ? [] : await listFlowBackupFiles(folder);
 			if (existingSkill === null) {
 				return {
 					name: definition.name,
@@ -419,6 +430,7 @@ export async function inspectFlowSkillInstall(
 					missingFiles: definition.files.map((file) => file.relativePath),
 					editedFiles: [],
 					outdatedFiles: [],
+					backupFiles,
 				};
 			}
 			if (markerContent === null) {
@@ -430,6 +442,7 @@ export async function inspectFlowSkillInstall(
 					missingFiles: [],
 					editedFiles: [],
 					outdatedFiles: [],
+					backupFiles,
 				};
 			}
 			const missingFiles: string[] = [];
@@ -468,6 +481,7 @@ export async function inspectFlowSkillInstall(
 				missingFiles,
 				editedFiles,
 				outdatedFiles,
+				backupFiles,
 			};
 		}),
 	);
@@ -491,7 +505,11 @@ export async function inspectFlowSkillInstall(
 		)
 		.map((skill) => skill.name);
 	const actionRequiredSkills = skills
-		.filter((skill) => ["foreign", "edited"].includes(skill.status))
+		.filter(
+			(skill) =>
+				["foreign", "edited"].includes(skill.status) ||
+				skill.backupFiles.length > 0,
+		)
 		.map((skill) => skill.name);
 	const actionRequired = actionRequiredSkills.length > 0;
 	const syncRequired = syncRequiredSkills.length > 0;
@@ -550,6 +568,9 @@ export function formatFlowSkillDoctor(report: FlowSkillDoctorReport): string {
 		if (skill.outdatedFiles.length > 0) {
 			lines.push(`  outdated: ${skill.outdatedFiles.join(", ")}`);
 		}
+		if (skill.backupFiles.length > 0) {
+			lines.push(`  backups: ${skill.backupFiles.join(", ")}`);
+		}
 	}
 	if (report.unmanagedFlowSkills.length > 0) {
 		lines.push("", "Unmanaged Flow-like skill folders:");
@@ -566,6 +587,11 @@ export function formatFlowSkillDoctor(report: FlowSkillDoctorReport): string {
 		lines.push(
 			"- Resolve user-owned or edited managed skill folders, then restart OpenCode. Move a folder aside to let Flow recreate it, or keep it intentionally as a local override.",
 		);
+		if (report.skills.some((skill) => skill.backupFiles.length > 0)) {
+			lines.push(
+				"- Flow saved earlier local edits as .backup files; review each one and delete it once the saved copy is no longer needed. Sync ignores them, and they block a clean uninstall until removed.",
+			);
+		}
 	}
 	lines.push(`- Details command: ${formatFlowDoctorCommand(report.version)}`);
 	return `${lines.join("\n")}\n`;
@@ -586,20 +612,40 @@ async function listSkillFolderFiles(folder: string): Promise<string[]> {
 		);
 }
 
-async function isPristineManagedFolder(
+async function listFlowBackupFiles(folder: string): Promise<string[]> {
+	try {
+		return (await listSkillFolderFiles(folder)).filter(isFlowBackupFile);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+		throw error;
+	}
+}
+
+// A managed folder is removable when every non-marker file is either a pristine
+// managed file or Flow-created `.backup` residue. Backups hold the user's own
+// earlier edits, so they are returned separately: removable, but reported so the
+// deletion is never silent.
+async function inspectManagedFolderForUninstall(
 	folder: string,
 	markerContent: string,
-): Promise<boolean> {
+): Promise<{ pristine: boolean; backups: string[] }> {
 	const hashes = parseMarkerFiles(markerContent);
-	if (hashes.size === 0) return false;
+	if (hashes.size === 0) return { pristine: false, backups: [] };
+	const backups: string[] = [];
 	for (const relativePath of await listSkillFolderFiles(folder)) {
 		if (relativePath === MARKER_FILENAME) continue;
+		if (isFlowBackupFile(relativePath)) {
+			backups.push(relativePath);
+			continue;
+		}
 		const recordedHash = hashes.get(relativePath);
-		if (recordedHash === undefined) return false;
+		if (recordedHash === undefined) return { pristine: false, backups };
 		const content = await optionalRead(resolveSkillFile(folder, relativePath));
-		if (content === null || sha256(content) !== recordedHash) return false;
+		if (content === null || sha256(content) !== recordedHash) {
+			return { pristine: false, backups };
+		}
 	}
-	return true;
+	return { pristine: true, backups };
 }
 
 export async function uninstallFlowSkills(
@@ -609,12 +655,13 @@ export async function uninstallFlowSkills(
 	const root = resolveFlowSkillsRoot(home);
 	const removed: string[] = [];
 	const kept: string[] = [];
+	const removedBackups: string[] = [];
 	let entries: string[];
 	try {
 		entries = await readdir(root);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return { removed, kept };
+			return { removed, kept, removedBackups };
 		}
 		throw error;
 	}
@@ -622,17 +669,25 @@ export async function uninstallFlowSkills(
 		if (name !== "flow" && !name.startsWith("flow-")) continue;
 		const folder = join(root, name);
 		const markerContent = await optionalRead(join(folder, MARKER_FILENAME));
-		if (
-			markerContent === null ||
-			!(await isPristineManagedFolder(folder, markerContent))
-		) {
+		if (markerContent === null) {
 			kept.push(folder);
 			continue;
+		}
+		const { pristine, backups } = await inspectManagedFolderForUninstall(
+			folder,
+			markerContent,
+		);
+		if (!pristine) {
+			kept.push(folder);
+			continue;
+		}
+		for (const backup of backups) {
+			removedBackups.push(resolveSkillFile(folder, backup));
 		}
 		if (!options.dryRun) {
 			await rm(folder, { recursive: true, force: true });
 		}
 		removed.push(folder);
 	}
-	return { removed, kept };
+	return { removed, kept, removedBackups };
 }

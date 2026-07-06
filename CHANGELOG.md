@@ -2,6 +2,18 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.1] - 2026-07-06
+
+Doctor and uninstall now account for the `.backup` files Flow writes when it
+retires a locally-edited managed skill file:
+
+- `doctor` reports leftover `.backup` files as action-required instead of
+  saying "ok", lists each one, and explains that they hold your earlier edits
+  and can be deleted once you no longer need the saved copy.
+- `uninstall` treats a folder that is pristine apart from Flow-created
+  `.backup` residue as removable and names the removed backup files, so the
+  cleanup is no longer silently blocked or silently destructive.
+
 ## [4.3.0] - 2026-07-06
 
 Parallel orchestration reworked into a single pass playbook, plus sharper

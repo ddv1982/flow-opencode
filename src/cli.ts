@@ -130,6 +130,14 @@ async function main(argv: string[]): Promise<void> {
 	for (const path of result.kept) {
 		process.stdout.write(`Kept non-Flow or user-edited skill: ${path}\n`);
 	}
+	if (result.removedBackups.length > 0) {
+		process.stdout.write(
+			`${dryRun ? "Would remove" : "Removed"} Flow-created backup files holding your earlier edits:\n`,
+		);
+		for (const path of result.removedBackups) {
+			process.stdout.write(`  ${path}\n`);
+		}
+	}
 	process.stdout.write(
 		dryRun
 			? "Dry run: no files were removed.\n"

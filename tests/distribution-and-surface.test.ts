@@ -1096,10 +1096,18 @@ describe("Flow distribution and plugin surface", () => {
 		);
 		expect(marker).not.toContain(retiredRelativePath);
 		const report = await inspectFlowSkillInstall("4.0.0-test", home);
-		expect(report.status).toBe("ok");
-		expect(report.skills.find((skill) => skill.name === "flow")).toMatchObject({
-			status: "ok",
-		});
+		// The retired file is gone, but its backup is orphaned residue: doctor
+		// must surface it as action_required rather than silently reporting "ok".
+		expect(report.status).toBe("action_required");
+		expect(report.actionRequiredSkills).toContain("flow");
+		const flowSkill = report.skills.find((skill) => skill.name === "flow");
+		expect(flowSkill?.status).toBe("ok");
+		expect(
+			flowSkill?.backupFiles.some((file) =>
+				file.startsWith(`${retiredRelativePath}.backup.`),
+			),
+		).toBe(true);
+		expect(formatFlowSkillDoctor(report)).toContain("backups:");
 	});
 
 	test("startup sync skips every expected managed skill folder without Flow markers", async () => {
@@ -1435,6 +1443,76 @@ describe("Flow distribution and plugin surface", () => {
 				"utf8",
 			),
 		).resolves.toContain("flow");
+	});
+
+	test("doctor flags leftover Flow backup files as action required", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const backupRelativePath = `references/handoff-format.md.backup.${sha256(
+			"leftover",
+		).slice(0, 12)}`;
+		const backupPath = flowSkillFile(home, "flow", backupRelativePath);
+		await writeFile(backupPath, "earlier user edit\n", "utf8");
+
+		const report = await inspectFlowSkillInstall("4.0.0-test", home);
+		expect(report.status).toBe("action_required");
+		expect(report.actionRequiredSkills).toContain("flow");
+		const flowSkill = report.skills.find((skill) => skill.name === "flow");
+		// The managed files are untouched; only the orphaned backup is the problem.
+		expect(flowSkill?.status).toBe("ok");
+		expect(flowSkill?.backupFiles).toContain(backupRelativePath);
+		const text = formatFlowSkillDoctor(report);
+		expect(text).toContain(`backups: ${backupRelativePath}`);
+		expect(text).toContain(".backup files");
+	});
+
+	test("uninstall removes a pristine managed folder with Flow backup residue and reports it", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const backupPath = flowSkillFile(
+			home,
+			"flow",
+			`references/handoff-format.md.backup.${sha256("leftover").slice(0, 12)}`,
+		);
+		await writeFile(backupPath, "earlier user edit\n", "utf8");
+
+		const dryRun = await uninstallFlowSkills(home, { dryRun: true });
+		expect(dryRun.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			true,
+		);
+		expect(dryRun.removedBackups).toContain(backupPath);
+		await expect(readFile(backupPath, "utf8")).resolves.toBe(
+			"earlier user edit\n",
+		);
+
+		const result = await uninstallFlowSkills(home);
+		expect(result.removed.some((path) => path.endsWith(`${sep}flow`))).toBe(
+			true,
+		);
+		expect(result.removedBackups).toContain(backupPath);
+		await expect(readFile(backupPath, "utf8")).rejects.toMatchObject({
+			code: "ENOENT",
+		});
+	});
+
+	test("CLI uninstall reports removed Flow backup files", async () => {
+		const home = await tempHome();
+		await syncFlowSkills("4.0.0-test", home);
+		const backupPath = flowSkillFile(
+			home,
+			"flow",
+			`references/handoff-format.md.backup.${sha256("leftover").slice(0, 12)}`,
+		);
+		await writeFile(backupPath, "earlier user edit\n", "utf8");
+
+		const result = await runFlowCli(["uninstall"], home);
+		expect(result.status).toBe(0);
+		expect(result.stderr).toBe("");
+		expect(result.stdout).toContain("Removed Flow-created backup files");
+		expect(result.stdout).toContain(backupPath);
+		await expect(readFile(backupPath, "utf8")).rejects.toMatchObject({
+			code: "ENOENT",
+		});
 	});
 
 	test("CLI uninstall --dry-run previews without deleting", async () => {
