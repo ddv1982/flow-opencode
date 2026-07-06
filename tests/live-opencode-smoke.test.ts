@@ -35,6 +35,42 @@ const EXPECTED_AGENTS = [
 	"flow-verifier-worker",
 ];
 
+// The read-only workers whose isolation must actually bind: they may inspect
+// and read, but must not mutate Flow state, spawn subagents, load native
+// skills, or edit files. (flow-candidate-worker is excluded — it may edit/bash
+// with "ask" in an assigned slice.)
+const READ_ONLY_WORKERS = [
+	"flow-audit-worker",
+	"flow-evidence-worker",
+	"flow-reviewer",
+	"flow-validation-worker",
+	"flow-verifier-worker",
+];
+
+type ResolvedPermissionRule = {
+	permission: string;
+	pattern: string;
+	action: "ask" | "allow" | "deny";
+};
+
+type ResolvedAgent = {
+	name: string;
+	permission?: ResolvedPermissionRule[];
+};
+
+// OpenCode resolves an agent's permission config into an ordered rule list
+// returned by GET /agent. A rule binds when it is present with the expected
+// action.
+function hasPermissionRule(
+	rules: ResolvedPermissionRule[],
+	permission: string,
+	action: ResolvedPermissionRule["action"],
+): boolean {
+	return rules.some(
+		(rule) => rule.permission === permission && rule.action === action,
+	);
+}
+
 async function fetchJson(
 	url: string,
 	timeoutMs = DATA_REQUEST_TIMEOUT_MS,
@@ -132,12 +168,57 @@ describe.skipIf(!LIVE)("live OpenCode smoke", () => {
 					expect(commandNames).toContain(expected);
 				}
 
-				const agents = (await fetchJson(`${baseUrl}/agent`)) as Array<{
-					name: string;
-				}>;
+				const agents = (await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[];
 				const agentNames = agents.map((agent) => agent.name);
 				for (const expected of EXPECTED_AGENTS) {
 					expect(agentNames).toContain(expected);
+				}
+
+				// Prove the hidden read-only worker isolation actually binds at
+				// runtime. Flow declares these denials with tool-name and wildcard
+				// permission keys (skill, task, flow_*, flow_status) that are absent
+				// from the SDK's simplified AgentConfig permission type — this test
+				// exists to confirm OpenCode nonetheless compiles them into the
+				// resolved permission rules, rather than silently dropping them.
+				const agentsByName = new Map(
+					agents.map((agent) => [agent.name, agent]),
+				);
+				for (const name of READ_ONLY_WORKERS) {
+					const agent = agentsByName.get(name);
+					if (!agent) throw new Error(`Expected agent '${name}' to register.`);
+					const rules = agent.permission ?? [];
+					expect(
+						rules.length,
+						`${name} has resolved permission rules`,
+					).toBeGreaterThan(0);
+					// Cannot mutate Flow state, but flow_status stays readable (the
+					// allow rule follows the flow_* deny, so status resolves to allow).
+					expect(
+						hasPermissionRule(rules, "flow_*", "deny"),
+						`${name} denies state-changing flow_* tools`,
+					).toBe(true);
+					expect(
+						hasPermissionRule(rules, "flow_status", "allow"),
+						`${name} still allows flow_status`,
+					).toBe(true);
+					// Cannot spawn subagents, load native skills, or edit files.
+					expect(
+						hasPermissionRule(rules, "task", "deny"),
+						`${name} cannot spawn task subagents`,
+					).toBe(true);
+					expect(
+						hasPermissionRule(rules, "skill", "deny"),
+						`${name} cannot load native skills`,
+					).toBe(true);
+					expect(
+						hasPermissionRule(rules, "edit", "deny"),
+						`${name} is read-only`,
+					).toBe(true);
+					// Bash is never fully granted for a read-only worker (deny or ask).
+					expect(
+						hasPermissionRule(rules, "bash", "allow"),
+						`${name} never gets unrestricted bash`,
+					).toBe(false);
 				}
 
 				// Startup skill sync ran inside the real host process.

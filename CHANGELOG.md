@@ -2,6 +2,19 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.3] - 2026-07-07
+
+Verification only — no behavior change:
+
+- The live OpenCode smoke test now proves the hidden read-only workers'
+  isolation actually binds at runtime: against a real server it asserts each
+  worker's resolved permission rules deny the state-changing `flow_*` tools,
+  `task`, `skill`, and `edit`, while keeping `flow_status` readable. This
+  confirms OpenCode compiles Flow's tool-name and wildcard permission keys
+  (which are absent from the SDK's simplified permission type) rather than
+  silently dropping them, closing the one unverified question from the 4.3.2
+  review.
+
 ## [4.3.2] - 2026-07-07
 
 Correctness and safety hardening from a full-project review, repairing two

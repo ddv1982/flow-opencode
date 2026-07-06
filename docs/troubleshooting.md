@@ -30,14 +30,14 @@ Project-local skill overrides work through OpenCode's normal lookup:
 Inspect the installed skill set at any time:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.2 doctor
+npx -y opencode-plugin-flow@4.3.3 doctor
 ```
 
 For automation, opt into machine behavior explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.2 doctor --json
-npx -y opencode-plugin-flow@4.3.2 doctor --check
+npx -y opencode-plugin-flow@4.3.3 doctor --json
+npx -y opencode-plugin-flow@4.3.3 doctor --check
 ```
 
 `doctor --check` and `doctor --strict` exit nonzero when the health status is
@@ -61,7 +61,7 @@ Setup states you may see:
 Missing, incomplete, or outdated managed skills are repaired with:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.2 sync
+npx -y opencode-plugin-flow@4.3.3 sync
 ```
 
 Then restart OpenCode. If a command reports `Skill "flow-review" not found`
@@ -79,7 +79,7 @@ OpenCode config manually:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@4.3.2"]
+  "plugin": ["opencode-plugin-flow@4.3.3"]
 }
 ```
 
@@ -87,7 +87,7 @@ When updating through this fallback, replace the older pinned entry instead of
 adding a duplicate. Then run the pre-start skill sync and restart OpenCode:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.2 sync
+npx -y opencode-plugin-flow@4.3.3 sync
 ```
 
 Why `--force` in the recommended installer command: OpenCode keeps an existing
@@ -112,8 +112,8 @@ First remove `opencode-plugin-flow` from your OpenCode plugin config so future
 startups stop loading Flow. Then remove Flow-owned synced skills:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.2 uninstall --dry-run   # preview
-npx -y opencode-plugin-flow@4.3.2 uninstall
+npx -y opencode-plugin-flow@4.3.3 uninstall --dry-run   # preview
+npx -y opencode-plugin-flow@4.3.3 uninstall
 ```
 
 Restart OpenCode after both steps. Uninstall removes Flow-owned skill folders

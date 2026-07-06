@@ -161,6 +161,15 @@ const FLOW_PUBLIC_COMMAND_TEMPLATES = {
 const FLOW_WORKER_HANDOFF_CONTRACT =
 	"Return only the assigned Flow handoff. Cite or drop every claim, label single-source, inferred, and unsettled claims, and report blocked if the assigned scope, expected coverage, or handoff shape is missing.";
 
+// Worker permission maps below use tool-name and wildcard keys (`skill`,
+// `task`, `flow_*`, `flow_status`) that are NOT in the SDK's simplified
+// AgentConfig `permission` type. That mismatch is expected and not a bug:
+// OpenCode compiles these keys into its resolved per-agent permission rule list
+// and enforces them (the `flow_status` allow follows the `flow_*` deny, so
+// status stays readable while every state-changing Flow tool is denied). This
+// is proven end-to-end by the read-only-worker isolation assertions in
+// tests/live-opencode-smoke.test.ts (FLOW_LIVE_SMOKE=1) — do not "fix" the type
+// mismatch by dropping these keys.
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
 		mode: "subagent",
