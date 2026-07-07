@@ -18,13 +18,24 @@ Runtime must enforce:
 3. Feature completion requires recorded validation evidence.
 4. Non-final completion requires `validationScope: "targeted"`.
 5. Final completion requires `validationScope: "broad"`.
-6. Feature completion requires a passing `featureReview`.
-7. Final completion requires a passing `finalReview` whose `reviewDepth` matches the approved plan.
-8. A session cannot close as `completed` unless an approved plan has passed final completion.
+6. Feature completion requires `featureReviewDepth` to meet or exceed the
+   feature's planned `reviewDepth`.
+7. Feature completion requires a passing `featureReview`.
+8. Final completion requires a passing `finalReview` whose `reviewDepth` matches the approved plan.
+9. A session cannot close as `completed` unless an approved plan has passed final completion.
+10. A phase boundary blocks `flow_run_start` until the caller explicitly
+    acknowledges that continuation is happening in a fresh phase.
 
 ## State
 
 `.flow/session.json` is the active source of truth. `.flow/opencode-instructions.md` is an ignored generated projection for OpenCode's stable `config.instructions` path; it must always be rebuildable from the active session and never becomes authoritative state. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state and generated projections are ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, and other projection caches are intentionally not runtime state.
+
+Budget and retry telemetry in the session ledger records feature-count phase
+boundaries, review counts, failed review counts, per-feature failed review
+attempts, and host token telemetry status. OpenCode does not currently expose
+per-turn token usage through the plugin surface Flow uses, so token fields stay
+`host_unavailable` until a supported host API exists. Do not invent token counts
+inside runtime state.
 
 Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against filesystem roots and `$HOME`.
 

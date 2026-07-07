@@ -14,22 +14,24 @@ The data model is defined in `src/runtime/schema.ts` and persisted through `src/
 | `plan` | `Plan` or `null`. |
 | `activeFeatureId` | Current feature id or `null`. |
 | `history` | Completion and blocker history entries. |
+| `budget` | Phase-boundary, review-count, failed-review, and token-telemetry status. |
 | `closure` | Completed, deferred, or abandoned closure record. |
 | `lastError` | Last runtime completion or transition error. |
 | `timestamps` | Created, updated, and completed timestamps. |
 
 ## Plan and feature
 
-`PlanSchema` stores `summary`, `overview`, `requirements`, `decisions`, `finalReviewPolicy`, and `features`. `FeatureSchema` stores `id`, `title`, `summary`, `status`, `targets`, `validation`, and `dependsOn`.
+`PlanSchema` stores `summary`, `overview`, `requirements`, `decisions`, `finalReviewPolicy`, and `features`. `FeatureSchema` stores `id`, `title`, `summary`, `status`, `reviewDepth`, `targets`, `validation`, and `dependsOn`.
 
 ## Evidence
 
 | Schema | Fields |
 | --- | --- |
 | `ValidationRunSchema` | `command`, `status`, `summary`. |
+| `FeatureReviewDepthSchema` | `quick`, `standard`, or `detailed`. |
 | `ReviewSchema` | `status`, `summary`, `blockingFindings`. |
 | `FinalReviewSchema` | Review fields plus `reviewDepth`. |
-| `WorkerResultSchema` | `status`, `featureId`, `summary`, artifacts, validation, review, final review, and outcome. |
+| `WorkerResultSchema` | `status`, `featureId`, `summary`, artifacts, validation, feature review depth, review, final review, and outcome. |
 
 ## Runtime API payloads
 

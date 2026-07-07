@@ -2,6 +2,25 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.5] - 2026-07-08
+
+Flow now stops long autonomous loops more deliberately without making reviews
+shallower:
+
+- Runtime budget telemetry records completed features since the last phase
+  boundary, feature/final review counts, failed review counts, per-feature
+  retry attempts, and host token telemetry availability.
+- Failed feature and final reviews now pause by default, allow only one
+  autonomous repair plus one retry, then block the feature with a compact
+  resume packet instead of continuing to edit in the same root session.
+- Feature completion now records `featureReviewDepth` and rejects evidence that
+  is shallower than the approved feature requires.
+- Large sessions now checkpoint after three completed features and require an
+  explicit `phaseBoundaryAck` in a fresh phase before the next feature starts.
+- Flow planning, running, review, README, maintainer docs, and wiki pages now
+  describe scoped review packets, risk-based review depth, retry limits, and
+  phase-boundary handoffs.
+
 ## [4.3.4] - 2026-07-07
 
 Planning and final-review lore sharpened without changing the runtime surface:

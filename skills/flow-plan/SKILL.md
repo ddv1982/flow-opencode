@@ -59,6 +59,7 @@ Call `flow_plan_save` with:
         "id": "lowercase-kebab-case",
         "title": "Short title",
         "summary": "Outcome this feature delivers",
+        "reviewDepth": "standard",
         "targets": ["files, modules, routes, commands, or docs in scope"],
         "validation": ["focused checks expected before completion"],
         "dependsOn": []
@@ -69,6 +70,14 @@ Call `flow_plan_save` with:
 ```
 
 Use only `finalReviewPolicy: "broad"` or `"detailed"`. These are the canonical final-review policy and `reviewDepth` enum values. Use `"broad"` only for low-risk, narrow work. Use `"detailed"` for behavioral changes, cross-module edits, migrations, releases, security-sensitive code, or large refactors.
+
+Set each feature's `reviewDepth` to one of:
+
+- `quick`: docs, comments, config-only changes, generated output, or mechanical changes fully covered by tooling.
+- `standard`: the default for ordinary implementation slices. The review reads every changed file and relevant tests.
+- `detailed`: persistence, migrations, concurrency, security, cross-module behavior, release/package surfaces, large refactors, weak validation, or any work where a missed edge case would be expensive.
+
+Do not make reviews shallower to save tokens. Reduce token use by splitting features, keeping `targets` precise, and using scoped review packets during execution.
 
 ## Plan quality gate
 
@@ -89,6 +98,10 @@ to execute.
   validation entry should name the expected test level, such as targeted unit,
   integration, browser/e2e, package/build, docs/static, cleanup preservation, or
   broad project gate.
+- Assign `reviewDepth` from risk. Use `detailed` for persistence, migration,
+  concurrency, security, final-delivery-adjacent, or cross-module slices; use
+  `standard` for normal code changes; reserve `quick` for low-risk non-behavioral
+  work.
 
 ## Approval
 

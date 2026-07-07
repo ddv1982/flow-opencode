@@ -17,8 +17,8 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@4.3.4 --global --force
-npx -y opencode-plugin-flow@4.3.4 sync
+opencode plugin opencode-plugin-flow@4.3.5 --global --force
+npx -y opencode-plugin-flow@4.3.5 sync
 ```
 
 Restart OpenCode, then give Flow a goal:
@@ -46,6 +46,7 @@ restart.
   ... implementation, tests ...
   flow_feature_complete
                     validationRun: "bun test tests/middleware.test.ts" passed
+                    featureReviewDepth: standard
                     featureReview: passed
   flow_run_start    feature: per-route-config
   ...
@@ -93,8 +94,8 @@ The runtime exposes seven tools:
 | `flow_session_close` | Archive the active session as completed, deferred, or abandoned. |
 
 Review evidence is part of `flow_feature_complete`: every completed feature
-needs a passing `featureReview`, and the final feature also needs a passing
-`finalReview`.
+needs a passing `featureReview` at the feature's planned `reviewDepth`, and the
+final feature also needs a passing `finalReview`.
 
 ## What the runtime enforces
 
@@ -107,6 +108,13 @@ The runtime owns only safety; judgment lives in the skills:
 - Completion requires passing validation evidence: `targeted` scope for
   ordinary features, `broad` scope plus a passing final review for the last
   one.
+- Completion records `featureReviewDepth`; the runtime rejects review evidence
+  that is shallower than the approved feature requires.
+- Failed reviews are bounded: a failed review pauses by default, and autonomous
+  repair is limited to one repair plus one retry before the feature blocks.
+- Long sessions hit phase boundaries after a small number of completed
+  features. Flow returns a compact resume packet and requires explicit
+  `phaseBoundaryAck` before starting the next feature.
 - A session can close as `completed` only after final completion has passed.
 - Crash recovery is built in: stale session locks expire automatically and
   unreadable session files are quarantined with recovery guidance, never
@@ -135,7 +143,7 @@ To update a pinned Flow version, rerun the install command with the new
 version. To inspect skill health:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.4 doctor
+npx -y opencode-plugin-flow@4.3.5 doctor
 ```
 
 ## Experimental: compaction context

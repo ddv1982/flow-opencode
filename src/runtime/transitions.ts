@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
+	type BudgetTelemetry,
 	type ExecutionHistoryEntry,
 	type Feature,
+	type FeatureReviewDepth,
 	type Plan,
 	type PlanInput,
 	PlanInputSchema,
+	type Review,
 	type Session,
 	type WorkerResult,
 	WorkerResultSchema,
@@ -21,6 +24,14 @@ type CompletedWorkerResult = Extract<WorkerResult, { status: "ok" }>;
 // session.json without limit (every mutation re-reads/re-validates the whole
 // file). The cap is generous; only pathological loops ever reach it.
 const MAX_HISTORY_ENTRIES = 500;
+const MAX_FEATURES_PER_PHASE = 3;
+const MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE = 2;
+
+const FEATURE_REVIEW_DEPTH_RANK: Record<FeatureReviewDepth, number> = {
+	quick: 0,
+	standard: 1,
+	detailed: 2,
+};
 
 function appendHistory(
 	history: readonly ExecutionHistoryEntry[],
@@ -44,9 +55,42 @@ function historyEntryFor(
 		artifactsChanged: worker.artifactsChanged,
 		validationRun: worker.validationRun,
 		validationScope: worker.validationScope,
+		featureReviewDepth: worker.featureReviewDepth,
 		featureReview: worker.featureReview,
 		finalReview: worker.finalReview,
 		outcome: worker.outcome,
+	};
+}
+
+function initialBudgetTelemetry(): BudgetTelemetry {
+	return {
+		phaseStartedAt: nowIso(),
+		completedFeaturesSinceBoundary: 0,
+		reviewCount: 0,
+		failedReviewCount: 0,
+		failedReviewAttemptsByFeature: {},
+		tokenTelemetry: {
+			source: "host_unavailable",
+			visibleTokens: null,
+			cacheReadTokens: null,
+			nonCacheTokens: null,
+		},
+		phaseBoundary: null,
+	};
+}
+
+function normalizeBudgetTelemetry(session: Session): BudgetTelemetry {
+	const defaults = initialBudgetTelemetry();
+	return {
+		...defaults,
+		...session.budget,
+		failedReviewAttemptsByFeature: {
+			...session.budget.failedReviewAttemptsByFeature,
+		},
+		tokenTelemetry: {
+			...defaults.tokenTelemetry,
+			...session.budget.tokenTelemetry,
+		},
 	};
 }
 
@@ -80,6 +124,7 @@ function clonePlan(input: PlanInput): Plan {
 			title: feature.title,
 			summary: feature.summary,
 			status: "pending",
+			reviewDepth: feature.reviewDepth ?? "standard",
 			targets: feature.targets ?? [],
 			validation: feature.validation ?? [],
 			dependsOn: feature.dependsOn ?? [],
@@ -134,6 +179,7 @@ export function createSession(goal: string): Session {
 		plan: null,
 		activeFeatureId: null,
 		history: [],
+		budget: initialBudgetTelemetry(),
 		closure: null,
 		lastError: null,
 		timestamps: {
@@ -171,6 +217,7 @@ export function applyPlan(
 			plan,
 			activeFeatureId: null,
 			history: [],
+			budget: initialBudgetTelemetry(),
 			closure: null,
 			lastError: null,
 			timestamps: { ...session.timestamps, completedAt: null },
@@ -244,6 +291,7 @@ function updateFeature(
 export function startRun(
 	session: Session,
 	featureId?: string,
+	options?: { phaseBoundaryAck?: boolean },
 ): TransitionResult<{ session: Session; feature: Feature }> {
 	if (session.status === "completed") {
 		return fail("This Flow session is already completed.");
@@ -255,6 +303,13 @@ export function startRun(
 		return fail(
 			"Blocked features must be reset before rerun.",
 			"Call flow_feature_reset for the blocked feature, then start it again.",
+		);
+	}
+	const budget = normalizeBudgetTelemetry(session);
+	if (budget.phaseBoundary && !options?.phaseBoundaryAck) {
+		return fail(
+			budget.phaseBoundary.summary,
+			budget.phaseBoundary.resumeInstructions,
 		);
 	}
 	if (session.activeFeatureId) {
@@ -281,6 +336,14 @@ export function startRun(
 		...session,
 		status: "running",
 		plan: nextPlan,
+		budget: budget.phaseBoundary
+			? {
+					...budget,
+					phaseStartedAt: nowIso(),
+					completedFeaturesSinceBoundary: 0,
+					phaseBoundary: null,
+				}
+			: budget,
 		activeFeatureId: selected.value.id,
 		lastError: null,
 	});
@@ -306,6 +369,21 @@ function finalFeature(session: Session, featureId: string): boolean {
 	);
 }
 
+function activeFeature(session: Session, featureId: string): Feature | null {
+	return (
+		session.plan?.features.find((feature) => feature.id === featureId) ?? null
+	);
+}
+
+function reviewDepthMeetsRequirement(
+	actual: FeatureReviewDepth,
+	required: FeatureReviewDepth,
+): boolean {
+	return (
+		FEATURE_REVIEW_DEPTH_RANK[actual] >= FEATURE_REVIEW_DEPTH_RANK[required]
+	);
+}
+
 function completionFailure<T>(
 	session: Session,
 	tool: string,
@@ -323,6 +401,8 @@ function validateCompletion(
 	worker: CompletedWorkerResult,
 ): TransitionResult<void> {
 	const wasFinal = finalFeature(session, worker.featureId);
+	const feature = activeFeature(session, worker.featureId);
+	const requiredReviewDepth = feature?.reviewDepth ?? "standard";
 	if (worker.validationRun.length === 0) {
 		return completionFailure(
 			session,
@@ -345,6 +425,16 @@ function validateCompletion(
 			"flow_feature_complete",
 			"Non-final feature completion requires targeted validation.",
 			"Record validationScope: targeted for ordinary feature completion.",
+		);
+	}
+	if (
+		!reviewDepthMeetsRequirement(worker.featureReviewDepth, requiredReviewDepth)
+	) {
+		return completionFailure(
+			session,
+			"flow_feature_complete",
+			`Feature review depth '${worker.featureReviewDepth}' does not meet the plan requirement '${requiredReviewDepth}'.`,
+			"Run the feature review at the planned depth or reset/replan if the depth is wrong.",
 		);
 	}
 	if (wasFinal && worker.validationScope !== "broad") {
@@ -393,6 +483,148 @@ function validateCompletion(
 	return ok(undefined);
 }
 
+function incrementFailedReviewAttempt(
+	session: Session,
+	worker: CompletedWorkerResult,
+	review: Review,
+	reviewKind: "feature" | "final",
+): {
+	session: Session;
+	attempts: number;
+	exhausted: boolean;
+} {
+	const budget = normalizeBudgetTelemetry(session);
+	const attempts =
+		(budget.failedReviewAttemptsByFeature[worker.featureId] ?? 0) + 1;
+	const exhausted = attempts >= MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE;
+	const nextBudget: BudgetTelemetry = {
+		...budget,
+		failedReviewCount: budget.failedReviewCount + 1,
+		failedReviewAttemptsByFeature: {
+			...budget.failedReviewAttemptsByFeature,
+			[worker.featureId]: attempts,
+		},
+		phaseBoundary: exhausted
+			? {
+					reason: "review_failure_limit",
+					summary:
+						"Review retry budget exhausted. Stop and report the blocker before making more changes.",
+					resumeInstructions:
+						"Ask the user how to proceed, or reset the feature after an explicit decision. Do not keep auto-repairing this review failure.",
+					recordedAt: nowIso(),
+				}
+			: budget.phaseBoundary,
+	};
+	if (!exhausted) {
+		return {
+			session: { ...session, budget: nextBudget },
+			attempts,
+			exhausted,
+		};
+	}
+	const entry = historyEntryFor(
+		{
+			...worker,
+			summary: `${reviewKind === "final" ? "Final review" : "Feature review"} failed after ${attempts} attempts: ${review.summary}`,
+			outcome: {
+				kind: "blocked",
+				summary: review.summary,
+				resolutionHint:
+					"Report the review blocker and wait for explicit reset, replan, or repair approval.",
+			},
+		},
+		"blocked",
+	);
+	return {
+		session: touch({
+			...session,
+			status: "blocked",
+			activeFeatureId: null,
+			plan: session.plan
+				? {
+						...session.plan,
+						features: updateFeature(
+							session.plan.features,
+							worker.featureId,
+							"blocked",
+						),
+					}
+				: session.plan,
+			history: appendHistory(session.history, entry),
+			budget: nextBudget,
+		}),
+		attempts,
+		exhausted,
+	};
+}
+
+function failedReviewCompletion<T>(
+	session: Session,
+	worker: CompletedWorkerResult,
+	review: Review,
+	reviewKind: "feature" | "final",
+): TransitionResult<T> {
+	const failedReview = incrementFailedReviewAttempt(
+		session,
+		worker,
+		review,
+		reviewKind,
+	);
+	const reviewName = reviewKind === "final" ? "finalReview" : "featureReview";
+	return completionFailure(
+		failedReview.session,
+		"flow_feature_complete",
+		failedReview.exhausted
+			? "Review retry budget exhausted for this feature."
+			: `Completion requires a passing ${reviewName} with no blocking findings.`,
+		failedReview.exhausted
+			? "Stop and report the remaining review blocker. Reset or replan only after explicit user direction."
+			: `Pause and report the review blocker. If autonomous repair was explicitly authorized, make at most one repair and retry once; this was failed review attempt ${failedReview.attempts}/${MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE}.`,
+	);
+}
+
+function clearFailedReviewAttempts(
+	budget: BudgetTelemetry,
+	featureId: string,
+): BudgetTelemetry {
+	const { [featureId]: _cleared, ...remainingAttempts } =
+		budget.failedReviewAttemptsByFeature;
+	return {
+		...budget,
+		failedReviewAttemptsByFeature: remainingAttempts,
+	};
+}
+
+function completionBudget(
+	session: Session,
+	worker: CompletedWorkerResult,
+	allComplete: boolean,
+): BudgetTelemetry {
+	const budget = clearFailedReviewAttempts(
+		normalizeBudgetTelemetry(session),
+		worker.featureId,
+	);
+	const completedFeaturesSinceBoundary =
+		budget.completedFeaturesSinceBoundary + 1;
+	const reviewCount = budget.reviewCount + (worker.finalReview ? 2 : 1);
+	const reachedFeatureLimit =
+		!allComplete && completedFeaturesSinceBoundary >= MAX_FEATURES_PER_PHASE;
+	return {
+		...budget,
+		completedFeaturesSinceBoundary,
+		reviewCount,
+		phaseBoundary: reachedFeatureLimit
+			? {
+					reason: "feature_limit",
+					summary: `Completed ${completedFeaturesSinceBoundary} features since the last Flow checkpoint. Stop this OpenCode session and resume from .flow/session.json in a fresh session.`,
+					resumeInstructions:
+						"Start a fresh OpenCode session in this workspace, call flow_status, then call flow_run_start with phaseBoundaryAck: true to begin the next phase.",
+					recordedAt: nowIso(),
+				}
+			: budget.phaseBoundary,
+	};
+}
+
 export function completeFeature(
 	session: Session,
 	input: unknown,
@@ -412,7 +644,7 @@ export function completeFeature(
 			.join("; ");
 		return fail(
 			`flow_feature_complete payload is invalid: ${issues}.`,
-			'Provide status, featureId, and summary. Results with status "ok" also need validationScope, at least one validationRun entry, and a featureReview; final features add a finalReview.',
+			'Provide status, featureId, and summary. Results with status "ok" also need validationScope, at least one validationRun entry, featureReviewDepth, and a featureReview; final features add a finalReview.',
 		);
 	}
 	const worker = parsed.data;
@@ -424,6 +656,7 @@ export function completeFeature(
 
 	if (worker.status === "needs_input") {
 		const entry = historyEntryFor(worker, "needs_input");
+		const budget = normalizeBudgetTelemetry(session);
 		return ok(
 			touch({
 				...session,
@@ -438,9 +671,27 @@ export function completeFeature(
 					),
 				},
 				history: appendHistory(session.history, entry),
+				budget,
 				lastError: null,
 			}),
 		);
+	}
+
+	if (!isPassingReview(worker.featureReview)) {
+		return failedReviewCompletion(
+			session,
+			worker,
+			worker.featureReview,
+			"feature",
+		);
+	}
+
+	if (
+		finalFeature(session, worker.featureId) &&
+		worker.finalReview &&
+		!isPassingReview(worker.finalReview)
+	) {
+		return failedReviewCompletion(session, worker, worker.finalReview, "final");
 	}
 
 	const validation = validateCompletion(session, worker);
@@ -456,6 +707,7 @@ export function completeFeature(
 		(feature) => feature.status === "completed",
 	);
 	const now = nowIso();
+	const budget = completionBudget(session, worker, allComplete);
 	return ok(
 		touch({
 			...session,
@@ -463,6 +715,7 @@ export function completeFeature(
 			activeFeatureId: null,
 			plan: { ...session.plan, features },
 			history: appendHistory(session.history, entry),
+			budget,
 			closure: allComplete
 				? { kind: "completed", summary: worker.summary, recordedAt: now }
 				: null,
@@ -512,6 +765,13 @@ export function resetFeature(
 			? { ...feature, status: "pending" as const }
 			: feature,
 	);
+	const budget = normalizeBudgetTelemetry(session);
+	const failedReviewAttemptsByFeature = {
+		...budget.failedReviewAttemptsByFeature,
+	};
+	for (const featureIdToClear of affected) {
+		delete failedReviewAttemptsByFeature[featureIdToClear];
+	}
 	const nextStatus =
 		session.approval !== "approved"
 			? "planning"
@@ -528,6 +788,14 @@ export function resetFeature(
 			plan: {
 				...session.plan,
 				features: nextFeatures,
+			},
+			budget: {
+				...budget,
+				failedReviewAttemptsByFeature,
+				phaseBoundary:
+					budget.phaseBoundary?.reason === "review_failure_limit"
+						? null
+						: budget.phaseBoundary,
 			},
 			closure: null,
 			lastError: null,
@@ -599,6 +867,7 @@ export function summarizeSession(session: Session | null) {
 	const active = session.activeFeatureId
 		? features.find((feature) => feature.id === session.activeFeatureId)
 		: null;
+	const budget = normalizeBudgetTelemetry(session);
 	return {
 		status: session.status,
 		summary:
@@ -621,6 +890,36 @@ export function summarizeSession(session: Session | null) {
 			activeFeature: active ?? null,
 			progress: { completed: completed.length, total: features.length },
 			features,
+			budget: {
+				phaseStartedAt: budget.phaseStartedAt,
+				completedFeaturesSinceBoundary: budget.completedFeaturesSinceBoundary,
+				reviewCount: budget.reviewCount,
+				failedReviewCount: budget.failedReviewCount,
+				failedReviewAttemptsByFeature: budget.failedReviewAttemptsByFeature,
+				tokenTelemetry: {
+					...budget.tokenTelemetry,
+					note:
+						budget.tokenTelemetry.source === "host_unavailable"
+							? "OpenCode does not expose per-turn usage to this plugin surface; Flow can enforce feature/review checkpoints, but token thresholds remain manager-observed."
+							: undefined,
+				},
+				phaseBoundary: budget.phaseBoundary,
+			},
+			resumePacket: budget.phaseBoundary
+				? {
+						sessionId: session.id,
+						goal: session.goal,
+						status: session.status,
+						activeFeatureId: session.activeFeatureId,
+						progress: {
+							completed: completed.length,
+							total: features.length,
+						},
+						phaseBoundary: budget.phaseBoundary,
+						nextAction:
+							"Start a fresh OpenCode session in this workspace, call flow_status, then call flow_run_start with phaseBoundaryAck: true.",
+					}
+				: null,
 			closure: session.closure,
 			lastError: session.lastError,
 			latestHistoryEntry,
@@ -633,6 +932,9 @@ export function summarizeSession(session: Session | null) {
 function nextAction(session: Session): string {
 	if (!session.plan) return "Save a plan with flow_plan_save.";
 	if (session.approval !== "approved") return "Approve the plan.";
+	if (session.budget.phaseBoundary) {
+		return "Start a fresh OpenCode session, call flow_status, then acknowledge the phase boundary with flow_run_start.";
+	}
 	if (session.status === "ready") return "Start the next feature.";
 	if (session.status === "running")
 		return "Complete or reset the active feature.";

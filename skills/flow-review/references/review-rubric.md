@@ -72,9 +72,12 @@ Feature review:
 
 ```json
 {
-  "status": "passed",
-  "summary": "Reviewed changed runtime files and focused tests; validation covers the new gate.",
-  "blockingFindings": []
+  "featureReviewDepth": "standard",
+  "featureReview": {
+    "status": "passed",
+    "summary": "Reviewed changed runtime files and focused tests; validation covers the new gate.",
+    "blockingFindings": []
+  }
 }
 ```
 
@@ -82,14 +85,17 @@ Failed feature review:
 
 ```json
 {
-  "status": "failed",
-  "summary": "Validation does not exercise the changed persistence path.",
-  "blockingFindings": [
-    {
-      "summary": "No test covers archive removal of .flow/session.json after close.",
-      "severity": "blocking"
-    }
-  ]
+  "featureReviewDepth": "detailed",
+  "featureReview": {
+    "status": "failed",
+    "summary": "Validation does not exercise the changed persistence path.",
+    "blockingFindings": [
+      {
+        "summary": "No test covers archive removal of .flow/session.json after close.",
+        "severity": "blocking"
+      }
+    ]
+  }
 }
 ```
 

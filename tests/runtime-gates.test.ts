@@ -59,11 +59,52 @@ function completePayload(featureId: string, scope: "targeted" | "broad") {
 			},
 		],
 		validationScope: scope,
+		featureReviewDepth: "standard" as const,
 		featureReview: {
 			status: "passed" as const,
 			summary: "Reviewed changed files and validation.",
 			blockingFindings: [],
 		},
+	};
+}
+
+function fourFeaturePlan() {
+	return {
+		...twoFeaturePlan(),
+		features: [
+			{
+				id: "feature-one",
+				title: "Feature one",
+				summary: "Deliver part one.",
+				targets: ["src/one.ts"],
+				validation: ["targeted test one"],
+				dependsOn: [],
+			},
+			{
+				id: "feature-two",
+				title: "Feature two",
+				summary: "Deliver part two.",
+				targets: ["src/two.ts"],
+				validation: ["targeted test two"],
+				dependsOn: ["feature-one"],
+			},
+			{
+				id: "feature-three",
+				title: "Feature three",
+				summary: "Deliver part three.",
+				targets: ["src/three.ts"],
+				validation: ["targeted test three"],
+				dependsOn: ["feature-two"],
+			},
+			{
+				id: "feature-four",
+				title: "Feature four",
+				summary: "Deliver part four.",
+				targets: ["src/four.ts"],
+				validation: ["broad check"],
+				dependsOn: ["feature-three"],
+			},
+		],
 	};
 }
 
@@ -204,6 +245,178 @@ describe("Flow runtime gates", () => {
 
 		const status = await flowStatus(workspace);
 		expect(status.status).toBe("running");
+	});
+
+	test("completion enforces planned feature review depth", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Require detailed review",
+			plan: {
+				...twoFeaturePlan(),
+				features: [
+					{ ...twoFeaturePlan().features[0], reviewDepth: "detailed" as const },
+					twoFeaturePlan().features[1],
+				],
+			},
+		});
+		await flowPlanApprove(workspace);
+		await flowRunStart(workspace, {});
+
+		const shallow = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			featureReviewDepth: "standard" as const,
+		});
+		expect(shallow.status).toBe("error");
+		expect(String(shallow.summary)).toContain("review depth");
+
+		const detailed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			featureReviewDepth: "detailed" as const,
+		});
+		expect(detailed.status).toBe("ok");
+	});
+
+	test("failed review retry budget blocks after one autonomous retry", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const failedReviewPayload = {
+			...completePayload("first-feature", "targeted"),
+			featureReview: {
+				status: "failed" as const,
+				summary: "A blocker remains.",
+				blockingFindings: [{ summary: "Missing behavior test." }],
+			},
+		};
+		const firstFailure = await flowFeatureComplete(
+			workspace,
+			failedReviewPayload,
+		);
+		expect(firstFailure.status).toBe("error");
+		expect(String(firstFailure.recovery)).toContain("at most one repair");
+		expect((await flowStatus(workspace)).status).toBe("running");
+
+		const retryFailure = await flowFeatureComplete(
+			workspace,
+			failedReviewPayload,
+		);
+		expect(retryFailure.status).toBe("error");
+		expect(String(retryFailure.summary)).toContain("retry budget");
+		const retrySession = retryFailure.session as {
+			budget: { phaseBoundary: { reason: string } };
+			resumePacket: unknown;
+		};
+		expect(retrySession.budget.phaseBoundary.reason).toBe(
+			"review_failure_limit",
+		);
+		expect(retrySession.resumePacket).toBeTruthy();
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("blocked");
+		expect(
+			(status.session as { budget: { failedReviewCount: number } }).budget
+				.failedReviewCount,
+		).toBe(2);
+	});
+
+	test("failed final review uses retry budget and returns boundary handoff", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+		expect(
+			(
+				await flowFeatureComplete(
+					workspace,
+					completePayload("first-feature", "targeted"),
+				)
+			).status,
+		).toBe("ok");
+		await flowRunStart(workspace, {});
+
+		const failedFinalReviewPayload = {
+			...completePayload("final-feature", "broad"),
+			finalReview: {
+				...finalReview(),
+				status: "failed" as const,
+				summary: "Final review still finds a blocker.",
+				blockingFindings: [{ summary: "Release gate is not covered." }],
+			},
+		};
+		const firstFailure = await flowFeatureComplete(
+			workspace,
+			failedFinalReviewPayload,
+		);
+		expect(firstFailure.status).toBe("error");
+		expect(String(firstFailure.recovery)).toContain("at most one repair");
+		expect((await flowStatus(workspace)).status).toBe("running");
+
+		const retryFailure = await flowFeatureComplete(
+			workspace,
+			failedFinalReviewPayload,
+		);
+		expect(retryFailure.status).toBe("error");
+		expect(String(retryFailure.summary)).toContain("retry budget");
+		const retrySession = retryFailure.session as {
+			budget: {
+				failedReviewCount: number;
+				phaseBoundary: { reason: string };
+			};
+			features: Array<{ id: string; status: string }>;
+			resumePacket: unknown;
+		};
+		expect(retrySession.budget.failedReviewCount).toBe(2);
+		expect(retrySession.budget.phaseBoundary.reason).toBe(
+			"review_failure_limit",
+		);
+		expect(retrySession.resumePacket).toBeTruthy();
+		expect(
+			retrySession.features.find((feature) => feature.id === "final-feature")
+				?.status,
+		).toBe("blocked");
+		expect((await flowStatus(workspace)).status).toBe("blocked");
+	});
+
+	test("phase boundary requires explicit continuation acknowledgement", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Deliver a four-feature change",
+			plan: fourFeaturePlan(),
+		});
+		await flowPlanApprove(workspace);
+
+		for (const featureId of ["feature-one", "feature-two", "feature-three"]) {
+			expect((await flowRunStart(workspace, {})).status).toBe("ok");
+			expect(
+				(
+					await flowFeatureComplete(
+						workspace,
+						completePayload(featureId, "targeted"),
+					)
+				).status,
+			).toBe("ok");
+		}
+
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("ready");
+		expect(
+			(status.session as { budget: { phaseBoundary: { reason: string } } })
+				.budget.phaseBoundary.reason,
+		).toBe("feature_limit");
+		const blockedStart = await flowRunStart(workspace, {});
+		expect(blockedStart.status).toBe("error");
+		expect(String(blockedStart.recovery)).toContain("fresh OpenCode session");
+
+		const resumedStart = await flowRunStart(workspace, {
+			phaseBoundaryAck: true,
+		});
+		expect(resumedStart.status).toBe("ok");
+		expect(
+			(
+				(await flowStatus(workspace)).session as {
+					budget: { completedFeaturesSinceBoundary: number };
+				}
+			).budget.completedFeaturesSinceBoundary,
+		).toBe(0);
 	});
 
 	test("final feature requires broad validation and final review", async () => {

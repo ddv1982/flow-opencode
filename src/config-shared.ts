@@ -98,6 +98,7 @@ const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 
 const FLOW_SELF_CONTAINED_COMMAND_PREFLIGHT = [
 	"Call `flow_status` first. If the result includes `setup.skills`, report the setup status and continue with the bundled public Flow command instructions below.",
+	"If `flow_status` includes `session.resumePacket` or `session.budget.phaseBoundary`, stop the current autonomous loop and report the resume instructions unless this is a fresh user invocation explicitly resuming the session; only then may `flow_run_start` use `phaseBoundaryAck: true`.",
 	"After `flow_status`, briefly state which bundled Flow command is running and for what goal, then continue.",
 	"Do not call native Flow skills for `flow`, `flow-plan`, `flow-run`, or `flow-review` from public Flow commands. In bundled sections, `load` means read and use the corresponding bundled section in this command, and missing native public Flow skills are not blockers.",
 	"Optional helper skills (`flow-test`, `flow-deslop`, `flow-ui-quality`, and user-triggered `flow-commit`) are not bundled fallbacks. If one is unavailable, record the coverage gap exactly as the bundled instructions require.",
@@ -142,6 +143,7 @@ const FLOW_REVIEW_COMMAND_TEMPLATE = flowBundledCommandTemplate(
 
 const FLOW_REVIEW_AGENT_INSTRUCTIONS = [
 	"Use Flow review mode. Call `flow_status` first. Do not call the native skill tool for `flow-review`; the canonical Flow review instructions and rubric are already embedded below. If Flow setup reports stale/unavailable skills, continue as advisory review only and do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
+	"Prefer the manager's compact review packet over the accumulated root transcript. Return feature review packets with `featureReviewDepth` plus `featureReview`; final reviews still return `finalReview` with `reviewDepth`.",
 	"When the manager assigns a parallel review slice instead of a direct Flow review command, cite or drop every claim, label single-source, inferred, and unsettled claims, and return only the assigned Flow handoff. Report blocked if the assigned scope, expected coverage, or handoff shape is missing.",
 	"",
 	"## Bundled Flow review instructions",

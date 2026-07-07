@@ -29,6 +29,11 @@ These instructions run in two contexts, and only one of them can load helpers:
 
 - Call `flow_status` when available.
 - Identify whether this is a feature review or final review.
+- Prefer the manager's compact review packet over parent-session memory. The
+  packet should name the active feature, minimum `reviewDepth`, changed files,
+  diff summary, validation evidence, and targeted paths or risk lenses. If the
+  packet is missing important scope or evidence, record that as a coverage gap
+  or blocker instead of searching the full conversation transcript.
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
 - For final review, also compare the original goal, full feature list, completed
   feature evidence, changed artifacts, and final validation against the
@@ -50,15 +55,22 @@ These instructions run in two contexts, and only one of them can load helpers:
 
 ## Output
 
-For a feature review, return:
+For a feature review, return a packet the manager can copy into
+`flow_feature_complete`:
 
 ```json
 {
-  "status": "passed",
-  "summary": "what was reviewed and why it is acceptable",
-  "blockingFindings": []
+  "featureReviewDepth": "standard",
+  "featureReview": {
+    "status": "passed",
+    "summary": "what was reviewed and why it is acceptable",
+    "blockingFindings": []
+  }
 }
 ```
+
+`featureReviewDepth` must be at least the feature's planned `reviewDepth`.
+Use the actual depth performed: `quick`, `standard`, or `detailed`.
 
 For a final review, return:
 

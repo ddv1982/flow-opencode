@@ -24,7 +24,7 @@ stay separate:
 | --- | --- | --- |
 | Repo shape is unclear before planning | Discovery pass | Requirements, decisions, targets, validation entries, or a review-first feature |
 | A broad finding set needs refutation | Audit pass | Surviving findings with guards checked and gaps named |
-| Changed files or risk lenses are too broad for one review pass | Review pass | One `featureReview` or `finalReview` payload owned by the manager |
+| Changed files or risk lenses are too broad for one review pass | Review pass | One feature review packet or `finalReview` payload owned by the manager |
 | Test strategy or route coverage is unclear | Validation pass | Candidate commands or authorized raw command evidence |
 | A claim is single-source, surprising, high-stakes, or payload-bound | Verification pass | Per-claim keep, narrow, rewrite, or remove decisions |
 | Multiple implementation paths are plausible | Candidate pass | Candidate patches inspected and validated by the manager before use |
@@ -258,7 +258,7 @@ Where accepted evidence goes:
 - Validation evidence may become `validationRun` only when the worker was
   explicitly authorized to run the command and reported the exact command,
   status, and raw outcome summary.
-- Review evidence informs `featureReview` or `finalReview`, but the manager
+- Review evidence informs `featureReviewDepth` plus `featureReview`, or `finalReview`, but the manager
   owns the pass/fail verdict and must resolve blockers, contradictions, and
   coverage gaps before returning the payload.
 - Audit evidence becomes findings only after refutation; blocking findings need

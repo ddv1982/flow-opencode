@@ -12,6 +12,12 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 ## Start
 
 - Call `flow_status`.
+- If `flow_status` returns a `session.resumePacket` or
+  `session.budget.phaseBoundary`, stop the current autonomous loop and report
+  the resume instructions. Only call `flow_run_start` with
+  `phaseBoundaryAck: true` at the start of a fresh user invocation that is
+  explicitly resuming the Flow session; do not acknowledge a boundary inside
+  the same uninterrupted loop that created it.
 - Call `flow_run_start` with no `featureId` unless the user or plan requires a specific runnable feature.
 - Treat the returned feature as the sole scope until it is completed, blocked, or reset.
 - Helper rule: when a named helper skill is unavailable, record the gap and
@@ -22,6 +28,8 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 ## Implement
 
 - Read the feature `targets`, `summary`, `validation`, dependencies, and plan `requirements`/`decisions`.
+- Treat the feature's `reviewDepth` as the minimum feature-review depth that
+  must be recorded in `flow_feature_complete`.
 - Keep edits scoped to the active feature. If new scope appears, stop and replan or defer it to another feature.
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
@@ -59,8 +67,26 @@ merges, validates, and records Flow state serially.
 ## Review and complete
 
 Before `flow_feature_complete`, obtain a `featureReview` payload. Load
-`flow-review`; for read-only subagent reviews, the manager receives the payload
-and records it.
+`flow-review`; for read-only subagent reviews, the manager receives the review
+packet and records both `featureReviewDepth` and `featureReview`.
+
+Send reviewers a compact review packet. Do not rely on the accumulated parent
+conversation. Include only:
+
+- active feature id, title, summary, `reviewDepth`, targets, validation, and dependencies
+- relevant plan requirements, decisions, and final review policy
+- changed files and a short diff summary
+- validation evidence with exact commands, status, and observed result
+- targeted paths or risk lenses the reviewer must inspect
+
+If the review returns `status: "failed"`, do not fix inside the review pass.
+Record the failed attempt by calling `flow_feature_complete` with the otherwise
+prepared completion payload, the failed `featureReview`, and the attempted
+`featureReviewDepth`; the runtime will reject completion and update the retry
+budget. Default to stopping and reporting the blocker. When the user already
+authorized autonomous implementation, make at most one repair and run one retry
+review. If the retry fails or the runtime reports review retry budget
+exhausted, stop with the blocker.
 
 If `flow_status` reports `setup.skills` or `flow-review` cannot be loaded, do
 not record a Flow-gated `featureReview` or `finalReview`. You may perform an
@@ -82,8 +108,13 @@ Complete with:
     { "command": "bun test tests/foo.test.ts", "status": "passed", "summary": "3 pass, exercised foo behavior" }
   ],
   "validationScope": "targeted",
+  "featureReviewDepth": "standard",
   "featureReview": { "status": "passed", "summary": "review summary", "blockingFindings": [] }
 }
 ```
 
-If genuinely blocked, call `flow_feature_complete` with `status: "needs_input"` and an `outcome` that explains the blocker and next step. Never fabricate validation or review evidence to force progress.
+If `flow_feature_complete` returns a `session.resumePacket` or
+`session.budget.phaseBoundary`, stop after reporting the compact handoff. If
+genuinely blocked, call `flow_feature_complete` with `status: "needs_input"` and
+an `outcome` that explains the blocker and next step. Never fabricate validation
+or review evidence to force progress.

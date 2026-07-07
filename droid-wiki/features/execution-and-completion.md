@@ -38,14 +38,14 @@ graph TD
     Start --> Active[in_progress feature]
     Active --> Payload[flow_feature_complete payload]
     Payload --> Validate[validateCompletion]
-    Validate --> NonFinal[targeted validation + featureReview]
-    Validate --> Final[broad validation + featureReview + finalReview]
+    Validate --> NonFinal[targeted validation + featureReviewDepth + featureReview]
+    Validate --> Final[broad validation + featureReviewDepth + featureReview + finalReview]
     NonFinal --> NextReady[ready for next feature]
     Final --> Complete[completed session]
     Payload --> Blocked[blocked session when needs_input]
 ```
 
-`startRun` only chooses pending features whose dependencies are complete. `completeFeature` rejects missing validation, failed validation, wrong validation scope, failed feature review, missing final review, failed final review, or final review depth that does not match the plan policy.
+`startRun` only chooses pending features whose dependencies are complete. It also refuses to continue across a phase boundary until the caller explicitly acknowledges a fresh continuation phase. `completeFeature` rejects missing validation, failed validation, wrong validation scope, too-shallow feature review depth, failed feature review, missing final review, failed final review, or final review depth that does not match the plan policy.
 
 ## Integration points
 

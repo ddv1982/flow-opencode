@@ -25,17 +25,18 @@ src/runtime/
 | --- | --- | --- |
 | `ValidationRunSchema` | `src/runtime/schema.ts` | Command/status/summary validation evidence. |
 | `ValidationScopeSchema` | `src/runtime/schema.ts` | `targeted` or `broad`. |
+| `FeatureReviewDepthSchema` | `src/runtime/schema.ts` | `quick`, `standard`, or `detailed` feature-review depth. |
 | `ReviewSchema` | `src/runtime/schema.ts` | Feature review payload. |
 | `FinalReviewSchema` | `src/runtime/schema.ts` | Final review payload with `reviewDepth`. |
 | `validateCompletion` | `src/runtime/transitions.ts` | Enforces evidence and review gates. |
 
 ## How it works
 
-Feature completion requires at least one passing validation run, `validationScope: "targeted"` for non-final features, and a passing `featureReview` with no blocking findings. Final feature completion requires `validationScope: "broad"`, a passing `featureReview`, a passing `finalReview`, and `finalReview.reviewDepth` equal to the plan's `finalReviewPolicy`.
+Feature completion requires at least one passing validation run, `validationScope: "targeted"` for non-final features, `featureReviewDepth` that meets the feature's planned `reviewDepth`, and a passing `featureReview` with no blocking findings. Final feature completion requires `validationScope: "broad"`, a passing `featureReview`, a passing `finalReview`, and `finalReview.reviewDepth` equal to the plan's `finalReviewPolicy`.
 
 ## Integration points
 
-The review feature connects skills and runtime without giving review its own state-changing tool. `skills/flow-review/SKILL.md` returns payloads, and the manager records them in `flow_feature_complete` through `src/runtime/api.ts`. `tests/runtime-gates.test.ts` verifies rejected missing, failed, or mismatched evidence.
+The review feature connects skills and runtime without giving review its own state-changing tool. `skills/flow-review/SKILL.md` returns feature review packets and final review payloads, and the manager records them in `flow_feature_complete` through `src/runtime/api.ts`. `tests/runtime-gates.test.ts` verifies rejected missing, failed, too-shallow, or mismatched evidence.
 
 ## Key source files
 

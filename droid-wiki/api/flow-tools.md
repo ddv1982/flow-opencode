@@ -9,8 +9,8 @@ The seven Flow tools are registered in `src/adapters/opencode/tools.ts` and impl
 | `flow_status` | `flowStatus` in `src/runtime/api.ts` | Read the active session and next action. |
 | `flow_plan_save` | `flowPlanSave` in `src/runtime/api.ts` | Create or update a draft plan. |
 | `flow_plan_approve` | `flowPlanApprove` in `src/runtime/api.ts` | Approve the draft plan. |
-| `flow_run_start` | `flowRunStart` in `src/runtime/api.ts` | Start the next runnable feature. |
-| `flow_feature_complete` | `flowFeatureComplete` in `src/runtime/api.ts` | Record completion or blocker evidence. |
+| `flow_run_start` | `flowRunStart` in `src/runtime/api.ts` | Start the next runnable feature; accepts `phaseBoundaryAck` when resuming after a checkpoint. |
+| `flow_feature_complete` | `flowFeatureComplete` in `src/runtime/api.ts` | Record completion or blocker evidence, including `featureReviewDepth`. |
 | `flow_feature_reset` | `flowFeatureReset` in `src/runtime/api.ts` | Reset one feature and dependents. |
 | `flow_session_close` | `flowSessionClose` in `src/runtime/api.ts` | Archive the active session. |
 

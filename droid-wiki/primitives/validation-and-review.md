@@ -20,6 +20,7 @@ skills/flow-review/SKILL.md
 | Abstraction | File | Description |
 | --- | --- | --- |
 | `ValidationRunSchema` | `src/runtime/schema.ts` | Exact command, status, and summary evidence. |
+| `FeatureReviewDepthSchema` | `src/runtime/schema.ts` | `quick`, `standard`, or `detailed` feature-review depth. |
 | `ReviewSchema` | `src/runtime/schema.ts` | Feature review status, summary, and blocking findings. |
 | `FinalReviewSchema` | `src/runtime/schema.ts` | Review plus final `reviewDepth`. |
 | `ReviewFindingSchema` | `src/runtime/schema.ts` | Blocking or advisory finding summary. |
@@ -27,11 +28,11 @@ skills/flow-review/SKILL.md
 
 ## How it works
 
-`ValidationRunSchema` permits `passed` or `failed`, but `validateCompletion` requires every recorded validation run to be `passed`. `ReviewSchema` permits failed reviews, but completion requires `status: "passed"` and no blocking findings. Final completion adds `FinalReviewSchema` and requires its `reviewDepth` to match the plan's `finalReviewPolicy`.
+`ValidationRunSchema` permits `passed` or `failed`, but `validateCompletion` requires every recorded validation run to be `passed`. Feature completion records `featureReviewDepth`, which must meet or exceed the feature's planned `reviewDepth`. `ReviewSchema` permits failed reviews, but completion requires `status: "passed"` and no blocking findings. Final completion adds `FinalReviewSchema` and requires its `reviewDepth` to match the plan's `finalReviewPolicy`.
 
 ## Integration points
 
-`skills/flow-test/SKILL.md` produces `validationRun` summaries. `skills/flow-review/SKILL.md` produces `featureReview` and `finalReview` payloads. The manager records accepted payloads through `flow_feature_complete`; no separate review-record tool exists in v4.
+`skills/flow-test/SKILL.md` produces `validationRun` summaries. `skills/flow-review/SKILL.md` produces feature review packets with `featureReviewDepth` plus `featureReview`, and final review payloads. The manager records accepted payloads through `flow_feature_complete`; no separate review-record tool exists in v4.
 
 ## Key source files
 

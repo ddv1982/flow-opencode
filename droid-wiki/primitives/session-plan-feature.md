@@ -4,7 +4,7 @@ Active contributors: ddv1982
 
 ## Purpose
 
-The session is Flow's durable workflow ledger. The plan describes the goal and feature breakdown, and each feature carries status, targets, validation hints, and dependency ordering.
+The session is Flow's durable workflow ledger. The plan describes the goal and feature breakdown, and each feature carries status, review depth, targets, validation hints, and dependency ordering.
 
 ## Directory layout
 
@@ -28,11 +28,11 @@ src/runtime/
 
 ## How it works
 
-`SessionSchema` persists `version`, `id`, `goal`, `status`, `approval`, `plan`, `activeFeatureId`, `history`, `closure`, `lastError`, and timestamps. `PlanSchema` requires at least one feature. `FeatureSchema` restricts ids to lowercase kebab-case using `FEATURE_ID_PATTERN`.
+`SessionSchema` persists `version`, `id`, `goal`, `status`, `approval`, `plan`, `activeFeatureId`, `history`, budget telemetry, `closure`, `lastError`, and timestamps. `PlanSchema` requires at least one feature. `FeatureSchema` restricts ids to lowercase kebab-case using `FEATURE_ID_PATTERN` and records the feature's minimum `reviewDepth`.
 
 ## Integration points
 
-The session is written to `.flow/session.json` by `saveSession` in `src/runtime/workspace.ts`. It is read by `flow_status`, command compaction context, and generated instructions. Skills refer to plan `requirements`, `decisions`, feature `targets`, and feature `validation` when choosing work and evidence.
+The session is written to `.flow/session.json` by `saveSession` in `src/runtime/workspace.ts`. It is read by `flow_status`, command compaction context, and generated instructions. Skills refer to plan `requirements`, `decisions`, feature `targets`, feature `validation`, and feature `reviewDepth` when choosing work and evidence.
 
 ## Key source files
 

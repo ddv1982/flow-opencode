@@ -68,6 +68,7 @@ function finalPayload() {
 			},
 		],
 		validationScope: "broad" as const,
+		featureReviewDepth: "standard" as const,
 		featureReview: {
 			status: "passed" as const,
 			summary: "Feature review passed.",
@@ -152,6 +153,25 @@ describe("Flow workspace persistence", () => {
 		await flowPlanApprove(workspace);
 		const approved = await readFile(instructionPath, "utf8");
 		expect(approved).toContain('- status: "ready"');
+	});
+
+	test("loads pre-budget v2 sessions with review-depth defaults", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Load existing v2 session",
+			plan: oneFeaturePlan(),
+		});
+		const raw = JSON.parse(await readFile(sessionPath(workspace), "utf8")) as {
+			budget?: unknown;
+			plan: { features: Array<{ reviewDepth?: string }> };
+		};
+		delete raw.budget;
+		delete raw.plan.features[0]?.reviewDepth;
+		await writeFile(sessionPath(workspace), `${JSON.stringify(raw)}\n`, "utf8");
+
+		const session = await loadSession(workspace);
+		expect(session?.budget.tokenTelemetry.source).toBe("host_unavailable");
+		expect(session?.plan?.features[0]?.reviewDepth).toBe("standard");
 	});
 
 	test("deferred and abandoned close archives and clears the active session", async () => {

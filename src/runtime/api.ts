@@ -3,6 +3,7 @@ import {
 	ArtifactSchema,
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
+	FeatureReviewDepthSchema,
 	FinalReviewSchema,
 	NeedsInputOutcomeSchema,
 	PlanInputSchema,
@@ -43,6 +44,7 @@ export const FlowPlanSaveSchema = z
 export const FlowRunStartSchema = z
 	.object({
 		featureId: z.string().min(1).optional(),
+		phaseBoundaryAck: z.boolean().optional(),
 	})
 	.strict();
 
@@ -67,6 +69,7 @@ export const FlowFeatureCompleteToolSchema = z
 		artifactsChanged: z.array(ArtifactSchema).optional(),
 		validationRun: z.array(ValidationRunSchema).optional(),
 		validationScope: ValidationScopeSchema.optional(),
+		featureReviewDepth: FeatureReviewDepthSchema.optional(),
 		featureReview: ReviewSchema.optional(),
 		finalReview: FinalReviewSchema.optional(),
 		outcome: z.union([WorkerOutcomeSchema, NeedsInputOutcomeSchema]).optional(),
@@ -226,7 +229,13 @@ export async function flowRunStart(
 		if (!session) {
 			return missingSessionResponse();
 		}
-		const result = startRun(session, args.featureId);
+		const result = startRun(
+			session,
+			args.featureId,
+			args.phaseBoundaryAck === undefined
+				? undefined
+				: { phaseBoundaryAck: args.phaseBoundaryAck },
+		);
 		if (!result.ok) return responseFromFailure(result);
 		const saved = await saveSession(worktree, result.value.session);
 		return {
@@ -249,7 +258,15 @@ export async function flowFeatureComplete(
 		}
 		const result = completeFeature(session, worker);
 		if (!result.ok) {
-			if (result.session) await saveSession(worktree, result.session);
+			if (result.session) {
+				const saved = await saveSession(worktree, result.session);
+				return {
+					...summarizeSession(saved),
+					status: "error",
+					summary: result.message,
+					...(result.recovery ? { recovery: result.recovery } : {}),
+				};
+			}
 			return responseFromFailure(result);
 		}
 		const saved = await saveSession(worktree, result.value);

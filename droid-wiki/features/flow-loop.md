@@ -42,13 +42,15 @@ stateDiagram-v2
     planning --> ready: flow_plan_approve
     ready --> running: flow_run_start
     running --> ready: flow_feature_complete non-final ok
+    ready --> ready: phase boundary until acknowledged
     running --> blocked: flow_feature_complete needs_input
+    running --> blocked: review retry budget exhausted
     blocked --> ready: flow_feature_reset
     running --> completed: flow_feature_complete final ok
     completed --> [*]: flow_session_close completed
 ```
 
-The loop always starts by calling `flow_status`. The skill then plans, gets approval, runs one feature, validates it, obtains review payloads, records completion, and repeats until the final feature passes broad validation and final review.
+The loop always starts by calling `flow_status`. The skill then plans, gets approval, runs one feature, validates it, obtains review packets, records completion, and repeats until the final feature passes broad validation and final review. Phase boundaries intentionally stop a growing root session and require a fresh continuation acknowledgement before the next feature starts.
 
 ## Integration points
 

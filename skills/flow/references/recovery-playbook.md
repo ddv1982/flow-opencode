@@ -19,9 +19,16 @@ Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction
 - `Completion requires all recorded validation to pass`: fix failures and rerun. Do not relabel failed checks as passed.
 - `Non-final feature completion requires targeted validation`: use `validationScope: "targeted"` for ordinary features.
 - `Final feature completion requires broad validation`: run the project-level gate and use `validationScope: "broad"`.
+- `Feature review depth ... does not meet the plan requirement`: rerun review
+  at the feature's planned depth or reset/replan if the depth was chosen
+  incorrectly.
 - `Completion requires a passing featureReview`: run or request a real review and include a passing `featureReview` only when there are no blocking findings.
+- `Review retry budget exhausted`: stop and report the remaining blocker. Do
+  not keep patching; reset or replan only after explicit user direction.
 - `Final feature completion requires a finalReview`: perform final review and include `finalReview`.
 - `Final review depth must match the plan policy`: use `reviewDepth` equal to the approved plan's `finalReviewPolicy`; valid final-review values are `broad` and `detailed`.
+- `Completed ... features since the last Flow checkpoint`: stop the current
+  root session and resume from `.flow/session.json` in a fresh OpenCode session.
 - `Cannot close ... unfinished features`: complete, reset, defer, or abandon honestly. Do not mark completed while work remains.
 
 ## Reset guidance
