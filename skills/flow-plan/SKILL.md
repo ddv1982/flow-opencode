@@ -70,6 +70,15 @@ Call `flow_plan_save` with:
 
 Use only `finalReviewPolicy: "broad"` or `"detailed"`. These are the canonical final-review policy and `reviewDepth` enum values. Use `"broad"` only for low-risk, narrow work. Use `"detailed"` for behavioral changes, cross-module edits, migrations, releases, security-sensitive code, or large refactors.
 
+## Plan quality gate
+
+Before saving or asking for approval, load
+`references/plan-quality-checklist.md` and check the draft against it. Revise the
+plan until it passes, or record the remaining gap in `decisions` when the gap is
+an intentional assumption. Do not approve a plan whose outcome, requirements,
+targets, validation, or dependency order are still too vague for another agent
+to execute.
+
 ## Feature sizing
 
 - Each feature should have one owner, one coherent outcome, and a validation story.
@@ -85,4 +94,5 @@ Use only `finalReviewPolicy: "broad"` or `"detailed"`. These are the canonical f
 
 After saving, summarize the plan to the user. Call `flow_plan_approve` only after explicit user approval, unless the user already authorized autonomous implementation. Approved plans are immutable; changing them later requires reset/closure rather than silent edits.
 
-See `references/planning-examples.md` for payload examples and decomposition anti-patterns.
+See `references/planning-examples.md` for payload examples and decomposition
+anti-patterns.

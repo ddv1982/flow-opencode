@@ -2,6 +2,24 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.4] - 2026-07-07
+
+Planning and final-review lore sharpened without changing the runtime surface:
+
+- `flow-plan` now has a pre-approval quality gate that checks outcome,
+  requirements, decisions, uncertainty, feature shape, bounded targets,
+  validation levels, dependencies, and review policy before a plan is saved or
+  approved.
+- Planning examples now cover bugfix, UI/frontend, runtime/schema, docs-only,
+  audit-first, and stronger validation patterns, giving agents better few-shot
+  guidance for common Flow sessions.
+- Final review now includes a convergence scan that traces the original goal,
+  approved requirements, every planned feature, changed artifacts, and
+  validation evidence before returning a passing `finalReview`.
+- The new planning checklist is shipped through synced skills and bundled
+  `/flow-plan` and `/flow-auto` command instructions, so fresh and stale skill
+  discovery paths get the same guidance.
+
 ## [4.3.3] - 2026-07-07
 
 Verification only — no behavior change:

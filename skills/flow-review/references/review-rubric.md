@@ -30,12 +30,41 @@ If unsure whether a finding is real, read more or downgrade it. Do not promote g
 
 ## Final review checklist
 
-- Every feature is complete and together they satisfy the original goal.
-- Broad validation ran and passed.
+- The original goal is satisfied by the delivered behavior or artifacts.
+- Every approved requirement is either met or explicitly accounted for by an
+  accepted gap.
+- Plan decisions and scope boundaries still match the implementation.
+- Every planned feature is complete, has recorded validation evidence, and
+  contributes to the final outcome.
+- Feature dependencies were completed in an order that makes the evidence
+  trustworthy.
+- Changed artifacts match the plan's `targets`; extra changed surfaces are
+  explained and reviewed.
+- Broad validation ran and passed, or any skipped broad check is justified as a
+  non-blocking gap.
 - The final `reviewDepth` equals the approved `finalReviewPolicy`; the only final-review enum values are `broad` and `detailed`.
 - Feature-level reviews have no unresolved blocking findings.
 - Docs, commands, package metadata, and release surfaces match the delivered behavior.
 - Remaining gaps are explicit and do not contradict `kind: "completed"`.
+
+## Final convergence scan
+
+Run this scan before returning a passing `finalReview`:
+
+1. Restate the original goal and the approved plan summary in your own words.
+2. Map each requirement to delivered evidence, validation output, or an explicit
+   accepted gap.
+3. Walk every planned feature and confirm its completion evidence, review
+   result, and validation level.
+4. Compare the changed files, docs, commands, generated surfaces, and package
+   metadata to the planned targets and requirements.
+5. Check whether the validation evidence would have caught the main failure
+   modes introduced by the work.
+6. Decide whether remaining gaps are advisory or blocking before setting
+   `status`.
+
+Fail the final review when the delivered work cannot be traced back to the
+approved goal and requirements, even if each individual feature review passed.
 
 ## Payloads
 

@@ -26,6 +26,9 @@ import flowDeslopSkillDoc from "../../skills/flow-deslop/SKILL.md" with {
 import flowPlanParallelDiscoveryDoc from "../../skills/flow-plan/references/parallel-discovery.md" with {
 	type: "text",
 };
+import flowPlanPlanQualityChecklistDoc from "../../skills/flow-plan/references/plan-quality-checklist.md" with {
+	type: "text",
+};
 import flowPlanPlanningExamplesDoc from "../../skills/flow-plan/references/planning-examples.md" with {
 	type: "text",
 };
@@ -100,6 +103,10 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 			{
 				relativePath: "references/planning-examples.md",
 				content: flowPlanPlanningExamplesDoc,
+			},
+			{
+				relativePath: "references/plan-quality-checklist.md",
+				content: flowPlanPlanQualityChecklistDoc,
 			},
 			{
 				relativePath: "references/parallel-discovery.md",

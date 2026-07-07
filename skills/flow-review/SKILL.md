@@ -30,6 +30,9 @@ These instructions run in two contexts, and only one of them can load helpers:
 - Call `flow_status` when available.
 - Identify whether this is a feature review or final review.
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
+- For final review, also compare the original goal, full feature list, completed
+  feature evidence, changed artifacts, and final validation against the
+  convergence checklist in `references/review-rubric.md`.
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
 - In manager context, load `flow-test` for validation-heavy,
   regression-sensitive, browser QA, or unclear coverage reviews. If it is

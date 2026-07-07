@@ -64,6 +64,7 @@ const FLOW_REVIEW_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 const FLOW_PLAN_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	["flow-plan", "SKILL.md"],
 	["flow-plan", "references/planning-examples.md"],
+	["flow-plan", "references/plan-quality-checklist.md"],
 	["flow-plan", "references/parallel-discovery.md"],
 	["flow", "references/parallel-orchestration.md"],
 	["flow", "references/handoff-format.md"],
@@ -86,6 +87,7 @@ const FLOW_AUTO_BUNDLED_INSTRUCTIONS = bundledFlowInstructions([
 	["flow", "references/handoff-format.md"],
 	["flow-plan", "SKILL.md"],
 	["flow-plan", "references/planning-examples.md"],
+	["flow-plan", "references/plan-quality-checklist.md"],
 	["flow-plan", "references/parallel-discovery.md"],
 	["flow-run", "SKILL.md"],
 	["flow-run", "references/validation-rubric.md"],

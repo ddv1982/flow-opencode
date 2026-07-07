@@ -442,10 +442,12 @@ describe("Flow distribution and plugin surface", () => {
 				"Bundled flow/SKILL.md",
 				"Bundled flow/references/parallel-orchestration.md",
 				"Bundled flow/references/handoff-format.md",
+				"Bundled flow-plan/references/plan-quality-checklist.md",
 				"Bundled flow-run/SKILL.md",
 			],
 			"flow-plan": [
 				"Bundled flow-plan/SKILL.md",
+				"Bundled flow-plan/references/plan-quality-checklist.md",
 				"Bundled flow/references/parallel-orchestration.md",
 				"Bundled flow/references/handoff-format.md",
 			],
@@ -1104,6 +1106,16 @@ describe("Flow distribution and plugin surface", () => {
 		await expect(
 			readFile(flowSkillFile(home, "flow-test", "SKILL.md"), "utf8"),
 		).resolves.toContain("validationRun");
+		await expect(
+			readFile(
+				flowSkillFile(
+					home,
+					"flow-plan",
+					"references/plan-quality-checklist.md",
+				),
+				"utf8",
+			),
+		).resolves.toContain("Plan quality checklist");
 		await expect(
 			readFile(flowSkillFile(home, "flow-commit", "SKILL.md"), "utf8"),
 		).resolves.toContain("user explicitly asks");
