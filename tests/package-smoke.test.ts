@@ -146,5 +146,5 @@ describe("package smoke", () => {
 			"bun-types",
 			consumer,
 		]);
-	});
+	}, 20_000);
 });

@@ -2,6 +2,15 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.7] - 2026-07-08
+
+Package-smoke patience lore keeps the 4.3.6 release path portable across slower
+macOS Node 24 runners:
+
+- The package smoke test now has an explicit timeout large enough for the packed
+  consumer declaration check to finish on CI, avoiding a runner-speed-only
+  failure after the Release workflow already passed.
+
 ## [4.3.6] - 2026-07-08
 
 Phase-continuity lore removes the rough stop after three completed features and
