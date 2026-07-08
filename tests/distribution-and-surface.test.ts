@@ -483,6 +483,9 @@ describe("Flow distribution and plugin surface", () => {
 					kind: "candidate",
 					decision: "candidate-exact-path",
 					decisionReason: "Candidate owns a disjoint exact path.",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
 					modes: ["candidate-implementation"],
 					workerCount: 1,
 					candidateWorkerCount: 1,
@@ -491,8 +494,268 @@ describe("Flow distribution and plugin surface", () => {
 					writeScope: "exact-path",
 					handoffRefs: ["/tmp/flow/runtime-candidate.md"],
 					verificationStatus: "passed",
-					outcome: "accepted",
+					outcome: "modified",
 					synthesisRef: "/tmp/flow/runtime-synthesis.md",
+				},
+			]),
+		).not.toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "runtime-candidate-decision-with-worker-evidence",
+					kind: "implementation-decision",
+					decision: "candidate-exact-path",
+					decisionReason:
+						"Candidate worker owned a disjoint exact-path implementation.",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					writeScope: "exact-path",
+				},
+			]),
+		).not.toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "candidate-used-with-omitted-decision",
+					kind: "candidate",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+				},
+			]),
+		).not.toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "candidate-used-with-worktree-decision",
+					kind: "candidate",
+					decision: "candidate-worktree",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					writeScope: "isolated-worktree",
+				},
+			]),
+		).not.toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "contradictory-used-pass",
+					kind: "implementation-decision",
+					decision: "serial",
+					candidateEligibility: "not_eligible",
+					candidateDecision: "used",
+					decisionFactors: ["shared_state"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "candidate-used-with-serial-decision",
+					kind: "candidate",
+					decision: "serial",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "contradictory-serial-pass",
+					kind: "implementation-decision",
+					decision: "serial",
+					candidateEligibility: "eligible",
+					candidateDecision: "serial_required",
+					decisionFactors: ["independent_surface"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "contradictory-skipped-pass",
+					kind: "implementation-decision",
+					decision: "skipped",
+					candidateEligibility: "not_eligible",
+					candidateDecision: "serial_required",
+					decisionFactors: ["shared_state"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "mispaired-skipped-pass",
+					kind: "implementation-decision",
+					decision: "serial",
+					candidateEligibility: "eligible",
+					candidateDecision: "skipped",
+					decisionFactors: ["small_slice"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "missing-factor-pass",
+					kind: "implementation-decision",
+					decision: "skipped",
+					candidateEligibility: "eligible",
+					candidateDecision: "skipped",
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "missing-implementation-decision-pass",
+					kind: "implementation-decision",
+					candidateEligibility: "not_eligible",
+					candidateDecision: "serial_required",
+					decisionFactors: ["shared_state"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "missing-candidate-decision-pass",
+					kind: "implementation-decision",
+					decision: "serial",
+					candidateEligibility: "eligible",
+					decisionFactors: ["small_slice"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "missing-candidate-eligibility-pass",
+					kind: "implementation-decision",
+					decision: "skipped",
+					candidateDecision: "skipped",
+					decisionFactors: ["small_slice"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "used-without-candidate-signal",
+					kind: "implementation-decision",
+					decision: "serial",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "used-with-decision-only-signal",
+					kind: "implementation-decision",
+					decision: "candidate-exact-path",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface"],
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "serial-used-with-worker-signal",
+					kind: "implementation-decision",
+					decision: "serial",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "validation-skipped-candidate",
+					kind: "validation",
+					candidateEligibility: "eligible",
+					candidateDecision: "skipped",
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "audit-serial-required-candidate",
+					kind: "audit",
+					candidateEligibility: "not_eligible",
+					candidateDecision: "serial_required",
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "candidate-worker-count-exceeds-total",
+					kind: "implementation-decision",
+					decision: "candidate-exact-path",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface"],
+					workerCount: 0,
+					candidateWorkerCount: 1,
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "parallel-implementation-decision",
+					kind: "implementation-decision",
+					decision: "parallel",
+					candidateEligibility: "not_eligible",
+					candidateDecision: "serial_required",
+					decisionFactors: ["shared_state"],
+					workerCount: 2,
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "candidate-shaped-decision-without-evidence",
+					kind: "review",
+					decision: "tournament",
+					workerCount: 3,
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "dual-role-single-worker",
+					kind: "candidate",
+					modes: ["candidate-implementation", "verifier"],
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					verifierWorkerCount: 1,
 				},
 			]),
 		).not.toThrow();
@@ -501,6 +764,7 @@ describe("Flow distribution and plugin surface", () => {
 				{
 					id: "snake-case-pass",
 					kind: "candidate",
+					candidate_eligibility: "eligible",
 					handoff_ref: "/tmp/flow/snake.md",
 					verification_status: "passed",
 				},
@@ -649,6 +913,9 @@ describe("Flow distribution and plugin surface", () => {
 		expect(orchestration).toContain("Stage 3 — Manifest");
 		expect(orchestration).toContain("orchestrationPasses");
 		expect(orchestration).toContain("decisionReason");
+		expect(orchestration).toContain("candidateEligibility");
+		expect(orchestration).toContain("candidateDecision");
+		expect(orchestration).toContain("decisionFactors");
 		expect(orchestration).toContain("writeScope");
 		expect(orchestration).toContain("Worker failure ladder");
 		expect(passExample).toContain("# Parallel pass example");

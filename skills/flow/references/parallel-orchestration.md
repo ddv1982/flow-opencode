@@ -53,11 +53,32 @@ Before implementing a broad, risky, or multi-target feature, record one manager
 decision. This is required even when the answer is "stay serial"; the point is
 to make the skipped parallelism visible instead of relying on memory.
 
+First classify candidate eligibility:
+
+- `eligible`: at least one slice is independent enough for a candidate worker.
+- `not_eligible`: worker isolation would not make the implementation safer or
+  cheaper because the slice shares state, files, tests, or one mental model.
+- `unknown`: orientation did not produce enough evidence to classify; use this
+  only for non-decision pass rows or legacy low-signal records, not for
+  `implementation-decision` records and not as a substitute for judgment.
+
+Then record the candidate decision:
+
+- `used`: candidate workers were used or a candidate pass carried the work.
+- `skipped`: candidates were eligible, but the manager chose serial anyway.
+  This is the underused-parallelism signal counted by Flow status; use it only
+  on `kind: "implementation-decision"` records.
+- `serial_required`: candidates were not eligible, so serial work was the
+  correct implementation shape. Use it only on `kind: "implementation-decision"`
+  records.
+
 Use one of these decisions:
 
 - `serial`: the manager implements directly because slices overlap, the next
   edit depends on one shared contract, or prompt/merge overhead would exceed the
-  value.
+  value. Pair unsafe or not-useful worker cases with
+  `candidateEligibility: "not_eligible"` and
+  `candidateDecision: "serial_required"`.
 - `candidate-exact-path`: one or more candidate workers may edit exact
   non-overlapping paths or modules named by the manager.
 - `candidate-worktree`: one or more candidate workers may edit in isolated
@@ -65,11 +86,54 @@ Use one of these decisions:
 - `tournament`: several isolated candidate implementations compete for the same
   outcome; the manager filters by tests, review, and source inspection before
   accepting one.
-- `skipped`: candidate workers were considered but rejected; include the reason,
-  such as shared fixtures, shared API contracts, unclear ownership, or no user
-  authorization for worker edits.
+- Candidate-shaped decisions (`candidate-exact-path`, `candidate-worktree`,
+  `tournament`) require candidate execution evidence on the same record:
+  `kind: "candidate"`, `modes` includes `candidate-implementation`, or
+  `candidateWorkerCount > 0`. The same evidence rule applies to
+  `candidateDecision: "used"`. Non-decision candidate rows (for example
+  `kind: "candidate"`) may omit `decision`; `implementation-decision` rows must
+  always set one, and when `candidateDecision` is `"used"` that decision must
+  be candidate-shaped — never `serial`, `parallel`, or `skipped`.
+- `parallel` describes multi-worker read or audit passes (discovery, audit,
+  review); it is not a valid `implementation-decision` value. Implementation
+  decisions use `serial`, `skipped`, or a candidate-shaped decision.
+- `skipped`: candidate workers were eligible but the manager chose serial
+  anyway; pair this with `candidateEligibility: "eligible"` and
+  `candidateDecision: "skipped"`. Do not use `skipped` for shared fixtures,
+  shared API contracts, unclear ownership, or other unsafe worker cases; use
+  `serial` plus `serial_required` for those.
+
+Use structured `decisionFactors` alongside prose `decisionReason`:
+`shared_state`, `overlapping_files`, `small_slice`,
+`needs_manager_judgment`, `independent_surface`, and
+`validation_available`. Serial-required records usually cite
+`shared_state`, `overlapping_files`, or `needs_manager_judgment`; eligible
+records usually cite `independent_surface` and `validation_available`, with
+`small_slice` explaining an eligible-but-skipped choice.
+
+### Worker decision rubric
+
+Default to considering candidate workers when:
+
+- the plan has three or more features.
+- features touch separate surfaces such as frontend, core, docs, release
+  scripts, tests, or bindings.
+- validation can run per slice.
+- the work is mostly additive or localized.
+- the final manager can review, apply, adapt, or reject the result safely.
+
+Prefer serial when:
+
+- one tight invariant crosses shared files.
+- migrations, persistence, storage, or lifecycle semantics require one mental
+  model.
+- tests require iterative local debugging in one checkout.
+- multiple slices would edit the same files or fixtures.
+- the slice is so small that prompt, handoff, merge, and verification overhead
+  costs more than direct work.
 
 Record the decision in the pass manifest with a stable pass id,
+`candidateEligibility`, `candidateDecision`, `decisionFactors`,
 `decisionReason`, `writeScope`, expected verification, and where any handoff or
 synthesis artifact will live. If the feature completes, include the compact
 record in the `orchestrationPasses` array of the `flow_feature_complete`
@@ -205,7 +269,17 @@ N handoffs collected and checked in Stage 5 before anything is synthesized.
 
 For implementation decisions, add a manifest row even when no worker is spawned:
 `kind=implementation-decision`, `decision=serial` or `decision=skipped`,
+`candidateEligibility`, `candidateDecision`, `decisionFactors`,
 `workerCount=0`, `writeScope=manager-serial`, and a concrete `decisionReason`.
+Use `decision=serial` with `candidateDecision=serial_required` for ineligible
+worker cases; reserve `decision=skipped` for eligible candidate work that the
+manager chose not to delegate. When an implementation-decision row uses
+`candidateDecision=used`, it must also record actual candidate execution
+evidence: either `modes=candidate-implementation`, or `candidateWorkerCount > 0`
+with `workerCount` raised to cover it — a `workerCount=0` row cannot carry a
+positive `candidateWorkerCount`. Neither subtype count may exceed the total:
+`candidateWorkerCount <= workerCount` and `verifierWorkerCount <= workerCount`
+(a single worker may fill both roles).
 This is how Flow distinguishes deliberate serial work from forgotten candidate
 or verifier passes.
 
@@ -256,7 +330,8 @@ For each row, fill in:
   review packet location that the manager can re-open.
 - `verificationStatus`: `not-needed`, `pending`, `passed`, `failed`, `mixed`,
   or `downgraded`.
-- `outcome`: `accepted`, `rejected`, `partial`, `not-covered`, or `superseded`.
+- `outcome`: `accepted`, `modified`, `rejected`, `partial`, `not-covered`, or
+  `superseded`.
 - `synthesisRef`: the manager-owned synthesis file or plan field that carries
   the accepted result forward.
 
@@ -289,7 +364,8 @@ handoff only after a cheap manager-side pass:
   artifact they depend on.
 - Candidate implementation claims identify whether they came from exact path
   ownership or an isolated worktree, and whether the manager inspected the
-  resulting patch.
+  resulting patch. Record the manager result as `accepted`, `modified`, or
+  `rejected` where that is the most precise candidate outcome.
 - Contradictions between workers are either resolved or explicitly marked as
   contested.
 
@@ -330,6 +406,11 @@ Apply the manager synthesis barrier before presenting or recording anything:
 - When workers disagree, inspect the cited artifact or rerun the cited command
   instead of arbitrating from summaries. Do not average conflicting claims.
 - Run the strongest practical local check for the deliverable.
+- For broad implementation sessions, use one verifier worker after manager
+  synthesis when the risk is medium or high. Ask it whether every planned
+  feature landed, worker validation claims are supported, final code matches
+  the audit finding, generated bindings/docs/version metadata stayed
+  consistent, and changed files have plausible test coverage.
 - Re-read critical files or docs that will be cited in the final decision.
 - Move only distilled, evidence-backed claims forward; raw handoffs remain
   candidate evidence, not a plan, review, completion payload, or final answer.
@@ -364,6 +445,9 @@ decision that materially affected the feature:
   "kind": "implementation-decision",
   "decision": "serial",
   "decisionReason": "Shared schema and tests made exact path ownership unsafe.",
+  "candidateEligibility": "not_eligible",
+  "candidateDecision": "serial_required",
+  "decisionFactors": ["shared_state", "overlapping_files"],
   "modes": [],
   "workerCount": 0,
   "candidateWorkerCount": 0,
@@ -386,6 +470,21 @@ these compact records into `session.budget.orchestration` and stores them on
 the feature history entry. Do not store full handoffs, long logs, or scratch
 tables in `.flow/session.json`.
 
+Status accounting distinguishes three cases: `candidateDecision: "used"` means
+candidate execution evidence was recorded, `candidateDecision:
+"serial_required"` means workers were not safe or useful, and
+`candidateEligibility: "eligible"` plus `candidateDecision: "skipped"`
+increments `skippedCandidateDecisionCount`. These candidate decision counters
+come from `kind: "implementation-decision"` records; `skipped` and
+`serial_required` are not valid on discovery, audit, review, validation,
+verification, or candidate pass rows. `candidatePassCount`
+counts actual candidate pass or worker evidence (`kind: "candidate"`,
+`modes` includes `candidate-implementation`, or `candidateWorkerCount > 0`) —
+a candidate-shaped decision label without that evidence is rejected, so decision
+labels alone never count. `verifierPassCount` similarly counts
+actual verifier pass or worker evidence (`kind: "verification"`, `modes`
+includes `verifier`, or `verifierWorkerCount > 0`).
+
 Persist the manifest and the synthesis when another pass may follow or the
 session is long enough to be compacted or resumed: write the distilled result —
 the accounted manifest, accepted claims with evidence and confidence, dropped
@@ -407,7 +506,8 @@ Stop after a pass when:
 - every dependency edge named in the manifest has either a verified upstream
   result or an explicit not-covered outcome.
 - implementation pass decisions are recorded, including skipped candidate
-  workers and the reason they were skipped.
+  workers, candidate eligibility, candidate decision, structured factors, and
+  the reason eligible workers were skipped.
 - remaining gaps are explicit and do not block the Flow artifact being produced.
 
 Start a bounded follow-up pass only when:
@@ -426,3 +526,17 @@ reason, such as a high-stakes verifier check or a newly discovered bounded
 slice. Do not recurse by default: if a worker says it needs another worker, the
 manager decides whether that is a follow-up pass and writes the next bounded
 prompt, starting again from the manifest.
+
+## Worker count defaults
+
+Use caps, not a fixed feature limit:
+
+- small implementation: zero or one worker.
+- medium independent implementation: two workers.
+- broad audit: three to five workers.
+- broad implementation: two to four candidate workers, only for
+  non-overlapping slices.
+- final verifier: one worker when risk is medium or high.
+
+The target is not "more workers." The target is explicit accounting: Flow must
+justify not using workers when the work was eligible.

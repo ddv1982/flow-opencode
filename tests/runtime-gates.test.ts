@@ -13,6 +13,7 @@ import {
 } from "../src/runtime/api";
 import {
 	type OrchestrationPassRecord,
+	type OrchestrationTelemetry,
 	WorkerResultSchema,
 } from "../src/runtime/schema";
 
@@ -79,6 +80,8 @@ function orchestrationPass(
 		id,
 		kind: "validation",
 		modes: [],
+		candidateEligibility: "unknown",
+		decisionFactors: [],
 		workerCount: 1,
 		candidateWorkerCount: 0,
 		verifierWorkerCount: 0,
@@ -153,28 +156,12 @@ async function approvedTwoFeatureSession(workspace: string): Promise<void> {
 	expect((await flowPlanApprove(workspace)).status).toBe("ok");
 }
 
-async function orchestrationTelemetry(workspace: string): Promise<{
-	passCount: number;
-	workerCount: number;
-	candidatePassCount: number;
-	verifierPassCount: number;
-	skippedCandidateDecisionCount: number;
-	latestPasses: Array<{ id: string }>;
-}> {
+async function orchestrationTelemetry(
+	workspace: string,
+): Promise<OrchestrationTelemetry> {
 	const status = await flowStatus(workspace);
 	return (
-		status.session as {
-			budget: {
-				orchestration: {
-					passCount: number;
-					workerCount: number;
-					candidatePassCount: number;
-					verifierPassCount: number;
-					skippedCandidateDecisionCount: number;
-					latestPasses: Array<{ id: string }>;
-				};
-			};
-		}
+		status.session as { budget: { orchestration: OrchestrationTelemetry } }
 	).budget.orchestration;
 }
 
@@ -336,9 +323,16 @@ describe("Flow runtime gates", () => {
 				{
 					id: "first-feature-implementation-decision",
 					kind: "implementation-decision" as const,
-					decision: "skipped" as const,
+					decision: "serial" as const,
 					decisionReason:
 						"Shared contract edits made manager-serial implementation safer.",
+					candidateEligibility: "not_eligible" as const,
+					candidateDecision: "serial_required" as const,
+					decisionFactors: [
+						"shared_state" as const,
+						"overlapping_files" as const,
+						"needs_manager_judgment" as const,
+					],
 					writeScope: "manager-serial" as const,
 					verificationStatus: "not-needed" as const,
 					outcome: "accepted" as const,
@@ -349,6 +343,12 @@ describe("Flow runtime gates", () => {
 					decision: "candidate-exact-path" as const,
 					decisionReason:
 						"Docs target was disjoint from runtime implementation files.",
+					candidateEligibility: "eligible" as const,
+					candidateDecision: "used" as const,
+					decisionFactors: [
+						"independent_surface" as const,
+						"validation_available" as const,
+					],
 					modes: ["candidate-implementation" as const],
 					workerCount: 1,
 					candidateWorkerCount: 1,
@@ -376,21 +376,7 @@ describe("Flow runtime gates", () => {
 
 		const status = await flowStatus(workspace);
 		const session = status.session as {
-			budget: {
-				orchestration: {
-					passCount: number;
-					workerCount: number;
-					candidatePassCount: number;
-					verifierPassCount: number;
-					skippedCandidateDecisionCount: number;
-					latestPasses: Array<{
-						id: string;
-						kind: string;
-						dependsOn?: string[];
-						handoffRefs?: string[];
-					}>;
-				};
-			};
+			budget: { orchestration: OrchestrationTelemetry };
 			latestHistoryEntry: {
 				orchestrationPasses: Array<{ id: string; writeScope: string }>;
 			};
@@ -400,7 +386,10 @@ describe("Flow runtime gates", () => {
 			workerCount: 2,
 			candidatePassCount: 1,
 			verifierPassCount: 1,
-			skippedCandidateDecisionCount: 1,
+			candidateEligibleCount: 0,
+			candidateUsedDecisionCount: 0,
+			candidateSerialRequiredDecisionCount: 1,
+			skippedCandidateDecisionCount: 0,
 		});
 		expect(
 			session.budget.orchestration.latestPasses.map((pass) => pass.id),
@@ -409,6 +398,20 @@ describe("Flow runtime gates", () => {
 			"first-feature-candidate-docs",
 			"first-feature-review-claim-check",
 		]);
+		expect(session.budget.orchestration.latestPasses[0]).toMatchObject({
+			candidateEligibility: "not_eligible",
+			candidateDecision: "serial_required",
+			decisionFactors: [
+				"shared_state",
+				"overlapping_files",
+				"needs_manager_judgment",
+			],
+		});
+		expect(session.budget.orchestration.latestPasses[1]).toMatchObject({
+			candidateEligibility: "eligible",
+			candidateDecision: "used",
+			decisionFactors: ["independent_surface", "validation_available"],
+		});
 		expect(session.budget.orchestration.latestPasses[1]?.handoffRefs).toEqual([
 			"/tmp/flow/first-feature-candidate.md",
 		]);
@@ -419,6 +422,279 @@ describe("Flow runtime gates", () => {
 		expect(session.latestHistoryEntry.orchestrationPasses[1]?.writeScope).toBe(
 			"exact-path",
 		);
+	});
+
+	test("counts only eligible skipped implementation candidates as skipped", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-too-tight", {
+					kind: "implementation-decision",
+					decision: "serial",
+					decisionReason:
+						"A shared lifecycle invariant required one manager-owned edit.",
+					candidateEligibility: "not_eligible",
+					candidateDecision: "serial_required",
+					decisionFactors: ["shared_state", "overlapping_files"],
+					workerCount: 0,
+					writeScope: "manager-serial",
+					verificationStatus: "not-needed",
+				}),
+				orchestrationPass("first-feature-frontend-skipped", {
+					kind: "implementation-decision",
+					decision: "skipped",
+					decisionReason:
+						"Frontend slice was independent with targeted validation, but the manager chose serial.",
+					candidateEligibility: "eligible",
+					candidateDecision: "skipped",
+					decisionFactors: [
+						"independent_surface",
+						"validation_available",
+						"small_slice",
+					],
+					workerCount: 0,
+					writeScope: "manager-serial",
+					verificationStatus: "not-needed",
+				}),
+			],
+		});
+		expect(completed.status).toBe("ok");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.candidateEligibleCount).toBe(1);
+		expect(telemetry.candidateUsedDecisionCount).toBe(0);
+		expect(telemetry.candidateSerialRequiredDecisionCount).toBe(1);
+		expect(telemetry.skippedCandidateDecisionCount).toBe(1);
+		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
+			"first-feature-too-tight",
+			"first-feature-frontend-skipped",
+		]);
+	});
+
+	test("dedupes resubmitted pass ids beyond the latestPasses window", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const manyPasses = Array.from({ length: 60 }, (_, index) =>
+			orchestrationPass(`first-feature-pass-${index}`),
+		);
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: manyPasses,
+		});
+		expect(completed.status).toBe("ok");
+		const afterFirst = await orchestrationTelemetry(workspace);
+		expect(afterFirst.passCount).toBe(60);
+		expect(afterFirst.latestPasses).toHaveLength(50);
+
+		// first-feature-pass-0 has slid out of the 50-record window; a
+		// resubmitted id must still dedup via recordedPassIds.
+		await flowRunStart(workspace, {});
+		const resubmitted = await flowFeatureComplete(workspace, {
+			...completePayload("final-feature", "broad"),
+			finalReview: finalReview(),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-pass-0"),
+				orchestrationPass("final-feature-fresh-pass"),
+			],
+		});
+		expect(resubmitted.status).toBe("ok");
+		const afterSecond = await orchestrationTelemetry(workspace);
+		expect(afterSecond.passCount).toBe(61);
+		expect(afterSecond.workerCount).toBe(61);
+	});
+
+	test("rejects candidate decision usage without execution evidence", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-decision-only-candidate", {
+					kind: "implementation-decision",
+					decision: "candidate-exact-path",
+					decisionReason:
+						"Decision selected a candidate-capable exact-path shape.",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 0,
+					candidateWorkerCount: 0,
+					writeScope: "exact-path",
+				}),
+			],
+		});
+		expect(completed.status).toBe("error");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.candidatePassCount).toBe(0);
+		expect(telemetry.candidateUsedDecisionCount).toBe(0);
+		expect(telemetry.latestPasses).toEqual([]);
+	});
+
+	test("rejects serial implementation decisions that claim candidate usage", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-serial-used-candidate", {
+					kind: "implementation-decision",
+					decision: "serial",
+					decisionReason:
+						"Serial manager-owned work cannot also claim candidate usage.",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					writeScope: "manager-serial",
+				}),
+			],
+		});
+		expect(completed.status).toBe("error");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(0);
+		expect(telemetry.candidatePassCount).toBe(0);
+		expect(telemetry.candidateUsedDecisionCount).toBe(0);
+		expect(telemetry.latestPasses).toEqual([]);
+	});
+
+	test("rejects candidate accounting decisions on non-implementation passes", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-validation-skipped-candidate", {
+					kind: "validation",
+					decisionReason:
+						"Validation cannot record a manager implementation skip.",
+					candidateEligibility: "eligible",
+					candidateDecision: "skipped",
+					verificationStatus: "passed",
+				}),
+			],
+		});
+		expect(completed.status).toBe("error");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(0);
+		expect(telemetry.candidateEligibleCount).toBe(0);
+		expect(telemetry.candidateSerialRequiredDecisionCount).toBe(0);
+		expect(telemetry.skippedCandidateDecisionCount).toBe(0);
+		expect(telemetry.latestPasses).toEqual([]);
+	});
+
+	test("rejects orchestration subtype worker counts above total workers", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-impossible-worker-counts", {
+					kind: "implementation-decision",
+					decision: "candidate-exact-path",
+					decisionReason:
+						"Candidate worker count cannot exceed total worker count.",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 0,
+					candidateWorkerCount: 1,
+					writeScope: "exact-path",
+				}),
+			],
+		});
+		expect(completed.status).toBe("error");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(0);
+		expect(telemetry.workerCount).toBe(0);
+		expect(telemetry.candidatePassCount).toBe(0);
+		expect(telemetry.latestPasses).toEqual([]);
+	});
+
+	test("counts valid candidate implementation decisions with worker evidence", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-candidate-worker-decision", {
+					kind: "implementation-decision",
+					decision: "candidate-exact-path",
+					decisionReason:
+						"Candidate worker owned a disjoint exact-path implementation.",
+					candidateEligibility: "eligible",
+					candidateDecision: "used",
+					decisionFactors: ["independent_surface", "validation_available"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					writeScope: "exact-path",
+					verificationStatus: "passed",
+				}),
+			],
+		});
+		expect(completed.status).toBe("ok");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(1);
+		expect(telemetry.workerCount).toBe(1);
+		expect(telemetry.candidatePassCount).toBe(1);
+		expect(telemetry.candidateEligibleCount).toBe(1);
+		expect(telemetry.candidateUsedDecisionCount).toBe(1);
+		expect(telemetry.candidateSerialRequiredDecisionCount).toBe(0);
+		expect(telemetry.skippedCandidateDecisionCount).toBe(0);
+		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
+			"first-feature-candidate-worker-decision",
+		]);
+	});
+
+	test("counts verifier worker count as verifier pass evidence", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				orchestrationPass("first-feature-verifier-worker-count", {
+					kind: "validation",
+					decisionReason:
+						"A verifier worker checked claims after manager synthesis.",
+					workerCount: 1,
+					verifierWorkerCount: 1,
+					verificationStatus: "passed",
+				}),
+			],
+		});
+		expect(completed.status).toBe("ok");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(1);
+		expect(telemetry.workerCount).toBe(1);
+		expect(telemetry.verifierPassCount).toBe(1);
+		expect(telemetry.candidatePassCount).toBe(0);
+		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
+			"first-feature-verifier-worker-count",
+		]);
 	});
 
 	test("records orchestration telemetry on validation gate failures", async () => {

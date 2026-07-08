@@ -17,8 +17,8 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@4.3.8 --global --force
-npx -y opencode-plugin-flow@4.3.8 sync
+opencode plugin opencode-plugin-flow@4.3.9 --global --force
+npx -y opencode-plugin-flow@4.3.9 sync
 ```
 
 Restart OpenCode, then give Flow a goal:
@@ -136,8 +136,9 @@ your own config.
 
 For broad implementation, the manager records whether work stayed serial,
 used exact-path candidate workers, used isolated worktrees, ran a tournament, or
-skipped candidates. Feature completion can carry compact
-`orchestrationPasses`; `flow_status` reports the aggregate under
+skipped eligible candidates. Feature completion can carry compact
+`orchestrationPasses` with candidate eligibility, decision, and structured
+factors; `flow_status` reports the aggregate under
 `session.budget.orchestration`.
 
 ## Install details, doctor, repair, uninstall
@@ -150,7 +151,7 @@ To update a pinned Flow version, rerun the install command with the new
 version. To inspect skill health:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.8 doctor
+npx -y opencode-plugin-flow@4.3.9 doctor
 ```
 
 ## Experimental: compaction context

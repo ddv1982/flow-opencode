@@ -2,6 +2,29 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.9] - 2026-07-08
+
+Candidate accounting coherence lore makes the 4.3.8 orchestration accounting
+rules self-consistent, so valid manager records stop bouncing off the schema:
+
+- `decision: "parallel"` on implementation-decision records is now rejected
+  with one clear message (it stays valid for discovery, audit, and review
+  passes); previously every `candidateDecision` pairing produced contradictory
+  errors.
+- Candidate-shaped decisions now require candidate execution evidence on every
+  pass kind, so a decision label alone can no longer validate while being
+  excluded from `candidatePassCount`.
+- Candidate and verifier worker counts are checked per subtype instead of
+  summed, so one worker may fill both roles on a single pass row.
+- Orchestration pass dedup now remembers every recorded pass id in
+  `recordedPassIds`, so resubmitted completions no longer double-count
+  telemetry after the recent-pass window rolls over.
+- The candidate accounting rules are documented once, in
+  `skills/flow/references/parallel-orchestration.md`; the run skill, handoff
+  format, and wiki point there instead of restating them, and the two doc
+  instructions that contradicted the schema (omitted `decision` on decision
+  records, `workerCount=0` with positive `candidateWorkerCount`) are fixed.
+
 ## [4.3.8] - 2026-07-08
 
 Parallel orchestration accounting lore makes broad worker use visible without

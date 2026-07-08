@@ -35,7 +35,13 @@ candidate exact-path, candidate worktree, tournament, or skipped. Compact pass
 records may be included in `flow_feature_complete.orchestrationPasses`; the
 runtime aggregates counts and recent pass summaries under
 `session.budget.orchestration`, while full worker handoffs stay outside
-`.flow/**`.
+`.flow/**`. Candidate accounting records `candidateEligibility`,
+`candidateDecision`, and structured `decisionFactors` so `flow_status` can
+distinguish serial-required work from eligible candidate work that was skipped.
+The full validation rules — valid decision pairings and what counts as
+candidate or verifier execution evidence — are canonical in
+`skills/flow/references/parallel-orchestration.md` ("Implementation pass
+decision" and the status accounting section).
 
 ## Integration points
 

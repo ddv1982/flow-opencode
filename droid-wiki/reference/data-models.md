@@ -36,10 +36,21 @@ The data model is defined in `src/runtime/schema.ts` and persisted through `src/
 ## Orchestration telemetry
 
 `OrchestrationPassRecordSchema` stores compact pass ids, pass kind, decision,
-worker counts, slice ids, dependencies, write scope, handoff references,
-verification status, outcome, and synthesis references. The runtime keeps
-aggregates and recent records under `budget.orchestration`; full handoffs and
-logs are not stored in the session file.
+candidate eligibility, candidate decision, structured decision factors, worker
+counts, slice ids, dependencies, write scope, handoff references, verification
+status, outcome, and synthesis references. The runtime keeps aggregates and
+recent records under `budget.orchestration`; full handoffs and logs are not
+stored in the session file. `skippedCandidateDecisionCount` means an
+implementation-decision record was `eligible` for candidate workers but the
+manager chose `skipped`. The telemetry also keeps `recordedPassIds` — every
+pass id ever counted — so resubmitted ids dedup even after they leave the
+bounded `latestPasses` window. Each subtype worker count
+(`candidateWorkerCount`, `verifierWorkerCount`) must not exceed the total
+`workerCount`; a single worker may fill both roles. The remaining validation
+rules — valid decision pairings and the execution evidence required for
+candidate-shaped decisions, `candidateDecision: "used"`, `candidatePassCount`,
+and `verifierPassCount` — are canonical in
+`skills/flow/references/parallel-orchestration.md`.
 
 ## Runtime API payloads
 

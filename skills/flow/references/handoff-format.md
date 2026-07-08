@@ -167,6 +167,12 @@ completion.
 The manager, not the worker, may carry compact records into
 `flow_feature_complete.orchestrationPasses`. Use one record per material pass or
 implementation decision; keep handoffs and long artifacts outside `.flow/**`.
+The candidate accounting rules — which `candidateEligibility`,
+`candidateDecision`, and `decision` combinations validate, and what counts as
+candidate execution evidence — live in
+[parallel-orchestration.md](parallel-orchestration.md) under "Implementation
+pass decision"; note `decision: "parallel"` is not valid on
+`implementation-decision` records.
 
 ```json
 {
@@ -174,6 +180,16 @@ implementation decision; keep handoffs and long artifacts outside `.flow/**`.
   "kind": "discovery | audit | review | validation | verification | candidate | implementation-decision",
   "decision": "serial | parallel | candidate-exact-path | candidate-worktree | tournament | skipped",
   "decisionReason": "why this pass shape was chosen",
+  "candidateEligibility": "eligible | not_eligible | unknown",
+  "candidateDecision": "used | skipped | serial_required",
+  "decisionFactors": [
+    "shared_state",
+    "overlapping_files",
+    "small_slice",
+    "needs_manager_judgment",
+    "independent_surface",
+    "validation_available"
+  ],
   "modes": ["evidence"],
   "workerCount": 1,
   "candidateWorkerCount": 0,
@@ -183,7 +199,7 @@ implementation decision; keep handoffs and long artifacts outside `.flow/**`.
   "writeScope": "none | manager-serial | exact-path | isolated-worktree | mixed",
   "handoffRefs": ["/tmp/flow-handoff.md"],
   "verificationStatus": "not-needed | pending | passed | failed | mixed | downgraded",
-  "outcome": "accepted | rejected | partial | not-covered | superseded",
+  "outcome": "accepted | modified | rejected | partial | not-covered | superseded",
   "synthesisRef": "/tmp/flow-synthesis.md"
 }
 ```

@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
 	type BudgetTelemetry,
+	BudgetTelemetrySchema,
 	type ExecutionHistoryEntry,
 	type Feature,
 	type FeatureReviewDepth,
+	hasCandidateExecutionEvidence,
+	hasVerifierExecutionEvidence,
 	type OrchestrationPassRecord,
 	type Plan,
 	type PlanInput,
@@ -65,28 +68,7 @@ function historyEntryFor(
 }
 
 function initialBudgetTelemetry(): BudgetTelemetry {
-	return {
-		phaseStartedAt: nowIso(),
-		completedFeaturesSinceBoundary: 0,
-		reviewCount: 0,
-		failedReviewCount: 0,
-		failedReviewAttemptsByFeature: {},
-		tokenTelemetry: {
-			source: "host_unavailable",
-			visibleTokens: null,
-			cacheReadTokens: null,
-			nonCacheTokens: null,
-		},
-		orchestration: {
-			passCount: 0,
-			workerCount: 0,
-			candidatePassCount: 0,
-			verifierPassCount: 0,
-			skippedCandidateDecisionCount: 0,
-			latestPasses: [],
-		},
-		phaseBoundary: null,
-	};
+	return { ...BudgetTelemetrySchema.parse({}), phaseStartedAt: nowIso() };
 }
 
 function normalizeBudgetTelemetry(session: Session): BudgetTelemetry {
@@ -104,23 +86,12 @@ function normalizeBudgetTelemetry(session: Session): BudgetTelemetry {
 		orchestration: {
 			...defaults.orchestration,
 			...session.budget.orchestration,
+			recordedPassIds: [
+				...(session.budget.orchestration?.recordedPassIds ?? []),
+			],
 			latestPasses: [...(session.budget.orchestration?.latestPasses ?? [])],
 		},
 	};
-}
-
-function passUsesCandidate(pass: OrchestrationPassRecord): boolean {
-	return (
-		pass.kind === "candidate" ||
-		pass.modes.includes("candidate-implementation") ||
-		pass.decision === "candidate-exact-path" ||
-		pass.decision === "candidate-worktree" ||
-		pass.decision === "tournament"
-	);
-}
-
-function passUsesVerifier(pass: OrchestrationPassRecord): boolean {
-	return pass.kind === "verification" || pass.modes.includes("verifier");
 }
 
 function recordOrchestrationPasses(
@@ -128,9 +99,12 @@ function recordOrchestrationPasses(
 	passes: readonly OrchestrationPassRecord[],
 ): BudgetTelemetry {
 	if (passes.length === 0) return budget;
-	const seenPassIds = new Set(
-		budget.orchestration.latestPasses.map((pass) => pass.id),
-	);
+	// recordedPassIds is the durable dedup set; latestPasses is included for
+	// sessions recorded before recordedPassIds existed.
+	const seenPassIds = new Set([
+		...budget.orchestration.recordedPassIds,
+		...budget.orchestration.latestPasses.map((pass) => pass.id),
+	]);
 	const newPasses: OrchestrationPassRecord[] = [];
 	for (const pass of passes) {
 		if (seenPassIds.has(pass.id)) continue;
@@ -138,27 +112,61 @@ function recordOrchestrationPasses(
 		newPasses.push(pass);
 	}
 	if (newPasses.length === 0) return budget;
+	const tally = {
+		workerCount: 0,
+		candidatePassCount: 0,
+		verifierPassCount: 0,
+		candidateEligibleCount: 0,
+		candidateUsedDecisionCount: 0,
+		candidateSerialRequiredDecisionCount: 0,
+		skippedCandidateDecisionCount: 0,
+	};
+	for (const pass of newPasses) {
+		tally.workerCount += pass.workerCount;
+		if (hasCandidateExecutionEvidence(pass)) tally.candidatePassCount += 1;
+		if (hasVerifierExecutionEvidence(pass)) tally.verifierPassCount += 1;
+		// The schema restricts candidate accounting decisions to
+		// implementation-decision records, so these are single-field checks.
+		if (pass.kind !== "implementation-decision") continue;
+		if (pass.candidateEligibility === "eligible") {
+			tally.candidateEligibleCount += 1;
+		}
+		if (pass.candidateDecision === "used") {
+			tally.candidateUsedDecisionCount += 1;
+		}
+		if (pass.candidateDecision === "serial_required") {
+			tally.candidateSerialRequiredDecisionCount += 1;
+		}
+		if (pass.candidateDecision === "skipped") {
+			tally.skippedCandidateDecisionCount += 1;
+		}
+	}
 	const latestPasses = [...budget.orchestration.latestPasses, ...newPasses];
 	return {
 		...budget,
 		orchestration: {
 			passCount: budget.orchestration.passCount + newPasses.length,
-			workerCount:
-				budget.orchestration.workerCount +
-				newPasses.reduce((total, pass) => total + pass.workerCount, 0),
+			workerCount: budget.orchestration.workerCount + tally.workerCount,
 			candidatePassCount:
-				budget.orchestration.candidatePassCount +
-				newPasses.filter(passUsesCandidate).length,
+				budget.orchestration.candidatePassCount + tally.candidatePassCount,
 			verifierPassCount:
-				budget.orchestration.verifierPassCount +
-				newPasses.filter(passUsesVerifier).length,
+				budget.orchestration.verifierPassCount + tally.verifierPassCount,
+			candidateEligibleCount:
+				budget.orchestration.candidateEligibleCount +
+				tally.candidateEligibleCount,
+			candidateUsedDecisionCount:
+				budget.orchestration.candidateUsedDecisionCount +
+				tally.candidateUsedDecisionCount,
+			candidateSerialRequiredDecisionCount:
+				budget.orchestration.candidateSerialRequiredDecisionCount +
+				tally.candidateSerialRequiredDecisionCount,
 			skippedCandidateDecisionCount:
 				budget.orchestration.skippedCandidateDecisionCount +
-				newPasses.filter(
-					(pass) =>
-						pass.kind === "implementation-decision" &&
-						pass.decision === "skipped",
-				).length,
+				tally.skippedCandidateDecisionCount,
+			recordedPassIds: [
+				...budget.orchestration.recordedPassIds,
+				...newPasses.map((pass) => pass.id),
+			],
 			latestPasses:
 				latestPasses.length > MAX_LATEST_ORCHESTRATION_PASSES
 					? latestPasses.slice(

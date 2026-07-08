@@ -35,9 +35,16 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
   `candidate-worktree`, `tournament`, or `skipped`. Use
   `../flow/references/parallel-orchestration.md` for the decision rules,
   manifest fields, and compact `orchestrationPasses` record.
-- If candidate workers are skipped, record the reason, such as overlapping
-  targets, shared contracts, missing isolation, or no explicit authorization
-  for worker edits.
+- Classify `candidateEligibility` (`eligible`, `not_eligible`, or `unknown`)
+  and `candidateDecision` (`used`, `skipped`, or `serial_required`) separately;
+  implementation decisions must use `eligible` or `not_eligible` and always set
+  an explicit `decision`. The valid pairings and the candidate execution
+  evidence rules are in `../flow/references/parallel-orchestration.md` under
+  "Implementation pass decision" — follow that reference when composing the
+  record.
+- Record structured `decisionFactors`: `shared_state`, `overlapping_files`,
+  `small_slice`, `needs_manager_judgment`, `independent_surface`, and
+  `validation_available`.
 - Keep edits scoped to the active feature. If new scope appears, stop and replan or defer it to another feature.
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
@@ -70,7 +77,8 @@ manager decides what is strong enough to record.
 For independent implementation attempts, use candidate workers only with
 explicit user authorization plus isolated worktrees or exact non-overlapping
 path ownership. Treat their output as candidate patches. The manager inspects,
-merges, validates, and records Flow state serially.
+merges or rejects, validates, and records Flow state serially. Record whether a
+candidate was `accepted`, `modified`, or `rejected`.
 When a candidate pass or serial/skipped implementation decision materially
 shaped the feature, include its compact record in
 `flow_feature_complete.orchestrationPasses`. Do not paste full worker handoffs
@@ -128,6 +136,9 @@ Complete with:
       "kind": "implementation-decision",
       "decision": "serial",
       "decisionReason": "Shared contract edits made worker ownership unsafe.",
+      "candidateEligibility": "not_eligible",
+      "candidateDecision": "serial_required",
+      "decisionFactors": ["shared_state", "overlapping_files"],
       "writeScope": "manager-serial",
       "verificationStatus": "not-needed",
       "outcome": "accepted"
