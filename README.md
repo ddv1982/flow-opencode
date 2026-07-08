@@ -17,8 +17,8 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@4.3.5 --global --force
-npx -y opencode-plugin-flow@4.3.5 sync
+opencode plugin opencode-plugin-flow@4.3.6 --global --force
+npx -y opencode-plugin-flow@4.3.6 sync
 ```
 
 Restart OpenCode, then give Flow a goal:
@@ -143,7 +143,7 @@ To update a pinned Flow version, rerun the install command with the new
 version. To inspect skill health:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.5 doctor
+npx -y opencode-plugin-flow@4.3.6 doctor
 ```
 
 ## Experimental: compaction context

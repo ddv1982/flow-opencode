@@ -30,10 +30,11 @@ Runtime must enforce:
 
 `.flow/session.json` is the active source of truth. `.flow/opencode-instructions.md` is an ignored generated projection for OpenCode's stable `config.instructions` path; it must always be rebuildable from the active session and never becomes authoritative state. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state and generated projections are ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, and other projection caches are intentionally not runtime state.
 
-Budget and retry telemetry in the session ledger records feature-count phase
-boundaries, review counts, failed review counts, per-feature failed review
-attempts, and host token telemetry status. OpenCode does not currently expose
-per-turn token usage through the plugin surface Flow uses, so token fields stay
+Budget and retry telemetry in the session ledger records completed feature
+counts, review counts, failed review counts, per-feature failed review attempts,
+and host token telemetry status. Feature count is telemetry only and must not
+stop an approved plan by itself. OpenCode does not currently expose per-turn
+token usage through the plugin surface Flow uses, so token fields stay
 `host_unavailable` until a supported host API exists. Do not invent token counts
 inside runtime state.
 
@@ -66,6 +67,16 @@ future helper-skill access must be an intentional worker-specific allowlist.
 Parallel workers produce candidate evidence only. Flow remains a serial state
 machine: the manager checks handoffs, verifies important claims, synthesizes one
 artifact, and owns every state-changing tool call.
+
+Empty or unstructured worker output is a failed handoff, not success. The
+manager must re-task, cover the slice directly, or carry it as not-covered.
+
+Hidden Flow workers may be routed to installation-specific OpenCode models with
+environment variables. Use `OPENCODE_FLOW_READONLY_WORKER_MODEL` for evidence,
+validation, and audit workers; `OPENCODE_FLOW_REVIEW_WORKER_MODEL` for reviewer
+and verifier workers; `OPENCODE_FLOW_CANDIDATE_WORKER_MODEL` for candidate
+implementation workers; and `OPENCODE_FLOW_WORKER_MODEL` as a fallback for all
+hidden Flow workers. Leave them unset when the provider/model ID is unknown.
 
 Tools:
 
@@ -189,6 +200,14 @@ environment blank unless the GitHub workflow starts using an environment.
 The normal release path is: commit the versioned release changes, push `main`,
 then create and push a fresh `vX.Y.Z` tag. Avoid moving existing release tags
 unless a maintainer explicitly chooses that rollback or repair path.
+
+After pushing the tag, monitor both the tag-triggered Release workflow and the
+branch-triggered CI workflow for the release commit before declaring the release
+healthy:
+
+```bash
+bun run release:monitor -- --commit <main-sha> --tag vX.Y.Z
+```
 
 ## Checks
 

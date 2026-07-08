@@ -24,7 +24,6 @@ type CompletedWorkerResult = Extract<WorkerResult, { status: "ok" }>;
 // session.json without limit (every mutation re-reads/re-validates the whole
 // file). The cap is generous; only pathological loops ever reach it.
 const MAX_HISTORY_ENTRIES = 500;
-const MAX_FEATURES_PER_PHASE = 3;
 const MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE = 2;
 
 const FEATURE_REVIEW_DEPTH_RANK: Record<FeatureReviewDepth, number> = {
@@ -375,6 +374,30 @@ function activeFeature(session: Session, featureId: string): Feature | null {
 	);
 }
 
+function featureLabel(feature: Feature): string {
+	return `${feature.id} (${feature.title})`;
+}
+
+function statusLine(
+	session: Session,
+	features: readonly Feature[],
+	active: Feature | null,
+	next: Feature | null,
+	completedCount: number,
+): string {
+	if (features.length === 0) return `Status ${session.status}; no plan saved.`;
+	const progress = `Progress ${completedCount}/${features.length}`;
+	if (active) return `${progress}; active: ${featureLabel(active)}.`;
+	if (next) return `${progress}; next: ${featureLabel(next)}.`;
+	const unfinished = features.filter(
+		(feature) => feature.status !== "completed",
+	);
+	if (unfinished.length > 0) {
+		return `${progress}; remaining: ${unfinished.map(featureLabel).join(", ")}.`;
+	}
+	return `${progress}; all planned features are complete.`;
+}
+
 function reviewDepthMeetsRequirement(
 	actual: FeatureReviewDepth,
 	required: FeatureReviewDepth,
@@ -598,7 +621,6 @@ function clearFailedReviewAttempts(
 function completionBudget(
 	session: Session,
 	worker: CompletedWorkerResult,
-	allComplete: boolean,
 ): BudgetTelemetry {
 	const budget = clearFailedReviewAttempts(
 		normalizeBudgetTelemetry(session),
@@ -607,21 +629,11 @@ function completionBudget(
 	const completedFeaturesSinceBoundary =
 		budget.completedFeaturesSinceBoundary + 1;
 	const reviewCount = budget.reviewCount + (worker.finalReview ? 2 : 1);
-	const reachedFeatureLimit =
-		!allComplete && completedFeaturesSinceBoundary >= MAX_FEATURES_PER_PHASE;
 	return {
 		...budget,
 		completedFeaturesSinceBoundary,
 		reviewCount,
-		phaseBoundary: reachedFeatureLimit
-			? {
-					reason: "feature_limit",
-					summary: `Completed ${completedFeaturesSinceBoundary} features since the last Flow checkpoint. Stop this OpenCode session and resume from .flow/session.json in a fresh session.`,
-					resumeInstructions:
-						"Start a fresh OpenCode session in this workspace, call flow_status, then call flow_run_start with phaseBoundaryAck: true to begin the next phase.",
-					recordedAt: nowIso(),
-				}
-			: budget.phaseBoundary,
+		phaseBoundary: budget.phaseBoundary,
 	};
 }
 
@@ -707,7 +719,7 @@ export function completeFeature(
 		(feature) => feature.status === "completed",
 	);
 	const now = nowIso();
-	const budget = completionBudget(session, worker, allComplete);
+	const budget = completionBudget(session, worker);
 	return ok(
 		touch({
 			...session,
@@ -867,6 +879,11 @@ export function summarizeSession(session: Session | null) {
 	const active = session.activeFeatureId
 		? features.find((feature) => feature.id === session.activeFeatureId)
 		: null;
+	const next = nextRunnableFeature(features);
+	const nextFeature = next.ok ? next.value : null;
+	const pendingFeatures = features.filter(
+		(feature) => feature.status !== "completed",
+	);
 	const budget = normalizeBudgetTelemetry(session);
 	return {
 		status: session.status,
@@ -876,6 +893,13 @@ export function summarizeSession(session: Session | null) {
 			blockedEntry?.summary ??
 			session.plan?.summary ??
 			"Flow session is active.",
+		statusSummary: statusLine(
+			session,
+			features,
+			active ?? null,
+			nextFeature,
+			completed.length,
+		),
 		nextAction: nextAction(session),
 		// The goal, summaries, and other fields below are workflow state read
 		// verbatim from `.flow/session.json` (which a cloned repo can ship).
@@ -888,7 +912,13 @@ export function summarizeSession(session: Session | null) {
 			status: session.status,
 			approval: session.approval,
 			activeFeature: active ?? null,
-			progress: { completed: completed.length, total: features.length },
+			nextFeature,
+			pendingFeatures,
+			progress: {
+				completed: completed.length,
+				total: features.length,
+				remaining: features.length - completed.length,
+			},
 			features,
 			budget: {
 				phaseStartedAt: budget.phaseStartedAt,
@@ -900,7 +930,7 @@ export function summarizeSession(session: Session | null) {
 					...budget.tokenTelemetry,
 					note:
 						budget.tokenTelemetry.source === "host_unavailable"
-							? "OpenCode does not expose per-turn usage to this plugin surface; Flow can enforce feature/review checkpoints, but token thresholds remain manager-observed."
+							? "OpenCode does not expose per-turn usage to this plugin surface; Flow can enforce review checkpoints, but token thresholds remain manager-observed."
 							: undefined,
 				},
 				phaseBoundary: budget.phaseBoundary,
@@ -932,12 +962,20 @@ export function summarizeSession(session: Session | null) {
 function nextAction(session: Session): string {
 	if (!session.plan) return "Save a plan with flow_plan_save.";
 	if (session.approval !== "approved") return "Approve the plan.";
-	if (session.budget.phaseBoundary) {
+	const budget = normalizeBudgetTelemetry(session);
+	if (budget.phaseBoundary) {
 		return "Start a fresh OpenCode session, call flow_status, then acknowledge the phase boundary with flow_run_start.";
 	}
-	if (session.status === "ready") return "Start the next feature.";
+	if (session.status === "ready") {
+		const next = nextRunnableFeature(session.plan.features);
+		return next.ok
+			? `Start the next feature: ${featureLabel(next.value)}.`
+			: "No runnable feature is available; inspect feature dependencies or reset blocked work.";
+	}
 	if (session.status === "running")
-		return "Complete or reset the active feature.";
+		return session.activeFeatureId
+			? `Complete or reset the active feature: ${session.activeFeatureId}.`
+			: "Complete or reset the active feature.";
 	if (session.status === "blocked")
 		return "Reset the blocked feature or close the session.";
 	if (session.status === "completed")

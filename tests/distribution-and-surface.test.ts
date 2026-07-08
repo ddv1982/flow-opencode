@@ -399,6 +399,49 @@ describe("Flow distribution and plugin surface", () => {
 		});
 	});
 
+	test("applies optional worker model routing by worker class", () => {
+		const previous = {
+			OPENCODE_FLOW_WORKER_MODEL: process.env.OPENCODE_FLOW_WORKER_MODEL,
+			OPENCODE_FLOW_READONLY_WORKER_MODEL:
+				process.env.OPENCODE_FLOW_READONLY_WORKER_MODEL,
+			OPENCODE_FLOW_REVIEW_WORKER_MODEL:
+				process.env.OPENCODE_FLOW_REVIEW_WORKER_MODEL,
+			OPENCODE_FLOW_CANDIDATE_WORKER_MODEL:
+				process.env.OPENCODE_FLOW_CANDIDATE_WORKER_MODEL,
+		};
+		try {
+			process.env.OPENCODE_FLOW_WORKER_MODEL = "test/fallback";
+			process.env.OPENCODE_FLOW_READONLY_WORKER_MODEL = "test/fast-readonly";
+			process.env.OPENCODE_FLOW_REVIEW_WORKER_MODEL = "test/review";
+			process.env.OPENCODE_FLOW_CANDIDATE_WORKER_MODEL = "test/candidate";
+
+			const config = createFlowCoreConfigEntries();
+			expect(
+				(config.agent["flow-evidence-worker"] as { model?: string }).model,
+			).toBe("test/fast-readonly");
+			expect(
+				(config.agent["flow-validation-worker"] as { model?: string }).model,
+			).toBe("test/fast-readonly");
+			expect((config.agent["flow-reviewer"] as { model?: string }).model).toBe(
+				"test/review",
+			);
+			expect(
+				(config.agent["flow-verifier-worker"] as { model?: string }).model,
+			).toBe("test/review");
+			expect(
+				(config.agent["flow-candidate-worker"] as { model?: string }).model,
+			).toBe("test/candidate");
+		} finally {
+			for (const [name, value] of Object.entries(previous)) {
+				if (value === undefined) {
+					delete process.env[name];
+				} else {
+					process.env[name] = value;
+				}
+			}
+		}
+	});
+
 	test("uses runtime-backed OpenCode tool argument schemas", () => {
 		const tools = createTools({});
 
@@ -531,6 +574,10 @@ describe("Flow distribution and plugin surface", () => {
 			expect(normalizedPrompt, `${agentName} prompt fails closed`).toContain(
 				"report blocked if",
 			);
+			expect(
+				normalizedPrompt,
+				`${agentName} prompt rejects empty handoffs`,
+			).toContain("empty or unstructured output is a failed handoff");
 		}
 	});
 
@@ -570,6 +617,11 @@ describe("Flow distribution and plugin surface", () => {
 		expect(orchestration).toContain(
 			"The\nmanager copies the matching handoff template into every worker prompt",
 		);
+		expect(handoff).toContain(
+			"Empty or unstructured worker output is a failed handoff",
+		);
+		expect(orchestration).toContain("returns empty or unstructured output");
+		expect(orchestration).toContain("OPENCODE_FLOW_READONLY_WORKER_MODEL");
 
 		const disallowedTerm = ["w", "a", "v", "e"].join("");
 		for (const [name, text] of [

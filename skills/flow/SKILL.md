@@ -79,14 +79,14 @@ Planning and running require loaded Flow tools; do not simulate plan approval or
 
 ## Budget And Retry Boundaries
 
-Flow can enforce review retry counts and feature-count phase boundaries in the
-runtime ledger. The current OpenCode plugin surface does not expose per-turn
-token usage to Flow; when usage is visible in the host UI or logs, stop the
-current autonomous loop once the root session is large enough to threaten
-latency or cost and report a compact handoff instead of continuing. Treat high
-visible tokens, high non-cache tokens, or repeated reviewer fan-out as a reason
-to finish the current feature, emit the resume packet, and continue in a fresh
-session.
+Flow enforces review retry counts in the runtime ledger and tracks completed
+feature counts as telemetry only. The current OpenCode plugin surface does not
+expose per-turn token usage to Flow; when usage is visible in the host UI or
+logs, stop the current autonomous loop once the root session is large enough to
+threaten latency or cost and report a compact handoff instead of continuing.
+Treat high visible tokens, high non-cache tokens, or repeated reviewer fan-out
+as a reason to finish the current feature, emit the resume packet, and continue
+in a fresh session.
 
 ## Recovery
 

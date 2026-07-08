@@ -76,10 +76,15 @@ carry the permission boundaries for each mode.
 | `verifier` | `flow-verifier-worker` | Per-claim verdicts against cited evidence or commands | No | `flow_status` only if needed |
 | `candidate-implementation` | `flow-candidate-worker` | Candidate patch summary from an isolated worktree or exact path-owned slice | Only with explicit user authorization plus isolation or exact non-overlapping path ownership | No state-changing Flow tools |
 
-If the runtime exposes per-worker model or effort choices, spend them where
-being wrong is expensive: read-heavy discovery slices tolerate the cheapest
-configured option, while verifier and review slices deserve the strongest.
-Otherwise route by scope: give weaker slices narrower, more countable scope.
+Use worker-specific model routing where the installation can support it:
+`OPENCODE_FLOW_READONLY_WORKER_MODEL` for evidence, validation, and audit
+workers; `OPENCODE_FLOW_REVIEW_WORKER_MODEL` for reviewer and verifier workers;
+`OPENCODE_FLOW_CANDIDATE_WORKER_MODEL` for candidate implementation workers; and
+`OPENCODE_FLOW_WORKER_MODEL` as a fallback for all hidden Flow workers. Model IDs
+are OpenCode installation-specific (`provider/model`), so leave these unset when
+the configured provider is unknown. Spend stronger models where being wrong is
+expensive; read-heavy discovery slices tolerate the cheapest configured option,
+while verifier and review slices deserve the strongest.
 
 ## Permission contract
 
@@ -180,8 +185,9 @@ Continue non-overlapping manager work while workers run.
 ## Stage 5 — Account
 
 Check every manifest row off against a returned handoff before synthesis. A
-worker that never returns, errors out, or reports `partial` or `blocked` is a
-hole in the pass, and synthesizing around it silently drops a slice.
+worker that never returns, errors out, returns empty or unstructured output, or
+reports `partial` or `blocked` is a hole in the pass, and synthesizing around it
+silently drops a slice.
 
 Worker failure ladder:
 
@@ -196,7 +202,8 @@ Worker failure ladder:
 `Status: success` only says the worker believes its slice is done. Accept a
 handoff only after a cheap manager-side pass:
 
-- `Status` is present and terminal: `success`, `partial`, or `blocked`.
+- `Status` is present and terminal: `success`, `partial`, or `blocked`; empty or
+  unstructured output fails this check.
 - Coverage matches the assigned slice, or skips are explicit.
 - Important claims have concrete evidence and confidence tags.
 - Cited paths, commands, screenshots, URLs, or metrics resolve.

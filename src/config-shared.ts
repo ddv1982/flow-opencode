@@ -13,6 +13,7 @@ export type FlowAgentConfig = {
 	description: string;
 	prompt: string;
 	hidden?: boolean;
+	model?: string;
 	permission?: FlowPermissionConfig;
 };
 
@@ -144,7 +145,7 @@ const FLOW_REVIEW_COMMAND_TEMPLATE = flowBundledCommandTemplate(
 const FLOW_REVIEW_AGENT_INSTRUCTIONS = [
 	"Use Flow review mode. Call `flow_status` first. Do not call the native skill tool for `flow-review`; the canonical Flow review instructions and rubric are already embedded below. If Flow setup reports stale/unavailable skills, continue as advisory review only and do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
 	"Prefer the manager's compact review packet over the accumulated root transcript. Return feature review packets with `featureReviewDepth` plus `featureReview`; final reviews still return `finalReview` with `reviewDepth`.",
-	"When the manager assigns a parallel review slice instead of a direct Flow review command, cite or drop every claim, label single-source, inferred, and unsettled claims, and return only the assigned Flow handoff. Report blocked if the assigned scope, expected coverage, or handoff shape is missing.",
+	"When the manager assigns a parallel review slice instead of a direct Flow review command, cite or drop every claim, label single-source, inferred, and unsettled claims, and return only the assigned Flow handoff. Report blocked if the assigned scope, expected coverage, or handoff shape is missing. Empty or unstructured output is a failed handoff; return blocked with the missing elements instead.",
 	"",
 	"## Bundled Flow review instructions",
 	"",
@@ -163,7 +164,23 @@ const FLOW_PUBLIC_COMMAND_TEMPLATES = {
 } as const;
 
 const FLOW_WORKER_HANDOFF_CONTRACT =
-	"Return only the assigned Flow handoff. Cite or drop every claim, label single-source, inferred, and unsettled claims, and report blocked if the assigned scope, expected coverage, or handoff shape is missing.";
+	"Return only the assigned Flow handoff. Cite or drop every claim, label single-source, inferred, and unsettled claims, and report blocked if the assigned scope, expected coverage, or handoff shape is missing. Empty or unstructured output is a failed handoff; return blocked with the missing elements instead.";
+
+function envModel(name: string): string | undefined {
+	const value = process.env[name]?.trim();
+	return value ? value : undefined;
+}
+
+function flowWorkerModel(agentName: string): string | undefined {
+	const fallback = envModel("OPENCODE_FLOW_WORKER_MODEL");
+	if (agentName === "flow-candidate-worker") {
+		return envModel("OPENCODE_FLOW_CANDIDATE_WORKER_MODEL") ?? fallback;
+	}
+	if (agentName === "flow-reviewer" || agentName === "flow-verifier-worker") {
+		return envModel("OPENCODE_FLOW_REVIEW_WORKER_MODEL") ?? fallback;
+	}
+	return envModel("OPENCODE_FLOW_READONLY_WORKER_MODEL") ?? fallback;
+}
 
 // Worker permission maps below use tool-name and wildcard keys (`skill`,
 // `task`, `flow_*`, `flow_status`) that are NOT in the SDK's simplified
@@ -303,10 +320,12 @@ export function createFlowCoreConfigEntries() {
 								: {}),
 						}
 					: undefined;
+				const model = flowWorkerModel(name);
 				return [
 					name,
 					{
 						...value,
+						...(model ? { model } : {}),
 						...(permission ? { permission } : {}),
 					},
 				];

@@ -376,7 +376,7 @@ describe("Flow runtime gates", () => {
 		expect((await flowStatus(workspace)).status).toBe("blocked");
 	});
 
-	test("phase boundary requires explicit continuation acknowledgement", async () => {
+	test("does not stop a plan after three completed features", async () => {
 		const workspace = await tempWorkspace();
 		await flowPlanSave(workspace, {
 			goal: "Deliver a four-feature change",
@@ -398,25 +398,48 @@ describe("Flow runtime gates", () => {
 
 		const status = await flowStatus(workspace);
 		expect(status.status).toBe("ready");
+		expect(String(status.statusSummary)).toContain("Progress 3/4");
+		expect(String(status.statusSummary)).toContain("feature-four");
+		expect(String(status.nextAction)).toContain("feature-four");
 		expect(
-			(status.session as { budget: { phaseBoundary: { reason: string } } })
-				.budget.phaseBoundary.reason,
-		).toBe("feature_limit");
-		const blockedStart = await flowRunStart(workspace, {});
-		expect(blockedStart.status).toBe("error");
-		expect(String(blockedStart.recovery)).toContain("fresh OpenCode session");
-
-		const resumedStart = await flowRunStart(workspace, {
-			phaseBoundaryAck: true,
-		});
-		expect(resumedStart.status).toBe("ok");
+			(status.session as { nextFeature: { id: string } | null }).nextFeature
+				?.id,
+		).toBe("feature-four");
 		expect(
 			(
-				(await flowStatus(workspace)).session as {
+				status.session as {
+					pendingFeatures: Array<{ id: string }>;
+					progress: { remaining: number };
+				}
+			).pendingFeatures.map((feature) => feature.id),
+		).toEqual(["feature-four"]);
+		expect(
+			(
+				status.session as {
+					pendingFeatures: Array<{ id: string }>;
+					progress: { remaining: number };
+				}
+			).progress.remaining,
+		).toBe(1);
+		expect(
+			(status.session as { budget: { phaseBoundary: unknown } }).budget
+				.phaseBoundary,
+		).toBeNull();
+
+		const nextStart = await flowRunStart(workspace, {});
+		expect(nextStart.status).toBe("ok");
+		const runningStatus = await flowStatus(workspace);
+		expect(String(runningStatus.statusSummary)).toContain(
+			"active: feature-four",
+		);
+		expect(String(runningStatus.nextAction)).toContain("feature-four");
+		expect(
+			(
+				runningStatus.session as {
 					budget: { completedFeaturesSinceBoundary: number };
 				}
 			).budget.completedFeaturesSinceBoundary,
-		).toBe(0);
+		).toBe(3);
 	});
 
 	test("final feature requires broad validation and final review", async () => {
@@ -653,9 +676,12 @@ describe("Flow runtime gates", () => {
 			(status.session as { activeFeature: unknown }).activeFeature,
 		).toBeNull();
 		expect(
-			(status.session as { progress: { completed: number; total: number } })
-				.progress,
-		).toEqual({ completed: 0, total: 2 });
+			(
+				status.session as {
+					progress: { completed: number; total: number; remaining: number };
+				}
+			).progress,
+		).toEqual({ completed: 0, total: 2, remaining: 2 });
 		expect(
 			(status.session as { closure: null; timestamps: { completedAt: null } })
 				.closure,

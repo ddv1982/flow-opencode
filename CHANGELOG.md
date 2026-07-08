@@ -2,6 +2,24 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.6] - 2026-07-08
+
+Phase-continuity lore removes the rough stop after three completed features and
+adds sharper handoffs around long Flow sessions:
+
+- Completed feature counts are now telemetry only; approved plans keep moving to
+  the next runnable feature instead of requiring a fresh session after three
+  completions.
+- `flow_status` now includes a human-readable progress line, `nextFeature`,
+  `pendingFeatures`, and remaining feature count so resumed sessions name the
+  exact next slice.
+- Hidden worker prompts now fail closed on empty or unstructured handoffs, and
+  worker model routing can be configured with `OPENCODE_FLOW_*_WORKER_MODEL`
+  environment variables.
+- Release publishing now has `bun run release:monitor`, which watches the
+  release commit's CI and tag-triggered Release workflow before declaring the
+  release healthy.
+
 ## [4.3.5] - 2026-07-08
 
 Flow now stops long autonomous loops more deliberately without making reviews
