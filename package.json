@@ -61,6 +61,6 @@
 		"@biomejs/biome": "^2.2.6",
 		"@opencode-ai/plugin": "1.17.3",
 		"bun-types": "latest",
-		"typescript": "^6.0.2"
+		"typescript": "^7.0.2"
 	}
 }
