@@ -30,6 +30,13 @@ skills/flow/references/
 
 The plugin injects hidden agents into OpenCode config through `applyFlowConfig` in `src/config-shared.ts`. Worker permissions deny Flow state-changing tools and, for most workers, deny edits and native skill loading. Candidate workers can ask for edit and shell permissions, but only when a manager assigns isolated worktrees or exact non-overlapping paths.
 
+The manager records implementation pass decisions explicitly: serial,
+candidate exact-path, candidate worktree, tournament, or skipped. Compact pass
+records may be included in `flow_feature_complete.orchestrationPasses`; the
+runtime aggregates counts and recent pass summaries under
+`session.budget.orchestration`, while full worker handoffs stay outside
+`.flow/**`.
+
 ## Integration points
 
 `skills/flow/SKILL.md`, `skills/flow-plan/SKILL.md`, `skills/flow-run/SKILL.md`, and `skills/flow-review/SKILL.md` all refer to the parallel orchestration references for broad discovery, validation, review, and implementation attempts. The manager remains responsible for claim verification and every `flow_*` state call.

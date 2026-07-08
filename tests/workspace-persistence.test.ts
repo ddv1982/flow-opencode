@@ -171,6 +171,8 @@ describe("Flow workspace persistence", () => {
 
 		const session = await loadSession(workspace);
 		expect(session?.budget.tokenTelemetry.source).toBe("host_unavailable");
+		expect(session?.budget.orchestration.passCount).toBe(0);
+		expect(session?.budget.orchestration.latestPasses).toEqual([]);
 		expect(session?.plan?.features[0]?.reviewDepth).toBe("standard");
 	});
 

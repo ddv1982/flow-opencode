@@ -6,6 +6,7 @@ import {
 	FeatureReviewDepthSchema,
 	FinalReviewSchema,
 	NeedsInputOutcomeSchema,
+	OrchestrationPassRecordSchema,
 	PlanInputSchema,
 	ReviewSchema,
 	ValidationRunSchema,
@@ -73,6 +74,7 @@ export const FlowFeatureCompleteToolSchema = z
 		featureReview: ReviewSchema.optional(),
 		finalReview: FinalReviewSchema.optional(),
 		outcome: z.union([WorkerOutcomeSchema, NeedsInputOutcomeSchema]).optional(),
+		orchestrationPasses: z.array(OrchestrationPassRecordSchema).optional(),
 	})
 	.strict();
 

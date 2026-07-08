@@ -32,11 +32,19 @@ Runtime must enforce:
 
 Budget and retry telemetry in the session ledger records completed feature
 counts, review counts, failed review counts, per-feature failed review attempts,
-and host token telemetry status. Feature count is telemetry only and must not
-stop an approved plan by itself. OpenCode does not currently expose per-turn
-token usage through the plugin surface Flow uses, so token fields stay
-`host_unavailable` until a supported host API exists. Do not invent token counts
-inside runtime state.
+compact orchestration pass accounting, and host token telemetry status. Feature
+count and pass accounting are telemetry only and must not stop an approved plan
+by themselves. OpenCode does not currently expose per-turn token usage through
+the plugin surface Flow uses, so token fields stay `host_unavailable` until a
+supported host API exists. Do not invent token counts inside runtime state.
+
+Runtime pass accounting is deliberately compact: counts, recent pass ids,
+worker counts, candidate/verifier usage, skipped candidate decisions, handoff
+references, verification status, outcome, and synthesis references. Full worker
+handoffs, command logs, transcripts, scratch tables, and standalone manager
+synthesis artifacts stay outside `.flow/**`. Distilled conclusions may enter
+plan prose or completion summaries when they are the Flow artifact being
+recorded.
 
 Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against filesystem roots and `$HOME`.
 

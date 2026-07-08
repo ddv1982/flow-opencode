@@ -34,6 +34,12 @@ success | partial | blocked
 ## Scope
 <owned slice: path set, module, command, risk lens, route, data range, or question set>
 
+## Pass metadata
+- Pass id: <stable pass id from the manifest>
+- Manifest row id: <row id from the manifest>
+- Depends on: <upstream row ids or "none">
+- Write scope: <none | manager-serial | exact-path | isolated-worktree | mixed>
+
 ## Coverage
 - Expected: <files, ranges, questions, commands, or findings assigned>
 - Checked: <actual coverage, for example "12/12 files" or "command not run">
@@ -88,6 +94,11 @@ success | partial | blocked
 ## Scope
 <claim ids, sources or commands checked, and the acceptance question>
 
+## Pass metadata
+- Pass id: <stable pass id from the manifest>
+- Manifest row id: <row id from the manifest>
+- Depends on: <upstream row ids or "none">
+
 ## Verdict per claim
 - <claim id>: verdict=<supported | partly-supported | unsupported | source-not-found>
   - claim: <claim text>
@@ -118,6 +129,12 @@ success | partial | blocked
 ## Scope
 <isolated worktree or exact path-owned slice>
 
+## Pass metadata
+- Pass id: <stable pass id from the manifest>
+- Manifest row id: <row id from the manifest>
+- Depends on: <upstream row ids or "none">
+- Write scope: <exact-path | isolated-worktree>
+
 ## Changed or proposed patch
 - <path>: <what changed and why>
 
@@ -144,3 +161,29 @@ live-verified | test-verified | type-check-only | not-verified
 
 The manager must inspect and validate any candidate patch before recording Flow
 completion.
+
+## Manager pass accounting record
+
+The manager, not the worker, may carry compact records into
+`flow_feature_complete.orchestrationPasses`. Use one record per material pass or
+implementation decision; keep handoffs and long artifacts outside `.flow/**`.
+
+```json
+{
+  "id": "stable-pass-id",
+  "kind": "discovery | audit | review | validation | verification | candidate | implementation-decision",
+  "decision": "serial | parallel | candidate-exact-path | candidate-worktree | tournament | skipped",
+  "decisionReason": "why this pass shape was chosen",
+  "modes": ["evidence"],
+  "workerCount": 1,
+  "candidateWorkerCount": 0,
+  "verifierWorkerCount": 0,
+  "sliceIds": ["manifest-row-id"],
+  "dependsOn": [],
+  "writeScope": "none | manager-serial | exact-path | isolated-worktree | mixed",
+  "handoffRefs": ["/tmp/flow-handoff.md"],
+  "verificationStatus": "not-needed | pending | passed | failed | mixed | downgraded",
+  "outcome": "accepted | rejected | partial | not-covered | superseded",
+  "synthesisRef": "/tmp/flow-synthesis.md"
+}
+```

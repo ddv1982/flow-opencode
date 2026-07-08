@@ -4,6 +4,7 @@ import {
 	type ExecutionHistoryEntry,
 	type Feature,
 	type FeatureReviewDepth,
+	type OrchestrationPassRecord,
 	type Plan,
 	type PlanInput,
 	PlanInputSchema,
@@ -25,6 +26,7 @@ type CompletedWorkerResult = Extract<WorkerResult, { status: "ok" }>;
 // file). The cap is generous; only pathological loops ever reach it.
 const MAX_HISTORY_ENTRIES = 500;
 const MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE = 2;
+const MAX_LATEST_ORCHESTRATION_PASSES = 50;
 
 const FEATURE_REVIEW_DEPTH_RANK: Record<FeatureReviewDepth, number> = {
 	quick: 0,
@@ -58,6 +60,7 @@ function historyEntryFor(
 		featureReview: worker.featureReview,
 		finalReview: worker.finalReview,
 		outcome: worker.outcome,
+		orchestrationPasses: worker.orchestrationPasses,
 	};
 }
 
@@ -73,6 +76,14 @@ function initialBudgetTelemetry(): BudgetTelemetry {
 			visibleTokens: null,
 			cacheReadTokens: null,
 			nonCacheTokens: null,
+		},
+		orchestration: {
+			passCount: 0,
+			workerCount: 0,
+			candidatePassCount: 0,
+			verifierPassCount: 0,
+			skippedCandidateDecisionCount: 0,
+			latestPasses: [],
 		},
 		phaseBoundary: null,
 	};
@@ -90,7 +101,83 @@ function normalizeBudgetTelemetry(session: Session): BudgetTelemetry {
 			...defaults.tokenTelemetry,
 			...session.budget.tokenTelemetry,
 		},
+		orchestration: {
+			...defaults.orchestration,
+			...session.budget.orchestration,
+			latestPasses: [...(session.budget.orchestration?.latestPasses ?? [])],
+		},
 	};
+}
+
+function passUsesCandidate(pass: OrchestrationPassRecord): boolean {
+	return (
+		pass.kind === "candidate" ||
+		pass.modes.includes("candidate-implementation") ||
+		pass.decision === "candidate-exact-path" ||
+		pass.decision === "candidate-worktree" ||
+		pass.decision === "tournament"
+	);
+}
+
+function passUsesVerifier(pass: OrchestrationPassRecord): boolean {
+	return pass.kind === "verification" || pass.modes.includes("verifier");
+}
+
+function recordOrchestrationPasses(
+	budget: BudgetTelemetry,
+	passes: readonly OrchestrationPassRecord[],
+): BudgetTelemetry {
+	if (passes.length === 0) return budget;
+	const seenPassIds = new Set(
+		budget.orchestration.latestPasses.map((pass) => pass.id),
+	);
+	const newPasses: OrchestrationPassRecord[] = [];
+	for (const pass of passes) {
+		if (seenPassIds.has(pass.id)) continue;
+		seenPassIds.add(pass.id);
+		newPasses.push(pass);
+	}
+	if (newPasses.length === 0) return budget;
+	const latestPasses = [...budget.orchestration.latestPasses, ...newPasses];
+	return {
+		...budget,
+		orchestration: {
+			passCount: budget.orchestration.passCount + newPasses.length,
+			workerCount:
+				budget.orchestration.workerCount +
+				newPasses.reduce((total, pass) => total + pass.workerCount, 0),
+			candidatePassCount:
+				budget.orchestration.candidatePassCount +
+				newPasses.filter(passUsesCandidate).length,
+			verifierPassCount:
+				budget.orchestration.verifierPassCount +
+				newPasses.filter(passUsesVerifier).length,
+			skippedCandidateDecisionCount:
+				budget.orchestration.skippedCandidateDecisionCount +
+				newPasses.filter(
+					(pass) =>
+						pass.kind === "implementation-decision" &&
+						pass.decision === "skipped",
+				).length,
+			latestPasses:
+				latestPasses.length > MAX_LATEST_ORCHESTRATION_PASSES
+					? latestPasses.slice(
+							latestPasses.length - MAX_LATEST_ORCHESTRATION_PASSES,
+						)
+					: latestPasses,
+		},
+	};
+}
+
+function sessionWithOrchestrationPasses(
+	session: Session,
+	passes: readonly OrchestrationPassRecord[],
+): Session {
+	const budget = recordOrchestrationPasses(
+		normalizeBudgetTelemetry(session),
+		passes,
+	);
+	return budget === session.budget ? session : { ...session, budget };
 }
 
 function ok<T>(value: T): TransitionResult<T> {
@@ -665,13 +752,17 @@ export function completeFeature(
 			`Worker result feature '${worker.featureId}' does not match active feature '${session.activeFeatureId}'.`,
 		);
 	}
+	const sessionWithPasses = sessionWithOrchestrationPasses(
+		session,
+		worker.orchestrationPasses,
+	);
 
 	if (worker.status === "needs_input") {
 		const entry = historyEntryFor(worker, "needs_input");
-		const budget = normalizeBudgetTelemetry(session);
+		const budget = normalizeBudgetTelemetry(sessionWithPasses);
 		return ok(
 			touch({
-				...session,
+				...sessionWithPasses,
 				status: "blocked",
 				activeFeatureId: null,
 				plan: {
@@ -682,7 +773,7 @@ export function completeFeature(
 						"blocked",
 					),
 				},
-				history: appendHistory(session.history, entry),
+				history: appendHistory(sessionWithPasses.history, entry),
 				budget,
 				lastError: null,
 			}),
@@ -691,7 +782,7 @@ export function completeFeature(
 
 	if (!isPassingReview(worker.featureReview)) {
 		return failedReviewCompletion(
-			session,
+			sessionWithPasses,
 			worker,
 			worker.featureReview,
 			"feature",
@@ -699,14 +790,19 @@ export function completeFeature(
 	}
 
 	if (
-		finalFeature(session, worker.featureId) &&
+		finalFeature(sessionWithPasses, worker.featureId) &&
 		worker.finalReview &&
 		!isPassingReview(worker.finalReview)
 	) {
-		return failedReviewCompletion(session, worker, worker.finalReview, "final");
+		return failedReviewCompletion(
+			sessionWithPasses,
+			worker,
+			worker.finalReview,
+			"final",
+		);
 	}
 
-	const validation = validateCompletion(session, worker);
+	const validation = validateCompletion(sessionWithPasses, worker);
 	if (!validation.ok) return validation;
 
 	const entry = historyEntryFor(worker, "completed");
@@ -719,22 +815,24 @@ export function completeFeature(
 		(feature) => feature.status === "completed",
 	);
 	const now = nowIso();
-	const budget = completionBudget(session, worker);
+	const budget = completionBudget(sessionWithPasses, worker);
 	return ok(
 		touch({
-			...session,
+			...sessionWithPasses,
 			status: allComplete ? "completed" : "ready",
 			activeFeatureId: null,
 			plan: { ...session.plan, features },
-			history: appendHistory(session.history, entry),
+			history: appendHistory(sessionWithPasses.history, entry),
 			budget,
 			closure: allComplete
 				? { kind: "completed", summary: worker.summary, recordedAt: now }
 				: null,
 			lastError: null,
 			timestamps: {
-				...session.timestamps,
-				completedAt: allComplete ? now : session.timestamps.completedAt,
+				...sessionWithPasses.timestamps,
+				completedAt: allComplete
+					? now
+					: sessionWithPasses.timestamps.completedAt,
 			},
 		}),
 	);
@@ -926,6 +1024,7 @@ export function summarizeSession(session: Session | null) {
 				reviewCount: budget.reviewCount,
 				failedReviewCount: budget.failedReviewCount,
 				failedReviewAttemptsByFeature: budget.failedReviewAttemptsByFeature,
+				orchestration: budget.orchestration,
 				tokenTelemetry: {
 					...budget.tokenTelemetry,
 					note:

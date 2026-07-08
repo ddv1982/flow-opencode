@@ -98,6 +98,11 @@ to execute.
   validation entry should name the expected test level, such as targeted unit,
   integration, browser/e2e, package/build, docs/static, cleanup preservation, or
   broad project gate.
+- When a feature may benefit from parallel implementation, make `targets`
+  precise enough for later ownership decisions: name exact modules, docs,
+  commands, or route groups, and use `dependsOn` to preserve prerequisite order.
+  Broad shared-contract work should stay in one feature or an earlier foundation
+  feature so later candidate passes can own disjoint paths safely.
 - Assign `reviewDepth` from risk. Use `detailed` for persistence, migration,
   concurrency, security, final-delivery-adjacent, or cross-module slices; use
   `standard` for normal code changes; reserve `quick` for low-risk non-behavioral

@@ -47,6 +47,35 @@ Pass notes:
   or exact non-overlapping path ownership. Patches stay proposals until the
   manager inspects, merges or rejects, and validates.
 
+## Implementation pass decision
+
+Before implementing a broad, risky, or multi-target feature, record one manager
+decision. This is required even when the answer is "stay serial"; the point is
+to make the skipped parallelism visible instead of relying on memory.
+
+Use one of these decisions:
+
+- `serial`: the manager implements directly because slices overlap, the next
+  edit depends on one shared contract, or prompt/merge overhead would exceed the
+  value.
+- `candidate-exact-path`: one or more candidate workers may edit exact
+  non-overlapping paths or modules named by the manager.
+- `candidate-worktree`: one or more candidate workers may edit in isolated
+  worktrees, then the manager inspects and merges or rejects.
+- `tournament`: several isolated candidate implementations compete for the same
+  outcome; the manager filters by tests, review, and source inspection before
+  accepting one.
+- `skipped`: candidate workers were considered but rejected; include the reason,
+  such as shared fixtures, shared API contracts, unclear ownership, or no user
+  authorization for worker edits.
+
+Record the decision in the pass manifest with a stable pass id,
+`decisionReason`, `writeScope`, expected verification, and where any handoff or
+synthesis artifact will live. If the feature completes, include the compact
+record in the `orchestrationPasses` array of the `flow_feature_complete`
+payload. The runtime stores only compact accounting; full worker handoffs stay
+in manager-owned scratch files or the conversation.
+
 ## When to stay serial
 
 - One file, command, or design question determines the next step.
@@ -122,6 +151,12 @@ schemas, docs, tests, commands, or artifacts to identify real slices. Keep the
 immediate blocker local: do not delegate the question that determines whether
 fan-out is even valid.
 
+Treat orientation as uncertainty reduction. Resolve environment uncertainty by
+inspecting the repo, running cheap commands, or assigning evidence workers; ask
+the user only when the remaining specification uncertainty would make a wrong
+slice expensive to undo. Do not split a vague goal into workers until the
+candidate slices have concrete targets, dependencies, and verification signals.
+
 ## Stage 2 — Slice
 
 Split along whichever axis keeps slices independent: modules or path sets,
@@ -129,14 +164,29 @@ route or endpoint groups, risk lenses, command surfaces, data ranges, or claim
 sets. Each slice needs a one-line scope, expected coverage, and a defined
 output the manager can check.
 
+For implementation slices, also name dependencies and write ownership before
+spawning. A real dependency edge means the later slice waits for a verified
+handoff or manager synthesis from the earlier slice; a shared file, fixture,
+schema, or public contract usually means the work should stay serial unless an
+isolated worktree is used. The manifest owns those edges through `dependsOn`
+and `writeScope`.
+
 ## Stage 3 — Manifest (the pre-fan-out coverage gate)
 
 Before spawning, write a pass manifest: one row per slice, plus a totals check.
+Give the pass a stable id so later handoffs, verifier claims, and completion
+payloads can refer to the same work without replaying chat.
 
-| # | Slice scope | Expected coverage | Mode | Verification tier |
-| --- | --- | --- | --- | --- |
-| 1 | `src/core/**` plus its tests | 14 files | `evidence` | accept locally |
-| 2 | release contract: CI workflows, `package.json`, changelog | 6 files | `evidence` | verify once |
+| Row id | Slice scope | Expected coverage | Mode | Depends on | Write scope | Verification tier | Handoff ref | Verification status | Synthesis ref |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `runtime-read` | `src/core/**` plus its tests | 14 files | `evidence` | none | none | accept locally | pending | pending | pending |
+| `release-read` | release contract: CI workflows, `package.json`, changelog | 6 files | `evidence` | none | none | verify once | pending | pending | pending |
+
+`writeScope` values in runtime accounting are `none`, `manager-serial`,
+`exact-path`, `isolated-worktree`, or `mixed`. Use `manager-serial` for a
+recorded serial implementation decision, `exact-path` for disjoint candidate
+edits in one checkout, and `isolated-worktree` for candidate work that must be
+merged back by the manager.
 
 - Count the total work items when countable: files, modules, routes, commands,
   rows, findings, screenshots, or claims. Confirm slice counts add back to the
@@ -145,10 +195,19 @@ Before spawning, write a pass manifest: one row per slice, plus a totals check.
   "all changed files plus callers" or "all public commands plus release docs."
 - Assign each slice's verification tier now (see Stage 6). Deciding where a
   wrong claim is expensive belongs before handoffs arrive, not after.
+- Record dependency edges now. A row may be spawned only after every `depends on`
+  row it names has returned a verified handoff or a manager synthesis that
+  explicitly settles the dependency.
 - Fix the slice map centrally before spawning if the gate does not reconcile.
 
 The manifest is also the accounting contract for the pass: N rows spawned means
 N handoffs collected and checked in Stage 5 before anything is synthesized.
+
+For implementation decisions, add a manifest row even when no worker is spawned:
+`kind=implementation-decision`, `decision=serial` or `decision=skipped`,
+`workerCount=0`, `writeScope=manager-serial`, and a concrete `decisionReason`.
+This is how Flow distinguishes deliberate serial work from forgotten candidate
+or verifier passes.
 
 Write the manifest where it survives the pass: the conversation is enough for a
 single bounded pass, but when a follow-up pass or a session resume is
@@ -162,8 +221,10 @@ Every worker prompt includes:
 ```text
 Overall goal, context only: <goal>
 Mode: evidence | review | validation | audit | verifier | candidate-implementation
+Pass id and manifest row id: <stable ids from the manifest>
 Your exact slice: <paths, modules, command, claim ids, risk lens, or worktree>
 Expected coverage: <count, paths, range, or complete question set>
+Dependencies and write scope: <verified dependencies, if any; none | manager-serial | exact-path | isolated-worktree>
 Do: <bounded actions>
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
 Return only the Flow handoff in this exact shape:
@@ -189,6 +250,20 @@ worker that never returns, errors out, returns empty or unstructured output, or
 reports `partial` or `blocked` is a hole in the pass, and synthesizing around it
 silently drops a slice.
 
+For each row, fill in:
+
+- `handoffRefs`: worker ids, handoff file paths, command output artifacts, or
+  review packet location that the manager can re-open.
+- `verificationStatus`: `not-needed`, `pending`, `passed`, `failed`, `mixed`,
+  or `downgraded`.
+- `outcome`: `accepted`, `rejected`, `partial`, `not-covered`, or `superseded`.
+- `synthesisRef`: the manager-owned synthesis file or plan field that carries
+  the accepted result forward.
+
+Rows with no worker, such as serial or skipped implementation decisions, still
+need a row id, decision, reason, and outcome. They are not handoffs, but they
+are accounting.
+
 Worker failure ladder:
 
 1. Re-spawn once with a narrower slice and a note about what the first attempt
@@ -210,6 +285,11 @@ handoff only after a cheap manager-side pass:
 - The evidence supports the claim, not just the topic.
 - Findings stay inside the worker's slice.
 - Headline counts can be recounted or traced.
+- Dependency claims cite the verified upstream handoff, synthesis, or source
+  artifact they depend on.
+- Candidate implementation claims identify whether they came from exact path
+  ownership or an isolated worktree, and whether the manager inspected the
+  resulting patch.
 - Contradictions between workers are either resolved or explicitly marked as
   contested.
 
@@ -274,6 +354,38 @@ Where accepted evidence goes:
 - Candidate patches are not Flow evidence until the manager inspects, merges or
   rejects them, and validates the main Flow-managed workspace.
 
+When completing a feature, include compact pass accounting in
+`flow_feature_complete.orchestrationPasses` for any pass or implementation
+decision that materially affected the feature:
+
+```json
+{
+  "id": "feature-id-implementation-decision",
+  "kind": "implementation-decision",
+  "decision": "serial",
+  "decisionReason": "Shared schema and tests made exact path ownership unsafe.",
+  "modes": [],
+  "workerCount": 0,
+  "candidateWorkerCount": 0,
+  "verifierWorkerCount": 0,
+  "sliceIds": ["manager-implementation"],
+  "dependsOn": [],
+  "writeScope": "manager-serial",
+  "handoffRefs": [],
+  "verificationStatus": "not-needed",
+  "outcome": "accepted",
+  "synthesisRef": "/tmp/flow-pass-synthesis.md"
+}
+```
+
+For candidate and verifier passes, use `kind: "candidate"` or
+`kind: "verification"`, list the worker modes used, worker counts, slice ids,
+handoff refs, dependency ids, verification status, and whether the manager
+accepted, rejected, downgraded, or superseded the pass. The runtime aggregates
+these compact records into `session.budget.orchestration` and stores them on
+the feature history entry. Do not store full handoffs, long logs, or scratch
+tables in `.flow/session.json`.
+
 Persist the manifest and the synthesis when another pass may follow or the
 session is long enough to be compacted or resumed: write the distilled result —
 the accounted manifest, accepted claims with evidence and confidence, dropped
@@ -292,6 +404,10 @@ Stop after a pass when:
 - accepted claims are evidenced, scoped, and confidence-labeled.
 - material single-source, contested, high-stakes, or payload-bound claims have
   been verified or downgraded.
+- every dependency edge named in the manifest has either a verified upstream
+  result or an explicit not-covered outcome.
+- implementation pass decisions are recorded, including skipped candidate
+  workers and the reason they were skipped.
 - remaining gaps are explicit and do not block the Flow artifact being produced.
 
 Start a bounded follow-up pass only when:
@@ -299,6 +415,9 @@ Start a bounded follow-up pass only when:
 - the original slice map missed material scope.
 - workers disagree on a claim that affects the Flow decision.
 - a high-stakes or payload-bound claim needs verification.
+- a dependency has just become verified and now unlocks a dependent slice.
+- a candidate patch was rejected and an isolated alternative is still cheaper
+  than serial repair.
 - a first pass exposes a narrower implementation or validation slice worth
   isolating.
 

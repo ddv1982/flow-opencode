@@ -30,15 +30,19 @@ config, or release surfaces in the pass manifest.
 
 Write the pass manifest and the worker prompts exactly as Stages 3 and 4 of
 `../../flow/references/parallel-orchestration.md` define them: one manifest row
-per slice with expected coverage and a verification tier, and a self-contained
-prompt per worker naming the mode (usually `evidence`), the exact slice, and
-the expected coverage. Discovery-specific rules:
+per slice with expected coverage, dependencies, write scope, and a verification
+tier, and a self-contained prompt per worker naming the mode (usually
+`evidence`), the exact slice, and the expected coverage. Discovery-specific
+rules:
 
 - Workers are read-only. For validation-oriented discovery, workers may report
   commands that should be run, and include raw output only for commands they
   actually ran.
 - Workers cannot read reference files themselves; paste the matching handoff
   template from `../../flow/references/handoff-format.md` into the prompt.
+- If discovery finds later features with disjoint path ownership, preserve that
+  fact in feature `targets` and `dependsOn` so execution can make an explicit
+  serial or candidate-pass decision instead of rediscovering ownership.
 
 ## Synthesis
 

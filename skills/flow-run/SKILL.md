@@ -30,6 +30,14 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Read the feature `targets`, `summary`, `validation`, dependencies, and plan `requirements`/`decisions`.
 - Treat the feature's `reviewDepth` as the minimum feature-review depth that
   must be recorded in `flow_feature_complete`.
+- For broad, risky, or multi-target work, record an implementation pass
+  decision before editing: `serial`, `candidate-exact-path`,
+  `candidate-worktree`, `tournament`, or `skipped`. Use
+  `../flow/references/parallel-orchestration.md` for the decision rules,
+  manifest fields, and compact `orchestrationPasses` record.
+- If candidate workers are skipped, record the reason, such as overlapping
+  targets, shared contracts, missing isolation, or no explicit authorization
+  for worker edits.
 - Keep edits scoped to the active feature. If new scope appears, stop and replan or defer it to another feature.
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
@@ -63,6 +71,10 @@ For independent implementation attempts, use candidate workers only with
 explicit user authorization plus isolated worktrees or exact non-overlapping
 path ownership. Treat their output as candidate patches. The manager inspects,
 merges, validates, and records Flow state serially.
+When a candidate pass or serial/skipped implementation decision materially
+shaped the feature, include its compact record in
+`flow_feature_complete.orchestrationPasses`. Do not paste full worker handoffs
+or long logs into the runtime payload.
 
 ## Review and complete
 
@@ -109,7 +121,18 @@ Complete with:
   ],
   "validationScope": "targeted",
   "featureReviewDepth": "standard",
-  "featureReview": { "status": "passed", "summary": "review summary", "blockingFindings": [] }
+  "featureReview": { "status": "passed", "summary": "review summary", "blockingFindings": [] },
+  "orchestrationPasses": [
+    {
+      "id": "active-feature-id-implementation-decision",
+      "kind": "implementation-decision",
+      "decision": "serial",
+      "decisionReason": "Shared contract edits made worker ownership unsafe.",
+      "writeScope": "manager-serial",
+      "verificationStatus": "not-needed",
+      "outcome": "accepted"
+    }
+  ]
 }
 ```
 

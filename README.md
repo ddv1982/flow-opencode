@@ -17,8 +17,8 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@4.3.7 --global --force
-npx -y opencode-plugin-flow@4.3.7 sync
+opencode plugin opencode-plugin-flow@4.3.8 --global --force
+npx -y opencode-plugin-flow@4.3.8 sync
 ```
 
 Restart OpenCode, then give Flow a goal:
@@ -112,9 +112,10 @@ The runtime owns only safety; judgment lives in the skills:
   that is shallower than the approved feature requires.
 - Failed reviews are bounded: a failed review pauses by default, and autonomous
   repair is limited to one repair plus one retry before the feature blocks.
-- Long sessions hit phase boundaries after a small number of completed
-  features. Flow returns a compact resume packet and requires explicit
-  `phaseBoundaryAck` before starting the next feature.
+- Completed feature counts are telemetry only; Flow does not stop an approved
+  plan just because several features have completed. Review retry boundaries
+  still return a compact resume packet and require explicit `phaseBoundaryAck`
+  before starting the next feature.
 - A session can close as `completed` only after final completion has passed.
 - Crash recovery is built in: stale session locks expire automatically and
   unreadable session files are quarantined with recovery guidance, never
@@ -133,6 +134,12 @@ complete features, or close sessions. Flow reserves those agent ids and the
 public command ids while the plugin is enabled, and warns if they collide with
 your own config.
 
+For broad implementation, the manager records whether work stayed serial,
+used exact-path candidate workers, used isolated worktrees, ran a tournament, or
+skipped candidates. Feature completion can carry compact
+`orchestrationPasses`; `flow_status` reports the aggregate under
+`session.budget.orchestration`.
+
 ## Install details, doctor, repair, uninstall
 
 See [docs/troubleshooting.md](docs/troubleshooting.md) for skill sync
@@ -143,7 +150,7 @@ To update a pinned Flow version, rerun the install command with the new
 version. To inspect skill health:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.7 doctor
+npx -y opencode-plugin-flow@4.3.8 doctor
 ```
 
 ## Experimental: compaction context

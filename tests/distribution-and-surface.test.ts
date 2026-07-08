@@ -476,6 +476,46 @@ describe("Flow distribution and plugin surface", () => {
 				summary: "Need user input.",
 			}),
 		).not.toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "runtime-candidate-pass",
+					kind: "candidate",
+					decision: "candidate-exact-path",
+					decisionReason: "Candidate owns a disjoint exact path.",
+					modes: ["candidate-implementation"],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					sliceIds: ["runtime-slice"],
+					dependsOn: ["runtime-discovery"],
+					writeScope: "exact-path",
+					handoffRefs: ["/tmp/flow/runtime-candidate.md"],
+					verificationStatus: "passed",
+					outcome: "accepted",
+					synthesisRef: "/tmp/flow/runtime-synthesis.md",
+				},
+			]),
+		).not.toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "snake-case-pass",
+					kind: "candidate",
+					handoff_ref: "/tmp/flow/snake.md",
+					verification_status: "passed",
+				},
+			]),
+		).toThrow();
+		expect(() =>
+			tools.flow_feature_complete.args.orchestrationPasses.parse([
+				{
+					id: "unknown-key-pass",
+					kind: "validation",
+					workerCount: 1,
+					unexpectedKey: true,
+				},
+			]),
+		).toThrow();
 	});
 
 	test("keeps public Flow commands self-contained from native skill loading", () => {
@@ -604,8 +644,12 @@ describe("Flow distribution and plugin surface", () => {
 		expect(orchestration).toContain("**Verify strongly**");
 		expect(orchestration).toContain("stable claim ids");
 		expect(orchestration).toContain("## Choose a pass");
+		expect(orchestration).toContain("## Implementation pass decision");
 		expect(orchestration).toContain("## Stage 8 — Extend or stop");
 		expect(orchestration).toContain("Stage 3 — Manifest");
+		expect(orchestration).toContain("orchestrationPasses");
+		expect(orchestration).toContain("decisionReason");
+		expect(orchestration).toContain("writeScope");
 		expect(orchestration).toContain("Worker failure ladder");
 		expect(passExample).toContain("# Parallel pass example");
 		expect(passExample).toContain(
@@ -620,6 +664,8 @@ describe("Flow distribution and plugin surface", () => {
 		expect(handoff).toContain(
 			"Empty or unstructured worker output is a failed handoff",
 		);
+		expect(handoff).toContain("## Pass metadata");
+		expect(handoff).toContain("## Manager pass accounting record");
 		expect(orchestration).toContain("returns empty or unstructured output");
 		expect(orchestration).toContain("OPENCODE_FLOW_READONLY_WORKER_MODEL");
 

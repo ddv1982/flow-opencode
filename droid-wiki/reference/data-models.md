@@ -14,7 +14,7 @@ The data model is defined in `src/runtime/schema.ts` and persisted through `src/
 | `plan` | `Plan` or `null`. |
 | `activeFeatureId` | Current feature id or `null`. |
 | `history` | Completion and blocker history entries. |
-| `budget` | Phase-boundary, review-count, failed-review, and token-telemetry status. |
+| `budget` | Phase-boundary, review-count, failed-review, compact orchestration, and token-telemetry status. |
 | `closure` | Completed, deferred, or abandoned closure record. |
 | `lastError` | Last runtime completion or transition error. |
 | `timestamps` | Created, updated, and completed timestamps. |
@@ -31,7 +31,15 @@ The data model is defined in `src/runtime/schema.ts` and persisted through `src/
 | `FeatureReviewDepthSchema` | `quick`, `standard`, or `detailed`. |
 | `ReviewSchema` | `status`, `summary`, `blockingFindings`. |
 | `FinalReviewSchema` | Review fields plus `reviewDepth`. |
-| `WorkerResultSchema` | `status`, `featureId`, `summary`, artifacts, validation, feature review depth, review, final review, and outcome. |
+| `WorkerResultSchema` | `status`, `featureId`, `summary`, artifacts, validation, feature review depth, review, final review, outcome, and optional `orchestrationPasses`. |
+
+## Orchestration telemetry
+
+`OrchestrationPassRecordSchema` stores compact pass ids, pass kind, decision,
+worker counts, slice ids, dependencies, write scope, handoff references,
+verification status, outcome, and synthesis references. The runtime keeps
+aggregates and recent records under `budget.orchestration`; full handoffs and
+logs are not stored in the session file.
 
 ## Runtime API payloads
 

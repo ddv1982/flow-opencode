@@ -11,7 +11,10 @@ import {
 	flowSessionClose,
 	flowStatus,
 } from "../src/runtime/api";
-import { WorkerResultSchema } from "../src/runtime/schema";
+import {
+	type OrchestrationPassRecord,
+	WorkerResultSchema,
+} from "../src/runtime/schema";
 
 async function tempWorkspace(): Promise<string> {
 	return mkdtemp(join(tmpdir(), "flow-runtime-"));
@@ -65,6 +68,27 @@ function completePayload(featureId: string, scope: "targeted" | "broad") {
 			summary: "Reviewed changed files and validation.",
 			blockingFindings: [],
 		},
+	};
+}
+
+function orchestrationPass(
+	id: string,
+	overrides: Partial<OrchestrationPassRecord> = {},
+): OrchestrationPassRecord {
+	return {
+		id,
+		kind: "validation",
+		modes: [],
+		workerCount: 1,
+		candidateWorkerCount: 0,
+		verifierWorkerCount: 0,
+		sliceIds: [],
+		dependsOn: [],
+		writeScope: "none",
+		handoffRefs: [],
+		verificationStatus: "passed",
+		outcome: "accepted",
+		...overrides,
 	};
 }
 
@@ -127,6 +151,31 @@ async function approvedTwoFeatureSession(workspace: string): Promise<void> {
 		).status,
 	).toBe("ok");
 	expect((await flowPlanApprove(workspace)).status).toBe("ok");
+}
+
+async function orchestrationTelemetry(workspace: string): Promise<{
+	passCount: number;
+	workerCount: number;
+	candidatePassCount: number;
+	verifierPassCount: number;
+	skippedCandidateDecisionCount: number;
+	latestPasses: Array<{ id: string }>;
+}> {
+	const status = await flowStatus(workspace);
+	return (
+		status.session as {
+			budget: {
+				orchestration: {
+					passCount: number;
+					workerCount: number;
+					candidatePassCount: number;
+					verifierPassCount: number;
+					skippedCandidateDecisionCount: number;
+					latestPasses: Array<{ id: string }>;
+				};
+			};
+		}
+	).budget.orchestration;
 }
 
 describe("Flow runtime gates", () => {
@@ -274,6 +323,230 @@ describe("Flow runtime gates", () => {
 			featureReviewDepth: "detailed" as const,
 		});
 		expect(detailed.status).toBe("ok");
+	});
+
+	test("records compact orchestration pass accounting", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [
+				{
+					id: "first-feature-implementation-decision",
+					kind: "implementation-decision" as const,
+					decision: "skipped" as const,
+					decisionReason:
+						"Shared contract edits made manager-serial implementation safer.",
+					writeScope: "manager-serial" as const,
+					verificationStatus: "not-needed" as const,
+					outcome: "accepted" as const,
+				},
+				{
+					id: "first-feature-candidate-docs",
+					kind: "candidate" as const,
+					decision: "candidate-exact-path" as const,
+					decisionReason:
+						"Docs target was disjoint from runtime implementation files.",
+					modes: ["candidate-implementation" as const],
+					workerCount: 1,
+					candidateWorkerCount: 1,
+					sliceIds: ["docs-slice"],
+					writeScope: "exact-path" as const,
+					handoffRefs: ["/tmp/flow/first-feature-candidate.md"],
+					verificationStatus: "passed" as const,
+					outcome: "accepted" as const,
+					synthesisRef: "/tmp/flow/first-feature-synthesis.md",
+				},
+				{
+					id: "first-feature-review-claim-check",
+					kind: "verification" as const,
+					modes: ["verifier" as const],
+					workerCount: 1,
+					verifierWorkerCount: 1,
+					sliceIds: ["claim-review-coverage"],
+					dependsOn: ["first-feature-candidate-docs"],
+					verificationStatus: "passed" as const,
+					outcome: "accepted" as const,
+				},
+			],
+		});
+		expect(completed.status).toBe("ok");
+
+		const status = await flowStatus(workspace);
+		const session = status.session as {
+			budget: {
+				orchestration: {
+					passCount: number;
+					workerCount: number;
+					candidatePassCount: number;
+					verifierPassCount: number;
+					skippedCandidateDecisionCount: number;
+					latestPasses: Array<{
+						id: string;
+						kind: string;
+						dependsOn?: string[];
+						handoffRefs?: string[];
+					}>;
+				};
+			};
+			latestHistoryEntry: {
+				orchestrationPasses: Array<{ id: string; writeScope: string }>;
+			};
+		};
+		expect(session.budget.orchestration).toMatchObject({
+			passCount: 3,
+			workerCount: 2,
+			candidatePassCount: 1,
+			verifierPassCount: 1,
+			skippedCandidateDecisionCount: 1,
+		});
+		expect(
+			session.budget.orchestration.latestPasses.map((pass) => pass.id),
+		).toEqual([
+			"first-feature-implementation-decision",
+			"first-feature-candidate-docs",
+			"first-feature-review-claim-check",
+		]);
+		expect(session.budget.orchestration.latestPasses[1]?.handoffRefs).toEqual([
+			"/tmp/flow/first-feature-candidate.md",
+		]);
+		expect(session.budget.orchestration.latestPasses[2]?.dependsOn).toEqual([
+			"first-feature-candidate-docs",
+		]);
+		expect(session.latestHistoryEntry.orchestrationPasses).toHaveLength(3);
+		expect(session.latestHistoryEntry.orchestrationPasses[1]?.writeScope).toBe(
+			"exact-path",
+		);
+	});
+
+	test("records orchestration telemetry on validation gate failures", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const failed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			validationRun: [
+				{
+					command: "bun test first-feature",
+					status: "failed" as const,
+					summary: "Focused check failed.",
+				},
+			],
+			orchestrationPasses: [
+				orchestrationPass("first-feature-validation-failure", {
+					workerCount: 2,
+				}),
+			],
+		});
+		expect(failed.status).toBe("error");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(1);
+		expect(telemetry.workerCount).toBe(2);
+		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
+			"first-feature-validation-failure",
+		]);
+	});
+
+	test("does not double count orchestration passes across review retries", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const pass = orchestrationPass("first-feature-review-pass", {
+			kind: "review",
+			modes: ["review"],
+		});
+		const failedReview = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			featureReview: {
+				status: "failed" as const,
+				summary: "A blocker remains.",
+				blockingFindings: [{ summary: "Missing behavior test." }],
+			},
+			orchestrationPasses: [pass],
+		});
+		expect(failedReview.status).toBe("error");
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: [pass],
+		});
+		expect(completed.status).toBe("ok");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(1);
+		expect(telemetry.latestPasses.map((item) => item.id)).toEqual([
+			"first-feature-review-pass",
+		]);
+	});
+
+	test("records orchestration telemetry when a feature needs input", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const blocked = await flowFeatureComplete(workspace, {
+			status: "needs_input" as const,
+			featureId: "first-feature",
+			summary: "Need a product decision.",
+			outcome: {
+				kind: "needs_input" as const,
+				summary: "Need user input on expected behavior.",
+			},
+			orchestrationPasses: [
+				orchestrationPass("first-feature-question-discovery", {
+					kind: "discovery",
+					modes: ["evidence"],
+				}),
+			],
+		});
+		expect(blocked.status).toBe("ok");
+
+		const status = await flowStatus(workspace);
+		expect(status.status).toBe("blocked");
+		const session = status.session as {
+			budget: {
+				orchestration: {
+					passCount: number;
+					latestPasses: Array<{ id: string }>;
+				};
+			};
+			latestHistoryEntry: {
+				orchestrationPasses: Array<{ id: string }>;
+			};
+		};
+		expect(session.budget.orchestration.passCount).toBe(1);
+		expect(session.budget.orchestration.latestPasses[0]?.id).toBe(
+			"first-feature-question-discovery",
+		);
+		expect(session.latestHistoryEntry.orchestrationPasses[0]?.id).toBe(
+			"first-feature-question-discovery",
+		);
+	});
+
+	test("caps latest orchestration pass retention without losing totals", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const completed = await flowFeatureComplete(workspace, {
+			...completePayload("first-feature", "targeted"),
+			orchestrationPasses: Array.from({ length: 55 }, (_, index) =>
+				orchestrationPass(`first-feature-pass-${index}`),
+			),
+		});
+		expect(completed.status).toBe("ok");
+
+		const telemetry = await orchestrationTelemetry(workspace);
+		expect(telemetry.passCount).toBe(55);
+		expect(telemetry.workerCount).toBe(55);
+		expect(telemetry.latestPasses).toHaveLength(50);
+		expect(telemetry.latestPasses[0]?.id).toBe("first-feature-pass-5");
+		expect(telemetry.latestPasses.at(-1)?.id).toBe("first-feature-pass-54");
 	});
 
 	test("failed review retry budget blocks after one autonomous retry", async () => {

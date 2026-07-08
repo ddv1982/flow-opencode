@@ -27,6 +27,85 @@ export const FeatureReviewDepthSchema = z.enum([
 	"detailed",
 ]);
 export const FinalReviewPolicySchema = z.enum(["broad", "detailed"]);
+export const OrchestrationPassKindSchema = z.enum([
+	"discovery",
+	"audit",
+	"review",
+	"validation",
+	"verification",
+	"candidate",
+	"implementation-decision",
+]);
+export const OrchestrationModeSchema = z.enum([
+	"evidence",
+	"review",
+	"validation",
+	"audit",
+	"verifier",
+	"candidate-implementation",
+]);
+export const OrchestrationDecisionSchema = z.enum([
+	"serial",
+	"parallel",
+	"candidate-exact-path",
+	"candidate-worktree",
+	"tournament",
+	"skipped",
+]);
+export const OrchestrationWriteScopeSchema = z.enum([
+	"none",
+	"manager-serial",
+	"exact-path",
+	"isolated-worktree",
+	"mixed",
+]);
+export const OrchestrationVerificationStatusSchema = z.enum([
+	"not-needed",
+	"pending",
+	"passed",
+	"failed",
+	"mixed",
+	"downgraded",
+]);
+export const OrchestrationOutcomeSchema = z.enum([
+	"accepted",
+	"rejected",
+	"partial",
+	"not-covered",
+	"superseded",
+]);
+
+export const OrchestrationPassRecordSchema = z
+	.object({
+		id: z.string().min(1),
+		kind: OrchestrationPassKindSchema,
+		decision: OrchestrationDecisionSchema.optional(),
+		decisionReason: z.string().min(1).optional(),
+		modes: z.array(OrchestrationModeSchema).default([]),
+		workerCount: z.number().int().nonnegative().default(0),
+		candidateWorkerCount: z.number().int().nonnegative().default(0),
+		verifierWorkerCount: z.number().int().nonnegative().default(0),
+		sliceIds: z.array(z.string().min(1)).default([]),
+		dependsOn: z.array(z.string().min(1)).default([]),
+		writeScope: OrchestrationWriteScopeSchema.default("none"),
+		handoffRefs: z.array(z.string().min(1)).default([]),
+		verificationStatus:
+			OrchestrationVerificationStatusSchema.default("not-needed"),
+		outcome: OrchestrationOutcomeSchema.default("accepted"),
+		synthesisRef: z.string().min(1).optional(),
+	})
+	.strict();
+
+export const OrchestrationTelemetrySchema = z
+	.object({
+		passCount: z.number().int().nonnegative().default(0),
+		workerCount: z.number().int().nonnegative().default(0),
+		candidatePassCount: z.number().int().nonnegative().default(0),
+		verifierPassCount: z.number().int().nonnegative().default(0),
+		skippedCandidateDecisionCount: z.number().int().nonnegative().default(0),
+		latestPasses: z.array(OrchestrationPassRecordSchema).default([]),
+	})
+	.strict();
 
 export const ReviewFindingSchema = z
 	.object({
@@ -136,6 +215,7 @@ export const WorkerResultSchema = z
 				featureReview: ReviewSchema,
 				finalReview: FinalReviewSchema.optional(),
 				outcome: WorkerOutcomeSchema.optional(),
+				orchestrationPasses: z.array(OrchestrationPassRecordSchema).default([]),
 			})
 			.strict(),
 		z
@@ -150,6 +230,7 @@ export const WorkerResultSchema = z
 				featureReview: ReviewSchema.optional(),
 				finalReview: FinalReviewSchema.optional(),
 				outcome: NeedsInputOutcomeSchema,
+				orchestrationPasses: z.array(OrchestrationPassRecordSchema).default([]),
 			})
 			.strict(),
 	])
@@ -180,6 +261,7 @@ export const ExecutionHistoryEntrySchema = z
 		featureReview: ReviewSchema.optional(),
 		finalReview: FinalReviewSchema.optional(),
 		outcome: WorkerOutcomeSchema.optional(),
+		orchestrationPasses: z.array(OrchestrationPassRecordSchema).default([]),
 	})
 	.strict();
 
@@ -221,6 +303,14 @@ export const BudgetTelemetrySchema = z
 			cacheReadTokens: null,
 			nonCacheTokens: null,
 		}),
+		orchestration: OrchestrationTelemetrySchema.default({
+			passCount: 0,
+			workerCount: 0,
+			candidatePassCount: 0,
+			verifierPassCount: 0,
+			skippedCandidateDecisionCount: 0,
+			latestPasses: [],
+		}),
 		phaseBoundary: PhaseBoundarySchema.nullable().default(null),
 	})
 	.strict();
@@ -253,6 +343,14 @@ export const SessionSchema = z
 				visibleTokens: null,
 				cacheReadTokens: null,
 				nonCacheTokens: null,
+			},
+			orchestration: {
+				passCount: 0,
+				workerCount: 0,
+				candidatePassCount: 0,
+				verifierPassCount: 0,
+				skippedCandidateDecisionCount: 0,
+				latestPasses: [],
 			},
 			phaseBoundary: null,
 		}),
@@ -290,6 +388,12 @@ export type ExecutionHistoryEntry = z.infer<typeof ExecutionHistoryEntrySchema>;
 export type Feature = z.infer<typeof FeatureSchema>;
 export type FeatureReviewDepth = z.infer<typeof FeatureReviewDepthSchema>;
 export type FinalReview = z.infer<typeof FinalReviewSchema>;
+export type OrchestrationPassRecord = z.infer<
+	typeof OrchestrationPassRecordSchema
+>;
+export type OrchestrationTelemetry = z.infer<
+	typeof OrchestrationTelemetrySchema
+>;
 export type PhaseBoundary = z.infer<typeof PhaseBoundarySchema>;
 export type Plan = z.infer<typeof PlanSchema>;
 export type PlanInput = z.input<typeof PlanInputSchema>;

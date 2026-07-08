@@ -2,6 +2,26 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.3.8] - 2026-07-08
+
+Parallel orchestration accounting lore makes broad worker use visible without
+turning Flow state into a transcript store:
+
+- `flow_feature_complete` can now record compact `orchestrationPasses` for
+  serial, skipped, exact-path candidate, isolated-worktree, tournament,
+  validation, review, and verifier passes.
+- `flow_status` reports aggregate pass telemetry under
+  `session.budget.orchestration`, including worker counts, candidate/verifier
+  usage, skipped candidate decisions, and recent pass records.
+- Completion now records orchestration telemetry on success, validation-gate
+  failures, failed reviews, and `needs_input`, while deduping retry payloads and
+  retaining only the latest compact pass records.
+- Flow planning and running guidance now requires explicit implementation pass
+  decisions for broad work and keeps full handoffs, logs, and manager scratch
+  artifacts outside `.flow/**`.
+- README runtime wording now matches the 4.3.6 behavior: completed feature
+  counts are telemetry only, not a three-feature stop.
+
 ## [4.3.7] - 2026-07-08
 
 Package-smoke patience lore keeps the 4.3.6 release path portable across slower
