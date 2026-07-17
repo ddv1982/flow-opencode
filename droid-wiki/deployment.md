@@ -25,8 +25,10 @@ graph TD
 - workflow syntax linting with `rhysd/actionlint:1.7.7`,
 - `bun run check` on Ubuntu and macOS across Node 24 and 26,
 - live OpenCode 1.18.3 smoke on Ubuntu Node 24,
-- a non-blocking scheduled live smoke against the latest OpenCode release,
 - blocking Windows validation for platform-specific filesystem behavior.
+
+The separate `opencode-compatibility.yml` workflow runs a non-blocking scheduled
+live smoke against the latest OpenCode release.
 
 ## Release contract
 
