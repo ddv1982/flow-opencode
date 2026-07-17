@@ -100,10 +100,8 @@ the host boundary, prompt bloat, and the human-facing story.
    Submit the ecosystem PR and awesome-opencode entry.
 3. **Human-readable CHANGELOG.** The "lore" one-liners are inscrutable to an
    evaluating user; say what changed in user terms.
-4. **Compaction survival (contract-gated).** The maintainer contract bans
-   experimental hooks by default but explicitly allows "compatibility code with
-   tests". Flow's core promise is durable state across long sessions;
-   `experimental.session.compacting` injection of the active session summary is
-   the highest-value candidate. Revisit deliberately.
+4. **Durable restart survival.** Flow's stable generated instruction projection
+   and runtime-issued phase boundaries carry session state across restarts.
+   Experimental host compaction hooks are outside the supported architecture.
 5. Polish: Dependabot/Renovate, SHA-pinned actions, coverage threshold,
    protected release environment.

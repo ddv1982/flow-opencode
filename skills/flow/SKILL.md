@@ -20,14 +20,22 @@ Routing: this manager skill owns the whole loop and every state-changing `flow_*
    `phaseBoundaryAck: true`.
 2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
 3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, browser QA, route QA, or failure-prone work, use `flow-test` to choose and summarize evidence before completion.
-4. Load `flow-review` for the required feature review. Send a compact review
+4. Load `flow-review` for the required feature review. Send a bounded review
    packet, not the accumulated root transcript. The reviewer reports
    `featureReviewDepth` and `featureReview`; the manager records both inside
    `flow_feature_complete`.
 5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
-Use `references/parallel-orchestration.md` for broad read-only discovery, audit, validation, review, verification, or candidate implementation passes. It is the whole pass playbook — orient, slice, manifest, fan out, account, verify, synthesize, extend or stop — and its `references/handoff-format.md` companion holds the worker report templates the manager pastes into prompts. Hidden Flow workers are injected by plugin config; invoke the named worker when it is available. The manager owns every `flow_*` state change.
+For broad discovery, audit, validation, review, verification, or candidate work,
+use `references/parallel-orchestration.md` as the routing index. Read
+`references/parallel-decision.md` first. Load
+`references/parallel-manifest.md` and `references/parallel-execution.md` only
+after selecting fan-out, then read `references/parallel-synthesis.md` when
+handoffs return. Paste one matching template from
+`references/handoff-format.md` into each worker prompt. Hidden Flow workers are
+injected by plugin config; invoke the named worker when available. The manager
+owns every `flow_*` state change.
 
 Do not commit, push, amend, rebase, publish, or mutate releases during the
 autonomous Flow loop. Load `flow-commit` only when the user explicitly asks for
@@ -76,17 +84,6 @@ Planning and running require loaded Flow tools; do not simulate plan approval or
 - Phase boundaries stop the current root session; resume from
   `.flow/session.json` in a fresh OpenCode session.
 - `flow_session_close` accepts `kind: "completed"` only after an approved plan has passed final completion.
-
-## Budget And Retry Boundaries
-
-Flow enforces review retry counts in the runtime ledger and tracks completed
-feature counts as telemetry only. The current OpenCode plugin surface does not
-expose per-turn token usage to Flow; when usage is visible in the host UI or
-logs, stop the current autonomous loop once the root session is large enough to
-threaten latency or cost and report a compact handoff instead of continuing.
-Treat high visible tokens, high non-cache tokens, or repeated reviewer fan-out
-as a reason to finish the current feature, emit the resume packet, and continue
-in a fresh session.
 
 ## Recovery
 

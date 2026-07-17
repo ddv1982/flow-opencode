@@ -327,16 +327,22 @@ describe("Flow distribution and plugin surface", () => {
 		});
 		expect(
 			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
-		).toContain("Bundled Flow review instructions");
+		).toContain("Feature review depths");
 		expect(
-			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
-		).toContain("advisory review only");
+			(config.agent["flow-reviewer"] as { prompt: string }).prompt.replace(
+				/\s+/g,
+				" ",
+			),
+		).toContain("label the result advisory");
 		expect(
 			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
 		).toContain("Finding classes");
 		expect(
-			(config.agent["flow-reviewer"] as { prompt: string }).prompt,
-		).toContain("Never approve to unblock completion");
+			(config.agent["flow-reviewer"] as { prompt: string }).prompt.replace(
+				/\s+/g,
+				" ",
+			),
+		).toContain("Only the root manager may mutate Flow state");
 		expect(config.agent["flow-evidence-worker"]).toMatchObject({
 			mode: "subagent",
 			hidden: true,
@@ -786,31 +792,27 @@ describe("Flow distribution and plugin surface", () => {
 		const config = createFlowCoreConfigEntries();
 		const expectedBundledSections = {
 			"flow-auto": [
-				"Bundled flow/SKILL.md",
-				"Bundled flow/references/parallel-orchestration.md",
-				"Bundled flow/references/handoff-format.md",
-				"Bundled flow-plan/references/plan-quality-checklist.md",
-				"Bundled flow-run/SKILL.md",
+				"Bundled flow/SKILL.md (selected sections)",
+				"Bundled flow-plan/references/plan-quality-checklist.md (selected sections)",
+				"Bundled flow-run/SKILL.md (selected sections)",
+				"Conditional parallel pass",
 			],
 			"flow-plan": [
-				"Bundled flow-plan/SKILL.md",
-				"Bundled flow-plan/references/plan-quality-checklist.md",
-				"Bundled flow/references/parallel-orchestration.md",
-				"Bundled flow/references/handoff-format.md",
+				"Bundled flow-plan/SKILL.md (selected sections)",
+				"Bundled flow-plan/references/plan-quality-checklist.md (selected sections)",
+				"Conditional parallel pass",
 			],
 			"flow-run": [
-				"Bundled flow-run/SKILL.md",
-				"Bundled flow/references/parallel-orchestration.md",
-				"Bundled flow/references/handoff-format.md",
-				"Bundled flow-review/SKILL.md",
-			],
-			"flow-review": [
-				"Bundled flow-review/SKILL.md",
-				"Bundled flow-review/references/review-rubric.md",
-				"Bundled flow-run/references/audit-rubric.md",
+				"Bundled flow-run/SKILL.md (selected sections)",
+				"Bundled flow-run/references/validation-rubric.md (selected sections)",
+				"## Candidate implementation",
+				"Public reviewer routing",
 			],
 		} satisfies Record<
-			Exclude<(typeof FLOW_COMMAND_NAMES)[number], "flow-status">,
+			Exclude<
+				(typeof FLOW_COMMAND_NAMES)[number],
+				"flow-review" | "flow-status"
+			>,
 			string[]
 		>;
 
@@ -822,19 +824,33 @@ describe("Flow distribution and plugin surface", () => {
 				);
 				continue;
 			}
+			if (command === "flow-review") {
+				expect(entry.template).toStartWith("# Flow review request");
+				expect(entry.template).toContain("`flow-reviewer` contract");
+				expect(entry.template).toContain("setup or required evidence");
+				expect(entry.template).not.toContain("Bundled flow-review/SKILL.md");
+				continue;
+			}
 
-			expect(entry.template).toStartWith("Call `flow_status` first.");
-			expect(entry.template).toContain("setup.skills");
-			expect(entry.template).toContain("continue with the bundled public Flow");
-			expect(entry.template).toContain("Do not call native Flow skills");
-			expect(entry.template).toContain(
-				"In bundled sections, `load` means read and use",
+			expect(entry.template).toStartWith(
+				`# Flow ${command.slice(5)} command contract`,
 			);
-			expect(entry.template).toContain("Optional helper skills");
+			expect(entry.template).toContain("Call `flow_status` first");
+			expect(entry.template).toContain("setup.skills");
+			expect(entry.template).toContain("compiled core instructions");
+			expect(entry.template).toContain(
+				"mean use the matching compiled section, not a native skill call",
+			);
+			expect(entry.template).toContain("missing optional helper");
 			for (const section of expectedBundledSections[command]) {
 				expect(entry.template).toContain(section);
 			}
-			expect(entry.template).not.toContain("Otherwise load the `flow");
+			expect(entry.template).not.toContain(
+				"## Bundled flow-plan/references/planning-examples.md",
+			);
+			expect(entry.template).not.toContain(
+				"## Bundled flow/references/handoff-format.md",
+			);
 		}
 	});
 
@@ -846,16 +862,16 @@ describe("Flow distribution and plugin surface", () => {
 
 	test("documents every injected Flow worker and permission contract", async () => {
 		const config = createFlowCoreConfigEntries();
-		const orchestration = await readFile(
-			"skills/flow/references/parallel-orchestration.md",
+		const execution = await readFile(
+			"skills/flow/references/parallel-execution.md",
 			"utf8",
 		);
 
 		for (const agentName of Object.keys(config.agent)) {
-			expect(orchestration).toContain(`\`${agentName}\``);
+			expect(execution).toContain(`\`${agentName}\``);
 		}
 
-		expect(parsePermissionContractDoc(orchestration)).toEqual(
+		expect(parsePermissionContractDoc(execution)).toEqual(
 			Object.fromEntries(
 				Object.entries(config.agent).map(([agentName, agent]) => [
 					agentName,
@@ -867,6 +883,7 @@ describe("Flow distribution and plugin surface", () => {
 		for (const [agentName, agent] of Object.entries(config.agent)) {
 			const prompt = (agent as { prompt: string }).prompt;
 			const normalizedPrompt = prompt.toLowerCase();
+			const squashedPrompt = normalizedPrompt.replace(/\s+/g, " ");
 			expect(
 				normalizedPrompt,
 				`${agentName} prompt cites or drops claims`,
@@ -875,26 +892,50 @@ describe("Flow distribution and plugin surface", () => {
 				normalizedPrompt,
 				`${agentName} prompt preserves confidence gaps`,
 			).toContain("single-source, inferred, and unsettled");
-			expect(normalizedPrompt, `${agentName} prompt fails closed`).toContain(
-				"report blocked if",
+			expect(squashedPrompt, `${agentName} prompt fails closed`).toContain(
+				"`## status` set to `blocked`",
 			);
 			expect(
-				normalizedPrompt,
+				squashedPrompt,
 				`${agentName} prompt rejects empty handoffs`,
 			).toContain("empty or unstructured output is a failed handoff");
 		}
 	});
 
 	test("keeps parallel skill docs linked and handoff statuses stable", async () => {
-		const [orchestration, discovery, handoff, passExample] = await Promise.all([
+		const [
+			orchestration,
+			decision,
+			manifest,
+			execution,
+			synthesis,
+			discovery,
+			handoff,
+			passExample,
+			hiddenReviewerContract,
+			flowSkill,
+		] = await Promise.all([
 			readFile("skills/flow/references/parallel-orchestration.md", "utf8"),
+			readFile("skills/flow/references/parallel-decision.md", "utf8"),
+			readFile("skills/flow/references/parallel-manifest.md", "utf8"),
+			readFile("skills/flow/references/parallel-execution.md", "utf8"),
+			readFile("skills/flow/references/parallel-synthesis.md", "utf8"),
 			readFile("skills/flow-plan/references/parallel-discovery.md", "utf8"),
 			readFile("skills/flow/references/handoff-format.md", "utf8"),
 			readFile("skills/flow/references/parallel-pass-example.md", "utf8"),
+			readFile(
+				"skills/flow-review/references/hidden-reviewer-contract.md",
+				"utf8",
+			),
+			readFile("skills/flow/SKILL.md", "utf8"),
 		]);
 
 		expect(orchestration).toContain("handoff-format.md");
 		expect(orchestration).toContain("parallel-pass-example.md");
+		expect(orchestration).toContain("parallel-decision.md");
+		expect(orchestration).toContain("parallel-manifest.md");
+		expect(orchestration).toContain("parallel-execution.md");
+		expect(orchestration).toContain("parallel-synthesis.md");
 		expect(discovery).toContain("../../flow/references/handoff-format.md");
 		expect(discovery).toContain(
 			"../../flow/references/parallel-orchestration.md",
@@ -904,20 +945,20 @@ describe("Flow distribution and plugin surface", () => {
 		expect(handoff).toContain("- `success`:");
 		expect(handoff).toContain("- `partial`:");
 		expect(handoff).toContain("- `blocked`:");
-		expect(orchestration).toContain("### Verification tiers");
-		expect(orchestration).toContain("**Verify strongly**");
-		expect(orchestration).toContain("stable claim ids");
-		expect(orchestration).toContain("## Choose a pass");
-		expect(orchestration).toContain("## Implementation pass decision");
-		expect(orchestration).toContain("## Stage 8 — Extend or stop");
-		expect(orchestration).toContain("Stage 3 — Manifest");
-		expect(orchestration).toContain("orchestrationPasses");
-		expect(orchestration).toContain("decisionReason");
-		expect(orchestration).toContain("candidateEligibility");
-		expect(orchestration).toContain("candidateDecision");
-		expect(orchestration).toContain("decisionFactors");
-		expect(orchestration).toContain("writeScope");
-		expect(orchestration).toContain("Worker failure ladder");
+		expect(synthesis).toContain("### Verification tiers");
+		expect(synthesis).toContain("**Verify strongly**");
+		expect(synthesis).toContain("stable ids");
+		expect(decision).toContain("## Choose a pass");
+		expect(decision).toContain("## Implementation pass decision");
+		expect(synthesis).toContain("## Extend or stop");
+		expect(manifest).toContain("## Write the manifest");
+		expect(decision).toContain("orchestrationPasses");
+		expect(decision).toContain("decisionReason");
+		expect(decision).toContain("candidateEligibility");
+		expect(decision).toContain("candidateDecision");
+		expect(decision).toContain("decisionFactors");
+		expect(manifest).toContain("writeScope");
+		expect(synthesis).toContain("Worker failure ladder");
 		expect(passExample).toContain("# Parallel pass example");
 		expect(passExample).toContain(
 			"Return only the Flow handoff in this exact shape:",
@@ -925,20 +966,48 @@ describe("Flow distribution and plugin surface", () => {
 		expect(passExample).toContain(
 			"<matching handoff template copied verbatim from handoff-format.md>",
 		);
-		expect(orchestration).toContain(
-			"The\nmanager copies the matching handoff template into every worker prompt",
+		expect(execution).toContain(
+			"Copy the\nmatching block from `handoff-format.md`",
 		);
-		expect(handoff).toContain(
-			"Empty or unstructured worker output is a failed handoff",
+		expect(handoff.replace(/\s+/g, " ")).toContain(
+			"Empty or unstructured output is a failed handoff",
 		);
 		expect(handoff).toContain("## Pass metadata");
 		expect(handoff).toContain("## Manager pass accounting record");
-		expect(orchestration).toContain("returns empty or unstructured output");
-		expect(orchestration).toContain("OPENCODE_FLOW_READONLY_WORKER_MODEL");
+		expect(handoff).toContain("<!-- flow-prompt:worker-integrity:start -->");
+		expect(handoff).toContain("<!-- flow-prompt:handoff-candidate:end -->");
+		expect(decision).toContain(
+			"<!-- flow-prompt:manager-parallel-core:start -->",
+		);
+		for (const role of [
+			"evidence",
+			"validation",
+			"audit",
+			"candidate",
+			"verifier",
+		]) {
+			expect(execution).toContain(
+				`<!-- flow-prompt:worker-role-${role}:start -->`,
+			);
+			expect(execution).toContain(
+				`<!-- flow-prompt:worker-role-${role}:end -->`,
+			);
+		}
+		expect(hiddenReviewerContract).toContain("## Feature review depths");
+		expect(hiddenReviewerContract).toContain("## Special-case evidence");
+		expect(flowSkill).not.toMatch(
+			/visible tokens|non-cache tokens|session is large enough|request compaction/i,
+		);
+		expect(synthesis).toContain("empty");
+		expect(execution).toContain("OPENCODE_FLOW_READONLY_WORKER_MODEL");
 
 		const disallowedTerm = ["w", "a", "v", "e"].join("");
 		for (const [name, text] of [
 			["orchestration", orchestration],
+			["decision", decision],
+			["manifest", manifest],
+			["execution", execution],
+			["synthesis", synthesis],
 			["discovery", discovery],
 			["passExample", passExample],
 		] as const) {
@@ -971,7 +1040,7 @@ describe("Flow distribution and plugin surface", () => {
 		);
 	});
 
-	test("registers generated instructions without experimental hooks by default", async () => {
+	test("registers generated instructions through stable hooks only", async () => {
 		const previousHome = process.env.HOME;
 		process.env.HOME = await tempHome();
 		try {
@@ -989,8 +1058,9 @@ describe("Flow distribution and plugin surface", () => {
 				serverUrl: new URL("http://localhost"),
 				$: {},
 			} as unknown as Parameters<typeof FlowPlugin>[0]);
-			expect(hooks["experimental.chat.system.transform"]).toBeUndefined();
-			expect(hooks["experimental.session.compacting"]).toBeUndefined();
+			expect(
+				Object.keys(hooks).filter((name) => name.startsWith("experimental.")),
+			).toEqual([]);
 
 			const config = { instructions: ["AGENTS.md"] };
 			const configHook = hooks.config;
@@ -1153,13 +1223,12 @@ describe("Flow distribution and plugin surface", () => {
 				}
 				expect(bundledPrompt).toContain("Restart OpenCode");
 				expect(bundledPrompt).toContain("npx -y opencode-plugin-flow@");
-				expect(bundledPrompt).toContain("Call `flow_status` first.");
-				expect(bundledPrompt).toContain(
-					"continue with the bundled public Flow",
-				);
-				expect(bundledPrompt).toContain(
-					"briefly state which bundled Flow command is running",
-				);
+				expect(bundledPrompt).toContain("Call `flow_status` first");
+				if (command === "flow-review") {
+					expect(bundledPrompt).toContain("`flow-reviewer` contract");
+				} else {
+					expect(bundledPrompt).toContain("compiled core instructions");
+				}
 				expect(bundledPrompt).not.toContain("review: stale");
 			}
 
@@ -1217,7 +1286,8 @@ describe("Flow distribution and plugin surface", () => {
 					command: "/flow-plan",
 					arguments: "Ship canonical commands",
 					expectedSeed: "Flow plan: Ship canonical commands",
-					expectedAction: "Plan: Ship canonical commands",
+					expectedAction:
+						"Create or revise the Flow plan for: Ship canonical commands",
 					expectedBundledSection: "Bundled flow-plan/SKILL.md",
 				},
 				{
@@ -1253,14 +1323,15 @@ describe("Flow distribution and plugin surface", () => {
 					textOutput.parts,
 					testCase.expectedSeed,
 				);
-				expect(bundledPrompt).toContain("Do not call native Flow skills");
+				expect(bundledPrompt).toContain(
+					"Only the root manager may call state-changing `flow_*` tools",
+				);
 				expect(bundledPrompt).toContain(testCase.expectedAction);
 				expect(bundledPrompt).toContain(testCase.expectedBundledSection);
-				expect(bundledPrompt).toContain(
-					"briefly state which bundled Flow command is running",
-				);
 				expect(bundledPrompt).not.toContain("stale content");
-				expect(bundledPrompt).not.toContain("Otherwise load the `flow");
+				expect(bundledPrompt).not.toContain(
+					"## Bundled flow-plan/references/planning-examples.md",
+				);
 			}
 
 			const statusOutput: {
@@ -1316,12 +1387,12 @@ describe("Flow distribution and plugin surface", () => {
 			);
 			expect(reviewOutput.parts).toHaveLength(1);
 			expect(reviewOutput.parts[0]?.prompt).toContain(
-				"Do not call native Flow skills",
+				"Review the assigned work: the changed Flow command path",
 			);
 			expect(reviewOutput.parts[0]?.prompt).toContain(
-				"Review: the changed Flow command path",
+				"`flow-reviewer` contract",
 			);
-			expect(reviewOutput.parts[0]?.prompt).toContain(
+			expect(reviewOutput.parts[0]?.prompt).not.toContain(
 				"Bundled flow-review/SKILL.md",
 			);
 			expect(reviewOutput.parts[0]?.agent).toBe("flow-reviewer");
@@ -1378,7 +1449,7 @@ describe("Flow distribution and plugin surface", () => {
 			expect(output.parts).toHaveLength(2);
 			const subtask = output.parts.find((part) => part.type === "subtask");
 			const file = output.parts.find((part) => part.type === "file");
-			expect(subtask?.prompt).toContain("Bundled flow-review/SKILL.md");
+			expect(subtask?.prompt).toContain("`flow-reviewer` contract");
 			expect(subtask?.prompt).not.toContain("review: stale");
 			expect(file?.url).toBe("file:///src/auth.ts");
 			expect(output.parts.some((part) => part.type === "text")).toBe(false);
@@ -1469,6 +1540,18 @@ describe("Flow distribution and plugin surface", () => {
 			),
 		).resolves.toContain("Parallel orchestration");
 		await expect(
+			readFile(
+				flowSkillFile(home, "flow", "references/parallel-decision.md"),
+				"utf8",
+			),
+		).resolves.toContain("Parallel pass decisions");
+		await expect(
+			readFile(
+				flowSkillFile(home, "flow", "references/parallel-execution.md"),
+				"utf8",
+			),
+		).resolves.toContain("Parallel pass execution");
+		await expect(
 			readFile(flowSkillFile(home, "flow-test", "SKILL.md"), "utf8"),
 		).resolves.toContain("validationRun");
 		await expect(
@@ -1499,6 +1582,10 @@ describe("Flow distribution and plugin surface", () => {
 		expect(marker).toContain(
 			"file=references/parallel-orchestration.md sha256=",
 		);
+		expect(marker).toContain("file=references/parallel-decision.md sha256=");
+		expect(marker).toContain("file=references/parallel-manifest.md sha256=");
+		expect(marker).toContain("file=references/parallel-execution.md sha256=");
+		expect(marker).toContain("file=references/parallel-synthesis.md sha256=");
 		expect(marker).toContain(
 			"file=references/parallel-pass-example.md sha256=",
 		);
@@ -2321,93 +2408,5 @@ describe("config collision reporting", () => {
 		expect(
 			(config.agent["flow-reviewer"] as { description: string }).description,
 		).toBe("Internal read-only reviewer for Flow-guided work.");
-	});
-});
-
-describe("opt-in compaction context", () => {
-	test("stable default registers no experimental hooks", async () => {
-		const home = await tempHome();
-		const previousHome = process.env.HOME;
-		process.env.HOME = home;
-		delete process.env.FLOW_EXPERIMENTAL_COMPACTION;
-		try {
-			const workspace = await tempWorkspace();
-			const hooks = await FlowPlugin({
-				client: { app: { log() {} } },
-				project: {},
-				directory: workspace,
-				worktree: workspace,
-				experimental_workspace: { register() {} },
-				serverUrl: new URL("http://localhost"),
-				$: {},
-			} as unknown as Parameters<typeof FlowPlugin>[0]);
-			expect(
-				Object.keys(hooks).filter((name) => name.startsWith("experimental")),
-			).toEqual([]);
-		} finally {
-			if (previousHome === undefined) {
-				delete process.env.HOME;
-			} else {
-				process.env.HOME = previousHome;
-			}
-		}
-	});
-
-	test("FLOW_EXPERIMENTAL_COMPACTION=1 injects active session context on compaction", async () => {
-		const home = await tempHome();
-		const previousHome = process.env.HOME;
-		process.env.HOME = home;
-		process.env.FLOW_EXPERIMENTAL_COMPACTION = "1";
-		try {
-			const workspace = await tempWorkspace();
-			await flowPlanSave(workspace, { goal: "Survive compaction" });
-			const hooks = await FlowPlugin({
-				client: { app: { log() {} } },
-				project: {},
-				directory: workspace,
-				worktree: workspace,
-				experimental_workspace: { register() {} },
-				serverUrl: new URL("http://localhost"),
-				$: {},
-			} as unknown as Parameters<typeof FlowPlugin>[0]);
-			const compacting = hooks["experimental.session.compacting"];
-			expect(compacting).toBeDefined();
-			if (!compacting) throw new Error("Expected compaction hook.");
-
-			const output: { context: string[] } = { context: [] };
-			await compacting(
-				{ sessionID: "test-session" },
-				output as Parameters<typeof compacting>[1],
-			);
-			expect(output.context).toHaveLength(1);
-			expect(output.context[0]).toContain("Survive compaction");
-			expect(output.context[0]).toContain("flow_status");
-
-			const emptyWorkspace = await tempWorkspace();
-			const emptyHooks = await FlowPlugin({
-				client: { app: { log() {} } },
-				project: {},
-				directory: emptyWorkspace,
-				worktree: emptyWorkspace,
-				experimental_workspace: { register() {} },
-				serverUrl: new URL("http://localhost"),
-				$: {},
-			} as unknown as Parameters<typeof FlowPlugin>[0]);
-			const emptyCompacting = emptyHooks["experimental.session.compacting"];
-			if (!emptyCompacting) throw new Error("Expected compaction hook.");
-			const emptyOutput: { context: string[] } = { context: [] };
-			await emptyCompacting(
-				{ sessionID: "test-session" },
-				emptyOutput as Parameters<typeof emptyCompacting>[1],
-			);
-			expect(emptyOutput.context).toEqual([]);
-		} finally {
-			delete process.env.FLOW_EXPERIMENTAL_COMPACTION;
-			if (previousHome === undefined) {
-				delete process.env.HOME;
-			} else {
-				process.env.HOME = previousHome;
-			}
-		}
 	});
 });

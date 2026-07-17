@@ -2,7 +2,7 @@
 
 Use this checklist before `flow_plan_save` and again before approval if the plan
 changed during discussion. The goal is not a long planning artifact; it is a
-compact plan another agent can execute without rediscovering the work.
+concise plan another agent can execute without rediscovering the work.
 
 ## Must pass
 

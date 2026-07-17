@@ -8,7 +8,7 @@ Several current files were introduced with the first plugin commit on 2026-03-31
 
 ## The longest current file
 
-The longest current file is `tests/distribution-and-surface.test.ts` at 1,778 lines. That size reflects how much of Flow's public contract lives at the OpenCode boundary: managed skills, command prompts, hidden worker permissions, CLI doctor/sync/uninstall behavior, config collision handling, setup health, and optional compaction hooks.
+The longest current file is `tests/distribution-and-surface.test.ts`. That size reflects how much of Flow's public contract lives at the OpenCode boundary: managed skills, command prompts, hidden worker permissions, CLI doctor/sync/uninstall behavior, config collision handling, and setup health.
 
 ## No TODO trail
 

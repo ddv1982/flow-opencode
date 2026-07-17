@@ -23,13 +23,15 @@ These instructions run in two contexts, and only one of them can load helpers:
   subagents. In this context, skip every "load" and "fan out" instruction
   below: judge from the diff, the plan fields, and the recorded validation
   evidence, and record a coverage gap for any judgment that would have needed
-  a helper skill or a command run.
+  a helper skill or a command run. The bundled hidden reviewer prompt uses the
+  canonical role-safe contract in
+  `references/hidden-reviewer-contract.md`.
 
 ## Start
 
 - Call `flow_status` when available.
 - Identify whether this is a feature review or final review.
-- Prefer the manager's compact review packet over parent-session memory. The
+- Prefer the manager's bounded review packet over parent-session memory. The
   packet should name the active feature, minimum `reviewDepth`, changed files,
   diff summary, validation evidence, and targeted paths or risk lenses. If the
   packet is missing important scope or evidence, record that as a coverage gap
@@ -90,14 +92,15 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 - Cleanup/refactor: in manager context, load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved. If it is unavailable or you are the hidden reviewer, record a coverage gap instead of approving cleanup claims.
 - UI/frontend: in manager context, load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available. If it is unavailable or you are the hidden reviewer, record a coverage gap and do not claim visual polish was verified.
 - Audit reports: use `../flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
-- Large reviews (manager context only): use
+- Large reviews (manager context only): start with
   `../flow/references/parallel-orchestration.md` for read-only slices by
-  changed-file group, risk lens, or validation surface. Use the named review,
-  audit, evidence, or validation agents from that reference instead of generic
-  subagents. Write its pass manifest before fan-out and apply its Stage 6
-  handoff acceptance and verification tiers; only the manager
-  returns the final `featureReview` or `finalReview` payload. If that reference
-  is unavailable in the current context (for example in a bundled public Flow
+  changed-file group, risk lens, or validation surface. If fan-out is selected,
+  use `../flow/references/parallel-manifest.md`,
+  `../flow/references/parallel-execution.md`, and
+  `../flow/references/parallel-synthesis.md` with the named review, audit,
+  evidence, or validation workers; only the manager returns the final
+  `featureReview` or `finalReview` payload. If those references are unavailable
+  in the current context (for example in a bundled public Flow
   command that does not include it), review serially and record the skipped
   fan-out as a coverage gap instead of improvising worker contracts. The hidden
   reviewer cannot spawn workers; it reviews its assigned scope directly and

@@ -1,0 +1,33 @@
+{
+	"variant": "surface-specific-bookended",
+	"justification": "Accepted after restoring source-backed runtime guards, reviewer depth and special-case evidence rules, and bounded worker handoffs; the reviewer increase restores omitted judgment while manager surfaces remain substantially smaller than the whole-skill baseline.",
+	"growthPolicy": {
+		"minimumWordAllowance": 8,
+		"relativeWordAllowance": 0.02
+	},
+	"surfaces": {
+		"flow-auto": { "acceptedWords": 3596, "maxExactDuplicateLines": 3 },
+		"flow-plan": { "acceptedWords": 1390, "maxExactDuplicateLines": 2 },
+		"flow-run": { "acceptedWords": 1706, "maxExactDuplicateLines": 0 },
+		"flow-review": { "acceptedWords": 57, "maxExactDuplicateLines": 0 },
+		"flow-status": { "acceptedWords": 10, "maxExactDuplicateLines": 0 },
+		"flow-reviewer": { "acceptedWords": 1120, "maxExactDuplicateLines": 1 },
+		"flow-evidence-worker": {
+			"acceptedWords": 170,
+			"maxExactDuplicateLines": 0
+		},
+		"flow-validation-worker": {
+			"acceptedWords": 170,
+			"maxExactDuplicateLines": 0
+		},
+		"flow-audit-worker": { "acceptedWords": 181, "maxExactDuplicateLines": 0 },
+		"flow-verifier-worker": {
+			"acceptedWords": 173,
+			"maxExactDuplicateLines": 0
+		},
+		"flow-candidate-worker": {
+			"acceptedWords": 195,
+			"maxExactDuplicateLines": 0
+		}
+	}
+}

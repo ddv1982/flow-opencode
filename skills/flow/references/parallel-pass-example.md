@@ -1,8 +1,8 @@
 # Parallel pass example
 
-Use this example after `parallel-orchestration.md` when a broad Flow task needs a
-concrete pass shape. The project below is illustrative; derive your own slices
-from the actual repo during serial orientation.
+Use this example only after `parallel-orchestration.md` routes a broad Flow task
+to fan-out. It illustrates the manifest, execution, and synthesis references;
+derive real slices from the actual repo during serial orientation.
 
 Goal: review whether a web app's API error handling is consistent before
 planning a refactor.
@@ -88,7 +88,7 @@ keeps only verified or clearly labeled claims, and records one artifact such as
 a plan decision, review payload, or docs patch. Raw handoffs and unverified
 suggestions do not move into the next pass or user-facing answer.
 
-If the pass shaped feature execution, the manager records compact accounting in
+If the pass shaped feature execution, the manager records bounded accounting in
 `flow_feature_complete.orchestrationPasses`, such as pass id
 `api-error-handling-read`, kind `review`, worker count `3`, slice ids
 `routes-auth`, `routes-billing`, and `routes-admin`, verification status

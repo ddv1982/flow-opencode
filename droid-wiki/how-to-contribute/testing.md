@@ -8,7 +8,8 @@ Testing focuses on hard gates, persistence safety, public surface stability, pac
 | --- | --- |
 | `tests/runtime-gates.test.ts` | Plan validation, immutable approval, single active feature, completion evidence, final review, blockers, reset, and close rules. |
 | `tests/workspace-persistence.test.ts` | Unsafe roots, duplicate and malformed JSON, generated instructions, archive and close behavior, lock recovery, quarantine, and schema errors. |
-| `tests/distribution-and-surface.test.ts` | Plugin surface, managed skills, command prompts, permission contracts, CLI doctor/sync/uninstall, startup sync health, config collisions, and compaction opt-in. |
+| `tests/distribution-and-surface.test.ts` | Plugin surface, managed skills, command prompts, permission contracts, CLI doctor/sync/uninstall, startup sync health, and config collisions. |
+| `tests/prompt-quality.test.ts` | Prompt source ownership, role applicability, handoff schemas, growth thresholds, 18 static scenarios, and model-response grading. |
 | `tests/package-smoke.test.ts` | Build, pack, tar extraction, CLI execution from the packed package, and consumer TypeScript imports. |
 | `tests/live-opencode-smoke.test.ts` | Real OpenCode server registration over HTTP, gated by `FLOW_LIVE_SMOKE=1`. |
 
@@ -20,6 +21,8 @@ Testing focuses on hard gates, persistence safety, public surface stability, pac
 | `bun test tests/runtime-gates.test.ts` | Runtime state gate changed. |
 | `bun test tests/workspace-persistence.test.ts` | `.flow/` persistence or recovery changed. |
 | `bun test tests/distribution-and-surface.test.ts` | Plugin config, commands, agents, skill sync, or CLI changed. |
+| `bun run prompt:quality` | Prompt sources, contracts, roles, or compiled surface size changed. |
+| `bun run prompt:model-eval -- --model <provider/model> --timeout-ms 300000` | Opt-in comparison of baseline and implemented prompt decisions is warranted. |
 | `bun run package:smoke` | `package.json`, `exports`, `bin`, build scripts, declaration output, or packed package changed. |
 | `FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts` | OpenCode host behavior might differ from mocked adapter tests. |
 

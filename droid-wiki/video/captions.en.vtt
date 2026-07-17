@@ -374,7 +374,7 @@ Distribution and surface tests cover commands
 
 94
 00:03:50.812 --> 00:03:53.294
-, and optional compaction. The release path
+, and bounded recovery. The release path
 
 95
 00:03:53.294 --> 00:03:55.776

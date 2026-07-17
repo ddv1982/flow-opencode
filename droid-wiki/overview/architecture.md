@@ -29,7 +29,6 @@ The adapter in `src/adapters/opencode/plugin.ts` is the only runtime-facing Open
 - registers the config hook from `src/adapters/opencode/config.ts`,
 - registers tools from `src/adapters/opencode/tools.ts`,
 - expands Flow slash commands through `command.execute.before`,
-- optionally registers `experimental.session.compacting` when `FLOW_EXPERIMENTAL_COMPACTION=1`.
 
 ## Data flow for a feature run
 
@@ -61,7 +60,7 @@ As of 2026-07-02, the repo has about 6,503 TypeScript lines across 23 files and 
 | File | Purpose |
 | --- | --- |
 | `src/index.ts` | Exports the OpenCode plugin. |
-| `src/adapters/opencode/plugin.ts` | Plugin hooks, command preflight, optional compaction context. |
+| `src/adapters/opencode/plugin.ts` | Stable plugin hooks and command preflight. |
 | `src/config-shared.ts` | Public commands, hidden workers, and config mutation. |
 | `src/runtime/api.ts` | Runtime tool handlers and input schemas. |
 | `src/runtime/transitions.ts` | State machine and completion gates. |

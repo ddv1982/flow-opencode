@@ -7,6 +7,8 @@ description: "Use when an approved Flow plan has a feature to implement, validat
 
 Use this skill for implementation after a Flow plan is approved. Work one feature at a time.
 
+## Execution runtime availability
+
 If `flow_run_start` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode.
 
 ## Start
@@ -30,21 +32,6 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Read the feature `targets`, `summary`, `validation`, dependencies, and plan `requirements`/`decisions`.
 - Treat the feature's `reviewDepth` as the minimum feature-review depth that
   must be recorded in `flow_feature_complete`.
-- For broad, risky, or multi-target work, record an implementation pass
-  decision before editing: `serial`, `candidate-exact-path`,
-  `candidate-worktree`, `tournament`, or `skipped`. Use
-  `../flow/references/parallel-orchestration.md` for the decision rules,
-  manifest fields, and compact `orchestrationPasses` record.
-- Classify `candidateEligibility` (`eligible`, `not_eligible`, or `unknown`)
-  and `candidateDecision` (`used`, `skipped`, or `serial_required`) separately;
-  implementation decisions must use `eligible` or `not_eligible` and always set
-  an explicit `decision`. The valid pairings and the candidate execution
-  evidence rules are in `../flow/references/parallel-orchestration.md` under
-  "Implementation pass decision" — follow that reference when composing the
-  record.
-- Record structured `decisionFactors`: `shared_state`, `overlapping_files`,
-  `small_slice`, `needs_manager_judgment`, `independent_surface`, and
-  `validation_available`.
 - Keep edits scoped to the active feature. If new scope appears, stop and replan or defer it to another feature.
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
@@ -53,6 +40,37 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
   `flow-commit` only after `flow_feature_complete` has been recorded, unless the
   user explicitly asks for a WIP commit path. Keep Git boundaries separate from
   Flow state recording.
+
+## Candidate implementation
+
+`flow-run` remains the candidate-implementation manager entry route. Invoke the
+hidden `flow-candidate-worker` only after feature start and a complete pass
+manifest; never route the user's feature request directly to it.
+
+For broad, risky, or multi-target work, record an implementation pass decision
+before editing: `serial`, `candidate-exact-path`, `candidate-worktree`,
+`tournament`, or `skipped`. Candidate implementation requires explicit user
+authorization and either an isolated worktree or exact non-overlapping path
+ownership. It is eligible only when the slice has an independent surface and
+practical validation, with no shared state, overlapping files, or unresolved
+manager judgment. Shared contracts, migrations, lockfiles, generated outputs,
+tightly coupled callers, unclear ownership, and small slices remain serial.
+
+Classify `candidateEligibility` (`eligible`, `not_eligible`, or `unknown`) and
+`candidateDecision` (`used`, `skipped`, or `serial_required`) separately. Read
+`../flow/references/parallel-decision.md` for valid pairings and factors. After
+selecting fan-out, read `../flow/references/parallel-manifest.md` and
+`../flow/references/parallel-execution.md`, then
+`../flow/references/parallel-synthesis.md` when handoffs return.
+Set `decision`, `decisionReason`, `decisionFactors`, and `writeScope`.
+
+Candidate workers return patches for manager inspection. The manager accepts,
+modifies, or rejects them, integrates accepted work, validates, reviews, and
+records Flow state serially. Record the candidate outcome as `accepted`,
+`modified`, or `rejected`. When a candidate pass or serial/skipped decision
+materially shaped the feature, include its bounded record in
+`flow_feature_complete.orchestrationPasses`; keep full handoffs and long logs
+outside the runtime payload.
 
 ## Validate
 
@@ -65,24 +83,14 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Non-final features complete with `validationScope: "targeted"`.
 - The final feature must run a broad project-level gate and use `validationScope: "broad"`.
 
-For broad validation research, risky changes, or unclear coverage, use
-`../flow/references/parallel-orchestration.md` to fan out named Flow workers.
-Use the mode-to-agent mapping in that reference instead of generic subagents.
-Write its pass manifest before fan-out, paste the matching handoff template
-from `../flow/references/handoff-format.md` into every worker prompt, and
-apply its verification tiers to the handoffs that come back.
+For broad validation research, risky changes, or unclear coverage, start with
+`../flow/references/parallel-orchestration.md`. If it routes to fan-out, write
+the manifest from `../flow/references/parallel-manifest.md`, use the named Flow
+workers and prompt contract in `../flow/references/parallel-execution.md`, paste
+the matching handoff template from `../flow/references/handoff-format.md`, and
+apply `../flow/references/parallel-synthesis.md` when the handoffs return.
 They may report command output they actually ran or propose focused checks; the
 manager decides what is strong enough to record.
-
-For independent implementation attempts, use candidate workers only with
-explicit user authorization plus isolated worktrees or exact non-overlapping
-path ownership. Treat their output as candidate patches. The manager inspects,
-merges or rejects, validates, and records Flow state serially. Record whether a
-candidate was `accepted`, `modified`, or `rejected`.
-When a candidate pass or serial/skipped implementation decision materially
-shaped the feature, include its compact record in
-`flow_feature_complete.orchestrationPasses`. Do not paste full worker handoffs
-or long logs into the runtime payload.
 
 ## Review and complete
 
@@ -90,7 +98,7 @@ Before `flow_feature_complete`, obtain a `featureReview` payload. Load
 `flow-review`; for read-only subagent reviews, the manager receives the review
 packet and records both `featureReviewDepth` and `featureReview`.
 
-Send reviewers a compact review packet. Do not rely on the accumulated parent
+Send reviewers a bounded review packet. Do not rely on the accumulated parent
 conversation. Include only:
 
 - active feature id, title, summary, `reviewDepth`, targets, validation, and dependencies
@@ -148,7 +156,8 @@ Complete with:
 ```
 
 If `flow_feature_complete` returns a `session.resumePacket` or
-`session.budget.phaseBoundary`, stop after reporting the compact handoff. If
+`session.budget.phaseBoundary`, stop after reporting the runtime-provided resume
+packet. If
 genuinely blocked, call `flow_feature_complete` with `status: "needs_input"` and
 an `outcome` that explains the blocker and next step. Never fabricate validation
 or review evidence to force progress.

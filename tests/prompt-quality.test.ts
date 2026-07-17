@@ -1,0 +1,464 @@
+import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { LEGACY_PROMPT_BASELINE } from "../src/prompt-baseline-fixtures";
+import {
+	buildPromptModelEvaluationPacket,
+	gradeModelDecisions,
+	type ModelDecision,
+	parseModelDecisionResponse,
+} from "../src/prompt-model-evaluation";
+import {
+	evaluatePromptVariant,
+	measureCompiledPrompt,
+	PROMPT_EVALUATION_SCENARIOS,
+	promptInventoryForVariant,
+} from "../src/prompt-quality";
+import {
+	compiledFlowPromptSurfaces,
+	FLOW_STATIC_PROMPT_SURFACES,
+	type FlowPromptSurfaceName,
+	type FlowWorkerHandoffKind,
+	validateFlowWorkerHandoff,
+} from "../src/prompt-surfaces";
+
+type GrowthBaseline = {
+	variant: string;
+	justification: string;
+	growthPolicy: {
+		minimumWordAllowance: number;
+		relativeWordAllowance: number;
+	};
+	surfaces: Record<
+		FlowPromptSurfaceName,
+		{ acceptedWords: number; maxExactDuplicateLines: number }
+	>;
+};
+
+const WORKER_HANDOFF_KINDS = {
+	"flow-reviewer": "review-slice",
+	"flow-evidence-worker": "evidence",
+	"flow-validation-worker": "validation",
+	"flow-audit-worker": "audit",
+	"flow-candidate-worker": "candidate",
+	"flow-verifier-worker": "verifier",
+} satisfies Partial<Record<FlowPromptSurfaceName, FlowWorkerHandoffKind>>;
+
+async function growthBaseline(): Promise<GrowthBaseline> {
+	return JSON.parse(
+		await readFile("tests/fixtures/prompt-quality-baseline.json", "utf8"),
+	) as GrowthBaseline;
+}
+
+function validHandoffFromSchema(schema: string): string {
+	const headings = schema
+		.split(/\r?\n/)
+		.map((line) => /^## ([^—]+?)(?:\s+—.*)?$/.exec(line)?.[1]?.trim())
+		.filter((heading): heading is string => Boolean(heading));
+	return headings
+		.map(
+			(heading) =>
+				`## ${heading}\n${heading === "Status" ? "success" : "covered"}`,
+		)
+		.join("\n");
+}
+
+function emptyBodyHandoffFromSchema(schema: string): string {
+	const headings = schema
+		.split(/\r?\n/)
+		.map((line) => /^## (.+)$/.exec(line)?.[1]?.trim())
+		.filter((heading): heading is string => Boolean(heading));
+	return headings
+		.map((heading) => `## ${heading}${heading === "Status" ? "\nsuccess" : ""}`)
+		.join("\n");
+}
+
+function passingModelDecisions(): ModelDecision[] {
+	const overrides: Record<string, Partial<ModelDecision>> = {
+		"small-serial-bug-fix": {
+			validation: ["focused"],
+			independentReview: true,
+			workers: ["flow-reviewer"],
+		},
+		"broad-planning-request": { planOnly: true },
+		"review-first-maintainability": { planOnly: true, reviewFirst: true },
+		"runtime-persistence-change": {
+			validation: ["behavioral"],
+			independentReview: true,
+		},
+		"ui-special-validation": {
+			validation: ["ui", "browser"],
+			independentReview: true,
+		},
+		"parallel-discovery": {
+			executionMode: "readonly_parallel",
+			workers: ["flow-evidence-worker"],
+			manifestComplete: true,
+		},
+		"partial-handoff": {
+			coverage: "partial",
+			handoffStatus: "partial",
+			handoffHasRequiredSections: true,
+		},
+		"malformed-handoff": {
+			coverage: "missing",
+			handoffStatus: "blocked",
+			handoffHasRequiredSections: true,
+		},
+		"failed-review-repair": {
+			retryReviews: 1,
+			stopsAfterRetryFailure: true,
+		},
+		"resume-after-interruption": {
+			phaseBoundaryAction: "resume_with_ack",
+		},
+		"candidate-safe": {
+			executionMode: "candidate_worker",
+			workers: ["flow-candidate-worker"],
+			manifestComplete: true,
+			candidateDecision: "used",
+		},
+		"candidate-serial": { candidateDecision: "serial_required" },
+		"planning-runtime-unavailable": { executionMode: "blocked" },
+		"execution-runtime-unavailable": { executionMode: "blocked" },
+		"detailed-feature-review": {
+			independentReview: true,
+			reviewDepth: "detailed",
+		},
+		"cleanup-review-missing-helper": { coverage: "partial" },
+		"ui-review-missing-visual-evidence": { coverage: "partial" },
+		"no-self-initiated-compaction": { sessionContinuation: "continue" },
+	};
+	return PROMPT_EVALUATION_SCENARIOS.map((scenario) => ({
+		id: scenario.id,
+		route: scenario.expectedRoute,
+		executionMode: "serial",
+		workers: [],
+		stateOwner: "root-manager",
+		callsStatusFirst: true,
+		planOnly: false,
+		reviewFirst: false,
+		validation: [],
+		independentReview: false,
+		reviewDepth: "not_applicable",
+		manifestComplete: false,
+		coverage: "not_applicable",
+		handoffStatus: "not_applicable",
+		handoffHasRequiredSections: false,
+		retryReviews: 0,
+		stopsAfterRetryFailure: false,
+		phaseBoundaryAction: "none",
+		sessionContinuation: "not_applicable",
+		candidateDecision: "not_applicable",
+		completionClaimed: false,
+		reason: "Grounded in the rendered Flow contract.",
+		...overrides[scenario.id],
+	}));
+}
+
+describe("Flow prompt quality", () => {
+	test("inventories every static prompt surface and the requested scenarios", () => {
+		expect(Object.isFrozen(LEGACY_PROMPT_BASELINE)).toBe(true);
+		expect(Object.isFrozen(LEGACY_PROMPT_BASELINE.workerPrompts)).toBe(true);
+		expect(Object.isFrozen(LEGACY_PROMPT_BASELINE.reviewerSections)).toBe(true);
+		expect(FLOW_STATIC_PROMPT_SURFACES).toHaveLength(11);
+		expect(new Set(FLOW_STATIC_PROMPT_SURFACES).size).toBe(11);
+		expect(PROMPT_EVALUATION_SCENARIOS).toHaveLength(18);
+		expect(new Set(PROMPT_EVALUATION_SCENARIOS.map(({ id }) => id)).size).toBe(
+			18,
+		);
+		for (const fixture of PROMPT_EVALUATION_SCENARIOS) {
+			expect(fixture.input.length).toBeGreaterThan(20);
+			expect(fixture.expectedRoute).toBe(fixture.surface);
+		}
+		const candidateSafe = PROMPT_EVALUATION_SCENARIOS.find(
+			({ id }) => id === "candidate-safe",
+		);
+		expect(candidateSafe?.input).toContain(
+			"root Flow manager executing an approved feature",
+		);
+		expect(candidateSafe?.expectedRoute).toBe("flow-run");
+	});
+
+	test("builds and deterministically grades opt-in model evaluation packets", () => {
+		const packet = buildPromptModelEvaluationPacket(
+			"surface-specific-bookended",
+		);
+		for (const surface of FLOW_STATIC_PROMPT_SURFACES) {
+			expect(packet).toContain(`<surface name="${surface}">`);
+		}
+		for (const scenario of PROMPT_EVALUATION_SCENARIOS) {
+			expect(packet).toContain(`<scenario id="${scenario.id}">`);
+		}
+		expect(packet).toContain("Use [] for non-applicable array fields");
+		expect(packet).toContain("never inside an array");
+		const passing = passingModelDecisions();
+		const grade = gradeModelDecisions(passing);
+		expect(grade.passedScenarios).toBe(grade.totalScenarios);
+		expect(grade.passedCriteria).toBe(grade.totalCriteria);
+
+		const unsafeCandidate = passing.map((decision) =>
+			decision.id === "candidate-serial"
+				? {
+						...decision,
+						executionMode: "candidate_worker" as const,
+						workers: ["flow-candidate-worker"],
+						candidateDecision: "used" as const,
+					}
+				: decision,
+		);
+		expect(gradeModelDecisions(unsafeCandidate).passedScenarios).toBeLessThan(
+			grade.totalScenarios,
+		);
+		expect(
+			parseModelDecisionResponse(
+				`The requested result follows.\n\`\`\`json\n${JSON.stringify({ decisions: passing })}\n\`\`\``,
+			),
+		).toEqual(passing);
+		expect(() =>
+			parseModelDecisionResponse('{"decisions":[{"id":"missing-fields"}]}'),
+		).toThrow();
+		expect(() =>
+			parseModelDecisionResponse(
+				JSON.stringify({
+					decisions: [...passing, { ...passing[0], id: "unknown-scenario" }],
+				}),
+			),
+		).toThrow("unknown scenario decision");
+		expect(() =>
+			gradeModelDecisions([...passing, passing[0] as ModelDecision]),
+		).toThrow("duplicate scenario decision");
+	});
+
+	test("rejects unbounded model evaluation timeout values before launch", () => {
+		const result = Bun.spawnSync({
+			cmd: [
+				"bun",
+				"run",
+				"scripts/prompt-model-eval.ts",
+				"--model",
+				"provider/model",
+				"--timeout-ms",
+				"0",
+			],
+			cwd: process.cwd(),
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr.toString()).toContain("--timeout-ms 300000");
+	});
+
+	test("bookended surface compilation preserves every deterministic contract", () => {
+		const baseline = evaluatePromptVariant("baseline");
+		const lexical = evaluatePromptVariant("lexically-deduplicated");
+		const surfaceSpecific = evaluatePromptVariant("surface-specific");
+		const bookended = evaluatePromptVariant("surface-specific-bookended");
+
+		expect(lexical.scenariosPassed).toBe(baseline.scenariosPassed);
+		expect(surfaceSpecific.scenariosPassed).toBeGreaterThan(
+			baseline.scenariosPassed,
+		);
+		expect(bookended.scenariosPassed).toBe(bookended.scenariosTotal);
+		expect(bookended.criteriaPassed).toBe(bookended.criteriaTotal);
+		expect(bookended.staticApproximateTokens).toBeLessThan(
+			baseline.staticApproximateTokens,
+		);
+		expect(bookended.roleInapplicableLines).toBe(0);
+	});
+
+	test("guards accepted surface sizes and exact duplicate lines", async () => {
+		const accepted = await growthBaseline();
+		expect(accepted.justification.length).toBeGreaterThan(40);
+		for (const metric of promptInventoryForVariant(
+			"surface-specific-bookended",
+		)) {
+			const expected =
+				accepted.surfaces[metric.surface as FlowPromptSurfaceName];
+			expect(
+				expected,
+				`${metric.surface} needs a growth baseline`,
+			).toBeDefined();
+			if (!expected) continue;
+			const wordAllowance = Math.max(
+				accepted.growthPolicy.minimumWordAllowance,
+				Math.ceil(
+					expected.acceptedWords * accepted.growthPolicy.relativeWordAllowance,
+				),
+			);
+			expect(
+				metric.words,
+				`${metric.surface} grew materially; update the accepted baseline with a justification`,
+			).toBeLessThanOrEqual(expected.acceptedWords + wordAllowance);
+			expect(
+				metric.exactDuplicateLines,
+				`${metric.surface} gained exact duplicate instruction lines`,
+			).toBeLessThanOrEqual(expected.maxExactDuplicateLines);
+			expect(metric.terminologyWarnings).toEqual([]);
+		}
+	});
+
+	test("keeps canonical ids unique and role fragments applicable", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		for (const [surface, compiled] of Object.entries(surfaces)) {
+			const ids = compiled.fragments.map(({ id }) => id);
+			expect(new Set(ids).size, `${surface} has duplicate canonical ids`).toBe(
+				ids.length,
+			);
+			for (const fragment of compiled.fragments) {
+				expect(
+					fragment.roles,
+					`${surface} includes role-inapplicable fragment ${fragment.id}`,
+				).toContain(compiled.role);
+				if (fragment.source.startsWith("skills/")) {
+					expect(
+						fragment.origin,
+						`${surface} claims a skill source for compiler-owned text`,
+					).toBe("skill-source");
+				}
+			}
+			expect(
+				measureCompiledPrompt(compiled).roleInapplicableLines,
+				`${surface} contains text that grants a role-inapplicable capability`,
+			).toBe(0);
+		}
+		for (const surface of [
+			"flow-evidence-worker",
+			"flow-validation-worker",
+			"flow-audit-worker",
+			"flow-candidate-worker",
+			"flow-verifier-worker",
+		] as const) {
+			const purpose = surfaces[surface].fragments.filter(
+				(fragment) => fragment.kind === "purpose",
+			);
+			expect(
+				purpose,
+				`${surface} has one canonical role contract`,
+			).toHaveLength(1);
+			expect(purpose[0]?.origin).toBe("skill-source");
+			expect(purpose[0]?.source).toContain(
+				"skills/flow/references/parallel-execution.md#flow-prompt:worker-role-",
+			);
+		}
+	});
+
+	test("bookends manager prompts without repeating the complete contract", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		for (const surface of ["flow-auto", "flow-plan", "flow-run"] as const) {
+			const compiled = surfaces[surface];
+			expect(compiled.fragments[0]?.kind).toBe("invariant");
+			expect(compiled.fragments.at(-1)?.kind).toBe("checkpoint");
+			expect(compiled.text).toContain("Call `flow_status` first");
+			expect(compiled.text).toContain(
+				"Only the root manager may call state-changing `flow_*` tools",
+			);
+			expect(compiled.text).not.toContain(
+				"## Bundled flow-plan/references/planning-examples.md",
+			);
+			expect(compiled.text).not.toContain(
+				"## Bundled flow/references/handoff-format.md",
+			);
+		}
+		for (const surface of ["flow-auto", "flow-run"] as const) {
+			expect(surfaces[surface].text).toContain("Public reviewer routing");
+			expect(surfaces[surface].text).toContain("reserved `flow-reviewer`");
+			expect(surfaces[surface].text).toContain("Flow-gated");
+			expect(surfaces[surface].text).toContain(
+				"`flow-run` remains the candidate-implementation manager entry route",
+			);
+			expect(surfaces[surface].text).toContain(
+				"never route the user's feature request directly to it",
+			);
+		}
+	});
+
+	test("gives each hidden worker one applicable schema with deterministic validation", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		for (const [surface, kind] of Object.entries(WORKER_HANDOFF_KINDS)) {
+			const compiled = surfaces[surface as keyof typeof surfaces];
+			const schemas = compiled.fragments.filter(
+				(fragment) => fragment.kind === "schema",
+			);
+			expect(
+				schemas,
+				`${surface} must have exactly one handoff schema`,
+			).toHaveLength(1);
+			const schema = schemas[0];
+			if (!schema || !kind) continue;
+			expect(schema.roles).toEqual([compiled.role]);
+			const valid = validHandoffFromSchema(schema.text);
+			expect(validateFlowWorkerHandoff(kind, valid)).toEqual({
+				ok: true,
+				errors: [],
+			});
+			expect(validateFlowWorkerHandoff(kind, "").ok).toBe(false);
+			expect(validateFlowWorkerHandoff(kind, "free-form success").ok).toBe(
+				false,
+			);
+			expect(
+				validateFlowWorkerHandoff(
+					kind,
+					valid.replace(
+						"## Status\nsuccess",
+						"## Status\nsuccess | partial | blocked",
+					),
+				).ok,
+			).toBe(false);
+			expect(
+				validateFlowWorkerHandoff(kind, `${valid}\n## Status\nsuccess`).errors,
+			).toContain("duplicate heading: Status");
+			const emptyBodies = validateFlowWorkerHandoff(
+				kind,
+				emptyBodyHandoffFromSchema(schema.text),
+			);
+			expect(emptyBodies.ok).toBe(false);
+			expect(
+				emptyBodies.errors.some((error) => error.startsWith("empty section:")),
+			).toBe(true);
+			const unresolvedPlaceholder = validateFlowWorkerHandoff(
+				kind,
+				valid.replace("covered", "<missing>"),
+			);
+			expect(unresolvedPlaceholder.ok).toBe(false);
+			expect(
+				unresolvedPlaceholder.errors.some((error) =>
+					error.startsWith("unresolved placeholder"),
+				),
+			).toBe(true);
+		}
+	});
+
+	test("keeps parallel guidance progressively disclosed", async () => {
+		const [index, decision, manifest, execution, synthesis, flowSkill] =
+			await Promise.all([
+				readFile("skills/flow/references/parallel-orchestration.md", "utf8"),
+				readFile("skills/flow/references/parallel-decision.md", "utf8"),
+				readFile("skills/flow/references/parallel-manifest.md", "utf8"),
+				readFile("skills/flow/references/parallel-execution.md", "utf8"),
+				readFile("skills/flow/references/parallel-synthesis.md", "utf8"),
+				readFile("skills/flow/SKILL.md", "utf8"),
+			]);
+
+		expect(index.split(/\r?\n/).length).toBeLessThan(80);
+		expect(index).toContain("## Load only the selected branch");
+		expect(index).toContain("The decision reference is enough");
+		expect(index).not.toContain("## Permission contract");
+		expect(index).not.toContain("## Synthesize");
+		expect(decision.split(/\r?\n/).length).toBeLessThan(150);
+		expect(manifest.split(/\r?\n/).length).toBeLessThan(100);
+		expect(execution.split(/\r?\n/).length).toBeLessThan(150);
+		expect(synthesis.split(/\r?\n/).length).toBeLessThan(150);
+		expect(decision).toContain("## Implementation pass decision");
+		expect(manifest).toContain("## Write the manifest");
+		expect(execution).toContain("## Permission contract");
+		expect(synthesis).toContain("## Extend or stop");
+		for (const reference of [
+			"parallel-decision.md",
+			"parallel-manifest.md",
+			"parallel-execution.md",
+			"parallel-synthesis.md",
+		]) {
+			expect(flowSkill).toContain(`references/${reference}`);
+		}
+	});
+});

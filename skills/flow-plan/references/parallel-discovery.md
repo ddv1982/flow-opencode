@@ -2,9 +2,13 @@
 
 Use this only after a serial orientation pass has identified the repo shape and the likely slices. Workers are read-only evidence gatherers; the planner owns the plan.
 
-For broad parallel passes, also load `../../flow/references/parallel-orchestration.md`.
-Use its pass manifest as the pre-fan-out coverage gate and
-`../../flow/references/handoff-format.md` response shapes.
+For broad parallel passes, start with
+`../../flow/references/parallel-orchestration.md`. If it selects fan-out, use
+`../../flow/references/parallel-manifest.md` as the coverage gate,
+`../../flow/references/parallel-execution.md` for worker prompts, and
+`../../flow/references/parallel-synthesis.md` when handoffs return. Copy the
+matching `../../flow/references/handoff-format.md` response shape into each
+prompt.
 
 ## Good slices
 
@@ -28,8 +32,8 @@ config, or release surfaces in the pass manifest.
 
 ## Manifest and prompts
 
-Write the pass manifest and the worker prompts exactly as Stages 3 and 4 of
-`../../flow/references/parallel-orchestration.md` define them: one manifest row
+Write the pass manifest and worker prompts as `parallel-manifest.md` and
+`parallel-execution.md` define them: one manifest row
 per slice with expected coverage, dependencies, write scope, and a verification
 tier, and a self-contained prompt per worker naming the mode (usually
 `evidence`), the exact slice, and the expected coverage. Discovery-specific
@@ -56,5 +60,5 @@ Convert only evidence-backed work into plan fields:
 If workers disagree, inspect the source artifact yourself. If a candidate finding lacks a concrete citation or refutation pass, make it a review-first deliverable rather than a fix feature.
 
 Apply the manager synthesis barrier from
-`../../flow/references/parallel-orchestration.md`: only distilled,
+`../../flow/references/parallel-synthesis.md`: only distilled,
 evidence-backed claims become plan fields.

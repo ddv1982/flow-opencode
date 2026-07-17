@@ -16,7 +16,6 @@ If a user already defines one of Flow's reserved command or agent ids, `createCo
 
 | Variable | Purpose | Source |
 | --- | --- | --- |
-| `FLOW_EXPERIMENTAL_COMPACTION=1` | Enables the optional `experimental.session.compacting` hook. | `src/adapters/opencode/plugin.ts` |
 | `FLOW_LIVE_SMOKE=1` | Enables the live OpenCode smoke test. | `package.json`, `tests/live-opencode-smoke.test.ts` |
 | `HOME` / `USERPROFILE` | Used to resolve the OpenCode skills root. | `src/distribution/sync.ts` |
 
@@ -35,9 +34,12 @@ If a user already defines one of Flow's reserved command or agent ids, `createCo
 
 | File | Purpose |
 | --- | --- |
+| `src/prompt-surfaces.ts` | Role/phase-specific prompt compilation and offline handoff validators. |
+| `src/prompt-quality.ts` | Prompt inventory metrics and static scenario contracts. |
+| `src/prompt-model-evaluation.ts` | Opt-in model-decision packets, schemas, and graders. |
 | `src/config-shared.ts` | Config entries for commands and agents. |
 | `src/adapters/opencode/config.ts` | Runtime config hook. |
-| `src/adapters/opencode/plugin.ts` | Experimental compaction opt-in. |
+| `src/adapters/opencode/plugin.ts` | Stable plugin hooks and command preflight. |
 | `src/distribution/sync.ts` | Skills root resolution. |
 
 Related pages: [OpenCode commands](../api/open-code-commands.md), [Parallel orchestration](../features/parallel-orchestration.md), and [Tooling](../how-to-contribute/tooling.md).

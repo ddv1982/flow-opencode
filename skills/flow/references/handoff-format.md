@@ -1,14 +1,18 @@
 # Flow worker handoff contract
 
 Flow managers merge only the worker's final response. Treat that response as the
-worker report of record: it must include the assigned scope, what was actually
-covered, the evidence for each useful claim, and the remaining gaps. End worker
-prompts with "Return only this Flow handoff."
+worker report of record. End worker prompts with "Return only this Flow
+handoff."
 
-Empty or unstructured worker output is a failed handoff. If the worker cannot
-cover the assigned scope, verify the evidence, or satisfy the handoff shape, it
-must return `Status: blocked` with the missing elements, and the manager must
-not treat the slice as complete.
+<!-- flow-prompt:worker-integrity:start -->
+Cite or drop every claim. Label single-source, inferred, and unsettled claims.
+When usable evidence exists but named expected coverage could not be checked,
+return the required handoff with `## Status` set to `partial` and enumerate the
+unchecked items and reasons. If the assignment or required shape is missing,
+or no usable coverage can be produced, return the required handoff with
+`## Status` set to `blocked` and name the missing elements. Empty or
+unstructured output is a failed handoff.
+<!-- flow-prompt:worker-integrity:end -->
 
 Sections: evidence/review/validation/audit worker report, verifier worker report,
 and candidate implementation worker report.
@@ -24,154 +28,143 @@ Status meanings:
 
 ## Evidence, review, validation, or audit worker report
 
-Use this for `flow-evidence-worker`, `flow-reviewer`,
-`flow-validation-worker`, and `flow-audit-worker`.
+Use the one role-specific block that matches the assigned worker.
 
-```markdown
+<!-- flow-prompt:handoff-evidence:start -->
+Return only this Flow handoff:
 ## Status
 success | partial | blocked
-
 ## Scope
-<owned slice: path set, module, command, risk lens, route, data range, or question set>
-
+assigned slice
 ## Pass metadata
-- Pass id: <stable pass id from the manifest>
-- Manifest row id: <row id from the manifest>
-- Depends on: <upstream row ids or "none">
-- Write scope: <none | manager-serial | exact-path | isolated-worktree | mixed>
-
+pass id, manifest row id, dependencies, write scope
 ## Coverage
-- Expected: <files, ranges, questions, commands, or findings assigned>
-- Checked: <actual coverage, for example "12/12 files" or "command not run">
-- Not checked: <items skipped with reason, or "none">
-
+expected, checked, not checked with reasons
 ## Findings or facts
-- [high|med|low] <claim>; evidence: <file:line | command summary | screenshot path | URL | metric>; corroboration: <N sources or "single source">
-- [high|med|low] <claim>; evidence: <...>; corroboration: <...>
-
+confidence, atomic claim, citation, corroboration
 ## Sources
-- <paths read, commands run, docs fetched, data ranges covered, screenshots inspected>
-
+paths, commands, documents, screenshots, or data ranges inspected
 ## Confidence and verification
-- Verified: <claims directly re-run, recounted, traced, or cross-checked>
-- Single-source: <claims with exactly one supporting source>
-- Inferred: <claims derived from surrounding evidence rather than directly observed>
-- Unsettled: <claims, sources, or citations that could not be resolved>
-- Falsifier or missing input: <what would overturn or materially change the result>
-
+verified, single-source, inferred, unsettled, falsifier
 ## Open questions / gaps
-- <ambiguity, missing source, contradiction, skipped item, or out-of-scope dependency>
-
 ## Manager follow-ups
-- <concrete next tasks, verifier claims, validation commands, or Flow plan targets>
-```
+<!-- flow-prompt:handoff-evidence:end -->
 
-Validation workers must include exact command names and raw outcome summaries
-for commands they actually ran. Audit workers must include guards checked for
-any blocking-severity candidate. Review workers must separate blocking findings
-from advisory notes. In the shared `Findings or facts` section, review workers
-should prefix review items with `blocking:` or `advisory:` before the claim.
+<!-- flow-prompt:handoff-validation:start -->
+Return only this Flow handoff:
+## Status
+success | partial | blocked
+## Scope
+assigned checks or validation question
+## Pass metadata
+pass id, manifest row id, dependencies, write scope
+## Coverage
+expected, checked, not checked with reasons
+## Commands and outcomes
+exact command, status, raw outcome summary, behavior covered
+## Confidence and verification
+verified, single-source, inferred, unsettled, falsifier
+## Open questions / gaps
+## Manager follow-ups
+<!-- flow-prompt:handoff-validation:end -->
 
-Example evidence quality:
+<!-- flow-prompt:handoff-audit:start -->
+Return only this Flow handoff:
+## Status
+success | partial | blocked
+## Scope
+assigned paths, risks, or candidate findings
+## Pass metadata
+pass id, manifest row id, dependencies, write scope
+## Coverage
+expected, checked, not checked with reasons
+## Findings
+severity, atomic claim, citation, corroboration, guards checked, refutation result
+## Sources
+## Confidence and verification
+verified, single-source, inferred, unsettled, falsifier
+## Open questions / gaps
+## Manager follow-ups
+<!-- flow-prompt:handoff-audit:end -->
 
-- Good fact: `[high] public Flow command prompts include bundled instructions;
-  evidence: src/config-shared.ts:135; corroboration: single source`.
-- Weak fact: `[high] prompts look self-contained; evidence: read the config`.
-- Good validation: `bun test tests/distribution-and-surface.test.ts`, status
-  passed, summary `surface tests passed and covered bundled command prompts`.
-- Weak validation: `tests pass`, with no command, status, or raw outcome.
+<!-- flow-prompt:handoff-review-slice:start -->
+For an assigned review slice, return only this Flow handoff:
+## Status
+success | partial | blocked
+## Scope
+assigned files, risk lens, or validation surface
+## Pass metadata
+pass id, manifest row id, dependencies, write scope
+## Coverage
+expected, checked, not checked with reasons
+## Findings
+prefix each `blocking:` or `advisory:`, then severity, claim, citation, and corroboration
+## Sources
+## Confidence and verification
+verified, single-source, inferred, unsettled, falsifier
+## Open questions / gaps
+## Manager follow-ups
+<!-- flow-prompt:handoff-review-slice:end -->
 
 ## Verifier worker report
 
-Use this for `flow-verifier-worker`. Give it atomic claims and the cited sources
-or commands. Do not include the generator's reasoning unless that reasoning is
-the thing being verified, and do not say which worker produced the claim.
+Use this for `flow-verifier-worker`.
 
-```markdown
+<!-- flow-prompt:handoff-verifier:start -->
+Return only this Flow handoff:
 ## Status
 success | partial | blocked
-
 ## Scope
-<claim ids, sources or commands checked, and the acceptance question>
-
+atomic claim ids, sources or commands checked, acceptance question
 ## Pass metadata
-- Pass id: <stable pass id from the manifest>
-- Manifest row id: <row id from the manifest>
-- Depends on: <upstream row ids or "none">
-
+pass id, manifest row id, dependencies
 ## Verdict per claim
-- <claim id>: verdict=<supported | partly-supported | unsupported | source-not-found>
-  - claim: <claim text>
-  - evidence: <supporting snippet, path plus line, measured value, command result, or "none">
-  - source resolution: <URL, path, or command plus whether it resolved>
-  - confidence level: high | med | low
-  - recommended action: <keep, narrow, rewrite, or remove>
-
+supported | partly-supported | unsupported | source-not-found; include claim, resolved evidence, confidence, recommended action
 ## Overall
-<accept | revise | reject> because <brief reason>
-
+accept | revise | reject with reason
 ## Gaps
-- <unavailable source, ambiguous claim wording, missing oracle, or check not run>
-
 ## Manager follow-ups
-- <narrow recheck, plan adjustment, review finding, or none>
-```
+<!-- flow-prompt:handoff-verifier:end -->
 
 ## Candidate implementation worker report
 
-Use this only with explicit user authorization, in an isolated worktree or an
-exact non-overlapping path-owned slice assigned by the manager.
+Use this only with explicit user authorization and isolated or exact-path
+ownership.
 
-```markdown
+<!-- flow-prompt:handoff-candidate:start -->
+Return only this Flow handoff:
 ## Status
 success | partial | blocked
-
 ## Scope
-<isolated worktree or exact path-owned slice>
-
+isolated worktree or exact path-owned slice
 ## Pass metadata
-- Pass id: <stable pass id from the manifest>
-- Manifest row id: <row id from the manifest>
-- Depends on: <upstream row ids or "none">
-- Write scope: <exact-path | isolated-worktree>
-
+pass id, manifest row id, dependencies, exact-path | isolated-worktree
 ## Changed or proposed patch
-- <path>: <what changed and why>
-
+paths, change, reason
 ## Coverage
-- Assigned: <owned files/modules>
-- Touched: <files changed or proposed>
-- Skipped: <anything assigned but not changed and why, or "none">
-
+assigned, touched, skipped with reasons
 ## Verification
-live-verified | test-verified | type-check-only | not-verified
-- <command, observed outcome, pass/fail counts, or manual check>
-
+level, exact command or check, observed outcome
 ## Confidence and risk
-- Checked directly: <behavior, files, or commands verified by the worker>
-- Still open: <tests, review paths, or integration points the manager must cover>
-- Risk: low | medium | high -- <why>
-
+directly checked, still open, risk with reason
 ## Merge notes
-- <conflicts, nearby user changes, assumptions, or deviations>
-
+conflicts, user changes, assumptions, deviations
 ## Manager follow-ups
-- <merge, reject, rerun check, verifier pass, or replan task>
-```
+<!-- flow-prompt:handoff-candidate:end -->
 
 The manager must inspect and validate any candidate patch before recording Flow
 completion.
 
 ## Manager pass accounting record
 
-The manager, not the worker, may carry compact records into
+The manager, not the worker, may carry bounded records into
 `flow_feature_complete.orchestrationPasses`. Use one record per material pass or
 implementation decision; keep handoffs and long artifacts outside `.flow/**`.
 The candidate accounting rules — which `candidateEligibility`,
 `candidateDecision`, and `decision` combinations validate, and what counts as
 candidate execution evidence — live in
-[parallel-orchestration.md](parallel-orchestration.md) under "Implementation
-pass decision"; note `decision: "parallel"` is not valid on
+[parallel-decision.md](parallel-decision.md) under "Implementation pass
+decision"; note `decision: "parallel"` is not valid on
 `implementation-decision` records.
 
 ```json

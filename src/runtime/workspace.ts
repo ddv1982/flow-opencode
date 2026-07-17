@@ -387,7 +387,7 @@ export function flowSessionProgress(session: Session): {
 	};
 }
 
-function renderFlowInstructionFile(session: Session): string {
+export function renderFlowInstructionFile(session: Session): string {
 	const { completed: completedFeatures, total: totalFeatures } =
 		flowSessionProgress(session);
 	return [

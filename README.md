@@ -17,8 +17,8 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@4.3.9 --global --force
-npx -y opencode-plugin-flow@4.3.9 sync
+opencode plugin opencode-plugin-flow@4.4.0 --global --force
+npx -y opencode-plugin-flow@4.4.0 sync
 ```
 
 Restart OpenCode, then give Flow a goal:
@@ -71,9 +71,11 @@ completed.
 | `/flow-review` | Run a read-only review. |
 | `/flow-status` | Show the active session and next action. |
 
-Commands are bundled entrypoints: they carry their own instructions, so they
-keep working even when OpenCode's native skill discovery lags behind a fresh
-install (see [docs/troubleshooting.md](docs/troubleshooting.md)).
+Commands are compiled entrypoints: manager commands carry only their applicable
+core instructions, while `/flow-review` runs against the reserved reviewer's
+role-specific agent contract. They keep working even when OpenCode's native
+skill discovery lags behind a fresh install (see
+[docs/troubleshooting.md](docs/troubleshooting.md)).
 
 `flow-test`, `flow-deslop`, `flow-ui-quality`, and `flow-commit` are managed
 helper skills, not public commands.
@@ -114,8 +116,10 @@ The runtime owns only safety; judgment lives in the skills:
   repair is limited to one repair plus one retry before the feature blocks.
 - Completed feature counts are telemetry only; Flow does not stop an approved
   plan just because several features have completed. Review retry boundaries
-  still return a compact resume packet and require explicit `phaseBoundaryAck`
+  still return a bounded resume packet and require explicit `phaseBoundaryAck`
   before starting the next feature.
+- Skills do not estimate context pressure or request host compaction. Only a
+  runtime-issued phase boundary stops the current loop for a fresh invocation.
 - A session can close as `completed` only after final completion has passed.
 - Crash recovery is built in: stale session locks expire automatically and
   unreadable session files are quarantined with recovery guidance, never
@@ -126,7 +130,7 @@ The runtime owns only safety; judgment lives in the skills:
 
 ## Hidden workers
 
-For broad work, Flow's manager can fan out read-only workers
+For broad work, Flow's manager can fan out isolated hidden workers
 (`flow-evidence-worker`, `flow-validation-worker`, `flow-audit-worker`,
 `flow-candidate-worker`, `flow-verifier-worker`, and the `flow-reviewer`) with
 locked-down permissions. Workers gather evidence; they never approve plans,
@@ -134,9 +138,20 @@ complete features, or close sessions. Flow reserves those agent ids and the
 public command ids while the plugin is enabled, and warns if they collide with
 your own config.
 
+Each hidden worker receives only its applicable handoff schema. The manager
+contract treats empty or malformed handoffs as coverage gaps instead of
+success. The offline handoff validator detects missing headings, empty sections,
+unresolved placeholders, and invalid statuses; current OpenCode worker output
+remains plain text, so runtime acceptance still depends on the manager applying
+that contract. Inspect rendered surfaces and static contracts with
+`bun run prompt:quality`; run opt-in model decisions with
+`bun run prompt:model-eval -- --model <provider/model> --timeout-ms 300000`;
+see
+[docs/prompt-quality.md](docs/prompt-quality.md).
+
 For broad implementation, the manager records whether work stayed serial,
 used exact-path candidate workers, used isolated worktrees, ran a tournament, or
-skipped eligible candidates. Feature completion can carry compact
+skipped eligible candidates. Feature completion can carry bounded
 `orchestrationPasses` with candidate eligibility, decision, and structured
 factors; `flow_status` reports the aggregate under
 `session.budget.orchestration`.
@@ -151,16 +166,8 @@ To update a pinned Flow version, rerun the install command with the new
 version. To inspect skill health:
 
 ```bash
-npx -y opencode-plugin-flow@4.3.9 doctor
+npx -y opencode-plugin-flow@4.4.0 doctor
 ```
-
-## Experimental: compaction context
-
-Flow's ambient context uses stable OpenCode configuration by default. If you
-want the active session summary injected into OpenCode's session compaction as
-well, opt in with the environment variable `FLOW_EXPERIMENTAL_COMPACTION=1`.
-This uses OpenCode's experimental compaction hook and may change with OpenCode
-versions; the default remains hook-free.
 
 ## Development
 

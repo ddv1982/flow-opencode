@@ -5,14 +5,19 @@ description: "Use when Flow work needs planning before implementation: a new goa
 
 # Flow Plan
 
-Use this skill before implementation. The output is a compact plan the runtime can enforce and future agents can execute without rediscovering the goal.
+Use this skill before implementation. The output is a concise plan the runtime can enforce and future agents can execute without rediscovering the goal.
+
+## Planning runtime availability
 
 If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode. Planning requires the loaded Flow runtime.
 
 ## Inspect first
 
 - Read the files, docs, tests, package scripts, and local conventions that determine the work.
-- For broad discovery, read `references/parallel-discovery.md` after a serial orientation pass. Use `../flow/references/parallel-orchestration.md` when discovery needs multiple workers, and write its pass manifest before fan-out.
+- For broad discovery, read `references/parallel-discovery.md` after a serial
+  orientation pass. When multiple workers may help, start with
+  `../flow/references/parallel-orchestration.md` and load only the branch it
+  selects.
 - Helper rule: when a named helper skill is unavailable, record a planning gap
   and keep the corresponding claims conservative instead of simulating its
   checks.

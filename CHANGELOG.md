@@ -2,6 +2,33 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [4.4.0] - 2026-07-17
+
+Prompt economy lore makes Flow's instructions smaller, more role-specific, and
+easier to verify without weakening runtime, validation, or review gates:
+
+- Public commands and hidden workers now compile role- and phase-specific
+  prompts from canonical skill fragments instead of concatenating whole skills
+  or maintaining parallel prompt copies in TypeScript.
+- Parallel guidance uses progressive disclosure: a short routing index loads
+  decision rules first, manifest and execution rules only after fan-out is
+  selected, and synthesis rules only when handoffs return. Serial-decision
+  context is about 76% smaller while the complete advanced contract remains
+  available.
+- Each hidden worker receives one role contract and one matching handoff schema;
+  empty, malformed, partial, and blocked handoffs remain explicit coverage gaps,
+  and candidate implementation stays subordinate to the root `flow-run`
+  manager.
+- Runtime-unavailable guards, planned review depth, cleanup/UI/audit evidence,
+  bounded review repair, and root-manager state ownership are covered across
+  the compiled surfaces.
+- Skills no longer estimate context pressure or request host compaction, and
+  the experimental compaction hook and environment switch have been removed;
+  durable runtime phase boundaries remain the continuation mechanism.
+- New deterministic prompt-quality tooling covers 18 scenarios and 52 static
+  criteria, with an opt-in structured model evaluator for GPT-5.4, GPT-5.6 Sol,
+  and other configured OpenCode models.
+
 ## [4.3.9] - 2026-07-08
 
 Candidate accounting coherence lore makes the 4.3.8 orchestration accounting

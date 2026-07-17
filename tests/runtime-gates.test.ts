@@ -312,7 +312,7 @@ describe("Flow runtime gates", () => {
 		expect(detailed.status).toBe("ok");
 	});
 
-	test("records compact orchestration pass accounting", async () => {
+	test("records bounded orchestration pass accounting", async () => {
 		const workspace = await tempWorkspace();
 		await approvedTwoFeatureSession(workspace);
 		await flowRunStart(workspace, {});

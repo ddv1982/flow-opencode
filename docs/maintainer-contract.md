@@ -32,13 +32,13 @@ Runtime must enforce:
 
 Budget and retry telemetry in the session ledger records completed feature
 counts, review counts, failed review counts, per-feature failed review attempts,
-compact orchestration pass accounting, and host token telemetry status. Feature
+bounded orchestration pass accounting, and host token telemetry status. Feature
 count and pass accounting are telemetry only and must not stop an approved plan
 by themselves. OpenCode does not currently expose per-turn token usage through
 the plugin surface Flow uses, so token fields stay `host_unavailable` until a
 supported host API exists. Do not invent token counts inside runtime state.
 
-Runtime pass accounting is deliberately compact: counts, recent pass ids,
+Runtime pass accounting is deliberately bounded: counts, recent pass ids,
 worker counts, candidate/verifier usage, skipped candidate decisions, handoff
 references, verification status, outcome, and synthesis references. Full worker
 handoffs, command logs, transcripts, scratch tables, and standalone manager
@@ -78,6 +78,9 @@ artifact, and owns every state-changing tool call.
 
 Empty or unstructured worker output is a failed handoff, not success. The
 manager must re-task, cover the slice directly, or carry it as not-covered.
+`validateFlowWorkerHandoff` provides offline structural checking, but OpenCode
+does not currently apply it as a runtime output hook; it does not establish the
+truth or adequacy of worker evidence.
 
 Hidden Flow workers may be routed to installation-specific OpenCode models with
 environment variables. Use `OPENCODE_FLOW_READONLY_WORKER_MODEL` for evidence,
@@ -147,37 +150,73 @@ Runtime setup health is surfaced through `flow_status`:
 
 Public Flow commands must call `flow_status` first. If `setup.skills` is
 present, they report that setup state and continue through bundled public Flow
-instructions instead of native-loading required public skills. The OpenCode
+instructions instead of depending on native-loaded public skills. The OpenCode
 command preflight hook is authoritative for public Flow commands: it must
 replace resolved command parts with the current bundled template so stale
 command files or command registry cache cannot ask for old skill-loading
 behavior. `/flow-auto`, `/flow-plan`, `/flow-run`, and `/flow-review` must stay
-self-contained and must not native-load `flow`, `flow-plan`, `flow-run`, or
-`flow-review`; synced skills remain useful for discoverability and manual
-loading, not as a public-command availability dependency. `/flow-status` remains
-tool-only. Missing optional helpers such as `flow-test`, `flow-deslop`,
+self-contained as configured surfaces: manager commands compile selected core
+sections, while `/flow-review` supplies the task to the reserved
+`flow-reviewer`, whose agent prompt owns the review contract. They must not
+depend on native-loading `flow`, `flow-plan`, `flow-run`, or `flow-review`;
+references to loading those core skills inside selected source sections mean
+using the matching compiled section, not making a native skill call. Synced
+skills remain useful for discoverability, manual loading, and detailed
+references, not as a public-command availability dependency. `/flow-status`
+remains tool-only. Missing optional helpers such as `flow-test`, `flow-deslop`,
 `flow-ui-quality`, or user-triggered `flow-commit` are coverage gaps, not
 bundled fallbacks. `flow-commit` must not be loaded by the autonomous Flow loop
 and must not replace `flow_feature_complete`.
 
-Ambient Flow session context must use stable OpenCode configuration by default:
+Ambient Flow session context must use stable OpenCode configuration:
 the adapter registers `.flow/opencode-instructions.md` through
 `config.instructions`, and the runtime keeps that file synchronized with
-`.flow/session.json`. Default behavior must not depend on OpenCode experimental
-chat system, message transform, or session compaction hooks. Experimental hooks
-may only exist as explicit compatibility code with tests proving the stable
-default remains hook-free. The one such opt-in today is
-`FLOW_EXPERIMENTAL_COMPACTION=1`, which registers
-`experimental.session.compacting` to inject a short active-session summary into
-compaction context; it is best-effort, read-only, and covered by tests that
-assert the default registers no experimental hooks.
+`.flow/session.json`. Flow does not register OpenCode experimental chat-system,
+message-transform, or session-compaction hooks. Skills react only to durable
+runtime state and runtime-issued phase boundaries; they do not estimate context
+pressure or initiate host compaction.
+
+## Prompt Contracts
+
+Skill-attributed prompt fragments must be extracted from their bundled skill
+source. Use section selection for ordinary Markdown or a unique
+`flow-prompt` marker pair for a prompt-only block. Compiler-owned routing and
+bookends must identify `src/prompt-surfaces.ts` as their source; do not maintain
+manual copies of skill judgment in TypeScript.
+
+The canonical hidden-reviewer judgment lives in
+`skills/flow-review/references/hidden-reviewer-contract.md`. The manager owns
+only public routing to that reviewer. Worker integrity and handoff schemas live
+in `skills/flow/references/handoff-format.md`; every worker receives exactly one
+role-applicable schema.
+
+Parallel manager guidance uses one-level progressive disclosure. Keep
+`parallel-orchestration.md` as the routing index, manager selection rules in
+`parallel-decision.md`, coverage accounting in `parallel-manifest.md`, worker
+roles and permissions in `parallel-execution.md`, and handoff acceptance plus
+synthesis in `parallel-synthesis.md`. Serial paths must not require the later
+runbooks.
+
+Prompt changes must preserve all 18 static scenarios and 52 criteria. A surface
+may grow by the larger of eight words or 2% before the growth guard requires an
+accepted baseline update and a specific justification. The opt-in model runner
+has a five-minute default timeout per variant and remains outside the broad
+local gate because provider output is nondeterministic.
+
+`src/prompt-baseline-fixtures.ts` is the sole manual-text exception. It is a
+frozen historical evaluation comparator, never a production prompt source.
+Changes to current skill judgment belong in marked skill blocks, not that
+fixture.
 
 ## Source Ownership
 
 - `runtime`: schema, transitions, persistence, and tool-facing runtime API.
 - `adapters`: OpenCode config, hooks, and tool registration.
 - `distribution`: syncing bundled skills and uninstalling Flow-owned skill folders.
-- `config-shared`: command and agent config constants.
+- `prompt-surfaces`: role/phase-specific prompt compilation and offline handoff shape validation.
+- `prompt-quality`: reproducible prompt metrics, repetition classifications, and static contracts.
+- `prompt-model-evaluation`: opt-in model-decision packets, schemas, and deterministic grading.
+- `config-shared`: command and agent configuration consuming compiled prompts.
 
 Keep adapter/distribution concerns out of runtime.
 

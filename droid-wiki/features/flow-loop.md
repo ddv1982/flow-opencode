@@ -14,6 +14,10 @@ skills/flow/
 └── references/
     ├── recovery-playbook.md
     ├── parallel-orchestration.md
+    ├── parallel-decision.md
+    ├── parallel-manifest.md
+    ├── parallel-execution.md
+    ├── parallel-synthesis.md
     ├── parallel-pass-example.md
     └── handoff-format.md
 src/runtime/

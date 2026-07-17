@@ -4,11 +4,6 @@ import {
 	resolveFlowPluginVersion,
 	runFlowSkillSync,
 } from "../../distribution/sync";
-import {
-	flowSessionProgress,
-	loadSession,
-	resolveWorkspaceRoot,
-} from "../../runtime/workspace";
 import { createConfigHook } from "./config";
 import { createFlowLog } from "./logging";
 import type { Hooks, Part, Plugin } from "./sdk";
@@ -130,35 +125,6 @@ function createCommandPreflightHook(): NonNullable<
 	};
 }
 
-function createCompactionHook(ctx: {
-	worktree?: string;
-	directory?: string;
-}): NonNullable<Hooks["experimental.session.compacting"]> {
-	return async (_input, output) => {
-		try {
-			const root = resolveWorkspaceRoot(ctx);
-			const session = await loadSession(root);
-			if (!session) return;
-			const { completed: completedFeatures, total: totalFeatures } =
-				flowSessionProgress(session);
-			output.context.push(
-				[
-					"## Flow session context",
-					"An active Flow session exists in this workspace (`.flow/session.json`).",
-					`- goal: ${JSON.stringify(session.goal)}`,
-					`- status: ${JSON.stringify(session.status)}`,
-					`- approval: ${JSON.stringify(session.approval)}`,
-					`- activeFeatureId: ${JSON.stringify(session.activeFeatureId)}`,
-					`- progress: ${completedFeatures}/${totalFeatures} features completed`,
-					"After compaction, call `flow_status` before any Flow action and follow its `nextAction`.",
-				].join("\n"),
-			);
-		} catch {
-			// Compaction context is best-effort and must never break compaction.
-		}
-	};
-}
-
 const FlowPlugin: Plugin = async (ctx) => {
 	const log = createFlowLog(ctx);
 	log("info", "Flow v4 plugin initialized.");
@@ -169,12 +135,6 @@ const FlowPlugin: Plugin = async (ctx) => {
 		tool: createTools(ctx),
 		"command.execute.before": createCommandPreflightHook(),
 	};
-	// Contract: default behavior stays hook-free of experimental OpenCode
-	// surfaces; compaction context is an explicit opt-in.
-	if (process.env.FLOW_EXPERIMENTAL_COMPACTION === "1") {
-		hooks["experimental.session.compacting"] = createCompactionHook(ctx);
-		log("info", "Flow experimental compaction context enabled.");
-	}
 	return hooks;
 };
 

@@ -1,10 +1,22 @@
 import flowHandoffFormatDoc from "../../skills/flow/references/handoff-format.md" with {
 	type: "text",
 };
+import flowParallelDecisionDoc from "../../skills/flow/references/parallel-decision.md" with {
+	type: "text",
+};
+import flowParallelExecutionDoc from "../../skills/flow/references/parallel-execution.md" with {
+	type: "text",
+};
+import flowParallelManifestDoc from "../../skills/flow/references/parallel-manifest.md" with {
+	type: "text",
+};
 import flowParallelOrchestrationDoc from "../../skills/flow/references/parallel-orchestration.md" with {
 	type: "text",
 };
 import flowParallelPassExampleDoc from "../../skills/flow/references/parallel-pass-example.md" with {
+	type: "text",
+};
+import flowParallelSynthesisDoc from "../../skills/flow/references/parallel-synthesis.md" with {
 	type: "text",
 };
 import flowRecoveryPlaybookDoc from "../../skills/flow/references/recovery-playbook.md" with {
@@ -33,6 +45,9 @@ import flowPlanPlanningExamplesDoc from "../../skills/flow-plan/references/plann
 	type: "text",
 };
 import flowPlanSkillDoc from "../../skills/flow-plan/SKILL.md" with {
+	type: "text",
+};
+import flowReviewHiddenReviewerContractDoc from "../../skills/flow-review/references/hidden-reviewer-contract.md" with {
 	type: "text",
 };
 import flowReviewReviewRubricDoc from "../../skills/flow-review/references/review-rubric.md" with {
@@ -87,6 +102,22 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 				content: flowParallelOrchestrationDoc,
 			},
 			{
+				relativePath: "references/parallel-decision.md",
+				content: flowParallelDecisionDoc,
+			},
+			{
+				relativePath: "references/parallel-manifest.md",
+				content: flowParallelManifestDoc,
+			},
+			{
+				relativePath: "references/parallel-execution.md",
+				content: flowParallelExecutionDoc,
+			},
+			{
+				relativePath: "references/parallel-synthesis.md",
+				content: flowParallelSynthesisDoc,
+			},
+			{
 				relativePath: "references/parallel-pass-example.md",
 				content: flowParallelPassExampleDoc,
 			},
@@ -136,6 +167,10 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 		name: "flow-review",
 		files: [
 			{ relativePath: "SKILL.md", content: flowReviewSkillDoc },
+			{
+				relativePath: "references/hidden-reviewer-contract.md",
+				content: flowReviewHiddenReviewerContractDoc,
+			},
 			{
 				relativePath: "references/review-rubric.md",
 				content: flowReviewReviewRubricDoc,

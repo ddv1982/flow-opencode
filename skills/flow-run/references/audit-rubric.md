@@ -16,7 +16,7 @@ A finding that survives this pass is worth reporting. A finding you did not try 
 
 ## Parallel audit slices
 
-For broad audits, use `../../flow/references/parallel-orchestration.md` to split
+For broad audits, start with `../../flow/references/parallel-orchestration.md` to split
 read-only slices by module, data flow, or risk lens. Workers surface candidates;
 the audit author owns the report. Apply its handoff format and verification
 gates. Before blocking severity, dedupe, trace guards, fill cross-layer checks,

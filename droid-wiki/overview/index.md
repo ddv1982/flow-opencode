@@ -29,7 +29,7 @@ English captions are available as
 
 | Path | Purpose |
 | --- | --- |
-| `src/adapters/opencode/plugin.ts` | OpenCode plugin entrypoint, command preflight, tools, config hook, and optional compaction hook. |
+| `src/adapters/opencode/plugin.ts` | OpenCode plugin entrypoint, command preflight, tools, and config hook. |
 | `src/runtime/api.ts` | Tool-facing runtime API and Zod input schemas. |
 | `src/runtime/transitions.ts` | Pure state transitions for planning, running, completion, reset, and close. |
 | `src/runtime/workspace.ts` | `.flow/` persistence, locks, atomic writes, archive, quarantine, and generated instructions. |

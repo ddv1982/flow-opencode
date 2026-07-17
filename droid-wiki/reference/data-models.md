@@ -14,7 +14,7 @@ The data model is defined in `src/runtime/schema.ts` and persisted through `src/
 | `plan` | `Plan` or `null`. |
 | `activeFeatureId` | Current feature id or `null`. |
 | `history` | Completion and blocker history entries. |
-| `budget` | Phase-boundary, review-count, failed-review, compact orchestration, and token-telemetry status. |
+| `budget` | Phase-boundary, review-count, failed-review, bounded orchestration, and token-telemetry status. |
 | `closure` | Completed, deferred, or abandoned closure record. |
 | `lastError` | Last runtime completion or transition error. |
 | `timestamps` | Created, updated, and completed timestamps. |
@@ -35,7 +35,7 @@ The data model is defined in `src/runtime/schema.ts` and persisted through `src/
 
 ## Orchestration telemetry
 
-`OrchestrationPassRecordSchema` stores compact pass ids, pass kind, decision,
+`OrchestrationPassRecordSchema` stores bounded pass ids, pass kind, decision,
 candidate eligibility, candidate decision, structured decision factors, worker
 counts, slice ids, dependencies, write scope, handoff references, verification
 status, outcome, and synthesis references. The runtime keeps aggregates and
@@ -47,10 +47,12 @@ pass id ever counted — so resubmitted ids dedup even after they leave the
 bounded `latestPasses` window. Each subtype worker count
 (`candidateWorkerCount`, `verifierWorkerCount`) must not exceed the total
 `workerCount`; a single worker may fill both roles. The remaining validation
-rules — valid decision pairings and the execution evidence required for
+manager-facing rules — valid decision pairings and the execution evidence required for
 candidate-shaped decisions, `candidateDecision: "used"`, `candidatePassCount`,
 and `verifierPassCount` — are canonical in
-`skills/flow/references/parallel-orchestration.md`.
+`skills/flow/references/parallel-decision.md` and
+`skills/flow/references/parallel-synthesis.md`; `src/runtime/schema.ts` remains
+the enforcement authority.
 
 ## Runtime API payloads
 

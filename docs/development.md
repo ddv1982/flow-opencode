@@ -58,13 +58,27 @@ The managed skill set is `flow`, `flow-plan`, `flow-run`, `flow-test`,
 sync, `doctor`, and `sync` must cover all eight uniformly. Foreign or edited
 folders require a user decision and must not be overwritten silently.
 
-Flow commands must call `flow_status` first. Public action commands embed the
-required public Flow skill lore and must not native-load `flow`, `flow-plan`,
-`flow-run`, or `flow-review`; synced skills remain the discoverable/manual form.
+Flow commands must call `flow_status` first. Public manager commands compile
+only the applicable core skill sections plus bounded conditional rules;
+`/flow-review` delegates its small task prompt to the reserved reviewer whose
+agent prompt owns review judgment. Public commands do not depend on native
+loading of `flow`, `flow-plan`, `flow-run`, or `flow-review`; synced skills
+remain the discoverable/manual and progressive-disclosure form.
 If status includes `setup.skills`, public action commands should report setup
 state and continue with their bundled public instructions. Optional helpers
 degrade to explicit coverage gaps; they are not copied into bundled fallback
 prompts.
+
+Run `bun run prompt:quality` to inspect rendered surfaces and compare the four
+maintained variants with offline static-contract checks. Use the opt-in
+`prompt:model-eval` runner for structured model decisions; it is intentionally
+outside `bun run check` because it uses external providers and is
+nondeterministic. The runner defaults to a five-minute timeout per prompt
+variant. Prompt changes must preserve the 18 static scenarios and 52 criteria.
+Update the accepted growth baseline in
+`tests/fixtures/prompt-quality-baseline.json` only for material growth (more
+than the larger of eight words or 2%) and include a specific justification.
+See [Prompt quality](prompt-quality.md).
 
 Skill changes should preserve the v4 tool surface:
 

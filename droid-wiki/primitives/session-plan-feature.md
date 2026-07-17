@@ -32,7 +32,7 @@ src/runtime/
 
 ## Integration points
 
-The session is written to `.flow/session.json` by `saveSession` in `src/runtime/workspace.ts`. It is read by `flow_status`, command compaction context, and generated instructions. Skills refer to plan `requirements`, `decisions`, feature `targets`, feature `validation`, and feature `reviewDepth` when choosing work and evidence.
+The session is written to `.flow/session.json` by `saveSession` in `src/runtime/workspace.ts`. It is read by `flow_status` and the generated instruction projection. Skills refer to plan `requirements`, `decisions`, feature `targets`, feature `validation`, and feature `reviewDepth` when choosing work and evidence.
 
 ## Key source files
 

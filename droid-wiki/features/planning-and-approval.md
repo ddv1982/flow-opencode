@@ -36,13 +36,14 @@ src/runtime/
 
 ## Integration points
 
-The public `/flow-plan` command is defined in `src/config-shared.ts`. Its command template bundles `skills/flow-plan/SKILL.md`, planning examples, parallel discovery guidance, and the core Flow orchestration references so planning still works when native skill discovery is stale.
+The public `/flow-plan` command is defined in `src/config-shared.ts` and compiled by `src/prompt-surfaces.ts`. Its prompt includes selected planning and quality-checklist sections plus a bounded parallel-pass contract. Planning examples and the full orchestration playbook remain managed progressive-disclosure references instead of loading into every planning request.
 
 ## Key source files
 
 | File | Purpose |
 | --- | --- |
 | `skills/flow-plan/SKILL.md` | Planning procedure and payload shape. |
+| `src/prompt-surfaces.ts` | Public planning prompt source selection and critical bookends. |
 | `src/runtime/schema.ts` | Plan, feature, and review-policy schemas. |
 | `src/runtime/transitions.ts` | Plan validation and approval logic. |
 | `tests/runtime-gates.test.ts` | Invalid dependency and immutable-plan tests. |
