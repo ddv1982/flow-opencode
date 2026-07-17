@@ -1,25 +1,22 @@
 ---
 name: flow
-description: Manage the end-to-end Flow loop for skills-first OpenCode work. Use when a user asks for Flow-guided delivery from goal to completion, resumable autonomous delivery, or resuming or closing a Flow session. For plan-only work use flow-plan; for executing one approved feature use flow-run.
+description: Manage the end-to-end Flow loop for OpenCode work. Use when a user asks for Flow-guided delivery from goal to completion, resumable autonomous delivery, or resuming or closing a Flow session. For plan-only work use flow-plan; for executing one approved feature use flow-run.
 ---
 
 # Flow
 
-Use Flow as a minimal state ledger, not as a framework. Skills provide judgment; the runtime only records the approved plan, active feature, validation evidence, review evidence, and closure.
+Use Flow as a minimal state ledger, not as a framework. Package-owned guidance provides judgment; the runtime only records the approved plan, active feature, validation evidence, review evidence, and closure.
 
-Routing: this manager skill owns the whole loop and every state-changing `flow_*` call. Load `flow-plan` alone for plan-only requests and `flow-run` alone when an approved plan needs one feature executed. Answer status-only questions with `flow_status`; no skill load is needed. `flow-test`, `flow-deslop`, and `flow-ui-quality` are optional helpers loaded from inside the loop; `flow-commit` is user-triggered only and never part of the autonomous loop.
+Routing: the root manager owns the whole loop and every state-changing `flow_*` call. Public commands embed the core `flow-plan`, `flow-run`, and `flow-review` guidance. Answer status-only questions with `flow_status`. Load optional helpers through `flow_guidance`: `flow-test`, `flow-deslop`, and `flow-ui-quality` may be used inside the loop; `flow-commit` is user-triggered only and never part of the autonomous loop.
 
 ## Loop
 
 1. Call `flow_status` first. Trust its active session and next action over conversation memory.
-   If the result includes `setup.skills`, follow the Skill Availability rules
-   below before loading any Flow skill.
-   If it includes `session.resumePacket` or `session.budget.phaseBoundary`, stop
-   and report the resume instructions unless this is a fresh user invocation
-   explicitly resuming the session. Only then may the next `flow_run_start` use
-   `phaseBoundaryAck: true`.
+   If `workflowData.session.closure` is present, do not run, reset, approve, or
+   replan. Retry `flow_session_close` with the recorded closure kind to finish
+   archiving the session.
 2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
-3. Load `flow-run`, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, browser QA, route QA, or failure-prone work, use `flow-test` to choose and summarize evidence before completion.
+3. Use the compiled `flow-run` guidance, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, browser QA, route QA, or failure-prone work, call `flow_guidance` with `id: "flow-test"` to choose and summarize evidence before completion.
 4. Load `flow-review` for the required feature review. Send a bounded review
    packet, not the accumulated root transcript. The reviewer reports
    `featureReviewDepth` and `featureReview`; the manager records both inside
@@ -28,35 +25,31 @@ Routing: this manager skill owns the whole loop and every state-changing `flow_*
 6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
 
 For broad discovery, audit, validation, review, verification, or candidate work,
-use `references/parallel-orchestration.md` as the routing index. Read
-`references/parallel-decision.md` first. Load
-`references/parallel-manifest.md` and `references/parallel-execution.md` only
-after selecting fan-out, then read `references/parallel-synthesis.md` when
-handoffs return. Paste one matching template from
-`references/handoff-format.md` into each worker prompt. Hidden Flow workers are
-injected by plugin config; invoke the named worker when available. The manager
-owns every `flow_*` state change.
+request `flow/references/parallel-orchestration.md` from `flow_guidance` as the
+routing index, then request the exact reference ids it selects. Request
+`flow/references/parallel-decision.md` first. Load `flow/references/parallel-manifest.md`
+and `flow/references/parallel-execution.md` only after selecting fan-out, then load
+`flow/references/parallel-synthesis.md` when handoffs return. Paste the matching template from
+`flow/references/handoff-format.md` into each worker prompt. Hidden Flow workers
+are injected by plugin config; invoke the named worker when available. The
+manager owns every `flow_*` state change.
 
 Do not commit, push, amend, rebase, publish, or mutate releases during the
-autonomous Flow loop. Load `flow-commit` only when the user explicitly asks for
-commit preparation or commit creation.
+autonomous Flow loop. Call `flow_guidance` with `id: "flow-commit"` only when
+the user explicitly asks for commit preparation or commit creation.
 
-## Skill Availability
+## Guidance Availability
 
-If `flow_status` returns `setup.skills`, report that setup status and stop
-native-loading Flow skills in the current OpenCode startup. Missing, incomplete,
-or outdated managed skills require a sync/restart cycle before their native skill
-instructions can be trusted by the running process. Public command bundles are
-self-contained and may continue when the command prompt already embeds the
-required Flow instructions.
-
-If optional helper skills such as `flow-test`, `flow-deslop`, or
-`flow-ui-quality` are unavailable, continue only with explicit coverage gaps. Do
-not copy their rubrics into another skill and do not claim their quality checks
-were completed.
+Core command guidance is compiled into the plugin and optional documents are
+returned directly by `flow_guidance`; neither path depends on native skill
+discovery or files under the user's OpenCode configuration directory. Use the
+exact stable id named by the current guide. If the tool itself is unavailable,
+the Flow plugin is not fully loaded: continue only with explicit coverage gaps
+and do not claim helper checks were completed.
 
 ## Runtime Surface
 
+- `flow_guidance`: load exact package-owned guidance by stable id; it never changes Flow state.
 - `flow_status`: read the active session.
 - `flow_plan_save`: create a session and/or save a draft plan.
 - `flow_plan_approve`: lock the draft plan.
@@ -67,7 +60,7 @@ were completed.
 
 There is no `flow_context`, no separate review-record tool, and no multi-session activation surface. The single active source of truth is `.flow/session.json`; closed sessions are archived under `.flow/history/`.
 
-Planning and running require loaded Flow tools; do not simulate plan approval or feature completion when the runtime is unavailable. Review may still return advisory output when tools, skills, or references are stale or unavailable, but the manager must not record it as Flow-gated evidence.
+Planning and running require loaded Flow tools; do not simulate plan approval or feature completion when the runtime is unavailable. Review may still return advisory output when tools, guidance, or required evidence is unavailable, but the manager must not record it as Flow-gated evidence.
 
 ## Hard Gates
 
@@ -81,8 +74,8 @@ Planning and running require loaded Flow tools; do not simulate plan approval or
 - Every completed feature requires a passing `featureReview` with no blocking findings.
 - Failed reviews pause the loop by default. Autonomous repair may make at most
   one repair plus one retry review before stopping.
-- Phase boundaries stop the current root session; resume from
-  `.flow/session.json` in a fresh OpenCode session.
+- A stored closure makes the session archive-only; retry `flow_session_close`
+  until archival succeeds.
 - `flow_session_close` accepts `kind: "completed"` only after an approved plan has passed final completion.
 
 ## Recovery
@@ -91,6 +84,6 @@ Planning and running require loaded Flow tools; do not simulate plan approval or
 - Wrong assumption or failed implementation path: use `flow_feature_reset` for the feature and dependents, then rerun from the corrected plan.
 - Missing validation or review evidence: gather real evidence, then call `flow_feature_complete`.
 - Approved plan is materially wrong: reset the affected features, save a revised plan if the session is back in planning; otherwise close and start a new goal.
-- Unknown runtime error: read `summary` and `recovery`; see `references/recovery-playbook.md` for common cases.
+- Unknown runtime error: read `summary` and `recovery`; request `flow/references/recovery-playbook.md` from `flow_guidance` for common cases.
 
 Never fabricate validation output, backfill review approval you did not perform, or close as `deferred`/`abandoned` merely to avoid an unfinished-work blocker.

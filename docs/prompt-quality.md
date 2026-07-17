@@ -78,33 +78,27 @@ pass reaches 2,424 words through manifest and execution (47.3% less before
 handoffs), while the complete staged contract is 3,177 words (30.9% less).
 The optional worked example is excluded from these path totals.
 
-## Compaction and continuation policy
+## Closure and continuation policy
 
-Skills do not estimate visible tokens, non-cache tokens, context pressure, or
-decide that a session should be compacted. The model continues ordinary work
-unless `flow_status` returns a runtime-issued `session.budget.phaseBoundary` or
-`session.resumePacket`. Only a fresh user invocation explicitly resuming that
-session may acknowledge the boundary.
-
-The experimental OpenCode compaction hook and its opt-in environment switch
-were removed. Runtime-issued phase boundaries and bounded resume packets remain
-part of the supported Flow contract; host compaction is not a skill or model
-responsibility.
+Flow has no token, compaction, phase-boundary, or resume-packet protocol. A
+blocked feature resumes only through an explicit `flow_feature_reset`. A session
+with `workflowData.session.closure` is archive-only: the manager retries
+`flow_session_close` and does not run, reset, approve, or replan it.
 
 ## Static evaluation
 
 The 18 fixtures cover serial fixes, planning, review-first work, persistence,
 UI validation, parallel discovery, partial and malformed handoffs, bounded
-review repair, resume behavior, safe and unsafe candidate work, missing
-planning/execution runtimes, detailed review, cleanup/UI evidence gaps, and the
-absence of self-initiated compaction.
+review repair, archive retry behavior, safe and unsafe candidate work, missing
+planning/execution runtimes, detailed review, cleanup/UI evidence gaps, and
+review-retry exhaustion.
 
 | Variant | Complete scenarios | Criteria | Est. tokens | Exact duplicate lines | Role-inapplicable lines |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Whole-skill baseline | 12/18 | 43/52 | 58,144 | 189 | 26 |
-| Lexically deduplicated | 12/18 | 43/52 | 58,074 | 173 | 26 |
-| Surface-specific | 17/18 | 51/52 | 15,809 | 6 | 0 |
-| Surface-specific with bookends | 18/18 | 52/52 | 16,421 | 6 | 0 |
+| Whole-skill baseline | 12/18 | 43/52 | 58,054 | 188 | 26 |
+| Lexically deduplicated | 12/18 | 43/52 | 57,983 | 172 | 26 |
+| Surface-specific | 18/18 | 52/52 | 15,763 | 5 | 0 |
+| Surface-specific with bookends | 18/18 | 52/52 | 16,368 | 5 | 0 |
 
 The implemented set is 71.8% smaller than the whole-skill baseline by this
 estimate. Lexical deduplication alone changes little; role/phase selection
@@ -205,7 +199,7 @@ support comparison rather than a universal quality claim.
 | Full parallel playbook | Load conditionally | Commands need the bounded decision/manifest contract; stages remain progressive-disclosure material. |
 | Every handoff format in manager prompts | Load conditionally | Each worker gets one schema; managers retain acceptance and accounting rules. |
 | Planning examples | Remove | The schema and checklist retain the distinct planning contract. |
-| Completion checkpoint | Keep after evaluation | A short final bookend restores the resume criterion without repeating the full prompt. |
+| Completion checkpoint | Keep after evaluation | A short final bookend restores the pending-archive criterion without repeating the full prompt. |
 | Manager and reviewer judgment | Keep separately | Routing and independent review cross different role boundaries and have different canonical sources. |
 
 Safety text is not removed merely because it repeats. Runtime gates, manager

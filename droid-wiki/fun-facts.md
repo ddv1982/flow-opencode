@@ -4,11 +4,14 @@ This page collects small bits of repository archaeology that help explain where 
 
 ## Oldest surviving code
 
-Several current files were introduced with the first plugin commit on 2026-03-31 (`c59240e`), including `src/index.ts`, `src/adapters/opencode/plugin.ts`, `src/adapters/opencode/config.ts`, `src/runtime/schema.ts`, and `src/runtime/transitions.ts`. Those files survived the v4 simplification, although their responsibilities narrowed after ADR 0001 in `docs/adr/0001-skills-first-flow-architecture.md`.
+The predecessors of several current files were introduced with the first plugin
+commit on 2026-03-31 (`c59240e`) under `src/adapters/opencode/**` and
+`src/runtime/**`. Their behavior survived the v4 simplification and moved into
+the v5 platform, application, domain, and infrastructure layers.
 
 ## The longest current file
 
-The longest current file is `tests/distribution-and-surface.test.ts`. That size reflects how much of Flow's public contract lives at the OpenCode boundary: managed skills, command prompts, hidden worker permissions, CLI doctor/sync/uninstall behavior, config collision handling, and setup health.
+The largest files now sit in the domain and persistence test surfaces. The old distribution test shrank substantially when v5 replaced startup skill synchronization with one embedded guidance catalog and a read-only tool.
 
 ## No TODO trail
 

@@ -4,12 +4,14 @@ Active contributors: ddv1982
 
 ## Purpose
 
-The OpenCode adapter binds the host plugin API to Flow's runtime and distribution systems. It lives under `src/adapters/opencode/` and is reached through the package entrypoint in `src/index.ts`.
+The OpenCode platform binds the host plugin API to Flow's application,
+filesystem composition, and embedded guidance. It lives under
+`src/platform/opencode/` and is reached through `src/index.ts`.
 
 ## Directory layout
 
 ```text
-src/adapters/opencode/
+src/platform/opencode/
 ├── plugin.ts
 ├── tools.ts
 ├── config.ts
@@ -21,32 +23,36 @@ src/adapters/opencode/
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `FlowPlugin` | `src/adapters/opencode/plugin.ts` | Plugin factory that registers hooks. |
-| `createCommandPreflightHook` | `src/adapters/opencode/plugin.ts` | Replaces Flow command parts with bundled current instructions. |
-| `createConfigHook` | `src/adapters/opencode/config.ts` | Injects commands, agents, and generated instruction path. |
-| `createTools` | `src/adapters/opencode/tools.ts` | Registers seven Flow tools with OpenCode. |
-| `createFlowLog` | `src/adapters/opencode/logging.ts` | Host logging wrapper. |
+| `FlowPlugin` | `src/platform/opencode/plugin.ts` | Plugin factory that registers hooks. |
+| `createCommandPreflightHook` | `src/platform/opencode/plugin.ts` | Replaces Flow command parts with bundled current instructions. |
+| `createConfigHook` | `src/platform/opencode/config.ts` | Injects commands and agents without workspace I/O. |
+| `createTools` | `src/platform/opencode/tools.ts` | Registers `flow_guidance` and seven stateful Flow tools. |
+| `createFlowLog` | `src/platform/opencode/logging.ts` | Host logging wrapper. |
 
 ## How it works
 
-`FlowPlugin` runs `runFlowSkillSync`, creates config and tool hooks, and registers command preflight. Command preflight normalizes names like `/flow-run`, renders the current bundled template from `FLOW_CORE_COMMANDS` in `src/config-shared.ts`, prepends setup warnings when needed, and replaces the command parts that OpenCode will execute.
+`FlowPlugin` creates config and tool hooks and registers command preflight. Command preflight normalizes names like `/flow-run`, renders the current bundled template from `FLOW_CORE_COMMANDS` in `src/config-shared.ts`, and replaces the command parts that OpenCode will execute. Manager commands reject unexpected subtask parts. `/flow-review` requires exactly one subtask with the expected command identity and `flow-reviewer` agent, then rewrites only its prompt. Startup performs no global or workspace guidance filesystem work.
 
 ## Integration points
 
-The adapter imports runtime code only through `src/runtime/api.ts` and workspace helpers. It imports distribution code through `src/distribution/sync.ts`. The allowed dependency direction is documented in `docs/architecture/allowed-cross-layer-dependencies.md`.
+The platform invokes filesystem-backed use cases through
+`src/infrastructure/fs/workspace-flow-service.ts`, imports public response types
+from the application layer, and loads package-owned Markdown through
+`src/guidance/catalog.ts`. Private host schemas never cross into application
+declarations.
 
 ## Key source files
 
 | File | Purpose |
 | --- | --- |
 | `src/index.ts` | Package plugin export. |
-| `src/adapters/opencode/plugin.ts` | Main OpenCode hook registration. |
-| `src/adapters/opencode/tools.ts` | Tool wrappers and JSON error handling. |
-| `src/adapters/opencode/config.ts` | Config mutation and instruction projection registration. |
+| `src/platform/opencode/plugin.ts` | Main OpenCode hook registration. |
+| `src/platform/opencode/tools.ts` | Tool wrappers and JSON error handling. |
+| `src/platform/opencode/config.ts` | Filesystem-free config mutation. |
 | `tests/distribution-and-surface.test.ts` | Adapter surface tests. |
 
 ## Entry points for modification
 
-Change `src/adapters/opencode/plugin.ts` for command preflight or hook selection. Change `src/adapters/opencode/tools.ts` when tool registration changes, and update [Flow tools](../api/flow-tools.md) plus surface tests.
+Change `src/platform/opencode/plugin.ts` for command preflight or hook selection. Change `src/platform/opencode/tools.ts` when tool registration changes, and update [Flow tools](../api/flow-tools.md) plus surface tests.
 
-Related pages: [Runtime state machine](runtime-state-machine.md), [OpenCode commands](../api/open-code-commands.md), and [Managed skills](../features/managed-skills.md).
+Related pages: [Runtime state machine](runtime-state-machine.md), [OpenCode commands](../api/open-code-commands.md), and [Embedded guidance](../features/embedded-guidance.md).

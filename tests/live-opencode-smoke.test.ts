@@ -1,15 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import packageJson from "../package.json";
+import packageJson from "../package.json" with { type: "json" };
 
 // Boots a real OpenCode server with the packed tarball installed as a
-// plugin and verifies the public Flow surface over the HTTP API. Requires
-// an `opencode` binary on PATH and network access for plugin install, so
-// it only runs when explicitly requested: FLOW_LIVE_SMOKE=1.
+// plugin and verifies the public Flow surface over the HTTP API. It boots the
+// exact OpenCode version paired with the pinned plugin dev dependency through
+// bunx by default. Scheduled compatibility monitoring overrides the package
+// spec with FLOW_OPENCODE_SMOKE_VERSION=latest. The test requires network
+// access, so it only runs when explicitly requested: FLOW_LIVE_SMOKE=1.
 const LIVE = process.env.FLOW_LIVE_SMOKE === "1";
+const PINNED_OPENCODE_VERSION =
+	packageJson.devDependencies["@opencode-ai/plugin"];
+
+function resolveOpenCodeVersion(override: string | undefined): string {
+	return override?.trim() || PINNED_OPENCODE_VERSION;
+}
+
+const OPENCODE_VERSION = resolveOpenCodeVersion(
+	process.env.FLOW_OPENCODE_SMOKE_VERSION,
+);
 // The server reports healthy before plugins finish loading, and the first
 // data request blocks while it bun-installs the plugin's dependencies over
 // the network — so health polls retry on a short timeout while data
@@ -106,7 +118,15 @@ function stopServer(server: ChildProcess): void {
 	if (!server.killed) server.kill("SIGTERM");
 }
 
-describe.skipIf(!LIVE)("live OpenCode smoke", () => {
+describe("live OpenCode smoke configuration", () => {
+	test("uses the pinned host by default and accepts an explicit compatibility target", () => {
+		expect(resolveOpenCodeVersion(undefined)).toBe(PINNED_OPENCODE_VERSION);
+		expect(resolveOpenCodeVersion("  ")).toBe(PINNED_OPENCODE_VERSION);
+		expect(resolveOpenCodeVersion("latest")).toBe("latest");
+	});
+});
+
+describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 	test(
 		"packed plugin loads in a real OpenCode server and registers the Flow surface",
 		async () => {
@@ -145,8 +165,15 @@ describe.skipIf(!LIVE)("live OpenCode smoke", () => {
 			const port = 41000 + Math.floor(Math.random() * 1000);
 			const baseUrl = `http://127.0.0.1:${port}`;
 			const server = spawn(
-				"opencode",
-				["serve", "--port", String(port), "--hostname", "127.0.0.1"],
+				"bunx",
+				[
+					`opencode-ai@${OPENCODE_VERSION}`,
+					"serve",
+					"--port",
+					String(port),
+					"--hostname",
+					"127.0.0.1",
+				],
 				{
 					cwd: project,
 					env: { ...process.env, HOME: home, XDG_CONFIG_HOME: "" },
@@ -221,12 +248,15 @@ describe.skipIf(!LIVE)("live OpenCode smoke", () => {
 					).toBe(false);
 				}
 
-				// Startup skill sync ran inside the real host process.
-				const syncedSkill = await readFile(
-					join(home, ".config", "opencode", "skills", "flow", "SKILL.md"),
-					"utf8",
-				);
-				expect(syncedSkill).toContain("flow");
+				// Plugin startup must not install, refresh, or inspect global skills.
+				await expect(
+					lstat(join(home, ".config", "opencode", "skills")),
+				).rejects.toMatchObject({ code: "ENOENT" });
+				// Config registration must also remain workspace-read-only. Session
+				// state is created only by an explicit Flow mutation tool call.
+				await expect(lstat(join(project, ".flow"))).rejects.toMatchObject({
+					code: "ENOENT",
+				});
 			} catch (error) {
 				stopServer(server);
 				throw new Error(

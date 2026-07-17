@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+	cp,
 	mkdir,
 	mkdtemp,
 	readdir,
@@ -77,36 +78,84 @@ describe("package smoke", () => {
 		]) {
 			expect(tarList).toContain(expected);
 		}
+		for (const removedSurface of [
+			"package/dist/runtime/",
+			"package/dist/adapters/",
+			"package/dist/platform/opencode/tool-input-schemas.d.ts",
+		]) {
+			expect(tarList).not.toContain(removedSurface);
+		}
 
 		const extractDir = await tempDir("flow-extract");
 		run("tar", ["-xzf", tarballPath, "-C", extractDir]);
 		const extractedPackage = join(extractDir, "package");
 		const cliPath = join(extractedPackage, "dist", "cli.js");
 		expect(await readFile(cliPath, "utf8")).toStartWith("#!/usr/bin/env node");
+		const bundledPlugin = await readFile(
+			join(extractedPackage, "dist", "index.js"),
+			"utf8",
+		);
+		expect(bundledPlugin).toContain("# Flow Test");
+		expect(bundledPlugin).toContain("flow-ui-quality/references/ui-rubric.md");
+		expect(bundledPlugin).not.toContain(".flow-skill-version");
 		const extractedManifest = JSON.parse(
 			await readFile(join(extractedPackage, "package.json"), "utf8"),
 		);
 		expect(extractedManifest.types).toBe("dist/index.d.ts");
 		expect(extractedManifest.bin["opencode-plugin-flow"]).toBe("./dist/cli.js");
 
+		const declarations = (
+			await readdir(join(extractedPackage, "dist"), {
+				recursive: true,
+				withFileTypes: true,
+			})
+		)
+			.filter((entry) => entry.isFile() && entry.name.endsWith(".d.ts"))
+			.map((entry) => join(entry.parentPath, entry.name));
+		expect(declarations.length).toBeGreaterThan(0);
+		for (const declaration of declarations) {
+			const source = await readFile(declaration, "utf8");
+			expect(source).not.toContain("node_modules");
+			expect(source).not.toContain(".bun/");
+			expect(source).not.toMatch(/zod@\d/);
+		}
+
 		const home = await tempDir("flow-pack-home");
 		const packedBinPath = join(
 			extractedPackage,
 			extractedManifest.bin["opencode-plugin-flow"],
 		);
-		const doctor = run("node", [packedBinPath, "doctor", "--json"], {
-			env: { HOME: home },
+		const version = run("node", [packedBinPath, "--version"], {
+			env: { npm_package_version: "9.9.9" },
 		});
-		expect(JSON.parse(doctor.stdout).status).toBe("sync_required");
-		run("node", [packedBinPath, "sync"], { env: { HOME: home } });
-		run("node", [packedBinPath, "uninstall"], { env: { HOME: home } });
+		expect(version.stdout.trim()).toBe(extractedManifest.version);
+		const cleanup = run(
+			"node",
+			[packedBinPath, "legacy-cleanup", "--dry-run", "--json"],
+			{
+				env: { HOME: home },
+			},
+		);
+		const cleanupReport = JSON.parse(cleanup.stdout);
+		expect(cleanupReport.mode).toBe("dry-run");
+		expect(
+			cleanupReport.results.every(
+				(result: { status: string }) => result.status === "absent",
+			),
+		).toBe(true);
+		expect(await readdir(home)).toEqual([]);
 
 		const consumerDir = await tempDir("flow-consumer");
+		await writeFile(
+			join(consumerDir, "package.json"),
+			'{"type":"module"}\n',
+			"utf8",
+		);
 		await mkdir(join(consumerDir, "node_modules"), { recursive: true });
-		await symlink(
+		await cp(
 			extractedPackage,
 			join(consumerDir, "node_modules", "opencode-plugin-flow"),
-			"dir",
+			{ recursive: true },
 		);
 		const scopedModules = join(consumerDir, "node_modules", "@opencode-ai");
 		await mkdir(scopedModules, { recursive: true });
@@ -117,6 +166,11 @@ describe("package smoke", () => {
 				"dir",
 			);
 		}
+		await symlink(
+			join(process.cwd(), "node_modules", "zod"),
+			join(consumerDir, "node_modules", "zod"),
+			"dir",
+		);
 		const consumer = join(consumerDir, "consumer.ts");
 		await writeFile(
 			consumer,
@@ -133,18 +187,27 @@ describe("package smoke", () => {
 			"--noEmit",
 			"--ignoreConfig",
 			"--target",
-			"ES2022",
+			"ES2024",
 			"--module",
-			"ESNext",
+			"NodeNext",
 			"--moduleResolution",
-			"Bundler",
+			"NodeNext",
 			"--strict",
-			"--skipLibCheck",
-			"--allowSyntheticDefaultImports",
-			"--esModuleInterop",
 			"--types",
-			"bun-types",
+			"node",
 			consumer,
 		]);
+
+		const runtimeConsumer = join(consumerDir, "consumer.mjs");
+		await writeFile(
+			runtimeConsumer,
+			[
+				'import flowPlugin from "opencode-plugin-flow";',
+				'if (typeof flowPlugin !== "function") throw new Error("Expected a plugin function.");',
+				"",
+			].join("\n"),
+			"utf8",
+		);
+		run("node", [runtimeConsumer], { cwd: consumerDir });
 	}, 20_000);
 });

@@ -4,7 +4,7 @@ Active contributors: ddv1982
 
 ## Purpose
 
-Planning turns a user goal into a structured plan that the runtime can enforce. `skills/flow-plan/SKILL.md` defines planning behavior, and `src/runtime/transitions.ts` locks the plan once `flow_plan_approve` succeeds.
+Planning turns a user goal into a structured plan that the runtime can enforce. `skills/flow-plan/SKILL.md` defines planning behavior, and `src/domain/transitions.ts` locks the plan once `flow_plan_approve` succeeds.
 
 ## Directory layout
 
@@ -14,21 +14,20 @@ skills/flow-plan/
 └── references/
     ├── planning-examples.md
     └── parallel-discovery.md
-src/runtime/
-├── api.ts
-├── schema.ts
-└── transitions.ts
+src/domain/transitions.ts
+src/application/schema.ts
+src/application/flow-service.ts
 ```
 
 ## Key abstractions
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `PlanInputSchema` | `src/runtime/schema.ts` | Accepts draft plan input before feature statuses are normalized. |
-| `PlanSchema` | `src/runtime/schema.ts` | Persisted plan shape with normalized features. |
-| `applyPlan` | `src/runtime/transitions.ts` | Validates and applies a draft plan. |
-| `approvePlan` | `src/runtime/transitions.ts` | Moves a planning session to approved ready state. |
-| `FlowPlanSaveSchema` | `src/runtime/api.ts` | Tool input schema for `flow_plan_save`. |
+| `PlanInputSchema` | `src/application/schema.ts` | Accepts draft plan input before feature statuses are normalized. |
+| `PlanSchema` | `src/application/schema.ts` | Persisted plan shape with normalized features. |
+| `applyPlan` | `src/domain/transitions.ts` | Validates and applies a draft plan. |
+| `approvePlan` | `src/domain/transitions.ts` | Moves a planning session to approved ready state. |
+| `FlowPlanSaveSchema` | `src/application/flow-service.ts` | Tool input schema for `flow_plan_save`. |
 
 ## How it works
 
@@ -36,7 +35,7 @@ src/runtime/
 
 ## Integration points
 
-The public `/flow-plan` command is defined in `src/config-shared.ts` and compiled by `src/prompt-surfaces.ts`. Its prompt includes selected planning and quality-checklist sections plus a bounded parallel-pass contract. Planning examples and the full orchestration playbook remain managed progressive-disclosure references instead of loading into every planning request.
+The public `/flow-plan` command is defined in `src/config-shared.ts` and compiled by `src/prompt-surfaces.ts`. Its prompt includes selected planning and quality-checklist sections plus a bounded parallel-pass contract. Planning examples and the full orchestration playbook remain embedded progressive-disclosure references loaded by stable id instead of entering every planning request.
 
 ## Key source files
 
@@ -44,12 +43,12 @@ The public `/flow-plan` command is defined in `src/config-shared.ts` and compile
 | --- | --- |
 | `skills/flow-plan/SKILL.md` | Planning procedure and payload shape. |
 | `src/prompt-surfaces.ts` | Public planning prompt source selection and critical bookends. |
-| `src/runtime/schema.ts` | Plan, feature, and review-policy schemas. |
-| `src/runtime/transitions.ts` | Plan validation and approval logic. |
+| `src/application/schema.ts` | Plan, feature, and review-policy schemas. |
+| `src/domain/transitions.ts` | Plan validation and approval logic. |
 | `tests/runtime-gates.test.ts` | Invalid dependency and immutable-plan tests. |
 
 ## Entry points for modification
 
-Change `skills/flow-plan/SKILL.md` for planning guidance. Change `src/runtime/schema.ts` and `src/runtime/transitions.ts` together if the persisted plan contract changes, then update tests in `tests/runtime-gates.test.ts` and surface docs in [Data models](../reference/data-models.md).
+Change `skills/flow-plan/SKILL.md` for planning guidance. Change `src/application/schema.ts` and `src/domain/transitions.ts` together if the persisted plan contract changes, then update tests in `tests/runtime-gates.test.ts` and surface docs in [Data models](../reference/data-models.md).
 
 Related pages: [Flow loop](flow-loop.md), [Session, plan, and feature](../primitives/session-plan-feature.md), and [Flow tools](../api/flow-tools.md).

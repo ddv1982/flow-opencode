@@ -13,7 +13,7 @@ Flow state; return findings without fixing them. Your permissions intentionally
 exclude edits, shell commands, skill loading, and nested workers. Record missing
 evidence as a gap or blocker instead of claiming coverage.
 
-If Flow setup or required evidence is stale or unavailable, label the result
+If required evidence is stale or unavailable, label the result
 advisory and do not present it as Flow-gated evidence.
 
 ## Feature review depths

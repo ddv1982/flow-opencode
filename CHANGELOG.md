@@ -2,6 +2,63 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.0.0] - 2026-07-18
+
+TypeScript 7 hard-cutover lore makes Flow 5 smaller, stricter, and easier to
+recover without carrying a v4 compatibility layer:
+
+- The compiler is TypeScript 7.0.2; the pinned toolchain is Bun 1.3.14,
+  Biome 2.5.4, OpenCode plugin 1.18.3, and Zod 4.4.3. Published code now
+  requires Node.js 24 or newer and CI covers Node 24 and 26.
+- Source code now follows `domain -> application -> infrastructure ->
+  platform`: pure transitions use injected time and IDs, application use cases
+  depend on repository ports, filesystem state is an outer implementation,
+  and OpenCode owns only host transport and rendering.
+- OpenCode's embedded validator is private to the host adapter. Flow's core
+  schemas use its direct Zod dependency, shared fixtures keep both wire
+  contracts aligned, and declaration emit no longer leaks package-manager or
+  nested-validator paths.
+- Persisted sessions use schema version 3. Version 2 sessions are not migrated;
+  they are reported as unsupported and preserved in quarantine so a new v5
+  session can start safely.
+- Public use-case results have an explicit typed operation status. Repository-
+  and caller-controlled prose is confined to `workflowData`; top-level
+  summaries, next actions, and recovery fields remain plugin-authored. Feature
+  and session IDs are branded, feature IDs are consistently lowercase
+  kebab-case at every input boundary, and all superseded `src/runtime` and
+  `src/adapters` entrypoints are removed.
+- Source and declaration imports follow NodeNext ESM rules with explicit `.js`
+  specifiers, and the packed-package smoke test compiles a strict NodeNext
+  consumer without skipping library checks before importing the plugin in Node.
+- Workspace roots are canonicalized and every Flow-managed directory and file
+  rejects symbolic links before read or mutation. Archive publication is
+  no-clobber and retry-safe, while lock contention and malformed owner metadata
+  fail closed for manual inspection instead of using age or liveness to steal a
+  lock. Completion outcomes require an explicit discriminator, and domain
+  transitions copy caller-owned plan and evidence collections before recording
+  them.
+- Flow no longer synchronizes Markdown into OpenCode's global skill registry.
+  Core command guidance and optional helpers are embedded in the plugin;
+  `flow_guidance` returns exact package-versioned documents by stable id, plugin
+  startup performs no global skill filesystem work, and `flow_status` no longer
+  carries setup/restart health.
+- Plugin configuration only registers commands and agents; it performs no
+  workspace filesystem I/O and maintains no ambient instruction projection.
+  `/flow-review` validates OpenCode's native subtask identity and agent before
+  rewriting only its prompt, so malformed dispatch fails closed.
+- Orchestration telemetry retains at most 50 recent pass records and accepts at
+  most 50 per completion. Deduplication is scoped to that retained telemetry
+  window, and failed completion mutations now update `timestamps.updatedAt`
+  from the same instant recorded in `lastError`.
+- The experimental compaction hook, token telemetry, phase boundaries, resume
+  packets, and acknowledgement protocol are gone. Review retry exhaustion uses
+  the ordinary blocked-feature/reset path, while a recorded closure makes the
+  session archive-only until retry-safe publication succeeds.
+- The old doctor/sync/uninstall CLI is replaced by explicit
+  `legacy-cleanup --dry-run|--apply`. Apply never deletes: it moves only
+  marker-proven pristine v4 folders to a recovery archive and refuses
+  foreign, edited, extra, malformed, or symlinked content.
+
 ## [4.4.0] - 2026-07-17
 
 Prompt economy lore makes Flow's instructions smaller, more role-specific, and

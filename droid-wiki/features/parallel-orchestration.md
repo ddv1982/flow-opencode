@@ -42,7 +42,7 @@ The manager records implementation pass decisions explicitly: serial,
 candidate exact-path, candidate worktree, tournament, or skipped. Bounded pass
 records may be included in `flow_feature_complete.orchestrationPasses`; the
 runtime aggregates counts and recent pass summaries under
-`session.budget.orchestration`, while full worker handoffs stay outside
+`workflowData.session.budget.orchestration`, while full worker handoffs stay outside
 `.flow/**`. Candidate accounting records `candidateEligibility`,
 `candidateDecision`, and structured `decisionFactors` so `flow_status` can
 distinguish serial-required work from eligible candidate work that was skipped.
@@ -77,4 +77,4 @@ while reducing context on ordinary paths.
 
 Change worker ids and runtime permissions in `src/config-shared.ts`. Change manager fan-out judgment in `parallel-decision.md`, worker role prose in `parallel-execution.md`, and acceptance rules in `parallel-synthesis.md`. Update `tests/distribution-and-surface.test.ts` when permissions or expected worker names change.
 
-Related pages: [Managed skills](managed-skills.md), [OpenCode adapter](../systems/opencode-adapter.md), and [Security](../security.md).
+Related pages: [Embedded guidance](embedded-guidance.md), [OpenCode adapter](../systems/opencode-adapter.md), and [Security](../security.md).

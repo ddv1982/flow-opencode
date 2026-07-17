@@ -1,23 +1,26 @@
 {
 	"compilerOptions": {
-		"target": "ES2022",
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
+		"target": "ES2024",
+		"lib": ["ES2024"],
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"moduleDetection": "force",
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
+		"noUncheckedSideEffectImports": true,
 		"exactOptionalPropertyTypes": true,
 		"noImplicitOverride": true,
+		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
 		"verbatimModuleSyntax": true,
 		"isolatedModules": true,
+		"erasableSyntaxOnly": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noEmit": true,
 		"resolveJsonModule": true,
-		"allowSyntheticDefaultImports": true,
-		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"types": ["bun-types"]
+		"types": ["bun"]
 	},
-	"include": ["src/**/*.ts", "tests/**/*.ts"]
+	"include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }

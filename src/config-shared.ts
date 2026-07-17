@@ -1,4 +1,4 @@
-import { compileFlowPromptSurface } from "./prompt-surfaces";
+import { compileFlowPromptSurface } from "./prompt-surfaces.js";
 
 export type FlowPermissionConfig = {
 	edit?: string;
@@ -17,17 +17,28 @@ export type FlowAgentConfig = {
 	permission?: FlowPermissionConfig;
 };
 
-export type FlowCommandConfig = {
+type FlowCommandConfigBase = {
 	description: string;
 	template: string;
-	agent?: string;
-	subtask?: boolean;
 };
+
+export type FlowManagerCommandConfig = FlowCommandConfigBase & {
+	agent?: never;
+	subtask: false;
+};
+
+export type FlowSubtaskCommandConfig = FlowCommandConfigBase & {
+	agent: string;
+	subtask: true;
+};
+
+export type FlowCommandConfig =
+	| FlowManagerCommandConfig
+	| FlowSubtaskCommandConfig;
 
 export type MutableFlowConfig = {
 	agent?: Record<string, unknown>;
 	command?: Record<string, unknown>;
-	instructions?: string[];
 };
 
 const FLOW_PUBLIC_COMMAND_TEMPLATES = {
@@ -160,15 +171,18 @@ export const FLOW_CORE_AGENTS = {
 
 export const FLOW_CORE_COMMANDS = {
 	"flow-auto": {
-		description: "Drive Flow skills against the minimal runtime ledger",
+		description: "Drive the Flow lifecycle against the runtime ledger",
+		subtask: false,
 		template: FLOW_PUBLIC_COMMAND_TEMPLATES["flow-auto"],
 	},
 	"flow-plan": {
 		description: "Create or approve a Flow plan",
+		subtask: false,
 		template: FLOW_PUBLIC_COMMAND_TEMPLATES["flow-plan"],
 	},
 	"flow-run": {
 		description: "Run one approved Flow feature",
+		subtask: false,
 		template: FLOW_PUBLIC_COMMAND_TEMPLATES["flow-run"],
 	},
 	"flow-review": {
@@ -179,6 +193,7 @@ export const FLOW_CORE_COMMANDS = {
 	},
 	"flow-status": {
 		description: "Inspect the active Flow session",
+		subtask: false,
 		template: FLOW_PUBLIC_COMMAND_TEMPLATES["flow-status"],
 	},
 } satisfies Record<string, FlowCommandConfig>;
@@ -215,14 +230,9 @@ export function createFlowCoreConfigEntries() {
 	};
 }
 
-function appendUnique(values: readonly string[], value: string): string[] {
-	return values.includes(value) ? [...values] : [...values, value];
-}
-
 export function applyFlowConfig(
 	config: MutableFlowConfig,
 	options?: {
-		flowInstructionPath?: string;
 		onCollision?: (kind: "agent" | "command", name: string) => void;
 	},
 ): void {
@@ -241,10 +251,4 @@ export function applyFlowConfig(
 	}
 	config.agent = { ...(config.agent ?? {}), ...entries.agent };
 	config.command = { ...(config.command ?? {}), ...entries.command };
-	if (options?.flowInstructionPath) {
-		config.instructions = appendUnique(
-			config.instructions ?? [],
-			options.flowInstructionPath,
-		);
-	}
 }

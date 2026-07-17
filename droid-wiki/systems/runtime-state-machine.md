@@ -4,59 +4,65 @@ Active contributors: ddv1982
 
 ## Purpose
 
-The runtime state machine enforces Flow's hard safety gates. `src/runtime/api.ts` handles tool inputs and persistence, while `src/runtime/transitions.ts` contains pure transition logic for plans, runs, completion, reset, close, and status summaries.
+The state machine enforces Flow's hard safety gates. The application service
+parses core inputs and coordinates a repository port, while domain transitions
+contain pure logic for plans, runs, completion, reset, close, and status.
 
 ## Directory layout
 
 ```text
-src/runtime/
-├── api.ts
-├── transitions.ts
-├── schema.ts
-├── workspace.ts
-└── time.ts
+src/domain/session.ts
+src/domain/transitions.ts
+src/application/flow-service.ts
+src/application/ports/session-repository.ts
 ```
 
 ## Key abstractions
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `mutate` | `src/runtime/api.ts` | Lock, load, transition, and save wrapper. |
-| `createSession` | `src/runtime/transitions.ts` | Creates a version 2 planning session. |
-| `applyPlan` | `src/runtime/transitions.ts` | Validates and applies a draft plan. |
-| `startRun` | `src/runtime/transitions.ts` | Starts the next runnable feature. |
-| `completeFeature` | `src/runtime/transitions.ts` | Records completion or blocker history. |
-| `summarizeSession` | `src/runtime/transitions.ts` | Produces `flow_status` output. |
+| `createFlowService` | `src/application/flow-service.ts` | Builds typed use cases over an injected repository and environment. |
+| `createSession` | `src/domain/transitions.ts` | Creates a version 3 planning session. |
+| `applyPlan` | `src/domain/transitions.ts` | Validates and applies a draft plan. |
+| `startRun` | `src/domain/transitions.ts` | Starts the next runnable feature. |
+| `completeFeature` | `src/domain/transitions.ts` | Records completion or blocker history. |
+| `summarizeSession` | `src/domain/transitions.ts` | Produces `flow_status` output. |
 
 ## How it works
 
 ```mermaid
 graph TD
-    Tool[Tool handler in api.ts] --> Parse[Parse input schema]
-    Parse --> Lock[withSessionLock]
-    Lock --> Load[loadSession]
-    Load --> Transition[transition in transitions.ts]
-    Transition --> Save[saveSession or archiveAndClearSession]
-    Save --> Response[RuntimeResponse JSON]
+    Platform[OpenCode platform] --> Service[FlowService use case]
+    Service --> Port[SessionRepository port]
+    Port --> Load[load under transaction]
+    Load --> Transition[pure domain transition]
+    Transition --> Save[save or archive through port]
+    Save --> Response[discriminated FlowResponse]
 ```
 
-`src/runtime/transitions.ts` does not write files. It returns either `{ ok: true, value }` or `{ ok: false, message, recovery, session }`. `src/runtime/api.ts` decides whether to persist a successful next state, save a failure state with `lastError`, quarantine unreadable sessions, or archive closed sessions.
+Domain transitions do not write files or read time and UUIDs directly. They
+return typed success or failure values. The application service decides whether
+to persist a successful next state, save a failure state with `lastError`, ask
+the repository to quarantine unreadable state, or archive a closed session.
 
 ## Integration points
 
-The adapter calls runtime functions through `src/adapters/opencode/tools.ts`. The tests in `tests/runtime-gates.test.ts` exercise the state machine through the public API functions, not by mutating session objects directly.
+The platform calls the filesystem composition in
+`src/infrastructure/fs/workspace-flow-service.ts`. Application-level domain
+tests inject deterministic time and IDs; workspace tests exercise the real
+repository implementation.
 
 ## Key source files
 
 | File | Purpose |
 | --- | --- |
-| `src/runtime/api.ts` | Tool-facing API and mutation wrapper. |
-| `src/runtime/transitions.ts` | Pure state machine. |
-| `src/runtime/schema.ts` | Session and payload schemas. |
+| `src/application/flow-service.ts` | Tool-facing API and mutation wrapper. |
+| `src/domain/transitions.ts` | Pure state machine. |
+| `src/application/schema.ts` | Session and payload schemas. |
 | `tests/runtime-gates.test.ts` | State gate behavior coverage. |
 
 ## Entry points for modification
 
-Add a new hard gate in `src/runtime/transitions.ts`, then add API-level tests in `tests/runtime-gates.test.ts`. Avoid adding planning heuristics here; put those in `skills/flow-plan/SKILL.md` or related skill files.
+Add a new hard gate in `src/domain/transitions.ts`, then add API-level tests in `tests/runtime-gates.test.ts`. Avoid adding planning heuristics here; put those in `skills/flow-plan/SKILL.md` or related skill files.
 
 Related pages: [Execution and completion](../features/execution-and-completion.md), [Schema and JSON](schema-and-json.md), and [Flow tools](../api/flow-tools.md).

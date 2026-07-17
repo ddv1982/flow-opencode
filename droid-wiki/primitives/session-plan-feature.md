@@ -9,22 +9,20 @@ The session is Flow's durable workflow ledger. The plan describes the goal and f
 ## Directory layout
 
 ```text
-src/runtime/
-├── schema.ts
-├── transitions.ts
-├── api.ts
-└── workspace.ts
+src/domain/session.ts
+src/domain/transitions.ts
+src/application/schema.ts
 ```
 
 ## Key abstractions
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `SessionSchema` | `src/runtime/schema.ts` | Version 2 persisted session model. |
-| `PlanSchema` | `src/runtime/schema.ts` | Summary, overview, requirements, decisions, final review policy, and features. |
-| `FeatureSchema` | `src/runtime/schema.ts` | Kebab-case feature id and feature state. |
-| `createSession` | `src/runtime/transitions.ts` | Creates a planning session with `approval: "pending"`. |
-| `summarizeSession` | `src/runtime/transitions.ts` | Produces user-facing status and next action. |
+| `SessionSchema` | `src/application/schema.ts` | Version 3 persisted session model. |
+| `PlanSchema` | `src/application/schema.ts` | Summary, overview, requirements, decisions, final review policy, and features. |
+| `FeatureSchema` | `src/application/schema.ts` | Kebab-case feature id and feature state. |
+| `createSession` | `src/domain/transitions.ts` | Creates a planning session with `approval: "pending"`. |
+| `summarizeSession` | `src/domain/transitions.ts` | Produces user-facing status and next action. |
 
 ## How it works
 
@@ -32,19 +30,19 @@ src/runtime/
 
 ## Integration points
 
-The session is written to `.flow/session.json` by `saveSession` in `src/runtime/workspace.ts`. It is read by `flow_status` and the generated instruction projection. Skills refer to plan `requirements`, `decisions`, feature `targets`, feature `validation`, and feature `reviewDepth` when choosing work and evidence.
+The session is written to `.flow/session.json` by `saveSession` in `src/infrastructure/fs/workspace.ts` and read explicitly by `flow_status`. Flow guidance refers to plan `requirements`, `decisions`, feature `targets`, feature `validation`, and feature `reviewDepth` when choosing work and evidence.
 
 ## Key source files
 
 | File | Purpose |
 | --- | --- |
-| `src/runtime/schema.ts` | Session, plan, feature, and history schemas. |
-| `src/runtime/transitions.ts` | State changes for session, plan, and feature status. |
-| `src/runtime/workspace.ts` | Session persistence and instruction projection. |
+| `src/application/schema.ts` | Session, plan, feature, and history schemas. |
+| `src/domain/transitions.ts` | State changes for session, plan, and feature status. |
+| `src/infrastructure/fs/workspace.ts` | Session persistence, archive, and quarantine. |
 | `tests/runtime-gates.test.ts` | Plan and feature gate tests. |
 
 ## Entry points for modification
 
-Change `src/runtime/schema.ts` first when model fields change. Then adjust transitions, workspace tests, and [Data models](../reference/data-models.md). Avoid adding model fields that only serve prompt convenience.
+Change `src/application/schema.ts` first when model fields change. Then adjust transitions, workspace tests, and [Data models](../reference/data-models.md). Avoid adding model fields that only serve prompt convenience.
 
 Related pages: [Runtime state machine](../systems/runtime-state-machine.md), [Planning and approval](../features/planning-and-approval.md), and [Workspace persistence](../systems/workspace-persistence.md).

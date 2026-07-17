@@ -1,10 +1,10 @@
 # Flow plugin for OpenCode
 
-`opencode-plugin-flow` adds a durable planning and execution loop to OpenCode. The package is a TypeScript npm plugin that installs Flow commands, hidden worker agents, managed skills, and seven runtime tools while keeping workflow state in `.flow/session.json`.
+`opencode-plugin-flow` adds a durable planning and execution loop to OpenCode. The TypeScript package installs Flow commands and hidden worker agents, exposes embedded guidance plus seven stateful runtime tools, and keeps workflow state in `.flow/session.json`.
 
 ## What this project does
 
-Flow turns a broad coding goal into an approved feature plan, runs one feature at a time, records validation and review evidence, and archives the session when it is done. The runtime in `src/runtime/api.ts`, `src/runtime/transitions.ts`, and `src/runtime/workspace.ts` enforces the hard rules. The skills under `skills/` contain the judgment for planning, execution, validation, review, cleanup, UI checks, and commit preparation.
+Flow turns a broad coding goal into an approved feature plan, runs one feature at a time, records validation and review evidence, and archives the session when it is done. The runtime in `src/application/flow-service.ts`, `src/domain/transitions.ts`, and `src/infrastructure/fs/workspace.ts` enforces the hard rules. The skills under `skills/` contain the judgment for planning, execution, validation, review, cleanup, UI checks, and commit preparation.
 
 ## Quick links
 
@@ -19,6 +19,10 @@ Flow turns a broad coding goal into an approved feature plan, runs one feature a
 
 ## Video overview
 
+The current recording predates the v5 embedded-guidance cutover and is retained
+as a historical architecture tour. Use this wiki for current installation and
+runtime behavior.
+
 Download the generated English video overview:
 [overview.mp4](https://github.com/ddv1982/flow-opencode/raw/main/droid-wiki/video/overview.mp4).
 
@@ -29,13 +33,13 @@ English captions are available as
 
 | Path | Purpose |
 | --- | --- |
-| `src/adapters/opencode/plugin.ts` | OpenCode plugin entrypoint, command preflight, tools, and config hook. |
-| `src/runtime/api.ts` | Tool-facing runtime API and Zod input schemas. |
-| `src/runtime/transitions.ts` | Pure state transitions for planning, running, completion, reset, and close. |
-| `src/runtime/workspace.ts` | `.flow/` persistence, locks, atomic writes, archive, quarantine, and generated instructions. |
+| `src/platform/opencode/plugin.ts` | OpenCode plugin entrypoint, command preflight, tools, and config hook. |
+| `src/application/flow-service.ts` | Typed use cases, repository coordination, and core Zod input schemas. |
+| `src/domain/transitions.ts` | Pure state transitions for planning, running, completion, reset, and close. |
+| `src/infrastructure/fs/workspace.ts` | `.flow/` persistence, locks, atomic writes, archive, and quarantine. |
 | `src/config-shared.ts` | Flow command and hidden worker config injected into OpenCode. |
-| `src/distribution/sync.ts` | Managed skill sync, doctor, and uninstall behavior. |
-| `skills/` | Bundled skill instructions and references copied into the OpenCode skills root. |
+| `src/guidance/catalog.ts` | Stable ids and Markdown embedded in the plugin bundle. |
+| `skills/` | Authored guidance and references consumed by the embedded catalog. |
 
 ## Reader map
 

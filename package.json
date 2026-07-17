@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "4.4.0",
+	"version": "5.0.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"repository": {
@@ -26,10 +26,11 @@
 		"CHANGELOG.md"
 	],
 	"scripts": {
-		"build": "bun run build:plugin && bun run build:cli && bun run build:types",
+		"build": "bun run clean && bun run build:plugin && bun run build:cli && bun run build:types",
 		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --sourcemap=external ./src/index.ts",
 		"build:cli": "bun build --target=node --outdir=./dist --entry-naming=cli.js --banner='#!/usr/bin/env node' --sourcemap=external ./src/cli.ts",
 		"build:types": "tsc -p tsconfig.types.json",
+		"clean": "bun run scripts/clean-dist.ts",
 		"lint": "bunx biome check src tests scripts --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"prompt:quality": "bun run scripts/prompt-quality.ts",
 		"prompt:model-eval": "bun run scripts/prompt-model-eval.ts",
@@ -38,8 +39,7 @@
 		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
 		"test": "bun test tests",
 		"typecheck": "tsc --noEmit",
-		"uninstall:opencode": "bun run ./src/cli.ts uninstall",
-		"check": "bun run typecheck && bun run lint && bun run build && bun run test"
+		"check": "bun run typecheck && bun run lint && bun run prompt:quality && bun run build && bun run test"
 	},
 	"keywords": [
 		"opencode",
@@ -50,19 +50,24 @@
 	],
 	"author": "Douwe de Vries",
 	"license": "MIT",
+	"packageManager": "bun@1.3.14",
 	"engines": {
-		"node": ">=20.12.0"
+		"node": ">=24"
 	},
 	"peerDependencies": {
-		"@opencode-ai/plugin": ">=1.17.3 <2"
+		"@opencode-ai/plugin": ">=1.18.3 <2"
 	},
 	"dependencies": {
-		"zod": "4.1.8"
+		"zod": "4.4.3"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.2.6",
-		"@opencode-ai/plugin": "1.17.3",
-		"bun-types": "latest",
-		"typescript": "^6.0.2"
+		"@biomejs/biome": "2.5.4",
+		"@opencode-ai/plugin": "1.18.3",
+		"@types/bun": "1.3.14",
+		"@types/node": "24.13.3",
+		"typescript": "7.0.2"
+	},
+	"overrides": {
+		"@types/node": "24.13.3"
 	}
 }

@@ -5,8 +5,8 @@ import {
 	buildPromptModelEvaluationPacket,
 	gradeModelDecisions,
 	parseModelDecisionResponse,
-} from "../src/prompt-model-evaluation";
-import type { FlowPromptVariant } from "../src/prompt-surfaces";
+} from "../src/prompt-model-evaluation.js";
+import type { FlowPromptVariant } from "../src/prompt-surfaces.js";
 
 const SUPPORTED_VARIANTS: readonly FlowPromptVariant[] = [
 	"baseline",

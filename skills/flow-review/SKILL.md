@@ -1,6 +1,6 @@
 ---
 name: flow-review
-description: "Use when Flow work needs a review verdict in the v4 runtime: a completed feature awaiting its featureReview, a final session review, or an assigned review slice. Validation evidence gathering stays in flow-test; cleanup judgment stays in flow-deslop."
+description: "Use when Flow work needs a review verdict in the v5 runtime: a completed feature awaiting its featureReview, a final session review, or an assigned review slice. Validation evidence gathering stays in flow-test; cleanup judgment stays in flow-deslop."
 ---
 
 # Flow Review
@@ -41,11 +41,11 @@ These instructions run in two contexts, and only one of them can load helpers:
   feature evidence, changed artifacts, and final validation against the
   convergence checklist in `references/review-rubric.md`.
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
-- In manager context, load `flow-test` for validation-heavy,
+- In manager context, request `flow-test` through `flow_guidance` for validation-heavy,
   regression-sensitive, browser QA, or unclear coverage reviews. If it is
   unavailable or you are the hidden reviewer, record a coverage gap and treat
   missing validation evidence as a gap or blocker based on user impact.
-- Load `references/review-rubric.md` for severity, depth, and payload shape.
+- Request `flow-review/references/review-rubric.md` from `flow_guidance` for severity, depth, and payload shape.
 
 ## Feature Review Depth
 
@@ -89,15 +89,13 @@ Use `status: "failed"` when any blocking finding remains. Advisory findings may 
 
 ## Special cases
 
-- Cleanup/refactor: in manager context, load `flow-deslop`; verify the smell was real, refutation paths were checked, and behavior was preserved. If it is unavailable or you are the hidden reviewer, record a coverage gap instead of approving cleanup claims.
-- UI/frontend: in manager context, load `flow-ui-quality`; verify state coverage and visual evidence when a local target was available. If it is unavailable or you are the hidden reviewer, record a coverage gap and do not claim visual polish was verified.
-- Audit reports: use `../flow-run/references/audit-rubric.md`; findings must survive refutation before they can drive fix features.
-- Large reviews (manager context only): start with
-  `../flow/references/parallel-orchestration.md` for read-only slices by
+- Cleanup/refactor: in manager context, request `flow-deslop` through `flow_guidance`; verify the smell was real, refutation paths were checked, and behavior was preserved. If it is unavailable or you are the hidden reviewer, record a coverage gap instead of approving cleanup claims.
+- UI/frontend: in manager context, request `flow-ui-quality` through `flow_guidance`; verify state coverage and visual evidence when a local target was available. If it is unavailable or you are the hidden reviewer, record a coverage gap and do not claim visual polish was verified.
+- Audit reports: request `flow-run/references/audit-rubric.md` from `flow_guidance`; findings must survive refutation before they can drive fix features.
+- Large reviews (manager context only): request
+  `flow/references/parallel-orchestration.md` from `flow_guidance` for read-only slices by
   changed-file group, risk lens, or validation surface. If fan-out is selected,
-  use `../flow/references/parallel-manifest.md`,
-  `../flow/references/parallel-execution.md`, and
-  `../flow/references/parallel-synthesis.md` with the named review, audit,
+  request the manifest, execution, and synthesis reference ids with the named review, audit,
   evidence, or validation workers; only the manager returns the final
   `featureReview` or `finalReview` payload. If those references are unavailable
   in the current context (for example in a bundled public Flow

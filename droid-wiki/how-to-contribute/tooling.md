@@ -1,6 +1,6 @@
 # Tooling
 
-Flow's tooling is deliberately small: Bun scripts, TypeScript, Biome, GitHub Actions, and the plugin's own CLI for managed skills.
+Flow's tooling is deliberately small: Bun scripts, TypeScript, Biome, GitHub Actions, and an explicit legacy-cleanup CLI.
 
 ## Package scripts
 
@@ -20,7 +20,7 @@ These scripts are defined in `package.json`.
 
 ## Biome
 
-`biome.json` enables formatting and recommended lint rules. `noConsole` is an error outside the allowed test and script areas, which is why adapter logging goes through `createFlowLog` in `src/adapters/opencode/logging.ts`.
+`biome.json` enables formatting and recommended lint rules. `noConsole` is an error outside the allowed test and script areas, which is why adapter logging goes through `createFlowLog` in `src/platform/opencode/logging.ts`.
 
 ## GitHub automation
 
@@ -28,12 +28,11 @@ These scripts are defined in `package.json`.
 
 ## Flow CLI
 
-The CLI in `src/cli.ts` implements:
+The CLI in `src/cli.ts` implements only:
 
-- `opencode-plugin-flow doctor`
-- `opencode-plugin-flow sync`
-- `opencode-plugin-flow uninstall`
+- `opencode-plugin-flow legacy-cleanup --dry-run`
+- `opencode-plugin-flow legacy-cleanup --apply`
 
-Those commands call `inspectFlowSkillInstall`, `syncFlowSkills`, and `uninstallFlowSkills` from `src/distribution/sync.ts`.
+The command calls `cleanupLegacySkills` from `src/distribution/legacy-cleanup.ts`. Dry-run makes no writes; apply moves only pristine marker-owned folders to a recovery archive and never deletes them.
 
 Related pages: [CLI and package](../systems/cli-and-package.md), [Configuration](../reference/configuration.md), and [Deployment](../deployment.md).

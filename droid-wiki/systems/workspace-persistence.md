@@ -4,14 +4,13 @@ Active contributors: ddv1982
 
 ## Purpose
 
-Workspace persistence owns `.flow/` state on disk. `src/runtime/workspace.ts` validates workspace roots, serializes writes, reads strict sessions, writes generated instruction projections, archives sessions, and quarantines unreadable active state.
+Workspace persistence owns `.flow/` state on disk. `src/infrastructure/fs/workspace.ts` validates workspace roots, serializes writes, reads strict sessions, archives sessions, and quarantines unreadable active state.
 
 ## Directory layout
 
 ```text
 .flow/
 ├── session.json
-├── opencode-instructions.md
 ├── session.lock/
 │   └── owner.json
 ├── history/
@@ -23,32 +22,51 @@ Workspace persistence owns `.flow/` state on disk. `src/runtime/workspace.ts` va
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `assertMutableWorkspaceRoot` | `src/runtime/workspace.ts` | Rejects root and `$HOME` as mutable roots. |
-| `withSessionLock` | `src/runtime/workspace.ts` | Serializes in-process and filesystem writes. |
-| `loadSession` | `src/runtime/workspace.ts` | Reads strict JSON and validates `SessionSchema`. |
-| `saveSession` | `src/runtime/workspace.ts` | Atomically writes session and instructions. |
-| `archiveAndClearSession` | `src/runtime/workspace.ts` | Moves closed sessions to history and clears active state. |
-| `quarantineUnreadableSession` | `src/runtime/workspace.ts` | Preserves bad session files for inspection. |
+| `assertMutableWorkspaceRoot` | `src/infrastructure/fs/workspace.ts` | Canonicalizes aliases and rejects root and `$HOME` as mutable roots. |
+| `withSessionLock` | `src/infrastructure/fs/workspace.ts` | Serializes in-process and filesystem writes. |
+| `loadSession` | `src/infrastructure/fs/workspace.ts` | Reads strict JSON and validates `SessionSchema`. |
+| `saveSession` | `src/infrastructure/fs/workspace.ts` | Atomically writes the active session. |
+| `archiveAndClearSession` | `src/infrastructure/fs/workspace.ts` | Publishes closed sessions to history without clobbering and clears active state. |
+| `quarantineUnreadableSession` | `src/infrastructure/fs/workspace.ts` | Preserves bad session files for inspection. |
 
 ## How it works
 
-Writes use a temporary file, file sync, rename, and directory sync on non-Windows platforms. Locks use a `session.lock` directory with owner metadata and stale-lock detection based on process liveness or age. Generated instructions are rebuilt from the active session and registered through the OpenCode config hook in `src/adapters/opencode/config.ts`.
+Writes use a temporary file, exclusive creation, file sync, rename, and
+directory sync on non-Windows platforms. Before use, `.flow`, `history`, the
+lock, session, and ignore paths must be real directories or regular files
+rather than symbolic links; POSIX managed-file reads also use `O_NOFOLLOW`.
+Locks use a `session.lock` directory with owner metadata and always fail closed
+on contention or invalid metadata. Flow never steals a lock based on age or an
+owner-liveness guess; the timeout directs maintainers to inspect an abandoned
+lock manually.
+
+Closing first saves the closed session as authoritative active state. Archive
+publication then hard-links that exact `session.json` to the fixed history path,
+which fails rather than replacing an existing file. An identical existing
+archive means a prior close was interrupted after publication, so cleanup
+resumes; different contents raise `ArchiveCollisionError` and preserve active
+state. Lock owner fields are semantically validated before use. Malformed dates,
+non-positive or fractional pids, and blank hostnames fail closed.
 
 ## Integration points
 
-`src/runtime/api.ts` calls `withSessionLock` before state mutations. `src/adapters/opencode/config.ts` calls `refreshFlowInstructionFile` when OpenCode config loads. `tests/workspace-persistence.test.ts` covers unsafe roots, malformed JSON, duplicate keys, archive/close, stale locks, and quarantine.
+`src/infrastructure/fs/session-repository.ts` maps the application repository
+port to `withSessionLock` and the workspace primitives.
+`src/infrastructure/fs/workspace-flow-service.ts` composes that repository with
+the application service and system transition environment. The OpenCode config
+hook does not touch workspace state.
 
 ## Key source files
 
 | File | Purpose |
 | --- | --- |
-| `src/runtime/workspace.ts` | Persistence and recovery implementation. |
-| `src/runtime/json/strict-object.ts` | Strict JSON parser used by `loadSession`. |
-| `src/adapters/opencode/config.ts` | Registers generated instruction projection. |
+| `src/infrastructure/fs/workspace.ts` | Persistence and recovery implementation. |
+| `src/infrastructure/fs/strict-json-object.ts` | Strict JSON parser used by `loadSession`. |
+| `src/platform/opencode/config.ts` | Registers commands and agents without filesystem I/O. |
 | `tests/workspace-persistence.test.ts` | Persistence safety tests. |
 
 ## Entry points for modification
 
-Change `src/runtime/workspace.ts` for `.flow/` layout or persistence behavior. Update `tests/workspace-persistence.test.ts` for every filesystem behavior change, especially lock, archive, quarantine, and generated instruction cases.
+Change `src/infrastructure/fs/workspace.ts` for `.flow/` layout or persistence behavior. Update `tests/workspace-persistence.test.ts` for every filesystem behavior change, especially lock, archive, and quarantine cases.
 
 Related pages: [Schema and JSON](schema-and-json.md), [Debugging](../how-to-contribute/debugging.md), and [Security](../security.md).

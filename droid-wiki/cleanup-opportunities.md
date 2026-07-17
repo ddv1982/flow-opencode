@@ -6,11 +6,11 @@ The current repo has no `TODO`, `FIXME`, `HACK`, or `@deprecated` markers in `sr
 
 | File | Lines | Why it is worth watching |
 | --- | ---: | --- |
-| `tests/distribution-and-surface.test.ts` | 1,778 | Covers many public surface contracts in one large file. |
-| `src/distribution/sync.ts` | 638 | Combines sync, marker parsing, doctor reporting, setup health, and uninstall behavior. |
-| `src/runtime/transitions.ts` | 628 | Central state machine and completion gate. |
-| `tests/workspace-persistence.test.ts` | 585 | Broad persistence safety coverage. |
-| `src/runtime/workspace.ts` | 439 | Filesystem safety, locking, archive, quarantine, and instruction projection in one module. |
+| `tests/distribution-and-surface.test.ts` | 688 | Covers guidance, plugin, command, permission, and legacy-cleanup contracts. |
+| `src/domain/transitions.ts` | 1,212 | Central pure state machine and completion gate. |
+| `src/distribution/legacy-cleanup.ts` | ~290 | Deliberately conservative one-time migration code; keep it outside plugin startup. |
+| `tests/workspace-persistence.test.ts` | 910 | Broad persistence safety coverage. |
+| `src/infrastructure/fs/workspace.ts` | 652 | Filesystem safety, locking, archive, and quarantine in one module. |
 
 ## Recent churn hotspots
 
@@ -23,7 +23,8 @@ Dependabot is enabled in `.github/dependabot.yml`, but `zod` and `@opencode-ai/p
 ## Suggested next checks
 
 - Split `tests/distribution-and-surface.test.ts` only if a future change makes a stable contract cluster obvious.
-- Keep `src/distribution/sync.ts` behavior-tested before extracting helper modules.
-- Avoid splitting `src/runtime/transitions.ts` unless the state machine remains easy to review end-to-end.
+- Keep legacy cleanup recoverable and nofollow-tested; do not generalize it into runtime sync.
+- Split `src/domain/transitions.ts` only along domain concepts that preserve
+  pure transition review and exhaustive gate coverage.
 
 Related pages: [By the numbers](by-the-numbers.md), [Patterns and conventions](how-to-contribute/patterns-and-conventions.md), and [Dependencies](reference/dependencies.md).

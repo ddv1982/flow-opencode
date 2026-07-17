@@ -14,9 +14,9 @@ The ADR records that v3 sessions and retired tools are not migrated. It removes 
 
 | File | Role |
 | --- | --- |
-| `src/runtime/schema.ts` | Minimal session, plan, feature, validation, and review model. |
-| `src/runtime/transitions.ts` | Hard gates only. |
-| `src/runtime/api.ts` | Seven tool handlers. |
+| `src/application/schema.ts` | Minimal session, plan, feature, validation, and review model. |
+| `src/domain/transitions.ts` | Hard gates only. |
+| `src/application/flow-service.ts` | Seven tool handlers. |
 | `skills/flow/SKILL.md` | End-to-end workflow judgment. |
 | `skills/flow-plan/SKILL.md` | Planning judgment. |
 | `skills/flow-run/SKILL.md` | Execution and validation discipline. |
@@ -24,6 +24,6 @@ The ADR records that v3 sessions and retired tools are not migrated. It removes 
 
 ## Maintenance rule
 
-If a rule needs interpretation, it belongs in `skills/**`. If a rule must never be bypassed for session safety, it belongs in `src/runtime/transitions.ts` or `src/runtime/workspace.ts`.
+If a rule needs interpretation, it belongs in `skills/**`. If a rule must never be bypassed for session safety, it belongs in `src/domain/transitions.ts` or `src/infrastructure/fs/workspace.ts`.
 
-Related pages: [Runtime state machine](../systems/runtime-state-machine.md), [Managed skills](../features/managed-skills.md), and [Lore](../lore.md).
+Related pages: [Runtime state machine](../systems/runtime-state-machine.md), [Embedded guidance](../features/embedded-guidance.md), and [Lore](../lore.md).

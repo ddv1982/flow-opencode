@@ -1,5 +1,5 @@
-import { FLOW_SKILL_DEFINITIONS } from "./distribution/flow-skill-definitions";
-import { LEGACY_PROMPT_BASELINE } from "./prompt-baseline-fixtures";
+import { findFlowGuidance } from "./guidance/catalog.js";
+import { LEGACY_PROMPT_BASELINE } from "./prompt-baseline-fixtures.js";
 
 export type FlowPromptVariant =
 	| "baseline"
@@ -90,19 +90,12 @@ const COMMAND_ACTIONS = {
 		"Call flow_status and report the session state and next action.",
 } as const;
 
-function flowSkillFileContent(skillName: string, relativePath: string): string {
-	const definition = FLOW_SKILL_DEFINITIONS.find(
-		(candidate) => candidate.name === skillName,
-	);
-	const file = definition?.files.find(
-		(candidate) => candidate.relativePath === relativePath,
-	);
-	if (!file) {
-		throw new Error(
-			`Missing bundled Flow skill file ${skillName}/${relativePath}.`,
-		);
+function flowGuidanceFileContent(topic: string, relativePath: string): string {
+	const document = findFlowGuidance(topic, relativePath);
+	if (!document) {
+		throw new Error(`Missing bundled Flow guidance ${topic}/${relativePath}.`);
 	}
-	return file.content;
+	return document.content;
 }
 
 function markdownSection(content: string, heading: string): string {
@@ -128,7 +121,7 @@ function sourceFragment(options: {
 	kind?: FlowPromptFragmentKind;
 	conditional?: boolean;
 }): FlowPromptFragment {
-	const content = flowSkillFileContent(options.skill, options.path);
+	const content = flowGuidanceFileContent(options.skill, options.path);
 	const source = `${options.skill}/${options.path}`;
 	return {
 		id: options.id,
@@ -163,7 +156,7 @@ function wholeSourceFragment(options: {
 		...(options.conditional === undefined
 			? {}
 			: { conditional: options.conditional }),
-		text: `## Bundled ${source}\n\n${flowSkillFileContent(options.skill, options.path)}`,
+		text: `## Bundled ${source}\n\n${flowGuidanceFileContent(options.skill, options.path)}`,
 	};
 }
 
@@ -203,7 +196,7 @@ function markedSourceFragment(options: {
 			? {}
 			: { conditional: options.conditional }),
 		text: markedPromptBlock(
-			flowSkillFileContent(options.skill, options.path),
+			flowGuidanceFileContent(options.skill, options.path),
 			options.marker,
 		),
 	};
@@ -279,7 +272,7 @@ const MANAGER_OPENINGS = {
 		"- Call `flow_status` first and trust its state and `nextAction` over conversation memory.",
 		"- Only the root manager may call state-changing `flow_*` tools or synthesize final results.",
 		"- Approved plans are immutable, only one feature may be active, and completion requires real validation plus independent review evidence.",
-		"- A phase boundary ends the current root session; acknowledge it only in a fresh invocation explicitly resuming the session.",
+		"- A stored closure makes the session archive-only; retry `flow_session_close` until archival succeeds.",
 	].join("\n"),
 	"flow-plan": [
 		"# Flow plan command contract",
@@ -305,17 +298,17 @@ const MANAGER_OPENINGS = {
 	].join("\n"),
 } as const;
 
-const PUBLIC_COMMAND_SETUP = literalFragment({
-	id: "public-command.setup-and-resume",
+const PUBLIC_COMMAND_STARTUP = literalFragment({
+	id: "public-command.startup-and-archive-recovery",
 	source: "src/prompt-surfaces.ts#PUBLIC_COMMAND_SETUP",
 	kind: "procedure",
 	roles: MANAGER_ROLE,
 	text: [
 		"## Public command startup",
 		"",
-		"If `flow_status` reports `setup.skills`, report it and continue with the compiled core instructions in this command. The compiled sections are the public command's core Flow contract: references inside them to loading `flow`, `flow-plan`, `flow-run`, or `flow-review` mean use the matching compiled section, not a native skill call. A missing optional helper becomes an explicit coverage gap, never simulated coverage.",
+		"The compiled sections are this public command's core Flow contract: references inside them to loading `flow`, `flow-plan`, `flow-run`, or `flow-review` mean use the matching compiled section or reserved reviewer route, never a native skill call. If an exact guide is already included below as a Bundled section, use it without loading it again. Otherwise call `flow_guidance` with id `flow-test`, `flow-deslop`, `flow-ui-quality`, or the exact reference id requested; `flow-commit` remains user-triggered only.",
 		"",
-		"If status includes `session.resumePacket` or `session.budget.phaseBoundary`, stop and report its resume instructions unless this fresh user invocation explicitly resumes that session. Only that fresh invocation may pass `phaseBoundaryAck: true` to `flow_run_start`.",
+		"If status includes `workflowData.session.closure`, do not run, reset, approve, or replan. Retry `flow_session_close` with the recorded closure kind to finish archiving the session.",
 	].join("\n"),
 });
 
@@ -346,14 +339,14 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 	readonly FlowPromptFragment[]
 > = {
 	"flow-auto": [
-		PUBLIC_COMMAND_SETUP,
+		PUBLIC_COMMAND_STARTUP,
 		sourceFragment({
 			id: "manager.flow-loop",
 			skill: "flow",
 			path: "SKILL.md",
 			headings: [
 				"Loop",
-				"Skill Availability",
+				"Guidance Availability",
 				"Runtime Surface",
 				"Hard Gates",
 				"Recovery",
@@ -407,7 +400,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 		PUBLIC_REVIEWER_ROUTE,
 	],
 	"flow-plan": [
-		PUBLIC_COMMAND_SETUP,
+		PUBLIC_COMMAND_STARTUP,
 		sourceFragment({
 			id: "manager.plan-core",
 			skill: "flow-plan",
@@ -431,7 +424,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 		MANAGER_PARALLEL_CORE,
 	],
 	"flow-run": [
-		PUBLIC_COMMAND_SETUP,
+		PUBLIC_COMMAND_STARTUP,
 		sourceFragment({
 			id: "manager.run-core",
 			skill: "flow-run",
@@ -463,7 +456,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 
 const MANAGER_CHECKPOINTS = {
 	"flow-auto":
-		"Before stopping: confirm the runtime state matches the report; every completed feature has real validation and independent review evidence; the final feature has broad validation and final review; otherwise report the exact blocker or resume packet.",
+		"Before stopping: confirm the runtime state matches the report; every completed feature has real validation and independent review evidence; the final feature has broad validation and final review; otherwise report the exact blocker or pending archival.",
 	"flow-plan":
 		"Before returning: confirm the plan is evidence-backed, executable by another agent, explicit about requirements/decisions/targets/validation/dependencies/review depth, saved as a draft, and not approved without authorization.",
 	"flow-run":
@@ -478,7 +471,7 @@ const REVIEW_INVOCATION_FRAGMENT = literalFragment({
 	text: [
 		"# Flow review request",
 		"",
-		"Call `flow_status` first when available, then review the assigned packet and actual changed artifacts under the `flow-reviewer` contract. Prefer the bounded packet over parent-session memory. If setup or required evidence is stale or unavailable, return an advisory result and state why it cannot be used as Flow-gated review evidence.",
+		"Call `flow_status` first when available, then review the assigned packet and actual changed artifacts under the `flow-reviewer` contract. Prefer the bounded packet over parent-session memory. If required evidence is stale or unavailable, return an advisory result and state why it cannot be used as Flow-gated review evidence.",
 	].join("\n"),
 });
 

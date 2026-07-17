@@ -1,6 +1,6 @@
 # How to contribute
 
-Contribution work starts with the runtime and skills split: `skills/**` owns workflow judgment, while `src/**` owns durable state, hard gates, skill sync, and OpenCode integration. `docs/maintainer-contract.md` is the main contract to read before changing behavior.
+Contribution work starts with the runtime and guidance split: `skills/**` owns authored workflow judgment, `src/guidance/**` embeds it, and the remaining `src/**` owns durable state, hard gates, and OpenCode integration. `docs/maintainer-contract.md` is the main contract to read before changing behavior.
 
 ## Work pickup
 
@@ -21,6 +21,6 @@ Contribution work starts with the runtime and skills split: `skills/**` owns wor
 
 ## Review expectations
 
-Review should check the changed source, tests, and validation output. If the change touches persistence, review `src/runtime/workspace.ts` and the tests that cover locks, archive, duplicate-key rejection, and quarantine. If the change touches public command behavior, review `src/config-shared.ts`, `src/adapters/opencode/plugin.ts`, and the bundled skill definitions in `src/distribution/flow-skill-definitions.ts`.
+Review should check the changed source, tests, and validation output. If the change touches persistence, review `src/infrastructure/fs/workspace.ts` and the tests that cover locks, archive, duplicate-key rejection, and quarantine. If the change touches public command behavior, review `src/config-shared.ts`, `src/platform/opencode/plugin.ts`, and `src/guidance/catalog.ts`.
 
 Related pages: [Development workflow](development-workflow.md), [Testing](testing.md), and [Patterns and conventions](patterns-and-conventions.md).

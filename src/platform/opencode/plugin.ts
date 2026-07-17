@@ -1,17 +1,17 @@
-import { FLOW_CORE_COMMANDS } from "../../config-shared";
-import {
-	formatFlowSkillSetupWarning,
-	resolveFlowPluginVersion,
-	runFlowSkillSync,
-} from "../../distribution/sync";
-import { createConfigHook } from "./config";
-import { createFlowLog } from "./logging";
-import type { Hooks, Part, Plugin } from "./sdk";
-import { createTools } from "./tools";
+import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
+import { createConfigHook } from "./config.js";
+import { createFlowLog } from "./logging.js";
+import type { Hooks, Plugin } from "./sdk.js";
+import { createTools } from "./tools.js";
 
 type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
+type FlowCommandOutput = Parameters<
+	NonNullable<Hooks["command.execute.before"]>
+>[1];
+type Part = FlowCommandOutput["parts"][number];
 type FlowTextPart = Extract<Part, { type: "text" }>;
 type FlowSubtaskPart = Extract<Part, { type: "subtask" }>;
+type FlowSubtaskPartWithCommand = FlowSubtaskPart & { command?: string };
 
 const FLOW_COMMAND_TITLE_SEEDS = {
 	"flow-auto": "Flow auto",
@@ -44,10 +44,7 @@ function renderFlowCommandPreflight(
 	command: FlowCommandName,
 	args: string,
 ): string {
-	const renderedTemplate = renderFlowCommandTemplate(command, args);
-	const setupWarning = formatFlowSkillSetupWarning();
-	if (!setupWarning || command === "flow-status") return renderedTemplate;
-	return [setupWarning, renderedTemplate].join("\n\n");
+	return renderFlowCommandTemplate(command, args);
 }
 
 function renderFlowCommandTitleSeed(
@@ -67,7 +64,7 @@ function renderFlowCommandTitleSeed(
 }
 
 function isFlowSubtaskPart(part: Part | undefined): part is FlowSubtaskPart {
-	return part?.type === "subtask" && typeof part.prompt === "string";
+	return part?.type === "subtask";
 }
 
 function createFlowTextPart(
@@ -81,22 +78,16 @@ function createFlowTextPart(
 	} as FlowTextPart;
 }
 
-function replaceFlowCommandParts(
-	output: Parameters<NonNullable<Hooks["command.execute.before"]>>[1],
+function replaceManagerCommandParts(
+	output: FlowCommandOutput,
 	titleSeed: string,
 	text: string,
 ): void {
 	const { parts } = output;
-	// A subtask-based command (e.g. /flow-review spawning the read-only
-	// reviewer) must have the rewritten instructions run INSIDE the subtask,
-	// never re-injected into the parent session. Rewrite the subtask prompt in
-	// place regardless of sibling parts (attachments), and leave those siblings
-	// untouched — otherwise an invocation with an attachment would both keep the
-	// stale subtask and run the instructions with the parent's permissions.
-	const subtask = parts.find(isFlowSubtaskPart);
-	if (subtask) {
-		subtask.prompt = text;
-		return;
+	if (parts.some(isFlowSubtaskPart)) {
+		throw new Error(
+			"Flow refused to execute a manager command with an unexpected subtask part.",
+		);
 	}
 	const preserved = parts.filter((part) => {
 		const type = (part as { type?: string }).type;
@@ -111,24 +102,55 @@ function replaceFlowCommandParts(
 	);
 }
 
+function replaceSubtaskCommandPrompt(
+	command: FlowCommandName,
+	output: FlowCommandOutput,
+	agent: string,
+	text: string,
+): void {
+	const { parts } = output;
+	if (parts.length !== 1 || !isFlowSubtaskPart(parts[0])) {
+		throw new Error(
+			`Flow refused to execute /${command}: OpenCode must provide exactly one subtask part.`,
+		);
+	}
+	const subtask = parts[0] as FlowSubtaskPartWithCommand;
+	if (subtask.agent !== agent) {
+		throw new Error(
+			`Flow refused to execute /${command}: expected subtask agent '${agent}', received '${subtask.agent}'.`,
+		);
+	}
+	if (subtask.command?.replace(/^\/+/, "") !== command) {
+		throw new Error(
+			`Flow refused to execute /${command}: subtask command identity did not match.`,
+		);
+	}
+	subtask.prompt = text;
+}
+
 function createCommandPreflightHook(): NonNullable<
 	Hooks["command.execute.before"]
 > {
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
 		if (!isFlowCommandName(command)) return;
-		replaceFlowCommandParts(
+		const config = FLOW_CORE_COMMANDS[command];
+		const prompt = renderFlowCommandPreflight(command, input.arguments);
+		if (config.subtask) {
+			replaceSubtaskCommandPrompt(command, output, config.agent, prompt);
+			return;
+		}
+		replaceManagerCommandParts(
 			output,
 			renderFlowCommandTitleSeed(command, input.arguments),
-			renderFlowCommandPreflight(command, input.arguments),
+			prompt,
 		);
 	};
 }
 
 const FlowPlugin: Plugin = async (ctx) => {
 	const log = createFlowLog(ctx);
-	log("info", "Flow v4 plugin initialized.");
-	await runFlowSkillSync(resolveFlowPluginVersion(), log);
+	log("info", "Flow v5 plugin initialized.");
 
 	const hooks: Hooks = {
 		config: createConfigHook(ctx),

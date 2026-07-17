@@ -3,7 +3,7 @@ import {
 	compiledFlowPromptSurfaces,
 	type FlowPromptSurfaceName,
 	type FlowPromptVariant,
-} from "./prompt-surfaces";
+} from "./prompt-surfaces.js";
 
 export type PromptMetric = {
 	surface: string;
@@ -73,7 +73,7 @@ const CRITICAL_RULES: Record<string, RegExp> = {
 	"single-active-feature": /only one feature (?:can|may) be active/i,
 	"validation-required": /completion requires[^.]*validation/i,
 	"independent-review-required": /completion requires[^.]*independent review/i,
-	"phase-boundary-resume": /phase boundary[^.]*fresh/i,
+	"archive-pending-retry": /closure[^.]*flow_session_close/i,
 };
 
 const STRUCTURAL_RULE_PATTERNS: Record<string, RegExp> = {
@@ -451,15 +451,16 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		],
 	},
 	{
-		id: "resume-after-interruption",
-		name: "Resume after interruption",
-		input: "Resume the approved feature after a phase-boundary interruption.",
+		id: "archive-pending",
+		name: "Retry pending archival",
+		input:
+			"flow_status reports a stored closure after archive publication failed.",
 		expectedRoute: "flow-run",
 		surface: "flow-run",
 		required: [
-			{ label: "status first", pattern: /Call `flow_status` first/i },
-			{ label: "fresh invocation", pattern: /fresh (?:user )?invocation/i },
-			{ label: "boundary ack", pattern: /phaseBoundaryAck: true/ },
+			{ label: "status first", pattern: /Call `flow_status`/i },
+			{ label: "closure detected", pattern: /session\.closure/i },
+			{ label: "retry close", pattern: /Retry `flow_session_close`/i },
 		],
 	},
 	{
@@ -598,28 +599,16 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		],
 	},
 	{
-		id: "no-self-initiated-compaction",
-		name: "No self-initiated compaction",
+		id: "review-retry-exhausted",
+		name: "Review retry budget exhausted",
 		input:
-			"The host UI says the context is large, but flow_status reports no phase boundary. Continue the approved feature safely.",
+			"The second independent review failed and the runtime blocked the feature.",
 		expectedRoute: "flow-run",
 		surface: "flow-run",
 		required: [
-			{
-				label: "runtime boundary controls rollover",
-				pattern: /session\.budget\.phaseBoundary[\s\S]*stop/i,
-			},
-		],
-		forbidden: [
-			{
-				label: "model-estimated token pressure",
-				pattern: /visible tokens|non-cache tokens|session is large enough/i,
-			},
-			{
-				label: "model-directed compaction",
-				pattern:
-					/long enough to be compacted|request compaction|initiate compaction/i,
-			},
+			{ label: "stop with blocker", pattern: /stop with the blocker/i },
+			{ label: "explicit direction", pattern: /explicit user direction/i },
+			{ label: "reset feature", pattern: /flow_feature_reset/i },
 		],
 	},
 ] as const;
@@ -690,9 +679,12 @@ export const PROMPT_REPETITION_CLASSIFICATIONS: readonly PromptRepetitionClassif
 		{
 			id: "flow-status-before-action",
 			classification: "keep",
-			occurrences: ["public command opening", "ambient state projection"],
+			occurrences: [
+				"public command opening",
+				"archive-pending recovery messages",
+			],
 			rationale:
-				"Each occurrence crosses a different trust boundary and is a bounded recovery invariant.",
+				"The command opening establishes current state before ordinary work; archive recovery must detect the stored closure before attempting any mutation.",
 		},
 		{
 			id: "manager-state-ownership",

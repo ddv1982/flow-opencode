@@ -1,35 +1,26 @@
 # By the numbers
 
-Data collected on 2026-07-02 from `main` at `819182cab2da32253210ae6c09535f2901779304`.
+Data collected on 2026-07-17 from the v5 worktree.
 
 ## Size
 
-The repository is small but test-heavy. Excluding `node_modules`, `dist`, `.git`, `.flow`, `.factory`, `.release-artifacts`, and `droid-wiki`, it contains 76 tracked or local project files.
-
-```mermaid
-xychart-beta
-    title "Lines by language"
-    x-axis ["TypeScript", "Markdown", "YAML", "Other", "JSON", "Lockfile"]
-    y-axis "Lines" 0 --> 7000
-    bar [6503, 4120, 234, 226, 141, 108]
-```
+The repository is small but test-heavy. Counts below include the current v5
+source and test trees and exclude generated output.
 
 | Category | Count |
 | --- | ---: |
-| TypeScript source files in `src/` | 18 |
-| Test files in `tests/` | 5 |
-| Config, workflow, and top-level metadata files | 12 |
-| Markdown files | 38 |
+| TypeScript source files in `src/` | 32 |
+| Test files in `tests/` | 10 |
 
 ## Directory size
 
 | Directory | Files | Lines |
 | --- | ---: | ---: |
-| `src/` | 18 | 3,365 |
-| `tests/` | 5 | 3,138 |
-| `docs/` | 11 | 1,910 |
-| `skills/` | 23 | 1,812 |
-| `.github/` | 4 | 246 |
+| `src/` | 32 | 7,387 |
+| `tests/` | 10 | 4,589 |
+| `docs/` | 13 | — |
+| `skills/` | 27 | — |
+| `.github/` | 4 | 284 |
 
 ## Activity
 
@@ -66,12 +57,12 @@ Git history has 383 commits. 69 commits, or about 18.0%, contain bot co-authorsh
 
 | Metric | Value |
 | --- | --- |
-| Largest current file | `tests/distribution-and-surface.test.ts`, 1,778 lines |
-| Largest source file | `src/distribution/sync.ts`, 638 lines |
-| Most exported symbols | `src/runtime/schema.ts`, 31 export declarations |
-| Runtime state machine size | `src/runtime/transitions.ts`, 628 lines |
-| Workspace persistence size | `src/runtime/workspace.ts`, 439 lines |
+| Largest source file | `src/domain/transitions.ts`, 1,212 lines |
+| Prompt compiler size | `src/prompt-surfaces.ts`, 1,018 lines |
+| Workspace persistence size | `src/infrastructure/fs/workspace.ts`, 812 lines |
+| Embedded guidance catalog | `src/guidance/catalog.ts`, 308 lines |
+| Legacy cleanup utility | `src/distribution/legacy-cleanup.ts`, 296 lines |
 
-The import graph is intentionally shallow. `docs/architecture/allowed-cross-layer-dependencies.md` defines the expected source ownership map, and `tests/distribution-and-surface.test.ts` checks much of the public surface through behavior rather than a generated dependency graph.
+The import graph is intentionally shallow. `docs/architecture/allowed-cross-layer-dependencies.md` defines the expected source ownership map, `tests/architecture-boundaries.test.ts` enforces inward dependencies, and `tests/distribution-and-surface.test.ts` checks the public surface through behavior.
 
 Related pages: [Architecture](overview/architecture.md), [Cleanup opportunities](cleanup-opportunities.md), and [Testing](how-to-contribute/testing.md).

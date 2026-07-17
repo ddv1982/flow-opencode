@@ -12,11 +12,11 @@ const LEGACY_WORKER_HANDOFF =
 
 export const LEGACY_PROMPT_BASELINE = Object.freeze({
 	publicCommandPreflight: [
-		"Call `flow_status` first. If the result includes `setup.skills`, report the setup status and continue with the bundled public Flow command instructions below.",
+		"Call `flow_status` first and continue with the bundled public Flow command instructions below.",
 		"If `flow_status` includes `session.resumePacket` or `session.budget.phaseBoundary`, stop the current autonomous loop and report the resume instructions unless this is a fresh user invocation explicitly resuming the session; only then may `flow_run_start` use `phaseBoundaryAck: true`.",
 		"After `flow_status`, briefly state which bundled Flow command is running and for what goal, then continue.",
 		"Do not call native Flow skills for `flow`, `flow-plan`, `flow-run`, or `flow-review` from public Flow commands. In bundled sections, `load` means read and use the corresponding bundled section in this command, and missing native public Flow skills are not blockers.",
-		"Optional helper skills (`flow-test`, `flow-deslop`, `flow-ui-quality`, and user-triggered `flow-commit`) are not bundled fallbacks. If one is unavailable, record the coverage gap exactly as the bundled instructions require.",
+		"Load optional helper guidance through `flow_guidance` (`flow-test`, `flow-deslop`, `flow-ui-quality`, and user-triggered `flow-commit`) and follow the exact bundled content it returns.",
 	].join(" "),
 	workerPrompts: Object.freeze({
 		"flow-evidence-worker": `Use Flow evidence mode. Inspect only the assigned slice, do not edit files, do not call state-changing Flow tools, and return coverage, evidence inspected, confidence-tagged findings or facts, gaps, and manager follow-ups. ${LEGACY_WORKER_HANDOFF}`,
@@ -26,7 +26,7 @@ export const LEGACY_PROMPT_BASELINE = Object.freeze({
 		"flow-verifier-worker": `Use Flow verifier mode. Verify only the assigned claims against the provided sources, commands, counts, or current docs. Do not generate new scope, do not edit files, do not call state-changing Flow tools, and return supported, partly-supported, unsupported, or source-not-found per claim with evidence, confidence, gaps, and manager follow-ups. ${LEGACY_WORKER_HANDOFF}`,
 	}),
 	reviewerSections: Object.freeze([
-		"Use Flow review mode. Call `flow_status` first. Do not call the native skill tool for `flow-review`; the canonical Flow review instructions and rubric are already embedded below. If Flow setup reports stale/unavailable skills, continue as advisory review only and do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
+		"Use Flow review mode. Call `flow_status` first. Do not call the native skill tool for `flow-review`; the canonical Flow review instructions and rubric are already embedded below. If required evidence is stale or unavailable, continue as advisory review only and do not present advisory review as Flow-gated `featureReview` or `finalReview` evidence.",
 		"Prefer the manager's bounded review packet over the accumulated root transcript. Return feature review packets with `featureReviewDepth` plus `featureReview`; final reviews still return `finalReview` with `reviewDepth`.",
 		`When the manager assigns a parallel review slice instead of a direct Flow review command, ${LEGACY_WORKER_HANDOFF}`,
 		"## Bundled Flow review instructions",

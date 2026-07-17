@@ -10,9 +10,12 @@ The repo does not define a custom branch process in source files. Local work sho
 
 | Path | Change here when |
 | --- | --- |
-| `src/runtime/**` | Session schema, transition gates, filesystem persistence, and tool-facing runtime API change. |
-| `src/adapters/**` | OpenCode config, hooks, command preflight, or tool registration changes. |
-| `src/distribution/**` | Managed skill sync, doctor, uninstall, or bundled skill imports change. |
+| `src/domain/**` | Session types, invariants, or pure transition gates change. |
+| `src/application/**` | Use cases, repository ports, typed results, or core schemas change. |
+| `src/infrastructure/**` | Filesystem persistence, locks, strict JSON, or system services change. |
+| `src/platform/**` | OpenCode host schemas, config, hooks, command preflight, or tools change. |
+| `src/guidance/**` | Stable ids or embedded Markdown imports change. |
+| `src/distribution/**` | Explicit legacy-cleanup safety changes. |
 | `src/prompt-surfaces.ts` | Prompt fragments, source selection, role contracts, or offline handoff validators change. |
 | `src/prompt-quality.ts` | Prompt metrics, static contracts, or repetition classifications change. |
 | `src/prompt-model-evaluation.ts` | Model-decision packets, schemas, or graders change. |
@@ -20,7 +23,9 @@ The repo does not define a custom branch process in source files. Local work sho
 | `skills/**` | Planning, execution, validation, review, cleanup, UI, or commit guidance changes. |
 | `tests/**` | Behavior and package contract coverage changes. |
 
-`docs/architecture/allowed-cross-layer-dependencies.md` states the import rule: runtime does not import adapters or distribution, distribution does not import runtime behavior, adapters bind OpenCode to both, and `src/config-shared.ts` stays host-neutral.
+`docs/architecture/allowed-cross-layer-dependencies.md` states the inward import
+rule. `tests/architecture-boundaries.test.ts` rejects legacy source trees and
+imports from inner layers to infrastructure or platform code.
 
 ## Local loop
 
@@ -40,6 +45,10 @@ than the larger of eight words or 2%, and record a specific justification. Run
 
 ## Review and merge
 
-The CI workflow in `.github/workflows/ci.yml` runs actionlint, checks on Ubuntu and macOS across Node 20, 22, and 24, runs a live OpenCode smoke on Ubuntu Node 22, and runs a non-blocking Windows check. The release workflow in `.github/workflows/release.yml` reruns checks and package smoke before publishing.
+The CI workflow in `.github/workflows/ci.yml` runs actionlint, checks on Ubuntu
+and macOS across Node 24 and 26, runs a pinned OpenCode 1.18.3 live smoke on
+Ubuntu Node 24, and runs a non-blocking Windows check. A non-blocking scheduled
+job probes the latest OpenCode release separately. The release workflow reruns
+checks and package smoke before publishing.
 
 Related pages: [Tooling](tooling.md), [Deployment](../deployment.md), and [Source map](../reference/source-map.md).

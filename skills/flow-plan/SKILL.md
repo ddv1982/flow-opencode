@@ -1,6 +1,6 @@
 ---
 name: flow-plan
-description: "Use when Flow work needs planning before implementation: a new goal to turn into an approved Flow feature plan, a draft plan to revise, or a decomposition or plan-approval decision in the v4 skills-first runtime. For executing an approved feature use flow-run; for the full goal-to-completion loop use flow."
+description: "Use when Flow work needs planning before implementation: a new goal to turn into an approved Flow feature plan, a draft plan to revise, or a decomposition or plan-approval decision in the v5 runtime. For executing an approved feature use flow-run; for the full goal-to-completion loop use flow."
 ---
 
 # Flow Plan
@@ -14,17 +14,17 @@ If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the use
 ## Inspect first
 
 - Read the files, docs, tests, package scripts, and local conventions that determine the work.
-- For broad discovery, read `references/parallel-discovery.md` after a serial
-  orientation pass. When multiple workers may help, start with
-  `../flow/references/parallel-orchestration.md` and load only the branch it
-  selects.
-- Helper rule: when a named helper skill is unavailable, record a planning gap
-  and keep the corresponding claims conservative instead of simulating its
-  checks.
-- For complex validation, regression-sensitive changes, browser QA, route QA,
-  failure-prone checks, or uncertain test strategy, load `flow-test`.
-- For cleanup/refactor goals, load `flow-deslop`.
-- For UI/frontend goals, load `flow-ui-quality`.
+- For broad discovery, request `flow-plan/references/parallel-discovery.md`
+  from `flow_guidance` after a serial orientation pass. When multiple workers
+  may help, start with `flow/references/parallel-orchestration.md` and request
+  only the branch it selects.
+- Helper rule: load named helper guidance with `flow_guidance`; if that tool is
+  unavailable, record a planning gap and keep the corresponding claims
+  conservative instead of simulating its checks.
+- When validation is complex, regression-sensitive, browser-based, route-based,
+  failure-prone checks, or uncertain test strategy, request `flow-test`.
+- For cleanup/refactor goals, request `flow-deslop`.
+- For UI/frontend goals, request `flow-ui-quality`.
 - Do not invent findings. Broad "review and fix" goals start with a review-first feature whose deliverable is evidence-backed findings.
 
 ## Reduce uncertainty before decomposing
@@ -86,8 +86,8 @@ Do not make reviews shallower to save tokens. Reduce token use by splitting feat
 
 ## Plan quality gate
 
-Before saving or asking for approval, load
-`references/plan-quality-checklist.md` and check the draft against it. Revise the
+Before saving or asking for approval, request
+`flow-plan/references/plan-quality-checklist.md` from `flow_guidance` and check the draft against it. Revise the
 plan until it passes, or record the remaining gap in `decisions` when the gap is
 an intentional assumption. Do not approve a plan whose outcome, requirements,
 targets, validation, or dependency order are still too vague for another agent
@@ -117,5 +117,5 @@ to execute.
 
 After saving, summarize the plan to the user. Call `flow_plan_approve` only after explicit user approval, unless the user already authorized autonomous implementation. Approved plans are immutable; changing them later requires reset/closure rather than silent edits.
 
-See `references/planning-examples.md` for payload examples and decomposition
-anti-patterns.
+Request `flow-plan/references/planning-examples.md` from `flow_guidance` for
+payload examples and decomposition anti-patterns.

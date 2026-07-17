@@ -2,7 +2,7 @@
 
 Active contributors: ddv1982
 
-Flow's core primitives are the session ledger, plan and feature model, and validation and review evidence model. They are defined in `src/runtime/schema.ts` and enforced by `src/runtime/transitions.ts`.
+Flow's core primitives are the session ledger, plan and feature model, and validation and review evidence model. They are defined in `src/application/schema.ts` and enforced by `src/domain/transitions.ts`.
 
 ## Primitive map
 
@@ -13,6 +13,9 @@ Flow's core primitives are the session ledger, plan and feature model, and valid
 
 ## Why these are primitives
 
-`Session`, `Plan`, `Feature`, `ValidationRun`, `Review`, and `FinalReview` appear across runtime API handlers, transitions, workspace persistence, tests, and skills. They are the common vocabulary between OpenCode commands, hidden workers, and the persisted `.flow/session.json` file.
+`Session`, `Plan`, `Feature`, `ValidationRun`, `Review`, and `FinalReview` appear
+across application use cases, domain transitions, workspace persistence, tests,
+and skills. They are the common vocabulary between OpenCode commands, hidden
+workers, and the persisted `.flow/session.json` file.
 
 Related pages: [Schema and JSON](../systems/schema-and-json.md), [Flow loop](../features/flow-loop.md), and [Data models](../reference/data-models.md).

@@ -1,12 +1,9 @@
 import {
 	evaluatePromptVariant,
-	measurePromptText,
 	PROMPT_REPETITION_CLASSIFICATIONS,
 	promptInventoryForVariant,
-} from "../src/prompt-quality";
-import type { FlowPromptVariant } from "../src/prompt-surfaces";
-import { createSession } from "../src/runtime/transitions";
-import { renderFlowInstructionFile } from "../src/runtime/workspace";
+} from "../src/prompt-quality.js";
+import type { FlowPromptVariant } from "../src/prompt-surfaces.js";
 
 const VARIANTS: readonly FlowPromptVariant[] = [
 	"baseline",
@@ -16,9 +13,6 @@ const VARIANTS: readonly FlowPromptVariant[] = [
 ];
 
 function report() {
-	const session = createSession(
-		"Representative prompt-quality evaluation goal",
-	);
 	return {
 		generatedAt: new Date().toISOString(),
 		tokenEstimate:
@@ -26,13 +20,6 @@ function report() {
 		inventories: Object.fromEntries(
 			VARIANTS.map((variant) => [variant, promptInventoryForVariant(variant)]),
 		),
-		runtimeSurfaces: [
-			measurePromptText({
-				surface: "generated-ambient-flow-instructions",
-				variant: "runtime",
-				text: renderFlowInstructionFile(session),
-			}),
-		],
 		evaluations: VARIANTS.map(evaluatePromptVariant),
 		repetitionClassifications: PROMPT_REPETITION_CLASSIFICATIONS,
 	};
@@ -60,13 +47,9 @@ function markdown(): string {
 		"",
 		"| Surface | Words | Approx tokens | Actions | Exact dupes | Near dupes | Negative density | Sources |",
 		"| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-		...data.inventories["surface-specific-bookended"].map(
+		...(data.inventories["surface-specific-bookended"] ?? []).map(
 			(metric) =>
 				`| ${metric.surface} | ${metric.words} | ${metric.approximateTokens} | ${metric.actionableInstructions} | ${metric.exactDuplicateLines} | ${metric.nearDuplicateLinePairs} | ${metric.negativeInstructionDensity} | ${metric.sources.length} |`,
-		),
-		...data.runtimeSurfaces.map(
-			(metric) =>
-				`| ${metric.surface} | ${metric.words} | ${metric.approximateTokens} | ${metric.actionableInstructions} | ${metric.exactDuplicateLines} | ${metric.nearDuplicateLinePairs} | ${metric.negativeInstructionDensity} | generated |`,
 		),
 		"",
 		"## Static contract gaps by variant",

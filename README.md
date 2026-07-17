@@ -6,10 +6,10 @@ then implement one feature at a time with enforced validation and review
 evidence. State lives in `.flow/session.json`, so a session survives restarts,
 model switches, and context loss.
 
-The design is skills-first: the skills carry planning, execution, validation,
-review, and orchestration judgment, while the plugin runtime stays deliberately
-small — it keeps the session ledger and enforces the hard gates prompts should
-not be trusted to remember.
+The design is guidance-first: package-owned Markdown carries planning,
+execution, validation, review, and orchestration judgment, while the plugin
+runtime stays deliberately small — it keeps the session ledger and enforces the
+hard gates prompts should not be trusted to remember.
 
 Full project documentation is available in the
 [Flow OpenCode wiki](https://github.com/ddv1982/flow-opencode/wiki).
@@ -17,11 +17,10 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@4.4.0 --global --force
-npx -y opencode-plugin-flow@4.4.0 sync
+opencode plugin opencode-plugin-flow@5.0.0 --global --force
 ```
 
-Restart OpenCode, then give Flow a goal:
+Start or restart OpenCode, then give Flow a goal:
 
 ```text
 /flow-auto add rate limiting to the public API
@@ -52,8 +51,9 @@ restart.
   ...
 
 > /flow-status
-  status: running, 1/3 features completed
-  nextAction: complete feature "per-route-config"
+  status: ok
+  workflowData.session.status: running, 1/3 features completed
+  nextAction: complete the feature under workflowData.session.activeFeature
 ```
 
 Interrupt at any point; `/flow-run` resumes the next approved feature. On the
@@ -65,7 +65,7 @@ completed.
 
 | Command | Purpose |
 | --- | --- |
-| `/flow-auto <goal>` | Drive the full skill-guided loop. |
+| `/flow-auto <goal>` | Drive the full guidance-driven loop. |
 | `/flow-plan <goal>` | Create or approve a plan. |
 | `/flow-run` | Execute one approved feature. |
 | `/flow-review` | Run a read-only review. |
@@ -73,20 +73,22 @@ completed.
 
 Commands are compiled entrypoints: manager commands carry only their applicable
 core instructions, while `/flow-review` runs against the reserved reviewer's
-role-specific agent contract. They keep working even when OpenCode's native
-skill discovery lags behind a fresh install (see
-[docs/troubleshooting.md](docs/troubleshooting.md)).
+role-specific agent contract. Flow does not install files into OpenCode's
+global skill registry and does not depend on native skill discovery.
 
-`flow-test`, `flow-deslop`, `flow-ui-quality`, and `flow-commit` are managed
-helper skills, not public commands.
-`flow-commit` is user-triggered only and stays outside the autonomous loop.
+`flow-test`, `flow-deslop`, `flow-ui-quality`, and `flow-commit` are optional
+package-owned guides loaded on demand through `flow_guidance`, not public
+commands. `flow-commit` is user-triggered only and stays outside the autonomous
+loop.
 
 ## Tools
 
-The runtime exposes seven tools:
+The plugin exposes eight tools. `flow_guidance` is read-only and returns embedded
+Markdown; the other seven form the stateful runtime surface:
 
 | Tool | Purpose |
 | --- | --- |
+| `flow_guidance` | Load exact package-owned guidance by stable id. |
 | `flow_status` | Read the active session and next action. |
 | `flow_plan_save` | Create a session and/or save a draft plan. |
 | `flow_plan_approve` | Approve the draft plan. |
@@ -101,7 +103,7 @@ final feature also needs a passing `finalReview`.
 
 ## What the runtime enforces
 
-The runtime owns only safety; judgment lives in the skills:
+The runtime owns only safety; judgment lives in package-owned guidance:
 
 - `.flow/session.json` is the single source of truth; writes are locked and
   atomic, and closed sessions are archived under `.flow/history/`.
@@ -114,19 +116,18 @@ The runtime owns only safety; judgment lives in the skills:
   that is shallower than the approved feature requires.
 - Failed reviews are bounded: a failed review pauses by default, and autonomous
   repair is limited to one repair plus one retry before the feature blocks.
-- Completed feature counts are telemetry only; Flow does not stop an approved
-  plan just because several features have completed. Review retry boundaries
-  still return a bounded resume packet and require explicit `phaseBoundaryAck`
-  before starting the next feature.
-- Skills do not estimate context pressure or request host compaction. Only a
-  runtime-issued phase boundary stops the current loop for a fresh invocation.
+- Review exhaustion uses the ordinary blocked-feature state; continuing requires
+  an explicit `flow_feature_reset`, not a second checkpoint protocol.
+- Once a closure is recorded, the session is archive-only. If publication fails,
+  retry `flow_session_close`; no run, reset, approval, or replan can reopen it.
 - A session can close as `completed` only after final completion has passed.
-- Crash recovery is built in: stale session locks expire automatically and
-  unreadable session files are quarantined with recovery guidance, never
-  silently deleted.
+- Session locks fail closed: Flow never guesses that an old lock is abandoned,
+  and only the unique owner may release it. Unreadable session files are
+  quarantined with recovery guidance, never silently deleted.
 - Flow writes `.flow/.gitignore` so session state stays out of Git by default.
-- `.flow/opencode-instructions.md` is a generated projection of the active
-  session that keeps ambient context accurate; do not edit it.
+- `.flow/session.json` is the only active-state representation. Canonical Flow
+  commands call `flow_status` before acting; plugin configuration does not read,
+  refresh, or project workspace state.
 
 ## Hidden workers
 
@@ -154,26 +155,28 @@ used exact-path candidate workers, used isolated worktrees, ran a tournament, or
 skipped eligible candidates. Feature completion can carry bounded
 `orchestrationPasses` with candidate eligibility, decision, and structured
 factors; `flow_status` reports the aggregate under
-`session.budget.orchestration`.
+`workflowData.session.budget.orchestration`.
 
-## Install details, doctor, repair, uninstall
+## Install details and legacy cleanup
 
-See [docs/troubleshooting.md](docs/troubleshooting.md) for skill sync
-mechanics, the `doctor`/`sync` CLI, older-OpenCode install fallback, stuck
-session recovery, and uninstall (`uninstall --dry-run` previews removals).
+See [docs/troubleshooting.md](docs/troubleshooting.md) for updates,
+older-OpenCode install fallback, stuck session recovery, and removal of global
+Flow skill folders left by v4.
 
-To update a pinned Flow version, rerun the install command with the new
-version. To inspect skill health:
+To update a pinned Flow version, rerun the install command with the new version.
+Flow starts with the new package-owned guidance immediately; no second restart
+or sync command is required. To preview recoverable migration of pristine v4
+global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@4.4.0 doctor
+npx -y opencode-plugin-flow@5.0.0 legacy-cleanup --dry-run
 ```
 
 ## Development
 
 ```bash
 bun install
-bun run check        # typecheck + lint + build + tests
+bun run check        # typecheck + lint + prompt quality + build + tests
 bun run smoke:live   # boots a real OpenCode server against the packed tarball
 ```
 
@@ -185,7 +188,8 @@ import flowPlugin from "opencode-plugin-flow";
 
 See [docs/development.md](docs/development.md) and
 [docs/maintainer-contract.md](docs/maintainer-contract.md) for the
-runtime/skills split and release process.
+v5 domain/application/infrastructure/platform boundaries, guidance split, and
+release process.
 
 ## Credits
 
@@ -195,5 +199,5 @@ work on parallel agent workflows. Flow also draws conceptual inspiration from
 emphasis on codebase orientation, context engineering, agent orchestration,
 and reviewable handoffs.
 
-The Flow version is its own OpenCode-native design: skills-first,
+The Flow version is its own OpenCode-native design: package-owned guidance,
 manager-owned state, hidden workers, and no extra runtime ledger.

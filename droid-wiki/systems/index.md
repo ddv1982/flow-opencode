@@ -8,21 +8,24 @@ The main internal systems are the OpenCode adapter, runtime state machine, works
 
 | System | Paths |
 | --- | --- |
-| [OpenCode adapter](opencode-adapter.md) | `src/adapters/opencode/**` |
-| [Runtime state machine](runtime-state-machine.md) | `src/runtime/api.ts`, `src/runtime/transitions.ts` |
-| [Workspace persistence](workspace-persistence.md) | `src/runtime/workspace.ts` |
-| [Schema and JSON](schema-and-json.md) | `src/runtime/schema.ts`, `src/runtime/json/strict-object.ts` |
-| [Skill distribution](skill-distribution.md) | `src/distribution/**`, `skills/**` |
+| [OpenCode adapter](opencode-adapter.md) | `src/platform/opencode/**` |
+| [Runtime state machine](runtime-state-machine.md) | `src/application/flow-service.ts`, `src/domain/transitions.ts` |
+| [Workspace persistence](workspace-persistence.md) | `src/infrastructure/fs/workspace.ts` |
+| [Schema and JSON](schema-and-json.md) | `src/application/schema.ts`, `src/infrastructure/fs/strict-json-object.ts` |
+| [Guidance distribution](guidance-distribution.md) | `src/guidance/**`, `skills/**` |
 | [CLI and package](cli-and-package.md) | `src/cli.ts`, `package.json`, `tests/package-smoke.test.ts` |
 
 ## Directory coverage
 
 | Source directory | Decision |
 | --- | --- |
-| `src/adapters/` | Wiki page, adapter boundary is core. |
-| `src/runtime/` | Split into state machine, persistence, and schema pages. |
-| `src/distribution/` | Wiki page, skill sync is central to install behavior. |
-| `skills/` | Covered by [Managed skills](../features/managed-skills.md) and [Skill distribution](skill-distribution.md). |
+| `src/domain/` | Session vocabulary, orchestration invariants, and pure state machine. |
+| `src/application/` | Use cases, ports, typed results, and direct-Zod schemas. |
+| `src/infrastructure/` | Workspace persistence and system service implementations. |
+| `src/platform/` | OpenCode composition and transport boundary. |
+| `src/guidance/` | Stable ids and build-time embedded Markdown. |
+| `src/distribution/` | Explicit legacy cleanup, never plugin startup. |
+| `skills/` | Covered by [Embedded guidance](../features/embedded-guidance.md) and [Guidance distribution](guidance-distribution.md). |
 | `tests/` | Covered by [Testing](../how-to-contribute/testing.md). |
 | `docs/` | Used as background and contribution references, not a standalone system. |
 

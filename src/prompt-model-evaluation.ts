@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { PROMPT_EVALUATION_SCENARIOS } from "./prompt-quality";
+import { PROMPT_EVALUATION_SCENARIOS } from "./prompt-quality.js";
 import {
 	compiledFlowPromptSurfaces,
 	type FlowPromptVariant,
-} from "./prompt-surfaces";
+} from "./prompt-surfaces.js";
 
 const ROUTES = [
 	"flow-auto",
@@ -50,13 +50,6 @@ const ModelDecisionSchema = z.strictObject({
 	handoffHasRequiredSections: z.boolean(),
 	retryReviews: z.number().int().nonnegative(),
 	stopsAfterRetryFailure: z.boolean(),
-	phaseBoundaryAction: z.enum(["none", "stop", "resume_with_ack"]),
-	sessionContinuation: z.enum([
-		"continue",
-		"stop_on_runtime_boundary",
-		"self_initiated_rollover",
-		"not_applicable",
-	]),
 	candidateDecision: z.enum(["used", "serial_required", "not_applicable"]),
 	completionClaimed: z.boolean(),
 	reason: z.string().min(1),
@@ -254,15 +247,15 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 			test: (decision) => decision.stopsAfterRetryFailure,
 		},
 	],
-	"resume-after-interruption": [
+	"archive-pending": [
 		...COMMON_MANAGER_CRITERIA,
 		{
 			label: "routes to flow-run",
 			test: (decision) => decision.route === "flow-run",
 		},
 		{
-			label: "resumes only with a fresh boundary acknowledgement",
-			test: (decision) => decision.phaseBoundaryAction === "resume_with_ack",
+			label: "does not continue implementation while archival is pending",
+			test: (decision) => decision.executionMode === "blocked",
 		},
 	],
 	"candidate-safe": [
@@ -356,19 +349,16 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 			test: (decision) => decision.coverage === "partial",
 		},
 	],
-	"no-self-initiated-compaction": [
+	"review-retry-exhausted": [
 		...COMMON_MANAGER_CRITERIA,
 		{
 			label: "routes to flow-run",
 			test: (decision) => decision.route === "flow-run",
 		},
 		{
-			label: "does not invent a phase boundary",
-			test: (decision) => decision.phaseBoundaryAction === "none",
-		},
-		{
-			label: "continues without self-initiated rollover",
-			test: (decision) => decision.sessionContinuation === "continue",
+			label: "stops after the bounded review retry",
+			test: (decision) =>
+				decision.executionMode === "blocked" && decision.stopsAfterRetryFailure,
 		},
 	],
 };
@@ -394,8 +384,6 @@ function responseContract(): string {
       "handoffHasRequiredSections": false,
       "retryReviews": 0,
       "stopsAfterRetryFailure": false,
-      "phaseBoundaryAction": "none | stop | resume_with_ack",
-      "sessionContinuation": "continue | stop_on_runtime_boundary | self_initiated_rollover | not_applicable",
       "candidateDecision": "used | serial_required | not_applicable",
       "completionClaimed": false,
       "reason": "one sentence grounded in the supplied Flow instructions"
@@ -427,7 +415,7 @@ Return only one JSON object matching this contract, with exactly one decision fo
 
 ${responseContract()}
 
-Use false or zero for non-applicable boolean or numeric fields. Use [] for non-applicable array fields; every validation array item must be one of the five listed evidence categories, and every worker item must be an exact Flow worker id. Use "not_applicable" only for scalar enum fields that list it as an option, never inside an array. The stateOwner field means the actor authorized to mutate durable Flow state, not the actor performing a read-only slice. The validation array lists evidence categories the workflow requires before completion; it does not claim those checks already ran. The reviewDepth field is the depth the decision requires, not a claim that review already ran. The manifestComplete field means the decision requires a complete manifest before any parallel or candidate worker launch, not that the scenario already supplies one. The completionClaimed field means claiming that implementation or the Flow feature is already complete from the scenario alone; choosing a future completion workflow is not a completion claim. The handoffHasRequiredSections field means the worker response required by the decision would contain every heading in its role prompt, even when access or coverage is missing and the status is blocked. The sessionContinuation field distinguishes ordinary continuation from a stop caused by a runtime-issued phase boundary; never infer a rollover from host context size alone.
+Use false or zero for non-applicable boolean or numeric fields. Use [] for non-applicable array fields; every validation array item must be one of the five listed evidence categories, and every worker item must be an exact Flow worker id. Use "not_applicable" only for scalar enum fields that list it as an option, never inside an array. The stateOwner field means the actor authorized to mutate durable Flow state, not the actor performing a read-only slice. The validation array lists evidence categories the workflow requires before completion; it does not claim those checks already ran. The reviewDepth field is the depth the decision requires, not a claim that review already ran. The manifestComplete field means the decision requires a complete manifest before any parallel or candidate worker launch, not that the scenario already supplies one. The completionClaimed field means claiming that implementation or the Flow feature is already complete from the scenario alone; choosing a future completion workflow is not a completion claim. The handoffHasRequiredSections field means the worker response required by the decision would contain every heading in its role prompt, even when access or coverage is missing and the status is blocked.
 
 ## Rendered Flow surfaces (${variant})
 ${promptBlocks}

@@ -22,10 +22,10 @@ the host boundary, prompt bloat, and the human-facing story.
    folder (user notes) are silently destroyed; a corrupt marker with zero
    `file=` entries makes any folder "pristine". Fix: treat unknown files or an
    empty marker as user-edited; add `--dry-run`.
-2. **Stale lock bricks the workspace.** A crash between `acquireLock` and
-   release leaves `.flow/session.lock/` forever; every future tool call times
-   out after 30s with no remedy. Fix: write pid/timestamp metadata, expire
-   stale locks, and name the manual remedy in the timeout error.
+2. **Abandoned lock inspection.** A crash between `acquireLock` and release leaves
+	 `.flow/session.lock/` behind. The final design writes token/pid/host/timestamp
+	 metadata and names the manual remedy, but deliberately fails closed instead
+	 of using time-based lock stealing that can admit concurrent writers.
 3. **Session schema migration/quarantine.** `version: z.literal(2)` +
    hard-parse means any pre-v2 or drifted `session.json` turns every tool
    (including `flow_status`) into a raw ZodError dump. Fix: quarantine the
@@ -100,8 +100,9 @@ the host boundary, prompt bloat, and the human-facing story.
    Submit the ecosystem PR and awesome-opencode entry.
 3. **Human-readable CHANGELOG.** The "lore" one-liners are inscrutable to an
    evaluating user; say what changed in user terms.
-4. **Durable restart survival.** Flow's stable generated instruction projection
-   and runtime-issued phase boundaries carry session state across restarts.
-   Experimental host compaction hooks are outside the supported architecture.
+4. **Durable restart survival.** `.flow/session.json` and explicit `flow_status`
+   reads carry session state across restarts. The config hook does no workspace
+   I/O, and experimental host compaction hooks remain outside the supported
+   architecture.
 5. Polish: Dependabot/Renovate, SHA-pinned actions, coverage threshold,
    protected release environment.

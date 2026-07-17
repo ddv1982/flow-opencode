@@ -4,7 +4,7 @@ Active contributors: ddv1982
 
 ## Purpose
 
-The npm package exposes the OpenCode plugin as the default export and ships a small CLI for managed skill maintenance. The package surface is defined in `package.json`, implemented in `src/index.ts` and `src/cli.ts`, and checked by `tests/package-smoke.test.ts`.
+The npm package exposes the OpenCode plugin as the default export and ships a small CLI only for explicit v4 cleanup. The package surface is defined in `package.json`, implemented in `src/index.ts` and `src/cli.ts`, and checked by `tests/package-smoke.test.ts`.
 
 ## Directory layout
 
@@ -21,19 +21,22 @@ tests/package-smoke.test.ts
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| Default export | `src/index.ts` | Re-exports `src/adapters/opencode/plugin.ts`. |
-| CLI `main` | `src/cli.ts` | Dispatches `doctor`, `sync`, and `uninstall`. |
+| Default export | `src/index.ts` | Re-exports `src/platform/opencode/plugin.ts`. |
+| CLI `main` | `src/cli.ts` | Dispatches `legacy-cleanup --dry-run|--apply`. |
 | `exports` | `package.json` | Maps package import to `dist/index.js` and `dist/index.d.ts`. |
 | `bin` | `package.json` | Maps `opencode-plugin-flow` to `dist/cli.js`. |
 | `files` | `package.json` | Publishes `dist`, `LICENSE`, `README.md`, and `CHANGELOG.md`. |
 
 ## How it works
 
-`bun run build:plugin` bundles `src/index.ts` into `dist/index.js`. `bun run build:cli` bundles `src/cli.ts` into `dist/cli.js` with a shebang. `bun run build:types` emits declarations from `tsconfig.types.json`.
+`bun run build` first removes the generated `dist/` tree so deleted declaration
+paths cannot leak into a tarball. It then bundles `src/index.ts` to
+`dist/index.js`, bundles the CLI with a shebang, and emits declarations from
+`tsconfig.types.json`.
 
 ## Integration points
 
-`tests/package-smoke.test.ts` builds, packs, extracts, runs the packed CLI, and checks consumer TypeScript import behavior. `.github/workflows/release.yml` repeats package smoke before publishing to npm.
+`tests/package-smoke.test.ts` builds, packs, extracts, proves guidance text is embedded, runs the packed cleanup dry-run without filesystem writes, and checks consumer TypeScript import behavior. `.github/workflows/release.yml` repeats package smoke before publishing to npm.
 
 ## Key source files
 

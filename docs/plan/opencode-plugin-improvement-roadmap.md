@@ -221,8 +221,8 @@ Rationale:
 
 - Workflow systems such as Temporal store append-only event histories for audit
   and recovery while maintaining current mutable state separately.
-- Flow reset currently reopens feature state but leaves history available for
-  audit.
+- Flow reset currently reopens affected feature state in a nonclosed session
+  but leaves history available for audit.
 - The risk is not preserved history itself; the risk is consumers mistaking an
   old `latestHistoryEntry` for current feature state after reset.
 
@@ -243,9 +243,9 @@ Implementation direction:
 - Flow exposes a deliberately minimal seven-tool surface in
   `src/adapters/opencode/tools.ts:53-125`, matching the README and maintainer
   contract.
-- Flow uses stable `config.instructions` for generated session context through
-  `src/config-shared.ts:392-404`, avoiding default reliance on experimental chat
-  or compaction hooks.
+- Flow commands carry package-owned guidance and explicitly read current state
+  through `flow_status`; the config hook registers commands and agents without
+  workspace filesystem I/O.
 - Runtime gates enforce the key Flow invariants: approved-plan immutability, one
   active feature, validation evidence, targeted versus broad validation scopes,
   feature review, final review, and safe completed closure in
@@ -312,42 +312,24 @@ Validation:
 - Typecheck against `@opencode-ai/plugin@1.17.3`.
 - Existing runtime gate tests plus distribution/surface tests.
 
-### Instruction Registration Resilience
+### Instruction Projection Removal
 
-Evidence:
-
-- `createConfigHook` computes `instructionPath` only after
-  `refreshFlowInstructionFile(root)` succeeds: `src/adapters/opencode/config.ts:15-31`.
-- `docs/development.md:24-30` says the path is registered even before the file
-  exists so sessions created later can be picked up without config reload.
-
-Plan:
-
-- Resolve the workspace root and instruction path before refresh.
-- Register the path whenever root resolution succeeds, even if refresh logs a
-  best-effort warning.
-- Keep invalid workspace-root failures from registering misleading paths.
+The earlier implementation tried to keep an ambient session projection in
+OpenCode configuration. The v5 outcome removes that second state
+representation entirely: `createConfigHook` only registers commands and agents,
+and canonical commands call `flow_status` before acting.
 
 Validation:
 
-- Add a focused adapter test that simulates refresh failure and still asserts
-  instruction path registration.
+- Adapter tests prove config initialization performs no workspace write and
+  does not wait on a held session lock.
 
 ### Command Part Typing And Subtask Safety
 
-Evidence:
-
-- `replaceFlowCommandParts` casts `output.parts` to local part variants and
-  mutates subtask prompt text: `src/adapters/opencode/plugin.ts:74-95`.
-- Installed SDK types define `output.parts` as `Part[]`, with subtask parts that
-  include `prompt`, `description`, and `agent` fields.
-
-Plan:
-
-- Replace the local partial union with SDK-aligned type guards where possible.
-- Add tests for text-part replacement and subtask prompt replacement that reflect
-  the installed SDK shape.
-- Treat this as compatibility hardening, not a known behavior bug.
+The v5 outcome uses SDK-aligned part types and treats dispatch as a security
+boundary. Manager commands reject subtask parts. `/flow-review` requires exactly
+one subtask with the expected agent and command identity, then rewrites only its
+prompt. Missing, duplicate, or mismatched parts fail closed.
 
 Validation:
 
@@ -473,10 +455,11 @@ Validation:
 
 Evidence:
 
-- Reset reopens affected features and clears closure/completedAt, but leaves
-  history intact: `src/runtime/transitions.ts:474-513`.
+- Reset reopens affected features and clears their failed-review attempts, but
+  leaves history intact; a stored closure rejects reset entirely:
+  `src/domain/transitions.ts`.
 - Session summary still exposes `latestHistoryEntry` and `historyCount`:
-  `src/runtime/transitions.ts:562-600`.
+  `src/domain/transitions.ts`.
 
 Plan:
 
@@ -516,16 +499,15 @@ Evidence:
 - API mutation paths acquire a lock before `loadSession` and `saveSession` assert
   mutable workspace roots: `src/runtime/api.ts:59-67` and
   `src/runtime/workspace.ts:124-190`.
-- Atomic writes are per file, not transactional across session, instruction
-  projection, `.flow/.gitignore`, archive write, and session removal:
-  `src/runtime/workspace.ts:245-272`.
+- Atomic writes are per file across session, `.flow/.gitignore`, archive
+  publication, and active-session removal.
 
 Plan:
 
 - Normalize/assert the mutable workspace root before lock acquisition or prove the
   adapter always does so.
-- Add tests for lock contention, stale lock timeout, malformed JSON beyond
-  duplicate keys, archive failure ordering, and projection write failures.
+- Add tests for lock contention, abandoned-lock timeout, malformed JSON beyond
+  duplicate keys, and archive failure ordering.
 
 Validation:
 
@@ -535,10 +517,8 @@ Validation:
 
 Evidence:
 
-- Artifact paths and timestamps are currently non-empty strings:
-  `src/runtime/schema.ts:53-57` and `src/runtime/schema.ts:166-211`.
-- `isAbsoluteOrTraversal` exists but is not applied to artifact paths:
-  `src/runtime/workspace.ts:302-304`.
+- Artifact paths and timestamps are informational non-empty strings; no runtime
+  code consumes artifact paths as filesystem targets.
 
 Plan:
 

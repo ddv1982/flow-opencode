@@ -1,1 +1,1 @@
-export { default } from "./adapters/opencode/plugin";
+export { default } from "./platform/opencode/plugin.js";

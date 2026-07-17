@@ -8,7 +8,7 @@ Deployment for this repo means publishing the npm package and GitHub release ass
 graph TD
     Tag[Push v* tag] --> Checkout[Checkout repository]
     Checkout --> Node[Set up Node 24 and npm 11]
-    Node --> Bun[Set up Bun 1.3.5]
+    Node --> Bun[Set up Bun 1.3.14]
     Bun --> Install[bun install --frozen-lockfile]
     Install --> Validate[Validate tag, package version, changelog, install pins]
     Validate --> Check[bun run check]
@@ -20,11 +20,12 @@ graph TD
 
 ## CI workflow
 
-`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, and manual dispatch. It includes:
+`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, weekly schedules, and manual dispatch. It includes:
 
 - workflow syntax linting with `rhysd/actionlint:1.7.7`,
-- `bun run check` on Ubuntu and macOS across Node 20, 22, and 24,
-- live OpenCode smoke on Ubuntu Node 22,
+- `bun run check` on Ubuntu and macOS across Node 24 and 26,
+- live OpenCode 1.18.3 smoke on Ubuntu Node 24,
+- a non-blocking scheduled live smoke against the latest OpenCode release,
 - non-blocking Windows validation while Windows support is being brought up.
 
 ## Release contract

@@ -13,8 +13,8 @@ This is a helper skill: it contributes UI judgment and visual evidence only. The
 
 - Identify the user, job-to-be-done, primary workflow, density needs, device constraints, and brand/product tone before choosing visuals.
 - Choose a clear design direction that fits the product context. Distinctive does not mean decorative; utilitarian tools can be excellent through restraint, hierarchy, and speed.
-- Load `references/ui-rubric.md` for design and UX review criteria.
-- Load `references/visual-verification.md` before completing meaningful UI changes to capture visual evidence. During review, use it to assess recorded evidence; only run browser checks yourself if the current agent and tools permit it.
+- Request `flow-ui-quality/references/ui-rubric.md` from `flow_guidance` for design and UX review criteria.
+- Request `flow-ui-quality/references/visual-verification.md` from `flow_guidance` before completing meaningful UI changes to capture visual evidence. During review, use it to assess recorded evidence; only run browser checks yourself if the current agent and tools permit it.
 - Record design constraints and verification expectations in Flow plan fields: `requirements`, `decisions`, feature `targets`, and feature `validation`. Do not add new Flow payload fields.
 
 ## Build with visual intent
@@ -29,7 +29,7 @@ This is a helper skill: it contributes UI judgment and visual evidence only. The
 
 - For meaningful UI changes, run the app and capture screenshots when a local browser target is available.
 - For browser-driven QA, route selection, failure classification, and
-  `validationRun` summaries, load `flow-test`. Keep visual judgment, design
+  `validationRun` summaries, request `flow-test` from `flow_guidance`. Keep visual judgment, design
   quality, and screenshot assessment in `flow-ui-quality`.
 - Check desktop and mobile breakpoints, not only the viewport you developed in.
 - Verify text does not overlap, truncate unintentionally, or escape controls; long labels and empty/error states must fit.

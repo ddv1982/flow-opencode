@@ -77,18 +77,30 @@ import flowUiQualityVisualVerificationDoc from "../../skills/flow-ui-quality/ref
 import flowUiQualitySkillDoc from "../../skills/flow-ui-quality/SKILL.md" with {
 	type: "text",
 };
+import {
+	FLOW_GUIDANCE_IDS,
+	type FlowGuidanceId,
+	type FlowGuidanceTopic,
+} from "./ids.js";
 
-export type FlowSkillFile = {
+export {
+	FLOW_GUIDANCE_IDS,
+	FLOW_GUIDANCE_TOPICS,
+	type FlowGuidanceId,
+	type FlowGuidanceTopic,
+} from "./ids.js";
+
+export type FlowGuidanceFile = {
 	relativePath: string;
 	content: string;
 };
 
-export type FlowSkillDefinition = {
-	name: string;
-	files: FlowSkillFile[];
+export type FlowGuidanceDefinition = {
+	name: FlowGuidanceTopic;
+	files: FlowGuidanceFile[];
 };
 
-export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
+export const FLOW_GUIDANCE_DEFINITIONS: readonly FlowGuidanceDefinition[] = [
 	{
 		name: "flow",
 		files: [
@@ -210,3 +222,54 @@ export const FLOW_SKILL_DEFINITIONS: readonly FlowSkillDefinition[] = [
 		files: [{ relativePath: "SKILL.md", content: flowCommitSkillDoc }],
 	},
 ];
+
+function guidanceId(
+	topic: FlowGuidanceTopic,
+	relativePath: string,
+): FlowGuidanceId {
+	const id = relativePath === "SKILL.md" ? topic : `${topic}/${relativePath}`;
+	if ((FLOW_GUIDANCE_IDS as readonly string[]).includes(id)) {
+		return id as FlowGuidanceId;
+	}
+	throw new Error(`Bundled Flow guidance has an undeclared id '${id}'.`);
+}
+
+export type FlowGuidanceDocument = FlowGuidanceFile & {
+	id: FlowGuidanceId;
+	topic: FlowGuidanceTopic;
+};
+
+export const FLOW_GUIDANCE_DOCUMENTS: readonly FlowGuidanceDocument[] =
+	FLOW_GUIDANCE_DEFINITIONS.flatMap((definition) =>
+		definition.files.map((file) => ({
+			...file,
+			id: guidanceId(definition.name, file.relativePath),
+			topic: definition.name,
+		})),
+	);
+
+const FLOW_GUIDANCE_BY_ID = new Map(
+	FLOW_GUIDANCE_DOCUMENTS.map((document) => [document.id, document]),
+);
+
+if (FLOW_GUIDANCE_BY_ID.size !== FLOW_GUIDANCE_IDS.length) {
+	throw new Error(
+		"Bundled Flow guidance ids and imported documents are out of sync.",
+	);
+}
+
+export function getFlowGuidance(id: FlowGuidanceId): FlowGuidanceDocument {
+	const document = FLOW_GUIDANCE_BY_ID.get(id);
+	if (!document) throw new Error(`Missing bundled Flow guidance '${id}'.`);
+	return document;
+}
+
+export function findFlowGuidance(
+	topic: string,
+	relativePath: string,
+): FlowGuidanceDocument | undefined {
+	return FLOW_GUIDANCE_DOCUMENTS.find(
+		(document) =>
+			document.topic === topic && document.relativePath === relativePath,
+	);
+}

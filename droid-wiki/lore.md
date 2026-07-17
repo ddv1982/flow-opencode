@@ -7,7 +7,7 @@ Flow began on 2026-03-31 as an OpenCode plugin for stateful planning and executi
 ### First plugin shape, Mar 2026
 
 - 2026-03-31: `c59240e` introduced the Flow plugin for OpenCode.
-- 2026-03-31: `9f73add` added reviewer-gated execution, a design thread that still exists as `featureReview` and `finalReview` in `src/runtime/schema.ts`.
+- 2026-03-31: `9f73add` added reviewer-gated execution, a design thread that still exists as `featureReview` and `finalReview` in `src/application/schema.ts`.
 - 2026-04-01: `fdcaf7f` added GitHub Actions validation, now visible in `.github/workflows/ci.yml`.
 
 ### Early runtime hardening, Apr 2026
@@ -39,14 +39,26 @@ Flow began on 2026-03-31 as an OpenCode plugin for stateful planning and executi
 
 | Feature | First seen | Still active in |
 | --- | --- | --- |
-| OpenCode plugin entrypoint | 2026-03-31 | `src/index.ts`, `src/adapters/opencode/plugin.ts` |
-| Runtime tools | 2026-03-31, simplified 2026-06-14 | `src/adapters/opencode/tools.ts`, `src/runtime/api.ts` |
-| Reviewer-gated completion | 2026-03-31 | `src/runtime/transitions.ts`, `skills/flow-review/SKILL.md` |
+| OpenCode plugin entrypoint | 2026-03-31 | `src/index.ts`, `src/platform/opencode/plugin.ts` |
+| Runtime tools | 2026-03-31, simplified 2026-06-14 | `src/platform/opencode/tools.ts`, `src/application/flow-service.ts` |
+| Reviewer-gated completion | 2026-03-31 | `src/domain/transitions.ts`, `skills/flow-review/SKILL.md` |
 | GitHub Actions validation | 2026-04-01 | `.github/workflows/ci.yml` |
 
 ## Deprecated and removed ideas
 
-ADR 0001 records the main deprecations on 2026-06-14. Flow v4 removed v3 session migration, `flow_context`, separate review-record tools, context quality, readiness projections, project maps, feature doc drilldowns, lanes, and decision gates. The replacement is the small state model in `src/runtime/schema.ts` and the seven tool handlers in `src/runtime/api.ts`.
+ADR 0001 records the main deprecations on 2026-06-14. Flow v4 removed v3 session migration, `flow_context`, separate review-record tools, context quality, readiness projections, project maps, feature doc drilldowns, lanes, and decision gates. At the time, the replacement lived in `src/runtime/schema.ts` and `src/runtime/api.ts`; Flow v5 later moved those responsibilities into explicit layers.
+
+### v5 TypeScript 7 cutover, Jul 2026
+
+- 2026-07-17: ADR 0002 adopted TypeScript 7.0.2, Node 24+, Bun
+  1.3.14, session schema version 3, and the
+  domain/application/infrastructure/platform dependency direction.
+- 2026-07-18: tag `v5.0.0` opened the TypeScript 7 line with embedded guidance,
+  archive-only closure recovery, direct Zod schemas, and no v4 runtime or
+  session compatibility layer.
+- The cutover removed the `src/runtime/**` and `src/adapters/**` entrypoints,
+  separated OpenCode's host validator from Flow's direct Zod schemas, and
+  intentionally provided no v2-session migration reader.
 
 ## Major rewrites
 

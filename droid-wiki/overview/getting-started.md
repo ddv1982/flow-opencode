@@ -6,9 +6,9 @@ This repo uses Bun, TypeScript, Biome, and GitHub Actions. The package builds an
 
 | Tool | Required by |
 | --- | --- |
-| Node.js `>=20` | `package.json` engine and TypeScript tooling. |
-| Bun | Local scripts in `package.json`. |
-| OpenCode | Runtime host for the published plugin. |
+| Node.js `>=24` | `package.json` engine and TypeScript tooling. |
+| Bun `1.3.14` | Pinned local scripts and builds in `package.json`. |
+| OpenCode `>=1.18.3 <2` | Stable runtime host API for the published plugin. |
 | npm | Release publishing and smoke-package consumption checks. |
 
 ## Install for local development
@@ -18,7 +18,7 @@ bun install
 bun run check
 ```
 
-`bun run check` runs `bun run typecheck`, `bun run lint`, `bun run build`, and `bun run test` in that order, as defined in `package.json`.
+`bun run check` runs `bun run typecheck`, `bun run lint`, `bun run prompt:quality`, `bun run build`, and `bun run test` in that order, as defined in `package.json`.
 
 ## Build outputs
 
@@ -34,8 +34,7 @@ bun run check
 The public install path in `README.md` is:
 
 ```bash
-opencode plugin opencode-plugin-flow@4.2.0 --global --force
-npx -y opencode-plugin-flow@4.2.0 sync
+opencode plugin opencode-plugin-flow@5.0.0 --global --force
 ```
 
 After restarting OpenCode, a user can start with `/flow-auto <goal>` or split the loop with `/flow-plan`, `/flow-run`, and `/flow-review`. The CLI commands behind the npm binary are implemented in `src/cli.ts`.

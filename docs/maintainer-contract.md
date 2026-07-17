@@ -1,11 +1,18 @@
 # Maintainer Contract
 
-Flow v4 has one rule: keep the code boring and small.
+Flow v5 has one rule: keep the boundaries explicit and the behavior small.
 
 ## Split
 
-- `skills/**` owns judgment: planning, decomposition, review depth, validation quality, recovery choices, cleanup, and UI quality.
-- `src/**` owns safety: durable session state, atomic writes, tool schemas, hard completion gates, skill sync, and the OpenCode bridge.
+- `skills/**` owns authored guidance: planning, decomposition, review depth, validation quality, recovery choices, cleanup, and UI quality.
+- `src/guidance/**` owns the typed embedded catalog and stable guidance ids.
+- `src/domain/**` owns immutable values and pure hard-gate transitions.
+- `src/application/**` owns use cases, direct Zod schemas, typed results, and
+  ports.
+- `src/infrastructure/**` owns filesystem persistence and system services.
+- `src/platform/opencode/**` owns the OpenCode bridge and its private host
+  schemas.
+- `src/distribution/**` owns the explicit, recoverable v4 cleanup utility only.
 
 Do not move planning or review heuristics into runtime projections. If a rule needs interpretation, it belongs in a skill.
 
@@ -23,20 +30,17 @@ Runtime must enforce:
 7. Feature completion requires a passing `featureReview`.
 8. Final completion requires a passing `finalReview` whose `reviewDepth` matches the approved plan.
 9. A session cannot close as `completed` unless an approved plan has passed final completion.
-10. A phase boundary blocks `flow_run_start` until the caller explicitly
-    acknowledges that continuation is happening in a fresh phase.
+10. Once `closure` is recorded, every mutation except `flow_session_close`
+    fails until archival succeeds.
 
 ## State
 
-`.flow/session.json` is the active source of truth. `.flow/opencode-instructions.md` is an ignored generated projection for OpenCode's stable `config.instructions` path; it must always be rebuildable from the active session and never becomes authoritative state. `.flow/history/<session-id>.json` stores archived sessions. Flow writes `.flow/.gitignore` so local session state and generated projections are ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, and other projection caches are intentionally not runtime state.
+`.flow/session.json` is the only active source of truth and the only active-state representation. `.flow/history/<session-id>.json` stores archived sessions. Archive publication is exclusive and no-clobber: persist the closed active snapshot first, publish it with a hard link, accept an existing target only when its normalized session is identical, then remove active state. A different existing archive is a collision and must leave both its bytes and readable active state intact. Flow writes `.flow/.gitignore` so local session state is ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, ambient instruction files, and other projection caches are intentionally not runtime state.
 
-Budget and retry telemetry in the session ledger records completed feature
-counts, review counts, failed review counts, per-feature failed review attempts,
-bounded orchestration pass accounting, and host token telemetry status. Feature
-count and pass accounting are telemetry only and must not stop an approved plan
-by themselves. OpenCode does not currently expose per-turn token usage through
-the plugin surface Flow uses, so token fields stay `host_unavailable` until a
-supported host API exists. Do not invent token counts inside runtime state.
+Budget and retry telemetry in the session ledger records review counts, failed
+review counts, per-feature failed review attempts, and bounded orchestration
+pass accounting. Review retry exhaustion uses the ordinary blocked-feature
+state and resumes only through `flow_feature_reset`.
 
 Runtime pass accounting is deliberately bounded: counts, recent pass ids,
 worker counts, candidate/verifier usage, skipped candidate decisions, handoff
@@ -44,9 +48,23 @@ references, verification status, outcome, and synthesis references. Full worker
 handoffs, command logs, transcripts, scratch tables, and standalone manager
 synthesis artifacts stay outside `.flow/**`. Distilled conclusions may enter
 plan prose or completion summaries when they are the Flow artifact being
-recorded.
+recorded. Completion accepts at most 50 pass records, and `latestPasses`
+retains at most 50. Pass ids deduplicate within a payload and while they remain
+in that window; an evicted id may be counted again because this is telemetry,
+not a permanent idempotency ledger.
 
-Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against filesystem roots and `$HOME`.
+Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against
+filesystem roots, `$HOME`, and symbolic links at every Flow-managed path. Root
+aliases are canonicalized before lock identity or containment decisions.
+Lock owner metadata is trusted only after semantic validation: tokens are
+non-empty, pids are positive safe integers, hostnames are non-empty, and
+timestamps parse to finite values. Locks are never stolen based on age or an
+owner-liveness guess; only the matching unique owner token may release a lock.
+
+Domain transitions may structurally share existing session state, but must copy
+every caller-owned collection and nested evidence object before recording it.
+Completion outcome discriminators are always explicit; union-branch defaults
+must not decide persisted state.
 
 ## Public Surface
 
@@ -91,6 +109,7 @@ hidden Flow workers. Leave them unset when the provider/model ID is unknown.
 
 Tools:
 
+- `flow_guidance`
 - `flow_status`
 - `flow_plan_save`
 - `flow_plan_approve`
@@ -99,11 +118,22 @@ Tools:
 - `flow_feature_reset`
 - `flow_session_close`
 
-No compatibility aliases are required for v3 sessions or retired tools.
+Tool responses keep plugin-authored operation metadata at the top level. All
+session, feature, closure, failure-detail, and other repository- or
+caller-controlled prose belongs under `workflowData`. Active `flow_status`
+returns top-level `status: "ok"`; the state-machine status lives at
+`workflowData.session.status`. Top-level response strings must never interpolate
+untrusted workflow prose.
 
-## Managed Skills And Setup Health
+No runtime compatibility aliases, session migrations, or readers are allowed
+for v2 sessions, v4 source paths, or retired tools. Unsupported active sessions
+are preserved in quarantine and reported with recovery instructions. The
+standalone global-folder cleanup utility is migration hygiene, not runtime
+compatibility.
 
-The managed skill set is:
+## Embedded Guidance
+
+The authored guidance topics are:
 
 - `flow`
 - `flow-plan`
@@ -114,71 +144,74 @@ The managed skill set is:
 - `flow-ui-quality`
 - `flow-commit`
 
-Startup sync, `opencode-plugin-flow doctor`, `opencode-plugin-flow sync`, and
-uninstall must treat the managed set uniformly. Missing, incomplete, or outdated
-Flow-owned folders are sync-repairable. Foreign or edited managed folders
-require user action and must not be overwritten silently. A folder with no Flow
-marker is user-owned even when files sit at managed paths, so sync must skip it
-rather than overwrite it without a backup.
-
-Flow-created `.backup` residue — a file whose name and content checksum both
-match Flow's backup format — is reported by doctor as action-required and is
-removed by uninstall (naming each removed backup) when the folder is otherwise
-pristine. A file that merely resembles a backup name but whose content does not
-match the embedded checksum is the user's own file: it is never deleted and it
-keeps the folder.
+Every runtime-loadable document has one stable id in
+`src/guidance/ids.ts` and one text entry in `src/guidance/catalog.ts`. Main documents use ids such as `flow-test`;
+references use ids such as `flow-ui-quality/references/ui-rubric.md`. The
+catalog imports Markdown as text so Bun embeds it into `dist/index.js`.
+`flow_guidance` returns that exact text and never reads the filesystem or
+changes Flow state.
 
 Install and update guidance should use OpenCode's native plugin installer as the
 primary config mutation path when available, with one pinned install-or-update
 command:
 `opencode plugin opencode-plugin-flow@<version> --global --force`. OpenCode
 keeps an existing same-package plugin entry unless replacement is requested, so
-published Flow docs should include `--force` by default. Flow's own CLI should
-remain a skill sync, doctor, and uninstall helper; it must not silently mutate
-OpenCode plugin config. The manual `opencode.json` fallback for older OpenCode
+published Flow docs should include `--force` by default. Flow's CLI exists only
+for explicit v4 legacy cleanup; it must not silently mutate OpenCode plugin
+config. The manual `opencode.json` fallback for older OpenCode
 versions should tell users to replace older pinned Flow entries instead of
 adding duplicates.
 
-Runtime setup health is surfaced through `flow_status`:
+Plugin initialization must never read or write OpenCode's global skills root.
+There is no sync health, `setup.skills`, marker update, backup, doctor, sync, or
+second-restart workflow. Package smoke must prove guidance is embedded, and
+surface tests must prove concurrent initialization leaves hostile global links
+untouched.
 
-- `restart_required`: startup sync changed skills and OpenCode should restart
-  before Flow skills are loaded.
-- `action_required`: at least one managed skill folder is foreign or edited and
-  needs a user decision.
-- `sync_failed`: skill sync raised an error and the runtime should not assume
-  skill instructions are current.
-
-Public Flow commands must call `flow_status` first. If `setup.skills` is
-present, they report that setup state and continue through bundled public Flow
-instructions instead of depending on native-loaded public skills. The OpenCode
+Public Flow commands must call `flow_status` first. The OpenCode
 command preflight hook is authoritative for public Flow commands: it must
 replace resolved command parts with the current bundled template so stale
-command files or command registry cache cannot ask for old skill-loading
+command files or command registry cache cannot ask for native skill-loading
 behavior. `/flow-auto`, `/flow-plan`, `/flow-run`, and `/flow-review` must stay
 self-contained as configured surfaces: manager commands compile selected core
 sections, while `/flow-review` supplies the task to the reserved
 `flow-reviewer`, whose agent prompt owns the review contract. They must not
 depend on native-loading `flow`, `flow-plan`, `flow-run`, or `flow-review`;
 references to loading those core skills inside selected source sections mean
-using the matching compiled section, not making a native skill call. Synced
-skills remain useful for discoverability, manual loading, and detailed
-references, not as a public-command availability dependency. `/flow-status`
-remains tool-only. Missing optional helpers such as `flow-test`, `flow-deslop`,
-`flow-ui-quality`, or user-triggered `flow-commit` are coverage gaps, not
-bundled fallbacks. `flow-commit` must not be loaded by the autonomous Flow loop
-and must not replace `flow_feature_complete`.
+using the matching compiled section, not making a native skill call.
+`/flow-status` remains tool-only. Optional helpers such as `flow-test`,
+`flow-deslop`, `flow-ui-quality`, and user-triggered `flow-commit` are loaded
+through `flow_guidance`. Hidden workers deny them through `flow_*`, while the
+later `flow_status` allow rule keeps status readable. `flow-commit` must not be
+loaded by the autonomous Flow loop and must not replace
+`flow_feature_complete`.
 
-Ambient Flow session context must use stable OpenCode configuration:
-the adapter registers `.flow/opencode-instructions.md` through
-`config.instructions`, and the runtime keeps that file synchronized with
-`.flow/session.json`. Flow does not register OpenCode experimental chat-system,
-message-transform, or session-compaction hooks. Skills react only to durable
-runtime state and runtime-issued phase boundaries; they do not estimate context
-pressure or initiate host compaction.
+Manager commands must reject any unexpected subtask part. `/flow-review` must
+receive exactly one OpenCode subtask whose normalized command identity is
+`flow-review` and whose agent is `flow-reviewer`; preflight rewrites only that
+part's prompt. Missing, duplicate, or mismatched subtask parts fail closed
+instead of falling through to parent-session execution.
+
+The only legacy path is the explicitly invoked
+`opencode-plugin-flow legacy-cleanup`. Dry-run is mandatory unless `--apply` is
+given. Apply atomically quarantines a marker-proven folder, verifies it again at
+the new path, and accepts it as archived only when it remains byte-pristine. It
+never deletes legacy content. Foreign, edited, extra, malformed, non-directory,
+or symlinked content must be refused before the move; content that changes during
+the move stays quarantined at the reported recovery path.
+
+The OpenCode config hook only registers Flow commands and agents. It must not
+read workspace state, acquire a session lock, write a projected instruction
+file, or append a Flow path to `config.instructions`. Canonical Flow commands
+begin with `flow_status`, so durable session state is loaded explicitly at the
+point of action. Flow does not register OpenCode experimental chat-system,
+message-transform, or session-compaction hooks. Flow guidance reacts only to
+durable runtime state; it does not estimate context pressure or initiate host
+compaction.
 
 ## Prompt Contracts
 
-Skill-attributed prompt fragments must be extracted from their bundled skill
+Guidance-attributed prompt fragments must be extracted from their bundled Markdown
 source. Use section selection for ordinary Markdown or a unique
 `flow-prompt` marker pair for a prompt-only block. Compiler-owned routing and
 bookends must identify `src/prompt-surfaces.ts` as their source; do not maintain
@@ -210,27 +243,35 @@ fixture.
 
 ## Source Ownership
 
-- `runtime`: schema, transitions, persistence, and tool-facing runtime API.
-- `adapters`: OpenCode config, hooks, and tool registration.
-- `distribution`: syncing bundled skills and uninstalling Flow-owned skill folders.
+- `domain`: branded values, orchestration invariants, and pure transitions.
+- `application`: use cases, typed results, direct-Zod schemas, and ports.
+- `infrastructure`: filesystem repository, strict JSON, locks, and system services.
+- `platform/opencode`: private host schemas, OpenCode config, hooks, and tools.
+- `guidance`: stable ids and embedded package-owned Markdown.
+- `distribution`: explicit, recoverable legacy-folder cleanup outside plugin startup.
 - `prompt-surfaces`: role/phase-specific prompt compilation and offline handoff shape validation.
 - `prompt-quality`: reproducible prompt metrics, repetition classifications, and static contracts.
 - `prompt-model-evaluation`: opt-in model-decision packets, schemas, and deterministic grading.
 - `config-shared`: command and agent configuration consuming compiled prompts.
 
-Keep adapter/distribution concerns out of runtime.
+Keep platform, distribution, filesystem, clock, and UUID concerns outside the
+domain and application layers.
 
 ## Dependencies
 
-- `@opencode-ai/plugin` is a peer range (`>=1.17.3 <2`) so users on newer
+- `@opencode-ai/plugin` is a peer range (`>=1.18.3 <2`) so users on newer
   OpenCode versions install without resolution friction; the exact version CI
   verifies against stays pinned in `devDependencies`. Widen the lower bound
   only after testing, and cap at the next major.
-- `zod` is exact-pinned and externalized on purpose: Zod schema objects cross
-  the plugin/host boundary (they are handed to the host's `tool()` runner), so
-  the pin prevents instanceof/shape drift between the plugin's schemas and the
-  host's Zod copy. Bump it deliberately alongside the tested
-  `@opencode-ai/plugin` version, not automatically.
+- `zod` is exact-pinned and externalized on purpose for Flow's domain and
+  persistence validation. Zod schema objects must not cross the plugin/host
+  boundary: OpenCode transport schemas use `tool.schema` from
+  `@opencode-ai/plugin`, while Flow core schemas use the direct dependency.
+  Shared contract fixtures must pass before either validator is bumped.
+- TypeScript, Biome, Bun types, Node types, and the OpenCode development host
+  are exact-pinned. Keep Node types on the Node 24 line even when a newer
+  non-LTS major is published. The `overrides` entry must match the direct pin
+  so `bun-types` cannot resolve its wildcard Node dependency to a newer major.
 
 ## Release Publishing
 

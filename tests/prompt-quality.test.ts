@@ -1,25 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { LEGACY_PROMPT_BASELINE } from "../src/prompt-baseline-fixtures";
+import { LEGACY_PROMPT_BASELINE } from "../src/prompt-baseline-fixtures.js";
 import {
 	buildPromptModelEvaluationPacket,
 	gradeModelDecisions,
 	type ModelDecision,
 	parseModelDecisionResponse,
-} from "../src/prompt-model-evaluation";
+} from "../src/prompt-model-evaluation.js";
 import {
 	evaluatePromptVariant,
 	measureCompiledPrompt,
 	PROMPT_EVALUATION_SCENARIOS,
 	promptInventoryForVariant,
-} from "../src/prompt-quality";
+} from "../src/prompt-quality.js";
 import {
 	compiledFlowPromptSurfaces,
 	FLOW_STATIC_PROMPT_SURFACES,
 	type FlowPromptSurfaceName,
 	type FlowWorkerHandoffKind,
 	validateFlowWorkerHandoff,
-} from "../src/prompt-surfaces";
+} from "../src/prompt-surfaces.js";
 
 type GrowthBaseline = {
 	variant: string;
@@ -108,9 +108,7 @@ function passingModelDecisions(): ModelDecision[] {
 			retryReviews: 1,
 			stopsAfterRetryFailure: true,
 		},
-		"resume-after-interruption": {
-			phaseBoundaryAction: "resume_with_ack",
-		},
+		"archive-pending": { executionMode: "blocked" },
 		"candidate-safe": {
 			executionMode: "candidate_worker",
 			workers: ["flow-candidate-worker"],
@@ -126,7 +124,10 @@ function passingModelDecisions(): ModelDecision[] {
 		},
 		"cleanup-review-missing-helper": { coverage: "partial" },
 		"ui-review-missing-visual-evidence": { coverage: "partial" },
-		"no-self-initiated-compaction": { sessionContinuation: "continue" },
+		"review-retry-exhausted": {
+			executionMode: "blocked",
+			stopsAfterRetryFailure: true,
+		},
 	};
 	return PROMPT_EVALUATION_SCENARIOS.map((scenario) => ({
 		id: scenario.id,
@@ -146,8 +147,6 @@ function passingModelDecisions(): ModelDecision[] {
 		handoffHasRequiredSections: false,
 		retryReviews: 0,
 		stopsAfterRetryFailure: false,
-		phaseBoundaryAction: "none",
-		sessionContinuation: "not_applicable",
 		candidateDecision: "not_applicable",
 		completionClaimed: false,
 		reason: "Grounded in the rendered Flow contract.",

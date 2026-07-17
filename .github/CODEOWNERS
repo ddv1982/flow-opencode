@@ -1,12 +1,15 @@
 # Default ownership
 * @ddv1982
 
-# Flow v4 ownership boundaries
+# Flow v5 ownership boundaries
 /.github/ @ddv1982
 /.agents/ @ddv1982
-/src/runtime/ @ddv1982
+/src/domain/ @ddv1982
+/src/application/ @ddv1982
+/src/infrastructure/ @ddv1982
+/src/platform/ @ddv1982
+/src/guidance/ @ddv1982
 /src/distribution/ @ddv1982
-/src/adapters/ @ddv1982
 /skills/ @ddv1982
 /docs/ @ddv1982
 /tests/ @ddv1982

@@ -1,6 +1,6 @@
 ---
 name: flow-run
-description: "Use when an approved Flow plan has a feature to implement, validate, or complete in the v4 runtime, and the work is scoped to one active feature. For planning a goal first use flow-plan; for the full goal-to-completion loop or resuming a session use flow."
+description: "Use when an approved Flow plan has a feature to implement, validate, or complete in the v5 runtime, and the work is scoped to one active feature. For planning a goal first use flow-plan; for the full goal-to-completion loop or resuming a session use flow."
 ---
 
 # Flow Run
@@ -14,18 +14,16 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 ## Start
 
 - Call `flow_status`.
-- If `flow_status` returns a `session.resumePacket` or
-  `session.budget.phaseBoundary`, stop the current autonomous loop and report
-  the resume instructions. Only call `flow_run_start` with
-  `phaseBoundaryAck: true` at the start of a fresh user invocation that is
-  explicitly resuming the Flow session; do not acknowledge a boundary inside
-  the same uninterrupted loop that created it.
+- If `flow_status` returns a `workflowData.session.closure`, do not mutate the
+  closed session. Retry `flow_session_close` with the recorded closure kind to
+  finish archiving it.
 - Call `flow_run_start` with no `featureId` unless the user or plan requires a specific runnable feature.
 - Treat the returned feature as the sole scope until it is completed, blocked, or reset.
-- Helper rule: when a named helper skill is unavailable, record the gap and
-  keep the corresponding claims conservative instead of simulating its checks.
-- Load `flow-deslop` for cleanup/refactor features.
-- Load `flow-ui-quality` for frontend, UX, responsive, accessibility, or visual work.
+- Helper rule: obtain named helper guidance with `flow_guidance`; if that tool is
+  unavailable, record the gap and keep the corresponding claims conservative
+  instead of simulating its checks.
+- Request `flow-deslop` for cleanup/refactor features.
+- Request `flow-ui-quality` for frontend, UX, responsive, accessibility, or visual work.
 
 ## Implement
 
@@ -36,8 +34,8 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
 - Do not stage, commit, push, amend, rebase, publish, or mutate releases as part
-  of feature execution. If the user explicitly asks for commit preparation, load
-  `flow-commit` only after `flow_feature_complete` has been recorded, unless the
+  of feature execution. If the user explicitly asks for commit preparation, request
+  `flow-commit` through `flow_guidance` only after `flow_feature_complete` has been recorded, unless the
   user explicitly asks for a WIP commit path. Keep Git boundaries separate from
   Flow state recording.
 
@@ -57,11 +55,12 @@ manager judgment. Shared contracts, migrations, lockfiles, generated outputs,
 tightly coupled callers, unclear ownership, and small slices remain serial.
 
 Classify `candidateEligibility` (`eligible`, `not_eligible`, or `unknown`) and
-`candidateDecision` (`used`, `skipped`, or `serial_required`) separately. Read
-`../flow/references/parallel-decision.md` for valid pairings and factors. After
-selecting fan-out, read `../flow/references/parallel-manifest.md` and
-`../flow/references/parallel-execution.md`, then
-`../flow/references/parallel-synthesis.md` when handoffs return.
+`candidateDecision` (`used`, `skipped`, or `serial_required`) separately.
+Request `flow/references/parallel-decision.md` from `flow_guidance` for valid
+pairings and factors. After selecting fan-out, request
+`flow/references/parallel-manifest.md` and
+`flow/references/parallel-execution.md`, then
+`flow/references/parallel-synthesis.md` when handoffs return.
 Set `decision`, `decisionReason`, `decisionFactors`, and `writeScope`.
 
 Candidate workers return patches for manager inspection. The manager accepts,
@@ -76,19 +75,17 @@ outside the runtime payload.
 
 - For complex validation, regression-sensitive changes, browser QA, route QA,
   failure-prone checks, unclear coverage, exploratory QA, or
-  `validationRun` summarization, load `flow-test` (helper rule applies).
-- Read `references/validation-rubric.md` before completing.
+  `validationRun` summarization, request `flow-test` through `flow_guidance` (helper rule applies).
+- Request `flow-run/references/validation-rubric.md` from `flow_guidance` before completing.
 - Run the strongest practical checks for the changed behavior.
 - Record concrete command names, status, and observed results. "Tests pass" is not evidence.
 - Non-final features complete with `validationScope: "targeted"`.
 - The final feature must run a broad project-level gate and use `validationScope: "broad"`.
 
-For broad validation research, risky changes, or unclear coverage, start with
-`../flow/references/parallel-orchestration.md`. If it routes to fan-out, write
-the manifest from `../flow/references/parallel-manifest.md`, use the named Flow
-workers and prompt contract in `../flow/references/parallel-execution.md`, paste
-the matching handoff template from `../flow/references/handoff-format.md`, and
-apply `../flow/references/parallel-synthesis.md` when the handoffs return.
+For broad validation research, risky changes, or unclear coverage, request
+`flow/references/parallel-orchestration.md` from `flow_guidance`. If it routes
+to fan-out, request and use the manifest, execution, handoff-format, and
+synthesis reference ids in the order that routing guide specifies.
 They may report command output they actually ran or propose focused checks; the
 manager decides what is strong enough to record.
 
@@ -114,13 +111,14 @@ prepared completion payload, the failed `featureReview`, and the attempted
 budget. Default to stopping and reporting the blocker. When the user already
 authorized autonomous implementation, make at most one repair and run one retry
 review. If the retry fails or the runtime reports review retry budget
-exhausted, stop with the blocker.
+exhausted, stop with the blocker. Continue only after explicit user direction
+by calling `flow_feature_reset`; do not call `flow_run_start` against the
+blocked feature.
 
-If `flow_status` reports `setup.skills` or `flow-review` cannot be loaded, do
-not record a Flow-gated `featureReview` or `finalReview`. You may perform an
-advisory review using available context or the bundled review fallback provided
-by plugin config, then complete with `status: "needs_input"` if review evidence
-is required to proceed.
+If the reserved `flow-reviewer` or required evidence is unavailable, do not
+record a Flow-gated `featureReview` or `finalReview`. You may perform an
+advisory review using available context, then complete with
+`status: "needs_input"` if review evidence is required to proceed.
 
 For the final feature, also obtain a `finalReview` payload whose `reviewDepth` equals the approved plan's `finalReviewPolicy`.
 
@@ -155,9 +153,8 @@ Complete with:
 }
 ```
 
-If `flow_feature_complete` returns a `session.resumePacket` or
-`session.budget.phaseBoundary`, stop after reporting the runtime-provided resume
-packet. If
-genuinely blocked, call `flow_feature_complete` with `status: "needs_input"` and
+If `flow_feature_complete` returns a `workflowData.session.closure`, finish by
+calling `flow_session_close` with the recorded closure kind. If genuinely
+blocked, call `flow_feature_complete` with `status: "needs_input"` and
 an `outcome` that explains the blocker and next step. Never fabricate validation
 or review evidence to force progress.
