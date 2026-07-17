@@ -10,11 +10,14 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { FLOW_GUIDANCE_TOPICS } from "../guidance/ids.js";
 
 const LEGACY_MARKER = ".flow-skill-version";
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 const SUPPORTED_LEGACY_MAJOR = "4";
+const POST_MOVE_VERIFICATION_ATTEMPTS = 4;
+const POST_MOVE_VERIFICATION_RETRY_MS = 25;
 const SEMVER_PATTERN =
 	/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
@@ -273,6 +276,26 @@ async function ensureRealArchiveRoot(path: string): Promise<void> {
 	}
 }
 
+async function verifyMovedLegacyFolder(
+	name: string,
+	archivePath: string,
+): Promise<LegacySkillCleanupResult> {
+	let verified = await inspectLegacyFolder(name, archivePath);
+	for (
+		let attempt = 1;
+		attempt < POST_MOVE_VERIFICATION_ATTEMPTS && verified.status !== "eligible";
+		attempt += 1
+	) {
+		// Windows may briefly report a just-renamed directory as missing or
+		// inaccessible while a competing inspection releases its file handles.
+		// Retrying never weakens cleanup safety: only a complete byte-pristine
+		// inspection can return eligible, while persistent edits still quarantine.
+		await sleep(POST_MOVE_VERIFICATION_RETRY_MS * attempt);
+		verified = await inspectLegacyFolder(name, archivePath);
+	}
+	return verified;
+}
+
 export async function cleanupLegacySkills(options?: {
 	home?: string;
 	apply?: boolean;
@@ -318,7 +341,7 @@ export async function cleanupLegacySkills(options?: {
 			continue;
 		}
 		await options?.afterQuarantine?.({ name, path, archivePath });
-		const verified = await inspectLegacyFolder(name, archivePath);
+		const verified = await verifyMovedLegacyFolder(name, archivePath);
 		if (verified.status !== "eligible") {
 			results.push({
 				name,

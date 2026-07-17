@@ -24,7 +24,10 @@ These scripts are defined in `package.json`.
 
 ## GitHub automation
 
-`.github/workflows/ci.yml` runs actionlint, matrix checks on Ubuntu and macOS, a live OpenCode smoke, and a non-blocking Windows check. `.github/workflows/release.yml` validates tags, changelog, install pins, checks, package smoke, npm publishing, and GitHub release assets.
+`.github/workflows/ci.yml` runs actionlint, blocking matrix checks on Ubuntu,
+macOS, and Windows, plus a live OpenCode smoke. `.github/workflows/release.yml`
+validates tags, changelog, install pins, checks, package smoke, npm publishing,
+and GitHub release assets.
 
 ## Flow CLI
 

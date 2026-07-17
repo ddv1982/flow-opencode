@@ -6,12 +6,14 @@ import {
 	mkdir,
 	readdir,
 	readFile,
+	rename,
 	symlink,
 	unlink,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import packageJson from "../package.json" with { type: "json" };
 import {
 	applyFlowConfig,
@@ -604,10 +606,11 @@ describe("explicit legacy cleanup", () => {
 	test("concurrent cleanup archives once without clobbering", async () => {
 		const home = await tempHome();
 		await installPristineLegacyTopic(home, "flow-test");
-		const reports = await Promise.all([
-			cleanupLegacySkills({ home, apply: true }),
-			cleanupLegacySkills({ home, apply: true }),
-		]);
+		const reports = await Promise.all(
+			Array.from({ length: 8 }, () =>
+				cleanupLegacySkills({ home, apply: true }),
+			),
+		);
 		const results = reports.flatMap((report) =>
 			report.results.filter((result) => result.name === "flow-test"),
 		);
@@ -623,6 +626,27 @@ describe("explicit legacy cleanup", () => {
 		expect(
 			archives.filter((name) => name.startsWith("flow-test-")),
 		).toHaveLength(1);
+	});
+
+	test("retries verification when a moved archive is temporarily unavailable", async () => {
+		const home = await tempHome();
+		await installPristineLegacyTopic(home, "flow-test");
+		let restoration: Promise<void> | undefined;
+		const report = await cleanupLegacySkills({
+			home,
+			apply: true,
+			afterQuarantine: async ({ archivePath }) => {
+				const displacedPath = `${archivePath}.transient`;
+				await rename(archivePath, displacedPath);
+				restoration = sleep(5).then(() => rename(displacedPath, archivePath));
+				void restoration.catch(() => undefined);
+			},
+		});
+		await restoration;
+
+		expect(
+			report.results.find((result) => result.name === "flow-test")?.status,
+		).toBe("archived");
 	});
 
 	test("post-move changes are preserved in quarantine and never accepted as pristine", async () => {

@@ -26,7 +26,7 @@ graph TD
 - `bun run check` on Ubuntu and macOS across Node 24 and 26,
 - live OpenCode 1.18.3 smoke on Ubuntu Node 24,
 - a non-blocking scheduled live smoke against the latest OpenCode release,
-- non-blocking Windows validation while Windows support is being brought up.
+- blocking Windows validation for platform-specific filesystem behavior.
 
 ## Release contract
 

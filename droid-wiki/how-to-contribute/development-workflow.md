@@ -47,7 +47,7 @@ than the larger of eight words or 2%, and record a specific justification. Run
 
 The CI workflow in `.github/workflows/ci.yml` runs actionlint, checks on Ubuntu
 and macOS across Node 24 and 26, runs a pinned OpenCode 1.18.3 live smoke on
-Ubuntu Node 24, and runs a non-blocking Windows check. A non-blocking scheduled
+Ubuntu Node 24, and runs a blocking Windows check. A non-blocking scheduled
 job probes the latest OpenCode release separately. The release workflow reruns
 checks and package smoke before publishing.
 

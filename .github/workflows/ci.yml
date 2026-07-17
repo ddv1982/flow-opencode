@@ -78,11 +78,9 @@ jobs:
       - name: Run live OpenCode smoke
         run: bun run smoke:live
 
-  # Windows support is being brought up: the runtime has Windows-specific
-  # code paths (USERPROFILE, no directory fsync) but the test suite still
-  # contains POSIX path assumptions. Non-blocking until it is green.
+  # Keep Windows as a first-class blocking signal. This covers USERPROFILE,
+  # no-directory-fsync paths, and Windows rename/handle timing.
   validate-windows:
-    continue-on-error: true
     runs-on: windows-latest
     steps:
       - name: Check out repository
