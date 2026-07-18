@@ -4,6 +4,7 @@ import {
 	mkdir,
 	readdir,
 	readFile,
+	rename,
 	rm,
 	stat,
 	symlink,
@@ -12,6 +13,7 @@ import {
 import { homedir, hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { SessionSchema } from "../src/application/schema.js";
 import {
 	ArchiveCollisionError,
 	archiveAndClearSession,
@@ -26,14 +28,106 @@ import {
 	withSessionLock,
 } from "../src/infrastructure/fs/workspace.js";
 import {
-	flowFeatureComplete,
-	flowFeatureReset,
+	flowFeatureComplete as executeFlowFeatureComplete,
+	flowFeatureReset as executeFlowFeatureReset,
+	flowSessionClose as executeFlowSessionClose,
+	flowStatus as executeFlowStatus,
 	flowPlanApprove,
 	flowPlanSave,
 	flowRunStart,
-	flowSessionClose,
-	flowStatus,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
+
+const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
+const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
+let operationSequence = 0;
+
+function completionValidations(payload: Record<string, unknown>) {
+	const validationRun = Array.isArray(payload.validationRun)
+		? payload.validationRun
+		: [];
+	return validationRun.flatMap((run) => {
+		if (
+			typeof run !== "object" ||
+			run === null ||
+			!("command" in run) ||
+			typeof run.command !== "string"
+		) {
+			return [];
+		}
+		return [
+			{
+				command: run.command,
+				summary:
+					"summary" in run && typeof run.summary === "string"
+						? run.summary
+						: "Validation result.",
+				startedAt: "2026-07-18T08:58:00.000Z",
+				completedAt: "2026-07-18T08:59:00.000Z",
+				exitCode: "status" in run && run.status === "passed" ? 0 : 1,
+				outputDigest: OUTPUT_DIGEST,
+				environmentKeys: [],
+			},
+		];
+	});
+}
+
+async function flowFeatureComplete(workspace: string, input: unknown) {
+	const session = await loadSession(workspace);
+	if (!session) return executeFlowFeatureComplete(workspace, input);
+	const payload =
+		typeof input === "object" && input !== null
+			? (input as Record<string, unknown>)
+			: {};
+	const { validationRun: _validationRun, ...publicPayload } = payload;
+	return executeFlowFeatureComplete(workspace, {
+		operationId: `persistence-operation-${++operationSequence}`,
+		expectedRevision: session.causal.revision,
+		expectedSnapshotId: session.causal.snapshotId,
+		...(Array.isArray(payload.validationRun)
+			? { validations: completionValidations(payload) }
+			: {}),
+		...publicPayload,
+	});
+}
+
+async function flowFeatureReset(workspace: string, input: unknown) {
+	const session = await loadSession(workspace);
+	const payload =
+		typeof input === "object" && input !== null
+			? (input as Record<string, unknown>)
+			: {};
+	return executeFlowFeatureReset(workspace, {
+		operationId: `persistence-operation-${++operationSequence}`,
+		expectedRevision: session?.causal.revision ?? 0,
+		expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
+		...payload,
+	});
+}
+
+async function flowSessionClose(workspace: string, input: unknown) {
+	const session = await loadSession(workspace);
+	const payload =
+		typeof input === "object" && input !== null
+			? (input as Record<string, unknown>)
+			: {};
+	return executeFlowSessionClose(workspace, {
+		operationId: `persistence-operation-${++operationSequence}`,
+		expectedRevision: session?.causal.revision ?? 0,
+		expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
+		...payload,
+	});
+}
+
+async function flowStatus(workspace: string, input: unknown = {}) {
+	const response = await executeFlowStatus(workspace, input);
+	const session = await loadSession(workspace);
+	return session?.closure
+		? {
+				...response,
+				statusSummary: `Session closed as ${session.closure.kind}; archival is pending.`,
+			}
+		: response;
+}
 
 async function tempWorkspace(): Promise<string> {
 	const root = join(tmpdir(), `flow-workspace-${crypto.randomUUID()}`);
@@ -116,6 +210,32 @@ function finalPayload() {
 			blockingFindings: [],
 			reviewDepth: "broad" as const,
 		},
+		reviewExecutions: [
+			{
+				attemptId: "only-feature-review-1",
+				logicalPassId: "only-feature-review",
+				featureId: "only-feature",
+				reviewKind: "feature" as const,
+				reviewSnapshotId: `sha256:${"a".repeat(64)}`,
+				verdict: "passed" as const,
+				findings: [],
+				startedAt: "2026-07-18T09:00:00.000Z",
+				completedAt: "2026-07-18T09:01:00.000Z",
+				terminalDisposition: "submitted" as const,
+			},
+			{
+				attemptId: "only-final-review-1",
+				logicalPassId: "only-final-review",
+				featureId: "only-feature",
+				reviewKind: "final" as const,
+				reviewSnapshotId: `sha256:${"b".repeat(64)}`,
+				verdict: "passed" as const,
+				findings: [],
+				startedAt: "2026-07-18T09:02:00.000Z",
+				completedAt: "2026-07-18T09:03:00.000Z",
+				terminalDisposition: "submitted" as const,
+			},
+		],
 	};
 }
 
@@ -260,7 +380,9 @@ describe("Flow workspace persistence", () => {
 
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+		).resolves.toBe(
+			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+		);
 	});
 
 	test("applies version 3 defaults to omitted telemetry and review depth", async () => {
@@ -271,9 +393,11 @@ describe("Flow workspace persistence", () => {
 		});
 		const raw = JSON.parse(await readFile(sessionPath(workspace), "utf8")) as {
 			budget?: unknown;
+			causal?: unknown;
 			plan: { features: Array<{ reviewDepth?: string }> };
 		};
 		delete raw.budget;
+		delete raw.causal;
 		delete raw.plan.features[0]?.reviewDepth;
 		await writeFile(sessionPath(workspace), `${JSON.stringify(raw)}\n`, "utf8");
 
@@ -313,6 +437,177 @@ describe("Flow workspace persistence", () => {
 			expect(archived.closure.summary).toBe(`Archived as ${kind}.`);
 			expect(archived.status).toBe("planning");
 		}
+	});
+
+	test("replays an exact archived close without writing or advancing revision", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Replay one archived close",
+			plan: oneFeaturePlan(),
+		});
+		const active = await loadSession(workspace);
+		if (!active) throw new Error("Expected an active session.");
+		const request = {
+			operationId: "archived-close-replay",
+			expectedRevision: active.causal.revision,
+			expectedSnapshotId: active.causal.snapshotId,
+			kind: "deferred" as const,
+			summary: "Archive exactly once.",
+		};
+		const first = await executeFlowSessionClose(workspace, request);
+		expect(first.status).toBe("ok");
+		const [filename] = await readdir(historyDir(workspace));
+		if (!filename) throw new Error("Expected one canonical archive.");
+		const archivePath = join(historyDir(workspace), filename);
+		const beforeBytes = await readFile(archivePath, "utf8");
+		const before = SessionSchema.parse(JSON.parse(beforeBytes));
+
+		const replay = await executeFlowSessionClose(workspace, request);
+
+		expect(replay).toEqual(first);
+		expect(await readFile(archivePath, "utf8")).toBe(beforeBytes);
+		expect(await readdir(historyDir(workspace))).toEqual([filename]);
+		await expect(stat(sessionPath(workspace))).rejects.toThrow();
+		const after = SessionSchema.parse(
+			JSON.parse(await readFile(archivePath, "utf8")),
+		);
+		expect(after.causal.revision).toBe(before.causal.revision);
+
+		for (const changed of [
+			{ ...request, summary: "Changed close intent." },
+			{ ...request, expectedRevision: request.expectedRevision + 1 },
+			{ ...request, kind: "abandoned" as const },
+		]) {
+			const conflict = await executeFlowSessionClose(workspace, changed);
+			expect(conflict.status).toBe("error");
+			expect(conflict.workflowData?.failure?.summary).toContain(
+				"different request",
+			);
+		}
+		const crossKindOperation = before.causal.mutations.find(
+			(mutation) => mutation.operationKind === "plan_save",
+		)?.operationId;
+		if (!crossKindOperation) throw new Error("Expected a plan-save operation.");
+		const crossKind = await executeFlowSessionClose(workspace, {
+			...request,
+			operationId: crossKindOperation,
+		});
+		expect(crossKind.status).toBe("error");
+		expect(crossKind.workflowData?.failure?.summary).toContain(
+			"different request",
+		);
+	});
+
+	test("fails closed on corrupt, ambiguous, and filename-mismatched canonical archives", async () => {
+		const corruptWorkspace = await tempWorkspace();
+		await flowPlanSave(corruptWorkspace, {
+			goal: "Reject corrupt archive history",
+			plan: oneFeaturePlan(),
+		});
+		const corruptActive = await loadSession(corruptWorkspace);
+		if (!corruptActive) throw new Error("Expected an active session.");
+		const corruptRequest = {
+			operationId: "corrupt-archive-close",
+			expectedRevision: corruptActive.causal.revision,
+			expectedSnapshotId: corruptActive.causal.snapshotId,
+			kind: "deferred" as const,
+			summary: "Publish before corruption.",
+		};
+		await executeFlowSessionClose(corruptWorkspace, corruptRequest);
+		await writeFile(
+			join(historyDir(corruptWorkspace), "corrupt.json"),
+			"{bad\n",
+		);
+		const corrupt = await executeFlowSessionClose(
+			corruptWorkspace,
+			corruptRequest,
+		);
+		expect(corrupt.status).toBe("error");
+		expect(JSON.stringify(corrupt)).not.toContain(corruptWorkspace);
+
+		const mismatchWorkspace = await tempWorkspace();
+		await flowPlanSave(mismatchWorkspace, {
+			goal: "Reject mismatched archive filename",
+			plan: oneFeaturePlan(),
+		});
+		const mismatchActive = await loadSession(mismatchWorkspace);
+		if (!mismatchActive) throw new Error("Expected an active session.");
+		const mismatchRequest = {
+			operationId: "mismatch-archive-close",
+			expectedRevision: mismatchActive.causal.revision,
+			expectedSnapshotId: mismatchActive.causal.snapshotId,
+			kind: "deferred" as const,
+		};
+		await executeFlowSessionClose(mismatchWorkspace, mismatchRequest);
+		const [mismatchFilename] = await readdir(historyDir(mismatchWorkspace));
+		if (!mismatchFilename) throw new Error("Expected a canonical archive.");
+		await rename(
+			join(historyDir(mismatchWorkspace), mismatchFilename),
+			join(historyDir(mismatchWorkspace), "different-session.json"),
+		);
+		expect(
+			(await executeFlowSessionClose(mismatchWorkspace, mismatchRequest))
+				.status,
+		).toBe("error");
+
+		const ambiguousWorkspace = await tempWorkspace();
+		const secondWorkspace = await tempWorkspace();
+		for (const workspace of [ambiguousWorkspace, secondWorkspace]) {
+			await flowPlanSave(workspace, {
+				goal: `Ambiguous archive ${workspace}`,
+				plan: oneFeaturePlan(),
+			});
+			const active = await loadSession(workspace);
+			if (!active) throw new Error("Expected an active session.");
+			await executeFlowSessionClose(workspace, {
+				operationId: "ambiguous-archive-close",
+				expectedRevision: active.causal.revision,
+				expectedSnapshotId: active.causal.snapshotId,
+				kind: "deferred",
+			});
+		}
+		const [secondFilename] = await readdir(historyDir(secondWorkspace));
+		if (!secondFilename) throw new Error("Expected a second archive.");
+		await writeFile(
+			join(historyDir(ambiguousWorkspace), secondFilename),
+			await readFile(join(historyDir(secondWorkspace), secondFilename), "utf8"),
+		);
+		const ambiguous = await executeFlowSessionClose(ambiguousWorkspace, {
+			operationId: "ambiguous-archive-close",
+			expectedRevision: 0,
+			expectedSnapshotId: SOURCE_DIGEST,
+			kind: "deferred",
+		});
+		expect(ambiguous.status).toBe("error");
+		expect(ambiguous.workflowData?.failure?.summary).toContain("ambiguous");
+		expect(JSON.stringify(ambiguous)).not.toContain(ambiguousWorkspace);
+	});
+
+	test("never treats quarantine archives as replay sources", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Ignore quarantine replay data",
+			plan: oneFeaturePlan(),
+		});
+		const active = await loadSession(workspace);
+		if (!active) throw new Error("Expected an active session.");
+		const request = {
+			operationId: "quarantined-close",
+			expectedRevision: active.causal.revision,
+			expectedSnapshotId: active.causal.snapshotId,
+			kind: "deferred" as const,
+		};
+		await executeFlowSessionClose(workspace, request);
+		const [filename] = await readdir(historyDir(workspace));
+		if (!filename) throw new Error("Expected a canonical archive.");
+		await rename(
+			join(historyDir(workspace), filename),
+			join(historyDir(workspace), `quarantine-${filename}`),
+		);
+
+		const retry = await executeFlowSessionClose(workspace, request);
+
+		expect(retry.status).toBe("missing_session");
 	});
 
 	test("deferred and abandoned close preserve running and blocked archive state", async () => {
@@ -499,19 +794,23 @@ describe("Flow workspace persistence", () => {
 		const active = await loadSession(workspace);
 		if (!active) throw new Error("Expected an active session.");
 		const recordedAt = "2026-07-17T12:00:00.000Z";
-		const closed = await saveSession(workspace, {
-			...active,
-			activeFeatureId: null,
-			closure: {
-				kind: "deferred",
-				summary: "Retry the same close.",
-				recordedAt,
-			},
-			timestamps: {
-				...active.timestamps,
-				updatedAt: recordedAt,
-			},
-		});
+		const { causal: _legacyCausal, ...sparseActive } = active;
+		const closed = await saveSession(
+			workspace,
+			SessionSchema.parse({
+				...sparseActive,
+				activeFeatureId: null,
+				closure: {
+					kind: "deferred",
+					summary: "Retry the same close.",
+					recordedAt,
+				},
+				timestamps: {
+					...active.timestamps,
+					updatedAt: recordedAt,
+				},
+			}),
+		);
 		await mkdir(historyDir(workspace), { recursive: true });
 		const archivePath = archivedSessionPath(workspace, active.id);
 		const publishedContents = await readFile(sessionPath(workspace), "utf8");
@@ -536,12 +835,14 @@ describe("Flow workspace persistence", () => {
 		});
 		const active = await loadSession(workspace);
 		if (!active) throw new Error("Expected an active session.");
+		const { causal: _legacyCausal, ...sparseActive } = active;
+		const different = SessionSchema.parse({
+			...sparseActive,
+			goal: "A different snapshot",
+		});
 
 		await expect(
-			archiveAndClearSession(workspace, {
-				...active,
-				goal: "A different snapshot",
-			}),
+			archiveAndClearSession(workspace, different),
 		).rejects.toBeInstanceOf(ArchiveCollisionError);
 		expect((await loadSession(workspace))?.goal).toBe(
 			"Reject stale archive input",
@@ -571,7 +872,9 @@ describe("Flow workspace persistence", () => {
 		expect(historyFiles[0]?.endsWith(".json")).toBe(true);
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+		).resolves.toBe(
+			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+		);
 	});
 
 	test("a completed session must be archived before starting a new goal", async () => {
@@ -768,7 +1071,9 @@ describe("unreadable session quarantine", () => {
 		expect(archived.some((name) => name.startsWith("quarantine-"))).toBe(true);
 		await expect(
 			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
-		).resolves.toBe("session.json\nhistory/\nsession.lock/\n.gitignore\n");
+		).resolves.toBe(
+			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+		);
 
 		const next = await flowPlanSave(workspace, { goal: "Recover cleanly" });
 		expect(next.status).toBe("ok");

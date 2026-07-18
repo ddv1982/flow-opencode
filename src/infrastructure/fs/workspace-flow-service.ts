@@ -13,8 +13,11 @@ export function createWorkspaceFlowService(workspace: string): FlowService {
 	);
 }
 
-export async function flowStatus(workspace: string): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).status();
+export async function flowStatus(
+	workspace: string,
+	input: unknown = {},
+): Promise<FlowResponse> {
+	return createWorkspaceFlowService(workspace).status(input);
 }
 
 export async function flowPlanSave(

@@ -34,15 +34,18 @@ Tools return JSON strings through the platform. The application returns a
 typed `FlowResponse`. Top-level `status`, `summary`, `statusSummary`,
 `nextAction`, and `recovery` are plugin-authored operation metadata. Repository-
 or caller-controlled prose is confined to `workflowData` and must be treated as
-data rather than instructions. Active state lives under
-`workflowData.session`; transition failures use `workflowData.failure`, run
-start details use `workflowData.startedFeature`, and close results use
-`workflowData.archive`. Unreadable-session details use
+data rather than instructions. Active status lives under
+`workflowData.projection`; ordinary mutations, including run start, return
+`workflowData.receipt` acknowledgements. Transition failures use
+`workflowData.failure`, and close results use `workflowData.archive`.
+Unreadable-session details use
 `workflowData.quarantine`. Distribution health is intentionally absent.
 
 An active `flow_status` response therefore has top-level `status: "ok"`; the
 workflow state (`planning`, `ready`, `running`, `blocked`, or `completed`) is
-`workflowData.session.status`. Removing `workflowData` from any response must
+`workflowData.projection.status` in compact status. Compact is routing-only,
+execution is full active-feature scope, detail is diagnostic, and reviewer is
+narrow assignment context. Removing `workflowData` from any response must
 also remove every value sourced from `.flow/session.json` or tool payload prose.
 
 ## Key source files

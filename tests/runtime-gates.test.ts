@@ -2,20 +2,246 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { FlowResponse } from "../src/application/flow-service.js";
 import {
 	type OrchestrationPassRecord,
 	type OrchestrationTelemetry,
 	WorkerResultSchema,
 } from "../src/application/schema.js";
+import type { ReviewExecutionInput, Session } from "../src/domain/session.js";
+import { loadSession } from "../src/infrastructure/fs/workspace.js";
 import {
-	flowFeatureComplete,
-	flowFeatureReset,
-	flowPlanApprove,
-	flowPlanSave,
-	flowRunStart,
-	flowSessionClose,
-	flowStatus,
+	flowFeatureComplete as executeFlowFeatureComplete,
+	flowFeatureReset as executeFlowFeatureReset,
+	flowPlanApprove as executeFlowPlanApprove,
+	flowPlanSave as executeFlowPlanSave,
+	flowRunStart as executeFlowRunStart,
+	flowSessionClose as executeFlowSessionClose,
+	flowStatus as executeFlowStatus,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
+
+type TestSession = Session & {
+	sourceSummary: string;
+	features: NonNullable<Session["plan"]>["features"];
+	nextFeature: NonNullable<Session["plan"]>["features"][number] | null;
+	pendingFeatures: NonNullable<Session["plan"]>["features"];
+	latestHistoryEntry: Session["history"][number] | null;
+	historyCount: number;
+	progress: { completed: number; total: number; remaining: number };
+};
+
+type TestFlowResponse = FlowResponse & {
+	workflowData?: NonNullable<FlowResponse["workflowData"]> & {
+		session?: TestSession;
+	};
+};
+
+let operationSequence = 0;
+const completionResponseCache = new WeakMap<object, FlowResponse>();
+const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
+const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
+
+function completionValidations(payload: Record<string, unknown>) {
+	const validations = Array.isArray(payload.validationRun)
+		? payload.validationRun
+		: [];
+	return validations.flatMap((run) => {
+		if (
+			typeof run !== "object" ||
+			run === null ||
+			!("command" in run) ||
+			typeof run.command !== "string"
+		) {
+			return [];
+		}
+		return [
+			{
+				command: run.command,
+				summary:
+					"summary" in run && typeof run.summary === "string"
+						? run.summary
+						: "Validation result.",
+				startedAt: "2026-07-18T08:58:00.000Z",
+				completedAt: "2026-07-18T08:59:00.000Z",
+				exitCode: "status" in run && run.status === "passed" ? 0 : 1,
+				outputDigest: OUTPUT_DIGEST,
+				environmentKeys: [],
+			},
+		];
+	});
+}
+
+function decorateSession(session: Session): TestSession {
+	const features = session.plan?.features ?? [];
+	const completed = features.filter(
+		(feature) => feature.status === "completed",
+	).length;
+	const nextFeature =
+		features.find((feature) => feature.status === "pending") ?? null;
+	return {
+		...session,
+		sourceSummary:
+			session.history.at(-1)?.summary ?? session.plan?.summary ?? session.goal,
+		features,
+		nextFeature,
+		pendingFeatures: features.filter(
+			(feature) => feature.status !== "completed",
+		),
+		latestHistoryEntry: session.history.at(-1) ?? null,
+		historyCount: session.history.length,
+		progress: {
+			completed,
+			total: features.length,
+			remaining: features.length - completed,
+		},
+	};
+}
+
+async function withTestSession(
+	workspace: string,
+	response: FlowResponse,
+): Promise<TestFlowResponse> {
+	try {
+		const session = await loadSession(workspace);
+		if (!session) return response;
+		const features = session.plan?.features ?? [];
+		const completed = features.filter(
+			(feature) => feature.status === "completed",
+		).length;
+		const active = session.activeFeatureId;
+		const next = features.find((feature) => feature.status === "pending")?.id;
+		return {
+			...response,
+			statusSummary:
+				response.statusSummary ??
+				`Progress ${completed}/${features.length}${active ? `; active: ${active}` : next ? `; next: ${next}` : ""}`,
+			workflowData: {
+				...response.workflowData,
+				session: decorateSession(session),
+			},
+		};
+	} catch {
+		return response;
+	}
+}
+
+async function flowStatus(
+	workspace: string,
+	input: unknown = {},
+): Promise<TestFlowResponse> {
+	return withTestSession(workspace, await executeFlowStatus(workspace, input));
+}
+
+async function flowPlanSave(
+	workspace: string,
+	input: unknown,
+): Promise<TestFlowResponse> {
+	return withTestSession(
+		workspace,
+		await executeFlowPlanSave(workspace, input),
+	);
+}
+
+async function flowPlanApprove(workspace: string): Promise<TestFlowResponse> {
+	return withTestSession(workspace, await executeFlowPlanApprove(workspace));
+}
+
+async function flowRunStart(
+	workspace: string,
+	input: unknown,
+): Promise<TestFlowResponse> {
+	return withTestSession(
+		workspace,
+		await executeFlowRunStart(workspace, input),
+	);
+}
+
+async function flowFeatureComplete(
+	workspace: string,
+	input: unknown,
+): Promise<TestFlowResponse> {
+	if (typeof input === "object" && input !== null) {
+		const cached = completionResponseCache.get(input);
+		if (cached) return withTestSession(workspace, cached);
+	}
+	const session = await loadSession(workspace);
+	const payload =
+		typeof input === "object" && input !== null
+			? (input as Record<string, unknown>)
+			: {};
+	const operationId = `runtime-operation-${++operationSequence}`;
+	const normalizedPayload: Record<string, unknown> = {
+		...payload,
+		...(Array.isArray(payload.reviewExecutions)
+			? {
+					reviewExecutions: (
+						payload.reviewExecutions as ReviewExecutionInput[]
+					).map((execution) => ({
+						...execution,
+						attemptId: `${execution.attemptId}-${operationId}`,
+					})),
+				}
+			: {}),
+	};
+	const { validationRun: _validationRun, ...publicNormalizedPayload } =
+		normalizedPayload;
+	const guarded = session
+		? {
+				operationId,
+				expectedRevision: session.causal.revision,
+				expectedSnapshotId: session.causal.snapshotId,
+				...(Array.isArray(normalizedPayload.validationRun)
+					? { validations: completionValidations(normalizedPayload) }
+					: {}),
+				...publicNormalizedPayload,
+			}
+		: input;
+	const response = await executeFlowFeatureComplete(workspace, guarded);
+	if (typeof input === "object" && input !== null) {
+		completionResponseCache.set(input, response);
+	}
+	return withTestSession(workspace, response);
+}
+
+async function flowFeatureReset(
+	workspace: string,
+	input: unknown,
+): Promise<TestFlowResponse> {
+	const session = await loadSession(workspace);
+	const payload =
+		typeof input === "object" && input !== null
+			? (input as Record<string, unknown>)
+			: {};
+	return withTestSession(
+		workspace,
+		await executeFlowFeatureReset(workspace, {
+			operationId: `runtime-operation-${++operationSequence}`,
+			expectedRevision: session?.causal.revision ?? 0,
+			expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
+			...payload,
+		}),
+	);
+}
+
+async function flowSessionClose(
+	workspace: string,
+	input: unknown,
+): Promise<TestFlowResponse> {
+	const session = await loadSession(workspace);
+	const payload =
+		typeof input === "object" && input !== null
+			? (input as Record<string, unknown>)
+			: {};
+	return withTestSession(
+		workspace,
+		await executeFlowSessionClose(workspace, {
+			operationId: `runtime-operation-${++operationSequence}`,
+			expectedRevision: session?.causal.revision ?? 0,
+			expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
+			...payload,
+		}),
+	);
+}
 
 async function tempWorkspace(): Promise<string> {
 	return mkdtemp(join(tmpdir(), "flow-runtime-"));
@@ -50,6 +276,16 @@ function twoFeaturePlan() {
 }
 
 function completePayload(featureId: string, scope: "targeted" | "broad") {
+	const featureExecution = reviewExecution(
+		featureId,
+		"feature",
+		"passed",
+		"pass",
+	);
+	const finalExecutions =
+		featureId === "final-feature"
+			? [reviewExecution(featureId, "final", "passed", "pass")]
+			: [];
 	return {
 		status: "ok" as const,
 		featureId,
@@ -69,6 +305,44 @@ function completePayload(featureId: string, scope: "targeted" | "broad") {
 			summary: "Reviewed changed files and validation.",
 			blockingFindings: [],
 		},
+		reviewExecutions: [featureExecution, ...finalExecutions],
+	};
+}
+
+function reviewExecution(
+	featureId: string,
+	reviewKind: "feature" | "final",
+	verdict: "passed" | "failed",
+	attempt: string,
+) {
+	const isFinal = reviewKind === "final";
+	return {
+		attemptId: `${featureId}-${reviewKind}-${attempt}`,
+		logicalPassId: `${featureId}-${reviewKind}-review`,
+		featureId,
+		reviewKind,
+		reviewSnapshotId: `sha256:${(isFinal ? "b" : "a").repeat(64)}`,
+		verdict,
+		findings:
+			verdict === "failed"
+				? [
+						{
+							taxonomy: "implementation_defect" as const,
+							subject: `src/${featureId}.ts`,
+							requirementOrRisk: `${reviewKind} review must pass`,
+							evidenceLocator: `src/${featureId}.ts:1`,
+							summary: "Missing behavior test.",
+							severity: "blocking" as const,
+						},
+					]
+				: [],
+		startedAt: isFinal
+			? "2026-07-18T09:02:00.000Z"
+			: "2026-07-18T09:00:00.000Z",
+		completedAt: isFinal
+			? "2026-07-18T09:03:00.000Z"
+			: "2026-07-18T09:01:00.000Z",
+		terminalDisposition: "submitted" as const,
 	};
 }
 
@@ -324,7 +598,7 @@ describe("Flow runtime gates", () => {
 		});
 		expect(missingValidation.status).toBe("error");
 		expect(String(missingValidation.workflowData?.failure?.summary)).toContain(
-			"validation evidence",
+			"validations",
 		);
 
 		const failedValidation = await flowFeatureComplete(workspace, {
@@ -352,6 +626,9 @@ describe("Flow runtime gates", () => {
 
 		const failedReview = await flowFeatureComplete(workspace, {
 			...completePayload("first-feature", "targeted"),
+			reviewExecutions: [
+				reviewExecution("first-feature", "feature", "failed", "failure-1"),
+			],
 			featureReview: {
 				status: "failed",
 				summary: "A blocker remains.",
@@ -610,7 +887,7 @@ describe("Flow runtime gates", () => {
 		expect(afterSecond.latestPasses).toHaveLength(50);
 	});
 
-	test("rejects candidate decision usage without execution evidence", async () => {
+	test("drops candidate decision usage without execution evidence", async () => {
 		const workspace = await tempWorkspace();
 		await approvedTwoFeatureSession(workspace);
 		await flowRunStart(workspace, {});
@@ -632,7 +909,8 @@ describe("Flow runtime gates", () => {
 				}),
 			],
 		});
-		expect(completed.status).toBe("error");
+		expect(completed.status).toBe("ok");
+		expect(completed.warnings).toHaveLength(1);
 
 		const telemetry = await orchestrationTelemetry(workspace);
 		expect(telemetry.candidatePassCount).toBe(0);
@@ -640,7 +918,7 @@ describe("Flow runtime gates", () => {
 		expect(telemetry.latestPasses).toEqual([]);
 	});
 
-	test("rejects serial implementation decisions that claim candidate usage", async () => {
+	test("drops serial implementation decisions that claim candidate usage", async () => {
 		const workspace = await tempWorkspace();
 		await approvedTwoFeatureSession(workspace);
 		await flowRunStart(workspace, {});
@@ -662,7 +940,8 @@ describe("Flow runtime gates", () => {
 				}),
 			],
 		});
-		expect(completed.status).toBe("error");
+		expect(completed.status).toBe("ok");
+		expect(completed.warnings).toHaveLength(1);
 
 		const telemetry = await orchestrationTelemetry(workspace);
 		expect(telemetry.passCount).toBe(0);
@@ -671,7 +950,7 @@ describe("Flow runtime gates", () => {
 		expect(telemetry.latestPasses).toEqual([]);
 	});
 
-	test("rejects candidate accounting decisions on non-implementation passes", async () => {
+	test("drops candidate accounting decisions on non-implementation passes", async () => {
 		const workspace = await tempWorkspace();
 		await approvedTwoFeatureSession(workspace);
 		await flowRunStart(workspace, {});
@@ -689,7 +968,8 @@ describe("Flow runtime gates", () => {
 				}),
 			],
 		});
-		expect(completed.status).toBe("error");
+		expect(completed.status).toBe("ok");
+		expect(completed.warnings).toHaveLength(1);
 
 		const telemetry = await orchestrationTelemetry(workspace);
 		expect(telemetry.passCount).toBe(0);
@@ -699,7 +979,7 @@ describe("Flow runtime gates", () => {
 		expect(telemetry.latestPasses).toEqual([]);
 	});
 
-	test("rejects orchestration subtype worker counts above total workers", async () => {
+	test("drops orchestration subtype worker counts above total workers", async () => {
 		const workspace = await tempWorkspace();
 		await approvedTwoFeatureSession(workspace);
 		await flowRunStart(workspace, {});
@@ -721,7 +1001,8 @@ describe("Flow runtime gates", () => {
 				}),
 			],
 		});
-		expect(completed.status).toBe("error");
+		expect(completed.status).toBe("ok");
+		expect(completed.warnings).toHaveLength(1);
 
 		const telemetry = await orchestrationTelemetry(workspace);
 		expect(telemetry.passCount).toBe(0);
@@ -839,6 +1120,9 @@ describe("Flow runtime gates", () => {
 		});
 		const failedReview = await flowFeatureComplete(workspace, {
 			...completePayload("first-feature", "targeted"),
+			reviewExecutions: [
+				reviewExecution("first-feature", "feature", "failed", "failure-1"),
+			],
 			featureReview: {
 				status: "failed" as const,
 				summary: "A blocker remains.",
@@ -905,7 +1189,7 @@ describe("Flow runtime gates", () => {
 		);
 	});
 
-	test("rejects completion payloads above the orchestration pass limit", async () => {
+	test("drops completion telemetry above the orchestration pass limit", async () => {
 		const workspace = await tempWorkspace();
 		await approvedTwoFeatureSession(workspace);
 		await flowRunStart(workspace, {});
@@ -916,8 +1200,8 @@ describe("Flow runtime gates", () => {
 				orchestrationPass(`first-feature-pass-${index}`),
 			),
 		});
-		expect(completed.status).toBe("error");
-		expect(completed.summary).toContain("payload is invalid");
+		expect(completed.status).toBe("ok");
+		expect(completed.warnings).toHaveLength(1);
 
 		const telemetry = await orchestrationTelemetry(workspace);
 		expect(telemetry.passCount).toBe(0);
@@ -932,6 +1216,9 @@ describe("Flow runtime gates", () => {
 
 		const failedReviewPayload = {
 			...completePayload("first-feature", "targeted"),
+			reviewExecutions: [
+				reviewExecution("first-feature", "feature", "failed", "failure-1"),
+			],
 			featureReview: {
 				status: "failed" as const,
 				summary: "A blocker remains.",
@@ -950,10 +1237,25 @@ describe("Flow runtime gates", () => {
 			"running",
 		);
 
-		const retryFailure = await flowFeatureComplete(
+		const duplicateFailure = await flowFeatureComplete(
 			workspace,
 			failedReviewPayload,
 		);
+		expect(duplicateFailure.status).toBe("error");
+		expect(String(duplicateFailure.workflowData?.failure?.recovery)).toContain(
+			"at most one repair",
+		);
+		expect(duplicateFailure.workflowData?.session?.status).toBe("running");
+		expect(
+			duplicateFailure.workflowData?.session?.budget.failedReviewCount,
+		).toBe(1);
+
+		const retryFailure = await flowFeatureComplete(workspace, {
+			...failedReviewPayload,
+			reviewExecutions: [
+				reviewExecution("first-feature", "feature", "failed", "failure-2"),
+			],
+		});
 		expect(retryFailure.status).toBe("error");
 		expect(String(retryFailure.workflowData?.failure?.summary)).toContain(
 			"retry budget",
@@ -987,6 +1289,10 @@ describe("Flow runtime gates", () => {
 
 		const failedFinalReviewPayload = {
 			...completePayload("final-feature", "broad"),
+			reviewExecutions: [
+				reviewExecution("final-feature", "feature", "passed", "pass"),
+				reviewExecution("final-feature", "final", "failed", "failure-1"),
+			],
 			finalReview: {
 				...finalReview(),
 				status: "failed" as const,
@@ -1006,10 +1312,23 @@ describe("Flow runtime gates", () => {
 			"running",
 		);
 
-		const retryFailure = await flowFeatureComplete(
+		const duplicateFailure = await flowFeatureComplete(
 			workspace,
 			failedFinalReviewPayload,
 		);
+		expect(duplicateFailure.status).toBe("error");
+		expect(duplicateFailure.workflowData?.session?.status).toBe("running");
+		expect(
+			duplicateFailure.workflowData?.session?.budget.failedReviewCount,
+		).toBe(1);
+
+		const retryFailure = await flowFeatureComplete(workspace, {
+			...failedFinalReviewPayload,
+			reviewExecutions: [
+				reviewExecution("final-feature", "feature", "passed", "retry-pass"),
+				reviewExecution("final-feature", "final", "failed", "failure-2"),
+			],
+		});
 		expect(retryFailure.status).toBe("error");
 		expect(String(retryFailure.workflowData?.failure?.summary)).toContain(
 			"retry budget",
@@ -1056,7 +1375,7 @@ describe("Flow runtime gates", () => {
 		expect(String(status.statusSummary)).toContain("Progress 3/4");
 		expect(String(status.statusSummary)).toContain("feature-four");
 		expect(String(status.nextAction)).toContain(
-			"workflowData.session.nextFeature",
+			"workflowData.projection.feature",
 		);
 		expect(
 			(workflowSession(status) as { nextFeature: { id: string } | null })
@@ -1090,7 +1409,7 @@ describe("Flow runtime gates", () => {
 			"active: feature-four",
 		);
 		expect(String(runningStatus.nextAction)).toContain(
-			"workflowData.session.activeFeature",
+			"workflowData.projection.feature",
 		);
 		expect(
 			(workflowSession(runningStatus) as { budget: { reviewCount: number } })
@@ -1132,6 +1451,10 @@ describe("Flow runtime gates", () => {
 
 		const failedFinalReview = await flowFeatureComplete(workspace, {
 			...completePayload("final-feature", "broad"),
+			reviewExecutions: [
+				reviewExecution("final-feature", "feature", "passed", "pass"),
+				reviewExecution("final-feature", "final", "failed", "failure-1"),
+			],
 			finalReview: {
 				...finalReview(),
 				status: "failed" as const,
@@ -1146,6 +1469,10 @@ describe("Flow runtime gates", () => {
 
 		const wrongReviewDepth = await flowFeatureComplete(workspace, {
 			...completePayload("final-feature", "broad"),
+			reviewExecutions: [
+				reviewExecution("final-feature", "feature", "passed", "retry-pass"),
+				reviewExecution("final-feature", "final", "passed", "retry-pass"),
+			],
 			finalReview: {
 				...finalReview(),
 				reviewDepth: "broad" as const,
@@ -1226,6 +1553,10 @@ describe("Flow runtime gates", () => {
 
 		const parsed = WorkerResultSchema.parse({
 			status: "needs_input",
+			operationId: "runtime-schema-needs-input",
+			expectedRevision: 0,
+			expectedSnapshotId: SOURCE_DIGEST,
+			requestDigest: SOURCE_DIGEST,
 			featureId: "first-feature",
 			summary: "Need operator input.",
 			outcome: {

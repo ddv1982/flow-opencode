@@ -6,6 +6,7 @@ import {
 	lstat,
 	mkdir,
 	open,
+	readdir,
 	rename,
 	rm,
 	writeFile,
@@ -14,6 +15,7 @@ import { homedir, hostname } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { UnreadableFlowSessionError } from "../../application/errors.js";
+import { ArchivedSessionLookupError } from "../../application/ports/session-repository.js";
 import { SessionSchema } from "../../application/schema.js";
 import type { Session } from "../../domain/session.js";
 import { parseStrictJsonObject } from "./strict-json-object.js";
@@ -498,6 +500,73 @@ export async function loadSession(worktree: string): Promise<Session | null> {
 	return result.data;
 }
 
+const CANONICAL_ARCHIVE_FILENAME = /^[a-zA-Z0-9_-]+\.json$/;
+
+export async function findArchivedSessionByOperationId(
+	worktree: string,
+	operationId: string,
+): Promise<Session | null> {
+	const root = assertMutableWorkspaceRoot(worktree);
+	try {
+		if (
+			(await managedDirectoryState(
+				flowDir(root),
+				"the Flow state directory",
+			)) === "missing" ||
+			(await managedDirectoryState(
+				historyDir(root),
+				"the Flow session history directory",
+			)) === "missing"
+		) {
+			return null;
+		}
+		const matches: Session[] = [];
+		for (const filename of (await readdir(historyDir(root))).sort()) {
+			if (
+				filename.startsWith("quarantine-") ||
+				!CANONICAL_ARCHIVE_FILENAME.test(filename)
+			) {
+				continue;
+			}
+			const contents = await readManagedFile(
+				join(historyDir(root), filename),
+				"the Flow session archive",
+			);
+			const parsed = parseStrictJsonObject(contents, "Flow session archive");
+			if (!parsed.ok) {
+				throw new ArchivedSessionLookupError(
+					"Flow could not verify canonical archived session history.",
+				);
+			}
+			const session = SessionSchema.safeParse(parsed.value);
+			if (!session.success || filename !== `${session.data.id}.json`) {
+				throw new ArchivedSessionLookupError(
+					"Flow could not verify canonical archived session history.",
+				);
+			}
+			if (
+				session.data.causal.mutations.some(
+					(mutation) => mutation.operationId === operationId,
+				)
+			) {
+				matches.push(session.data);
+			}
+		}
+		if (matches.length > 1) {
+			throw new ArchivedSessionLookupError(
+				"Flow found ambiguous archived operation history.",
+			);
+		}
+		return matches[0] ?? null;
+	} catch (error) {
+		if (error instanceof ArchivedSessionLookupError) throw error;
+		throw new ArchivedSessionLookupError(
+			"Flow could not verify archived operation history safely.",
+			{ cause: error },
+		);
+	}
+}
+
 export async function quarantineUnreadableSession(
 	worktree: string,
 ): Promise<string | null> {
@@ -619,14 +688,18 @@ export async function archiveAndClearSession(
 const FLOW_GITIGNORE_CONTENT = [
 	"session.json",
 	"history/",
+	"evidence/",
 	"session.lock/",
 	".gitignore",
 	"",
 ].join("\n");
 
-const LEGACY_FLOW_GITIGNORE_CONTENTS = new Set(["session.lock/"]);
+const LEGACY_FLOW_GITIGNORE_CONTENTS = new Set([
+	"session.lock/",
+	["session.json", "history/", "session.lock/", ".gitignore"].join("\n"),
+]);
 
-async function ensureFlowGitignore(worktree: string): Promise<void> {
+export async function ensureFlowGitignore(worktree: string): Promise<void> {
 	const path = join(flowDir(worktree), ".gitignore");
 	await ensureFlowDirectory(worktree);
 	const state = await managedFileState(path, "the Flow ignore file");
@@ -638,6 +711,16 @@ async function ensureFlowGitignore(worktree: string): Promise<void> {
 		const existing = await readManagedFile(path, "the Flow ignore file");
 		if (LEGACY_FLOW_GITIGNORE_CONTENTS.has(existing.trimEnd())) {
 			await writeFileAtomically(path, FLOW_GITIGNORE_CONTENT);
+		} else if (!existing.trimEnd().endsWith(FLOW_GITIGNORE_CONTENT.trimEnd())) {
+			// Preserve maintainer-owned entries, but finish with Flow's complete
+			// ignore block so an earlier negation cannot expose restricted runtime
+			// evidence to ordinary Git staging.
+			const separator =
+				existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+			await writeFileAtomically(
+				path,
+				`${existing}${separator}${FLOW_GITIGNORE_CONTENT}`,
+			);
 		}
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;

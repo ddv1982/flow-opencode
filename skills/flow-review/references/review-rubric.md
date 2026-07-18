@@ -4,12 +4,16 @@ Use this to decide whether a `featureReview` or `finalReview` payload may pass.
 
 ## Finding classes
 
-- **correctness**: wrong result, broken state transition, bad edge case, race, data loss, or crash.
-- **contract**: public API, CLI, config, persisted data, or documented behavior changed without plan approval.
-- **security/privacy**: unsafe input handling, secret exposure, permission bypass, or insecure default.
-- **test-coverage**: behavioral change lacks a check strong enough for the risk.
-- **maintainability**: complexity or coupling creates concrete future-change risk.
-- **ui/accessibility**: user cannot complete the workflow, layout breaks, accessibility basics fail, or visual claims lack evidence.
+- `implementation_defect`: incorrect behavior, unsafe contract, security/privacy
+  issue, or concrete maintainability/UI defect.
+- `regression_coverage_gap`: changed behavior lacks a check strong enough for its risk.
+- `evidence_gap`: supplied evidence cannot support a claimed result or coverage.
+- `advisory`: non-blocking improvement that does not invalidate the current goal.
+
+Each typed finding also records `subject`, `requirementOrRisk`,
+`evidenceLocator`, `summary`, and `severity`. Flow computes its stable
+fingerprint from normalized taxonomy + subject + requirement/risk + evidence
+locator, excluding attempt and timing data.
 
 ## Severity
 
@@ -68,33 +72,23 @@ approved goal and requirements, even if each individual feature review passed.
 
 ## Payloads
 
-Feature review:
+Feature review verdict and execution:
 
 ```json
 {
   "featureReviewDepth": "standard",
-  "featureReview": {
-    "status": "passed",
-    "summary": "Reviewed changed runtime files and focused tests; validation covers the new gate.",
-    "blockingFindings": []
-  }
-}
-```
-
-Failed feature review:
-
-```json
-{
-  "featureReviewDepth": "detailed",
-  "featureReview": {
-    "status": "failed",
-    "summary": "Validation does not exercise the changed persistence path.",
-    "blockingFindings": [
-      {
-        "summary": "No test covers archive removal of .flow/session.json after close.",
-        "severity": "blocking"
-      }
-    ]
+  "featureReview": { "status": "passed", "summary": "Reviewed the changed behavior and evidence.", "blockingFindings": [] },
+  "reviewExecution": {
+    "attemptId": "attempt-1",
+    "logicalPassId": "feature-pass",
+    "featureId": "feature-id",
+    "reviewKind": "feature",
+    "reviewSnapshotId": "sha256:digest",
+    "verdict": "passed",
+    "findings": [],
+    "startedAt": "ISO-8601",
+    "completedAt": "ISO-8601",
+    "terminalDisposition": "submitted"
   }
 }
 ```

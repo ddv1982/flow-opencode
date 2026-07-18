@@ -23,6 +23,12 @@ Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction
   at the feature's planned depth or reset/replan if the depth was chosen
   incorrectly.
 - `Completion requires a passing featureReview`: run or request a real review and include a passing `featureReview` only when there are no blocking findings.
+- `Review execution evidence is missing`: append every observed attempt to
+  `reviewExecutions`, including failed `observed_unsubmitted` attempts; do not
+  substitute optional orchestration telemetry.
+- Final feature awaiting review: keep it `in_progress`; awaiting review is not a blocker.
+- Contradictory verdicts for one review snapshot: stop. Economy mode forbids
+  early final-review dispatch, and speculative mode remains disabled.
 - `Review retry budget exhausted`: stop and report the remaining blocker. Do
   not keep patching; reset or replan only after explicit user direction.
 - `Final feature completion requires a finalReview`: perform final review and include `finalReview`.

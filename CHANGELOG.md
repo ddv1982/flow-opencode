@@ -2,6 +2,38 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.1.0] - 2026-07-18
+
+Causal evidence and review truth lore makes long-running Flow work compact,
+retry-safe, and auditable without putting raw evidence into model-visible state:
+
+- Session v3 gains additive revision and snapshot identity, an authenticated
+  mutation ledger, and guarded idempotent operations. Existing sparse v3
+  sessions hydrate to the canonical revision-zero state without a migration.
+- `flow_status` now separates compact routing, complete execution, bounded
+  detail, reviewer, and revision-delta projections. Mutations return receipts
+  instead of the full session; the checked-in six-feature fixture preserves all
+  transition decisions while reducing measured stateful response bytes by
+  93.95%, with the unavailable historical same-corpus gate reported as such.
+- Validation evidence is bound to a deterministic source digest. Optional raw
+  output lives in an owner-only, hash-addressed `.flow/evidence` store with
+  strict size, permission, symlink, integrity, and no-clobber checks; ordinary
+  state records only typed digest and length references.
+- Review executions are durable independently of completion, with stable
+  attempt and logical-pass identity, typed finding fingerprints, append-only
+  failed-to-passed retry history, contradiction checks, and explicit final-
+  feature chronology. Malformed optional orchestration telemetry can no longer
+  erase valid core review evidence.
+- A provider-neutral sanitized replay oracle derives terminal and retry truth
+  from event causality, rejects private or unsafe fixture content, and keeps
+  host facts, Flow-ledger claims, supplied observations, and replay-derived
+  facts distinct. New `replay:report` and `transport:report` commands expose the
+  reproducible local reports.
+- Manager and reviewer guidance now routes from compact status to exact
+  execution context, records every observed review attempt, performs final
+  feature validation and reviews in economy order, and closes only from a
+  refreshed compact projection.
+
 ## [5.0.0] - 2026-07-18
 
 TypeScript 7 hard-cutover lore makes Flow 5 smaller, stricter, and easier to

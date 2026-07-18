@@ -11,18 +11,23 @@ Routing: the root manager owns the whole loop and every state-changing `flow_*` 
 
 ## Loop
 
-1. Call `flow_status` first. Trust its active session and next action over conversation memory.
-   If `workflowData.session.closure` is present, do not run, reset, approve, or
-   replan. Retry `flow_session_close` with the recorded closure kind to finish
-   archiving the session.
-2. If there is no active session and the user gave a goal, load `flow-plan`, save a plan with `flow_plan_save`, then approve it with `flow_plan_approve` only after explicit user approval or prior authorization for autonomous implementation. If there is no goal, ask for one.
-3. Use the compiled `flow-run` guidance, call `flow_run_start`, implement exactly one feature, validate it, and prepare a `flow_feature_complete` payload. For validation-heavy, regression-sensitive, browser QA, route QA, or failure-prone work, call `flow_guidance` with `id: "flow-test"` to choose and summarize evidence before completion.
-4. Load `flow-review` for the required feature review. Send a bounded review
-   packet, not the accumulated root transcript. The reviewer reports
-   `featureReviewDepth` and `featureReview`; the manager records both inside
-   `flow_feature_complete`.
-5. On the final feature, run broad validation and include `finalReview` in the same `flow_feature_complete` call. Its `reviewDepth` must match the plan's `finalReviewPolicy`.
-6. After all features are complete, archive the session with `flow_session_close` using `kind: "completed"`.
+1. Call `flow_status` with `view: "compact"`; read state only from
+   `workflowData.projection`. If `projection.closure.kind` exists, retry guarded
+   `flow_session_close` with that kind and stop ordinary mutation.
+2. Without a session, use `flow-plan` to save and, after explicit approval or
+   prior autonomous authorization, approve the user's goal. Ask when no goal exists.
+3. When ready, call `flow_run_start`; its receipt only acknowledges the start.
+   For fresh or resumed running work, load `flow_status` with
+   `view: "execution"` and use its active-feature scope and causal guards.
+4. Implement, validate, and review exactly that scope, then prepare
+   `flow_feature_complete`. Load `flow-test` for complex or failure-prone validation.
+5. On the final feature, economy mode is exactly `targeted validation -> feature
+   review -> one authorized bounded repair/retry if needed -> broad validation
+   after the last functional edit -> final review -> one atomic
+   flow_feature_complete`. The final review depth matches `finalReviewPolicy`.
+6. Immediately call `flow_status` with `view: "compact"` after completion.
+   Close from refreshed `projection.closure.kind`; otherwise start the next
+   ready feature and load execution, or report the blocker. Never route from a receipt.
 
 For broad discovery, audit, validation, review, verification, or candidate work,
 request `flow/references/parallel-orchestration.md` from `flow_guidance` as the
@@ -50,7 +55,9 @@ and do not claim helper checks were completed.
 ## Runtime Surface
 
 - `flow_guidance`: load exact package-owned guidance by stable id; it never changes Flow state.
-- `flow_status`: read the active session.
+- `flow_status`: read a bounded projection; compact is routing-only, execution
+  is the full active-feature working scope, detail is diagnostic, and reviewer
+  is narrow review assignment context.
 - `flow_plan_save`: create a session and/or save a draft plan.
 - `flow_plan_approve`: lock the draft plan.
 - `flow_run_start`: start one runnable feature.

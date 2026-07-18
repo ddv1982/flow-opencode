@@ -26,7 +26,8 @@ src/application/ports/session-repository.ts
 | `applyPlan` | `src/domain/transitions.ts` | Validates and applies a draft plan. |
 | `startRun` | `src/domain/transitions.ts` | Starts the next runnable feature. |
 | `completeFeature` | `src/domain/transitions.ts` | Records completion or blocker history. |
-| `summarizeSession` | `src/domain/transitions.ts` | Produces `flow_status` output. |
+| `compactSessionProjection` | `src/domain/transitions.ts` | Produces bounded routing status. |
+| `executionSessionProjection` | `src/domain/transitions.ts` | Produces full active-feature working scope. |
 
 ## How it works
 

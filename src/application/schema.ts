@@ -5,7 +5,11 @@ import {
 } from "../domain/feature-id.js";
 import { MAX_ORCHESTRATION_PASSES } from "../domain/limits.js";
 import { validateOrchestrationPassPolicy } from "../domain/orchestration-policy.js";
-import { toFeatureId, toSessionId } from "../domain/session.js";
+import { type Session, toFeatureId, toSessionId } from "../domain/session.js";
+import {
+	canonicalSessionSnapshotId,
+	validateCausalChain,
+} from "../domain/transitions.js";
 
 export {
 	hasCandidateExecutionEvidence,
@@ -23,6 +27,20 @@ const SessionIdSchema = z
 	.regex(/^[a-zA-Z0-9_-]+$/, "Invalid session id.")
 	.transform(toSessionId);
 
+export const DigestSchema = z
+	.string()
+	.regex(/^sha256:[a-f0-9]{64}$/, "Expected a lowercase SHA-256 digest.")
+	.transform((value) => value as `sha256:${string}`);
+
+export const SnapshotIdSchema = DigestSchema;
+export const EvidenceIdSchema = DigestSchema;
+export const OperationIdSchema = z
+	.string()
+	.min(1)
+	.max(128)
+	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
+export const CausalRevisionSchema = z.number().int().nonnegative().safe();
+
 export const FeatureStatusSchema = z.enum([
 	"pending",
 	"in_progress",
@@ -39,6 +57,18 @@ export const SessionStatusSchema = z.enum([
 ]);
 
 export const ReviewStatusSchema = z.enum(["passed", "failed"]);
+export const ReviewFindingTaxonomySchema = z.enum([
+	"implementation_defect",
+	"regression_coverage_gap",
+	"evidence_gap",
+	"advisory",
+]);
+export const ReviewKindSchema = z.enum(["feature", "final"]);
+export const ReviewVerdictSchema = z.enum(["passed", "failed"]);
+export const ReviewTerminalDispositionSchema = z.enum([
+	"submitted",
+	"observed_unsubmitted",
+]);
 export const ValidationStatusSchema = z.enum(["passed", "failed"]);
 export const ValidationScopeSchema = z.enum(["targeted", "broad"]);
 export const FeatureReviewDepthSchema = z.enum([
@@ -176,6 +206,109 @@ export const ReviewFindingSchema = z
 	})
 	.strict();
 
+const ReviewExecutionIdSchema = z
+	.string()
+	.min(1)
+	.max(128)
+	.regex(
+		/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/,
+		"Review execution ids must use a bounded portable identifier.",
+	);
+
+export const ReviewSnapshotIdSchema = z.string().pipe(SnapshotIdSchema);
+
+const ReviewTimestampSchema = z.string().datetime({ offset: true });
+
+export const ReviewExecutionFindingInputSchema = z
+	.object({
+		taxonomy: ReviewFindingTaxonomySchema,
+		subject: z.string().trim().min(1).max(512),
+		requirementOrRisk: z.string().trim().min(1).max(2_000),
+		evidenceLocator: z.string().trim().min(1).max(2_000),
+		summary: z.string().trim().min(1).max(4_000),
+		severity: z.enum(["blocking", "advisory"]),
+	})
+	.strict();
+
+export const ReviewExecutionFindingSchema =
+	ReviewExecutionFindingInputSchema.extend({
+		fingerprint: z.string().regex(/^finding-v1-[a-f0-9]{32}$/),
+	}).strict();
+
+const ReviewExecutionBaseShape = {
+	attemptId: ReviewExecutionIdSchema,
+	logicalPassId: ReviewExecutionIdSchema,
+	featureId: FeatureIdSchema,
+	reviewKind: ReviewKindSchema,
+	reviewSnapshotId: ReviewSnapshotIdSchema,
+	verdict: ReviewVerdictSchema,
+	startedAt: ReviewTimestampSchema,
+	completedAt: ReviewTimestampSchema,
+	terminalDisposition: ReviewTerminalDispositionSchema,
+} as const;
+
+function validateReviewExecution(
+	value: {
+		verdict: "passed" | "failed";
+		findings: Array<{ severity: "blocking" | "advisory" }>;
+		startedAt: string;
+		completedAt: string;
+		terminalDisposition: "submitted" | "observed_unsubmitted";
+	},
+	ctx: z.RefinementCtx,
+): void {
+	if (Date.parse(value.completedAt) < Date.parse(value.startedAt)) {
+		ctx.addIssue({
+			code: "custom",
+			path: ["completedAt"],
+			message: "completedAt must not precede startedAt.",
+		});
+	}
+	const hasBlockingFinding = value.findings.some(
+		(finding) => finding.severity === "blocking",
+	);
+	if (value.verdict === "failed" && !hasBlockingFinding) {
+		ctx.addIssue({
+			code: "custom",
+			path: ["findings"],
+			message: "A failed review execution requires a blocking finding.",
+		});
+	}
+	if (value.verdict === "passed" && hasBlockingFinding) {
+		ctx.addIssue({
+			code: "custom",
+			path: ["findings"],
+			message: "A passed review execution cannot retain blocking findings.",
+		});
+	}
+	if (
+		value.terminalDisposition === "observed_unsubmitted" &&
+		value.verdict !== "failed"
+	) {
+		ctx.addIssue({
+			code: "custom",
+			path: ["terminalDisposition"],
+			message: "An observed_unsubmitted review execution must be failed.",
+		});
+	}
+}
+
+export const ReviewExecutionInputSchema = z
+	.object({
+		...ReviewExecutionBaseShape,
+		findings: z.array(ReviewExecutionFindingInputSchema).max(100),
+	})
+	.strict()
+	.superRefine(validateReviewExecution);
+
+export const ReviewExecutionSchema = z
+	.object({
+		...ReviewExecutionBaseShape,
+		findings: z.array(ReviewExecutionFindingSchema).max(100),
+	})
+	.strict()
+	.superRefine(validateReviewExecution);
+
 export const ReviewSchema = z
 	.object({
 		status: ReviewStatusSchema,
@@ -193,6 +326,169 @@ export const ValidationRunSchema = z
 		command: z.string().min(1),
 		status: ValidationStatusSchema,
 		summary: z.string().min(1),
+	})
+	.strict();
+
+const EvidenceTimestampSchema = z.string().datetime({ offset: true });
+
+// Server-derived identity fields. The public caller never asserts these; the
+// trusted boundary computes them and binds each record to the current snapshot
+// and the recomputed source digest.
+const EvidenceIdentityShape = {
+	evidenceId: EvidenceIdSchema,
+	snapshotId: SnapshotIdSchema,
+	sourceDigest: DigestSchema,
+} as const;
+
+const EvidenceTimeShape = {
+	startedAt: EvidenceTimestampSchema,
+	completedAt: EvidenceTimestampSchema,
+} as const;
+
+const ValidationCommandClassSchema = z.enum([
+	"test",
+	"typecheck",
+	"lint",
+	"build",
+	"format",
+	"smoke",
+	"other",
+]);
+
+// Command timing and output/environment metadata are caller-attested: the
+// eight-tool surface has no host command-execution hook, so Flow cannot observe
+// validation start/end itself. These fields are labeled honestly as attested,
+// and every chronology that can be derived is still enforced.
+const ValidationEvidenceDetailShape = {
+	commandClass: ValidationCommandClassSchema,
+	exitCode: z.number().int().safe(),
+	outputDigest: DigestSchema,
+	artifactRef: z
+		.object({
+			kind: z.literal("restricted_evidence_v1"),
+			digest: DigestSchema,
+			byteLength: z.number().int().nonnegative().safe(),
+		})
+		.strict()
+		.optional(),
+	environmentKeys: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/)).max(64),
+} as const;
+
+function validateEvidenceTimes(
+	value: { startedAt: string; completedAt: string },
+	ctx: z.RefinementCtx,
+): void {
+	if (Date.parse(value.completedAt) < Date.parse(value.startedAt)) {
+		ctx.addIssue({
+			code: "custom",
+			path: ["completedAt"],
+			message: "completedAt must not precede startedAt.",
+		});
+	}
+}
+
+export const ValidationEvidenceSchema = z
+	.object({
+		kind: z.literal("validation"),
+		...EvidenceIdentityShape,
+		...EvidenceTimeShape,
+		...ValidationEvidenceDetailShape,
+	})
+	.strict()
+	.superRefine(validateEvidenceTimes);
+
+export const ReviewEvidenceSchema = z
+	.object({
+		kind: z.literal("review"),
+		...EvidenceIdentityShape,
+		...EvidenceTimeShape,
+		attemptId: ReviewExecutionIdSchema,
+		packetDigest: DigestSchema,
+	})
+	.strict()
+	.superRefine(validateEvidenceTimes);
+
+export const EvidenceRecordSchema = z.discriminatedUnion("kind", [
+	ValidationEvidenceSchema,
+	ReviewEvidenceSchema,
+]);
+
+// One public validation observation carries both the declared validation run
+// and its attestation. Identity and command classification remain trusted
+// server-derived fields.
+export const ValidationObservationSchema = z
+	.strictObject({
+		command: z.string().trim().min(1),
+		summary: z.string().trim().min(1),
+		...EvidenceTimeShape,
+		exitCode: z.number().int().safe(),
+		outputDigest: DigestSchema,
+		artifactRef: ValidationEvidenceDetailShape.artifactRef,
+		environmentKeys: ValidationEvidenceDetailShape.environmentKeys,
+	})
+	.superRefine(validateEvidenceTimes);
+
+export const CausalMutationRecordSchema = z
+	.object({
+		operationId: OperationIdSchema,
+		operationKind: z.enum([
+			"plan_save",
+			"plan_approve",
+			"run_start",
+			"review_record",
+			"evidence_record",
+			"feature_complete",
+			"feature_reset",
+			"session_close",
+		]),
+		requestDigest: DigestSchema,
+		priorMutationDigest: DigestSchema.nullable(),
+		mutationDigest: DigestSchema,
+		priorRevision: CausalRevisionSchema,
+		revision: CausalRevisionSchema,
+		priorSnapshotId: SnapshotIdSchema,
+		currentSnapshotId: SnapshotIdSchema,
+		changedEntity: z
+			.object({
+				kind: z.enum([
+					"session",
+					"plan",
+					"feature",
+					"review",
+					"evidence",
+					"closure",
+				]),
+				id: z.string().min(1).max(128),
+			})
+			.strict(),
+		changedFields: z.array(z.string().min(1).max(128)).max(64),
+		blockerDelta: z
+			.object({
+				added: z.array(z.string().min(1).max(2_000)).max(32),
+				removed: z.array(z.string().min(1).max(2_000)).max(32),
+			})
+			.strict(),
+		evidenceRefs: z.array(EvidenceIdSchema).max(100),
+		recordedAt: EvidenceTimestampSchema,
+	})
+	.strict()
+	.superRefine((value, context) => {
+		if (value.revision !== value.priorRevision + 1) {
+			context.addIssue({
+				code: "custom",
+				path: ["revision"],
+				message: "revision must advance exactly once from priorRevision.",
+			});
+		}
+	});
+
+export const CausalStateSchema = z
+	.object({
+		revision: CausalRevisionSchema,
+		genesisSnapshotId: SnapshotIdSchema,
+		snapshotId: SnapshotIdSchema,
+		mutations: z.array(CausalMutationRecordSchema),
+		evidence: z.array(EvidenceRecordSchema),
 	})
 	.strict();
 
@@ -265,42 +561,50 @@ export const WorkerOutcomeSchema = z.discriminatedUnion("kind", [
 ]);
 
 export const WorkerResultSchema = z.discriminatedUnion("status", [
-	z
-		.object({
-			status: z.literal("ok"),
-			featureId: FeatureIdSchema,
-			summary: z.string().min(1),
-			artifactsChanged: z.array(ArtifactSchema).default([]),
-			validationRun: z.array(ValidationRunSchema).default([]),
-			validationScope: ValidationScopeSchema,
-			featureReviewDepth: FeatureReviewDepthSchema,
-			featureReview: ReviewSchema,
-			finalReview: FinalReviewSchema.optional(),
-			outcome: CompletedWorkerOutcomeSchema.optional(),
-			orchestrationPasses: z
-				.array(OrchestrationPassRecordSchema)
-				.max(MAX_ORCHESTRATION_PASSES)
-				.default([]),
-		})
-		.strict(),
-	z
-		.object({
-			status: z.literal("needs_input"),
-			featureId: FeatureIdSchema,
-			summary: z.string().min(1),
-			artifactsChanged: z.array(ArtifactSchema).default([]),
-			validationRun: z.array(ValidationRunSchema).default([]),
-			validationScope: ValidationScopeSchema.optional(),
-			featureReviewDepth: FeatureReviewDepthSchema.optional(),
-			featureReview: ReviewSchema.optional(),
-			finalReview: FinalReviewSchema.optional(),
-			outcome: NeedsInputOutcomeSchema,
-			orchestrationPasses: z
-				.array(OrchestrationPassRecordSchema)
-				.max(MAX_ORCHESTRATION_PASSES)
-				.default([]),
-		})
-		.strict(),
+	z.strictObject({
+		status: z.literal("ok"),
+		operationId: OperationIdSchema,
+		expectedRevision: CausalRevisionSchema,
+		expectedSnapshotId: SnapshotIdSchema,
+		requestDigest: DigestSchema,
+		featureId: FeatureIdSchema,
+		summary: z.string().min(1),
+		artifactsChanged: z.array(ArtifactSchema).default([]),
+		validationRun: z.array(ValidationRunSchema).min(1).max(100),
+		validationScope: ValidationScopeSchema,
+		featureReviewDepth: FeatureReviewDepthSchema,
+		featureReview: ReviewSchema,
+		finalReview: FinalReviewSchema.optional(),
+		outcome: CompletedWorkerOutcomeSchema.optional(),
+		reviewExecutions: z.array(ReviewExecutionInputSchema).min(1).max(100),
+		evidence: z.array(EvidenceRecordSchema).min(1).max(100),
+		orchestrationPasses: z
+			.array(OrchestrationPassRecordSchema)
+			.max(MAX_ORCHESTRATION_PASSES)
+			.default([]),
+	}),
+	z.strictObject({
+		status: z.literal("needs_input"),
+		operationId: OperationIdSchema,
+		expectedRevision: CausalRevisionSchema,
+		expectedSnapshotId: SnapshotIdSchema,
+		requestDigest: DigestSchema,
+		featureId: FeatureIdSchema,
+		summary: z.string().min(1),
+		artifactsChanged: z.array(ArtifactSchema).default([]),
+		validationRun: z.array(ValidationRunSchema).default([]),
+		validationScope: ValidationScopeSchema.optional(),
+		featureReviewDepth: FeatureReviewDepthSchema.optional(),
+		featureReview: ReviewSchema.optional(),
+		finalReview: FinalReviewSchema.optional(),
+		outcome: NeedsInputOutcomeSchema,
+		reviewExecutions: z.array(ReviewExecutionInputSchema).max(100).default([]),
+		evidence: z.array(EvidenceRecordSchema).max(100).default([]),
+		orchestrationPasses: z
+			.array(OrchestrationPassRecordSchema)
+			.max(MAX_ORCHESTRATION_PASSES)
+			.default([]),
+	}),
 ]);
 
 export const ExecutionHistoryEntrySchema = z
@@ -333,11 +637,44 @@ export const BudgetTelemetrySchema = z
 				z.number().int().nonnegative(),
 			)
 			.default({}),
+		reviewExecutions: z.array(ReviewExecutionSchema).default([]),
+		reviewLifecycle: z
+			.object({
+				featureAttemptCount: z.number().int().nonnegative().default(0),
+				finalAttemptCount: z.number().int().nonnegative().default(0),
+				passedVerdictCount: z.number().int().nonnegative().default(0),
+				failedVerdictCount: z.number().int().nonnegative().default(0),
+				retryConsumedCount: z.number().int().nonnegative().default(0),
+			})
+			.strict()
+			.prefault({}),
+		observedReviewWorkers: z
+			.discriminatedUnion("source", [
+				z
+					.object({
+						source: z.literal("unavailable"),
+						reconciliationStatus: z.literal("unreconciled"),
+						observedExecutionCount: z.null(),
+					})
+					.strict(),
+				z
+					.object({
+						source: z.literal("host_observed"),
+						reconciliationStatus: z.literal("reconciled"),
+						observedExecutionCount: z.number().int().nonnegative(),
+					})
+					.strict(),
+			])
+			.default({
+				source: "unavailable",
+				reconciliationStatus: "unreconciled",
+				observedExecutionCount: null,
+			}),
 		orchestration: OrchestrationTelemetrySchema.prefault({}),
 	})
 	.strict();
 
-export const SessionSchema = z
+const SessionV3Schema = z
 	.object({
 		version: z.literal(3),
 		// Constrained to the archive-safe charset so a hostile or hand-edited
@@ -352,6 +689,7 @@ export const SessionSchema = z
 		activeFeatureId: FeatureIdSchema.nullable(),
 		history: z.array(ExecutionHistoryEntrySchema).default([]),
 		budget: BudgetTelemetrySchema.prefault({}),
+		causal: CausalStateSchema.optional(),
 		closure: z
 			.object({
 				kind: z.enum(["completed", "deferred", "abandoned"]),
@@ -380,19 +718,62 @@ export const SessionSchema = z
 	})
 	.strict();
 
+export const SessionSchema = SessionV3Schema.transform((value): Session => {
+	if (value.causal) return value as Session;
+	const hydrated: Session = {
+		...value,
+		causal: {
+			revision: 0,
+			genesisSnapshotId: `sha256:${"0".repeat(64)}`,
+			snapshotId: `sha256:${"0".repeat(64)}`,
+			mutations: [],
+			evidence: [],
+		},
+	};
+	const snapshotId = canonicalSessionSnapshotId(hydrated);
+	return {
+		...hydrated,
+		causal: {
+			...hydrated.causal,
+			genesisSnapshotId: snapshotId,
+			snapshotId,
+		},
+	};
+}).superRefine((session, context) => {
+	const chainError = validateCausalChain(session);
+	if (!chainError) return;
+	context.addIssue({
+		code: "custom",
+		path: ["causal"],
+		message: chainError,
+	});
+});
+
 export type {
 	Artifact,
 	BudgetTelemetry,
+	CausalMutationRecord,
+	CausalState,
+	EvidenceId,
+	EvidenceRecord,
 	ExecutionHistoryEntry,
 	Feature,
 	FeatureReviewDepth,
 	FinalReview,
+	ObservedReviewWorkerLedger,
 	OrchestrationPassRecord,
 	OrchestrationTelemetry,
 	Plan,
 	PlanInput,
 	Review,
+	ReviewExecution,
+	ReviewExecutionFinding,
+	ReviewExecutionFindingInput,
+	ReviewExecutionInput,
+	ReviewFindingTaxonomy,
+	ReviewLifecycleTelemetry,
 	Session,
+	SnapshotId,
 	ValidationRun,
 	WorkerResult,
 } from "../domain/session.js";

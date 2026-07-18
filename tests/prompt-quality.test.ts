@@ -347,7 +347,10 @@ describe("Flow prompt quality", () => {
 			const compiled = surfaces[surface];
 			expect(compiled.fragments[0]?.kind).toBe("invariant");
 			expect(compiled.fragments.at(-1)?.kind).toBe("checkpoint");
-			expect(compiled.text).toContain("Call `flow_status` first");
+			expect(compiled.text).toContain(
+				'Call `flow_status` with `view: "compact"` first',
+			);
+			expect(compiled.text).toContain("`workflowData.projection`");
 			expect(compiled.text).toContain(
 				"Only the root manager may call state-changing `flow_*` tools",
 			);
@@ -369,6 +372,116 @@ describe("Flow prompt quality", () => {
 				"never route the user's feature request directly to it",
 			);
 		}
+	});
+
+	test("compiles one compact to execution continuation contract", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		for (const surface of ["flow-auto", "flow-run"] as const) {
+			const text = surfaces[surface].text.replace(/\s+/g, " ");
+			expect(text).not.toContain("workflowData.session");
+			expect(text).toContain("`projection.closure.kind`");
+			expect(text).toMatch(/receipt only acknowledges/i);
+
+			const compact = text.indexOf('Call `flow_status` with `view: "compact"`');
+			const start = text.indexOf("When ready, call `flow_run_start`", compact);
+			const execution = text.indexOf(
+				'call `flow_status` with `view: "execution"`',
+				start,
+			);
+			const refresh = text.indexOf(
+				'Immediately call `flow_status` with `view: "compact"` after completion',
+				execution,
+			);
+			for (const [label, index] of [
+				["compact", compact],
+				["conditional start", start],
+				["execution", execution],
+				["compact refresh", refresh],
+			] as const) {
+				expect(index, `${surface} includes ${label}`).toBeGreaterThanOrEqual(0);
+			}
+			expect(compact).toBeLessThan(start);
+			expect(start).toBeLessThan(execution);
+			expect(execution).toBeLessThan(refresh);
+		}
+
+		expect(surfaces["flow-auto"].text.replace(/\s+/g, " ")).toContain(
+			"start the next ready feature and load execution",
+		);
+		expect(surfaces["flow-run"].text.replace(/\s+/g, " ")).toContain(
+			"without starting another feature",
+		);
+	});
+
+	test("keeps economy review ordering and lifecycle terminology deterministic", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		const economySequence =
+			"targeted validation -> feature review -> one authorized bounded repair/retry if needed -> broad validation after the last functional edit -> final review -> one atomic flow_feature_complete";
+		for (const surface of ["flow-auto", "flow-run"] as const) {
+			const text = surfaces[surface].text.replace(/\s+/g, " ");
+			expect(text).toContain(economySequence);
+			let cursor = text.indexOf(economySequence);
+			for (const stage of [
+				"targeted validation",
+				"feature review",
+				"one authorized bounded repair/retry if needed",
+				"broad validation after the last functional edit",
+				"final review",
+				"one atomic flow_feature_complete",
+			]) {
+				const next = text.indexOf(stage, cursor);
+				expect(next, `${surface} orders ${stage}`).toBeGreaterThanOrEqual(
+					cursor,
+				);
+				cursor = next + stage.length;
+			}
+			expect(text).toContain(
+				"An active final feature may remain `in_progress` while awaiting review; this is not a blocker.",
+			);
+			expect(text).toContain(
+				"Never dispatch final review before the feature review passes in economy mode.",
+			);
+			expect(text).toContain(
+				"Latency/speculative review mode remains disabled",
+			);
+			expect(text).toContain("one immutable `reviewSnapshotId`");
+			expect(text).toContain("contradiction reconciliation");
+		}
+
+		const manager = surfaces["flow-run"].text.replace(/\s+/g, " ");
+		const reviewer = surfaces["flow-reviewer"].text.replace(/\s+/g, " ");
+		for (const field of [
+			"attemptId",
+			"logicalPassId",
+			"featureId",
+			"reviewKind",
+			"reviewSnapshotId",
+			"verdict",
+			"findings",
+			"startedAt",
+			"completedAt",
+			"terminalDisposition",
+		]) {
+			expect(manager, `manager guidance includes ${field}`).toContain(field);
+			expect(reviewer, `reviewer guidance includes ${field}`).toContain(field);
+		}
+		for (const taxonomy of [
+			"implementation_defect",
+			"regression_coverage_gap",
+			"evidence_gap",
+			"advisory",
+		]) {
+			expect(manager).toContain(taxonomy);
+			expect(reviewer).toContain(taxonomy);
+		}
+		expect(manager).toContain("observed_unsubmitted");
+		expect(reviewer).toContain("observed_unsubmitted");
+		expect(manager).toContain(
+			"normalized taxonomy + subject + requirement/risk + evidence locator",
+		);
+		expect(reviewer).toContain(
+			"normalized taxonomy + subject + requirement/risk + evidence locator",
+		);
 	});
 
 	test("gives each hidden worker one applicable schema with deterministic validation", () => {

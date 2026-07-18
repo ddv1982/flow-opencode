@@ -31,11 +31,18 @@ match the plan's `finalReviewPolicy`. Claim only the depth actually performed.
 
 ## Direct review outputs
 
-For a direct feature review, return only `featureReviewDepth` plus
-`featureReview`. For a direct final review, return only `status`, `summary`,
-`blockingFindings`, and `reviewDepth`. Use `status: "failed"` whenever a
-blocking finding remains. Advisory notes belong in the summary, while
-`blockingFindings` contains only blockers.
+Return the verdict plus one `reviewExecution` envelope. Copy the attempt,
+logical-pass, feature, review-kind, immutable snapshot-digest, and start fields;
+add the verdict, typed findings, completion time, and `terminalDisposition`. Use
+`observed_unsubmitted` for an observed attempt that cannot submit normally and
+mark it failed. The manager appends every execution. Use `status: "failed"`
+whenever a blocker remains.
+
+Finding taxonomy is exactly `implementation_defect`,
+`regression_coverage_gap`, `evidence_gap`, or `advisory`. Include `subject`,
+`requirementOrRisk`, `evidenceLocator`, `summary`, and `severity`; Flow, not the
+reviewer, computes the fingerprint from normalized taxonomy + subject +
+requirement/risk + evidence locator.
 
 ## Special-case evidence
 

@@ -17,7 +17,7 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@5.0.0 --global --force
+opencode plugin opencode-plugin-flow@5.1.0 --global --force
 ```
 
 Start or restart OpenCode, then give Flow a goal:
@@ -41,20 +41,33 @@ restart.
                     features: rate-limit-middleware, per-route-config, docs-update
   (you approve the plan)
   flow_plan_approve plan locked — features are now immutable
-  flow_run_start    feature: rate-limit-middleware
+  flow_run_start    mutation acknowledged
+  flow_status       view: execution, feature: rate-limit-middleware
   ... implementation, tests ...
   flow_feature_complete
                     validationRun: "bun test tests/middleware.test.ts" passed
                     featureReviewDepth: standard
                     featureReview: passed
-  flow_run_start    feature: per-route-config
+  flow_run_start    mutation acknowledged
+  flow_status       view: execution, feature: per-route-config
   ...
 
 > /flow-status
   status: ok
-  workflowData.session.status: running, 1/3 features completed
-  nextAction: complete the feature under workflowData.session.activeFeature
+  workflowData.projection.view: compact
+  workflowData.projection.status: running
+  workflowData.projection.progress: { completed: 1, total: 3, remaining: 2 }
+
+> /flow-run
+  flow_status       view: execution
+                    workflowData.projection: full active-feature scope
 ```
+
+`flow_status` returns workflow state under `workflowData.projection`: compact is
+routing-only, execution is the full active-feature working scope, detail is
+diagnostic, and reviewer is narrow assignment context. State-changing tools
+return `workflowData.receipt` acknowledgements; a receipt never replaces a
+fresh status projection.
 
 Interrupt at any point; `/flow-run` resumes the next approved feature. On the
 final feature Flow requires broad project-level validation and a final review
@@ -154,8 +167,8 @@ For broad implementation, the manager records whether work stayed serial,
 used exact-path candidate workers, used isolated worktrees, ran a tournament, or
 skipped eligible candidates. Feature completion can carry bounded
 `orchestrationPasses` with candidate eligibility, decision, and structured
-factors; `flow_status` reports the aggregate under
-`workflowData.session.budget.orchestration`.
+factors. Bounded projections report the relevant aggregate while full worker
+handoffs remain outside `.flow/**`.
 
 ## Install details and legacy cleanup
 
@@ -169,7 +182,7 @@ or sync command is required. To preview recoverable migration of pristine v4
 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.0.0 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.1.0 legacy-cleanup --dry-run
 ```
 
 ## Development

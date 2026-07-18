@@ -4,8 +4,6 @@ import {
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
 } from "../../domain/feature-id.js";
-import { MAX_ORCHESTRATION_PASSES } from "../../domain/limits.js";
-import { validateOrchestrationPassPolicy } from "../../domain/orchestration-policy.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
@@ -22,6 +20,13 @@ import { createFlowLog } from "./logging.js";
 const host = tool.schema;
 const featureId = host.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
 const nonEmptyString = host.string().min(1);
+const digest = host.string().regex(/^sha256:[a-f0-9]{64}$/);
+const operationId = host
+	.string()
+	.min(1)
+	.max(128)
+	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
+const causalRevision = host.number().int().nonnegative().safe();
 
 const featureStatus = host.enum([
 	"pending",
@@ -50,15 +55,115 @@ const review = host
 
 const finalReview = review.extend({ reviewDepth: finalReviewPolicy }).strict();
 
-const artifact = host.object({ path: nonEmptyString }).strict();
+const reviewFindingTaxonomy = host.enum([
+	"implementation_defect",
+	"regression_coverage_gap",
+	"evidence_gap",
+	"advisory",
+]);
 
-const validationRun = host
+const reviewExecutionFindingInput = host
 	.object({
-		command: nonEmptyString,
-		status: host.enum(["passed", "failed"]),
-		summary: nonEmptyString,
+		taxonomy: reviewFindingTaxonomy,
+		subject: host.string().trim().min(1).max(512),
+		requirementOrRisk: host.string().trim().min(1).max(2_000),
+		evidenceLocator: host.string().trim().min(1).max(2_000),
+		summary: host.string().trim().min(1).max(4_000),
+		severity: host.enum(["blocking", "advisory"]),
 	})
 	.strict();
+
+const reviewExecutionId = host
+	.string()
+	.min(1)
+	.max(128)
+	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
+
+const reviewExecutionInput = host
+	.object({
+		attemptId: reviewExecutionId,
+		logicalPassId: reviewExecutionId,
+		featureId,
+		reviewKind: host.enum(["feature", "final"]),
+		reviewSnapshotId: host.string().regex(/^sha256:[a-f0-9]{64}$/),
+		verdict: host.enum(["passed", "failed"]),
+		findings: host.array(reviewExecutionFindingInput).max(100),
+		startedAt: host.string().datetime({ offset: true }),
+		completedAt: host.string().datetime({ offset: true }),
+		terminalDisposition: host.enum(["submitted", "observed_unsubmitted"]),
+	})
+	.strict()
+	.superRefine((value, context) => {
+		if (Date.parse(value.completedAt) < Date.parse(value.startedAt)) {
+			context.addIssue({
+				code: "custom",
+				path: ["completedAt"],
+				message: "completedAt must not precede startedAt.",
+			});
+		}
+		const hasBlockingFinding = value.findings.some(
+			(finding) => finding.severity === "blocking",
+		);
+		if (value.verdict === "failed" && !hasBlockingFinding) {
+			context.addIssue({
+				code: "custom",
+				path: ["findings"],
+				message: "A failed review execution requires a blocking finding.",
+			});
+		}
+		if (value.verdict === "passed" && hasBlockingFinding) {
+			context.addIssue({
+				code: "custom",
+				path: ["findings"],
+				message: "A passed review execution cannot retain blocking findings.",
+			});
+		}
+		if (
+			value.terminalDisposition === "observed_unsubmitted" &&
+			value.verdict !== "failed"
+		) {
+			context.addIssue({
+				code: "custom",
+				path: ["terminalDisposition"],
+				message: "An observed_unsubmitted review execution must be failed.",
+			});
+		}
+	});
+
+const artifact = host.object({ path: nonEmptyString }).strict();
+
+// A single public observation declares the validation and attests its result;
+// Flow derives status, command class, evidence identity, and source identity.
+const validationObservation = host
+	.object({
+		command: host.string().trim().min(1),
+		summary: host.string().trim().min(1),
+		startedAt: host.string().datetime({ offset: true }),
+		completedAt: host.string().datetime({ offset: true }),
+		exitCode: host.number().int().safe(),
+		outputDigest: digest,
+		artifactRef: host
+			.object({
+				kind: host.literal("restricted_evidence_v1"),
+				digest,
+				byteLength: host.number().int().nonnegative().safe(),
+			})
+			.strict()
+			.optional(),
+		environmentKeys: host
+			.array(host.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/))
+			.max(64),
+	})
+	.strict()
+	.superRefine((value, context) => {
+		if (Date.parse(value.completedAt) < Date.parse(value.startedAt)) {
+			context.addIssue({
+				code: "custom",
+				path: ["completedAt"],
+				message: "completedAt must not precede startedAt.",
+			});
+		}
+	});
 
 const planFeature = host
 	.object({
@@ -105,110 +210,20 @@ const workerOutcome = host.discriminatedUnion("kind", [
 	needsInputOutcome,
 ]);
 
-const orchestrationPass = host
-	.object({
-		id: nonEmptyString,
-		kind: host.enum([
-			"discovery",
-			"audit",
-			"review",
-			"validation",
-			"verification",
-			"candidate",
-			"implementation-decision",
-		]),
-		decision: host
-			.enum([
-				"serial",
-				"parallel",
-				"candidate-exact-path",
-				"candidate-worktree",
-				"tournament",
-				"skipped",
-			])
-			.optional(),
-		decisionReason: nonEmptyString.optional(),
-		candidateEligibility: host
-			.enum(["eligible", "not_eligible", "unknown"])
-			.default("unknown"),
-		candidateDecision: host
-			.enum(["used", "skipped", "serial_required"])
-			.optional(),
-		decisionFactors: host
-			.array(
-				host.enum([
-					"shared_state",
-					"overlapping_files",
-					"small_slice",
-					"needs_manager_judgment",
-					"independent_surface",
-					"validation_available",
-				]),
-			)
-			.default([]),
-		modes: host
-			.array(
-				host.enum([
-					"evidence",
-					"review",
-					"validation",
-					"audit",
-					"verifier",
-					"candidate-implementation",
-				]),
-			)
-			.default([]),
-		workerCount: host.number().int().nonnegative().default(0),
-		candidateWorkerCount: host.number().int().nonnegative().default(0),
-		verifierWorkerCount: host.number().int().nonnegative().default(0),
-		sliceIds: host.array(nonEmptyString).default([]),
-		dependsOn: host.array(nonEmptyString).default([]),
-		writeScope: host
-			.enum([
-				"none",
-				"manager-serial",
-				"exact-path",
-				"isolated-worktree",
-				"mixed",
-			])
-			.default("none"),
-		handoffRefs: host.array(nonEmptyString).default([]),
-		verificationStatus: host
-			.enum([
-				"not-needed",
-				"pending",
-				"passed",
-				"failed",
-				"mixed",
-				"downgraded",
-			])
-			.default("not-needed"),
-		outcome: host
-			.enum([
-				"accepted",
-				"modified",
-				"rejected",
-				"partial",
-				"not-covered",
-				"superseded",
-			])
-			.default("accepted"),
-		synthesisRef: nonEmptyString.optional(),
-	})
-	.strict()
-	.superRefine((value, context) => {
-		for (const issue of validateOrchestrationPassPolicy(value)) {
-			context.addIssue({
-				code: "custom",
-				path: [issue.path],
-				message: issue.message,
-			});
-		}
-	});
-
 const FlowPlanSaveToolArgs = {
 	goal: host.string().trim().min(1).optional(),
 	plan: plan.optional(),
+};
+
+const FlowStatusToolArgs = {
+	view: host.enum(["compact", "detail", "execution", "reviewer"]).optional(),
+	sinceRevision: causalRevision.optional(),
+	featureId: featureId.optional(),
+	reviewKind: host.enum(["feature", "final"]).optional(),
+	packetHash: digest.optional(),
+	evidenceRefs: host.array(digest).max(100).optional(),
+	expectedRevision: causalRevision.optional(),
+	expectedSnapshotId: digest.optional(),
 };
 
 const FlowRunStartToolArgs = {
@@ -216,29 +231,42 @@ const FlowRunStartToolArgs = {
 };
 
 const FlowFeatureResetToolArgs = {
+	operationId,
+	expectedRevision: causalRevision,
+	expectedSnapshotId: digest,
 	featureId,
 };
 
 const FlowSessionCloseToolArgs = {
+	operationId,
+	expectedRevision: causalRevision,
+	expectedSnapshotId: digest,
 	kind: host.enum(["completed", "deferred", "abandoned"]),
 	summary: host.string().trim().min(1).optional(),
 };
 
-const FlowFeatureCompleteToolArgs = {
+// OpenCode 1.18 accepts only a flat ZodRawShape for tool registration, so it
+// cannot express status-dependent required fields without nesting the entire
+// payload. Keep the flat UX as a leaf-validated transport envelope; the
+// application's strict discriminated union remains the authoritative contract.
+const FlowFeatureCompleteHostEnvelopeArgs = {
 	status: host.enum(["ok", "needs_input"]),
+	operationId,
+	expectedRevision: causalRevision,
+	expectedSnapshotId: digest,
 	featureId,
-	summary: nonEmptyString,
-	artifactsChanged: host.array(artifact).optional(),
-	validationRun: host.array(validationRun).optional(),
+	summary: host.string().trim().min(1),
+	artifactsChanged: host.array(artifact).max(100).optional(),
+	validations: host.array(validationObservation).max(100).optional(),
 	validationScope: validationScope.optional(),
 	featureReviewDepth: featureReviewDepth.optional(),
 	featureReview: review.optional(),
 	finalReview: finalReview.optional(),
+	reviewExecutions: host.array(reviewExecutionInput).max(100).optional(),
 	outcome: workerOutcome.optional(),
-	orchestrationPasses: host
-		.array(orchestrationPass)
-		.max(MAX_ORCHESTRATION_PASSES)
-		.optional(),
+	// The application validates this optional telemetry separately from the
+	// completion evidence so malformed counters cannot suppress review records.
+	orchestrationPasses: host.unknown().optional(),
 };
 
 const FlowGuidanceToolArgs = {
@@ -246,14 +274,52 @@ const FlowGuidanceToolArgs = {
 };
 
 const FlowHostInputSchemas = {
+	status: host.union([
+		host.object({ view: host.literal("execution") }).strict(),
+		host
+			.object({
+				view: host.literal("reviewer"),
+				featureId,
+				packetHash: digest,
+				evidenceRefs: host.array(digest).max(100),
+				reviewKind: host.literal("feature"),
+				expectedRevision: causalRevision,
+				expectedSnapshotId: digest,
+			})
+			.strict(),
+		host
+			.object({
+				view: host.literal("reviewer"),
+				featureId,
+				reviewKind: host.literal("final"),
+				packetHash: digest,
+				evidenceRefs: host.array(digest).max(100),
+				expectedRevision: causalRevision,
+				expectedSnapshotId: digest,
+			})
+			.strict(),
+		host
+			.object({
+				view: host.literal("detail"),
+				sinceRevision: causalRevision.optional(),
+			})
+			.strict(),
+		host
+			.object({
+				view: host.literal("compact").default("compact"),
+				sinceRevision: causalRevision.optional(),
+			})
+			.strict(),
+	]),
 	planSave: host.object(FlowPlanSaveToolArgs).strict(),
 	runStart: host.object(FlowRunStartToolArgs).strict(),
-	featureComplete: host.object(FlowFeatureCompleteToolArgs).strict(),
+	featureComplete: host.object(FlowFeatureCompleteHostEnvelopeArgs).strict(),
 	featureReset: host.object(FlowFeatureResetToolArgs).strict(),
 	sessionClose: host.object(FlowSessionCloseToolArgs).strict(),
 } as const;
 
 export type FlowHostInputOperation =
+	| "status"
 	| "planSave"
 	| "runStart"
 	| "featureComplete"
@@ -270,7 +336,7 @@ export function acceptsFlowHostInput(
 type FlowTools = NonNullable<Hooks["tool"]>;
 
 function toJson(value: unknown): string {
-	return JSON.stringify(value, null, 2);
+	return JSON.stringify(value);
 }
 
 function toolError(error: unknown): string {
@@ -309,8 +375,9 @@ export function createTools(ctx: unknown): FlowTools {
 		}),
 		flow_status: tool({
 			description: "Show the active Flow session and next action",
-			args: {},
-			execute: (_args, context) => execute(context, flowStatus),
+			args: FlowStatusToolArgs,
+			execute: (args, context) =>
+				execute(context, (worktree) => flowStatus(worktree, args)),
 		}),
 		flow_plan_save: tool({
 			description: "Create or update a draft Flow plan for the active goal",
@@ -332,7 +399,7 @@ export function createTools(ctx: unknown): FlowTools {
 		flow_feature_complete: tool({
 			description:
 				"Record a completed or blocked active feature with validation and review evidence",
-			args: FlowFeatureCompleteToolArgs,
+			args: FlowFeatureCompleteHostEnvelopeArgs,
 			execute: (args, context) =>
 				execute(context, (worktree) => flowFeatureComplete(worktree, args)),
 		}),

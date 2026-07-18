@@ -1,0 +1,829 @@
+{
+	"version": 1,
+	"fixtureId": "fixture_1",
+	"sourceFingerprint": "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+	"sources": [
+		{
+			"category": "host_metadata",
+			"fingerprint": "96879611650f80a81392a52e0db9b0237669087c4518e1c130e541a505e0eeef"
+		},
+		{
+			"category": "flow_ledger",
+			"fingerprint": "ca08c3f17da905f14c139b51d6a2eaacb6698ee6573d8ce6012ef9795710c89e"
+		},
+		{
+			"category": "supplied_observation",
+			"fingerprint": "ac7f39a1e0b7bcd03a4d2c83b773ae28ba3befa34bbfd0341e3fef15dfdfad84"
+		},
+		{
+			"category": "replay_derived",
+			"fingerprint": "8ba109b081fba300f099405e5c3eba22d49c6c86b2f4533abad171352b5d456c"
+		}
+	],
+	"hostFacts": [
+		{
+			"metric": "session_count",
+			"availability": { "status": "available", "value": 46 }
+		},
+		{
+			"metric": "child_session_count",
+			"availability": { "status": "available", "value": 45 }
+		},
+		{
+			"metric": "tool_part_count",
+			"availability": { "status": "available", "value": 3314 }
+		},
+		{
+			"metric": "input_token_count",
+			"availability": { "status": "available", "value": 6673027 }
+		},
+		{
+			"metric": "cache_read_token_count",
+			"availability": { "status": "available", "value": 98713088 }
+		},
+		{
+			"metric": "output_token_count",
+			"availability": {
+				"status": "unavailable",
+				"reason": "provider_unavailable"
+			}
+		},
+		{
+			"metric": "compaction_count",
+			"availability": { "status": "available", "value": 4 }
+		},
+		{
+			"metric": "root_flow_tool_call_count",
+			"availability": { "status": "available", "value": 92 }
+		},
+		{
+			"metric": "root_flow_tool_result_character_count",
+			"availability": { "status": "available", "value": 1007950 }
+		},
+		{
+			"metric": "child_flow_status_call_count",
+			"availability": { "status": "available", "value": 28 }
+		},
+		{
+			"metric": "child_flow_status_result_character_count",
+			"availability": { "status": "available", "value": 455038 }
+		},
+		{
+			"metric": "reviewer_dispatch_count",
+			"availability": { "status": "available", "value": 30 }
+		},
+		{
+			"metric": "reviewer_child_session_count",
+			"availability": { "status": "available", "value": 26 }
+		},
+		{
+			"metric": "reviewer_execution_count",
+			"availability": { "status": "available", "value": 7 }
+		},
+		{
+			"metric": "prompt_character_count",
+			"availability": { "status": "available", "value": 103813 }
+		},
+		{
+			"metric": "result_character_count",
+			"availability": { "status": "available", "value": 255269 }
+		},
+		{
+			"metric": "tool_error_count",
+			"availability": { "status": "available", "value": 17 }
+		},
+		{
+			"metric": "message_error_count",
+			"availability": { "status": "available", "value": 2 }
+		},
+		{
+			"metric": "tool_latency_p50_ms",
+			"availability": { "status": "available", "value": 9 }
+		},
+		{
+			"metric": "tool_latency_p95_ms",
+			"availability": { "status": "available", "value": 185 }
+		},
+		{
+			"metric": "tool_latency_total_ms",
+			"availability": { "status": "available", "value": 11661273 }
+		}
+	],
+	"flowLedgerClaims": [
+		{
+			"metric": "declared_worker_count",
+			"availability": { "status": "available", "value": 0 }
+		}
+	],
+	"suppliedObservations": [
+		{
+			"metric": "result_character_count",
+			"availability": { "status": "available", "value": 108102 }
+		},
+		{
+			"metric": "reviewer_input_share_basis_points",
+			"availability": { "status": "available", "value": 7820 }
+		},
+		{
+			"metric": "review_packet_file_count",
+			"availability": { "status": "available", "value": 80 }
+		},
+		{
+			"metric": "review_packet_line_count",
+			"availability": { "status": "available", "value": 5657 }
+		}
+	],
+	"replayDerivedFacts": [
+		{
+			"metric": "session_count",
+			"availability": { "status": "available", "value": 46 }
+		},
+		{
+			"metric": "child_session_count",
+			"availability": { "status": "available", "value": 45 }
+		},
+		{
+			"metric": "tool_part_count",
+			"availability": { "status": "available", "value": 3314 }
+		},
+		{
+			"metric": "input_token_count",
+			"availability": { "status": "available", "value": 6673027 }
+		},
+		{
+			"metric": "cache_read_token_count",
+			"availability": { "status": "available", "value": 98713088 }
+		},
+		{
+			"metric": "output_token_count",
+			"availability": {
+				"status": "unavailable",
+				"reason": "provider_unavailable"
+			}
+		},
+		{
+			"metric": "compaction_count",
+			"availability": { "status": "available", "value": 4 }
+		},
+		{
+			"metric": "root_flow_tool_call_count",
+			"availability": { "status": "available", "value": 92 }
+		},
+		{
+			"metric": "root_flow_tool_result_character_count",
+			"availability": { "status": "available", "value": 1007950 }
+		},
+		{
+			"metric": "child_flow_status_call_count",
+			"availability": { "status": "available", "value": 28 }
+		},
+		{
+			"metric": "child_flow_status_result_character_count",
+			"availability": { "status": "available", "value": 455038 }
+		},
+		{
+			"metric": "reviewer_dispatch_count",
+			"availability": { "status": "available", "value": 30 }
+		},
+		{
+			"metric": "reviewer_child_session_count",
+			"availability": { "status": "available", "value": 26 }
+		},
+		{
+			"metric": "prompt_character_count",
+			"availability": { "status": "available", "value": 103813 }
+		},
+		{
+			"metric": "result_character_count",
+			"availability": { "status": "available", "value": 255269 }
+		},
+		{
+			"metric": "tool_error_count",
+			"availability": { "status": "available", "value": 17 }
+		},
+		{
+			"metric": "message_error_count",
+			"availability": { "status": "available", "value": 2 }
+		},
+		{
+			"metric": "tool_latency_p50_ms",
+			"availability": { "status": "available", "value": 9 }
+		},
+		{
+			"metric": "tool_latency_p95_ms",
+			"availability": { "status": "available", "value": 185 }
+		},
+		{
+			"metric": "tool_latency_total_ms",
+			"availability": { "status": "available", "value": 11661273 }
+		},
+		{
+			"metric": "reviewer_execution_count",
+			"availability": { "status": "available", "value": 7 }
+		},
+		{
+			"metric": "live_prompt_character_count",
+			"availability": { "status": "available", "value": 26947 }
+		},
+		{
+			"metric": "live_prompt_estimated_token_count",
+			"availability": { "status": "available", "value": 6737 }
+		}
+	],
+	"scenarios": [
+		{
+			"id": "active_final_feature_awaiting_review",
+			"sessionId": "session_1",
+			"initialStateDigest": "96879611650f80a81392a52e0db9b0237669087c4518e1c130e541a505e0eeef",
+			"controlDefects": ["active_final_false_block"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "flow_ledger",
+					"kind": "session_state",
+					"sessionId": "session_1",
+					"revision": 5,
+					"sessionStatus": "running",
+					"featureStatus": "in_progress",
+					"stateDigest": "de44d7486ef40efd092286206fe7b70f188ae3177c1fe224e4c137ab96b04665"
+				},
+				{
+					"seq": 2,
+					"atMs": 7,
+					"source": "host_metadata",
+					"kind": "validation",
+					"operationId": "operation_11",
+					"evidenceRef": "evidence_11",
+					"snapshotId": "snapshot_10",
+					"revision": 5,
+					"scope": "targeted",
+					"status": "passed",
+					"freshness": "current",
+					"latencyMs": { "status": "available", "value": 7 }
+				},
+				{
+					"seq": 3,
+					"atMs": 11,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_12",
+					"workerId": "worker_10",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_10",
+					"logicalPassId": "pass_10",
+					"snapshotId": "snapshot_10",
+					"evidenceRef": "evidence_12",
+					"verdict": "passed",
+					"submitted": true,
+					"findingFingerprints": [],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 4,
+					"atMs": 13,
+					"source": "host_metadata",
+					"kind": "operation_metrics",
+					"operationId": "operation_12",
+					"workerId": "worker_10",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"latencyMs": { "status": "available", "value": 2 },
+					"inputTokenCount": { "status": "available", "value": 1200 },
+					"cacheReadTokenCount": { "status": "available", "value": 4000 },
+					"outputTokenCount": {
+						"status": "unavailable",
+						"reason": "provider_unavailable"
+					},
+					"promptCharacterCount": { "status": "available", "value": 4800 },
+					"resultCharacterCount": { "status": "available", "value": 700 }
+				},
+				{
+					"seq": 5,
+					"atMs": 15,
+					"source": "replay_derived",
+					"kind": "compaction",
+					"operationId": "operation_13",
+					"beforeCharacterCount": { "status": "available", "value": 9000 },
+					"afterCharacterCount": { "status": "available", "value": 3000 }
+				},
+				{
+					"seq": 6,
+					"atMs": 17,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "blocked",
+					"reason": "active_final_feature_in_progress",
+					"revision": 5,
+					"stateDigest": "de44d7486ef40efd092286206fe7b70f188ae3177c1fe224e4c137ab96b04665",
+					"evidenceRefs": ["evidence_11", "evidence_12"]
+				}
+			]
+		},
+		{
+			"id": "contradictory_feature_final_verdicts",
+			"sessionId": "session_2",
+			"initialStateDigest": "ca08c3f17da905f14c139b51d6a2eaacb6698ee6573d8ce6012ef9795710c89e",
+			"controlDefects": ["contradictory_verdict_not_reconciled"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "flow_ledger",
+					"kind": "session_state",
+					"sessionId": "session_2",
+					"revision": 8,
+					"sessionStatus": "running",
+					"featureStatus": "completed",
+					"stateDigest": "cbc43a03a3a3768f556b537e11049ce64f9fc2a5840dd8bac207396d1cc7b1fe"
+				},
+				{
+					"seq": 2,
+					"atMs": 8,
+					"source": "supplied_observation",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_21",
+					"workerId": "worker_21",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_21",
+					"logicalPassId": "pass_21",
+					"snapshotId": "snapshot_20",
+					"evidenceRef": "evidence_21",
+					"verdict": "failed",
+					"submitted": true,
+					"findingFingerprints": [
+						"e41383022f9afaddeff43e46f650cb52e611be72d40bcc8e99b97ceef68fcba5"
+					],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 3,
+					"atMs": 12,
+					"source": "supplied_observation",
+					"kind": "final_review_attempt",
+					"operationId": "operation_22",
+					"workerId": "worker_22",
+					"role": "final_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_22",
+					"logicalPassId": "pass_22",
+					"snapshotId": "snapshot_20",
+					"evidenceRef": "evidence_22",
+					"verdict": "passed",
+					"submitted": true,
+					"findingFingerprints": [],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 4,
+					"atMs": 14,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "blocked",
+					"reason": "contradictory_review_verdicts",
+					"revision": 8,
+					"stateDigest": "cbc43a03a3a3768f556b537e11049ce64f9fc2a5840dd8bac207396d1cc7b1fe",
+					"evidenceRefs": ["evidence_21", "evidence_22"]
+				}
+			]
+		},
+		{
+			"id": "failed_to_passed_retry",
+			"sessionId": "session_3",
+			"initialStateDigest": "ac7f39a1e0b7bcd03a4d2c83b773ae28ba3befa34bbfd0341e3fef15dfdfad84",
+			"controlDefects": ["logical_pass_retry_not_correlated"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_31",
+					"workerId": "worker_30",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_31",
+					"logicalPassId": "pass_30",
+					"snapshotId": "snapshot_30",
+					"evidenceRef": "evidence_31",
+					"verdict": "failed",
+					"submitted": true,
+					"findingFingerprints": [
+						"baa8019536585a30aa76d1e29c06cd9175f48fee79a008e7df3996bddf0828cc"
+					],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 2,
+					"atMs": 5,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_33",
+					"workerId": "worker_30",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_32",
+					"logicalPassId": "pass_30",
+					"snapshotId": "snapshot_32",
+					"evidenceRef": "evidence_32",
+					"verdict": "passed",
+					"submitted": true,
+					"findingFingerprints": [],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 3,
+					"atMs": 10,
+					"source": "replay_derived",
+					"kind": "retry_finding_delta",
+					"operationId": "operation_32",
+					"logicalPassId": "pass_30",
+					"previousAttemptId": "attempt_31",
+					"currentAttemptId": "attempt_32",
+					"delta": "resolved",
+					"previousFindingCount": 1,
+					"currentFindingCount": 0,
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 4,
+					"atMs": 13,
+					"source": "replay_derived",
+					"kind": "compaction",
+					"operationId": "operation_34",
+					"beforeCharacterCount": { "status": "available", "value": 7200 },
+					"afterCharacterCount": { "status": "available", "value": 2500 }
+				},
+				{
+					"seq": 5,
+					"atMs": 15,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "complete",
+					"reason": "review_retry_passed",
+					"revision": 6,
+					"stateDigest": "c7b4cd46ff12033e6e7becb7384ac9acadde430c8cadcaa951e5aa0a5ab2f669",
+					"evidenceRefs": ["evidence_31", "evidence_32"]
+				}
+			]
+		},
+		{
+			"id": "unsubmitted_review_failure",
+			"sessionId": "session_4",
+			"initialStateDigest": "8ba109b081fba300f099405e5c3eba22d49c6c86b2f4533abad171352b5d456c",
+			"controlDefects": ["unsubmitted_review_failure_not_counted"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "supplied_observation",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_41",
+					"workerId": "worker_40",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_41",
+					"logicalPassId": "pass_40",
+					"snapshotId": "snapshot_40",
+					"evidenceRef": "evidence_41",
+					"verdict": "failed",
+					"submitted": false,
+					"findingFingerprints": [
+						"e41383022f9afaddeff43e46f650cb52e611be72d40bcc8e99b97ceef68fcba5"
+					],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 2,
+					"atMs": 4,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "blocked",
+					"reason": "review_failure_unsubmitted",
+					"revision": 3,
+					"stateDigest": "060e2bddb70ac9c2aac585f72c68c839044f5197175828f38389baef52f75177",
+					"evidenceRefs": ["evidence_41"]
+				}
+			]
+		},
+		{
+			"id": "malformed_optional_telemetry",
+			"sessionId": "session_5",
+			"initialStateDigest": "16091175048ac6014be4712b1640c0e3a3272f4fc944e0bee3248f8861b234be",
+			"controlDefects": ["malformed_telemetry_masks_review"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_51",
+					"workerId": "worker_50",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_51",
+					"logicalPassId": "pass_50",
+					"snapshotId": "snapshot_50",
+					"evidenceRef": "evidence_51",
+					"verdict": "failed",
+					"submitted": true,
+					"findingFingerprints": [
+						"baa8019536585a30aa76d1e29c06cd9175f48fee79a008e7df3996bddf0828cc"
+					],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 2,
+					"atMs": 3,
+					"source": "flow_ledger",
+					"kind": "telemetry_validity",
+					"operationId": "operation_52",
+					"status": "malformed",
+					"declaredWorkerCount": { "status": "available", "value": 0 }
+				},
+				{
+					"seq": 3,
+					"atMs": 4,
+					"source": "replay_derived",
+					"kind": "schema_failure",
+					"operationId": "operation_52",
+					"target": "telemetry",
+					"failure": "invalid_type"
+				},
+				{
+					"seq": 4,
+					"atMs": 5,
+					"source": "replay_derived",
+					"kind": "compaction",
+					"operationId": "operation_53",
+					"beforeCharacterCount": {
+						"status": "unavailable",
+						"reason": "not_recorded"
+					},
+					"afterCharacterCount": {
+						"status": "unavailable",
+						"reason": "not_recorded"
+					}
+				},
+				{
+					"seq": 5,
+					"atMs": 7,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "blocked",
+					"reason": "optional_telemetry_malformed",
+					"revision": 4,
+					"stateDigest": "c1407d6c3b836e52928e95a6f82dc4a33e1cfda4e70575f33a9fc88661119068",
+					"evidenceRefs": ["evidence_51"]
+				}
+			]
+		},
+		{
+			"id": "empty_or_malformed_handoff",
+			"sessionId": "session_6",
+			"initialStateDigest": "249215fed826e1cff9368c2c7490760a16f7bd49f875d39a9f23eaf1505d076d",
+			"controlDefects": ["handoff_not_runtime_validated"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "host_metadata",
+					"kind": "handoff_validity",
+					"operationId": "operation_61",
+					"workerId": "worker_60",
+					"role": "implementation_worker",
+					"modelClass": "worker",
+					"status": "empty",
+					"evidenceRef": "evidence_61"
+				},
+				{
+					"seq": 2,
+					"atMs": 2,
+					"source": "host_metadata",
+					"kind": "handoff_validity",
+					"operationId": "operation_62",
+					"workerId": "worker_60",
+					"role": "implementation_worker",
+					"modelClass": "worker",
+					"status": "malformed",
+					"evidenceRef": "evidence_62"
+				},
+				{
+					"seq": 3,
+					"atMs": 3,
+					"source": "replay_derived",
+					"kind": "schema_failure",
+					"operationId": "operation_62",
+					"target": "handoff",
+					"failure": "missing_field"
+				},
+				{
+					"seq": 4,
+					"atMs": 5,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "blocked",
+					"reason": "handoff_invalid",
+					"revision": 2,
+					"stateDigest": "caa0a710710542eed42e7a630f1294c409d321c20380aec1cdb80e96cc686034",
+					"evidenceRefs": ["evidence_61", "evidence_62"]
+				}
+			]
+		},
+		{
+			"id": "stale_validation",
+			"sessionId": "session_7",
+			"initialStateDigest": "a03f2386ae06b21109577020844df367857b72c2fcce384c1896fed98a89c82b",
+			"controlDefects": ["stale_validation_not_snapshot_bound"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "host_metadata",
+					"kind": "validation",
+					"operationId": "operation_71",
+					"evidenceRef": "evidence_71",
+					"snapshotId": "snapshot_70",
+					"revision": 11,
+					"scope": "broad",
+					"status": "passed",
+					"freshness": "stale",
+					"latencyMs": { "status": "available", "value": 9 }
+				},
+				{
+					"seq": 2,
+					"atMs": 4,
+					"source": "flow_ledger",
+					"kind": "session_state",
+					"sessionId": "session_7",
+					"revision": 12,
+					"sessionStatus": "running",
+					"featureStatus": "completed",
+					"stateDigest": "96a4924ba6393a387ad85ef720dfe1376978024a0d4e83f8cc72adc0434224d2"
+				},
+				{
+					"seq": 3,
+					"atMs": 8,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_72",
+					"workerId": "worker_70",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_70",
+					"logicalPassId": "pass_70",
+					"snapshotId": "snapshot_71",
+					"evidenceRef": "evidence_72",
+					"verdict": "passed",
+					"submitted": true,
+					"findingFingerprints": [],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 4,
+					"atMs": 10,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "complete",
+					"reason": "validation_stale",
+					"revision": 12,
+					"stateDigest": "96a4924ba6393a387ad85ef720dfe1376978024a0d4e83f8cc72adc0434224d2",
+					"evidenceRefs": ["evidence_71", "evidence_72"]
+				}
+			]
+		},
+		{
+			"id": "unchanged_finding_retry",
+			"sessionId": "session_8",
+			"initialStateDigest": "06b29bb318814108e94270528fe7994c096308b3692923723bf1ae6f98d50b4f",
+			"controlDefects": ["unchanged_finding_not_deduplicated"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_81",
+					"workerId": "worker_80",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_81",
+					"logicalPassId": "pass_80",
+					"snapshotId": "snapshot_80",
+					"evidenceRef": "evidence_81",
+					"verdict": "failed",
+					"submitted": true,
+					"findingFingerprints": [
+						"e41383022f9afaddeff43e46f650cb52e611be72d40bcc8e99b97ceef68fcba5"
+					],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 2,
+					"atMs": 4,
+					"source": "host_metadata",
+					"kind": "feature_review_attempt",
+					"operationId": "operation_82",
+					"workerId": "worker_80",
+					"role": "feature_reviewer",
+					"modelClass": "reviewer",
+					"attemptId": "attempt_82",
+					"logicalPassId": "pass_80",
+					"snapshotId": "snapshot_82",
+					"evidenceRef": "evidence_82",
+					"verdict": "failed",
+					"submitted": true,
+					"findingFingerprints": [
+						"e41383022f9afaddeff43e46f650cb52e611be72d40bcc8e99b97ceef68fcba5"
+					],
+					"duplicateFindingCount": 0
+				},
+				{
+					"seq": 3,
+					"atMs": 6,
+					"source": "replay_derived",
+					"kind": "retry_finding_delta",
+					"operationId": "operation_83",
+					"logicalPassId": "pass_80",
+					"previousAttemptId": "attempt_81",
+					"currentAttemptId": "attempt_82",
+					"delta": "unchanged",
+					"previousFindingCount": 1,
+					"currentFindingCount": 1,
+					"duplicateFindingCount": 1
+				},
+				{
+					"seq": 4,
+					"atMs": 8,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "retry",
+					"reason": "finding_unchanged",
+					"revision": 9,
+					"stateDigest": "3be410ccb0192fe72bf669e8d919335c4abf4e7ff25c2bd1df550276d3a24422",
+					"evidenceRefs": ["evidence_81", "evidence_82"]
+				}
+			]
+		},
+		{
+			"id": "crash_replay_around_mutation",
+			"sessionId": "session_9",
+			"initialStateDigest": "cdb2e0d0f873ce5326e87cf7dec48de8da3043cfc950a7eba05a059150e873f5",
+			"controlDefects": ["mutation_recovery_not_idempotent"],
+			"events": [
+				{
+					"seq": 1,
+					"atMs": 0,
+					"source": "flow_ledger",
+					"kind": "mutation_start",
+					"operationId": "operation_90",
+					"mutationId": "mutation_90",
+					"baseRevision": 20,
+					"inputDigest": "a5bd77afb37838286964d71807d10f800aa99027231c0eb2e95b84ff990caa4d"
+				},
+				{
+					"seq": 2,
+					"atMs": 3,
+					"source": "host_metadata",
+					"kind": "mutation_crash",
+					"operationId": "operation_90",
+					"mutationId": "mutation_90",
+					"phase": "after_write_before_commit"
+				},
+				{
+					"seq": 3,
+					"atMs": 5,
+					"source": "flow_ledger",
+					"kind": "mutation_recovery",
+					"operationId": "operation_90",
+					"mutationId": "mutation_90",
+					"status": "reapplied",
+					"revision": 21,
+					"stateDigest": "a5bd77afb37838286964d71807d10f800aa99027231c0eb2e95b84ff990caa4d"
+				},
+				{
+					"seq": 4,
+					"atMs": 7,
+					"source": "replay_derived",
+					"kind": "compaction",
+					"operationId": "operation_92",
+					"beforeCharacterCount": { "status": "available", "value": 6400 },
+					"afterCharacterCount": { "status": "available", "value": 2400 }
+				},
+				{
+					"seq": 5,
+					"atMs": 9,
+					"source": "replay_derived",
+					"kind": "terminal_decision",
+					"decision": "recovered",
+					"reason": "mutation_recovered",
+					"revision": 21,
+					"stateDigest": "a5bd77afb37838286964d71807d10f800aa99027231c0eb2e95b84ff990caa4d",
+					"evidenceRefs": []
+				}
+			]
+		}
+	]
+}

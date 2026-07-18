@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	type EvidenceRecord,
 	type FeatureId,
 	type PlanInput,
 	toFeatureId,
@@ -9,6 +10,7 @@ import {
 import {
 	applyPlan,
 	approvePlan,
+	canonicalEvidenceId,
 	completeFeature,
 	createSession,
 	startRun,
@@ -21,6 +23,8 @@ const fixedEnvironment: TransitionEnvironment = {
 };
 
 const featureId = toFeatureId("domain-rewrite");
+const sourceDigest = `sha256:${"c".repeat(64)}`;
+const outputDigest = `sha256:${"d".repeat(64)}`;
 
 const plan = {
 	summary: "Rewrite the Flow domain.",
@@ -45,6 +49,10 @@ function unwrap<T>(result: { ok: true; value: T } | { ok: false }): T {
 	expect(result.ok).toBe(true);
 	if (!result.ok) throw new Error("Expected a successful transition.");
 	return result.value;
+}
+
+function canonicalEvidence<T extends EvidenceRecord>(record: T): T {
+	return { ...record, evidenceId: canonicalEvidenceId(record) };
 }
 
 describe("v5 domain transitions", () => {
@@ -77,6 +85,9 @@ describe("v5 domain transitions", () => {
 
 		const worker: WorkerResult = {
 			status: "ok",
+			operationId: "complete-domain-rewrite",
+			expectedRevision: running.causal.revision,
+			expectedSnapshotId: running.causal.snapshotId,
 			featureId,
 			summary: "Domain rewrite complete.",
 			artifactsChanged: [{ path: "src/domain/transitions.ts" }],
@@ -100,6 +111,66 @@ describe("v5 domain transitions", () => {
 				blockingFindings: [],
 				reviewDepth: "detailed",
 			},
+			reviewExecutions: [
+				{
+					attemptId: "domain-feature-review-1",
+					logicalPassId: "domain-feature-review",
+					featureId,
+					reviewKind: "feature",
+					reviewSnapshotId: `sha256:${"a".repeat(64)}`,
+					verdict: "passed",
+					findings: [],
+					startedAt: "2026-07-17T11:55:00.000Z",
+					completedAt: "2026-07-17T11:56:00.000Z",
+					terminalDisposition: "submitted",
+				},
+				{
+					attemptId: "domain-final-review-1",
+					logicalPassId: "domain-final-review",
+					featureId,
+					reviewKind: "final",
+					reviewSnapshotId: `sha256:${"b".repeat(64)}`,
+					verdict: "passed",
+					findings: [],
+					startedAt: "2026-07-17T11:57:00.000Z",
+					completedAt: "2026-07-17T11:58:00.000Z",
+					terminalDisposition: "submitted",
+				},
+			],
+			evidence: [
+				canonicalEvidence({
+					kind: "validation",
+					evidenceId: "",
+					snapshotId: running.causal.snapshotId,
+					sourceDigest,
+					commandClass: "test",
+					startedAt: "2026-07-17T11:53:00.000Z",
+					completedAt: "2026-07-17T11:54:00.000Z",
+					exitCode: 0,
+					outputDigest,
+					environmentKeys: ["CI"],
+				}),
+				canonicalEvidence({
+					kind: "review",
+					evidenceId: "",
+					snapshotId: running.causal.snapshotId,
+					sourceDigest,
+					attemptId: "domain-feature-review-1",
+					packetDigest: `sha256:${"a".repeat(64)}`,
+					startedAt: "2026-07-17T11:55:00.000Z",
+					completedAt: "2026-07-17T11:56:00.000Z",
+				}),
+				canonicalEvidence({
+					kind: "review",
+					evidenceId: "",
+					snapshotId: running.causal.snapshotId,
+					sourceDigest,
+					attemptId: "domain-final-review-1",
+					packetDigest: `sha256:${"b".repeat(64)}`,
+					startedAt: "2026-07-17T11:57:00.000Z",
+					completedAt: "2026-07-17T11:58:00.000Z",
+				}),
+			],
 			orchestrationPasses: [],
 		};
 		const completed = unwrap(
@@ -139,6 +210,9 @@ describe("v5 domain transitions", () => {
 			running,
 			{
 				status: "ok",
+				operationId: "reject-missing-validation",
+				expectedRevision: running.causal.revision,
+				expectedSnapshotId: running.causal.snapshotId,
 				featureId,
 				summary: "Missing validation.",
 				artifactsChanged: [],
@@ -150,6 +224,32 @@ describe("v5 domain transitions", () => {
 					summary: "Review passed.",
 					blockingFindings: [],
 				},
+				reviewExecutions: [
+					{
+						attemptId: "domain-validation-gate-review-1",
+						logicalPassId: "domain-feature-review",
+						featureId,
+						reviewKind: "feature",
+						reviewSnapshotId: `sha256:${"a".repeat(64)}`,
+						verdict: "passed",
+						findings: [],
+						startedAt: "2026-07-17T11:55:00.000Z",
+						completedAt: "2026-07-17T11:56:00.000Z",
+						terminalDisposition: "submitted",
+					},
+				],
+				evidence: [
+					canonicalEvidence({
+						kind: "review",
+						evidenceId: "",
+						snapshotId: running.causal.snapshotId,
+						sourceDigest,
+						attemptId: "domain-validation-gate-review-1",
+						packetDigest: `sha256:${"a".repeat(64)}`,
+						startedAt: "2026-07-17T11:55:00.000Z",
+						completedAt: "2026-07-17T11:56:00.000Z",
+					}),
+				],
 				orchestrationPasses: [],
 			},
 			{ ...fixedEnvironment, now: () => failedAt },

@@ -5,11 +5,36 @@ import {
 	FlowPlanSaveSchema,
 	FlowRunStartSchema,
 	FlowSessionCloseSchema,
+	FlowStatusSchema,
 } from "../src/application/flow-service.js";
 import {
 	acceptsFlowHostInput,
+	createTools,
 	type FlowHostInputOperation,
 } from "../src/platform/opencode/tools.js";
+
+const REVIEW_SNAPSHOT_ID = `sha256:${"a".repeat(64)}`;
+const OUTPUT_DIGEST = `sha256:${"c".repeat(64)}`;
+const EVIDENCE_ID = `sha256:${"d".repeat(64)}`;
+
+const causalGuard = {
+	operationId: "domain-rewrite-completion",
+	expectedRevision: 3,
+	expectedSnapshotId: REVIEW_SNAPSHOT_ID,
+} as const;
+
+const reviewExecution = {
+	attemptId: "attempt-1",
+	logicalPassId: "feature-review",
+	featureId: "domain-rewrite",
+	reviewKind: "feature",
+	reviewSnapshotId: REVIEW_SNAPSHOT_ID,
+	verdict: "passed",
+	findings: [],
+	startedAt: "2026-07-18T09:00:00.000Z",
+	completedAt: "2026-07-18T09:01:00.000Z",
+	terminalDisposition: "submitted",
+} as const;
 
 const plan = {
 	summary: "Rewrite Flow for v5.",
@@ -32,14 +57,19 @@ const plan = {
 
 const validFeatureResult = {
 	status: "ok",
+	...causalGuard,
 	featureId: "domain-rewrite",
 	summary: "The domain was rewritten.",
 	artifactsChanged: [{ path: "src/domain/session.ts" }],
-	validationRun: [
+	validations: [
 		{
 			command: "bun test tests/domain",
-			status: "passed",
 			summary: "Domain tests passed.",
+			startedAt: "2026-07-18T08:58:00.000Z",
+			completedAt: "2026-07-18T08:59:00.000Z",
+			exitCode: 0,
+			outputDigest: OUTPUT_DIGEST,
+			environmentKeys: [],
 		},
 	],
 	validationScope: "targeted",
@@ -49,6 +79,7 @@ const validFeatureResult = {
 		summary: "The new domain boundary was reviewed.",
 		blockingFindings: [],
 	},
+	reviewExecutions: [reviewExecution],
 	orchestrationPasses: [
 		{
 			id: "domain-review",
@@ -70,6 +101,7 @@ const validFeatureResult = {
 } as const;
 
 const coreSchemas = {
+	status: FlowStatusSchema,
 	planSave: FlowPlanSaveSchema,
 	runStart: FlowRunStartSchema,
 	featureComplete: FlowFeatureCompleteToolSchema,
@@ -78,6 +110,48 @@ const coreSchemas = {
 } as const;
 
 const fixtures = [
+	{
+		name: "accepts compact status by default",
+		schema: "status",
+		input: {},
+		expected: true,
+	},
+	{
+		name: "accepts execution status without a caller feature selection",
+		schema: "status",
+		input: { view: "execution" },
+		expected: true,
+	},
+	{
+		name: "rejects caller-selected execution features",
+		schema: "status",
+		input: { view: "execution", featureId: "domain-rewrite" },
+		expected: false,
+	},
+	{
+		name: "rejects reviewer-only fields on strict execution input",
+		schema: "status",
+		input: {
+			view: "execution",
+			reviewKind: "feature",
+			packetHash: REVIEW_SNAPSHOT_ID,
+		},
+		expected: false,
+	},
+	{
+		name: "accepts a guarded reviewer projection request",
+		schema: "status",
+		input: {
+			view: "reviewer",
+			featureId: "domain-rewrite",
+			reviewKind: "feature",
+			packetHash: REVIEW_SNAPSHOT_ID,
+			evidenceRefs: [EVIDENCE_ID],
+			expectedRevision: 3,
+			expectedSnapshotId: REVIEW_SNAPSHOT_ID,
+		},
+		expected: true,
+	},
 	{
 		name: "accepts a complete plan payload",
 		schema: "planSave",
@@ -127,6 +201,12 @@ const fixtures = [
 		expected: true,
 	},
 	{
+		name: "rejects a whitespace-only completion summary",
+		schema: "featureComplete",
+		input: { ...validFeatureResult, summary: "   " },
+		expected: false,
+	},
+	{
 		name: "rejects a completion outcome without an explicit kind",
 		schema: "featureComplete",
 		input: {
@@ -138,7 +218,7 @@ const fixtures = [
 		expected: false,
 	},
 	{
-		name: "rejects impossible orchestration worker counts",
+		name: "passes impossible optional orchestration telemetry to application isolation",
 		schema: "featureComplete",
 		input: {
 			...validFeatureResult,
@@ -150,10 +230,10 @@ const fixtures = [
 				},
 			],
 		},
-		expected: false,
+		expected: true,
 	},
 	{
-		name: "rejects more than 50 orchestration passes",
+		name: "passes over-limit optional orchestration telemetry to application isolation",
 		schema: "featureComplete",
 		input: {
 			...validFeatureResult,
@@ -162,6 +242,71 @@ const fixtures = [
 				id: `domain-review-${index}`,
 			})),
 		},
+		expected: true,
+	},
+	{
+		name: "accepts strict review execution evidence without a caller fingerprint",
+		schema: "featureComplete",
+		input: {
+			...validFeatureResult,
+			reviewExecutions: [reviewExecution],
+		},
+		expected: true,
+	},
+	{
+		name: "rejects a passed review that was observed but never submitted",
+		schema: "featureComplete",
+		input: {
+			...validFeatureResult,
+			reviewExecutions: [
+				{
+					...reviewExecution,
+					terminalDisposition: "observed_unsubmitted",
+				},
+			],
+		},
+		expected: false,
+	},
+	{
+		name: "rejects caller-fabricated review finding fingerprints",
+		schema: "featureComplete",
+		input: {
+			...validFeatureResult,
+			reviewExecutions: [
+				{
+					...reviewExecution,
+					verdict: "failed",
+					findings: [
+						{
+							taxonomy: "implementation_defect",
+							subject: "src/domain/session.ts",
+							requirementOrRisk: "Attempts must remain append-only.",
+							evidenceLocator: "src/domain/session.ts:100",
+							summary: "Attempt evidence can be overwritten.",
+							severity: "blocking",
+							fingerprint: `finding-v1-${"b".repeat(32)}`,
+						},
+					],
+				},
+			],
+		},
+		expected: false,
+	},
+	{
+		name: "rejects non-digest review snapshot identities",
+		schema: "featureComplete",
+		input: {
+			...validFeatureResult,
+			reviewExecutions: [
+				{ ...reviewExecution, reviewSnapshotId: "review-snapshot-latest" },
+			],
+		},
+		expected: false,
+	},
+	{
+		name: "rejects unknown non-telemetry completion fields",
+		schema: "featureComplete",
+		input: { ...validFeatureResult, legacyApproval: true },
 		expected: false,
 	},
 	{
@@ -179,7 +324,7 @@ const fixtures = [
 	{
 		name: "accepts a feature reset",
 		schema: "featureReset",
-		input: { featureId: "domain-rewrite" },
+		input: { ...causalGuard, featureId: "domain-rewrite" },
 		expected: true,
 	},
 	{
@@ -197,7 +342,11 @@ const fixtures = [
 	{
 		name: "accepts an abandoned session closure",
 		schema: "sessionClose",
-		input: { kind: "abandoned", summary: "Superseded by v5." },
+		input: {
+			...causalGuard,
+			kind: "abandoned",
+			summary: "Superseded by v5.",
+		},
 		expected: true,
 	},
 	{
@@ -221,4 +370,83 @@ describe("OpenCode transport and core input schema contract", () => {
 			);
 		});
 	}
+
+	test("registers the execution status view on the host tool", () => {
+		const registered = createTools({}).flow_status;
+		expect(registered).toBeDefined();
+		if (!registered) throw new Error("Expected flow_status tool.");
+		const view = registered.args.view as
+			| { safeParse(value: unknown): { success: boolean } }
+			| undefined;
+		expect(view?.safeParse("execution").success).toBe(true);
+	});
+
+	test("registers only the public completion envelope fields", () => {
+		const registered = createTools({}).flow_feature_complete;
+		expect(registered).toBeDefined();
+		if (!registered) throw new Error("Expected flow_feature_complete tool.");
+		expect(Object.keys(registered.args).sort()).toEqual(
+			[
+				"artifactsChanged",
+				"expectedRevision",
+				"expectedSnapshotId",
+				"featureId",
+				"featureReview",
+				"featureReviewDepth",
+				"finalReview",
+				"operationId",
+				"orchestrationPasses",
+				"outcome",
+				"reviewExecutions",
+				"status",
+				"summary",
+				"validationScope",
+				"validations",
+			].sort(),
+		);
+		for (const serverOwned of [
+			"sourceDigest",
+			"snapshotId",
+			"evidenceId",
+			"evidence",
+			"validationRun",
+			"commandClass",
+		]) {
+			expect(registered.args).not.toHaveProperty(serverOwned);
+		}
+	});
+
+	test("host envelope defers status-dependent required fields to the authoritative application union", () => {
+		const { validations: _omitted, ...missingConditionalField } =
+			validFeatureResult;
+		expect(
+			acceptsFlowHostInput("featureComplete", missingConditionalField),
+		).toBe(true);
+		expect(
+			FlowFeatureCompleteToolSchema.safeParse(missingConditionalField).success,
+		).toBe(false);
+	});
+
+	test("application union enforces one aggregate derived-evidence budget", () => {
+		const overAggregateLimit = {
+			...validFeatureResult,
+			validations: Array.from({ length: 51 }, (_, index) => ({
+				...validFeatureResult.validations[0],
+				command: `bun test tests/domain-${index}`,
+			})),
+			reviewExecutions: Array.from({ length: 50 }, (_, index) => ({
+				...reviewExecution,
+				attemptId: `attempt-${index + 1}`,
+			})),
+		};
+		expect(acceptsFlowHostInput("featureComplete", overAggregateLimit)).toBe(
+			true,
+		);
+		const parsed = FlowFeatureCompleteToolSchema.safeParse(overAggregateLimit);
+		expect(parsed.success).toBe(false);
+		if (parsed.success) throw new Error("Expected aggregate limit rejection.");
+		expect(parsed.error.issues[0]?.message).toContain(
+			"at most 100 evidence records",
+		);
+	});
 });

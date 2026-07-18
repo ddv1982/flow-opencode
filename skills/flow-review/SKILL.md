@@ -57,8 +57,17 @@ These instructions run in two contexts, and only one of them can load helpers:
 
 ## Output
 
-For a feature review, return a packet the manager can copy into
-`flow_feature_complete`:
+For every observed dispatch, return the verdict plus one `reviewExecution` for
+the manager to append to `flow_feature_complete.reviewExecutions`. Copy the
+packet-provided `attemptId`, `logicalPassId`, `featureId`, `reviewKind`,
+immutable `reviewSnapshotId` digest, and `startedAt`; add `verdict`, typed
+`findings`, `completedAt`, and `terminalDisposition`. Use
+`terminalDisposition: "observed_unsubmitted"` for an observed attempt that
+cannot submit normally; it is still a failed execution, never missing evidence.
+Flow computes each finding fingerprint from normalized taxonomy + subject +
+requirement/risk + evidence locator.
+
+Feature example:
 
 ```json
 {
@@ -67,6 +76,18 @@ For a feature review, return a packet the manager can copy into
     "status": "passed",
     "summary": "what was reviewed and why it is acceptable",
     "blockingFindings": []
+  },
+  "reviewExecution": {
+    "attemptId": "attempt-2",
+    "logicalPassId": "feature-pass",
+    "featureId": "feature-id",
+    "reviewKind": "feature",
+    "reviewSnapshotId": "sha256:digest",
+    "verdict": "passed",
+    "findings": [],
+    "startedAt": "ISO-8601",
+    "completedAt": "ISO-8601",
+    "terminalDisposition": "submitted"
   }
 }
 ```
@@ -74,7 +95,7 @@ For a feature review, return a packet the manager can copy into
 `featureReviewDepth` must be at least the feature's planned `reviewDepth`.
 Use the actual depth performed: `quick`, `standard`, or `detailed`.
 
-For a final review, return:
+Final review uses `reviewKind: "final"` in that envelope plus:
 
 ```json
 {
@@ -86,6 +107,10 @@ For a final review, return:
 ```
 
 Use `status: "failed"` when any blocking finding remains. Advisory findings may be included in the prose summary, but `blockingFindings` contains only blockers.
+
+Typed execution findings use exactly `implementation_defect`,
+`regression_coverage_gap`, `evidence_gap`, or `advisory` as `taxonomy`, with
+`subject`, `requirementOrRisk`, `evidenceLocator`, `summary`, and `severity`.
 
 ## Special cases
 

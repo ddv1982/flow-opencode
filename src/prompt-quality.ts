@@ -459,7 +459,10 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		surface: "flow-run",
 		required: [
 			{ label: "status first", pattern: /Call `flow_status`/i },
-			{ label: "closure detected", pattern: /session\.closure/i },
+			{
+				label: "closure detected",
+				pattern: /projection\.closure(?:\.kind)?/i,
+			},
 			{ label: "retry close", pattern: /Retry `flow_session_close`/i },
 		],
 	},

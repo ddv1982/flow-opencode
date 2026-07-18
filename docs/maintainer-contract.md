@@ -35,7 +35,17 @@ Runtime must enforce:
 
 ## State
 
-`.flow/session.json` is the only active source of truth and the only active-state representation. `.flow/history/<session-id>.json` stores archived sessions. Archive publication is exclusive and no-clobber: persist the closed active snapshot first, publish it with a hard link, accept an existing target only when its normalized session is identical, then remove active state. A different existing archive is a collision and must leave both its bytes and readable active state intact. Flow writes `.flow/.gitignore` so local session state is ignored by Git unless a repository intentionally opts in. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, ambient instruction files, and other projection caches are intentionally not runtime state.
+`.flow/session.json` is the only active source of truth and the only active-state representation. `.flow/history/<session-id>.json` stores archived sessions. Restricted evidence bytes live separately under `.flow/evidence/v1/sha256/**`; the session ledger stores only typed digest/length references to them. This is ordinary hash-addressed filesystem storage, not a database, index, cache of projected state, or qa-scribe integration. Archive publication is exclusive and no-clobber: persist the closed active snapshot first, publish it with a hard link, accept an existing target only when its normalized session is identical, then remove active state. A different existing archive is a collision and must leave both its bytes and readable active state intact. Flow writes or safely extends `.flow/.gitignore` so session, history, evidence, and lock state remain ignored even when a maintainer has custom entries. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, ambient instruction files, and other projection caches are intentionally not runtime state.
+
+Every committed mutation advances one nonnegative revision and records a stable
+operation id, operation kind, canonical request digest, prior/current snapshot,
+prior mutation digest, changed entity/fields, blocker delta, and evidence
+references. Completion, reset, close, and preliminary review recording bind
+their operation identity to the expected revision and snapshot. Replaying the
+same operation envelope is idempotent; reusing an id for another kind, payload,
+or causal assignment fails closed. The SHA-256 chain is an integrity and replay
+boundary, not a secret signature against an actor who can rewrite the entire
+workspace.
 
 Budget and retry telemetry in the session ledger records review counts, failed
 review counts, per-feature failed review attempts, and bounded orchestration
@@ -45,10 +55,13 @@ state and resumes only through `flow_feature_reset`.
 Runtime pass accounting is deliberately bounded: counts, recent pass ids,
 worker counts, candidate/verifier usage, skipped candidate decisions, handoff
 references, verification status, outcome, and synthesis references. Full worker
-handoffs, command logs, transcripts, scratch tables, and standalone manager
-synthesis artifacts stay outside `.flow/**`. Distilled conclusions may enter
-plan prose or completion summaries when they are the Flow artifact being
-recorded. Completion accepts at most 50 pass records, and `latestPasses`
+handoffs, transcripts, scratch tables, and standalone manager synthesis
+artifacts stay outside `.flow/**`. Exact validation output may enter only the
+restricted, size-bounded `.flow/evidence/**` store when explicitly published;
+ordinary status and mutation responses expose its digest/length reference, not
+its bytes, absolute path, or low-level filesystem errors. Distilled conclusions
+may enter plan prose or completion summaries when they are the Flow artifact
+being recorded. Completion accepts at most 50 pass records, and `latestPasses`
 retains at most 50. Pass ids deduplicate within a payload and while they remain
 in that window; an evicted id may be counted again because this is telemetry,
 not a permanent idempotency ledger.
@@ -121,9 +134,15 @@ Tools:
 Tool responses keep plugin-authored operation metadata at the top level. All
 session, feature, closure, failure-detail, and other repository- or
 caller-controlled prose belongs under `workflowData`. Active `flow_status`
-returns top-level `status: "ok"`; the state-machine status lives at
-`workflowData.session.status`. Top-level response strings must never interpolate
-untrusted workflow prose.
+returns top-level `status: "ok"`; the default state-machine view is the compact
+object at `workflowData.projection`. Compact is routing-only and includes the
+causal guards plus `closure.kind` needed for archive recovery. Explicit
+`execution`, `detail`, `reviewer`, and `sinceRevision` requests select full
+active-feature working scope, bounded diagnostics, narrow review assignment
+context, or deltas. Ordinary mutations return `workflowData.receipt`, not a
+full session; receipts acknowledge mutations and never become feature scope or
+continuation state. Top-level response strings must never interpolate untrusted
+workflow prose.
 
 No runtime compatibility aliases, session migrations, or readers are allowed
 for v2 sessions, v4 source paths, or retired tools. Unsupported active sessions
@@ -168,9 +187,33 @@ second-restart workflow. Package smoke must prove guidance is embedded, and
 surface tests must prove concurrent initialization leaves hostile global links
 untouched.
 
-Public Flow commands must call `flow_status` first. The OpenCode
-command preflight hook is authoritative for public Flow commands: it must
-replace resolved command parts with the current bundled template so stale
+Public Flow commands must call `flow_status` with `view: "compact"` first and
+read workflow state only from `workflowData.projection`. A stored
+`projection.closure.kind` routes only to guarded `flow_session_close`. Ready
+work calls `flow_run_start`, treats its receipt as acknowledgement, then loads
+`view: "execution"`; already running or resumed work loads execution directly.
+Execution scope and causal guards govern implementation, validation, review,
+and completion. Immediately after completion the manager refreshes compact
+status: `flow-auto` continues or closes from that projection, while `flow-run`
+reports after its one feature and closes when applicable.
+
+Model-visible scope references use a host-independent lexical privacy boundary.
+Flow normalizes with NFKC and trims first, then replaces POSIX roots, leading
+backslashes, drive-qualified paths, UNC/device paths, URI schemes, home roots,
+and exact `..` path segments with deterministic digests. Safe relative values
+such as `src\feature.ts` and `foo..bar` remain readable. Classification happens
+before bounded-view truncation, and execution retains every transformed target
+rather than paginating or silently dropping scope.
+
+OpenCode 1.18 tool registration accepts one flat `ZodRawShape`, so the registered
+`flow_status` envelope can validate leaf fields but cannot express
+view-conditional field combinations. The application's strict union is the
+authoritative boundary: execution accepts only `{ view: "execution" }` and
+rejects caller feature selection or reviewer-only fields. Keep this explicit
+rather than adding a second status tool or a nested compatibility envelope.
+
+The OpenCode command preflight hook is authoritative for public Flow commands:
+it must replace resolved command parts with the current bundled template so stale
 command files or command registry cache cannot ask for native skill-loading
 behavior. `/flow-auto`, `/flow-plan`, `/flow-run`, and `/flow-review` must stay
 self-contained as configured surfaces: manager commands compile selected core

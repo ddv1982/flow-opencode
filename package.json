@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "5.0.0",
+	"version": "5.1.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"repository": {
@@ -34,6 +34,8 @@
 		"lint": "bunx biome check src tests scripts --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"prompt:quality": "bun run scripts/prompt-quality.ts",
 		"prompt:model-eval": "bun run scripts/prompt-model-eval.ts",
+		"replay:report": "bun run scripts/replay-report.ts",
+		"transport:report": "bun run scripts/causal-transport-report.ts",
 		"package:smoke": "bun test tests/package-smoke.test.ts",
 		"release:monitor": "node scripts/release-monitor.mjs",
 		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",

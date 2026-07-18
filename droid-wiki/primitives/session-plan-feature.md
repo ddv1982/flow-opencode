@@ -22,15 +22,20 @@ src/application/schema.ts
 | `PlanSchema` | `src/application/schema.ts` | Summary, overview, requirements, decisions, final review policy, and features. |
 | `FeatureSchema` | `src/application/schema.ts` | Kebab-case feature id and feature state. |
 | `createSession` | `src/domain/transitions.ts` | Creates a planning session with `approval: "pending"`. |
-| `summarizeSession` | `src/domain/transitions.ts` | Produces user-facing status and next action. |
+| `compactSessionProjection` | `src/domain/transitions.ts` | Produces bounded routing state and next action. |
+| `executionSessionProjection` | `src/domain/transitions.ts` | Produces the full active-feature working scope. |
 
 ## How it works
 
-`SessionSchema` persists `version`, `id`, `goal`, `status`, `approval`, `plan`, `activeFeatureId`, `history`, budget telemetry, `closure`, `lastError`, and timestamps. `PlanSchema` requires at least one feature. `FeatureSchema` restricts ids to lowercase kebab-case using `FEATURE_ID_PATTERN` and records the feature's minimum `reviewDepth`.
+`SessionSchema` persists `version`, `id`, `goal`, `status`, `approval`, `plan`, `activeFeatureId`, `history`, budget telemetry, `closure`, `lastError`, causal state, and timestamps. `PlanSchema` requires at least one feature. `FeatureSchema` restricts ids to lowercase kebab-case using `FEATURE_ID_PATTERN` and records the feature's minimum `reviewDepth`.
 
 ## Integration points
 
-The session is written to `.flow/session.json` by `saveSession` in `src/infrastructure/fs/workspace.ts` and read explicitly by `flow_status`. Flow guidance refers to plan `requirements`, `decisions`, feature `targets`, feature `validation`, and feature `reviewDepth` when choosing work and evidence.
+The session is written through the repository transaction and read explicitly by
+`flow_status`. Compact status is routing-only; execution status exposes the
+active feature's requirements, decisions, targets, validation, review policy,
+and causal guards. Flow guidance never treats a mutation receipt as feature
+scope.
 
 ## Key source files
 

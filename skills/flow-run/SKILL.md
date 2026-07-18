@@ -13,12 +13,12 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 
 ## Start
 
-- Call `flow_status`.
-- If `flow_status` returns a `workflowData.session.closure`, do not mutate the
-  closed session. Retry `flow_session_close` with the recorded closure kind to
-  finish archiving it.
-- Call `flow_run_start` with no `featureId` unless the user or plan requires a specific runnable feature.
-- Treat the returned feature as the sole scope until it is completed, blocked, or reset.
+- Load compact `flow_status` and read only `workflowData.projection`. If
+  `projection.closure.kind` exists, retry guarded `flow_session_close` and stop.
+- When ready, call `flow_run_start`; its receipt only acknowledges the mutation.
+- For fresh or resumed running work, call `flow_status` with
+  `view: "execution"`. Its projection is the sole feature scope and supplies
+  causal guards through completion.
 - Helper rule: obtain named helper guidance with `flow_guidance`; if that tool is
   unavailable, record the gap and keep the corresponding claims conservative
   instead of simulating its checks.
@@ -91,70 +91,48 @@ manager decides what is strong enough to record.
 
 ## Review and complete
 
-Before `flow_feature_complete`, obtain a `featureReview` payload. Load
-`flow-review`; for read-only subagent reviews, the manager receives the review
-packet and records both `featureReviewDepth` and `featureReview`.
+Before completion, route a bounded `flow-review` packet and record
+`featureReviewDepth` plus verdict.
 
-Send reviewers a bounded review packet. Do not rely on the accumulated parent
-conversation. Include only:
+For the final feature, economy mode uses exactly: `targeted validation ->
+feature review -> one authorized bounded repair/retry if needed -> broad
+validation after the last functional edit -> final review -> one atomic
+flow_feature_complete`. An active final feature may remain `in_progress` while
+awaiting review; this is not a blocker. Never dispatch final review before the
+feature review passes in economy mode. Latency/speculative review mode remains
+disabled; enabling it would require one immutable `reviewSnapshotId` shared by
+both reviews plus explicit contradiction reconciliation.
 
-- active feature id, title, summary, `reviewDepth`, targets, validation, and dependencies
-- relevant plan requirements, decisions, and final review policy
-- changed files and a short diff summary
-- validation evidence with exact commands, status, and observed result
-- targeted paths or risk lenses the reviewer must inspect
+Send scope, planned depth, requirements/decisions, changed-file summary,
+validation outcomes, risk lenses, and immutable snapshot digest—not the transcript.
 
-If the review returns `status: "failed"`, do not fix inside the review pass.
-Record the failed attempt by calling `flow_feature_complete` with the otherwise
-prepared completion payload, the failed `featureReview`, and the attempted
-`featureReviewDepth`; the runtime will reject completion and update the retry
-budget. Default to stopping and reporting the blocker. When the user already
-authorized autonomous implementation, make at most one repair and run one retry
-review. If the retry fails or the runtime reports review retry budget
-exhausted, stop with the blocker. Continue only after explicit user direction
-by calling `flow_feature_reset`; do not call `flow_run_start` against the
-blocked feature.
+Append one `reviewExecutions` item per dispatch, including failed
+`observed_unsubmitted` work. Record
+`attemptId`, `logicalPassId`, `featureId`, `reviewKind`, `reviewSnapshotId`,
+`verdict`, `findings`, `startedAt`, `completedAt`, and `terminalDisposition`.
+Each finding uses one taxonomy: `implementation_defect`,
+`regression_coverage_gap`, `evidence_gap`, or `advisory`, plus `subject`,
+`requirementOrRisk`, `evidenceLocator`, `summary`, and `severity`. Flow computes
+the stable finding fingerprint from normalized taxonomy + subject +
+requirement/risk + evidence locator; reviewers do not supply it. Orchestration
+telemetry never replaces review evidence.
 
-If the reserved `flow-reviewer` or required evidence is unavailable, do not
-record a Flow-gated `featureReview` or `finalReview`. You may perform an
-advisory review using available context, then complete with
-`status: "needs_input"` if review evidence is required to proceed.
+If `featureReview.status` or `finalReview.status` is `"failed"`, do not fix
+inside review. Record the failed attempt by calling `flow_feature_complete`
+with its `reviewExecutions` item, failed `featureReview`, and attempted depth;
+the runtime rejects completion but preserves the attempt and consumes retry
+budget. With prior autonomous authorization, make at most one repair and one retry review.
+If it fails or exhausts budget, stop with the blocker. Resume only after
+explicit user direction via `flow_feature_reset`; never start a blocked feature.
 
-For the final feature, also obtain a `finalReview` payload whose `reviewDepth` equals the approved plan's `finalReviewPolicy`.
+If the reviewer or evidence is unavailable, do not record Flow-gated review;
+return advisory output and complete `needs_input` when review is required.
 
-Complete with:
+For the final feature, `finalReview.reviewDepth` equals `finalReviewPolicy`.
+Submit validation, verdicts, new `reviewExecutions`, artifacts, and optional
+bounded `orchestrationPasses` in the single completion call.
 
-```json
-{
-  "status": "ok",
-  "featureId": "active-feature-id",
-  "summary": "what changed",
-  "artifactsChanged": [{ "path": "src/file.ts" }],
-  "validationRun": [
-    { "command": "bun test tests/foo.test.ts", "status": "passed", "summary": "3 pass, exercised foo behavior" }
-  ],
-  "validationScope": "targeted",
-  "featureReviewDepth": "standard",
-  "featureReview": { "status": "passed", "summary": "review summary", "blockingFindings": [] },
-  "orchestrationPasses": [
-    {
-      "id": "active-feature-id-implementation-decision",
-      "kind": "implementation-decision",
-      "decision": "serial",
-      "decisionReason": "Shared contract edits made worker ownership unsafe.",
-      "candidateEligibility": "not_eligible",
-      "candidateDecision": "serial_required",
-      "decisionFactors": ["shared_state", "overlapping_files"],
-      "writeScope": "manager-serial",
-      "verificationStatus": "not-needed",
-      "outcome": "accepted"
-    }
-  ]
-}
-```
-
-If `flow_feature_complete` returns a `workflowData.session.closure`, finish by
-calling `flow_session_close` with the recorded closure kind. If genuinely
-blocked, call `flow_feature_complete` with `status: "needs_input"` and
-an `outcome` that explains the blocker and next step. Never fabricate validation
-or review evidence to force progress.
+Immediately call `flow_status` with `view: "compact"` after completion. Close
+from refreshed `projection.closure.kind`; otherwise report the result and next
+action without starting another feature. Complete real blockers as
+`needs_input`. Never fabricate evidence or route from a receipt.

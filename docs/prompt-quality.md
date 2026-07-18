@@ -81,9 +81,10 @@ The optional worked example is excluded from these path totals.
 ## Closure and continuation policy
 
 Flow has no token, compaction, phase-boundary, or resume-packet protocol. A
-blocked feature resumes only through an explicit `flow_feature_reset`. A session
-with `workflowData.session.closure` is archive-only: the manager retries
-`flow_session_close` and does not run, reset, approve, or replan it.
+blocked feature resumes only through an explicit `flow_feature_reset`. A compact
+projection with `workflowData.projection.closure.kind` is archive-only: the
+manager retries guarded `flow_session_close` and does not run, reset, approve,
+or replan it.
 
 ## Static evaluation
 
@@ -95,12 +96,12 @@ review-retry exhaustion.
 
 | Variant | Complete scenarios | Criteria | Est. tokens | Exact duplicate lines | Role-inapplicable lines |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Whole-skill baseline | 12/18 | 43/52 | 58,054 | 188 | 26 |
-| Lexically deduplicated | 12/18 | 43/52 | 57,983 | 172 | 26 |
-| Surface-specific | 18/18 | 52/52 | 15,763 | 5 | 0 |
-| Surface-specific with bookends | 18/18 | 52/52 | 16,368 | 5 | 0 |
+| Whole-skill baseline | 11/18 | 42/52 | 59,106 | 188 | 26 |
+| Lexically deduplicated | 11/18 | 42/52 | 59,036 | 172 | 26 |
+| Surface-specific | 18/18 | 52/52 | 15,699 | 5 | 0 |
+| Surface-specific with bookends | 18/18 | 52/52 | 16,322 | 5 | 0 |
 
-The implemented set is 71.8% smaller than the whole-skill baseline by this
+The implemented set is 72.4% smaller than the whole-skill baseline by this
 estimate. Lexical deduplication alone changes little; role/phase selection
 accounts for nearly all of the reduction and eliminates role-inapplicable
 lines.
@@ -109,18 +110,17 @@ lines.
 
 | Surface | Words | Est. tokens | Actions | Exact dupes | Sources |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `flow-auto` | 3,631 | 6,779 | 127 | 3 | 11 |
-| `flow-plan` | 1,391 | 2,596 | 51 | 2 | 7 |
-| `flow-run` | 1,740 | 3,294 | 55 | 0 | 8 |
-| `flow-review` task | 57 | 99 | 1 | 0 | 1 |
+| `flow-auto` | 3,575 | 6,663 | 121 | 2 | 11 |
+| `flow-plan` | 1,408 | 2,646 | 52 | 2 | 7 |
+| `flow-run` | 1,689 | 3,173 | 48 | 0 | 8 |
+| `flow-review` task | 55 | 97 | 1 | 0 | 1 |
 | `flow-status` | 10 | 16 | 1 | 0 | 0 |
-| `flow-reviewer` agent | 1,120 | 2,049 | 50 | 1 | 4 |
+| `flow-reviewer` agent | 1,140 | 2,139 | 49 | 1 | 4 |
 | `flow-evidence-worker` | 170 | 303 | 3 | 0 | 3 |
 | `flow-validation-worker` | 170 | 305 | 3 | 0 | 3 |
 | `flow-audit-worker` | 181 | 320 | 3 | 0 | 3 |
 | `flow-verifier-worker` | 173 | 311 | 3 | 0 | 3 |
 | `flow-candidate-worker` | 195 | 349 | 3 | 0 | 3 |
-| Generated ambient instructions | 69 | 138 | 9 | 0 | generated |
 
 Worker prompts are larger than their old one-paragraph forms because the old
 prompts referred to a handoff without supplying its required shape. The
@@ -133,7 +133,7 @@ claim is true.
 The hidden reviewer grew from the first surface-specific draft because that
 draft had accidentally omitted detailed-review depth, runtime-unavailable
 behavior, and cleanup/UI special-case evidence. Restoring that judgment is an
-intentional quality correction, while the reviewer remains 49.3% smaller than
+intentional quality correction, while the reviewer remains 47.1% smaller than
 the 4,044-token whole-skill baseline.
 
 ## Live model comparison
