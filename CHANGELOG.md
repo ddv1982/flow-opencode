@@ -18,7 +18,8 @@ retry-safe, and auditable without putting raw evidence into model-visible state:
 - Validation evidence is bound to a deterministic source digest. Optional raw
   output lives in an owner-only, hash-addressed `.flow/evidence` store with
   strict size, permission, symlink, integrity, and no-clobber checks; ordinary
-  state records only typed digest and length references.
+  state records only typed digest and length references, and concurrent
+  publishers converge on the same ignore policy across platforms.
 - Review executions are durable independently of completion, with stable
   attempt and logical-pass identity, typed finding fingerprints, append-only
   failed-to-passed retry history, contradiction checks, and explicit final-

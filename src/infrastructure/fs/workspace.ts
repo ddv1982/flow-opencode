@@ -699,25 +699,48 @@ const LEGACY_FLOW_GITIGNORE_CONTENTS = new Set([
 	["session.json", "history/", "session.lock/", ".gitignore"].join("\n"),
 ]);
 
+async function writeFlowGitignoreAtomically(
+	path: string,
+	contents: string,
+): Promise<void> {
+	try {
+		await writeFileAtomically(path, contents);
+	} catch (error) {
+		try {
+			if ((await readManagedFile(path, "the Flow ignore file")) === contents) {
+				// Concurrent publication can win the same atomic write before this
+				// rename. Windows reports that race as EPERM instead of replacing the
+				// destination; exact content means the requested policy is installed.
+				return;
+			}
+		} catch (verificationError) {
+			if (verificationError instanceof UnsafeFlowWorkspaceLayoutError) {
+				throw verificationError;
+			}
+		}
+		throw error;
+	}
+}
+
 export async function ensureFlowGitignore(worktree: string): Promise<void> {
 	const path = join(flowDir(worktree), ".gitignore");
 	await ensureFlowDirectory(worktree);
 	const state = await managedFileState(path, "the Flow ignore file");
 	if (state === "missing") {
-		await writeFileAtomically(path, FLOW_GITIGNORE_CONTENT);
+		await writeFlowGitignoreAtomically(path, FLOW_GITIGNORE_CONTENT);
 		return;
 	}
 	try {
 		const existing = await readManagedFile(path, "the Flow ignore file");
 		if (LEGACY_FLOW_GITIGNORE_CONTENTS.has(existing.trimEnd())) {
-			await writeFileAtomically(path, FLOW_GITIGNORE_CONTENT);
+			await writeFlowGitignoreAtomically(path, FLOW_GITIGNORE_CONTENT);
 		} else if (!existing.trimEnd().endsWith(FLOW_GITIGNORE_CONTENT.trimEnd())) {
 			// Preserve maintainer-owned entries, but finish with Flow's complete
 			// ignore block so an earlier negation cannot expose restricted runtime
 			// evidence to ordinary Git staging.
 			const separator =
 				existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
-			await writeFileAtomically(
+			await writeFlowGitignoreAtomically(
 				path,
 				`${existing}${separator}${FLOW_GITIGNORE_CONTENT}`,
 			);
@@ -726,6 +749,6 @@ export async function ensureFlowGitignore(worktree: string): Promise<void> {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 		// The file disappeared after validation. Atomic creation remains safe
 		// because the Flow directory itself was validated above.
-		await writeFileAtomically(path, FLOW_GITIGNORE_CONTENT);
+		await writeFlowGitignoreAtomically(path, FLOW_GITIGNORE_CONTENT);
 	}
 }
