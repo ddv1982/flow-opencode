@@ -706,6 +706,12 @@ async function writeFlowGitignoreAtomically(
 	try {
 		await writeFileAtomically(path, contents);
 	} catch (error) {
+		if (
+			process.platform !== "win32" ||
+			(error as NodeJS.ErrnoException).code !== "EPERM"
+		) {
+			throw error;
+		}
 		try {
 			if ((await readManagedFile(path, "the Flow ignore file")) === contents) {
 				// Concurrent publication can win the same atomic write before this

@@ -385,6 +385,53 @@ describe("Flow workspace persistence", () => {
 		);
 	});
 
+	test.skipIf(process.platform === "win32")(
+		"does not mistake a directory-sync failure for concurrent ignore publication",
+		async () => {
+			const workspace = await tempWorkspace();
+			const workspaceModule = pathToFileURL(
+				join(process.cwd(), "src/infrastructure/fs/workspace.ts"),
+			).href;
+			const child = spawn(
+				process.execPath,
+				[
+					"--eval",
+					`import { open } from "node:fs/promises";
+import { ensureFlowGitignore } from ${JSON.stringify(workspaceModule)};
+const probe = await open(process.env.FLOW_TEST_WORKSPACE, "r");
+const fileHandlePrototype = Object.getPrototypeOf(probe);
+await probe.close();
+const originalSync = fileHandlePrototype.sync;
+fileHandlePrototype.sync = async function () {
+  const info = await this.stat();
+  if (info.isDirectory()) {
+    const error = new Error("Synthetic directory sync failure.");
+    error.code = "EIO";
+    throw error;
+  }
+  return originalSync.call(this);
+};
+let failureCode;
+try { await ensureFlowGitignore(process.env.FLOW_TEST_WORKSPACE); }
+catch (error) { failureCode = error?.code; }
+if (failureCode !== "EIO") process.exitCode = 2;`,
+				],
+				{
+					cwd: process.cwd(),
+					env: { ...process.env, FLOW_TEST_WORKSPACE: workspace },
+					stdio: ["ignore", "ignore", "pipe"],
+				},
+			);
+
+			expect(await waitForChild(child)).toEqual({ code: 0, stderr: "" });
+			await expect(
+				readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
+			).resolves.toBe(
+				"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+			);
+		},
+	);
+
 	test("applies version 3 defaults to omitted telemetry and review depth", async () => {
 		const workspace = await tempWorkspace();
 		await flowPlanSave(workspace, {

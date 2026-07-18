@@ -9,7 +9,7 @@ there is no skill sync, setup-health state, or second-restart requirement.
 Install or replace the pinned plugin version:
 
 ```bash
-opencode plugin opencode-plugin-flow@5.1.0 --global --force
+opencode plugin opencode-plugin-flow@5.1.1 --global --force
 ```
 
 Start or restart OpenCode once after changing the installed package. Core
@@ -22,7 +22,7 @@ Flow entry in `opencode.json` instead of adding a duplicate:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.1.0"]
+  "plugin": ["opencode-plugin-flow@5.1.1"]
 }
 ```
 
@@ -45,13 +45,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.1.0 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.1.1 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.1.0 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.1.1 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to

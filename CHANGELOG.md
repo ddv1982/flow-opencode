@@ -2,6 +2,19 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.1.1] - 2026-07-19
+
+Durable ignore publication lore keeps concurrent restricted-evidence setup
+portable without weakening the crash-safety boundary:
+
+- Exact-content convergence is accepted only for the Windows `EPERM` rename
+  race it was designed to tolerate.
+- POSIX parent-directory sync failures and unrelated atomic-write errors remain
+  fatal, so evidence publication cannot continue without a durable ignore
+  policy.
+- Isolated fault-injection coverage proves that visible expected bytes do not
+  turn a failed directory sync into success.
+
 ## [5.1.0] - 2026-07-18
 
 Causal evidence and review truth lore makes long-running Flow work compact,
