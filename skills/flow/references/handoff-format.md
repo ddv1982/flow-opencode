@@ -158,7 +158,7 @@ completion.
 ## Manager pass accounting record
 
 The manager, not the worker, may carry bounded records into
-`flow_feature_complete.orchestrationPasses`. Use one record per material pass or
+`flow_feature_complete.request.result.orchestrationPasses`. Use one record per material pass or
 implementation decision; keep handoffs and long artifacts outside `.flow/**`.
 The candidate accounting rules — which `candidateEligibility`,
 `candidateDecision`, and `decision` combinations validate, and what counts as

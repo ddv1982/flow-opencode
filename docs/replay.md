@@ -103,6 +103,33 @@ Reports keep four origins separate:
   only as a reconciliation value; the report labels its observation source as
   host metadata, never as a count inferred from the nine scenario events.
 
+The report also loads the closed `qa_scribe_5_1_high` lifecycle baseline. It
+prints all eight remediation counters: reviewer-assignment attempts, invalid
+reviewer payloads, completion submissions, accepted blockers, schema
+rejections, evidence-only reruns, feature resets, and abandoned sessions.
+Unavailable source facts remain `unavailable` with `not_recorded` provenance;
+they are never converted to zero. The `high` inference-effort label is retained
+as run provenance and is not presented as the cause of protocol outcomes.
+
+`tests/support/lifecycle-proof-registry.ts` is the seven-invariant executable
+proof registry. `tests/review-lifecycle-coverage-map.test.ts` verifies that each
+required proof class invokes real assertions rather than naming a source anchor.
+The focused invariant suites cover relational state, trusted chronology,
+context-loss continuation, archive retry, actual host contracts, atomicity, and
+the Session v4-only boundary.
+
+The deterministic host proof classes exercise the actual registered handlers:
+`registered_host_final_path` covers final recovery and
+`registered_host_calls` covers the host contract corpus. They are not a packed-
+host claim. Executable packed-plugin proof belongs to the separate pinned
+OpenCode live-smoke release gate.
+
+S4-HOST-01 does not treat advertised schema as enforcement. The supported host
+can still enter a handler for an invalid advertised request, so the registered
+handler must parse that same host schema before the application execution
+wrapper. The contract proof includes invalid handler calls and requires a host
+tool error with no Flow state read or mutation.
+
 Unavailable historical data is displayed as `unavailable`, never converted to
 zero. Reconciliation compares replay-derived host-backed aggregates to the
 verified host facts, reports absolute and percentage deltas, and uses a 1%

@@ -19,20 +19,39 @@ skills/flow-review/SKILL.md
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `ValidationRunSchema` | `src/application/schema.ts` | Exact command, status, and summary evidence. |
+| `ValidationObservationSchema` | `src/application/schema.ts` | Caller-attested validation result accepted at assignment creation. |
+| `ValidationEvidenceSchema` | `src/application/schema.ts` | Durable source- and feature-run-bound validation evidence. |
 | `FeatureReviewDepthSchema` | `src/application/schema.ts` | `quick`, `standard`, or `detailed` feature-review depth. |
-| `ReviewSchema` | `src/application/schema.ts` | Feature review status, summary, and blocking findings. |
-| `FinalReviewSchema` | `src/application/schema.ts` | Review plus final `reviewDepth`. |
-| `ReviewFindingSchema` | `src/application/schema.ts` | Blocking or advisory finding summary. |
-| `validateCompletion` | `src/domain/transitions.ts` | Gate that checks evidence before completion. |
+| `ReviewAssignmentSchema` | `src/application/schema.ts` | Runtime-owned feature or final review assignment. |
+| `ReviewExecutionSchema` | `src/application/schema.ts` | Durable verdict and typed findings derived from an assignment result. |
+| `ExecutionHistoryEntrySchema` | `src/application/schema.ts` | V4-native outcome record containing ledger references, not duplicate review summaries. |
+| `completeAssignedFeature` | `src/domain/transitions.ts` | Gate that checks evidence and assignment results before one atomic mutation. |
 
 ## How it works
 
-`ValidationRunSchema` permits `passed` or `failed`, but `validateCompletion` requires every recorded validation run to be `passed`. Feature completion records `featureReviewDepth`, which must meet or exceed the feature's planned `reviewDepth`. `ReviewSchema` permits failed reviews, but completion requires `status: "passed"` and no blocking findings. Final completion adds `FinalReviewSchema` and requires its `reviewDepth` to match the plan's `finalReviewPolicy`.
+`flow_review_start.request` accepts passing validation observations, binds them to the
+current source and feature run, and creates a durable assignment whose required
+depth comes from the approved plan. `flow_feature_complete.request` accepts only
+the small result for that assignment. A final assignment stores the exact
+passing feature result as a bound prerequisite. A broad final outcome submits
+only the final-assignment result; the runtime records it atomically with the
+durable prerequisite. Source-changed pending
+assignments record invalidation before replacement. History stores assignment
+ids and validation evidence refs; detail status derives summaries from the
+canonical ledgers.
+
+Validation and review timestamps are reported time. They must be ordered from
+active-execution start through validation, assignment start, and result, and
+cannot postdate runtime acceptance. Broad final validation starts no earlier
+than the passing feature-assignment result.
 
 ## Integration points
 
-`skills/flow-test/SKILL.md` produces `validationRun` summaries. `skills/flow-review/SKILL.md` produces feature review packets with `featureReviewDepth` plus `featureReview`, and final review payloads. The manager records accepted payloads through `flow_feature_complete`; no separate review-record tool exists in v5.
+`skills/flow-test/SKILL.md` produces validation observations for the manager.
+The manager creates assignments with `flow_review_start`, and
+`skills/flow-review/SKILL.md` returns an assignment-id-bound verdict and typed
+findings. Only the manager records those results through
+`flow_feature_complete`.
 
 ## Key source files
 
@@ -41,7 +60,7 @@ skills/flow-review/SKILL.md
 | `src/application/schema.ts` | Evidence schemas. |
 | `src/domain/transitions.ts` | Evidence enforcement. |
 | `skills/flow-test/SKILL.md` | Validation evidence guidance. |
-| `skills/flow-review/SKILL.md` | Review payload guidance. |
+| `skills/flow-review/SKILL.md` | Assignment-result guidance. |
 | `tests/runtime-gates.test.ts` | Evidence rejection and acceptance tests. |
 
 ## Entry points for modification

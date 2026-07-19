@@ -44,14 +44,29 @@ stateDiagram-v2
     planning --> ready: flow_plan_approve
     ready --> running: flow_run_start
     running --> ready: flow_feature_complete non-final ok
-    running --> blocked: flow_feature_complete needs_input
+    running --> blocked: flow_feature_complete blocked result
     running --> blocked: review retry budget exhausted
     blocked --> ready: flow_feature_reset
-    running --> completed: flow_feature_complete final ok + closure
-    completed --> [*]: flow_session_close completed
+    running --> completed: flow_feature_complete final ok
+    completed --> archive_recovery: flow_session_close start
+    archive_recovery --> [*]: archive publication or retry
 ```
 
-The loop always starts by calling `flow_status`. The skill then plans, gets approval, runs one feature, validates it, obtains review packets, records completion, and repeats until the final feature passes broad validation and final review. Review retry exhaustion uses the ordinary blocked-feature path. Any stored closure makes the session archive-only until `flow_session_close` succeeds.
+The loop always starts with `flow_status { request: { view: "compact" } }`. The
+skill then plans, gets approval, runs one active execution, validates it,
+obtains assignment results, records a feature outcome, and repeats until the
+final feature passes ordered broad validation and final review. Review retry
+exhaustion uses the ordinary blocked-feature path. Any stored closure is
+quiescent and archive-only; compact status supplies the retry handle used by
+`flow_session_close`.
+
+`flow_plan_save` updates only the active same-goal draft. A different goal
+requires an explicit `deferred` or `abandoned` close (or `completed` after all
+work is complete) and converged archive publication before a new save. A close
+start operation id must also be absent from the active causal history and every
+mutation in every canonical Session v4 archive; unreadable or ambiguous
+canonical history fails closed. Archive publication rejects `closure: null`,
+and canonical lookup fails closed on any closureless archive.
 
 ## Integration points
 

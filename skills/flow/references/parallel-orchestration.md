@@ -9,7 +9,7 @@ state-changing `flow_*` call throughout the pass.
 
 1. Read `parallel-decision.md` whenever deciding whether work should fan out.
 2. Stop loading parallel references when the decision is serial. Record the
-   implementation decision when the active feature requires one.
+   implementation decision when the active execution requires one.
 3. After selecting a parallel or candidate pass, read
    `parallel-manifest.md`, then `parallel-execution.md`.
 4. When handoffs return, read `parallel-synthesis.md` before accepting claims,

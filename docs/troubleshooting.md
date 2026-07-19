@@ -9,7 +9,7 @@ there is no skill sync, setup-health state, or second-restart requirement.
 Install or replace the pinned plugin version:
 
 ```bash
-opencode plugin opencode-plugin-flow@5.1.1 --global --force
+opencode plugin opencode-plugin-flow@5.2.0 --global --force
 ```
 
 Start or restart OpenCode once after changing the installed package. Core
@@ -22,7 +22,7 @@ Flow entry in `opencode.json` instead of adding a duplicate:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.1.1"]
+  "plugin": ["opencode-plugin-flow@5.2.0"]
 }
 ```
 
@@ -45,13 +45,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.1.1 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.2.0 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.1.1 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.2.0 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to
@@ -67,10 +67,39 @@ move, it remains quarantined at the printed recovery path.
 	 be using the workspace. Flow deliberately does not steal locks based on age
 	 or process-liveness guesses. If the recorded owner has definitely ended,
 	 inspect `.flow/session.lock/owner.json` before removing the lock directory.
-- **Unreadable session file**: if `.flow/session.json` is corrupt or from an
-  unsupported plugin version, a Flow tool call quarantines it into
-  `.flow/history/quarantine-*.json` and tells you how to start fresh. Nothing
-  is silently deleted.
+- **Malformed Session v4 file**: Flow rejects state that fails strict JSON,
+  schema, or relational-invariant checks. Preserve the file for inspection and
+  restore a known-good Session v4 document; Flow never repairs malformed state
+  by guessing.
+- **Different session version**: only Session v4 can become active state or
+  canonical history. Flow rejects every other version as generic unsupported
+  input and provides no migration or version-specific recovery path.
+- **A different goal is already open**: `flow_plan_save` never archives or
+  replaces an unclosed session, even when its draft is unapproved. Close
+  unfinished work explicitly as `deferred` or `abandoned`, finish archive
+  publication, then save the new goal. Completed progress requires a
+  `completed` close.
+- **Archive publication interrupted**: call
+  `flow_status { request: { view: "compact" } }`, read the complete
+  `closure.retryOperationId`, and call
+  `flow_session_close { request: { mode: "retry", operationId } }`. Do not
+  recreate the original summary or causal guards.
+- **Timestamp chronology rejected**: preserve truthful reported times. They must
+  follow active-execution start, validation, review-assignment start, and result
+  order, and cannot postdate runtime acceptance.
+- **Final-review retry lost its prerequisite**: for an unchanged source, call
+  `flow_status { request: { view: "detail" } }` and copy
+  `workflowData.projection.finalReviewRetry.prerequisite.result` unchanged into
+  the next final review start's `request.featureReview`. Compact and reviewer
+  status omit it. A mismatch leaves the operation id reusable. If source
+  changed, rerun targeted feature review before broad validation.
+- **Close operation id collision**: an unaccepted close start must use an id
+  absent from the active causal chain and every mutation in canonical Session
+  v4 workspace history. If canonical history is malformed, unsupported,
+  filename-mismatched, closureless, or ambiguous, preserve and repair it before
+  retrying; quarantine files are never retry sources. A Session v4 document
+  cannot be canonical history until explicit close has recorded non-null
+  closure.
 
 ## Uninstall
 

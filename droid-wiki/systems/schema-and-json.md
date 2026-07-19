@@ -20,15 +20,18 @@ src/infrastructure/fs/strict-json-object.ts
 | `SessionSchema` | `src/application/schema.ts` | Persisted active or archived session model. |
 | `PlanSchema` | `src/application/schema.ts` | Persisted approved or draft plan model. |
 | `FeatureSchema` | `src/application/schema.ts` | Feature id, title, summary, status, targets, validation, dependencies. |
-| `WorkerResultSchema` | `src/application/schema.ts` | Completion or blocker payload. |
+| `ReviewAssignmentSchema` | `src/application/schema.ts` | Durable runtime-owned review assignment. |
+| `FlowFeatureCompleteToolSchema` | `src/application/flow-service.ts` | Nested atomic completion or blocker payload. |
 | `parseStrictJsonObject` | `src/infrastructure/fs/strict-json-object.ts` | JSON parser that reports duplicate keys and non-object roots. |
 
 ## How it works
 
 `loadSession` first calls `parseStrictJsonObject`. If parsing succeeds,
-`SessionSchema.safeParse` validates a version 3 session. Older versions are not
-migrated: the application reports them as unsupported and asks the repository
-to preserve them in quarantine.
+`SessionSchema.safeParse` validates only a relationally coherent Session v4.
+Every other version is generic unsupported input and cannot become active state
+or canonical history. Malformed, unversioned, corrupt, filename-mismatched,
+ambiguous, closureless, or current-v4-invalid canonical archives fail closed.
+Session v4 active state may have `closure: null`, but canonical history may not.
 
 ## Integration points
 
@@ -36,7 +39,12 @@ Application input schemas reuse the core schemas in `src/application/schema.ts`
 and use Flow's exact-pinned direct `zod` dependency. OpenCode host schemas are a
 separate private graph in `src/platform/opencode/tools.ts`, built with the
 validator exported by the host SDK. Shared contract fixtures prevent wire
-format drift without passing schema objects across the boundary.
+format drift without passing schema objects across the boundary. The actual
+registered tools expose one strict nested `request` union, and application,
+registered, emitted, and executed schemas must accept and reject the same
+semantic requests. Because host advertisement does not guarantee enforcement,
+each handler parses that registered schema again at entry before the
+application wrapper; invalid calls become host tool errors without state I/O.
 
 ## Key source files
 

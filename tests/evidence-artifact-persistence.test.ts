@@ -349,11 +349,14 @@ describe("restricted evidence artifact persistence", () => {
 		expect(
 			(
 				await flowSessionClose(archiveWorkspace, {
-					operationId: "archive-evidence-session",
-					expectedRevision: archiveSession.causal.revision,
-					expectedSnapshotId: archiveSession.causal.snapshotId,
-					kind: "deferred",
-					summary: "Archive without moving evidence.",
+					request: {
+						mode: "start",
+						operationId: "archive-evidence-session",
+						expectedRevision: archiveSession.causal.revision,
+						expectedSnapshotId: archiveSession.causal.snapshotId,
+						kind: "deferred",
+						summary: "Archive without moving evidence.",
+					},
 				})
 			).status,
 		).toBe("ok");

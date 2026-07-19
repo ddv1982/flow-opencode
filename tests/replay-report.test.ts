@@ -153,6 +153,21 @@ describe("sanitized replay report", () => {
 					metric.withinTolerance === null || metric.deltaPercent === 0,
 			),
 		).toBe(true);
+		expect(report.reviewLifecycleBaseline).toMatchObject({
+			baselineId: "qa_scribe_5_1_high",
+			inferenceEffort: "high",
+		});
+		expect(report.reviewLifecycleBaseline.facts).toContainEqual({
+			metric: "invalid_reviewer_payload_count",
+			availability: { status: "available", value: 47 },
+		});
+		expect(report.reviewLifecycleBaseline.facts).toContainEqual({
+			metric: "evidence_only_rerun_count",
+			availability: { status: "unavailable", reason: "not_recorded" },
+		});
+		const formatted = formatReplayReport(report);
+		expect(formatted).toContain("Flow 5.1 pre-v4 lifecycle baseline");
+		expect(formatted).not.toContain("Session v4 lifecycle baseline");
 	});
 
 	test("keeps fact origins, zero, unavailability, and supplied observations distinct", async () => {
@@ -197,6 +212,9 @@ describe("sanitized replay report", () => {
 		expect(formatReplayReport(report)).toContain("Unavailable");
 		expect(formatReplayReport(report)).toContain(
 			"7 observed reviewer executions",
+		);
+		expect(formatReplayReport(report)).toContain(
+			"47 invalid reviewer payloads",
 		);
 	});
 

@@ -149,20 +149,20 @@ Why this is better than one "build UI" feature: the plan names the uncertain
 surface first, keeps implementation scoped to the route/components, and makes
 visual evidence part of completion rather than an afterthought.
 
-## Runtime or schema plan
+## External API schema plan
 
 Human summary:
 
-1. Introduce the schema change behind a backward-compatible parser.
-2. Migrate callers and persistence writes.
+1. Introduce the client-facing schema change behind a backward-compatible parser.
+2. Migrate API callers and persistence writes.
 3. Add compatibility validation and docs.
 
 Good feature outline:
 
 ```text
-1. Compatible schema reader - accept old and new session payloads, with targeted parser tests for both.
+1. Compatible API reader - accept old and new client payloads, with targeted parser tests for both.
 2. New writer path - emit the new field from runtime transitions and update affected callers.
-3. Compatibility sweep - run persistence/workspace tests, update docs, and verify old sessions still recover.
+3. Compatibility sweep - run API and persistence tests, update docs, and verify supported client payloads still work.
 ```
 
 Use `finalReviewPolicy: "detailed"` for this shape. Persistence and schema work

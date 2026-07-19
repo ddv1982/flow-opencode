@@ -5,4 +5,5 @@ import type { TransitionEnvironment } from "../../domain/transitions.js";
 export const systemTransitionEnvironment: TransitionEnvironment = {
 	now: () => new Date().toISOString(),
 	newSessionId: () => toSessionId(randomUUID()),
+	newRuntimeId: (kind) => `${kind}:${randomUUID()}`,
 };

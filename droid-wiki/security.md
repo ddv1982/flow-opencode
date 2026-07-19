@@ -11,7 +11,7 @@ Flow's security boundary is local and host-facing: it writes workspace state and
 | Session file input | `parseStrictJsonObject` in `src/infrastructure/fs/strict-json-object.ts` rejects malformed JSON and duplicate keys. |
 | State writes | `withSessionLock` and atomic writes in `src/infrastructure/fs/workspace.ts`. |
 | Tool response prose | Plugin-authored metadata stays top-level; repository and caller prose stays under `workflowData`. |
-| Session archives | Exclusive hard-link publication never replaces a colliding history file; retries accept only identical normalized contents. |
+| Session archives | Exact ids map to lowercase SHA-256 filenames; pinned-cwd helpers publish through relative temp+hard-link operations and delete active state only after inode, topology, spelling, and content revalidation. |
 | Embedded guidance | Stable enum ids and package smoke prove the loaded text matches the installed plugin. |
 | Legacy cleanup | Nofollow reads, exact marker hashes, extra-entry refusal, and recoverable moves in `src/distribution/legacy-cleanup.ts`. |
 | Hidden workers | Permission maps in `FLOW_CORE_AGENTS` in `src/config-shared.ts`. |
@@ -23,9 +23,14 @@ Flow's security boundary is local and host-facing: it writes workspace state and
 `.flow/.gitignore`, and archives sessions under `.flow/history/`. Workspace
 roots use their canonical real path, managed directories and files refuse
 symbolic links, and POSIX reads add `O_NOFOLLOW`. The config hook does not read
-workspace state or register a Flow instruction path. Flow quarantines unreadable
-regular session files instead of deleting them silently. Artifact paths are
-informational data and are not consumed as filesystem targets.
+workspace state or register a Flow instruction path. Flow rejects unreadable or
+incoherent session input rather than guessing repairs. Only a valid Session v4
+document can become active state, and only an explicitly closed valid Session
+v4 document can become canonical history. Archive and quarantine publication
+use helpers pinned to validated directory identities so a swapped intermediate
+symlink is not used as the destination; active deletion uses a separately pinned
+`.flow` helper. Artifact paths are informational data and are not consumed as
+filesystem targets.
 
 ## Prompt and worker safety
 
@@ -39,7 +44,7 @@ Hidden workers in `src/config-shared.ts` deny Flow state-changing tools. Most al
 
 | File | Purpose |
 | --- | --- |
-| `src/infrastructure/fs/workspace.ts` | Filesystem root checks, lock, archive, quarantine, generated `.gitignore`. |
+| `src/infrastructure/fs/workspace.ts` | Filesystem root checks, lock, archive publication, strict input, generated `.gitignore`. |
 | `src/infrastructure/fs/strict-json-object.ts` | Strict JSON parsing. |
 | `src/config-shared.ts` | Hidden worker permission maps. |
 | `src/guidance/catalog.ts` | Stable embedded guidance ids. |

@@ -1,6 +1,6 @@
 ---
 name: flow-plan
-description: "Use when Flow work needs planning before implementation: a new goal to turn into an approved Flow feature plan, a draft plan to revise, or a decomposition or plan-approval decision in the v5 runtime. For executing an approved feature use flow-run; for the full goal-to-completion loop use flow."
+description: "Use when Flow work needs planning before implementation: a new goal to turn into an approved Flow feature plan, a draft plan to revise, or a decomposition or plan-approval decision in the v5 runtime. For executing an approved feature use flow-run; for the full goal-to-closure loop use flow."
 ---
 
 # Flow Plan
@@ -10,6 +10,12 @@ Use this skill before implementation. The output is a concise plan the runtime c
 ## Planning runtime availability
 
 If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode. Planning requires the loaded Flow runtime.
+
+`flow_plan_save` may revise only the active same-goal draft. If compact status
+shows any unclosed session for a different goal, do not replace or implicitly
+archive it. Close unfinished work explicitly as `deferred` or `abandoned`, let
+archive publication converge, then save the new goal. Completed progress uses
+an explicit `completed` close.
 
 ## Inspect first
 
@@ -66,7 +72,7 @@ Call `flow_plan_save` with:
         "summary": "Outcome this feature delivers",
         "reviewDepth": "standard",
         "targets": ["files, modules, routes, commands, or docs in scope"],
-        "validation": ["focused checks expected before completion"],
+        "validation": ["focused checks expected before a passing outcome"],
         "dependsOn": []
       }
     ]

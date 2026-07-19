@@ -21,6 +21,11 @@ Contribution work starts with the runtime and guidance split: `skills/**` owns a
 
 ## Review expectations
 
-Review should check the changed source, tests, and validation output. If the change touches persistence, review `src/infrastructure/fs/workspace.ts` and the tests that cover locks, archive, duplicate-key rejection, and quarantine. If the change touches public command behavior, review `src/config-shared.ts`, `src/platform/opencode/plugin.ts`, and `src/guidance/catalog.ts`.
+Review should check the changed source, tests, and validation output. If the
+change touches persistence, review `src/infrastructure/fs/workspace.ts` and the
+tests that cover locks, archive publication, duplicate-key rejection, strict
+Session v4 input, and retry convergence. If the change touches public command
+behavior, review `src/config-shared.ts`, `src/platform/opencode/plugin.ts`, and
+`src/guidance/catalog.ts`.
 
 Related pages: [Development workflow](development-workflow.md), [Testing](testing.md), and [Patterns and conventions](patterns-and-conventions.md).

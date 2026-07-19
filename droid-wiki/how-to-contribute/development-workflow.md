@@ -38,7 +38,7 @@ bun run check
 ```
 
 Use the narrow test that matches the changed area during development. Prompt
-changes must preserve all 18 static scenarios and 52 criteria. Update
+changes must preserve all 19 static scenarios and 54 criteria. Update
 `tests/fixtures/prompt-quality-baseline.json` only when a surface grows by more
 than the larger of eight words or 2%, and record a specific justification. Run
 `bun run check` before handing work off or preparing a release.

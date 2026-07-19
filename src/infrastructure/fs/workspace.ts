@@ -1,12 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { constants, lstatSync, realpathSync } from "node:fs";
 import {
 	type FileHandle,
-	link,
 	lstat,
 	mkdir,
 	open,
-	readdir,
 	rename,
 	rm,
 	writeFile,
@@ -14,9 +13,13 @@ import {
 import { homedir, hostname } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { UnreadableFlowSessionError } from "../../application/errors.js";
+import {
+	UnreadableFlowSessionError,
+	UnsupportedFlowSessionVersionError,
+} from "../../application/errors.js";
 import { ArchivedSessionLookupError } from "../../application/ports/session-repository.js";
 import { SessionSchema } from "../../application/schema.js";
+import { MAX_SESSION_ID_LENGTH } from "../../domain/limits.js";
 import type { Session } from "../../domain/session.js";
 import { parseStrictJsonObject } from "./strict-json-object.js";
 
@@ -41,6 +44,14 @@ export class ArchiveCollisionError extends Error {
 	constructor(message: string, options?: ErrorOptions) {
 		super(message, options);
 		this.name = "ArchiveCollisionError";
+	}
+}
+
+export class UnclosedSessionArchiveError extends Error {
+	readonly code = "FLOW_ARCHIVE_REQUIRES_CLOSURE";
+	constructor(message: string) {
+		super(message);
+		this.name = "UnclosedSessionArchiveError";
 	}
 }
 
@@ -125,14 +136,30 @@ export function historyDir(worktree: string): string {
 	return join(flowDir(worktree), "history");
 }
 
+function assertArchiveSafeSessionId(sessionId: string): void {
+	if (
+		sessionId.length > MAX_SESSION_ID_LENGTH ||
+		!/^[a-zA-Z0-9_-]+$/.test(sessionId)
+	) {
+		throw new Error("Invalid session id.");
+	}
+}
+
+/**
+ * Map the exact, case-sensitive session identity into a portable lowercase
+ * archive component. The fixed digest avoids both case-fold collisions and
+ * filesystem component growth while lookup still verifies the parsed id.
+ */
+export function archivedSessionFilename(sessionId: string): string {
+	assertArchiveSafeSessionId(sessionId);
+	return `${createHash("sha256").update(sessionId, "utf8").digest("hex")}.json`;
+}
+
 export function archivedSessionPath(
 	worktree: string,
 	sessionId: string,
 ): string {
-	if (!/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
-		throw new Error("Invalid session id.");
-	}
-	return join(historyDir(worktree), `${sessionId}.json`);
+	return join(historyDir(worktree), archivedSessionFilename(sessionId));
 }
 
 async function writeFileAtomically(
@@ -165,16 +192,6 @@ async function writeFileAtomically(
 		} finally {
 			await directory.close();
 		}
-	}
-}
-
-async function syncDirectory(path: string): Promise<void> {
-	if (process.platform === "win32") return;
-	const directory = await open(path, "r");
-	try {
-		await directory.sync();
-	} finally {
-		await directory.close();
 	}
 }
 
@@ -299,6 +316,584 @@ async function ensureHistoryDirectory(worktree: string): Promise<void> {
 		historyDir(worktree),
 		"the Flow session history directory",
 	);
+}
+
+type ManagedPathIdentity = {
+	dev: string;
+	ino: string;
+};
+
+type PinnedFileRead = {
+	contents: string;
+	identity: ManagedPathIdentity;
+};
+
+type PinnedArchiveEntry = {
+	filename: string;
+	contents: string;
+};
+
+type PinnedHelperResult =
+	| {
+			status: "read";
+			contents: string;
+			identity: ManagedPathIdentity;
+	  }
+	| { status: "listed"; entries: PinnedArchiveEntry[] }
+	| { status: "published" }
+	| { status: "exists"; contents: string }
+	| { status: "removed" };
+
+type ArchiveAndClearTestHooks = {
+	afterHistoryPinned?: (() => Promise<void>) | undefined;
+	afterFlowPinnedBeforeDelete?: (() => Promise<void>) | undefined;
+	pinnedHelperTestExecutable?: string | undefined;
+	pinnedHelperReadyTimeoutMs?: number | undefined;
+	pinnedHelperCompletionTimeoutMs?: number | undefined;
+};
+
+type PinnedHelperRunOptions = Pick<
+	ArchiveAndClearTestHooks,
+	| "pinnedHelperTestExecutable"
+	| "pinnedHelperReadyTimeoutMs"
+	| "pinnedHelperCompletionTimeoutMs"
+>;
+
+const PINNED_HELPER_READY_TIMEOUT_MS = 10_000;
+const PINNED_HELPER_COMPLETION_TIMEOUT_MS = 60_000;
+
+const PINNED_DIRECTORY_HELPER_SOURCE = String.raw`
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+const path = require("node:path");
+
+function fail(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  throw error;
+}
+
+function identity(info) {
+  return { dev: String(info.dev), ino: String(info.ino) };
+}
+
+function sameIdentity(actual, expected) {
+  return actual.dev === expected.dev && actual.ino === expected.ino;
+}
+
+function directoryIdentity(target, label) {
+  const info = fs.lstatSync(target, { bigint: true });
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    fail("FLOW_PINNED_DIRECTORY_MISMATCH", label + " is no longer a regular directory.");
+  }
+  return identity(info);
+}
+
+function validatePinned(request) {
+  const cwd = identity(fs.statSync(".", { bigint: true }));
+  if (!sameIdentity(cwd, request.expectedCwd)) {
+    fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned directory identity changed.");
+  }
+  if (request.expectedParent) {
+    const parent = identity(fs.statSync("..", { bigint: true }));
+    if (!sameIdentity(parent, request.expectedParent)) {
+      fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned directory parent changed.");
+    }
+  }
+  if (!sameIdentity(directoryIdentity(request.canonicalPath, "Canonical directory"), request.expectedCwd)) {
+    fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Canonical directory no longer names the pinned directory.");
+  }
+  if (request.canonicalParentPath && request.expectedParent) {
+    if (!sameIdentity(directoryIdentity(request.canonicalParentPath, "Canonical parent directory"), request.expectedParent)) {
+      fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Canonical parent no longer names the pinned parent directory.");
+    }
+  }
+}
+
+function safeBasename(name) {
+  if (!name || path.basename(name) !== name || name === "." || name === "..") {
+    fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper received an unsafe relative filename.");
+  }
+  return name;
+}
+
+function readRegularPath(name) {
+  const before = fs.lstatSync(name, { bigint: true });
+  if (before.isSymbolicLink() || !before.isFile()) {
+    fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper refuses a non-regular managed file.");
+  }
+  const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+  const fd = fs.openSync(name, fs.constants.O_RDONLY | noFollow);
+  try {
+    const opened = fs.fstatSync(fd, { bigint: true });
+    if (!opened.isFile()) {
+      fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper opened a non-regular managed file.");
+    }
+    return { bytes: fs.readFileSync(fd), identity: identity(opened) };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function readRegular(name) {
+  safeBasename(name);
+  return readRegularPath(name);
+}
+
+function requireExactDirectoryEntry(directory, expectedName) {
+  const matches = fs.readdirSync(directory).filter(
+    (entry) => entry.toLowerCase() === expectedName.toLowerCase(),
+  );
+  if (matches.length !== 1 || matches[0] !== expectedName) {
+    fail(
+      "FLOW_ARCHIVE_CASE_COLLISION",
+      "Archive history no longer contains exactly the expected filename spelling.",
+    );
+  }
+}
+
+function syncCwd() {
+  if (process.platform === "win32") return;
+  const fd = fs.openSync(".", fs.constants.O_RDONLY);
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+function output(value) {
+  process.stdout.write(JSON.stringify(value));
+}
+
+try {
+  const request = JSON.parse(Buffer.from(process.argv[1], "base64").toString("utf8"));
+  validatePinned(request);
+  process.stdout.write(JSON.stringify({ event: "pinned" }) + "\n");
+  const input = fs.readFileSync(0);
+  validatePinned(request);
+
+  if (request.operation === "read") {
+    const value = readRegular(request.name);
+    output({
+      status: "read",
+      contents: value.bytes.toString("base64"),
+      identity: value.identity,
+    });
+  } else if (request.operation === "listCanonical") {
+    const entries = [];
+    const canonical = /^[a-f0-9]{64}\.json$/;
+    const caseFoldedCanonical = /^[a-f0-9]{64}\.json$/i;
+    for (const filename of fs.readdirSync(".").sort()) {
+      if (filename.startsWith("quarantine-")) continue;
+      if (!canonical.test(filename)) {
+        if (caseFoldedCanonical.test(filename)) {
+          fail("FLOW_ARCHIVE_CASE_COLLISION", "Archive history contains a case-folded canonical filename collision.");
+        }
+		if (/\.json$/i.test(filename)) {
+		  fail("FLOW_ARCHIVE_UNKNOWN_JSON", "Archive history contains an unknown JSON entry in the managed namespace.");
+		}
+        continue;
+      }
+      const value = readRegular(filename);
+      entries.push({ filename, contents: value.bytes.toString("base64") });
+    }
+    output({ status: "listed", entries });
+  } else if (request.operation === "publish") {
+    const target = safeBasename(request.targetName);
+    const temporary = safeBasename(request.tempName);
+    let temporaryCreated = false;
+    let published = false;
+	let linkAttempted = false;
+    try {
+      const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+      const fd = fs.openSync(
+        temporary,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | noFollow,
+        0o600,
+      );
+      temporaryCreated = true;
+      try {
+        fs.writeFileSync(fd, input);
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+	  linkAttempted = true;
+	  fs.linkSync(temporary, target);
+      published = true;
+      validatePinned(request);
+      syncCwd();
+      fs.unlinkSync(temporary);
+      temporaryCreated = false;
+      syncCwd();
+      output({ status: "published" });
+    } catch (error) {
+      if (temporaryCreated) {
+        try { fs.unlinkSync(temporary); } catch {}
+      }
+      if (published && error && error.code === "FLOW_PINNED_DIRECTORY_MISMATCH") {
+        try { fs.unlinkSync(target); } catch {}
+        try { syncCwd(); } catch {}
+      }
+	  if (linkAttempted && error && error.code === "EEXIST") {
+		requireExactDirectoryEntry(".", target);
+        const existing = readRegular(target);
+        output({ status: "exists", contents: existing.bytes.toString("base64") });
+      } else {
+        throw error;
+      }
+    }
+  } else if (request.operation === "remove") {
+    const value = readRegular(request.name);
+    if (!sameIdentity(value.identity, request.expectedFileIdentity)) {
+      fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Active session identity changed before deletion.");
+    }
+    const digest = crypto.createHash("sha256").update(value.bytes).digest("hex");
+    if (digest !== request.expectedSha256) {
+      fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Active session contents changed before deletion.");
+    }
+	if (request.expectedHistoryIdentity) {
+	  const historyIdentity = directoryIdentity("history", "Pinned history directory");
+	  if (!sameIdentity(historyIdentity, request.expectedHistoryIdentity)) {
+		fail("FLOW_PINNED_DIRECTORY_MISMATCH", "History changed before active-session deletion.");
+	  }
+	  const archiveName = safeBasename(request.expectedArchiveName);
+	  requireExactDirectoryEntry("history", archiveName);
+	  const archive = readRegularPath(path.join("history", archiveName));
+	  const archiveDigest = crypto.createHash("sha256").update(archive.bytes).digest("hex");
+	  if (archiveDigest !== request.expectedArchiveSha256) {
+		fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Verified archive changed before active-session deletion.");
+	  }
+	  const historyAfterRead = directoryIdentity("history", "Pinned history directory");
+	  if (!sameIdentity(historyAfterRead, request.expectedHistoryIdentity)) {
+		fail("FLOW_PINNED_DIRECTORY_MISMATCH", "History changed while verifying active-session deletion.");
+	  }
+	  requireExactDirectoryEntry("history", archiveName);
+	}
+    validatePinned(request);
+	if (request.expectedHistoryIdentity) {
+	  requireExactDirectoryEntry("history", safeBasename(request.expectedArchiveName));
+	}
+    fs.unlinkSync(request.name);
+    syncCwd();
+    output({ status: "removed" });
+  } else {
+    fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Unknown pinned helper operation.");
+  }
+} catch (error) {
+  process.stderr.write(JSON.stringify({
+    name: error && error.name,
+    code: error && error.code,
+    message: error && error.message ? error.message : String(error),
+  }));
+  process.exitCode = 1;
+}
+`;
+
+async function managedDirectoryIdentity(
+	path: string,
+	description: string,
+): Promise<ManagedPathIdentity> {
+	const info = await lstat(path, { bigint: true });
+	if (info.isSymbolicLink() || !info.isDirectory()) {
+		throw new UnsafeFlowWorkspaceLayoutError(
+			`Flow requires ${description} to remain a regular directory: ${path}.`,
+		);
+	}
+	return { dev: String(info.dev), ino: String(info.ino) };
+}
+
+async function assertManagedDirectoryIdentity(
+	path: string,
+	description: string,
+	expected: ManagedPathIdentity,
+): Promise<void> {
+	const actual = await managedDirectoryIdentity(path, description);
+	if (actual.dev !== expected.dev || actual.ino !== expected.ino) {
+		throw new UnsafeFlowWorkspaceLayoutError(
+			`Flow detected that ${description} changed during a managed operation: ${path}.`,
+		);
+	}
+}
+
+function helperFailure(stderr: string, cause?: unknown): Error {
+	let detail: { code?: string; message?: string } | null = null;
+	try {
+		detail = JSON.parse(stderr) as { code?: string; message?: string };
+	} catch {
+		// Preserve the process failure without exposing helper source or input bytes.
+	}
+	if (
+		detail?.code === "FLOW_PINNED_DIRECTORY_MISMATCH" ||
+		detail?.code === "FLOW_ARCHIVE_CASE_COLLISION" ||
+		detail?.code === "FLOW_ARCHIVE_UNKNOWN_JSON"
+	) {
+		return new UnsafeFlowWorkspaceLayoutError(
+			detail.message ?? "Flow detected an unsafe pinned directory change.",
+			{ cause },
+		);
+	}
+	const error = new Error(
+		detail?.message ?? "Flow pinned filesystem helper failed.",
+		{ cause },
+	) as Error & { code?: string };
+	if (detail?.code) error.code = detail.code;
+	return error;
+}
+
+async function runPinnedDirectoryHelper(
+	cwd: string,
+	request: Record<string, unknown>,
+	input = "",
+	afterPinned?: () => Promise<void>,
+	options: PinnedHelperRunOptions = {},
+): Promise<PinnedHelperResult> {
+	const encodedRequest = Buffer.from(JSON.stringify(request), "utf8").toString(
+		"base64",
+	);
+	const child = spawn(
+		options.pinnedHelperTestExecutable ?? process.execPath,
+		["--eval", PINNED_DIRECTORY_HELPER_SOURCE, encodedRequest],
+		{
+			cwd,
+			// OpenCode is distributed as a Bun-compiled executable, so its
+			// process.execPath names `opencode`, not a standalone `bun` binary.
+			// This switch makes that same executable expose Bun's CLI for --eval.
+			env: process.versions.bun
+				? { ...process.env, BUN_BE_BUN: "1" }
+				: process.env,
+			stdio: ["pipe", "pipe", "pipe"],
+			windowsHide: true,
+		},
+	);
+	child.stdout.setEncoding("utf8");
+	child.stderr.setEncoding("utf8");
+	let stdout = "";
+	let stderr = "";
+	let readyState: "pending" | "resolved" | "rejected" = "pending";
+	let forcedFailure: Error | null = null;
+	let resolvePinned: (() => void) | undefined;
+	let rejectPinned: ((error: Error) => void) | undefined;
+	const pinnedPromise = new Promise<void>((resolve, reject) => {
+		resolvePinned = resolve;
+		rejectPinned = reject;
+	});
+	const positiveTimeout = (candidate: number | undefined, fallback: number) =>
+		typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0
+			? candidate
+			: fallback;
+	const terminateHelper = (error: Error): void => {
+		if (forcedFailure) return;
+		forcedFailure = error;
+		if (readyState === "pending") {
+			readyState = "rejected";
+			rejectPinned?.(error);
+		}
+		child.kill("SIGKILL");
+	};
+	const readyTimeout = setTimeout(
+		() => {
+			terminateHelper(
+				new Error("Flow pinned filesystem helper timed out before readiness."),
+			);
+		},
+		positiveTimeout(
+			options.pinnedHelperReadyTimeoutMs,
+			PINNED_HELPER_READY_TIMEOUT_MS,
+		),
+	);
+	readyTimeout.unref();
+	let completionTimeout: NodeJS.Timeout | undefined;
+	child.stdout.on("data", (chunk: string) => {
+		stdout += chunk;
+		if (readyState === "pending") {
+			const newline = stdout.indexOf("\n");
+			if (newline !== -1) {
+				let event: { event?: string };
+				try {
+					event = JSON.parse(stdout.slice(0, newline)) as {
+						event?: string;
+					};
+				} catch (error) {
+					terminateHelper(
+						new Error(
+							"Flow pinned filesystem helper returned an invalid ready event.",
+							{ cause: error },
+						),
+					);
+					return;
+				}
+				if (event.event !== "pinned") {
+					terminateHelper(
+						new Error("Flow pinned filesystem helper omitted its ready event."),
+					);
+					return;
+				}
+				stdout = stdout.slice(newline + 1);
+				readyState = "resolved";
+				clearTimeout(readyTimeout);
+				completionTimeout = setTimeout(
+					() => {
+						terminateHelper(
+							new Error(
+								"Flow pinned filesystem helper timed out before completion.",
+							),
+						);
+					},
+					positiveTimeout(
+						options.pinnedHelperCompletionTimeoutMs,
+						PINNED_HELPER_COMPLETION_TIMEOUT_MS,
+					),
+				);
+				completionTimeout.unref();
+				resolvePinned?.();
+			}
+		}
+	});
+	child.stderr.on("data", (chunk: string) => {
+		stderr += chunk;
+	});
+	child.stdin.on("error", () => {
+		// The exit status below owns helper failures, including an early stdin close.
+	});
+	const completion = new Promise<PinnedHelperResult>((resolve, reject) => {
+		child.once("error", (error) => {
+			clearTimeout(readyTimeout);
+			if (completionTimeout) clearTimeout(completionTimeout);
+			const failure = forcedFailure ?? helperFailure(stderr, error);
+			if (readyState === "pending") {
+				readyState = "rejected";
+				rejectPinned?.(failure);
+			}
+			reject(failure);
+		});
+		child.once("close", (code) => {
+			clearTimeout(readyTimeout);
+			if (completionTimeout) clearTimeout(completionTimeout);
+			if (forcedFailure) {
+				reject(forcedFailure);
+				return;
+			}
+			if (readyState !== "resolved") {
+				const failure = new Error(
+					"Flow pinned filesystem helper exited before readiness.",
+				);
+				if (readyState === "pending") {
+					readyState = "rejected";
+					rejectPinned?.(failure);
+				}
+				reject(failure);
+				return;
+			}
+			if (code !== 0) {
+				reject(helperFailure(stderr));
+				return;
+			}
+			try {
+				resolve(JSON.parse(stdout) as PinnedHelperResult);
+			} catch (error) {
+				reject(
+					new Error("Flow pinned filesystem helper returned invalid output.", {
+						cause: error,
+					}),
+				);
+			}
+		});
+	});
+	try {
+		await pinnedPromise;
+	} catch (error) {
+		await completion.catch(() => undefined);
+		throw error;
+	}
+	try {
+		await afterPinned?.();
+	} catch (error) {
+		child.kill("SIGKILL");
+		await completion.catch(() => undefined);
+		throw error;
+	}
+	child.stdin.end(input);
+	return completion;
+}
+
+function pinnedRequest(
+	operation: string,
+	canonicalPath: string,
+	expectedCwd: ManagedPathIdentity,
+	canonicalParentPath: string,
+	expectedParent: ManagedPathIdentity,
+	extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+	return {
+		operation,
+		canonicalPath,
+		expectedCwd,
+		canonicalParentPath,
+		expectedParent,
+		...extra,
+	};
+}
+
+async function readPinnedFile(
+	directory: string,
+	directoryIdentity: ManagedPathIdentity,
+	parentDirectory: string,
+	parentIdentity: ManagedPathIdentity,
+	name: string,
+	options: PinnedHelperRunOptions = {},
+): Promise<PinnedFileRead> {
+	const result = await runPinnedDirectoryHelper(
+		directory,
+		pinnedRequest(
+			"read",
+			directory,
+			directoryIdentity,
+			parentDirectory,
+			parentIdentity,
+			{ name },
+		),
+		"",
+		undefined,
+		options,
+	);
+	if (result.status !== "read") {
+		throw new Error(
+			"Flow pinned filesystem helper returned the wrong read result.",
+		);
+	}
+	return {
+		contents: Buffer.from(result.contents, "base64").toString("utf8"),
+		identity: result.identity,
+	};
+}
+
+async function readPinnedCanonicalArchiveEntries(
+	root: string,
+	flowIdentity: ManagedPathIdentity,
+	historyIdentity: ManagedPathIdentity,
+	options: PinnedHelperRunOptions = {},
+): Promise<PinnedArchiveEntry[]> {
+	const history = historyDir(root);
+	const result = await runPinnedDirectoryHelper(
+		history,
+		pinnedRequest(
+			"listCanonical",
+			history,
+			historyIdentity,
+			flowDir(root),
+			flowIdentity,
+		),
+		"",
+		undefined,
+		options,
+	);
+	if (result.status !== "listed") {
+		throw new Error(
+			"Flow pinned filesystem helper returned the wrong archive-list result.",
+		);
+	}
+	return result.entries.map((entry) => ({
+		filename: entry.filename,
+		contents: Buffer.from(entry.contents, "base64").toString("utf8"),
+	}));
 }
 
 const inProcessLocks = new Map<string, Promise<void>>();
@@ -458,14 +1053,6 @@ export async function withSessionLock<T>(
 	}
 }
 
-function describeSessionSchemaFailure(value: Record<string, unknown>): string {
-	const version = value.version;
-	if (version !== 3) {
-		return `it uses session schema version ${JSON.stringify(version ?? null)}, but this plugin version requires version 3`;
-	}
-	return "it does not match the current session schema";
-}
-
 export async function loadSession(worktree: string): Promise<Session | null> {
 	const root = assertMutableWorkspaceRoot(worktree);
 	if (
@@ -489,9 +1076,12 @@ export async function loadSession(worktree: string): Promise<Session | null> {
 	if (!parsed.ok) {
 		throw new UnreadableFlowSessionError(parsed.error, parsed.error);
 	}
+	if (Object.hasOwn(parsed.value, "version") && parsed.value.version !== 4) {
+		throw new UnsupportedFlowSessionVersionError(parsed.value.version);
+	}
 	const result = SessionSchema.safeParse(parsed.value);
 	if (!result.success) {
-		const reason = describeSessionSchemaFailure(parsed.value);
+		const reason = "it does not match the current Session v4 schema";
 		throw new UnreadableFlowSessionError(
 			`Flow session file at ${sessionPath(root)} is unreadable: ${reason}.`,
 			reason,
@@ -500,58 +1090,88 @@ export async function loadSession(worktree: string): Promise<Session | null> {
 	return result.data;
 }
 
-const CANONICAL_ARCHIVE_FILENAME = /^[a-zA-Z0-9_-]+\.json$/;
+const CANONICAL_ARCHIVE_FILENAME = /^[a-f0-9]{64}\.json$/;
 
-export async function findArchivedSessionByOperationId(
+function parseCanonicalArchivedSession(entry: PinnedArchiveEntry): Session {
+	if (!CANONICAL_ARCHIVE_FILENAME.test(entry.filename)) {
+		throw new ArchivedSessionLookupError(
+			"Flow could not verify canonical archived session history.",
+		);
+	}
+	const parsed = parseStrictJsonObject(entry.contents, "Flow session archive");
+	if (!parsed.ok) {
+		throw new ArchivedSessionLookupError(
+			"Flow could not verify canonical archived session history.",
+		);
+	}
+	if (parsed.value.version !== 4) {
+		throw new ArchivedSessionLookupError(
+			"Flow could not verify canonical archived Session v4 history.",
+		);
+	}
+	const session = SessionSchema.safeParse(parsed.value);
+	if (
+		!session.success ||
+		entry.filename !== archivedSessionFilename(session.data.id)
+	) {
+		throw new ArchivedSessionLookupError(
+			"Flow could not verify canonical archived session history.",
+		);
+	}
+	if (session.data.closure === null) {
+		throw new ArchivedSessionLookupError(
+			"Flow could not verify explicitly closed canonical session history.",
+		);
+	}
+	return session.data;
+}
+
+async function loadCanonicalArchivedSessions(root: string): Promise<Session[]> {
+	if (
+		(await managedDirectoryState(flowDir(root), "the Flow state directory")) ===
+			"missing" ||
+		(await managedDirectoryState(
+			historyDir(root),
+			"the Flow session history directory",
+		)) === "missing"
+	) {
+		return [];
+	}
+	const flowIdentity = await managedDirectoryIdentity(
+		flowDir(root),
+		"the Flow state directory",
+	);
+	const historyIdentity = await managedDirectoryIdentity(
+		historyDir(root),
+		"the Flow session history directory",
+	);
+	const entries = await readPinnedCanonicalArchiveEntries(
+		root,
+		flowIdentity,
+		historyIdentity,
+	);
+	await assertManagedDirectoryIdentity(
+		flowDir(root),
+		"the Flow state directory",
+		flowIdentity,
+	);
+	await assertManagedDirectoryIdentity(
+		historyDir(root),
+		"the Flow session history directory",
+		historyIdentity,
+	);
+	return entries.map(parseCanonicalArchivedSession);
+}
+
+async function findCanonicalArchivedSession(
 	worktree: string,
-	operationId: string,
+	predicate: (session: Session) => boolean,
 ): Promise<Session | null> {
 	const root = assertMutableWorkspaceRoot(worktree);
 	try {
-		if (
-			(await managedDirectoryState(
-				flowDir(root),
-				"the Flow state directory",
-			)) === "missing" ||
-			(await managedDirectoryState(
-				historyDir(root),
-				"the Flow session history directory",
-			)) === "missing"
-		) {
-			return null;
-		}
-		const matches: Session[] = [];
-		for (const filename of (await readdir(historyDir(root))).sort()) {
-			if (
-				filename.startsWith("quarantine-") ||
-				!CANONICAL_ARCHIVE_FILENAME.test(filename)
-			) {
-				continue;
-			}
-			const contents = await readManagedFile(
-				join(historyDir(root), filename),
-				"the Flow session archive",
-			);
-			const parsed = parseStrictJsonObject(contents, "Flow session archive");
-			if (!parsed.ok) {
-				throw new ArchivedSessionLookupError(
-					"Flow could not verify canonical archived session history.",
-				);
-			}
-			const session = SessionSchema.safeParse(parsed.value);
-			if (!session.success || filename !== `${session.data.id}.json`) {
-				throw new ArchivedSessionLookupError(
-					"Flow could not verify canonical archived session history.",
-				);
-			}
-			if (
-				session.data.causal.mutations.some(
-					(mutation) => mutation.operationId === operationId,
-				)
-			) {
-				matches.push(session.data);
-			}
-		}
+		const matches = (await loadCanonicalArchivedSessions(root)).filter(
+			predicate,
+		);
 		if (matches.length > 1) {
 			throw new ArchivedSessionLookupError(
 				"Flow found ambiguous archived operation history.",
@@ -567,32 +1187,159 @@ export async function findArchivedSessionByOperationId(
 	}
 }
 
+/**
+ * Find any canonical archive containing an operation id. Close-start preflight
+ * uses this wider lookup because a retry handle must not collide with any
+ * historical mutation identity.
+ */
+export function findArchivedSessionByOperationId(
+	worktree: string,
+	operationId: string,
+): Promise<Session | null> {
+	return findCanonicalArchivedSession(worktree, (session) =>
+		session.causal.mutations.some(
+			(mutation) => mutation.operationId === operationId,
+		),
+	);
+}
+
+/**
+ * Recover only the archive whose accepted closure owns this retry handle.
+ * A later session may reuse the same text for a non-close mutation without
+ * making the original accepted close ambiguous.
+ */
+export function findArchivedSessionByCloseRetryOperationId(
+	worktree: string,
+	operationId: string,
+): Promise<Session | null> {
+	return findCanonicalArchivedSession(
+		worktree,
+		(session) => session.closure?.retryOperationId === operationId,
+	);
+}
+
 export async function quarantineUnreadableSession(
 	worktree: string,
+	hooks: ArchiveAndClearTestHooks = {},
 ): Promise<string | null> {
 	const root = assertMutableWorkspaceRoot(worktree);
-	const source = sessionPath(root);
 	if (
 		(await managedDirectoryState(flowDir(root), "the Flow state directory")) ===
 			"missing" ||
-		(await managedFileState(source, "the Flow session file")) === "missing"
+		(await managedFileState(sessionPath(root), "the Flow session file")) ===
+			"missing"
 	) {
 		return null;
 	}
 	await ensureFlowGitignore(root);
 	await ensureHistoryDirectory(root);
-	const target = join(
-		historyDir(root),
-		`quarantine-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}.json`,
+	const rootIdentity = await managedDirectoryIdentity(
+		root,
+		"the workspace root",
 	);
+	const flowIdentity = await managedDirectoryIdentity(
+		flowDir(root),
+		"the Flow state directory",
+	);
+	const historyIdentity = await managedDirectoryIdentity(
+		historyDir(root),
+		"the Flow session history directory",
+	);
+	let active: PinnedFileRead;
 	try {
-		await rename(source, target);
+		active = await readPinnedFile(
+			flowDir(root),
+			flowIdentity,
+			root,
+			rootIdentity,
+			"session.json",
+			hooks,
+		);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
 		throw error;
 	}
-	await syncDirectory(historyDir(root));
-	await syncDirectory(flowDir(root));
+	const activeSha256 = createHash("sha256")
+		.update(active.contents, "utf8")
+		.digest("hex");
+	const targetFilename = `quarantine-${activeSha256}.json`;
+	const target = join(historyDir(root), targetFilename);
+	const publication = await runPinnedDirectoryHelper(
+		historyDir(root),
+		pinnedRequest(
+			"publish",
+			historyDir(root),
+			historyIdentity,
+			flowDir(root),
+			flowIdentity,
+			{
+				targetName: targetFilename,
+				tempName: `.quarantine-${process.pid}-${randomUUID()}.tmp`,
+			},
+		),
+		active.contents,
+		hooks.afterHistoryPinned,
+		hooks,
+	);
+	if (
+		publication.status === "exists" &&
+		Buffer.from(publication.contents, "base64").toString("utf8") !==
+			active.contents
+	) {
+		throw new ArchiveCollisionError(
+			"Flow quarantine target already exists with different contents.",
+		);
+	}
+	if (publication.status !== "published" && publication.status !== "exists") {
+		throw new Error(
+			"Flow pinned filesystem helper returned the wrong quarantine result.",
+		);
+	}
+	await Promise.all([
+		assertManagedDirectoryIdentity(root, "the workspace root", rootIdentity),
+		assertManagedDirectoryIdentity(
+			flowDir(root),
+			"the Flow state directory",
+			flowIdentity,
+		),
+		assertManagedDirectoryIdentity(
+			historyDir(root),
+			"the Flow session history directory",
+			historyIdentity,
+		),
+	]);
+	const quarantined = await readPinnedFile(
+		historyDir(root),
+		historyIdentity,
+		flowDir(root),
+		flowIdentity,
+		targetFilename,
+		hooks,
+	);
+	if (quarantined.contents !== active.contents) {
+		throw new ArchiveCollisionError(
+			"Flow could not verify quarantined session contents before cleanup.",
+		);
+	}
+	const removal = await runPinnedDirectoryHelper(
+		flowDir(root),
+		pinnedRequest("remove", flowDir(root), flowIdentity, root, rootIdentity, {
+			name: "session.json",
+			expectedFileIdentity: active.identity,
+			expectedSha256: activeSha256,
+			expectedHistoryIdentity: historyIdentity,
+			expectedArchiveName: targetFilename,
+			expectedArchiveSha256: activeSha256,
+		}),
+		"",
+		hooks.afterFlowPinnedBeforeDelete,
+		hooks,
+	);
+	if (removal.status !== "removed") {
+		throw new Error(
+			"Flow pinned filesystem helper returned the wrong quarantine cleanup result.",
+		);
+	}
 	return target;
 }
 
@@ -614,17 +1361,43 @@ export async function saveSession(
 export async function archiveAndClearSession(
 	worktree: string,
 	session: Session,
+	hooks: ArchiveAndClearTestHooks = {},
 ): Promise<void> {
 	const root = assertMutableWorkspaceRoot(worktree);
 	const normalized = SessionSchema.parse(session);
+	if (normalized.closure === null) {
+		throw new UnclosedSessionArchiveError(
+			"Flow refuses to publish canonical history without an accepted session closure.",
+		);
+	}
 	await ensureFlowGitignore(root);
 	await ensureHistoryDirectory(root);
-	await Promise.all([
-		managedFileState(sessionPath(root), "the Flow session file"),
-		managedFileState(join(flowDir(root), ".gitignore"), "the Flow ignore file"),
-	]);
+	await managedFileState(
+		join(flowDir(root), ".gitignore"),
+		"the Flow ignore file",
+	);
 	const expectedContents = `${JSON.stringify(normalized, null, 2)}\n`;
-	const activePath = sessionPath(root);
+	const rootIdentity = await managedDirectoryIdentity(
+		root,
+		"the workspace root",
+	);
+	const flowIdentity = await managedDirectoryIdentity(
+		flowDir(root),
+		"the Flow state directory",
+	);
+	const historyIdentity = await managedDirectoryIdentity(
+		historyDir(root),
+		"the Flow session history directory",
+	);
+	const active = await readPinnedFile(
+		flowDir(root),
+		flowIdentity,
+		root,
+		rootIdentity,
+		"session.json",
+		hooks,
+	);
+	const targetFilename = archivedSessionFilename(normalized.id);
 	const targetPath = archivedSessionPath(root, normalized.id);
 	const normalizeContents = (contents: string): string | null => {
 		const parsed = parseStrictJsonObject(contents, "Flow session archive");
@@ -632,57 +1405,167 @@ export async function archiveAndClearSession(
 		const result = SessionSchema.safeParse(parsed.value);
 		return result.success ? `${JSON.stringify(result.data, null, 2)}\n` : null;
 	};
-	const activeContents = await readManagedFile(
-		activePath,
-		"the Flow session file",
-	);
-	if (normalizeContents(activeContents) !== expectedContents) {
+	if (normalizeContents(active.contents) !== expectedContents) {
 		throw new ArchiveCollisionError(
 			"Flow refused to archive because the active session changed before publication.",
 		);
 	}
 
-	const existingArchiveMatches = async (): Promise<boolean> => {
-		if (
-			(await managedFileState(targetPath, "the Flow session archive")) ===
-			"missing"
-		) {
-			return false;
-		}
-		return (
-			normalizeContents(
-				await readManagedFile(targetPath, "the Flow session archive"),
-			) === expectedContents
+	const beforeEntries = await readPinnedCanonicalArchiveEntries(
+		root,
+		flowIdentity,
+		historyIdentity,
+		hooks,
+	);
+	const archivedBefore = beforeEntries.map(parseCanonicalArchivedSession);
+	const competingRetry = archivedBefore.find(
+		(archived) =>
+			archived.id !== normalized.id &&
+			archived.closure?.retryOperationId ===
+				normalized.closure?.retryOperationId,
+	);
+	if (competingRetry) {
+		throw new ArchiveCollisionError(
+			"Flow refused to publish an archive with an ambiguous close retry identity.",
 		);
-	};
+	}
+	const existing = beforeEntries.find(
+		(entry) => entry.filename === targetFilename,
+	);
+	if (existing && normalizeContents(existing.contents) !== expectedContents) {
+		throw new ArchiveCollisionError(
+			`Flow archive already exists with different contents: ${targetPath}.`,
+		);
+	}
+	await Promise.all([
+		assertManagedDirectoryIdentity(root, "the workspace root", rootIdentity),
+		assertManagedDirectoryIdentity(
+			flowDir(root),
+			"the Flow state directory",
+			flowIdentity,
+		),
+		assertManagedDirectoryIdentity(
+			historyDir(root),
+			"the Flow session history directory",
+			historyIdentity,
+		),
+	]);
 
-	if (await existingArchiveMatches()) {
+	if (existing) {
 		// A previous close reached archive publication but not active-state
 		// cleanup. Continue the same transaction instead of wedging retries.
 	} else {
-		try {
-			// Hard-link publication is atomic and exclusive: unlike rename, it can
-			// never replace an existing archive with the same session id.
-			await link(activePath, targetPath);
-		} catch (error) {
-			if (
-				(error as NodeJS.ErrnoException).code !== "EEXIST" ||
-				!(await existingArchiveMatches())
-			) {
-				if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-					throw new ArchiveCollisionError(
-						`Flow archive already exists with different contents: ${targetPath}.`,
-						{ cause: error },
-					);
-				}
-				throw error;
-			}
+		const publication = await runPinnedDirectoryHelper(
+			historyDir(root),
+			pinnedRequest(
+				"publish",
+				historyDir(root),
+				historyIdentity,
+				flowDir(root),
+				flowIdentity,
+				{
+					targetName: targetFilename,
+					tempName: `.publish-${process.pid}-${randomUUID()}.tmp`,
+				},
+			),
+			expectedContents,
+			hooks.afterHistoryPinned,
+			hooks,
+		);
+		if (
+			publication.status === "exists" &&
+			normalizeContents(
+				Buffer.from(publication.contents, "base64").toString("utf8"),
+			) !== expectedContents
+		) {
+			throw new ArchiveCollisionError(
+				`Flow archive already exists with different contents: ${targetPath}.`,
+			);
+		}
+		if (publication.status !== "published" && publication.status !== "exists") {
+			throw new Error(
+				"Flow pinned filesystem helper returned the wrong publication result.",
+			);
 		}
 	}
-	await syncDirectory(historyDir(root));
 
-	await rm(activePath);
-	await syncDirectory(flowDir(root));
+	await Promise.all([
+		assertManagedDirectoryIdentity(root, "the workspace root", rootIdentity),
+		assertManagedDirectoryIdentity(
+			flowDir(root),
+			"the Flow state directory",
+			flowIdentity,
+		),
+		assertManagedDirectoryIdentity(
+			historyDir(root),
+			"the Flow session history directory",
+			historyIdentity,
+		),
+	]);
+	const verifiedEntries = await readPinnedCanonicalArchiveEntries(
+		root,
+		flowIdentity,
+		historyIdentity,
+		hooks,
+	);
+	verifiedEntries.map(parseCanonicalArchivedSession);
+	const verified = verifiedEntries.find(
+		(entry) => entry.filename === targetFilename,
+	);
+	if (!verified || normalizeContents(verified.contents) !== expectedContents) {
+		throw new ArchiveCollisionError(
+			"Flow could not verify the exact archive before active-state deletion.",
+		);
+	}
+	await Promise.all([
+		assertManagedDirectoryIdentity(root, "the workspace root", rootIdentity),
+		assertManagedDirectoryIdentity(
+			flowDir(root),
+			"the Flow state directory",
+			flowIdentity,
+		),
+		assertManagedDirectoryIdentity(
+			historyDir(root),
+			"the Flow session history directory",
+			historyIdentity,
+		),
+	]);
+	const removal = await runPinnedDirectoryHelper(
+		flowDir(root),
+		pinnedRequest("remove", flowDir(root), flowIdentity, root, rootIdentity, {
+			name: "session.json",
+			expectedFileIdentity: active.identity,
+			expectedSha256: createHash("sha256")
+				.update(active.contents, "utf8")
+				.digest("hex"),
+			expectedHistoryIdentity: historyIdentity,
+			expectedArchiveName: targetFilename,
+			expectedArchiveSha256: createHash("sha256")
+				.update(verified.contents, "utf8")
+				.digest("hex"),
+		}),
+		"",
+		hooks.afterFlowPinnedBeforeDelete,
+		hooks,
+	);
+	if (removal.status !== "removed") {
+		throw new Error(
+			"Flow pinned filesystem helper returned the wrong active-delete result.",
+		);
+	}
+	await Promise.all([
+		assertManagedDirectoryIdentity(root, "the workspace root", rootIdentity),
+		assertManagedDirectoryIdentity(
+			flowDir(root),
+			"the Flow state directory",
+			flowIdentity,
+		),
+		assertManagedDirectoryIdentity(
+			historyDir(root),
+			"the Flow session history directory",
+			historyIdentity,
+		),
+	]);
 }
 
 const FLOW_GITIGNORE_CONTENT = [

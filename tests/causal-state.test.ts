@@ -1,27 +1,25 @@
 import { describe, expect, test } from "bun:test";
+import { SessionSchema } from "../src/application/schema.js";
 import {
-	type EvidenceRecord,
-	type ReviewExecutionInput,
+	type ReviewAssignment,
+	type Session,
 	toFeatureId,
 	toSessionId,
-	type WorkerResult,
 } from "../src/domain/session.js";
+import { validateSessionInvariants } from "../src/domain/session-invariants.js";
 import {
 	applyPlan,
 	approvePlan,
-	canonicalEvidenceId,
+	canonicalReviewAssignmentResultDigest,
 	canonicalSessionSnapshotId,
 	causalDeltaProjection,
 	closeSession,
 	compactSessionProjection,
-	completeFeature,
 	createSession,
 	detailSessionProjection,
 	executionSessionProjection,
 	MAX_EXECUTION_PROJECTION_BYTES,
 	mutationReceiptProjection,
-	recordEvidence,
-	recordReviewExecutions,
 	resetFeature,
 	reviewerSessionProjection,
 	serializedUtf8JsonBytes,
@@ -39,8 +37,6 @@ const environment: TransitionEnvironment = {
 
 const featureId = toFeatureId("causal-state");
 const SOURCE_DIGEST = `sha256:${"1".repeat(64)}`;
-const OUTPUT_DIGEST = `sha256:${"2".repeat(64)}`;
-const ARTIFACT_DIGEST = `sha256:${"3".repeat(64)}` as const;
 const FEATURE_PACKET_DIGEST = `sha256:${"4".repeat(64)}`;
 const FINAL_PACKET_DIGEST = `sha256:${"5".repeat(64)}`;
 
@@ -80,134 +76,66 @@ function runningSession(featureCount = 1) {
 	return unwrap(startRun(approved, environment, featureId)).session;
 }
 
-function withCanonicalId<T extends EvidenceRecord>(evidence: T): T {
-	return { ...evidence, evidenceId: canonicalEvidenceId(evidence) };
-}
-
-function completionEvidence(snapshotId: string): EvidenceRecord[] {
-	return [
-		withCanonicalId({
-			kind: "validation",
-			evidenceId: "",
-			snapshotId,
-			sourceDigest: SOURCE_DIGEST,
-			commandClass: "test",
-			startedAt: "2026-07-18T11:50:00.000Z",
-			completedAt: "2026-07-18T11:51:00.000Z",
-			exitCode: 0,
-			outputDigest: OUTPUT_DIGEST,
-			artifactRef: {
-				kind: "restricted_evidence_v1",
-				digest: ARTIFACT_DIGEST,
-				byteLength: 512,
-			},
-			environmentKeys: ["CI"],
-		}),
-		withCanonicalId({
-			kind: "review",
-			evidenceId: "",
-			snapshotId,
-			sourceDigest: SOURCE_DIGEST,
-			attemptId: "feature-review-attempt",
-			packetDigest: FEATURE_PACKET_DIGEST,
-			startedAt: "2026-07-18T11:52:00.000Z",
-			completedAt: "2026-07-18T11:53:00.000Z",
-		}),
-		withCanonicalId({
-			kind: "review",
-			evidenceId: "",
-			snapshotId,
-			sourceDigest: SOURCE_DIGEST,
-			attemptId: "final-review-attempt",
-			packetDigest: FINAL_PACKET_DIGEST,
-			startedAt: "2026-07-18T11:54:00.000Z",
-			completedAt: "2026-07-18T11:55:00.000Z",
-		}),
-	];
-}
-
-function reviewExecutions(): ReviewExecutionInput[] {
-	return [
-		{
-			attemptId: "feature-review-attempt",
-			logicalPassId: "feature-review-pass",
-			featureId,
-			reviewKind: "feature",
-			reviewSnapshotId: FEATURE_PACKET_DIGEST,
-			verdict: "passed",
-			findings: [],
-			startedAt: "2026-07-18T11:52:00.000Z",
-			completedAt: "2026-07-18T11:53:00.000Z",
-			terminalDisposition: "submitted",
-		},
-		{
-			attemptId: "final-review-attempt",
-			logicalPassId: "final-review-pass",
-			featureId,
-			reviewKind: "final",
-			reviewSnapshotId: FINAL_PACKET_DIGEST,
-			verdict: "passed",
-			findings: [],
-			startedAt: "2026-07-18T11:54:00.000Z",
-			completedAt: "2026-07-18T11:55:00.000Z",
-			terminalDisposition: "submitted",
-		},
-	];
-}
-
-function worker(session: ReturnType<typeof runningSession>): WorkerResult {
-	return {
-		status: "ok",
-		operationId: "complete-causal-feature",
-		expectedRevision: session.causal.revision,
-		expectedSnapshotId: session.causal.snapshotId,
-		featureId,
-		summary: "Causal state complete.",
-		artifactsChanged: [{ path: "src/domain/session.ts" }],
-		validationRun: [
-			{
-				command: "bun test tests/causal-state.test.ts",
-				status: "passed",
-				summary: "Causal state tests passed.",
-			},
-		],
-		validationScope: "broad",
-		featureReviewDepth: "standard",
-		featureReview: {
-			status: "passed",
-			summary: "Feature review passed.",
-			blockingFindings: [],
-		},
-		finalReview: {
-			status: "passed",
-			summary: "Final review passed.",
-			blockingFindings: [],
-			reviewDepth: "detailed",
-		},
-		reviewExecutions: reviewExecutions(),
-		evidence: completionEvidence(session.causal.snapshotId),
-		orchestrationPasses: [],
+function withReviewAssignment(
+	session: Session,
+	reviewKind: "feature" | "final" = "feature",
+	requiredDepth: ReviewAssignment["requiredDepth"] = "standard",
+	id = `review-assignment:${reviewKind}`,
+): { session: Session; assignment: ReviewAssignment } {
+	if (!session.activeFeatureRunId || !session.activeFeatureId) {
+		throw new Error("Expected an active native feature run.");
+	}
+	const prerequisiteAssignment =
+		reviewKind === "final"
+			? session.reviewAssignments.find(
+					(assignment) => assignment.reviewKind === "feature",
+				)
+			: undefined;
+	const prerequisiteResult = prerequisiteAssignment
+		? {
+				assignmentId: prerequisiteAssignment.id,
+				verdict: "passed" as const,
+				findings: [],
+				completedAt: prerequisiteAssignment.startedAt,
+				terminalDisposition: "submitted" as const,
+			}
+		: null;
+	const assignment: ReviewAssignment = {
+		id,
+		operationId: `start-${id}`,
+		featureRunId: session.activeFeatureRunId,
+		featureId: session.activeFeatureId,
+		reviewKind,
+		validationScope: reviewKind === "final" ? "broad" : "targeted",
+		validationEvidenceRefs: [],
+		sourceDigest: SOURCE_DIGEST,
+		packetDigest:
+			reviewKind === "final" ? FINAL_PACKET_DIGEST : FEATURE_PACKET_DIGEST,
+		packetSummary: `Review the ${reviewKind} assignment.`,
+		riskLenses: [],
+		prerequisite: prerequisiteResult
+			? {
+					assignmentId: prerequisiteResult.assignmentId,
+					result: prerequisiteResult,
+					resultDigest:
+						canonicalReviewAssignmentResultDigest(prerequisiteResult),
+				}
+			: null,
+		attemptId: `review-attempt:${reviewKind}`,
+		logicalPassId: `review-pass:${reviewKind}`,
+		startedAt: environment.now(),
+		requiredDepth,
+		status: "pending",
+		completedAt: null,
+		invalidatedAt: null,
+		invalidationReason: null,
 	};
-}
-
-function nonFinalWorker(
-	session: ReturnType<typeof runningSession>,
-	operationId = "complete-non-final-feature",
-): WorkerResult {
-	const base = worker(session);
-	const { finalReview: _finalReview, ...withoutFinalReview } = base;
 	return {
-		...withoutFinalReview,
-		operationId,
-		validationScope: "targeted",
-		reviewExecutions: (base.reviewExecutions ?? []).filter(
-			(execution) => execution.reviewKind === "feature",
-		),
-		evidence: (base.evidence ?? []).filter(
-			(evidence) =>
-				evidence.kind === "validation" ||
-				evidence.attemptId === "feature-review-attempt",
-		),
+		session: {
+			...session,
+			reviewAssignments: [...session.reviewAssignments, assignment],
+		},
+		assignment,
 	};
 }
 
@@ -219,7 +147,7 @@ describe("causal session state", () => {
 	test("starts at a canonical revision-zero snapshot", () => {
 		const session = createSession("Canonical creation", environment);
 
-		expect(session.version).toBe(3);
+		expect(session.version).toBe(4);
 		expect(session.causal.revision).toBe(0);
 		expect(session.causal.mutations).toEqual([]);
 		expect(session.causal.evidence).toEqual([]);
@@ -274,177 +202,6 @@ describe("causal session state", () => {
 		expect(created.plan).toBeNull();
 	});
 
-	test("commits review and evidence state with successful completion once", () => {
-		const running = runningSession();
-		const result = unwrap(
-			completeFeature(running, worker(running), environment),
-		);
-		const mutation = result.causal.mutations.at(-1);
-
-		expect(result.status).toBe("completed");
-		expect(result.causal.revision).toBe(running.causal.revision + 1);
-		expect(result.causal.mutations).toHaveLength(
-			running.causal.mutations.length + 1,
-		);
-		expect(result.causal.evidence).toHaveLength(3);
-		expect(result.budget.reviewExecutions).toHaveLength(2);
-		expect(mutation?.operationId).toBe("complete-causal-feature");
-		expect(mutation?.priorSnapshotId).toBe(running.causal.snapshotId);
-		expect(mutation?.currentSnapshotId).toBe(result.causal.snapshotId);
-		expect(mutation?.changedFields).toEqual(
-			expect.arrayContaining([
-				"budget.reviewExecutions",
-				"budget.reviewLifecycle",
-				"causal.evidence",
-				"budget.reviewCount",
-			]),
-		);
-		expect(mutation?.changedFields).not.toContain("budget");
-		expect(mutation?.changedFields).not.toContain(
-			"budget.failedReviewAttemptsByFeature",
-		);
-		expect(mutation?.changedFields).toEqual(
-			expect.arrayContaining(["closure", "timestamps.completedAt"]),
-		);
-		expect(mutation?.evidenceRefs).toEqual(
-			result.causal.evidence.map((evidence) => evidence.evidenceId),
-		);
-		expect(result.causal.snapshotId).toBe(canonicalSessionSnapshotId(result));
-	});
-
-	test("reports only durable fields for a non-final successful completion", () => {
-		const running = runningSession(2);
-		const result = unwrap(
-			completeFeature(running, nonFinalWorker(running), environment),
-		);
-		const mutation = result.causal.mutations.at(-1);
-
-		expect(result.status).toBe("ready");
-		expect(result.closure).toBeNull();
-		expect(result.timestamps.completedAt).toBeNull();
-		expect(mutation?.changedFields).not.toContain("closure");
-		expect(mutation?.changedFields).not.toContain("timestamps.completedAt");
-		expect(mutation?.changedFields).not.toContain(
-			"budget.failedReviewAttemptsByFeature",
-		);
-		expect(mutation?.blockerDelta).toEqual({ added: [], removed: [] });
-	});
-
-	test("reports clearing the exact prior completion error on a later success", () => {
-		const running = runningSession(2);
-		const invalidWorker = nonFinalWorker(
-			running,
-			"reject-mismatched-review-feature",
-		);
-		const featureReview = invalidWorker.reviewExecutions?.[0];
-		if (!featureReview) throw new Error("Expected feature review execution.");
-		const rejected = completeFeature(
-			running,
-			{
-				...invalidWorker,
-				reviewExecutions: [
-					{ ...featureReview, featureId: toFeatureId("other-feature") },
-				],
-			},
-			environment,
-		);
-		expect(rejected.ok).toBe(false);
-		if (rejected.ok || !rejected.session?.lastError) {
-			throw new Error("Expected a persisted rejected completion error.");
-		}
-		const priorError = rejected.session.lastError.summary;
-
-		const succeeded = unwrap(
-			completeFeature(
-				rejected.session,
-				nonFinalWorker(rejected.session, "succeed-after-rejection"),
-				environment,
-			),
-		);
-		const mutation = succeeded.causal.mutations.at(-1);
-		expect(succeeded.lastError).toBeNull();
-		expect(mutation?.changedFields).toContain("lastError");
-		expect(mutation?.blockerDelta.removed).toEqual([priorError]);
-	});
-
-	test("reports failed-review counter removal only when the counter existed", () => {
-		const running = runningSession(2);
-		const passingAttempt = reviewExecutions()[0];
-		if (!passingAttempt) throw new Error("Expected a feature review attempt.");
-		const failedAttempt: ReviewExecutionInput = {
-			...passingAttempt,
-			attemptId: "feature-review-failed-attempt",
-			verdict: "failed" as const,
-			findings: [
-				{
-					taxonomy: "implementation_defect",
-					subject: "causal completion",
-					requirementOrRisk: "Receipt must reflect durable state.",
-					evidenceLocator: "tests/causal-state.test.ts",
-					summary: "The completion delta was imprecise.",
-					severity: "blocking" as const,
-				},
-			],
-		};
-		const withFailedAttempt = unwrap(
-			recordReviewExecutions(
-				running,
-				[failedAttempt],
-				environment,
-				"record-failed-review-attempt",
-			),
-		);
-		expect(
-			withFailedAttempt.budget.failedReviewAttemptsByFeature[featureId],
-		).toBe(1);
-
-		const result = unwrap(
-			completeFeature(
-				withFailedAttempt,
-				nonFinalWorker(withFailedAttempt, "complete-after-review-retry"),
-				environment,
-			),
-		);
-		const mutation = result.causal.mutations.at(-1);
-
-		expect(
-			result.budget.failedReviewAttemptsByFeature[featureId],
-		).toBeUndefined();
-		expect(mutation?.changedFields).toContain(
-			"budget.failedReviewAttemptsByFeature",
-		);
-	});
-
-	test("references only newly appended evidence when historical evidence exists", () => {
-		const running = runningSession(2);
-		const historicalEvidence = completionEvidence(running.causal.snapshotId)[0];
-		if (!historicalEvidence) throw new Error("Expected historical evidence.");
-		const withHistory = unwrap(
-			recordEvidence(
-				running,
-				[historicalEvidence],
-				environment,
-				"record-historical-evidence",
-			),
-		);
-		const completion = nonFinalWorker(
-			withHistory,
-			"complete-with-historical-evidence",
-		);
-		const newEvidenceIds = (completion.evidence ?? []).map(
-			(evidence) => evidence.evidenceId,
-		);
-
-		const result = unwrap(
-			completeFeature(withHistory, completion, environment),
-		);
-		const mutation = result.causal.mutations.at(-1);
-
-		expect(result.causal.evidence).toHaveLength(3);
-		expect(mutation?.evidenceRefs).toEqual(newEvidenceIds);
-		expect(mutation?.evidenceRefs).not.toContain(historicalEvidence.evidenceId);
-	});
-
 	test("copies receipt changed entities instead of aliasing causal history", () => {
 		const session = runningSession();
 		const mutation = session.causal.mutations.at(-1);
@@ -456,98 +213,6 @@ describe("causal session state", () => {
 		receipt.changedEntity.id = "mutated-receipt";
 
 		expect(mutation.changedEntity.id).not.toBe("mutated-receipt");
-	});
-
-	test("fails stale guards closed without mutating causal state", () => {
-		const running = runningSession();
-		const staleWorker = {
-			...worker(running),
-			expectedRevision: running.causal.revision - 1,
-		};
-		const result = completeFeature(running, staleWorker, environment);
-
-		expect(result.ok).toBe(false);
-		if (result.ok || !result.session)
-			throw new Error("Expected stale failure.");
-		expect(result.message).toContain("stale");
-		expect(result.session.status).toBe("running");
-		expect(result.session.budget.reviewExecutions).toEqual([]);
-		expect(result.session.causal).toEqual(running.causal);
-	});
-
-	test("fails missing and digest-mismatched evidence closed", () => {
-		const running = runningSession();
-		const missing = completeFeature(
-			running,
-			{ ...worker(running), evidence: [] },
-			environment,
-		);
-		expect(missing.ok).toBe(false);
-		if (missing.ok) throw new Error("Expected missing evidence failure.");
-		expect(missing.message).toContain("source-bound review evidence");
-
-		const [validation, ...remainingEvidence] = completionEvidence(
-			running.causal.snapshotId,
-		);
-		if (validation?.kind !== "validation") {
-			throw new Error("Expected validation evidence.");
-		}
-		const mismatched = completeFeature(
-			running,
-			{
-				...worker(running),
-				evidence: [
-					{ ...validation, outputDigest: `sha256:${"f".repeat(64)}` },
-					...remainingEvidence,
-				],
-			},
-			environment,
-		);
-		expect(mismatched.ok).toBe(false);
-		if (mismatched.ok) throw new Error("Expected digest mismatch failure.");
-		expect(mismatched.message).toContain("canonical digest");
-
-		const [validValidation, ...reviewEvidence] = completionEvidence(
-			running.causal.snapshotId,
-		);
-		if (validValidation?.kind !== "validation") {
-			throw new Error("Expected validation evidence.");
-		}
-		const wrongClass = withCanonicalId({
-			...validValidation,
-			evidenceId: "",
-			commandClass: "lint" as const,
-		});
-		const classMismatch = completeFeature(
-			running,
-			{
-				...worker(running),
-				operationId: "wrong-command-class",
-				evidence: [wrongClass, ...reviewEvidence],
-			},
-			environment,
-		);
-		expect(classMismatch.ok).toBe(false);
-		if (classMismatch.ok) throw new Error("Expected command-class mismatch.");
-		expect(classMismatch.message).toContain("command classes");
-
-		const invalidSource = withCanonicalId({
-			...validValidation,
-			evidenceId: "",
-			sourceDigest: "not-a-digest",
-		});
-		const invalidDigest = completeFeature(
-			running,
-			{
-				...worker(running),
-				operationId: "invalid-source-digest",
-				evidence: [invalidSource, ...reviewEvidence],
-			},
-			environment,
-		);
-		expect(invalidDigest.ok).toBe(false);
-		if (invalidDigest.ok) throw new Error("Expected invalid source digest.");
-		expect(invalidDigest.message).toContain("non-canonical digest");
 	});
 
 	test("returns complete execution context with derived finality and copied arrays", () => {
@@ -562,6 +227,7 @@ describe("causal session state", () => {
 
 		expect(nonFinal).toEqual({
 			view: "execution",
+			featureRunId: nonFinalSession.activeFeatureRunId ?? undefined,
 			goal: nonFinalSession.goal,
 			plan: {
 				summary: nonFinalPlan.summary,
@@ -600,10 +266,10 @@ describe("causal session state", () => {
 		expect(final.requiredValidationScope).toBe("broad");
 	});
 
-	test("rejects oversized legacy execution state without truncating it", () => {
+	test("rejects oversized hand-edited execution state without truncating it", () => {
 		const session = runningSession();
 		if (!session.plan) throw new Error("Expected an approved plan.");
-		const legacyOversized = {
+		const oversized = {
 			...session,
 			plan: {
 				...session.plan,
@@ -611,7 +277,7 @@ describe("causal session state", () => {
 			},
 		};
 
-		const result = executionSessionProjection(legacyOversized);
+		const result = executionSessionProjection(oversized);
 
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error("Expected runtime oversize rejection.");
@@ -739,14 +405,10 @@ describe("causal session state", () => {
 		const execution = unwrap(executionSessionProjection(scoped));
 		const repeated = unwrap(executionSessionProjection(scoped));
 		const detail = detailSessionProjection(scoped);
+		const assigned = withReviewAssignment(scoped);
 		const reviewer = unwrap(
-			reviewerSessionProjection(scoped, {
-				reviewKind: "feature",
-				featureId,
-				packetHash: FEATURE_PACKET_DIGEST,
-				evidenceRefs: [],
-				expectedRevision: scoped.causal.revision,
-				expectedSnapshotId: scoped.causal.snapshotId,
+			reviewerSessionProjection(assigned.session, {
+				assignmentId: assigned.assignment.id,
 			}),
 		);
 		const detailTargets = detail.plan?.features[0]?.targets ?? [];
@@ -795,17 +457,10 @@ describe("causal session state", () => {
 					}
 				: null,
 		};
+		const assigned = withReviewAssignment(privateScopeSession);
 		const reviewer = unwrap(
-			reviewerSessionProjection(privateScopeSession, {
-				reviewKind: "feature",
-				featureId,
-				packetHash: FEATURE_PACKET_DIGEST,
-				evidenceRefs: Array.from(
-					{ length: 30 },
-					(_, index) => `sha256:${index.toString(16).padStart(64, "0")}`,
-				),
-				expectedRevision: session.causal.revision,
-				expectedSnapshotId: session.causal.snapshotId,
+			reviewerSessionProjection(assigned.session, {
+				assignmentId: assigned.assignment.id,
 			}),
 		);
 		const receipt = mutationReceiptProjection(session, ["🔥".repeat(1000)]);
@@ -839,6 +494,7 @@ describe("causal session state", () => {
 		);
 		expect(compactSessionProjection(closed).closure).toEqual({
 			kind: "deferred",
+			retryOperationId: "close-for-compact-projection",
 		});
 	});
 
@@ -859,29 +515,131 @@ describe("causal session state", () => {
 		expect(future.ok).toBe(false);
 	});
 
+	test("rejects relational corruption across active pointers, runs, assignments, and history", () => {
+		const running = runningSession();
+		const run = running.featureRuns.find(
+			(candidate) => candidate.id === running.activeFeatureRunId,
+		);
+		const runningFeature = running.plan?.features[0];
+		if (!run || !running.plan || !runningFeature) {
+			throw new Error("Expected active run state.");
+		}
+		const assigned = withReviewAssignment(running);
+		const brokenAssignment = {
+			...assigned.session,
+			reviewAssignments: assigned.session.reviewAssignments.map((candidate) =>
+				candidate.id === assigned.assignment.id
+					? { ...candidate, featureRunId: "feature-run:missing" }
+					: candidate,
+			),
+		};
+		const terminal = {
+			...running,
+			status: "ready" as const,
+			activeFeatureId: null,
+			activeFeatureRunId: null,
+			featureRuns: [
+				{ ...run, status: "completed" as const, endedAt: environment.now() },
+			],
+			plan: {
+				...running.plan,
+				features: [
+					...running.plan.features.map((feature) => ({
+						...feature,
+						status: "completed" as const,
+					})),
+					{
+						...runningFeature,
+						id: toFeatureId("causal-state-pending"),
+						dependsOn: [],
+						status: "pending" as const,
+					},
+				],
+			},
+			history: [
+				{
+					featureRunId: run.id,
+					featureId: run.featureId,
+					status: "completed" as const,
+					summary: "Corrupt unresolved history references.",
+					recordedAt: environment.now(),
+					artifactsChanged: [],
+					validationScope: "targeted" as const,
+					validationEvidenceRefs: [SOURCE_DIGEST],
+					reviewAssignmentIds: ["review-assignment:missing"],
+					outcome: {
+						kind: "completed" as const,
+						summary: "Corrupt unresolved history references.",
+					},
+					orchestrationPasses: [],
+				},
+			],
+		};
+		const cases = [
+			{
+				name: "active pointer pair",
+				state: { ...running, activeFeatureId: null },
+				error: "present or absent together",
+			},
+			{
+				name: "active run status",
+				state: {
+					...running,
+					featureRuns: [
+						{ ...run, status: "reset" as const, endedAt: environment.now() },
+					],
+				},
+				error: "exactly one active feature run",
+			},
+			{
+				name: "plan feature status",
+				state: {
+					...running,
+					plan: {
+						...running.plan,
+						features: running.plan.features.map((feature) => ({
+							...feature,
+							status: "pending" as const,
+						})),
+					},
+				},
+				error: "running session requires exactly one in-progress feature",
+			},
+			{
+				name: "assignment run reference",
+				state: brokenAssignment,
+				error: "does not match its feature run",
+			},
+			{
+				name: "terminal ownership",
+				state: terminal,
+				error: "runtime-owned terminal mutation",
+			},
+		];
+
+		for (const corruption of cases) {
+			expect(
+				validateSessionInvariants(corruption.state),
+				corruption.name,
+			).toContain(corruption.error);
+			expect(
+				SessionSchema.safeParse(corruption.state).success,
+				corruption.name,
+			).toBe(false);
+		}
+	});
+
 	test("paginates deltas without advertising records it did not return", () => {
 		let session = runningSession();
-		for (let index = 0; index < 25; index += 1) {
+		for (let index = 0; index < 13; index += 1) {
 			session = unwrap(
-				recordReviewExecutions(
-					session,
-					[
-						{
-							attemptId: `delta-attempt-${index}`,
-							logicalPassId: `delta-pass-${index}`,
-							featureId,
-							reviewKind: "feature",
-							reviewSnapshotId: FEATURE_PACKET_DIGEST,
-							verdict: "passed",
-							findings: [],
-							startedAt: "2026-07-18T11:52:00.000Z",
-							completedAt: "2026-07-18T11:53:00.000Z",
-							terminalDisposition: "submitted",
-						},
-					],
-					environment,
-				),
+				resetFeature(session, featureId, environment, {
+					operationId: `delta-reset-${index}`,
+					expectedRevision: session.causal.revision,
+					expectedSnapshotId: session.causal.snapshotId,
+				}),
 			);
+			session = unwrap(startRun(session, environment, featureId)).session;
 		}
 
 		const first = unwrap(causalDeltaProjection(session, 0));
@@ -902,23 +660,24 @@ describe("causal session state", () => {
 
 	test("authenticates the causal chain and replays an operation idempotently", () => {
 		const running = runningSession();
-		const completed = unwrap(
-			completeFeature(running, worker(running), environment),
-		);
-		const replayed = unwrap(
-			completeFeature(completed, worker(running), environment),
-		);
+		const guard = {
+			operationId: "causal-reset-replay",
+			expectedRevision: running.causal.revision,
+			expectedSnapshotId: running.causal.snapshotId,
+		};
+		const reset = unwrap(resetFeature(running, featureId, environment, guard));
+		const replayed = unwrap(resetFeature(reset, featureId, environment, guard));
 
-		expect(replayed).toEqual(completed);
-		expect(validateCausalChain(completed)).toBeNull();
-		const latest = completed.causal.mutations.at(-1);
+		expect(replayed).toEqual(reset);
+		expect(validateCausalChain(reset)).toBeNull();
+		const latest = reset.causal.mutations.at(-1);
 		if (!latest) throw new Error("Expected a causal mutation.");
 		const tampered = {
-			...completed,
+			...reset,
 			causal: {
-				...completed.causal,
+				...reset.causal,
 				mutations: [
-					...completed.causal.mutations.slice(0, -1),
+					...reset.causal.mutations.slice(0, -1),
 					{ ...latest, operationId: "forged-operation" },
 				],
 			},
@@ -929,25 +688,13 @@ describe("causal session state", () => {
 	test("rejects operation-id reuse across operation kinds and request payloads", () => {
 		const running = runningSession();
 		const firstOperationId = running.causal.mutations[0]?.operationId;
-		const secondOperationId = running.causal.mutations[1]?.operationId;
 		const thirdOperationId = running.causal.mutations[2]?.operationId;
-		if (!firstOperationId || !secondOperationId || !thirdOperationId) {
+		if (!firstOperationId || !thirdOperationId) {
 			throw new Error("Expected three setup mutations.");
 		}
 
-		const completionCollision = completeFeature(
-			running,
-			{ ...worker(running), operationId: firstOperationId },
-			environment,
-		);
-		expect(completionCollision.ok).toBe(false);
-		if (completionCollision.ok) {
-			throw new Error("Expected completion operation collision.");
-		}
-		expect(completionCollision.message).toContain("different request");
-
 		const resetCollision = resetFeature(running, featureId, environment, {
-			operationId: secondOperationId,
+			operationId: firstOperationId,
 			expectedRevision: running.causal.revision,
 			expectedSnapshotId: running.causal.snapshotId,
 		});
@@ -994,7 +741,7 @@ describe("causal session state", () => {
 		}
 	});
 
-	test("derives feature and final reviewer policy from approved active state", () => {
+	test("projects feature and final policy from durable assignments", () => {
 		const session = runningSession();
 		if (!session.plan) throw new Error("Expected an approved plan.");
 		const plan = {
@@ -1009,24 +756,27 @@ describe("causal session state", () => {
 			})),
 		};
 		const approved = { ...session, plan };
-		const common = {
-			featureId,
-			packetHash: FEATURE_PACKET_DIGEST,
-			evidenceRefs: [],
-			expectedRevision: approved.causal.revision,
-			expectedSnapshotId: approved.causal.snapshotId,
-		};
+		const featureAssigned = withReviewAssignment(
+			approved,
+			"feature",
+			"quick",
+			"review-assignment:feature-policy",
+		);
+		const finalAssigned = withReviewAssignment(
+			featureAssigned.session,
+			"final",
+			"broad",
+			"review-assignment:final-policy",
+		);
 
 		const feature = unwrap(
-			reviewerSessionProjection(approved, {
-				...common,
-				reviewKind: "feature",
+			reviewerSessionProjection(finalAssigned.session, {
+				assignmentId: featureAssigned.assignment.id,
 			}),
 		);
 		const final = unwrap(
-			reviewerSessionProjection(approved, {
-				...common,
-				reviewKind: "final",
+			reviewerSessionProjection(finalAssigned.session, {
+				assignmentId: finalAssigned.assignment.id,
 			}),
 		);
 
@@ -1039,12 +789,10 @@ describe("causal session state", () => {
 			reviewKind: "final",
 			requiredDepth: "broad",
 			assignedScope: ["src/domain", "tests"],
-			requirements: ["Preserve causal truth."],
-			decisions: ["Use one immutable review packet."],
 		});
 	});
 
-	test("rejects reviewer assignments without approved applicable active state", () => {
+	test("rejects reviewer recovery without a durable assignment", () => {
 		const created = createSession("Reject premature review", environment);
 		const planned = unwrap(
 			applyPlan(
@@ -1063,45 +811,13 @@ describe("causal session state", () => {
 				environment,
 			),
 		);
-		const request = {
-			reviewKind: "feature" as const,
-			featureId,
-			packetHash: FEATURE_PACKET_DIGEST,
-			evidenceRefs: [],
-			expectedRevision: planned.causal.revision,
-			expectedSnapshotId: planned.causal.snapshotId,
-		};
-		const unapproved = reviewerSessionProjection(planned, request);
-		expect(unapproved.ok).toBe(false);
-		if (unapproved.ok) throw new Error("Expected unapproved review rejection.");
-		expect(unapproved.message).toContain("approved");
-
-		const approved = unwrap(approvePlan(planned, environment));
-		const inactive = reviewerSessionProjection(approved, {
-			...request,
-			expectedRevision: approved.causal.revision,
-			expectedSnapshotId: approved.causal.snapshotId,
+		const missing = reviewerSessionProjection(planned, {
+			assignmentId: "review-assignment:missing",
 		});
-		expect(inactive.ok).toBe(false);
-		if (inactive.ok) throw new Error("Expected inactive review rejection.");
-		expect(inactive.message).toContain("active in-progress");
-
-		const earlierFeature = runningSession(2);
-		const inapplicableFinal = reviewerSessionProjection(earlierFeature, {
-			reviewKind: "final",
-			featureId,
-			packetHash: FEATURE_PACKET_DIGEST,
-			evidenceRefs: [],
-			expectedRevision: earlierFeature.causal.revision,
-			expectedSnapshotId: earlierFeature.causal.snapshotId,
-		});
-		expect(inapplicableFinal.ok).toBe(false);
-		if (inapplicableFinal.ok) {
-			throw new Error("Expected inapplicable final review rejection.");
-		}
-		expect(inapplicableFinal.message).toContain(
-			"not eligible for final review",
-		);
+		expect(missing.ok).toBe(false);
+		if (missing.ok) throw new Error("Expected missing assignment rejection.");
+		expect(missing.message).toContain("was not found");
+		expect(missing.recovery).toContain("flow_review_start");
 	});
 
 	test("replays an exact guarded reset but rejects a changed reset request", () => {

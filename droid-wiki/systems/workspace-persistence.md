@@ -4,7 +4,10 @@ Active contributors: ddv1982
 
 ## Purpose
 
-Workspace persistence owns `.flow/` state on disk. `src/infrastructure/fs/workspace.ts` validates workspace roots, serializes writes, reads strict sessions, archives sessions, and quarantines unreadable active state.
+Workspace persistence owns `.flow/` state on disk.
+`src/infrastructure/fs/workspace.ts` validates workspace roots, serializes
+writes, reads strict Session v4 state, and publishes quiescent closures into
+history.
 
 ## Directory layout
 
@@ -14,7 +17,8 @@ Workspace persistence owns `.flow/` state on disk. `src/infrastructure/fs/worksp
 ├── session.lock/
 │   └── owner.json
 ├── history/
-│   └── <session-id>.json
+│   ├── <sha256(session-id)>.json
+│   └── quarantine-<content-sha256>.json
 └── .gitignore
 ```
 
@@ -26,8 +30,7 @@ Workspace persistence owns `.flow/` state on disk. `src/infrastructure/fs/worksp
 | `withSessionLock` | `src/infrastructure/fs/workspace.ts` | Serializes in-process and filesystem writes. |
 | `loadSession` | `src/infrastructure/fs/workspace.ts` | Reads strict JSON and validates `SessionSchema`. |
 | `saveSession` | `src/infrastructure/fs/workspace.ts` | Atomically writes the active session. |
-| `archiveAndClearSession` | `src/infrastructure/fs/workspace.ts` | Publishes closed sessions to history without clobbering and clears active state. |
-| `quarantineUnreadableSession` | `src/infrastructure/fs/workspace.ts` | Preserves bad session files for inspection. |
+| `archiveAndClearSession` | `src/infrastructure/fs/workspace.ts` | Publishes closed sessions to history without clobbering, then removes the active session file. |
 
 ## How it works
 
@@ -40,13 +43,30 @@ on contention or invalid metadata. Flow never steals a lock based on age or an
 owner-liveness guess; the timeout directs maintainers to inspect an abandoned
 lock manually.
 
-Closing first saves the closed session as authoritative active state. Archive
-publication then hard-links that exact `session.json` to the fixed history path,
-which fails rather than replacing an existing file. An identical existing
-archive means a prior close was interrupted after publication, so cleanup
-resumes; different contents raise `ArchiveCollisionError` and preserve active
-state. Lock owner fields are semantically validated before use. Malformed dates,
-non-positive or fractional pids, and blank hostnames fail closed.
+Closing first saves the closed session as authoritative active state. The exact
+case-sensitive session id maps to one lowercase SHA-256 filename. A short-lived
+helper whose cwd is pinned to the validated history-directory identity writes
+and syncs the expected bytes to a relative temporary file, then hard-links that
+file exclusively to the canonical name. A second helper pinned to `.flow`
+removes `session.json` only after the history inode, archive spelling, bytes, and
+directory topology are revalidated. An identical existing archive means a prior
+close was interrupted after publication, so cleanup resumes; different contents
+raise `ArchiveCollisionError` and preserve active state. On POSIX, cwd pins the
+directory inode across renames; Windows additionally benefits from its directory
+sharing rules, while directory fsync remains POSIX-only. These checks prevent
+following a swapped parent but do not claim a privilege boundary against a
+continuously malicious process running as the same OS user. Lock owner fields
+are semantically validated before use. Malformed dates, non-positive or
+fractional pids, and blank hostnames fail closed.
+
+Before accepting a new close start, repository history lookup checks its
+operation id against every mutation in every canonical Session v4 archive. Any
+match is a collision regardless of mutation kind. Quarantine files are not
+canonical retry sources. Corrupt, unsupported, filename-mismatched, or
+ambiguous canonical history stops the close before active bytes change.
+`archiveAndClearSession` also rejects every Session v4 document with
+`closure: null`. Canonical archive lookup treats a closureless document as
+invalid and fails closed; only explicit closure can publish canonical history.
 
 ## Integration points
 
@@ -67,6 +87,9 @@ hook does not touch workspace state.
 
 ## Entry points for modification
 
-Change `src/infrastructure/fs/workspace.ts` for `.flow/` layout or persistence behavior. Update `tests/workspace-persistence.test.ts` for every filesystem behavior change, especially lock, archive, and quarantine cases.
+Change `src/infrastructure/fs/workspace.ts` for `.flow/` layout or persistence
+behavior. Update `tests/workspace-persistence.test.ts` for every filesystem
+behavior change, especially strict input, lock, archive publication, and retry
+cases.
 
 Related pages: [Schema and JSON](schema-and-json.md), [Debugging](../how-to-contribute/debugging.md), and [Security](../security.md).

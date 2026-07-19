@@ -6,7 +6,7 @@ The most important background for Flow is the June 2026 v4 simplification. ADR 0
 
 | Page | Focus |
 | --- | --- |
-| [Skills-first ADR](skills-first-adr.md) | Why v4 removed earlier runtime concepts and kept seven tools. |
+| [Skills-first ADR](skills-first-adr.md) | Why v4 originally removed earlier runtime concepts and kept seven tools, before ADR 0003 established the current nine-tool assignment surface. |
 
 ## Source context
 

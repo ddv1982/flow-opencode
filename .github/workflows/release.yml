@@ -82,6 +82,9 @@ jobs:
       - name: Run package smoke
         run: bun run package:smoke
 
+      - name: Run pinned live OpenCode smoke
+        run: bun run smoke:live
+
       - name: Prepare package
         shell: bash
         run: |

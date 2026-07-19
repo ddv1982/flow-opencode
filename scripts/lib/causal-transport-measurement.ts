@@ -10,7 +10,7 @@ import type {
 	SessionTransaction,
 } from "../../src/application/ports/session-repository.js";
 import {
-	type ReviewExecutionInput,
+	type ReviewAssignment,
 	type Session,
 	toSessionId,
 } from "../../src/domain/session.js";
@@ -163,6 +163,7 @@ class DeterministicMemoryRepository implements SessionRepository {
 				entryCount: 0,
 			}),
 			load: async () => cloneSession(this.#session),
+			findArchivedByCloseRetryOperationId: async () => null,
 			findArchivedByOperationId: async () => null,
 			save: async (session) => {
 				this.#session = cloneSession(session);
@@ -267,7 +268,11 @@ function decisionFromReceipt(
 	response: FlowResponse,
 ): DecisionSignature {
 	const receipt = response.workflowData?.receipt;
-	if (!receipt?.operationId) {
+	if (
+		!receipt?.operationId ||
+		receipt.status === null ||
+		receipt.revision === null
+	) {
 		throw new Error(`Expected mutation receipt for '${id}'.`);
 	}
 	return {
@@ -287,100 +292,41 @@ function assertSuccessful(response: FlowResponse, label: string): void {
 
 function environmentFor(fixture: MeasurementFixture): TransitionEnvironment {
 	let tick = 0;
+	let runtimeSequence = 0;
 	const baseline = Date.parse(fixture.measuredAt);
 	return {
 		now: () => new Date(baseline + tick++ * 1000).toISOString(),
 		newSessionId: () => toSessionId(fixture.sessionId),
 		newOperationId: (revision) => `measurement-operation-${revision}`,
+		newRuntimeId: (kind) => `${kind}:measurement-${++runtimeSequence}`,
 	};
 }
 
-function completionPayload(session: Session, featureIndex: number) {
-	const featureId = session.activeFeatureId;
-	if (!featureId) throw new Error("Expected an active feature for completion.");
-	const finalFeature =
-		session.plan?.features.every(
-			(feature) => feature.id === featureId || feature.status === "completed",
-		) ?? false;
-	const minute = String(10 + featureIndex * 4).padStart(2, "0");
-	const nextMinute = String(11 + featureIndex * 4).padStart(2, "0");
-	const finalStartMinute = String(12 + featureIndex * 4).padStart(2, "0");
-	const finalEndMinute = String(13 + featureIndex * 4).padStart(2, "0");
-	const featurePacket = sha256(`${featureId}:feature-review-packet`);
-	const finalPacket = sha256(`${featureId}:final-review-packet`);
-	if (!digestPattern.test(featurePacket) || !digestPattern.test(finalPacket)) {
-		throw new Error("Measurement packet digests must be canonical.");
-	}
-	const reviewExecutions: ReviewExecutionInput[] = [
-		{
-			attemptId: `${featureId}-feature-review`,
-			logicalPassId: `${featureId}-feature-pass`,
-			featureId,
-			reviewKind: "feature",
-			reviewSnapshotId: featurePacket,
-			verdict: "passed",
-			findings: [],
-			startedAt: `2026-07-18T10:${minute}:00.000Z`,
-			completedAt: `2026-07-18T10:${nextMinute}:00.000Z`,
-			terminalDisposition: "submitted",
-		},
-	];
-	if (finalFeature) {
-		reviewExecutions.push({
-			attemptId: `${featureId}-final-review`,
-			logicalPassId: `${featureId}-final-pass`,
-			featureId,
-			reviewKind: "final",
-			reviewSnapshotId: finalPacket,
-			verdict: "passed",
-			findings: [],
-			startedAt: `2026-07-18T10:${finalStartMinute}:00.000Z`,
-			completedAt: `2026-07-18T10:${finalEndMinute}:00.000Z`,
-			terminalDisposition: "submitted",
-		});
-	}
+function validationObservations(featureId: string, timestamp: string) {
 	const outputDigest = sha256(`${featureId}:validation-output`);
-	const validations = [
+	if (!digestPattern.test(outputDigest)) {
+		throw new Error("Measurement output digests must be canonical.");
+	}
+	return [
 		{
 			command: "bun test tests/causal-transport-measurement.test.ts",
 			summary: "Deterministic transport measurement passed.",
-			startedAt: `2026-07-18T10:${minute}:00.000Z`,
-			completedAt: `2026-07-18T10:${nextMinute}:00.000Z`,
+			startedAt: timestamp,
+			completedAt: timestamp,
 			exitCode: 0,
 			outputDigest,
 			environmentKeys: [],
 		},
 	];
+}
+
+function passingAssignmentResult(assignment: ReviewAssignment) {
 	return {
-		status: "ok" as const,
-		operationId: `complete-${featureId}`,
-		expectedRevision: session.causal.revision,
-		expectedSnapshotId: session.causal.snapshotId,
-		featureId,
-		summary: `Completed ${featureId} in the deterministic transport fixture.`,
-		artifactsChanged: [{ path: `src/${featureId}.ts` }],
-		validations,
-		validationScope: finalFeature ? ("broad" as const) : ("targeted" as const),
-		featureReviewDepth:
-			session.plan?.features.find((feature) => feature.id === featureId)
-				?.reviewDepth ?? "standard",
-		featureReview: {
-			status: "passed" as const,
-			summary: "Feature review passed against the immutable packet.",
-			blockingFindings: [],
-		},
-		...(finalFeature
-			? {
-					finalReview: {
-						status: "passed" as const,
-						summary: "Final review passed against the final packet.",
-						blockingFindings: [],
-						reviewDepth: "detailed" as const,
-					},
-				}
-			: {}),
-		reviewExecutions,
-		orchestrationPasses: [],
+		assignmentId: assignment.id,
+		verdict: "passed" as const,
+		findings: [],
+		completedAt: assignment.startedAt,
+		terminalDisposition: "submitted" as const,
 	};
 }
 
@@ -410,16 +356,20 @@ export async function measureCausalTransport(
 	const recordMutation = async (
 		id: string,
 		response: FlowResponse,
+		ordinaryReceipt = true,
 	): Promise<void> => {
 		assertSuccessful(response, id);
-		const detail = await service.status({ view: "detail" });
-		const compact = await service.status({});
+		const detail = await service.status({ request: { view: "detail" } });
+		const compact = await service.status({ request: { view: "compact" } });
 		const compactProjection = requireProjection(compact);
 		if (typeof compactProjection.revision !== "number") {
 			throw new Error("Compact output is missing its revision.");
 		}
 		const unchanged = await service.status({
-			sinceRevision: compactProjection.revision,
+			request: {
+				view: "compact",
+				sinceRevision: compactProjection.revision,
+			},
 		});
 		assertSuccessful(detail, `${id}:detail`);
 		assertSuccessful(compact, `${id}:compact`);
@@ -430,7 +380,7 @@ export async function measureCausalTransport(
 		}
 		referenceDecisions.push(decisionFromDetail(id, detail));
 		currentDecisions.push(decisionFromReceipt(id, response));
-		receiptBytes.push(utf8Bytes(response));
+		if (ordinaryReceipt) receiptBytes.push(utf8Bytes(response));
 		compactBytes.push(utf8Bytes(compact));
 		unchangedBytes.push(utf8Bytes(unchanged));
 		unchangedProjectionKeys.push(
@@ -444,39 +394,153 @@ export async function measureCausalTransport(
 	);
 	await recordMutation("plan-approve", await service.planApprove());
 
-	for (const [featureIndex, feature] of fixture.plan.features.entries()) {
+	for (const feature of fixture.plan.features) {
 		await recordMutation(
 			`run-start:${feature.id}`,
 			await service.runStart({ featureId: feature.id }),
 		);
-		const session = repository.requireSession();
-		const execution = await service.status({ view: "execution" });
+		const execution = await service.status({
+			request: { view: "execution" },
+		});
 		assertSuccessful(execution, `execution:${feature.id}`);
 		executionBytes.push(utf8Bytes(requireProjection(execution)));
-		const executionReference = await service.status({ view: "detail" });
+		const executionReference = await service.status({
+			request: { view: "detail" },
+		});
 		assertSuccessful(executionReference, `execution:${feature.id}:detail`);
 		referenceOutputs.push(executionReference);
 		currentOutputs.push(execution);
-		const packetHash = sha256(`${feature.id}:feature-review-packet`);
+
+		const running = repository.requireSession();
+		const featureAssignmentOperation = `review-start:feature:${feature.id}`;
+		await recordMutation(
+			featureAssignmentOperation,
+			await service.reviewStart({
+				request: {
+					operationId: featureAssignmentOperation,
+					expectedRevision: running.causal.revision,
+					expectedSnapshotId: running.causal.snapshotId,
+					featureId: feature.id,
+					reviewKind: "feature",
+					validationScope: "targeted",
+					packet: {
+						summary: `Review ${feature.id} against its assigned targets.`,
+						riskLenses: ["behavior", "regression"],
+					},
+					validations: validationObservations(
+						feature.id,
+						running.featureRuns.find(
+							(run) => run.id === running.activeFeatureRunId,
+						)?.startedAt ?? running.timestamps.updatedAt,
+					),
+				},
+			}),
+			false,
+		);
+		const afterFeatureAssignment = repository.requireSession();
+		const featureAssignment = afterFeatureAssignment.reviewAssignments.find(
+			(assignment) => assignment.operationId === featureAssignmentOperation,
+		);
+		if (!featureAssignment) {
+			throw new Error(`Expected feature assignment for '${feature.id}'.`);
+		}
 		const reviewer = await service.status({
-			view: "reviewer",
-			featureId: feature.id,
-			packetHash,
-			evidenceRefs: Array.from({ length: 8 }, (_, index) =>
-				sha256(`${feature.id}:evidence-ref:${index}`),
-			),
-			reviewKind: "feature",
-			expectedRevision: session.causal.revision,
-			expectedSnapshotId: session.causal.snapshotId,
+			request: {
+				view: "reviewer",
+				assignmentId: featureAssignment.id,
+			},
 		});
 		assertSuccessful(reviewer, `reviewer:${feature.id}`);
-		const reviewerReference = await service.status({ view: "detail" });
+		const reviewerReference = await service.status({
+			request: { view: "detail" },
+		});
 		referenceOutputs.push(reviewerReference);
 		currentOutputs.push(reviewer);
 		reviewerBytes.push(utf8Bytes(reviewer));
+
+		const finalFeature =
+			afterFeatureAssignment.plan?.features.every(
+				(candidate) =>
+					candidate.id === feature.id || candidate.status === "completed",
+			) ?? false;
+		let finalAssignment: ReviewAssignment | undefined;
+		if (finalFeature) {
+			const finalAssignmentOperation = `review-start:final:${feature.id}`;
+			const beforeFinalAssignment = repository.requireSession();
+			await recordMutation(
+				finalAssignmentOperation,
+				await service.reviewStart({
+					request: {
+						operationId: finalAssignmentOperation,
+						expectedRevision: beforeFinalAssignment.causal.revision,
+						expectedSnapshotId: beforeFinalAssignment.causal.snapshotId,
+						featureId: feature.id,
+						reviewKind: "final",
+						validationScope: "broad",
+						featureReview: passingAssignmentResult(featureAssignment),
+						packet: {
+							summary:
+								"Review the completed plan and broad validation evidence.",
+							riskLenses: ["integration", "release-readiness"],
+						},
+						validations: validationObservations(
+							feature.id,
+							featureAssignment.startedAt,
+						),
+					},
+				}),
+				false,
+			);
+			const afterFinalAssignment = repository.requireSession();
+			finalAssignment = afterFinalAssignment.reviewAssignments.find(
+				(assignment) => assignment.operationId === finalAssignmentOperation,
+			);
+			if (!finalAssignment) {
+				throw new Error(`Expected final assignment for '${feature.id}'.`);
+			}
+			const finalReviewer = await service.status({
+				request: {
+					view: "reviewer",
+					assignmentId: finalAssignment.id,
+				},
+			});
+			assertSuccessful(finalReviewer, `reviewer:final:${feature.id}`);
+			const finalReviewerReference = await service.status({
+				request: { view: "detail" },
+			});
+			referenceOutputs.push(finalReviewerReference);
+			currentOutputs.push(finalReviewer);
+			reviewerBytes.push(utf8Bytes(finalReviewer));
+		}
+
+		const beforeCompletion = repository.requireSession();
 		await recordMutation(
 			`feature-complete:${feature.id}`,
-			await service.featureComplete(completionPayload(session, featureIndex)),
+			await service.featureComplete({
+				request: {
+					operationId: `feature-complete:${feature.id}`,
+					expectedRevision: beforeCompletion.causal.revision,
+					expectedSnapshotId: beforeCompletion.causal.snapshotId,
+					featureId: feature.id,
+					result: finalAssignment
+						? {
+								kind: "completed",
+								summary: `Completed ${feature.id} in the deterministic transport fixture.`,
+								artifactsChanged: [{ path: `src/${feature.id}.ts` }],
+								validationScope: "broad",
+								finalReview: passingAssignmentResult(finalAssignment),
+								orchestrationPasses: [],
+							}
+						: {
+								kind: "completed",
+								summary: `Completed ${feature.id} in the deterministic transport fixture.`,
+								artifactsChanged: [{ path: `src/${feature.id}.ts` }],
+								validationScope: "targeted",
+								featureReview: passingAssignmentResult(featureAssignment),
+								orchestrationPasses: [],
+							},
+				},
+			}),
 		);
 	}
 

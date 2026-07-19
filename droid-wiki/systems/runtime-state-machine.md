@@ -22,10 +22,13 @@ src/application/ports/session-repository.ts
 | Abstraction | File | Description |
 | --- | --- | --- |
 | `createFlowService` | `src/application/flow-service.ts` | Builds typed use cases over an injected repository and environment. |
-| `createSession` | `src/domain/transitions.ts` | Creates a version 3 planning session. |
+| `createSession` | `src/domain/transitions.ts` | Creates a version 4 planning session. |
 | `applyPlan` | `src/domain/transitions.ts` | Validates and applies a draft plan. |
 | `startRun` | `src/domain/transitions.ts` | Starts the next runnable feature. |
-| `completeFeature` | `src/domain/transitions.ts` | Records completion or blocker history. |
+| `startReviewAssignment` | `src/domain/transitions.ts` | Creates durable source- and run-bound review work. |
+| `completeAssignedFeature` | `src/domain/transitions.ts` | Atomically records assignment results and completion or blocker history. |
+| `resetFeature` | `src/domain/transitions.ts` | Ends the active run and invalidates its pending assignments before reset. |
+| `closeSession` | `src/domain/transitions.ts` | Starts quiescent closure and records the durable archive retry handle. |
 | `compactSessionProjection` | `src/domain/transitions.ts` | Produces bounded routing status. |
 | `executionSessionProjection` | `src/domain/transitions.ts` | Produces full active-feature working scope. |
 
@@ -43,8 +46,10 @@ graph TD
 
 Domain transitions do not write files or read time and UUIDs directly. They
 return typed success or failure values. The application service decides whether
-to persist a successful next state, save a failure state with `lastError`, ask
-the repository to quarantine unreadable state, or archive a closed session.
+to persist a successful next state, save a failure state with `lastError`, or
+publish a closed session into history. A passing final feature outcome leaves
+completed progress with null closure; the separate close transition records
+quiescent closure and its retry handle before archive publication.
 
 ## Integration points
 

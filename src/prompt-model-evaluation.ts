@@ -142,6 +142,14 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 		},
 		{ label: "remains plan-only", test: (decision) => decision.planOnly },
 	],
+	"flow-auto-plan-only": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "stays on the invoked flow-auto surface",
+			test: (decision) => decision.route === "flow-auto",
+		},
+		{ label: "stops after planning", test: (decision) => decision.planOnly },
+	],
 	"review-first-maintainability": [
 		...COMMON_MANAGER_CRITERIA,
 		{

@@ -3,13 +3,15 @@ import {
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
 } from "../domain/feature-id.js";
-import { MAX_ORCHESTRATION_PASSES } from "../domain/limits.js";
+import {
+	MAX_ORCHESTRATION_PASSES,
+	MAX_REVIEW_ASSIGNMENT_RESULT_BYTES,
+	MAX_SESSION_ID_LENGTH,
+} from "../domain/limits.js";
 import { validateOrchestrationPassPolicy } from "../domain/orchestration-policy.js";
 import { type Session, toFeatureId, toSessionId } from "../domain/session.js";
-import {
-	canonicalSessionSnapshotId,
-	validateCausalChain,
-} from "../domain/transitions.js";
+import { validateSessionInvariants } from "../domain/session-invariants.js";
+import { validateCausalChain } from "../domain/transitions.js";
 
 export {
 	hasCandidateExecutionEvidence,
@@ -24,6 +26,7 @@ export const FeatureIdSchema = z
 
 const SessionIdSchema = z
 	.string()
+	.max(MAX_SESSION_ID_LENGTH, "Session id is too long.")
 	.regex(/^[a-zA-Z0-9_-]+$/, "Invalid session id.")
 	.transform(toSessionId);
 
@@ -39,7 +42,7 @@ export const OperationIdSchema = z
 	.min(1)
 	.max(128)
 	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
-export const CausalRevisionSchema = z.number().int().nonnegative().safe();
+export const CausalRevisionSchema = z.number().int().safe().nonnegative();
 
 export const FeatureStatusSchema = z.enum([
 	"pending",
@@ -56,7 +59,6 @@ export const SessionStatusSchema = z.enum([
 	"completed",
 ]);
 
-export const ReviewStatusSchema = z.enum(["passed", "failed"]);
 export const ReviewFindingTaxonomySchema = z.enum([
 	"implementation_defect",
 	"regression_coverage_gap",
@@ -69,7 +71,6 @@ export const ReviewTerminalDispositionSchema = z.enum([
 	"submitted",
 	"observed_unsubmitted",
 ]);
-export const ValidationStatusSchema = z.enum(["passed", "failed"]);
 export const ValidationScopeSchema = z.enum(["targeted", "broad"]);
 export const FeatureReviewDepthSchema = z.enum([
 	"quick",
@@ -199,13 +200,6 @@ export const OrchestrationTelemetrySchema = z
 	})
 	.strict();
 
-export const ReviewFindingSchema = z
-	.object({
-		summary: z.string().min(1),
-		severity: z.enum(["blocking", "advisory"]).default("blocking"),
-	})
-	.strict();
-
 const ReviewExecutionIdSchema = z
 	.string()
 	.min(1)
@@ -214,6 +208,9 @@ const ReviewExecutionIdSchema = z
 		/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/,
 		"Review execution ids must use a bounded portable identifier.",
 	);
+
+export const FeatureRunIdSchema = ReviewExecutionIdSchema;
+export const ReviewAssignmentIdSchema = ReviewExecutionIdSchema;
 
 export const ReviewSnapshotIdSchema = z.string().pipe(SnapshotIdSchema);
 
@@ -236,6 +233,8 @@ export const ReviewExecutionFindingSchema =
 	}).strict();
 
 const ReviewExecutionBaseShape = {
+	assignmentId: ReviewAssignmentIdSchema,
+	featureRunId: FeatureRunIdSchema,
 	attemptId: ReviewExecutionIdSchema,
 	logicalPassId: ReviewExecutionIdSchema,
 	featureId: FeatureIdSchema,
@@ -293,13 +292,54 @@ function validateReviewExecution(
 	}
 }
 
-export const ReviewExecutionInputSchema = z
+export const ReviewAssignmentResultInputSchema = z
 	.object({
-		...ReviewExecutionBaseShape,
+		assignmentId: ReviewAssignmentIdSchema,
+		verdict: ReviewVerdictSchema,
 		findings: z.array(ReviewExecutionFindingInputSchema).max(100),
+		completedAt: ReviewTimestampSchema,
+		terminalDisposition: ReviewTerminalDispositionSchema,
 	})
 	.strict()
-	.superRefine(validateReviewExecution);
+	.superRefine((value, ctx) => {
+		if (
+			new TextEncoder().encode(JSON.stringify(value)).byteLength >
+			MAX_REVIEW_ASSIGNMENT_RESULT_BYTES
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: [],
+				message: `A serialized review result cannot exceed ${MAX_REVIEW_ASSIGNMENT_RESULT_BYTES} UTF-8 bytes.`,
+			});
+		}
+		const hasBlockingFinding = value.findings.some(
+			(finding) => finding.severity === "blocking",
+		);
+		if (value.verdict === "failed" && !hasBlockingFinding) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["findings"],
+				message: "A failed review result requires a blocking finding.",
+			});
+		}
+		if (value.verdict === "passed" && hasBlockingFinding) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["findings"],
+				message: "A passed review result cannot retain blocking findings.",
+			});
+		}
+		if (
+			value.terminalDisposition === "observed_unsubmitted" &&
+			value.verdict !== "failed"
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["terminalDisposition"],
+				message: "An observed_unsubmitted review result must be failed.",
+			});
+		}
+	});
 
 export const ReviewExecutionSchema = z
 	.object({
@@ -308,26 +348,6 @@ export const ReviewExecutionSchema = z
 	})
 	.strict()
 	.superRefine(validateReviewExecution);
-
-export const ReviewSchema = z
-	.object({
-		status: ReviewStatusSchema,
-		summary: z.string().min(1),
-		blockingFindings: z.array(ReviewFindingSchema).default([]),
-	})
-	.strict();
-
-export const FinalReviewSchema = ReviewSchema.extend({
-	reviewDepth: FinalReviewPolicySchema,
-}).strict();
-
-export const ValidationRunSchema = z
-	.object({
-		command: z.string().min(1),
-		status: ValidationStatusSchema,
-		summary: z.string().min(1),
-	})
-	.strict();
 
 const EvidenceTimestampSchema = z.string().datetime({ offset: true });
 
@@ -338,6 +358,9 @@ const EvidenceIdentityShape = {
 	evidenceId: EvidenceIdSchema,
 	snapshotId: SnapshotIdSchema,
 	sourceDigest: DigestSchema,
+	featureRunId: FeatureRunIdSchema,
+	capturedAtRevision: CausalRevisionSchema,
+	capturedAtSnapshotId: SnapshotIdSchema,
 } as const;
 
 const EvidenceTimeShape = {
@@ -356,7 +379,7 @@ const ValidationCommandClassSchema = z.enum([
 ]);
 
 // Command timing and output/environment metadata are caller-attested: the
-// eight-tool surface has no host command-execution hook, so Flow cannot observe
+// The nine-tool surface has no host command-execution hook, so Flow cannot observe
 // validation start/end itself. These fields are labeled honestly as attested,
 // and every chronology that can be derived is still enforced.
 const ValidationEvidenceDetailShape = {
@@ -367,7 +390,7 @@ const ValidationEvidenceDetailShape = {
 		.object({
 			kind: z.literal("restricted_evidence_v1"),
 			digest: DigestSchema,
-			byteLength: z.number().int().nonnegative().safe(),
+			byteLength: z.number().int().safe().nonnegative(),
 		})
 		.strict()
 		.optional(),
@@ -393,6 +416,7 @@ export const ValidationEvidenceSchema = z
 		...EvidenceIdentityShape,
 		...EvidenceTimeShape,
 		...ValidationEvidenceDetailShape,
+		commandDigest: DigestSchema,
 	})
 	.strict()
 	.superRefine(validateEvidenceTimes);
@@ -403,6 +427,7 @@ export const ReviewEvidenceSchema = z
 		...EvidenceIdentityShape,
 		...EvidenceTimeShape,
 		attemptId: ReviewExecutionIdSchema,
+		assignmentId: ReviewAssignmentIdSchema,
 		packetDigest: DigestSchema,
 	})
 	.strict()
@@ -435,13 +460,13 @@ export const CausalMutationRecordSchema = z
 			"plan_save",
 			"plan_approve",
 			"run_start",
-			"review_record",
-			"evidence_record",
+			"review_start",
 			"feature_complete",
 			"feature_reset",
 			"session_close",
 		]),
 		requestDigest: DigestSchema,
+		featureRunId: FeatureRunIdSchema.nullable(),
 		priorMutationDigest: DigestSchema.nullable(),
 		mutationDigest: DigestSchema,
 		priorRevision: CausalRevisionSchema,
@@ -465,7 +490,9 @@ export const CausalMutationRecordSchema = z
 		blockerDelta: z
 			.object({
 				added: z.array(z.string().min(1).max(2_000)).max(32),
-				removed: z.array(z.string().min(1).max(2_000)).max(32),
+				// A reset records the complete dependency closure so durable causal
+				// state never truncates affected feature identities.
+				removed: z.array(z.string().min(1).max(2_000)),
 			})
 			.strict(),
 		evidenceRefs: z.array(EvidenceIdSchema).max(100),
@@ -539,7 +566,7 @@ export const PlanInputSchema = PlanSchema.omit({ features: true }).extend({
 		.min(1),
 });
 
-export const CompletedWorkerOutcomeSchema = z
+export const CompletedExecutionOutcomeSchema = z
 	.object({
 		kind: z.literal("completed"),
 		summary: z.string().min(1).optional(),
@@ -547,79 +574,31 @@ export const CompletedWorkerOutcomeSchema = z
 	})
 	.strict();
 
-export const NeedsInputOutcomeSchema = z
+export const BlockedExecutionOutcomeSchema = z
 	.object({
-		kind: z.enum(["blocked", "needs_input", "replan_required"]),
+		kind: z.literal("blocked"),
 		summary: z.string().min(1),
 		resolutionHint: z.string().min(1).optional(),
 	})
 	.strict();
 
-export const WorkerOutcomeSchema = z.discriminatedUnion("kind", [
-	CompletedWorkerOutcomeSchema,
-	NeedsInputOutcomeSchema,
-]);
-
-export const WorkerResultSchema = z.discriminatedUnion("status", [
-	z.strictObject({
-		status: z.literal("ok"),
-		operationId: OperationIdSchema,
-		expectedRevision: CausalRevisionSchema,
-		expectedSnapshotId: SnapshotIdSchema,
-		requestDigest: DigestSchema,
-		featureId: FeatureIdSchema,
-		summary: z.string().min(1),
-		artifactsChanged: z.array(ArtifactSchema).default([]),
-		validationRun: z.array(ValidationRunSchema).min(1).max(100),
-		validationScope: ValidationScopeSchema,
-		featureReviewDepth: FeatureReviewDepthSchema,
-		featureReview: ReviewSchema,
-		finalReview: FinalReviewSchema.optional(),
-		outcome: CompletedWorkerOutcomeSchema.optional(),
-		reviewExecutions: z.array(ReviewExecutionInputSchema).min(1).max(100),
-		evidence: z.array(EvidenceRecordSchema).min(1).max(100),
-		orchestrationPasses: z
-			.array(OrchestrationPassRecordSchema)
-			.max(MAX_ORCHESTRATION_PASSES)
-			.default([]),
-	}),
-	z.strictObject({
-		status: z.literal("needs_input"),
-		operationId: OperationIdSchema,
-		expectedRevision: CausalRevisionSchema,
-		expectedSnapshotId: SnapshotIdSchema,
-		requestDigest: DigestSchema,
-		featureId: FeatureIdSchema,
-		summary: z.string().min(1),
-		artifactsChanged: z.array(ArtifactSchema).default([]),
-		validationRun: z.array(ValidationRunSchema).default([]),
-		validationScope: ValidationScopeSchema.optional(),
-		featureReviewDepth: FeatureReviewDepthSchema.optional(),
-		featureReview: ReviewSchema.optional(),
-		finalReview: FinalReviewSchema.optional(),
-		outcome: NeedsInputOutcomeSchema,
-		reviewExecutions: z.array(ReviewExecutionInputSchema).max(100).default([]),
-		evidence: z.array(EvidenceRecordSchema).max(100).default([]),
-		orchestrationPasses: z
-			.array(OrchestrationPassRecordSchema)
-			.max(MAX_ORCHESTRATION_PASSES)
-			.default([]),
-	}),
+export const ExecutionOutcomeSchema = z.discriminatedUnion("kind", [
+	CompletedExecutionOutcomeSchema,
+	BlockedExecutionOutcomeSchema,
 ]);
 
 export const ExecutionHistoryEntrySchema = z
 	.object({
+		featureRunId: FeatureRunIdSchema,
 		featureId: FeatureIdSchema,
-		status: z.enum(["completed", "blocked", "needs_input"]),
+		status: z.enum(["completed", "blocked"]),
 		summary: z.string().min(1),
 		recordedAt: z.string().min(1),
 		artifactsChanged: z.array(ArtifactSchema).default([]),
-		validationRun: z.array(ValidationRunSchema).default([]),
-		validationScope: ValidationScopeSchema.optional(),
-		featureReviewDepth: FeatureReviewDepthSchema.optional(),
-		featureReview: ReviewSchema.optional(),
-		finalReview: FinalReviewSchema.optional(),
-		outcome: WorkerOutcomeSchema.optional(),
+		validationScope: ValidationScopeSchema,
+		validationEvidenceRefs: z.array(EvidenceIdSchema).min(1).max(200),
+		reviewAssignmentIds: z.array(ReviewAssignmentIdSchema).min(1).max(2),
+		outcome: ExecutionOutcomeSchema,
 		orchestrationPasses: z
 			.array(OrchestrationPassRecordSchema)
 			.max(MAX_ORCHESTRATION_PASSES)
@@ -631,11 +610,8 @@ export const BudgetTelemetrySchema = z
 	.object({
 		reviewCount: z.number().int().nonnegative().default(0),
 		failedReviewCount: z.number().int().nonnegative().default(0),
-		failedReviewAttemptsByFeature: z
-			.record(
-				z.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE),
-				z.number().int().nonnegative(),
-			)
+		failedReviewAttemptsByFeatureRun: z
+			.record(ReviewExecutionIdSchema, z.number().int().nonnegative())
 			.default({}),
 		reviewExecutions: z.array(ReviewExecutionSchema).default([]),
 		reviewLifecycle: z
@@ -674,9 +650,111 @@ export const BudgetTelemetrySchema = z
 	})
 	.strict();
 
-const SessionV3Schema = z
+export const FeatureRunSchema = z
 	.object({
-		version: z.literal(3),
+		id: FeatureRunIdSchema,
+		featureId: FeatureIdSchema,
+		sequence: z.number().int().positive().safe(),
+		status: z.enum([
+			"active",
+			"completed",
+			"blocked",
+			"reset",
+			"deferred",
+			"abandoned",
+		]),
+		startedAt: ReviewTimestampSchema,
+		endedAt: ReviewTimestampSchema.nullable(),
+	})
+	.strict();
+
+export const ReviewAssignmentSchema = z
+	.object({
+		id: ReviewAssignmentIdSchema,
+		operationId: OperationIdSchema,
+		featureRunId: FeatureRunIdSchema,
+		featureId: FeatureIdSchema,
+		reviewKind: ReviewKindSchema,
+		validationScope: ValidationScopeSchema,
+		validationEvidenceRefs: z.array(EvidenceIdSchema).min(1).max(100),
+		sourceDigest: DigestSchema,
+		packetDigest: DigestSchema,
+		packetSummary: z.string().trim().min(1).max(2_000),
+		riskLenses: z.array(z.string().trim().min(1).max(240)).max(16),
+		prerequisite: z
+			.object({
+				assignmentId: ReviewAssignmentIdSchema,
+				result: ReviewAssignmentResultInputSchema,
+				resultDigest: DigestSchema,
+			})
+			.strict()
+			.nullable(),
+		attemptId: ReviewExecutionIdSchema,
+		logicalPassId: ReviewExecutionIdSchema,
+		startedAt: ReviewTimestampSchema,
+		requiredDepth: z.union([FeatureReviewDepthSchema, FinalReviewPolicySchema]),
+		status: z.enum([
+			"pending",
+			"submitted",
+			"observed_unsubmitted",
+			"invalidated",
+		]),
+		completedAt: ReviewTimestampSchema.nullable(),
+		invalidatedAt: ReviewTimestampSchema.nullable(),
+		invalidationReason: z
+			.enum([
+				"feature_reset",
+				"source_changed",
+				"session_deferred",
+				"session_abandoned",
+			])
+			.nullable(),
+	})
+	.strict()
+	.superRefine((assignment, context) => {
+		const hasCompletion = assignment.completedAt !== null;
+		const hasInvalidation = assignment.invalidatedAt !== null;
+		if (
+			(assignment.status === "pending" && (hasCompletion || hasInvalidation)) ||
+			((assignment.status === "submitted" ||
+				assignment.status === "observed_unsubmitted") &&
+				(!hasCompletion || hasInvalidation)) ||
+			(assignment.status === "invalidated" &&
+				(hasCompletion || !hasInvalidation))
+		) {
+			context.addIssue({
+				code: "custom",
+				path: ["status"],
+				message:
+					"Review assignment status must match its completion or invalidation timestamp.",
+			});
+		}
+		if (
+			(assignment.reviewKind === "feature" && assignment.prerequisite) ||
+			(assignment.reviewKind === "final" && !assignment.prerequisite)
+		) {
+			context.addIssue({
+				code: "custom",
+				path: ["prerequisite"],
+				message:
+					"Final assignments require one feature-review prerequisite binding; feature assignments cannot carry one.",
+			});
+		}
+		if (
+			(assignment.status === "invalidated") !==
+			(assignment.invalidationReason !== null)
+		) {
+			context.addIssue({
+				code: "custom",
+				path: ["invalidationReason"],
+				message: "Only invalidated assignments require an invalidation reason.",
+			});
+		}
+	});
+
+const SessionV4Schema = z
+	.object({
+		version: z.literal(4),
 		// Constrained to the archive-safe charset so a hostile or hand-edited
 		// session.json with an exotic id (e.g. "session/1") fails to load and
 		// routes through quarantine recovery, instead of loading and then
@@ -687,14 +765,18 @@ const SessionV3Schema = z
 		approval: z.enum(["pending", "approved"]),
 		plan: PlanSchema.nullable(),
 		activeFeatureId: FeatureIdSchema.nullable(),
+		activeFeatureRunId: FeatureRunIdSchema.nullable(),
+		featureRuns: z.array(FeatureRunSchema),
+		reviewAssignments: z.array(ReviewAssignmentSchema),
 		history: z.array(ExecutionHistoryEntrySchema).default([]),
 		budget: BudgetTelemetrySchema.prefault({}),
-		causal: CausalStateSchema.optional(),
+		causal: CausalStateSchema,
 		closure: z
 			.object({
 				kind: z.enum(["completed", "deferred", "abandoned"]),
 				summary: z.string().min(1),
 				recordedAt: z.string().min(1),
+				retryOperationId: OperationIdSchema,
 			})
 			.strict()
 			.nullable(),
@@ -718,28 +800,17 @@ const SessionV3Schema = z
 	})
 	.strict();
 
-export const SessionSchema = SessionV3Schema.transform((value): Session => {
-	if (value.causal) return value as Session;
-	const hydrated: Session = {
-		...value,
-		causal: {
-			revision: 0,
-			genesisSnapshotId: `sha256:${"0".repeat(64)}`,
-			snapshotId: `sha256:${"0".repeat(64)}`,
-			mutations: [],
-			evidence: [],
-		},
-	};
-	const snapshotId = canonicalSessionSnapshotId(hydrated);
-	return {
-		...hydrated,
-		causal: {
-			...hydrated.causal,
-			genesisSnapshotId: snapshotId,
-			snapshotId,
-		},
-	};
-}).superRefine((session, context) => {
+export const SessionSchema = SessionV4Schema.transform(
+	(value): Session => value as Session,
+).superRefine((session, context) => {
+	const invariantError = validateSessionInvariants(session);
+	if (invariantError) {
+		context.addIssue({
+			code: "custom",
+			path: [],
+			message: invariantError,
+		});
+	}
 	const chainError = validateCausalChain(session);
 	if (!chainError) return;
 	context.addIssue({
@@ -751,6 +822,7 @@ export const SessionSchema = SessionV3Schema.transform((value): Session => {
 
 export type {
 	Artifact,
+	BoundReviewPrerequisite,
 	BudgetTelemetry,
 	CausalMutationRecord,
 	CausalState,
@@ -759,13 +831,16 @@ export type {
 	ExecutionHistoryEntry,
 	Feature,
 	FeatureReviewDepth,
-	FinalReview,
+	FeatureRun,
+	FeatureRunId,
 	ObservedReviewWorkerLedger,
 	OrchestrationPassRecord,
 	OrchestrationTelemetry,
 	Plan,
 	PlanInput,
-	Review,
+	ReviewAssignment,
+	ReviewAssignmentId,
+	ReviewAssignmentResultInput,
 	ReviewExecution,
 	ReviewExecutionFinding,
 	ReviewExecutionFindingInput,
@@ -774,6 +849,4 @@ export type {
 	ReviewLifecycleTelemetry,
 	Session,
 	SnapshotId,
-	ValidationRun,
-	WorkerResult,
 } from "../domain/session.js";

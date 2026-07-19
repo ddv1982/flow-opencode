@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "5.1.1",
+	"version": "5.2.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"repository": {
@@ -39,6 +39,10 @@
 		"package:smoke": "bun test tests/package-smoke.test.ts",
 		"release:monitor": "node scripts/release-monitor.mjs",
 		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
+		"test:lifecycle:invariants": "bun test tests/review-lifecycle-coverage-map.test.ts tests/lifecycle-invariant-sequences.test.ts tests/lifecycle-invariant-v4-only.test.ts",
+		"test:lifecycle:recovery": "bun test tests/lifecycle-invariant-recovery.test.ts",
+		"test:contracts": "bun test tests/lifecycle-invariant-contracts.test.ts tests/opencode-schema-contract.test.ts",
+		"verify:lifecycle": "bun run test:lifecycle:invariants && bun run test:lifecycle:recovery && bun run test:contracts",
 		"test": "bun test tests",
 		"typecheck": "tsc --noEmit",
 		"check": "bun run typecheck && bun run lint && bun run prompt:quality && bun run build && bun run test"

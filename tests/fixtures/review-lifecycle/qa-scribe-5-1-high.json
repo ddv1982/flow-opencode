@@ -1,0 +1,40 @@
+{
+	"version": 1,
+	"baselineId": "qa_scribe_5_1_high",
+	"capturedOn": "2026-07-19",
+	"inferenceEffort": "high",
+	"facts": [
+		{
+			"metric": "review_assignment_attempt_count",
+			"availability": { "status": "available", "value": 0 }
+		},
+		{
+			"metric": "invalid_reviewer_payload_count",
+			"availability": { "status": "available", "value": 47 }
+		},
+		{
+			"metric": "completion_submission_count",
+			"availability": { "status": "available", "value": 17 }
+		},
+		{
+			"metric": "accepted_blocker_count",
+			"availability": { "status": "available", "value": 0 }
+		},
+		{
+			"metric": "schema_rejection_count",
+			"availability": { "status": "available", "value": 11 }
+		},
+		{
+			"metric": "evidence_only_rerun_count",
+			"availability": { "status": "unavailable", "reason": "not_recorded" }
+		},
+		{
+			"metric": "feature_reset_count",
+			"availability": { "status": "unavailable", "reason": "not_recorded" }
+		},
+		{
+			"metric": "abandoned_session_count",
+			"availability": { "status": "unavailable", "reason": "not_recorded" }
+		}
+	]
+}

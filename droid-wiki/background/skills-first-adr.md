@@ -1,6 +1,9 @@
 # Skills-first ADR
 
-ADR 0001 in `docs/adr/0001-skills-first-flow-architecture.md` is the central design decision for Flow v4. It was accepted on 2026-06-14 and explains why the runtime is deliberately small.
+ADR 0001 in `docs/adr/0001-skills-first-flow-architecture.md` is the original
+skills-first decision for Flow v4. It was accepted on 2026-06-14 and explains
+why the runtime is deliberately small. ADR 0003 supersedes its original
+completion contract with the current nine-tool Session v4 assignment surface.
 
 ## Decision
 
@@ -8,7 +11,11 @@ Flow v4 keeps only a minimal runtime ledger and hard completion gates. Planning 
 
 ## Consequences
 
-The ADR records that v3 sessions and retired tools are not migrated. It removes `flow_context`, context quality, readiness projections, project maps, feature doc drilldowns, lanes, and decision gates. Review decisions are no longer recorded independently; completion payloads carry `featureReview` and `finalReview`.
+The ADR records that unsupported sessions and retired tools are not migrated.
+It removes `flow_context`, context quality, readiness projections, project maps,
+feature doc drilldowns, lanes, and decision gates. ADR 0003 supersedes the
+original completion-carried review decision with durable review assignments and
+atomic recorded review executions.
 
 ## Code that implements the decision
 
@@ -16,7 +23,7 @@ The ADR records that v3 sessions and retired tools are not migrated. It removes 
 | --- | --- |
 | `src/application/schema.ts` | Minimal session, plan, feature, validation, and review model. |
 | `src/domain/transitions.ts` | Hard gates only. |
-| `src/application/flow-service.ts` | Seven tool handlers. |
+| `src/application/flow-service.ts` | Eight runtime service handlers, including durable review assignment and explicit close; the platform registers nine tools including `flow_guidance`. |
 | `skills/flow/SKILL.md` | End-to-end workflow judgment. |
 | `skills/flow-plan/SKILL.md` | Planning judgment. |
 | `skills/flow-run/SKILL.md` | Execution and validation discipline. |

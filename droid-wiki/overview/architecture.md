@@ -27,7 +27,7 @@ graph LR
 `src/domain/**` contains no host, filesystem, clock, or UUID dependencies.
 `src/application/**` depends only on the domain and its own ports. The filesystem
 implementation lives under `src/infrastructure/**`; it supplies the clock and
-ID environment, locking, strict JSON, persistence, archive, quarantine, and
+ID environment, locking, strict JSON, persistence, archive publication, and
 workspace safety.
 
 ## OpenCode boundary

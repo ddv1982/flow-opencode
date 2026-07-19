@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { LEGACY_PROMPT_BASELINE } from "../src/prompt-baseline-fixtures.js";
 import {
 	buildPromptModelEvaluationPacket,
@@ -8,6 +9,7 @@ import {
 	parseModelDecisionResponse,
 } from "../src/prompt-model-evaluation.js";
 import {
+	auditLifecycleFlatRequestExamples,
 	evaluatePromptVariant,
 	measureCompiledPrompt,
 	PROMPT_EVALUATION_SCENARIOS,
@@ -20,6 +22,21 @@ import {
 	type FlowWorkerHandoffKind,
 	validateFlowWorkerHandoff,
 } from "../src/prompt-surfaces.js";
+
+const LIFECYCLE_DOCUMENTATION_ROOTS = ["docs", "droid-wiki"] as const;
+const HISTORICAL_LIFECYCLE_EXAMPLE_FILES = new Set(["CHANGELOG.md"]);
+
+async function textDocumentsBelow(directory: string): Promise<string[]> {
+	const entries = await readdir(directory, { withFileTypes: true });
+	const nested = await Promise.all(
+		entries.map(async (entry) => {
+			const path = join(directory, entry.name);
+			if (entry.isDirectory()) return textDocumentsBelow(path);
+			return entry.isFile() && /\.(?:md|vtt)$/.test(entry.name) ? [path] : [];
+		}),
+	);
+	return nested.flat();
+}
 
 type GrowthBaseline = {
 	variant: string;
@@ -80,6 +97,7 @@ function passingModelDecisions(): ModelDecision[] {
 			workers: ["flow-reviewer"],
 		},
 		"broad-planning-request": { planOnly: true },
+		"flow-auto-plan-only": { planOnly: true },
 		"review-first-maintainability": { planOnly: true, reviewFirst: true },
 		"runtime-persistence-change": {
 			validation: ["behavioral"],
@@ -161,9 +179,9 @@ describe("Flow prompt quality", () => {
 		expect(Object.isFrozen(LEGACY_PROMPT_BASELINE.reviewerSections)).toBe(true);
 		expect(FLOW_STATIC_PROMPT_SURFACES).toHaveLength(11);
 		expect(new Set(FLOW_STATIC_PROMPT_SURFACES).size).toBe(11);
-		expect(PROMPT_EVALUATION_SCENARIOS).toHaveLength(18);
+		expect(PROMPT_EVALUATION_SCENARIOS).toHaveLength(19);
 		expect(new Set(PROMPT_EVALUATION_SCENARIOS.map(({ id }) => id)).size).toBe(
-			18,
+			19,
 		);
 		for (const fixture of PROMPT_EVALUATION_SCENARIOS) {
 			expect(fixture.input.length).toBeGreaterThan(20);
@@ -348,7 +366,7 @@ describe("Flow prompt quality", () => {
 			expect(compiled.fragments[0]?.kind).toBe("invariant");
 			expect(compiled.fragments.at(-1)?.kind).toBe("checkpoint");
 			expect(compiled.text).toContain(
-				'Call `flow_status` with `view: "compact"` first',
+				'Call `flow_status { request: { view: "compact" } }` first',
 			);
 			expect(compiled.text).toContain("`workflowData.projection`");
 			expect(compiled.text).toContain(
@@ -364,7 +382,7 @@ describe("Flow prompt quality", () => {
 		for (const surface of ["flow-auto", "flow-run"] as const) {
 			expect(surfaces[surface].text).toContain("Public reviewer routing");
 			expect(surfaces[surface].text).toContain("reserved `flow-reviewer`");
-			expect(surfaces[surface].text).toContain("Flow-gated");
+			expect(surfaces[surface].text).toContain("flow_review_start");
 			expect(surfaces[surface].text).toContain(
 				"`flow-run` remains the candidate-implementation manager entry route",
 			);
@@ -374,22 +392,156 @@ describe("Flow prompt quality", () => {
 		}
 	});
 
+	test("keeps lifecycle examples on strict nested request contracts", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		const current = [
+			surfaces["flow-auto"].text,
+			surfaces["flow-plan"].text,
+			surfaces["flow-run"].text,
+			surfaces["flow-reviewer"].text,
+		].join("\n");
+
+		expect(current).toContain('flow_status { request: { view: "compact" } }');
+		expect(current).toMatch(
+			/flow_status \{ (?:"request"|request): \{ (?:"view"|view): "reviewer", (?:"assignmentId"|assignmentId):/,
+		);
+		expect(current).toContain('mode: "retry"');
+		expect(current).toContain("closure.retryOperationId");
+		for (const surface of ["flow-auto", "flow-run"] as const) {
+			expect(surfaces[surface].text).toContain(
+				"finalReviewRetry.prerequisite.result",
+			);
+		}
+		expect(surfaces["flow-reviewer"].text).not.toContain(
+			"finalReviewRetry.prerequisite",
+		);
+		for (const surface of ["flow-auto", "flow-plan"] as const) {
+			expect(surfaces[surface].text).toContain("same-goal draft");
+			expect(surfaces[surface].text).toContain("deferred");
+			expect(surfaces[surface].text).toContain("abandoned");
+		}
+		expect(current).not.toMatch(/flow_status\s*\{\s*(?:["']?view["']?\s*:)/i);
+		expect(current).not.toMatch(/original close envelope/i);
+		expect(current).not.toMatch(/carrying that same feature result/i);
+	});
+
+	test("detects reordered flat lifecycle examples with one shared audit", () => {
+		const flatExamples = [
+			{
+				tool: "flow_status",
+				topLevelField: "sinceRevision",
+				text: 'Call flow_status {\n  sinceRevision: 4, view: "detail"\n}',
+			},
+			{
+				tool: "flow_review_start",
+				topLevelField: "featureId",
+				text: 'Call flow_review_start({\n  featureId: "changed-feature"\n})',
+			},
+			{
+				tool: "flow_feature_complete",
+				topLevelField: "expectedSnapshotId",
+				text: 'Call flow_feature_complete {\n  expectedSnapshotId: "sha256:...", result: {}\n}',
+			},
+			{
+				tool: "flow_session_close",
+				topLevelField: "expectedRevision",
+				text: 'Call flow_session_close {\n  expectedRevision: 8, mode: "start"\n}',
+			},
+		] as const;
+
+		for (const example of flatExamples) {
+			expect(auditLifecycleFlatRequestExamples(example.text)).toEqual([
+				{
+					tool: example.tool,
+					line: 1,
+					topLevelField: example.topLevelField,
+				},
+			]);
+			expect(
+				auditLifecycleFlatRequestExamples(
+					`${example.tool} { request: {}, ${example.topLevelField}: "legacy" }`,
+				),
+			).toEqual([
+				{
+					tool: example.tool,
+					line: 1,
+					topLevelField: example.topLevelField,
+				},
+			]);
+			expect(
+				auditLifecycleFlatRequestExamples(
+					`Call \`${example.tool}\` with \`{ ${example.topLevelField}: "legacy" }\``,
+				),
+			).toEqual([
+				{
+					tool: example.tool,
+					line: 1,
+					topLevelField: example.topLevelField,
+				},
+			]);
+		}
+
+		expect(
+			auditLifecycleFlatRequestExamples(
+				[
+					'flow_status { request: { view: "compact" } }',
+					'flow_review_start({ "request": { "reviewKind": "feature" } })',
+					"flow_feature_complete { request: { ...guards, result } }",
+					'flow_session_close { request: { mode: "retry", operationId } }',
+					'Call `flow_status` with `{ request: { view: "compact" } }`',
+					'Call `flow_review_start` with `{ request: { reviewKind: "feature" } }`',
+					"Call `flow_feature_complete` with `{ request: { ...guards, result } }`",
+					'Call `flow_session_close` with `{ request: { mode: "retry", operationId } }`',
+				].join("\n"),
+			),
+		).toEqual([]);
+	});
+
+	test("keeps active documentation and plans on nested lifecycle examples", async () => {
+		const documentationFiles = [
+			"README.md",
+			"CONTEXT.md",
+			"CHANGELOG.md",
+			...(
+				await Promise.all(LIFECYCLE_DOCUMENTATION_ROOTS.map(textDocumentsBelow))
+			).flat(),
+		].sort();
+		expect(documentationFiles).toContain(
+			"docs/plan/session-v4-lifecycle-hardening-plan.md",
+		);
+		expect([...HISTORICAL_LIFECYCLE_EXAMPLE_FILES]).toEqual(["CHANGELOG.md"]);
+
+		const violations: string[] = [];
+		for (const path of documentationFiles) {
+			if (HISTORICAL_LIFECYCLE_EXAMPLE_FILES.has(path)) continue;
+			const content = await readFile(path, "utf8");
+			for (const violation of auditLifecycleFlatRequestExamples(content)) {
+				violations.push(
+					`${path}:${violation.line} ${violation.tool} exposes ${violation.topLevelField ?? "an empty object"} outside request`,
+				);
+			}
+		}
+		expect(violations).toEqual([]);
+	});
+
 	test("compiles one compact to execution continuation contract", () => {
 		const surfaces = compiledFlowPromptSurfaces();
 		for (const surface of ["flow-auto", "flow-run"] as const) {
 			const text = surfaces[surface].text.replace(/\s+/g, " ");
 			expect(text).not.toContain("workflowData.session");
-			expect(text).toContain("`projection.closure.kind`");
+			expect(text).toContain("`projection.closure.retryOperationId`");
 			expect(text).toMatch(/receipt only acknowledges/i);
 
-			const compact = text.indexOf('Call `flow_status` with `view: "compact"`');
+			const compact = text.indexOf(
+				'Call `flow_status { request: { view: "compact" } }`',
+			);
 			const start = text.indexOf("When ready, call `flow_run_start`", compact);
 			const execution = text.indexOf(
-				'call `flow_status` with `view: "execution"`',
+				'call `flow_status { request: { view: "execution" } }`',
 				start,
 			);
 			const refresh = text.indexOf(
-				'Immediately call `flow_status` with `view: "compact"` after completion',
+				'Immediately call `flow_status { request: { view: "compact" } }` after the feature outcome',
 				execution,
 			);
 			for (const [label, index] of [
@@ -416,18 +568,19 @@ describe("Flow prompt quality", () => {
 	test("keeps economy review ordering and lifecycle terminology deterministic", () => {
 		const surfaces = compiledFlowPromptSurfaces();
 		const economySequence =
-			"targeted validation -> feature review -> one authorized bounded repair/retry if needed -> broad validation after the last functional edit -> final review -> one atomic flow_feature_complete";
+			"targeted validation -> feature assignment/review -> one authorized bounded repair/retry if needed -> broad validation after the last functional edit -> final assignment created with the exact passing feature-assignment result -> final review -> one atomic flow_feature_complete carrying only the final-assignment result";
 		for (const surface of ["flow-auto", "flow-run"] as const) {
 			const text = surfaces[surface].text.replace(/\s+/g, " ");
 			expect(text).toContain(economySequence);
 			let cursor = text.indexOf(economySequence);
 			for (const stage of [
 				"targeted validation",
-				"feature review",
+				"feature assignment/review",
 				"one authorized bounded repair/retry if needed",
 				"broad validation after the last functional edit",
+				"final assignment created with the exact passing feature-assignment result",
 				"final review",
-				"one atomic flow_feature_complete",
+				"one atomic flow_feature_complete carrying only the final-assignment result",
 			]) {
 				const next = text.indexOf(stage, cursor);
 				expect(next, `${surface} orders ${stage}`).toBeGreaterThanOrEqual(
@@ -436,29 +589,23 @@ describe("Flow prompt quality", () => {
 				cursor = next + stage.length;
 			}
 			expect(text).toContain(
-				"An active final feature may remain `in_progress` while awaiting review; this is not a blocker.",
+				"The final feature's active execution may remain `in_progress` while awaiting review; this is not a blocker.",
 			);
 			expect(text).toContain(
-				"Never dispatch final review before the feature review passes in economy mode.",
+				"Never start final review before the feature review has passed in economy order.",
 			);
 			expect(text).toContain(
-				"Latency/speculative review mode remains disabled",
+				"call `flow_review_start` before dispatching review",
 			);
-			expect(text).toContain("one immutable `reviewSnapshotId`");
-			expect(text).toContain("contradiction reconciliation");
+			expect(text).toContain("The runtime records current source identity");
 		}
 
 		const manager = surfaces["flow-run"].text.replace(/\s+/g, " ");
 		const reviewer = surfaces["flow-reviewer"].text.replace(/\s+/g, " ");
 		for (const field of [
-			"attemptId",
-			"logicalPassId",
-			"featureId",
-			"reviewKind",
-			"reviewSnapshotId",
+			"assignmentId",
 			"verdict",
 			"findings",
-			"startedAt",
 			"completedAt",
 			"terminalDisposition",
 		]) {
@@ -476,12 +623,8 @@ describe("Flow prompt quality", () => {
 		}
 		expect(manager).toContain("observed_unsubmitted");
 		expect(reviewer).toContain("observed_unsubmitted");
-		expect(manager).toContain(
-			"normalized taxonomy + subject + requirement/risk + evidence locator",
-		);
-		expect(reviewer).toContain(
-			"normalized taxonomy + subject + requirement/risk + evidence locator",
-		);
+		expect(manager).toContain("Neither manager nor reviewer invents attempt");
+		expect(reviewer).toContain("Do not return attempt");
 	});
 
 	test("gives each hidden worker one applicable schema with deterministic validation", () => {

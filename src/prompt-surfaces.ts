@@ -82,7 +82,7 @@ const SURFACE_ROLES: Record<FlowPromptSurfaceName, FlowPromptRole> = {
 
 const COMMAND_ACTIONS = {
 	"flow-auto":
-		"Drive the Flow loop until completion or a real blocker: $ARGUMENTS",
+		"Drive the Flow loop only within the user's authorized scope; stop after planning when the request says not to implement: $ARGUMENTS",
 	"flow-plan": "Create or revise the Flow plan for: $ARGUMENTS",
 	"flow-run": "Execute the next approved feature. $ARGUMENTS",
 	"flow-review": "Review the assigned work: $ARGUMENTS",
@@ -266,13 +266,13 @@ const MANAGER_OPENINGS = {
 	"flow-auto": [
 		"# Flow auto command contract",
 		"",
-		"Purpose: manage the approved Flow lifecycle from planning through validated, independently reviewed completion.",
+		"Purpose: manage the approved Flow lifecycle from planning through validated, independently reviewed feature outcomes and closure.",
 		"",
 		"Non-negotiable invariants:",
-		'- Call `flow_status` with `view: "compact"` first and trust `workflowData.projection` over conversation memory.',
+		'- Call `flow_status { request: { view: "compact" } }` first and trust `workflowData.projection` over conversation memory.',
 		"- Only the root manager may call state-changing `flow_*` tools or synthesize final results.",
-		"- Approved plans are immutable, only one feature may be active, and completion requires real validation plus independent review evidence.",
-		"- A stored closure makes the session archive-only; retry `flow_session_close` until archival succeeds.",
+		"- Approved plans are immutable, only one active execution may exist, and a passing feature outcome requires real validation plus an independent review assignment result.",
+		"- A passing final feature outcome leaves closure null; start a guarded completed close. A stored closure is quiescent and retries only with its durable operation id.",
 	].join("\n"),
 	"flow-plan": [
 		"# Flow plan command contract",
@@ -280,7 +280,7 @@ const MANAGER_OPENINGS = {
 		"Purpose: produce an evidence-backed, executable Flow plan without beginning implementation.",
 		"",
 		"Non-negotiable invariants:",
-		'- Call `flow_status` with `view: "compact"` first and trust `workflowData.projection` over conversation memory.',
+		'- Call `flow_status { request: { view: "compact" } }` first and trust `workflowData.projection` over conversation memory.',
 		"- Only the root manager may call state-changing `flow_*` tools.",
 		"- Inspect environment facts before decomposing; do not invent findings.",
 		"- Save a complete draft before approval, and approve only with explicit user approval or prior autonomous authorization.",
@@ -288,13 +288,13 @@ const MANAGER_OPENINGS = {
 	"flow-run": [
 		"# Flow run command contract",
 		"",
-		"Purpose: execute exactly one approved Flow feature and record honest completion or a real blocker.",
+		"Purpose: execute exactly one approved Flow feature and record an honest feature outcome or a real blocker.",
 		"",
 		"Non-negotiable invariants:",
-		'- Call `flow_status` with `view: "compact"` first and trust `workflowData.projection` over conversation memory.',
+		'- Call `flow_status { request: { view: "compact" } }` first and trust `workflowData.projection` over conversation memory.',
 		"- Only the root manager may call state-changing `flow_*` tools or synthesize final results.",
-		"- Keep edits within the active feature and preserve unrelated user changes.",
-		"- Completion requires passing validation and an independent review at least as deep as the approved plan requires.",
+		"- Keep edits within the active execution and preserve unrelated user changes.",
+		"- Create runtime-owned review identity only after passing validation; final assignment start durably binds the passing feature result and broad feature outcome submits only the final result.",
 	].join("\n"),
 } as const;
 
@@ -308,7 +308,7 @@ const PUBLIC_COMMAND_STARTUP = literalFragment({
 		"",
 		"The compiled sections are this public command's core Flow contract: references inside them to loading `flow`, `flow-plan`, `flow-run`, or `flow-review` mean use the matching compiled section or reserved reviewer route, never a native skill call. If an exact guide is already included below as a Bundled section, use it without loading it again. Otherwise call `flow_guidance` with id `flow-test`, `flow-deslop`, `flow-ui-quality`, or the exact reference id requested; `flow-commit` remains user-triggered only.",
 		"",
-		"Read status only from `workflowData.projection`. If compact status includes `projection.closure.kind`, do not run, reset, approve, or replan. Retry `flow_session_close` with that kind and causal guards.",
+		'Call `flow_status { request: { view: "compact" } }` and read status only from `workflowData.projection`. If compact status is completed with null closure, call `flow_session_close { request: { mode: "start", kind: "completed", ...guards } }`. If `projection.closure.retryOperationId` exists, do not run, reset, approve, or replan; call only `flow_session_close { request: { mode: "retry", operationId } }` with that complete value.',
 	].join("\n"),
 });
 
@@ -330,7 +330,7 @@ const PUBLIC_REVIEWER_ROUTE = literalFragment({
 	text: [
 		"## Public reviewer routing",
 		"",
-		"When a compiled source section says to load `flow-review`, route the bounded review packet to the reserved `flow-reviewer`; do not invoke a native core skill or perform the independent review in manager context.",
+		"When a compiled source section says to load `flow-review`, route the bounded assignment packet to the reserved `flow-reviewer`; do not invoke a native core skill or perform the independent review in manager context.",
 	].join("\n"),
 });
 
@@ -382,7 +382,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 				"Implement",
 				"Candidate implementation",
 				"Validate",
-				"Review and complete",
+				"Review and record outcome",
 			],
 		}),
 		sourceFragment({
@@ -435,7 +435,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 				"Implement",
 				"Candidate implementation",
 				"Validate",
-				"Review and complete",
+				"Review and record outcome",
 			],
 		}),
 		sourceFragment({
@@ -456,11 +456,11 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 
 const MANAGER_CHECKPOINTS = {
 	"flow-auto":
-		"Before stopping: confirm the runtime state matches the report; every completed feature has real validation and independent review evidence; the final feature has broad validation and final review; otherwise report the exact blocker or pending archival.",
+		"Before stopping: confirm runtime state matches the report; every delivered feature has accepted validation and a recorded review execution; the final feature has ordered broad validation and a durable bound prerequisite; completed progress is explicitly closed or awaiting archive publication; otherwise report the exact blocker.",
 	"flow-plan":
 		"Before returning: confirm the plan is evidence-backed, executable by another agent, explicit about requirements/decisions/targets/validation/dependencies/review depth, saved as a draft, and not approved without authorization.",
 	"flow-run":
-		"Before completion: confirm scope stayed within the active feature, commands and observed results are exact, review is independent and deep enough, no blocking finding remains unresolved, and the runtime—not prose—accepted the completion payload.",
+		"Before submitting the feature outcome: confirm scope stayed within the active execution, commands and observed results are exact, reported times are ordered, review is independent and deep enough, no blocking finding remains unresolved, and the runtime—not prose—accepted the request.",
 } as const;
 
 const REVIEW_INVOCATION_FRAGMENT = literalFragment({
@@ -469,9 +469,9 @@ const REVIEW_INVOCATION_FRAGMENT = literalFragment({
 	kind: "purpose",
 	roles: REVIEWER_ROLE,
 	text: [
-		"# Flow review request",
+		"# Flow review assignment",
 		"",
-		"Call `flow_status` first when available, then review the assigned packet and actual changed artifacts under the `flow-reviewer` contract. Prefer the bounded packet over parent-session memory. If required evidence is stale or unavailable, return an advisory result and state why it cannot be used as Flow-gated review evidence.",
+		'Recover the assignment only with `flow_status { request: { view: "reviewer", assignmentId } }` when available, then review its bounded packet context and actual changed artifacts under the `flow-reviewer` contract. Never guess feature, packet, evidence, revision, or snapshot fields. Treat `completedAt` as reported time bounded by assignment start and runtime acceptance. If required evidence is stale or unavailable, return an advisory result and state why it cannot be treated as Flow-gated.',
 	].join("\n"),
 });
 

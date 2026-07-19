@@ -6,10 +6,10 @@ Testing focuses on hard gates, persistence safety, public surface stability, pac
 
 | File | Purpose |
 | --- | --- |
-| `tests/runtime-gates.test.ts` | Plan validation, immutable approval, single active feature, completion evidence, final review, blockers, reset, and close rules. |
-| `tests/workspace-persistence.test.ts` | Unsafe roots, duplicate and malformed JSON, archive and close behavior, fail-closed lock contention, quarantine, and schema errors. |
+| `tests/runtime-gates.test.ts` | Plan validation, immutable approval, single active execution, feature-outcome evidence, final review, blockers, reset, and close rules. |
+| `tests/workspace-persistence.test.ts` | Unsafe roots, duplicate and malformed JSON, archive and close behavior, fail-closed lock contention, strict version rejection, and schema errors. |
 | `tests/distribution-and-surface.test.ts` | Embedded guidance, no-write startup, hostile-link safety, command prompts, permissions, legacy cleanup, and config collisions. |
-| `tests/prompt-quality.test.ts` | Prompt source ownership, role applicability, handoff schemas, growth thresholds, 18 static scenarios, and model-response grading. |
+| `tests/prompt-quality.test.ts` | Prompt source ownership, role applicability, handoff schemas, growth thresholds, 19 static scenarios, and model-response grading. |
 | `tests/package-smoke.test.ts` | Build, pack, tar extraction, CLI execution from the packed package, and consumer TypeScript imports. |
 | `tests/live-opencode-smoke.test.ts` | Real OpenCode server registration over HTTP, gated by `FLOW_LIVE_SMOKE=1`. |
 

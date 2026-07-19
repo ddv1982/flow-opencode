@@ -4,11 +4,12 @@ Date: 2026-07-17
 
 ## Status
 
-Accepted.
+Accepted. The original persisted-session decision is superseded by ADR 0003;
+the TypeScript, platform, layering, and distribution decisions remain current.
 
 ## Context
 
-Flow v4 is host-neutral at runtime, but its state machine, persistence, tool
+The pre-v5 implementation is host-neutral at runtime, but its state machine, persistence, tool
 transport, and distribution concerns are still concentrated in a few large
 modules. The package also relies on implicit compatibility between the Zod
 version used by Flow and the Zod version embedded in the OpenCode plugin SDK.
@@ -68,9 +69,9 @@ The config hook registers commands and agents without workspace filesystem I/O;
 canonical commands load the sole active representation, `.flow/session.json`,
 through `flow_status` at the point of action.
 
-The v5 persisted session format is version 3. Flow will not read or migrate
-older active sessions. If an older session is encountered it is preserved and
-reported as unsupported; it is never silently overwritten or deleted.
+ADR 0003 replaces the original v5 persisted-session decision with the sole
+Session v4 assignment lifecycle. Other versions are generic unsupported input,
+not compatibility or canonical-history formats.
 
 Public use-case results are discriminated unions rather than open-ended
 `Record<string, unknown>` values. IDs are branded at the domain boundary,
@@ -82,7 +83,7 @@ state.
 
 ## Non-goals
 
-- Supporting Flow v4 source APIs or session files.
+- Supporting pre-v5 source APIs or pre-cutover session documents.
 - Targeting OpenCode's beta v2 plugin API before its migration contract is
   complete.
 - Reintroducing startup skill synchronization, setup-health state, or a second
@@ -101,12 +102,12 @@ The v5 release requires:
 - contract tests across the OpenCode and core schema boundary;
 - Node 24 and Node 26 package-consumer tests;
 - no imports that violate the documented dependency direction;
-- no compatibility readers, adapters, aliases, or deprecated v4 entrypoints.
+- no compatibility readers, adapters, aliases, or deprecated pre-v5 entrypoints.
 
 ## Consequences
 
-- Existing `.flow/session.json` files must be closed with v4 or archived by the
-  user before starting a v5 session.
+- Only the Session v4 document defined by ADR 0003 can become active state or
+  canonical history; pre-cutover documents are generic unsupported input.
 - Consumers must upgrade their Node and OpenCode installations with Flow v5.
 - The OpenCode adapter duplicates a deliberately small wire-schema description;
   contract fixtures prevent that description from drifting from core parsing.

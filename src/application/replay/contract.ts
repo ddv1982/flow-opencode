@@ -92,6 +92,19 @@ export const UnsignedAvailabilitySchema = z.discriminatedUnion("status", [
 ]);
 export type UnsignedAvailability = z.infer<typeof UnsignedAvailabilitySchema>;
 
+export const REVIEW_LIFECYCLE_AGGREGATE_METRICS = [
+	"review_assignment_attempt_count",
+	"invalid_reviewer_payload_count",
+	"completion_submission_count",
+	"accepted_blocker_count",
+	"schema_rejection_count",
+	"evidence_only_rerun_count",
+	"feature_reset_count",
+	"abandoned_session_count",
+] as const;
+export type ReviewLifecycleAggregateMetric =
+	(typeof REVIEW_LIFECYCLE_AGGREGATE_METRICS)[number];
+
 export const AggregateMetricSchema = z.enum([
 	"session_count",
 	"child_session_count",
@@ -131,6 +144,7 @@ export const AggregateMetricSchema = z.enum([
 	"four_invocation_character_count",
 	"scenario_count",
 	"terminal_decision_count",
+	...REVIEW_LIFECYCLE_AGGREGATE_METRICS,
 ]);
 export type AggregateMetric = z.infer<typeof AggregateMetricSchema>;
 
@@ -459,6 +473,45 @@ const AggregateFactsSchema = z
 			metrics.add(fact.metric);
 		}
 	});
+
+export const ReviewLifecycleBaselineSchema = z
+	.strictObject({
+		version: z.literal(1),
+		baselineId: z.literal("qa_scribe_5_1_high"),
+		capturedOn: z.literal("2026-07-19"),
+		inferenceEffort: z.enum(["high", "max"]),
+		facts: z
+			.array(ApprovedAggregateFactSchema)
+			.length(REVIEW_LIFECYCLE_AGGREGATE_METRICS.length),
+	})
+	.superRefine((baseline, context) => {
+		const metrics = new Set(baseline.facts.map((fact) => fact.metric));
+		for (const [index, fact] of baseline.facts.entries()) {
+			if (
+				!REVIEW_LIFECYCLE_AGGREGATE_METRICS.includes(
+					fact.metric as ReviewLifecycleAggregateMetric,
+				)
+			) {
+				context.addIssue({
+					code: "custom",
+					path: ["facts", index, "metric"],
+					message: "Lifecycle baseline contains a non-lifecycle metric.",
+				});
+			}
+		}
+		for (const metric of REVIEW_LIFECYCLE_AGGREGATE_METRICS) {
+			if (!metrics.has(metric)) {
+				context.addIssue({
+					code: "custom",
+					path: ["facts"],
+					message: `Lifecycle baseline is missing '${metric}'.`,
+				});
+			}
+		}
+	});
+export type ReviewLifecycleBaseline = z.infer<
+	typeof ReviewLifecycleBaselineSchema
+>;
 
 export const ReplayFixtureSchema = z
 	.strictObject({

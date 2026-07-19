@@ -7,6 +7,7 @@ import { createFileSourceIdentityProvider } from "./source-identity.js";
 import {
 	archiveAndClearSession,
 	assertMutableWorkspaceRoot,
+	findArchivedSessionByCloseRetryOperationId,
 	findArchivedSessionByOperationId,
 	loadSession,
 	quarantineUnreadableSession,
@@ -24,6 +25,8 @@ export function createFileSessionRepository(
 		...evidenceArtifacts,
 		computeSourceIdentity: () => sourceIdentity.computeSourceIdentity(),
 		load: () => loadSession(root),
+		findArchivedByCloseRetryOperationId: (operationId) =>
+			findArchivedSessionByCloseRetryOperationId(root, operationId),
 		findArchivedByOperationId: (operationId) =>
 			findArchivedSessionByOperationId(root, operationId),
 		save: (session) => saveSession(root, session),

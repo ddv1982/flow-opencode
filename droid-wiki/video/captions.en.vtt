@@ -162,7 +162,7 @@ the goal, current status, approval state
 
 41
 00:01:39.274 --> 00:01:41.756
-, plan, active feature, history, closure, last
+, plan, active execution, history, closure, last
 
 42
 00:01:41.756 --> 00:01:44.238
@@ -278,7 +278,7 @@ atomically, uses a session lock, rejects
 
 70
 00:02:51.248 --> 00:02:53.730
-unsafe roots, and quarantines unreadable sessions
+unsafe roots, and rejects unreadable session input
 
 71
 00:02:53.730 --> 00:02:56.212
@@ -362,7 +362,7 @@ policy. Workspace tests cover JSON parsing
 
 91
 00:03:43.367 --> 00:03:45.849
-, locks, generated instructions, archive, and quarantine.
+, locks, generated instructions, and archive publication.
 
 92
 00:03:45.849 --> 00:03:48.330

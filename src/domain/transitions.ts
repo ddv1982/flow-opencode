@@ -1,4 +1,4 @@
-import { MAX_ORCHESTRATION_PASSES } from "./limits.js";
+import { MAX_HISTORY_ENTRIES, MAX_ORCHESTRATION_PASSES } from "./limits.js";
 import {
 	hasCandidateExecutionEvidence,
 	hasVerifierExecutionEvidence,
@@ -13,11 +13,14 @@ import type {
 	ExecutionProjection,
 	Feature,
 	FeatureId,
-	FeatureReviewDepth,
+	FeatureRun,
+	FeatureRunId,
 	OrchestrationPassRecord,
 	Plan,
 	PlanInput,
-	Review,
+	ReviewAssignment,
+	ReviewAssignmentId,
+	ReviewAssignmentResultInput,
 	ReviewExecution,
 	ReviewExecutionFindingInput,
 	ReviewExecutionInput,
@@ -26,12 +29,10 @@ import type {
 	Session,
 	SessionId,
 	SnapshotId,
-	WorkerOutcome,
-	WorkerResult,
 } from "./session.js";
-import { validationCommandClass } from "./validation-command.js";
 
 export const MAX_EXECUTION_PROJECTION_BYTES = 12 * 1024;
+export const MAX_REVIEWER_PROJECTION_BYTES = 3_000;
 
 const MAX_EXECUTION_REVISION = Number.MAX_SAFE_INTEGER;
 const MAX_EXECUTION_SNAPSHOT_ID = `sha256:${"f".repeat(64)}`;
@@ -40,29 +41,58 @@ export type TransitionEnvironment = {
 	now(): string;
 	newSessionId(): SessionId;
 	newOperationId?(revision: number): string;
+	newRuntimeId?(kind: "feature-run" | "review-assignment"): string;
 };
 
 export type TransitionResult<T> =
 	| { ok: true; value: T }
 	| { ok: false; message: string; recovery?: string; session?: Session };
 
-type CompletedWorkerResult = Extract<WorkerResult, { status: "ok" }>;
+export type ReviewStartInput = CausalGuard & {
+	requestDigest: string;
+	featureId: FeatureId;
+	reviewKind: "feature" | "final";
+	validationScope: "targeted" | "broad";
+	packetSummary: string;
+	riskLenses: string[];
+	sourceDigest: string;
+	validationEvidence: Extract<EvidenceRecord, { kind: "validation" }>[];
+	featureReview?: ReviewAssignmentResultInput | undefined;
+};
 
-function cloneReview<T extends Review>(review: T | undefined): T | undefined {
-	if (!review) return undefined;
-	return {
-		...review,
-		blockingFindings: review.blockingFindings.map((finding) => ({
-			...finding,
-		})),
-	};
-}
+export type AssignedFeatureCompletionInput = CausalGuard & {
+	featureId: FeatureId;
+	sourceDigest: string;
+	result:
+		| {
+				kind: "completed";
+				summary: string;
+				artifactsChanged: Array<{ path: string }>;
+				validationScope: "targeted";
+				featureReview: ReviewAssignmentResultInput;
+				orchestrationPasses: OrchestrationPassRecord[];
+		  }
+		| {
+				kind: "completed";
+				summary: string;
+				artifactsChanged: Array<{ path: string }>;
+				validationScope: "broad";
+				finalReview: ReviewAssignmentResultInput;
+				orchestrationPasses: OrchestrationPassRecord[];
+		  }
+		| {
+				kind: "blocked";
+				summary: string;
+				review: ReviewAssignmentResultInput;
+				resolutionHint?: string | undefined;
+				orchestrationPasses: OrchestrationPassRecord[];
+		  };
+};
 
-function cloneWorkerOutcome<T extends WorkerOutcome>(
-	outcome: T | undefined,
-): T | undefined {
-	return outcome ? { ...outcome } : undefined;
-}
+export type AssignedFeatureCompletionPreflightInput = Omit<
+	AssignedFeatureCompletionInput,
+	"sourceDigest"
+>;
 
 function cloneOrchestrationPass(
 	pass: OrchestrationPassRecord,
@@ -214,6 +244,75 @@ function deterministicDigest(prefix: string, value: unknown): string {
 	return `sha256:${sha256Hex(`${prefix}\u0000${payload}`)}`;
 }
 
+export function canonicalReviewAssignmentResultDigest(
+	result: ReviewAssignmentResultInput,
+): string {
+	return deterministicDigest("review-assignment-result-v1", result);
+}
+
+export function canonicalReviewAttemptId(
+	assignmentId: ReviewAssignmentId,
+): string {
+	return `review-attempt:${deterministicDigest("review-attempt-v1", {
+		assignmentId,
+	}).slice("sha256:".length, "sha256:".length + 32)}`;
+}
+
+export function canonicalLogicalReviewPassId(
+	featureRunId: FeatureRunId,
+	reviewKind: ReviewAssignment["reviewKind"],
+): string {
+	return `review-pass:${deterministicDigest("logical-review-pass-v1", {
+		featureRunId,
+		reviewKind,
+	}).slice("sha256:".length, "sha256:".length + 32)}`;
+}
+
+export function canonicalReviewPacketDigest(
+	assignment: Pick<
+		ReviewAssignment,
+		| "featureRunId"
+		| "featureId"
+		| "reviewKind"
+		| "validationScope"
+		| "validationEvidenceRefs"
+		| "sourceDigest"
+		| "packetSummary"
+		| "riskLenses"
+		| "prerequisite"
+	>,
+): string {
+	return deterministicDigest("review-packet-v2", {
+		featureRunId: assignment.featureRunId,
+		featureId: assignment.featureId,
+		reviewKind: assignment.reviewKind,
+		validationScope: assignment.validationScope,
+		validationEvidenceRefs: assignment.validationEvidenceRefs,
+		sourceDigest: assignment.sourceDigest,
+		packetSummary: assignment.packetSummary,
+		riskLenses: assignment.riskLenses,
+		prerequisite: assignment.prerequisite
+			? {
+					assignmentId: assignment.prerequisite.assignmentId,
+					resultDigest: assignment.prerequisite.resultDigest,
+				}
+			: null,
+	});
+}
+
+function cloneReviewAssignmentResult(
+	result: ReviewAssignmentResultInput,
+): ReviewAssignmentResultInput {
+	return {
+		...result,
+		findings: result.findings.map((finding) => ({ ...finding })),
+	};
+}
+
+export function canonicalValidationCommandDigest(command: string): string {
+	return deterministicDigest("validation-command-v1", command.trim());
+}
+
 const SHA256_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 function isSha256Digest(value: string): boolean {
@@ -248,6 +347,9 @@ function snapshotPayload(session: Session): unknown {
 		approval: session.approval,
 		plan: session.plan,
 		activeFeatureId: session.activeFeatureId,
+		activeFeatureRunId: session.activeFeatureRunId,
+		featureRuns: session.featureRuns,
+		reviewAssignments: session.reviewAssignments,
 		history: session.history,
 		budget: session.budget,
 		closure: session.closure,
@@ -362,6 +464,8 @@ function canonicalReviewExecution(
 	input: ReviewExecutionInput,
 ): ReviewExecution {
 	return {
+		assignmentId: input.assignmentId,
+		featureRunId: input.featureRunId,
 		attemptId: input.attemptId,
 		logicalPassId: input.logicalPassId,
 		featureId: input.featureId,
@@ -392,6 +496,8 @@ function cloneReviewExecution(execution: ReviewExecution): ReviewExecution {
 
 function reviewExecutionSignature(execution: ReviewExecution): string {
 	return JSON.stringify({
+		assignmentId: execution.assignmentId,
+		featureRunId: execution.featureRunId,
 		attemptId: execution.attemptId,
 		logicalPassId: execution.logicalPassId,
 		featureId: execution.featureId,
@@ -416,16 +522,9 @@ function reviewExecutionSignature(execution: ReviewExecution): string {
 // Bound the persisted history so a long autonomous retry loop cannot grow
 // session.json without limit (every mutation re-reads/re-validates the whole
 // file). The cap is generous; only pathological loops ever reach it.
-const MAX_HISTORY_ENTRIES = 500;
 const MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE = 2;
 
 const FINDING_FINGERPRINT_VERSION = "finding-v1";
-
-const FEATURE_REVIEW_DEPTH_RANK: Record<FeatureReviewDepth, number> = {
-	quick: 0,
-	standard: 1,
-	detailed: 2,
-};
 
 function appendHistory(
 	history: readonly ExecutionHistoryEntry[],
@@ -437,36 +536,11 @@ function appendHistory(
 		: next;
 }
 
-function historyEntryFor(
-	worker: WorkerResult,
-	status: ExecutionHistoryEntry["status"],
-	environment: TransitionEnvironment,
-	outcome: WorkerOutcome | undefined = worker.outcome,
-	summary: string = worker.summary,
-): ExecutionHistoryEntry {
-	return {
-		featureId: worker.featureId,
-		status,
-		summary,
-		recordedAt: environment.now(),
-		artifactsChanged: worker.artifactsChanged.map((artifact) => ({
-			...artifact,
-		})),
-		validationRun: worker.validationRun.map((run) => ({ ...run })),
-		validationScope: worker.validationScope,
-		featureReviewDepth: worker.featureReviewDepth,
-		featureReview: cloneReview(worker.featureReview),
-		finalReview: cloneReview(worker.finalReview),
-		outcome: cloneWorkerOutcome(outcome),
-		orchestrationPasses: worker.orchestrationPasses.map(cloneOrchestrationPass),
-	};
-}
-
 function initialBudgetTelemetry(): BudgetTelemetry {
 	return {
 		reviewCount: 0,
 		failedReviewCount: 0,
-		failedReviewAttemptsByFeature: {},
+		failedReviewAttemptsByFeatureRun: {},
 		reviewExecutions: [],
 		reviewLifecycle: {
 			featureAttemptCount: 0,
@@ -498,8 +572,8 @@ function cloneBudgetTelemetry(session: Session): BudgetTelemetry {
 	return {
 		reviewCount: session.budget.reviewCount,
 		failedReviewCount: session.budget.failedReviewCount,
-		failedReviewAttemptsByFeature: {
-			...session.budget.failedReviewAttemptsByFeature,
+		failedReviewAttemptsByFeatureRun: {
+			...session.budget.failedReviewAttemptsByFeatureRun,
 		},
 		reviewExecutions: session.budget.reviewExecutions.map(cloneReviewExecution),
 		reviewLifecycle: { ...session.budget.reviewLifecycle },
@@ -598,80 +672,6 @@ function sessionWithOrchestrationPasses(
 	return budget === session.budget ? session : { ...session, budget };
 }
 
-export type LogicalReviewPassProjection = {
-	logicalPassId: string;
-	featureId: FeatureId;
-	reviewKind: ReviewExecution["reviewKind"];
-	reviewSnapshotId: string;
-	latestAttemptId: string;
-	verdict: ReviewExecution["verdict"];
-	attemptCount: number;
-};
-
-function latestLogicalReviewExecutions(
-	executions: readonly ReviewExecution[],
-): Map<string, { execution: ReviewExecution; attemptCount: number }> {
-	const latest = new Map<
-		string,
-		{ execution: ReviewExecution; attemptCount: number }
-	>();
-	for (const execution of executions) {
-		const key = `${execution.featureId}\u0000${execution.reviewKind}\u0000${execution.logicalPassId}`;
-		const previous = latest.get(key);
-		latest.set(key, {
-			execution,
-			attemptCount: (previous?.attemptCount ?? 0) + 1,
-		});
-	}
-	return latest;
-}
-
-export function projectLogicalReviewPasses(
-	executions: readonly ReviewExecution[],
-): LogicalReviewPassProjection[] {
-	return [...latestLogicalReviewExecutions(executions).values()].map(
-		({ execution, attemptCount }) => ({
-			logicalPassId: execution.logicalPassId,
-			featureId: execution.featureId,
-			reviewKind: execution.reviewKind,
-			reviewSnapshotId: execution.reviewSnapshotId,
-			latestAttemptId: execution.attemptId,
-			verdict: execution.verdict,
-			attemptCount,
-		}),
-	);
-}
-
-function latestReviewTruth(
-	executions: readonly ReviewExecution[],
-	featureId: FeatureId,
-	reviewKind: ReviewExecution["reviewKind"],
-): ReviewExecution[] {
-	return [...latestLogicalReviewExecutions(executions).values()]
-		.map(({ execution }) => execution)
-		.filter(
-			(execution) =>
-				execution.featureId === featureId &&
-				execution.reviewKind === reviewKind,
-		);
-}
-
-function contradictoryReviewSnapshot(
-	executions: readonly ReviewExecution[],
-): string | null {
-	const verdictsBySnapshot = new Map<string, Set<ReviewExecution["verdict"]>>();
-	for (const projection of projectLogicalReviewPasses(executions)) {
-		const verdicts =
-			verdictsBySnapshot.get(projection.reviewSnapshotId) ?? new Set();
-		verdicts.add(projection.verdict);
-		verdictsBySnapshot.set(projection.reviewSnapshotId, verdicts);
-	}
-	for (const [snapshotId, verdicts] of verdictsBySnapshot) {
-		if (verdicts.size > 1) return snapshotId;
-	}
-	return null;
-}
-
 function appendReviewExecutions(
 	session: Session,
 	inputs: readonly ReviewExecutionInput[],
@@ -710,8 +710,8 @@ function appendReviewExecutions(
 		return ok({ session, appendedAttemptIds: new Set() });
 	}
 
-	const failedReviewAttemptsByFeature = {
-		...budget.failedReviewAttemptsByFeature,
+	const failedReviewAttemptsByFeatureRun = {
+		...budget.failedReviewAttemptsByFeatureRun,
 	};
 	const reviewLifecycle = { ...budget.reviewLifecycle };
 	for (const execution of additions) {
@@ -725,8 +725,8 @@ function appendReviewExecutions(
 		} else {
 			reviewLifecycle.failedVerdictCount += 1;
 			reviewLifecycle.retryConsumedCount += 1;
-			failedReviewAttemptsByFeature[execution.featureId] =
-				(failedReviewAttemptsByFeature[execution.featureId] ?? 0) + 1;
+			failedReviewAttemptsByFeatureRun[execution.featureRunId] =
+				(failedReviewAttemptsByFeatureRun[execution.featureRunId] ?? 0) + 1;
 		}
 	}
 	const failedAdditions = additions.filter(
@@ -735,7 +735,7 @@ function appendReviewExecutions(
 	const nextBudget: BudgetTelemetry = {
 		...budget,
 		failedReviewCount: budget.failedReviewCount + failedAdditions,
-		failedReviewAttemptsByFeature,
+		failedReviewAttemptsByFeatureRun,
 		reviewExecutions: [
 			...budget.reviewExecutions,
 			...additions.map(cloneReviewExecution),
@@ -748,68 +748,6 @@ function appendReviewExecutions(
 			additions.map((execution) => execution.attemptId),
 		),
 	});
-}
-
-export function recordReviewExecutions(
-	session: Session,
-	executions: readonly ReviewExecutionInput[],
-	environment: TransitionEnvironment,
-	operationId?: string,
-	guard?: Pick<CausalGuard, "expectedRevision" | "expectedSnapshotId">,
-): TransitionResult<Session> {
-	const preflight = causalPreflight<Session>(session);
-	if (preflight) return preflight;
-	const pendingArchive = pendingArchiveFailure<Session>(session);
-	if (pendingArchive) return pendingArchive;
-	const requestDigest = canonicalOperationRequestDigest("review_record", {
-		executions,
-		expectedRevision: guard?.expectedRevision,
-		expectedSnapshotId: guard?.expectedSnapshotId,
-	});
-	const replay = operationReplay(
-		session,
-		operationId,
-		"review_record",
-		requestDigest,
-	);
-	if (!replay.ok) return replay;
-	if (replay.value === "replay") return ok(session);
-	if (
-		guard &&
-		(guard.expectedRevision !== session.causal.revision ||
-			guard.expectedSnapshotId !== session.causal.snapshotId)
-	) {
-		return fail(
-			"Review evidence is stale for the current session revision or snapshot.",
-			"Reload compact status and record review evidence only for its exact causal identity.",
-			session,
-		);
-	}
-	const recorded = mergeReviewExecutionsForCompletion(session, executions);
-	if (!recorded.ok) return recorded;
-	return ok(
-		recorded.value === session
-			? session
-			: touch(recorded.value, environment, {
-					operationId,
-					operationKind: "review_record",
-					requestDigest,
-					changedEntity: { kind: "review", id: session.id },
-					changedFields: [
-						"budget.reviewExecutions",
-						"budget.reviewLifecycle",
-						"budget.failedReviewCount",
-					],
-				}),
-	);
-}
-
-export function mergeReviewExecutionsForCompletion(
-	session: Session,
-	executions: readonly ReviewExecutionInput[],
-): TransitionResult<Session> {
-	const recorded = appendReviewExecutions(session, executions);
-	return recorded.ok ? ok(recorded.value.session) : recorded;
 }
 
 function evidenceSignature(evidence: EvidenceRecord): string {
@@ -839,6 +777,13 @@ function safeArtifactRef(
 		Number.isSafeInteger(reference.byteLength) &&
 		reference.byteLength >= 0
 	);
+}
+
+function evidenceAppliesToActiveRun(
+	session: Session,
+	evidence: EvidenceRecord,
+): boolean {
+	return evidence.featureRunId === session.activeFeatureRunId;
 }
 
 function appendEvidenceForCompletion(
@@ -903,10 +848,15 @@ function appendEvidenceForCompletion(
 				session,
 			);
 		}
-		if (evidence.snapshotId !== session.causal.snapshotId) {
+		if (
+			evidence.featureRunId !== session.activeFeatureRunId ||
+			evidence.capturedAtRevision !== session.causal.revision ||
+			evidence.capturedAtSnapshotId !== session.causal.snapshotId ||
+			evidence.snapshotId !== evidence.capturedAtSnapshotId
+		) {
 			return fail(
-				`Evidence '${evidence.evidenceId}' is stale for the current snapshot.`,
-				"Rerun validation or review against the current snapshot before completion.",
+				`Evidence '${evidence.evidenceId}' is stale for the active feature run or capture snapshot.`,
+				"Rerun validation or review against the active feature run and current source state.",
 				session,
 			);
 		}
@@ -951,51 +901,6 @@ function appendEvidenceForCompletion(
 			additions.map((evidence) => evidence.evidenceId),
 		),
 	});
-}
-
-export function mergeEvidenceForCompletion(
-	session: Session,
-	evidenceRecords: readonly EvidenceRecord[],
-): TransitionResult<Session> {
-	const appended = appendEvidenceForCompletion(session, evidenceRecords);
-	return appended.ok ? ok(appended.value.session) : appended;
-}
-
-export function recordEvidence(
-	session: Session,
-	evidenceRecords: readonly EvidenceRecord[],
-	environment: TransitionEnvironment,
-	operationId?: string,
-): TransitionResult<Session> {
-	const preflight = causalPreflight<Session>(session);
-	if (preflight) return preflight;
-	const pendingArchive = pendingArchiveFailure<Session>(session);
-	if (pendingArchive) return pendingArchive;
-	const requestDigest = canonicalOperationRequestDigest(
-		"evidence_record",
-		evidenceRecords,
-	);
-	const replay = operationReplay(
-		session,
-		operationId,
-		"evidence_record",
-		requestDigest,
-	);
-	if (!replay.ok) return replay;
-	if (replay.value === "replay") return ok(session);
-	const merged = mergeEvidenceForCompletion(session, evidenceRecords);
-	if (!merged.ok) return merged;
-	if (merged.value === session) return ok(session);
-	return ok(
-		touch(merged.value, environment, {
-			operationId,
-			operationKind: "evidence_record",
-			requestDigest,
-			changedEntity: { kind: "evidence", id: session.id },
-			changedFields: ["causal.evidence"],
-			evidenceRefs: evidenceRecords.map((evidence) => evidence.evidenceId),
-		}),
-	);
 }
 
 function ok<T>(value: T): TransitionResult<T> {
@@ -1077,13 +982,16 @@ export function createSession(
 ): Session {
 	const now = environment.now();
 	const session: Session = {
-		version: 3,
+		version: 4,
 		id: environment.newSessionId(),
 		goal,
 		status: "planning",
 		approval: "pending",
 		plan: null,
 		activeFeatureId: null,
+		activeFeatureRunId: null,
+		featureRuns: [],
+		reviewAssignments: [],
 		history: [],
 		budget: initialBudgetTelemetry(),
 		causal: {
@@ -1114,8 +1022,9 @@ export function createSession(
 
 type MutationDescriptor = {
 	operationId?: string | undefined;
-	operationKind?: CausalMutationRecord["operationKind"] | undefined;
+	operationKind: CausalMutationRecord["operationKind"];
 	requestDigest?: string | undefined;
+	featureRunId?: FeatureRunId | null | undefined;
 	recordedAt?: string | undefined;
 	changedEntity?: CausalMutationRecord["changedEntity"] | undefined;
 	changedFields?: string[] | undefined;
@@ -1126,7 +1035,7 @@ type MutationDescriptor = {
 function touch(
 	session: Session,
 	environment: TransitionEnvironment,
-	descriptor: MutationDescriptor = {},
+	descriptor: MutationDescriptor,
 ): Session {
 	const recordedAt = descriptor.recordedAt ?? environment.now();
 	const priorRevision = session.causal.revision;
@@ -1137,7 +1046,7 @@ function touch(
 		timestamps: { ...session.timestamps, updatedAt: recordedAt },
 	};
 	const currentSnapshotId = canonicalSessionSnapshotId(nextWithoutMutation);
-	const operationKind = descriptor.operationKind ?? "evidence_record";
+	const operationKind = descriptor.operationKind;
 	const proposedOperationId =
 		descriptor.operationId ??
 		environment.newOperationId?.(revision) ??
@@ -1161,6 +1070,10 @@ function touch(
 				changedEntity: descriptor.changedEntity,
 				changedFields: descriptor.changedFields,
 			}),
+		featureRunId:
+			descriptor.featureRunId !== undefined
+				? descriptor.featureRunId
+				: session.activeFeatureRunId,
 		priorMutationDigest:
 			session.causal.mutations.at(-1)?.mutationDigest ?? null,
 		priorRevision,
@@ -1271,6 +1184,9 @@ export function applyPlan(
 				approval: "pending",
 				plan,
 				activeFeatureId: null,
+				activeFeatureRunId: null,
+				featureRuns: [],
+				reviewAssignments: [],
 				history: [],
 				budget: initialBudgetTelemetry(),
 				closure: null,
@@ -1370,6 +1286,35 @@ function updateFeature(
 	);
 }
 
+function closeFeatureRun(
+	runs: readonly FeatureRun[],
+	featureRunId: FeatureRunId | null,
+	status: Exclude<FeatureRun["status"], "active">,
+	endedAt: string,
+): FeatureRun[] {
+	if (!featureRunId) return [...runs];
+	return runs.map((run) =>
+		run.id === featureRunId && run.status === "active"
+			? { ...run, status, endedAt }
+			: run,
+	);
+}
+
+function runtimeId(
+	session: Session,
+	environment: TransitionEnvironment,
+	kind: "feature-run" | "review-assignment",
+	identity: unknown,
+): string {
+	return (
+		environment.newRuntimeId?.(kind) ??
+		`${kind}:${deterministicDigest(`${kind}-v1`, {
+			sessionId: session.id,
+			identity,
+		}).slice("sha256:".length, "sha256:".length + 32)}`
+	);
+}
+
 export function startRun(
 	session: Session,
 	environment: TransitionEnvironment,
@@ -1398,6 +1343,12 @@ export function startRun(
 	}
 	const budget = cloneBudgetTelemetry(session);
 	if (session.activeFeatureId) {
+		if (!session.activeFeatureRunId) {
+			return fail(
+				"The active feature predates native feature-run identity.",
+				"Reset the active feature before resuming so Flow can start a native execution epoch.",
+			);
+		}
 		if (!featureId || featureId === session.activeFeatureId) {
 			const active = session.plan.features.find(
 				(feature) => feature.id === session.activeFeatureId,
@@ -1417,6 +1368,22 @@ export function startRun(
 			"in_progress",
 		),
 	};
+	const sequence =
+		session.featureRuns.filter((run) => run.featureId === selected.value.id)
+			.length + 1;
+	const featureRunId = runtimeId(session, environment, "feature-run", {
+		featureId: selected.value.id,
+		sequence,
+	}) as FeatureRunId;
+	const acceptedAt = environment.now();
+	const featureRun: FeatureRun = {
+		id: featureRunId,
+		featureId: selected.value.id,
+		sequence,
+		status: "active",
+		startedAt: acceptedAt,
+		endedAt: null,
+	};
 	const next = touch(
 		{
 			...session,
@@ -1424,16 +1391,24 @@ export function startRun(
 			plan: nextPlan,
 			budget,
 			activeFeatureId: selected.value.id,
+			activeFeatureRunId: featureRunId,
+			featureRuns: [...session.featureRuns, featureRun],
 			lastError: null,
 		},
 		environment,
 		{
 			operationKind: "run_start",
+			recordedAt: acceptedAt,
 			requestDigest: canonicalOperationRequestDigest("run_start", {
 				featureId: selected.value.id,
 			}),
 			changedEntity: { kind: "feature", id: selected.value.id },
-			changedFields: ["status", "activeFeatureId"],
+			changedFields: [
+				"status",
+				"activeFeatureId",
+				"activeFeatureRunId",
+				"featureRuns",
+			],
 		},
 	);
 	return ok({
@@ -1444,11 +1419,984 @@ export function startRun(
 	});
 }
 
-function isPassingReview(review: {
-	status: string;
-	blockingFindings: unknown[];
-}) {
-	return review.status === "passed" && review.blockingFindings.length === 0;
+export function startReviewAssignment(
+	session: Session,
+	input: ReviewStartInput,
+	environment: TransitionEnvironment,
+): TransitionResult<{ session: Session; assignment: ReviewAssignment }> {
+	const requestDigest = input.requestDigest;
+	const checkedGuard = causalMutationGuard(
+		session,
+		input,
+		"Review assignment",
+		"review_start",
+		requestDigest,
+	);
+	if (!checkedGuard.ok) return checkedGuard;
+	if (checkedGuard.value === "replay") {
+		const assignment = session.reviewAssignments.find(
+			(candidate) => candidate.operationId === input.operationId,
+		);
+		return assignment
+			? ok({ session, assignment })
+			: fail(
+					`Review assignment operation '${input.operationId}' has no durable assignment.`,
+					"Preserve the session and use causal recovery; do not recreate the assignment identity.",
+					session,
+				);
+	}
+	if (
+		!session.plan ||
+		session.status !== "running" ||
+		session.activeFeatureId !== input.featureId
+	) {
+		return fail("Review assignment requires the active in-progress feature.");
+	}
+	if (!session.activeFeatureRunId) {
+		return fail(
+			"Review assignment requires native feature-run identity.",
+			"Reset and restart the active feature to establish a valid feature run.",
+		);
+	}
+	const activeRun = session.featureRuns.find(
+		(run) => run.id === session.activeFeatureRunId && run.status === "active",
+	);
+	if (!activeRun) {
+		return fail(
+			"Review assignment requires one coherent active feature run.",
+			"Preserve the session and repair invalid Session v4 state before retrying.",
+			session,
+		);
+	}
+	const acceptedAt = environment.now();
+	const feature = session.plan.features.find(
+		(candidate) => candidate.id === input.featureId,
+	);
+	if (!feature) return fail(`Feature '${input.featureId}' is not in the plan.`);
+	if (input.reviewKind === "final" && !finalFeature(session, feature.id)) {
+		return fail(
+			`Feature '${feature.id}' is not eligible for final review.`,
+			"Complete every other approved feature before starting final review.",
+		);
+	}
+	const requiredScope = input.reviewKind === "final" ? "broad" : "targeted";
+	if (input.validationScope !== requiredScope) {
+		return fail(
+			`${input.reviewKind === "final" ? "Final" : "Feature"} review requires ${requiredScope} validation.`,
+			`Record validationScope: ${requiredScope} for this assignment.`,
+		);
+	}
+	if (input.validationEvidence.length === 0) {
+		return fail(
+			"Review assignment requires source-bound validation observations.",
+			"Run the required validation and include at least one passing observation.",
+		);
+	}
+	if (
+		new Set(input.validationEvidence.map((evidence) => evidence.evidenceId))
+			.size !== input.validationEvidence.length
+	) {
+		return fail(
+			"Review assignment validation evidence ids must be unique.",
+			"Submit each canonical validation observation exactly once.",
+			session,
+		);
+	}
+	if (
+		input.validationEvidence.some(
+			(evidence) =>
+				evidence.featureRunId !== session.activeFeatureRunId ||
+				evidence.sourceDigest !== input.sourceDigest ||
+				evidence.exitCode !== 0 ||
+				!evidence.commandDigest ||
+				Date.parse(evidence.startedAt) < Date.parse(activeRun.startedAt) ||
+				Date.parse(evidence.completedAt) < Date.parse(evidence.startedAt) ||
+				Date.parse(evidence.completedAt) > Date.parse(acceptedAt),
+		)
+	) {
+		return fail(
+			"Review assignment validation is failed, stale, future-dated, out of order, or missing command identity.",
+			"Submit passing observations captured within the active feature run and no later than runtime acceptance.",
+		);
+	}
+	if (input.reviewKind === "feature" && input.featureReview) {
+		return fail(
+			"Feature review assignment cannot declare a feature-review prerequisite.",
+			"Remove featureReview; only final review is sequenced after a passing feature review.",
+			session,
+		);
+	}
+	const startedAt = acceptedAt;
+	let prerequisite: ReviewAssignment["prerequisite"] = null;
+	if (input.reviewKind === "final") {
+		if (!input.featureReview) {
+			return fail(
+				"Final review assignment requires the passing feature-review result.",
+				"Complete feature review, then bind its exact result when starting final review.",
+				session,
+			);
+		}
+		const resolvedPrerequisite = resolveAssignmentResult(
+			session,
+			input.featureReview,
+			input.sourceDigest,
+			acceptedAt,
+		);
+		if (!resolvedPrerequisite.ok) return resolvedPrerequisite;
+		if (
+			resolvedPrerequisite.value.assignment.reviewKind !== "feature" ||
+			resolvedPrerequisite.value.execution.verdict !== "passed" ||
+			resolvedPrerequisite.value.execution.terminalDisposition !== "submitted"
+		) {
+			return fail(
+				"Final review assignment requires one submitted passing feature-review result.",
+				"Use the exact passing result returned for the active feature assignment.",
+				session,
+			);
+		}
+		if (
+			Date.parse(resolvedPrerequisite.value.execution.completedAt) >
+			Date.parse(startedAt)
+		) {
+			return fail(
+				"Final review cannot start before feature review has completed.",
+				"Use the reviewer-reported completion time and start final review afterward.",
+				session,
+			);
+		}
+		if (
+			input.validationEvidence.some(
+				(evidence) =>
+					Date.parse(evidence.startedAt) <
+					Date.parse(resolvedPrerequisite.value.execution.completedAt),
+			)
+		) {
+			return fail(
+				"Final review broad validation started before feature review completed.",
+				"Complete feature review first, then run broad validation and start final review.",
+				session,
+			);
+		}
+		const proposedResultDigest = canonicalReviewAssignmentResultDigest(
+			input.featureReview,
+		);
+		const durableRetryBinding = session.reviewAssignments.find(
+			(assignment) =>
+				assignment.featureRunId === session.activeFeatureRunId &&
+				assignment.reviewKind === "final" &&
+				assignment.sourceDigest === input.sourceDigest &&
+				assignment.prerequisite?.assignmentId ===
+					resolvedPrerequisite.value.assignment.id &&
+				assignment.prerequisite !== null,
+		)?.prerequisite;
+		if (
+			durableRetryBinding &&
+			(durableRetryBinding.assignmentId !==
+				resolvedPrerequisite.value.assignment.id ||
+				durableRetryBinding.resultDigest !== proposedResultDigest)
+		) {
+			return fail(
+				"Final review retry must reuse the exact durable feature-review prerequisite.",
+				'Reload flow_status { request: { view: "detail" } } and copy workflowData.projection.finalReviewRetry.prerequisite.result unchanged.',
+				session,
+			);
+		}
+		prerequisite = durableRetryBinding
+			? {
+					assignmentId: durableRetryBinding.assignmentId,
+					result: cloneReviewAssignmentResult(durableRetryBinding.result),
+					resultDigest: durableRetryBinding.resultDigest,
+				}
+			: {
+					assignmentId: resolvedPrerequisite.value.assignment.id,
+					result: cloneReviewAssignmentResult(input.featureReview),
+					resultDigest: proposedResultDigest,
+				};
+	}
+	const pending = session.reviewAssignments.find(
+		(assignment) =>
+			assignment.featureRunId === session.activeFeatureRunId &&
+			assignment.reviewKind === input.reviewKind &&
+			assignment.status === "pending",
+	);
+	if (pending && pending.sourceDigest === input.sourceDigest) {
+		return fail(
+			`Review assignment '${pending.id}' is still pending.`,
+			'Recover it with flow_status { request: { view: "reviewer", assignmentId } } or submit its terminal result.',
+		);
+	}
+	const reviewAssignments = session.reviewAssignments.map((assignment) =>
+		assignment === pending
+			? {
+					...assignment,
+					status: "invalidated" as const,
+					completedAt: null,
+					invalidatedAt: startedAt,
+					invalidationReason: "source_changed" as const,
+				}
+			: assignment,
+	);
+	const mergedEvidence = appendEvidenceForCompletion(
+		session,
+		input.validationEvidence,
+	);
+	if (!mergedEvidence.ok) return mergedEvidence;
+	const validationEvidenceRefs = input.validationEvidence.map(
+		(evidence) => evidence.evidenceId,
+	);
+	const samePassAssignments = session.reviewAssignments.filter(
+		(assignment) =>
+			assignment.featureRunId === session.activeFeatureRunId &&
+			assignment.reviewKind === input.reviewKind,
+	);
+	const logicalPassId = canonicalLogicalReviewPassId(
+		session.activeFeatureRunId,
+		input.reviewKind,
+	);
+	const assignmentId = runtimeId(session, environment, "review-assignment", {
+		featureRunId: session.activeFeatureRunId,
+		reviewKind: input.reviewKind,
+		attempt: samePassAssignments.length + 1,
+	}) as ReviewAssignmentId;
+	const packetDigest = canonicalReviewPacketDigest({
+		featureRunId: session.activeFeatureRunId,
+		featureId: input.featureId,
+		reviewKind: input.reviewKind,
+		validationScope: input.validationScope,
+		validationEvidenceRefs,
+		sourceDigest: input.sourceDigest,
+		packetSummary: input.packetSummary,
+		riskLenses: input.riskLenses,
+		prerequisite,
+	});
+	const assignment: ReviewAssignment = {
+		id: assignmentId,
+		operationId: input.operationId,
+		featureRunId: session.activeFeatureRunId,
+		featureId: input.featureId,
+		reviewKind: input.reviewKind,
+		validationScope: input.validationScope,
+		validationEvidenceRefs,
+		sourceDigest: input.sourceDigest,
+		packetDigest,
+		packetSummary: input.packetSummary,
+		riskLenses: [...input.riskLenses],
+		prerequisite,
+		attemptId: canonicalReviewAttemptId(assignmentId),
+		logicalPassId,
+		startedAt,
+		requiredDepth:
+			input.reviewKind === "final"
+				? session.plan.finalReviewPolicy
+				: feature.reviewDepth,
+		status: "pending",
+		completedAt: null,
+		invalidatedAt: null,
+		invalidationReason: null,
+	};
+	const next = touch(
+		{
+			...mergedEvidence.value.session,
+			reviewAssignments: [...reviewAssignments, assignment],
+		},
+		environment,
+		{
+			operationId: input.operationId,
+			operationKind: "review_start",
+			requestDigest,
+			recordedAt: acceptedAt,
+			changedEntity: { kind: "review", id: assignment.id },
+			changedFields: ["causal.evidence", "reviewAssignments"],
+			evidenceRefs: validationEvidenceRefs,
+		},
+	);
+	const projection = reviewerSessionProjection(next, {
+		assignmentId: assignment.id,
+	});
+	if (
+		!projection.ok ||
+		serializedUtf8JsonBytes(projection.value) > MAX_REVIEWER_PROJECTION_BYTES
+	) {
+		return fail(
+			`Reviewer assignment exceeds the ${MAX_REVIEWER_PROJECTION_BYTES}-byte projection limit.`,
+			"Shorten the packet summary or risk lenses and retry with the same operation id.",
+			session,
+		);
+	}
+	return ok({ session: next, assignment });
+}
+
+function reviewExecutionFromAssignment(
+	assignment: ReviewAssignment,
+	result: ReviewAssignmentResultInput,
+): ReviewExecutionInput {
+	return {
+		assignmentId: assignment.id,
+		featureRunId: assignment.featureRunId,
+		attemptId: assignment.attemptId,
+		logicalPassId: assignment.logicalPassId,
+		featureId: assignment.featureId,
+		reviewKind: assignment.reviewKind,
+		reviewSnapshotId: assignment.packetDigest,
+		verdict: result.verdict,
+		findings: result.findings.map((finding) => ({ ...finding })),
+		startedAt: assignment.startedAt,
+		completedAt: result.completedAt,
+		terminalDisposition: result.terminalDisposition,
+	};
+}
+
+function assignmentReviewEvidence(
+	session: Session,
+	assignment: ReviewAssignment,
+	result: ReviewAssignmentResultInput,
+): Extract<EvidenceRecord, { kind: "review" }> {
+	const provisional: Extract<EvidenceRecord, { kind: "review" }> = {
+		kind: "review",
+		evidenceId: "",
+		featureRunId: assignment.featureRunId,
+		assignmentId: assignment.id,
+		capturedAtRevision: session.causal.revision,
+		capturedAtSnapshotId: session.causal.snapshotId,
+		snapshotId: session.causal.snapshotId,
+		sourceDigest: assignment.sourceDigest,
+		attemptId: assignment.attemptId,
+		packetDigest: assignment.packetDigest,
+		startedAt: assignment.startedAt,
+		completedAt: result.completedAt,
+	};
+	return { ...provisional, evidenceId: canonicalEvidenceId(provisional) };
+}
+
+function assignmentFailure(
+	message: string,
+	recovery: string,
+	session: Session,
+): TransitionResult<never> {
+	return fail(message, recovery, session);
+}
+
+type AssignmentResultObservation = {
+	assignment: ReviewAssignment;
+	execution: ReviewExecutionInput;
+};
+
+function resolveAssignmentResultIdentity(
+	session: Session,
+	result: ReviewAssignmentResultInput,
+	acceptedAt?: string,
+): TransitionResult<AssignmentResultObservation> {
+	const assignment = session.reviewAssignments.find(
+		(candidate) => candidate.id === result.assignmentId,
+	);
+	if (!assignment) {
+		return assignmentFailure(
+			`Review assignment '${result.assignmentId}' was not found.`,
+			"Use the exact assignmentId returned by flow_review_start.",
+			session,
+		);
+	}
+	if (assignment.status !== "pending") {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' already has a terminal result.`,
+			"Replay the original completion operation or start a new review assignment for a retry.",
+			session,
+		);
+	}
+	if (
+		assignment.featureRunId !== session.activeFeatureRunId ||
+		assignment.featureId !== session.activeFeatureId
+	) {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' belongs to a historical feature run.`,
+			"Start a new assignment for the active feature run.",
+			session,
+		);
+	}
+	if (Date.parse(result.completedAt) < Date.parse(assignment.startedAt)) {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' has invalid completion chronology.`,
+			"Submit a completion time that does not precede the runtime-owned assignment start.",
+			session,
+		);
+	}
+	if (
+		acceptedAt !== undefined &&
+		Date.parse(result.completedAt) > Date.parse(acceptedAt)
+	) {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' has a completion time later than runtime acceptance.`,
+			"Submit an actor-reported completion time no later than the accepting Flow mutation.",
+			session,
+		);
+	}
+	const hasBlockingFinding = result.findings.some(
+		(finding) => finding.severity === "blocking",
+	);
+	if (
+		(result.verdict === "failed" && !hasBlockingFinding) ||
+		(result.verdict === "passed" && hasBlockingFinding) ||
+		(result.terminalDisposition === "observed_unsubmitted" &&
+			result.verdict !== "failed")
+	) {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' has an inconsistent verdict, findings, or disposition.`,
+			"A failure needs a blocking finding; a pass cannot retain one; unsubmitted work must fail closed.",
+			session,
+		);
+	}
+	return ok({
+		assignment,
+		execution: reviewExecutionFromAssignment(assignment, result),
+	});
+}
+
+function resolveAssignmentResult(
+	session: Session,
+	result: ReviewAssignmentResultInput,
+	sourceDigest: string,
+	acceptedAt?: string,
+): TransitionResult<AssignmentResultObservation> {
+	const identified = resolveAssignmentResultIdentity(
+		session,
+		result,
+		acceptedAt,
+	);
+	if (!identified.ok) return identified;
+	const { assignment } = identified.value;
+	if (assignment.sourceDigest !== sourceDigest) {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' is stale for the current source state.`,
+			"Rerun validation and start a new review assignment after the last source change.",
+			session,
+		);
+	}
+	const validationEvidence = assignment.validationEvidenceRefs.map(
+		(reference) =>
+			session.causal.evidence.find(
+				(evidence) => evidence.evidenceId === reference,
+			),
+	);
+	if (
+		validationEvidence.some((evidence) => {
+			if (!evidence) return true;
+			return (
+				evidence.kind !== "validation" ||
+				!evidenceAppliesToActiveRun(session, evidence) ||
+				evidence.sourceDigest !== sourceDigest ||
+				evidence.exitCode !== 0
+			);
+		})
+	) {
+		return assignmentFailure(
+			`Review assignment '${assignment.id}' has missing, failed, or stale validation evidence.`,
+			"Rerun validation and create a new assignment for the current source state.",
+			session,
+		);
+	}
+	return identified;
+}
+
+function completionResultInputs(
+	session: Session,
+	input: AssignedFeatureCompletionPreflightInput,
+): TransitionResult<ReviewAssignmentResultInput[]> {
+	const result = input.result;
+	if (result.kind === "blocked") {
+		const failedAssignment = session.reviewAssignments.find(
+			(assignment) => assignment.id === result.review.assignmentId,
+		);
+		const failedAttempts = session.activeFeatureRunId
+			? (session.budget.failedReviewAttemptsByFeatureRun[
+					session.activeFeatureRunId
+				] ?? 0)
+			: 0;
+		if (
+			failedAssignment?.reviewKind === "final" &&
+			failedAssignment.prerequisite &&
+			failedAttempts + 1 >= MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE
+		) {
+			return ok([
+				cloneReviewAssignmentResult(failedAssignment.prerequisite.result),
+				result.review,
+			]);
+		}
+		return ok([result.review]);
+	}
+	if (result.validationScope === "targeted") {
+		return ok([result.featureReview]);
+	}
+	const finalAssignment = session.reviewAssignments.find(
+		(assignment) => assignment.id === result.finalReview.assignmentId,
+	);
+	if (
+		finalAssignment?.reviewKind !== "final" ||
+		!finalAssignment.prerequisite
+	) {
+		return fail(
+			"Final completion requires a final assignment with a durable feature-review prerequisite.",
+			"Recover the pending final assignment and submit only its final-assignment result.",
+			session,
+		);
+	}
+	return ok([
+		cloneReviewAssignmentResult(finalAssignment.prerequisite.result),
+		result.finalReview,
+	]);
+}
+
+function validateCompletionResultSemantics(
+	session: Session,
+	input: AssignedFeatureCompletionPreflightInput,
+	observations: AssignmentResultObservation[],
+): TransitionResult<true> {
+	if (
+		observations.some((item) => item.assignment.featureId !== input.featureId)
+	) {
+		return fail(
+			"Review assignments do not match the active feature.",
+			undefined,
+			session,
+		);
+	}
+	if (input.result.kind === "completed") {
+		const featureObservation = observations[0];
+		if (
+			featureObservation?.assignment.reviewKind !== "feature" ||
+			featureObservation?.execution.verdict !== "passed"
+		) {
+			return fail(
+				"Completed results require one passing feature-review assignment.",
+				"Submit the passing result from the feature assignment returned by flow_review_start.",
+				session,
+			);
+		}
+		const isFinal = finalFeature(session, input.featureId);
+		const finalObservation = observations[1];
+		if (
+			isFinal &&
+			(finalObservation?.assignment.reviewKind !== "final" ||
+				finalObservation?.execution.verdict !== "passed")
+		) {
+			return fail(
+				"Final completion requires one passing final-review assignment.",
+				"Run broad validation, start final review, and submit its passing assignment result.",
+				session,
+			);
+		}
+		if (!isFinal && finalObservation) {
+			return fail(
+				"Non-final completion cannot submit a final-review assignment.",
+				"Submit only the passing feature-review result.",
+				session,
+			);
+		}
+		const requiredScope = isFinal ? "broad" : "targeted";
+		if (
+			input.result.validationScope !== requiredScope ||
+			(isFinal && finalObservation?.assignment.validationScope !== "broad")
+		) {
+			return fail(
+				`${isFinal ? "Final" : "Feature"} completion requires ${requiredScope} validation.`,
+				`Submit validationScope: ${requiredScope} with an assignment bound to that validation scope.`,
+				session,
+			);
+		}
+		if (
+			finalObservation &&
+			(finalObservation.assignment.prerequisite?.assignmentId !==
+				featureObservation.assignment.id ||
+				finalObservation.assignment.prerequisite.result.assignmentId !==
+					featureObservation.assignment.id ||
+				finalObservation.assignment.prerequisite.resultDigest !==
+					canonicalReviewAssignmentResultDigest(
+						finalObservation.assignment.prerequisite.result,
+					))
+		) {
+			return fail(
+				"Final review assignment has an invalid durable feature-review binding.",
+				"Preserve the session and repair the bound prerequisite before retrying final completion.",
+				session,
+			);
+		}
+		if (
+			finalObservation &&
+			Date.parse(finalObservation.assignment.startedAt) <
+				Date.parse(featureObservation.execution.completedAt)
+		) {
+			return fail(
+				"Final review started before feature review passed.",
+				"Complete feature review, then run broad validation and start final review.",
+				session,
+			);
+		}
+	} else {
+		const failedObservation = observations.at(-1);
+		if (failedObservation?.execution.verdict !== "failed") {
+			return fail(
+				"Blocked results require one failed assignment result.",
+				"Submit a failed verdict with at least one blocking finding.",
+				session,
+			);
+		}
+		if (observations.length > 1) {
+			const featureObservation = observations[0];
+			if (
+				featureObservation?.assignment.reviewKind !== "feature" ||
+				featureObservation.execution.verdict !== "passed" ||
+				failedObservation.assignment.reviewKind !== "final" ||
+				failedObservation.assignment.prerequisite?.assignmentId !==
+					featureObservation.assignment.id
+			) {
+				return fail(
+					"Terminal final-review failure has an invalid durable prerequisite.",
+					"Preserve the session and repair the bound review graph before retrying.",
+					session,
+				);
+			}
+		}
+	}
+	return ok(true);
+}
+
+export function preflightAssignedFeatureCompletion(
+	session: Session,
+	input: AssignedFeatureCompletionPreflightInput,
+	acceptedAt?: string,
+): TransitionResult<"new" | "replay"> {
+	const causal = causalPreflight<"new" | "replay">(session);
+	if (causal) return causal;
+	const pendingArchive = pendingArchiveFailure<"new" | "replay">(session);
+	if (pendingArchive) return pendingArchive;
+	const requestDigest = canonicalOperationRequestDigest(
+		"feature_complete",
+		input,
+	);
+	const checkedGuard = causalMutationGuard(
+		session,
+		input,
+		"Feature completion",
+		"feature_complete",
+		requestDigest,
+	);
+	if (!checkedGuard.ok || checkedGuard.value === "replay") return checkedGuard;
+	if (
+		!session.plan ||
+		session.status !== "running" ||
+		session.activeFeatureId !== input.featureId ||
+		!session.activeFeatureRunId
+	) {
+		return fail(
+			"Assigned completion requires an active native feature run.",
+			"Start or reset/restart the approved feature before completing it.",
+			session,
+		);
+	}
+	const completionInputs = completionResultInputs(session, input);
+	if (!completionInputs.ok) return completionInputs;
+	const resultInputs = completionInputs.value;
+	if (
+		new Set(resultInputs.map((result) => result.assignmentId)).size !==
+		resultInputs.length
+	) {
+		return fail(
+			"Completion cannot reuse one assignment for multiple review results.",
+			"Submit each runtime assignment exactly once.",
+			session,
+		);
+	}
+	const resolved = resultInputs.map((result) =>
+		resolveAssignmentResultIdentity(session, result, acceptedAt),
+	);
+	const rejected = resolved.find((item) => !item.ok);
+	if (rejected && !rejected.ok) return rejected;
+	const observations = resolved.map((item) => {
+		if (!item.ok)
+			throw new Error("Resolved review result unexpectedly failed preflight.");
+		return item.value;
+	});
+	const semantics = validateCompletionResultSemantics(
+		session,
+		input,
+		observations,
+	);
+	return semantics.ok ? ok("new") : semantics;
+}
+
+export function completeAssignedFeature(
+	session: Session,
+	input: AssignedFeatureCompletionInput,
+	environment: TransitionEnvironment,
+): TransitionResult<Session> {
+	const acceptedAt = environment.now();
+	const publicIntent = {
+		operationId: input.operationId,
+		expectedRevision: input.expectedRevision,
+		expectedSnapshotId: input.expectedSnapshotId,
+		featureId: input.featureId,
+		result: input.result,
+	};
+	const requestDigest = canonicalOperationRequestDigest(
+		"feature_complete",
+		publicIntent,
+	);
+	const checked = preflightAssignedFeatureCompletion(
+		session,
+		publicIntent,
+		acceptedAt,
+	);
+	if (!checked.ok) return checked;
+	if (checked.value === "replay") return ok(session);
+	if (!session.plan || !session.activeFeatureRunId) {
+		return fail(
+			"Assigned completion lost its active native feature run after preflight.",
+			"Reload compact status and retry against the active feature run.",
+			session,
+		);
+	}
+	const completionInputs = completionResultInputs(session, input);
+	if (!completionInputs.ok) return completionInputs;
+	const resultInputs = completionInputs.value;
+	const resolved = resultInputs.map((result) =>
+		resolveAssignmentResult(session, result, input.sourceDigest, acceptedAt),
+	);
+	const rejected = resolved.find((item) => !item.ok);
+	if (rejected && !rejected.ok) return rejected;
+	const observations = resolved.map((item) => {
+		if (!item.ok)
+			throw new Error("Resolved review result unexpectedly failed.");
+		return item.value;
+	});
+	const executions = observations.map((item) => item.execution);
+	const recordedReviews = appendReviewExecutions(session, executions);
+	if (!recordedReviews.ok)
+		return fail(recordedReviews.message, recordedReviews.recovery, session);
+	const reviewEvidence = observations.map((item, index) =>
+		assignmentReviewEvidence(
+			session,
+			item.assignment,
+			resultInputs[index] as ReviewAssignmentResultInput,
+		),
+	);
+	const recordedEvidence = appendEvidenceForCompletion(
+		recordedReviews.value.session,
+		reviewEvidence,
+	);
+	if (!recordedEvidence.ok) {
+		return fail(recordedEvidence.message, recordedEvidence.recovery, session);
+	}
+	const completedById = new Map(
+		resultInputs.map((result) => [result.assignmentId, result]),
+	);
+	let candidate: Session = {
+		...recordedEvidence.value.session,
+		reviewAssignments: session.reviewAssignments.map((assignment) => {
+			const completed = completedById.get(assignment.id);
+			return completed
+				? {
+						...assignment,
+						status: completed.terminalDisposition,
+						completedAt: completed.completedAt,
+						invalidatedAt: null,
+						invalidationReason: null,
+					}
+				: assignment;
+		}),
+	};
+	candidate = sessionWithOrchestrationPasses(
+		candidate,
+		input.result.orchestrationPasses,
+	);
+	const now = acceptedAt;
+	const evidenceRefs = reviewEvidence.map((evidence) => evidence.evidenceId);
+	if (input.result.kind === "blocked") {
+		const observation = observations.at(-1);
+		if (!observation)
+			return fail(
+				"Blocked review result was not resolved.",
+				undefined,
+				session,
+			);
+		const attempts =
+			candidate.budget.failedReviewAttemptsByFeatureRun[
+				session.activeFeatureRunId
+			] ?? 0;
+		const exhausted = attempts >= MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE;
+		const history = exhausted
+			? appendHistory(candidate.history, {
+					featureRunId: observation.assignment.featureRunId,
+					featureId: input.featureId,
+					status: "blocked",
+					summary: input.result.summary,
+					recordedAt: now,
+					artifactsChanged: [],
+					validationScope: observation.assignment.validationScope,
+					validationEvidenceRefs: [
+						...observation.assignment.validationEvidenceRefs,
+					],
+					reviewAssignmentIds: observations.map((item) => item.assignment.id),
+					outcome: {
+						kind: "blocked",
+						summary: input.result.summary,
+						...(input.result.resolutionHint
+							? { resolutionHint: input.result.resolutionHint }
+							: {}),
+					},
+					orchestrationPasses: input.result.orchestrationPasses.map(
+						cloneOrchestrationPass,
+					),
+				})
+			: candidate.history;
+		const next: Session = {
+			...candidate,
+			status: exhausted ? "blocked" : "running",
+			activeFeatureId: exhausted ? null : candidate.activeFeatureId,
+			activeFeatureRunId: exhausted ? null : candidate.activeFeatureRunId,
+			featureRuns: exhausted
+				? closeFeatureRun(
+						candidate.featureRuns,
+						candidate.activeFeatureRunId,
+						"blocked",
+						now,
+					)
+				: candidate.featureRuns,
+			plan: exhausted
+				? {
+						...session.plan,
+						features: updateFeature(
+							session.plan.features,
+							input.featureId,
+							"blocked",
+						),
+					}
+				: session.plan,
+			history,
+			lastError: exhausted
+				? {
+						tool: "flow_feature_complete",
+						summary: input.result.summary,
+						recovery:
+							input.result.resolutionHint ??
+							"Reset or replan only after explicit user direction.",
+						recordedAt: now,
+					}
+				: null,
+		};
+		return ok(
+			touch(next, environment, {
+				operationId: input.operationId,
+				operationKind: "feature_complete",
+				featureRunId: session.activeFeatureRunId,
+				requestDigest,
+				recordedAt: now,
+				changedEntity: { kind: "review", id: observation.assignment.id },
+				changedFields: [
+					"reviewAssignments",
+					"budget.reviewExecutions",
+					"budget.reviewLifecycle",
+					"budget.failedReviewCount",
+					"budget.failedReviewAttemptsByFeatureRun",
+					"causal.evidence",
+					...(exhausted
+						? [
+								"status",
+								"activeFeatureId",
+								"activeFeatureRunId",
+								"featureRuns",
+								"plan.features.status",
+								"history",
+								"lastError",
+							]
+						: []),
+				],
+				blockerDelta: {
+					added: [input.result.summary],
+					removed: [],
+				},
+				evidenceRefs,
+			}),
+		);
+	}
+	const featureObservation = observations[0];
+	if (!featureObservation)
+		return fail("Feature review result was not resolved.", undefined, session);
+	const applicableValidationRefs = new Set(
+		observations.flatMap((item) => item.assignment.validationEvidenceRefs),
+	);
+	const entry: ExecutionHistoryEntry = {
+		featureRunId: featureObservation.assignment.featureRunId,
+		featureId: input.featureId,
+		status: "completed",
+		summary: input.result.summary,
+		recordedAt: now,
+		artifactsChanged: input.result.artifactsChanged.map((artifact) => ({
+			...artifact,
+		})),
+		validationScope: input.result.validationScope,
+		validationEvidenceRefs: [...applicableValidationRefs],
+		reviewAssignmentIds: observations.map((item) => item.assignment.id),
+		outcome: { kind: "completed", summary: input.result.summary },
+		orchestrationPasses: input.result.orchestrationPasses.map(
+			cloneOrchestrationPass,
+		),
+	};
+	const features = updateFeature(
+		session.plan.features,
+		input.featureId,
+		"completed",
+	);
+	const allComplete = features.every(
+		(feature) => feature.status === "completed",
+	);
+	const next: Session = {
+		...candidate,
+		status: allComplete ? "completed" : "ready",
+		activeFeatureId: null,
+		activeFeatureRunId: null,
+		featureRuns: closeFeatureRun(
+			candidate.featureRuns,
+			candidate.activeFeatureRunId,
+			"completed",
+			now,
+		),
+		plan: { ...session.plan, features },
+		history: appendHistory(candidate.history, entry),
+		budget: {
+			...candidate.budget,
+			reviewCount: candidate.budget.reviewCount + observations.length,
+		},
+		closure: null,
+		lastError: null,
+		timestamps: {
+			...candidate.timestamps,
+			completedAt: allComplete ? now : candidate.timestamps.completedAt,
+		},
+	};
+	return ok(
+		touch(next, environment, {
+			operationId: input.operationId,
+			operationKind: "feature_complete",
+			featureRunId: session.activeFeatureRunId,
+			requestDigest,
+			recordedAt: now,
+			changedEntity: { kind: "feature", id: input.featureId },
+			changedFields: [
+				"reviewAssignments",
+				"budget.reviewExecutions",
+				"budget.reviewLifecycle",
+				"budget.reviewCount",
+				"causal.evidence",
+				"status",
+				"activeFeatureId",
+				"activeFeatureRunId",
+				"featureRuns",
+				"plan.features.status",
+				"history",
+				...(allComplete ? ["timestamps.completedAt"] : []),
+			],
+			evidenceRefs,
+		}),
+	);
 }
 
 function finalFeature(session: Session, featureId: FeatureId): boolean {
@@ -1457,957 +2405,6 @@ function finalFeature(session: Session, featureId: FeatureId): boolean {
 		(feature) => feature.id === featureId || feature.status === "completed",
 	);
 }
-
-function activeFeature(session: Session, featureId: FeatureId): Feature | null {
-	return (
-		session.plan?.features.find((feature) => feature.id === featureId) ?? null
-	);
-}
-
-function reviewDepthMeetsRequirement(
-	actual: FeatureReviewDepth,
-	required: FeatureReviewDepth,
-): boolean {
-	return (
-		FEATURE_REVIEW_DEPTH_RANK[actual] >= FEATURE_REVIEW_DEPTH_RANK[required]
-	);
-}
-
-function completionFailure<T>(
-	session: Session,
-	tool: string,
-	message: string,
-	recovery: string,
-	environment: TransitionEnvironment,
-	descriptor: MutationDescriptor = {},
-): TransitionResult<T> {
-	const now = environment.now();
-	return fail<T>(
-		message,
-		recovery,
-		touch(
-			{
-				...session,
-				lastError: {
-					tool,
-					summary: message,
-					recovery,
-					recordedAt: now,
-				},
-			},
-			environment,
-			{
-				...descriptor,
-				recordedAt: now,
-				changedFields: [...(descriptor.changedFields ?? []), "lastError"],
-			},
-		),
-	);
-}
-
-function validateCompletion(
-	session: Session,
-	worker: CompletedWorkerResult,
-	environment: TransitionEnvironment,
-	descriptor: MutationDescriptor = {},
-): TransitionResult<void> {
-	const wasFinal = finalFeature(session, worker.featureId);
-	const feature = activeFeature(session, worker.featureId);
-	const requiredReviewDepth = feature?.reviewDepth ?? "standard";
-	if (worker.validationRun.length === 0) {
-		return completionFailure(
-			session,
-			"flow_feature_complete",
-			"Completion requires recorded validation evidence.",
-			"Run the targeted or broad validation command and record the result.",
-			environment,
-			descriptor,
-		);
-	}
-	if (!worker.validationRun.every((item) => item.status === "passed")) {
-		return completionFailure(
-			session,
-			"flow_feature_complete",
-			"Completion requires all recorded validation to pass.",
-			"Fix failures, rerun validation, then complete the feature.",
-			environment,
-			descriptor,
-		);
-	}
-	if (!wasFinal && worker.validationScope !== "targeted") {
-		return completionFailure(
-			session,
-			"flow_feature_complete",
-			"Non-final feature completion requires targeted validation.",
-			"Record validationScope: targeted for ordinary feature completion.",
-			environment,
-			descriptor,
-		);
-	}
-	if (
-		!reviewDepthMeetsRequirement(worker.featureReviewDepth, requiredReviewDepth)
-	) {
-		return completionFailure(
-			session,
-			"flow_feature_complete",
-			`Feature review depth '${worker.featureReviewDepth}' does not meet the plan requirement '${requiredReviewDepth}'.`,
-			"Run the feature review at the planned depth or reset/replan if the depth is wrong.",
-			environment,
-			descriptor,
-		);
-	}
-	if (wasFinal && worker.validationScope !== "broad") {
-		return completionFailure(
-			session,
-			"flow_feature_complete",
-			"Final feature completion requires broad validation.",
-			"Run the project-level gate and record validationScope: broad.",
-			environment,
-			descriptor,
-		);
-	}
-	if (!isPassingReview(worker.featureReview)) {
-		return completionFailure(
-			session,
-			"flow_feature_complete",
-			"Completion requires a passing featureReview with no blocking findings.",
-			"Fix or acknowledge the review findings before completing.",
-			environment,
-			descriptor,
-		);
-	}
-	if (wasFinal) {
-		if (!worker.finalReview) {
-			return completionFailure(
-				session,
-				"flow_feature_complete",
-				"Final feature completion requires a finalReview.",
-				"Run final review and include the finalReview payload.",
-				environment,
-				descriptor,
-			);
-		}
-		if (!isPassingReview(worker.finalReview)) {
-			return completionFailure(
-				session,
-				"flow_feature_complete",
-				"Final completion requires a passing finalReview.",
-				"Resolve final review findings before completing the session.",
-				environment,
-				descriptor,
-			);
-		}
-		const policy = session.plan?.finalReviewPolicy ?? "detailed";
-		if (worker.finalReview.reviewDepth !== policy) {
-			return completionFailure(
-				session,
-				"flow_feature_complete",
-				`Final review depth must match the plan policy '${policy}'.`,
-				"Record a finalReview whose reviewDepth matches the approved plan.",
-				environment,
-				descriptor,
-			);
-		}
-	}
-	return ok(undefined);
-}
-
-function validationEvidenceFailure(
-	session: Session,
-	worker: CompletedWorkerResult,
-): { message: string; recovery: string } | null {
-	const evidence = session.causal.evidence.filter(
-		(record): record is Extract<EvidenceRecord, { kind: "validation" }> =>
-			record.kind === "validation" &&
-			record.snapshotId === session.causal.snapshotId,
-	);
-	if (evidence.length < worker.validationRun.length) {
-		return {
-			message: "Completion is missing source-bound validation evidence.",
-			recovery:
-				"Rerun every declared validation command and attach its canonical safe evidence record for the current snapshot.",
-		};
-	}
-	const expected = new Map<string, number>();
-	for (const run of worker.validationRun) {
-		const key = `${validationCommandClass(run.command)}:${run.status}`;
-		expected.set(key, (expected.get(key) ?? 0) + 1);
-	}
-	const observed = new Map<string, number>();
-	for (const record of evidence) {
-		const status = record.exitCode === 0 ? "passed" : "failed";
-		const key = `${record.commandClass}:${status}`;
-		observed.set(key, (observed.get(key) ?? 0) + 1);
-	}
-	if ([...expected].some(([key, count]) => (observed.get(key) ?? 0) < count)) {
-		return {
-			message:
-				"Validation summaries do not match the bound evidence command classes and exit codes.",
-			recovery:
-				"Do not rewrite validation summaries; rerun validation and submit evidence whose canonical digest and exit code match the result.",
-		};
-	}
-	return null;
-}
-
-function boundReviewEvidence(
-	session: Session,
-	executions: readonly ReviewExecution[],
-): Extract<EvidenceRecord, { kind: "review" }>[] {
-	const bound: Extract<EvidenceRecord, { kind: "review" }>[] = [];
-	for (const execution of executions) {
-		const evidence = session.causal.evidence.find(
-			(record): record is Extract<EvidenceRecord, { kind: "review" }> =>
-				record.kind === "review" &&
-				record.attemptId === execution.attemptId &&
-				record.snapshotId === session.causal.snapshotId,
-		);
-		if (evidence) bound.push(evidence);
-	}
-	return bound;
-}
-
-function reviewEvidenceFailure(
-	session: Session,
-	executions: readonly ReviewExecution[],
-): { message: string; recovery: string } | null {
-	for (const execution of executions) {
-		const evidence = session.causal.evidence.find(
-			(record): record is Extract<EvidenceRecord, { kind: "review" }> =>
-				record.kind === "review" && record.attemptId === execution.attemptId,
-		);
-		if (!evidence) {
-			return {
-				message: `Review execution '${execution.attemptId}' has no source-bound review evidence.`,
-				recovery:
-					"Attach the canonical review packet evidence for each latest logical review pass.",
-			};
-		}
-		if (
-			evidence.snapshotId !== session.causal.snapshotId ||
-			evidence.packetDigest !== execution.reviewSnapshotId
-		) {
-			return {
-				message: `Review execution '${execution.attemptId}' has stale or digest-mismatched evidence.`,
-				recovery:
-					"Rebuild the immutable review packet and rerun review against the current session snapshot.",
-			};
-		}
-	}
-	return null;
-}
-
-function incrementFailedReviewAttempt(
-	session: Session,
-	worker: CompletedWorkerResult,
-	review: Review,
-	reviewKind: "feature" | "final",
-	environment: TransitionEnvironment,
-): {
-	session: Session;
-	attempts: number;
-	exhausted: boolean;
-} {
-	const budget = cloneBudgetTelemetry(session);
-	const attempts = budget.failedReviewAttemptsByFeature[worker.featureId] ?? 0;
-	const exhausted = attempts >= MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE;
-	const nextBudget = budget;
-	if (!exhausted) {
-		return {
-			session: { ...session, budget: nextBudget },
-			attempts,
-			exhausted,
-		};
-	}
-	const entry = historyEntryFor(
-		worker,
-		"blocked",
-		environment,
-		{
-			kind: "blocked",
-			summary: review.summary,
-			resolutionHint:
-				"Report the review blocker and wait for explicit reset, replan, or repair approval.",
-		},
-		`${reviewKind === "final" ? "Final review" : "Feature review"} failed after ${attempts} attempts: ${review.summary}`,
-	);
-	return {
-		session: {
-			...session,
-			status: "blocked",
-			activeFeatureId: null,
-			plan: session.plan
-				? {
-						...session.plan,
-						features: updateFeature(
-							session.plan.features,
-							worker.featureId,
-							"blocked",
-						),
-					}
-				: session.plan,
-			history: appendHistory(session.history, entry),
-			budget: nextBudget,
-		},
-		attempts,
-		exhausted,
-	};
-}
-
-function failedReviewCompletion<T>(
-	delta: CompletionDelta,
-	worker: CompletedWorkerResult,
-	review: Review,
-	reviewKind: "feature" | "final",
-	environment: TransitionEnvironment,
-): TransitionResult<T> {
-	const failedReview = incrementFailedReviewAttempt(
-		delta.session,
-		worker,
-		review,
-		reviewKind,
-		environment,
-	);
-	const failedDelta = advanceCompletionDelta(
-		delta,
-		failedReview.session,
-		failedReview.exhausted
-			? ["status", "activeFeatureId", "plan.features.status", "history"]
-			: [],
-	);
-	const reviewName = reviewKind === "final" ? "finalReview" : "featureReview";
-	return completionFailure(
-		failedDelta.session,
-		"flow_feature_complete",
-		failedReview.exhausted
-			? "Review retry budget exhausted for this feature."
-			: `Completion requires a passing ${reviewName} with no blocking findings.`,
-		failedReview.exhausted
-			? "Stop and report the remaining review blocker. Reset or replan only after explicit user direction."
-			: `Pause and report the review blocker. If autonomous repair was explicitly authorized, make at most one repair and retry once; this was failed review attempt ${failedReview.attempts}/${MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE}.`,
-		environment,
-		completionMutationDescriptor(worker, failedDelta),
-	);
-}
-
-function clearFailedReviewAttempts(
-	budget: BudgetTelemetry,
-	featureId: FeatureId,
-): BudgetTelemetry {
-	const { [featureId]: _cleared, ...remainingAttempts } =
-		budget.failedReviewAttemptsByFeature;
-	return {
-		...budget,
-		failedReviewAttemptsByFeature: remainingAttempts,
-	};
-}
-
-function completionBudget(
-	session: Session,
-	worker: CompletedWorkerResult,
-): BudgetTelemetry {
-	const budget = clearFailedReviewAttempts(
-		cloneBudgetTelemetry(session),
-		worker.featureId,
-	);
-	const reviewCount = budget.reviewCount + (worker.finalReview ? 2 : 1);
-	return {
-		...budget,
-		reviewCount,
-	};
-}
-
-type CompletionChangedField =
-	| "activeFeatureId"
-	| "budget.failedReviewAttemptsByFeature"
-	| "budget.failedReviewCount"
-	| "budget.orchestration"
-	| "budget.reviewCount"
-	| "budget.reviewExecutions"
-	| "budget.reviewLifecycle"
-	| "causal.evidence"
-	| "closure"
-	| "history"
-	| "lastError"
-	| "plan.features.status"
-	| "status"
-	| "timestamps.completedAt";
-
-type CompletionDelta = Readonly<{
-	session: Session;
-	changedFields: readonly CompletionChangedField[];
-	appendedReviewAttemptIds: readonly string[];
-	newEvidenceIds: readonly EvidenceId[];
-}>;
-
-function uniqueCompletionFields(
-	fields: readonly CompletionChangedField[],
-): CompletionChangedField[] {
-	return [...new Set(fields)];
-}
-
-function advanceCompletionDelta(
-	delta: CompletionDelta,
-	session: Session,
-	changedFields: readonly CompletionChangedField[],
-	appendedReviewAttemptIds: readonly string[] = [],
-	newEvidenceIds: readonly EvidenceId[] = [],
-): CompletionDelta {
-	return {
-		session,
-		changedFields: uniqueCompletionFields([
-			...delta.changedFields,
-			...changedFields,
-		]),
-		appendedReviewAttemptIds: [
-			...delta.appendedReviewAttemptIds,
-			...appendedReviewAttemptIds,
-		],
-		newEvidenceIds: [...delta.newEvidenceIds, ...newEvidenceIds],
-	};
-}
-
-function completionOperationDescriptor(
-	worker: WorkerResult,
-): MutationDescriptor & {
-	operationKind: "feature_complete";
-	requestDigest: string;
-} {
-	return {
-		operationId: worker.operationId,
-		operationKind: "feature_complete",
-		requestDigest:
-			worker.requestDigest ??
-			canonicalOperationRequestDigest("feature_complete", worker),
-	};
-}
-
-function completionMutationDescriptor(
-	worker: WorkerResult,
-	delta: CompletionDelta,
-	additionalFields: readonly CompletionChangedField[] = [],
-): MutationDescriptor & {
-	operationKind: "feature_complete";
-	requestDigest: string;
-} {
-	return {
-		...completionOperationDescriptor(worker),
-		changedEntity: { kind: "feature", id: worker.featureId },
-		changedFields: uniqueCompletionFields([
-			...delta.changedFields,
-			...additionalFields,
-		]),
-		evidenceRefs: [...delta.newEvidenceIds],
-	};
-}
-
-export function completeFeature(
-	session: Session,
-	worker: WorkerResult,
-	environment: TransitionEnvironment,
-): TransitionResult<Session> {
-	const preflight = causalPreflight<Session>(session);
-	if (preflight) return preflight;
-	if (!worker.operationId) {
-		return fail(
-			"Completion requires a stable operationId.",
-			"Generate one operation identity and reuse it only when replaying the exact same completion.",
-			session,
-		);
-	}
-	const completionOperation = completionOperationDescriptor(worker);
-	const replay = operationReplay(
-		session,
-		worker.operationId,
-		"feature_complete",
-		completionOperation.requestDigest,
-	);
-	if (!replay.ok) return replay;
-	if (replay.value === "replay") {
-		const replayedOperation = session.causal.mutations.find(
-			(mutation) => mutation.operationId === worker.operationId,
-		);
-		if (!replayedOperation) {
-			return fail(
-				`Operation '${worker.operationId}' could not be resolved from causal history.`,
-				"Preserve the session and use the existing quarantine/recovery path; do not rewrite causal history.",
-				session,
-			);
-		}
-		return replayedOperation.changedFields.includes("lastError")
-			? fail(
-					`Operation '${worker.operationId}' was already recorded as a rejected completion.`,
-					"Use the existing receipt; use a new operationId only for a new attempt against current status.",
-					session,
-				)
-			: ok(session);
-	}
-	const pendingArchive = pendingArchiveFailure<Session>(session);
-	if (pendingArchive) return pendingArchive;
-	if (
-		!session.plan ||
-		session.status !== "running" ||
-		!session.activeFeatureId
-	) {
-		return fail("No feature is currently running.");
-	}
-	if (worker.featureId !== session.activeFeatureId) {
-		return fail(
-			`Worker result feature '${worker.featureId}' does not match active feature '${session.activeFeatureId}'.`,
-		);
-	}
-	if (
-		worker.expectedRevision === undefined ||
-		worker.expectedSnapshotId === undefined
-	) {
-		return fail(
-			"Completion requires expectedRevision and expectedSnapshotId causal guards.",
-			"Reload compact status and retry with its exact revision and snapshot identity.",
-			session,
-		);
-	}
-	if (
-		worker.expectedRevision !== session.causal.revision ||
-		worker.expectedSnapshotId !== session.causal.snapshotId
-	) {
-		return fail(
-			"Completion evidence is stale for the current session revision or snapshot.",
-			"Reload compact status, rerun source-bound evidence, and retry against the current causal identity.",
-			session,
-		);
-	}
-	const sessionWithPasses = sessionWithOrchestrationPasses(
-		session,
-		worker.orchestrationPasses,
-	);
-	let completionDelta: CompletionDelta = {
-		session: sessionWithPasses,
-		changedFields:
-			sessionWithPasses.budget.orchestration.passCount !==
-			session.budget.orchestration.passCount
-				? ["budget.orchestration"]
-				: [],
-		appendedReviewAttemptIds: [],
-		newEvidenceIds: [],
-	};
-	const completionDescriptor = (
-		additionalFields: readonly CompletionChangedField[] = [],
-	) => completionMutationDescriptor(worker, completionDelta, additionalFields);
-	const reviewExecutions = worker.reviewExecutions ?? [];
-	if (
-		reviewExecutions.some(
-			(execution) => execution.featureId !== worker.featureId,
-		)
-	) {
-		return completionFailure(
-			completionDelta.session,
-			"flow_feature_complete",
-			"Review execution evidence does not match the active feature.",
-			"Submit only review executions for the active feature in this completion attempt.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-	const recordedReviews = appendReviewExecutions(
-		completionDelta.session,
-		reviewExecutions,
-	);
-	if (!recordedReviews.ok) {
-		return completionFailure(
-			completionDelta.session,
-			"flow_feature_complete",
-			recordedReviews.message,
-			recordedReviews.recovery ??
-				"Use a new attemptId for a distinct review execution.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-	const appendedReviewAttemptIds = [
-		...recordedReviews.value.appendedAttemptIds,
-	];
-	const appendedFailedReview = reviewExecutions.some(
-		(execution) =>
-			recordedReviews.value.appendedAttemptIds.has(execution.attemptId) &&
-			execution.verdict === "failed",
-	);
-	completionDelta = advanceCompletionDelta(
-		completionDelta,
-		recordedReviews.value.session,
-		appendedReviewAttemptIds.length > 0
-			? [
-					"budget.reviewExecutions",
-					"budget.reviewLifecycle",
-					...(appendedFailedReview
-						? ([
-								"budget.failedReviewCount",
-								"budget.failedReviewAttemptsByFeature",
-							] as const)
-						: []),
-				]
-			: [],
-		appendedReviewAttemptIds,
-	);
-	const mergedEvidence = appendEvidenceForCompletion(
-		completionDelta.session,
-		worker.evidence ?? [],
-	);
-	if (!mergedEvidence.ok) {
-		return completionFailure(
-			completionDelta.session,
-			"flow_feature_complete",
-			mergedEvidence.message,
-			mergedEvidence.recovery ??
-				"Regenerate safe evidence against the current snapshot.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-	const newEvidenceIds = [...mergedEvidence.value.appendedEvidenceIds];
-	completionDelta = advanceCompletionDelta(
-		completionDelta,
-		mergedEvidence.value.session,
-		newEvidenceIds.length > 0 ? ["causal.evidence"] : [],
-		[],
-		newEvidenceIds,
-	);
-	const sessionWithBoundEvidence = completionDelta.session;
-	const currentSnapshotEvidence =
-		sessionWithBoundEvidence.causal.evidence.filter(
-			(evidence) =>
-				evidence.snapshotId === sessionWithBoundEvidence.causal.snapshotId,
-		);
-	const currentSourceDigests = new Set(
-		currentSnapshotEvidence.map((evidence) => evidence.sourceDigest),
-	);
-	if (currentSourceDigests.size > 1) {
-		return completionFailure(
-			sessionWithBoundEvidence,
-			"flow_feature_complete",
-			"Completion evidence refers to multiple source-state digests.",
-			"Rerun validation and review on one immutable source/worktree state.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-	const contradictorySnapshotId = contradictoryReviewSnapshot(
-		sessionWithBoundEvidence.budget.reviewExecutions,
-	);
-	if (contradictorySnapshotId) {
-		return completionFailure(
-			sessionWithBoundEvidence,
-			"flow_feature_complete",
-			`Review snapshot '${contradictorySnapshotId}' has contradictory terminal verdicts from distinct logical passes.`,
-			"Reconcile the review passes on one immutable snapshot before completing the feature.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-
-	if (worker.status === "needs_input") {
-		const entry = historyEntryFor(worker, "needs_input", environment);
-		const budget = cloneBudgetTelemetry(sessionWithBoundEvidence);
-		return ok(
-			touch(
-				{
-					...sessionWithBoundEvidence,
-					status: "blocked",
-					activeFeatureId: null,
-					plan: {
-						...session.plan,
-						features: updateFeature(
-							session.plan.features,
-							worker.featureId,
-							"blocked",
-						),
-					},
-					history: appendHistory(sessionWithBoundEvidence.history, entry),
-					budget,
-					lastError: null,
-				},
-				environment,
-				{
-					...completionDescriptor([
-						"status",
-						"plan.features.status",
-						"history",
-						"activeFeatureId",
-						...(sessionWithBoundEvidence.lastError
-							? (["lastError"] as const)
-							: []),
-					]),
-					blockerDelta: { added: [worker.outcome.summary], removed: [] },
-				},
-			),
-		);
-	}
-	const featureTruth = latestReviewTruth(
-		sessionWithBoundEvidence.budget.reviewExecutions,
-		worker.featureId,
-		"feature",
-	);
-	const failedFeatureTruth = featureTruth.find(
-		(execution) => execution.verdict === "failed",
-	);
-	const featureEvidenceFailure = reviewEvidenceFailure(
-		sessionWithBoundEvidence,
-		featureTruth,
-	);
-	if (featureEvidenceFailure) {
-		return completionFailure(
-			sessionWithBoundEvidence,
-			"flow_feature_complete",
-			featureEvidenceFailure.message,
-			featureEvidenceFailure.recovery,
-			environment,
-			completionDescriptor(),
-		);
-	}
-
-	if (!isPassingReview(worker.featureReview)) {
-		if (!failedFeatureTruth) {
-			return completionFailure(
-				sessionWithBoundEvidence,
-				"flow_feature_complete",
-				"The failed featureReview has no matching failed review execution.",
-				"Record the observed failed review execution with a distinct attemptId before retrying completion.",
-				environment,
-				completionDescriptor(),
-			);
-		}
-		return failedReviewCompletion(
-			completionDelta,
-			worker,
-			worker.featureReview,
-			"feature",
-			environment,
-		);
-	}
-	if (featureTruth.length === 0) {
-		return completionFailure(
-			sessionWithBoundEvidence,
-			"flow_feature_complete",
-			"Completion requires a recorded feature review execution.",
-			"Include the observed feature review attempt and immutable reviewSnapshotId; summary review fields are not execution evidence.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-	if (failedFeatureTruth) {
-		return completionFailure(
-			sessionWithBoundEvidence,
-			"flow_feature_complete",
-			`Feature review execution '${failedFeatureTruth.attemptId}' remains failed.`,
-			"Record a passing retry under the same logicalPassId before claiming a passing featureReview.",
-			environment,
-			completionDescriptor(),
-		);
-	}
-	const validationEvidenceError = validationEvidenceFailure(
-		sessionWithBoundEvidence,
-		worker,
-	);
-	if (validationEvidenceError) {
-		return completionFailure(
-			sessionWithBoundEvidence,
-			"flow_feature_complete",
-			validationEvidenceError.message,
-			validationEvidenceError.recovery,
-			environment,
-			completionDescriptor(),
-		);
-	}
-
-	const isFinalFeature = finalFeature(
-		sessionWithBoundEvidence,
-		worker.featureId,
-	);
-	if (isFinalFeature && worker.finalReview) {
-		const finalTruth = latestReviewTruth(
-			sessionWithBoundEvidence.budget.reviewExecutions,
-			worker.featureId,
-			"final",
-		);
-		const failedFinalTruth = finalTruth.find(
-			(execution) => execution.verdict === "failed",
-		);
-		const finalEvidenceFailure = reviewEvidenceFailure(
-			sessionWithBoundEvidence,
-			finalTruth,
-		);
-		if (finalEvidenceFailure) {
-			return completionFailure(
-				sessionWithBoundEvidence,
-				"flow_feature_complete",
-				finalEvidenceFailure.message,
-				finalEvidenceFailure.recovery,
-				environment,
-				completionDescriptor(),
-			);
-		}
-		if (!isPassingReview(worker.finalReview)) {
-			if (!failedFinalTruth) {
-				return completionFailure(
-					sessionWithBoundEvidence,
-					"flow_feature_complete",
-					"The failed finalReview has no matching failed review execution.",
-					"Record the observed failed final review execution with a distinct attemptId before retrying completion.",
-					environment,
-					completionDescriptor(),
-				);
-			}
-			return failedReviewCompletion(
-				completionDelta,
-				worker,
-				worker.finalReview,
-				"final",
-				environment,
-			);
-		}
-		if (finalTruth.length === 0) {
-			return completionFailure(
-				sessionWithBoundEvidence,
-				"flow_feature_complete",
-				"Final completion requires a recorded final review execution.",
-				"Run final review after the passing feature review and record its immutable review execution before completion.",
-				environment,
-				completionDescriptor(),
-			);
-		}
-		if (failedFinalTruth) {
-			return completionFailure(
-				sessionWithBoundEvidence,
-				"flow_feature_complete",
-				`Final review execution '${failedFinalTruth.attemptId}' remains failed.`,
-				"Record a passing retry under the same logicalPassId before claiming a passing finalReview.",
-				environment,
-				completionDescriptor(),
-			);
-		}
-		const latestFeatureCompletion = Math.max(
-			...featureTruth.map((execution) => Date.parse(execution.completedAt)),
-		);
-		const prematureFinal = finalTruth.find(
-			(execution) => Date.parse(execution.startedAt) < latestFeatureCompletion,
-		);
-		if (prematureFinal) {
-			return completionFailure(
-				sessionWithBoundEvidence,
-				"flow_feature_complete",
-				`Final review execution '${prematureFinal.attemptId}' started before feature review passed.`,
-				"Economy mode requires a passing feature review before final review begins.",
-				environment,
-				completionDescriptor(),
-			);
-		}
-		// Cross-check the bound review *evidence* chronology, not just the execution
-		// timestamps: final-review evidence must not predate the feature-review
-		// evidence it follows, even when the two agree at the execution level.
-		const featureEvidenceCompletions = boundReviewEvidence(
-			sessionWithBoundEvidence,
-			featureTruth,
-		).map((evidence) => Date.parse(evidence.completedAt));
-		const latestFeatureEvidenceCompletion =
-			featureEvidenceCompletions.length > 0
-				? Math.max(...featureEvidenceCompletions)
-				: latestFeatureCompletion;
-		const prematureFinalEvidence = boundReviewEvidence(
-			sessionWithBoundEvidence,
-			finalTruth,
-		).find(
-			(evidence) =>
-				Date.parse(evidence.startedAt) < latestFeatureEvidenceCompletion,
-		);
-		if (prematureFinalEvidence) {
-			return completionFailure(
-				sessionWithBoundEvidence,
-				"flow_feature_complete",
-				`Final review evidence '${prematureFinalEvidence.evidenceId}' predates the feature review it follows.`,
-				"Final review must run after the passing feature review; rebuild its evidence against the current source state.",
-				environment,
-				completionDescriptor(),
-			);
-		}
-	}
-
-	const validation = validateCompletion(
-		sessionWithBoundEvidence,
-		worker,
-		environment,
-		completionDescriptor(),
-	);
-	if (!validation.ok) return validation;
-
-	const entry = historyEntryFor(worker, "completed", environment);
-	const features = updateFeature(
-		session.plan.features,
-		worker.featureId,
-		"completed",
-	);
-	const allComplete = features.every(
-		(feature) => feature.status === "completed",
-	);
-	const now = environment.now();
-	const hadFailedReviewAttempts = Object.hasOwn(
-		session.budget.failedReviewAttemptsByFeature,
-		worker.featureId,
-	);
-	completionDelta = {
-		...completionDelta,
-		changedFields: completionDelta.changedFields.filter(
-			(field) => field !== "budget.failedReviewAttemptsByFeature",
-		),
-	};
-	const budget = completionBudget(sessionWithBoundEvidence, worker);
-	return ok(
-		touch(
-			{
-				...sessionWithBoundEvidence,
-				status: allComplete ? "completed" : "ready",
-				activeFeatureId: null,
-				plan: { ...session.plan, features },
-				history: appendHistory(sessionWithBoundEvidence.history, entry),
-				budget,
-				closure: allComplete
-					? { kind: "completed", summary: worker.summary, recordedAt: now }
-					: null,
-				lastError: null,
-				timestamps: {
-					...sessionWithBoundEvidence.timestamps,
-					completedAt: allComplete
-						? now
-						: sessionWithBoundEvidence.timestamps.completedAt,
-				},
-			},
-			environment,
-			{
-				...completionDescriptor([
-					"status",
-					"plan.features.status",
-					"activeFeatureId",
-					"history",
-					"budget.reviewCount",
-					...(hadFailedReviewAttempts
-						? (["budget.failedReviewAttemptsByFeature"] as const)
-						: []),
-					...(allComplete ? (["closure"] as const) : []),
-					...(sessionWithBoundEvidence.lastError
-						? (["lastError"] as const)
-						: []),
-					...(allComplete ? (["timestamps.completedAt"] as const) : []),
-				]),
-				recordedAt: now,
-				blockerDelta: {
-					added: [],
-					removed: sessionWithBoundEvidence.lastError
-						? [sessionWithBoundEvidence.lastError.summary]
-						: [],
-				},
-			},
-		),
-	);
-}
-
 function dependentFeatureIds(
 	features: Feature[],
 	featureId: FeatureId,
@@ -2490,6 +2487,13 @@ export function resetFeature(
 	);
 	if (!checkedGuard.ok) return checkedGuard;
 	if (checkedGuard.value === "replay") return ok(session);
+	if (session.status === "completed") {
+		return fail(
+			"A completed Flow session cannot be reset.",
+			"Close and archive it with flow_session_close before starting another goal.",
+			session,
+		);
+	}
 	if (!session.plan) return fail("There is no active plan to reset.");
 	if (!session.plan.features.some((feature) => feature.id === featureId)) {
 		return fail(`Feature '${featureId}' is not in the plan.`);
@@ -2499,18 +2503,39 @@ export function resetFeature(
 		session.activeFeatureId && affected.has(session.activeFeatureId)
 			? null
 			: session.activeFeatureId;
+	const resetActiveRun = activeFeatureId !== session.activeFeatureId;
+	const activeFeatureRunId = resetActiveRun ? null : session.activeFeatureRunId;
+	const resetAt = environment.now();
+	const featureRuns = resetActiveRun
+		? closeFeatureRun(
+				session.featureRuns,
+				session.activeFeatureRunId,
+				"reset",
+				resetAt,
+			)
+		: [...session.featureRuns];
+	const reviewAssignments = session.reviewAssignments.map((assignment) =>
+		resetActiveRun &&
+		assignment.featureRunId === session.activeFeatureRunId &&
+		assignment.status === "pending"
+			? {
+					...assignment,
+					status: "invalidated" as const,
+					completedAt: null,
+					invalidatedAt: resetAt,
+					invalidationReason: "feature_reset" as const,
+				}
+			: assignment,
+	);
+	const invalidatedAssignments = reviewAssignments.some(
+		(assignment, index) => assignment !== session.reviewAssignments[index],
+	);
 	const nextFeatures = session.plan.features.map((feature) =>
 		affected.has(feature.id)
 			? { ...feature, status: "pending" as const }
 			: feature,
 	);
 	const budget = cloneBudgetTelemetry(session);
-	const failedReviewAttemptsByFeature = {
-		...budget.failedReviewAttemptsByFeature,
-	};
-	for (const featureIdToClear of affected) {
-		delete failedReviewAttemptsByFeature[featureIdToClear];
-	}
 	const nextStatus =
 		session.approval !== "approved"
 			? "planning"
@@ -2525,28 +2550,37 @@ export function resetFeature(
 				...session,
 				status: nextStatus,
 				activeFeatureId,
+				activeFeatureRunId,
+				featureRuns,
+				reviewAssignments,
 				plan: {
 					...session.plan,
 					features: nextFeatures,
 				},
 				budget: {
 					...budget,
-					failedReviewAttemptsByFeature,
 				},
-				lastError: null,
+				lastError: nextStatus === "blocked" ? session.lastError : null,
 				timestamps: { ...session.timestamps, completedAt: null },
 			},
 			environment,
 			{
 				operationId: guard?.operationId,
 				operationKind: "feature_reset",
+				featureRunId: session.activeFeatureRunId,
 				requestDigest,
+				recordedAt: resetAt,
 				changedEntity: { kind: "feature", id: featureId },
 				changedFields: [
 					"status",
 					"plan.features.status",
 					"activeFeatureId",
-					"budget.failedReviewAttemptsByFeature",
+					"activeFeatureRunId",
+					"featureRuns",
+					...(session.lastError && nextStatus !== "blocked"
+						? ["lastError"]
+						: []),
+					...(invalidatedAssignments ? ["reviewAssignments"] : []),
 				],
 				blockerDelta: { added: [], removed: [...affected] },
 			},
@@ -2561,7 +2595,15 @@ export function closeSession(
 	summary?: string,
 	guard?: CausalGuard,
 ): TransitionResult<Session> {
+	if (session.closure) {
+		return fail(
+			"Session closure is already recorded; a new or repeated start request cannot adopt it.",
+			`Retry flow_session_close { request: { mode: "retry", operationId: "${session.closure.retryOperationId}" } }.`,
+			session,
+		);
+	}
 	const requestDigest = canonicalOperationRequestDigest("session_close", {
+		mode: "start",
 		kind,
 		summary,
 		expectedRevision: guard?.expectedRevision,
@@ -2576,7 +2618,21 @@ export function closeSession(
 	);
 	if (!checkedGuard.ok) return checkedGuard;
 	if (checkedGuard.value === "replay") return ok(session);
-	if (session.closure) return ok(session);
+	const retryOperationId = guard?.operationId;
+	if (!retryOperationId) {
+		return fail(
+			"Session close requires a durable retry operation id.",
+			"Reload compact status and start closure with complete causal guards.",
+			session,
+		);
+	}
+	if (session.status === "completed" && kind !== "completed") {
+		return fail(
+			"A completed Flow session must close as completed.",
+			"Retry with kind 'completed' so canonical history preserves the delivered outcome.",
+			session,
+		);
+	}
 	if (kind === "completed") {
 		if (!session.plan || session.approval !== "approved") {
 			return fail(
@@ -2597,34 +2653,80 @@ export function closeSession(
 				"Cannot close a Flow session as completed before final completion gates pass.",
 			);
 		}
+		if (
+			session.activeFeatureId ||
+			session.activeFeatureRunId ||
+			session.reviewAssignments.some(
+				(assignment) => assignment.status === "pending",
+			)
+		) {
+			return fail(
+				"A completed close requires quiescent completed session state.",
+				"Finish final completion before closing the session as completed.",
+				session,
+			);
+		}
 	}
 	const closureSummary = summary ?? `Session closed as ${kind}.`;
 	const now = environment.now();
+	const activeFeatureRunId = session.activeFeatureRunId;
+	const invalidationReason =
+		kind === "deferred"
+			? ("session_deferred" as const)
+			: ("session_abandoned" as const);
+	const reviewAssignments =
+		kind === "completed"
+			? [...session.reviewAssignments]
+			: session.reviewAssignments.map((assignment) =>
+					assignment.status === "pending"
+						? {
+								...assignment,
+								status: "invalidated" as const,
+								completedAt: null,
+								invalidatedAt: now,
+								invalidationReason,
+							}
+						: assignment,
+				);
 	return ok(
 		touch(
 			{
 				...session,
 				status: kind === "completed" ? "completed" : session.status,
 				activeFeatureId: null,
+				activeFeatureRunId: null,
+				featureRuns: activeFeatureRunId
+					? closeFeatureRun(session.featureRuns, activeFeatureRunId, kind, now)
+					: [...session.featureRuns],
+				reviewAssignments,
 				closure: {
 					kind,
 					summary: closureSummary,
 					recordedAt: now,
-				},
-				timestamps: {
-					...session.timestamps,
-					completedAt:
-						kind === "completed" ? now : session.timestamps.completedAt,
+					retryOperationId,
 				},
 			},
 			environment,
 			{
 				operationId: guard?.operationId,
 				operationKind: "session_close",
+				featureRunId: activeFeatureRunId,
 				requestDigest,
 				recordedAt: now,
 				changedEntity: { kind: "closure", id: session.id },
-				changedFields: ["closure", "activeFeatureId", "status"],
+				changedFields: [
+					"closure",
+					...(session.activeFeatureId ? ["activeFeatureId"] : []),
+					...(session.activeFeatureRunId
+						? ["activeFeatureRunId", "featureRuns"]
+						: []),
+					...(reviewAssignments.some(
+						(assignment, index) =>
+							assignment !== session.reviewAssignments[index],
+					)
+						? ["reviewAssignments"]
+						: []),
+				],
 			},
 		),
 	);
@@ -2649,7 +2751,7 @@ function nextAction(session: Session): string {
 	if (session.status === "blocked")
 		return "Reset the blocked feature or close the session.";
 	if (session.status === "completed")
-		return "Close/archive the session or start a new goal.";
+		return "Call flow_session_close to archive the completed session before starting a new goal.";
 	return "Inspect session state.";
 }
 
@@ -2703,12 +2805,14 @@ function buildExecutionProjection(
 	goal: string,
 	plan: Plan,
 	feature: Feature,
+	featureRunId: FeatureRunId | undefined,
 	isFinalFeature: boolean,
 	expectedRevision: number,
 	expectedSnapshotId: SnapshotId,
 ): ExecutionProjection {
 	return {
 		view: "execution",
+		...(featureRunId ? { featureRunId } : {}),
 		goal,
 		plan: {
 			summary: plan.summary,
@@ -2740,6 +2844,7 @@ function planExecutionBudgetFailure(goal: string, plan: Plan): string | null {
 				goal,
 				plan,
 				feature,
+				undefined,
 				isFinalFeature,
 				MAX_EXECUTION_REVISION,
 				MAX_EXECUTION_SNAPSHOT_ID,
@@ -2788,6 +2893,7 @@ export function compactSessionProjection(session: Session) {
 		approval: session.approval,
 		revision: session.causal.revision,
 		snapshotId: session.causal.snapshotId,
+		featureRunId: session.activeFeatureRunId,
 		feature: canonicalFeature
 			? {
 					id: canonicalFeature.id,
@@ -2811,7 +2917,12 @@ export function compactSessionProjection(session: Session) {
 				? boundedText(session.lastError.summary, 240)
 				: null,
 		},
-		closure: session.closure ? { kind: session.closure.kind } : null,
+		closure: session.closure
+			? {
+					kind: session.closure.kind,
+					retryOperationId: session.closure.retryOperationId,
+				}
+			: null,
 		nextAction: boundedText(nextAction(session), 240),
 	};
 }
@@ -2844,6 +2955,7 @@ export function executionSessionProjection(
 		session.goal,
 		session.plan,
 		feature,
+		session.activeFeatureRunId ?? undefined,
 		finalFeature(session, feature.id),
 		session.causal.revision,
 		session.causal.snapshotId,
@@ -2859,9 +2971,36 @@ export function executionSessionProjection(
 }
 
 export function detailSessionProjection(session: Session) {
+	const recoverableFinalAssignment = session.reviewAssignments.findLast(
+		(assignment) =>
+			assignment.featureRunId === session.activeFeatureRunId &&
+			assignment.reviewKind === "final" &&
+			assignment.prerequisite !== null &&
+			session.reviewAssignments.some(
+				(prerequisiteAssignment) =>
+					prerequisiteAssignment.id === assignment.prerequisite?.assignmentId &&
+					prerequisiteAssignment.status === "pending",
+			),
+	);
+	const recoverablePrerequisite = recoverableFinalAssignment?.prerequisite;
 	return {
 		view: "detail" as const,
 		compact: compactSessionProjection(session),
+		finalReviewRetry:
+			recoverableFinalAssignment && recoverablePrerequisite
+				? {
+						finalReviewAssignmentId: recoverableFinalAssignment.id,
+						featureRunId: recoverableFinalAssignment.featureRunId,
+						sourceDigest: recoverableFinalAssignment.sourceDigest,
+						prerequisite: {
+							assignmentId: recoverablePrerequisite.assignmentId,
+							result: cloneReviewAssignmentResult(
+								recoverablePrerequisite.result,
+							),
+							resultDigest: recoverablePrerequisite.resultDigest,
+						},
+					}
+				: null,
 		plan: session.plan
 			? {
 					summary: boundedText(session.plan.summary, 1000),
@@ -2881,14 +3020,69 @@ export function detailSessionProjection(session: Session) {
 				}
 			: null,
 		history: session.history.map((entry) => ({
+			featureRunId: entry.featureRunId,
 			featureId: entry.featureId,
 			status: entry.status,
 			summary: boundedText(entry.summary, 500),
 			recordedAt: entry.recordedAt,
-			validation: entry.validationRun.map((run) => ({
-				status: run.status,
-				summary: boundedText(run.summary, 300),
-			})),
+			validationScope: entry.validationScope,
+			validation: entry.validationEvidenceRefs.flatMap((reference) => {
+				const evidence = session.causal.evidence.find(
+					(candidate) =>
+						candidate.kind === "validation" &&
+						candidate.evidenceId === reference,
+				);
+				return evidence?.kind === "validation"
+					? [
+							{
+								evidenceId: evidence.evidenceId,
+								commandClass: evidence.commandClass,
+								status: evidence.exitCode === 0 ? "passed" : "failed",
+								completedAt: evidence.completedAt,
+							},
+						]
+					: [];
+			}),
+			reviews: entry.reviewAssignmentIds.flatMap((assignmentId) => {
+				const assignment = session.reviewAssignments.find(
+					(candidate) => candidate.id === assignmentId,
+				);
+				if (!assignment) return [];
+				const execution = session.budget.reviewExecutions.find(
+					(candidate) => candidate.assignmentId === assignmentId,
+				);
+				return [
+					{
+						assignmentId,
+						reviewKind: assignment.reviewKind,
+						requiredDepth: assignment.requiredDepth,
+						status: assignment.status,
+						verdict: execution?.verdict ?? null,
+						blockingFindingCount:
+							execution?.findings.filter(
+								(finding) => finding.severity === "blocking",
+							).length ?? 0,
+					},
+				];
+			}),
+		})),
+		featureRuns: session.featureRuns.map((run) => ({ ...run })),
+		reviewAssignments: session.reviewAssignments.map((assignment) => ({
+			id: assignment.id,
+			featureRunId: assignment.featureRunId,
+			featureId: assignment.featureId,
+			reviewKind: assignment.reviewKind,
+			status: assignment.status,
+			startedAt: assignment.startedAt,
+			completedAt: assignment.completedAt,
+			invalidatedAt: assignment.invalidatedAt,
+			invalidationReason: assignment.invalidationReason,
+			prerequisite: assignment.prerequisite
+				? {
+						assignmentId: assignment.prerequisite.assignmentId,
+						resultDigest: assignment.prerequisite.resultDigest,
+					}
+				: null,
 		})),
 		causal: {
 			revision: session.causal.revision,
@@ -2903,82 +3097,51 @@ export function reviewerSessionProjection(
 	session: Session,
 	request: ReviewerProjectionRequest,
 ): TransitionResult<ReviewerProjection> {
-	if (
-		(request.expectedRevision !== undefined &&
-			request.expectedRevision !== session.causal.revision) ||
-		(request.expectedSnapshotId !== undefined &&
-			request.expectedSnapshotId !== session.causal.snapshotId)
-	) {
-		return fail(
-			"Reviewer assignment is stale for the current revision or snapshot.",
-			"Regenerate the review packet and reviewer projection from compact status.",
-		);
-	}
-	if (
-		!isSha256Digest(request.packetHash) ||
-		request.evidenceRefs.some((reference) => !isSha256Digest(reference))
-	) {
-		return fail(
-			"Reviewer projection requires canonical packet and evidence digests.",
-			"Build the reviewer packet from immutable hash-addressed artifacts.",
-		);
-	}
-	if (!session.plan || session.approval !== "approved") {
-		return fail(
-			"Reviewer assignment requires an approved Flow plan.",
-			"Approve the plan before assigning feature or final review.",
-		);
-	}
-	const feature = session.plan.features.find(
-		(candidate) => candidate.id === request.featureId,
+	const assignment = session.reviewAssignments.find(
+		(candidate) => candidate.id === request.assignmentId,
 	);
-	if (!feature)
-		return fail(`Feature '${request.featureId}' is not in the plan.`);
-	if (
-		session.activeFeatureId !== feature.id ||
-		feature.status !== "in_progress"
-	) {
+	if (!assignment) {
 		return fail(
-			`Feature '${request.featureId}' is not the active in-progress feature.`,
-			"Start the approved feature before assigning its review.",
+			`Review assignment '${request.assignmentId}' was not found.`,
+			"Use the exact assignmentId returned by flow_review_start.",
 		);
 	}
-	const common = {
-		view: "reviewer",
-		featureId: feature.id,
-		packetHash: boundedText(request.packetHash, 80),
-		evidenceRefs: boundedStrings(request.evidenceRefs, 8, 80),
-		expectedRevision: session.causal.revision,
-		expectedSnapshotId: session.causal.snapshotId,
-	} as const;
-	if (request.reviewKind === "feature") {
-		return ok({
-			...common,
-			reviewKind: "feature",
-			assignedScope: feature.targets.slice(0, 12).map(boundedScopeReference),
-			requiredDepth: feature.reviewDepth,
-		});
-	}
-	if (!finalFeature(session, feature.id)) {
+	if (assignment.status === "invalidated") {
+		const sourceChanged = assignment.invalidationReason === "source_changed";
 		return fail(
-			`Feature '${request.featureId}' is not eligible for final review.`,
-			"Complete every other approved feature before assigning final review.",
+			`Review assignment '${assignment.id}' was invalidated because ${sourceChanged ? "the source changed" : "its feature run was reset"}.`,
+			sourceChanged
+				? "Rerun validation and use the replacement assignment for the current source."
+				: "Start a new feature run and create a new review assignment; historical assignments cannot be recovered as active work.",
 		);
 	}
-	const assignedScope = [
-		...new Set(
-			session.plan.features.flatMap((plannedFeature) => plannedFeature.targets),
-		),
-	]
-		.slice(0, 32)
-		.map(boundedScopeReference);
+	const feature = session.plan?.features.find(
+		(candidate) => candidate.id === assignment.featureId,
+	);
+	if (!feature) {
+		return fail("The review assignment references a missing plan feature.");
+	}
+	const assignedScope =
+		assignment.reviewKind === "final" && session.plan
+			? [...new Set(session.plan.features.flatMap((item) => item.targets))]
+					.slice(0, 32)
+					.map(boundedScopeReference)
+			: feature.targets.slice(0, 12).map(boundedScopeReference);
 	return ok({
-		...common,
-		reviewKind: "final",
+		view: "reviewer",
+		assignmentId: assignment.id,
+		assignmentStatus: assignment.status,
+		featureRunId: assignment.featureRunId,
+		featureId: assignment.featureId,
+		reviewKind: assignment.reviewKind,
 		assignedScope,
-		requiredDepth: session.plan.finalReviewPolicy,
-		requirements: boundedStrings(session.plan.requirements, 32, 240),
-		decisions: boundedStrings(session.plan.decisions, 32, 240),
+		requiredDepth: assignment.requiredDepth,
+		packetSummary: boundedText(assignment.packetSummary, 1_000),
+		riskLenses: boundedStrings(assignment.riskLenses, 16, 240),
+		validationScope: assignment.validationScope,
+		validationEvidenceCount: assignment.validationEvidenceRefs.length,
+		terminalDisposition:
+			assignment.status === "pending" ? null : assignment.status,
 	});
 }
 
@@ -2986,18 +3149,27 @@ export function mutationReceiptProjection(
 	session: Session,
 	warnings: readonly string[] = [],
 	operationId?: string,
+	operationKind?: CausalMutationRecord["operationKind"],
+	acceptedWithoutMutation = false,
 ) {
 	const mutation = operationId
 		? (session.causal.mutations.find(
 				(candidate) => candidate.operationId === operationId,
 			) ?? null)
-		: (session.causal.mutations.at(-1) ?? null);
+		: operationKind
+			? (session.causal.mutations.findLast(
+					(candidate) => candidate.operationKind === operationKind,
+				) ?? null)
+			: (session.causal.mutations.at(-1) ?? null);
 	return {
 		view: "mutation_receipt" as const,
 		status: session.status,
+		operationAccepted: mutation !== null || acceptedWithoutMutation,
+		operationIdConsumed: mutation !== null,
 		operationId: mutation?.operationId ?? null,
 		revision: mutation?.revision ?? session.causal.revision,
 		snapshotId: mutation?.currentSnapshotId ?? session.causal.snapshotId,
+		featureRunId: mutation?.featureRunId ?? session.activeFeatureRunId,
 		changedEntity: mutation ? { ...mutation.changedEntity } : null,
 		changedFields: mutation
 			? boundedStrings(mutation.changedFields, 8, 64)
@@ -3011,6 +3183,31 @@ export function mutationReceiptProjection(
 		evidenceRefs: mutation ? boundedStrings(mutation.evidenceRefs, 4, 80) : [],
 		warnings: boundedStrings(warnings, 2, 120),
 		nextAction: boundedText(nextAction(session), 160),
+	};
+}
+
+export function rejectedMutationReceiptProjection(
+	session: Session | null,
+	warnings: readonly string[] = [],
+	operationId?: string,
+) {
+	return {
+		view: "mutation_receipt" as const,
+		status: session?.status ?? null,
+		operationAccepted: false,
+		operationIdConsumed: false,
+		operationId: operationId ?? null,
+		revision: session?.causal.revision ?? null,
+		snapshotId: session?.causal.snapshotId ?? null,
+		featureRunId: session?.activeFeatureRunId ?? null,
+		changedEntity: null,
+		changedFields: [],
+		blockerDelta: { added: [], removed: [] },
+		evidenceRefs: [],
+		warnings: boundedStrings(warnings, 2, 120),
+		nextAction: session
+			? boundedText(nextAction(session), 160)
+			: "Start a new Flow session with /flow-plan <goal>.",
 	};
 }
 

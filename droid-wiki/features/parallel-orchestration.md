@@ -40,7 +40,8 @@ The plugin injects hidden agents into OpenCode config through `applyFlowConfig` 
 
 The manager records implementation pass decisions explicitly: serial,
 candidate exact-path, candidate worktree, tournament, or skipped. Bounded pass
-records may be included in `flow_feature_complete.orchestrationPasses`; the
+records may be included in
+`flow_feature_complete.request.result.orchestrationPasses`; the
 runtime persists bounded counts and recent pass summaries in the session
 ledger, while mutation receipts never substitute for status and full worker
 handoffs stay outside `.flow/**`. Candidate accounting records `candidateEligibility`,

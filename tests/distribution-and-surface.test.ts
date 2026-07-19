@@ -33,6 +33,7 @@ import {
 import FlowPlugin from "../src/index.js";
 import { createFlowLog } from "../src/platform/opencode/logging.js";
 import { createTools } from "../src/platform/opencode/tools.js";
+import { auditLifecycleFlatRequestExamples } from "../src/prompt-quality.js";
 import { resolveFlowPluginVersion } from "../src/version.js";
 
 async function tempDirectory(prefix: string): Promise<string> {
@@ -121,13 +122,14 @@ async function installPristineLegacyTopic(
 }
 
 describe("embedded guidance and plugin surface", () => {
-	test("exposes the eight-tool v5 surface", () => {
+	test("exposes the nine-tool v5 surface", () => {
 		expect(Object.keys(createTools({})).sort()).toEqual([
 			"flow_feature_complete",
 			"flow_feature_reset",
 			"flow_guidance",
 			"flow_plan_approve",
 			"flow_plan_save",
+			"flow_review_start",
 			"flow_run_start",
 			"flow_session_close",
 			"flow_status",
@@ -150,6 +152,10 @@ describe("embedded guidance and plugin surface", () => {
 		for (const document of FLOW_GUIDANCE_DOCUMENTS) {
 			expect(getFlowGuidance(document.id)).toBe(document);
 			expect(document.content.length).toBeGreaterThan(40);
+			expect(
+				auditLifecycleFlatRequestExamples(document.content),
+				`${document.id} contains a flat lifecycle request example`,
+			).toEqual([]);
 			for (const match of document.content.matchAll(
 				/`((?:flow(?:-(?:plan|run|test|review|deslop|ui-quality|commit))?\/references\/[^`]+\.md))`/g,
 			)) {
@@ -185,7 +191,8 @@ describe("embedded guidance and plugin surface", () => {
 			expect(template).not.toContain("setup.skills");
 			expect(template).toContain("never a native skill call");
 		}
-		expect(getFlowGuidance("flow-test").content).toContain("validationRun");
+		expect(getFlowGuidance("flow-test").content).toContain("validations");
+		expect(getFlowGuidance("flow-test").content).toContain("flow_review_start");
 		expect(getFlowGuidance("flow-deslop").content).toContain(
 			"flow-deslop/references/smell-rubric.md",
 		);
@@ -295,7 +302,7 @@ describe("embedded guidance and plugin surface", () => {
 		const workspace = await tempWorkspace();
 		const statusTool = createTools({}).flow_status;
 		if (!statusTool) throw new Error("Expected flow_status tool");
-		const output = await statusTool.execute({}, {
+		const output = await statusTool.execute({ request: { view: "compact" } }, {
 			directory: workspace,
 			worktree: workspace,
 		} as Parameters<typeof statusTool.execute>[1]);

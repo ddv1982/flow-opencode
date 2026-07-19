@@ -6,12 +6,19 @@ import {
 	type ReplayFixtureResult,
 	type ReplayScenarioResult,
 	type ReplayVariant,
+	type ReviewLifecycleAggregateMetric,
+	type ReviewLifecycleBaseline,
+	ReviewLifecycleBaselineSchema,
 	replayFixture,
 	type TerminalComparisonStatus,
 } from "../src/application/replay/index.js";
 import { parseStrictJsonObject } from "../src/infrastructure/fs/strict-json-object.js";
 
 const FIXTURE_ROOT = resolve(import.meta.dir, "../tests/fixtures/replay");
+const REVIEW_LIFECYCLE_BASELINE_PATH = resolve(
+	import.meta.dir,
+	"../tests/fixtures/review-lifecycle/qa-scribe-5-1-high.json",
+);
 const SAFE_FIXTURE_NAME = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const VARIANTS = ["A", "B", "C", "D"] as const;
 const RECONCILIATION_TOLERANCE_PERCENT = 1;
@@ -69,6 +76,7 @@ export type ReplayReport = {
 		suppliedObservations: ReplayFixture["suppliedObservations"];
 		replayDerivedFacts: ReplayFixture["replayDerivedFacts"];
 	};
+	reviewLifecycleBaseline: ReviewLifecycleBaseline;
 	replay: ReplayFixtureResult;
 	// Oracle reconciliation is reported separately from variant support: a
 	// `supported` variant never implies its terminal expectations matched.
@@ -281,6 +289,14 @@ export async function buildReplayReport(
 ): Promise<ReplayReport> {
 	const fixturePath = resolveReplayFixturePath(options.fixture);
 	const fixture = parseReplayFixtureText(await readFile(fixturePath, "utf8"));
+	const lifecycleBaselineRaw = parseStrictJsonObject(
+		await readFile(REVIEW_LIFECYCLE_BASELINE_PATH, "utf8"),
+		"review lifecycle baseline",
+	);
+	if (!lifecycleBaselineRaw.ok) fail(lifecycleBaselineRaw.error);
+	const reviewLifecycleBaseline = ReviewLifecycleBaselineSchema.parse(
+		lifecycleBaselineRaw.value,
+	);
 	const replay = replayFixture(fixture, options.variant);
 	return {
 		fixture: options.fixture,
@@ -293,6 +309,7 @@ export async function buildReplayReport(
 			suppliedObservations: fixture.suppliedObservations,
 			replayDerivedFacts: fixture.replayDerivedFacts,
 		},
+		reviewLifecycleBaseline,
 		replay,
 		terminalExpectations: aggregateTerminalExpectations(replay.scenarios),
 		reviewWorkers: {
@@ -326,6 +343,13 @@ function renderBasisPoints(
 	return value === null ? "unavailable" : `${value / 100}%`;
 }
 
+function renderLifecycleCounter(
+	baseline: ReviewLifecycleBaseline,
+	metric: ReviewLifecycleAggregateMetric,
+): string {
+	return renderFact(baseline.facts, metric);
+}
+
 export function formatReplayReport(report: ReplayReport): string {
 	const host = report.factOrigins.hostFacts;
 	const ledger = report.factOrigins.flowLedgerClaims;
@@ -346,6 +370,7 @@ export function formatReplayReport(report: ReplayReport): string {
 		`Flow ledger: ${renderFact(ledger, "declared_worker_count")} declared workers`,
 		`Supplied/unreconciled: ${renderFact(supplied, "result_character_count")} four-invocation characters; ${renderBasisPoints(supplied, "reviewer_input_share_basis_points")} reviewer input share`,
 		`Replay-derived: ${report.replay.scenarios.filter((scenario) => scenario.supported).length} supported terminal decisions`,
+		`Flow 5.1 pre-v4 lifecycle baseline (${report.reviewLifecycleBaseline.baselineId}; ${report.reviewLifecycleBaseline.inferenceEffort} inference): ${renderLifecycleCounter(report.reviewLifecycleBaseline, "review_assignment_attempt_count")} assignment attempts; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "invalid_reviewer_payload_count")} invalid reviewer payloads; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "completion_submission_count")} completion submissions; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "accepted_blocker_count")} accepted blockers; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "schema_rejection_count")} schema rejections; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "evidence_only_rerun_count")} evidence-only reruns; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "feature_reset_count")} feature resets; ${renderLifecycleCounter(report.reviewLifecycleBaseline, "abandoned_session_count")} abandoned sessions`,
 		`Terminal expectations: ${report.terminalExpectations.status} (decision ${report.terminalExpectations.fieldStatus.decision}; reason ${report.terminalExpectations.fieldStatus.reason}; revision ${report.terminalExpectations.fieldStatus.revision}; digest ${report.terminalExpectations.fieldStatus.stateDigest}; ${report.terminalExpectations.scenariosMatched} matched / ${report.terminalExpectations.scenariosMismatched} mismatched / ${report.terminalExpectations.scenariosUnavailable} unavailable)`,
 		`Review worker reconciliation: ${report.reviewWorkers.reconciliationStatus} (${report.reviewWorkers.declared ?? "unavailable"} declared; ${report.reviewWorkers.observed ?? "unavailable"} observed)`,
 		`Reconciliation (${report.reconciliation.tolerancePercent}%): ${reconciliation}`,

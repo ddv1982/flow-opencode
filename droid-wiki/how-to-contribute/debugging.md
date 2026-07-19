@@ -8,7 +8,7 @@ Debugging Flow usually starts with `flow_status`, then moves to `.flow/session.j
 | --- | --- |
 | No active Flow state | `flow_status` output from the filesystem composition and application service. |
 | Lock timeout | `.flow/session.lock/owner.json`, created by `src/infrastructure/fs/workspace.ts`. |
-| Malformed session file | Quarantine behavior in `src/application/flow-service.ts` and `src/infrastructure/fs/workspace.ts`. |
+| Malformed session file | Strict JSON, Session v4 schema, and relational-invariant rejection in `src/application/flow-service.ts` and `src/infrastructure/fs/workspace.ts`. |
 
 `src/infrastructure/fs/workspace.ts` refuses filesystem root and `$HOME` as mutable workspace roots. It writes sessions atomically, uses a directory lock, and treats unreadable sessions as recoverable errors rather than silently deleting them.
 

@@ -80,9 +80,9 @@ Before presenting or recording a result:
 - Move only distilled evidence forward and name remaining gaps honestly.
 
 Planning evidence may become requirements, decisions, targets, validation, or a
-review-first feature. Authorized command evidence may become `validationRun`
+review-first feature. Authorized command evidence may become `validations`
 only with exact command, status, and observed result. Review workers inform but
-do not own the final review payload. Audit findings must survive refutation.
+do not own the final assignment result. Audit findings must survive refutation.
 Candidate patches become usable only after manager inspection, integration, and
 validation in the Flow-managed workspace.
 

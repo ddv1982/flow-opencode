@@ -22,35 +22,102 @@ Runtime must enforce:
 
 1. A plan cannot be changed after approval.
 2. Only one feature can run at a time.
-3. Feature completion requires recorded validation evidence.
-4. Non-final completion requires `validationScope: "targeted"`.
-5. Final completion requires `validationScope: "broad"`.
-6. Feature completion requires `featureReviewDepth` to meet or exceed the
-   feature's planned `reviewDepth`.
-7. Feature completion requires a passing `featureReview`.
-8. Final completion requires a passing `finalReview` whose `reviewDepth` matches the approved plan.
-9. A session cannot close as `completed` unless an approved plan has passed final completion.
-10. Once `closure` is recorded, every mutation except `flow_session_close`
-    fails until archival succeeds.
+3. Every run has runtime-owned feature-run identity; reset preserves but ends
+   applicability of its evidence and review truth.
+4. Reviewer assignment requires passing validation bound to current source and
+   the active run in trusted chronology. Validation starts no earlier than the
+   run and completes no later than assignment start.
+5. Feature assignment requires targeted validation. Final assignment requires
+   broad validation plus the exact passing feature-assignment prerequisite,
+   durably bound as one aggregate containing assignment id, cloned canonical
+   result, and result digest. Every same-run, same-source final-review retry
+   reuses the first aggregate exactly; detail status exposes the bounded
+   recovery value while compact and reviewer status omit it.
+6. Review depth is derived from the approved plan and stored on the assignment.
+7. Non-final completion requires one passing feature-assignment result.
+8. A passing final feature outcome carries one distinct final-assignment result;
+   the runtime consumes the exact durable bound feature result and records both
+   atomically. Reported result time cannot precede assignment start or postdate
+   the one runtime acceptance time captured for the mutation.
+9. A passing final feature outcome marks progress `completed` but does not
+   create closure.
+   Only `flow_session_close` records closure and the `session_close` mutation.
+10. A session cannot close as `completed` unless an approved plan has passed final completion.
+11. Every closure is quiescent: active-execution feature and run identities are null, an
+    active run is terminalized, and pending assignments are invalidated.
+12. Once `closure` is recorded, every ordinary mutation fails and
+    `flow_session_close` accepts only retry by the durable accepted operation id
+    until archive publication succeeds.
+13. A close-start operation id is unused in the active causal chain and in
+    every mutation in canonical Session v4 workspace history. Quarantine files
+    are excluded; corrupt, unsupported, filename-mismatched, or ambiguous
+    canonical history fails closed before active bytes change.
+14. `flow_plan_save` updates only the active same-goal draft. A different goal
+    cannot replace any unclosed session; unfinished work requires explicit
+    `deferred` or `abandoned` closure and converged archive publication first.
+15. Archive publication requires a non-null explicit closure. A closureless
+    Session v4 document may be active state, but it cannot become or validate
+    canonical history; canonical lookup fails closed if it encounters one.
 
 ## State
 
-`.flow/session.json` is the only active source of truth and the only active-state representation. `.flow/history/<session-id>.json` stores archived sessions. Restricted evidence bytes live separately under `.flow/evidence/v1/sha256/**`; the session ledger stores only typed digest/length references to them. This is ordinary hash-addressed filesystem storage, not a database, index, cache of projected state, or qa-scribe integration. Archive publication is exclusive and no-clobber: persist the closed active snapshot first, publish it with a hard link, accept an existing target only when its normalized session is identical, then remove active state. A different existing archive is a collision and must leave both its bytes and readable active state intact. Flow writes or safely extends `.flow/.gitignore` so session, history, evidence, and lock state remain ignored even when a maintainer has custom entries. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, ambient instruction files, and other projection caches are intentionally not runtime state.
+`.flow/session.json` is the only active source of truth and the only active-state representation. `.flow/history/<sha256(session-id)>.json` stores explicitly closed sessions; lookup verifies that each lowercase digest filename matches the exact parsed session id. A Session v4 document with `closure: null` is not publishable or valid canonical history. Restricted evidence bytes live separately under `.flow/evidence/v1/sha256/**`; the session ledger stores only typed digest/length references to them. This is ordinary hash-addressed filesystem storage, not a database, index, cache of projected state, or qa-scribe integration. Archive publication is exclusive and no-clobber: persist the closed active snapshot first, let a short-lived helper pinned to the validated history-directory identity write and sync a relative temporary file, publish it with an exclusive hard link, accept an existing target only when its normalized session is identical, and remove active state only through a second helper pinned to the validated `.flow` identity after archive and topology revalidation. A different existing archive is a collision and must leave both its bytes and readable active state intact. Flow writes or safely extends `.flow/.gitignore` so session, history, evidence, and lock state remain ignored even when a maintainer has custom entries. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, ambient instruction files, and other projection caches are intentionally not runtime state.
+
+Before a new close starts, repository lookup checks its operation id against
+every mutation in canonical Session v4 workspace history. One match of any
+mutation kind is a collision because post-archive retry is keyed only by that
+id. Quarantine files never authorize retry. Canonical-history corruption,
+unsupported versions, filename mismatch, or ambiguous matches stop the close
+without changing the active session. A rejected collision is not a retry
+handle; the caller chooses a fresh id.
+
+Canonical session ids remain bounded to 1–128 ASCII letters, digits,
+underscores, or hyphens. Persistence maps the exact case-sensitive id to a
+fixed lowercase SHA-256 archive component, so case-folding filesystems and deep
+workspace paths do not make an accepted id unpublishable. Generic corruption
+recovery remains in the disjoint `quarantine-<content-sha256>.json` namespace.
 
 Every committed mutation advances one nonnegative revision and records a stable
 operation id, operation kind, canonical request digest, prior/current snapshot,
 prior mutation digest, changed entity/fields, blocker delta, and evidence
-references. Completion, reset, close, and preliminary review recording bind
+references. Review assignment, completion, reset, and close bind
 their operation identity to the expected revision and snapshot. Replaying the
 same operation envelope is idempotent; reusing an id for another kind, payload,
 or causal assignment fails closed. The SHA-256 chain is an integrity and replay
 boundary, not a secret signature against an actor who can rewrite the entire
 workspace.
 
+Pending review assignments are source-applicable. A same-run, same-kind review
+start on changed source atomically invalidates the stale assignment with
+`source_changed` and creates a replacement; reset invalidation records
+`feature_reset`. An unchanged-source pending assignment remains recoverable and
+blocks duplicate identity. Closure invalidates pending work for the terminalized
+run. Final assignments persist one bound prerequisite result containing the
+feature-assignment id, cloned canonical passing result, and canonical digest.
+The bound result does not become a recorded review execution until an accepted
+feature outcome records it atomically with the final-assignment result.
+For same-source final-review recovery, detail projection exposes
+`finalReviewRetry` with final-assignment, run, and source identity plus the
+bounded prerequisite aggregate. The manager copies
+`finalReviewRetry.prerequisite.result` unchanged into the next final review
+start's `request.featureReview`. The projection also carries final-assignment,
+run, source, prerequisite-assignment, and result-digest identity, and the raw
+result stays within the persisted 64 KiB limit. Compact and reviewer projections
+intentionally omit the aggregate; it is manager recovery state, not reviewer
+scope. A mismatched retry is mutation-free and leaves its operation id reusable.
+A source edit starts a new targeted feature-review sequence instead of reusing
+the old-source binding.
+
+Reported chronology is inclusive:
+`feature-run start <= validation start <= validation completion <= assignment
+start <= reported assignment-result time <= runtime acceptance time`. Final broad
+validation starts no earlier than the bound feature-assignment result and
+completes no later than final-assignment start.
+
 Budget and retry telemetry in the session ledger records review counts, failed
-review counts, per-feature failed review attempts, and bounded orchestration
+review counts, per-feature-run failed review attempts, and bounded orchestration
 pass accounting. Review retry exhaustion uses the ordinary blocked-feature
-state and resumes only through `flow_feature_reset`.
+state and resumes only through `flow_feature_reset` and a fresh run.
 
 Runtime pass accounting is deliberately bounded: counts, recent pass ids,
 worker counts, candidate/verifier usage, skipped candidate decisions, handoff
@@ -127,6 +194,7 @@ Tools:
 - `flow_plan_save`
 - `flow_plan_approve`
 - `flow_run_start`
+- `flow_review_start`
 - `flow_feature_complete`
 - `flow_feature_reset`
 - `flow_session_close`
@@ -134,21 +202,24 @@ Tools:
 Tool responses keep plugin-authored operation metadata at the top level. All
 session, feature, closure, failure-detail, and other repository- or
 caller-controlled prose belongs under `workflowData`. Active `flow_status`
-returns top-level `status: "ok"`; the default state-machine view is the compact
-object at `workflowData.projection`. Compact is routing-only and includes the
-causal guards plus `closure.kind` needed for archive recovery. Explicit
+returns top-level `status: "ok"`; callers explicitly select the compact
+state-machine view through `{ request: { view: "compact" } }`. Compact is
+routing-only and includes causal guards plus `closure.kind` and the complete
+`closure.retryOperationId` needed for archive recovery. Explicit
 `execution`, `detail`, `reviewer`, and `sinceRevision` requests select full
 active-feature working scope, bounded diagnostics, narrow review assignment
 context, or deltas. Ordinary mutations return `workflowData.receipt`, not a
 full session; receipts acknowledge mutations and never become feature scope or
-continuation state. Top-level response strings must never interpolate untrusted
-workflow prose.
+continuation state. Rejections also carry a consequence receipt with both
+acceptance booleans false; accepted blockers carry both true. Top-level response
+strings must never interpolate untrusted workflow prose.
 
 No runtime compatibility aliases, session migrations, or readers are allowed
-for v2 sessions, v4 source paths, or retired tools. Unsupported active sessions
-are preserved in quarantine and reported with recovery instructions. The
-standalone global-folder cleanup utility is migration hygiene, not runtime
-compatibility.
+for any other session contract or retired tool. Session v4 is the only active
+runtime schema and the only version permitted in canonical history. A different
+version is generic unsupported input and receives no version-specific recovery
+path. The standalone global-folder cleanup utility is distribution hygiene, not
+session-runtime compatibility.
 
 ## Embedded Guidance
 
@@ -187,15 +258,26 @@ second-restart workflow. Package smoke must prove guidance is embedded, and
 surface tests must prove concurrent initialization leaves hostile global links
 untouched.
 
-Public Flow commands must call `flow_status` with `view: "compact"` first and
+Public Flow commands must call `flow_status` with
+`{ request: { view: "compact" } }` first and
 read workflow state only from `workflowData.projection`. A stored
-`projection.closure.kind` routes only to guarded `flow_session_close`. Ready
+`projection.closure.retryOperationId` routes only to
+`flow_session_close { request: { mode: "retry", operationId } }`. Ready
 work calls `flow_run_start`, treats its receipt as acknowledgement, then loads
-`view: "execution"`; already running or resumed work loads execution directly.
-Execution scope and causal guards govern implementation, validation, review,
-and completion. Immediately after completion the manager refreshes compact
-status: `flow-auto` continues or closes from that projection, while `flow-run`
-reports after its one feature and closes when applicable.
+`{ request: { view: "execution" } }`; already running or resumed work loads
+execution directly.
+Execution scope and causal guards govern implementation and validation. The
+manager creates review identity with `flow_review_start`, reviewers recover
+only by assignment id, and `flow_feature_complete` records one atomic nested
+result. Immediately after completion the manager refreshes compact
+status: a completed projection with null closure calls a new guarded
+`flow_session_close { request: { mode: "start", kind: "completed", ...guards } }`;
+a stored closure is archive-only and retries only by its durable operation id.
+`flow-auto` otherwise continues,
+while `flow-run` reports after its one feature.
+An explicit plan-only or “do not implement” request is an execution boundary
+even on `flow-auto`: save and summarize the plan, then stop before
+`flow_run_start`.
 
 Model-visible scope references use a host-independent lexical privacy boundary.
 Flow normalizes with NFKC and trims first, then replaces POSIX roots, leading
@@ -205,12 +287,15 @@ such as `src\feature.ts` and `foo..bar` remain readable. Classification happens
 before bounded-view truncation, and execution retains every transformed target
 rather than paginating or silently dropping scope.
 
-OpenCode 1.18 tool registration accepts one flat `ZodRawShape`, so the registered
-`flow_status` envelope can validate leaf fields but cannot express
-view-conditional field combinations. The application's strict union is the
-authoritative boundary: execution accepts only `{ view: "execution" }` and
-rejects caller feature selection or reviewer-only fields. Keep this explicit
-rather than adding a second status tool or a nested compatibility envelope.
+OpenCode 1.18 tool registration accepts one `ZodRawShape`. Every lifecycle tool
+therefore registers one required `request` field whose value is a strict union
+of the conditionally valid branches. The actual registered schema is the host
+contract: application, registered, emitted, executed, and documented contracts
+must accept and reject the same semantic request set. OpenCode may still invoke
+a handler after advertising a request as invalid, so every handler parses the
+same registered schema again before entering the application execution wrapper.
+That handler-entry rejection is a host tool error and cannot read or mutate Flow
+state. Do not retain a flat adapter or a refined test-only shadow schema.
 
 The OpenCode command preflight hook is authoritative for public Flow commands:
 it must replace resolved command parts with the current bundled template so stale
@@ -273,16 +358,17 @@ roles and permissions in `parallel-execution.md`, and handoff acceptance plus
 synthesis in `parallel-synthesis.md`. Serial paths must not require the later
 runbooks.
 
-Prompt changes must preserve all 18 static scenarios and 52 criteria. A surface
+Prompt changes must preserve all 19 static scenarios and 54 criteria. A surface
 may grow by the larger of eight words or 2% before the growth guard requires an
 accepted baseline update and a specific justification. The opt-in model runner
 has a five-minute default timeout per variant and remains outside the broad
 local gate because provider output is nondeterministic.
 
 `src/prompt-baseline-fixtures.ts` is the sole manual-text exception. It is a
-frozen historical evaluation comparator, never a production prompt source.
-Changes to current skill judgment belong in marked skill blocks, not that
-fixture.
+frozen compiler-shape comparator, never a production prompt source. Its assembly
+topology is historical, but it must retain the current lifecycle and wire
+contract. Changes to current skill judgment belong in marked skill blocks, not
+that fixture.
 
 ## Source Ownership
 

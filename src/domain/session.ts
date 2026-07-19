@@ -13,6 +13,8 @@ export type ValidationScope = "targeted" | "broad";
 
 export type SnapshotId = string;
 export type EvidenceId = string;
+export type FeatureRunId = string;
+export type ReviewAssignmentId = string;
 export type EvidenceArtifactRef = {
 	kind: "restricted_evidence_v1";
 	digest: `sha256:${string}`;
@@ -117,11 +119,6 @@ export type OrchestrationTelemetry = {
 	latestPasses: OrchestrationPassRecord[];
 };
 
-export type ReviewFinding = {
-	summary: string;
-	severity: "blocking" | "advisory";
-};
-
 export type ReviewFindingTaxonomy =
 	| "implementation_defect"
 	| "regression_coverage_gap"
@@ -142,6 +139,8 @@ export type ReviewExecutionFinding = ReviewExecutionFindingInput & {
 };
 
 export type ReviewExecutionInput = {
+	assignmentId: ReviewAssignmentId;
+	featureRunId: FeatureRunId;
 	attemptId: string;
 	logicalPassId: string;
 	featureId: FeatureId;
@@ -156,6 +155,63 @@ export type ReviewExecutionInput = {
 
 export type ReviewExecution = Omit<ReviewExecutionInput, "findings"> & {
 	findings: ReviewExecutionFinding[];
+};
+
+export type FeatureRun = {
+	id: FeatureRunId;
+	featureId: FeatureId;
+	sequence: number;
+	status:
+		| "active"
+		| "completed"
+		| "blocked"
+		| "reset"
+		| "deferred"
+		| "abandoned";
+	startedAt: string;
+	endedAt: string | null;
+};
+
+export type BoundReviewPrerequisite = {
+	assignmentId: ReviewAssignmentId;
+	result: ReviewAssignmentResultInput;
+	resultDigest: string;
+};
+
+export type ReviewAssignment = {
+	id: ReviewAssignmentId;
+	operationId: string;
+	featureRunId: FeatureRunId;
+	featureId: FeatureId;
+	reviewKind: "feature" | "final";
+	validationScope: ValidationScope;
+	validationEvidenceRefs: EvidenceId[];
+	sourceDigest: string;
+	packetDigest: string;
+	packetSummary: string;
+	riskLenses: string[];
+	prerequisite: BoundReviewPrerequisite | null;
+	attemptId: string;
+	logicalPassId: string;
+	startedAt: string;
+	requiredDepth: FeatureReviewDepth | FinalReviewPolicy;
+	status: "pending" | "submitted" | "observed_unsubmitted" | "invalidated";
+	completedAt: string | null;
+	invalidatedAt: string | null;
+	invalidationReason:
+		| "feature_reset"
+		| "source_changed"
+		| "session_deferred"
+		| "session_abandoned"
+		| null;
+};
+
+export type ReviewAssignmentResultInput = {
+	assignmentId: ReviewAssignmentId;
+	verdict: "passed" | "failed";
+	findings: ReviewExecutionFindingInput[];
+	completedAt: string;
+	terminalDisposition: "submitted" | "observed_unsubmitted";
 };
 
 export type ReviewLifecycleTelemetry = {
@@ -178,27 +234,15 @@ export type ObservedReviewWorkerLedger =
 			observedExecutionCount: number;
 	  };
 
-export type Review = {
-	status: "passed" | "failed";
-	summary: string;
-	blockingFindings: ReviewFinding[];
-};
-
-export type FinalReview = Review & {
-	reviewDepth: FinalReviewPolicy;
-};
-
-export type ValidationRun = {
-	command: string;
-	status: "passed" | "failed";
-	summary: string;
-};
-
 export type ValidationEvidence = {
 	kind: "validation";
 	evidenceId: EvidenceId;
+	featureRunId: FeatureRunId;
+	capturedAtRevision: number;
+	capturedAtSnapshotId: SnapshotId;
 	snapshotId: SnapshotId;
 	sourceDigest: string;
+	commandDigest: string;
 	commandClass: ValidationCommandClass;
 	startedAt: string;
 	completedAt: string;
@@ -211,6 +255,10 @@ export type ValidationEvidence = {
 export type ReviewEvidence = {
 	kind: "review";
 	evidenceId: EvidenceId;
+	featureRunId: FeatureRunId;
+	assignmentId: ReviewAssignmentId;
+	capturedAtRevision: number;
+	capturedAtSnapshotId: SnapshotId;
 	snapshotId: SnapshotId;
 	sourceDigest: string;
 	attemptId: string;
@@ -227,12 +275,12 @@ export type CausalMutationRecord = {
 		| "plan_save"
 		| "plan_approve"
 		| "run_start"
-		| "review_record"
-		| "evidence_record"
+		| "review_start"
 		| "feature_complete"
 		| "feature_reset"
 		| "session_close";
 	requestDigest: string;
+	featureRunId: FeatureRunId | null;
 	priorMutationDigest: string | null;
 	mutationDigest: string;
 	priorRevision: number;
@@ -260,39 +308,25 @@ export type CausalState = {
 	evidence: EvidenceRecord[];
 };
 
-type ReviewerProjectionRequestBase = {
-	featureId: FeatureId;
-	packetHash: string;
-	evidenceRefs: string[];
-	expectedRevision?: number | undefined;
-	expectedSnapshotId?: SnapshotId | undefined;
-};
+export type ReviewerProjectionRequest = { assignmentId: ReviewAssignmentId };
 
-export type ReviewerProjectionRequest =
-	| (ReviewerProjectionRequestBase & { reviewKind: "feature" })
-	| (ReviewerProjectionRequestBase & { reviewKind: "final" });
-
-type ReviewerProjectionBase = {
+export type AssignmentReviewerProjection = {
 	view: "reviewer";
+	assignmentId: ReviewAssignmentId;
+	assignmentStatus: ReviewAssignment["status"];
+	featureRunId: FeatureRunId;
 	featureId: FeatureId;
+	reviewKind: "feature" | "final";
 	assignedScope: string[];
-	packetHash: string;
-	evidenceRefs: string[];
-	expectedRevision: number;
-	expectedSnapshotId: SnapshotId;
+	requiredDepth: FeatureReviewDepth | FinalReviewPolicy;
+	packetSummary: string;
+	riskLenses: string[];
+	validationScope: ValidationScope;
+	validationEvidenceCount: number;
+	terminalDisposition: "submitted" | "observed_unsubmitted" | null;
 };
 
-export type ReviewerProjection =
-	| (ReviewerProjectionBase & {
-			reviewKind: "feature";
-			requiredDepth: FeatureReviewDepth;
-	  })
-	| (ReviewerProjectionBase & {
-			reviewKind: "final";
-			requiredDepth: FinalReviewPolicy;
-			requirements: string[];
-			decisions: string[];
-	  });
+export type ReviewerProjection = AssignmentReviewerProjection;
 
 export type Artifact = {
 	path: string;
@@ -320,6 +354,7 @@ export type Plan = {
 
 export type ExecutionProjection = {
 	view: "execution";
+	featureRunId?: FeatureRunId | undefined;
 	goal: string;
 	plan: {
 		summary: string;
@@ -361,71 +396,36 @@ export type PlanInput = {
 	}>;
 };
 
-export type CompletedWorkerOutcome = {
-	kind: "completed";
-	summary?: string | undefined;
-	resolutionHint?: string | undefined;
-};
-
-export type NeedsInputOutcome = {
-	kind: "blocked" | "needs_input" | "replan_required";
-	summary: string;
-	resolutionHint?: string | undefined;
-};
-
-export type WorkerOutcome = CompletedWorkerOutcome | NeedsInputOutcome;
-
-type WorkerResultBase = {
-	operationId?: string | undefined;
-	expectedRevision?: number | undefined;
-	expectedSnapshotId?: SnapshotId | undefined;
-	/** Trusted application-boundary digest of the normalized public request. */
-	requestDigest?: string | undefined;
-	featureId: FeatureId;
-	summary: string;
-	artifactsChanged: Artifact[];
-	validationRun: ValidationRun[];
-	validationScope?: ValidationScope | undefined;
-	featureReviewDepth?: FeatureReviewDepth | undefined;
-	featureReview?: Review | undefined;
-	finalReview?: FinalReview | undefined;
-	reviewExecutions?: ReviewExecutionInput[] | undefined;
-	evidence?: EvidenceRecord[] | undefined;
-	orchestrationPasses: OrchestrationPassRecord[];
-};
-
-export type WorkerResult =
-	| (WorkerResultBase & {
-			status: "ok";
-			validationScope: ValidationScope;
-			featureReviewDepth: FeatureReviewDepth;
-			featureReview: Review;
-			outcome?: CompletedWorkerOutcome | undefined;
-	  })
-	| (WorkerResultBase & {
-			status: "needs_input";
-			outcome: NeedsInputOutcome;
-	  });
+export type ExecutionOutcome =
+	| {
+			kind: "blocked";
+			summary: string;
+			resolutionHint?: string | undefined;
+	  }
+	| {
+			kind: "completed";
+			summary?: string | undefined;
+			resolutionHint?: string | undefined;
+	  };
 
 export type ExecutionHistoryEntry = {
+	featureRunId: FeatureRunId;
 	featureId: FeatureId;
-	status: "completed" | "blocked" | "needs_input";
+	status: "completed" | "blocked";
 	summary: string;
 	recordedAt: string;
 	artifactsChanged: Artifact[];
-	validationRun: ValidationRun[];
-	validationScope?: ValidationScope | undefined;
-	featureReviewDepth?: FeatureReviewDepth | undefined;
-	featureReview?: Review | undefined;
-	finalReview?: FinalReview | undefined;
-	outcome?: WorkerOutcome | undefined;
+	validationScope: ValidationScope;
+	validationEvidenceRefs: EvidenceId[];
+	reviewAssignmentIds: ReviewAssignmentId[];
+	outcome: ExecutionOutcome;
 	orchestrationPasses: OrchestrationPassRecord[];
 };
 
 export type BudgetTelemetry = {
 	reviewCount: number;
 	failedReviewCount: number;
-	failedReviewAttemptsByFeature: Record<string, number>;
+	failedReviewAttemptsByFeatureRun: Record<string, number>;
 	reviewExecutions: ReviewExecution[];
 	reviewLifecycle: ReviewLifecycleTelemetry;
 	observedReviewWorkers: ObservedReviewWorkerLedger;
@@ -433,13 +433,16 @@ export type BudgetTelemetry = {
 };
 
 export type Session = {
-	version: 3;
+	version: 4;
 	id: SessionId;
 	goal: string;
 	status: SessionStatus;
 	approval: "pending" | "approved";
 	plan: Plan | null;
 	activeFeatureId: FeatureId | null;
+	activeFeatureRunId: FeatureRunId | null;
+	featureRuns: FeatureRun[];
+	reviewAssignments: ReviewAssignment[];
 	history: ExecutionHistoryEntry[];
 	budget: BudgetTelemetry;
 	causal: CausalState;
@@ -447,6 +450,7 @@ export type Session = {
 		kind: "completed" | "deferred" | "abandoned";
 		summary: string;
 		recordedAt: string;
+		retryOperationId: string;
 	} | null;
 	lastError: {
 		tool: string;

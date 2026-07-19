@@ -6,11 +6,11 @@ The current repo has no `TODO`, `FIXME`, `HACK`, or `@deprecated` markers in `sr
 
 | File | Lines | Why it is worth watching |
 | --- | ---: | --- |
-| `tests/distribution-and-surface.test.ts` | 688 | Covers guidance, plugin, command, permission, and legacy-cleanup contracts. |
-| `src/domain/transitions.ts` | 1,212 | Central pure state machine and completion gate. |
+| `tests/distribution-and-surface.test.ts` | ~760 | Covers guidance, plugin, command, permission, and legacy-cleanup contracts. |
+| `src/domain/transitions.ts` | ~2,800 | Central pure state machine, assignment lifecycle, and completion gate. |
 | `src/distribution/legacy-cleanup.ts` | ~290 | Deliberately conservative one-time migration code; keep it outside plugin startup. |
-| `tests/workspace-persistence.test.ts` | 910 | Broad persistence safety coverage. |
-| `src/infrastructure/fs/workspace.ts` | 652 | Filesystem safety, locking, archive, and quarantine in one module. |
+| `tests/workspace-persistence.test.ts` | ~1,470 | Broad persistence safety coverage. |
+| `src/infrastructure/fs/workspace.ts` | ~760 | Filesystem safety, locking, strict input, and archive publication in one module. |
 
 ## Recent churn hotspots
 

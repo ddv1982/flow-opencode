@@ -43,7 +43,7 @@ wildcard Node dependency inside Bun's declarations to the same version.
 
 ```text
 OpenCode command / guidance-driven agent
-  -> flow_guidance plus seven stateful Flow tools
+  -> flow_guidance plus eight Flow runtime tools
   -> platform transport
   -> application service and domain transitions
   -> filesystem repository
@@ -57,6 +57,12 @@ does no workspace filesystem work and does not append Flow state to
 `config.instructions`. Public Flow command guidance explicitly calls
 `flow_status` before acting, which keeps `.flow/session.json` as the sole state
 representation without startup refresh or lock coupling.
+
+Do not rely on OpenCode's advertised tool schema as the only validator. Each
+registered handler must parse that same host schema at entry before invoking
+the application execution wrapper. Contract tests must cover advertised,
+registered, emitted, handler-entered, and application behavior; an invalid host
+call is a tool error and performs no Flow state I/O.
 
 ## Editing Guidance
 
@@ -81,7 +87,8 @@ folders. It defaults to no action unless `--dry-run` or `--apply` is selected;
 apply archives only marker-proven pristine folders and refuses symlinks, edits,
 extra files, and foreign content.
 
-Flow commands must call `flow_status` first. Public manager commands compile
+Flow commands must call `flow_status { request: { view: "compact" } }` first.
+Public manager commands compile
 only the applicable core skill sections plus bounded conditional rules;
 `/flow-review` delegates its small task prompt to the reserved reviewer whose
 agent prompt owns review judgment. Public commands do not depend on native
@@ -95,7 +102,7 @@ maintained variants with offline static-contract checks. Use the opt-in
 outside `bun run check` because it uses external providers and is
 nondeterministic. The deterministic `prompt:quality` report is part of the
 canonical gate. The model runner defaults to a five-minute timeout per prompt
-variant. Prompt changes must preserve the 18 static scenarios and 52 criteria.
+variant. Prompt changes must preserve the 19 static scenarios and 54 criteria.
 Update the accepted growth baseline in
 `tests/fixtures/prompt-quality-baseline.json` only for material growth (more
 than the larger of eight words or 2%) and include a specific justification.
@@ -108,6 +115,7 @@ Guidance changes should preserve the v5 tool surface:
 - `flow_plan_save`
 - `flow_plan_approve`
 - `flow_run_start`
+- `flow_review_start`
 - `flow_feature_complete`
 - `flow_feature_reset`
 - `flow_session_close`

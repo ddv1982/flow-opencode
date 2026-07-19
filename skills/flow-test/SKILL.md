@@ -1,12 +1,12 @@
 ---
 name: flow-test
-description: Choose, run, and summarize validation checks for Flow features. Use when selecting validation coverage, running tests or browser/e2e QA, classifying test failures, or preparing validationRun evidence for flow_feature_complete. Visual design judgment stays in flow-ui-quality and review verdicts stay in flow-review.
+description: Choose, run, and summarize validation checks for Flow features. Use when selecting validation coverage, running tests or browser/e2e QA, classifying test failures, or preparing validation observations for flow_review_start. Visual design judgment stays in flow-ui-quality and review verdicts stay in flow-review.
 ---
 
 # Flow Test
 
 Use this skill to decide and gather validation evidence. It produces validation
-evidence only: the manager still owns `flow_feature_complete`, review payloads,
+evidence only: the manager still owns `flow_review_start`, `flow_feature_complete`, review results,
 plan approval, session closure, and every other Flow state change.
 
 Do not mutate `.flow/**`, approve plans, complete features, close sessions, or
@@ -98,16 +98,20 @@ when a practical automated check exists.
 
 ## Output
 
-Return a concise validation summary and a `validationRun` array that the manager
-can record through `flow_feature_complete` if it accepts the evidence:
+Return a concise validation summary and a `validations` array that the manager
+can place inside `flow_review_start.request` if it accepts the evidence:
 
 ```json
 {
-  "validationRun": [
+  "validations": [
     {
       "command": "bun test tests/foo.test.ts",
-      "status": "passed",
-      "summary": "3 pass; covered foo creation, duplicate rejection, and reset behavior"
+      "summary": "3 pass; covered foo creation, duplicate rejection, and reset behavior",
+      "startedAt": "ISO-8601",
+      "completedAt": "ISO-8601",
+      "exitCode": 0,
+      "outputDigest": "sha256:<64 lowercase hex characters>",
+      "environmentKeys": []
     }
   ],
   "testSummary": "Targeted behavior and package shape passed. Browser evidence was not applicable.",
@@ -115,10 +119,15 @@ can record through `flow_feature_complete` if it accepts the evidence:
 }
 ```
 
-Only passing checks belong in `validationRun` for completion. Failed, skipped,
+Only passing checks belong in `validations` for assignment. Failed, skipped,
 or unavailable checks belong in `testSummary`, `gaps`, or a blocker outcome.
 Each summary must state what behavior, file set, route, command, or state was
 covered. Static inspection alone is a gap for behavioral changes.
 
-Never relabel a failed command as passed, invent output, or use "not run" as
-completion evidence.
+`startedAt` and `completedAt` are reported times. Record them honestly and in
+order; Flow rejects observations that precede the active execution, end after
+assignment start, or postdate runtime acceptance. Broad final validation must
+start no earlier than the passing feature-assignment result.
+
+Never relabel a failed command as passed, invent output, or present "not run"
+as passing validation.

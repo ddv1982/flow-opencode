@@ -18,7 +18,7 @@ src/application/schema.ts
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `SessionSchema` | `src/application/schema.ts` | Version 3 persisted session model. |
+| `SessionSchema` | `src/application/schema.ts` | Strict version 4 persisted session model. |
 | `PlanSchema` | `src/application/schema.ts` | Summary, overview, requirements, decisions, final review policy, and features. |
 | `FeatureSchema` | `src/application/schema.ts` | Kebab-case feature id and feature state. |
 | `createSession` | `src/domain/transitions.ts` | Creates a planning session with `approval: "pending"`. |
@@ -27,13 +27,18 @@ src/application/schema.ts
 
 ## How it works
 
-`SessionSchema` persists `version`, `id`, `goal`, `status`, `approval`, `plan`, `activeFeatureId`, `history`, budget telemetry, `closure`, `lastError`, causal state, and timestamps. `PlanSchema` requires at least one feature. `FeatureSchema` restricts ids to lowercase kebab-case using `FEATURE_ID_PATTERN` and records the feature's minimum `reviewDepth`.
+`SessionSchema` persists `version`, `id`, `goal`, `status`, `approval`, `plan`,
+the paired active-execution identities, feature runs, review assignments,
+history, budget telemetry, `closure`, `lastError`, causal state, and timestamps.
+`PlanSchema` requires at least one feature. `FeatureSchema` restricts ids to
+lowercase kebab-case using `FEATURE_ID_PATTERN` and records the feature's minimum
+`reviewDepth`.
 
 ## Integration points
 
 The session is written through the repository transaction and read explicitly by
 `flow_status`. Compact status is routing-only; execution status exposes the
-active feature's requirements, decisions, targets, validation, review policy,
+active execution's requirements, decisions, targets, validation, review policy,
 and causal guards. Flow guidance never treats a mutation receipt as feature
 scope.
 
@@ -43,7 +48,7 @@ scope.
 | --- | --- |
 | `src/application/schema.ts` | Session, plan, feature, and history schemas. |
 | `src/domain/transitions.ts` | State changes for session, plan, and feature status. |
-| `src/infrastructure/fs/workspace.ts` | Session persistence, archive, and quarantine. |
+| `src/infrastructure/fs/workspace.ts` | Session persistence, archive publication, and strict input handling. |
 | `tests/runtime-gates.test.ts` | Plan and feature gate tests. |
 
 ## Entry points for modification

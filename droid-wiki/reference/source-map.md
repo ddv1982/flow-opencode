@@ -37,7 +37,7 @@ This page maps repository paths to purpose. It is useful when choosing where to 
 | `skills/flow-plan/` | Planning and approval behavior. |
 | `skills/flow-run/` | One-feature execution and completion behavior. |
 | `skills/flow-test/` | Validation selection and evidence guidance. |
-| `skills/flow-review/` | Review payload guidance. |
+| `skills/flow-review/` | Assignment-result guidance. |
 | `skills/flow-deslop/` | Cleanup and refactor guidance. |
 | `skills/flow-ui-quality/` | UI quality and visual verification guidance. |
 | `skills/flow-commit/` | Explicit user-triggered commit preparation guidance. |

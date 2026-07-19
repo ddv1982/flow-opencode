@@ -2,6 +2,53 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.2.0] - 2026-07-19
+
+Runtime-owned review assignment lore removes the recovery loops seen in long
+Flow runs while preserving independent review and stale-source protection:
+
+- Session v4 separates plan features from execution runs. Reset preserves old
+  evidence and attempts as audit history but gives restarted work fresh run and
+  retry identity. It is the sole supported session contract; every other version
+  is generic unsupported input rather than a migration or compatibility path.
+- New manager-only `flow_review_start` records source-bound validation and
+  creates a durable reviewer assignment. Reviewers recover only by assignment
+  id and no longer invent attempt, pass, packet, evidence, snapshot, start-time,
+  or review-depth fields.
+- `flow_feature_complete` now accepts one nested `completed` or `blocked`
+  result. Invalid or stale input is mutation-free and leaves its operation id
+  reusable; a genuine review blocker is an accepted mutation that consumes the
+  bounded run-scoped retry budget.
+- Final assignments retain the exact passing feature-assignment result as a
+  durable bound prerequisite. A broad final feature outcome submits only the
+  final-assignment result; Flow records both review executions atomically even
+  after manager context loss. Same-source final-review retries recover the first
+  binding from detail status; compact and reviewer status keep it out.
+- Reported validation and review times must follow active-execution,
+  validation, and assignment order and cannot postdate runtime acceptance.
+- Completed, deferred, and abandoned closure are quiescent. If archive
+  publication is interrupted, compact status exposes one retry operation id;
+  retry needs no reconstructed summary or causal guards. New close ids are
+  unique across active and canonical archived mutation history.
+- Saving a different goal never silently archives or replaces an unclosed
+  session, including an unapproved draft. Explicit deferred or abandoned close
+  owns that disposition before the next goal begins.
+- Archive publication and canonical history now require non-null explicit
+  closure; closureless Session v4 archives fail closed.
+- Lifecycle tools expose strict nested `request` unions. Application,
+  registered, emitted, executed, prompt, and documented contracts now exercise
+  the same semantic request set with no flat compatibility adapter. Registered
+  handlers validate again at entry because schema advertisement alone does not
+  stop every invalid host invocation.
+- Validation applicability uses source identity plus feature run instead of the
+  latest review-ledger revision. Distinct silent validation commands retain
+  distinct command identities, while source edits and reset still stale prior
+  assignments.
+- Manager, reviewer, recovery, README, lifecycle, causal-state, and maintainer
+  contracts now describe the nine-tool assignment handshake and final-feature
+  economy order. Deterministic lifecycle, transport-budget, prompt, package,
+  persistence, and schema coverage exercise the cutover.
+
 ## [5.1.1] - 2026-07-19
 
 Durable ignore publication lore keeps concurrent restricted-evidence setup

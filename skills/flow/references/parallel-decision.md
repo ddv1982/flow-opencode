@@ -27,7 +27,7 @@ claims, then let only the manager synthesize the result and mutate Flow state.
 | --- | --- | --- |
 | Repo shape is unclear before planning | Discovery | Evidenced requirements, decisions, targets, validation, or a review-first feature |
 | A broad finding set needs refutation | Audit | Findings that survive guard and counterexample checks |
-| Changed files or risk lenses exceed one review pass | Review | One feature review or final review payload |
+| Changed files or risk lenses exceed one review pass | Review | One feature or final assignment result |
 | Test strategy or route coverage is unclear | Validation | Candidate commands or authorized raw command evidence |
 | A claim is surprising, high-stakes, single-source, or payload-bound | Verification | Per-claim keep, narrow, rewrite, or remove decisions |
 | Multiple independent implementation paths are plausible | Candidate | Inspected candidate patches, never direct Flow completion |
@@ -85,7 +85,7 @@ Record `decisionReason` plus the applicable structured `decisionFactors`:
 `needs_manager_judgment`, `independent_surface`, and
 `validation_available`. Also record a stable pass id, write scope, expected
 verification, and the handoff or synthesis location. Carry the bounded record
-into `flow_feature_complete.orchestrationPasses` when it materially shaped the
+into `flow_feature_complete.request.result.orchestrationPasses` when it materially shaped the
 feature; keep full handoffs and logs outside Flow state.
 
 ## Candidate judgment

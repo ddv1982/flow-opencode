@@ -13,6 +13,9 @@ export class ArchivedSessionLookupError extends Error {
 export type SessionTransaction = EvidenceArtifactStore &
 	SourceIdentityProvider & {
 		load(): Promise<Session | null>;
+		findArchivedByCloseRetryOperationId(
+			operationId: string,
+		): Promise<Session | null>;
 		findArchivedByOperationId(operationId: string): Promise<Session | null>;
 		save(session: Session): Promise<Session>;
 		archiveAndClear(session: Session): Promise<void>;

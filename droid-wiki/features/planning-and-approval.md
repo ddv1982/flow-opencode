@@ -33,6 +33,12 @@ src/application/flow-service.ts
 
 `applyPlan` clones the plan through `PlanInputSchema`, sets every feature to `pending`, defaults `finalReviewPolicy` to `detailed`, and validates duplicate feature ids, unknown dependencies, self-dependencies, and dependency cycles. `approvePlan` only accepts sessions in `planning` status with a draft plan.
 
+`flow_plan_save` may update only an active draft whose goal matches the request.
+It refuses every different-goal save while a session is unclosed, regardless
+of approval state, without archiving or replacing active bytes. The caller must
+explicitly close unfinished work as `deferred` or `abandoned`, converge archive
+publication, and then save the new goal.
+
 ## Integration points
 
 The public `/flow-plan` command is defined in `src/config-shared.ts` and compiled by `src/prompt-surfaces.ts`. Its prompt includes selected planning and quality-checklist sections plus a bounded parallel-pass contract. Planning examples and the full orchestration playbook remain embedded progressive-disclosure references loaded by stable id instead of entering every planning request.

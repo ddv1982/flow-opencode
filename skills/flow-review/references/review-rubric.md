@@ -1,6 +1,6 @@
 # Review rubric
 
-Use this to decide whether a `featureReview` or `finalReview` payload may pass.
+Use this to decide whether a runtime-owned feature or final review assignment may pass.
 
 ## Finding classes
 
@@ -24,7 +24,7 @@ If unsure whether a finding is real, read more or downgrade it. Do not promote g
 
 ## Feature review checklist
 
-- The work matches the active feature's `summary`, `targets`, and dependencies.
+- The work matches the assigned feature's `summary`, `targets`, and dependencies.
 - Plan `requirements` and `decisions` are still honored.
 - Changed files were read, not just summarized.
 - Validation evidence covers the behavior touched.
@@ -46,61 +46,63 @@ If unsure whether a finding is real, read more or downgrade it. Do not promote g
   explained and reviewed.
 - Broad validation ran and passed, or any skipped broad check is justified as a
   non-blocking gap.
-- The final `reviewDepth` equals the approved `finalReviewPolicy`; the only final-review enum values are `broad` and `detailed`.
+- The assignment's runtime-owned final depth equals the approved
+  `finalReviewPolicy`; the reviewer does not restate it in the result.
 - Feature-level reviews have no unresolved blocking findings.
 - Docs, commands, package metadata, and release surfaces match the delivered behavior.
 - Remaining gaps are explicit and do not contradict `kind: "completed"`.
 
 ## Final convergence scan
 
-Run this scan before returning a passing `finalReview`:
+Run this scan before returning a passing final-assignment result:
 
 1. Restate the original goal and the approved plan summary in your own words.
 2. Map each requirement to delivered evidence, validation output, or an explicit
    accepted gap.
-3. Walk every planned feature and confirm its completion evidence, review
+3. Walk every planned feature and confirm its recorded outcome, assignment
    result, and validation level.
 4. Compare the changed files, docs, commands, generated surfaces, and package
    metadata to the planned targets and requirements.
 5. Check whether the validation evidence would have caught the main failure
    modes introduced by the work.
-6. Decide whether remaining gaps are advisory or blocking before setting
-   `status`.
+6. Decide whether remaining gaps are advisory or blocking before setting the
+   `verdict`.
 
 Fail the final review when the delivered work cannot be traced back to the
 approved goal and requirements, even if each individual feature review passed.
 
 ## Payloads
 
-Feature review verdict and execution:
+Passing feature or final assignment result:
 
 ```json
 {
-  "featureReviewDepth": "standard",
-  "featureReview": { "status": "passed", "summary": "Reviewed the changed behavior and evidence.", "blockingFindings": [] },
-  "reviewExecution": {
-    "attemptId": "attempt-1",
-    "logicalPassId": "feature-pass",
-    "featureId": "feature-id",
-    "reviewKind": "feature",
-    "reviewSnapshotId": "sha256:digest",
-    "verdict": "passed",
-    "findings": [],
-    "startedAt": "ISO-8601",
-    "completedAt": "ISO-8601",
-    "terminalDisposition": "submitted"
-  }
+  "assignmentId": "review-assignment:runtime-id",
+  "verdict": "passed",
+  "findings": [],
+  "completedAt": "ISO-8601",
+  "terminalDisposition": "submitted"
 }
 ```
 
-Final review:
+Failed result:
 
 ```json
 {
-  "status": "passed",
-  "summary": "Reviewed plan scope, all changed files, broad validation, and release metadata.",
-  "blockingFindings": [],
-  "reviewDepth": "detailed"
+  "assignmentId": "review-assignment:runtime-id",
+  "verdict": "failed",
+  "findings": [
+    {
+      "taxonomy": "evidence_gap",
+      "subject": "broad validation",
+      "requirementOrRisk": "release behavior must be verified",
+      "evidenceLocator": "assignment validation summary",
+      "summary": "The supplied gate does not exercise the changed behavior.",
+      "severity": "blocking"
+    }
+  ],
+  "completedAt": "ISO-8601",
+  "terminalDisposition": "submitted"
 }
 ```
 

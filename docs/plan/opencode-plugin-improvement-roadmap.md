@@ -240,9 +240,10 @@ Implementation direction:
   and `src/adapters/opencode/plugin.ts:111-120`.
 - The adapter registers OpenCode-supported surfaces: `config`, custom `tool`, and
   `command.execute.before` hooks in `src/adapters/opencode/plugin.ts:116-120`.
-- Flow exposes a deliberately minimal seven-tool surface in
-  `src/adapters/opencode/tools.ts:53-125`, matching the README and maintainer
-  contract.
+- Flow now exposes the deliberately bounded nine-tool assignment surface in
+  `src/platform/opencode/tools.ts`, matching ADR 0003, the README, and the
+  maintainer contract. This supersedes the roadmap's original seven-tool
+  completion-carried-review surface.
 - Flow commands carry package-owned guidance and explicitly read current state
   through `flow_status`; the config hook registers commands and agents without
   workspace filesystem I/O.
@@ -477,16 +478,22 @@ Validation:
 
 Evidence:
 
-- Deferred/abandoned close preserves the previous session status while clearing
-  `activeFeatureId`: `src/runtime/transitions.ts:516-558`.
-- Tests cover planning-state deferred/abandoned archive but not running or
-  blocked close semantics: `tests/workspace-persistence.test.ts:137-166`.
+- A deferred or abandoned close is a terminal, quiescent transition: it records
+  the closure, clears active execution, and leaves no review assignment active.
+- Archive publication can fail after the closure is durable, so compact status
+  exposes the accepted retry handle as `closure.retryOperationId`.
 
 Plan:
 
-- Decide intended archived state for running and blocked sessions closed as
-  deferred or abandoned.
-- Add tests for those states before changing behavior.
+- Preserve quiescent closure semantics for sessions closed from planning,
+  running, blocked, and review states.
+- Cover both the initial nested `flow_session_close` request and retry by the
+  exact durable operation id; never reconstruct a close request from status.
+- Reserve close-start operation ids across active causal state and every
+  canonical Session v4 archive mutation; malformed or ambiguous canonical
+  history fails closed.
+- Reject every different-goal `flow_plan_save` while a session is unclosed;
+  explicit deferred or abandoned close owns unfinished-work disposition.
 
 Validation:
 
@@ -668,8 +675,10 @@ Defer until higher-priority contract and safety work is done:
 
 ## Non-Goals
 
-- Do not expand the seven-tool runtime surface without concrete user need.
-- Do not restore v3 compatibility aliases or session migrations.
+- Do not expand the current nine-tool runtime surface without concrete user
+  need and an explicit contract decision.
+- Do not restore compatibility aliases or migrations for another session
+  format.
 - Do not move planning, validation, review, cleanup, UI, or commit judgment into
   runtime projections.
 - Do not add public `/flow-test` or `/flow-commit` commands unless direct command

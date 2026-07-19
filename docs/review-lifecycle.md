@@ -1,95 +1,191 @@
 # Review lifecycle
 
-Flow records review executions independently from feature completion. A review
-attempt remains durable when completion fails validation, review, snapshot, or
-schema gates; successful retries add a new attempt instead of rewriting prior
-evidence.
+Flow separates a planned feature, its active execution, current source
+identity, mutable session snapshot, validation evidence, and each review
+assignment. Session v4 is the sole supported session contract.
 
-## Execution identity and retry truth
+## Runtime-owned identity
 
-Each `reviewExecutions` entry identifies an `attemptId`, `logicalPassId`,
-`featureId`, review kind, immutable `reviewSnapshotId`, verdict, typed findings,
-start/end timestamps, and terminal disposition. The two terminal dispositions
-are `submitted` and `observed_unsubmitted`.
+Every `flow_run_start` creates one feature-run identity. Reset terminalizes the
+active run and leaves its evidence and review records in append-only history.
+Pending assignments for that run become explicitly invalidated and cannot be
+recovered as active reviewer work. Retry counters and effective review truth
+are run-scoped, so a historical failed attempt cannot block repaired work after
+reset.
 
-`observed_unsubmitted` represents a failed attempt the host observed even
-though normal submission did not complete. It cannot carry a passing verdict.
+After implementation, the manager runs validation and calls
+`flow_review_start` with a strict nested request. Flow records source-bound
+validation metadata and one pending review assignment atomically. It derives
+and owns:
 
-Attempt IDs are idempotent. Repeating the same attempt has no effect; reusing an
-attempt ID with different evidence fails closed. A logical pass projects to its
-latest recorded attempt, so a failed-to-passed retry is currently passed while
-both attempts remain in the append-only ledger. Distinct logical passes that end
-with contradictory verdicts on one immutable snapshot prevent completion.
+- feature-run and assignment ids;
+- attempt and logical-pass ids;
+- current source and immutable packet digests;
+- applicable validation evidence references;
+- review-assignment start time; and
+- required feature or final review depth from the approved plan.
 
-Findings use exactly four taxonomies:
+Feature review uses `reviewKind: "feature"` with
+`validationScope: "targeted"`. Final review uses `reviewKind: "final"` with
+`validationScope: "broad"` and the exact passing feature-assignment result.
+Flow persists that result as a bound prerequisite result containing its
+assignment id, canonical result, and digest. Binding does not terminalize the
+feature assignment or append a recorded review execution.
 
-- `implementation_defect`
-- `regression_coverage_gap`
-- `evidence_gap`
-- `advisory`
+The first final assignment for one active run and source pins that prerequisite
+for same-source final-review retries. After context loss, the manager loads
+`flow_status { request: { view: "detail" } }` and copies
+`workflowData.projection.finalReviewRetry.prerequisite.result` unchanged into
+the new final `flow_review_start.request.featureReview`. The surrounding detail
+object also bounds final-assignment, run, source, prerequisite-assignment, and
+result-digest identity; the raw result is capped by the persisted 64 KiB limit.
+Compact and reviewer status intentionally omit this aggregate. A mismatched
+retry records nothing and leaves its operation id reusable. If source changed,
+rerun targeted validation and feature review before starting a new broad/final
+sequence.
 
-Flow computes each finding fingerprint from normalized taxonomy, subject,
-requirement or risk, and evidence locator. Attempt identity, time, summary prose,
-and presentation severity do not affect the fingerprint.
+The full reviewer prompt and raw validation output are not persisted in the
+ordinary session ledger.
 
-## Completion and optional telemetry
+## Reviewer recovery and output
 
-Core review evidence is a correctness input. Orchestration passes are optional
-telemetry and are parsed separately. Invalid optional telemetry is ignored with
-a bounded warning; it cannot erase a valid review execution or turn a failed
-review into a passing completion. Unknown core completion fields remain invalid.
+A reviewer recovers one exact assignment with:
 
-A completed (`status: "ok"`) result must include at least one execution. Flow
-records structurally valid, active-feature executions before validating the rest
-of the completion envelope, so they survive a later core-schema or ordinary
-completion rejection. Review summaries do not override this ledger: a failed
-summary needs a matching failed execution, and a passing summary requires the
-latest truth for every applicable logical pass to be passing. Final completion
-also requires a distinct passing final execution.
+```json
+{
+  "request": {
+    "view": "reviewer",
+    "assignmentId": "review-assignment:runtime-id"
+  }
+}
+```
 
-Preliminary review recording is itself a causal operation. Its request identity
-binds the execution list, expected revision, and expected snapshot. An exact
-retry returns the original receipt; reusing the operation id for another causal
-assignment fails instead of presenting a stale observation as accepted.
+The reviewer never reconstructs feature, packet, evidence, revision, snapshot,
+attempt, pass, start-time, or depth identity. It returns only:
 
-Two distinct failed review attempts consume the bounded retry budget. Replaying
-one already-recorded attempt is idempotent and does not consume the budget again.
+```json
+{
+  "assignmentId": "review-assignment:runtime-id",
+  "verdict": "passed",
+  "findings": [],
+  "completedAt": "2026-07-19T10:05:00.000Z",
+  "terminalDisposition": "submitted"
+}
+```
 
-## Final-feature economy order
+`completedAt` is reported time, not runtime-owned time. Flow accepts it only
+when it falls between the assignment start and the accepting mutation time,
+inclusive.
 
-The default final-feature sequence is:
+`observed_unsubmitted` represents failed work that the host observed but the
+reviewer could not submit normally. It must have a failed verdict and a
+blocking finding. Findings use the four taxonomies `implementation_defect`,
+`regression_coverage_gap`, `evidence_gap`, and `advisory`; Flow derives stable
+fingerprints from their normalized semantic locator fields.
 
-1. targeted validation;
-2. feature review;
-3. at most one already-authorized repair and feature-review retry;
-4. broad validation after the last functional edit;
-5. final review;
-6. one atomic `flow_feature_complete` call.
+## Atomic feature outcome
 
-An active final feature may legitimately remain `in_progress` between these
-steps. Economy mode does not dispatch final review before feature review passes.
-The runtime enforces this chronology from execution timestamps: final review
-cannot start before the latest feature review completes. Speculative latency
-routing remains disabled.
+`flow_feature_complete` accepts one strict nested request whose `result` is
+discriminated by outcome and validation scope:
+
+- a targeted `completed` result carries a summary, changed artifacts, and one
+  passing feature-assignment result;
+- a broad `completed` result carries a summary, changed artifacts, and one
+  passing final-assignment result; Flow obtains the feature-assignment result
+  from the final assignment's durable bound prerequisite; or
+- a `blocked` result carries a summary, one failed assignment result, and an
+  optional resolution hint.
+
+Invalid schema, stale guards, missing or reused assignments, source changes,
+bad chronology, or inconsistent findings record no mutation and do not consume
+the operation id. A corrected request can reuse that id.
+
+A genuine failed review is different: it is an accepted mutation with
+operation status `ok`. Flow records the assignment result as a recorded review
+execution, marks the assignment terminal, consumes run-scoped retry budget, and
+blocks the feature after two failed attempts. An exact accepted replay is
+idempotent.
+
+Optional `request.result.orchestrationPasses` telemetry is parsed separately. Malformed
+telemetry is ignored with a bounded warning and cannot erase, fabricate, or
+change the review result.
+
+## Source applicability and chronology
+
+Validation evidence records capture revision and snapshot for audit, but its
+applicability depends on source digest plus feature-run identity. Review-ledger
+mutations therefore do not stale unchanged-source validation. Any source edit
+or feature reset does. Starting review after a source edit atomically marks a
+pending same-run, same-kind assignment `invalidated` with reason
+`source_changed` and creates its replacement. Reset uses reason
+`feature_reset`. Unchanged-source duplicate starts remain rejected so the
+caller recovers the existing assignment instead of minting another.
+
+Flow accepts reported times only in this inclusive order:
+
+```text
+feature-run start
+  <= validation start
+  <= validation completion
+  <= review-assignment start
+  <= reported assignment-result time
+  <= runtime acceptance time
+```
+
+The final-feature economy order adds:
+
+```text
+bound feature-assignment result time
+  <= broad-validation start
+  <= broad-validation completion
+  <= final-assignment start
+```
+
+The full final sequence is targeted validation, feature assignment and review,
+at most one authorized repair and retry, broad validation after the last source
+edit and the passing feature-assignment result, final assignment and review,
+then one atomic broad feature outcome. The manager submits the final-assignment
+result only; the runtime records it together with the durable bound prerequisite
+result. Review depth remains a runtime-owned projection of approved plan policy.
+
+## Closure and archive recovery
+
+A passing final feature outcome marks workflow progress `completed` and records
+its progress timestamp, but leaves `closure` null. Only the `start` branch of
+`flow_session_close.request` records closure and the `session_close` causal
+mutation.
+
+Closure is quiescent. Completed, deferred, and abandoned closure leave no
+active execution or pending review assignment. Deferred or abandoned closure
+preserves unfinished plan and workflow progress as forensic state while
+terminalizing the active run and invalidating its pending assignments with the
+closure reason.
+
+If archive publication stops after closure is durable, compact status exposes
+`closure.kind` and the complete `closure.retryOperationId`. Recovery calls only:
+
+```json
+{
+  "request": {
+    "mode": "retry",
+    "operationId": "accepted-session-close-operation-id"
+  }
+}
+```
+
+The retry resumes publication and cleanup without another lifecycle mutation.
+It does not reconstruct or resubmit summary, guards, or a new close request.
+A new close start also requires an operation id absent from every active or
+canonical archived mutation in the workspace. Quarantine files do not reserve
+or authorize retries. Unreadable, unsupported, filename-mismatched, or
+ambiguous canonical history fails closed without changing active bytes. A
+Session v4 document with `closure: null` is likewise invalid canonical history;
+archive publication rejects it before cleanup.
 
 ## Observed worker capability
 
-The supported OpenCode plugin API exposes generic session and message events,
-including parent session and agent metadata, but it does not provide a durable
-Flow operation, feature, logical-pass, and review-snapshot correlation boundary.
-Those events are therefore insufficient for a trustworthy persistent child
-execution adapter.
-
-Flow keeps manager-declared orchestration counts as declared intent. The
-separate observed-review-worker ledger defaults to `unreconciled` with a `null`
-count; it never presents missing observation as zero. Its state is a strict
-union: unavailable observation is always unreconciled with a null count, while
-host-observed data is reconciled with a numeric count. A future adapter requires
-a verified durable correlation path and does not require a new public tool.
-
-## Compatibility and rollback
-
-These fields are additive Session v3 defaults. Existing sparse v3 sessions load
-with an empty review-execution ledger and an unreconciled observed-worker count;
-Flow does not fabricate retrospective attempts. Rolling back routing does not
-delete recorded review history.
+OpenCode session events do not provide a durable Flow operation, feature-run,
+assignment, logical-pass, and packet correlation boundary. Flow therefore does
+not infer reviewer truth from generic child-session events. The separate
+observed-review-worker ledger distinguishes unavailable observation from a
+reconciled numeric count; missing observation is never presented as zero.

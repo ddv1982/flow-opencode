@@ -85,11 +85,11 @@ error envelope; sources: src/routes/billing.ts, src/routes/subscription.ts`.
 
 Final synthesis: the manager re-reads the relevant route and middleware lines,
 keeps only verified or clearly labeled claims, and records one artifact such as
-a plan decision, review payload, or docs patch. Raw handoffs and unverified
+a plan decision, assignment result, or docs patch. Raw handoffs and unverified
 suggestions do not move into the next pass or user-facing answer.
 
 If the pass shaped feature execution, the manager records bounded accounting in
-`flow_feature_complete.orchestrationPasses`, such as pass id
+`flow_feature_complete.request.result.orchestrationPasses`, such as pass id
 `api-error-handling-read`, kind `review`, worker count `3`, slice ids
 `routes-auth`, `routes-billing`, and `routes-admin`, verification status
 `mixed` or `passed`, and a synthesis ref pointing to the manager-owned summary.

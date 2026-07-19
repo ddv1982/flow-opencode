@@ -26,10 +26,11 @@ the host boundary, prompt bloat, and the human-facing story.
 	 `.flow/session.lock/` behind. The final design writes token/pid/host/timestamp
 	 metadata and names the manual remedy, but deliberately fails closed instead
 	 of using time-based lock stealing that can admit concurrent writers.
-3. **Session schema migration/quarantine.** `version: z.literal(2)` +
-   hard-parse means any pre-v2 or drifted `session.json` turns every tool
-   (including `flow_status`) into a raw ZodError dump. Fix: quarantine the
-   unreadable file into `.flow/history/` and return a curated recovery message.
+3. **Session schema rejection.** Hard parsing previously turned an unsupported
+   or drifted `session.json` into a raw ZodError on every tool, including
+   `flow_status`. The current contract returns a curated failure and permits only
+   valid Session v4 state or canonical history; it does not add a compatibility
+   reader.
 4. **Small correctness fixes** (all verified):
    - `plugin.ts:34` `replaceAll("$ARGUMENTS", args)` mangles `$$`/`` $` `` in
      user goals — use a replacer function.

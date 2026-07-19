@@ -4,7 +4,11 @@ Active contributors: ddv1982
 
 ## Purpose
 
-Review and validation are evidence inputs to completion. `skills/flow-test/SKILL.md` selects and summarizes checks, `skills/flow-review/SKILL.md` returns review payloads, and `src/domain/transitions.ts` refuses completion until the accepted evidence is present and passing.
+Review and validation are evidence inputs to a feature outcome.
+`skills/flow-test/SKILL.md` selects and summarizes checks,
+`skills/flow-review/SKILL.md` returns assignment results, and
+`src/domain/transitions.ts` refuses the outcome until accepted evidence is
+present, passing, and chronologically applicable.
 
 ## Directory layout
 
@@ -22,20 +26,42 @@ src/domain/transitions.ts
 
 | Abstraction | File | Description |
 | --- | --- | --- |
-| `ValidationRunSchema` | `src/application/schema.ts` | Command/status/summary validation evidence. |
+| `ValidationObservationSchema` | `src/application/schema.ts` | Caller-attested command result accepted by `flow_review_start`. |
+| `ValidationEvidenceSchema` | `src/application/schema.ts` | Runtime-owned source-, snapshot-, and feature-run-bound validation evidence. |
 | `ValidationScopeSchema` | `src/application/schema.ts` | `targeted` or `broad`. |
 | `FeatureReviewDepthSchema` | `src/application/schema.ts` | `quick`, `standard`, or `detailed` feature-review depth. |
-| `ReviewSchema` | `src/application/schema.ts` | Feature review payload. |
-| `FinalReviewSchema` | `src/application/schema.ts` | Final review payload with `reviewDepth`. |
-| `validateCompletion` | `src/domain/transitions.ts` | Enforces evidence and review gates. |
+| `ReviewAssignmentSchema` | `src/application/schema.ts` | Durable runtime-owned review identity and lifecycle. |
+| `ReviewAssignmentResultInputSchema` | `src/application/schema.ts` | Small reviewer result bound to one assignment id. |
+| `completeAssignedFeature` | `src/domain/transitions.ts` | Enforces assignment, evidence, source, and review gates atomically. |
 
 ## How it works
 
-Feature completion requires at least one passing validation run, `validationScope: "targeted"` for non-final features, `featureReviewDepth` that meets the feature's planned `reviewDepth`, and a passing `featureReview` with no blocking findings. Final feature completion requires `validationScope: "broad"`, a passing `featureReview`, a passing `finalReview`, and `finalReview.reviewDepth` equal to the plan's `finalReviewPolicy`.
+The manager submits passing validation observations to `flow_review_start`.
+The runtime binds them to the current source and feature run, derives review
+identity and required depth from the approved plan, and returns an assignment
+id. A non-final feature outcome requires a targeted feature-assignment result. Final
+assignment creation requires broad validation plus the exact passing feature
+result and stores it as a durable bound prerequisite. The final feature outcome
+submits only the distinct passing final-assignment result; Flow records both
+atomically. A source-changed pending assignment is
+invalidated while its replacement is created. Failed results require blocking
+findings and consume the run-scoped retry budget as accepted blocker mutations.
+The first final assignment pins its prerequisite for same-source final-review
+retries. Detail status exposes the bounded aggregate under
+`finalReviewRetry.prerequisite`; compact and reviewer status omit it. A source
+edit requires a new targeted feature-review sequence. A mismatched same-source
+retry records nothing and leaves its operation id reusable.
+Reported validation and review times must follow run, validation, assignment,
+and result order and cannot postdate runtime acceptance. Broad final validation
+must start no earlier than the passing feature-assignment result.
 
 ## Integration points
 
-The review feature connects skills and runtime without giving review its own state-changing tool. `skills/flow-review/SKILL.md` returns feature review packets and final review payloads, and the manager records them in `flow_feature_complete` through `src/application/flow-service.ts`. `tests/runtime-gates.test.ts` verifies rejected missing, failed, too-shallow, or mismatched evidence.
+`flow_review_start` is the manager-only state-changing boundary that makes a
+review assignment durable before dispatch. `skills/flow-review/SKILL.md`
+instructs a hidden reviewer to recover only that assignment and return its
+small result to the manager. The manager records the result atomically through
+`flow_feature_complete`; reviewers never mutate Flow state.
 
 ## Key source files
 
@@ -44,7 +70,7 @@ The review feature connects skills and runtime without giving review its own sta
 | `skills/flow-test/SKILL.md` | Validation selection, run discipline, and evidence output shape. |
 | `skills/flow-review/SKILL.md` | Feature and final review procedure. |
 | `src/application/schema.ts` | Validation and review schemas. |
-| `src/domain/transitions.ts` | Completion evidence gate. |
+| `src/domain/transitions.ts` | Feature-outcome validation and assignment-result gate. |
 | `tests/runtime-gates.test.ts` | Review and validation enforcement tests. |
 
 ## Entry points for modification

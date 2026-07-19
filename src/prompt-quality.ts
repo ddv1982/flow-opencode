@@ -59,20 +59,36 @@ export type PromptRepetitionClassification = {
 	rationale: string;
 };
 
+export type LifecycleFlatRequestExample = {
+	tool:
+		| "flow_status"
+		| "flow_review_start"
+		| "flow_feature_complete"
+		| "flow_session_close";
+	line: number;
+	topLevelField: string | null;
+};
+
 const WORD_PATTERN = /[\p{L}\p{N}_`.-]+/gu;
 const ACTION_PATTERN =
 	/^(?:[-*]\s+|\d+[.)]\s+|(?:call|use|return|report|record|read|run|inspect|load|keep|preserve|treat|send|include|verify|confirm|stop|fail|approve|complete|work|identify|prefer|classify|write|account|orient|before)\b)/i;
 const NEGATIVE_PATTERN =
 	/\b(?:do not|don't|never|must not|cannot|can't|only\s+[^.]{0,40}\s+may)\b/i;
 
+const LIFECYCLE_REQUEST_EXAMPLE_START =
+	/\b(flow_status|flow_review_start|flow_feature_complete|flow_session_close)\b`?\s*(?:with\s+)?(?:\(\s*)?`?\{/gi;
+
 const CRITICAL_RULES: Record<string, RegExp> = {
 	"status-first": /call `?flow_status`? first/i,
 	"manager-state-ownership":
 		/only the (?:root )?manager may call state-changing `?flow_\*`?/i,
 	"approved-plan-immutability": /approved plans? (?:are|is) immutable/i,
-	"single-active-feature": /only one feature (?:can|may) be active/i,
-	"validation-required": /completion requires[^.]*validation/i,
-	"independent-review-required": /completion requires[^.]*independent review/i,
+	"single-active-feature":
+		/only one (?:feature (?:can|may) be active|active execution may exist)/i,
+	"validation-required":
+		/(?:completion|passing feature outcome) requires[^.]*validation/i,
+	"independent-review-required":
+		/(?:completion|passing feature outcome) requires[^.]*independent review/i,
 	"archive-pending-retry": /closure[^.]*flow_session_close/i,
 };
 
@@ -80,12 +96,12 @@ const STRUCTURAL_RULE_PATTERNS: Record<string, RegExp> = {
 	"worker state mutation denied by permissions": /state-changing `?flow_/i,
 	"approved plan immutability enforced by runtime":
 		/approved plans? (?:are|is|cannot be changed) immutable/i,
-	"single active feature enforced by runtime":
-		/only one feature (?:can|may) be active/i,
-	"validation gate enforced by completion schema/runtime":
-		/completion requires[^.]*validation|validationRun/i,
-	"review gate enforced by completion schema/runtime":
-		/featureReview|independent review/i,
+	"single active execution enforced by runtime":
+		/only one (?:feature (?:can|may) be active|active execution may exist)/i,
+	"validation gate enforced by feature-outcome schema/runtime":
+		/(?:completion|feature outcome) requires[^.]*validation|flow_review_start[^.]*validation/i,
+	"review gate enforced by feature-outcome schema/runtime":
+		/flow_review_start|independent review/i,
 };
 
 const MANAGER_ONLY_CAPABILITY_PATTERNS = [
@@ -182,6 +198,140 @@ function rulePositions(text: string): Record<string, number | null> {
 	);
 }
 
+function quotedEnd(text: string, start: number): number {
+	const quote = text[start];
+	for (let index = start + 1; index < text.length; index += 1) {
+		if (text[index] === "\\") {
+			index += 1;
+			continue;
+		}
+		if (text[index] === quote) return index;
+	}
+	return text.length - 1;
+}
+
+function skipWhitespace(text: string, start: number): number {
+	let index = start;
+	while (/\s/.test(text[index] ?? "")) index += 1;
+	return index;
+}
+
+function topLevelObjectFields(payload: string): string[] {
+	const fields: string[] = [];
+	let objectDepth = 1;
+	let arrayDepth = 0;
+	let parenthesisDepth = 0;
+	let expectsField = true;
+
+	for (let index = 0; index < payload.length; index += 1) {
+		const character = payload[index];
+		const next = payload[index + 1];
+		if (character === "/" && next === "/") {
+			index = payload.indexOf("\n", index + 2);
+			if (index === -1) break;
+			continue;
+		}
+		if (character === "/" && next === "*") {
+			const end = payload.indexOf("*/", index + 2);
+			if (end === -1) break;
+			index = end + 1;
+			continue;
+		}
+		if (character === '"' || character === "'" || character === "`") {
+			const end = quotedEnd(payload, index);
+			if (
+				expectsField &&
+				objectDepth === 1 &&
+				arrayDepth === 0 &&
+				parenthesisDepth === 0
+			) {
+				const separator = skipWhitespace(payload, end + 1);
+				if (payload[separator] === ":") {
+					fields.push(payload.slice(index + 1, end));
+					expectsField = false;
+				}
+			}
+			index = end;
+			continue;
+		}
+		if (character === "{") {
+			objectDepth += 1;
+			continue;
+		}
+		if (character === "}") {
+			if (objectDepth === 1) break;
+			objectDepth -= 1;
+			continue;
+		}
+		if (character === "[") {
+			arrayDepth += 1;
+			continue;
+		}
+		if (character === "]") {
+			arrayDepth = Math.max(0, arrayDepth - 1);
+			continue;
+		}
+		if (character === "(") {
+			parenthesisDepth += 1;
+			continue;
+		}
+		if (character === ")") {
+			parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+			continue;
+		}
+		if (objectDepth !== 1 || arrayDepth !== 0 || parenthesisDepth !== 0) {
+			continue;
+		}
+		if (character === ",") {
+			expectsField = true;
+			continue;
+		}
+		if (!expectsField || /\s/.test(character ?? "")) continue;
+		if (payload.startsWith("...", index)) {
+			fields.push("...");
+			expectsField = false;
+			continue;
+		}
+		const identifier = /^[A-Za-z_][A-Za-z0-9_]*/.exec(
+			payload.slice(index),
+		)?.[0];
+		if (!identifier) continue;
+		const separator = skipWhitespace(payload, index + identifier.length);
+		if (
+			payload[separator] === ":" ||
+			payload[separator] === "," ||
+			payload[separator] === "}"
+		) {
+			fields.push(identifier);
+			expectsField = false;
+		}
+		index += identifier.length - 1;
+	}
+	return fields;
+}
+
+/** Finds lifecycle-tool examples that bypass the required `request` envelope. */
+export function auditLifecycleFlatRequestExamples(
+	text: string,
+): LifecycleFlatRequestExample[] {
+	const violations: LifecycleFlatRequestExample[] = [];
+	for (const match of text.matchAll(LIFECYCLE_REQUEST_EXAMPLE_START)) {
+		const tool = match[1] as LifecycleFlatRequestExample["tool"] | undefined;
+		if (!tool || match.index === undefined) continue;
+		const payloadStart = match.index + match[0].length;
+		const payload = text.slice(payloadStart);
+		const fields = topLevelObjectFields(payload);
+		const topLevelField = fields.find((field) => field !== "request") ?? null;
+		if (fields.length > 0 && topLevelField === null) continue;
+		violations.push({
+			tool,
+			line: text.slice(0, match.index).split(/\r?\n/).length,
+			topLevelField,
+		});
+	}
+	return violations;
+}
+
 function terminologyWarnings(text: string): string[] {
 	const warnings: string[] = [];
 	if (/finalReviewDepth/.test(text)) {
@@ -203,6 +353,22 @@ function terminologyWarnings(text: string): string[] {
 		warnings.push(
 			"asks the model to infer context pressure or initiate compaction",
 		);
+	}
+	if (/flow_status`?\s+with\s+`?view\s*:/i.test(text)) {
+		warnings.push("uses a flat flow_status request instead of request.view");
+	}
+	if (auditLifecycleFlatRequestExamples(text).length > 0) {
+		warnings.push("uses a flat lifecycle tool request instead of request");
+	}
+	if (
+		/original close envelope|reconstruct(?:ed|ing)? close request/i.test(text)
+	) {
+		warnings.push("asks for caller-retained or reconstructed close state");
+	}
+	if (
+		/carrying that same feature result|resubmit[^.]*feature result/i.test(text)
+	) {
+		warnings.push("asks final outcome to resubmit the durable prerequisite");
 	}
 	return warnings;
 }
@@ -304,14 +470,14 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		surface: "flow-run",
 		required: [
 			{
-				label: "one active feature scope",
-				pattern: /sole scope|active feature/i,
+				label: "one active execution scope",
+				pattern: /sole scope|active execution/i,
 			},
 			{
 				label: "targeted validation",
 				pattern: /validationScope: ["`]targeted/i,
 			},
-			{ label: "feature review", pattern: /featureReviewDepth/ },
+			{ label: "review assignment", pattern: /flow_review_start/ },
 			{
 				label: "small slice stays serial",
 				pattern:
@@ -338,6 +504,24 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 			{
 				label: "approval gate",
 				pattern: /explicit user approval|prior autonomous authorization/i,
+			},
+		],
+	},
+	{
+		id: "flow-auto-plan-only",
+		name: "Explicit plan-only request through flow-auto",
+		input:
+			"Using /flow-auto, create a phased migration plan and approval summary, but do not implement anything.",
+		expectedRoute: "flow-auto",
+		surface: "flow-auto",
+		required: [
+			{
+				label: "plan-only boundary applies to flow-auto",
+				pattern: /stop after the saved approval summary[\s\S]*\/flow-auto/i,
+			},
+			{
+				label: "plan-only request does not authorize execution",
+				pattern: /does not authorize `flow_run_start`/i,
 			},
 		],
 	},
@@ -443,11 +627,11 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		surface: "flow-run",
 		required: [
 			{
-				label: "failed review recorded",
-				pattern: /failed attempt[^.]*flow_feature_complete/i,
+				label: "failed review accepted as blocker",
+				pattern: /genuine blocker[^.]*accepted mutation/i,
 			},
 			{ label: "one repair", pattern: /at most one repair/i },
-			{ label: "one retry review", pattern: /one retry\s+review/i },
+			{ label: "one retry review", pattern: /one\s+retry\s+review/i },
 		],
 	},
 	{
@@ -458,12 +642,15 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		expectedRoute: "flow-run",
 		surface: "flow-run",
 		required: [
-			{ label: "status first", pattern: /Call `flow_status`/i },
+			{ label: "status first", pattern: /Call `flow_status\b/i },
 			{
 				label: "closure detected",
-				pattern: /projection\.closure(?:\.kind)?/i,
+				pattern: /projection\.closure\.retryOperationId/i,
 			},
-			{ label: "retry close", pattern: /Retry `flow_session_close`/i },
+			{
+				label: "retry close",
+				pattern: /flow_session_close[^.]*mode: ["`]retry/i,
+			},
 		],
 	},
 	{
@@ -763,7 +950,7 @@ export const PROMPT_REPETITION_CLASSIFICATIONS: readonly PromptRepetitionClassif
 			id: "manager-and-hidden-review-judgment",
 			classification: "keep",
 			occurrences: [
-				"manager review-and-complete procedure",
+				"manager review-and-record-outcome procedure",
 				"hidden reviewer role-safe contract",
 			],
 			rationale:

@@ -16,7 +16,7 @@ without an exclusion.
 
 For the current-run reduction check, the reference side explicitly requests the
 diagnostic `detail` projection at each state. The current side uses the actual
-mutation receipt, default compact status, execution projection, reviewer
+mutation receipt, explicit compact status, execution projection, reviewer
 projection, and unchanged poll response produced for the same accepted
 transitions. The report publishes both decision-signature arrays and requires
 them to match before the 60% reduction gate can pass. This is a reproducible

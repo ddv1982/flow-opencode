@@ -1,17 +1,17 @@
 {
 	"variant": "surface-specific-bookended",
-	"justification": "Accepted after restoring source-backed runtime guards, reviewer depth and special-case evidence rules, and bounded worker handoffs; the reviewer increase restores omitted judgment while manager surfaces remain substantially smaller than the whole-skill baseline.",
+	"justification": "Accepted for Session v4 lifecycle hardening: manager surfaces now teach strict nested requests, first-binding final-review retry recovery, explicit different-goal closure, workspace-history-unique close handles, trusted chronology, and quiescent archive recovery.",
 	"growthPolicy": {
 		"minimumWordAllowance": 8,
 		"relativeWordAllowance": 0.02
 	},
 	"surfaces": {
-		"flow-auto": { "acceptedWords": 3596, "maxExactDuplicateLines": 3 },
-		"flow-plan": { "acceptedWords": 1390, "maxExactDuplicateLines": 2 },
-		"flow-run": { "acceptedWords": 1706, "maxExactDuplicateLines": 0 },
-		"flow-review": { "acceptedWords": 57, "maxExactDuplicateLines": 0 },
+		"flow-auto": { "acceptedWords": 4453, "maxExactDuplicateLines": 4 },
+		"flow-plan": { "acceptedWords": 1486, "maxExactDuplicateLines": 2 },
+		"flow-run": { "acceptedWords": 2115, "maxExactDuplicateLines": 0 },
+		"flow-review": { "acceptedWords": 76, "maxExactDuplicateLines": 0 },
 		"flow-status": { "acceptedWords": 10, "maxExactDuplicateLines": 0 },
-		"flow-reviewer": { "acceptedWords": 1120, "maxExactDuplicateLines": 1 },
+		"flow-reviewer": { "acceptedWords": 1189, "maxExactDuplicateLines": 1 },
 		"flow-evidence-worker": {
 			"acceptedWords": 170,
 			"maxExactDuplicateLines": 0

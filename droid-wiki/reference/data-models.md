@@ -8,16 +8,19 @@ Application input schemas reuse the core validators.
 
 | Field | Meaning |
 | --- | --- |
-| `version` | Literal `3`; older versions are preserved as unsupported and never migrated. |
-| `id` | Session id. |
+| `version` | Literal `4`; every other version is generic unsupported input and cannot become Flow state or canonical history. |
+| `id` | Bounded session identity (1–128 ASCII letters, digits, underscores, or hyphens); persistence maps its exact case-sensitive bytes to a lowercase SHA-256 archive filename. |
 | `goal` | User goal. |
 | `status` | `planning`, `ready`, `running`, `blocked`, or `completed`. |
 | `approval` | `pending` or `approved`. |
 | `plan` | `Plan` or `null`. |
-| `activeFeatureId` | Current feature id or `null`. |
+| `activeFeatureId` | Active-execution feature id or `null`; paired with `activeFeatureRunId`. |
+| `activeFeatureRunId` | Active-execution epoch or `null`; paired with `activeFeatureId`. |
+| `featureRuns` | Historical and active execution epochs. |
+| `reviewAssignments` | Durable runtime-owned feature and final review assignments. |
 | `history` | Completion and blocker history entries. |
-| `budget` | Review-count, failed-review, and bounded orchestration telemetry. |
-| `closure` | Completed, deferred, or abandoned closure record; when present, the session is archive-only. |
+| `budget` | Review-count, run-scoped failed-review, lifecycle, and bounded orchestration telemetry. |
+| `closure` | Completed, deferred, or abandoned quiescent closure plus archive retry handle; when present, no active execution or pending assignment remains. It may be null only in active state, never canonical history. |
 | `lastError` | Last runtime completion or transition error. |
 | `timestamps` | Created, updated, and completed timestamps. |
 
@@ -29,11 +32,21 @@ Application input schemas reuse the core validators.
 
 | Schema | Fields |
 | --- | --- |
-| `ValidationRunSchema` | `command`, `status`, `summary`. |
 | `FeatureReviewDepthSchema` | `quick`, `standard`, or `detailed`. |
-| `ReviewSchema` | `status`, `summary`, `blockingFindings`. |
-| `FinalReviewSchema` | Review fields plus `reviewDepth`. |
-| `WorkerResultSchema` | `status`, `featureId`, `summary`, artifacts, validation, feature review depth, review, final review, explicitly discriminated outcome, and optional `orchestrationPasses`. |
+| `ValidationObservationSchema` | Caller-attested command result; runtime derives command class, digest, source, run, and capture identity. |
+| `ValidationEvidenceSchema` | Runtime-owned validation identity, source and run binding, command identity, timestamps, result digests, and optional restricted artifact reference. |
+| `ReviewAssignmentSchema` | Runtime-owned feature/final assignment, validation refs, packet/source identity, planned depth, final bound prerequisite result, invalidation reason, and pending/terminal/invalidated lifecycle. |
+| `ReviewExecutionSchema` | Assignment-bound verdict, typed findings, timestamps, and terminal disposition. |
+| `ReviewAssignmentResultInputSchema` | Assignment id, verdict, typed findings, reported result time, and terminal disposition. |
+| `ExecutionHistoryEntrySchema` | Feature-run outcome with validation evidence refs and canonical review-assignment ids; duplicate review summaries are not persisted. |
+| `FlowFeatureCompleteToolSchema` | Nested `completed` or `blocked` result with causal guards and assignment result(s). |
+
+Detail status exposes `finalReviewRetry` only when one active-run/source final
+assignment has established a prerequisite. It contains the bounded final
+assignment, run, source, and prerequisite aggregate needed for same-source
+manager recovery, including prerequisite assignment id, raw result, and digest.
+The raw result remains inside the persisted 64 KiB limit. Compact and reviewer
+status omit it.
 
 ## Orchestration telemetry
 
@@ -63,6 +76,7 @@ the enforcement authority.
 | --- | --- |
 | `flow_plan_save` | `FlowPlanSaveSchema` in `src/application/flow-service.ts`. |
 | `flow_run_start` | `FlowRunStartSchema` in `src/application/flow-service.ts`. |
+| `flow_review_start` | `FlowReviewStartSchema` in `src/application/flow-service.ts`. |
 | `flow_feature_complete` | `FlowFeatureCompleteToolSchema` in `src/application/flow-service.ts`. |
 | `flow_feature_reset` | `FlowFeatureResetSchema` in `src/application/flow-service.ts`. |
 | `flow_session_close` | `FlowSessionCloseSchema` in `src/application/flow-service.ts`. |

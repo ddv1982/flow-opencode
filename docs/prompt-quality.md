@@ -23,7 +23,7 @@ bun run prompt:model-eval -- \
 ```
 
 `prompt:quality` is deterministic and offline. `prompt:model-eval` sends the
-actual rendered prompt sets plus 18 scenarios to one requested model, requires
+actual rendered prompt sets plus 19 scenarios to one requested model, requires
 strict structured decisions, and grades those decisions deterministically. It
 uses OpenCode `1.18.3`, `--pure`, an isolated temporary directory, and no
 auto-approved tools. The default timeout is five minutes per variant and can be
@@ -48,9 +48,9 @@ Prompt fragments declare both their role and their origin:
   markers.
 
 `src/prompt-baseline-fixtures.ts` contains the only manual-text exception: a
-frozen snapshot of pre-compiler startup and worker prompts used for historical
-comparison. Default production surfaces never select it, and current skill
-judgment must not be projected into it.
+frozen snapshot of pre-compiler assembly topology used for comparison. Default
+production surfaces never select it. Its lifecycle and wire language stays
+current, while current judgment remains sourced from skill Markdown.
 
 The parallel routing index is
 `skills/flow/references/parallel-orchestration.md`. The canonical manager
@@ -88,7 +88,8 @@ or replan it.
 
 ## Static evaluation
 
-The 18 fixtures cover serial fixes, planning, review-first work, persistence,
+The 19 fixtures cover serial fixes, planning, an explicit plan-only request
+through `/flow-auto`, review-first work, persistence,
 UI validation, parallel discovery, partial and malformed handoffs, bounded
 review repair, archive retry behavior, safe and unsafe candidate work, missing
 planning/execution runtimes, detailed review, cleanup/UI evidence gaps, and
@@ -96,12 +97,12 @@ review-retry exhaustion.
 
 | Variant | Complete scenarios | Criteria | Est. tokens | Exact duplicate lines | Role-inapplicable lines |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Whole-skill baseline | 11/18 | 42/52 | 59,106 | 188 | 26 |
-| Lexically deduplicated | 11/18 | 42/52 | 59,036 | 172 | 26 |
-| Surface-specific | 18/18 | 52/52 | 15,699 | 5 | 0 |
-| Surface-specific with bookends | 18/18 | 52/52 | 16,322 | 5 | 0 |
+| Whole-skill baseline | 13/19 | 45/54 | 62,847 | 192 | 26 |
+| Lexically deduplicated | 13/19 | 45/54 | 62,603 | 176 | 26 |
+| Surface-specific | 19/19 | 54/54 | 18,352 | 7 | 0 |
+| Surface-specific with bookends | 19/19 | 54/54 | 19,061 | 7 | 0 |
 
-The implemented set is 72.4% smaller than the whole-skill baseline by this
+The implemented bookended set is 69.7% smaller than the whole-skill baseline by this
 estimate. Lexical deduplication alone changes little; role/phase selection
 accounts for nearly all of the reduction and eliminates role-inapplicable
 lines.
@@ -110,12 +111,12 @@ lines.
 
 | Surface | Words | Est. tokens | Actions | Exact dupes | Sources |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `flow-auto` | 3,575 | 6,663 | 121 | 2 | 11 |
-| `flow-plan` | 1,408 | 2,646 | 52 | 2 | 7 |
-| `flow-run` | 1,689 | 3,173 | 48 | 0 | 8 |
-| `flow-review` task | 55 | 97 | 1 | 0 | 1 |
+| `flow-auto` | 4,453 | 8,315 | 132 | 4 | 11 |
+| `flow-plan` | 1,486 | 2,794 | 52 | 2 | 7 |
+| `flow-run` | 2,115 | 3,983 | 51 | 0 | 8 |
+| `flow-review` task | 76 | 140 | 0 | 0 | 1 |
 | `flow-status` | 10 | 16 | 1 | 0 | 0 |
-| `flow-reviewer` agent | 1,140 | 2,139 | 49 | 1 | 4 |
+| `flow-reviewer` agent | 1,189 | 2,225 | 49 | 1 | 4 |
 | `flow-evidence-worker` | 170 | 303 | 3 | 0 | 3 |
 | `flow-validation-worker` | 170 | 305 | 3 | 0 | 3 |
 | `flow-audit-worker` | 181 | 320 | 3 | 0 | 3 |
@@ -133,8 +134,8 @@ claim is true.
 The hidden reviewer grew from the first surface-specific draft because that
 draft had accidentally omitted detailed-review depth, runtime-unavailable
 behavior, and cleanup/UI special-case evidence. Restoring that judgment is an
-intentional quality correction, while the reviewer remains 47.1% smaller than
-the 4,044-token whole-skill baseline.
+intentional quality correction, while the reviewer remains 49.6% smaller than
+the 4,414-token whole-skill baseline.
 
 ## Live model comparison
 
@@ -144,6 +145,10 @@ progressive-disclosure split. Each model returned one decision per scenario,
 graded across 96 routing, scope, validation, review, retry, ownership, handoff,
 continuation, and false-completion criteria. These are single-sample decision
 simulations, not end-to-end Flow executions.
+
+These provider-backed rows predate the nineteenth deterministic plan-only
+scenario and remain historical 18-scenario samples. No 19-scenario model score
+is claimed until that optional evaluation is rerun.
 
 | Model | Configuration | Variant | Scenarios | Criteria | Tool events | OpenCode-reported tokens |
 | --- | --- | --- | ---: | ---: | ---: | --- |

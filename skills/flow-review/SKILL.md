@@ -1,15 +1,17 @@
 ---
 name: flow-review
-description: "Use when Flow work needs a review verdict in the v5 runtime: a completed feature awaiting its featureReview, a final session review, or an assigned review slice. Validation evidence gathering stays in flow-test; cleanup judgment stays in flow-deslop."
+description: "Use when Flow work needs an assignment result in the v5 runtime: an active execution awaiting feature review, a final review assignment, or an assigned review slice. Validation evidence gathering stays in flow-test; cleanup judgment stays in flow-deslop."
 ---
 
 # Flow Review
 
-Use this skill for review. The reviewer is usually read-only and does not mutate Flow state. The manager records the returned review payload inside `flow_feature_complete`.
+Use this skill for review. The reviewer is read-only and does not mutate Flow
+state. The manager creates the assignment before dispatch and records the
+returned terminal result inside `flow_feature_complete`.
 
 If Flow tools, required Flow skills, or required references are unavailable or
-stale, perform an advisory review and say that no Flow-gated review payload was
-recorded.
+stale, perform an advisory review and say that no Flow-gated assignment result
+was recorded.
 
 ## Execution contexts
 
@@ -29,13 +31,18 @@ These instructions run in two contexts, and only one of them can load helpers:
 
 ## Start
 
-- Call `flow_status` when available.
-- Identify whether this is a feature review or final review.
-- Prefer the manager's bounded review packet over parent-session memory. The
-  packet should name the active feature, minimum `reviewDepth`, changed files,
-  diff summary, validation evidence, and targeted paths or risk lenses. If the
-  packet is missing important scope or evidence, record that as a coverage gap
-  or blocker instead of searching the full conversation transcript.
+- When the assignment id is available, call only
+  `flow_status { "request": { "view": "reviewer", "assignmentId": "..." } }`
+  and verify that
+  the returned assignment is pending. Do not reconstruct reviewer status from
+  feature, packet, evidence, revision, or snapshot fields.
+- Identify whether the assignment is a feature review or final review.
+- Prefer the bounded assignment packet over parent-session memory. The
+  assignment projection names the active execution's feature, runtime-owned
+  required depth, packet summary, validation evidence count, assigned scope,
+  and risk lenses. If the packet is missing important scope or evidence, record
+  that as a coverage gap or blocker instead of searching the full conversation
+  transcript.
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
 - For final review, also compare the original goal, full feature list, completed
   feature evidence, changed artifacts, and final validation against the
@@ -57,56 +64,54 @@ These instructions run in two contexts, and only one of them can load helpers:
 
 ## Output
 
-For every observed dispatch, return the verdict plus one `reviewExecution` for
-the manager to append to `flow_feature_complete.reviewExecutions`. Copy the
-packet-provided `attemptId`, `logicalPassId`, `featureId`, `reviewKind`,
-immutable `reviewSnapshotId` digest, and `startedAt`; add `verdict`, typed
-`findings`, `completedAt`, and `terminalDisposition`. Use
-`terminalDisposition: "observed_unsubmitted"` for an observed attempt that
-cannot submit normally; it is still a failed execution, never missing evidence.
-Flow computes each finding fingerprint from normalized taxonomy + subject +
-requirement/risk + evidence locator.
+For every observed dispatch, return exactly one assignment result. Echo only
+the runtime-owned `assignmentId`; add `verdict`, typed `findings`,
+`completedAt`, and `terminalDisposition`. Do not return attempt id, logical-pass
+id, feature/run identity, packet/snapshot/source/evidence identity, start time,
+or review depth—the runtime derives those fields from the durable
+assignment. Use `terminalDisposition: "observed_unsubmitted"` only for an
+observed result that cannot submit normally; it must be failed and include a
+blocking finding. Flow computes finding fingerprints.
 
-Feature example:
+`completedAt` is reported time. It must not precede the runtime-owned
+assignment start or postdate the runtime acceptance time at which the manager
+submits the assignment result.
 
-```json
-{
-  "featureReviewDepth": "standard",
-  "featureReview": {
-    "status": "passed",
-    "summary": "what was reviewed and why it is acceptable",
-    "blockingFindings": []
-  },
-  "reviewExecution": {
-    "attemptId": "attempt-2",
-    "logicalPassId": "feature-pass",
-    "featureId": "feature-id",
-    "reviewKind": "feature",
-    "reviewSnapshotId": "sha256:digest",
-    "verdict": "passed",
-    "findings": [],
-    "startedAt": "ISO-8601",
-    "completedAt": "ISO-8601",
-    "terminalDisposition": "submitted"
-  }
-}
-```
-
-`featureReviewDepth` must be at least the feature's planned `reviewDepth`.
-Use the actual depth performed: `quick`, `standard`, or `detailed`.
-
-Final review uses `reviewKind: "final"` in that envelope plus:
+Passing example:
 
 ```json
 {
-  "status": "passed",
-  "summary": "session-level review summary",
-  "blockingFindings": [],
-  "reviewDepth": "detailed"
+  "assignmentId": "review-assignment:runtime-id",
+  "verdict": "passed",
+  "findings": [],
+  "completedAt": "ISO-8601",
+  "terminalDisposition": "submitted"
 }
 ```
 
-Use `status: "failed"` when any blocking finding remains. Advisory findings may be included in the prose summary, but `blockingFindings` contains only blockers.
+Blocking example:
+
+```json
+{
+  "assignmentId": "review-assignment:runtime-id",
+  "verdict": "failed",
+  "findings": [
+    {
+      "taxonomy": "implementation_defect",
+      "subject": "src/navigation.ts",
+      "requirementOrRisk": "stale requests cannot publish terminal state",
+      "evidenceLocator": "src/navigation.ts:publishResult",
+      "summary": "A superseded request can still publish an error.",
+      "severity": "blocking"
+    }
+  ],
+  "completedAt": "ISO-8601",
+  "terminalDisposition": "submitted"
+}
+```
+
+Use `verdict: "failed"` when any blocking finding remains. A pass may include
+advisory findings but cannot include a blocking one.
 
 Typed execution findings use exactly `implementation_defect`,
 `regression_coverage_gap`, `evidence_gap`, or `advisory` as `taxonomy`, with
@@ -121,8 +126,8 @@ Typed execution findings use exactly `implementation_defect`,
   `flow/references/parallel-orchestration.md` from `flow_guidance` for read-only slices by
   changed-file group, risk lens, or validation surface. If fan-out is selected,
   request the manifest, execution, and synthesis reference ids with the named review, audit,
-  evidence, or validation workers; only the manager returns the final
-  `featureReview` or `finalReview` payload. If those references are unavailable
+  evidence, or validation workers; only the manager returns the final assignment
+  result. If those references are unavailable
   in the current context (for example in a bundled public Flow
   command that does not include it), review serially and record the skipped
   fan-out as a coverage gap instead of improvising worker contracts. The hidden

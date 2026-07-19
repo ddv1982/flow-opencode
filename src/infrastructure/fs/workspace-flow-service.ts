@@ -15,7 +15,7 @@ export function createWorkspaceFlowService(workspace: string): FlowService {
 
 export async function flowStatus(
 	workspace: string,
-	input: unknown = {},
+	input: unknown,
 ): Promise<FlowResponse> {
 	return createWorkspaceFlowService(workspace).status(input);
 }
@@ -45,6 +45,13 @@ export async function flowFeatureComplete(
 	input: unknown,
 ): Promise<FlowResponse> {
 	return createWorkspaceFlowService(workspace).featureComplete(input);
+}
+
+export async function flowReviewStart(
+	workspace: string,
+	input: unknown,
+): Promise<FlowResponse> {
+	return createWorkspaceFlowService(workspace).reviewStart(input);
 }
 
 export async function flowFeatureReset(

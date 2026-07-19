@@ -69,11 +69,11 @@ describe("causal transport measurement", () => {
 			"mutation_receipt_compact_execution_reviewer_and_unchanged",
 		);
 		expect(currentRun.reference.count).toBe(currentRun.current.count);
-		expect(currentRun.current.count).toBe(54);
+		expect(currentRun.current.count).toBe(76);
 		expect(currentRun.reductionBasisPoints).toBeGreaterThanOrEqual(6000);
 		expect(currentRun.sameRuntimeTransitionDecisions).toBe(true);
 		expect(currentRun.referenceDecisions).toEqual(currentRun.currentDecisions);
-		expect(currentRun.decisionCount).toBe(14);
+		expect(currentRun.decisionCount).toBe(21);
 		expect(currentRun.pass).toBe(true);
 	});
 

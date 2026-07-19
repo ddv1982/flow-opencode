@@ -4,7 +4,13 @@
 
 ## What this project does
 
-Flow turns a broad coding goal into an approved feature plan, runs one feature at a time, records validation and review evidence, and archives the session when it is done. The runtime in `src/application/flow-service.ts`, `src/domain/transitions.ts`, and `src/infrastructure/fs/workspace.ts` enforces the hard rules. The skills under `skills/` contain the judgment for planning, execution, validation, review, cleanup, UI checks, and commit preparation.
+Flow turns a broad coding goal into an approved feature plan, runs one active
+execution at a time, records validation evidence and assignment results, and
+publishes a closed session into history. The runtime in
+`src/application/flow-service.ts`, `src/domain/transitions.ts`, and
+`src/infrastructure/fs/workspace.ts` enforces the hard rules. The skills under
+`skills/` contain the judgment for planning, execution, validation, review,
+cleanup, UI checks, and commit preparation.
 
 ## Quick links
 
@@ -36,7 +42,7 @@ English captions are available as
 | `src/platform/opencode/plugin.ts` | OpenCode plugin entrypoint, command preflight, tools, and config hook. |
 | `src/application/flow-service.ts` | Typed use cases, repository coordination, and core Zod input schemas. |
 | `src/domain/transitions.ts` | Pure state transitions for planning, running, completion, reset, and close. |
-| `src/infrastructure/fs/workspace.ts` | `.flow/` persistence, locks, atomic writes, archive, and quarantine. |
+| `src/infrastructure/fs/workspace.ts` | `.flow/` persistence, locks, atomic writes, strict input, and archive publication. |
 | `src/config-shared.ts` | Flow command and hidden worker config injected into OpenCode. |
 | `src/guidance/catalog.ts` | Stable ids and Markdown embedded in the plugin bundle. |
 | `skills/` | Authored guidance and references consumed by the embedded catalog. |

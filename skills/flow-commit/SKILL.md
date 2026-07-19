@@ -11,10 +11,10 @@ committing. It is not part of the autonomous Flow loop and must not be loaded
 automatically by `flow`, `flow-run`, or `flow_feature_complete`.
 
 When a Flow session exists, a commit never substitutes for Flow completion. The
-manager still records validation and review evidence through
+manager still records validation and assignment results through
 `flow_feature_complete` before claiming a Flow feature is done. Default to commit
 preparation only after `flow_feature_complete` has recorded the relevant
-completion evidence. If the user explicitly asks for a WIP commit, preserve
+feature outcome. If the user explicitly asks for a WIP commit, preserve
 failing or incomplete validation context in the message.
 
 ## Boundaries

@@ -22,11 +22,11 @@ Flow began on 2026-03-31 as an OpenCode plugin for stateful planning and executi
 - 2026-05-03: tag `v2.0.0` started the v2 line.
 - 2026-05-03 to 2026-06-01: the v2 line advanced through `v2.0.56`, with frequent runtime and docs changes.
 
-### v3 to v4 simplification, Jun 2026
+### Breaking simplification, Jun 2026
 
-- 2026-06-12: tag `v3.0.0` started the v3 line.
+- 2026-06-12: an earlier major release line began.
 - 2026-06-14: ADR `docs/adr/0001-skills-first-flow-architecture.md` accepted the skills-first minimal runtime.
-- 2026-06-14: tag `v4.0.0` marked the breaking simplification: seven runtime tools, `.flow/session.json`, and no v3 compatibility aliases.
+- 2026-06-14: tag `v4.0.0` marked the breaking simplification: seven runtime tools, `.flow/session.json`, and no compatibility aliases for the prior session contract.
 
 ### v4 hardening and release polish, Jun to Jul 2026
 
@@ -46,19 +46,24 @@ Flow began on 2026-03-31 as an OpenCode plugin for stateful planning and executi
 
 ## Deprecated and removed ideas
 
-ADR 0001 records the main deprecations on 2026-06-14. Flow v4 removed v3 session migration, `flow_context`, separate review-record tools, context quality, readiness projections, project maps, feature doc drilldowns, lanes, and decision gates. At the time, the replacement lived in `src/runtime/schema.ts` and `src/runtime/api.ts`; Flow v5 later moved those responsibilities into explicit layers.
+ADR 0001 records the main deprecations on 2026-06-14. Flow v4 removed earlier
+session compatibility, `flow_context`, separate review-record tools, context
+quality, readiness projections, project maps, feature doc drilldowns, lanes,
+and decision gates. At the time, the replacement lived in
+`src/runtime/schema.ts` and `src/runtime/api.ts`; Flow v5 later moved those
+responsibilities into explicit layers.
 
 ### v5 TypeScript 7 cutover, Jul 2026
 
 - 2026-07-17: ADR 0002 adopted TypeScript 7.0.2, Node 24+, Bun
-  1.3.14, session schema version 3, and the
+  1.3.14, the pre-cutover session contract, and the
   domain/application/infrastructure/platform dependency direction.
 - 2026-07-18: tag `v5.0.0` opened the TypeScript 7 line with embedded guidance,
   archive-only closure recovery, direct Zod schemas, and no v4 runtime or
   session compatibility layer.
 - The cutover removed the `src/runtime/**` and `src/adapters/**` entrypoints,
   separated OpenCode's host validator from Flow's direct Zod schemas, and
-  intentionally provided no v2-session migration reader.
+  intentionally provided no reader for an earlier session format.
 
 ## Major rewrites
 

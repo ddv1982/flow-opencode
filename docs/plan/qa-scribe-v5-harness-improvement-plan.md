@@ -49,7 +49,7 @@ case-study aggregates. They are baselines, not timeless product claims.
 
 | Signal | Verified baseline |
 | --- | ---: |
-| Package / state schema | `5.0.0` / strict Session v3 |
+| Package / state schema | `5.0.0` / pre-cutover persisted-session contract |
 | Focused prompt/runtime/schema tests | 52 passed, 0 failed |
 | Deterministic prompt evaluation | 18/18 scenarios; 52/52 criteria |
 | Current `flow-auto` | 26,947 characters; 6,737 estimated tokens |
@@ -273,12 +273,11 @@ optimizing any transport or prompt.
 
 ### Compatibility and rollback
 
-Prefer additive strict defaults for new v3 fields during Phase 1, matching the
-repository's existing sparse-v3 compatibility pattern. Do not bulk rewrite old
-sessions or fabricate retrospective attempts. If the design requires a semantic
-version boundary, stop and approve an explicit, backup-first migration before
-implementation. Latency policy remains off; rollback disables new routing but
-never deletes execution history.
+This historical Phase 1 checkpoint used additive strict defaults for new ledger
+fields. The current runtime must not preserve that pre-cutover session shape:
+Session v4 is the sole accepted contract, and no older session is rewritten or
+used to fabricate retrospective attempts. Latency policy remains off; rollback
+disables new routing but never deletes execution history.
 
 ## Phase 2 — Compact, revisioned, snapshot-bound state
 
@@ -330,16 +329,11 @@ bounded, role-scoped, and cheap.
 6. Extend persistence safety to evidence artifacts.
    - Publish artifacts atomically and exclusively, verify content digests on
      read, and make crash/replay idempotent.
-   - Do not silently migrate sessions. Prefer additive defaults where semantics
-     remain honest; otherwise use an explicit lock/backup/validate/publish
-     migration with digest-guarded rollback.
-   - A version-boundary migration, if separately approved, is a standalone
-     offline operation. The runtime gains no compatibility reader or automatic
-     migration: unsupported active sessions remain byte-preserved through the
-     existing quarantine/recovery path.
-   - The offline migrator retains strict JSON and root/symlink checks, lock
-     ownership, atomic/no-clobber publication, archive-collision behavior, and
-     digest-guarded rollback.
+   - Do not migrate session contracts. Session v4 is the sole accepted active
+     and canonical-history format; every other version is generic unsupported
+     input and gains no reader or version-specific recovery path.
+   - Retain strict JSON and root/symlink checks, lock ownership,
+     atomic/no-clobber publication, and archive-collision behavior.
 
 ### Phase 2 acceptance gate
 
@@ -354,14 +348,14 @@ bounded, role-scoped, and cheap.
 - Equivalent pre/post transition fixtures make the same runtime decisions.
 - Stale revision, stale snapshot, missing evidence, and digest mismatch all
   fail closed.
-- Crash, archive, quarantine, and rollback tests preserve readable state.
+- Crash, archive, strict-input, and rollback tests preserve readable state.
 
 ### Rollback
 
 Keep legacy full/detail rendering available for diagnostics behind an explicit
 view, not as ordinary model transport. Disable delta/compact selection if
 necessary while retaining causal/evidence records. Never down-convert or
-overwrite an unknown newer session.
+overwrite unsupported input.
 
 ## Phase 3 — Typed dispatch, handoffs, and completion contracts
 
@@ -794,8 +788,8 @@ provider-specific adapter enters the runtime.
 
 ### Phase 2 implementation checkpoint — acceptance blocked
 
-The four Phase 2 implementation slices are complete in flow-opencode. Session
-v3 now has a canonical revision/snapshot root, append-only digest-linked
+The four Phase 2 implementation slices are complete in flow-opencode. The
+pre-cutover session contract gained a canonical revision/snapshot root, append-only digest-linked
 operation and evidence records, stale causal guards, exact replay identity, and
 compact/detail/reviewer/delta projections. Ordinary mutations return bounded
 receipts. Restricted validation output uses owner-only, immutable,
@@ -903,6 +897,41 @@ does not convert that unavailable gate into a pass. Optional provider-backed
 prompt model evaluation was not run; deterministic prompt evaluation and the
 pinned real-host smoke were run instead.
 
-No dependency, session version, compatibility migration, database, archive
-index, cache, pagination layer, or new corpus field was added. No corpus,
-denominator, threshold, or baseline value was changed to obtain green output.
+At this 2026-07-18 checkpoint, no dependency, session version, compatibility
+migration, database, archive index, cache, pagination layer, or new corpus
+field was added. No corpus, denominator, threshold, or baseline value was
+changed to obtain green output.
+
+### Session v4 lifecycle follow-up — locally accepted 2026-07-19
+
+The later review-lifecycle remediation supersedes only the active execution and
+review handshake described by the checkpoint above. It intentionally adds
+Session v4 and one manager-only `flow_review_start` tool as a clean minor
+cutover; every other session version is generic unsupported input and is never
+hydrated or migrated.
+The implemented follow-up adds native feature runs, source-bound validation,
+runtime-owned reviewer assignments, assignment-id-only recovery, nested atomic
+completed/blocked results, accepted review blockers, and reset-scoped retry
+truth. Deprecated `needs_input` and `replan_required` persisted outcomes are no
+longer accepted by the Session v4 schema.
+
+The follow-up regression oracle now reports the eight lifecycle counters from
+the sanitized `qa_scribe_5_1_high` baseline and retains unavailable facts as
+`not_recorded`. A machine-checked coverage map binds all eleven lifecycle
+failure classes to concrete production-contract tests. Deterministic prompt
+evaluation is now 19/19 scenarios and 54/54 criteria; the added scenario proves
+that an explicit plan-only request stops after planning even through
+`/flow-auto`. Exact completion replay is still checked before derived source
+identity, while stale guards, missing assignments, chronology, verdict shape,
+and result semantics now fail before source I/O.
+
+The post-follow-up local gate passed 230 tests with zero failures (plus the one
+environment-gated live test skipped by the ordinary suite), and the separately
+enabled packed OpenCode 1.18.3 smoke passed 2/2 checks. These results supersede
+the earlier local test and prompt counts only for the Session v4 follow-up; the
+2026-07-18 numbers above remain a historical checkpoint.
+
+Local deterministic and pinned live-host gates are recorded in
+`flow-review-lifecycle-remediation-plan.md`. A fresh bounded real-project run
+and non-macOS matrix results remain release evidence, not compatibility
+functionality, and are not claimed by this follow-up checkpoint.
