@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	applyFlowActivation,
 	checkFlowActivation,
@@ -77,6 +78,54 @@ async function exists(path: string): Promise<boolean> {
 	}
 }
 
+async function crashActivation(
+	environment: Awaited<ReturnType<typeof fixture>>,
+	crashPoint: "after-cache-stage" | "after-removal-commit",
+): Promise<void> {
+	const child = Bun.spawn(
+		[
+			process.execPath,
+			"run",
+			fileURLToPath(new URL("./support/activation-crash.ts", import.meta.url)),
+			JSON.stringify({
+				project: environment.project,
+				target: "5.2.2",
+				paths: environment.paths,
+			}),
+			crashPoint,
+		],
+		{ cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+	);
+	const exitCode = await child.exited;
+	if (exitCode === 0) {
+		throw new Error(
+			`crash fixture exited normally: ${await new Response(child.stderr).text()}`,
+		);
+	}
+}
+
+async function journalPaths(journalRoot: string): Promise<string[]> {
+	return (await readdir(journalRoot))
+		.map((name) => join(journalRoot, name, "journal.json"))
+		.sort();
+}
+
+function legacyFlowWrapper(version: string): string {
+	return [
+		"const flowPluginUrl = new URL(",
+		`  "../.cache/opencode/packages/opencode-plugin-flow@${version}/node_modules/opencode-plugin-flow/dist/index.js",`,
+		`  \`file://\${process.env.HOME}/\`,`,
+		")",
+		"",
+		"export default async function flowPlugin(input, options) {",
+		'  process.env.BUN_BE_BUN = "1"',
+		"  const { default: plugin } = await import(flowPluginUrl.href)",
+		"  return plugin(input, options)",
+		"}",
+		"",
+	].join("\n");
+}
+
 afterEach(async () => {
 	await Promise.all(
 		temporaryRoots.splice(0).map((path) => rm(path, { recursive: true })),
@@ -84,7 +133,7 @@ afterEach(async () => {
 });
 
 describe("Flow activation apply", () => {
-	test("dry-runs, then leaves one canonical pin and quarantines only proven artifacts", async () => {
+	test("dry-runs, then leaves one canonical pin and permanently removes only proven artifacts", async () => {
 		const environment = await fixture();
 		const paths = resolveActivationPaths(
 			environment.project,
@@ -136,8 +185,8 @@ describe("Flow activation apply", () => {
 		expect(dryRun.plan.map(({ action }) => action)).toEqual(
 			expect.arrayContaining([
 				"rewrite-config",
-				"quarantine-wrapper",
-				"quarantine-cache",
+				"remove-wrapper",
+				"remove-cache",
 			]),
 		);
 		expect(await readFile(paths.globalConfig, "utf8")).toBe(globalBefore);
@@ -183,24 +232,28 @@ describe("Flow activation apply", () => {
 			await readFile(applied.recovery.journalPath, "utf8"),
 		) as {
 			state?: string;
+			format?: string;
 			actions?: Array<{
 				action?: string;
 				state?: string;
-				recoveryPath?: string;
+				stagingPath?: string;
+				deleted?: boolean;
 			}>;
 		};
+		expect(journal.format).toBe("flow-activation-journal-v2");
 		expect(journal.state).toBe("complete");
 		expect(journal.actions?.every(({ state }) => state === "complete")).toBe(
 			true,
 		);
-		const quarantined = journal.actions?.filter(
-			({ action }) =>
-				action === "quarantine-wrapper" || action === "quarantine-cache",
+		const removed = journal.actions?.filter(
+			({ action }) => action === "remove-wrapper" || action === "remove-cache",
 		);
-		for (const action of quarantined ?? []) {
-			expect(action.recoveryPath).toBeDefined();
-			expect(await exists(action.recoveryPath as string)).toBe(true);
+		for (const action of removed ?? []) {
+			expect(action.deleted).toBe(true);
+			expect(action.stagingPath).toBeDefined();
+			expect(await exists(action.stagingPath as string)).toBe(false);
 		}
+		expect(await exists(paths.cacheRecoveryRoot)).toBe(false);
 		const backupDirectory = join(
 			dirname(applied.recovery.journalPath),
 			"configs",
@@ -254,6 +307,157 @@ describe("Flow activation apply", () => {
 		);
 		expect(await readFile(paths.globalConfig, "utf8")).toBe(canonicalJsonc);
 		expect(await exists(wrapper)).toBe(false);
+	});
+
+	test("recognizes and permanently removes the exact legacy Flow wrapper", async () => {
+		const environment = await fixture();
+		const paths = resolveActivationPaths(
+			environment.project,
+			environment.paths,
+		);
+		const wrapper = join(paths.globalPluginDirectory, "flow-5.2.0-wrapper.js");
+		await mkdir(dirname(wrapper), { recursive: true });
+		await writeFile(wrapper, legacyFlowWrapper("5.2.0"), "utf8");
+		await writeJson(paths.globalConfig, {
+			plugin: ["./plugins/flow-5.2.0-wrapper.js", "opencode-plugin-flow@5.2.2"],
+		});
+		const oldCache = await installCacheArtifact(
+			environment.cacheRoot,
+			"opencode-plugin-flow@5.2.0",
+			"5.2.0",
+		);
+
+		const applied = await applyFlowActivation({
+			project: environment.project,
+			scope: "global",
+			target: "5.3.1",
+			apply: true,
+			paths: environment.paths,
+		});
+
+		expect(applied.status).toBe("applied");
+		expect(applied.after?.singleVersionSatisfied).toBe(true);
+		expect(await exists(wrapper)).toBe(false);
+		expect(await exists(oldCache)).toBe(false);
+		expect(JSON.parse(await readFile(paths.globalConfig, "utf8"))).toEqual({
+			plugin: ["opencode-plugin-flow@5.3.1"],
+		});
+		const journal = JSON.parse(
+			await readFile(applied.recovery?.journalPath as string, "utf8"),
+		) as { actions?: Array<{ action?: string; stagingPath?: string }> };
+		for (const action of journal.actions?.filter(({ action }) =>
+			action?.startsWith("remove-"),
+		) ?? []) {
+			expect(await exists(action.stagingPath as string)).toBe(false);
+		}
+	});
+
+	test("refuses to downgrade when a newer Flow version is already installed", async () => {
+		const environment = await fixture();
+		const paths = resolveActivationPaths(
+			environment.project,
+			environment.paths,
+		);
+		const configBefore = await writeJson(paths.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.3.1"],
+		});
+		const newerCache = await installCacheArtifact(
+			environment.cacheRoot,
+			"opencode-plugin-flow@5.3.1",
+			"5.3.1",
+		);
+
+		const report = await applyFlowActivation({
+			project: environment.project,
+			scope: "global",
+			target: "5.2.2",
+			apply: true,
+			paths: environment.paths,
+		});
+
+		expect(report.status).toBe("refused");
+		expect(report.refusals).toContainEqual(
+			expect.stringContaining("refusing to replace newer installed Flow 5.3.1"),
+		);
+		expect(await readFile(paths.globalConfig, "utf8")).toBe(configBefore);
+		expect(await exists(newerCache)).toBe(true);
+		expect(await exists(paths.journalRoot)).toBe(false);
+	});
+
+	test("ignores terminal v1 journals but blocks incomplete legacy recovery", async () => {
+		const completedEnvironment = await fixture();
+		const completedPaths = resolveActivationPaths(
+			completedEnvironment.project,
+			completedEnvironment.paths,
+		);
+		await writeJson(completedPaths.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.2.2"],
+		});
+		const completedRunId = "2026-07-20T00-00-00.000Z-completed-v1";
+		await writeJson(
+			join(completedPaths.journalRoot, completedRunId, "journal.json"),
+			{
+				format: "flow-activation-journal-v1",
+				runId: completedRunId,
+				state: "complete",
+			},
+		);
+
+		const completed = await applyFlowActivation({
+			project: completedEnvironment.project,
+			scope: "global",
+			target: "5.2.2",
+			apply: true,
+			paths: completedEnvironment.paths,
+		});
+
+		expect(completed.status).toBe("applied");
+		expect(completed.plan).toEqual([]);
+
+		const incompleteEnvironment = await fixture();
+		const incompletePaths = resolveActivationPaths(
+			incompleteEnvironment.project,
+			incompleteEnvironment.paths,
+		);
+		const configBefore = await writeJson(incompletePaths.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.2.2"],
+		});
+		const incompleteRunId = "2026-07-20T00-00-00.000Z-incomplete-v1";
+		await writeJson(
+			join(incompletePaths.journalRoot, incompleteRunId, "journal.json"),
+			{
+				format: "flow-activation-journal-v1",
+				runId: incompleteRunId,
+				state: "applying",
+			},
+		);
+
+		const check = await checkFlowActivation({
+			project: incompleteEnvironment.project,
+			target: "5.2.2",
+			paths: incompleteEnvironment.paths,
+		});
+		expect(check.singleVersionSatisfied).toBe(false);
+		expect(check.issues).toContainEqual(
+			expect.objectContaining({
+				code: "incomplete-recovery",
+				message: expect.stringContaining("legacy activation recovery"),
+			}),
+		);
+		const refused = await applyFlowActivation({
+			project: incompleteEnvironment.project,
+			scope: "global",
+			target: "5.2.2",
+			apply: true,
+			paths: incompleteEnvironment.paths,
+		});
+		expect(refused.status).toBe("refused");
+		expect(refused.refusals).toContainEqual(
+			expect.stringContaining("legacy activation recovery is incomplete"),
+		);
+		expect(await readFile(incompletePaths.globalConfig, "utf8")).toBe(
+			configBefore,
+		);
 	});
 
 	test("refuses unknown or edited Flow-like wrappers without changing configs", async () => {
@@ -332,7 +536,7 @@ describe("Flow activation apply", () => {
 		expect(report.status).toBe("refused");
 		expect(report.plan).not.toContainEqual(
 			expect.objectContaining({
-				action: "quarantine-cache",
+				action: "remove-cache",
 				path: ambiguous,
 			}),
 		);
@@ -341,7 +545,7 @@ describe("Flow activation apply", () => {
 		);
 	});
 
-	test("quarantines the pinned host's unversioned Flow cache directory", async () => {
+	test("removes the pinned host's obsolete unversioned Flow cache directory", async () => {
 		const environment = await fixture();
 		const paths = resolveActivationPaths(
 			environment.project,
@@ -394,7 +598,7 @@ describe("Flow activation apply", () => {
 		expect(applied.after?.singleVersionSatisfied).toBe(true);
 		expect(applied.plan).toContainEqual(
 			expect.objectContaining({
-				action: "quarantine-cache",
+				action: "remove-cache",
 				path: unversionedCache,
 			}),
 		);
@@ -474,7 +678,7 @@ describe("Flow activation apply", () => {
 		});
 		expect(recoveryAncestor.status).toBe("refused");
 		expect(recoveryAncestor.refusals).toContainEqual(
-			expect.stringContaining("recovery journal could not be prepared safely"),
+			expect.stringContaining("recovery journal could not be inspected safely"),
 		);
 		expect(await exists(paths.globalConfig)).toBe(false);
 		expect(await readdir(outsideRecovery)).toEqual([]);
@@ -521,6 +725,167 @@ describe("Flow activation apply", () => {
 		expect(journal.actions).toContainEqual(
 			expect.objectContaining({ state: "rolled-back" }),
 		);
+	});
+
+	test("restores a proven cache artifact when activation fails after staging", async () => {
+		const environment = await fixture();
+		const paths = resolveActivationPaths(
+			environment.project,
+			environment.paths,
+		);
+		const original = await writeJson(paths.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.1.0"],
+		});
+		const oldCache = await installCacheArtifact(
+			environment.cacheRoot,
+			"opencode-plugin-flow@5.1.0",
+			"5.1.0",
+		);
+
+		const report = await applyFlowActivation({
+			project: environment.project,
+			scope: "project",
+			target: "5.2.2",
+			apply: true,
+			paths: environment.paths,
+			afterMutation: async (operation) => {
+				if (operation.action === "remove-cache") {
+					throw new Error("injected failure after cache staging");
+				}
+			},
+		});
+
+		expect(report.status).toBe("refused");
+		expect(report.failure?.recoveryState).toBe("rolled-back");
+		expect(await readFile(paths.globalConfig, "utf8")).toBe(original);
+		expect(await exists(paths.projectConfig)).toBe(false);
+		expect(await exists(oldCache)).toBe(true);
+		const journal = JSON.parse(
+			await readFile(report.recovery?.journalPath as string, "utf8"),
+		) as { actions?: Array<{ action?: string; state?: string }> };
+		expect(journal.actions).toContainEqual(
+			expect.objectContaining({
+				action: "remove-cache",
+				state: "rolled-back",
+			}),
+		);
+	});
+
+	test("reconciles a hard process kill during reversible staging before retrying", async () => {
+		const environment = await fixture();
+		const paths = resolveActivationPaths(
+			environment.project,
+			environment.paths,
+		);
+		const original = await writeJson(paths.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.1.0"],
+		});
+		const oldCache = await installCacheArtifact(
+			environment.cacheRoot,
+			"opencode-plugin-flow@5.1.0",
+			"5.1.0",
+		);
+
+		await crashActivation(environment, "after-cache-stage");
+
+		const [interruptedJournalPath] = await journalPaths(paths.journalRoot);
+		if (!interruptedJournalPath)
+			throw new Error("Expected interrupted journal");
+		const interrupted = JSON.parse(
+			await readFile(interruptedJournalPath, "utf8"),
+		) as { state?: string; actions?: Array<{ stagingPath?: string }> };
+		expect(interrupted.state).toBe("applying");
+		expect(await exists(oldCache)).toBe(false);
+		expect(
+			await Promise.all(
+				(interrupted.actions ?? [])
+					.filter(({ stagingPath }) => stagingPath)
+					.map(({ stagingPath }) => exists(stagingPath as string)),
+			),
+		).toContain(true);
+		const blockedCheck = await checkFlowActivation({
+			project: environment.project,
+			target: "5.2.2",
+			paths: environment.paths,
+		});
+		expect(blockedCheck.singleVersionSatisfied).toBe(false);
+		expect(blockedCheck.issues).toContainEqual(
+			expect.objectContaining({ code: "incomplete-recovery" }),
+		);
+
+		const retried = await applyFlowActivation({
+			project: environment.project,
+			scope: "global",
+			target: "5.2.2",
+			apply: true,
+			paths: environment.paths,
+		});
+
+		expect(retried.status).toBe("applied");
+		expect(retried.after?.singleVersionSatisfied).toBe(true);
+		expect(await exists(oldCache)).toBe(false);
+		expect(await readFile(paths.globalConfig, "utf8")).not.toBe(original);
+		const recovered = JSON.parse(
+			await readFile(interruptedJournalPath, "utf8"),
+		) as { state?: string };
+		expect(recovered.state).toBe("rolled-back");
+	});
+
+	test("finishes permanent deletion after a hard kill at the durable commit point", async () => {
+		const environment = await fixture();
+		const paths = resolveActivationPaths(
+			environment.project,
+			environment.paths,
+		);
+		await writeJson(paths.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.1.0"],
+		});
+		const oldCache = await installCacheArtifact(
+			environment.cacheRoot,
+			"opencode-plugin-flow@5.1.0",
+			"5.1.0",
+		);
+
+		await crashActivation(environment, "after-removal-commit");
+
+		const [interruptedJournalPath] = await journalPaths(paths.journalRoot);
+		if (!interruptedJournalPath) throw new Error("Expected committed journal");
+		const committed = JSON.parse(
+			await readFile(interruptedJournalPath, "utf8"),
+		) as { state?: string; actions?: Array<{ stagingPath?: string }> };
+		expect(committed.state).toBe("committed");
+		expect(await exists(oldCache)).toBe(false);
+		expect(
+			await Promise.all(
+				(committed.actions ?? [])
+					.filter(({ stagingPath }) => stagingPath)
+					.map(({ stagingPath }) => exists(stagingPath as string)),
+			),
+		).toContain(true);
+
+		const retried = await applyFlowActivation({
+			project: environment.project,
+			scope: "global",
+			target: "5.2.2",
+			apply: true,
+			paths: environment.paths,
+		});
+
+		expect(retried.status).toBe("applied");
+		expect(retried.plan).toEqual([]);
+		const completed = JSON.parse(
+			await readFile(interruptedJournalPath, "utf8"),
+		) as {
+			state?: string;
+			actions?: Array<{ stagingPath?: string; deleted?: boolean }>;
+		};
+		expect(completed.state).toBe("complete");
+		for (const action of completed.actions?.filter(({ stagingPath }) =>
+			Boolean(stagingPath),
+		) ?? []) {
+			expect(action.deleted).toBe(true);
+			expect(await exists(action.stagingPath as string)).toBe(false);
+		}
 	});
 
 	test("preserves concurrent edits and returns explicit manual restore guidance", async () => {

@@ -8,6 +8,7 @@ import {
 	readdir,
 	rename,
 	rm,
+	rmdir,
 	writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -22,6 +23,7 @@ import {
 	sep,
 } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareSemanticVersions } from "../platform/opencode/leadership.js";
 import { resolveFlowPluginVersion } from "../version.js";
 
 const FLOW_PACKAGE_NAME = "opencode-plugin-flow";
@@ -56,6 +58,7 @@ export type ActivationSource =
 export type ActivationOwnership =
 	| "flow-npm"
 	| "marker-owned-wrapper"
+	| "legacy-flow-wrapper"
 	| "unknown-flow-like";
 
 export type ActivationRecord = {
@@ -70,14 +73,15 @@ export type ActivationRecord = {
 };
 
 export type ActivationIssue = {
-	source: ActivationSource | "project" | "cache" | "environment";
+	source: ActivationSource | "project" | "cache" | "environment" | "recovery";
 	path: string;
 	code:
 		| "invalid-project"
 		| "invalid-config"
 		| "invalid-plugin-directory"
 		| "ambiguous-cache-artifact"
-		| "unsafe-symlink";
+		| "unsafe-symlink"
+		| "incomplete-recovery";
 	message: string;
 };
 
@@ -148,6 +152,11 @@ export type ActivationCheckReport = {
 	mode: "check";
 	project: string;
 	target: string;
+	coverage: {
+		globalSources: true;
+		selectedProject: string;
+		otherProjectTrees: false;
+	};
 	paths: ActivationPaths;
 	records: ActivationRecord[];
 	cacheArtifacts: FlowCacheArtifact[];
@@ -160,8 +169,8 @@ export type ActivationCheckReport = {
 export type ActivationPlanOperation = {
 	action:
 		| "rewrite-config"
-		| "quarantine-wrapper"
-		| "quarantine-cache"
+		| "remove-wrapper"
+		| "remove-cache"
 		| "manual-remediation";
 	scope?: ActivationRecordScope;
 	path: string;
@@ -183,7 +192,7 @@ export type ActivationApplyReport = {
 	};
 	failure?: {
 		message: string;
-		recoveryState: "rolled-back" | "rollback-failed";
+		recoveryState: "rolled-back" | "rollback-failed" | "cleanup-failed";
 		guidance: string[];
 	};
 	after?: ActivationCheckReport;
@@ -241,27 +250,55 @@ type OwnedWrapper = {
 	scope: ActivationRecordScope;
 	source: ActivationSource;
 	version: string;
+	ownership: "marker-owned-wrapper" | "legacy-flow-wrapper";
 };
 
 type JournalAction = {
 	action: ActivationPlanOperation["action"];
 	path: string;
+	source?: ActivationSource;
+	scope?: ActivationRecordScope;
+	resolvedVersion?: string;
+	ownership?: Extract<
+		ActivationOwnership,
+		"marker-owned-wrapper" | "legacy-flow-wrapper"
+	>;
+	specifier?: string;
+	stagingPath?: string;
 	recoveryPath?: string;
 	backupPath?: string;
 	originalAbsent?: boolean;
 	originalMode?: number;
 	appliedDigest?: string;
+	deleted?: boolean;
 	state: "pending" | "complete" | "rolled-back" | "rollback-failed";
 	error?: string;
 };
 
 type ActivationJournal = {
-	format: "flow-activation-journal-v1";
+	format: "flow-activation-journal-v2";
 	runId: string;
 	createdAt: string;
+	ownerPid?: number;
 	project: string;
 	target: string;
 	scope: ActivationScope;
+	state:
+		| "prepared"
+		| "applying"
+		| "committed"
+		| "complete"
+		| "failed"
+		| "cleanup-failed"
+		| "rolled-back"
+		| "rollback-failed";
+	error?: string;
+	actions: JournalAction[];
+};
+
+type LegacyActivationJournal = {
+	format: "flow-activation-journal-v1";
+	runId: string;
 	state:
 		| "prepared"
 		| "applying"
@@ -269,9 +306,9 @@ type ActivationJournal = {
 		| "failed"
 		| "rolled-back"
 		| "rollback-failed";
-	error?: string;
-	actions: JournalAction[];
 };
+
+type ReadActivationJournal = ActivationJournal | LegacyActivationJournal;
 
 function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
@@ -458,6 +495,15 @@ async function optionalLstat(path: string) {
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
 		throw error;
+	}
+}
+
+async function removeEmptyDirectory(path: string): Promise<void> {
+	try {
+		await rmdir(path);
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code !== "ENOENT" && code !== "ENOTEMPTY") throw error;
 	}
 }
 
@@ -816,7 +862,33 @@ function parseOwnedWrapper(
 	return { kind: "owned", version };
 }
 
-/** Create the only local-wrapper format activation-apply is allowed to archive. */
+function legacyFlowWrapperContent(version: string): string {
+	return [
+		"const flowPluginUrl = new URL(",
+		`  "../.cache/opencode/packages/${FLOW_PACKAGE_NAME}@${version}/node_modules/${FLOW_PACKAGE_NAME}/dist/index.js",`,
+		`  \`file://\${process.env.HOME}/\`,`,
+		")",
+		"",
+		"export default async function flowPlugin(input, options) {",
+		'  process.env.BUN_BE_BUN = "1"',
+		"  const { default: plugin } = await import(flowPluginUrl.href)",
+		"  return plugin(input, options)",
+		"}",
+		"",
+	].join("\n");
+}
+
+function parseLegacyFlowWrapper(
+	path: string,
+	content: string,
+): { version: string } | null {
+	const normalized = content.replaceAll("\r\n", "\n");
+	const version = hintedFlowVersion(normalized);
+	if (!version || basename(path) !== `flow-${version}-wrapper.js`) return null;
+	return normalized === legacyFlowWrapperContent(version) ? { version } : null;
+}
+
+/** Create the marker-owned local-wrapper format activation may remove. */
 export function createMarkerOwnedFlowWrapper(version: string): string {
 	const exactVersion = resolveActivationTarget(version);
 	const body = `export { default } from "${FLOW_PACKAGE_NAME}@${exactVersion}";\n`;
@@ -915,6 +987,19 @@ async function classifyLocalPlugin(
 				owned.version === target
 					? "local wrapper duplicates the canonical npm activation source"
 					: "local wrapper activates another Flow version",
+		};
+	}
+	const legacy = parseLegacyFlowWrapper(path, content);
+	if (legacy) {
+		return {
+			source,
+			scope,
+			path,
+			specifier,
+			resolvedVersion: legacy.version,
+			ownership: "legacy-flow-wrapper",
+			status: "conflict",
+			reason: "exact known legacy Flow wrapper must be removed",
 		};
 	}
 	const flowLike =
@@ -1367,6 +1452,8 @@ export async function checkFlowActivation(options: {
 	project: string;
 	target?: string;
 	paths?: ActivationPathOptions;
+	/** @internal The journal for this in-process post-apply verification. */
+	ignoreRecoveryRunId?: string;
 }): Promise<ActivationCheckReport> {
 	const target = resolveActivationTarget(options.target);
 	const paths = resolveActivationPaths(options.project, options.paths);
@@ -1458,12 +1545,20 @@ export async function checkFlowActivation(options: {
 		};
 	}
 	issues.push(...cache.issues);
+	issues.push(
+		...(await activationJournalIssues(paths, options.ignoreRecoveryRunId)),
+	);
 	const limitations = await activationLimitations(paths);
 	const reasons = activationReasons(records, cache.artifacts, issues, target);
 	return {
 		mode: "check",
 		project: paths.project,
 		target,
+		coverage: {
+			globalSources: true,
+			selectedProject: paths.project,
+			otherProjectTrees: false,
+		},
 		paths,
 		records,
 		cacheArtifacts: cache.artifacts,
@@ -1587,7 +1682,8 @@ function uniqueOwnedWrappers(records: ActivationRecord[]): OwnedWrapper[] {
 	const wrappers = new Map<string, OwnedWrapper>();
 	for (const record of records) {
 		if (
-			record.ownership !== "marker-owned-wrapper" ||
+			(record.ownership !== "marker-owned-wrapper" &&
+				record.ownership !== "legacy-flow-wrapper") ||
 			record.resolvedVersion === null
 		) {
 			continue;
@@ -1597,6 +1693,7 @@ function uniqueOwnedWrappers(records: ActivationRecord[]): OwnedWrapper[] {
 			scope: record.scope,
 			source: record.source,
 			version: record.resolvedVersion,
+			ownership: record.ownership,
 		});
 	}
 	return [...wrappers.values()];
@@ -1623,7 +1720,8 @@ function removableConfigEntry(
 			record.source === descriptor.source &&
 			record.specifier === specifier &&
 			record.path === localPath &&
-			record.ownership === "marker-owned-wrapper",
+			(record.ownership === "marker-owned-wrapper" ||
+				record.ownership === "legacy-flow-wrapper"),
 	);
 }
 
@@ -1643,6 +1741,24 @@ function activationRefusals(before: ActivationCheckReport): string[] {
 					`${artifact.path}: ${artifact.reason ?? "ambiguous cache artifact refused"}`,
 			),
 	];
+}
+
+function downgradeRefusals(before: ActivationCheckReport): string[] {
+	const newerVersions = new Set<string>();
+	for (const version of [
+		...before.records.map((record) => record.resolvedVersion),
+		...before.cacheArtifacts.map((artifact) => artifact.resolvedVersion),
+	]) {
+		if (version && compareSemanticVersions(version, before.target) > 0) {
+			newerVersions.add(version);
+		}
+	}
+	return [...newerVersions]
+		.sort((left, right) => compareSemanticVersions(right, left))
+		.map(
+			(version) =>
+				`refusing to replace newer installed Flow ${version} with older target ${before.target}; run ${FLOW_PACKAGE_NAME}@latest instead`,
+		);
 }
 
 async function assertUnchangedConfig(
@@ -1766,15 +1882,230 @@ async function writeJournal(
 	}
 }
 
+type ActivationJournalEntry = {
+	journalPath: string;
+	journal?: ReadActivationJournal;
+	error?: string;
+};
+
+const TERMINAL_JOURNAL_STATES = new Set<ActivationJournal["state"]>([
+	"complete",
+	"rolled-back",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseActivationJournal(
+	content: string,
+	journalPath: string,
+): ReadActivationJournal {
+	let value: unknown;
+	try {
+		value = JSON.parse(content);
+	} catch (error) {
+		throw new Error(
+			`${journalPath}: recovery journal is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	if (
+		!isRecord(value) ||
+		typeof value.runId !== "string" ||
+		value.runId !== basename(dirname(journalPath)) ||
+		typeof value.state !== "string"
+	) {
+		throw new Error(`${journalPath}: recovery journal schema is invalid`);
+	}
+	if (value.format === "flow-activation-journal-v1") {
+		if (
+			![
+				"prepared",
+				"applying",
+				"complete",
+				"failed",
+				"rolled-back",
+				"rollback-failed",
+			].includes(value.state)
+		) {
+			throw new Error(
+				`${journalPath}: legacy recovery journal state is invalid`,
+			);
+		}
+		return value as LegacyActivationJournal;
+	}
+	if (
+		value.format !== "flow-activation-journal-v2" ||
+		typeof value.createdAt !== "string" ||
+		typeof value.project !== "string" ||
+		!isAbsolute(value.project) ||
+		typeof value.target !== "string" ||
+		!isExactFlowVersion(value.target) ||
+		(value.scope !== "global" && value.scope !== "project") ||
+		![
+			"prepared",
+			"applying",
+			"committed",
+			"complete",
+			"failed",
+			"cleanup-failed",
+			"rolled-back",
+			"rollback-failed",
+		].includes(value.state) ||
+		!Array.isArray(value.actions)
+	) {
+		throw new Error(`${journalPath}: recovery journal schema is invalid`);
+	}
+	for (const action of value.actions) {
+		if (
+			!isRecord(action) ||
+			!["rewrite-config", "remove-wrapper", "remove-cache"].includes(
+				String(action.action),
+			) ||
+			typeof action.path !== "string" ||
+			!isAbsolute(action.path) ||
+			!["pending", "complete", "rolled-back", "rollback-failed"].includes(
+				String(action.state),
+			)
+		) {
+			throw new Error(`${journalPath}: recovery journal action is invalid`);
+		}
+	}
+	if (
+		value.ownerPid !== undefined &&
+		(!Number.isSafeInteger(value.ownerPid) || Number(value.ownerPid) <= 0)
+	) {
+		throw new Error(`${journalPath}: recovery journal owner pid is invalid`);
+	}
+	return value as ActivationJournal;
+}
+
+async function readActivationJournalEntries(
+	paths: ActivationPaths,
+): Promise<ActivationJournalEntry[]> {
+	try {
+		await assertSafeMutationPath(dirname(paths.configRoot), paths.journalRoot);
+	} catch (error) {
+		return [
+			{
+				journalPath: paths.journalRoot,
+				error: error instanceof Error ? error.message : String(error),
+			},
+		];
+	}
+	const rootMetadata = await optionalLstat(paths.journalRoot);
+	if (!rootMetadata) return [];
+	if (rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory()) {
+		return [
+			{
+				journalPath: paths.journalRoot,
+				error: `${paths.journalRoot}: recovery root is not a real directory`,
+			},
+		];
+	}
+	const entries: ActivationJournalEntry[] = [];
+	for (const directory of await readdir(paths.journalRoot, {
+		withFileTypes: true,
+	})) {
+		const runRoot = join(paths.journalRoot, directory.name);
+		const journalPath = join(runRoot, "journal.json");
+		if (directory.isSymbolicLink()) {
+			entries.push({
+				journalPath,
+				error: `${runRoot}: symbolic recovery directory refused`,
+			});
+			continue;
+		}
+		if (!directory.isDirectory() || !(await optionalLstat(journalPath))) {
+			continue;
+		}
+		try {
+			const content = await readRegularFileWithoutFollowing(
+				journalPath,
+				MAX_LOCAL_PLUGIN_BYTES,
+			);
+			entries.push({
+				journalPath,
+				journal: parseActivationJournal(content, journalPath),
+			});
+		} catch (error) {
+			entries.push({
+				journalPath,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+	return entries.sort((left, right) =>
+		left.journalPath.localeCompare(right.journalPath),
+	);
+}
+
+function processIsAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+async function activationJournalIssues(
+	paths: ActivationPaths,
+	ignoreRunId?: string,
+): Promise<ActivationIssue[]> {
+	const issues: ActivationIssue[] = [];
+	for (const entry of await readActivationJournalEntries(paths)) {
+		if (entry.error) {
+			issues.push({
+				source: "recovery",
+				path: entry.journalPath,
+				code: "incomplete-recovery",
+				message: entry.error,
+			});
+			continue;
+		}
+		const journal = entry.journal as ReadActivationJournal;
+		if (
+			journal.runId === ignoreRunId ||
+			TERMINAL_JOURNAL_STATES.has(journal.state)
+		) {
+			continue;
+		}
+		const activeOwner =
+			journal.format === "flow-activation-journal-v2" &&
+			journal.ownerPid !== undefined &&
+			processIsAlive(journal.ownerPid);
+		issues.push({
+			source: "recovery",
+			path: entry.journalPath,
+			code: "incomplete-recovery",
+			message: activeOwner
+				? `activation recovery is still owned by running process ${journal.ownerPid}`
+				: journal.format === "flow-activation-journal-v1"
+					? `legacy activation recovery is incomplete in state ${journal.state}; follow that journal's manual recovery guidance before installing`
+					: journal.state === "rollback-failed"
+						? "activation rollback previously failed and requires the journal's manual recovery guidance"
+						: `activation recovery is incomplete in state ${journal.state}; rerun install to reconcile it before evaluating success`,
+		});
+	}
+	return issues;
+}
+
 async function verifyOwnedWrapper(wrapper: OwnedWrapper): Promise<void> {
 	const content = await readRegularFileWithoutFollowing(
 		wrapper.path,
 		MAX_LOCAL_PLUGIN_BYTES,
 	);
-	const parsed = parseOwnedWrapper(content);
-	if (parsed.kind !== "owned" || parsed.version !== wrapper.version) {
+	const version =
+		wrapper.ownership === "marker-owned-wrapper"
+			? (() => {
+					const parsed = parseOwnedWrapper(content);
+					return parsed.kind === "owned" ? parsed.version : null;
+				})()
+			: parseLegacyFlowWrapper(wrapper.path, content)?.version;
+	if (version !== wrapper.version) {
 		throw new Error(
-			`${wrapper.path}: owned wrapper changed while activation was running`,
+			`${wrapper.path}: removable wrapper changed while activation was running`,
 		);
 	}
 }
@@ -1799,27 +2130,27 @@ async function verifyCacheArtifact(
 }
 
 async function replaceKnownConfigContent(options: {
-	snapshot: StrictConfigSnapshot;
+	descriptor: ConfigDescriptor;
 	expectedDigest: string;
 	content: string;
 	mode: number;
 	runId: string;
 }): Promise<void> {
 	await assertSafeMutationPath(
-		options.snapshot.descriptor.safetyRoot,
-		options.snapshot.descriptor.path,
+		options.descriptor.safetyRoot,
+		options.descriptor.path,
 	);
 	const current = await readRegularFileWithoutFollowing(
-		options.snapshot.descriptor.path,
+		options.descriptor.path,
 	);
 	if (sha256(current) !== options.expectedDigest) {
 		throw new Error(
-			`${options.snapshot.descriptor.path}: automatic restore refused because the applied config changed`,
+			`${options.descriptor.path}: automatic restore refused because the applied config changed`,
 		);
 	}
 	const temporaryPath = join(
-		dirname(options.snapshot.descriptor.path),
-		`.${basename(options.snapshot.descriptor.path)}.restore-${options.runId}.tmp`,
+		dirname(options.descriptor.path),
+		`.${basename(options.descriptor.path)}.restore-${options.runId}.tmp`,
 	);
 	try {
 		await writeFile(temporaryPath, options.content, {
@@ -1827,7 +2158,7 @@ async function replaceKnownConfigContent(options: {
 			flag: "wx",
 			mode: options.mode,
 		});
-		await rename(temporaryPath, options.snapshot.descriptor.path);
+		await rename(temporaryPath, options.descriptor.path);
 	} finally {
 		await rm(temporaryPath, { force: true });
 	}
@@ -1881,7 +2212,7 @@ async function rollbackCompletedActions(options: {
 						action.backupPath,
 					);
 					await replaceKnownConfigContent({
-						snapshot,
+						descriptor: snapshot.descriptor,
 						expectedDigest: action.appliedDigest,
 						content: backup,
 						mode: action.originalMode ?? snapshot.mode,
@@ -1889,12 +2220,12 @@ async function rollbackCompletedActions(options: {
 					});
 				}
 			} else if (
-				action.action === "quarantine-wrapper" ||
-				action.action === "quarantine-cache"
+				action.action === "remove-wrapper" ||
+				action.action === "remove-cache"
 			) {
-				if (!action.recoveryPath) throw new Error("recovery path is missing");
+				if (!action.stagingPath) throw new Error("staging path is missing");
 				let safetyRoot: string;
-				if (action.action === "quarantine-cache") {
+				if (action.action === "remove-cache") {
 					safetyRoot = dirname(options.paths.cacheRoot);
 				} else {
 					const wrapper = options.wrappers.find(
@@ -1904,18 +2235,18 @@ async function rollbackCompletedActions(options: {
 					safetyRoot = wrapperMutationSafetyRoot(options.paths, wrapper);
 				}
 				await assertSafeMutationPath(safetyRoot, action.path);
-				await assertSafeMutationPath(safetyRoot, action.recoveryPath);
+				await assertSafeMutationPath(safetyRoot, action.stagingPath);
 				if (await optionalLstat(action.path)) {
 					throw new Error(
 						"original path is occupied; automatic restore refused",
 					);
 				}
-				const recovery = await optionalLstat(action.recoveryPath);
-				if (!recovery || recovery.isSymbolicLink()) {
-					throw new Error("quarantined artifact is missing or symbolic");
+				const staged = await optionalLstat(action.stagingPath);
+				if (!staged || staged.isSymbolicLink()) {
+					throw new Error("staged artifact is missing or symbolic");
 				}
 				await mkdir(dirname(action.path), { recursive: true });
-				await rename(action.recoveryPath, action.path);
+				await rename(action.stagingPath, action.path);
 			}
 			action.state = "rolled-back";
 		} catch (error) {
@@ -1935,6 +2266,406 @@ async function rollbackCompletedActions(options: {
 	return failures;
 }
 
+function journalConfigDescriptor(
+	paths: ActivationPaths,
+	action: JournalAction,
+): ConfigDescriptor {
+	const descriptor = configDescriptors(paths).find(
+		(candidate) =>
+			candidate.path === action.path &&
+			(action.source === undefined || candidate.source === action.source),
+	);
+	if (!descriptor) {
+		throw new Error(`${action.path}: journal config path is outside inventory`);
+	}
+	return descriptor;
+}
+
+function journalOwnedWrapper(
+	paths: ActivationPaths,
+	journal: ActivationJournal,
+	action: JournalAction,
+): { wrapper: OwnedWrapper; safetyRoot: string } {
+	if (
+		(action.ownership !== "marker-owned-wrapper" &&
+			action.ownership !== "legacy-flow-wrapper") ||
+		typeof action.resolvedVersion !== "string" ||
+		!isExactFlowVersion(action.resolvedVersion) ||
+		typeof action.source !== "string" ||
+		typeof action.scope !== "string"
+	) {
+		throw new Error(`${action.path}: wrapper recovery metadata is incomplete`);
+	}
+	const wrapper: OwnedWrapper = {
+		path: action.path,
+		source: action.source as ActivationSource,
+		scope: action.scope as ActivationRecordScope,
+		version: action.resolvedVersion,
+		ownership: action.ownership,
+	};
+	const pluginDirectory = pluginDirectoryDescriptors(paths).find(
+		(descriptor) =>
+			descriptor.source === wrapper.source &&
+			descriptor.scope === wrapper.scope &&
+			dirname(wrapper.path) === descriptor.path,
+	);
+	const config = configDescriptors(paths).find((descriptor) => {
+		if (
+			descriptor.source !== wrapper.source ||
+			descriptor.scope !== wrapper.scope
+		) {
+			return false;
+		}
+		const fromRoot = relative(descriptor.safetyRoot, wrapper.path);
+		return (
+			fromRoot !== ".." &&
+			!fromRoot.startsWith(`..${sep}`) &&
+			!isAbsolute(fromRoot)
+		);
+	});
+	const safetyRoot = pluginDirectory?.safetyRoot ?? config?.safetyRoot;
+	if (!safetyRoot) {
+		throw new Error(`${action.path}: wrapper path is outside inventory`);
+	}
+	const expectedStagingPath = join(
+		wrapperRecoveryRoot(paths, wrapper),
+		journal.runId,
+		sha256(action.path).slice(0, 12),
+		basename(action.path),
+	);
+	if (action.stagingPath !== expectedStagingPath) {
+		throw new Error(
+			`${action.path}: wrapper staging path does not match journal`,
+		);
+	}
+	return { wrapper, safetyRoot };
+}
+
+function journalCacheArtifact(
+	paths: ActivationPaths,
+	journal: ActivationJournal,
+	action: JournalAction,
+): FlowCacheArtifact {
+	if (
+		typeof action.specifier !== "string" ||
+		(action.specifier !== FLOW_PACKAGE_NAME &&
+			!action.specifier.startsWith(`${FLOW_PACKAGE_NAME}@`)) ||
+		action.specifier.includes("/") ||
+		action.specifier.includes("\\") ||
+		typeof action.resolvedVersion !== "string" ||
+		!isExactFlowVersion(action.resolvedVersion) ||
+		action.path !== join(paths.packageCacheRoot, action.specifier)
+	) {
+		throw new Error(`${action.path}: cache recovery metadata is incomplete`);
+	}
+	const expectedStagingPath = join(
+		paths.cacheRecoveryRoot,
+		journal.runId,
+		sha256(action.path).slice(0, 12),
+		basename(action.path),
+	);
+	if (action.stagingPath !== expectedStagingPath) {
+		throw new Error(
+			`${action.path}: cache staging path does not match journal`,
+		);
+	}
+	return {
+		path: action.path,
+		specifier: action.specifier,
+		resolvedVersion: action.resolvedVersion,
+		status: "inactive",
+	};
+}
+
+async function rollbackInterruptedConfigAction(options: {
+	journal: ActivationJournal;
+	journalPath: string;
+	action: JournalAction;
+	paths: ActivationPaths;
+}): Promise<void> {
+	const { action, journal, journalPath, paths } = options;
+	const descriptor = journalConfigDescriptor(paths, action);
+	await assertSafeMutationPath(descriptor.safetyRoot, action.path);
+	const currentMetadata = await optionalLstat(action.path);
+	if (
+		currentMetadata?.isSymbolicLink() ||
+		(currentMetadata && !currentMetadata.isFile())
+	) {
+		throw new Error(`${action.path}: interrupted config is not a regular file`);
+	}
+	const current = currentMetadata
+		? await readRegularFileWithoutFollowing(action.path)
+		: null;
+	if (action.originalAbsent === true) {
+		const expectedRecoveryPath = join(
+			dirname(action.path),
+			".flow-activation-recovery",
+			journal.runId,
+			`${basename(action.path)}-${sha256(action.path).slice(0, 12)}`,
+		);
+		if (action.recoveryPath !== expectedRecoveryPath) {
+			throw new Error(
+				`${action.path}: created-config recovery path is invalid`,
+			);
+		}
+		if (current === null) return;
+		if (!action.appliedDigest || sha256(current) !== action.appliedDigest) {
+			throw new Error(
+				`${action.path}: interrupted created config changed; automatic recovery refused`,
+			);
+		}
+		await assertSafeMutationPath(descriptor.safetyRoot, action.recoveryPath);
+		if (await optionalLstat(action.recoveryPath)) {
+			throw new Error(
+				`${action.path}: created-config recovery path is occupied`,
+			);
+		}
+		await mkdir(dirname(action.recoveryPath), {
+			recursive: true,
+			mode: 0o700,
+		});
+		await rename(action.path, action.recoveryPath);
+		return;
+	}
+	const expectedBackupPath = join(
+		dirname(journalPath),
+		"configs",
+		`${descriptor.source}-${sha256(action.path).slice(0, 12)}.backup`,
+	);
+	if (action.backupPath !== expectedBackupPath) {
+		throw new Error(`${action.path}: config backup path is invalid`);
+	}
+	const backup = await readRegularFileWithoutFollowing(
+		action.backupPath,
+		MAX_LOCAL_PLUGIN_BYTES,
+	);
+	if (current === null) {
+		throw new Error(`${action.path}: interrupted config is missing`);
+	}
+	if (sha256(current) === sha256(backup)) return;
+	if (!action.appliedDigest || sha256(current) !== action.appliedDigest) {
+		throw new Error(
+			`${action.path}: interrupted config changed; automatic recovery refused`,
+		);
+	}
+	await replaceKnownConfigContent({
+		descriptor,
+		expectedDigest: action.appliedDigest,
+		content: backup,
+		mode: action.originalMode ?? 0o600,
+		runId: journal.runId,
+	});
+}
+
+async function rollbackInterruptedRemovalAction(options: {
+	journal: ActivationJournal;
+	action: JournalAction;
+	paths: ActivationPaths;
+}): Promise<void> {
+	const { action, journal, paths } = options;
+	let safetyRoot: string;
+	let verifyStaged: () => Promise<void>;
+	if (action.action === "remove-wrapper") {
+		const { wrapper, safetyRoot: wrapperSafetyRoot } = journalOwnedWrapper(
+			paths,
+			journal,
+			action,
+		);
+		safetyRoot = wrapperSafetyRoot;
+		verifyStaged = () =>
+			verifyOwnedWrapper({ ...wrapper, path: action.stagingPath as string });
+	} else {
+		const artifact = journalCacheArtifact(paths, journal, action);
+		safetyRoot = dirname(paths.cacheRoot);
+		verifyStaged = () =>
+			verifyCacheArtifact(
+				{ ...artifact, path: action.stagingPath as string },
+				journal.target,
+			);
+	}
+	await assertSafeMutationPath(safetyRoot, action.path);
+	await assertSafeMutationPath(safetyRoot, action.stagingPath as string);
+	const original = await optionalLstat(action.path);
+	const staged = await optionalLstat(action.stagingPath as string);
+	if (original && staged) {
+		throw new Error(`${action.path}: both original and staged artifacts exist`);
+	}
+	if (original) {
+		if (original.isSymbolicLink()) {
+			throw new Error(`${action.path}: restored artifact is symbolic`);
+		}
+		return;
+	}
+	if (!staged || staged.isSymbolicLink()) {
+		throw new Error(`${action.path}: interrupted staged artifact is missing`);
+	}
+	await verifyStaged();
+	await mkdir(dirname(action.path), { recursive: true });
+	await rename(action.stagingPath as string, action.path);
+}
+
+async function rollbackInterruptedJournal(
+	journal: ActivationJournal,
+	journalPath: string,
+	paths: ActivationPaths,
+): Promise<void> {
+	for (const action of journal.actions.toReversed()) {
+		if (action.state === "rolled-back") continue;
+		if (action.action === "rewrite-config") {
+			await rollbackInterruptedConfigAction({
+				journal,
+				journalPath,
+				action,
+				paths,
+			});
+		} else {
+			await rollbackInterruptedRemovalAction({ journal, action, paths });
+		}
+		action.state = "rolled-back";
+		delete action.error;
+		await writeJournal(journalPath, journal);
+	}
+	journal.state = "rolled-back";
+	delete journal.ownerPid;
+	delete journal.error;
+	await writeJournal(journalPath, journal);
+}
+
+async function finishCommittedJournalCleanup(
+	journal: ActivationJournal,
+	journalPath: string,
+	paths: ActivationPaths,
+): Promise<void> {
+	const removalActions = journal.actions.filter(
+		(action) =>
+			action.action === "remove-wrapper" || action.action === "remove-cache",
+	);
+	for (const action of removalActions) {
+		let safetyRoot: string;
+		let verifyStaged: () => Promise<void>;
+		if (action.action === "remove-wrapper") {
+			const { wrapper, safetyRoot: wrapperSafetyRoot } = journalOwnedWrapper(
+				paths,
+				journal,
+				action,
+			);
+			safetyRoot = wrapperSafetyRoot;
+			verifyStaged = () =>
+				verifyOwnedWrapper({ ...wrapper, path: action.stagingPath as string });
+		} else {
+			const artifact = journalCacheArtifact(paths, journal, action);
+			safetyRoot = dirname(paths.cacheRoot);
+			verifyStaged = () =>
+				verifyCacheArtifact(
+					{ ...artifact, path: action.stagingPath as string },
+					journal.target,
+				);
+		}
+		await assertSafeMutationPath(safetyRoot, action.path);
+		await assertSafeMutationPath(safetyRoot, action.stagingPath as string);
+		if (await optionalLstat(action.path)) {
+			throw new Error(
+				`${action.path}: obsolete original path reappeared after activation commit`,
+			);
+		}
+		if (await optionalLstat(action.stagingPath as string)) {
+			await verifyStaged();
+			await rm(action.stagingPath as string, {
+				recursive: action.action === "remove-cache",
+			});
+		}
+		if (await optionalLstat(action.stagingPath as string)) {
+			throw new Error(`${action.path}: obsolete staged artifact still exists`);
+		}
+		action.deleted = true;
+		await removeEmptyDirectory(dirname(action.stagingPath as string));
+		await writeJournal(journalPath, journal);
+	}
+	for (const runDirectory of new Set(
+		removalActions.map((action) =>
+			dirname(dirname(action.stagingPath as string)),
+		),
+	)) {
+		await removeEmptyDirectory(runDirectory);
+	}
+	await removeEmptyDirectory(paths.cacheRecoveryRoot);
+	journal.state = "complete";
+	delete journal.ownerPid;
+	delete journal.error;
+	await writeJournal(journalPath, journal);
+}
+
+async function reconcileIncompleteActivationJournals(
+	paths: ActivationPaths,
+	pathOptions?: ActivationPathOptions,
+): Promise<string[]> {
+	const failures: string[] = [];
+	for (const entry of await readActivationJournalEntries(paths)) {
+		if (entry.error) {
+			failures.push(
+				`recovery journal could not be inspected safely at ${entry.journalPath}: ${entry.error}`,
+			);
+			continue;
+		}
+		const journal = entry.journal as ReadActivationJournal;
+		if (TERMINAL_JOURNAL_STATES.has(journal.state)) continue;
+		if (journal.format === "flow-activation-journal-v1") {
+			failures.push(
+				`${entry.journalPath}: legacy activation recovery is incomplete in state ${journal.state}; follow its manual recovery guidance before retrying`,
+			);
+			continue;
+		}
+		if (journal.ownerPid !== undefined && processIsAlive(journal.ownerPid)) {
+			failures.push(
+				`${entry.journalPath}: activation is still owned by running process ${journal.ownerPid}`,
+			);
+			continue;
+		}
+		if (journal.state === "rollback-failed") {
+			failures.push(
+				`${entry.journalPath}: previous rollback failed; follow its manual recovery guidance before retrying`,
+			);
+			continue;
+		}
+		const journalPaths = resolveActivationPaths(journal.project, pathOptions);
+		if (journalPaths.journalRoot !== paths.journalRoot) {
+			failures.push(
+				`${entry.journalPath}: journal resolves to a different recovery root`,
+			);
+			continue;
+		}
+		try {
+			if (journal.state === "committed" || journal.state === "cleanup-failed") {
+				await finishCommittedJournalCleanup(
+					journal,
+					entry.journalPath,
+					journalPaths,
+				);
+			} else {
+				await rollbackInterruptedJournal(
+					journal,
+					entry.journalPath,
+					journalPaths,
+				);
+			}
+		} catch (error) {
+			journal.state =
+				journal.state === "committed" || journal.state === "cleanup-failed"
+					? "cleanup-failed"
+					: "rollback-failed";
+			journal.error = error instanceof Error ? error.message : String(error);
+			delete journal.ownerPid;
+			try {
+				await writeJournal(entry.journalPath, journal);
+			} catch {
+				// The original reconciliation failure remains the actionable result.
+			}
+			failures.push(`${entry.journalPath}: ${journal.error}`);
+		}
+	}
+	return failures;
+}
+
 export async function applyFlowActivation(options: {
 	project: string;
 	scope: ActivationScope;
@@ -1943,14 +2674,25 @@ export async function applyFlowActivation(options: {
 	paths?: ActivationPathOptions;
 	/** @internal Deterministic failure-injection seam for recovery tests. */
 	afterMutation?: (operation: ActivationPlanOperation) => Promise<void>;
+	/** @internal Simulates interruption after the durable removal commit point. */
+	afterRemovalCommit?: () => Promise<void>;
 }): Promise<ActivationApplyReport> {
 	const target = resolveActivationTarget(options.target);
+	const paths = resolveActivationPaths(options.project, options.paths);
+	const recoveryRefusals =
+		options.apply === true
+			? await reconcileIncompleteActivationJournals(paths, options.paths)
+			: [];
 	const before = await checkFlowActivation({
 		project: options.project,
 		target,
 		...(options.paths ? { paths: options.paths } : {}),
 	});
-	const refusals = activationRefusals(before);
+	const refusals = [
+		...recoveryRefusals,
+		...activationRefusals(before),
+		...downgradeRefusals(before),
+	];
 	const snapshots: StrictConfigSnapshot[] = [];
 	for (const descriptor of configDescriptors(before.paths)) {
 		try {
@@ -1986,7 +2728,7 @@ export async function applyFlowActivation(options: {
 			await assertSafeMutationPath(safetyRoot, recoveryRoot);
 			if (!(await pathCanBeMoved(wrapper.path, recoveryRoot))) {
 				throw new Error(
-					`${wrapper.path}: marker-owned wrapper or recovery parent is not writable; archive it manually and rerun activation-apply`,
+					`${wrapper.path}: removable wrapper or staging parent is not writable; remove it manually and rerun activation-apply`,
 				);
 			}
 			wrappers.push(wrapper);
@@ -2094,17 +2836,18 @@ export async function applyFlowActivation(options: {
 	);
 	for (const wrapper of wrappers) {
 		plan.push({
-			action: "quarantine-wrapper",
+			action: "remove-wrapper",
 			scope: wrapper.scope,
 			path: wrapper.path,
-			detail: "move marker-proven wrapper outside OpenCode plugin discovery",
+			detail:
+				"permanently remove the proven Flow wrapper after reversible staging and activation verification",
 		});
 	}
 	for (const artifact of inactiveCache) {
 		plan.push({
-			action: "quarantine-cache",
+			action: "remove-cache",
 			path: artifact.path,
-			detail: `move proven inactive Flow ${artifact.resolvedVersion} cache artifact; never clear the cache root`,
+			detail: `permanently remove proven inactive Flow ${artifact.resolvedVersion} after reversible staging; preserve the cache root and unrelated packages`,
 		});
 	}
 	const base: ActivationApplyReport = {
@@ -2130,6 +2873,8 @@ export async function applyFlowActivation(options: {
 		const action: JournalAction = {
 			action: "rewrite-config",
 			path: snapshot.descriptor.path,
+			source: snapshot.descriptor.source,
+			scope: snapshot.descriptor.scope,
 			originalAbsent: !snapshot.exists,
 			originalMode: snapshot.mode,
 			state: "pending",
@@ -2152,32 +2897,43 @@ export async function applyFlowActivation(options: {
 	}
 	for (const wrapper of wrappers) {
 		actions.push({
-			action: "quarantine-wrapper",
+			action: "remove-wrapper",
 			path: wrapper.path,
-			recoveryPath: join(
+			source: wrapper.source,
+			scope: wrapper.scope,
+			resolvedVersion: wrapper.version,
+			ownership: wrapper.ownership,
+			stagingPath: join(
 				wrapperRecoveryRoot(before.paths, wrapper),
 				runId,
-				`${basename(wrapper.path)}-${sha256(wrapper.path).slice(0, 12)}`,
+				sha256(wrapper.path).slice(0, 12),
+				basename(wrapper.path),
 			),
 			state: "pending",
 		});
 	}
 	for (const artifact of inactiveCache) {
 		actions.push({
-			action: "quarantine-cache",
+			action: "remove-cache",
 			path: artifact.path,
-			recoveryPath: join(
+			...(artifact.resolvedVersion
+				? { resolvedVersion: artifact.resolvedVersion }
+				: {}),
+			specifier: artifact.specifier,
+			stagingPath: join(
 				before.paths.cacheRecoveryRoot,
 				runId,
-				`${basename(artifact.path)}-${sha256(artifact.path).slice(0, 12)}`,
+				sha256(artifact.path).slice(0, 12),
+				basename(artifact.path),
 			),
 			state: "pending",
 		});
 	}
 	const journal: ActivationJournal = {
-		format: "flow-activation-journal-v1",
+		format: "flow-activation-journal-v2",
 		runId,
 		createdAt: new Date().toISOString(),
+		ownerPid: process.pid,
 		project: before.project,
 		target,
 		scope: options.scope,
@@ -2197,6 +2953,8 @@ export async function applyFlowActivation(options: {
 		};
 	}
 
+	let removalCommitStarted = false;
+	let committedAfter: ActivationCheckReport | undefined;
 	try {
 		for (const snapshot of changedSnapshots) {
 			await assertUnchangedConfig(snapshot);
@@ -2235,7 +2993,6 @@ export async function applyFlowActivation(options: {
 		for (const snapshot of nonTargetConfigs) {
 			const entries = nextEntries.get(snapshot.descriptor.path) ?? [];
 			const content = updatedConfigContent(snapshot, entries);
-			await atomicWriteConfig(snapshot, content, runId);
 			const action = actions.find(
 				(candidate) =>
 					candidate.action === "rewrite-config" &&
@@ -2243,8 +3000,10 @@ export async function applyFlowActivation(options: {
 			);
 			if (action) {
 				action.appliedDigest = sha256(content);
-				action.state = "complete";
 			}
+			await writeJournal(journalPath, journal);
+			await atomicWriteConfig(snapshot, content, runId);
+			if (action) action.state = "complete";
 			await writeJournal(journalPath, journal);
 			await options.afterMutation?.(
 				plan.find(
@@ -2257,28 +3016,32 @@ export async function applyFlowActivation(options: {
 		for (const wrapper of wrappers) {
 			const action = actions.find(
 				(candidate) =>
-					candidate.action === "quarantine-wrapper" &&
+					candidate.action === "remove-wrapper" &&
 					candidate.path === wrapper.path,
 			);
-			if (!action?.recoveryPath) {
-				throw new Error(`${wrapper.path}: missing wrapper recovery path`);
+			if (!action?.stagingPath) {
+				throw new Error(`${wrapper.path}: missing wrapper staging path`);
 			}
 			await verifyOwnedWrapper(wrapper);
 			await assertSafeMutationPath(
 				wrapperMutationSafetyRoot(before.paths, wrapper),
 				wrapper.path,
 			);
-			await mkdir(dirname(action.recoveryPath), {
+			await assertSafeMutationPath(
+				wrapperMutationSafetyRoot(before.paths, wrapper),
+				action.stagingPath,
+			);
+			await mkdir(dirname(action.stagingPath), {
 				recursive: true,
 				mode: 0o700,
 			});
-			await rename(wrapper.path, action.recoveryPath);
+			await rename(wrapper.path, action.stagingPath);
 			action.state = "complete";
 			await writeJournal(journalPath, journal);
 			await options.afterMutation?.(
 				plan.find(
 					(operation) =>
-						operation.action === "quarantine-wrapper" &&
+						operation.action === "remove-wrapper" &&
 						operation.path === wrapper.path,
 				) as ActivationPlanOperation,
 			);
@@ -2286,28 +3049,32 @@ export async function applyFlowActivation(options: {
 		for (const artifact of inactiveCache) {
 			const action = actions.find(
 				(candidate) =>
-					candidate.action === "quarantine-cache" &&
+					candidate.action === "remove-cache" &&
 					candidate.path === artifact.path,
 			);
-			if (!action?.recoveryPath) {
-				throw new Error(`${artifact.path}: missing cache recovery path`);
+			if (!action?.stagingPath) {
+				throw new Error(`${artifact.path}: missing cache staging path`);
 			}
 			await verifyCacheArtifact(artifact, target);
 			await assertSafeMutationPath(
 				dirname(before.paths.cacheRoot),
 				artifact.path,
 			);
-			await mkdir(dirname(action.recoveryPath), {
+			await assertSafeMutationPath(
+				dirname(before.paths.cacheRoot),
+				action.stagingPath,
+			);
+			await mkdir(dirname(action.stagingPath), {
 				recursive: true,
 				mode: 0o700,
 			});
-			await rename(artifact.path, action.recoveryPath);
+			await rename(artifact.path, action.stagingPath);
 			action.state = "complete";
 			await writeJournal(journalPath, journal);
 			await options.afterMutation?.(
 				plan.find(
 					(operation) =>
-						operation.action === "quarantine-cache" &&
+						operation.action === "remove-cache" &&
 						operation.path === artifact.path,
 				) as ActivationPlanOperation,
 			);
@@ -2315,7 +3082,6 @@ export async function applyFlowActivation(options: {
 		if (targetConfig) {
 			const targetEntries = nextEntries.get(targetConfig.descriptor.path) ?? [];
 			const targetContent = updatedConfigContent(targetConfig, targetEntries);
-			await atomicWriteConfig(targetConfig, targetContent, runId);
 			const targetAction = actions.find(
 				(candidate) =>
 					candidate.action === "rewrite-config" &&
@@ -2323,8 +3089,10 @@ export async function applyFlowActivation(options: {
 			);
 			if (targetAction) {
 				targetAction.appliedDigest = sha256(targetContent);
-				targetAction.state = "complete";
 			}
+			await writeJournal(journalPath, journal);
+			await atomicWriteConfig(targetConfig, targetContent, runId);
+			if (targetAction) targetAction.state = "complete";
 			await writeJournal(journalPath, journal);
 			await options.afterMutation?.(
 				plan.find(
@@ -2337,6 +3105,7 @@ export async function applyFlowActivation(options: {
 		const after = await checkFlowActivation({
 			project: before.project,
 			target,
+			ignoreRecoveryRunId: runId,
 			...(options.paths ? { paths: options.paths } : {}),
 		});
 		if (!after.singleVersionSatisfied) {
@@ -2344,7 +3113,69 @@ export async function applyFlowActivation(options: {
 				`post-apply inventory did not prove a single version: ${after.reasons.join("; ")}`,
 			);
 		}
+		committedAfter = after;
+		for (const wrapper of wrappers) {
+			const action = actions.find(
+				(candidate) =>
+					candidate.action === "remove-wrapper" &&
+					candidate.path === wrapper.path,
+			);
+			if (!action?.stagingPath) {
+				throw new Error(`${wrapper.path}: missing staged wrapper at commit`);
+			}
+			await verifyOwnedWrapper({ ...wrapper, path: action.stagingPath });
+		}
+		for (const artifact of inactiveCache) {
+			const action = actions.find(
+				(candidate) =>
+					candidate.action === "remove-cache" &&
+					candidate.path === artifact.path,
+			);
+			if (!action?.stagingPath) {
+				throw new Error(`${artifact.path}: missing staged cache at commit`);
+			}
+			await verifyCacheArtifact(
+				{ ...artifact, path: action.stagingPath },
+				target,
+			);
+		}
+		const removalActions = actions.filter(
+			(candidate) =>
+				candidate.action === "remove-wrapper" ||
+				candidate.action === "remove-cache",
+		);
+		if (removalActions.length > 0) {
+			journal.state = "committed";
+			await writeJournal(journalPath, journal);
+			removalCommitStarted = true;
+			await options.afterRemovalCommit?.();
+		}
+		for (const action of removalActions) {
+			if (!action.stagingPath) {
+				throw new Error(`${action.path}: missing staging path at deletion`);
+			}
+			await rm(action.stagingPath, {
+				recursive: action.action === "remove-cache",
+			});
+			if (await optionalLstat(action.stagingPath)) {
+				throw new Error(
+					`${action.path}: staged obsolete artifact still exists`,
+				);
+			}
+			action.deleted = true;
+			await removeEmptyDirectory(dirname(action.stagingPath));
+			await writeJournal(journalPath, journal);
+		}
+		for (const runDirectory of new Set(
+			removalActions.flatMap((action) =>
+				action.stagingPath ? [dirname(dirname(action.stagingPath))] : [],
+			),
+		)) {
+			await removeEmptyDirectory(runDirectory);
+		}
+		await removeEmptyDirectory(before.paths.cacheRecoveryRoot);
 		journal.state = "complete";
+		delete journal.ownerPid;
 		await writeJournal(journalPath, journal);
 		return {
 			...base,
@@ -2354,6 +3185,31 @@ export async function applyFlowActivation(options: {
 			refusals: [],
 		};
 	} catch (error) {
+		if (removalCommitStarted) {
+			journal.state = "cleanup-failed";
+			delete journal.ownerPid;
+			journal.error = error instanceof Error ? error.message : String(error);
+			try {
+				await writeJournal(journalPath, journal);
+			} catch {
+				// The stable journal path is still returned below for manual inspection.
+			}
+			return {
+				...base,
+				status: "refused",
+				recovery: { runId, journalPath },
+				...(committedAfter ? { after: committedAfter } : {}),
+				failure: {
+					message: journal.error,
+					recoveryState: "cleanup-failed",
+					guidance: [
+						"The newest Flow activation is committed and remains authoritative; do not restore an older config or plugin source.",
+						`Inspect ${journalPath} and permanently delete each remaining remove-wrapper or remove-cache stagingPath after verifying it still contains only the recorded obsolete Flow version.`,
+					],
+				},
+				refusals: [journal.error],
+			};
+		}
 		journal.state = "failed";
 		journal.error = error instanceof Error ? error.message : String(error);
 		try {
@@ -2372,6 +3228,7 @@ export async function applyFlowActivation(options: {
 		const recoveryState =
 			rollbackFailures.length === 0 ? "rolled-back" : "rollback-failed";
 		journal.state = recoveryState;
+		delete journal.ownerPid;
 		if (rollbackFailures.length > 0) {
 			journal.error = `${journal.error ?? "apply failed"}; rollback: ${rollbackFailures.join("; ")}`;
 		}
@@ -2383,12 +3240,12 @@ export async function applyFlowActivation(options: {
 		const guidance =
 			recoveryState === "rolled-back"
 				? [
-						"All completed mutations were restored from exact backups or quarantine renames.",
+						"All completed mutations were restored from exact backups or reversible staging moves.",
 						`Inspect ${journalPath} and resolve the recorded failure before retrying.`,
 					]
 				: [
 						"Stop OpenCode before manual recovery.",
-						`Inspect ${journalPath}; for rollback-failed actions, restore backupPath to path or rename recoveryPath back to path only after verifying the destination is absent or unchanged.`,
+						`Inspect ${journalPath}; for rollback-failed actions, restore backupPath to path or rename stagingPath back to path only after verifying the destination is absent or unchanged.`,
 						"Do not delete the recovery directory until activation-check succeeds.",
 					];
 		return {

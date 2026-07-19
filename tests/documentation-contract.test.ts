@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import packageJson from "../package.json" with { type: "json" };
 import { FLOW_CORE_COMMANDS } from "../src/config-shared.js";
 import FlowPlugin from "../src/index.js";
 
@@ -64,11 +63,15 @@ describe("maintained documentation contract", () => {
 		).sort();
 		expect(documentedTools).toEqual(await combinedFlowToolNames());
 
-		const installedVersions = [
-			...readme.matchAll(/opencode-plugin-flow@(\d+\.\d+\.\d+)/g),
-		].map((match) => match[1]);
-		expect(installedVersions.length).toBeGreaterThanOrEqual(2);
-		expect(new Set(installedVersions)).toEqual(new Set([packageJson.version]));
+		const quickStart = section(readme, "Quick start");
+		expect(quickStart).toContain("opencode-plugin-flow@latest install");
+		expect(quickStart).not.toContain(
+			"opencode-plugin-flow@latest activation-check",
+		);
+		expect(quickStart).toMatch(/does not scan unrelated project\s+trees/);
+		expect(quickStart).not.toMatch(
+			/opencode-plugin-flow@\d+\.\d+\.\d+ install/,
+		);
 	});
 
 	test("points readers at maintained docs and labels generated history", async () => {

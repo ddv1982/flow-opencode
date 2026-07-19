@@ -305,29 +305,40 @@ catalog imports Markdown as text so Bun embeds it into `dist/index.js`.
 `flow_guidance` returns that exact text and never reads the filesystem or
 changes Flow state.
 
-Install and update guidance must use the exact-version activation CLI in three
-steps: `activation-apply` dry-run, the same command with `--apply`, then
-`activation-check`. Public examples must pass an absolute `--project`, choose
-one `--scope global|project`, and use the release's exact package version. The
-accepted end state is one exact npm activation and no proven inactive Flow
-cache artifact—not two adjacent versions with one described as preferred.
+Install and update guidance must use one `opencode-plugin-flow@latest install`
+invocation. Public examples must pass an absolute `--project` and choose one
+`--scope global|project`. The fetched CLI embeds and writes its exact package
+version, then performs its own post-apply inventory; public guidance must not
+resolve `@latest` again for verification. `activation-apply` with an exact
+package version remains the optional read-only preview. The accepted end state
+within global sources plus the selected project is one exact npm activation and
+no proven inactive Flow cache artifact—not two adjacent versions with one
+described as preferred.
+Other project trees are not scanned; installation guidance must tell users to
+run the command separately from each project with project-local OpenCode config.
 The embedded package version is the default target; any explicit `--target`
 must also be exact because activation never resolves tags or ranges.
 
 Activation inventory covers readable global, project, `.opencode`, custom,
 inline, and managed JSON/JSONC sources; singular/plural plugin directories; and
 Flow package-cache artifacts. Apply preserves unrelated plugin entries and
-mutates only recognized Flow npm entries, marker-owned wrappers, and proven
-inactive cache artifacts in strict JSON config. JSONC is inventoried but any
-required JSONC mutation is refused for manual remediation. Apply writes backups
-and a recovery journal and moves owned artifacts to recovery locations rather
-than deleting them. A post-mutation failure attempts exact safe rollback;
+mutates only recognized Flow npm entries, marker-owned or exact known legacy
+wrappers, and proven inactive cache artifacts in strict JSON config. JSONC is
+inventoried, but any required JSONC mutation is refused for manual remediation.
+Apply writes backups and a v2 recovery journal, reversibly stages proven
+obsolete artifacts during verification, and permanently deletes them before
+success. A pre-commit failure attempts exact safe rollback;
 `rolled-back` records convergence, while `rollback-failed` preserves concurrent
-or otherwise unsafe state and supplies journal-backed manual guidance. Unknown
+or otherwise unsafe state and supplies journal-backed manual guidance. A
+`cleanup-failed` result keeps the new activation authoritative and identifies
+only the obsolete staging paths whose permanent deletion did not finish. Unknown
 wrappers, ambiguous cache entries, unsafe links, immutable/inline sources, and
 unreadable remote or managed configuration must be surfaced for manual
-remediation. Runtime leadership remains the final duplicate guard for sources
-offline inventory cannot decode.
+remediation. A subsequent apply reconciles every nonterminal v2 journal before
+planning: pre-commit state rolls back, committed state completes verified
+deletion, and unsafe recovery refuses. Read-only inventory reports nonterminal
+journals as blocking. Runtime leadership remains the final duplicate guard for
+sources offline inventory cannot decode.
 
 Plugin initialization must never read or write OpenCode's global skills root.
 There is no sync health, `setup.skills`, marker update, backup, doctor, sync, or

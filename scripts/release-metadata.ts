@@ -67,15 +67,15 @@ export function validateReleaseMetadata(
 		input.changelog,
 		input.packageVersion,
 	);
-	const pinnedInstallVersions = installVersions(input.installDocuments);
-	if (pinnedInstallVersions.length === 0) {
+	const installReferences = installVersions(input.installDocuments);
+	if (installReferences.length === 0) {
 		throw new Error(
-			"README.md and docs/troubleshooting.md contain no version-pinned opencode-plugin-flow install snippets.",
+			"README.md and docs/troubleshooting.md contain no opencode-plugin-flow install snippets.",
 		);
 	}
 	for (const document of input.installDocuments) {
 		for (const version of installVersions([document])) {
-			if (version !== input.packageVersion) {
+			if (version !== "latest" && version !== input.packageVersion) {
 				throw new Error(
 					`${document.path} pins opencode-plugin-flow@${version}, expected ${input.packageVersion}.`,
 				);
@@ -84,7 +84,9 @@ export function validateReleaseMetadata(
 	}
 	return {
 		releaseNotes,
-		pinnedInstallVersions: [...new Set(pinnedInstallVersions)].sort(),
+		pinnedInstallVersions: [
+			...new Set(installReferences.filter((version) => version !== "latest")),
+		].sort(),
 	};
 }
 
@@ -139,7 +141,7 @@ async function main(args: readonly string[]): Promise<void> {
 	});
 	if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
 	process.stdout.write(
-		`Release metadata matches ${packageMetadata.version}; ${result.pinnedInstallVersions.length} pinned version found.\n`,
+		`Release metadata matches ${packageMetadata.version}; ${result.pinnedInstallVersions.length} release pin(s) and @latest install snippets validated.\n`,
 	);
 }
 

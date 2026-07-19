@@ -99,27 +99,33 @@ documents use their topic name; references use the topic-relative path. Bun
 embeds the text into the plugin bundle, and `flow_guidance` returns it without
 filesystem discovery or installation.
 
-Public install docs must use the package activation CLI and an exact release:
+Public install docs must make npm's latest release the one active version:
 
 ```bash
-npx -y opencode-plugin-flow@<version> activation-apply --project "$PWD" --scope global
-npx -y opencode-plugin-flow@<version> activation-apply --project "$PWD" --scope global --apply
-npx -y opencode-plugin-flow@<version> activation-check --project "$PWD"
+npx -y opencode-plugin-flow@latest install --project "$PWD" --scope global
 ```
 
-The dry-run is the review boundary. The check must finish with one exact npm
+`install` performs its own post-apply check with the fetched package's embedded
+exact version; resolving `@latest` again could select a different release. An
+exact-version `activation-apply` without `--apply` remains the read-only review
+boundary. The embedded check must finish with one exact npm
 activation source and no proven inactive Flow cache artifact. A project-scoped
 install changes only `--scope project`; do not document adding another pin next
-to a global one. `activation-apply` preserves unrelated plugin entries, supports
+to a global one. Coverage is global sources plus the selected project; other
+project trees are not scanned, so run install separately from each project with
+project-local OpenCode configuration. `activation-apply` preserves unrelated
+plugin entries, supports
 OpenCode string and `[specifier, options]` plugin entries, rewrites only strict
-JSON, and moves only proven Flow-owned wrappers and proven inactive cache
-artifacts. JSONC is inventoried, but any JSONC file requiring mutation is
+JSON, and permanently removes only proven Flow-owned wrappers, the exact known
+legacy wrapper, and proven inactive cache artifacts after reversible staging.
+JSONC is inventoried, but any JSONC file requiring mutation is
 refused for precise manual remediation rather than rewritten without its
 comments. Unknown wrappers, ambiguous cache state, inline config, managed
 config, and other non-mutable sources likewise require explicit manual
-remediation. A post-mutation failure attempts exact safe rollback; the journal
+remediation. A pre-commit failure attempts exact safe rollback; the journal
 distinguishes complete `rolled-back` recovery from `rollback-failed` state that
-preserves concurrent changes for manual repair.
+preserves concurrent changes for manual repair. `cleanup-failed` means the new
+activation is committed but a staged obsolete artifact still needs deletion.
 
 Plugin initialization must not touch OpenCode's global skill directory. The
 package CLI exposes activation inventory/convergence plus the explicit

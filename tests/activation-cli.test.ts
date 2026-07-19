@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
@@ -63,11 +63,13 @@ describe("activation CLI", () => {
 		const report = JSON.parse(result.stdout) as {
 			mode?: string;
 			target?: string;
+			coverage?: { otherProjectTrees?: boolean };
 			singleVersionSatisfied?: boolean;
 		};
 		expect(report).toMatchObject({
 			mode: "check",
 			target: packageJson.version,
+			coverage: { otherProjectTrees: false },
 			singleVersionSatisfied: true,
 		});
 		expect(result.stderr).toBe("");
@@ -95,6 +97,87 @@ describe("activation CLI", () => {
 			scope: "project",
 		});
 		expect(await Bun.file(projectConfig).exists()).toBe(false);
+	});
+
+	test("installs the embedded version immediately and permanently removes a proven older cache", async () => {
+		const environment = await fixture();
+		const globalConfig = join(
+			environment.xdgConfig,
+			"opencode",
+			"opencode.json",
+		);
+		await writeFile(
+			globalConfig,
+			`${JSON.stringify({ plugin: ["opencode-plugin-flow@5.2.2"] })}\n`,
+			"utf8",
+		);
+		const oldCache = join(
+			environment.xdgCache,
+			"opencode",
+			"packages",
+			"opencode-plugin-flow@5.2.2",
+		);
+		await mkdir(join(oldCache, "node_modules", "opencode-plugin-flow"), {
+			recursive: true,
+		});
+		await writeFile(
+			join(oldCache, "node_modules", "opencode-plugin-flow", "package.json"),
+			'{"name":"opencode-plugin-flow","version":"5.2.2"}\n',
+			"utf8",
+		);
+
+		const result = runCli(
+			[
+				"install",
+				"--project",
+				environment.project,
+				"--scope",
+				"global",
+				"--json",
+			],
+			environment,
+		);
+
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			mode: "apply",
+			status: "applied",
+			target: packageJson.version,
+			after: { singleVersionSatisfied: true },
+		});
+		expect(JSON.parse(await Bun.file(globalConfig).text())).toEqual({
+			plugin: [`opencode-plugin-flow@${packageJson.version}`],
+		});
+		await expect(access(oldCache)).rejects.toThrow();
+	});
+
+	test("labels a refused install plan as unexecuted", async () => {
+		const environment = await fixture();
+		const pluginDirectory = join(environment.xdgConfig, "opencode", "plugins");
+		await mkdir(pluginDirectory, { recursive: true });
+		await writeFile(
+			join(pluginDirectory, "flow-custom-wrapper.js"),
+			'export { default } from "opencode-plugin-flow@5.2.2";\n',
+			"utf8",
+		);
+		await writeFile(
+			join(environment.xdgConfig, "opencode", "opencode.json"),
+			`${JSON.stringify({ plugin: ["./plugins/flow-custom-wrapper.js"] })}\n`,
+			"utf8",
+		);
+
+		const result = runCli(
+			["install", "--project", environment.project, "--scope", "global"],
+			environment,
+		);
+
+		expect(result.status).toBe(1);
+		expect(result.stdout).toContain("Flow activation apply: refused");
+		expect(result.stdout).toContain("- blocked plan (not executed):");
+		expect(result.stdout.indexOf("- refused:")).toBeLessThan(
+			result.stdout.indexOf("- blocked plan (not executed):"),
+		);
+		expect(result.stdout).toContain("- would-rewrite-config:");
 	});
 
 	test("rejects tags locally and preserves legacy-cleanup", async () => {

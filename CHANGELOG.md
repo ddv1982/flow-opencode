@@ -2,6 +2,26 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.3.2] - 2026-07-20
+
+Crash-safe single-version installation lore makes upgrading converge on the
+invoked latest package without leaving an older active or staged copy behind:
+
+- The new `install` command immediately writes its embedded exact package
+  version, refuses downgrades, removes recognized older Flow activation entries,
+  and permanently deletes only ownership-proven wrappers and manifest-proven
+  inactive cache artifacts after verification.
+- Activation journal v2 records a durable deletion commit point. A later install
+  safely rolls back an interrupted pre-commit run or finishes verified deletion
+  after a committed interruption; read-only checks block on unresolved recovery
+  instead of reporting a false success.
+- Inventory and CLI output now state the honest coverage boundary: global sources
+  plus the selected project. Projects with their own OpenCode configuration must
+  be converged separately rather than relying on an unsafe filesystem-wide scan.
+- Public installation guidance resolves `@latest` once because `install` performs
+  its own exact-version post-apply check. Package smoke and real `SIGKILL` tests
+  cover installation, reversible staging, retry, and committed cleanup.
+
 ## [5.3.1] - 2026-07-20
 
 Windows validation lore keeps the single-version harness release portable:

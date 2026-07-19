@@ -41,6 +41,20 @@ describe("release metadata", () => {
 		);
 	});
 
+	test("accepts @latest as the user-facing convergence installer", () => {
+		const result = validateReleaseMetadata({
+			...metadata(),
+			installDocuments: [
+				{
+					path: "README.md",
+					content:
+						"npx -y opencode-plugin-flow@latest install --project /tmp/project --scope global",
+				},
+			],
+		});
+		expect(result.pinnedInstallVersions).toEqual([]);
+	});
+
 	for (const falsePositive of ["5x2x2", "5.2.20", "5.2.2-beta"]) {
 		test(`rejects near-match changelog heading ${falsePositive}`, () => {
 			expect(() =>

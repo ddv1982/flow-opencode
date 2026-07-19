@@ -6,24 +6,32 @@ there is no skill sync, setup-health state, or second-restart requirement.
 
 ## Install and update
 
-Plan, apply, and verify one exact pinned plugin version:
+Install npm's latest release as the one exact active version, then verify it:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.1 activation-apply \
+npx -y opencode-plugin-flow@latest install \
   --project "$PWD" --scope global
-npx -y opencode-plugin-flow@5.3.1 activation-apply \
-  --project "$PWD" --scope global --apply
-npx -y opencode-plugin-flow@5.3.1 activation-check --project "$PWD"
 ```
 
-The first command changes nothing. Inspect its config rewrites and quarantine
-operations before repeating with `--apply`. The final check must say
-`satisfied`; it requires one exact target activation, one total Flow activation
-source, and no proven inactive Flow cache artifact. Use `--scope project` for a
+`install` applies immediately. It uses the fetched package's embedded exact
+version, refuses a downgrade when a newer installed Flow is detected, removes
+recognized older activation entries, and permanently deletes proven obsolete
+Flow wrappers and OpenCode package-cache artifacts. Its internal final check
+must say `satisfied`; it uses the same embedded exact target and requires one
+target activation, one total Flow activation source, and no proven inactive
+Flow cache artifact. Do not run a second `@latest` command for that verification,
+because npm could resolve it to a newer release. Use `--scope project` for a
 project-local canonical pin. Do not retain a global and project copy together.
-The target defaults to the invoked package's embedded version. An explicit
-`--target` also accepts only an exact semantic version; tags and ranges are
-refused rather than resolved implicitly.
+
+Coverage is global sources plus the selected `--project`; unrelated project
+trees are not scanned. Run install separately from every project that contains
+project-local OpenCode configuration. A successful install for one selected
+project makes no claim about a different project's config.
+
+For a read-only preview, invoke an exact package version with
+`activation-apply` and omit `--apply`. An explicit `--target` also accepts only
+an exact semantic version; tags and ranges are refused rather than resolved
+implicitly.
 
 Start or restart OpenCode once after activation changes. Core command
 instructions are compiled into the plugin, and optional guides are returned by
@@ -57,21 +65,25 @@ one exact pin, for example:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.3.1"]
+  "plugin": ["opencode-plugin-flow@5.3.2"]
 }
 ```
 
-An applied activation writes owner-restricted backups and
-`flow-activation-journal-v1` under the printed recovery path before changing
-recognized sources. Marker-proven wrappers and proven inactive cache artifacts
-are moved, not deleted. If a post-mutation step fails, Flow first attempts exact
-safe rollback. A `rolled-back` journal means the recorded mutations were
-restored; rerun `activation-check` before another dry-run. A `rollback-failed`
-journal means a concurrent edit or another safety condition prevented exact
-restoration; Flow preserves that state and prints journal-backed manual recovery
-guidance. Stop OpenCode, inspect the journal, backups, recovery paths, and
-current bytes, then restore only actions whose identity still matches. Never
-treat an incomplete journal as permission to remove ambiguous content.
+An applied activation writes owner-restricted config backups and
+`flow-activation-journal-v2` under the printed recovery path before changing
+recognized sources. Proven obsolete wrappers and cache artifacts are moved to
+run-scoped staging while config changes are verified. A failed activation moves
+them back; a successful installation permanently deletes them before reporting
+success. A `rolled-back` journal means the recorded mutations were restored;
+rerun `activation-check` before retrying. A `rollback-failed` journal means a
+concurrent edit or another safety condition prevented exact restoration. A
+`cleanup-failed` journal means the newest activation was committed but permanent
+deletion did not finish; follow its narrow staging-path guidance without
+restoring an older activation. Never treat an incomplete journal as permission
+to remove ambiguous content. A later `install` inspects v2 journals before
+planning: it safely rolls back an interrupted pre-commit run or finishes
+verified deletion for a committed run. `activation-check` remains read-only and
+reports any unresolved journal as blocking.
 
 ## Duplicate runtime leadership error
 
@@ -105,13 +117,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.1 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.2 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.1 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.3.2 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to

@@ -947,15 +947,22 @@ or evidence above.
 The implementation now covers the planned harness phases as small contracts:
 
 1. **Single activation and leadership.** `activation-check` inventories readable
-   OpenCode global, project, `.opencode`, custom, inline, and managed JSON/JSONC
-   sources; singular/plural plugin directories; and Flow package-cache
-   artifacts. `activation-apply` is dry-run by default and converges recognized
-   sources on one exact npm pin only with `--apply`, preserving unrelated
-   entries and writing backups, quarantine moves, and a recovery journal.
+   OpenCode global sources and the selected project's project, `.opencode`,
+   custom, inline, and managed JSON/JSONC sources; singular/plural plugin
+   directories; and Flow package-cache artifacts. Other project trees are an
+   explicit per-project install boundary. `activation-apply` is dry-run by
+   default and converges recognized sources on one exact npm pin only with
+   `--apply`, preserving unrelated
+   entries and writing backups plus a v2 recovery journal. The `install`
+   command converges immediately to the invoked `@latest` package version.
+   Proven obsolete wrappers and cache artifacts are staged for rollback and
+   permanently deleted before success.
    JSONC requiring mutation, unknown wrappers, ambiguous cache artifacts,
    unsafe links, and non-mutable sources require manual remediation. A
    post-mutation failure attempts exact rollback and records `rolled-back` or
-   journal-backed `rollback-failed` recovery. Process-global leadership permits
+   journal-backed `rollback-failed` recovery. Interrupted v2 journals are
+   reconciled before a later apply: pre-commit work rolls back and committed
+   removal work finishes verified deletion. Process-global leadership permits
    one operational runtime; duplicates disable every copy and expose a
    highest-semantic-version identity for diagnosis only.
 2. **Runtime-attested validation.** `flow_validation_start` binds current causal

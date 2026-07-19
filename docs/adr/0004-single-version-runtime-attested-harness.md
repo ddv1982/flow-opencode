@@ -37,31 +37,42 @@ promoting a new profile; arbitrary token or percentage targets are insufficient.
 
 ### One activation and one operational runtime
 
-Flow ships `activation-check` and `activation-apply` as explicit distribution
-commands. Both require an absolute project path and an exact semantic-version
-target; apply also requires one canonical `global` or `project` scope. Apply is
+Flow ships `install`, `activation-check`, and `activation-apply` as explicit
+distribution commands. `install` immediately converges to the invoked package's
+embedded exact version and refuses to replace a detected newer installation.
+Check and apply require an absolute project path and exact semantic-version
+target; apply also requires one canonical `global` or `project` scope and is
 read-only unless `--apply` is present.
 
-Inventory covers readable OpenCode global, project, `.opencode`, custom,
-inline, and managed JSON/JSONC config; both `plugin/` and `plugins/` discovery
-directories; and Flow's package-cache artifacts. Plugin arrays accept both
-string entries and `[specifier, options]` tuples. A successful end state has
-exactly one `opencode-plugin-flow@<target>` npm activation source and no proven
-inactive Flow cache artifact.
+Inventory covers readable OpenCode global sources plus the selected project's
+project, `.opencode`, custom, inline, and managed JSON/JSONC config; both
+`plugin/` and `plugins/` discovery directories; and Flow's package-cache
+artifacts. Other project trees are not scanned and must be converged from those
+projects. Plugin arrays accept both string entries and `[specifier, options]`
+tuples. Within that explicit boundary, a successful end state has exactly one
+`opencode-plugin-flow@<target>` npm activation source and no proven inactive
+Flow cache artifact.
 
 Apply preserves unrelated config entries, removes recognized Flow activations
-outside the chosen scope, writes the canonical target pin last, and moves only
-marker-proven wrappers and manifest-proven inactive cache artifacts out of
-discovery. It creates config backups and an owner-restricted
-`flow-activation-journal-v1` before mutation. Unknown or edited wrappers,
+outside the chosen scope, writes the canonical target pin last, and removes only
+marker-proven wrappers, the byte-exact known legacy wrapper format, and
+manifest-proven inactive cache artifacts. It creates config backups and an
+owner-restricted `flow-activation-journal-v2`, stages obsolete artifacts outside
+discovery until the new activation is verified, then permanently deletes them
+before success. Unknown or edited wrappers,
 ambiguous cache artifacts, malformed sources, symbolic links, inline or managed
 entries, and other sources that cannot be changed safely require manual
 remediation. JSONC is inventoried but any JSONC file requiring mutation is
 refused rather than rewritten without comments. A post-mutation failure attempts
-exact safe rollback: the journal records `rolled-back` after successful exact
-restoration or `rollback-failed` when concurrent or unsafe state must be
-preserved for journal-backed manual recovery. Authenticated remote and some
-managed-preference sources are an explicit offline limitation.
+exact safe rollback before the deletion commit: the journal records
+`rolled-back` after successful exact restoration or `rollback-failed` when
+concurrent or unsafe state must be preserved for journal-backed manual recovery.
+`cleanup-failed` preserves the committed newest activation and identifies only
+remaining obsolete staging paths. Authenticated remote and some
+managed-preference sources are an explicit offline limitation. A durable
+`committed` journal state separates rollback from permanent cleanup. A later
+apply reconciles nonterminal journals before planning, while read-only checks
+report them as blocking.
 
 Every initialized Flow runtime also registers exact package, version, protocol,
 and instance identity in a bounded process-global registry. Exactly one

@@ -18,25 +18,26 @@ current product or contributor contract.
 ## Quick start
 
 ```bash
-npx -y opencode-plugin-flow@5.3.1 activation-apply \
+npx -y opencode-plugin-flow@latest install \
   --project "$PWD" --scope global
-npx -y opencode-plugin-flow@5.3.1 activation-apply \
-  --project "$PWD" --scope global --apply
-npx -y opencode-plugin-flow@5.3.1 activation-check --project "$PWD"
 ```
 
-The first command is a read-only plan. Review it before running the second;
-the final check must report exactly one active `opencode-plugin-flow@5.3.1`
-source and no proven inactive Flow cache artifacts. Use `--scope project` when
-the one canonical pin should live with the project instead of in global config.
-Flow refuses ambiguous local wrappers, cache entries, unsafe links, and config
-it cannot change conservatively rather than guessing which copy is authoritative.
+`install` resolves npm's current release before it starts, writes that package's
+embedded exact version as the sole Flow activation, and permanently removes
+positively identified older Flow wrappers and OpenCode cache artifacts. It
+refuses a downgrade when a newer installed version is detected. The final check
+performed by that same fetched CLI must report exactly one active Flow source at
+the installed exact version and no proven inactive Flow cache artifacts. Do not
+resolve `@latest` a second time for post-install verification. Inventory covers
+global sources plus the selected `--project`; it does not scan unrelated project
+trees. Run the installer from each project that has its own OpenCode config. Use
+`--scope project` when the canonical pin should live with that selected project
+instead of global config.
 
-To select npm's current release instead of this release-pinned example, replace
-`@5.3.1` with `@latest` on the `npx` invocations; do not pass
-`--target latest`. The fetched CLI resolves its own embedded exact version and
-converges every mutable Flow activation to that one pin, so latest replaces an
-older active version rather than loading beside it.
+For a read-only preview, run `activation-apply` without `--apply` using an exact
+package version. Flow refuses ambiguous local wrappers, cache entries, unsafe
+links, and config it cannot change conservatively rather than guessing which
+copy is authoritative.
 
 Start or restart OpenCode, then give Flow a goal:
 
@@ -292,13 +293,18 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for updates,
 activation refusal and duplicate-runtime recovery, stuck session recovery, and
 removal of global Flow skill folders left by v4.
 
-To update, run the same `activation-apply` dry-run/apply/check sequence with the
-new exact package version. The activator inventories OpenCode's global, project,
-`.opencode`, custom, inline, and readable managed configuration; singular and
-plural plugin directories; and the Flow package cache. It preserves unrelated
-plugins, removes recognized Flow config entries outside the selected canonical
-scope, and moves only marker-proven wrappers and proven inactive cache artifacts
-to recovery locations. Applied changes receive backups and a recovery journal.
+To update, run the same `@latest install` command. The installer inventories
+OpenCode's global sources plus the selected project's project, `.opencode`,
+custom, inline, and readable managed configuration; singular and plural plugin
+directories; and the Flow package cache. Other project trees are deliberately
+not discovered; run the command from each project with project-local OpenCode
+configuration. It preserves unrelated plugins, removes recognized Flow config
+entries outside the selected canonical scope, and permanently removes only
+marker-proven wrappers, the exact known legacy wrapper format, and
+manifest-proven inactive cache artifacts. Applied changes receive config
+backups and a recovery journal. Obsolete artifacts are staged reversibly while
+activation changes are verified, restored if activation fails, and deleted
+before installation reports success.
 Sources that cannot be proved safe—including unknown wrappers, ambiguous cache
 artifacts, JSONC that would require a lossy rewrite, inline config, and
 administrator-managed config—produce manual remediation instead of mutation.
@@ -306,12 +312,14 @@ If an applied multi-source change fails, Flow attempts exact safe rollback and
 records either `rolled-back` or `rollback-failed` in the recovery journal;
 concurrent or unsafe state is preserved for manual recovery. Remote and
 managed-preference sources that cannot be decoded offline remain covered by
-fail-closed runtime leadership.
+fail-closed runtime leadership. A later install reconciles interrupted v2
+journals before planning: pre-commit work is rolled back, while committed
+removal work finishes verified deletion.
 
 To preview recoverable migration of pristine v4 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.1 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.2 legacy-cleanup --dry-run
 ```
 
 ## Development

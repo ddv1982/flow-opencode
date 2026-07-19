@@ -287,9 +287,19 @@ async function executePackageSurfaceSmoke(): Promise<PackageSurfaceSmokeEvidence
 		);
 
 		const activationApply = JSON.parse(
-			runCommand("node", [packedBinPath, ...activationArguments, "--apply"], {
-				env: activationEnvironment,
-			}).stdout,
+			runCommand(
+				"node",
+				[
+					packedBinPath,
+					"install",
+					"--project",
+					activationProject,
+					"--scope",
+					"global",
+					"--json",
+				],
+				{ env: activationEnvironment },
+			).stdout,
 		) as {
 			mode?: string;
 			status?: string;

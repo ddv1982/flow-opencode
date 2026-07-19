@@ -300,6 +300,37 @@ describe("Flow activation inventory", () => {
 		);
 	});
 
+	test("states that success covers global sources and only the selected project", async () => {
+		const environment = await fixture();
+		const resolved = resolveActivationPaths(
+			environment.project,
+			environment.paths,
+		);
+		await writeJson(resolved.globalConfig, {
+			plugin: ["opencode-plugin-flow@5.2.2"],
+		});
+		const otherProject = join(environment.root, "other-project");
+		await writeJson(join(otherProject, "opencode.json"), {
+			plugin: ["opencode-plugin-flow@5.1.0"],
+		});
+
+		const report = await checkFlowActivation({
+			project: environment.project,
+			target: "5.2.2",
+			paths: environment.paths,
+		});
+
+		expect(report.singleVersionSatisfied).toBe(true);
+		expect(report.coverage).toEqual({
+			globalSources: true,
+			selectedProject: environment.project,
+			otherProjectTrees: false,
+		});
+		expect(report.records).not.toContainEqual(
+			expect.objectContaining({ path: join(otherProject, "opencode.json") }),
+		);
+	});
+
 	test("inventories JSONC but refuses lossy mutation with remediation", async () => {
 		const environment = await fixture();
 		const resolved = resolveActivationPaths(

@@ -14,17 +14,19 @@ import { resolveFlowPluginVersion } from "./version.js";
 function usage(): string {
 	return [
 		"usage:",
+		"  opencode-plugin-flow install --project <absolute-path> --scope <global|project> [--json]",
 		"  opencode-plugin-flow activation-check --project <absolute-path> [--target <exact-version>] [--json]",
 		"  opencode-plugin-flow activation-apply --project <absolute-path> --scope <global|project> [--target <exact-version>] [--apply] [--json]",
 		"  opencode-plugin-flow legacy-cleanup <--dry-run|--apply> [--json]",
 		"",
 		"commands:",
-		"  activation-check    Inventory all OpenCode Flow activation sources and cache artifacts",
+		"  install             Converge immediately to this package's exact version and remove proven older copies",
+		"  activation-check    Inventory global sources, one selected project, and cache artifacts",
 		"  activation-apply    Plan a single-version activation; mutate only with --apply",
 		"  legacy-cleanup      Inspect or archive marker-proven legacy global Flow skills",
 		"",
 		"activation options:",
-		"  --project <path>    Absolute project/worktree path whose sources are inventoried",
+		"  --project <path>    Absolute project/worktree path; other project trees are not scanned",
 		"  --scope <scope>     Config that receives the one canonical exact npm pin",
 		"  --target <version>  Exact version only; defaults to this package's embedded version",
 		"  --apply             Create backups/journal and apply the activation plan",
@@ -72,6 +74,9 @@ function writeActivationCheck(
 		`Flow activation check: ${report.singleVersionSatisfied ? "satisfied" : "not satisfied"}\n`,
 	);
 	process.stdout.write(`- project: ${report.project}\n`);
+	process.stdout.write(
+		"- coverage: global sources plus the selected project; other project trees are not scanned\n",
+	);
 	process.stdout.write(`- target: opencode-plugin-flow@${report.target}\n`);
 	process.stdout.write(`- activation sources: ${report.records.length}\n`);
 	for (const record of report.records) {
@@ -110,15 +115,25 @@ function writeActivationApply(
 	}
 	process.stdout.write(`Flow activation ${report.mode}: ${report.status}\n`);
 	process.stdout.write(`- project: ${report.project}\n`);
+	process.stdout.write(
+		"- coverage: global sources plus the selected project; other project trees are not scanned\n",
+	);
 	process.stdout.write(`- canonical scope: ${report.scope}\n`);
 	process.stdout.write(`- target: opencode-plugin-flow@${report.target}\n`);
-	for (const operation of report.plan) {
-		process.stdout.write(
-			`- ${operation.action}: ${operation.path}\n  ${operation.detail}\n`,
-		);
-	}
 	for (const refusal of report.refusals) {
 		process.stdout.write(`- refused: ${refusal}\n`);
+	}
+	if (report.status === "refused" && report.plan.length > 0) {
+		process.stdout.write("- blocked plan (not executed):\n");
+	}
+	for (const operation of report.plan) {
+		const action =
+			report.status === "refused"
+				? `would-${operation.action}`
+				: operation.action;
+		process.stdout.write(
+			`- ${action}: ${operation.path}\n  ${operation.detail}\n`,
+		);
 	}
 	if (report.recovery) {
 		process.stdout.write(
@@ -237,6 +252,33 @@ async function runActivationApply(flags: string[]): Promise<void> {
 	if (report.status === "refused") process.exitCode = 1;
 }
 
+async function runInstall(flags: string[]): Promise<void> {
+	const parsed = parseActivationFlags(flags);
+	const scope = activationScope(parsed?.scope);
+	if (
+		!parsed ||
+		parsed.apply ||
+		parsed.target ||
+		(!parsed.project && !parsed.help) ||
+		(!scope && !parsed.help)
+	) {
+		process.stderr.write(`${usage()}\n`);
+		process.exitCode = 2;
+		return;
+	}
+	if (parsed.help) {
+		process.stdout.write(`${usage()}\n`);
+		return;
+	}
+	const report = await applyFlowActivation({
+		project: parsed.project as string,
+		scope: scope as ActivationScope,
+		apply: true,
+	});
+	writeActivationApply(report, parsed.json);
+	if (report.status === "refused") process.exitCode = 1;
+}
+
 async function runLegacyCleanup(flags: string[]): Promise<void> {
 	const knownFlags = new Set(["--dry-run", "--apply", "--json"]);
 	const validFlags = flags.every((flag) => knownFlags.has(flag));
@@ -271,6 +313,10 @@ async function main(argv: string[]): Promise<void> {
 	}
 	if (command === "activation-check") {
 		await runActivationCheck(flags);
+		return;
+	}
+	if (command === "install") {
+		await runInstall(flags);
 		return;
 	}
 	if (command === "activation-apply") {
