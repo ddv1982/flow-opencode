@@ -17,7 +17,7 @@ Full project documentation is available in the
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@5.2.0 --global --force
+opencode plugin opencode-plugin-flow@5.2.1 --global --force
 ```
 
 Start or restart OpenCode, then give Flow a goal:
@@ -235,7 +235,7 @@ or sync command is required. To preview recoverable migration of pristine v4
 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.2.0 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.2.1 legacy-cleanup --dry-run
 ```
 
 ## Development

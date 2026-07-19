@@ -4,9 +4,16 @@ import type { SourceIdentityProvider } from "./source-identity.js";
 
 export class ArchivedSessionLookupError extends Error {
 	readonly code = "FLOW_ARCHIVE_LOOKUP_FAILED";
-	constructor(message: string, options?: ErrorOptions) {
+	readonly failureKind: "history-integrity" | "helper-runtime";
+	constructor(
+		message: string,
+		options?: ErrorOptions & {
+			failureKind?: "history-integrity" | "helper-runtime";
+		},
+	) {
 		super(message, options);
 		this.name = "ArchivedSessionLookupError";
+		this.failureKind = options?.failureKind ?? "history-integrity";
 	}
 }
 

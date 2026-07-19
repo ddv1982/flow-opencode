@@ -348,6 +348,7 @@ type ArchiveAndClearTestHooks = {
 	afterHistoryPinned?: (() => Promise<void>) | undefined;
 	afterFlowPinnedBeforeDelete?: (() => Promise<void>) | undefined;
 	pinnedHelperTestExecutable?: string | undefined;
+	pinnedHelperTestRuntime?: "node" | "bun" | "electron" | undefined;
 	pinnedHelperReadyTimeoutMs?: number | undefined;
 	pinnedHelperCompletionTimeoutMs?: number | undefined;
 };
@@ -355,6 +356,7 @@ type ArchiveAndClearTestHooks = {
 type PinnedHelperRunOptions = Pick<
 	ArchiveAndClearTestHooks,
 	| "pinnedHelperTestExecutable"
+	| "pinnedHelperTestRuntime"
 	| "pinnedHelperReadyTimeoutMs"
 	| "pinnedHelperCompletionTimeoutMs"
 >;
@@ -613,6 +615,18 @@ async function assertManagedDirectoryIdentity(
 	}
 }
 
+class PinnedFilesystemHelperError extends Error {
+	readonly code = "FLOW_PINNED_HELPER_FAILED";
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "PinnedFilesystemHelperError";
+	}
+}
+
+function pinnedHelperFailure(message: string, cause?: unknown): Error {
+	return new PinnedFilesystemHelperError(message, { cause });
+}
+
 function helperFailure(stderr: string, cause?: unknown): Error {
 	let detail: { code?: string; message?: string } | null = null;
 	try {
@@ -630,12 +644,22 @@ function helperFailure(stderr: string, cause?: unknown): Error {
 			{ cause },
 		);
 	}
-	const error = new Error(
+	return new PinnedFilesystemHelperError(
 		detail?.message ?? "Flow pinned filesystem helper failed.",
 		{ cause },
-	) as Error & { code?: string };
-	if (detail?.code) error.code = detail.code;
-	return error;
+	);
+}
+
+function pinnedHelperEnvironment(
+	runtime: "node" | "bun" | "electron",
+): NodeJS.ProcessEnv {
+	if (runtime === "electron") {
+		return { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
+	}
+	if (runtime === "bun") {
+		return { ...process.env, BUN_BE_BUN: "1" };
+	}
+	return process.env;
 }
 
 async function runPinnedDirectoryHelper(
@@ -648,17 +672,21 @@ async function runPinnedDirectoryHelper(
 	const encodedRequest = Buffer.from(JSON.stringify(request), "utf8").toString(
 		"base64",
 	);
+	const runtime =
+		options.pinnedHelperTestRuntime ??
+		(process.versions.electron
+			? "electron"
+			: process.versions.bun
+				? "bun"
+				: "node");
 	const child = spawn(
 		options.pinnedHelperTestExecutable ?? process.execPath,
 		["--eval", PINNED_DIRECTORY_HELPER_SOURCE, encodedRequest],
 		{
 			cwd,
-			// OpenCode is distributed as a Bun-compiled executable, so its
-			// process.execPath names `opencode`, not a standalone `bun` binary.
-			// This switch makes that same executable expose Bun's CLI for --eval.
-			env: process.versions.bun
-				? { ...process.env, BUN_BE_BUN: "1" }
-				: process.env,
+			// Both OpenCode distributions use their host executable as execPath.
+			// Select that host's CLI mode so --eval runs the isolated helper.
+			env: pinnedHelperEnvironment(runtime),
 			stdio: ["pipe", "pipe", "pipe"],
 			windowsHide: true,
 		},
@@ -691,7 +719,9 @@ async function runPinnedDirectoryHelper(
 	const readyTimeout = setTimeout(
 		() => {
 			terminateHelper(
-				new Error("Flow pinned filesystem helper timed out before readiness."),
+				pinnedHelperFailure(
+					"Flow pinned filesystem helper timed out before readiness.",
+				),
 			);
 		},
 		positiveTimeout(
@@ -713,16 +743,18 @@ async function runPinnedDirectoryHelper(
 					};
 				} catch (error) {
 					terminateHelper(
-						new Error(
+						pinnedHelperFailure(
 							"Flow pinned filesystem helper returned an invalid ready event.",
-							{ cause: error },
+							error,
 						),
 					);
 					return;
 				}
 				if (event.event !== "pinned") {
 					terminateHelper(
-						new Error("Flow pinned filesystem helper omitted its ready event."),
+						pinnedHelperFailure(
+							"Flow pinned filesystem helper omitted its ready event.",
+						),
 					);
 					return;
 				}
@@ -732,7 +764,7 @@ async function runPinnedDirectoryHelper(
 				completionTimeout = setTimeout(
 					() => {
 						terminateHelper(
-							new Error(
+							pinnedHelperFailure(
 								"Flow pinned filesystem helper timed out before completion.",
 							),
 						);
@@ -772,8 +804,8 @@ async function runPinnedDirectoryHelper(
 				return;
 			}
 			if (readyState !== "resolved") {
-				const failure = new Error(
-					"Flow pinned filesystem helper exited before readiness.",
+				const failure = pinnedHelperFailure(
+					"Flow could not start its pinned filesystem helper under the current host runtime.",
 				);
 				if (readyState === "pending") {
 					readyState = "rejected";
@@ -790,9 +822,10 @@ async function runPinnedDirectoryHelper(
 				resolve(JSON.parse(stdout) as PinnedHelperResult);
 			} catch (error) {
 				reject(
-					new Error("Flow pinned filesystem helper returned invalid output.", {
-						cause: error,
-					}),
+					pinnedHelperFailure(
+						"Flow pinned filesystem helper returned invalid output.",
+						error,
+					),
 				);
 			}
 		});
@@ -1180,6 +1213,12 @@ async function findCanonicalArchivedSession(
 		return matches[0] ?? null;
 	} catch (error) {
 		if (error instanceof ArchivedSessionLookupError) throw error;
+		if (error instanceof PinnedFilesystemHelperError) {
+			throw new ArchivedSessionLookupError(error.message, {
+				cause: error,
+				failureKind: "helper-runtime",
+			});
+		}
 		throw new ArchivedSessionLookupError(
 			"Flow could not verify archived operation history safely.",
 			{ cause: error },

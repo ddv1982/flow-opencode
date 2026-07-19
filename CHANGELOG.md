@@ -2,6 +2,21 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.2.1] - 2026-07-19
+
+Desktop helper runtime lore restores durable session closure under OpenCode
+Desktop while preserving Flow's pinned-filesystem safety boundary:
+
+- Electron-hosted Flow now starts its short-lived filesystem helper through the
+  host executable's Node mode. Bun-hosted OpenCode retains its dedicated CLI
+  mode, and ordinary Node hosts remain unchanged.
+- Helper launch and protocol failures are classified separately from malformed
+  or ambiguous canonical history. Recovery guidance preserves the active
+  session and its exact durable close operation instead of blaming healthy
+  archive state.
+- Persistence coverage exercises the Electron launch contract end to end and
+  proves that runtime failures remain atomic and receive the correct guidance.
+
 ## [5.2.0] - 2026-07-19
 
 Runtime-owned review assignment lore removes the recovery loops seen in long

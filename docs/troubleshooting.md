@@ -9,7 +9,7 @@ there is no skill sync, setup-health state, or second-restart requirement.
 Install or replace the pinned plugin version:
 
 ```bash
-opencode plugin opencode-plugin-flow@5.2.0 --global --force
+opencode plugin opencode-plugin-flow@5.2.1 --global --force
 ```
 
 Start or restart OpenCode once after changing the installed package. Core
@@ -22,7 +22,7 @@ Flow entry in `opencode.json` instead of adding a duplicate:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.2.0"]
+  "plugin": ["opencode-plugin-flow@5.2.1"]
 }
 ```
 
@@ -45,13 +45,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.2.0 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.2.1 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.2.0 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.2.1 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to
@@ -79,6 +79,10 @@ move, it remains quarantined at the printed recovery path.
   unfinished work explicitly as `deferred` or `abandoned`, finish archive
   publication, then save the new goal. Completed progress requires a
   `completed` close.
+- **The pinned filesystem helper cannot start**: install Flow 5.2.1 or newer
+  and restart OpenCode. Preserve `.flow/session.json` and `.flow/history`, then
+  retry the exact `closure.retryOperationId` exposed by compact status; a helper
+  runtime failure is not evidence that canonical history is corrupt.
 - **Archive publication interrupted**: call
   `flow_status { request: { view: "compact" } }`, read the complete
   `closure.retryOperationId`, and call

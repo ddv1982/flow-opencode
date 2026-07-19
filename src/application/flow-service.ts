@@ -492,18 +492,23 @@ function archivedLookupFailureResponse(
 	error: ArchivedSessionLookupError,
 	operationId: string,
 ): FlowResponse {
+	const helperRuntimeFailure = error.failureKind === "helper-runtime";
 	return rejectedMutationResponse(
 		{
 			status: "error",
-			summary: "Flow could not verify archived retry history.",
-			nextAction:
-				"Inspect canonical Flow history integrity before retrying this close operation.",
+			summary: helperRuntimeFailure
+				? "Flow could not start its filesystem helper to read archived retry history."
+				: "Flow could not verify archived retry history.",
+			nextAction: helperRuntimeFailure
+				? "Restart OpenCode with the current Flow build, then retry this close operation."
+				: "Inspect canonical Flow history integrity before retrying this close operation.",
 			dataNote: WORKFLOW_DATA_NOTE,
 			workflowData: {
 				failure: {
 					summary: error.message,
-					recovery:
-						"Preserve archive files and resolve corrupt or ambiguous canonical history; quarantine records are not replay sources.",
+					recovery: helperRuntimeFailure
+						? "Preserve Flow state, restart OpenCode after updating Flow, and retry with the same close operation id."
+						: "Preserve archive files and resolve corrupt or ambiguous canonical history; quarantine records are not replay sources.",
 				},
 			},
 		},
@@ -517,19 +522,23 @@ function archivedCloseStartLookupFailureResponse(
 	session: Session,
 	operationId: string,
 ): FlowResponse {
+	const helperRuntimeFailure = error.failureKind === "helper-runtime";
 	return rejectedMutationResponse(
 		{
 			status: "error",
-			summary:
-				"Flow could not prove that this close operation id is unique in canonical history.",
-			nextAction:
-				"Inspect canonical Flow history integrity before starting this close operation.",
+			summary: helperRuntimeFailure
+				? "Flow could not start its filesystem helper to verify this close operation id."
+				: "Flow could not prove that this close operation id is unique in canonical history.",
+			nextAction: helperRuntimeFailure
+				? "Restart OpenCode with the current Flow build, then start this close operation again."
+				: "Inspect canonical Flow history integrity before starting this close operation.",
 			dataNote: WORKFLOW_DATA_NOTE,
 			workflowData: {
 				failure: {
 					summary: error.message,
-					recovery:
-						"Preserve the active session and resolve corrupt or ambiguous canonical history before retrying with a verified operation id.",
+					recovery: helperRuntimeFailure
+						? "Preserve the active session, restart OpenCode after updating Flow, and retry with the same unconsumed operation id."
+						: "Preserve the active session and resolve corrupt or ambiguous canonical history before retrying with a verified operation id.",
 				},
 			},
 		},
@@ -543,19 +552,23 @@ function archivedCloseRetryLookupFailureResponse(
 	session: Session,
 	operationId: string,
 ): FlowResponse {
+	const helperRuntimeFailure = error.failureKind === "helper-runtime";
 	return rejectedMutationResponse(
 		{
 			status: "error",
-			summary:
-				"Flow could not verify canonical history before publishing the pending close.",
-			nextAction:
-				"Inspect canonical Flow history integrity before retrying archive publication.",
+			summary: helperRuntimeFailure
+				? "Flow could not start its filesystem helper before publishing the pending close."
+				: "Flow could not verify canonical history before publishing the pending close.",
+			nextAction: helperRuntimeFailure
+				? "Restart OpenCode with the current Flow build, then retry archive publication."
+				: "Inspect canonical Flow history integrity before retrying archive publication.",
 			dataNote: WORKFLOW_DATA_NOTE,
 			workflowData: {
 				failure: {
 					summary: error.message,
-					recovery:
-						"Preserve the active closed session and resolve corrupt, ambiguous, or conflicting canonical history before retrying its durable close operation.",
+					recovery: helperRuntimeFailure
+						? "Preserve the active closed session, restart OpenCode after updating Flow, and retry its exact durable close operation."
+						: "Preserve the active closed session and resolve corrupt, ambiguous, or conflicting canonical history before retrying its durable close operation.",
 				},
 			},
 		},

@@ -935,6 +935,49 @@ describe("Flow workspace persistence", () => {
 		5_000,
 	);
 
+	test.skipIf(process.platform === "win32")(
+		"runs pinned helpers through Electron's Node mode",
+		async () => {
+			const workspace = await tempWorkspace();
+			const environment = {
+				now: () => "2026-07-19T12:00:00.000Z",
+				newSessionId: () => toSessionId("electron-helper-runtime"),
+			};
+			const active = createSession("Close from OpenCode Desktop", environment);
+			const closed = closeSession(active, "deferred", environment, undefined, {
+				operationId: "electron-helper-close",
+				expectedRevision: active.causal.revision,
+				expectedSnapshotId: active.causal.snapshotId,
+			});
+			if (!closed.ok) throw new Error(closed.message);
+			await saveSession(workspace, closed.value);
+			const escapedExecutable = process.execPath.replaceAll("'", "'\\''");
+			const executable = join(workspace, "electron-node-mode.sh");
+			await writeFile(
+				executable,
+				`#!/bin/sh\nif [ "\${ELECTRON_RUN_AS_NODE:-}" != "1" ]; then exit 91; fi\nexec '${escapedExecutable}' "$@"\n`,
+				"utf8",
+			);
+			await chmod(executable, 0o700);
+
+			await archiveAndClearSession(workspace, closed.value, {
+				pinnedHelperTestExecutable: executable,
+				pinnedHelperTestRuntime: "electron",
+			});
+
+			expect(await loadSession(workspace)).toBeNull();
+			expect(
+				(
+					await findArchivedSessionByOperationId(
+						workspace,
+						"electron-helper-close",
+					)
+				)?.id,
+			).toBe(closed.value.id);
+		},
+		10_000,
+	);
+
 	test("pins corrupt-session quarantine across a history swap", async () => {
 		const workspace = await tempWorkspace();
 		const outside = await tempWorkspace();
@@ -1807,6 +1850,75 @@ if (failureCode !== "EIO") process.exitCode = 2;`,
 				),
 			).causal.revision,
 		);
+	});
+
+	test("reports helper runtime failures without blaming canonical history", async () => {
+		const workspace = await tempWorkspace();
+		await flowPlanSave(workspace, {
+			goal: "Keep runtime failures distinct from history corruption",
+			plan: oneFeaturePlan(),
+		});
+		const active = await loadSession(workspace);
+		if (!active) throw new Error("Expected an active session before close.");
+		const repository = createFileSessionRepository(workspace);
+		const operationId = "helper-runtime-close-retry";
+		const interruptedService = createFlowService(
+			{
+				read: () => repository.read(),
+				transact: (task) =>
+					repository.transact((transaction) =>
+						task({
+							...transaction,
+							archiveAndClear: async () => {
+								throw new Error("leave durable close pending");
+							},
+						}),
+					),
+			},
+			systemTransitionEnvironment,
+		);
+		await expect(
+			interruptedService.sessionClose({
+				request: {
+					mode: "start",
+					operationId,
+					expectedRevision: active.causal.revision,
+					expectedSnapshotId: active.causal.snapshotId,
+					kind: "deferred",
+				},
+			}),
+		).rejects.toThrow("leave durable close pending");
+
+		const runtimeFailureService = createFlowService(
+			{
+				read: () => repository.read(),
+				transact: (task) =>
+					repository.transact((transaction) =>
+						task({
+							...transaction,
+							findArchivedByOperationId: async () => {
+								throw new ArchivedSessionLookupError(
+									"Flow could not start its pinned filesystem helper under the current host runtime.",
+									{ failureKind: "helper-runtime" },
+								);
+							},
+						}),
+					),
+			},
+			systemTransitionEnvironment,
+		);
+		const response = await runtimeFailureService.sessionClose({
+			request: { mode: "retry", operationId },
+		});
+
+		expect(response.status).toBe("error");
+		expect(response.summary).toContain("filesystem helper");
+		expect(response.nextAction).toContain("Restart OpenCode");
+		expect(response.workflowData?.failure?.recovery).toContain(
+			"exact durable close operation",
+		);
+		expect(JSON.stringify(response)).not.toMatch(/corrupt|ambiguous/i);
+		expect(await loadSession(workspace)).not.toBeNull();
 	});
 
 	test("rescans canonical history before publishing an active close retry", async () => {
