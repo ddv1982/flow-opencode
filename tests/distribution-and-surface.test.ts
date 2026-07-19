@@ -656,6 +656,31 @@ describe("explicit legacy cleanup", () => {
 		).toBe("archived");
 	});
 
+	test("does not claim a concurrently relocated archive is quarantined", async () => {
+		const home = await tempHome();
+		await installPristineLegacyTopic(home, "flow-test");
+		let relocatedPath: string | undefined;
+		const report = await cleanupLegacySkills({
+			home,
+			apply: true,
+			afterQuarantine: async ({ name, archivePath }) => {
+				if (name !== "flow-test") return;
+				relocatedPath = `${archivePath}.concurrent`;
+				await rename(archivePath, relocatedPath);
+			},
+		});
+		const result = report.results.find(
+			(candidate) => candidate.name === "flow-test",
+		);
+
+		expect(result?.status).toBe("refused");
+		expect(result?.reason).toContain("archive moved again");
+		expect(result?.archivePath).toBeUndefined();
+		expect(
+			await readFile(join(relocatedPath ?? "", "SKILL.md"), "utf8"),
+		).toContain("# Flow Test");
+	});
+
 	test("post-move changes are preserved in quarantine and never accepted as pristine", async () => {
 		const home = await tempHome();
 		const folder = await installPristineLegacyTopic(home, "flow-test");

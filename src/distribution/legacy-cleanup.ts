@@ -342,6 +342,20 @@ export async function cleanupLegacySkills(options?: {
 		}
 		await options?.afterQuarantine?.({ name, path, archivePath });
 		const verified = await verifyMovedLegacyFolder(name, archivePath);
+		if (verified.status === "absent") {
+			// On Windows, two concurrent path-based renames can both report success
+			// while the later rename relocates the same directory again. Do not claim
+			// that our now-missing destination is quarantined; the competing cleanup
+			// owns verification of the final archive path.
+			results.push({
+				name,
+				path,
+				status: "refused",
+				reason:
+					"archive moved again while cleanup was running; inspect the legacy archive root",
+			});
+			continue;
+		}
 		if (verified.status !== "eligible") {
 			results.push({
 				name,
