@@ -2,6 +2,7 @@ import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ToolContext, tool } from "@opencode-ai/plugin";
+import { MAX_VALIDATION_RECEIPT_BYTES } from "../../src/domain/validation-receipt.js";
 import { createTools } from "../../src/platform/opencode/tools.js";
 import {
 	LIFECYCLE_APPLICATION_SCHEMAS,
@@ -166,6 +167,7 @@ type JsonSchema = {
 	items?: JsonSchema;
 	additionalProperties?: boolean;
 	minimum?: number;
+	exclusiveMinimum?: number;
 	maximum?: number;
 	minItems?: number;
 };
@@ -292,14 +294,29 @@ export const emittedJsonSchemaProof = executableProof(
 			"reviewKind",
 			"final",
 		);
+		const featureValidationRefs = property(
+			featureReviewStartBranch,
+			"validationRefs",
+		);
+		assertions.equal(featureValidationRefs.minItems, 1);
+		const validationRef = items(featureValidationRefs);
+		assertions.deepEqual(validationRef.required, [
+			"kind",
+			"digest",
+			"byteLength",
+		]);
+		assertions.equal(validationRef.additionalProperties, false);
 		assertions.equal(
-			literalValue(
-				property(
-					items(property(featureReviewStartBranch, "validations")),
-					"exitCode",
-				),
-			),
-			0,
+			literalValue(property(validationRef, "kind")),
+			"validation_receipt_ref_v1",
+		);
+		const receiptByteLength = property(validationRef, "byteLength");
+		assertions.equal(receiptByteLength.type, "integer");
+		assertions.equal(receiptByteLength.exclusiveMinimum, 0);
+		assertions.equal(receiptByteLength.maximum, MAX_VALIDATION_RECEIPT_BYTES);
+		assertions.deepEqual(
+			property(finalReviewStartBranch, "validationRefs"),
+			featureValidationRefs,
 		);
 		assertPassingSubmittedReviewSchema(
 			assertions,
@@ -383,12 +400,21 @@ export const emittedJsonSchemaProof = executableProof(
 		);
 		for (const entry of boundedProperties) {
 			assertions.equal(entry.schema.type, "integer", entry.name);
-			assertions.equal(entry.schema.minimum, 0, entry.name);
-			assertions.equal(
-				entry.schema.maximum,
-				Number.MAX_SAFE_INTEGER,
-				entry.name,
-			);
+			if (entry.name === "byteLength") {
+				assertions.equal(entry.schema.exclusiveMinimum, 0, entry.name);
+				assertions.equal(
+					entry.schema.maximum,
+					MAX_VALIDATION_RECEIPT_BYTES,
+					entry.name,
+				);
+			} else {
+				assertions.equal(entry.schema.minimum, 0, entry.name);
+				assertions.equal(
+					entry.schema.maximum,
+					Number.MAX_SAFE_INTEGER,
+					entry.name,
+				);
+			}
 		}
 		assertions.cover("nonnegative-integers");
 		assertions.cover("safe-integer-bounds");

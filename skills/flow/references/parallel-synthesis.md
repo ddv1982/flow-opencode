@@ -60,6 +60,14 @@ Assign the cheapest tier that matches the consequence of error:
 - **Do not accept**: unsupported, out-of-scope, contradicted, or topic-only
   evidence.
 
+Apply the plan's recorded assurance profile to the follow-up manifest.
+`standard` gets one countable discovery wave and a second wave containing only
+surprising, inferred, contested, low-confidence, single-source,
+cross-layer-incomplete, or high-impact claims. `assurance` independently
+challenges every would-be actionable or blocking candidate. Both remain
+claim-scoped: assign atomic claims and cited paths, never a blanket repository
+reread.
+
 Verifier prompts use stable ids, one atomic assertion and cited source or
 command per id, and one exact acceptance question. Do not reveal the generating
 worker or ask the verifier to redesign the work.
@@ -80,9 +88,12 @@ Before presenting or recording a result:
 - Move only distilled evidence forward and name remaining gaps honestly.
 
 Planning evidence may become requirements, decisions, targets, validation, or a
-review-first feature. Authorized command evidence may become `validations`
-only with exact command, status, and observed result. Review workers inform but
-do not own the final assignment result. Audit findings must survive refutation.
+review-first feature. Authorized command evidence may become `validationRefs`
+only through the exact immutable refs appended by runtime-attested capture;
+prose, timestamps, hashes, and reported status never substitute. Review workers
+inform but do not own the final assignment result. Findings-report audits carry
+strict `AuditLedgerV1` and the canonical Markdown returned by
+`flow_audit_render`; findings must survive refutation.
 Candidate patches become usable only after manager inspection, integration, and
 validation in the Flow-managed workspace.
 

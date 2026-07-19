@@ -3,9 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FlowResponse } from "../src/application/flow-service.js";
-import type {
-	OrchestrationPassRecord,
-	OrchestrationTelemetry,
+import {
+	type OrchestrationPassRecord,
+	type OrchestrationTelemetry,
+	SessionSchema,
 } from "../src/application/schema.js";
 import type {
 	ReviewAssignment,
@@ -24,6 +25,7 @@ import {
 	flowSessionClose as executeFlowSessionClose,
 	flowStatus as executeFlowStatus,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
+import { publishValidationReceiptForWorkspace } from "./support/validation-receipt.js";
 
 type TestSession = Session & {
 	sourceSummary: string;
@@ -44,17 +46,6 @@ type TestFlowResponse = FlowResponse & {
 let operationSequence = 0;
 const temporaryWorkspaces = new Set<string>();
 const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
-const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
-
-type ValidationObservation = {
-	command: string;
-	summary: string;
-	startedAt: string;
-	completedAt: string;
-	exitCode: number;
-	outputDigest: string;
-	environmentKeys: string[];
-};
 
 type CompletedResult =
 	| {
@@ -81,21 +72,6 @@ type BlockedResult = {
 	resolutionHint?: string;
 	orchestrationPasses?: unknown;
 };
-
-function validationObservation(
-	featureId: string,
-	overrides: Pick<ValidationObservation, "startedAt" | "completedAt"> &
-		Partial<Omit<ValidationObservation, "startedAt" | "completedAt">>,
-): ValidationObservation {
-	return {
-		command: `bun test ${featureId}`,
-		summary: "Focused check passed.",
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
-		...overrides,
-	};
-}
 
 function activeRun(session: Session) {
 	const run = session.featureRuns.find(
@@ -234,7 +210,6 @@ async function startReview(
 		featureId: string;
 		reviewKind: "feature" | "final";
 		validationScope: "targeted" | "broad";
-		validations?: ValidationObservation[];
 		packetSummary?: string;
 		featureReview?: ReviewAssignmentResultInput;
 	},
@@ -249,6 +224,15 @@ async function startReview(
 	);
 	if (pending) return pending;
 	const run = activeRun(current);
+	const validationAt =
+		input.reviewKind === "final" && input.featureReview
+			? input.featureReview.completedAt
+			: run.startedAt;
+	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
+		startedAt: validationAt,
+		command: `bun test ${input.featureId}`,
+		coverageScope: input.reviewKind === "final" ? "broad" : "focused",
+	});
 	const response = await executeFlowReviewStart(workspace, {
 		request: {
 			operationId: `runtime-operation-${++operationSequence}`,
@@ -263,18 +247,7 @@ async function startReview(
 					input.packetSummary ?? `Runtime gate ${input.reviewKind} review.`,
 				riskLenses: [],
 			},
-			validations: input.validations ?? [
-				validationObservation(input.featureId, {
-					startedAt:
-						input.reviewKind === "final" && input.featureReview
-							? input.featureReview.completedAt
-							: run.startedAt,
-					completedAt:
-						input.reviewKind === "final" && input.featureReview
-							? input.featureReview.completedAt
-							: run.startedAt,
-				}),
-			],
+			validationRefs: [validationRef],
 		},
 	});
 	if (response.status !== "ok") {
@@ -771,13 +744,22 @@ describe("Flow runtime gates", () => {
 			reviewKind: "feature",
 			validationScope: "targeted",
 			packet: { summary: "Review without validation.", riskLenses: [] },
-			validations: [],
+			validationRefs: [],
 		});
 		expect(missingValidation.status).toBe("error");
 		expect(String(missingValidation.workflowData?.failure?.summary)).toContain(
-			"validations",
+			"validationRefs",
 		);
 
+		const failedValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: activeRun(beforeMissing).startedAt,
+				command: "bun test first-feature",
+				coverageScope: "focused",
+				exitCode: 1,
+			},
+		);
 		const failedValidation = await flowReviewStartRequest(workspace, {
 			operationId: "failed-validation-review",
 			expectedRevision: beforeMissing.causal.revision,
@@ -786,18 +768,11 @@ describe("Flow runtime gates", () => {
 			reviewKind: "feature",
 			validationScope: "targeted",
 			packet: { summary: "Review failed validation.", riskLenses: [] },
-			validations: [
-				validationObservation("first-feature", {
-					startedAt: activeRun(beforeMissing).startedAt,
-					completedAt: activeRun(beforeMissing).startedAt,
-					summary: "Focused check failed.",
-					exitCode: 1,
-				}),
-			],
+			validationRefs: [failedValidationRef],
 		});
 		expect(failedValidation.status).toBe("error");
 		expect(String(failedValidation.workflowData?.failure?.summary)).toContain(
-			"exitCode 0",
+			"Failed validation receipts",
 		);
 
 		const featureAssignment = await startReview(workspace, {
@@ -847,6 +822,14 @@ describe("Flow runtime gates", () => {
 
 		const session = await loadSession(workspace);
 		if (!session) throw new Error("Expected running session.");
+		const validationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: activeRun(session).startedAt,
+				command: "bun test first-feature",
+				coverageScope: "focused",
+			},
+		);
 		const assignment = await flowReviewStartRequest(workspace, {
 			operationId: "detailed-depth-assignment",
 			expectedRevision: session.causal.revision,
@@ -855,12 +838,7 @@ describe("Flow runtime gates", () => {
 			reviewKind: "feature",
 			validationScope: "targeted",
 			packet: { summary: "Review at planned depth.", riskLenses: [] },
-			validations: [
-				validationObservation("first-feature", {
-					startedAt: activeRun(session).startedAt,
-					completedAt: activeRun(session).startedAt,
-				}),
-			],
+			validationRefs: [validationRef],
 		});
 		expect(assignment.status).toBe("ok");
 		expect(assignment.workflowData?.projection).toMatchObject({
@@ -1014,6 +992,48 @@ describe("Flow runtime gates", () => {
 		const persisted = await orchestrationTelemetry(workspace);
 		expect(persisted.workerCount).toBe(Number.MAX_SAFE_INTEGER);
 		expect(persisted.passCount).toBe(3);
+	});
+
+	test("saturates orchestration totals without failing feature persistence", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const first = await completeSuccessfully(workspace, {
+			featureId: "first-feature",
+			validationScope: "targeted",
+			orchestrationPasses: [
+				orchestrationPass("near-maximum-worker-total", {
+					workerCount: Number.MAX_SAFE_INTEGER - 1,
+				}),
+			],
+		});
+		expect(first.status).toBe("ok");
+		expect((await orchestrationTelemetry(workspace)).workerCount).toBe(
+			Number.MAX_SAFE_INTEGER - 1,
+		);
+
+		expect((await flowRunStart(workspace, {})).status).toBe("ok");
+		const final = await completeSuccessfully(workspace, {
+			featureId: "final-feature",
+			validationScope: "broad",
+			includeFinalReview: true,
+			orchestrationPasses: [
+				orchestrationPass("saturating-worker-increment", { workerCount: 2 }),
+			],
+		});
+		expect(final.status).toBe("ok");
+
+		const persisted = await loadSession(workspace);
+		expect(persisted).not.toBeNull();
+		if (!persisted) throw new Error("Expected completed persisted session.");
+		expect(() => SessionSchema.parse(persisted)).not.toThrow();
+		expect(persisted.status).toBe("completed");
+		expect(persisted.history).toHaveLength(2);
+		expect(persisted.budget.orchestration).toMatchObject({
+			passCount: 2,
+			workerCount: Number.MAX_SAFE_INTEGER,
+		});
 	});
 
 	test("counts only eligible skipped implementation candidates as skipped", async () => {
@@ -1325,6 +1345,15 @@ describe("Flow runtime gates", () => {
 
 		const session = await loadSession(workspace);
 		if (!session) throw new Error("Expected running session.");
+		const failedValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: activeRun(session).startedAt,
+				command: "bun test first-feature",
+				coverageScope: "focused",
+				exitCode: 1,
+			},
+		);
 		const failed = await flowReviewStartRequest(workspace, {
 			operationId: "failed-review-validation",
 			expectedRevision: session.causal.revision,
@@ -1333,14 +1362,7 @@ describe("Flow runtime gates", () => {
 			reviewKind: "feature",
 			validationScope: "targeted",
 			packet: { summary: "Reject failed validation.", riskLenses: [] },
-			validations: [
-				validationObservation("first-feature", {
-					startedAt: activeRun(session).startedAt,
-					completedAt: activeRun(session).startedAt,
-					summary: "Focused check failed.",
-					exitCode: 1,
-				}),
-			],
+			validationRefs: [failedValidationRef],
 		});
 		expect(failed.status).toBe("error");
 
@@ -1715,6 +1737,14 @@ describe("Flow runtime gates", () => {
 
 		const beforeFinalAssignment = await loadSession(workspace);
 		if (!beforeFinalAssignment) throw new Error("Expected running session.");
+		const finalValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: passedReview(featureAssignment).completedAt,
+				command: "bun test final-feature",
+				coverageScope: "broad",
+			},
+		);
 		const finalAssignment = await flowReviewStartRequest(workspace, {
 			operationId: `runtime-operation-${++operationSequence}`,
 			expectedRevision: beforeFinalAssignment.causal.revision,
@@ -1727,12 +1757,7 @@ describe("Flow runtime gates", () => {
 				summary: "Runtime-derived final review policy.",
 				riskLenses: [],
 			},
-			validations: [
-				validationObservation("final-feature", {
-					startedAt: passedReview(featureAssignment).completedAt,
-					completedAt: passedReview(featureAssignment).completedAt,
-				}),
-			],
+			validationRefs: [finalValidationRef],
 		});
 		expect(finalAssignment.status).toBe("ok");
 		expect(finalAssignment.workflowData?.projection).toMatchObject({

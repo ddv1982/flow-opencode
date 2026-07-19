@@ -21,9 +21,14 @@ export function createFileSessionRepository(
 	const root = assertMutableWorkspaceRoot(workspace);
 	const evidenceArtifacts = createFileEvidenceArtifactStore(root);
 	const sourceIdentity = createFileSourceIdentityProvider(root);
+	const computeSourceManifest = sourceIdentity.computeSourceManifest;
+	if (!computeSourceManifest) {
+		throw new Error("File source identity provider lacks manifest support.");
+	}
 	const transaction: SessionTransaction = {
 		...evidenceArtifacts,
 		computeSourceIdentity: () => sourceIdentity.computeSourceIdentity(),
+		computeSourceManifest: () => computeSourceManifest(),
 		load: () => loadSession(root),
 		findArchivedByCloseRetryOperationId: (operationId) =>
 			findArchivedSessionByCloseRetryOperationId(root, operationId),

@@ -1,7 +1,7 @@
 # Long-running harness improvement plan
 
-Status: in progress; four-phase remediation locally accepted on 2026-07-18,
-while the original historical same-corpus Phase 2 gate remains unavailable
+Status: harness rewrite implemented locally on 2026-07-19; the original and
+current same-corpus standard/assurance promotion gates remain unavailable
 
 Case study: qa-scribe on `opencode-plugin-flow@5.0.0`
 
@@ -935,3 +935,79 @@ Local deterministic and pinned live-host gates are recorded in
 `flow-review-lifecycle-remediation-plan.md`. A fresh bounded real-project run
 and non-macOS matrix results remain release evidence, not compatibility
 functionality, and are not claimed by this follow-up checkpoint.
+
+### Harness rewrite checkpoint — implemented locally 2026-07-19
+
+This checkpoint supersedes the plan's current operational assumptions about
+installation, the nine-tool surface, caller-authored `validations[]`, optional
+worker admission, and correction retry context. It does not rewrite or upgrade
+the historical case-study observations, accepted checkpoint counts, thresholds,
+or evidence above.
+
+The implementation now covers the planned harness phases as small contracts:
+
+1. **Single activation and leadership.** `activation-check` inventories readable
+   OpenCode global, project, `.opencode`, custom, inline, and managed JSON/JSONC
+   sources; singular/plural plugin directories; and Flow package-cache
+   artifacts. `activation-apply` is dry-run by default and converges recognized
+   sources on one exact npm pin only with `--apply`, preserving unrelated
+   entries and writing backups, quarantine moves, and a recovery journal.
+   JSONC requiring mutation, unknown wrappers, ambiguous cache artifacts,
+   unsafe links, and non-mutable sources require manual remediation. A
+   post-mutation failure attempts exact rollback and records `rolled-back` or
+   journal-backed `rollback-failed` recovery. Process-global leadership permits
+   one operational runtime; duplicates disable every copy and expose a
+   highest-semantic-version identity for diagnosis only.
+2. **Runtime-attested validation.** `flow_validation_start` binds current causal
+   guards, feature run, source, coverage scope, environment-key names, and the
+   exact next Bash command. The host hook supplies timing, structured exit,
+   output digest/completeness, and canonical command class, then publishes an
+   immutable restricted-artifact receipt. `flow_review_start` accepts unique
+   `validationRefs`, verifies receipt bytes and current applicability, and
+   materializes only complete, successful evidence. Exact replay is checked
+   before new source or artifact I/O.
+3. **Evidence-backed correction.** A caller may link only the latest recorded
+   failed assignment through `correctionOfAssignmentId`. Runtime-owned canonical
+   source manifests derive the sorted changed-path set and delta digest. Narrow
+   correction review is used only with complete safe feature context; final,
+   security-sensitive, persistence-sensitive, metadata-changing, missing,
+   unavailable, oversized, or projection-limited context falls back explicitly
+   to full review. A correction-only `public-contract`/`cross-layer` scope hint
+   closes semantic cases paths cannot prove and can only elevate to full; runtime
+   reasons retain precedence. Same-source retry is limited to evidence gaps with
+   genuinely distinct validation, and two accepted failures still exhaust the
+   run.
+4. **Typed audit truth.** `AuditLedgerV1` carries bounded source locators, proof,
+   reachability, deployment, guard/recovery, disposition, impact, severity,
+   priority, confidence, falsifier, and remediation fields. Policy checks
+   prevent severity inflation and refuted remediation. Summary and Markdown are
+   derived deterministically through `flow_audit_render` under aggregate input
+   and output byte bounds.
+5. **Bounded profiles and dispatch.** A trusted command footer selects
+   `control`, `standard`, or `assurance` and rollout `control`, `observe`, or
+   `enforce`. Control preserves discretionary optional passes without admission
+   ceremony. Standard and assurance evaluate one typed proposal before each
+   optional evidence, audit, verification, or candidate pass; admission binds
+   the expected hidden-worker class and count, with observe reporting and
+   enforce blocking. Lifecycle reviewer and validation workers remain outside
+   optional admission. Role-specific model and current OpenCode `steps` routing
+   are configurable without entering domain state.
+6. **Observation and promotion.** Host observation is bounded, salted, and
+   privacy-safe, recording child/route/tool/read/guidance/resource facts and
+   overflow while preserving unavailable values as null. The sanitized
+   `full-repo-audit-v1` control contains 11 sessions, 962 tool calls, 711 reads,
+   47 opaque finding decisions, three opaque refutations, one remediation
+   contradiction, and an unclean closure. Raw prompts, arguments, output,
+   finding prose, absolute paths, URLs, and credential-like fields are excluded.
+   Standard and assurance candidate observations are still unavailable.
+
+Promotion is intentionally not claimed. `harness:report` reports the sanitized
+state; `harness:gate` exits nonzero until an independently labeled candidate on
+the same source revision and model configuration preserves finding and
+refutation decision digests, has no remediation contradiction, closes cleanly,
+and lowers at least one comparable observed-work signal without increasing
+another comparable signal. No arbitrary reduction
+percentage, new dependency, database reader, raw trace fixture, or automatic
+production enforcement was introduced. Ordinary CI records the report without a
+required candidate; the separate read-only promotion workflow is manual and
+requires an explicit standard or assurance selection.

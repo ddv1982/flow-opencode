@@ -113,7 +113,16 @@ When reviewing a findings report, verify findings adversarially:
 - Check the cited file and surrounding code.
 - Trace mitigating paths before accepting blocking severity.
 - Confirm the deployment model used for severity.
+- Require strict `AuditLedgerV1` (`version: "audit-ledger/v1"`) using the exact
+  enums in the audit rubric, plus successful `flow_audit_render` output. The
+  supplied Markdown and counts must be the canonical tool result, not a second
+  model-authored report.
+- Accept P0 only as `severity: "critical"` plus
+  `actionPriority: "fix_now"`, with reproduced or source-proven evidence,
+  reachable deployed/distributed exposure, catastrophic impact, and ineffective
+  or absent guards and recovery.
 - Dedupe overlapping findings.
-- Downgrade or reject findings that do not survive refutation.
+- Downgrade or refute findings that do not survive challenge. A refuted entry
+  must be informational with action priority `none` and no remediation.
 
 Approve only on evidence actually inspected. A review is a claim of coverage, not a courtesy stamp.

@@ -57,9 +57,10 @@ import {
 	flowRunStart,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
 import { systemTransitionEnvironment } from "../src/infrastructure/system/transition-environment.js";
+import { publishValidationReceiptForWorkspace } from "./support/validation-receipt.js";
 
 const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
-const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
+const OUTPUT_DIGEST: `sha256:${string}` = `sha256:${"d".repeat(64)}`;
 const EXPECTED_FLOW_GITIGNORE = [
 	"session.json",
 	"/session.json.*.*.tmp",
@@ -106,18 +107,6 @@ async function expectPinnedDirectorySwapRejected(
 	expect(["EBUSY", "EPERM", "EACCES"]).toContain(code);
 }
 
-function validationObservation(featureId: string, recordedAt: string) {
-	return {
-		command: `bun test ${featureId}`,
-		summary: "Focused persistence check passed.",
-		startedAt: recordedAt,
-		completedAt: recordedAt,
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
-	};
-}
-
 async function startReview(
 	workspace: string,
 	featureId: string,
@@ -138,6 +127,12 @@ async function startReview(
 	);
 	if (!activeRun) throw new Error("Expected active feature-run state.");
 	const validationAt = featureReview?.completedAt ?? activeRun.startedAt;
+	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
+		startedAt: validationAt,
+		command: `bun test ${featureId}`,
+		coverageScope: reviewKind === "final" ? "broad" : "focused",
+		outputDigest: OUTPUT_DIGEST,
+	});
 	const response = await executeFlowReviewStart(workspace, {
 		request: {
 			operationId: `persistence-operation-${++operationSequence}`,
@@ -151,7 +146,7 @@ async function startReview(
 				summary: `Persistence ${reviewKind} review.`,
 				riskLenses: [],
 			},
-			validations: [validationObservation(featureId, validationAt)],
+			validationRefs: [validationRef],
 		},
 	});
 	const projection = response.workflowData?.projection as

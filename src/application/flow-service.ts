@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type {
 	CausalMutationRecord,
+	EvidenceId,
 	EvidenceRecord,
+	ReviewAssignment,
+	ReviewCorrectionBinding,
 	Session,
 	SessionId,
 } from "../domain/session.js";
@@ -10,7 +13,7 @@ import {
 	approvePlan,
 	canonicalEvidenceId,
 	canonicalOperationRequestDigest,
-	canonicalValidationCommandDigest,
+	canonicalSourceDeltaDigest,
 	causalDeltaProjection,
 	closeSession,
 	compactSessionProjection,
@@ -18,8 +21,11 @@ import {
 	createSession,
 	detailSessionProjection,
 	executionSessionProjection,
+	MAX_CORRECTION_CHANGED_PATHS,
+	MAX_CORRECTION_PATH_BYTES,
 	mutationReceiptProjection,
 	preflightAssignedFeatureCompletion,
+	preflightReviewCorrection,
 	rejectedMutationReceiptProjection,
 	resetFeature,
 	reviewerSessionProjection,
@@ -27,17 +33,35 @@ import {
 	startRun,
 	type TransitionEnvironment,
 } from "../domain/transitions.js";
-import { validationCommandClass } from "../domain/validation-command.js";
+import {
+	materializeValidationEvidence,
+	ValidationReceiptMaterializationError,
+	ValidationReceiptRefSchema,
+	type ValidationReceiptV1,
+} from "../domain/validation-receipt.js";
 import {
 	UnreadableFlowSessionError,
 	UnsupportedFlowSessionVersionError,
 } from "./errors.js";
+import {
+	EvidenceArtifactIntegrityError,
+	EvidenceArtifactNotFoundError,
+	EvidenceArtifactTooLargeError,
+	InvalidEvidenceArtifactReferenceError,
+	MAX_EVIDENCE_ARTIFACT_BYTES,
+} from "./ports/evidence-artifact-store.js";
 import type {
 	SessionRepository,
 	SessionTransaction,
 } from "./ports/session-repository.js";
 import { ArchivedSessionLookupError } from "./ports/session-repository.js";
-import { SourceIdentityError } from "./ports/source-identity.js";
+import {
+	parseCanonicalSourceManifest,
+	SourceIdentityError,
+	type SourceManifest,
+	SourceManifestIntegrityError,
+	type SourceManifestSnapshot,
+} from "./ports/source-identity.js";
 import {
 	ArtifactSchema,
 	CausalRevisionSchema,
@@ -50,9 +74,14 @@ import {
 	ReviewAssignmentIdSchema,
 	ReviewAssignmentResultInputSchema,
 	SnapshotIdSchema,
-	ValidationObservationSchema,
 	WorkflowProseInputSchema,
 } from "./schema.js";
+import {
+	createValidationReceiptStore,
+	InvalidValidationReceiptError,
+	ValidationReceiptIntegrityError,
+	ValidationReceiptTooLargeError,
+} from "./validation-receipts.js";
 
 type WorkflowData = {
 	projection?: unknown;
@@ -216,15 +245,6 @@ const FailedReviewAssignmentResultSchema =
 		},
 	);
 
-const SuccessfulValidationObservationSchema =
-	ValidationObservationSchema.refine(
-		(observation) => observation.exitCode === 0,
-		{
-			path: ["exitCode"],
-			message: "Review-start validation observations must have exitCode 0.",
-		},
-	);
-
 const FlowFeatureCompleteRequestSchema = z
 	.object({
 		...CompletionGuardShape,
@@ -267,29 +287,62 @@ const ReviewPacketSchema = z
 	})
 	.strict();
 
+const ValidationReceiptRefsSchema = z
+	.array(ValidationReceiptRefSchema)
+	.min(1)
+	.max(100)
+	.superRefine((references, context) => {
+		const seen = new Set<string>();
+		for (const [index, reference] of references.entries()) {
+			const identity = `${reference.digest}:${reference.byteLength}`;
+			if (!seen.has(identity)) {
+				seen.add(identity);
+				continue;
+			}
+			context.addIssue({
+				code: "custom",
+				path: [index],
+				message: "Validation receipt references must be unique.",
+			});
+		}
+	});
+
 const ReviewStartBaseShape = {
 	...CompletionGuardShape,
 	packet: ReviewPacketSchema,
-	validations: z.array(SuccessfulValidationObservationSchema).min(1).max(100),
+	validationRefs: ValidationReceiptRefsSchema,
+	correctionOfAssignmentId: ReviewAssignmentIdSchema.optional(),
+	correctionScopeHint: z.enum(["public-contract", "cross-layer"]).optional(),
 } as const;
 
-const FlowReviewStartRequestSchema = z.discriminatedUnion("reviewKind", [
-	z
-		.object({
-			...ReviewStartBaseShape,
-			reviewKind: z.literal("feature"),
-			validationScope: z.literal("targeted"),
-		})
-		.strict(),
-	z
-		.object({
-			...ReviewStartBaseShape,
-			reviewKind: z.literal("final"),
-			validationScope: z.literal("broad"),
-			featureReview: PassedSubmittedReviewAssignmentResultSchema,
-		})
-		.strict(),
-]);
+const FlowReviewStartRequestSchema = z
+	.discriminatedUnion("reviewKind", [
+		z
+			.object({
+				...ReviewStartBaseShape,
+				reviewKind: z.literal("feature"),
+				validationScope: z.literal("targeted"),
+			})
+			.strict(),
+		z
+			.object({
+				...ReviewStartBaseShape,
+				reviewKind: z.literal("final"),
+				validationScope: z.literal("broad"),
+				featureReview: PassedSubmittedReviewAssignmentResultSchema,
+			})
+			.strict(),
+	])
+	.superRefine((request, context) => {
+		if (!request.correctionScopeHint || request.correctionOfAssignmentId)
+			return;
+		context.addIssue({
+			code: "custom",
+			path: ["correctionScopeHint"],
+			message:
+				"Correction scope hints are valid only when correctionOfAssignmentId names the failed predecessor.",
+		});
+	});
 
 export const FlowReviewStartSchema = z
 	.object({ request: FlowReviewStartRequestSchema })
@@ -383,21 +436,6 @@ function responseFromFailure(result: {
 			},
 		},
 	};
-}
-
-function evidenceWithCanonicalId(
-	evidence:
-		| Omit<Extract<EvidenceRecord, { kind: "validation" }>, "evidenceId">
-		| Omit<Extract<EvidenceRecord, { kind: "review" }>, "evidenceId">,
-): EvidenceRecord {
-	const provisional = {
-		...evidence,
-		evidenceId: evidence.sourceDigest,
-	} as EvidenceRecord;
-	return {
-		...provisional,
-		evidenceId: canonicalEvidenceId(provisional),
-	} as EvidenceRecord;
 }
 
 function projectionResponse(
@@ -856,6 +894,388 @@ async function flowRunStart(
 	});
 }
 
+function compareUtf8(left: string, right: string): number {
+	const leftBytes = new TextEncoder().encode(left);
+	const rightBytes = new TextEncoder().encode(right);
+	const length = Math.min(leftBytes.length, rightBytes.length);
+	for (let index = 0; index < length; index += 1) {
+		const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+		if (difference !== 0) return difference;
+	}
+	return leftBytes.length - rightBytes.length;
+}
+
+function changedManifestPaths(
+	predecessor: SourceManifest,
+	current: SourceManifest,
+): string[] {
+	const prior = new Map(
+		predecessor.entries.map((entry) => [
+			entry.path,
+			`${entry.type}\u0000${entry.contentIdentity}`,
+		]),
+	);
+	const next = new Map(
+		current.entries.map((entry) => [
+			entry.path,
+			`${entry.type}\u0000${entry.contentIdentity}`,
+		]),
+	);
+	return [...new Set([...prior.keys(), ...next.keys()])]
+		.filter((path) => prior.get(path) !== next.get(path))
+		.sort(compareUtf8);
+}
+
+function correctionPathsFit(paths: readonly string[]): boolean {
+	return (
+		paths.length <= MAX_CORRECTION_CHANGED_PATHS &&
+		paths.every(
+			(path) =>
+				new TextEncoder().encode(path).byteLength <= MAX_CORRECTION_PATH_BYTES,
+		)
+	);
+}
+
+function deltaTouches(
+	paths: readonly string[],
+	riskLenses: readonly string[],
+	terms: readonly string[],
+): boolean {
+	const candidates = [...paths, ...riskLenses].map((value) =>
+		value.toLocaleLowerCase("en-US"),
+	);
+	return candidates.some((candidate) => {
+		const tokens = candidate.split(/[/._\-\s]+/u).filter(Boolean);
+		return terms.some((term) => tokens.includes(term));
+	});
+}
+
+function correctionBinding(
+	predecessor: ReviewAssignment,
+	currentSourceDigest: string,
+	changedRelativePaths: readonly string[],
+	options: {
+		reviewMode: "full" | "correction";
+		contextCompleteness: "complete" | "fallback";
+		fallbackReason: ReviewCorrectionBinding["fallbackReason"];
+		sourceDeltaDigest?: string | undefined;
+	},
+): ReviewCorrectionBinding {
+	const sourceChanged = predecessor.sourceDigest !== currentSourceDigest;
+	return {
+		predecessorAssignmentId: predecessor.id,
+		reviewMode: options.reviewMode,
+		sourceChanged,
+		changedRelativePaths: [...changedRelativePaths],
+		sourceDeltaDigest:
+			options.sourceDeltaDigest ??
+			canonicalSourceDeltaDigest({
+				predecessorSourceDigest: predecessor.sourceDigest,
+				currentSourceDigest,
+				sourceChanged,
+				changedRelativePaths,
+			}),
+		contextCompleteness: options.contextCompleteness,
+		fallbackReason: options.fallbackReason,
+	};
+}
+
+async function publishSourceManifest(
+	transaction: SessionTransaction,
+	snapshot: SourceManifestSnapshot,
+) {
+	if (snapshot.bytes.byteLength > MAX_EVIDENCE_ARTIFACT_BYTES) {
+		return { reference: undefined, oversized: true } as const;
+	}
+	try {
+		return {
+			reference: await transaction.publishEvidenceArtifact(snapshot.bytes),
+			oversized: false,
+		} as const;
+	} catch (error) {
+		if (error instanceof EvidenceArtifactTooLargeError) {
+			return { reference: undefined, oversized: true } as const;
+		}
+		throw error;
+	}
+}
+
+async function deriveReviewSourceContext(
+	transaction: SessionTransaction,
+	snapshot: SourceManifestSnapshot,
+	predecessor: ReviewAssignment | null,
+	reviewKind: ReviewAssignment["reviewKind"],
+	riskLenses: readonly string[],
+	correctionScopeHint: "public-contract" | "cross-layer" | undefined,
+): Promise<{
+	sourceManifestArtifactRef?: ReviewAssignment["sourceManifestArtifactRef"];
+	correction?: ReviewCorrectionBinding;
+}> {
+	if (snapshot.manifest.sourceDigest !== snapshot.identity.digest) {
+		throw new SourceManifestIntegrityError(
+			"The measured source manifest disagrees with source identity.",
+		);
+	}
+	const published = await publishSourceManifest(transaction, snapshot);
+	if (!predecessor) {
+		return published.reference
+			? { sourceManifestArtifactRef: published.reference }
+			: {};
+	}
+
+	const sourceChanged = predecessor.sourceDigest !== snapshot.identity.digest;
+	if (!predecessor.sourceManifestArtifactRef) {
+		return {
+			...(published.reference
+				? { sourceManifestArtifactRef: published.reference }
+				: {}),
+			correction: correctionBinding(predecessor, snapshot.identity.digest, [], {
+				reviewMode: "full",
+				contextCompleteness: "fallback",
+				fallbackReason: published.oversized
+					? "current_manifest_oversized"
+					: "predecessor_manifest_missing",
+			}),
+		};
+	}
+
+	let predecessorManifest: SourceManifest;
+	try {
+		predecessorManifest = parseCanonicalSourceManifest(
+			await transaction.readEvidenceArtifact(
+				predecessor.sourceManifestArtifactRef,
+			),
+		);
+	} catch (error) {
+		if (error instanceof EvidenceArtifactNotFoundError) {
+			return {
+				...(published.reference
+					? { sourceManifestArtifactRef: published.reference }
+					: {}),
+				correction: correctionBinding(
+					predecessor,
+					snapshot.identity.digest,
+					[],
+					{
+						reviewMode: "full",
+						contextCompleteness: "fallback",
+						fallbackReason: published.oversized
+							? "current_manifest_oversized"
+							: "predecessor_manifest_unavailable",
+					},
+				),
+			};
+		}
+		if (
+			error instanceof EvidenceArtifactIntegrityError ||
+			error instanceof InvalidEvidenceArtifactReferenceError ||
+			error instanceof SourceManifestIntegrityError
+		) {
+			throw new SourceManifestIntegrityError(
+				"The predecessor source manifest failed integrity verification.",
+				{ cause: error },
+			);
+		}
+		throw error;
+	}
+	if (predecessorManifest.sourceDigest !== predecessor.sourceDigest) {
+		throw new SourceManifestIntegrityError(
+			"The predecessor source manifest is bound to a different source digest.",
+		);
+	}
+	const changedPaths = changedManifestPaths(
+		predecessorManifest,
+		snapshot.manifest,
+	);
+	const metadataChanged =
+		predecessorManifest.mode !== snapshot.manifest.mode ||
+		predecessorManifest.repositoryIdentity !==
+			snapshot.manifest.repositoryIdentity;
+	if (
+		(!sourceChanged && (changedPaths.length > 0 || metadataChanged)) ||
+		(sourceChanged && changedPaths.length === 0 && !metadataChanged)
+	) {
+		throw new SourceManifestIntegrityError(
+			"The source manifest delta disagrees with its authoritative source digests.",
+		);
+	}
+	const fullDeltaDigest = canonicalSourceDeltaDigest({
+		predecessorSourceDigest: predecessor.sourceDigest,
+		currentSourceDigest: snapshot.identity.digest,
+		sourceChanged,
+		changedRelativePaths: changedPaths,
+	});
+	const base = published.reference
+		? { sourceManifestArtifactRef: published.reference }
+		: {};
+	if (!correctionPathsFit(changedPaths)) {
+		return {
+			...base,
+			correction: correctionBinding(predecessor, snapshot.identity.digest, [], {
+				reviewMode: "full",
+				contextCompleteness: "fallback",
+				fallbackReason: "source_delta_too_large",
+				sourceDeltaDigest: fullDeltaDigest,
+			}),
+		};
+	}
+	if (published.oversized) {
+		return {
+			correction: correctionBinding(
+				predecessor,
+				snapshot.identity.digest,
+				changedPaths,
+				{
+					reviewMode: "full",
+					contextCompleteness: "fallback",
+					fallbackReason: "current_manifest_oversized",
+				},
+			),
+		};
+	}
+	if (reviewKind === "final") {
+		return {
+			...base,
+			correction: correctionBinding(
+				predecessor,
+				snapshot.identity.digest,
+				changedPaths,
+				{
+					reviewMode: "full",
+					contextCompleteness: "complete",
+					fallbackReason: "broad_scope_requires_full",
+				},
+			),
+		};
+	}
+	if (metadataChanged) {
+		return {
+			...base,
+			correction: correctionBinding(
+				predecessor,
+				snapshot.identity.digest,
+				changedPaths,
+				{
+					reviewMode: "full",
+					contextCompleteness: "complete",
+					fallbackReason: "source_metadata_changed",
+				},
+			),
+		};
+	}
+	if (
+		deltaTouches(changedPaths, riskLenses, [
+			"auth",
+			"authentication",
+			"authorization",
+			"security",
+			"crypto",
+			"permission",
+			"permissions",
+			"secret",
+			"secrets",
+		])
+	) {
+		return {
+			...base,
+			correction: correctionBinding(
+				predecessor,
+				snapshot.identity.digest,
+				changedPaths,
+				{
+					reviewMode: "full",
+					contextCompleteness: "complete",
+					fallbackReason: "security_sensitive_delta_requires_full",
+				},
+			),
+		};
+	}
+	if (
+		deltaTouches(changedPaths, riskLenses, [
+			"database",
+			"db",
+			"migration",
+			"migrations",
+			"persistence",
+			"schema",
+			"storage",
+		])
+	) {
+		return {
+			...base,
+			correction: correctionBinding(
+				predecessor,
+				snapshot.identity.digest,
+				changedPaths,
+				{
+					reviewMode: "full",
+					contextCompleteness: "complete",
+					fallbackReason: "persistence_sensitive_delta_requires_full",
+				},
+			),
+		};
+	}
+	if (correctionScopeHint) {
+		return {
+			...base,
+			correction: correctionBinding(
+				predecessor,
+				snapshot.identity.digest,
+				changedPaths,
+				{
+					reviewMode: "full",
+					contextCompleteness: "complete",
+					fallbackReason:
+						correctionScopeHint === "public-contract"
+							? "public_contract_scope_requires_full"
+							: "cross_layer_scope_requires_full",
+				},
+			),
+		};
+	}
+	return {
+		...base,
+		correction: correctionBinding(
+			predecessor,
+			snapshot.identity.digest,
+			changedPaths,
+			{
+				reviewMode: "correction",
+				contextCompleteness: "complete",
+				fallbackReason: null,
+			},
+		),
+	};
+}
+
+function validationReceiptApplicabilityFailure(
+	receipt: ValidationReceiptV1,
+	options: {
+		featureRunId: string;
+		featureId: string;
+		sourceDigest: string;
+		reviewKind: "feature" | "final";
+	},
+): string | null {
+	if (
+		receipt.featureRunId !== options.featureRunId ||
+		receipt.featureId !== options.featureId
+	) {
+		return "A validation receipt belongs to a different feature run.";
+	}
+	if (receipt.sourceDigest !== options.sourceDigest) {
+		return "A validation receipt is stale for the current source state.";
+	}
+	if (
+		options.reviewKind === "final" &&
+		receipt.coverageScope !== "broad" &&
+		receipt.coverageScope !== "artifact"
+	) {
+		return "Final review requires a broad or complete artifact validation receipt.";
+	}
+	return null;
+}
+
 async function flowReviewStart(
 	repository: SessionRepository,
 	environment: TransitionEnvironment,
@@ -965,9 +1385,26 @@ async function flowReviewStart(
 					args.operationId,
 				);
 			}
-			let sourceDigest: string;
+			const correctionPreflight = preflightReviewCorrection(session, {
+				featureId: args.featureId,
+				reviewKind: args.reviewKind,
+				correctionOfAssignmentId: args.correctionOfAssignmentId,
+			});
+			if (!correctionPreflight.ok) {
+				return rejectedMutationResponse(
+					responseFromFailure(correctionPreflight),
+					session,
+					args.operationId,
+				);
+			}
+			let sourceSnapshot: SourceManifestSnapshot;
 			try {
-				sourceDigest = (await transaction.computeSourceIdentity()).digest;
+				if (!transaction.computeSourceManifest) {
+					throw new SourceIdentityError(
+						"The runtime source-manifest provider is unavailable.",
+					);
+				}
+				sourceSnapshot = await transaction.computeSourceManifest();
 			} catch (error) {
 				if (!(error instanceof SourceIdentityError)) throw error;
 				return rejectedMutationResponse(
@@ -980,44 +1417,107 @@ async function flowReviewStart(
 					args.operationId,
 				);
 			}
+			const sourceDigest = sourceSnapshot.identity.digest;
+			const receiptStore = createValidationReceiptStore(transaction);
+			const receipts: ValidationReceiptV1[] = [];
 			try {
-				for (const reference of args.validations.flatMap((observation) =>
-					observation.artifactRef ? [observation.artifactRef] : [],
-				)) {
-					await transaction.readEvidenceArtifact(reference);
+				for (const reference of args.validationRefs) {
+					receipts.push(await receiptStore.readValidationReceipt(reference));
 				}
-			} catch {
+			} catch (error) {
+				if (
+					!(error instanceof InvalidValidationReceiptError) &&
+					!(error instanceof ValidationReceiptIntegrityError) &&
+					!(error instanceof ValidationReceiptTooLargeError)
+				) {
+					throw error;
+				}
 				return rejectedMutationResponse(
 					responseFromFailure({
 						message:
-							"A claimed validation artifact was missing or failed digest/length verification.",
+							"A validation receipt was missing, malformed, or failed digest/length verification.",
 						recovery:
-							"Republish the restricted artifact and retry the assignment; artifact contents are never returned.",
+							"Run flow_validation_start again, execute its exact Bash command, and retry with the new receipt reference.",
 					}),
 					session,
 					args.operationId,
 				);
 			}
-			const validationEvidence = args.validations.map((observation) =>
-				evidenceWithCanonicalId({
-					kind: "validation",
-					featureRunId: session.activeFeatureRunId as string,
-					capturedAtRevision: session.causal.revision,
-					capturedAtSnapshotId: session.causal.snapshotId,
-					snapshotId: session.causal.snapshotId,
+			for (const receipt of receipts) {
+				const failure = validationReceiptApplicabilityFailure(receipt, {
+					featureRunId: session.activeFeatureRunId,
+					featureId: args.featureId,
 					sourceDigest,
-					commandDigest: canonicalValidationCommandDigest(observation.command),
-					commandClass: validationCommandClass(observation.command),
-					startedAt: observation.startedAt,
-					completedAt: observation.completedAt,
-					exitCode: observation.exitCode,
-					outputDigest: observation.outputDigest,
-					...(observation.artifactRef
-						? { artifactRef: observation.artifactRef }
-						: {}),
-					environmentKeys: [...observation.environmentKeys],
-				}),
-			) as Extract<EvidenceRecord, { kind: "validation" }>[];
+					reviewKind: args.reviewKind,
+				});
+				if (!failure) continue;
+				return rejectedMutationResponse(
+					responseFromFailure({
+						message: failure,
+						recovery:
+							"Capture fresh validation against the active run, current source, and required review scope.",
+					}),
+					session,
+					args.operationId,
+				);
+			}
+			let validationEvidence: Extract<EvidenceRecord, { kind: "validation" }>[];
+			try {
+				validationEvidence = receipts.map((receipt) => {
+					const provisional = materializeValidationEvidence(receipt, {
+						evidenceId: sourceDigest as EvidenceId,
+						capturedAtRevision: session.causal.revision,
+						capturedAtSnapshotId: session.causal.snapshotId,
+						snapshotId: session.causal.snapshotId,
+					});
+					return {
+						...provisional,
+						evidenceId: canonicalEvidenceId(provisional) as EvidenceId,
+					};
+				});
+			} catch (error) {
+				if (!(error instanceof ValidationReceiptMaterializationError)) {
+					throw error;
+				}
+				return rejectedMutationResponse(
+					responseFromFailure({
+						message: error.message,
+						recovery:
+							"Rerun validation to obtain a successful, complete host-attested receipt.",
+					}),
+					session,
+					args.operationId,
+				);
+			}
+			let sourceContext: Awaited<ReturnType<typeof deriveReviewSourceContext>>;
+			try {
+				sourceContext = await deriveReviewSourceContext(
+					transaction,
+					sourceSnapshot,
+					correctionPreflight.value?.assignment ?? null,
+					args.reviewKind,
+					args.packet.riskLenses,
+					args.correctionScopeHint,
+				);
+			} catch (error) {
+				if (
+					!(error instanceof SourceManifestIntegrityError) &&
+					!(error instanceof EvidenceArtifactIntegrityError) &&
+					!(error instanceof InvalidEvidenceArtifactReferenceError)
+				) {
+					throw error;
+				}
+				return rejectedMutationResponse(
+					responseFromFailure({
+						message:
+							"Correction review source-manifest integrity could not be verified.",
+						recovery:
+							"Preserve the session and repair or restore the immutable predecessor manifest before retrying.",
+					}),
+					session,
+					args.operationId,
+				);
+			}
 			const result = startReviewAssignment(
 				session,
 				{
@@ -1032,6 +1532,12 @@ async function flowReviewStart(
 					riskLenses: args.packet.riskLenses,
 					sourceDigest,
 					validationEvidence,
+					...(args.correctionOfAssignmentId
+						? {
+								correctionOfAssignmentId: args.correctionOfAssignmentId,
+							}
+						: {}),
+					...sourceContext,
 					...(args.reviewKind === "final"
 						? { featureReview: args.featureReview }
 						: {}),

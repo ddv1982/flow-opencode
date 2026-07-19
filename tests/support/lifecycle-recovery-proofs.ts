@@ -62,8 +62,7 @@ import {
 	executableProof,
 	type ProofAssertions,
 } from "./lifecycle-invariant-registry.js";
-
-const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
+import { publishValidationReceiptForWorkspace } from "./validation-receipt.js";
 
 type PendingFinalFixture = {
 	workspace: string;
@@ -123,18 +122,6 @@ async function runningWorkspace(
 	return workspace;
 }
 
-function validationAt(timestamp: string, label: string) {
-	return {
-		command: `bun test ${label}`,
-		summary: `${label} passed.`,
-		startedAt: timestamp,
-		completedAt: timestamp,
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
-	};
-}
-
 async function startFeatureAssignment(
 	workspace: string,
 	featureId: string,
@@ -146,6 +133,10 @@ async function startFeatureAssignment(
 		(candidate) => candidate.id === session.activeFeatureRunId,
 	);
 	assert.ok(run);
+	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
+		startedAt: run.startedAt,
+		command: `bun test ${featureId}-targeted`,
+	});
 	const response = await flowReviewStart(workspace, {
 		request: {
 			operationId,
@@ -158,7 +149,7 @@ async function startFeatureAssignment(
 				summary: `Review ${featureId}.`,
 				riskLenses: ["durable continuation"],
 			},
-			validations: [validationAt(run.startedAt, `${featureId}-targeted`)],
+			validationRefs: [validationRef],
 		},
 	});
 	assert.equal(response.status, "ok", JSON.stringify(response));
@@ -238,6 +229,11 @@ async function pendingFinalFixture(): Promise<PendingFinalFixture> {
 		featureAssignment.id,
 		featureAssignment.startedAt,
 	);
+	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
+		startedAt: featureResult.completedAt,
+		command: "bun test final-feature-broad",
+		coverageScope: "broad",
+	});
 	const finalStarted = await flowReviewStart(workspace, {
 		request: {
 			operationId: "final-broad-review",
@@ -251,9 +247,7 @@ async function pendingFinalFixture(): Promise<PendingFinalFixture> {
 				summary: "Review the final feature after broad validation.",
 				riskLenses: ["context loss", "atomic review recording"],
 			},
-			validations: [
-				validationAt(featureResult.completedAt, "final-feature-broad"),
-			],
+			validationRefs: [validationRef],
 		},
 	});
 	assert.equal(finalStarted.status, "ok", JSON.stringify(finalStarted));

@@ -14,6 +14,9 @@ describe("package smoke", () => {
 		expect(evidence.declarationCount).toBe(PUBLIC_DECLARATION_PATHS.length);
 		expect(evidence.cliVersion).toBe(evidence.packageVersion);
 		expect(evidence.legacyCleanupDryRun).toBe(true);
+		expect(evidence.activationDryRun).toBe(true);
+		expect(evidence.activationApplied).toBe(true);
+		expect(evidence.activationSingleVersion).toBe(true);
 		expect(evidence.consumerTypechecked).toBe(true);
 		expect(evidence.runtimeImported).toBe(true);
 	}, 30_000);

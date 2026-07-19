@@ -6,6 +6,7 @@ import {
 	createFlowService,
 	type FlowResponse,
 } from "../../src/application/flow-service.js";
+import { canonicalizeReplayJson } from "../../src/application/replay/canonical-json.js";
 import { SessionSchema } from "../../src/application/schema.js";
 import {
 	type ReviewAssignment,
@@ -18,10 +19,16 @@ import { validateSessionInvariants } from "../../src/domain/session-invariants.j
 import {
 	applyPlan,
 	approvePlan,
+	canonicalValidationCommandDigest,
 	createSession,
 	startRun,
 	type TransitionEnvironment,
 } from "../../src/domain/transitions.js";
+import { validationCommandClass } from "../../src/domain/validation-command.js";
+import type {
+	ValidationCoverageScope,
+	ValidationReceiptRef,
+} from "../../src/domain/validation-receipt.js";
 import { createFileSessionRepository } from "../../src/infrastructure/fs/session-repository.js";
 import {
 	loadSession,
@@ -32,8 +39,8 @@ import {
 	executableProof,
 	type ProofAssertions,
 } from "./lifecycle-invariant-registry.js";
+import { publishValidationReceiptForWorkspace } from "./validation-receipt.js";
 
-const OUTPUT_DIGEST = `sha256:${"e".repeat(64)}`;
 const EPOCH = Date.parse("2026-07-19T12:00:00.000Z");
 const RUN_AT = timestamp(0);
 const FEATURE_ASSIGNMENT_AT = timestamp(100);
@@ -144,16 +151,58 @@ async function persistedWorkspace(
 	return workspace;
 }
 
-function validation(startedAt: string, completedAt: string, label: string) {
-	return {
-		command: `bun test ${label}`,
-		summary: `${label} passed.`,
-		startedAt,
-		completedAt,
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
-	};
+async function publishValidationReceiptRef(
+	workspace: string,
+	startedAt: string,
+	completedAt: string,
+	label: string,
+	coverageScope: ValidationCoverageScope = "focused",
+): Promise<ValidationReceiptRef> {
+	const command = `bun test ${label}`;
+	if (Date.parse(completedAt) >= Date.parse(startedAt)) {
+		return publishValidationReceiptForWorkspace(workspace, {
+			startedAt,
+			completedAt,
+			command,
+			coverageScope,
+		});
+	}
+
+	// The reversed-time case proves that a malformed runtime artifact is rejected
+	// atomically. It cannot pass through the canonical test publisher by design.
+	const repository = createFileSessionRepository(workspace);
+	return repository.transact(async (transaction) => {
+		const session = await transaction.load();
+		if (!session?.activeFeatureId || !session.activeFeatureRunId) {
+			throw new Error("Expected an active time-proof feature run.");
+		}
+		const source = await transaction.computeSourceIdentity();
+		const bytes = new TextEncoder().encode(
+			canonicalizeReplayJson({
+				schemaVersion: 1,
+				kind: "validation_receipt_v1",
+				featureRunId: session.activeFeatureRunId,
+				featureId: session.activeFeatureId,
+				sourceDigest: source.digest,
+				startedAt,
+				completedAt,
+				command,
+				commandDigest: canonicalValidationCommandDigest(command),
+				commandClass: validationCommandClass(command),
+				coverageScope,
+				exitCode: 0,
+				outputDigest: `sha256:${"e".repeat(64)}`,
+				outputCompleteness: "complete",
+				environmentKeys: [],
+			}),
+		);
+		const artifactRef = await transaction.publishEvidenceArtifact(bytes);
+		return {
+			kind: "validation_receipt_ref_v1",
+			digest: artifactRef.digest,
+			byteLength: artifactRef.byteLength,
+		};
+	});
 }
 
 function passingResult(
@@ -278,6 +327,12 @@ async function startFeatureAssignment(
 		createFileSessionRepository(workspace),
 		environment(FEATURE_ASSIGNMENT_AT, `${namespace}-feature-setup`),
 	);
+	const validationRef = await publishValidationReceiptRef(
+		workspace,
+		run.startedAt,
+		run.startedAt,
+		namespace,
+	);
 	const response = await service.reviewStart({
 		request: {
 			operationId,
@@ -290,7 +345,7 @@ async function startFeatureAssignment(
 				summary: "Create the feature assignment used by the time proof.",
 				riskLenses: ["canonical chronology"],
 			},
-			validations: [validation(run.startedAt, run.startedAt, namespace)],
+			validationRefs: [validationRef],
 		},
 	});
 	assert.equal(response.status, "ok", JSON.stringify(response));
@@ -305,7 +360,7 @@ async function startFeatureAssignment(
 function reviewStartRequest(
 	session: Session,
 	operationId: string,
-	observation: ReturnType<typeof validation>,
+	validationRef: ValidationReceiptRef,
 ) {
 	return {
 		request: {
@@ -319,7 +374,7 @@ function reviewStartRequest(
 				summary: "Exercise one adjacent validation chronology boundary.",
 				riskLenses: ["canonical chronology"],
 			},
-			validations: [observation],
+			validationRefs: [validationRef],
 		},
 	};
 }
@@ -352,8 +407,7 @@ function finalReviewRequest(
 	featureAssignment: ReviewAssignment,
 	operationId: string,
 	featureCompletedAt: string,
-	broadStartedAt: string,
-	broadCompletedAt: string,
+	validationRef: ValidationReceiptRef,
 ) {
 	return {
 		request: {
@@ -368,13 +422,7 @@ function finalReviewRequest(
 				summary: "Exercise one adjacent final-review chronology boundary.",
 				riskLenses: ["canonical chronology"],
 			},
-			validations: [
-				validation(
-					broadStartedAt,
-					broadCompletedAt,
-					`${portable(operationId)}-broad`,
-				),
-			],
+			validationRefs: [validationRef],
 		},
 	};
 }
@@ -399,40 +447,52 @@ async function proveReviewStartBoundary(
 		assert.ok(session && run);
 		const operationId = mutationOperationId(boundary, delta);
 		const acceptedAt = ACCEPTANCE_AT;
-		let observation: ReturnType<typeof validation>;
+		let startedAt: string;
+		let completedAt: string;
 		switch (boundary) {
 			case "run-validation-start": {
-				const startedAt = valueForDelta(
+				startedAt = valueForDelta(
 					delta,
 					timestamp(-1),
 					run.startedAt,
 					timestamp(1),
 				);
-				observation = validation(startedAt, startedAt, namespace);
+				completedAt = startedAt;
 				break;
 			}
 			case "validation-start-completion": {
-				const startedAt = timestamp(10);
-				const completedAt = valueForDelta(
+				startedAt = timestamp(10);
+				completedAt = valueForDelta(
 					delta,
 					timestamp(9),
 					startedAt,
 					timestamp(11),
 				);
-				observation = validation(startedAt, completedAt, namespace);
 				break;
 			}
 			case "validation-completion-assignment-start": {
-				const completedAt = valueForDelta(
+				startedAt = run.startedAt;
+				completedAt = valueForDelta(
 					delta,
 					timestamp(999),
 					acceptedAt,
 					timestamp(1_001),
 				);
-				observation = validation(run.startedAt, completedAt, namespace);
 				break;
 			}
 		}
+		const validationRef = await publishValidationReceiptRef(
+			workspace,
+			startedAt,
+			completedAt,
+			namespace,
+		);
+		const correctedValidationRef = await publishValidationReceiptRef(
+			workspace,
+			run.startedAt,
+			acceptedAt,
+			`${namespace}-corrected`,
+		);
 		const service = createFlowService(
 			createFileSessionRepository(workspace),
 			environment(acceptedAt, namespace),
@@ -443,15 +503,11 @@ async function proveReviewStartBoundary(
 			expectedAcceptance(boundary, delta),
 			() =>
 				service.reviewStart(
-					reviewStartRequest(session, operationId, observation),
+					reviewStartRequest(session, operationId, validationRef),
 				),
 			() =>
 				service.reviewStart(
-					reviewStartRequest(
-						session,
-						operationId,
-						validation(run.startedAt, acceptedAt, `${namespace}-corrected`),
-					),
+					reviewStartRequest(session, operationId, correctedValidationRef),
 				),
 			assertions,
 		);
@@ -545,6 +601,20 @@ async function proveFinalReviewBoundary(
 			boundary === "feature-result-broad-validation-start"
 				? broadStartedAt
 				: valueForDelta(delta, timestamp(999), ACCEPTANCE_AT, timestamp(1_001));
+		const validationRef = await publishValidationReceiptRef(
+			workspace,
+			broadStartedAt,
+			broadCompletedAt,
+			`${portable(operationId)}-broad`,
+			"broad",
+		);
+		const correctedValidationRef = await publishValidationReceiptRef(
+			workspace,
+			featureCompletedAt,
+			ACCEPTANCE_AT,
+			`${portable(operationId)}-broad-corrected`,
+			"broad",
+		);
 		const service = createFlowService(
 			createFileSessionRepository(workspace),
 			environment(ACCEPTANCE_AT, namespace),
@@ -560,8 +630,7 @@ async function proveFinalReviewBoundary(
 						fixture.assignment,
 						operationId,
 						featureCompletedAt,
-						broadStartedAt,
-						broadCompletedAt,
+						validationRef,
 					),
 				),
 			() =>
@@ -571,8 +640,7 @@ async function proveFinalReviewBoundary(
 						fixture.assignment,
 						operationId,
 						featureCompletedAt,
-						featureCompletedAt,
-						ACCEPTANCE_AT,
+						correctedValidationRef,
 					),
 				),
 			assertions,

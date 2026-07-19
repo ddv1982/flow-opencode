@@ -17,6 +17,11 @@ import { SessionSchema } from "../src/application/schema.js";
 import type { Session } from "../src/domain/session.js";
 import { validateSessionInvariants } from "../src/domain/session-invariants.js";
 import { closeSession } from "../src/domain/transitions.js";
+import {
+	MAX_VALIDATION_RECEIPT_BYTES,
+	parseValidationReceiptRef,
+	type ValidationReceiptRef,
+} from "../src/domain/validation-receipt.js";
 import { archivedSessionFilename } from "../src/infrastructure/fs/workspace.js";
 import { systemTransitionEnvironment } from "../src/infrastructure/system/transition-environment.js";
 import {
@@ -96,6 +101,7 @@ type JsonSchema = {
 	allOf?: JsonSchema[];
 	anyOf?: JsonSchema[];
 	const?: unknown;
+	exclusiveMinimum?: number;
 	items?: JsonSchema;
 	maximum?: number;
 	minimum?: number;
@@ -123,6 +129,7 @@ type ChatCompletionBody = {
 type CallExpectation =
 	| "accepted-mutation"
 	| "accepted-read"
+	| "accepted-command"
 	| "archive-failure"
 	| "archive-retry"
 	| "schema-rejected";
@@ -140,6 +147,7 @@ type ScriptedModel = {
 		transcript: string;
 	}>;
 	modelVisibleSchemas: Map<string, JsonSchema>;
+	modelErrors: string[];
 	recoveredRetryOperationId: string | null;
 	rejectionMutationChecks: string[];
 	stateValidationChecks: string[];
@@ -159,8 +167,10 @@ const CONDITIONAL_TOOL_NAMES = [
 	"flow_feature_complete",
 	"flow_session_close",
 ] as const;
-
-const OUTPUT_DIGEST = `sha256:${"a".repeat(64)}`;
+const MODEL_SCHEMA_TOOL_NAMES = [
+	...CONDITIONAL_TOOL_NAMES,
+	"flow_validation_start",
+] as const;
 
 function property(schema: JsonSchema, name: string): JsonSchema {
 	const value = schema.properties?.[name];
@@ -277,11 +287,16 @@ function assertModelVisibleSchemas(
 	for (const branch of [featureReview, finalReview]) {
 		expect(branch.additionalProperties).toBe(false);
 	}
-	expect(
-		literalValue(
-			property(items(property(featureReview, "validations")), "exitCode"),
-		),
-	).toBe(0);
+	const featureValidationRef = items(property(featureReview, "validationRefs"));
+	expect(featureValidationRef.additionalProperties).toBe(false);
+	expect(literalValue(property(featureValidationRef, "kind"))).toBe(
+		"validation_receipt_ref_v1",
+	);
+	expect(featureValidationRef.required).toEqual([
+		"kind",
+		"digest",
+		"byteLength",
+	]);
 	expect(featureReview.required).not.toContain("featureReview");
 	expect(featureReview.properties).not.toHaveProperty("featureReview");
 	expect(finalReview.required).toContain("featureReview");
@@ -290,6 +305,31 @@ function assertModelVisibleSchemas(
 	);
 	expect(literalValue(property(finalReview, "validationScope"))).toBe("broad");
 	expectPassingSubmittedReviewSchema(property(finalReview, "featureReview"));
+
+	const validationStart = schemas.get("flow_validation_start");
+	if (!validationStart) {
+		throw new Error("The model did not receive flow_validation_start.");
+	}
+	// Like the request-envelope tools above, OpenCode reconstructs the SDK raw
+	// argument shape and currently omits this marker. It must never advertise an
+	// explicitly permissive boundary; the tool reparses the strict object.
+	expect(
+		validationStart.additionalProperties,
+		"flow_validation_start is not explicitly permissive",
+	).not.toBe(true);
+	expect(validationStart.required).toEqual([
+		"expectedRevision",
+		"expectedSnapshotId",
+		"featureId",
+		"command",
+		"coverageScope",
+		"environmentKeys",
+	]);
+	expect(property(validationStart, "coverageScope").enum).toEqual([
+		"focused",
+		"broad",
+		"artifact",
+	]);
 
 	const completionRequest = property(
 		schemas.get("flow_feature_complete") as JsonSchema,
@@ -365,25 +405,58 @@ function assertModelVisibleSchemas(
 		expect(entry.schema.type, `${entry.name} is emitted as an integer`).toBe(
 			"integer",
 		);
-		expect(entry.schema.minimum, `${entry.name} is nonnegative`).toBe(0);
-		expect(
-			entry.schema.maximum,
-			`${entry.name} stays safely representable`,
-		).toBe(Number.MAX_SAFE_INTEGER);
+		if (entry.name === "byteLength") {
+			expect(
+				entry.schema.exclusiveMinimum,
+				"receipt byteLength is positive",
+			).toBe(0);
+			expect(
+				entry.schema.maximum,
+				"receipt byteLength remains artifact-bounded",
+			).toBe(MAX_VALIDATION_RECEIPT_BYTES);
+		} else {
+			expect(entry.schema.minimum, `${entry.name} is nonnegative`).toBe(0);
+			expect(
+				entry.schema.maximum,
+				`${entry.name} stays safely representable`,
+			).toBe(Number.MAX_SAFE_INTEGER);
+		}
 	}
 }
 
 // OpenCode resolves an agent's permission config into an ordered rule list
-// returned by GET /agent. A rule binds when it is present with the expected
-// action.
-function hasPermissionRule(
+// returned by GET /agent. Pinned OpenCode 1.18.3 wildcard-matches both fields
+// and uses the last matching rule, so the live proof must evaluate precedence
+// instead of treating any earlier matching rule as authoritative.
+function matchesOpenCodeWildcard(input: string, pattern: string): boolean {
+	const normalized = input.replaceAll("\\", "/");
+	let escaped = pattern
+		.replaceAll("\\", "/")
+		.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+		.replace(/\*/g, ".*")
+		.replace(/\?/g, ".");
+	if (escaped.endsWith(" .*")) {
+		escaped = `${escaped.slice(0, -3)}( .*)?`;
+	}
+	return new RegExp(`^${escaped}$`, "s").test(normalized);
+}
+
+function effectivePermissionAction(
 	rules: ResolvedPermissionRule[],
 	permission: string,
-	action: ResolvedPermissionRule["action"],
-): boolean {
-	return rules.some(
-		(rule) => rule.permission === permission && rule.action === action,
-	);
+	pattern = "*",
+): ResolvedPermissionRule["action"] {
+	for (let index = rules.length - 1; index >= 0; index -= 1) {
+		const rule = rules[index];
+		if (
+			rule &&
+			matchesOpenCodeWildcard(permission, rule.permission) &&
+			matchesOpenCodeWildcard(pattern, rule.pattern)
+		) {
+			return rule.action;
+		}
+	}
+	return "ask";
 }
 
 async function fetchJson(
@@ -428,6 +501,7 @@ async function closeServer(server: Server): Promise<void> {
 async function startScriptedModel(project: string): Promise<ScriptedModel> {
 	const toolCalls: ScriptedCall[] = [];
 	const modelVisibleSchemas = new Map<string, JsonSchema>();
+	const modelErrors: string[] = [];
 	const rejectionMutationChecks: string[] = [];
 	const stateValidationChecks: string[] = [];
 	const activeSessionPath = join(project, ".flow", "session.json");
@@ -438,6 +512,8 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 	let phaseStep = 0;
 	let responseSequence = 0;
 	let observeCommandRequests = false;
+	let focusedValidationRef: ValidationReceiptRef | null = null;
+	let broadValidationRef: ValidationReceiptRef | null = null;
 	const commandRequests: ScriptedModel["commandRequests"] = [];
 
 	const sessionBytes = async (): Promise<string | null> => {
@@ -531,6 +607,49 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 		return null;
 	};
 
+	const validationReceiptRefFromContent = (
+		content: unknown,
+	): ValidationReceiptRef | null => {
+		if (typeof content === "string") {
+			const marker = "[flow-validation-receipt] ";
+			const markerIndex = content.lastIndexOf(marker);
+			if (markerIndex < 0) return null;
+			const line = content
+				.slice(markerIndex + marker.length)
+				.split(/\r?\n/, 1)[0]
+				?.trim();
+			if (!line) return null;
+			try {
+				return parseValidationReceiptRef(JSON.parse(line));
+			} catch {
+				return null;
+			}
+		}
+		if (Array.isArray(content)) {
+			for (let index = content.length - 1; index >= 0; index -= 1) {
+				const reference = validationReceiptRefFromContent(content[index]);
+				if (reference) return reference;
+			}
+			return null;
+		}
+		if (content === null || typeof content !== "object") return null;
+		for (const value of Object.values(content).reverse()) {
+			const reference = validationReceiptRefFromContent(value);
+			if (reference) return reference;
+		}
+		return null;
+	};
+
+	const latestValidationReceiptRef = (
+		body: ChatCompletionBody,
+	): ValidationReceiptRef | null => {
+		for (const message of [...(body.messages ?? [])].reverse()) {
+			if (message.role !== "tool") continue;
+			return validationReceiptRefFromContent(message.content);
+		}
+		return null;
+	};
+
 	const observePendingCall = async (
 		body: ChatCompletionBody,
 	): Promise<void> => {
@@ -556,6 +675,25 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 				expect(response?.status, call.label).toBe("ok");
 				await validateActiveState(call.label);
 				break;
+			case "accepted-command": {
+				expect(afterBytes, `${call.label} does not mutate Session v4`).toBe(
+					beforeBytes,
+				);
+				const reference = latestValidationReceiptRef(body);
+				expect(
+					reference,
+					`${call.label} returns an immutable receipt ref`,
+				).not.toBe(null);
+				if (!reference)
+					throw new Error(`${call.label} omitted its receipt ref.`);
+				if (call.label === "run focused validation command") {
+					focusedValidationRef = reference;
+				} else if (call.label === "run broad validation command") {
+					broadValidationRef = reference;
+				}
+				await validateActiveState(call.label);
+				break;
+			}
 			case "accepted-mutation":
 				expect(afterBytes, `${call.label} persists a new state`).not.toBe(
 					beforeBytes,
@@ -595,8 +733,8 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 			if (
 				!name ||
 				!parameters ||
-				!CONDITIONAL_TOOL_NAMES.includes(
-					name as (typeof CONDITIONAL_TOOL_NAMES)[number],
+				!MODEL_SCHEMA_TOOL_NAMES.includes(
+					name as (typeof MODEL_SCHEMA_TOOL_NAMES)[number],
 				)
 			) {
 				continue;
@@ -610,14 +748,6 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 				modelVisibleSchemas.set(name, structuredClone(parameters));
 			}
 		}
-	};
-
-	const activeRun = (session: Session) => {
-		const run = session.featureRuns.find(
-			(candidate) => candidate.id === session.activeFeatureRunId,
-		);
-		if (!run) throw new Error("Expected an active feature run.");
-		return run;
 	};
 
 	const pendingAssignment = (
@@ -659,22 +789,34 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 		terminalDisposition: "submitted" as const,
 	});
 
-	const validation = (timestamp: string, scope: string) => ({
-		command: `test -n packed-flow-${scope}`,
-		summary: `${scope} validation passed.`,
-		startedAt: timestamp,
-		completedAt: timestamp,
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
-	});
-
 	const guard = (session: Session, operationId: string) => ({
 		operationId,
 		expectedRevision: session.causal.revision,
 		expectedSnapshotId: session.causal.snapshotId,
 		featureId: "smoke-feature",
 	});
+
+	const validationStartRequest = (
+		session: Session,
+		coverageScope: "focused" | "broad",
+	) => ({
+		expectedRevision: session.causal.revision,
+		expectedSnapshotId: session.causal.snapshotId,
+		featureId: "smoke-feature",
+		command: `test -n packed-flow-${coverageScope}`,
+		coverageScope,
+		environmentKeys: [],
+	});
+
+	const requiredValidationRef = (
+		reference: ValidationReceiptRef | null,
+		coverageScope: "focused" | "broad",
+	): ValidationReceiptRef => {
+		if (!reference) {
+			throw new Error(`Expected a ${coverageScope} validation receipt ref.`);
+		}
+		return reference;
+	};
 
 	const featureReviewRequest = (session: Session, operationId: string) => ({
 		...guard(session, operationId),
@@ -684,7 +826,7 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 			summary: "Review the packed-host smoke feature.",
 			riskLenses: ["assignment recovery", "host contract"],
 		},
-		validations: [validation(activeRun(session).startedAt, "targeted")],
+		validationRefs: [requiredValidationRef(focusedValidationRef, "focused")],
 	});
 
 	const finalReviewRequest = (
@@ -703,12 +845,7 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 				summary: "Review the one-feature plan after broad validation.",
 				riskLenses: ["persisted prerequisite", "context loss"],
 			},
-			validations: [
-				validation(
-					featureResult?.completedAt ?? activeRun(session).startedAt,
-					"broad",
-				),
-			],
+			validationRefs: [requiredValidationRef(broadValidationRef, "broad")],
 			...(featureResult ? { featureReview: featureResult } : {}),
 		};
 	};
@@ -807,14 +944,30 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 							"start feature run",
 							"accepted-mutation",
 						);
-					case 4:
+					case 4: {
+						const session = await activeSession();
+						return emit(
+							"flow_validation_start",
+							validationStartRequest(session, "focused"),
+							"arm focused validation command",
+							"accepted-read",
+						);
+					}
+					case 5:
+						return emit(
+							"bash",
+							{ command: "test -n packed-flow-focused" },
+							"run focused validation command",
+							"accepted-command",
+						);
+					case 6:
 						return emit(
 							"flow_status",
 							{ request: { view: "reviewer" } },
 							"reject reviewer status without assignmentId",
 							"schema-rejected",
 						);
-					case 5:
+					case 7:
 						return emit(
 							"flow_status",
 							{
@@ -824,14 +977,14 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 							"reject unknown outer envelope field at handler entry",
 							"schema-rejected",
 						);
-					case 6:
+					case 8:
 						return emit(
 							"flow_status",
 							{ view: "compact" },
 							"reject legacy flat status",
 							"schema-rejected",
 						);
-					case 7: {
+					case 9: {
 						const session = await activeSession();
 						return emit(
 							"flow_review_start",
@@ -840,22 +993,7 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 							"schema-rejected",
 						);
 					}
-					case 8: {
-						const session = await activeSession();
-						return emit(
-							"flow_review_start",
-							{
-								request: finalReviewRequest(
-									session,
-									"packed-smoke-missing-prerequisite",
-									false,
-								),
-							},
-							"reject final review without feature prerequisite",
-							"schema-rejected",
-						);
-					}
-					case 9: {
+					case 10: {
 						const session = await activeSession();
 						return emit(
 							"flow_review_start",
@@ -893,6 +1031,37 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 					case 0: {
 						const session = await activeSession();
 						return emit(
+							"flow_validation_start",
+							validationStartRequest(session, "broad"),
+							"arm broad validation command",
+							"accepted-read",
+						);
+					}
+					case 1:
+						return emit(
+							"bash",
+							{ command: "test -n packed-flow-broad" },
+							"run broad validation command",
+							"accepted-command",
+						);
+					case 2: {
+						const session = await activeSession();
+						return emit(
+							"flow_review_start",
+							{
+								request: finalReviewRequest(
+									session,
+									"packed-smoke-missing-prerequisite",
+									false,
+								),
+							},
+							"reject final review without feature prerequisite",
+							"schema-rejected",
+						);
+					}
+					case 3: {
+						const session = await activeSession();
+						return emit(
 							"flow_review_start",
 							{
 								request: {
@@ -910,7 +1079,7 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 							"schema-rejected",
 						);
 					}
-					case 1: {
+					case 4: {
 						const session = await activeSession();
 						return emit(
 							"flow_review_start",
@@ -1170,10 +1339,14 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 				}),
 			);
 		} catch (error) {
-			response.writeHead(500, { "content-type": "application/json" });
+			const message = error instanceof Error ? error.message : String(error);
+			modelErrors.push(message);
+			// Script errors are deterministic contract failures. A non-retryable
+			// response keeps the live smoke from hiding them behind provider backoff.
+			response.writeHead(400, { "content-type": "application/json" });
 			response.end(
 				JSON.stringify({
-					error: error instanceof Error ? error.message : error,
+					error: message,
 				}),
 			);
 		}
@@ -1187,6 +1360,7 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 		baseUrl: `http://127.0.0.1:${address.port}/v1`,
 		commandRequests,
 		modelVisibleSchemas,
+		modelErrors,
 		get recoveredRetryOperationId() {
 			return recoveredRetryOperationId;
 		},
@@ -1296,7 +1470,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						model: "flow-smoke/smoke-model",
 						small_model: "flow-smoke/smoke-model",
 						enabled_providers: ["flow-smoke"],
-						permission: { "flow_*": "allow" },
+						permission: { "flow_*": "allow", bash: "allow" },
 						provider: {
 							"flow-smoke": {
 								npm: "@ai-sdk/openai-compatible",
@@ -1383,31 +1557,46 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					// Cannot mutate Flow state, but flow_status stays readable (the
 					// allow rule follows the flow_* deny, so status resolves to allow).
 					expect(
-						hasPermissionRule(rules, "flow_*", "deny"),
-						`${name} denies state-changing flow_* tools`,
-					).toBe(true);
+						effectivePermissionAction(rules, "flow_feature_complete"),
+						`${name} denies state-changing Flow tools`,
+					).toBe("deny");
 					expect(
-						hasPermissionRule(rules, "flow_status", "allow"),
+						effectivePermissionAction(rules, "flow_status"),
 						`${name} still allows flow_status`,
-					).toBe(true);
+					).toBe("allow");
+					// Only the workers responsible for producing immutable evidence may
+					// call their respective exception tool.
+					expect(
+						effectivePermissionAction(rules, "flow_validation_start"),
+						`${name} has the intended validation receipt access`,
+					).toBe(name === "flow-validation-worker" ? "allow" : "deny");
+					expect(
+						effectivePermissionAction(rules, "flow_audit_render"),
+						`${name} has the intended audit rendering access`,
+					).toBe(name === "flow-audit-worker" ? "allow" : "deny");
 					// Cannot spawn subagents, load native skills, or edit files.
 					expect(
-						hasPermissionRule(rules, "task", "deny"),
+						effectivePermissionAction(rules, "task"),
 						`${name} cannot spawn task subagents`,
-					).toBe(true);
+					).toBe("deny");
 					expect(
-						hasPermissionRule(rules, "skill", "deny"),
+						effectivePermissionAction(rules, "skill"),
 						`${name} cannot load native skills`,
-					).toBe(true);
+					).toBe("deny");
 					expect(
-						hasPermissionRule(rules, "edit", "deny"),
+						effectivePermissionAction(rules, "edit"),
 						`${name} is read-only`,
-					).toBe(true);
-					// Bash is never fully granted for a read-only worker (deny or ask).
+					).toBe("deny");
+					// Bash is never fully granted for a read-only worker. Validation,
+					// audit, and verifier workers may request it; the others deny it.
 					expect(
-						hasPermissionRule(rules, "bash", "allow"),
+						effectivePermissionAction(rules, "bash"),
 						`${name} never gets unrestricted bash`,
-					).toBe(false);
+					).toBe(
+						name === "flow-reviewer" || name === "flow-evidence-worker"
+							? "deny"
+							: "ask",
+					);
 				}
 				// Plugin startup must not install, refresh, or inspect global skills.
 				await expect(
@@ -1464,13 +1653,17 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					"flow_plan_approve",
 					"flow_plan_approve",
 					"flow_run_start",
+					"flow_validation_start",
+					"bash",
 					"flow_status",
 					"flow_status",
 					"flow_status",
 					"flow_review_start",
 					"flow_review_start",
-					"flow_review_start",
 					"flow_status",
+					"flow_validation_start",
+					"bash",
+					"flow_review_start",
 					"flow_review_start",
 					"flow_review_start",
 					"flow_status",
@@ -1501,8 +1694,12 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					"save one-feature plan",
 					"approve plan",
 					"start feature run",
+					"arm focused validation command",
+					"run focused validation command",
 					"start feature review assignment",
 					"recover feature reviewer assignment",
+					"arm broad validation command",
+					"run broad validation command",
 					"start final review with durable prerequisite",
 					"recover final reviewer assignment",
 					"recover manager state after context loss",
@@ -1527,16 +1724,19 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						state?: { status?: string; output?: string; error?: string };
 					}>;
 				}>;
-				const flowToolParts = messages
+				const scriptedToolParts = messages
 					.flatMap((message) => message.parts ?? [])
 					.filter(
-						(part) => part.type === "tool" && part.tool?.startsWith("flow_"),
+						(part) =>
+							part.type === "tool" &&
+							part.tool !== undefined &&
+							expectedToolNames.includes(part.tool),
 					);
-				expect(flowToolParts.map((part) => part.tool)).toEqual(
+				expect(scriptedToolParts.map((part) => part.tool)).toEqual(
 					expectedToolNames,
 				);
-				expect(flowToolParts).toHaveLength(scriptedModel.toolCalls.length);
-				for (const [index, part] of flowToolParts.entries()) {
+				expect(scriptedToolParts).toHaveLength(scriptedModel.toolCalls.length);
+				for (const [index, part] of scriptedToolParts.entries()) {
 					const call = scriptedModel.toolCalls[index];
 					if (!call) throw new Error(`Missing scripted call ${index}.`);
 					if (call.expectation === "schema-rejected") {
@@ -1551,6 +1751,12 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						part.state?.status,
 						`${call.label} completes host execution: ${part.state?.error ?? ""}`,
 					).toBe("completed");
+					if (call.expectation === "accepted-command") {
+						expect(part.state?.output, call.label).toContain(
+							"[flow-validation-receipt]",
+						);
+						continue;
+					}
 					const output = JSON.parse(part.state?.output ?? "{}") as {
 						status?: string;
 					};
@@ -1579,8 +1785,8 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					expect(scriptedModel.toolCalls[invalidIndex]?.name).toBe(
 						scriptedModel.toolCalls[correctedIndex]?.name,
 					);
-					expect(flowToolParts[invalidIndex]?.state?.status).toBe("error");
-					expect(flowToolParts[correctedIndex]?.state?.status).toBe(
+					expect(scriptedToolParts[invalidIndex]?.state?.status).toBe("error");
+					expect(scriptedToolParts[correctedIndex]?.state?.status).toBe(
 						"completed",
 					);
 				}
@@ -1588,7 +1794,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					"invalid-then-corrected-host-calls",
 				);
 
-				const reviewerParts = flowToolParts.filter((_part, index) =>
+				const reviewerParts = scriptedToolParts.filter((_part, index) =>
 					scriptedModel.toolCalls[index]?.label.includes("reviewer assignment"),
 				);
 				expect(reviewerParts).toHaveLength(2);
@@ -1691,6 +1897,12 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				expect(managerCommandRequest?.transcript).toContain(
 					"# Flow plan command contract",
 				);
+				expect(managerCommandRequest?.transcript).toContain(
+					"## Active Flow harness runtime policy",
+				);
+				expect(managerCommandRequest?.transcript).toContain(
+					"Profile: `standard`",
+				);
 				expect(managerCommandRequest?.toolNames).toContain("flow_plan_save");
 				const reviewerCommandRequest = scriptedModel.commandRequests.find(
 					(request) =>
@@ -1723,7 +1935,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					.map((call, index) => `${index + 1}. ${call.name}: ${call.label}`)
 					.join("\n");
 				throw new Error(
-					`${error instanceof Error ? error.message : String(error)}\nObserved Flow calls:\n${observedCalls || "(none)"}\nServer output:\n${serverOutput.join("")}`,
+					`${error instanceof Error ? error.message : String(error)}\nObserved Flow calls:\n${observedCalls || "(none)"}\nScripted model errors:\n${scriptedModel.modelErrors.join("\n") || "(none)"}\nServer output:\n${serverOutput.join("")}`,
 				);
 			} finally {
 				stopServer(server);

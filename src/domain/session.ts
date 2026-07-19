@@ -178,6 +178,30 @@ export type BoundReviewPrerequisite = {
 	resultDigest: string;
 };
 
+export type ReviewCorrectionFallbackReason =
+	| "broad_scope_requires_full"
+	| "security_sensitive_delta_requires_full"
+	| "persistence_sensitive_delta_requires_full"
+	| "public_contract_scope_requires_full"
+	| "cross_layer_scope_requires_full"
+	| "predecessor_manifest_missing"
+	| "predecessor_manifest_unavailable"
+	| "current_manifest_oversized"
+	| "source_metadata_changed"
+	| "source_delta_too_large"
+	| "projection_context_too_large";
+
+/** Runtime-derived correction binding. No field in this object is caller-owned. */
+export type ReviewCorrectionBinding = {
+	predecessorAssignmentId: ReviewAssignmentId;
+	reviewMode: "full" | "correction";
+	sourceChanged: boolean;
+	changedRelativePaths: string[];
+	sourceDeltaDigest: string;
+	contextCompleteness: "complete" | "fallback";
+	fallbackReason: ReviewCorrectionFallbackReason | null;
+};
+
 export type ReviewAssignment = {
 	id: ReviewAssignmentId;
 	operationId: string;
@@ -191,6 +215,10 @@ export type ReviewAssignment = {
 	packetSummary: string;
 	riskLenses: string[];
 	prerequisite: BoundReviewPrerequisite | null;
+	/** Restricted canonical manifest for a later evidence-backed correction. */
+	sourceManifestArtifactRef?: EvidenceArtifactRef | undefined;
+	/** Present only when the caller requested a verified correction predecessor. */
+	correction?: ReviewCorrectionBinding | undefined;
 	attemptId: string;
 	logicalPassId: string;
 	startedAt: string;
@@ -324,6 +352,17 @@ export type AssignmentReviewerProjection = {
 	validationScope: ValidationScope;
 	validationEvidenceCount: number;
 	terminalDisposition: "submitted" | "observed_unsubmitted" | null;
+	reviewMode: "full" | "correction";
+	predecessorAssignmentId: ReviewAssignmentId | null;
+	priorBlockingFindings: Array<{
+		fingerprint: string;
+		evidenceLocator: string;
+	}>;
+	sourceChanged: boolean | null;
+	changedRelativePaths: string[];
+	sourceDeltaDigest: string | null;
+	correctionContextCompleteness: "complete" | "fallback";
+	correctionFallbackReason: ReviewCorrectionFallbackReason | null;
 };
 
 export type ReviewerProjection = AssignmentReviewerProjection;

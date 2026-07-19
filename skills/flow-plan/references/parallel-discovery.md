@@ -60,6 +60,11 @@ Convert only evidence-backed work into plan fields:
 
 If workers disagree, inspect the source artifact yourself. If a candidate finding lacks a concrete citation or refutation pass, make it a review-first deliverable rather than a fix feature.
 
+Treat the synthesized audit as an evidence boundary. Preserve refuted candidates
+in the audit record, but exclude them from remediation. Do not turn an
+interesting hypothesis, a severity label, or a speculative fix shape into a
+plan feature before its triggering path and guards have been checked.
+
 Apply the manager synthesis barrier from
 `flow/references/parallel-synthesis.md`: only distilled,
 evidence-backed claims become plan fields.

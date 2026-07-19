@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "5.2.2",
+	"version": "5.3.0",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"repository": {
@@ -40,6 +40,8 @@
 		"lint": "bunx biome check biome.json src tests scripts --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"prompt:quality": "bun run scripts/prompt-quality.ts",
 		"prompt:model-eval": "bun run scripts/prompt-model-eval.ts",
+		"harness:report": "bun run scripts/harness-resource-report.ts --fixture tests/fixtures/harness/full-repo-audit-v1.json",
+		"harness:gate": "bun run scripts/harness-resource-report.ts --fixture tests/fixtures/harness/full-repo-audit-v1.json --require standard && bun run scripts/harness-resource-report.ts --fixture tests/fixtures/harness/full-repo-audit-v1.json --require assurance",
 		"release:metadata": "bun run scripts/release-metadata.ts",
 		"replay:report": "bun run scripts/replay-report.ts",
 		"transport:report": "bun run scripts/causal-transport-report.ts",

@@ -11,6 +11,12 @@ concise plan another agent can execute without rediscovering the work.
   implementation are captured in `requirements`.
 - Decisions: assumptions, scope choices, and architecture choices already made
   are captured in `decisions`.
+- Review contract: broad review plans record an exact `deliveryIntent` and
+  `assuranceProfile`; ambiguous broad review defaults to
+  `deliveryIntent: review_and_plan` and `assuranceProfile: standard`.
+- Evidence boundary: remediation features contain only findings that survived
+  refutation; refuted findings remain audit history and are absent from the fix
+  plan.
 - Uncertainty: specification uncertainty is resolved by a decision or a user
   question; environment uncertainty is resolved by inspection, discovery, or a
   first evidence-producing feature.

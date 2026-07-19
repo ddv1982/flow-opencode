@@ -10,17 +10,34 @@ import type {
 	SessionTransaction,
 } from "../../src/application/ports/session-repository.js";
 import {
+	canonicalSourceManifestBytes,
+	type SourceManifest,
+} from "../../src/application/ports/source-identity.js";
+import { createValidationReceiptStore } from "../../src/application/validation-receipts.js";
+import {
 	type ReviewAssignment,
 	type Session,
 	toSessionId,
 } from "../../src/domain/session.js";
 import {
+	canonicalValidationCommandDigest,
 	MAX_EXECUTION_PROJECTION_BYTES,
 	type TransitionEnvironment,
 } from "../../src/domain/transitions.js";
+import { validationCommandClass } from "../../src/domain/validation-command.js";
+import {
+	parseValidationReceipt,
+	type ValidationCoverageScope,
+} from "../../src/domain/validation-receipt.js";
 
-const digestPattern = /^sha256:[a-f0-9]{64}$/;
 const measurementSourceDigest = `sha256:${"0".repeat(64)}` as const;
+const measurementSourceManifest: SourceManifest = {
+	version: 1,
+	sourceDigest: measurementSourceDigest,
+	mode: "non-git",
+	repositoryIdentity: null,
+	entries: [],
+};
 
 const FeatureFixtureSchema = z
 	.object({
@@ -148,6 +165,7 @@ function cloneSession(session: Session | null): Session | null {
 
 class DeterministicMemoryRepository implements SessionRepository {
 	#session: Session | null = null;
+	readonly #artifacts = new Map<string, Uint8Array>();
 
 	async read(): Promise<Session | null> {
 		return cloneSession(this.#session);
@@ -157,6 +175,15 @@ class DeterministicMemoryRepository implements SessionRepository {
 		task: (transaction: SessionTransaction) => Promise<T>,
 	): Promise<T> {
 		const transaction: SessionTransaction = {
+			computeSourceManifest: async () => ({
+				identity: {
+					digest: measurementSourceDigest,
+					mode: "non-git",
+					entryCount: 0,
+				},
+				manifest: measurementSourceManifest,
+				bytes: canonicalSourceManifestBytes(measurementSourceManifest),
+			}),
 			computeSourceIdentity: async () => ({
 				digest: measurementSourceDigest,
 				mode: "non-git",
@@ -173,11 +200,22 @@ class DeterministicMemoryRepository implements SessionRepository {
 				this.#session = null;
 			},
 			quarantineUnreadable: async () => null,
-			publishEvidenceArtifact: async () => {
-				throw new Error("The transport fixture does not publish artifacts.");
+			publishEvidenceArtifact: async (bytes) => {
+				const stored = bytes.slice();
+				const digest = sha256(stored);
+				this.#artifacts.set(digest, stored);
+				return {
+					kind: "restricted_evidence_v1",
+					digest,
+					byteLength: stored.byteLength,
+				};
 			},
-			readEvidenceArtifact: async () => {
-				throw new Error("The transport fixture has no artifact bytes.");
+			readEvidenceArtifact: async (reference) => {
+				const stored = this.#artifacts.get(reference.digest);
+				if (!stored || stored.byteLength !== reference.byteLength) {
+					throw new Error("The transport fixture artifact is unavailable.");
+				}
+				return stored.slice();
 			},
 		};
 		return task(transaction);
@@ -194,7 +232,7 @@ function utf8Bytes(value: unknown): number {
 	return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }
 
-function sha256(value: string): string {
+function sha256(value: string | Uint8Array): `sha256:${string}` {
 	return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
@@ -302,22 +340,38 @@ function environmentFor(fixture: MeasurementFixture): TransitionEnvironment {
 	};
 }
 
-function validationObservations(featureId: string, timestamp: string) {
-	const outputDigest = sha256(`${featureId}:validation-output`);
-	if (!digestPattern.test(outputDigest)) {
-		throw new Error("Measurement output digests must be canonical.");
+async function publishValidationReceipt(
+	repository: SessionRepository,
+	session: Session,
+	timestamp: string,
+	coverageScope: ValidationCoverageScope,
+) {
+	if (!session.activeFeatureRunId || !session.activeFeatureId) {
+		throw new Error("Expected an active measurement feature run.");
 	}
-	return [
-		{
-			command: "bun test tests/causal-transport-measurement.test.ts",
-			summary: "Deterministic transport measurement passed.",
-			startedAt: timestamp,
-			completedAt: timestamp,
-			exitCode: 0,
-			outputDigest,
-			environmentKeys: [],
-		},
-	];
+	return repository.transact(async (transaction) => {
+		const source = await transaction.computeSourceIdentity();
+		const command = "bun test tests/causal-transport-measurement.test.ts";
+		return createValidationReceiptStore(transaction).publishValidationReceipt(
+			parseValidationReceipt({
+				schemaVersion: 1,
+				kind: "validation_receipt_v1",
+				featureRunId: session.activeFeatureRunId,
+				featureId: session.activeFeatureId,
+				sourceDigest: source.digest,
+				startedAt: timestamp,
+				completedAt: timestamp,
+				command,
+				commandDigest: canonicalValidationCommandDigest(command),
+				commandClass: validationCommandClass(command),
+				coverageScope,
+				exitCode: 0,
+				outputDigest: sha256(`${session.activeFeatureId}:validation-output`),
+				outputCompleteness: "complete",
+				environmentKeys: [],
+			}),
+		);
+	});
 }
 
 function passingAssignmentResult(assignment: ReviewAssignment) {
@@ -412,6 +466,13 @@ export async function measureCausalTransport(
 		currentOutputs.push(execution);
 
 		const running = repository.requireSession();
+		const featureValidationRef = await publishValidationReceipt(
+			repository,
+			running,
+			running.featureRuns.find((run) => run.id === running.activeFeatureRunId)
+				?.startedAt ?? running.timestamps.updatedAt,
+			"focused",
+		);
 		const featureAssignmentOperation = `review-start:feature:${feature.id}`;
 		await recordMutation(
 			featureAssignmentOperation,
@@ -427,12 +488,7 @@ export async function measureCausalTransport(
 						summary: `Review ${feature.id} against its assigned targets.`,
 						riskLenses: ["behavior", "regression"],
 					},
-					validations: validationObservations(
-						feature.id,
-						running.featureRuns.find(
-							(run) => run.id === running.activeFeatureRunId,
-						)?.startedAt ?? running.timestamps.updatedAt,
-					),
+					validationRefs: [featureValidationRef],
 				},
 			}),
 			false,
@@ -467,6 +523,12 @@ export async function measureCausalTransport(
 		if (finalFeature) {
 			const finalAssignmentOperation = `review-start:final:${feature.id}`;
 			const beforeFinalAssignment = repository.requireSession();
+			const finalValidationRef = await publishValidationReceipt(
+				repository,
+				beforeFinalAssignment,
+				featureAssignment.startedAt,
+				"broad",
+			);
 			await recordMutation(
 				finalAssignmentOperation,
 				await service.reviewStart({
@@ -483,10 +545,7 @@ export async function measureCausalTransport(
 								"Review the completed plan and broad validation evidence.",
 							riskLenses: ["integration", "release-readiness"],
 						},
-						validations: validationObservations(
-							feature.id,
-							featureAssignment.startedAt,
-						),
+						validationRefs: [finalValidationRef],
 					},
 				}),
 				false,

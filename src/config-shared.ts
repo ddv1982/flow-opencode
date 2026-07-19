@@ -14,8 +14,21 @@ export type FlowAgentConfig = {
 	prompt: string;
 	hidden?: boolean;
 	model?: string;
+	/** Current OpenCode agent-iteration limit (`maxSteps` is deprecated). */
+	steps?: number;
 	permission?: FlowPermissionConfig;
 };
+
+export type FlowHarnessProfile = "control" | "standard" | "assurance";
+export type FlowHarnessRolloutMode = "control" | "observe" | "enforce";
+
+export type FlowHarnessRuntimeConfig = {
+	profile: FlowHarnessProfile;
+	rolloutMode: FlowHarnessRolloutMode;
+	warnings: string[];
+};
+
+type FlowEnvironment = Readonly<Record<string, string | undefined>>;
 
 type FlowCommandConfigBase = {
 	description: string;
@@ -52,20 +65,117 @@ const FLOW_PUBLIC_COMMAND_TEMPLATES = {
 const FLOW_REVIEW_AGENT_INSTRUCTIONS =
 	compileFlowPromptSurface("flow-reviewer").text;
 
-function envModel(name: string): string | undefined {
-	const value = process.env[name]?.trim();
+function envValue(env: FlowEnvironment, name: string): string | undefined {
+	const value = env[name]?.trim();
 	return value ? value : undefined;
 }
 
-function flowWorkerModel(agentName: string): string | undefined {
-	const fallback = envModel("OPENCODE_FLOW_WORKER_MODEL");
+function flowWorkerClass(
+	agentName: string,
+): "candidate" | "review" | "readonly" {
 	if (agentName === "flow-candidate-worker") {
-		return envModel("OPENCODE_FLOW_CANDIDATE_WORKER_MODEL") ?? fallback;
+		return "candidate";
 	}
 	if (agentName === "flow-reviewer" || agentName === "flow-verifier-worker") {
-		return envModel("OPENCODE_FLOW_REVIEW_WORKER_MODEL") ?? fallback;
+		return "review";
 	}
-	return envModel("OPENCODE_FLOW_READONLY_WORKER_MODEL") ?? fallback;
+	return "readonly";
+}
+
+function classEnvironmentName(
+	workerClass: ReturnType<typeof flowWorkerClass>,
+	suffix: "MODEL" | "STEPS",
+): string {
+	return `OPENCODE_FLOW_${workerClass.toUpperCase()}_WORKER_${suffix}`;
+}
+
+function flowWorkerModel(
+	agentName: string,
+	env: FlowEnvironment,
+): string | undefined {
+	const fallback = envValue(env, "OPENCODE_FLOW_WORKER_MODEL");
+	return (
+		envValue(env, classEnvironmentName(flowWorkerClass(agentName), "MODEL")) ??
+		fallback
+	);
+}
+
+function parseWorkerSteps(
+	value: string | undefined,
+	name: string,
+	warnings: string[],
+): number | undefined {
+	if (value === undefined) return undefined;
+	if (!/^[1-9][0-9]{0,3}$/.test(value)) {
+		warnings.push(
+			`${name} must be an integer from 1 through 1000; ignoring it.`,
+		);
+		return undefined;
+	}
+	const parsed = Number(value);
+	if (!Number.isSafeInteger(parsed) || parsed > 1_000) {
+		warnings.push(
+			`${name} must be an integer from 1 through 1000; ignoring it.`,
+		);
+		return undefined;
+	}
+	return parsed;
+}
+
+function flowWorkerSteps(
+	agentName: string,
+	env: FlowEnvironment,
+	warnings: string[],
+): number | undefined {
+	const specificName = classEnvironmentName(
+		flowWorkerClass(agentName),
+		"STEPS",
+	);
+	const specific = envValue(env, specificName);
+	if (specific !== undefined) {
+		return parseWorkerSteps(specific, specificName, warnings);
+	}
+	return parseWorkerSteps(
+		envValue(env, "OPENCODE_FLOW_WORKER_STEPS"),
+		"OPENCODE_FLOW_WORKER_STEPS",
+		warnings,
+	);
+}
+
+export function resolveFlowHarnessRuntimeConfig(
+	env: FlowEnvironment = process.env,
+): FlowHarnessRuntimeConfig {
+	const warnings: string[] = [];
+	const rawProfile = envValue(env, "OPENCODE_FLOW_HARNESS_PROFILE");
+	let profile: FlowHarnessProfile = "standard";
+	if (
+		rawProfile === "control" ||
+		rawProfile === "standard" ||
+		rawProfile === "assurance"
+	) {
+		profile = rawProfile;
+	} else if (rawProfile !== undefined) {
+		profile = "control";
+		warnings.push(
+			"OPENCODE_FLOW_HARNESS_PROFILE must be control, standard, or assurance; using control.",
+		);
+	}
+
+	const rawRollout = envValue(env, "OPENCODE_FLOW_ROLLOUT_MODE");
+	let rolloutMode: FlowHarnessRolloutMode = "observe";
+	if (
+		rawRollout === "control" ||
+		rawRollout === "observe" ||
+		rawRollout === "enforce"
+	) {
+		rolloutMode = rawRollout;
+	} else if (rawRollout !== undefined) {
+		rolloutMode = "control";
+		warnings.push(
+			"OPENCODE_FLOW_ROLLOUT_MODE must be control, observe, or enforce; using control.",
+		);
+	}
+	return { profile, rolloutMode, warnings };
 }
 
 // Worker permission maps below use tool-name and wildcard keys (`skill`,
@@ -120,6 +230,7 @@ export const FLOW_CORE_AGENTS = {
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
+			flow_validation_start: "allow",
 		},
 	},
 	"flow-audit-worker": {
@@ -135,6 +246,7 @@ export const FLOW_CORE_AGENTS = {
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
+			flow_audit_render: "allow",
 		},
 	},
 	"flow-candidate-worker": {
@@ -198,8 +310,13 @@ export const FLOW_CORE_COMMANDS = {
 	},
 } satisfies Record<string, FlowCommandConfig>;
 
-export function createFlowCoreConfigEntries() {
-	return {
+export function createFlowCoreConfigEntries(options?: {
+	env?: FlowEnvironment;
+	onWarning?: (warning: string) => void;
+}) {
+	const env = options?.env ?? process.env;
+	const warnings: string[] = [];
+	const entries = {
 		agent: Object.fromEntries(
 			Object.entries(FLOW_CORE_AGENTS).map(([name, value]) => {
 				const permission = value.permission
@@ -210,12 +327,14 @@ export function createFlowCoreConfigEntries() {
 								: {}),
 						}
 					: undefined;
-				const model = flowWorkerModel(name);
+				const model = flowWorkerModel(name, env);
+				const steps = flowWorkerSteps(name, env, warnings);
 				return [
 					name,
 					{
 						...value,
 						...(model ? { model } : {}),
+						...(steps ? { steps } : {}),
 						...(permission ? { permission } : {}),
 					},
 				];
@@ -228,15 +347,20 @@ export function createFlowCoreConfigEntries() {
 			]),
 		),
 	};
+	for (const warning of new Set(warnings)) options?.onWarning?.(warning);
+	return entries;
 }
 
 export function applyFlowConfig(
 	config: MutableFlowConfig,
 	options?: {
 		onCollision?: (kind: "agent" | "command", name: string) => void;
+		onWarning?: (warning: string) => void;
 	},
 ): void {
-	const entries = createFlowCoreConfigEntries();
+	const entries = createFlowCoreConfigEntries({
+		...(options?.onWarning ? { onWarning: options.onWarning } : {}),
+	});
 	if (options?.onCollision) {
 		for (const name of Object.keys(entries.agent)) {
 			if (config.agent && name in config.agent) {

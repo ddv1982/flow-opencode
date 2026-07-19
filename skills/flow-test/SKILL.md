@@ -1,6 +1,6 @@
 ---
 name: flow-test
-description: Choose, run, and summarize validation checks for Flow features. Use when selecting validation coverage, running tests or browser/e2e QA, classifying test failures, or preparing validation observations for flow_review_start. Visual design judgment stays in flow-ui-quality and review verdicts stay in flow-review.
+description: Choose, run, and summarize validation checks for Flow features. Use when selecting validation coverage, running tests or browser/e2e QA, classifying test failures, or preparing validation receipt refs for flow_review_start. Visual design judgment stays in flow-ui-quality and review verdicts stay in flow-review.
 ---
 
 # Flow Test
@@ -58,8 +58,12 @@ For each check:
 
 1. State the hypothesis: what behavior or contract the check is expected to
    prove.
-2. Run the command or manual workflow when the environment allows it.
-3. Record exact command, status, and observed result.
+2. For Bash evidence, call `flow_validation_start` immediately before the exact
+   command with current causal guards, feature id, coverage scope, and
+   environment key names; run that byte-for-byte Bash command next.
+3. Inspect the outcome and collect the immutable object appended after
+   `[flow-validation-receipt]`. Do not author validation timestamps, exit status,
+   output digests, or a per-command API summary.
 4. If it fails, classify the failure before editing:
    - product failure
    - test failure
@@ -73,6 +77,22 @@ For each check:
 
 Do not trim failure output so far that the manager cannot understand the
 failure. Do redact secrets and credentials.
+
+## Validation Schedule
+
+- A pre-edit diagnostic baseline is advisory only. It identifies existing
+  failures but does not validate changed source.
+- Run focused checks after changes and rerun them after every relevant edit.
+- For artifact-only work, run the complete applicable artifact gate: docs,
+  generated output, package/build shape, or other checks that can actually fail
+  for that artifact.
+- Run the broad final gate once, after a passing feature review and the final
+  edit. Do not run it early as ceremony.
+
+Evidence is applicable only to the exact feature run and source identity it
+observed. Do not carry it across a source edit or a new run. Targeted evidence
+cannot be relabeled or reused as broad validation; broad final evidence comes
+from its own execution.
 
 ## Browser and Exploratory QA
 
@@ -98,36 +118,27 @@ when a practical automated check exists.
 
 ## Output
 
-Return a concise validation summary and a `validations` array that the manager
-can place inside `flow_review_start.request` if it accepts the evidence:
+Return the accepted immutable refs and gaps. The manager can place the refs
+unchanged inside `flow_review_start.request.validationRefs`:
 
 ```json
 {
-  "validations": [
+  "validationRefs": [
     {
-      "command": "bun test tests/foo.test.ts",
-      "summary": "3 pass; covered foo creation, duplicate rejection, and reset behavior",
-      "startedAt": "ISO-8601",
-      "completedAt": "ISO-8601",
-      "exitCode": 0,
-      "outputDigest": "sha256:<64 lowercase hex characters>",
-      "environmentKeys": []
+      "kind": "validation_receipt_ref_v1",
+      "digest": "sha256:<64 lowercase hex characters>",
+      "byteLength": 1234
     }
   ],
-  "testSummary": "Targeted behavior and package shape passed. Browser evidence was not applicable.",
   "gaps": []
 }
 ```
 
-Only passing checks belong in `validations` for assignment. Failed, skipped,
-or unavailable checks belong in `testSummary`, `gaps`, or a blocker outcome.
-Each summary must state what behavior, file set, route, command, or state was
-covered. Static inspection alone is a gap for behavioral changes.
-
-`startedAt` and `completedAt` are reported times. Record them honestly and in
-order; Flow rejects observations that precede the active execution, end after
-assignment start, or postdate runtime acceptance. Broad final validation must
-start no earlier than the passing feature-assignment result.
+Only refs appended after passing commands belong in `validationRefs`. Failed,
+skipped, unavailable, mismatched, or unreceipted checks belong in `gaps` or a
+blocker outcome. Static inspection alone is a gap for behavioral changes. Flow
+owns receipt chronology; broad final capture still runs only after the passing
+feature-assignment result.
 
 Never relabel a failed command as passed, invent output, or present "not run"
 as passing validation.

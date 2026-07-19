@@ -37,11 +37,28 @@ prerequisite aggregate containing the feature-assignment id, canonical passing
 result, and result digest. Capture revision and snapshot remain audit metadata;
 current applicability is based on source identity plus the active execution's run.
 
-Each accepted mutation captures one runtime acceptance time. Actor-reported
-validation and review times must be ordered from feature-run start through
-validation, assignment start, and assignment result, and may not postdate that
-runtime acceptance time. Broad final validation must begin no earlier than the
-bound feature-assignment result's reported time.
+Validation references originate from a runtime-attested capture, not from a
+caller-authored observation. `flow_validation_start` checks the active causal
+guard and measures source without mutating Session v4. It arms the exact next
+Bash command for one OpenCode session. The host hook binds the observed command,
+hook interval, structured exit, output digest/completeness, canonical command
+class, environment-key names, feature run, feature, and source into canonical
+`validation_receipt_v1` bytes. The returned
+`validation_receipt_ref_v1` is an immutable digest-and-length reference.
+
+`flow_review_start` verifies every referenced artifact and current applicability
+before materializing the existing validation-evidence shape at the assignment's
+current revision and snapshot. Only exit-zero, complete receipts materialize;
+final review additionally requires `broad` or `artifact` coverage. Missing,
+altered, duplicate, failed, incomplete, wrong-run, or stale-source refs record
+no mutation and leave the operation id reusable. Exact replay is resolved from
+the causal ledger before new source or receipt I/O.
+
+Each accepted mutation captures one runtime acceptance time. Host-observed
+validation intervals and reviewer-reported result times must be ordered from
+feature-run start through validation, assignment start, and assignment result,
+and may not postdate that runtime acceptance time. Broad final validation must
+begin no earlier than the bound feature-assignment result's reported time.
 
 The hashes detect inconsistent durable state and make replay comparisons
 deterministic. They are not a secret signature against an actor who can rewrite
@@ -148,6 +165,28 @@ blobs are not automatically deleted when active state is unreadable; no
 automatic cleanup or index exists. `.flow/.gitignore` finishes with Flow's
 canonical ignore block, while preserving maintainer-owned entries, so
 restricted evidence is not accidentally staged.
+
+Canonical validation receipts and review source manifests use the same
+restricted content-addressed artifact boundary. A receipt may refer to an exact
+output artifact only when host output was complete and both digests agree; raw
+output is not published by default. Receipt bytes do include the exact executed
+command, so the restricted store—not status, logs, fixtures, or ordinary
+session prose—is its confidentiality boundary. Source manifests include safe
+relative paths and content identities, never file contents, symlink targets, or
+Git object names.
+
+When `correctionOfAssignmentId` names the immediately preceding durable failed
+assignment, Flow reads its manifest and compares it with the current
+transaction-owned manifest. The runtime derives the sorted changed-path set and
+source-delta digest. It selects narrow correction context only when that
+evidence is complete and bounded; final/broad, security-sensitive,
+persistence-sensitive, metadata-changing, missing, unavailable, or oversized
+cases carry an explicit full-review fallback. A correction-only
+`correctionScopeHint` can additionally elevate known `public-contract` or
+`cross-layer` semantic scope to full review because paths cannot prove all such
+scope. The hint is replay-bound, has no narrow-review value, and never overrides
+a more specific runtime reason. These manifests and deltas support review scope;
+they are not another active-state representation.
 
 ## Threat model and rollback
 

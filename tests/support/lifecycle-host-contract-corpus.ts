@@ -6,8 +6,6 @@ import {
 } from "../../src/application/flow-service.js";
 
 const SNAPSHOT_ID = `sha256:${"a".repeat(64)}`;
-const OUTPUT_DIGEST = `sha256:${"c".repeat(64)}`;
-const ARTIFACT_DIGEST = `sha256:${"d".repeat(64)}`;
 
 const guard = {
 	operationId: "review-lifecycle-operation",
@@ -16,14 +14,10 @@ const guard = {
 	featureId: "domain-rewrite",
 } as const;
 
-const validation = {
-	command: "bun test tests/domain",
-	summary: "Domain tests passed.",
-	startedAt: "2026-07-19T08:58:00.000Z",
-	completedAt: "2026-07-19T08:59:00.000Z",
-	exitCode: 0,
-	outputDigest: OUTPUT_DIGEST,
-	environmentKeys: [],
+const validationRef = {
+	kind: "validation_receipt_ref_v1",
+	digest: `sha256:${"c".repeat(64)}`,
+	byteLength: 512,
 } as const;
 
 const assignmentResult = {
@@ -124,7 +118,7 @@ const featureReviewStart = {
 			summary: "Review the domain rewrite.",
 			riskLenses: ["causal identity"],
 		},
-		validations: [validation],
+		validationRefs: [validationRef],
 	},
 } as const;
 
@@ -314,11 +308,11 @@ const validCases: LifecycleContractCase[] = [
 		expected: true,
 	},
 	{
-		name: "equal validation timestamps",
+		name: "minimum validation receipt byte length",
 		operation: "reviewStart",
 		input: withRequest(featureReviewStart, {
 			...featureReviewStart.request,
-			validations: [{ ...validation, completedAt: validation.startedAt }],
+			validationRefs: [{ ...validationRef, byteLength: 1 }],
 		}),
 		expected: true,
 	},
@@ -455,38 +449,47 @@ const invalidCases: LifecycleContractCase[] = [
 		expected: false,
 	},
 	{
-		name: "review start with nonzero validation exit code",
+		name: "review start with invalid validation receipt kind",
 		operation: "reviewStart",
 		input: withRequest(featureReviewStart, {
 			...featureReviewStart.request,
-			validations: [{ ...validation, exitCode: 1 }],
+			validationRefs: [{ ...validationRef, kind: "restricted_evidence_v1" }],
 		}),
 		expected: false,
 	},
 	{
-		name: "review start with reversed validation time",
+		name: "review start with malformed validation receipt digest",
 		operation: "reviewStart",
 		input: withRequest(featureReviewStart, {
 			...featureReviewStart.request,
-			validations: [{ ...validation, completedAt: "2026-07-19T08:57:59.000Z" }],
+			validationRefs: [{ ...validationRef, digest: "sha256:not-a-digest" }],
 		}),
 		expected: false,
 	},
 	{
-		name: "review start with negative artifact length",
+		name: "review start with nonpositive validation receipt length",
 		operation: "reviewStart",
 		input: withRequest(featureReviewStart, {
 			...featureReviewStart.request,
-			validations: [
-				{
-					...validation,
-					artifactRef: {
-						kind: "restricted_evidence_v1",
-						digest: ARTIFACT_DIGEST,
-						byteLength: -1,
-					},
-				},
-			],
+			validationRefs: [{ ...validationRef, byteLength: 0 }],
+		}),
+		expected: false,
+	},
+	{
+		name: "review start with duplicate validation receipt references",
+		operation: "reviewStart",
+		input: withRequest(featureReviewStart, {
+			...featureReviewStart.request,
+			validationRefs: [validationRef, validationRef],
+		}),
+		expected: false,
+	},
+	{
+		name: "review start with unknown validation receipt field",
+		operation: "reviewStart",
+		input: withRequest(featureReviewStart, {
+			...featureReviewStart.request,
+			validationRefs: [{ ...validationRef, command: "bun test" }],
 		}),
 		expected: false,
 	},
@@ -714,18 +717,12 @@ const requiredDeletionSeeds: Array<{
 				"reviewKind",
 				"validationScope",
 				"packet",
-				"validations",
+				"validationRefs",
 			].map((field) => ["request", field] as const),
 			["request", "packet", "summary"],
-			...[
-				"command",
-				"summary",
-				"startedAt",
-				"completedAt",
-				"exitCode",
-				"outputDigest",
-				"environmentKeys",
-			].map((field) => ["request", "validations", 0, field] as const),
+			...["kind", "digest", "byteLength"].map(
+				(field) => ["request", "validationRefs", 0, field] as const,
+			),
 		],
 	},
 	{
@@ -864,5 +861,5 @@ export const LIFECYCLE_HOST_FIXTURES = {
 	statusExecution,
 	statusReviewer,
 	targetedCompletion,
-	validation,
+	validationRef,
 } as const;

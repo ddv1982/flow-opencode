@@ -61,7 +61,8 @@ pass id, manifest row id, dependencies, write scope
 ## Coverage
 expected, checked, not checked with reasons
 ## Commands and outcomes
-exact command, status, raw outcome summary, behavior covered
+exact command, observed status, complete appended validation receipt ref, or
+clearly marked proposed check; never model-authored receipt metadata
 ## Confidence and verification
 verified, single-source, inferred, unsettled, falsifier
 ## Open questions / gaps
@@ -79,7 +80,8 @@ pass id, manifest row id, dependencies, write scope
 ## Coverage
 expected, checked, not checked with reasons
 ## Findings
-severity, atomic claim, citation, corroboration, guards checked, refutation result
+strict `AuditLedgerV1` JSON plus the exact canonical Markdown and derived
+summary returned by `flow_audit_render`; never hand-authored reconciliation
 ## Sources
 ## Confidence and verification
 verified, single-source, inferred, unsettled, falsifier

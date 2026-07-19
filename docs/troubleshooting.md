@@ -6,25 +6,85 @@ there is no skill sync, setup-health state, or second-restart requirement.
 
 ## Install and update
 
-Install or replace the pinned plugin version:
+Plan, apply, and verify one exact pinned plugin version:
 
 ```bash
-opencode plugin opencode-plugin-flow@5.2.2 --global --force
+npx -y opencode-plugin-flow@5.3.0 activation-apply \
+  --project "$PWD" --scope global
+npx -y opencode-plugin-flow@5.3.0 activation-apply \
+  --project "$PWD" --scope global --apply
+npx -y opencode-plugin-flow@5.3.0 activation-check --project "$PWD"
 ```
 
-Start or restart OpenCode once after changing the installed package. Core
-command instructions are compiled into the plugin, and optional guides are
-returned by `flow_guidance` using stable ids such as `flow-test` or
+The first command changes nothing. Inspect its config rewrites and quarantine
+operations before repeating with `--apply`. The final check must say
+`satisfied`; it requires one exact target activation, one total Flow activation
+source, and no proven inactive Flow cache artifact. Use `--scope project` for a
+project-local canonical pin. Do not retain a global and project copy together.
+The target defaults to the invoked package's embedded version. An explicit
+`--target` also accepts only an exact semantic version; tags and ranges are
+refused rather than resolved implicitly.
+
+Start or restart OpenCode once after activation changes. Core command
+instructions are compiled into the plugin, and optional guides are returned by
+`flow_guidance` using stable ids such as `flow-test` or
 `flow-ui-quality/references/ui-rubric.md`.
 
-If your OpenCode version does not expose `opencode plugin`, replace the existing
-Flow entry in `opencode.json` instead of adding a duplicate:
+`activation-check` inventories readable OpenCode global, project,
+`.opencode`, custom, inline, and managed JSON/JSONC configuration; singular and
+plural plugin directories; and package-cache artifacts. Authenticated remote
+configuration and some managed preferences cannot be decoded offline. They are
+reported as limitations, and process-global runtime leadership is the final
+fail-closed duplicate guard.
+
+## Activation was refused
+
+Refusal means Flow could not prove that automatic mutation was safe. The report
+names the exact source and reason. Common cases are:
+
+- an unmarked, edited, absent, oversized, or symbolic-link local Flow wrapper;
+- malformed or unsafe JSON/JSONC, plugin directories, or path ancestors;
+- a JSONC file that contains a Flow entry requiring mutation (inventory is
+  supported, but apply refuses lossy comment-stripping rewrites);
+- a cache artifact whose nested package manifest does not prove its identity;
+- Flow entries supplied by `OPENCODE_CONFIG_CONTENT`, administrator-managed
+  config, or another source outside the chosen canonical scope.
+
+Do not delete an entire config, plugin directory, or OpenCode cache. Remove or
+repair only the reported Flow entry after inspecting it, then repeat the
+dry-run. A manual config repair retains unrelated entries and ends with exactly
+one exact pin, for example:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.2.2"]
+  "plugin": ["opencode-plugin-flow@5.3.0"]
 }
 ```
+
+An applied activation writes owner-restricted backups and
+`flow-activation-journal-v1` under the printed recovery path before changing
+recognized sources. Marker-proven wrappers and proven inactive cache artifacts
+are moved, not deleted. If a post-mutation step fails, Flow first attempts exact
+safe rollback. A `rolled-back` journal means the recorded mutations were
+restored; rerun `activation-check` before another dry-run. A `rollback-failed`
+journal means a concurrent edit or another safety condition prevented exact
+restoration; Flow preserves that state and prints journal-backed manual recovery
+guidance. Stop OpenCode, inspect the journal, backups, recovery paths, and
+current bytes, then restore only actions whose identity still matches. Never
+treat an incomplete journal as permission to remove ambiguous content.
+
+## Duplicate runtime leadership error
+
+When more than one Flow runtime registers in one OpenCode process, all Flow
+commands and tools fail closed. The diagnostic reports every registered
+identity and labels one deterministic highest-semantic-version copy as the
+diagnostic leader. That label is not authority: no copy operates until only one
+remains.
+
+Close OpenCode, run `activation-check` for the affected project, converge config
+and proven cache/wrapper state with `activation-apply`, resolve any reported
+remote or managed source with its owner, then restart. Do not work around the
+guard by selecting a lower or higher loaded copy in the running process.
 
 ## Guidance is unavailable
 
@@ -45,13 +105,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.2.2 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.0 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.2.2 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.3.0 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to
@@ -88,9 +148,10 @@ move, it remains quarantined at the printed recovery path.
   `closure.retryOperationId`, and call
   `flow_session_close { request: { mode: "retry", operationId } }`. Do not
   recreate the original summary or causal guards.
-- **Timestamp chronology rejected**: preserve truthful reported times. They must
-  follow active-execution start, validation, review-assignment start, and result
-  order, and cannot postdate runtime acceptance.
+- **Timestamp chronology rejected**: preserve the runtime-attested validation
+  interval and a truthful reviewer-reported completion time. They must follow
+  active-execution start, validation, review-assignment start, and result order,
+  and cannot postdate runtime acceptance.
 - **Final-review retry lost its prerequisite**: for an unchanged source, call
   `flow_status { request: { view: "detail" } }` and copy
   `workflowData.projection.finalReviewRetry.prerequisite.result` unchanged into
@@ -105,9 +166,47 @@ move, it remains quarantined at the printed recovery path.
   cannot be canonical history until explicit close has recorded non-null
   closure.
 
+## Validation receipt was rejected
+
+- **No receipt marker appeared**: the armed command must be the exact next Bash
+  call in the same OpenCode session. Any command mismatch cancels capture. Idle
+  or compaction also cancels an uncompleted capture.
+- **Structured exit status unavailable**: Flow requires OpenCode's structured
+  Bash `metadata.exit`; text that merely says a command passed is not evidence.
+- **Incomplete receipt**: truncated or unknown output, or any nonzero exit,
+  cannot become review evidence. Rerun a command whose complete host result is
+  observable.
+- **Stale or wrong scope**: capture again after the latest source edit and for
+  the active feature run. Final review requires a `broad` or `artifact`
+  coverage receipt.
+- **Missing or altered artifact**: receipt refs are exact digest-and-length
+  identities in `.flow/evidence/**`. Preserve the workspace, rerun validation,
+  and pass the newly emitted reference; do not hand-edit restricted artifacts.
+
+Rejected review start remains mutation-free and leaves its operation id
+unconsumed, so a corrected request may reuse the same id.
+
+## Correction review fell back to full review
+
+`correctionOfAssignmentId` must name the immediately preceding recorded failure
+for the same active run, review kind, and logical pass. Flow derives the source
+manifest delta itself. It deliberately selects full review when the review is
+final/broad, source metadata changed, the delta touches security or persistence,
+the correction request declares known `public-contract` or `cross-layer` scope,
+or required manifests/delta/projection context are missing, unavailable, or too
+large. `correctionScopeHint` is valid only beside `correctionOfAssignmentId`, and
+can only elevate to full. This is safe fallback, not lost reviewer state.
+
+Same-source correction is accepted only for an `evidence_gap` blocker with
+genuinely distinct validation evidence. An implementation defect requires a
+source change. After two accepted failed reviews in one feature run, the retry
+budget is exhausted; continue only through explicit reset or replan direction.
+
 ## Uninstall
 
 Remove `opencode-plugin-flow` from OpenCode configuration and restart OpenCode.
-Flow v5 has no global runtime files to uninstall. Workspace `.flow/` state is
-project data and is never removed by the package CLI. Use `legacy-cleanup` only
-for old global skill folders as described above.
+Run `activation-check` to find every remaining recognized source instead of
+assuming one config file was sufficient. Flow v5 has no global runtime files to
+uninstall. Workspace `.flow/` state is project data and is never removed by the
+package CLI. Use `legacy-cleanup` only for old global skill folders as described
+above.

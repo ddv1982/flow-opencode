@@ -12,9 +12,10 @@ flowchart LR
     Platform --> Domain
     Platform --> Guidance[guidance]
     Platform --> Config[config-shared]
+    Platform --> Harness[application/harness]
     Config --> Prompts[prompt modules]
     Prompts --> Guidance
-    Distribution[distribution/legacy-cleanup] --> Guidance
+    Distribution[distribution activation and legacy cleanup] --> Guidance
     CLI[cli] --> Distribution
 ```
 
@@ -24,11 +25,17 @@ flowchart LR
 - `src/infrastructure/**` implements application ports for local filesystems and
   process services. It may import application and domain.
 - `src/platform/opencode/**` is the outer composition and transport layer. It
-  may import the inward layers, config, and embedded guidance. Host-owned schemas
-  stay private in this layer and never appear in emitted public types.
+  may import the inward layers, config, and embedded guidance. It owns
+  process-global runtime leadership, bounded host observation, optional-worker
+  admission coordination, Bash receipt capture, and private host schemas. Host
+  schema objects stay private in this layer and never appear in emitted public
+  types.
 - `src/guidance/**` owns stable ids and Markdown embedded into the package.
-- `src/distribution/**` owns only explicit, recoverable legacy cleanup. It is
-  not imported by plugin startup and does not import workflow behavior.
+- `src/application/harness/**` owns the provider-neutral sanitized resource and
+  quality oracle. It consumes bounded projections rather than host SDK values.
+- `src/distribution/**` owns explicit single-version activation inventory and
+  convergence plus recoverable legacy cleanup. It is not imported by plugin
+  startup and does not import workflow behavior.
 - `src/prompt-*.ts` compiles host-neutral prompt fragments and evaluation
   contracts from bundled guidance definitions.
 - `src/cli.ts` is a thin outer adapter over distribution APIs.

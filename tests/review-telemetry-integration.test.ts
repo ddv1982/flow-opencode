@@ -12,9 +12,9 @@ import {
 	flowPlanSave,
 	flowRunStart,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
+import { publishValidationReceiptForWorkspace } from "./support/validation-receipt.js";
 
 const FEATURE_ID = "review-feature";
-const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
 let operationSequence = 0;
 const temporaryWorkspaces = new Set<string>();
 
@@ -100,6 +100,10 @@ async function startFeatureAssignment(
 		(run) => run.id === session.activeFeatureRunId,
 	);
 	if (!activeRun) throw new Error("Expected an active feature run.");
+	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
+		startedAt: activeRun.startedAt,
+		command: "bun test tests/review-telemetry-integration.test.ts",
+	});
 	const operationId = `telemetry-review-${++operationSequence}`;
 	const response = await flowReviewStart(workspace, {
 		operationId,
@@ -112,17 +116,7 @@ async function startFeatureAssignment(
 			summary: "Review the active feature and its focused validation.",
 			riskLenses: ["behavior", "regression"],
 		},
-		validations: [
-			{
-				command: "bun test tests/review-telemetry-integration.test.ts",
-				summary: "Focused tests passed.",
-				startedAt: activeRun.startedAt,
-				completedAt: activeRun.startedAt,
-				exitCode: 0,
-				outputDigest: OUTPUT_DIGEST,
-				environmentKeys: [],
-			},
-		],
+		validationRefs: [validationRef],
 	});
 	expect(response.status).toBe("ok");
 	const persisted = await requireSession(workspace);

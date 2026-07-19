@@ -14,6 +14,8 @@ import { type Session, toFeatureId, toSessionId } from "../domain/session.js";
 import { validateSessionInvariants } from "../domain/session-invariants.js";
 import {
 	goalProjectionBudgetFailure,
+	MAX_CORRECTION_CHANGED_PATHS,
+	MAX_CORRECTION_PATH_BYTES,
 	MAX_EXECUTION_PROJECTION_BYTES,
 	MAX_ORCHESTRATION_COLLECTION_BYTES,
 	MAX_PLAN_FEATURES,
@@ -94,6 +96,13 @@ export const DigestSchema = z
 
 export const SnapshotIdSchema = DigestSchema;
 export const EvidenceIdSchema = DigestSchema;
+export const EvidenceArtifactRefSchema = z
+	.object({
+		kind: z.literal("restricted_evidence_v1"),
+		digest: DigestSchema,
+		byteLength: z.number().int().safe().nonnegative(),
+	})
+	.strict();
 export const OperationIdSchema = z
 	.string()
 	.min(1)
@@ -515,22 +524,14 @@ const ValidationCommandClassSchema = z.enum([
 	"other",
 ]);
 
-// Command timing and output/environment metadata are caller-attested: the
-// nine-tool surface has no host command-execution hook, so Flow cannot observe
-// validation start/end itself. These fields are labeled honestly as attested,
-// and every chronology that can be derived is still enforced.
+// Command timing and output/environment metadata are runtime-attested from an
+// immutable validation receipt. Session v4 keeps the materialized evidence
+// shape while the public review-start API carries only receipt references.
 const ValidationEvidenceDetailShape = {
 	commandClass: ValidationCommandClassSchema,
 	exitCode: z.number().int().safe(),
 	outputDigest: DigestSchema,
-	artifactRef: z
-		.object({
-			kind: z.literal("restricted_evidence_v1"),
-			digest: DigestSchema,
-			byteLength: z.number().int().safe().nonnegative(),
-		})
-		.strict()
-		.optional(),
+	artifactRef: EvidenceArtifactRefSchema.optional(),
 	environmentKeys: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/)).max(64),
 } as const;
 
@@ -574,21 +575,6 @@ export const EvidenceRecordSchema = z.discriminatedUnion("kind", [
 	ValidationEvidenceSchema,
 	ReviewEvidenceSchema,
 ]);
-
-// One public validation observation carries both the declared validation run
-// and its attestation. Identity and command classification remain trusted
-// server-derived fields.
-export const ValidationObservationSchema = z
-	.strictObject({
-		command: z.string().trim().pipe(ExecutionContextTextSchema),
-		summary: WorkflowProseInputSchema,
-		...EvidenceTimeShape,
-		exitCode: z.number().int().safe(),
-		outputDigest: DigestSchema,
-		artifactRef: ValidationEvidenceDetailShape.artifactRef,
-		environmentKeys: ValidationEvidenceDetailShape.environmentKeys,
-	})
-	.superRefine(validateEvidenceTimes);
 
 export const CausalMutationRecordSchema = z
 	.object({
@@ -911,6 +897,55 @@ export const ReviewAssignmentSchema = z
 			})
 			.strict()
 			.nullable(),
+		sourceManifestArtifactRef: EvidenceArtifactRefSchema.optional(),
+		correction: z
+			.object({
+				predecessorAssignmentId: ReviewAssignmentIdSchema,
+				reviewMode: z.enum(["full", "correction"]),
+				sourceChanged: z.boolean(),
+				changedRelativePaths: z
+					.array(
+						boundedUtf8String(
+							MAX_CORRECTION_PATH_BYTES,
+							"A correction source path",
+						).refine(
+							(path) =>
+								!path.includes("\\") &&
+								!path.includes("\u0000") &&
+								!path.startsWith("/") &&
+								!/^[A-Za-z]:/.test(path) &&
+								path
+									.split("/")
+									.every(
+										(segment) =>
+											segment.length > 0 && segment !== "." && segment !== "..",
+									),
+							{
+								message: "Correction source paths must be safe relative paths.",
+							},
+						),
+					)
+					.max(MAX_CORRECTION_CHANGED_PATHS),
+				sourceDeltaDigest: DigestSchema,
+				contextCompleteness: z.enum(["complete", "fallback"]),
+				fallbackReason: z
+					.enum([
+						"broad_scope_requires_full",
+						"security_sensitive_delta_requires_full",
+						"persistence_sensitive_delta_requires_full",
+						"public_contract_scope_requires_full",
+						"cross_layer_scope_requires_full",
+						"predecessor_manifest_missing",
+						"predecessor_manifest_unavailable",
+						"current_manifest_oversized",
+						"source_metadata_changed",
+						"source_delta_too_large",
+						"projection_context_too_large",
+					])
+					.nullable(),
+			})
+			.strict()
+			.optional(),
 		attemptId: ReviewExecutionIdSchema,
 		logicalPassId: ReviewExecutionIdSchema,
 		startedAt: OffsetTimestampSchema,
@@ -971,6 +1006,33 @@ export const ReviewAssignmentSchema = z
 				path: ["invalidationReason"],
 				message: "Only invalidated assignments require an invalidation reason.",
 			});
+		}
+		if (assignment.correction) {
+			const correction = assignment.correction;
+			if (
+				(correction.reviewMode === "correction" &&
+					(correction.contextCompleteness !== "complete" ||
+						correction.fallbackReason !== null)) ||
+				(correction.reviewMode === "full" && correction.fallbackReason === null)
+			) {
+				context.addIssue({
+					code: "custom",
+					path: ["correction", "reviewMode"],
+					message:
+						"Correction review mode must agree with completeness and fallback reason.",
+				});
+			}
+			if (
+				!correction.sourceChanged &&
+				correction.changedRelativePaths.length > 0
+			) {
+				context.addIssue({
+					code: "custom",
+					path: ["correction", "changedRelativePaths"],
+					message:
+						"Same-source correction cannot contain changed relative paths.",
+				});
+			}
 		}
 	});
 

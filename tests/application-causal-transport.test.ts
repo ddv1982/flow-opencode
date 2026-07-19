@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFlowService } from "../src/application/flow-service.js";
 import type { SessionRepository } from "../src/application/ports/session-repository.js";
-import type { Session, ValidationEvidence } from "../src/domain/session.js";
-import { createFileEvidenceArtifactStore } from "../src/infrastructure/fs/evidence-artifact-store.js";
+import type { Session } from "../src/domain/session.js";
+import type { ValidationReceiptRef } from "../src/domain/validation-receipt.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
 import { loadSession } from "../src/infrastructure/fs/workspace.js";
 import {
@@ -17,8 +17,11 @@ import {
 	flowRunStart,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
 import { systemTransitionEnvironment } from "../src/infrastructure/system/transition-environment.js";
+import {
+	publishValidationReceiptForRepository,
+	publishValidationReceiptForWorkspace,
+} from "./support/validation-receipt.js";
 
-const OUTPUT_DIGEST = `sha256:${"c".repeat(64)}`;
 const temporaryWorkspaces = new Set<string>();
 
 async function tempWorkspace(prefix: string): Promise<string> {
@@ -89,12 +92,8 @@ async function runningWorkspace(): Promise<{
 function reviewStartPayload(
 	session: Session,
 	operationId: string,
-	artifactRef?: ValidationEvidence["artifactRef"],
+	validationRef: ValidationReceiptRef,
 ) {
-	const activeRun = session.featureRuns.find(
-		(run) => run.id === session.activeFeatureRunId,
-	);
-	if (!activeRun) throw new Error("Expected an active feature run.");
 	return {
 		operationId,
 		expectedRevision: session.causal.revision,
@@ -106,19 +105,16 @@ function reviewStartPayload(
 			summary: "Review the first feature.",
 			riskLenses: ["causal transport"],
 		},
-		validations: [
-			{
-				command: "bun test tests/application-causal-transport.test.ts",
-				summary: "Focused checks passed.",
-				startedAt: activeRun.startedAt,
-				completedAt: activeRun.startedAt,
-				exitCode: 0,
-				outputDigest: OUTPUT_DIGEST,
-				...(artifactRef ? { artifactRef } : {}),
-				environmentKeys: [],
-			},
-		],
+		validationRefs: [validationRef],
 	};
+}
+
+function activeRunStartedAt(session: Session): string {
+	const activeRun = session.featureRuns.find(
+		(run) => run.id === session.activeFeatureRunId,
+	);
+	if (!activeRun) throw new Error("Expected an active feature run.");
+	return activeRun.startedAt;
 }
 
 function assignmentId(response: Awaited<ReturnType<typeof flowReviewStart>>) {
@@ -198,13 +194,13 @@ describe("application causal transport", () => {
 		});
 	});
 
-	test("measures source and artifacts at assignment, then source at fresh completion only", async () => {
+	test("measures source and receipt artifacts at assignment, then source at fresh completion only", async () => {
 		const { workspace, session } = await runningWorkspace();
-		const store = createFileEvidenceArtifactStore(workspace);
-		const artifactRef = await store.publishEvidenceArtifact(
-			new TextEncoder().encode("instrumented validation output"),
-		);
 		const base = createFileSessionRepository(workspace);
+		const validationRef = await publishValidationReceiptForRepository(base, {
+			startedAt: activeRunStartedAt(session),
+			command: "bun test tests/application-causal-transport.test.ts",
+		});
 		let sourceIdentityCalls = 0;
 		let artifactReadCalls = 0;
 		const repository: SessionRepository = {
@@ -213,6 +209,13 @@ describe("application causal transport", () => {
 				base.transact((transaction) =>
 					task({
 						...transaction,
+						computeSourceManifest: async () => {
+							sourceIdentityCalls += 1;
+							if (!transaction.computeSourceManifest) {
+								throw new Error("Expected source manifest support.");
+							}
+							return transaction.computeSourceManifest();
+						},
 						computeSourceIdentity: async () => {
 							sourceIdentityCalls += 1;
 							return transaction.computeSourceIdentity();
@@ -228,7 +231,7 @@ describe("application causal transport", () => {
 		const startPayload = reviewStartPayload(
 			session,
 			"instrumented-assignment",
-			artifactRef,
+			validationRef,
 		);
 		const started = await service.reviewStart({ request: startPayload });
 		expect(started.status).toBe("ok");
@@ -292,9 +295,16 @@ describe("application causal transport", () => {
 
 	test("malformed completion is atomic and keeps its operation id reusable", async () => {
 		const { workspace, session } = await runningWorkspace();
+		const validationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: activeRunStartedAt(session),
+				command: "bun test tests/application-causal-transport.test.ts",
+			},
+		);
 		const started = await flowReviewStart(
 			workspace,
-			reviewStartPayload(session, "atomic-assignment"),
+			reviewStartPayload(session, "atomic-assignment", validationRef),
 		);
 		const current = await loadSession(workspace);
 		if (!current) throw new Error("Expected assignment state.");
@@ -315,19 +325,19 @@ describe("application causal transport", () => {
 		expect(corrected.status).toBe("ok");
 	});
 
-	test("rejects unavailable artifacts before assignment mutation", async () => {
+	test("rejects unavailable validation receipts before assignment mutation", async () => {
 		const { workspace, session } = await runningWorkspace();
 		const response = await flowReviewStart(
 			workspace,
 			reviewStartPayload(session, "missing-artifact", {
-				kind: "restricted_evidence_v1",
+				kind: "validation_receipt_ref_v1",
 				digest: `sha256:${"f".repeat(64)}`,
 				byteLength: 99,
 			}),
 		);
 		expect(response.status).toBe("error");
 		expect(response.workflowData?.failure?.summary).toContain(
-			"validation artifact",
+			"validation receipt",
 		);
 		expect(await loadSession(workspace)).toEqual(session);
 	});

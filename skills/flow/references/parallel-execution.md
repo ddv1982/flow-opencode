@@ -33,7 +33,11 @@ manager may mutate Flow state.
 
 Run only manager-specified commands or propose focused checks. Do not edit
 files, expand scope, or synthesize completion. Only the root manager may mutate
-Flow state. Distinguish commands actually run from checks merely proposed.
+Flow state. Immediately before an authorized Bash check, call
+`flow_validation_start` for that byte-for-byte next command; return only the
+immutable receipt ref appended after execution. Never author validation times,
+exit status, output digests, or inline observation summaries. Distinguish
+commands actually run from checks merely proposed.
 <!-- flow-prompt:worker-role-validation:end -->
 
 <!-- flow-prompt:worker-role-audit:start -->
@@ -42,7 +46,12 @@ Flow state. Distinguish commands actually run from checks merely proposed.
 Inspect only the assigned read-only slice and actively try to refute candidate
 findings. Do not edit files, expand scope, or synthesize the whole audit. Only
 the root manager may mutate Flow state. A blocking candidate must name the
-guards and mitigating paths checked.
+guards and mitigating paths checked. `actionPriority: "fix_now"` (P0) requires
+demonstrated, reachable catastrophic or ship-blocking behavior with ineffective
+or absent guards and recovery; otherwise downgrade it. Produce strict
+`AuditLedgerV1`, call
+`flow_audit_render`, and return its canonical Markdown and derived summary with
+the ledger. Never hand-maintain remediation; refuted candidates carry none.
 <!-- flow-prompt:worker-role-audit:end -->
 
 <!-- flow-prompt:worker-role-candidate:start -->
@@ -69,22 +78,35 @@ the whole pass. Only the root manager may mutate Flow state.
 The plugin injects these hidden workers. `Flow state tools` means every
 state-changing `flow_*` call; `flow_status` is the explicit read-only exception.
 
-| Worker | Edit | Bash | Task | Skill | Flow state tools | `flow_status` |
+| Worker | Edit | Bash | Task | Skill | Flow state tools | Explicit helper |
 | --- | --- | --- | --- | --- | --- | --- |
-| `flow-reviewer` | deny | deny | deny | deny | deny | allow |
-| `flow-evidence-worker` | deny | deny | deny | deny | deny | allow |
-| `flow-validation-worker` | deny | ask | deny | deny | deny | allow |
-| `flow-audit-worker` | deny | ask | deny | deny | deny | allow |
-| `flow-candidate-worker` | ask | ask | deny | deny | deny | allow |
-| `flow-verifier-worker` | deny | ask | deny | deny | deny | allow |
+| `flow-reviewer` | deny | deny | deny | deny | deny | `flow_status` |
+| `flow-evidence-worker` | deny | deny | deny | deny | deny | `flow_status` |
+| `flow-validation-worker` | deny | ask | deny | deny | deny | `flow_status`, `flow_validation_start` |
+| `flow-audit-worker` | deny | ask | deny | deny | deny | `flow_status`, `flow_audit_render` |
+| `flow-candidate-worker` | ask | ask | deny | deny | deny | `flow_status` |
+| `flow-verifier-worker` | deny | ask | deny | deny | deny | `flow_status` |
 
 Never fan out `flow_plan_save`, `flow_plan_approve`, `flow_run_start`,
 `flow_feature_complete`, `flow_feature_reset`, or `flow_session_close`. Workers
 must not edit `.flow/**`, approve work, record Flow evidence, or claim commands
 they did not run. Candidate workers may edit only their authorized isolation or
-exact path scope.
+exact path scope. `flow_validation_start` and `flow_audit_render` are bounded
+non-ledger helpers, not durable Flow mutation authority.
 
 ## Launch
+
+Obey the trusted active runtime-profile footer, defaulting to `standard` only
+when it is absent. `control` preserves legacy optional-worker behavior without
+admission ceremony. Under `standard` or `assurance`, for a discovery, audit,
+verification, or candidate-implementation pass, the root manager first calls
+`flow_orchestration_admit` with one policy-version-1 proposal whose pass kind,
+one-to-five slices, claim ids, verification tier, worker count, dependencies,
+write scope, authorization, wave, scope, and reason codes exactly match the
+manifest. Dispatch only after admission, to the worker class selected by the
+proposal, and consume exactly its worker count. Do not admit mandatory
+`flow-reviewer` assignments or receipt-gated `flow-validation-worker` checks.
+Runtime validation receipts remain mandatory in every profile.
 
 Every worker prompt contains:
 

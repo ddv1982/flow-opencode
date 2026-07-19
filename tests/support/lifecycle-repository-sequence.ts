@@ -22,8 +22,7 @@ import {
 	archivedSessionPath,
 	sessionPath,
 } from "../../src/infrastructure/fs/workspace.js";
-
-const OUTPUT_DIGEST = `sha256:${"e".repeat(64)}`;
+import { publishValidationReceiptForWorkspace } from "./validation-receipt.js";
 
 export const REQUIRED_REPOSITORY_SEQUENCE_ACTIONS = [
 	"plan",
@@ -133,18 +132,6 @@ function failingResult(
 		],
 		completedAt: assigned.startedAt,
 		terminalDisposition: "submitted",
-	};
-}
-
-function validationAt(timestamp: string, command: string) {
-	return {
-		command,
-		summary: `${command} passed.`,
-		startedAt: timestamp,
-		completedAt: timestamp,
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
 	};
 }
 
@@ -363,6 +350,13 @@ export async function runDeterministicRepositoryLifecycleSequence(
 		assert.ok(firstRun);
 		cover("validate");
 		trace.push("validate:prepared:targeted-equality");
+		const firstValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: firstRun.startedAt,
+				command: `seed-${seed}-initial-validation`,
+			},
+		);
 		const firstReviewOperation = `seed-${seed}-review-initial`;
 		const firstReviewResponse = await service().reviewStart({
 			request: {
@@ -376,9 +370,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 					summary: "Review before the deterministic source change.",
 					riskLenses: ["source binding"],
 				},
-				validations: [
-					validationAt(firstRun.startedAt, `seed-${seed}-initial-validation`),
-				],
+				validationRefs: [firstValidationRef],
 			},
 		});
 		const firstAssignmentId = responseAssignmentId(firstReviewResponse);
@@ -411,6 +403,11 @@ export async function runDeterministicRepositoryLifecycleSequence(
 				continue;
 			}
 			if (choice === 2) {
+				const duplicateValidationRef =
+					await publishValidationReceiptForWorkspace(workspace, {
+						startedAt: firstRun.startedAt,
+						command: `seed-${seed}-duplicate-${index}`,
+					});
 				current = await rejectAtomically(
 					"probe-duplicate-assignment",
 					operationId,
@@ -427,12 +424,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 								summary: "Reject a duplicate pending assignment.",
 								riskLenses: [],
 							},
-							validations: [
-								validationAt(
-									firstRun.startedAt,
-									`seed-${seed}-duplicate-${index}`,
-								),
-							],
+							validationRefs: [duplicateValidationRef],
 						},
 					}),
 				);
@@ -489,6 +481,13 @@ export async function runDeterministicRepositoryLifecycleSequence(
 		);
 
 		const replacementReviewOperation = `seed-${seed}-review-after-source`;
+		const replacementValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: firstRun.startedAt,
+				command: `seed-${seed}-updated-validation`,
+			},
+		);
 		const replacementReviewResponse = await service().reviewStart({
 			request: {
 				operationId: replacementReviewOperation,
@@ -501,9 +500,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 					summary: "Review the updated source.",
 					riskLenses: ["source invalidation"],
 				},
-				validations: [
-					validationAt(firstRun.startedAt, `seed-${seed}-updated-validation`),
-				],
+				validationRefs: [replacementValidationRef],
 			},
 		});
 		const replacementAssignmentId = responseAssignmentId(
@@ -544,6 +541,13 @@ export async function runDeterministicRepositoryLifecycleSequence(
 			(run) => run.id === current.session.activeFeatureRunId,
 		);
 		assert.ok(retryRun);
+		const retryValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: retryRun.startedAt,
+				command: `seed-${seed}-retry-validation`,
+			},
+		);
 		const retryResponse = await service().reviewStart({
 			request: {
 				operationId: `seed-${seed}-review-retry`,
@@ -556,9 +560,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 					summary: "Re-review after the seeded blocker.",
 					riskLenses: ["review retry"],
 				},
-				validations: [
-					validationAt(retryRun.startedAt, `seed-${seed}-retry-validation`),
-				],
+				validationRefs: [retryValidationRef],
 			},
 		});
 		const retryAssignmentId = responseAssignmentId(retryResponse);
@@ -593,6 +595,13 @@ export async function runDeterministicRepositoryLifecycleSequence(
 			(run) => run.id === current.session.activeFeatureRunId,
 		);
 		assert.ok(preResetRun);
+		const preResetValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: preResetRun.startedAt,
+				command: `seed-${seed}-pre-reset`,
+			},
+		);
 		const preResetReview = await service().reviewStart({
 			request: {
 				operationId: `seed-${seed}-pre-reset-review`,
@@ -605,9 +614,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 					summary: "Create work that reset must invalidate.",
 					riskLenses: ["reset isolation"],
 				},
-				validations: [
-					validationAt(preResetRun.startedAt, `seed-${seed}-pre-reset`),
-				],
+				validationRefs: [preResetValidationRef],
 			},
 		});
 		current = await acceptMutation(
@@ -634,6 +641,11 @@ export async function runDeterministicRepositoryLifecycleSequence(
 			(run) => run.id === current.session.activeFeatureRunId,
 		);
 		assert.ok(finalRun);
+		const finalFeatureValidationRef =
+			await publishValidationReceiptForWorkspace(workspace, {
+				startedAt: finalRun.startedAt,
+				command: `seed-${seed}-final-targeted`,
+			});
 		const finalFeatureReviewResponse = await service().reviewStart({
 			request: {
 				operationId: `seed-${seed}-final-feature-review`,
@@ -646,9 +658,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 					summary: "Review the final feature after reset.",
 					riskLenses: ["fresh execution epoch"],
 				},
-				validations: [
-					validationAt(finalRun.startedAt, `seed-${seed}-final-targeted`),
-				],
+				validationRefs: [finalFeatureValidationRef],
 			},
 		});
 		const finalFeatureAssignmentId = responseAssignmentId(
@@ -666,6 +676,14 @@ export async function runDeterministicRepositoryLifecycleSequence(
 		const featureResult = passingResult(finalFeatureAssignment);
 		cover("validate");
 		trace.push("validate:prepared:broad-equality");
+		const finalValidationRef = await publishValidationReceiptForWorkspace(
+			workspace,
+			{
+				startedAt: featureResult.completedAt,
+				command: `seed-${seed}-final-broad`,
+				coverageScope: "broad",
+			},
+		);
 		const finalReviewRequest = {
 			operationId: `seed-${seed}-final-review`,
 			expectedRevision: current.session.causal.revision,
@@ -678,9 +696,7 @@ export async function runDeterministicRepositoryLifecycleSequence(
 				summary: "Run final review from the bound feature result.",
 				riskLenses: ["durable prerequisite"],
 			},
-			validations: [
-				validationAt(featureResult.completedAt, `seed-${seed}-final-broad`),
-			],
+			validationRefs: [finalValidationRef],
 		};
 		const finalReviewResponse = await service().reviewStart({
 			request: finalReviewRequest,

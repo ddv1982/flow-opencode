@@ -11,8 +11,9 @@ Flow v5 has one rule: keep the boundaries explicit and the behavior small.
   ports.
 - `src/infrastructure/**` owns filesystem persistence and system services.
 - `src/platform/opencode/**` owns the OpenCode bridge and its private host
-  schemas.
-- `src/distribution/**` owns the explicit, recoverable v4 cleanup utility only.
+  schemas, leadership, admission, observation, and Bash receipt capture.
+- `src/distribution/**` owns single-version activation and the explicit,
+  recoverable v4 cleanup utility.
 
 Do not move planning or review heuristics into runtime projections. If a rule needs interpretation, it belongs in a skill.
 
@@ -58,10 +59,48 @@ Runtime must enforce:
 15. Archive publication requires a non-null explicit closure. A closureless
     Session v4 document may be active state, but it cannot become or validate
     canonical history; canonical lookup fails closed if it encounters one.
+16. Review start accepts only unique immutable validation receipt references.
+    Each receipt must verify by digest and length, belong to the active run,
+    feature, and current source, have a complete host-observed result with exit
+    zero, and meet the review's coverage requirement. Caller-authored timing,
+    command class, exit, output digest, or success is never accepted.
+17. A requested correction names only the immediately preceding durable failure
+    in the active logical pass. Flow derives its source manifest delta and
+    chooses narrow correction only when context is complete, bounded, and not
+    broad, security-sensitive, persistence-sensitive, metadata-changing, or
+    elevated by a correction-only `public-contract`/`cross-layer` scope hint.
+    The bounded hint can force full but cannot request narrow mode; more specific
+    runtime reasons take precedence. Correction retains the two-failure
+    run-scoped cap.
+18. Exactly one registered Flow runtime is operational in a process. Duplicate
+    registrations disable every copy; a deterministic highest-version
+    diagnostic identity never gains operational authority while duplicates
+    remain.
+19. Optional-worker admission is bounded by the trusted harness profile and
+    rollout mode. Admission is not plan approval, implementation authority,
+    review truth, validation evidence, or a replacement for OpenCode permission
+    enforcement.
+20. `AuditLedgerV1` and its host schema remain strict and bounded. Summary and
+    Markdown are derived; refuted findings cannot become remediation and
+    uncertain evidence cannot claim critical/fix-now treatment.
+
+An audit ledger contains at most 200 findings, each with at most 16 portable
+source locators. Both serialized input and rendered Markdown must stay within
+the 256 KiB UTF-8 ceiling; escaping expansion can therefore reject rendering
+even after the input schema succeeds.
 
 ## State
 
 `.flow/session.json` is the only active source of truth and the only active-state representation. `.flow/history/<sha256(session-id)>.json` stores explicitly closed sessions; lookup verifies that each lowercase digest filename matches the exact parsed session id. A Session v4 document with `closure: null` is not publishable or valid canonical history. Restricted evidence bytes live separately under `.flow/evidence/v1/sha256/**`; the session ledger stores only typed digest/length references to them. This is ordinary hash-addressed filesystem storage, not a database, index, cache of projected state, or qa-scribe integration. Archive publication is exclusive and no-clobber: persist the closed active snapshot first, let a short-lived helper pinned to the validated history-directory identity write and sync a relative temporary file, publish it with an exclusive hard link, accept an existing target only when its normalized session is identical, and remove active state only through a second helper pinned to the validated `.flow` identity after archive and topology revalidation. A different existing archive is a collision and must leave both its bytes and readable active state intact. Flow writes or safely extends `.flow/.gitignore` so session, history, evidence, and lock state remain ignored even when a maintainer has custom entries. Any archive or versioning of `.flow` artifacts must be explicit, artifact-specific maintainer intent; broad `.flow/**` staging is not part of the default contract. Markdown docs, context views, readiness ledgers, ambient instruction files, and other projection caches are intentionally not runtime state.
+
+Canonical validation receipts and source manifests also live in the restricted
+artifact store. A receipt includes the exact executed command and may include a
+separate exact-output artifact only when complete and digest-consistent; raw
+output is not published by default. A source manifest contains safe relative
+paths and content identities, never file contents or Git object names. Neither
+artifact is another active-state projection. `flow_review_start` reads them
+inside the repository transaction, verifies current applicability, then records
+only materialized typed evidence and assignment bindings in Session v4.
 
 Before a new close starts, repository lookup checks its operation id against
 every mutation in canonical Session v4 workspace history. One match of any
@@ -108,7 +147,8 @@ scope. A mismatched retry is mutation-free and leaves its operation id reusable.
 A source edit starts a new targeted feature-review sequence instead of reusing
 the old-source binding.
 
-Reported chronology is inclusive:
+Host-observed validation chronology and reviewer-reported result chronology are
+inclusive:
 `feature-run start <= validation start <= validation completion <= assignment
 start <= reported assignment-result time <= runtime acceptance time`. Final broad
 validation starts no earlier than the bound feature-assignment result and
@@ -201,6 +241,12 @@ validation, and audit workers; `OPENCODE_FLOW_REVIEW_WORKER_MODEL` for reviewer
 and verifier workers; `OPENCODE_FLOW_CANDIDATE_WORKER_MODEL` for candidate
 implementation workers; and `OPENCODE_FLOW_WORKER_MODEL` as a fallback for all
 hidden Flow workers. Leave them unset when the provider/model ID is unknown.
+The matching `OPENCODE_FLOW_READONLY_WORKER_STEPS`,
+`OPENCODE_FLOW_REVIEW_WORKER_STEPS`, and
+`OPENCODE_FLOW_CANDIDATE_WORKER_STEPS` values, with
+`OPENCODE_FLOW_WORKER_STEPS` fallback, configure OpenCode's `steps` field. They
+must be decimal integers from 1 through 1000; do not restore deprecated
+`maxSteps`.
 
 Tools:
 
@@ -213,6 +259,9 @@ Tools:
 - `flow_feature_complete`
 - `flow_feature_reset`
 - `flow_session_close`
+- `flow_orchestration_admit`
+- `flow_validation_start`
+- `flow_audit_render`
 
 Tool responses keep plugin-authored operation metadata at the top level. All
 session, feature, closure, failure-detail, and other repository- or
@@ -256,16 +305,29 @@ catalog imports Markdown as text so Bun embeds it into `dist/index.js`.
 `flow_guidance` returns that exact text and never reads the filesystem or
 changes Flow state.
 
-Install and update guidance should use OpenCode's native plugin installer as the
-primary config mutation path when available, with one pinned install-or-update
-command:
-`opencode plugin opencode-plugin-flow@<version> --global --force`. OpenCode
-keeps an existing same-package plugin entry unless replacement is requested, so
-published Flow docs should include `--force` by default. Flow's CLI exists only
-for explicit v4 legacy cleanup; it must not silently mutate OpenCode plugin
-config. The manual `opencode.json` fallback for older OpenCode
-versions should tell users to replace older pinned Flow entries instead of
-adding duplicates.
+Install and update guidance must use the exact-version activation CLI in three
+steps: `activation-apply` dry-run, the same command with `--apply`, then
+`activation-check`. Public examples must pass an absolute `--project`, choose
+one `--scope global|project`, and use the release's exact package version. The
+accepted end state is one exact npm activation and no proven inactive Flow
+cache artifact—not two adjacent versions with one described as preferred.
+The embedded package version is the default target; any explicit `--target`
+must also be exact because activation never resolves tags or ranges.
+
+Activation inventory covers readable global, project, `.opencode`, custom,
+inline, and managed JSON/JSONC sources; singular/plural plugin directories; and
+Flow package-cache artifacts. Apply preserves unrelated plugin entries and
+mutates only recognized Flow npm entries, marker-owned wrappers, and proven
+inactive cache artifacts in strict JSON config. JSONC is inventoried but any
+required JSONC mutation is refused for manual remediation. Apply writes backups
+and a recovery journal and moves owned artifacts to recovery locations rather
+than deleting them. A post-mutation failure attempts exact safe rollback;
+`rolled-back` records convergence, while `rollback-failed` preserves concurrent
+or otherwise unsafe state and supplies journal-backed manual guidance. Unknown
+wrappers, ambiguous cache entries, unsafe links, immutable/inline sources, and
+unreadable remote or managed configuration must be surfaced for manual
+remediation. Runtime leadership remains the final duplicate guard for sources
+offline inventory cannot decode.
 
 Plugin initialization must never read or write OpenCode's global skills root.
 There is no sync health, `setup.skills`, marker update, backup, doctor, sync, or
@@ -282,7 +344,10 @@ work calls `flow_run_start`, treats its receipt as acknowledgement, then loads
 `{ request: { view: "execution" } }`; already running or resumed work loads
 execution directly.
 Execution scope and causal guards govern implementation and validation. The
-manager creates review identity with `flow_review_start`, reviewers recover
+manager calls `flow_validation_start` immediately before the exact next Bash
+command, copies its immutable receipt reference into
+`flow_review_start.request.validationRefs`, and only then creates review
+identity. Reviewers recover
 only by assignment id, and `flow_feature_complete` records one atomic nested
 result. Immediately after completion the manager refreshes compact
 status: a completed projection with null closure calls a new guarded
@@ -329,14 +394,32 @@ later `flow_status` allow rule keeps status readable. `flow-commit` must not be
 loaded by the autonomous Flow loop and must not replace
 `flow_feature_complete`.
 
+Every rewritten Flow command also receives a trusted runtime-policy footer.
+`OPENCODE_FLOW_HARNESS_PROFILE` selects `control`, `standard`, or `assurance`
+(default `standard`); `OPENCODE_FLOW_ROLLOUT_MODE` selects `control`, `observe`,
+or `enforce` (default `observe`). Invalid values fall back to `control` with a
+warning. Control keeps optional passes discretionary without admission
+ceremony. Standard and assurance require one `flow_orchestration_admit` call per
+bounded optional evidence, audit, verification, or candidate pass; observe
+reports would-deny policy violations, while enforce blocks an unadmitted or
+wrong-class/count dispatch. Lifecycle-required reviewer and validation workers
+are exempt from optional-pass admission, not from their own hard gates.
+Standard admits at most two concurrent read-only workers and only discovery as
+its broad first wave. Assurance admits at most five broad first-wave read-only
+workers or two targeted follow-up workers. Follow-up audit/verification is
+claim-scoped and justified, post-synthesis verification uses one verifier, and
+writable candidate implementation remains authorized, targeted, and serial with
+an explicit isolation scope.
+
 Manager commands must reject any unexpected subtask part. `/flow-review` must
 receive exactly one OpenCode subtask whose normalized command identity is
 `flow-review` and whose agent is `flow-reviewer`; preflight rewrites only that
 part's prompt. Missing, duplicate, or mismatched subtask parts fail closed
 instead of falling through to parent-session execution.
 
-The only legacy path is the explicitly invoked
-`opencode-plugin-flow legacy-cleanup`. Dry-run is mandatory unless `--apply` is
+The only compatibility path is the explicitly invoked
+`opencode-plugin-flow legacy-cleanup`; activation is distribution convergence,
+not a session compatibility layer. Cleanup dry-run is mandatory unless `--apply` is
 given. Apply atomically quarantines a marker-proven folder, verifies it again at
 the new path, and accepts it as archived only when it remains byte-pristine. It
 never deletes legacy content. Foreign, edited, extra, malformed, non-directory,
@@ -347,9 +430,13 @@ The OpenCode config hook only registers Flow commands and agents. It must not
 read workspace state, acquire a session lock, write a projected instruction
 file, or append a Flow path to `config.instructions`. Canonical Flow commands
 begin with `flow_status`, so durable session state is loaded explicitly at the
-point of action. Flow does not register OpenCode experimental chat-system,
-message-transform, or session-compaction hooks. Flow guidance reacts only to
-durable runtime state; it does not estimate context pressure or initiate host
+point of action. Platform hooks may observe bounded host messages, events, and
+tool calls, enforce an armed optional-worker proposal, or attest the exact Bash
+call; they must not infer lifecycle truth from generic session events. Idle and
+compaction cancel pending capture/admission state. Observation hashes identities
+and bounded signatures with an ephemeral salt, records overflow, never emits
+raw prompts/arguments/results, and preserves unavailable metrics as null rather
+than zero. Flow guidance does not estimate context pressure or initiate host
 compaction.
 
 ## Prompt Contracts
@@ -373,7 +460,7 @@ roles and permissions in `parallel-execution.md`, and handoff acceptance plus
 synthesis in `parallel-synthesis.md`. Serial paths must not require the later
 runbooks.
 
-Prompt changes must preserve all 19 static scenarios and 54 criteria. A surface
+Prompt changes must preserve all 31 static scenarios and 100 criteria. A surface
 may grow by the larger of eight words or 2% before the growth guard requires an
 accepted baseline update and a specific justification. The opt-in model runner
 has a five-minute default timeout per variant and remains outside the broad
@@ -390,9 +477,13 @@ that fixture.
 - `domain`: branded values, orchestration invariants, and pure transitions.
 - `application`: use cases, typed results, direct-Zod schemas, and ports.
 - `infrastructure`: filesystem repository, strict JSON, locks, and system services.
-- `platform/opencode`: private host schemas, OpenCode config, hooks, and tools.
+- `platform/opencode`: private host schemas, OpenCode config, hooks, leadership,
+  observation, orchestration admission, validation capture, and tools.
 - `guidance`: stable ids and embedded package-owned Markdown.
-- `distribution`: explicit, recoverable legacy-folder cleanup outside plugin startup.
+- `distribution`: explicit single-version activation and recoverable
+  legacy-folder cleanup outside plugin startup.
+- `application/harness`: provider-neutral sanitized observation/oracle and
+  promotion-gate contracts.
 - `prompt-surfaces`: role/phase-specific prompt compilation and offline handoff shape validation.
 - `prompt-quality`: reproducible prompt metrics, repetition classifications, and static contracts.
 - `prompt-model-evaluation`: opt-in model-decision packets, schemas, and deterministic grading.
@@ -435,6 +526,19 @@ The normal release path is: commit the versioned release changes, push `main`,
 then create and push a fresh `vX.Y.Z` tag. Avoid moving existing release tags
 unless a maintainer explicitly chooses that rollback or repair path.
 
+Run `bun run harness:report` as release evidence. Do not enable
+standard/assurance enforcement from a checked-in unavailable candidate.
+Promotion requires a same-corpus, same-source, same-model observation with the
+independently labeled finding/refutation digests unchanged, zero remediation
+contradictions, clean closure, and at least one lower observed-work signal with
+no increase in another comparable signal.
+`bun run harness:gate` is blocking only when that candidate profile is being
+promoted; unavailable is a nonzero result, never an implicit pass.
+The ordinary CI harness job remains report-only. Candidate enforcement uses
+only the manual, read-only `Harness Promotion Gate` workflow with an explicit
+standard or assurance input; do not add push, pull-request, tag, or scheduled
+promotion triggers while candidate evidence is unavailable.
+
 After pushing the tag, monitor both the tag-triggered Release workflow and the
 branch-triggered CI workflow for the release commit before declaring the release
 healthy:
@@ -449,6 +553,7 @@ Use focused tests for changed behavior, then run:
 
 ```bash
 bun run check
+bun run harness:report
 ```
 
 The deterministic gate includes exact package/release metadata and tarball

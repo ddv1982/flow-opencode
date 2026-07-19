@@ -20,10 +20,12 @@ Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction
 - `Approved plans cannot be changed`: use `flow_feature_reset` when only affected features need another pass; otherwise close and start a new goal.
 - `No feature is currently running`: call `flow_run_start` before completing.
 - `already in progress`: record an outcome, reset, or block the active execution before starting another.
-- `Review assignment requires source-bound validation observations`: run real
-  validation and call `flow_review_start` with at least one passing observation.
-- `Review assignment validation is failed, stale, or missing command identity`:
-  fix failures, rerun after the last source edit, and create a fresh assignment.
+- `Review assignment requires source-bound validation receipt refs`: call
+  `flow_validation_start` immediately before the exact Bash command, collect
+  the appended immutable ref after a passing outcome, and place it unchanged in
+  `flow_review_start.request.validationRefs`.
+- Review validation is failed, stale, mismatched, or missing: fix failures,
+  capture a new receipt after the last source edit, and create a fresh assignment.
 - `Feature review requires targeted validation`: use `validationScope:
   "targeted"` for the feature assignment.
 - `Final review requires broad validation`: run the project-level gate after
@@ -44,7 +46,8 @@ Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction
   pending assignment and creates its replacement atomically.
 - A failed review returns operation status `ok`: this is an accepted blocker,
   not a tool failure. With authorization, repair once and start one retry
-  assignment; after exhaustion stop and await explicit reset direction.
+  assignment with `correctionOfAssignmentId` equal to the immediately preceding
+  failed assignment. After the second failure, stop; never start a third review.
 - `Final completion requires one passing final-review assignment`: complete the
   feature assignment first in economy order, run broad validation, create the
   final assignment with that exact feature result, and submit only the final
@@ -70,10 +73,10 @@ Use this when a Flow tool returns `status: "error"`, a blocker, or a `nextAction
   canonical history is corrupt, unsupported, filename-mismatched, or
   ambiguous, preserve it and repair the history before retrying. A closureless
   Session v4 archive is invalid canonical history and must fail closed.
-- Invalid chronology: rerun or resubmit with truthful reported times satisfying
-  `feature-run start <= validation start <= validation completion <= assignment
-  start <= review result <= runtime acceptance time`. Broad final validation
-  starts no earlier than the passing feature-assignment result.
+- Invalid chronology: validation receipt time is runtime-attested, so capture a
+  new receipt in the correct order rather than editing metadata. Broad final
+  validation starts no earlier than the passing feature-assignment result;
+  review completion remains truthful reported time.
 - Invalid completion payload: correct the nested `result` shape and reuse the
   same unconsumed operation id. Invalid input appends no partial review state.
 - `Cannot close ... unfinished features`: complete, reset, defer, or abandon honestly. Do not mark completed while work remains.

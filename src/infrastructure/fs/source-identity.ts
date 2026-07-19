@@ -12,6 +12,8 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import {
+	canonicalSourceManifestBytes,
+	isSafeSourceManifestPath,
 	type SourceDigest,
 	type SourceIdentity,
 	SourceIdentityGitError,
@@ -20,6 +22,10 @@ import {
 	SourceIdentityRaceError,
 	SourceIdentityUnreadableError,
 	SourceIdentityUnsafeSymlinkError,
+	type SourceManifest,
+	type SourceManifestEntry,
+	SourceManifestIntegrityError,
+	type SourceManifestSnapshot,
 } from "../../application/ports/source-identity.js";
 
 const execFileAsync = promisify(execFile);
@@ -125,6 +131,59 @@ function digestOfManifest(manifest: Manifest): SourceDigest {
 		.update(stableStringify(manifest))
 		.digest("hex");
 	return `sha256:${hex}`;
+}
+
+function digestCanonical(prefix: string, value: unknown): SourceDigest {
+	return `sha256:${createHash("sha256")
+		.update(`${prefix}\u0000`)
+		.update(stableStringify(value))
+		.digest("hex")}`;
+}
+
+function safeSourceManifest(manifest: Manifest): SourceManifest {
+	const indexByPath = new Map<string, IndexEntry[]>();
+	for (const entry of manifest.index) {
+		const current = indexByPath.get(entry.path) ?? [];
+		current.push(entry);
+		indexByPath.set(entry.path, current);
+	}
+	const entries: SourceManifestEntry[] = manifest.worktree.map((entry) => {
+		if (!isSafeSourceManifestPath(entry.path)) {
+			throw new SourceManifestIntegrityError(
+				"The source contains a path that cannot be represented safely in a correction manifest.",
+			);
+		}
+		const index = [...(indexByPath.get(entry.path) ?? [])]
+			.map(({ path: _path, ...identity }) => identity)
+			.sort((left, right) =>
+				Buffer.compare(
+					Buffer.from(stableStringify(left), "utf8"),
+					Buffer.from(stableStringify(right), "utf8"),
+				),
+			);
+		const { path, type, ...worktreeIdentity } = entry;
+		return {
+			path,
+			type,
+			contentIdentity: digestCanonical("source-manifest-entry-v1", {
+				index,
+				worktree: { type, ...worktreeIdentity },
+			}),
+		};
+	});
+	entries.sort(byPathBytes);
+	return {
+		version: 1,
+		sourceDigest: digestOfManifest(manifest),
+		mode: manifest.mode,
+		repositoryIdentity:
+			manifest.mode === "git"
+				? digestCanonical("source-manifest-repository-v1", {
+						head: manifest.head,
+					})
+				: null,
+		entries,
+	};
 }
 
 /**
@@ -875,31 +934,46 @@ export function createFileSourceIdentityProvider(
 			"Source entry limit must be a non-negative safe integer.",
 		);
 	}
+	async function measureManifest(): Promise<Manifest> {
+		const rootGuard = await openSourceDirectory(root, ".");
+		try {
+			const first = await buildManifest(root, maxEntries);
+			// A bounded second full computation detects structural changes (added,
+			// removed, or re-typed entries) that a single pass cannot observe; the
+			// per-file and directory-descriptor checks inside each pass detect state
+			// mutated during reads and ancestor substitution.
+			const second = await buildManifest(root, maxEntries);
+			if (digestOfManifest(first) !== digestOfManifest(second)) {
+				throw new SourceIdentityRaceError(
+					"The workspace changed while its source identity was being measured.",
+				);
+			}
+			await validateSourceDirectory(rootGuard);
+			return first;
+		} finally {
+			await rootGuard.handle?.close();
+		}
+	}
+
+	function identityFor(manifest: Manifest): SourceIdentity {
+		return {
+			digest: digestOfManifest(manifest),
+			mode: manifest.mode,
+			entryCount: manifest.worktree.length,
+		};
+	}
 	return {
 		async computeSourceIdentity(): Promise<SourceIdentity> {
-			const rootGuard = await openSourceDirectory(root, ".");
-			try {
-				const first = await buildManifest(root, maxEntries);
-				// A bounded second full computation detects structural changes (added,
-				// removed, or re-typed entries) that a single pass cannot observe; the
-				// per-file and directory-descriptor checks inside each pass detect state
-				// mutated during reads and ancestor substitution.
-				const second = await buildManifest(root, maxEntries);
-				const digest = digestOfManifest(first);
-				if (digest !== digestOfManifest(second)) {
-					throw new SourceIdentityRaceError(
-						"The workspace changed while its source identity was being measured.",
-					);
-				}
-				await validateSourceDirectory(rootGuard);
-				return {
-					digest,
-					mode: first.mode,
-					entryCount: first.worktree.length,
-				};
-			} finally {
-				await rootGuard.handle?.close();
-			}
+			return identityFor(await measureManifest());
+		},
+		async computeSourceManifest(): Promise<SourceManifestSnapshot> {
+			const measured = await measureManifest();
+			const manifest = safeSourceManifest(measured);
+			return {
+				identity: identityFor(measured),
+				manifest,
+				bytes: canonicalSourceManifestBytes(manifest),
+			};
 		},
 	};
 }

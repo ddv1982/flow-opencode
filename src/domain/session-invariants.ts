@@ -15,6 +15,7 @@ import {
 	canonicalReviewAssignmentResultDigest,
 	canonicalReviewAttemptId,
 	canonicalReviewPacketDigest,
+	canonicalSourceDeltaDigest,
 	planProjectionBudgetFailure,
 	stableReviewFindingFingerprint,
 	validatePlan,
@@ -45,6 +46,32 @@ function resultMatchesExecution(
 				),
 			)
 	);
+}
+
+function validationEvidenceSignature(
+	evidence: Extract<EvidenceRecord, { kind: "validation" }>,
+): string {
+	return JSON.stringify({
+		commandDigest: evidence.commandDigest,
+		commandClass: evidence.commandClass,
+		startedAt: evidence.startedAt,
+		completedAt: evidence.completedAt,
+		exitCode: evidence.exitCode,
+		outputDigest: evidence.outputDigest,
+		artifactRef: evidence.artifactRef ?? null,
+		environmentKeys: evidence.environmentKeys,
+	});
+}
+
+function compareUtf8(left: string, right: string): number {
+	const leftBytes = new TextEncoder().encode(left);
+	const rightBytes = new TextEncoder().encode(right);
+	const length = Math.min(leftBytes.length, rightBytes.length);
+	for (let index = 0; index < length; index += 1) {
+		const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+		if (difference !== 0) return difference;
+	}
+	return leftBytes.length - rightBytes.length;
 }
 
 function uniqueBy<T>(
@@ -774,6 +801,115 @@ export function validateSessionInvariants(session: Session): string | null {
 				assignmentStartedAt
 			) {
 				return `Review assignment '${assignment.id}' starts before validation completes.`;
+			}
+		}
+
+		if (assignment.correction) {
+			const correction = assignment.correction;
+			const assignmentIndex = session.reviewAssignments.indexOf(assignment);
+			const precedingTerminal = session.reviewAssignments
+				.slice(0, assignmentIndex)
+				.flatMap((candidate) => {
+					if (
+						candidate.featureRunId !== assignment.featureRunId ||
+						candidate.featureId !== assignment.featureId ||
+						candidate.reviewKind !== assignment.reviewKind ||
+						candidate.logicalPassId !== assignment.logicalPassId ||
+						(candidate.status !== "submitted" &&
+							candidate.status !== "observed_unsubmitted")
+					) {
+						return [];
+					}
+					const candidateExecution = assignmentExecution(session, candidate);
+					return candidateExecution
+						? [{ assignment: candidate, execution: candidateExecution }]
+						: [];
+				})
+				.at(-1);
+			if (
+				!precedingTerminal ||
+				precedingTerminal.assignment.id !==
+					correction.predecessorAssignmentId ||
+				precedingTerminal.execution.verdict !== "failed"
+			) {
+				return `Correction review assignment '${assignment.id}' does not follow the latest recorded failure in its logical pass.`;
+			}
+			const sourceChanged =
+				precedingTerminal.assignment.sourceDigest !== assignment.sourceDigest;
+			if (
+				correction.sourceChanged !== sourceChanged ||
+				(!sourceChanged && correction.changedRelativePaths.length > 0) ||
+				(correction.reviewMode === "correction" &&
+					sourceChanged &&
+					correction.changedRelativePaths.length === 0) ||
+				(correction.reviewMode === "correction" &&
+					(correction.contextCompleteness !== "complete" ||
+						correction.fallbackReason !== null)) ||
+				(correction.reviewMode === "full" &&
+					correction.fallbackReason === null) ||
+				(assignment.reviewKind === "final" &&
+					correction.reviewMode !== "full") ||
+				new Set(correction.changedRelativePaths).size !==
+					correction.changedRelativePaths.length ||
+				correction.changedRelativePaths.some(
+					(path, index, paths) =>
+						index > 0 && compareUtf8(paths[index - 1] ?? "", path) >= 0,
+				)
+			) {
+				return `Correction review assignment '${assignment.id}' has inconsistent source-delta metadata.`;
+			}
+			if (
+				(correction.contextCompleteness === "complete" ||
+					correction.fallbackReason === "projection_context_too_large") &&
+				correction.sourceDeltaDigest !==
+					canonicalSourceDeltaDigest({
+						predecessorSourceDigest: precedingTerminal.assignment.sourceDigest,
+						currentSourceDigest: assignment.sourceDigest,
+						sourceChanged,
+						changedRelativePaths: correction.changedRelativePaths,
+					})
+			) {
+				return `Correction review assignment '${assignment.id}' has a noncanonical source-delta digest.`;
+			}
+			const priorFailures = session.reviewAssignments
+				.slice(0, assignmentIndex)
+				.filter((candidate) => {
+					const candidateExecution = assignmentExecution(session, candidate);
+					return (
+						candidate.featureRunId === assignment.featureRunId &&
+						candidateExecution?.verdict === "failed"
+					);
+				}).length;
+			if (priorFailures > 1) {
+				return `Correction review assignment '${assignment.id}' exceeds the two-failure retry policy.`;
+			}
+			if (!sourceChanged) {
+				const blocking = precedingTerminal.execution.findings.filter(
+					(finding) => finding.severity === "blocking",
+				);
+				if (blocking.some((finding) => finding.taxonomy !== "evidence_gap")) {
+					return `Same-source correction review assignment '${assignment.id}' follows an implementation blocker.`;
+				}
+				const priorValidation = new Set(
+					precedingTerminal.assignment.validationEvidenceRefs.flatMap(
+						(reference) => {
+							const record = evidence.get(reference);
+							return record?.kind === "validation"
+								? [validationEvidenceSignature(record)]
+								: [];
+						},
+					),
+				);
+				const distinct = assignment.validationEvidenceRefs.some((reference) => {
+					const record = evidence.get(reference);
+					return (
+						record?.kind === "validation" &&
+						!priorValidation.has(validationEvidenceSignature(record))
+					);
+				});
+				if (!distinct) {
+					return `Same-source correction review assignment '${assignment.id}' lacks distinct validation evidence.`;
+				}
 			}
 		}
 

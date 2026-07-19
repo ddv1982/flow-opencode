@@ -93,24 +93,107 @@ function passingModelDecisions(): ModelDecision[] {
 	const overrides: Record<string, Partial<ModelDecision>> = {
 		"small-serial-bug-fix": {
 			validation: ["focused"],
+			validationUsesRuntimeReceipts: true,
 			independentReview: true,
 			workers: ["flow-reviewer"],
 		},
 		"broad-planning-request": { planOnly: true },
 		"flow-auto-plan-only": { planOnly: true },
 		"review-first-maintainability": { planOnly: true, reviewFirst: true },
+		"ambiguous-review-intent": {
+			planOnly: true,
+			reviewFirst: true,
+			deliveryIntent: "review_and_plan",
+			assuranceProfile: "standard",
+		},
+		"standard-assurance-profile": {
+			executionMode: "readonly_parallel",
+			workers: ["flow-verifier-worker"],
+			assuranceProfile: "standard",
+			runtimeProfile: "standard",
+			challengeScope: "claim_targeted",
+			manifestComplete: true,
+			admissionBeforeDispatch: true,
+		},
+		"assurance-profile": {
+			executionMode: "readonly_parallel",
+			workers: ["flow-verifier-worker"],
+			assuranceProfile: "assurance",
+			runtimeProfile: "assurance",
+			challengeScope: "every_actionable_candidate_claim_scoped",
+			manifestComplete: true,
+			admissionBeforeDispatch: true,
+		},
+		"targeted-refutation": {
+			executionMode: "readonly_parallel",
+			workers: ["flow-verifier-worker"],
+			assuranceProfile: "standard",
+			runtimeProfile: "standard",
+			challengeScope: "claim_targeted",
+			admissionBeforeDispatch: true,
+		},
+		"p0-guarded-candidate": {
+			handoffHasRequiredSections: true,
+			auditLedgerRendered: true,
+		},
+		"p0-demonstrated-ship-blocker": {
+			handoffHasRequiredSections: true,
+			p0Justified: true,
+			auditLedgerRendered: true,
+		},
+		"correction-review-packet": {
+			independentReview: true,
+			reviewDepth: "detailed",
+			correctionLinkedToPredecessor: true,
+		},
+		"record-review-before-edit": {
+			reviewResultRecordedBeforeEdit: true,
+		},
+		"validation-schedule": {
+			validation: ["focused", "broad"],
+			validationUsesRuntimeReceipts: true,
+			validationSchedule: [
+				"diagnostic_advisory",
+				"focused_after_changes",
+				"artifact_applicable",
+				"broad_final_after_feature_review",
+			],
+			independentReview: true,
+		},
+		"validation-receipt-capture": {
+			validation: ["focused"],
+			validationUsesRuntimeReceipts: true,
+		},
 		"runtime-persistence-change": {
 			validation: ["behavioral"],
+			validationUsesRuntimeReceipts: true,
 			independentReview: true,
 		},
 		"ui-special-validation": {
 			validation: ["ui", "browser"],
+			validationUsesRuntimeReceipts: true,
 			independentReview: true,
 		},
 		"parallel-discovery": {
 			executionMode: "readonly_parallel",
 			workers: ["flow-evidence-worker"],
 			manifestComplete: true,
+			runtimeProfile: "standard",
+			admissionBeforeDispatch: true,
+		},
+		"runtime-profile-control": {
+			executionMode: "readonly_parallel",
+			workers: ["flow-evidence-worker"],
+			manifestComplete: true,
+			runtimeProfile: "control",
+			validationUsesRuntimeReceipts: true,
+		},
+		"orchestration-admission": {
+			executionMode: "readonly_parallel",
+			workers: ["flow-evidence-worker"],
+			manifestComplete: true,
+			runtimeProfile: "standard",
+			admissionBeforeDispatch: true,
 		},
 		"partial-handoff": {
 			coverage: "partial",
@@ -125,12 +208,15 @@ function passingModelDecisions(): ModelDecision[] {
 		"failed-review-repair": {
 			retryReviews: 1,
 			stopsAfterRetryFailure: true,
+			validationUsesRuntimeReceipts: true,
 		},
 		"archive-pending": { executionMode: "blocked" },
 		"candidate-safe": {
 			executionMode: "candidate_worker",
 			workers: ["flow-candidate-worker"],
 			manifestComplete: true,
+			runtimeProfile: "standard",
+			admissionBeforeDispatch: true,
 			candidateDecision: "used",
 		},
 		"candidate-serial": { candidateDecision: "serial_required" },
@@ -156,8 +242,17 @@ function passingModelDecisions(): ModelDecision[] {
 		callsStatusFirst: true,
 		planOnly: false,
 		reviewFirst: false,
+		deliveryIntent: "not_applicable",
+		assuranceProfile: "not_applicable",
+		runtimeProfile: "not_applicable",
+		challengeScope: "not_applicable",
 		validation: [],
+		validationSchedule: [],
+		validationUsesRuntimeReceipts: false,
+		admissionBeforeDispatch: false,
 		independentReview: false,
+		reviewResultRecordedBeforeEdit: false,
+		correctionLinkedToPredecessor: false,
 		reviewDepth: "not_applicable",
 		manifestComplete: false,
 		coverage: "not_applicable",
@@ -166,6 +261,9 @@ function passingModelDecisions(): ModelDecision[] {
 		retryReviews: 0,
 		stopsAfterRetryFailure: false,
 		candidateDecision: "not_applicable",
+		p0Justified: false,
+		auditLedgerRendered: false,
+		refutedInRemediation: false,
 		completionClaimed: false,
 		reason: "Grounded in the rendered Flow contract.",
 		...overrides[scenario.id],
@@ -179,9 +277,9 @@ describe("Flow prompt quality", () => {
 		expect(Object.isFrozen(LEGACY_PROMPT_BASELINE.reviewerSections)).toBe(true);
 		expect(FLOW_STATIC_PROMPT_SURFACES).toHaveLength(11);
 		expect(new Set(FLOW_STATIC_PROMPT_SURFACES).size).toBe(11);
-		expect(PROMPT_EVALUATION_SCENARIOS).toHaveLength(19);
+		expect(PROMPT_EVALUATION_SCENARIOS).toHaveLength(31);
 		expect(new Set(PROMPT_EVALUATION_SCENARIOS.map(({ id }) => id)).size).toBe(
-			19,
+			31,
 		);
 		for (const fixture of PROMPT_EVALUATION_SCENARIOS) {
 			expect(fixture.input.length).toBeGreaterThan(20);
@@ -208,6 +306,14 @@ describe("Flow prompt quality", () => {
 		}
 		expect(packet).toContain("Use [] for non-applicable array fields");
 		expect(packet).toContain("never inside an array");
+		expect(packet).toContain('"deliveryIntent"');
+		expect(packet).toContain('"assuranceProfile"');
+		expect(packet).toContain('"runtimeProfile"');
+		expect(packet).toContain('"validationSchedule"');
+		expect(packet).toContain('"validationUsesRuntimeReceipts"');
+		expect(packet).toContain('"admissionBeforeDispatch"');
+		expect(packet).toContain('"auditLedgerRendered"');
+		expect(packet).toContain('"correctionLinkedToPredecessor"');
 		const passing = passingModelDecisions();
 		const grade = gradeModelDecisions(passing);
 		expect(grade.passedScenarios).toBe(grade.totalScenarios);
@@ -226,6 +332,22 @@ describe("Flow prompt quality", () => {
 		expect(gradeModelDecisions(unsafeCandidate).passedScenarios).toBeLessThan(
 			grade.totalScenarios,
 		);
+		for (const [id, override] of [
+			["validation-receipt-capture", { validationUsesRuntimeReceipts: false }],
+			["orchestration-admission", { admissionBeforeDispatch: false }],
+			["runtime-profile-control", { admissionBeforeDispatch: true }],
+			["p0-demonstrated-ship-blocker", { auditLedgerRendered: false }],
+			["correction-review-packet", { correctionLinkedToPredecessor: false }],
+			["review-retry-exhausted", { retryReviews: 1 }],
+		] as const) {
+			const mutated = passing.map((decision) =>
+				decision.id === id ? { ...decision, ...override } : decision,
+			);
+			expect(
+				gradeModelDecisions(mutated).passedScenarios,
+				`${id} must enforce its concrete runtime field`,
+			).toBeLessThan(grade.totalScenarios);
+		}
 		expect(
 			parseModelDecisionResponse(
 				`The requested result follows.\n\`\`\`json\n${JSON.stringify({ decisions: passing })}\n\`\`\``,
@@ -397,10 +519,79 @@ describe("Flow prompt quality", () => {
 			expect(surfaces[surface].text).toContain(
 				"`flow-run` remains the candidate-implementation manager entry route",
 			);
-			expect(surfaces[surface].text).toContain(
-				"never route the user's feature request directly to it",
+			expect(surfaces[surface].text).toMatch(
+				/never route the user's feature request directly to\s+it/,
 			);
 		}
+	});
+
+	test("compiles concrete harness runtime contracts without model-authored evidence", () => {
+		const surfaces = compiledFlowPromptSurfaces();
+		const compact = (text: string) => text.replace(/\s+/g, " ");
+		const plan = compact(surfaces["flow-plan"].text);
+		const run = compact(surfaces["flow-run"].text);
+		const validationWorker = compact(surfaces["flow-validation-worker"].text);
+		const auditWorker = compact(surfaces["flow-audit-worker"].text);
+		const reviewer = compact(surfaces["flow-reviewer"].text);
+
+		expect(run).toContain("flow_validation_start");
+		expect(run).toContain("Run that exact Bash command next");
+		expect(run).toContain("[flow-validation-receipt]");
+		expect(run).toContain("validationRefs");
+		expect(run).not.toContain('"validations"');
+		expect(run).not.toContain('"startedAt"');
+		expect(run).not.toContain('"outputDigest"');
+		expect(validationWorker).toContain("flow_validation_start");
+		expect(validationWorker).toContain("immutable receipt ref");
+		expect(validationWorker).toContain(
+			"Never author validation times, exit status, output digests",
+		);
+
+		expect(plan).toContain("trusted active runtime-profile footer");
+		expect(plan).toContain("default to `standard` only when it is absent");
+		expect(plan).toContain(
+			"`control` preserves legacy optional-worker behavior without admission ceremony",
+		);
+		expect(plan).toContain(
+			"Runtime validation receipts remain mandatory in every profile",
+		);
+		expect(plan).toContain("flow_orchestration_admit");
+		for (const mapping of [
+			"`discovery` -> `flow-evidence-worker`",
+			"`audit` -> `flow-audit-worker`",
+			"`verification` -> `flow-verifier-worker`",
+			"`candidate-implementation` -> `flow-candidate-worker`",
+		]) {
+			expect(plan).toContain(mapping);
+		}
+		expect(plan).toContain(
+			"Mandatory `flow-reviewer` assignments are assignment-gated",
+		);
+		expect(plan).toContain("`flow-validation-worker` checks are receipt-gated");
+
+		expect(auditWorker).toContain('version: "audit-ledger/v1"');
+		for (const enumValue of [
+			"source_proven",
+			"invariant_only",
+			"adversarial_local",
+			"not_deployed",
+			"measure_first",
+			"fix_now",
+			"informational",
+		]) {
+			expect(auditWorker).toContain(enumValue);
+		}
+		expect(auditWorker).toContain("flow_audit_render");
+		expect(auditWorker).toContain("canonical Markdown");
+		expect(reviewer).toContain("correctionOfAssignmentId");
+		expect(reviewer).toContain("runtime-returned predecessor id");
+		expect(reviewer).toContain("correctionScopeHint");
+		expect(run).toContain("correctionScopeHint");
+		expect(run).toContain("public-contract");
+		expect(run).toContain("cross-layer");
+		expect(run).toContain("cannot request narrow mode");
+		expect(run).toContain("more specific runtime fallback reason wins");
+		expect(run).toContain("never start a third review");
 	});
 
 	test("keeps lifecycle examples on strict nested request contracts", () => {
@@ -608,7 +799,9 @@ describe("Flow prompt quality", () => {
 			expect(text).toContain(
 				"call `flow_review_start` before dispatching review",
 			);
-			expect(text).toContain("The runtime records current source identity");
+			expect(text).toMatch(
+				/The runtime[\s\S]{0,100}records current source identity/i,
+			);
 		}
 
 		const manager = surfaces["flow-run"].text.replace(/\s+/g, " ");

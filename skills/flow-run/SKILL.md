@@ -37,6 +37,9 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 - Keep edits scoped to the active execution. If new scope appears, stop and replan or defer it to another feature.
 - Preserve unrelated user changes in the worktree.
 - When a wrong assumption invalidates the feature, use `flow_feature_reset`; do not pile patches onto a bad path.
+- For a findings-report audit, request the audit rubric, make strict
+  `AuditLedgerV1` the source of truth, and call `flow_audit_render`; use its
+  canonical Markdown and derived summary without hand reconciliation.
 - Do not stage, commit, push, amend, rebase, publish, or mutate releases as part
   of feature execution. If the user explicitly asks for commit preparation, request
   `flow-commit` through `flow_guidance` only after `flow_feature_complete` has been recorded, unless the
@@ -46,8 +49,11 @@ If `flow_run_start` is unavailable, stop and tell the user to check that `openco
 ## Candidate implementation
 
 `flow-run` remains the candidate-implementation manager entry route. Invoke the
-hidden `flow-candidate-worker` only after feature start and a complete pass
-manifest; never route the user's feature request directly to it.
+hidden `flow-candidate-worker` only after feature start, a complete pass
+manifest, and either the active `control` profile or one admitted
+`candidate-implementation` proposal under `standard` or `assurance` covering
+the exact candidate workers; never route the user's feature request directly to
+it.
 
 For broad, risky, or multi-target work, record an implementation pass decision
 before editing: `serial`, `candidate-exact-path`, `candidate-worktree`,
@@ -82,29 +88,38 @@ outside the runtime payload.
   validation-observation summarization, request `flow-test` through `flow_guidance` (helper rule applies).
 - Request `flow-run/references/validation-rubric.md` from `flow_guidance` before completing.
 - Run the strongest practical checks for the changed behavior.
-- Record concrete command names, status, and observed results. "Tests pass" is not evidence.
+- Immediately before every exact Bash command that may become review evidence,
+  call `flow_validation_start` with current causal guards, `featureId`, the
+  byte-for-byte command, `coverageScope`, and environment key names. Run that
+  exact Bash command next, inspect its outcome, and collect the immutable ref
+  appended as `[flow-validation-receipt]`. A missing ref is not evidence.
+- Never author or pass validation timestamps, exit status, output digests, or
+  per-command summaries. The runtime derives those fields from the Bash hook.
 - Non-final feature outcomes use `validationScope: "targeted"`.
 - The final feature must run a broad project-level gate and use `validationScope: "broad"`.
+- Follow the staged schedule and source/run applicability rules in the
+  validation rubric; a diagnostic baseline stays advisory and broad validation
+  is a distinct execution, not relabeled targeted evidence.
 
-Validation timestamps are reported time. They must satisfy
-`feature-run start <= validation start <= validation end <= assignment
-start`, and cannot postdate the runtime acceptance time for assignment start.
-For final review, broad validation must start no earlier than the passing
-feature-assignment result's reported time.
+Receipt chronology is runtime-attested. For final review, the broad receipt
+must start no earlier than the passing feature-assignment result's reported
+time.
 
 For broad validation research, risky changes, or unclear coverage, request
 `flow/references/parallel-orchestration.md` from `flow_guidance`. If it routes
 to fan-out, request and use the manifest, execution, handoff-format, and
 synthesis reference ids in the order that routing guide specifies.
-They may report command output they actually ran or propose focused checks; the
-manager decides what is strong enough to record.
+Validation workers may return appended receipt refs for exact commands they ran
+or propose focused checks; the manager decides which passing refs apply.
 
 ## Review and record outcome
 
 After validation, call `flow_review_start` before dispatching review. Use a new
 operation id inside `request` with the current execution guards, `featureId`,
 review kind, required validation scope, a bounded packet summary and risk
-lenses, and the validation observations you actually ran. The runtime records current source
+lenses, and `validationRefs` copied exactly from successful capture output. Do
+not submit inline validation observations. The runtime resolves and verifies
+the receipts, records current source
 identity and derives the feature run, assignment id, attempt id, logical pass,
 packet digest, start time, applicable evidence, and required review depth.
 
@@ -157,14 +172,36 @@ uses one branch:
 
 A genuine blocker is an accepted mutation with operation status `ok`. It
 records the attempt and consumes run-scoped retry budget; it is not a transport
-error. With prior autonomous authorization, make at most one repair and one
-retry review: rerun validation, create a new assignment, and dispatch it once.
-If the second review fails, stop with the blocker. Resume only after explicit user direction via
+error. Before any repair or edit, submit the terminal failed review result on
+the blocked outcome branch and confirm the runtime accepted it. Immediately
+refresh `flow_status { request: { view: "compact" } }` and follow its projection;
+do not assert that retry budget is exhausted from remembered attempts or
+reviewer prose. With prior autonomous authorization, make at most one repair
+and one retry review when refreshed runtime state permits it: capture fresh
+validation receipts, create a new assignment, and dispatch it once.
+If the second review fails, stop with the blocker; never start a third review.
+Resume only after explicit user direction via
 `flow_feature_reset`; the next `flow_run_start` receives a fresh feature-run id.
+
+A correction assignment packet contains the prior blocking findings, the actual
+artifacts changed to address them, and focused post-change evidence. Use a
+focused delta review only when that packet is complete and the delta is narrow.
+Fall back to a full assigned-depth review when the packet or changed-artifact
+accounting is incomplete, the repair broadened beyond the blockers, or the delta
+touches security, persistence, public contracts, or cross-layer behavior.
+When starting a correction review, pass
+`correctionOfAssignmentId` as the exact immediately preceding failed assignment
+id. If the repair is known to change a public contract or cross a layer boundary,
+also pass the respective `correctionScopeHint` value `public-contract` or
+`cross-layer`. This correction-only hint can only elevate to full; it cannot
+request narrow mode. Flow cannot infer every semantic scope from paths, so
+classify known scope honestly. Flow still derives paths and mode, and a more
+specific runtime fallback reason wins. Never author delta metadata; omit both
+correction fields for non-correction review.
 
 Malformed, stale, source-changed, or inconsistent input records nothing and
 does not consume the operation id. Re-anchor with compact/execution status,
-rerun validation after source changes, and call `flow_review_start`; Flow
+capture new validation refs after source changes, and call `flow_review_start`; Flow
 invalidates the stale pending assignment and creates its replacement. Optional
 bounded orchestration telemetry belongs inside
 `flow_feature_complete.request.result.orchestrationPasses` and never replaces

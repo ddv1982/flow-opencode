@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -66,6 +66,20 @@ function pluginContext(workspace: string) {
 		$: {},
 	} as unknown as Parameters<typeof FlowPlugin>[0];
 }
+
+const activePluginHooks: Array<Awaited<ReturnType<typeof FlowPlugin>>> = [];
+
+async function loadFlowPlugin(context: Parameters<typeof FlowPlugin>[0]) {
+	const hooks = await FlowPlugin(context);
+	activePluginHooks.push(hooks);
+	return hooks;
+}
+
+afterEach(async () => {
+	for (const hooks of activePluginHooks.splice(0).reverse()) {
+		await hooks.dispose?.();
+	}
+});
 
 async function runFlowCli(args: string[], home?: string) {
 	const cliHome = home ?? (await tempHome());
@@ -157,7 +171,7 @@ async function installPristineLegacyTopic(
 }
 
 describe("embedded guidance and plugin surface", () => {
-	test("exposes the nine-tool v5 surface", () => {
+	test("keeps the nine state/guidance tools as the core surface", () => {
 		expect(Object.keys(createTools({})).sort()).toEqual([
 			"flow_feature_complete",
 			"flow_feature_reset",
@@ -168,6 +182,25 @@ describe("embedded guidance and plugin surface", () => {
 			"flow_run_start",
 			"flow_session_close",
 			"flow_status",
+		]);
+	});
+
+	test("exposes the three harness tools through the composed plugin surface", async () => {
+		const workspace = await tempWorkspace();
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
+		expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([
+			"flow_audit_render",
+			"flow_feature_complete",
+			"flow_feature_reset",
+			"flow_guidance",
+			"flow_orchestration_admit",
+			"flow_plan_approve",
+			"flow_plan_save",
+			"flow_review_start",
+			"flow_run_start",
+			"flow_session_close",
+			"flow_status",
+			"flow_validation_start",
 		]);
 	});
 
@@ -258,7 +291,10 @@ describe("embedded guidance and plugin surface", () => {
 			expect(template).not.toContain("setup.skills");
 			expect(template).toContain("never a native skill call");
 		}
-		expect(getFlowGuidance("flow-test").content).toContain("validations");
+		expect(getFlowGuidance("flow-test").content).toContain(
+			"flow_validation_start",
+		);
+		expect(getFlowGuidance("flow-test").content).toContain("validationRefs");
 		expect(getFlowGuidance("flow-test").content).toContain("flow_review_start");
 		expect(getFlowGuidance("flow-deslop").content).toContain(
 			"flow-deslop/references/smell-rubric.md",
@@ -306,6 +342,21 @@ describe("embedded guidance and plugin surface", () => {
 			expect(agent.permission?.flow_status).toBe("allow");
 			expect(agent.permission?.skill).toBe("deny");
 		}
+		const validationPermission = config.agent["flow-validation-worker"]
+			?.permission as Record<string, unknown>;
+		const auditPermission = config.agent["flow-audit-worker"]
+			?.permission as Record<string, unknown>;
+		expect(validationPermission.flow_validation_start).toBe("allow");
+		expect(auditPermission.flow_audit_render).toBe("allow");
+		for (const [name, agent] of Object.entries(config.agent)) {
+			const permission = agent.permission as Record<string, unknown>;
+			if (name !== "flow-validation-worker") {
+				expect(permission.flow_validation_start).toBeUndefined();
+			}
+			if (name !== "flow-audit-worker") {
+				expect(permission.flow_audit_render).toBeUndefined();
+			}
+		}
 	});
 
 	test("keeps worker model routing configurable by worker class", () => {
@@ -351,7 +402,9 @@ describe("embedded guidance and plugin surface", () => {
 		process.env.HOME = home;
 		try {
 			await Promise.all(
-				Array.from({ length: 12 }, () => FlowPlugin(pluginContext(workspace))),
+				Array.from({ length: 12 }, () =>
+					loadFlowPlugin(pluginContext(workspace)),
+				),
 			);
 		} finally {
 			if (previousHome === undefined) delete process.env.HOME;
@@ -380,9 +433,57 @@ describe("embedded guidance and plugin surface", () => {
 });
 
 describe("command and config hooks", () => {
+	test.each([
+		{
+			profile: "control",
+			rollout: "control",
+			expected: "do not add flow_orchestration_admit ceremony",
+		},
+		{
+			profile: "assurance",
+			rollout: "enforce",
+			expected: "Use broader admitted evidence",
+		},
+	] as const)(
+		"injects the trusted $profile runtime policy without relaxing receipts",
+		async ({ profile, rollout, expected }) => {
+			const previousProfile = process.env.OPENCODE_FLOW_HARNESS_PROFILE;
+			const previousRollout = process.env.OPENCODE_FLOW_ROLLOUT_MODE;
+			process.env.OPENCODE_FLOW_HARNESS_PROFILE = profile;
+			process.env.OPENCODE_FLOW_ROLLOUT_MODE = rollout;
+			try {
+				const workspace = await tempWorkspace();
+				const hooks = await loadFlowPlugin(pluginContext(workspace));
+				const preflight = hooks["command.execute.before"];
+				if (!preflight) throw new Error("Expected command preflight hook");
+				const output = { parts: [{ type: "text", text: "stale" }] };
+				await preflight(
+					{ command: "flow-plan", sessionID: "test", arguments: "goal" },
+					output as unknown as Parameters<typeof preflight>[1],
+				);
+				const prompt = output.parts.map((part) => part.text).join("\n");
+				expect(prompt).toContain(`Profile: \`${profile}\``);
+				expect(prompt).toContain(`Rollout: \`${rollout}\``);
+				expect(prompt).toContain(expected);
+				expect(prompt).toContain("Validation receipts remain mandatory");
+			} finally {
+				if (previousProfile === undefined) {
+					delete process.env.OPENCODE_FLOW_HARNESS_PROFILE;
+				} else {
+					process.env.OPENCODE_FLOW_HARNESS_PROFILE = previousProfile;
+				}
+				if (previousRollout === undefined) {
+					delete process.env.OPENCODE_FLOW_ROLLOUT_MODE;
+				} else {
+					process.env.OPENCODE_FLOW_ROLLOUT_MODE = previousRollout;
+				}
+			}
+		},
+	);
+
 	test("rewrites stale command bodies with canonical package guidance", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const preflight = hooks["command.execute.before"];
 		if (!preflight) throw new Error("Expected command preflight hook");
 		const output = {
@@ -402,12 +503,16 @@ describe("command and config hooks", () => {
 		);
 		expect(output.parts[1]?.text).toContain("Bundled flow-plan/SKILL.md");
 		expect(output.parts[1]?.text).toContain("preserve $$ and $& literally");
+		expect(output.parts[1]?.text).toContain(
+			"## Active Flow harness runtime policy",
+		);
+		expect(output.parts[1]?.text).toContain("Profile: `standard`");
 		expect(output.parts[1]?.text).not.toContain("stale native skill body");
 	});
 
 	test("rewrites the canonical review subtask prompt in place", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const preflight = hooks["command.execute.before"];
 		if (!preflight) throw new Error("Expected command preflight hook");
 		const output = {
@@ -431,7 +536,7 @@ describe("command and config hooks", () => {
 
 	test("fails closed when review subtask dispatch is malformed", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const preflight = hooks["command.execute.before"];
 		if (!preflight) throw new Error("Expected command preflight hook");
 		const input = {
@@ -487,7 +592,7 @@ describe("command and config hooks", () => {
 
 	test("preserves non-text parts in manager commands", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const preflight = hooks["command.execute.before"];
 		if (!preflight) throw new Error("Expected command preflight hook");
 		const output = {
@@ -510,7 +615,7 @@ describe("command and config hooks", () => {
 
 	test("fails closed when a manager command receives a subtask", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const preflight = hooks["command.execute.before"];
 		if (!preflight) throw new Error("Expected command preflight hook");
 		await expect(
@@ -533,7 +638,7 @@ describe("command and config hooks", () => {
 
 	test("ignores prototype member command names", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const preflight = hooks["command.execute.before"];
 		if (!preflight) throw new Error("Expected command preflight hook");
 		for (const command of ["toString", "constructor", "valueOf"]) {
@@ -548,7 +653,7 @@ describe("command and config hooks", () => {
 
 	test("registers config entries without workspace filesystem writes", async () => {
 		const workspace = await tempWorkspace();
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const config = { instructions: ["AGENTS.md"] };
 		if (!hooks.config) throw new Error("Expected config hook");
 		await hooks.config(config);
@@ -559,7 +664,7 @@ describe("command and config hooks", () => {
 	test("does not inspect or wait on workspace Flow state during config", async () => {
 		const workspace = await tempWorkspace();
 		await mkdir(join(workspace, ".flow", "session.lock"), { recursive: true });
-		const hooks = await FlowPlugin(pluginContext(workspace));
+		const hooks = await loadFlowPlugin(pluginContext(workspace));
 		const config = { instructions: ["AGENTS.md"] };
 		if (!hooks.config) throw new Error("Expected config hook");
 		let timeout: ReturnType<typeof setTimeout> | undefined;

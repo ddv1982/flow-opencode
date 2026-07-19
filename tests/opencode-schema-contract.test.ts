@@ -21,6 +21,7 @@ import {
 	MAX_ORCHESTRATION_COLLECTION_BYTES,
 	MAX_PLAN_FEATURES,
 } from "../src/domain/transitions.js";
+import { MAX_VALIDATION_RECEIPT_BYTES } from "../src/domain/validation-receipt.js";
 import { createTools } from "../src/platform/opencode/tools.js";
 import {
 	LIFECYCLE_APPLICATION_SCHEMAS,
@@ -42,7 +43,6 @@ const {
 	smallMultibyteAssignmentResult,
 	statusCompact,
 	targetedCompletion,
-	validation,
 } = LIFECYCLE_HOST_FIXTURES;
 
 const registeredTools = createTools({});
@@ -139,30 +139,6 @@ const TEXT_BOUNDARY_CASES: TextBoundaryCase[] = [
 	planTextBoundary("feature validation", (value) =>
 		planWithFeature({ validation: [value] }),
 	),
-	{
-		name: "validation command",
-		toolName: "flow_review_start",
-		applicationSchema: FlowReviewStartSchema,
-		maximumBytes: MAX_EXECUTION_PROJECTION_BYTES,
-		input: (value) => ({
-			request: {
-				...featureReviewStart.request,
-				validations: [{ ...validation, command: value }],
-			},
-		}),
-	},
-	{
-		name: "validation summary",
-		toolName: "flow_review_start",
-		applicationSchema: FlowReviewStartSchema,
-		maximumBytes: MAX_WORKFLOW_PROSE_BYTES,
-		input: (value) => ({
-			request: {
-				...featureReviewStart.request,
-				validations: [{ ...validation, summary: value }],
-			},
-		}),
-	},
 	{
 		name: "review packet summary",
 		toolName: "flow_review_start",
@@ -281,6 +257,8 @@ type JsonSchema = {
 	items?: JsonSchema;
 	additionalProperties?: boolean;
 	minimum?: number;
+	exclusiveMinimum?: number;
+	maximum?: number;
 	minItems?: number;
 	maxItems?: number;
 	maxLength?: number;
@@ -843,6 +821,40 @@ describe("OpenCode registered host contract", () => {
 		}
 	});
 
+	test("mirrors the bounded correction scope hint and rejects it without a predecessor", () => {
+		const registered = registeredToolSchema("flow_review_start");
+		for (const correctionScopeHint of [
+			"public-contract",
+			"cross-layer",
+		] as const) {
+			const correction = {
+				request: {
+					...featureReviewStart.request,
+					correctionOfAssignmentId: "review-assignment:failed",
+					correctionScopeHint,
+				},
+			};
+			expect(registered.safeParse(correction).success).toBe(true);
+			expect(FlowReviewStartSchema.safeParse(correction).success).toBe(true);
+			const initialReview = {
+				request: { ...featureReviewStart.request, correctionScopeHint },
+			};
+			expect(registered.safeParse(initialReview).success).toBe(false);
+			expect(FlowReviewStartSchema.safeParse(initialReview).success).toBe(
+				false,
+			);
+		}
+		const unsupported = {
+			request: {
+				...featureReviewStart.request,
+				correctionOfAssignmentId: "review-assignment:failed",
+				correctionScopeHint: "correction",
+			},
+		};
+		expect(registered.safeParse(unsupported).success).toBe(false);
+		expect(FlowReviewStartSchema.safeParse(unsupported).success).toBe(false);
+	});
+
 	test("emits strict structural branches for conditional lifecycle requests", () => {
 		const statusRequest = property(emittedSchema("status"), "request");
 		expect(statusRequest.anyOf).toHaveLength(4);
@@ -874,14 +886,31 @@ describe("OpenCode registered host contract", () => {
 			"reviewKind",
 			"final",
 		);
-		expect(
-			literalValue(
-				property(
-					items(property(featureReviewStartBranch, "validations")),
-					"exitCode",
-				),
-			),
-		).toBe(0);
+		for (const branch of [featureReviewStartBranch, finalReviewStartBranch]) {
+			expect(property(branch, "correctionScopeHint").enum).toEqual([
+				"public-contract",
+				"cross-layer",
+			]);
+			expect(branch.required).not.toContain("correctionScopeHint");
+		}
+		const featureValidationRefs = property(
+			featureReviewStartBranch,
+			"validationRefs",
+		);
+		expect(featureValidationRefs.minItems).toBe(1);
+		const validationRef = items(featureValidationRefs);
+		expect(validationRef.required).toEqual(["kind", "digest", "byteLength"]);
+		expect(validationRef.additionalProperties).toBe(false);
+		expect(literalValue(property(validationRef, "kind"))).toBe(
+			"validation_receipt_ref_v1",
+		);
+		expect(property(validationRef, "byteLength").exclusiveMinimum).toBe(0);
+		expect(property(validationRef, "byteLength").maximum).toBe(
+			MAX_VALIDATION_RECEIPT_BYTES,
+		);
+		expect(property(finalReviewStartBranch, "validationRefs")).toEqual(
+			featureValidationRefs,
+		);
 		expectPassingSubmittedReviewSchema(
 			property(finalReviewStartBranch, "featureReview"),
 		);
@@ -929,7 +958,7 @@ describe("OpenCode registered host contract", () => {
 		}
 	});
 
-	test("emits nonnegative safe integer bounds", () => {
+	test("emits safe integer bounds", () => {
 		const names = new Set(["expectedRevision", "sinceRevision", "byteLength"]);
 		const properties = (
 			Object.keys(LIFECYCLE_OPERATION_TOOLS) as LifecycleCriticalOperation[]
@@ -938,7 +967,11 @@ describe("OpenCode registered host contract", () => {
 		);
 		expect(new Set(properties.map((entry) => entry.name))).toEqual(names);
 		for (const entry of properties) {
-			expect(entry.schema.minimum, entry.name).toBe(0);
+			if (entry.name === "byteLength") {
+				expect(entry.schema.exclusiveMinimum, entry.name).toBe(0);
+			} else {
+				expect(entry.schema.minimum, entry.name).toBe(0);
+			}
 		}
 	});
 

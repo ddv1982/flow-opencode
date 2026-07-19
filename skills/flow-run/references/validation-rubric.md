@@ -13,18 +13,21 @@ Use the strongest practical tier. For risky work, combine tiers.
 
 ## Recording rules
 
-- Each validation observation has `command`, `summary`, `startedAt`,
-  `completedAt`, numeric `exitCode`, `outputDigest`, and `environmentKeys`.
-- `startedAt` and `completedAt` are reported times. They must satisfy
-  `feature-run start <= startedAt <= completedAt <= review-assignment start <=
-  runtime acceptance time`.
-- `flow_review_start` accepts only passing observations (`exitCode: 0`). Failed
-  or skipped checks must be resolved or reported as blockers before assignment.
-- Do not claim a command was run unless it was run in this session or directly reported by a trusted worker with raw output.
-- Worker-reported command output must satisfy the acceptance and verification
-  rules in `flow/references/parallel-synthesis.md`: exact command, status,
-  raw outcome summary, coverage, and manager acceptance.
-- Include scope in the summary: what behavior, files, routes, or states the check covered.
+- Immediately before the exact Bash command, call `flow_validation_start` with
+  current `expectedRevision`, `expectedSnapshotId`, `featureId`, the exact
+  `command`, `coverageScope` (`focused`, `broad`, or `artifact`), and environment
+  key names. The next Bash command must match byte-for-byte.
+- After Bash finishes, collect the complete object appended after
+  `[flow-validation-receipt]`. Its kind is `validation_receipt_ref_v1`; pass the
+  object unchanged in `flow_review_start.request.validationRefs`.
+- The model never supplies validation times, exit status, output digests, or
+  per-command summaries. Flow derives them from host hooks and verifies the
+  immutable receipt against the active run and current source.
+- Accept only receipt refs from commands whose actual outcome you inspected and
+  that passed. Resolve failed, missing, mismatched, expired, or unreceipted
+  captures before assignment.
+- Worker-returned refs must satisfy the acceptance rules in
+  `flow/references/parallel-synthesis.md`; never reconstruct a ref from prose.
 - UI work should include browser or screenshot evidence when the app can run locally.
 - Cleanup/refactor work should show behavior preservation, not only formatting success.
 
@@ -33,13 +36,44 @@ Use the strongest practical tier. For risky work, combine tiers.
 - Use `validationScope: "targeted"` for an ordinary feature outcome.
 - Use `validationScope: "broad"` only when the session is on its final feature and the project-level gate was run.
 
+Use this schedule instead of rerunning every gate after every step:
+
+1. A diagnostic baseline before edits is advisory only; it locates pre-existing
+   failures but is not completion evidence for changed source.
+2. After changes, run focused checks for the behavior and artifacts touched.
+3. For artifact-only work, run the complete applicable artifact gate, such as
+   docs, generated output, package shape, or static checks.
+4. On the final feature, run the broad gate once, after the feature review has
+   passed and after the final edit.
+
+Validation applies only to the exact feature run and source identity it
+observed. A source edit or new run invalidates prior applicability. Never reuse
+or relabel targeted evidence as broad validation; broad is a distinct final
+execution.
+
 For final review, broad validation must start no earlier than the bound passing
 feature-assignment result's reported time. Rerun broad validation if that order
 cannot be established.
 
 Broad validation usually means the repo's full check command, full relevant test suite, build, or equivalent release gate. If the broad gate cannot run, do not submit a passing final feature outcome; submit a `blocked` result or fix the blocker.
 
-## Good nested review-start fragment
+## Good validation capture and review-start fragments
+
+Call this immediately before Bash:
+
+```json
+{
+  "expectedRevision": 7,
+  "expectedSnapshotId": "sha256:<64 lowercase hex characters>",
+  "featureId": "final-feature-id",
+  "command": "bun run check",
+  "coverageScope": "broad",
+  "environmentKeys": []
+}
+```
+
+Run exactly `bun run check` next. Copy the appended immutable ref into the
+review request:
 
 ```json
 {
@@ -61,24 +95,11 @@ Broad validation usually means the repo's full check command, full relevant test
       "completedAt": "2026-07-19T09:59:00.000Z",
       "terminalDisposition": "submitted"
     },
-    "validations": [
+    "validationRefs": [
       {
-        "command": "bun test tests/runtime-gates.test.ts",
-        "summary": "Covered approval immutability, active runs, and feature-outcome gates.",
-        "startedAt": "2026-07-19T10:00:00.000Z",
-        "completedAt": "2026-07-19T10:00:08.000Z",
-        "exitCode": 0,
-        "outputDigest": "sha256:<64 lowercase hex characters>",
-        "environmentKeys": []
-      },
-      {
-        "command": "bun run typecheck",
-        "summary": "TypeScript accepted the runtime and adapter changes.",
-        "startedAt": "2026-07-19T10:00:09.000Z",
-        "completedAt": "2026-07-19T10:00:12.000Z",
-        "exitCode": 0,
-        "outputDigest": "sha256:<64 lowercase hex characters>",
-        "environmentKeys": []
+        "kind": "validation_receipt_ref_v1",
+        "digest": "sha256:<64 lowercase hex characters>",
+        "byteLength": 1234
       }
     ]
   }

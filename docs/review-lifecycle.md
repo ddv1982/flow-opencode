@@ -13,10 +13,27 @@ recovered as active reviewer work. Retry counters and effective review truth
 are run-scoped, so a historical failed attempt cannot block repaired work after
 reset.
 
-After implementation, the manager runs validation and calls
-`flow_review_start` with a strict nested request. Flow records source-bound
-validation metadata and one pending review assignment atomically. It derives
-and owns:
+After implementation, the manager loads fresh guards and calls
+`flow_validation_start` immediately before each exact Bash validation command.
+That tool binds the active feature run and freshly measured source to an
+ephemeral capture; it accepts the command, coverage scope, and environment-key
+names, but no claimed timestamps, exit status, output digest, completeness, or
+command class. The exact command must be the next Bash call in the same OpenCode
+session. On completion the host hook derives those fields from the execution,
+publishes a canonical `validation_receipt_v1` beneath the restricted artifact
+store, and appends a `validation_receipt_ref_v1` marker to the Bash result.
+
+The manager copies one or more unique receipt references into
+`flow_review_start.request.validationRefs`. Flow reads and verifies the
+digest-and-length-addressed receipt bytes, rechecks active run, feature, current
+source, success, complete output, and applicable scope, and only then
+materializes Session v4 validation evidence. A feature review commonly uses a
+`focused` receipt; final review requires `broad` or `artifact` receipt coverage.
+The request's lifecycle scopes remain `targeted` for feature review and `broad`
+for final review.
+
+Flow then records materialized validation evidence and one pending review
+assignment atomically. It derives and owns:
 
 - feature-run and assignment ids;
 - attempt and logical-pass ids;
@@ -45,7 +62,10 @@ rerun targeted validation and feature review before starting a new broad/final
 sequence.
 
 The full reviewer prompt and raw validation output are not persisted in the
-ordinary session ledger.
+ordinary session ledger. Canonical receipts retain the exact command in the
+restricted artifact store; ordinary state exposes only typed evidence fields
+and references. Exact output is optional and, when present, is a separately
+verified restricted artifact whose digest must match the observed output.
 
 ## Reviewer recovery and output
 
@@ -106,6 +126,49 @@ execution, marks the assignment terminal, consumes run-scoped retry budget, and
 blocks the feature after two failed attempts. An exact accepted replay is
 idempotent.
 
+## Evidence-backed correction review
+
+After recording a failed assignment result and before editing, the manager
+retains the runtime-returned assignment id. A follow-up
+`flow_review_start.request.correctionOfAssignmentId` may name only the
+immediately preceding recorded failed assignment in the active run's same
+logical pass and review kind. Pending, stale, passed, foreign-run, or fabricated
+predecessors fail before source measurement.
+
+Each review assignment stores a restricted canonical source manifest. At
+correction start, Flow measures the current source in the transaction, verifies
+the predecessor manifest, computes the authoritative changed-path set and
+source-delta digest, and binds that runtime-derived context to the new
+assignment. The caller cannot provide correction paths, source digests, review
+mode, or fallback reason.
+
+For a correction request only, the caller may add the bounded elevation hint
+`correctionScopeHint: "public-contract"` or
+`correctionScopeHint: "cross-layer"`. These are the semantic cases the runtime
+cannot always recover from file paths. The hint has no narrow-review value and
+can only force `full`; using it without `correctionOfAssignmentId` is invalid.
+It is part of operation replay identity. The runtime's existing final,
+manifest, metadata, security, persistence, and size classifiers still run first
+and retain their more specific fallback reasons.
+
+Narrow `correction` mode is allowed only for a complete, bounded feature-review
+delta with no broad, source-metadata, security, or persistence reason for a full
+pass and no caller-declared public-contract or cross-layer elevation. Flow
+conservatively uses `full` review for final assignments,
+security-sensitive or persistence-sensitive paths/risk lenses, changed source
+metadata, missing or unavailable predecessor manifests, oversized current
+manifests or deltas, and projection context that cannot fit. The reviewer
+projection carries the predecessor id, prior blocking findings, sorted changed
+relative paths, source-delta digest, completeness, and explicit fallback
+reason.
+
+An implementation-defect correction requires changed source. Same-source
+correction is reserved for an `evidence_gap` and requires validation evidence
+whose command/timing/output/environment signature is genuinely distinct from
+the predecessor's evidence. Correction does not reset retry truth: the existing
+run-scoped cap accepts at most two failed review results, after which explicit
+reset or replanning is required.
+
 Optional `request.result.orchestrationPasses` telemetry is parsed separately.
 Non-JSON-serializable input or more than 65,536 serialized UTF-8 bytes is
 rejected at the public resource boundary. Structurally malformed telemetry, or
@@ -118,16 +181,17 @@ outcome unpersistable.
 
 ## Source applicability and chronology
 
-Validation evidence records capture revision and snapshot for audit, but its
-applicability depends on source digest plus feature-run identity. Review-ledger
-mutations therefore do not stale unchanged-source validation. Any source edit
-or feature reset does. Starting review after a source edit atomically marks a
+Materialized validation evidence records capture revision and snapshot for
+audit, but applicability depends on receipt-bound source digest plus feature-run
+identity. Review-ledger mutations therefore do not stale unchanged-source
+validation. Any source edit or feature reset does. Starting review after a source edit atomically marks a
 pending same-run, same-kind assignment `invalidated` with reason
 `source_changed` and creates its replacement. Reset uses reason
 `feature_reset`. Unchanged-source duplicate starts remain rejected so the
 caller recovers the existing assignment instead of minting another.
 
-Flow accepts reported times only in this inclusive order:
+Flow accepts the host-observed validation interval and reviewer-reported result
+time only in this inclusive order:
 
 ```text
 feature-run start
@@ -147,7 +211,8 @@ bound feature-assignment result time
   <= final-assignment start
 ```
 
-The full final sequence is targeted validation, feature assignment and review,
+The full final sequence is focused runtime-attested validation, targeted feature
+assignment and review,
 at most one authorized repair and retry, broad validation after the last source
 edit and the passing feature-assignment result, final assignment and review,
 then one atomic broad feature outcome. The manager submits the final-assignment

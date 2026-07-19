@@ -33,10 +33,40 @@ const ModelDecisionSchema = z.strictObject({
 	callsStatusFirst: z.boolean(),
 	planOnly: z.boolean(),
 	reviewFirst: z.boolean(),
+	deliveryIntent: z.enum([
+		"review_only",
+		"review_and_plan",
+		"review_and_implement",
+		"not_applicable",
+	]),
+	assuranceProfile: z.enum(["standard", "assurance", "not_applicable"]),
+	runtimeProfile: z.enum([
+		"control",
+		"standard",
+		"assurance",
+		"not_applicable",
+	]),
+	challengeScope: z.enum([
+		"claim_targeted",
+		"every_actionable_candidate_claim_scoped",
+		"not_applicable",
+	]),
 	validation: z.array(
 		z.enum(["focused", "behavioral", "ui", "browser", "broad"]),
 	),
+	validationSchedule: z.array(
+		z.enum([
+			"diagnostic_advisory",
+			"focused_after_changes",
+			"artifact_applicable",
+			"broad_final_after_feature_review",
+		]),
+	),
+	validationUsesRuntimeReceipts: z.boolean(),
+	admissionBeforeDispatch: z.boolean(),
 	independentReview: z.boolean(),
+	reviewResultRecordedBeforeEdit: z.boolean(),
+	correctionLinkedToPredecessor: z.boolean(),
 	reviewDepth: z.enum([
 		"quick",
 		"standard",
@@ -51,6 +81,9 @@ const ModelDecisionSchema = z.strictObject({
 	retryReviews: z.number().int().nonnegative(),
 	stopsAfterRetryFailure: z.boolean(),
 	candidateDecision: z.enum(["used", "serial_required", "not_applicable"]),
+	p0Justified: z.boolean(),
+	auditLedgerRendered: z.boolean(),
+	refutedInRemediation: z.boolean(),
 	completionClaimed: z.boolean(),
 	reason: z.string().min(1),
 });
@@ -161,6 +194,187 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 			test: (decision) => decision.planOnly && decision.reviewFirst,
 		},
 	],
+	"ambiguous-review-intent": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-plan",
+			test: (decision) => decision.route === "flow-plan",
+		},
+		{
+			label: "defaults ambiguous review to review and plan",
+			test: (decision) =>
+				decision.deliveryIntent === "review_and_plan" &&
+				decision.planOnly &&
+				decision.reviewFirst,
+		},
+		{
+			label: "defaults to the standard assurance profile",
+			test: (decision) => decision.assuranceProfile === "standard",
+		},
+	],
+	"standard-assurance-profile": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-plan",
+			test: (decision) => decision.route === "flow-plan",
+		},
+		{
+			label: "uses the standard profile",
+			test: (decision) =>
+				decision.assuranceProfile === "standard" &&
+				decision.runtimeProfile === "standard",
+		},
+		{
+			label: "uses a claim-targeted challenge wave",
+			test: (decision) =>
+				decision.executionMode === "readonly_parallel" &&
+				decision.challengeScope === "claim_targeted" &&
+				decision.workers.includes("flow-verifier-worker") &&
+				decision.manifestComplete &&
+				decision.admissionBeforeDispatch,
+		},
+	],
+	"assurance-profile": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-plan",
+			test: (decision) => decision.route === "flow-plan",
+		},
+		{
+			label: "uses the assurance profile",
+			test: (decision) =>
+				decision.assuranceProfile === "assurance" &&
+				decision.runtimeProfile === "assurance",
+		},
+		{
+			label: "challenges every actionable candidate claim by claim",
+			test: (decision) =>
+				decision.executionMode === "readonly_parallel" &&
+				decision.challengeScope === "every_actionable_candidate_claim_scoped" &&
+				decision.workers.includes("flow-verifier-worker") &&
+				decision.manifestComplete &&
+				decision.admissionBeforeDispatch,
+		},
+	],
+	"targeted-refutation": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-plan",
+			test: (decision) => decision.route === "flow-plan",
+		},
+		{
+			label: "targets the uncertain claim with a verifier",
+			test: (decision) =>
+				decision.executionMode === "readonly_parallel" &&
+				decision.challengeScope === "claim_targeted" &&
+				decision.workers.includes("flow-verifier-worker") &&
+				decision.admissionBeforeDispatch,
+		},
+		{
+			label: "does not remediate refuted candidates",
+			test: (decision) => !decision.refutedInRemediation,
+		},
+	],
+	"p0-guarded-candidate": [
+		...COMMON_WORKER_CRITERIA,
+		{
+			label: "routes to the audit worker",
+			test: (decision) => decision.route === "flow-audit-worker",
+		},
+		{
+			label: "does not assign P0 without a demonstrated reachable failure",
+			test: (decision) => !decision.p0Justified,
+		},
+		{
+			label: "keeps refuted candidates out of remediation",
+			test: (decision) => !decision.refutedInRemediation,
+		},
+		{
+			label: "returns the required handoff shape",
+			test: (decision) => decision.handoffHasRequiredSections,
+		},
+		{
+			label: "uses the strict audit ledger renderer",
+			test: (decision) => decision.auditLedgerRendered,
+		},
+	],
+	"p0-demonstrated-ship-blocker": [
+		...COMMON_WORKER_CRITERIA,
+		{
+			label: "routes to the audit worker",
+			test: (decision) => decision.route === "flow-audit-worker",
+		},
+		{
+			label: "allows P0 for a demonstrated reachable unguarded ship blocker",
+			test: (decision) => decision.p0Justified,
+		},
+		{
+			label: "returns the required handoff shape",
+			test: (decision) => decision.handoffHasRequiredSections,
+		},
+		{
+			label: "uses the strict audit ledger renderer",
+			test: (decision) => decision.auditLedgerRendered,
+		},
+	],
+	"correction-review-packet": [
+		...COMMON_WORKER_CRITERIA,
+		{
+			label: "routes through flow-reviewer",
+			test: routesThroughFlowReviewer,
+		},
+		{
+			label: "falls back to a detailed full review",
+			test: (decision) =>
+				decision.reviewDepth === "detailed" && decision.independentReview,
+		},
+		{
+			label: "links the correction to the exact failed predecessor",
+			test: (decision) => decision.correctionLinkedToPredecessor,
+		},
+	],
+	"record-review-before-edit": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-run",
+			test: (decision) => decision.route === "flow-run",
+		},
+		{
+			label: "records the terminal review before editing",
+			test: (decision) => decision.reviewResultRecordedBeforeEdit,
+		},
+	],
+	"validation-schedule": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-run",
+			test: (decision) => decision.route === "flow-run",
+		},
+		{
+			label: "uses the complete staged validation schedule",
+			test: (decision) =>
+				decision.validationSchedule.join(",") ===
+				"diagnostic_advisory,focused_after_changes,artifact_applicable,broad_final_after_feature_review",
+		},
+		{
+			label: "requires focused and broad evidence around review",
+			test: (decision) =>
+				decision.validation.includes("focused") &&
+				decision.validation.includes("broad") &&
+				decision.independentReview,
+		},
+	],
+	"validation-receipt-capture": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-run",
+			test: (decision) => decision.route === "flow-run",
+		},
+		{
+			label: "uses runtime-attested validation receipt refs",
+			test: (decision) => decision.validationUsesRuntimeReceipts,
+		},
+	],
 	"runtime-persistence-change": [
 		...COMMON_MANAGER_CRITERIA,
 		{
@@ -205,7 +419,44 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 		},
 		{
 			label: "requires a complete manifest",
-			test: (decision) => decision.manifestComplete,
+			test: (decision) =>
+				decision.manifestComplete && decision.admissionBeforeDispatch,
+		},
+	],
+	"runtime-profile-control": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-plan",
+			test: (decision) => decision.route === "flow-plan",
+		},
+		{
+			label: "uses legacy optional evidence workers without admission",
+			test: (decision) =>
+				decision.runtimeProfile === "control" &&
+				decision.executionMode === "readonly_parallel" &&
+				decision.workers.includes("flow-evidence-worker") &&
+				!decision.admissionBeforeDispatch,
+		},
+		{
+			label: "keeps runtime validation receipts mandatory",
+			test: (decision) => decision.validationUsesRuntimeReceipts,
+		},
+	],
+	"orchestration-admission": [
+		...COMMON_MANAGER_CRITERIA,
+		{
+			label: "routes to flow-plan",
+			test: (decision) => decision.route === "flow-plan",
+		},
+		{
+			label: "admits the bounded proposal before exact evidence workers",
+			test: (decision) =>
+				decision.runtimeProfile === "standard" &&
+				decision.executionMode === "readonly_parallel" &&
+				decision.workers.length === 1 &&
+				decision.workers[0] === "flow-evidence-worker" &&
+				decision.manifestComplete &&
+				decision.admissionBeforeDispatch,
 		},
 	],
 	"partial-handoff": [
@@ -281,7 +532,8 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 		},
 		{
 			label: "requires a complete manifest",
-			test: (decision) => decision.manifestComplete,
+			test: (decision) =>
+				decision.manifestComplete && decision.admissionBeforeDispatch,
 		},
 	],
 	"candidate-serial": [
@@ -366,7 +618,9 @@ const MODEL_CRITERIA: Record<string, DecisionCriterion[]> = {
 		{
 			label: "stops after the bounded review retry",
 			test: (decision) =>
-				decision.executionMode === "blocked" && decision.stopsAfterRetryFailure,
+				decision.executionMode === "blocked" &&
+				decision.stopsAfterRetryFailure &&
+				decision.retryReviews === 0,
 		},
 	],
 };
@@ -383,8 +637,17 @@ function responseContract(): string {
       "callsStatusFirst": true,
       "planOnly": false,
       "reviewFirst": false,
+      "deliveryIntent": "review_only | review_and_plan | review_and_implement | not_applicable",
+      "assuranceProfile": "standard | assurance | not_applicable",
+      "runtimeProfile": "control | standard | assurance | not_applicable",
+      "challengeScope": "claim_targeted | every_actionable_candidate_claim_scoped | not_applicable",
       "validation": ["focused | behavioral | ui | browser | broad"],
+      "validationSchedule": ["diagnostic_advisory | focused_after_changes | artifact_applicable | broad_final_after_feature_review"],
+      "validationUsesRuntimeReceipts": false,
+      "admissionBeforeDispatch": false,
       "independentReview": false,
+      "reviewResultRecordedBeforeEdit": false,
+      "correctionLinkedToPredecessor": false,
       "reviewDepth": "quick | standard | detailed | broad | not_applicable",
       "manifestComplete": false,
       "coverage": "complete | partial | missing | not_applicable",
@@ -393,6 +656,9 @@ function responseContract(): string {
       "retryReviews": 0,
       "stopsAfterRetryFailure": false,
       "candidateDecision": "used | serial_required | not_applicable",
+      "p0Justified": false,
+      "auditLedgerRendered": false,
+      "refutedInRemediation": false,
       "completionClaimed": false,
       "reason": "one sentence grounded in the supplied Flow instructions"
     }
@@ -423,7 +689,7 @@ Return only one JSON object matching this contract, with exactly one decision fo
 
 ${responseContract()}
 
-Use false or zero for non-applicable boolean or numeric fields. Use [] for non-applicable array fields; every validation array item must be one of the five listed evidence categories, and every worker item must be an exact Flow worker id. Use "not_applicable" only for scalar enum fields that list it as an option, never inside an array. The stateOwner field means the actor authorized to mutate durable Flow state, not the actor performing a read-only slice. The validation array lists evidence categories the workflow requires before completion; it does not claim those checks already ran. The reviewDepth field is the depth the decision requires, not a claim that review already ran. The manifestComplete field means the decision requires a complete manifest before any parallel or candidate worker launch, not that the scenario already supplies one. The completionClaimed field means claiming that implementation or the Flow feature is already complete from the scenario alone; choosing a future completion workflow is not a completion claim. The handoffHasRequiredSections field means the worker response required by the decision would contain every heading in its role prompt, even when access or coverage is missing and the status is blocked.
+Use false or zero for non-applicable boolean or numeric fields. Use [] for non-applicable array fields; every validation or validationSchedule item must use its listed enum, and every worker item must be an exact Flow worker id. Use "not_applicable" only for scalar enum fields that list it as an option, never inside an array. The stateOwner field means the actor authorized to mutate durable Flow state, not the actor performing a read-only slice. The validation array lists evidence categories the workflow requires before completion; validationSchedule lists their required lifecycle order and does not claim a check already ran. validationUsesRuntimeReceipts means an exact Bash command is armed with flow_validation_start, run next, and its appended immutable ref is copied into validationRefs without model-authored receipt metadata. runtimeProfile follows the trusted active footer when supplied and otherwise defaults to standard; control skips admission ceremony while standard and assurance use admitted proposals. admissionBeforeDispatch means the root manager calls flow_orchestration_admit exactly once for the bounded supported proposal before dispatching only the mapped workers. The deliveryIntent and assuranceProfile fields classify broad review work; use "not_applicable" outside that context. The challengeScope describes only a follow-up verification wave, never permission for blanket rereading. The reviewResultRecordedBeforeEdit field is true only when the next workflow records a terminal failed review and refreshes runtime status before repair. correctionLinkedToPredecessor means correctionOfAssignmentId names the exact immediately preceding failed assignment and source-delta context remains runtime-derived. The p0Justified field applies the rendered reachability, impact, guard, and recovery threshold. auditLedgerRendered means the strict AuditLedgerV1 was accepted by flow_audit_render and its canonical Markdown and summary are used. The refutedInRemediation field is true only when a refuted candidate would incorrectly remain in a fix plan. The reviewDepth field is the depth the decision requires, not a claim that review already ran. The manifestComplete field means the decision requires a complete manifest before any parallel or candidate worker launch, not that the scenario already supplies one. The completionClaimed field means claiming that implementation or the Flow feature is already complete from the scenario alone; choosing a future completion workflow is not a completion claim. The handoffHasRequiredSections field means the worker response required by the decision would contain every heading in its role prompt, even when access or coverage is missing and the status is blocked.
 
 ## Rendered Flow surfaces (${variant})
 ${promptBlocks}

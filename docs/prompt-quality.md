@@ -23,7 +23,7 @@ bun run prompt:model-eval -- \
 ```
 
 `prompt:quality` is deterministic and offline. `prompt:model-eval` sends the
-actual rendered prompt sets plus 19 scenarios to one requested model, requires
+actual rendered prompt sets plus 31 scenarios to one requested model, requires
 strict structured decisions, and grades those decisions deterministically. It
 uses OpenCode `1.18.3`, `--pure`, an isolated temporary directory, and no
 auto-approved tools. The default timeout is five minutes per variant and can be
@@ -63,8 +63,10 @@ live in
 former hand-maintained prompt projections and keeps one source for each rule.
 
 Manager prompts retain only minimal public-review routing. The reserved
-`flow-reviewer` owns review judgment. Each other hidden worker receives one
-role contract, one matching handoff schema, and the shared integrity rule.
+`flow-reviewer` owns review judgment. Each hidden worker receives one role
+contract, one matching handoff schema, and the shared integrity rule. The audit
+worker and reviewer additionally receive the exact ledger field and rendering
+contract because both must interpret the same strict artifact.
 
 Native skill loading follows the same progressive-disclosure boundary: read the
 decision reference first, stop when work remains serial, load manifest and
@@ -73,10 +75,63 @@ when handoffs return. The full advanced contract remains available without
 charging ordinary serial work for every worker-stage instruction.
 
 The former parallel playbook was 4,601 words. The routing index plus decision
-branch is now 1,122 words (75.6% less) for work that remains serial. A selected
-pass reaches 2,424 words through manifest and execution (47.3% less before
-handoffs), while the complete staged contract is 3,177 words (30.9% less).
+branch is now 1,298 words (71.8% less) for work that remains serial. A selected
+pass reaches 2,796 words through manifest and execution (39.2% less before
+handoffs), while the complete staged contract is 3,624 words (21.2% less).
 The optional worked example is excluded from these path totals.
+
+## Evidence-calibrated review contract
+
+Broad review plans record `deliveryIntent` (`review_only`,
+`review_and_plan`, or `review_and_implement`) and `assuranceProfile`
+(`standard` or `assurance`) in plan decisions. Ambiguous broad review defaults
+to review-and-plan. The audit is an evidence boundary: only candidates that
+survive refutation may become remediation features.
+
+Standard assurance uses one countable discovery wave and a claim-targeted
+challenge wave only for uncertain or consequential claims. Assurance challenges
+every would-be actionable or blocking candidate independently, but still by
+atomic claim rather than blanket rereading. Audit handoffs carry proof state,
+reachability, deployment context, trigger, guards and recovery, disposition,
+impact, action priority, confidence, and a falsifier. The strict ledger uses the
+runtime's exact enum spellings, including `source_proven`, `measure_first`, and
+`fix_now`. P0 means `severity: "critical"` plus
+`actionPriority: "fix_now"` and requires demonstrated reachable catastrophic
+behavior in deployed or distributed context with ineffective or absent guards.
+`flow_audit_render` validates the ledger and supplies the canonical Markdown and
+derived summary; refuted candidates retain no remediation.
+
+The trusted runtime-profile footer overrides static profile defaults. With no
+footer, manager guidance defaults to `standard`; `control` preserves legacy
+optional-worker behavior without admission ceremony, `standard` admits bounded
+discovery and claim verification, and `assurance` permits a larger admitted
+audit wave. Admission supports only discovery -> evidence worker, audit -> audit
+worker, verification -> verifier worker, and candidate implementation ->
+candidate worker. Required reviewer assignments remain assignment-gated, while
+validation workers remain receipt-gated.
+
+Failed terminal reviews are recorded before repair and followed by a compact
+status refresh. Correction packets contain prior blockers, actual changed
+artifacts, and focused evidence, with a full assigned-depth fallback for
+incomplete, broad, security, persistence, public-contract, or cross-layer
+deltas. A correction request names the exact immediately preceding failure in
+`correctionOfAssignmentId`. When semantic scope is known, the manager adds the
+elevation-only `correctionScopeHint` value `public-contract` or `cross-layer`;
+the runtime derives changed paths and review mode and may retain a more specific
+full-review reason.
+Only one repair/retry is allowed, so a second failed review stops without a
+third attempt.
+
+Validation is staged: advisory pre-edit diagnosis, focused post-change checks,
+a complete applicable artifact gate, and one separately executed broad final
+gate after passing feature review and the final edit. Immediately before an
+evidence-producing Bash command, the caller arms its exact bytes with
+`flow_validation_start`, runs that exact command next, and copies the appended
+immutable receipt ref into `flow_review_start.request.validationRefs`. The model
+does not author validation timestamps, status, output digests, or command
+summaries. Receipt capture remains mandatory in every runtime profile, stays
+bound to the exact source and feature run, and never relabels targeted evidence
+as broad.
 
 ## Closure and continuation policy
 
@@ -88,21 +143,23 @@ or replan it.
 
 ## Static evaluation
 
-The 19 fixtures cover serial fixes, planning, an explicit plan-only request
-through `/flow-auto`, review-first work, persistence,
-UI validation, parallel discovery, partial and malformed handoffs, bounded
-review repair, archive retry behavior, safe and unsafe candidate work, missing
-planning/execution runtimes, detailed review, cleanup/UI evidence gaps, and
-review-retry exhaustion.
+The 31 fixtures cover serial fixes, planning, explicit plan-only work,
+review-first work, delivery intent, both assurance profiles, targeted
+refutation, positive and negative P0 calibration, correction packets,
+record-before-edit recovery, staged validation, runtime-attested receipt
+capture, persistence, UI validation, parallel discovery, runtime-profile
+precedence, admission mapping, handoff failures, bounded review repair, archive
+retry, candidate work, missing runtimes, detailed review, evidence gaps, and
+retry exhaustion.
 
 | Variant | Complete scenarios | Criteria | Est. tokens | Exact duplicate lines | Role-inapplicable lines |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Whole-skill baseline | 13/19 | 45/54 | 62,847 | 192 | 26 |
-| Lexically deduplicated | 13/19 | 45/54 | 62,603 | 176 | 26 |
-| Surface-specific | 19/19 | 54/54 | 18,352 | 7 | 0 |
-| Surface-specific with bookends | 19/19 | 54/54 | 19,061 | 7 | 0 |
+| Whole-skill baseline | 22/31 | 81/100 | 72,719 | 197 | 26 |
+| Lexically deduplicated | 22/31 | 81/100 | 72,474 | 181 | 26 |
+| Surface-specific | 31/31 | 100/100 | 24,103 | 7 | 0 |
+| Surface-specific with bookends | 31/31 | 100/100 | 24,827 | 7 | 0 |
 
-The implemented bookended set is 69.7% smaller than the whole-skill baseline by this
+The implemented bookended set is 65.9% smaller than the whole-skill baseline by this
 estimate. Lexical deduplication alone changes little; role/phase selection
 accounts for nearly all of the reduction and eliminates role-inapplicable
 lines.
@@ -111,15 +168,15 @@ lines.
 
 | Surface | Words | Est. tokens | Actions | Exact dupes | Sources |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `flow-auto` | 4,453 | 8,315 | 132 | 4 | 11 |
-| `flow-plan` | 1,486 | 2,794 | 52 | 2 | 7 |
-| `flow-run` | 2,115 | 3,983 | 51 | 0 | 8 |
+| `flow-auto` | 5,516 | 10,372 | 151 | 4 | 11 |
+| `flow-plan` | 1,861 | 3,572 | 59 | 2 | 7 |
+| `flow-run` | 2,773 | 5,222 | 60 | 0 | 8 |
 | `flow-review` task | 76 | 140 | 0 | 0 | 1 |
 | `flow-status` | 10 | 16 | 1 | 0 | 0 |
-| `flow-reviewer` agent | 1,189 | 2,225 | 49 | 1 | 4 |
+| `flow-reviewer` agent | 1,675 | 3,170 | 61 | 1 | 5 |
 | `flow-evidence-worker` | 170 | 303 | 3 | 0 | 3 |
-| `flow-validation-worker` | 170 | 305 | 3 | 0 | 3 |
-| `flow-audit-worker` | 181 | 320 | 3 | 0 | 3 |
+| `flow-validation-worker` | 214 | 393 | 3 | 0 | 3 |
+| `flow-audit-worker` | 507 | 979 | 13 | 0 | 4 |
 | `flow-verifier-worker` | 173 | 311 | 3 | 0 | 3 |
 | `flow-candidate-worker` | 195 | 349 | 3 | 0 | 3 |
 
@@ -133,9 +190,10 @@ claim is true.
 
 The hidden reviewer grew from the first surface-specific draft because that
 draft had accidentally omitted detailed-review depth, runtime-unavailable
-behavior, and cleanup/UI special-case evidence. Restoring that judgment is an
-intentional quality correction, while the reviewer remains 49.6% smaller than
-the 4,414-token whole-skill baseline.
+behavior, cleanup/UI special-case evidence, and the strict ledger contract.
+Restoring that judgment is an intentional quality correction, while the
+reviewer remains 40.7% smaller than the current 5,283-token whole-skill
+baseline.
 
 ## Live model comparison
 
@@ -146,8 +204,8 @@ graded across 96 routing, scope, validation, review, retry, ownership, handoff,
 continuation, and false-completion criteria. These are single-sample decision
 simulations, not end-to-end Flow executions.
 
-These provider-backed rows predate the nineteenth deterministic plan-only
-scenario and remain historical 18-scenario samples. No 19-scenario model score
+These provider-backed rows predate the current 31-scenario contract suite and
+remain historical 18-scenario samples. No 31-scenario model score
 is claimed until that optional evaluation is rerun.
 
 | Model | Configuration | Variant | Scenarios | Criteria | Tool events | OpenCode-reported tokens |

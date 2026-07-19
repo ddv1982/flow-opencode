@@ -18,6 +18,10 @@ import {
 	MAX_EXECUTION_PROJECTION_BYTES,
 	MAX_PLAN_FEATURES,
 } from "../../domain/transitions.js";
+import {
+	MAX_VALIDATION_RECEIPT_BYTES,
+	VALIDATION_RECEIPT_REF_KIND,
+} from "../../domain/validation-receipt.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
@@ -206,38 +210,18 @@ const failedReviewAssignmentResult = host
 // by requiring only the existing non-empty string contract here.
 const artifact = host.object({ path: nonEmptyString }).strict();
 
-// A single public observation declares the validation and attests its result;
-// Flow derives status, command class, evidence identity, and source identity.
-const validationObservation = host
+const validationReceiptRef = host
 	.object({
-		command: host.string().trim().pipe(executionContextText),
-		summary: workflowProseInput,
-		startedAt: host.string().datetime({ offset: true }),
-		completedAt: host.string().datetime({ offset: true }),
-		exitCode: host.literal(0),
-		outputDigest: digest,
-		artifactRef: host
-			.object({
-				kind: host.literal("restricted_evidence_v1"),
-				digest,
-				byteLength: host.number().int().safe().nonnegative(),
-			})
-			.strict()
-			.optional(),
-		environmentKeys: host
-			.array(host.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/))
-			.max(64),
+		kind: host.literal(VALIDATION_RECEIPT_REF_KIND),
+		digest,
+		byteLength: host
+			.number()
+			.int()
+			.safe()
+			.positive()
+			.max(MAX_VALIDATION_RECEIPT_BYTES),
 	})
-	.strict()
-	.superRefine((value, context) => {
-		if (Date.parse(value.completedAt) < Date.parse(value.startedAt)) {
-			context.addIssue({
-				code: "custom",
-				path: ["completedAt"],
-				message: "completedAt must not precede startedAt.",
-			});
-		}
-	});
+	.strict();
 
 const planFeature = host
 	.object({
@@ -426,26 +410,57 @@ const reviewPacket = host
 const reviewStartBaseShape = {
 	...completionGuardShape,
 	packet: reviewPacket,
-	validations: host.array(validationObservation).min(1).max(100),
+	validationRefs: host
+		.array(validationReceiptRef)
+		.min(1)
+		.max(100)
+		.superRefine((references, context) => {
+			const seen = new Set<string>();
+			for (const [index, reference] of references.entries()) {
+				const identity = `${reference.digest}:${reference.byteLength}`;
+				if (!seen.has(identity)) {
+					seen.add(identity);
+					continue;
+				}
+				context.addIssue({
+					code: "custom",
+					path: [index],
+					message: "Validation receipt references must be unique.",
+				});
+			}
+		}),
+	correctionOfAssignmentId: operationId.optional(),
+	correctionScopeHint: host.enum(["public-contract", "cross-layer"]).optional(),
 } as const;
 
-const flowReviewStartRequest = host.discriminatedUnion("reviewKind", [
-	host
-		.object({
-			...reviewStartBaseShape,
-			reviewKind: host.literal("feature"),
-			validationScope: host.literal("targeted"),
-		})
-		.strict(),
-	host
-		.object({
-			...reviewStartBaseShape,
-			reviewKind: host.literal("final"),
-			validationScope: host.literal("broad"),
-			featureReview: passedSubmittedReviewAssignmentResult,
-		})
-		.strict(),
-]);
+const flowReviewStartRequest = host
+	.discriminatedUnion("reviewKind", [
+		host
+			.object({
+				...reviewStartBaseShape,
+				reviewKind: host.literal("feature"),
+				validationScope: host.literal("targeted"),
+			})
+			.strict(),
+		host
+			.object({
+				...reviewStartBaseShape,
+				reviewKind: host.literal("final"),
+				validationScope: host.literal("broad"),
+				featureReview: passedSubmittedReviewAssignmentResult,
+			})
+			.strict(),
+	])
+	.superRefine((request, context) => {
+		if (!request.correctionScopeHint || request.correctionOfAssignmentId)
+			return;
+		context.addIssue({
+			code: "custom",
+			path: ["correctionScopeHint"],
+			message:
+				"Correction scope hints are valid only when correctionOfAssignmentId names the failed predecessor.",
+		});
+	});
 
 const flowReviewStartToolInput = host
 	.object({ request: flowReviewStartRequest })

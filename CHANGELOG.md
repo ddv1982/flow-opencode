@@ -2,6 +2,45 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.3.0] - 2026-07-20
+
+Single-version harness lore makes the installed package, runtime authority,
+validation evidence, correction review, and audit promotion path explicit:
+
+- `activation-check` inventories Flow activation across OpenCode config,
+  plugin directories, and package cache. `activation-apply` plans by default,
+  then uses an exact canonical pin, backups, quarantine, and a recovery journal
+  with `--apply`; ambiguous or externally managed sources require manual
+  remediation. Post-mutation failure attempts exact safe rollback and records
+  whether recovery converged or needs journal-backed manual repair.
+- Process-global runtime leadership permits one operational Flow instance.
+  Duplicate versions fail closed; a deterministic highest-version identity is
+  diagnostic only and cannot silently take control.
+- Three bounded harness profiles (`control`, `standard`, and `assurance`) and
+  three rollout modes (`control`, `observe`, and `enforce`) now drive optional
+  worker admission through a trusted runtime-policy footer. Worker model and
+  current OpenCode `steps` routing are configurable by role.
+- Validation is runtime-attested: `flow_validation_start` binds the current run
+  and source to the exact next Bash command, which emits an immutable receipt
+  reference consumed through `flow_review_start.request.validationRefs`.
+  Failed, incomplete, stale, altered, or duplicate receipts cannot become
+  review evidence.
+- Correction review binds the latest recorded failure to authoritative source
+  manifests and a deterministic delta. Narrow correction context is used only
+  when complete and safe; broad, security-sensitive, persistence-sensitive,
+  missing, unavailable, or oversized context falls back to full review. A
+  bounded correction-only public-contract/cross-layer hint can elevate semantic
+  scope to full without overriding more specific runtime reasons. The existing
+  two-failure run-scoped cap remains authoritative.
+- `AuditLedgerV1` now provides bounded typed findings, conservative severity
+  rules, explicit refutations and falsifiers, derived summaries, and
+  deterministic reconciled Markdown through `flow_audit_render`.
+- Privacy-safe bounded host observation and the sanitized full-repository audit
+  oracle separate observed zero from unavailable data and require same-source,
+  same-model quality parity plus lower observed work before a candidate profile
+  can be promoted. The checked-in standard and assurance observations remain
+  unavailable, so enforcement is not yet a release claim.
+
 ## [5.2.2] - 2026-07-19
 
 Code-quality and persistence-hardening lore makes Flow safer at its input,

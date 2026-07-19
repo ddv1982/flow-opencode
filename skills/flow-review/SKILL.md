@@ -62,6 +62,24 @@ These instructions run in two contexts, and only one of them can load helpers:
 
 `quick` and `standard` are feature-review depth descriptions only. Final reviews use `reviewDepth: "broad"` or `"detailed"` to match the plan's `finalReviewPolicy`; these runtime enum values are the canonical final-review terms. Claim only the depth actually performed. Missing evidence is a finding, not a nuisance.
 
+## Correction reviews
+
+A correction packet must identify the prior blocking findings, actual artifacts
+changed in response, and focused post-change evidence. Review only that delta
+when the packet is complete and the repair is narrow. Fall back to the full
+assigned-depth review when packet or changed-artifact accounting is incomplete,
+the repair is broader than the blockers, or it touches security, persistence,
+public contracts, or cross-layer behavior.
+
+The manager starts a correction with `correctionOfAssignmentId` equal to the
+exact immediately preceding failed assignment id. Flow derives the source delta,
+review mode, and fallback; neither manager nor reviewer authors those fields. A
+manager may supply the elevation-only `correctionScopeHint` value
+`public-contract` or `cross-layer` when it knows the semantic repair scope; the
+hint is never authority to narrow a review. The reviewer verifies the returned
+predecessor id and runtime-derived context, including the authoritative fallback
+reason.
+
 ## Output
 
 For every observed dispatch, return exactly one assignment result. Echo only
@@ -121,7 +139,10 @@ Typed execution findings use exactly `implementation_defect`,
 
 - Cleanup/refactor: in manager context, request `flow-deslop` through `flow_guidance`; verify the smell was real, refutation paths were checked, and behavior was preserved. If it is unavailable or you are the hidden reviewer, record a coverage gap instead of approving cleanup claims.
 - UI/frontend: in manager context, request `flow-ui-quality` through `flow_guidance`; verify state coverage and visual evidence when a local target was available. If it is unavailable or you are the hidden reviewer, record a coverage gap and do not claim visual polish was verified.
-- Audit reports: request `flow-run/references/audit-rubric.md` from `flow_guidance`; findings must survive refutation before they can drive fix features.
+- Audit reports: request `flow-run/references/audit-rubric.md` from
+  `flow_guidance`; require strict `AuditLedgerV1` and canonical
+  `flow_audit_render` Markdown. Findings must survive refutation before they can
+  drive fixes, and refuted entries carry no remediation.
 - Large reviews (manager context only): request
   `flow/references/parallel-orchestration.md` from `flow_guidance` for read-only slices by
   changed-file group, risk lens, or validation surface. If fan-out is selected,

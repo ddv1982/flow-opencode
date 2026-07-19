@@ -32,6 +32,29 @@ an explicit `completed` close.
 - For cleanup/refactor goals, request `flow-deslop`.
 - For UI/frontend goals, request `flow-ui-quality`.
 - Do not invent findings. Broad "review and fix" goals start with a review-first feature whose deliverable is evidence-backed findings.
+- A findings-report audit delivers strict `AuditLedgerV1` plus the canonical
+  Markdown and derived summary from `flow_audit_render`; the Markdown is not a
+  second hand-maintained source of truth.
+
+## Delivery intent and assurance profile
+
+Classify broad review work before decomposing it. Record both values verbatim in
+plan `decisions` so later features do not infer scope from conversation memory:
+
+- `deliveryIntent: review_only` returns the evidence-backed audit without a fix
+  plan or edits.
+- `deliveryIntent: review_and_plan` makes the audit an evidence boundary, then
+  plans only findings that survive refutation. This is the default for an
+  ambiguous broad request such as "review this repository".
+- `deliveryIntent: review_and_implement` may plan and execute verified fixes only
+  when the user explicitly asks for implementation.
+
+Also record `assuranceProfile: standard` or `assuranceProfile: assurance`.
+`standard` is the default; `assurance` is reserved for explicitly requested or
+high-consequence independent challenge. The profile changes claim verification,
+not implementation authorization. Follow the profile mechanics in
+`flow/references/parallel-decision.md`; neither profile authorizes blanket
+rereading or speculative remediation.
 
 ## Reduce uncertainty before decomposing
 

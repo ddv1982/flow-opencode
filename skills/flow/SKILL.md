@@ -25,10 +25,13 @@ Routing: the root manager owns the whole loop and every state-changing `flow_*` 
    `{ request: { view: "execution" } }` and use its active-execution scope and
    causal guards.
 4. Implement and validate exactly that scope. Call `flow_review_start` with one
-   strict `request` containing the current execution guards and validation
-   observations, dispatch the returned
+   strict `request` containing the current execution guards and immutable
+   `validationRefs` appended by runtime-attested Bash capture, dispatch the returned
    assignment to the reviewer, then submit its terminal result through
-   `flow_feature_complete`. Load `flow-test` for complex or failure-prone validation.
+   `flow_feature_complete`. Record a failed terminal review result before any
+   repair or edit, then refresh compact status and follow runtime state rather
+   than remembered retry counts. Load `flow-test` for complex or failure-prone
+   validation.
 5. On the final feature, economy mode is exactly `targeted validation -> feature
    review -> one authorized bounded repair/retry if needed -> broad validation
    after the last functional edit -> final flow_review_start bound to the exact
@@ -51,8 +54,17 @@ routing index, then request the exact reference ids it selects. Request
 and `flow/references/parallel-execution.md` only after selecting fan-out, then load
 `flow/references/parallel-synthesis.md` when handoffs return. Paste the matching template from
 `flow/references/handoff-format.md` into each worker prompt. Hidden Flow workers
-are injected by plugin config; invoke the named worker when available. The
-manager owns every `flow_*` state change.
+are injected by plugin config. Obey the trusted active runtime-profile footer
+when present; default to `standard` only when it is absent. `control` preserves
+legacy optional-worker behavior without admission ceremony, `standard` uses
+admitted bounded discovery and claim verification, and `assurance` permits the
+larger admitted audit wave. Validation receipts remain mandatory in every
+profile. Under `standard` or `assurance`, before each bounded discovery, audit,
+verification, or candidate-implementation proposal, the root manager calls
+`flow_orchestration_admit` once and dispatches exactly the admitted evidence,
+audit, verifier, or candidate workers. Mandatory reviewer assignments remain
+assignment-gated and validation workers remain receipt-gated; neither uses
+orchestration admission. The manager owns every durable `flow_*` state change.
 
 Do not commit, push, amend, rebase, publish, or mutate releases during the
 autonomous Flow loop. Call `flow_guidance` with `id: "flow-commit"` only when
@@ -77,8 +89,15 @@ and do not claim helper checks were completed.
   never replaces a different unclosed goal.
 - `flow_plan_approve`: lock the draft plan.
 - `flow_run_start`: start one runnable feature.
+- `flow_orchestration_admit`: evaluate and arm one bounded discovery, audit,
+  verification, or candidate-implementation proposal before its exact hidden
+  workers are dispatched.
+- `flow_validation_start`: arm runtime capture for the exact next Bash command;
+  the host appends one immutable validation receipt ref after execution.
+- `flow_audit_render`: validate strict `AuditLedgerV1` data and return canonical
+  reconciled Markdown plus derived counts.
 - `flow_review_start`: bind current-source validation to one runtime-owned
-  reviewer assignment; only the root manager may call it.
+  reviewer assignment from `validationRefs`; only the root manager may call it.
 - `flow_feature_complete`: atomically record one completed or blocked result
   using the returned assignment id. Broad final outcome submits only the
   final-assignment result.
@@ -103,9 +122,10 @@ the manager must not record it as a Flow-gated assignment result.
   or `abandoned`, converge archive publication, then save the new goal.
 - Only one feature can be active at a time.
 - Each run has runtime-owned feature-run and reviewer-assignment identity.
-- `flow_review_start` requires passing, source-bound validation: targeted for a
-  feature assignment and broad for a final assignment. Starting again after a
-  source edit invalidates the stale pending assignment and returns a replacement.
+- `flow_review_start` requires passing runtime-attested, source/run-bound
+  validation receipt refs: targeted for a feature assignment and broad for a
+  final assignment. Starting again after a source edit invalidates the stale
+  pending assignment and returns a replacement.
 - A non-final feature outcome requires `validationScope: "targeted"` plus one passing
   feature-assignment result.
 - Final feature outcome requires `validationScope: "broad"` plus one passing
@@ -114,7 +134,9 @@ the manager must not record it as a Flow-gated assignment result.
 - Review depth comes from the approved plan; callers and reviewers do not
   author it in the feature outcome.
 - Failed reviews pause the loop by default. Autonomous repair may make at most
-  one repair plus one retry review before stopping.
+  one repair plus one retry review before stopping. First record the failed
+  terminal result and refresh compact status; never infer retry exhaustion from
+  conversation memory or reviewer prose.
 - A passing final feature outcome leaves closure null; `flow_session_close`
   alone records and
   archives the closure.
@@ -122,8 +144,8 @@ the manager must not record it as a Flow-gated assignment result.
   only with `{ request: { mode: "retry", operationId: closure.retryOperationId } }`
   until archive publication succeeds.
 - Every closure is quiescent: no active execution or pending assignment remains.
-- Reported validation and review times must follow lifecycle order and cannot
-  postdate the runtime acceptance time.
+- Runtime-attested validation and reported review times must follow lifecycle
+  order and cannot postdate runtime acceptance.
 - The `flow_session_close.request` start branch accepts `kind: "completed"`
   only after an approved plan has passed its final feature outcome.
 
@@ -132,8 +154,10 @@ the manager must not record it as a Flow-gated assignment result.
 - Confused state: call `flow_status { request: { view: "compact" } }` and follow
   `nextAction`.
 - Wrong assumption or failed implementation path: use `flow_feature_reset` for the feature and dependents, then rerun from the corrected plan.
-- Missing validation or an assignment result: gather real validation, create a fresh
-  assignment with `flow_review_start`, then submit its terminal result.
+- Missing validation or an assignment result: call `flow_validation_start`
+  immediately before each exact Bash command, collect the appended receipt
+  refs, create a fresh assignment with `flow_review_start`, then submit its
+  terminal result.
 - Source changed after assignment: rerun validation and call `flow_review_start`;
   Flow invalidates the stale pending assignment while creating its replacement.
 - Same-source final-review retry after context loss: load detail status and copy

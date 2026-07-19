@@ -27,8 +27,8 @@ import {
 	flowPlanSave,
 	flowRunStart,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
+import { publishValidationReceiptForWorkspace } from "./support/validation-receipt.js";
 
-const OUTPUT_DIGEST = `sha256:${"c".repeat(64)}`;
 const temporaryWorkspaces = new Set<string>();
 
 async function tempWorkspace(prefix: string): Promise<string> {
@@ -120,19 +120,20 @@ async function runningWorkspace() {
 	return workspace;
 }
 
-function validation(
+function publishValidation(
+	workspace: string,
 	timestamp: string,
-	command = "bun test tests/review-assignment-lifecycle.test.ts",
+	options: {
+		command?: string;
+		coverageScope?: "focused" | "broad" | "artifact";
+	} = {},
 ) {
-	return {
-		command,
-		summary: "Focused lifecycle checks passed.",
+	return publishValidationReceiptForWorkspace(workspace, {
 		startedAt: timestamp,
-		completedAt: timestamp,
-		exitCode: 0,
-		outputDigest: OUTPUT_DIGEST,
-		environmentKeys: [],
-	};
+		command:
+			options.command ?? "bun test tests/review-assignment-lifecycle.test.ts",
+		coverageScope: options.coverageScope ?? "focused",
+	});
 }
 
 async function startFeatureReview(
@@ -142,6 +143,10 @@ async function startFeatureReview(
 ) {
 	const session = await loadSession(workspace);
 	if (!session) throw new Error("Expected a running session.");
+	const validationRef = await publishValidation(
+		workspace,
+		activeRun(session).startedAt,
+	);
 	const response = await flowReviewStart(workspace, {
 		operationId,
 		expectedRevision: session.causal.revision,
@@ -153,7 +158,7 @@ async function startFeatureReview(
 			summary: "Review the source change and lifecycle invariants.",
 			riskLenses: ["stale source", "reset applicability"],
 		},
-		validations: [validation(activeRun(session).startedAt)],
+		validationRefs: [validationRef],
 	});
 	expect(response.status).toBe("ok");
 	const projection = response.workflowData?.projection as
@@ -313,6 +318,10 @@ describe("runtime-owned review assignment lifecycle", () => {
 		const running = await loadSession(workspace);
 		if (!running) throw new Error("Expected a running session.");
 		const run = activeRun(running);
+		const futureValidationRef = await publishValidation(
+			workspace,
+			"2100-01-01T00:00:00.000Z",
+		);
 		const reviewRequest = {
 			operationId: "chronology-review-start",
 			expectedRevision: running.causal.revision,
@@ -324,7 +333,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Reject validation that postdates runtime acceptance.",
 				riskLenses: ["chronology"],
 			},
-			validations: [validation("2100-01-01T00:00:00.000Z")],
+			validationRefs: [futureValidationRef],
 		};
 
 		const futureValidation = await flowReviewStart(workspace, reviewRequest);
@@ -336,9 +345,13 @@ describe("runtime-owned review assignment lifecycle", () => {
 			),
 		).toBe(false);
 
+		const correctedValidationRef = await publishValidation(
+			workspace,
+			run.startedAt,
+		);
 		const correctedReview = await flowReviewStart(workspace, {
 			...reviewRequest,
-			validations: [validation(run.startedAt)],
+			validationRefs: [correctedValidationRef],
 		});
 		expect(correctedReview.status).toBe("ok");
 		const assigned = await loadSession(workspace);
@@ -390,6 +403,10 @@ describe("runtime-owned review assignment lifecycle", () => {
 		const workspace = await runningWorkspace();
 		const beforeAssignment = await loadSession(workspace);
 		if (!beforeAssignment) throw new Error("Expected running state.");
+		const validationRef = await publishValidation(
+			workspace,
+			activeRun(beforeAssignment).startedAt,
+		);
 		const request = {
 			operationId: "review-invalidated-by-reset",
 			expectedRevision: beforeAssignment.causal.revision,
@@ -401,7 +418,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Review work that will be reset before completion.",
 				riskLenses: ["stale assignment recovery"],
 			},
-			validations: [validation(activeRun(beforeAssignment).startedAt)],
+			validationRefs: [validationRef],
 		};
 		const started = await flowReviewStart(workspace, request);
 		const assignmentId = (
@@ -769,6 +786,10 @@ describe("runtime-owned review assignment lifecycle", () => {
 		const running = await loadSession(workspace);
 		if (!running) throw new Error("Expected deterministic running state.");
 		const run = activeRun(running);
+		const featureValidationRef = await publishValidation(
+			workspace,
+			run.startedAt,
+		);
 		const featureStarted = await service.reviewStart({
 			request: {
 				operationId: "chronology-feature-review",
@@ -778,7 +799,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				reviewKind: "feature",
 				validationScope: "targeted",
 				packet: { summary: "Review the feature.", riskLenses: [] },
-				validations: [validation(run.startedAt)],
+				validationRefs: [featureValidationRef],
 			},
 		});
 		expect(featureStarted.status).toBe("ok");
@@ -792,6 +813,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 			Date.parse(featureAssignment.startedAt),
 		);
 		const featureResult = passingResult(featureAssignment);
+		const outOfOrderValidationRef = await publishValidation(
+			workspace,
+			run.startedAt,
+			{ coverageScope: "broad" },
+		);
 		const finalRequest = {
 			operationId: "chronology-final-review",
 			expectedRevision: afterFeature.causal.revision,
@@ -801,7 +827,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 			validationScope: "broad" as const,
 			featureReview: featureResult,
 			packet: { summary: "Review the final result.", riskLenses: [] },
-			validations: [validation(run.startedAt)],
+			validationRefs: [outOfOrderValidationRef],
 		};
 
 		const outOfOrder = await service.reviewStart({ request: finalRequest });
@@ -811,10 +837,15 @@ describe("runtime-owned review assignment lifecycle", () => {
 		);
 		expect(await loadSession(workspace)).toEqual(afterFeature);
 
+		const equalityValidationRef = await publishValidation(
+			workspace,
+			featureResult.completedAt,
+			{ coverageScope: "broad" },
+		);
 		const equalityBoundary = await service.reviewStart({
 			request: {
 				...finalRequest,
-				validations: [validation(featureResult.completedAt)],
+				validationRefs: [equalityValidationRef],
 			},
 		});
 		expect(equalityBoundary.status).toBe("ok");
@@ -864,6 +895,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 		if (!afterFeatureAssignment || !featureAssignment) {
 			throw new Error("Expected final feature assignment state.");
 		}
+		const finalValidationRef = await publishValidation(
+			workspace,
+			featureAssignment.startedAt,
+			{ coverageScope: "broad" },
+		);
 		const finalRequest = {
 			operationId: "sequenced-final-review",
 			expectedRevision: afterFeatureAssignment.causal.revision,
@@ -875,7 +911,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Review the completed plan after feature review passed.",
 				riskLenses: ["release sequencing"],
 			},
-			validations: [validation(featureAssignment.startedAt)],
+			validationRefs: [finalValidationRef],
 		};
 		const premature = await flowReviewStart(workspace, finalRequest);
 		expect(premature.status).toBe("error");
@@ -1056,6 +1092,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 				},
 			],
 		};
+		const firstFinalValidationRef = await publishValidation(
+			workspace,
+			originalFeatureResult.completedAt,
+			{ coverageScope: "broad" },
+		);
 		const firstFinalStarted = await flowReviewStart(workspace, {
 			operationId: "retry-binding-first-final-review",
 			expectedRevision: afterFeatureAssignment.causal.revision,
@@ -1068,7 +1109,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Run the first final review attempt.",
 				riskLenses: ["durable retry binding"],
 			},
-			validations: [validation(originalFeatureResult.completedAt)],
+			validationRefs: [firstFinalValidationRef],
 		});
 		expect(firstFinalStarted.status).toBe("ok");
 		const firstFinalAssignmentId = (
@@ -1171,6 +1212,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 			})),
 		};
 		const retryOperationId = "retry-binding-second-final-review";
+		const divergentValidationRef = await publishValidation(
+			workspace,
+			divergentFeatureResult.completedAt,
+			{ coverageScope: "broad" },
+		);
 		const divergentRetry = await flowReviewStart(workspace, {
 			operationId: retryOperationId,
 			expectedRevision: detail?.compact?.revision,
@@ -1183,7 +1229,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Reject a divergent reconstructed prerequisite.",
 				riskLenses: ["context loss"],
 			},
-			validations: [validation(divergentFeatureResult.completedAt)],
+			validationRefs: [divergentValidationRef],
 		});
 		expect(divergentRetry.status).toBe("error");
 		expect(divergentRetry.workflowData?.failure?.summary).toContain(
@@ -1203,6 +1249,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 		) {
 			throw new Error("Expected a complete detail recovery projection.");
 		}
+		const exactValidationRef = await publishValidation(
+			workspace,
+			recoveredFeatureResult.completedAt,
+			{ coverageScope: "broad" },
+		);
 		const exactRetry = await flowReviewStart(workspace, {
 			operationId: retryOperationId,
 			expectedRevision: detail.compact.revision,
@@ -1215,7 +1266,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Retry with the exact projected prerequisite.",
 				riskLenses: ["context loss"],
 			},
-			validations: [validation(recoveredFeatureResult.completedAt)],
+			validationRefs: [exactValidationRef],
 		});
 		expect(exactRetry.status).toBe("ok");
 		const secondFinalAssignmentId = (
@@ -1301,6 +1352,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 		const prepared = await prepareFinalFeature(workspace, "source-revert");
 		const originalAssignment = prepared.featureAssignment;
 		const originalResult = passingResult(originalAssignment);
+		const originalValidationRef = await publishValidation(
+			workspace,
+			originalResult.completedAt,
+			{ coverageScope: "broad" },
+		);
 		const firstFinalStarted = await flowReviewStart(workspace, {
 			operationId: "source-revert-first-final-review",
 			expectedRevision: prepared.session.causal.revision,
@@ -1313,7 +1369,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Bind the original source and feature assignment.",
 				riskLenses: ["source reversion"],
 			},
-			validations: [validation(originalResult.completedAt)],
+			validationRefs: [originalValidationRef],
 		});
 		expect(firstFinalStarted.status).toBe("ok");
 		const firstFinalAssignmentId = (
@@ -1371,6 +1427,11 @@ describe("runtime-owned review assignment lifecycle", () => {
 		});
 		const revertedAssignment = assignment(afterRevert, revertedAssignmentId);
 		const revertedResult = passingResult(revertedAssignment);
+		const reboundValidationRef = await publishValidation(
+			workspace,
+			revertedResult.completedAt,
+			{ coverageScope: "broad" },
+		);
 		const reboundFinal = await flowReviewStart(workspace, {
 			operationId: "source-revert-rebound-final-review",
 			expectedRevision: afterRevert.causal.revision,
@@ -1383,7 +1444,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Bind the fresh assignment after source reversion.",
 				riskLenses: ["source reversion"],
 			},
-			validations: [validation(revertedResult.completedAt)],
+			validationRefs: [reboundValidationRef],
 		});
 		expect(reboundFinal.status).toBe("ok");
 		const reboundFinalAssignmentId = (
@@ -1462,6 +1523,14 @@ describe("runtime-owned review assignment lifecycle", () => {
 		const workspace = await runningWorkspace();
 		const session = await loadSession(workspace);
 		if (!session) throw new Error("Expected running state.");
+		const validationRefs = await Promise.all([
+			publishValidation(workspace, activeRun(session).startedAt, {
+				command: "bun test tests/unit-a.test.ts",
+			}),
+			publishValidation(workspace, activeRun(session).startedAt, {
+				command: "bun test tests/unit-b.test.ts",
+			}),
+		]);
 		const response = await flowReviewStart(workspace, {
 			operationId: "silent-validation-assignment",
 			expectedRevision: session.causal.revision,
@@ -1473,16 +1542,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Review two silent validation observations.",
 				riskLenses: [],
 			},
-			validations: [
-				validation(
-					activeRun(session).startedAt,
-					"bun test tests/unit-a.test.ts",
-				),
-				validation(
-					activeRun(session).startedAt,
-					"bun test tests/unit-b.test.ts",
-				),
-			],
+			validationRefs,
 		});
 		expect(response.status).toBe("ok");
 		const persisted = await loadSession(workspace);
@@ -1502,7 +1562,10 @@ describe("runtime-owned review assignment lifecycle", () => {
 		const workspace = await runningWorkspace();
 		const before = await loadSession(workspace);
 		if (!before) throw new Error("Expected running state.");
-		const repeated = validation(activeRun(before).startedAt);
+		const repeated = await publishValidation(
+			workspace,
+			activeRun(before).startedAt,
+		);
 		const operationId = "duplicate-validation-evidence";
 		const response = await flowReviewStart(workspace, {
 			operationId,
@@ -1515,7 +1578,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 				summary: "Reject duplicated canonical validation evidence.",
 				riskLenses: ["evidence identity"],
 			},
-			validations: [repeated, repeated],
+			validationRefs: [repeated, repeated],
 		});
 		expect(response.status).toBe("error");
 		expect(response.workflowData?.failure?.summary).toContain("must be unique");
@@ -1523,8 +1586,8 @@ describe("runtime-owned review assignment lifecycle", () => {
 			operationAccepted: false,
 			operationIdConsumed: false,
 			operationId,
-			revision: before.causal.revision,
-			snapshotId: before.causal.snapshotId,
+			revision: null,
+			snapshotId: null,
 		});
 		expect(await loadSession(workspace)).toEqual(before);
 	});

@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { SessionSchema } from "../src/application/schema.js";
+import { canonicalValidationCommandDigest } from "../src/domain/transitions.js";
+import { validationCommandClass } from "../src/domain/validation-command.js";
 import {
-	SessionSchema,
-	ValidationObservationSchema,
-} from "../src/application/schema.js";
+	VALIDATION_RECEIPT_KIND,
+	ValidationReceiptV1Schema,
+} from "../src/domain/validation-receipt.js";
 import {
 	REQUIRED_REPOSITORY_SEQUENCE_ACTIONS,
 	runDeterministicRepositoryLifecycleSequence,
@@ -70,18 +73,27 @@ describe("Session v4 deterministic lifecycle sequences", () => {
 	});
 
 	test("accepts inclusive validation equality and rejects reversed chronology", () => {
+		const command = "bun test tests/lifecycle-invariant-sequences.test.ts";
 		const base = {
-			command: "bun test tests/lifecycle-invariant-sequences.test.ts",
-			summary: "Lifecycle invariant checks passed.",
+			schemaVersion: 1 as const,
+			kind: VALIDATION_RECEIPT_KIND,
+			featureRunId: "feature-run:sequence",
+			featureId: "sequence",
+			sourceDigest: `sha256:${"b".repeat(64)}`,
 			startedAt: "2026-07-19T12:00:00.000Z",
 			completedAt: "2026-07-19T12:00:00.000Z",
+			command,
+			commandDigest: canonicalValidationCommandDigest(command),
+			commandClass: validationCommandClass(command),
+			coverageScope: "focused" as const,
 			exitCode: 0,
 			outputDigest: `sha256:${"a".repeat(64)}`,
+			outputCompleteness: "complete" as const,
 			environmentKeys: [],
 		};
-		expect(ValidationObservationSchema.safeParse(base).success).toBe(true);
+		expect(ValidationReceiptV1Schema.safeParse(base).success).toBe(true);
 		expect(
-			ValidationObservationSchema.safeParse({
+			ValidationReceiptV1Schema.safeParse({
 				...base,
 				startedAt: "2026-07-19T12:00:00.001Z",
 			}).success,

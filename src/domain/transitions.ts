@@ -26,6 +26,7 @@ import type {
 	ReviewAssignment,
 	ReviewAssignmentId,
 	ReviewAssignmentResultInput,
+	ReviewCorrectionBinding,
 	ReviewExecution,
 	ReviewExecutionFindingInput,
 	ReviewExecutionInput,
@@ -48,6 +49,8 @@ const MAX_EXECUTION_FEATURE_RUN_ID = "f".repeat(
 	MAX_SESSION_ID_LENGTH,
 ) as FeatureRunId;
 const MAX_PERSISTED_REVIEW_ID = "r".repeat(MAX_SESSION_ID_LENGTH);
+export const MAX_CORRECTION_CHANGED_PATHS = 256;
+export const MAX_CORRECTION_PATH_BYTES = 512;
 
 export type TransitionEnvironment = {
 	now(): string;
@@ -70,6 +73,9 @@ export type ReviewStartInput = CausalGuard & {
 	sourceDigest: string;
 	validationEvidence: Extract<EvidenceRecord, { kind: "validation" }>[];
 	featureReview?: ReviewAssignmentResultInput | undefined;
+	correctionOfAssignmentId?: ReviewAssignmentId | undefined;
+	sourceManifestArtifactRef?: ReviewAssignment["sourceManifestArtifactRef"];
+	correction?: ReviewCorrectionBinding | undefined;
 };
 
 export type AssignedFeatureCompletionInput = CausalGuard & {
@@ -292,9 +298,11 @@ export function canonicalReviewPacketDigest(
 		| "packetSummary"
 		| "riskLenses"
 		| "prerequisite"
+		| "sourceManifestArtifactRef"
+		| "correction"
 	>,
 ): string {
-	return deterministicDigest("review-packet-v2", {
+	const base = {
 		featureRunId: assignment.featureRunId,
 		featureId: assignment.featureId,
 		reviewKind: assignment.reviewKind,
@@ -309,6 +317,38 @@ export function canonicalReviewPacketDigest(
 					resultDigest: assignment.prerequisite.resultDigest,
 				}
 			: null,
+	};
+	// Historical Session v4 assignments omitted both extension fields. Preserve
+	// their exact v2 golden digest instead of treating absence as a migration.
+	if (
+		assignment.sourceManifestArtifactRef === undefined &&
+		assignment.correction === undefined
+	) {
+		return deterministicDigest("review-packet-v2", base);
+	}
+	return deterministicDigest("review-packet-v3", {
+		...base,
+		sourceManifestArtifactRef: assignment.sourceManifestArtifactRef ?? null,
+		correction: assignment.correction
+			? {
+					...assignment.correction,
+					changedRelativePaths: [...assignment.correction.changedRelativePaths],
+				}
+			: null,
+	});
+}
+
+export function canonicalSourceDeltaDigest(input: {
+	predecessorSourceDigest: string;
+	currentSourceDigest: string;
+	sourceChanged: boolean;
+	changedRelativePaths: readonly string[];
+}): string {
+	return deterministicDigest("source-delta-v1", {
+		predecessorSourceDigest: input.predecessorSourceDigest,
+		currentSourceDigest: input.currentSourceDigest,
+		sourceChanged: input.sourceChanged,
+		changedRelativePaths: [...input.changedRelativePaths],
 	});
 }
 
@@ -1504,6 +1544,279 @@ export function startRun(
 	});
 }
 
+type ReviewCorrectionPreflight = {
+	assignment: ReviewAssignment;
+	execution: ReviewExecution;
+};
+
+/**
+ * Resolve a correction predecessor from durable state before any filesystem
+ * measurement or artifact read. The caller may name only the immediately
+ * preceding recorded failure in the active logical pass.
+ */
+export function preflightReviewCorrection(
+	session: Session,
+	input: {
+		featureId: FeatureId;
+		reviewKind: ReviewAssignment["reviewKind"];
+		correctionOfAssignmentId?: ReviewAssignmentId | undefined;
+	},
+): TransitionResult<ReviewCorrectionPreflight | null> {
+	if (!input.correctionOfAssignmentId) return ok(null);
+	if (
+		!session.activeFeatureRunId ||
+		session.activeFeatureId !== input.featureId
+	) {
+		return fail(
+			"Correction review requires the active native feature run.",
+			"Reload compact status and use a failed assignment from the active run.",
+			session,
+		);
+	}
+	const logicalPassId = canonicalLogicalReviewPassId(
+		session.activeFeatureRunId,
+		input.reviewKind,
+	);
+	const pending = session.reviewAssignments.find(
+		(assignment) =>
+			assignment.featureRunId === session.activeFeatureRunId &&
+			assignment.reviewKind === input.reviewKind &&
+			assignment.status === "pending",
+	);
+	if (pending) {
+		return fail(
+			`Review assignment '${pending.id}' is still pending.`,
+			"Record its terminal result before starting correction work.",
+			session,
+		);
+	}
+	const terminal = session.reviewAssignments.flatMap((assignment) => {
+		if (
+			assignment.featureRunId !== session.activeFeatureRunId ||
+			assignment.featureId !== input.featureId ||
+			assignment.reviewKind !== input.reviewKind ||
+			assignment.logicalPassId !== logicalPassId ||
+			(assignment.status !== "submitted" &&
+				assignment.status !== "observed_unsubmitted")
+		) {
+			return [];
+		}
+		const execution = session.budget.reviewExecutions.find(
+			(candidate) => candidate.assignmentId === assignment.id,
+		);
+		return execution ? [{ assignment, execution }] : [];
+	});
+	const predecessor = terminal.at(-1);
+	if (
+		!predecessor ||
+		predecessor.assignment.id !== input.correctionOfAssignmentId ||
+		predecessor.execution.verdict !== "failed"
+	) {
+		return fail(
+			`Review assignment '${input.correctionOfAssignmentId}' is not the latest recorded failure for this logical pass.`,
+			"Reload detail status and use the immediately preceding failed assignment exactly.",
+			session,
+		);
+	}
+	const reviewEvidence = session.causal.evidence.filter(
+		(evidence) =>
+			evidence.kind === "review" &&
+			evidence.assignmentId === predecessor.assignment.id &&
+			evidence.featureRunId === predecessor.assignment.featureRunId &&
+			evidence.packetDigest === predecessor.assignment.packetDigest,
+	);
+	if (
+		predecessor.assignment.completedAt !== predecessor.execution.completedAt ||
+		predecessor.execution.findings.every(
+			(finding) => finding.severity !== "blocking",
+		) ||
+		reviewEvidence.length !== 1 ||
+		!session.causal.mutations.some(
+			(mutation) =>
+				mutation.operationKind === "feature_complete" &&
+				mutation.featureRunId === predecessor.assignment.featureRunId &&
+				mutation.evidenceRefs.includes(reviewEvidence[0]?.evidenceId ?? ""),
+		)
+	) {
+		return fail(
+			`Review assignment '${predecessor.assignment.id}' does not have one durable failed result.`,
+			"Preserve the session and repair review evidence before starting a correction.",
+			session,
+		);
+	}
+	const failedAttempts =
+		session.budget.failedReviewAttemptsByFeatureRun[
+			session.activeFeatureRunId
+		] ?? 0;
+	if (failedAttempts >= MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE) {
+		return fail(
+			"The review retry budget is exhausted for this feature run.",
+			"Keep the two-failure terminal result; reset or replan only after explicit user direction.",
+			session,
+		);
+	}
+	return ok(predecessor);
+}
+
+function validationEvidenceSignature(
+	evidence: Extract<EvidenceRecord, { kind: "validation" }>,
+): string {
+	return JSON.stringify(
+		canonicalJsonValue({
+			commandDigest: evidence.commandDigest,
+			commandClass: evidence.commandClass,
+			startedAt: evidence.startedAt,
+			completedAt: evidence.completedAt,
+			exitCode: evidence.exitCode,
+			outputDigest: evidence.outputDigest,
+			artifactRef: evidence.artifactRef ?? null,
+			environmentKeys: evidence.environmentKeys,
+		}),
+	);
+}
+
+function hasDistinctValidationEvidence(
+	session: Session,
+	predecessor: ReviewAssignment,
+	current: readonly Extract<EvidenceRecord, { kind: "validation" }>[],
+): boolean {
+	const prior = new Set(
+		predecessor.validationEvidenceRefs.flatMap((reference) => {
+			const evidence = session.causal.evidence.find(
+				(candidate) => candidate.evidenceId === reference,
+			);
+			return evidence?.kind === "validation"
+				? [validationEvidenceSignature(evidence)]
+				: [];
+		}),
+	);
+	return current.some(
+		(evidence) => !prior.has(validationEvidenceSignature(evidence)),
+	);
+}
+
+function safeCorrectionPath(path: string): boolean {
+	if (
+		path.length === 0 ||
+		path.includes("\\") ||
+		path.includes("\u0000") ||
+		path.startsWith("/") ||
+		/^[A-Za-z]:/.test(path) ||
+		utf8ByteLength(path) > MAX_CORRECTION_PATH_BYTES
+	) {
+		return false;
+	}
+	return path
+		.split("/")
+		.every(
+			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
+		);
+}
+
+function compareUtf8(left: string, right: string): number {
+	const leftBytes = new TextEncoder().encode(left);
+	const rightBytes = new TextEncoder().encode(right);
+	const length = Math.min(leftBytes.length, rightBytes.length);
+	for (let index = 0; index < length; index += 1) {
+		const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+		if (difference !== 0) return difference;
+	}
+	return leftBytes.length - rightBytes.length;
+}
+
+function validateCorrectionBinding(
+	session: Session,
+	input: ReviewStartInput,
+	preflight: ReviewCorrectionPreflight | null,
+): TransitionResult<true> {
+	if (!input.correctionOfAssignmentId) {
+		return input.correction === undefined
+			? ok(true)
+			: fail(
+					"Runtime correction metadata cannot exist without a requested predecessor.",
+					undefined,
+					session,
+				);
+	}
+	if (!preflight || !input.correction) {
+		return fail(
+			"Correction review is missing runtime-derived source context.",
+			"Retry flow_review_start so Flow can derive the source delta transactionally.",
+			session,
+		);
+	}
+	const correction = input.correction;
+	const sourceChanged =
+		preflight.assignment.sourceDigest !== input.sourceDigest;
+	if (
+		correction.predecessorAssignmentId !== input.correctionOfAssignmentId ||
+		correction.sourceChanged !== sourceChanged ||
+		correction.changedRelativePaths.length > MAX_CORRECTION_CHANGED_PATHS ||
+		new Set(correction.changedRelativePaths).size !==
+			correction.changedRelativePaths.length ||
+		correction.changedRelativePaths.some((path) => !safeCorrectionPath(path)) ||
+		correction.changedRelativePaths.some(
+			(path, index, paths) =>
+				index > 0 && compareUtf8(paths[index - 1] ?? "", path) >= 0,
+		) ||
+		(!sourceChanged && correction.changedRelativePaths.length > 0) ||
+		!isSha256Digest(correction.sourceDeltaDigest) ||
+		((correction.contextCompleteness === "complete" ||
+			correction.fallbackReason === "projection_context_too_large") &&
+			correction.sourceDeltaDigest !==
+				canonicalSourceDeltaDigest({
+					predecessorSourceDigest: preflight.assignment.sourceDigest,
+					currentSourceDigest: input.sourceDigest,
+					sourceChanged,
+					changedRelativePaths: correction.changedRelativePaths,
+				}))
+	) {
+		return fail(
+			"Correction review source context is inconsistent or unsafe.",
+			"Retry flow_review_start and use only runtime-derived correction metadata.",
+			session,
+		);
+	}
+	if (
+		(correction.reviewMode === "correction" &&
+			(correction.contextCompleteness !== "complete" ||
+				correction.fallbackReason !== null)) ||
+		(correction.reviewMode === "full" && correction.fallbackReason === null)
+	) {
+		return fail(
+			"Correction review mode disagrees with its completeness or fallback reason.",
+			undefined,
+			session,
+		);
+	}
+	if (!sourceChanged) {
+		const blocking = preflight.execution.findings.filter(
+			(finding) => finding.severity === "blocking",
+		);
+		if (blocking.some((finding) => finding.taxonomy !== "evidence_gap")) {
+			return fail(
+				"Implementation correction requires a changed source state.",
+				"Change the implementation, rerun validation, and start correction review again.",
+				session,
+			);
+		}
+		if (
+			!hasDistinctValidationEvidence(
+				session,
+				preflight.assignment,
+				input.validationEvidence,
+			)
+		) {
+			return fail(
+				"Same-source evidence correction requires genuinely distinct validation evidence.",
+				"Run a new applicable validation or change the source before retrying.",
+				session,
+			);
+		}
+	}
+	return ok(true);
+}
+
 export function startReviewAssignment(
 	session: Session,
 	input: ReviewStartInput,
@@ -1553,6 +1866,8 @@ export function startReviewAssignment(
 			session,
 		);
 	}
+	const correctionPreflight = preflightReviewCorrection(session, input);
+	if (!correctionPreflight.ok) return correctionPreflight;
 	const acceptedAt = environment.now();
 	const feature = session.plan.features.find(
 		(candidate) => candidate.id === input.featureId,
@@ -1602,6 +1917,22 @@ export function startReviewAssignment(
 		return fail(
 			"Review assignment validation is failed, stale, future-dated, out of order, or missing command identity.",
 			"Submit passing observations captured within the active feature run and no later than runtime acceptance.",
+		);
+	}
+	const correctionBinding = validateCorrectionBinding(
+		session,
+		input,
+		correctionPreflight.value,
+	);
+	if (!correctionBinding.ok) return correctionBinding;
+	if (
+		input.sourceManifestArtifactRef !== undefined &&
+		!safeArtifactRef(input.sourceManifestArtifactRef)
+	) {
+		return fail(
+			"Review assignment contains an unsafe source-manifest artifact reference.",
+			"Retry so Flow can publish the canonical restricted source manifest.",
+			session,
 		);
 	}
 	if (input.reviewKind === "feature" && input.featureReview) {
@@ -1743,7 +2074,7 @@ export function startReviewAssignment(
 		reviewKind: input.reviewKind,
 		attempt: samePassAssignments.length + 1,
 	}) as ReviewAssignmentId;
-	const packetDigest = canonicalReviewPacketDigest({
+	const packetIdentity = {
 		featureRunId: session.activeFeatureRunId,
 		featureId: input.featureId,
 		reviewKind: input.reviewKind,
@@ -1753,8 +2084,12 @@ export function startReviewAssignment(
 		packetSummary: input.packetSummary,
 		riskLenses: input.riskLenses,
 		prerequisite,
-	});
-	const assignment: ReviewAssignment = {
+		...(input.sourceManifestArtifactRef
+			? { sourceManifestArtifactRef: input.sourceManifestArtifactRef }
+			: {}),
+		...(input.correction ? { correction: input.correction } : {}),
+	};
+	let assignment: ReviewAssignment = {
 		id: assignmentId,
 		operationId: input.operationId,
 		featureRunId: session.activeFeatureRunId,
@@ -1763,10 +2098,21 @@ export function startReviewAssignment(
 		validationScope: input.validationScope,
 		validationEvidenceRefs,
 		sourceDigest: input.sourceDigest,
-		packetDigest,
+		packetDigest: canonicalReviewPacketDigest(packetIdentity),
 		packetSummary: input.packetSummary,
 		riskLenses: [...input.riskLenses],
 		prerequisite,
+		...(input.sourceManifestArtifactRef
+			? { sourceManifestArtifactRef: { ...input.sourceManifestArtifactRef } }
+			: {}),
+		...(input.correction
+			? {
+					correction: {
+						...input.correction,
+						changedRelativePaths: [...input.correction.changedRelativePaths],
+					},
+				}
+			: {}),
 		attemptId: canonicalReviewAttemptId(assignmentId),
 		logicalPassId,
 		startedAt,
@@ -1779,23 +2125,50 @@ export function startReviewAssignment(
 		invalidatedAt: null,
 		invalidationReason: null,
 	};
-	const next = touch(
-		{
+	let provisional: Session = {
+		...mergedEvidence.value.session,
+		reviewAssignments: [...reviewAssignments, assignment],
+	};
+	let projection = reviewerSessionProjection(provisional, {
+		assignmentId: assignment.id,
+	});
+	if (
+		input.correction &&
+		(!projection.ok ||
+			serializedUtf8JsonBytes(projection.value) > MAX_REVIEWER_PROJECTION_BYTES)
+	) {
+		const correction: ReviewCorrectionBinding = {
+			...input.correction,
+			reviewMode: "full",
+			contextCompleteness: "fallback",
+			fallbackReason: "projection_context_too_large",
+		};
+		assignment = {
+			...assignment,
+			correction,
+			packetDigest: canonicalReviewPacketDigest({
+				...packetIdentity,
+				correction,
+			}),
+		};
+		provisional = {
 			...mergedEvidence.value.session,
 			reviewAssignments: [...reviewAssignments, assignment],
-		},
-		environment,
-		{
-			operationId: input.operationId,
-			operationKind: "review_start",
-			requestDigest,
-			recordedAt: acceptedAt,
-			changedEntity: { kind: "review", id: assignment.id },
-			changedFields: ["causal.evidence", "reviewAssignments"],
-			evidenceRefs: validationEvidenceRefs,
-		},
-	);
-	const projection = reviewerSessionProjection(next, {
+		};
+		projection = reviewerSessionProjection(provisional, {
+			assignmentId: assignment.id,
+		});
+	}
+	const next = touch(provisional, environment, {
+		operationId: input.operationId,
+		operationKind: "review_start",
+		requestDigest,
+		recordedAt: acceptedAt,
+		changedEntity: { kind: "review", id: assignment.id },
+		changedFields: ["causal.evidence", "reviewAssignments"],
+		evidenceRefs: validationEvidenceRefs,
+	});
+	projection = reviewerSessionProjection(next, {
 		assignmentId: assignment.id,
 	});
 	if (
@@ -2951,7 +3324,31 @@ type ReviewerProjectionSource = Pick<
 	| "riskLenses"
 	| "validationScope"
 	| "validationEvidenceRefs"
+	| "correction"
 >;
+
+type ReviewerCorrectionProjection = Pick<
+	ReviewerProjection,
+	| "reviewMode"
+	| "predecessorAssignmentId"
+	| "priorBlockingFindings"
+	| "sourceChanged"
+	| "changedRelativePaths"
+	| "sourceDeltaDigest"
+	| "correctionContextCompleteness"
+	| "correctionFallbackReason"
+>;
+
+const FULL_REVIEW_PROJECTION: ReviewerCorrectionProjection = {
+	reviewMode: "full",
+	predecessorAssignmentId: null,
+	priorBlockingFindings: [],
+	sourceChanged: null,
+	changedRelativePaths: [],
+	sourceDeltaDigest: null,
+	correctionContextCompleteness: "complete",
+	correctionFallbackReason: null,
+};
 
 function assignedReviewScope(
 	plan: Plan,
@@ -2970,6 +3367,7 @@ function buildReviewerProjection(
 	feature: Feature,
 	assignment: ReviewerProjectionSource,
 	assignedScope = assignedReviewScope(plan, feature, assignment.reviewKind),
+	correctionProjection: ReviewerCorrectionProjection = FULL_REVIEW_PROJECTION,
 ): ReviewerProjection {
 	return {
 		view: "reviewer",
@@ -2989,6 +3387,7 @@ function buildReviewerProjection(
 			assignment.status === "observed_unsubmitted"
 				? assignment.status
 				: null,
+		...correctionProjection,
 	};
 }
 
@@ -3321,6 +3720,12 @@ export function detailSessionProjection(session: Session) {
 			completedAt: assignment.completedAt,
 			invalidatedAt: assignment.invalidatedAt,
 			invalidationReason: assignment.invalidationReason,
+			reviewMode: assignment.correction?.reviewMode ?? "full",
+			predecessorAssignmentId:
+				assignment.correction?.predecessorAssignmentId ?? null,
+			sourceManifestArtifactRef: assignment.sourceManifestArtifactRef
+				? { ...assignment.sourceManifestArtifactRef }
+				: null,
 			prerequisite: assignment.prerequisite
 				? {
 						assignmentId: assignment.prerequisite.assignmentId,
@@ -3366,7 +3771,61 @@ export function reviewerSessionProjection(
 	if (!plan || !feature) {
 		return fail("The review assignment references a missing plan feature.");
 	}
-	return ok(buildReviewerProjection(plan, feature, assignment));
+	let correctionProjection = FULL_REVIEW_PROJECTION;
+	if (assignment.correction) {
+		const predecessor = session.reviewAssignments.find(
+			(candidate) =>
+				candidate.id === assignment.correction?.predecessorAssignmentId,
+		);
+		const execution = predecessor
+			? session.budget.reviewExecutions.find(
+					(candidate) => candidate.assignmentId === predecessor.id,
+				)
+			: undefined;
+		if (
+			!predecessor ||
+			!execution ||
+			execution.verdict !== "failed" ||
+			predecessor.featureRunId !== assignment.featureRunId ||
+			predecessor.reviewKind !== assignment.reviewKind ||
+			predecessor.logicalPassId !== assignment.logicalPassId
+		) {
+			return fail(
+				`Review assignment '${assignment.id}' has an unavailable correction predecessor.`,
+				"Preserve the session and repair the durable review graph before recovery.",
+			);
+		}
+		const omitOversizedContext =
+			assignment.correction.fallbackReason === "projection_context_too_large";
+		correctionProjection = {
+			reviewMode: assignment.correction.reviewMode,
+			predecessorAssignmentId: predecessor.id,
+			priorBlockingFindings: omitOversizedContext
+				? []
+				: execution.findings
+						.filter((finding) => finding.severity === "blocking")
+						.map((finding) => ({
+							fingerprint: finding.fingerprint,
+							evidenceLocator: finding.evidenceLocator,
+						})),
+			sourceChanged: assignment.correction.sourceChanged,
+			changedRelativePaths: omitOversizedContext
+				? []
+				: [...assignment.correction.changedRelativePaths],
+			sourceDeltaDigest: assignment.correction.sourceDeltaDigest,
+			correctionContextCompleteness: assignment.correction.contextCompleteness,
+			correctionFallbackReason: assignment.correction.fallbackReason,
+		};
+	}
+	return ok(
+		buildReviewerProjection(
+			plan,
+			feature,
+			assignment,
+			assignedReviewScope(plan, feature, assignment.reviewKind),
+			correctionProjection,
+		),
+	);
 }
 
 export function mutationReceiptProjection(

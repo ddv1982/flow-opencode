@@ -21,6 +21,24 @@ Network-backed advisory data is intentionally outside the reproducible local
 gate. Blocking CI runs `bun audit --audit-level=high` in a separate job; local
 contributors may run the same command when network access is available.
 
+Harness resource evidence is also separate from `bun run check` because a
+candidate observation is real-run evidence, not a deterministic unit-test
+fixture to manufacture during every build:
+
+```bash
+bun run harness:report
+bun run harness:gate
+```
+
+`harness:report` validates and summarizes the sanitized full-repository audit
+fixture. `harness:gate` requires both standard and assurance promotion gates to
+pass. It exits nonzero while either same-corpus candidate is unavailable or
+fails; that is the current expected result and must not be relabeled as success.
+CI runs the report without `--require` as observation only. The separate
+`Harness Promotion Gate` workflow is manual, read-only, and requires an explicit
+standard or assurance candidate; release and ordinary CI do not silently
+promote a profile.
+
 ## TypeScript 7 posture
 
 The checked-in compiler is exactly TypeScript 7.0.2. `tsconfig.json` targets
@@ -51,9 +69,9 @@ wildcard Node dependency inside Bun's declarations to the same version.
 
 ```text
 OpenCode command / guidance-driven agent
-  -> flow_guidance plus eight Flow runtime tools
+  -> nine lifecycle tools plus three harness tools
   -> platform transport
-  -> application service and domain transitions
+  -> application services, receipt/oracle contracts, and domain transitions
   -> filesystem repository
   -> locked atomic .flow/session.json writes
 ```
@@ -81,19 +99,34 @@ documents use their topic name; references use the topic-relative path. Bun
 embeds the text into the plugin bundle, and `flow_guidance` returns it without
 filesystem discovery or installation.
 
-Public install docs should prefer OpenCode's native installer when available and
-use one pinned install-or-update command:
-`opencode plugin opencode-plugin-flow@<version> --global --force` before the
-next OpenCode startup.
-Keep a manual `opencode.json` fallback for older OpenCode versions that do not
-expose `opencode plugin`; that fallback should tell users to replace older
-pinned Flow entries instead of adding duplicates.
+Public install docs must use the package activation CLI and an exact release:
+
+```bash
+npx -y opencode-plugin-flow@<version> activation-apply --project "$PWD" --scope global
+npx -y opencode-plugin-flow@<version> activation-apply --project "$PWD" --scope global --apply
+npx -y opencode-plugin-flow@<version> activation-check --project "$PWD"
+```
+
+The dry-run is the review boundary. The check must finish with one exact npm
+activation source and no proven inactive Flow cache artifact. A project-scoped
+install changes only `--scope project`; do not document adding another pin next
+to a global one. `activation-apply` preserves unrelated plugin entries, supports
+OpenCode string and `[specifier, options]` plugin entries, rewrites only strict
+JSON, and moves only proven Flow-owned wrappers and proven inactive cache
+artifacts. JSONC is inventoried, but any JSONC file requiring mutation is
+refused for precise manual remediation rather than rewritten without its
+comments. Unknown wrappers, ambiguous cache state, inline config, managed
+config, and other non-mutable sources likewise require explicit manual
+remediation. A post-mutation failure attempts exact safe rollback; the journal
+distinguishes complete `rolled-back` recovery from `rollback-failed` state that
+preserves concurrent changes for manual repair.
 
 Plugin initialization must not touch OpenCode's global skill directory. The
-package CLI exposes only an explicit `legacy-cleanup` migration for old v4
-folders. It defaults to no action unless `--dry-run` or `--apply` is selected;
-apply archives only marker-proven pristine folders and refuses symlinks, edits,
-extra files, and foreign content.
+package CLI exposes activation inventory/convergence plus the explicit
+`legacy-cleanup` migration for old v4 folders. Legacy cleanup defaults to no
+action unless `--dry-run` or `--apply` is selected; apply archives only
+marker-proven pristine folders and refuses symlinks, edits, extra files, and
+foreign content.
 
 Flow commands must call `flow_status { request: { view: "compact" } }` first.
 Public manager commands compile
@@ -110,7 +143,7 @@ maintained variants with offline static-contract checks. Use the opt-in
 outside `bun run check` because it uses external providers and is
 nondeterministic. The deterministic `prompt:quality` report is part of the
 canonical gate. The model runner defaults to a five-minute timeout per prompt
-variant. Prompt changes must preserve the 19 static scenarios and 54 criteria.
+variant. Prompt changes must preserve the 31 static scenarios and 100 criteria.
 Update the accepted growth baseline in
 `tests/fixtures/prompt-quality-baseline.json` only for material growth (more
 than the larger of eight words or 2%) and include a specific justification.
@@ -127,5 +160,52 @@ Guidance changes should preserve the v5 tool surface:
 - `flow_feature_complete`
 - `flow_feature_reset`
 - `flow_session_close`
+- `flow_orchestration_admit`
+- `flow_validation_start`
+- `flow_audit_render`
 
 Do not teach direct `.flow/**` edits.
+
+## Harness runtime development
+
+`OPENCODE_FLOW_HARNESS_PROFILE` accepts `control`, `standard`, or `assurance`
+and defaults to `standard`. `OPENCODE_FLOW_ROLLOUT_MODE` accepts `control`,
+`observe`, or `enforce` and defaults to `observe`. Invalid values deliberately
+fall back to `control` with a warning. The command preflight footer is the
+trusted active policy and must override static prompt defaults.
+
+Control keeps optional-worker dispatch discretionary without adding an
+admission ceremony. Standard and assurance call `flow_orchestration_admit`
+before optional evidence, audit, verification, or candidate passes. Observe
+records would-deny decisions without blocking; enforce requires the exact
+admitted worker class and count. The lifecycle-required `flow-reviewer` and
+`flow-validation-worker` are not optional admission passes.
+
+Worker routing uses the role-specific `OPENCODE_FLOW_READONLY_WORKER_MODEL`,
+`OPENCODE_FLOW_REVIEW_WORKER_MODEL`, and
+`OPENCODE_FLOW_CANDIDATE_WORKER_MODEL`, then
+`OPENCODE_FLOW_WORKER_MODEL` as fallback. The corresponding
+`OPENCODE_FLOW_*_WORKER_STEPS` variables and
+`OPENCODE_FLOW_WORKER_STEPS` fallback set OpenCode's current `steps` field;
+accepted values are integers from 1 through 1000. Do not reintroduce deprecated
+`maxSteps`.
+
+Runtime-attested validation is a four-step contract: load fresh guards, call
+`flow_validation_start`, run its exact command as the next Bash call, then copy
+the emitted immutable reference into
+`flow_review_start.request.validationRefs`. The host hook supplies timing,
+structured exit status, output digest/completeness, command class, run, source,
+and feature identity. Tests must prove mismatch, mutation, missing structured
+exit, truncation, stale source/run, altered artifacts, duplicate refs, and exact
+replay behavior.
+
+`AuditLedgerV1` is the only typed harness audit ledger. Keep the domain and host
+schemas in parity, preserve the 200-finding, 16-locator-per-finding, 256 KiB
+aggregate UTF-8 and rendered-Markdown bounds, derive all summaries, and ensure
+refuted findings never leak into remediation.
+Host observation must remain bounded and privacy-safe: hash identities and
+signatures with an ephemeral salt, record overflow explicitly, and preserve
+`unavailable` separately from numeric zero. Promotion uses only independently
+labeled, sanitized, same-corpus candidate observations through
+`canEnableHarnessEnforcement`; the static fixture does not itself authorize
+enforcement.

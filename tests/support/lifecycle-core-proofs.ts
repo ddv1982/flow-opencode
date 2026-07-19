@@ -42,13 +42,13 @@ import {
 } from "./lifecycle-repository-sequence.js";
 import { runningSequenceSession } from "./lifecycle-sequence.js";
 import { auditSessionV4OnlyState } from "./lifecycle-v4-absence.js";
+import { publishValidationReceiptForWorkspace } from "./validation-receipt.js";
 
 const FEATURE_ID = toFeatureId("core-proof-feature");
 const OWNERSHIP_FEATURE_ID = toFeatureId("ownership-proof-feature");
 const OWNERSHIP_TRAILING_FEATURE_ID = toFeatureId(
 	"ownership-proof-trailing-feature",
 );
-const OWNERSHIP_OUTPUT_DIGEST = `sha256:${"e".repeat(64)}`;
 
 function offsetBefore(timestamp: string): string {
 	return new Date(Date.parse(timestamp) - 1).toISOString();
@@ -151,6 +151,10 @@ async function pendingOwnershipReview(
 		(candidate) => candidate.id === running.activeFeatureRunId,
 	);
 	if (!running || !run) throw new Error("Expected one ownership-proof run.");
+	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
+		startedAt: run.startedAt,
+		command: "bun test ownership-proof",
+	});
 	const operationId = `ownership-${namespace}-review-start`;
 	const assigned = await service.reviewStart({
 		request: {
@@ -164,17 +168,7 @@ async function pendingOwnershipReview(
 				summary: "Create a pending ownership-proof assignment.",
 				riskLenses: ["runtime timestamp ownership"],
 			},
-			validations: [
-				{
-					command: "bun test ownership-proof",
-					summary: "Ownership proof validation passed.",
-					startedAt: run.startedAt,
-					completedAt: run.startedAt,
-					exitCode: 0,
-					outputDigest: OWNERSHIP_OUTPUT_DIGEST,
-					environmentKeys: [],
-				},
-			],
+			validationRefs: [validationRef],
 		},
 	});
 	if (assigned.status !== "ok") throw new Error(JSON.stringify(assigned));
@@ -242,6 +236,13 @@ async function blockedOwnershipSession(): Promise<{
 				(candidate) => candidate.id === current.activeFeatureRunId,
 			);
 			if (!run) throw new Error("Expected the retryable ownership run.");
+			const validationRef = await publishValidationReceiptForWorkspace(
+				prepared.workspace,
+				{
+					startedAt: run.startedAt,
+					command: "bun test ownership-proof-retry",
+				},
+			);
 			const assigned = await prepared.service.reviewStart({
 				request: {
 					operationId: "ownership-blocked-review-start-2",
@@ -254,17 +255,7 @@ async function blockedOwnershipSession(): Promise<{
 						summary: "Create the second failed ownership assignment.",
 						riskLenses: ["terminal blocked ownership"],
 					},
-					validations: [
-						{
-							command: "bun test ownership-proof-retry",
-							summary: "Ownership retry validation passed.",
-							startedAt: run.startedAt,
-							completedAt: run.startedAt,
-							exitCode: 0,
-							outputDigest: OWNERSHIP_OUTPUT_DIGEST,
-							environmentKeys: [],
-						},
-					],
+					validationRefs: [validationRef],
 				},
 			});
 			if (assigned.status !== "ok") throw new Error(JSON.stringify(assigned));
@@ -309,6 +300,13 @@ async function equalClockCompletedSession(): Promise<{
 		(candidate) => candidate.id === current.activeFeatureRunId,
 	);
 	if (!run) throw new Error("Expected the retryable equal-clock run.");
+	const validationRef = await publishValidationReceiptForWorkspace(
+		prepared.workspace,
+		{
+			startedAt: run.startedAt,
+			command: "bun test ownership-equal-clock",
+		},
+	);
 	const assigned = await prepared.service.reviewStart({
 		request: {
 			operationId: "ownership-equal-clock-review-start-2",
@@ -321,17 +319,7 @@ async function equalClockCompletedSession(): Promise<{
 				summary: "Create the successful equal-clock assignment.",
 				riskLenses: ["equal terminal timestamp ownership"],
 			},
-			validations: [
-				{
-					command: "bun test ownership-equal-clock",
-					summary: "Equal-clock retry validation passed.",
-					startedAt: run.startedAt,
-					completedAt: run.startedAt,
-					exitCode: 0,
-					outputDigest: OWNERSHIP_OUTPUT_DIGEST,
-					environmentKeys: [],
-				},
-			],
+			validationRefs: [validationRef],
 		},
 	});
 	if (assigned.status !== "ok") throw new Error(JSON.stringify(assigned));

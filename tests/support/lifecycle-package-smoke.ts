@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+	access,
 	cp,
 	mkdir,
 	mkdtemp,
@@ -11,7 +12,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import packageJson from "../../package.json" with { type: "json" };
 import {
 	PACKED_PACKAGE_PATHS,
@@ -25,6 +26,9 @@ export type PackageSurfaceSmokeEvidence = {
 	pinnedReadmeVersionCount: number;
 	cliVersion: string;
 	legacyCleanupDryRun: true;
+	activationDryRun: true;
+	activationApplied: true;
+	activationSingleVersion: true;
 	consumerTypechecked: true;
 	runtimeImported: true;
 };
@@ -188,6 +192,146 @@ async function executePackageSurfaceSmoke(): Promise<PackageSurfaceSmokeEvidence
 		);
 		assert.deepEqual(await readdir(isolatedHome), []);
 
+		const activationRoot = await createTemporaryDirectory(
+			"flow-pack-activation",
+		);
+		const activationProject = join(activationRoot, "project");
+		const activationHome = join(activationRoot, "home");
+		const activationConfigHome = join(activationRoot, "xdg-config");
+		const activationCacheHome = join(activationRoot, "xdg-cache");
+		const activationConfigRoot = join(activationConfigHome, "opencode");
+		const activationCacheRoot = join(activationCacheHome, "opencode");
+		const globalConfig = join(activationConfigRoot, "opencode.json");
+		const projectConfig = join(activationProject, "opencode.json");
+		const oldCache = join(
+			activationCacheRoot,
+			"packages",
+			"opencode-plugin-flow@0.0.1",
+		);
+		const targetCache = join(
+			activationCacheRoot,
+			"packages",
+			`opencode-plugin-flow@${extractedManifest.version}`,
+		);
+		const unrelatedCache = join(
+			activationCacheRoot,
+			"packages",
+			"unrelated-plugin@1.0.0",
+		);
+		await mkdir(activationProject, { recursive: true });
+		await mkdir(activationConfigRoot, { recursive: true });
+		await writeFile(
+			globalConfig,
+			`${JSON.stringify({ plugin: ["unrelated-plugin@1.0.0", "opencode-plugin-flow@0.0.1"] }, null, 2)}\n`,
+			"utf8",
+		);
+		await writeFile(
+			projectConfig,
+			`${JSON.stringify({ plugin: [`opencode-plugin-flow@${extractedManifest.version}`, "project-plugin@1.0.0"] }, null, 2)}\n`,
+			"utf8",
+		);
+		for (const [cachePath, manifest] of [
+			[oldCache, { name: "opencode-plugin-flow", version: "0.0.1" }],
+			[
+				targetCache,
+				{
+					name: "opencode-plugin-flow",
+					version: extractedManifest.version,
+				},
+			],
+		] as const) {
+			const manifestPath = join(
+				cachePath,
+				"node_modules",
+				"opencode-plugin-flow",
+				"package.json",
+			);
+			await mkdir(dirname(manifestPath), { recursive: true });
+			await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+		}
+		await mkdir(unrelatedCache, { recursive: true });
+		await writeFile(
+			join(unrelatedCache, "user-note.txt"),
+			"preserve\n",
+			"utf8",
+		);
+		const activationEnvironment = {
+			HOME: activationHome,
+			XDG_CONFIG_HOME: activationConfigHome,
+			XDG_CACHE_HOME: activationCacheHome,
+			OPENCODE_CONFIG: "",
+			OPENCODE_CONFIG_DIR: "",
+			OPENCODE_CONFIG_CONTENT: "",
+		};
+		const activationArguments = [
+			"activation-apply",
+			"--project",
+			activationProject,
+			"--scope",
+			"global",
+			"--json",
+		];
+		const globalBeforeActivation = await readFile(globalConfig, "utf8");
+		const projectBeforeActivation = await readFile(projectConfig, "utf8");
+		const activationDryRun = JSON.parse(
+			runCommand("node", [packedBinPath, ...activationArguments], {
+				env: activationEnvironment,
+			}).stdout,
+		) as { mode?: string; status?: string };
+		assert.equal(activationDryRun.mode, "dry-run");
+		assert.equal(activationDryRun.status, "ready");
+		assert.equal(await readFile(globalConfig, "utf8"), globalBeforeActivation);
+		assert.equal(
+			await readFile(projectConfig, "utf8"),
+			projectBeforeActivation,
+		);
+
+		const activationApply = JSON.parse(
+			runCommand("node", [packedBinPath, ...activationArguments, "--apply"], {
+				env: activationEnvironment,
+			}).stdout,
+		) as {
+			mode?: string;
+			status?: string;
+			after?: { singleVersionSatisfied?: boolean };
+			recovery?: { journalPath?: string };
+		};
+		assert.equal(activationApply.mode, "apply");
+		assert.equal(activationApply.status, "applied");
+		assert.equal(activationApply.after?.singleVersionSatisfied, true);
+		assert.ok(activationApply.recovery?.journalPath);
+		await access(activationApply.recovery.journalPath);
+		await assert.rejects(access(oldCache));
+		await access(targetCache);
+		assert.equal(
+			await readFile(join(unrelatedCache, "user-note.txt"), "utf8"),
+			"preserve\n",
+		);
+		assert.deepEqual(JSON.parse(await readFile(globalConfig, "utf8")), {
+			plugin: [
+				"unrelated-plugin@1.0.0",
+				`opencode-plugin-flow@${extractedManifest.version}`,
+			],
+		});
+		assert.deepEqual(JSON.parse(await readFile(projectConfig, "utf8")), {
+			plugin: ["project-plugin@1.0.0"],
+		});
+		const activationCheck = JSON.parse(
+			runCommand(
+				"node",
+				[
+					packedBinPath,
+					"activation-check",
+					"--project",
+					activationProject,
+					"--json",
+				],
+				{ env: activationEnvironment },
+			).stdout,
+		) as { target?: string; singleVersionSatisfied?: boolean };
+		assert.equal(activationCheck.target, extractedManifest.version);
+		assert.equal(activationCheck.singleVersionSatisfied, true);
+
 		const consumerDirectory = await createTemporaryDirectory("flow-consumer");
 		await writeFile(
 			join(consumerDirectory, "package.json"),
@@ -264,6 +408,9 @@ async function executePackageSurfaceSmoke(): Promise<PackageSurfaceSmokeEvidence
 			pinnedReadmeVersionCount: pinnedVersions.length,
 			cliVersion: version,
 			legacyCleanupDryRun: true,
+			activationDryRun: true,
+			activationApplied: true,
+			activationSingleVersion: true,
 			consumerTypechecked: true,
 			runtimeImported: true,
 		};

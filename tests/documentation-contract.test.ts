@@ -3,7 +3,7 @@ import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { FLOW_CORE_COMMANDS } from "../src/config-shared.js";
-import { createTools } from "../src/platform/opencode/tools.js";
+import FlowPlugin from "../src/index.js";
 
 function section(markdown: string, heading: string): string {
 	const start = markdown.indexOf(`## ${heading}`);
@@ -32,6 +32,23 @@ async function markdownFiles(directory: string): Promise<string[]> {
 	).flat();
 }
 
+async function combinedFlowToolNames(): Promise<string[]> {
+	const hooks = await FlowPlugin({
+		client: { app: { log() {} } },
+		project: {},
+		directory: process.cwd(),
+		worktree: process.cwd(),
+		experimental_workspace: { register() {} },
+		serverUrl: new URL("http://localhost"),
+		$: {},
+	} as unknown as Parameters<typeof FlowPlugin>[0]);
+	try {
+		return Object.keys(hooks.tool ?? {}).sort();
+	} finally {
+		await hooks.dispose?.();
+	}
+}
+
 describe("maintained documentation contract", () => {
 	test("keeps the README command, tool, and install inventories source-derived", async () => {
 		const readme = await readFile("README.md", "utf8");
@@ -45,7 +62,7 @@ describe("maintained documentation contract", () => {
 		const documentedTools = firstColumnCodeValues(
 			section(readme, "Tools"),
 		).sort();
-		expect(documentedTools).toEqual(Object.keys(createTools({})).sort());
+		expect(documentedTools).toEqual(await combinedFlowToolNames());
 
 		const installedVersions = [
 			...readme.matchAll(/opencode-plugin-flow@(\d+\.\d+\.\d+)/g),

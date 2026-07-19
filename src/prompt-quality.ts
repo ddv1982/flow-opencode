@@ -542,6 +542,287 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		],
 	},
 	{
+		id: "ambiguous-review-intent",
+		name: "Ambiguous broad review defaults to review and plan",
+		input:
+			"Review this repository for important quality problems; no implementation scope is stated.",
+		expectedRoute: "flow-plan",
+		surface: "flow-plan",
+		required: [
+			{
+				label: "three delivery intents",
+				pattern:
+					/deliveryIntent: review_only[\s\S]*deliveryIntent: review_and_plan[\s\S]*deliveryIntent: review_and_implement/i,
+			},
+			{
+				label: "ambiguous broad review defaults to review and plan",
+				pattern:
+					/default for an[\s\S]{0,60}ambiguous broad request[\s\S]{0,100}review this repository/i,
+			},
+			{
+				label: "audit is evidence boundary",
+				pattern: /audit an evidence boundary/i,
+			},
+		],
+	},
+	{
+		id: "standard-assurance-profile",
+		name: "Standard assurance uses a targeted challenge wave",
+		input:
+			"No trusted runtime-profile footer is present; plan a standard-profile repository audit after a countable discovery pass.",
+		expectedRoute: "flow-plan",
+		surface: "flow-plan",
+		required: [
+			{
+				label: "standard profile exact name",
+				pattern: /assuranceProfile: standard/i,
+			},
+			{
+				label: "standard is only the absent-footer default",
+				pattern:
+					/Obey the trusted active runtime-profile footer[\s\S]{0,100}default to\s+`standard` only when it is absent/i,
+			},
+			{
+				label: "standard admits bounded discovery and claim verification",
+				pattern:
+					/`standard` uses admitted bounded discovery\s+and claim verification/i,
+			},
+			{
+				label: "one countable discovery wave",
+				pattern: /one countable discovery wave/i,
+			},
+			{
+				label: "targeted second-wave eligibility",
+				pattern:
+					/claim-targeted second-wave challenge only for surprising, inferred, contested,\s*low-confidence, single-source, cross-layer-incomplete, or high-impact claims/i,
+			},
+			{
+				label: "no blanket reread",
+				pattern: /Neither profile[^.]*blanket reread/i,
+			},
+		],
+	},
+	{
+		id: "assurance-profile",
+		name: "Assurance profile challenges actionable candidates",
+		input:
+			"The trusted runtime-profile footer says assurance; plan a matching security audit with independent challenge of every actionable candidate.",
+		expectedRoute: "flow-plan",
+		surface: "flow-plan",
+		required: [
+			{
+				label: "assurance profile exact name",
+				pattern: /assuranceProfile: assurance/i,
+			},
+			{
+				label: "every actionable candidate challenged",
+				pattern:
+					/independently challenge every would-be\s+actionable or blocking candidate/i,
+			},
+			{
+				label: "challenge stays claim scoped",
+				pattern: /challenge claim-scoped/i,
+			},
+			{
+				label: "assurance permits the larger admitted audit wave",
+				pattern: /`assurance` permits the larger admitted audit wave/i,
+			},
+		],
+	},
+	{
+		id: "targeted-refutation",
+		name: "Standard second wave targets uncertain claims",
+		input:
+			"A standard discovery wave produced one low-confidence single-source cross-layer-incomplete finding; choose the next audit step.",
+		expectedRoute: "flow-plan",
+		surface: "flow-plan",
+		required: [
+			{
+				label: "uncertain claims receive targeted challenge",
+				pattern:
+					/claim-targeted second-wave challenge only for[\s\S]{0,160}low-confidence[\s\S]{0,80}single-source[\s\S]{0,80}cross-layer-incomplete/i,
+			},
+			{
+				label: "single-source verification worker",
+				pattern: /flow-verifier-worker/i,
+			},
+		],
+	},
+	{
+		id: "p0-guarded-candidate",
+		name: "Guarded speculative candidate is not P0",
+		input:
+			"As the audit worker, assess a suspected catastrophic path that has no demonstrated reachable trigger and has effective guards and recovery.",
+		expectedRoute: "flow-audit-worker",
+		surface: "flow-audit-worker",
+		required: [
+			{
+				label: "P0 has a demonstrated reachability threshold",
+				pattern:
+					/`actionPriority: "fix_now"` \(P0\) requires\s*demonstrated, reachable catastrophic or ship-blocking behavior/i,
+			},
+			{
+				label: "ineffective guards and recovery required",
+				pattern: /ineffective\s+or absent guards and recovery/i,
+			},
+			{
+				label: "refuted candidates excluded from remediation",
+				pattern:
+					/refuted candidates (?:carry none|out of remediation)|refuted finding[\s\S]{0,120}no remediation/i,
+			},
+		],
+	},
+	{
+		id: "p0-demonstrated-ship-blocker",
+		name: "Demonstrated reachable ship blocker may be P0",
+		input:
+			"As the audit worker, assess a reproduced reachable data-loss path in the actual deployment whose guards and recovery are demonstrably ineffective.",
+		expectedRoute: "flow-audit-worker",
+		surface: "flow-audit-worker",
+		required: [
+			{
+				label: "P0 allows demonstrated ship blockers",
+				pattern:
+					/`actionPriority: "fix_now"` \(P0\) requires\s*demonstrated, reachable catastrophic or ship-blocking behavior with ineffective\s+or absent guards and recovery/i,
+			},
+			{
+				label: "audit ledger fields",
+				pattern:
+					/Each finding uses exactly:[\s\S]{0,1400}`proofState`[\s\S]{0,1400}`actionPriority`[\s\S]{0,120}`falsifier`/i,
+			},
+			{
+				label: "exact audit ledger enum spellings",
+				pattern:
+					/`proofState`:[\s\S]{0,120}`source_proven`[\s\S]{0,80}`invariant_only`[\s\S]{0,1400}`actionPriority`:[\s\S]{0,80}`fix_now`/i,
+			},
+			{
+				label: "canonical audit renderer",
+				pattern: /call `flow_audit_render`[\s\S]{0,220}canonical Markdown/i,
+			},
+		],
+	},
+	{
+		id: "correction-review-packet",
+		name: "Correction review uses a bounded delta or full fallback",
+		input:
+			"Review a correction whose prior blockers are known but whose changed-artifact accounting is incomplete and touches persistence.",
+		expectedRoute: "flow-reviewer",
+		surface: "flow-reviewer",
+		required: [
+			{
+				label: "correction packet contents",
+				pattern:
+					/prior blockers, actual artifacts\s+changed in response, and focused post-change evidence/i,
+			},
+			{
+				label: "full review fallback",
+				pattern:
+					/Fall back to\s+the full assigned-depth review[\s\S]{0,180}persistence/i,
+			},
+			{
+				label: "correction links the exact predecessor",
+				pattern:
+					/`correctionOfAssignmentId`[\s\S]{0,180}runtime-returned predecessor id/i,
+			},
+		],
+	},
+	{
+		id: "record-review-before-edit",
+		name: "Failed review is recorded before repair",
+		input:
+			"A terminal feature review failed and autonomous repair is authorized, but the failed result has not been recorded yet.",
+		expectedRoute: "flow-run",
+		surface: "flow-run",
+		required: [
+			{
+				label: "record terminal result before edit",
+				pattern:
+					/Before any repair or edit, submit the terminal failed review result/i,
+			},
+			{
+				label: "refresh compact status",
+				pattern:
+					/Immediately\s+refresh `flow_status \{ request: \{ view: "compact" \} \}`/i,
+			},
+			{
+				label: "retry exhaustion not inferred from memory",
+				pattern:
+					/do not assert that retry budget is exhausted from remembered/i,
+			},
+		],
+	},
+	{
+		id: "validation-schedule",
+		name: "Validation follows the staged source-bound schedule",
+		input:
+			"Schedule validation for a final artifact-only feature from pre-edit diagnosis through final review.",
+		expectedRoute: "flow-run",
+		surface: "flow-run",
+		required: [
+			{
+				label: "diagnostic baseline advisory",
+				pattern: /diagnostic baseline before edits is advisory only/i,
+			},
+			{
+				label: "focused after changes",
+				pattern: /After changes, run focused checks/i,
+			},
+			{
+				label: "complete artifact gate",
+				pattern:
+					/artifact-only work, run the complete applicable artifact gate/i,
+			},
+			{
+				label: "broad once after review and last edit",
+				pattern:
+					/run the broad gate once, after the feature review has\s+passed and after the final edit/i,
+			},
+			{
+				label: "source and run applicability",
+				pattern: /only to the exact feature run and source identity/i,
+			},
+			{
+				label: "targeted not reused as broad",
+				pattern:
+					/Never reuse\s+or relabel targeted evidence as broad validation/i,
+			},
+		],
+	},
+	{
+		id: "validation-receipt-capture",
+		name: "Bash validation becomes a runtime receipt",
+		input:
+			"Capture a passing focused Bash check for the active feature and use it to create the next review assignment.",
+		expectedRoute: "flow-run",
+		surface: "flow-run",
+		required: [
+			{
+				label: "capture is armed immediately before Bash",
+				pattern:
+					/Immediately before every exact Bash command[\s\S]{0,120}`flow_validation_start`/i,
+			},
+			{
+				label: "exact command runs next",
+				pattern:
+					/byte-for-byte command[\s\S]{0,100}Run that\s+exact Bash command next/i,
+			},
+			{
+				label: "runtime appends immutable receipt ref",
+				pattern: /immutable ref[\s\S]{0,80}\[flow-validation-receipt\]/i,
+			},
+			{
+				label: "review start receives validation refs",
+				pattern:
+					/`validationRefs` copied exactly from successful capture output/i,
+			},
+			{
+				label: "model does not author validation metadata",
+				pattern:
+					/Never author or pass validation timestamps, exit status, output digests, or\s+per-command summaries/i,
+			},
+		],
+	},
+	{
 		id: "runtime-persistence-change",
 		name: "Runtime or persistence change",
 		input: "Implement the approved atomic session persistence change.",
@@ -586,6 +867,56 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 			{
 				label: "missing handoff is gap",
 				pattern: /malformed[^.]*coverage gap|failed handoff/i,
+			},
+		],
+	},
+	{
+		id: "runtime-profile-control",
+		name: "Control profile keeps legacy optional workers",
+		input:
+			"The trusted runtime-profile footer says control; dispatch one bounded optional discovery worker and plan a later Bash validation check.",
+		expectedRoute: "flow-plan",
+		surface: "flow-plan",
+		required: [
+			{
+				label: "trusted footer takes precedence",
+				pattern:
+					/Obey the trusted active runtime-profile footer when it is present/i,
+			},
+			{
+				label: "control has no admission ceremony",
+				pattern:
+					/`control` preserves legacy optional-worker\s+behavior without admission ceremony/i,
+			},
+			{
+				label: "receipts remain mandatory",
+				pattern:
+					/Runtime validation receipts remain mandatory in every profile/i,
+			},
+		],
+	},
+	{
+		id: "orchestration-admission",
+		name: "Bounded worker proposal is admitted before dispatch",
+		input:
+			"The trusted runtime-profile footer says standard; dispatch one bounded discovery proposal with two non-overlapping slices to the hidden evidence workers.",
+		expectedRoute: "flow-plan",
+		surface: "flow-plan",
+		required: [
+			{
+				label: "one admission call before dispatch",
+				pattern:
+					/Under `standard` or `assurance`, before dispatch the root manager calls\s+`flow_orchestration_admit` exactly once per bounded discovery/i,
+			},
+			{
+				label: "supported worker mappings are exact",
+				pattern:
+					/`discovery` ->\s*`flow-evidence-worker`[\s\S]{0,100}`audit` ->\s*`flow-audit-worker`[\s\S]{0,100}`verification` ->\s*`flow-verifier-worker`[\s\S]{0,120}`candidate-implementation` ->\s*`flow-candidate-worker`/i,
+			},
+			{
+				label: "review and validation are excluded",
+				pattern:
+					/Mandatory `flow-reviewer` assignments are\s+assignment-gated[\s\S]{0,120}`flow-validation-worker` checks are receipt-gated/i,
 			},
 		],
 	},
@@ -797,6 +1128,10 @@ export const PROMPT_EVALUATION_SCENARIOS: readonly PromptScenario[] = [
 		surface: "flow-run",
 		required: [
 			{ label: "stop with blocker", pattern: /stop with the blocker/i },
+			{
+				label: "never starts a third review",
+				pattern: /never start a third review/i,
+			},
 			{ label: "explicit direction", pattern: /explicit user direction/i },
 			{ label: "reset feature", pattern: /flow_feature_reset/i },
 		],

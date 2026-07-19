@@ -13,12 +13,36 @@ bounded worker count, exact non-overlapping slices, expected coverage, named
 Flow worker roles, dependencies, write scope, handoff kind, verification plan,
 and stop condition.
 
+Obey the trusted active runtime-profile footer when it is present; default to
+`standard` only when it is absent. `control` preserves legacy optional-worker
+behavior without admission ceremony. `standard` uses admitted bounded discovery
+and claim verification. `assurance` permits the larger admitted audit wave.
+Runtime validation receipts remain mandatory in every profile.
+
+Under `standard` or `assurance`, before dispatch the root manager calls
+`flow_orchestration_admit` exactly once per bounded discovery, audit,
+verification, or candidate-implementation proposal, then dispatches only its
+exact admitted workers. The supported mappings are exactly `discovery` ->
+`flow-evidence-worker`, `audit` -> `flow-audit-worker`, `verification` ->
+`flow-verifier-worker`, and `candidate-implementation` ->
+`flow-candidate-worker`. A denial is a routing decision, not permission to
+dispatch. Mandatory `flow-reviewer` assignments are assignment-gated and
+`flow-validation-worker` checks are receipt-gated; neither uses this admission
+path.
+
 Use `flow-evidence-worker` for discovery, `flow-validation-worker` for commands,
 `flow-audit-worker` for adversarial findings, `flow-verifier-worker` for
 high-impact claim checks, and `flow-reviewer` for independent review. Account
 for every manifest row. A missing, empty, malformed, partial, or blocked
 handoff is a coverage gap, not success. Verify high-impact or single-source
 claims, then let only the manager synthesize the result and mutate Flow state.
+
+For `assuranceProfile: standard`, use one countable discovery wave, then a
+claim-targeted second-wave challenge only for surprising, inferred, contested,
+low-confidence, single-source, cross-layer-incomplete, or high-impact claims.
+For `assuranceProfile: assurance`, independently challenge every would-be
+actionable or blocking candidate, while keeping each challenge claim-scoped.
+Neither profile performs a blanket reread of the repository.
 <!-- flow-prompt:manager-parallel-core:end -->
 
 ## Choose a pass

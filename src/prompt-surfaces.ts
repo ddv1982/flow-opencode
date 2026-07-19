@@ -359,6 +359,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 			headings: [
 				"Planning runtime availability",
 				"Inspect first",
+				"Delivery intent and assurance profile",
 				"Reduce uncertainty before decomposing",
 				"Plan shape",
 				"Plan quality gate",
@@ -408,6 +409,7 @@ const SURFACE_SPECIFIC_COMMAND_FRAGMENTS: Record<
 			headings: [
 				"Planning runtime availability",
 				"Inspect first",
+				"Delivery intent and assurance profile",
 				"Reduce uncertainty before decomposing",
 				"Plan shape",
 				"Plan quality gate",
@@ -460,7 +462,7 @@ const MANAGER_CHECKPOINTS = {
 	"flow-plan":
 		"Before returning: confirm the plan is evidence-backed, executable by another agent, explicit about requirements/decisions/targets/validation/dependencies/review depth, saved as a draft, and not approved without authorization.",
 	"flow-run":
-		"Before submitting the feature outcome: confirm scope stayed within the active execution, commands and observed results are exact, reported times are ordered, review is independent and deep enough, no blocking finding remains unresolved, and the runtime—not prose—accepted the request.",
+		"Before submitting the feature outcome: confirm scope stayed within the active execution, commands and observed results are exact, runtime-attested receipt chronology and reported review time follow lifecycle order, review is independent and deep enough, no blocking finding remains unresolved, and the runtime—not prose—accepted the request.",
 } as const;
 
 const REVIEW_INVOCATION_FRAGMENT = literalFragment({
@@ -536,6 +538,15 @@ const VERIFIER_HANDOFF_SCHEMA = markedSourceFragment({
 	roles: ["verifier-worker"],
 });
 
+const AUDIT_LEDGER_CONTRACT = sourceFragment({
+	id: "audit.ledger-contract",
+	skill: "flow-run",
+	path: "references/audit-rubric.md",
+	headings: ["Audit ledger fields", "Render and reconcile"],
+	roles: ["reviewer", "audit-worker"],
+	kind: "reference",
+});
+
 const CANDIDATE_HANDOFF_SCHEMA = markedSourceFragment({
 	id: "handoff.candidate-schema",
 	skill: "flow",
@@ -553,6 +564,7 @@ const REVIEWER_FRAGMENTS: readonly FlowPromptFragment[] = [
 		headings: [
 			"Role and availability",
 			"Feature review depths",
+			"Correction review packets",
 			"Direct review outputs",
 			"Special-case evidence",
 			"Completion checkpoint",
@@ -575,6 +587,7 @@ const REVIEWER_FRAGMENTS: readonly FlowPromptFragment[] = [
 		],
 		roles: REVIEWER_ROLE,
 	}),
+	AUDIT_LEDGER_CONTRACT,
 	REVIEW_SLICE_HANDOFF_SCHEMA,
 	WORKER_INTEGRITY,
 ];
@@ -648,6 +661,7 @@ const WORKER_FRAGMENTS: Record<
 	],
 	"flow-audit-worker": [
 		AUDIT_WORKER_ROLE,
+		AUDIT_LEDGER_CONTRACT,
 		AUDIT_HANDOFF_SCHEMA,
 		WORKER_INTEGRITY,
 	],

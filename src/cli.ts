@@ -1,4 +1,11 @@
 import {
+	type ActivationApplyReport,
+	type ActivationCheckReport,
+	type ActivationScope,
+	applyFlowActivation,
+	checkFlowActivation,
+} from "./distribution/activation.js";
+import {
 	cleanupLegacySkills,
 	type LegacyCleanupReport,
 } from "./distribution/legacy-cleanup.js";
@@ -6,22 +13,36 @@ import { resolveFlowPluginVersion } from "./version.js";
 
 function usage(): string {
 	return [
-		"usage: opencode-plugin-flow legacy-cleanup <--dry-run|--apply> [--json]",
+		"usage:",
+		"  opencode-plugin-flow activation-check --project <absolute-path> [--target <exact-version>] [--json]",
+		"  opencode-plugin-flow activation-apply --project <absolute-path> --scope <global|project> [--target <exact-version>] [--apply] [--json]",
+		"  opencode-plugin-flow legacy-cleanup <--dry-run|--apply> [--json]",
 		"",
 		"commands:",
+		"  activation-check    Inventory all OpenCode Flow activation sources and cache artifacts",
+		"  activation-apply    Plan a single-version activation; mutate only with --apply",
 		"  legacy-cleanup      Inspect or archive marker-proven legacy global Flow skills",
 		"",
-		"options:",
+		"activation options:",
+		"  --project <path>    Absolute project/worktree path whose sources are inventoried",
+		"  --scope <scope>     Config that receives the one canonical exact npm pin",
+		"  --target <version>  Exact version only; defaults to this package's embedded version",
+		"  --apply             Create backups/journal and apply the activation plan",
+		"                      Without --apply, activation-apply is read-only",
+		"",
+		"legacy cleanup options:",
 		"  --dry-run           Report eligible folders without changing the filesystem",
 		"  --apply             Move eligible folders to a recoverable archive outside skill discovery",
 		"                      Cleanup never deletes legacy folders",
+		"",
+		"common options:",
 		"  --json              Write the report as JSON",
 		"  --help              Show this help",
 		"  --version           Print the plugin version",
 	].join("\n");
 }
 
-function writeReport(report: LegacyCleanupReport, json: boolean): void {
+function writeLegacyReport(report: LegacyCleanupReport, json: boolean): void {
 	if (json) {
 		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 		return;
@@ -39,6 +60,205 @@ function writeReport(report: LegacyCleanupReport, json: boolean): void {
 	}
 }
 
+function writeActivationCheck(
+	report: ActivationCheckReport,
+	json: boolean,
+): void {
+	if (json) {
+		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+		return;
+	}
+	process.stdout.write(
+		`Flow activation check: ${report.singleVersionSatisfied ? "satisfied" : "not satisfied"}\n`,
+	);
+	process.stdout.write(`- project: ${report.project}\n`);
+	process.stdout.write(`- target: opencode-plugin-flow@${report.target}\n`);
+	process.stdout.write(`- activation sources: ${report.records.length}\n`);
+	for (const record of report.records) {
+		process.stdout.write(
+			`  - ${record.source}: ${record.specifier} (${record.ownership}, ${record.status}, version=${record.resolvedVersion ?? "unresolved"})\n`,
+		);
+		if (record.reason) process.stdout.write(`    reason: ${record.reason}\n`);
+	}
+	process.stdout.write(
+		`- Flow cache artifacts: ${report.cacheArtifacts.length}\n`,
+	);
+	for (const artifact of report.cacheArtifacts) {
+		process.stdout.write(
+			`  - ${artifact.specifier}: ${artifact.status} (version=${artifact.resolvedVersion ?? "unresolved"})\n`,
+		);
+		if (artifact.reason)
+			process.stdout.write(`    reason: ${artifact.reason}\n`);
+	}
+	for (const limitation of report.limitations) {
+		process.stdout.write(
+			`- limitation (${limitation.coverage}): ${limitation.source}\n  ${limitation.detail}\n`,
+		);
+	}
+	for (const reason of report.reasons) {
+		process.stdout.write(`- blocked: ${reason}\n`);
+	}
+}
+
+function writeActivationApply(
+	report: ActivationApplyReport,
+	json: boolean,
+): void {
+	if (json) {
+		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+		return;
+	}
+	process.stdout.write(`Flow activation ${report.mode}: ${report.status}\n`);
+	process.stdout.write(`- project: ${report.project}\n`);
+	process.stdout.write(`- canonical scope: ${report.scope}\n`);
+	process.stdout.write(`- target: opencode-plugin-flow@${report.target}\n`);
+	for (const operation of report.plan) {
+		process.stdout.write(
+			`- ${operation.action}: ${operation.path}\n  ${operation.detail}\n`,
+		);
+	}
+	for (const refusal of report.refusals) {
+		process.stdout.write(`- refused: ${refusal}\n`);
+	}
+	if (report.recovery) {
+		process.stdout.write(
+			`- recovery journal: ${report.recovery.journalPath}\n`,
+		);
+	}
+	if (report.failure) {
+		process.stdout.write(
+			`- recovery state: ${report.failure.recoveryState}\n- failure: ${report.failure.message}\n`,
+		);
+		for (const guidance of report.failure.guidance) {
+			process.stdout.write(`  recovery: ${guidance}\n`);
+		}
+	}
+	if (report.mode === "dry-run" && report.status === "ready") {
+		process.stdout.write(
+			"- no files changed; repeat with --apply to execute\n",
+		);
+	}
+}
+
+type ParsedActivationFlags = {
+	project?: string;
+	target?: string;
+	scope?: string;
+	apply: boolean;
+	json: boolean;
+	help: boolean;
+};
+
+function parseActivationFlags(flags: string[]): ParsedActivationFlags | null {
+	const parsed: ParsedActivationFlags = {
+		apply: false,
+		json: false,
+		help: false,
+	};
+	const seen = new Set<string>();
+	for (let index = 0; index < flags.length; index += 1) {
+		const flag = flags[index];
+		if (!flag || seen.has(flag)) return null;
+		seen.add(flag);
+		if (flag === "--apply") {
+			parsed.apply = true;
+			continue;
+		}
+		if (flag === "--json") {
+			parsed.json = true;
+			continue;
+		}
+		if (flag === "--help" || flag === "-h") {
+			parsed.help = true;
+			continue;
+		}
+		if (!["--project", "--target", "--scope"].includes(flag)) return null;
+		const value = flags[index + 1];
+		if (!value || value.startsWith("--")) return null;
+		index += 1;
+		if (flag === "--project") parsed.project = value;
+		if (flag === "--target") parsed.target = value;
+		if (flag === "--scope") parsed.scope = value;
+	}
+	return parsed;
+}
+
+function activationScope(value: string | undefined): ActivationScope | null {
+	return value === "global" || value === "project" ? value : null;
+}
+
+async function runActivationCheck(flags: string[]): Promise<void> {
+	const parsed = parseActivationFlags(flags);
+	if (
+		!parsed ||
+		parsed.apply ||
+		parsed.scope ||
+		(!parsed.project && !parsed.help)
+	) {
+		process.stderr.write(`${usage()}\n`);
+		process.exitCode = 2;
+		return;
+	}
+	if (parsed.help) {
+		process.stdout.write(`${usage()}\n`);
+		return;
+	}
+	const report = await checkFlowActivation({
+		project: parsed.project as string,
+		...(parsed.target ? { target: parsed.target } : {}),
+	});
+	writeActivationCheck(report, parsed.json);
+	if (!report.singleVersionSatisfied) process.exitCode = 1;
+}
+
+async function runActivationApply(flags: string[]): Promise<void> {
+	const parsed = parseActivationFlags(flags);
+	const scope = activationScope(parsed?.scope);
+	if (
+		!parsed ||
+		(!parsed.project && !parsed.help) ||
+		(!scope && !parsed.help)
+	) {
+		process.stderr.write(`${usage()}\n`);
+		process.exitCode = 2;
+		return;
+	}
+	if (parsed.help) {
+		process.stdout.write(`${usage()}\n`);
+		return;
+	}
+	const report = await applyFlowActivation({
+		project: parsed.project as string,
+		scope: scope as ActivationScope,
+		apply: parsed.apply,
+		...(parsed.target ? { target: parsed.target } : {}),
+	});
+	writeActivationApply(report, parsed.json);
+	if (report.status === "refused") process.exitCode = 1;
+}
+
+async function runLegacyCleanup(flags: string[]): Promise<void> {
+	const knownFlags = new Set(["--dry-run", "--apply", "--json"]);
+	const validFlags = flags.every((flag) => knownFlags.has(flag));
+	const dryRun = flags.includes("--dry-run");
+	const apply = flags.includes("--apply");
+	if (!validFlags || dryRun === apply) {
+		process.stderr.write(`${usage()}\n`);
+		process.exitCode = 2;
+		return;
+	}
+	const report = await cleanupLegacySkills({ apply });
+	writeLegacyReport(report, flags.includes("--json"));
+	if (
+		apply &&
+		report.results.some((result) =>
+			["refused", "quarantined"].includes(result.status),
+		)
+	) {
+		process.exitCode = 1;
+	}
+}
+
 async function main(argv: string[]): Promise<void> {
 	const [command, ...flags] = argv.slice(2);
 	if (command === "--help" || command === "-h") {
@@ -49,25 +269,20 @@ async function main(argv: string[]): Promise<void> {
 		process.stdout.write(`${resolveFlowPluginVersion()}\n`);
 		return;
 	}
-	const knownFlags = new Set(["--dry-run", "--apply", "--json"]);
-	const validFlags = flags.every((flag) => knownFlags.has(flag));
-	const dryRun = flags.includes("--dry-run");
-	const apply = flags.includes("--apply");
-	if (command !== "legacy-cleanup" || !validFlags || dryRun === apply) {
-		process.stderr.write(`${usage()}\n`);
-		process.exitCode = 2;
+	if (command === "activation-check") {
+		await runActivationCheck(flags);
 		return;
 	}
-	const report = await cleanupLegacySkills({ apply });
-	writeReport(report, flags.includes("--json"));
-	if (
-		apply &&
-		report.results.some((result) =>
-			["refused", "quarantined"].includes(result.status),
-		)
-	) {
-		process.exitCode = 1;
+	if (command === "activation-apply") {
+		await runActivationApply(flags);
+		return;
 	}
+	if (command === "legacy-cleanup") {
+		await runLegacyCleanup(flags);
+		return;
+	}
+	process.stderr.write(`${usage()}\n`);
+	process.exitCode = 2;
 }
 
 main(process.argv).catch((error) => {
