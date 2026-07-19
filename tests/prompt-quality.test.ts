@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { LEGACY_PROMPT_BASELINE } from "../src/prompt-baseline-fixtures.js";
 import {
 	buildPromptModelEvaluationPacket,
@@ -35,7 +35,7 @@ async function textDocumentsBelow(directory: string): Promise<string[]> {
 			return entry.isFile() && /\.(?:md|vtt)$/.test(entry.name) ? [path] : [];
 		}),
 	);
-	return nested.flat();
+	return nested.flat().map((path) => path.split(sep).join("/"));
 }
 
 type GrowthBaseline = {

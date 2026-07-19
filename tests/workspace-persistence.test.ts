@@ -15,6 +15,7 @@ import { homedir, hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { UnsupportedFlowSessionVersionError } from "../src/application/errors.js";
+import { createFlowService } from "../src/application/flow-service.js";
 import { ArchivedSessionLookupError } from "../src/application/ports/session-repository.js";
 import { SessionSchema } from "../src/application/schema.js";
 import { MAX_SESSION_ID_LENGTH } from "../src/domain/limits.js";
@@ -24,6 +25,7 @@ import type {
 } from "../src/domain/session.js";
 import { toSessionId } from "../src/domain/session.js";
 import { closeSession, createSession } from "../src/domain/transitions.js";
+import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
 import {
 	ArchiveCollisionError,
 	archiveAndClearSession,
@@ -52,10 +54,33 @@ import {
 	flowPlanSave,
 	flowRunStart,
 } from "../src/infrastructure/fs/workspace-flow-service.js";
+import { systemTransitionEnvironment } from "../src/infrastructure/system/transition-environment.js";
 
 const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
 const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
 let operationSequence = 0;
+
+async function expectPinnedDirectorySwapRejected(
+	action: () => Promise<unknown>,
+	swapCompleted: () => boolean,
+): Promise<void> {
+	let rejection: unknown;
+	try {
+		await action();
+	} catch (error) {
+		rejection = error;
+	}
+	if (!rejection)
+		throw new Error("Expected the pinned directory swap to fail.");
+	if (swapCompleted()) {
+		expect(rejection).toBeInstanceOf(UnsafeFlowWorkspaceLayoutError);
+		return;
+	}
+	expect(process.platform).toBe("win32");
+	const code = (rejection as NodeJS.ErrnoException).code;
+	if (!code) throw new Error("Expected a Windows filesystem rejection code.");
+	expect(["EBUSY", "EPERM", "EACCES"]).toContain(code);
+}
 
 function validationObservation(featureId: string, recordedAt: string) {
 	return {
@@ -739,19 +764,27 @@ describe("Flow workspace persistence", () => {
 		await saveSession(workspace, closed.value);
 		const activeBytes = await readFile(sessionPath(workspace), "utf8");
 		const parked = `${historyDir(workspace)}-parked`;
-		await expect(
-			archiveAndClearSession(workspace, closed.value, {
-				afterHistoryPinned: async () => {
-					await rename(historyDir(workspace), parked);
-					await symlink(outside, historyDir(workspace), "dir");
-				},
-			}),
-		).rejects.toBeInstanceOf(UnsafeFlowWorkspaceLayoutError);
+		let swapCompleted = false;
+		await expectPinnedDirectorySwapRejected(
+			() =>
+				archiveAndClearSession(workspace, closed.value, {
+					afterHistoryPinned: async () => {
+						await rename(historyDir(workspace), parked);
+						swapCompleted = true;
+						await symlink(outside, historyDir(workspace), "dir");
+					},
+				}),
+			() => swapCompleted,
+		);
 		expect(await readdir(outside)).toEqual([]);
-		expect(await readdir(parked)).toEqual([]);
 		expect(await readFile(sessionPath(workspace), "utf8")).toBe(activeBytes);
-		await rm(historyDir(workspace));
-		await rename(parked, historyDir(workspace));
+		if (swapCompleted) {
+			expect(await readdir(parked)).toEqual([]);
+			await rm(historyDir(workspace));
+			await rename(parked, historyDir(workspace));
+		} else {
+			expect(await readdir(historyDir(workspace))).toEqual([]);
+		}
 		await archiveAndClearSession(workspace, closed.value);
 		expect(await loadSession(workspace)).toBeNull();
 		await rm(outside, { recursive: true, force: true });
@@ -774,20 +807,27 @@ describe("Flow workspace persistence", () => {
 		await saveSession(workspace, closed.value);
 		const activeBytes = await readFile(sessionPath(workspace), "utf8");
 		const parked = `${flowDir(workspace)}-parked`;
-		await expect(
-			archiveAndClearSession(workspace, closed.value, {
-				afterFlowPinnedBeforeDelete: async () => {
-					await rename(flowDir(workspace), parked);
-					await symlink(outside, flowDir(workspace), "dir");
-				},
-			}),
-		).rejects.toBeInstanceOf(UnsafeFlowWorkspaceLayoutError);
-		expect(await readdir(outside)).toEqual([]);
-		await expect(readFile(join(parked, "session.json"), "utf8")).resolves.toBe(
-			activeBytes,
+		let swapCompleted = false;
+		await expectPinnedDirectorySwapRejected(
+			() =>
+				archiveAndClearSession(workspace, closed.value, {
+					afterFlowPinnedBeforeDelete: async () => {
+						await rename(flowDir(workspace), parked);
+						swapCompleted = true;
+						await symlink(outside, flowDir(workspace), "dir");
+					},
+				}),
+			() => swapCompleted,
 		);
-		await rm(flowDir(workspace));
-		await rename(parked, flowDir(workspace));
+		expect(await readdir(outside)).toEqual([]);
+		const preservedFlowDir = swapCompleted ? parked : flowDir(workspace);
+		await expect(
+			readFile(join(preservedFlowDir, "session.json"), "utf8"),
+		).resolves.toBe(activeBytes);
+		if (swapCompleted) {
+			await rm(flowDir(workspace));
+			await rename(parked, flowDir(workspace));
+		}
 		await archiveAndClearSession(workspace, closed.value);
 		expect(await loadSession(workspace)).toBeNull();
 		await rm(outside, { recursive: true, force: true });
@@ -902,19 +942,27 @@ describe("Flow workspace persistence", () => {
 		const corruptBytes = "not valid Session v4\n";
 		await writeFile(sessionPath(workspace), corruptBytes, "utf8");
 		const parked = `${historyDir(workspace)}-parked`;
-		await expect(
-			quarantineUnreadableSession(workspace, {
-				afterHistoryPinned: async () => {
-					await rename(historyDir(workspace), parked);
-					await symlink(outside, historyDir(workspace), "dir");
-				},
-			}),
-		).rejects.toBeInstanceOf(UnsafeFlowWorkspaceLayoutError);
+		let swapCompleted = false;
+		await expectPinnedDirectorySwapRejected(
+			() =>
+				quarantineUnreadableSession(workspace, {
+					afterHistoryPinned: async () => {
+						await rename(historyDir(workspace), parked);
+						swapCompleted = true;
+						await symlink(outside, historyDir(workspace), "dir");
+					},
+				}),
+			() => swapCompleted,
+		);
 		expect(await readdir(outside)).toEqual([]);
-		expect(await readdir(parked)).toEqual([]);
 		expect(await readFile(sessionPath(workspace), "utf8")).toBe(corruptBytes);
-		await rm(historyDir(workspace));
-		await rename(parked, historyDir(workspace));
+		if (swapCompleted) {
+			expect(await readdir(parked)).toEqual([]);
+			await rm(historyDir(workspace));
+			await rename(parked, historyDir(workspace));
+		} else {
+			expect(await readdir(historyDir(workspace))).toEqual([]);
+		}
 		const quarantined = await quarantineUnreadableSession(workspace);
 		expect(quarantined).not.toBeNull();
 		if (!quarantined) throw new Error("Expected a quarantine path.");
@@ -1679,20 +1727,36 @@ if (failureCode !== "EIO") process.exitCode = 2;`,
 			plan: oneFeaturePlan(),
 		});
 		await flowPlanApprove(workspace);
-		await mkdir(historyDir(workspace), { recursive: true });
-		await chmod(historyDir(workspace), 0o500);
 		const operationId = "archive-recovery-with-omitted-summary";
-
-		try {
-			await expect(
-				flowSessionClose(workspace, {
+		const active = await loadSession(workspace);
+		if (!active) throw new Error("Expected an active session before close.");
+		const repository = createFileSessionRepository(workspace);
+		const failingService = createFlowService(
+			{
+				read: () => repository.read(),
+				transact: (task) =>
+					repository.transact((transaction) =>
+						task({
+							...transaction,
+							archiveAndClear: async () => {
+								throw new Error("before-archive-publication failpoint");
+							},
+						}),
+					),
+			},
+			systemTransitionEnvironment,
+		);
+		await expect(
+			failingService.sessionClose({
+				request: {
+					mode: "start",
 					operationId,
+					expectedRevision: active.causal.revision,
+					expectedSnapshotId: active.causal.snapshotId,
 					kind: "deferred",
-				}),
-			).rejects.toThrow();
-		} finally {
-			await chmod(historyDir(workspace), 0o700);
-		}
+				},
+			}),
+		).rejects.toThrow("before-archive-publication failpoint");
 		const persisted = await loadSession(workspace);
 		if (!persisted?.closure) throw new Error("Expected durable closure state.");
 		const beforeRetryBytes = await readFile(sessionPath(workspace), "utf8");

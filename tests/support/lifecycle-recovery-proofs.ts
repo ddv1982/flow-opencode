@@ -888,6 +888,7 @@ export const archivePinnedTopologyProof = executableProof(
 		const parkedHistory = `${historyDir(historyFixture.workspace)}-parked`;
 		const parkedFlow = `${flowDir(flowFixture.workspace)}-parked`;
 		try {
+			let historySwapCompleted = false;
 			const historyActiveBytes = await readFile(
 				sessionPath(historyFixture.workspace),
 				"utf8",
@@ -899,6 +900,7 @@ export const archivePinnedTopologyProof = executableProof(
 					{
 						afterHistoryPinned: async () => {
 							await rename(historyDir(historyFixture.workspace), parkedHistory);
+							historySwapCompleted = true;
 							await symlink(
 								historyOutside,
 								historyDir(historyFixture.workspace),
@@ -909,24 +911,39 @@ export const archivePinnedTopologyProof = executableProof(
 				),
 			);
 			assertions.deepEqual(await readdir(historyOutside), ["source.ts"]);
-			assertions.deepEqual(await readdir(parkedHistory), []);
+			assertions.deepEqual(
+				await readdir(
+					historySwapCompleted
+						? parkedHistory
+						: historyDir(historyFixture.workspace),
+				),
+				[],
+			);
 			assertions.equal(
 				await readFile(sessionPath(historyFixture.workspace), "utf8"),
 				historyActiveBytes,
 			);
 			assertions.cover("pinned-history-publication");
 
+			let flowSwapCompleted = false;
 			await assertions.rejects(() =>
 				archiveAndClearSession(flowFixture.workspace, flowFixture.closed, {
 					afterFlowPinnedBeforeDelete: async () => {
 						await rename(flowDir(flowFixture.workspace), parkedFlow);
+						flowSwapCompleted = true;
 						await symlink(flowOutside, flowDir(flowFixture.workspace), "dir");
 					},
 				}),
 			);
 			assertions.deepEqual(await readdir(flowOutside), ["source.ts"]);
 			assertions.match(
-				await readFile(join(parkedFlow, "session.json"), "utf8"),
+				await readFile(
+					join(
+						flowSwapCompleted ? parkedFlow : flowDir(flowFixture.workspace),
+						"session.json",
+					),
+					"utf8",
+				),
 				/"closure"/,
 			);
 			assertions.cover("pinned-active-deletion");
