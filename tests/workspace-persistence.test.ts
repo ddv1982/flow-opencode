@@ -1884,7 +1884,7 @@ if (failureCode !== "EIO") process.exitCode = 2;`,
 				),
 			).toBe(false);
 		}
-	});
+	}, 30_000);
 
 	test("fails closed on an unsupported canonical archive version", async () => {
 		const workspace = await tempWorkspace();

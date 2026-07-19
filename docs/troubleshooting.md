@@ -9,11 +9,11 @@ there is no skill sync, setup-health state, or second-restart requirement.
 Plan, apply, and verify one exact pinned plugin version:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.0 activation-apply \
+npx -y opencode-plugin-flow@5.3.1 activation-apply \
   --project "$PWD" --scope global
-npx -y opencode-plugin-flow@5.3.0 activation-apply \
+npx -y opencode-plugin-flow@5.3.1 activation-apply \
   --project "$PWD" --scope global --apply
-npx -y opencode-plugin-flow@5.3.0 activation-check --project "$PWD"
+npx -y opencode-plugin-flow@5.3.1 activation-check --project "$PWD"
 ```
 
 The first command changes nothing. Inspect its config rewrites and quarantine
@@ -57,7 +57,7 @@ one exact pin, for example:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.3.0"]
+  "plugin": ["opencode-plugin-flow@5.3.1"]
 }
 ```
 
@@ -105,13 +105,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.0 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.1 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.0 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.3.1 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to

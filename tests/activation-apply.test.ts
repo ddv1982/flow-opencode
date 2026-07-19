@@ -7,6 +7,7 @@ import {
 	readFile,
 	rm,
 	symlink,
+	unlink,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -435,7 +436,7 @@ describe("Flow activation apply", () => {
 		);
 		expect(await exists(join(outside, "opencode.json"))).toBe(false);
 
-		await rm(join(environment.project, ".opencode"));
+		await unlink(join(environment.project, ".opencode"));
 		const outsideConfigParent = join(environment.root, "outside-config-parent");
 		const linkedConfigParent = join(environment.root, "linked-config-parent");
 		await mkdir(outsideConfigParent, { recursive: true });

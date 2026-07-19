@@ -18,22 +18,22 @@ current product or contributor contract.
 ## Quick start
 
 ```bash
-npx -y opencode-plugin-flow@5.3.0 activation-apply \
+npx -y opencode-plugin-flow@5.3.1 activation-apply \
   --project "$PWD" --scope global
-npx -y opencode-plugin-flow@5.3.0 activation-apply \
+npx -y opencode-plugin-flow@5.3.1 activation-apply \
   --project "$PWD" --scope global --apply
-npx -y opencode-plugin-flow@5.3.0 activation-check --project "$PWD"
+npx -y opencode-plugin-flow@5.3.1 activation-check --project "$PWD"
 ```
 
 The first command is a read-only plan. Review it before running the second;
-the final check must report exactly one active `opencode-plugin-flow@5.3.0`
+the final check must report exactly one active `opencode-plugin-flow@5.3.1`
 source and no proven inactive Flow cache artifacts. Use `--scope project` when
 the one canonical pin should live with the project instead of in global config.
 Flow refuses ambiguous local wrappers, cache entries, unsafe links, and config
 it cannot change conservatively rather than guessing which copy is authoritative.
 
 To select npm's current release instead of this release-pinned example, replace
-`@5.3.0` with `@latest` on the `npx` invocations; do not pass
+`@5.3.1` with `@latest` on the `npx` invocations; do not pass
 `--target latest`. The fetched CLI resolves its own embedded exact version and
 converges every mutable Flow activation to that one pin, so latest replaces an
 older active version rather than loading beside it.
@@ -311,7 +311,7 @@ fail-closed runtime leadership.
 To preview recoverable migration of pristine v4 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.0 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.1 legacy-cleanup --dry-run
 ```
 
 ## Development

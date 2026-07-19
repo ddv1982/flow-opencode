@@ -2,6 +2,17 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.3.1] - 2026-07-20
+
+Windows validation lore keeps the single-version harness release portable:
+
+- Activation's symbolic-link safety test now unlinks the link itself with the
+  cross-platform filesystem primitive instead of asking Bun to recursively
+  remove a Windows directory link.
+- The persistence integration test that exercises four pinned-helper closure
+  paths now has an explicit 30-second budget, matching the existing
+  process-spawning integration gates without weakening production timeouts.
+
 ## [5.3.0] - 2026-07-20
 
 Single-version harness lore makes the installed package, runtime authority,
