@@ -25,7 +25,7 @@ jobs:
 
       - name: Set up npm trusted publishing support
         run: |
-          npm install --global npm@11
+          npm install --global npm@11.18.0
           node --version
           npm --version
 
@@ -38,43 +38,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Validate release tag and changelog
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
-          package_version="$(node -p "require('./package.json').version")"
-
-          if [[ "${tag}" != "v${package_version}" ]]; then
-            echo "Release tag/version mismatch: tag=${tag}, package.json=${package_version}" >&2
-            exit 1
-          fi
-
-          if ! grep -Eq "^##[[:space:]]+\\[?${version}\\]?" CHANGELOG.md; then
-            echo "Missing changelog heading for version ${version}" >&2
-            exit 1
-          fi
-
-          mapfile -t readme_versions < <(grep -Eo 'opencode-plugin-flow@[0-9]+\.[0-9]+\.[0-9]+' README.md docs/troubleshooting.md | sed 's/.*@//' | sort -u)
-          if [[ "${#readme_versions[@]}" -eq 0 ]]; then
-            echo "README.md does not contain version-pinned opencode-plugin-flow install snippets" >&2
-            exit 1
-          fi
-          for readme_version in "${readme_versions[@]}"; do
-            if [[ "${readme_version}" != "${package_version}" ]]; then
-              echo "Docs pin opencode-plugin-flow@${readme_version}, expected ${package_version}" >&2
-              exit 1
-            fi
-          done
-
-          awk -v version="$version" '
-            BEGIN { in_section = 0 }
-            $0 ~ ("^## \\[?" version "\\]?") { in_section = 1 }
-            in_section {
-              if ($0 ~ /^## / && $0 !~ ("^## \\[?" version "\\]?")) exit
-              print
-            }
-          ' CHANGELOG.md > release-notes.md
+        run: bun run release:metadata -- --tag "${GITHUB_REF_NAME}" --notes-file release-notes.md
 
       - name: Run checks
         run: bun run check

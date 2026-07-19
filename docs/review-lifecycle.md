@@ -106,9 +106,15 @@ execution, marks the assignment terminal, consumes run-scoped retry budget, and
 blocks the feature after two failed attempts. An exact accepted replay is
 idempotent.
 
-Optional `request.result.orchestrationPasses` telemetry is parsed separately. Malformed
-telemetry is ignored with a bounded warning and cannot erase, fabricate, or
-change the review result.
+Optional `request.result.orchestrationPasses` telemetry is parsed separately.
+Non-JSON-serializable input or more than 65,536 serialized UTF-8 bytes is
+rejected at the public resource boundary. Structurally malformed telemetry, or
+an otherwise valid collection above the 50-record lifecycle window, is ignored
+with a bounded warning and cannot erase, fabricate, or change the review
+result. Persisted `latestPasses` retains the newest records that fit both the
+50-record and 65,536-byte limits. Aggregate numeric counters saturate at the
+largest safe JavaScript integer instead of making an otherwise valid feature
+outcome unpersistable.
 
 ## Source applicability and chronology
 

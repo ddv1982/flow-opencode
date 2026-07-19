@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+	executableProof,
 	executeLifecycleInvariantRegistry,
 	LIFECYCLE_EXTERNAL_PROOF_REQUIREMENTS,
 	LIFECYCLE_INVARIANT_REQUIREMENTS,
 	missingLifecycleCoverage,
 	missingLifecycleExternalProofs,
 	missingLifecycleProofs,
+	type ProofAssertions,
 } from "./support/lifecycle-invariant-registry.js";
 import {
 	assertLifecycleLiveProofObservation,
@@ -43,6 +45,37 @@ const REQUIRED_TIME_PERTURBATIONS = REQUIRED_TIME_BOUNDARIES.flatMap(
 );
 
 describe("Session v4 executable invariant registry", () => {
+	test("reuses successful proof executions but retries failures for local diagnostics", async () => {
+		let successfulRuns = 0;
+		const successful = executableProof(
+			"successful shared proof",
+			(assertions: ProofAssertions) => {
+				successfulRuns += 1;
+				assertions.ok(true);
+			},
+		);
+		const [first, second] = await Promise.all([
+			successful.run(),
+			successful.run(),
+		]);
+		expect(first).toMatchObject({ assertionCount: 1 });
+		expect(second).toMatchObject({ assertionCount: 1 });
+		expect(successfulRuns).toBe(1);
+		expect(Object.isFrozen(first)).toBe(true);
+		expect(Object.isFrozen(first.evidence)).toBe(true);
+		expect(Reflect.set(first.evidence, 0, "corrupted")).toBe(false);
+		expect((await successful.run()).evidence).toEqual(["assertions"]);
+
+		let failedRuns = 0;
+		const failing = executableProof("failing shared proof", () => {
+			failedRuns += 1;
+			throw new Error("deliberate proof failure");
+		});
+		await expect(failing.run()).rejects.toThrow("deliberate proof failure");
+		await expect(failing.run()).rejects.toThrow("deliberate proof failure");
+		expect(failedRuns).toBe(2);
+	});
+
 	test("defines exactly the seven lifecycle invariant rows", () => {
 		expect(Object.keys(LIFECYCLE_INVARIANT_REQUIREMENTS)).toEqual([
 			...REQUIRED_INVARIANT_IDS,

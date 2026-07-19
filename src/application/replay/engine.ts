@@ -13,8 +13,11 @@ import type {
 export type ReplayMismatch =
 	| "contradictory_review_verdicts"
 	| "duplicate_mutation_commit"
+	| "durable_state_mismatch"
+	| "mutation_lifecycle_invalid"
 	| "mutation_left_uncommitted"
 	| "recovery_without_crash"
+	| "session_identity_mismatch"
 	| "snapshot_revision_mismatch"
 	| "terminal_decision_missing"
 	| "terminal_decision_multiple"
@@ -141,6 +144,34 @@ type RetryFindingDeltaEvent = Extract<
 	{ kind: "retry_finding_delta" }
 >;
 
+type MutationEvent = Extract<
+	ReplayScenario["events"][number],
+	{
+		kind:
+			| "mutation_start"
+			| "mutation_commit"
+			| "mutation_crash"
+			| "mutation_recovery";
+	}
+>;
+
+type MutationLifecycleState = "started" | "crashed" | "committed" | "recovered";
+
+interface MutationLifecycle {
+	readonly operationId: OpaqueId;
+	readonly baseRevision: number;
+	readonly baseStateDigest: Sha256Digest;
+	crashPhase:
+		| Extract<MutationEvent, { kind: "mutation_crash" }>["phase"]
+		| null;
+	state: MutationLifecycleState;
+}
+
+interface DurableReplayState {
+	readonly revision: number | null;
+	readonly stateDigest: Sha256Digest | null;
+}
+
 interface IndexedReviewAttempt {
 	readonly event: ReviewAttemptEvent;
 	readonly eventIndex: number;
@@ -166,6 +197,136 @@ interface ReviewPassReduction {
 	readonly unsubmittedFailure: boolean;
 	readonly reviewFailed: boolean;
 	readonly anyPassedReview: boolean;
+}
+
+/**
+ * Advances one mutation independently from every other mutation in a scenario.
+ * A commit or recovery is accepted as durable evidence only when this transition
+ * returns true; malformed history can therefore never overwrite derived state.
+ */
+function advanceMutationLifecycle(
+	event: MutationEvent,
+	lifecycles: Map<OpaqueId, MutationLifecycle>,
+	mutationsByOperation: Map<OpaqueId, OpaqueId>,
+	mutationsByRevision: Map<number, OpaqueId>,
+	durable: DurableReplayState,
+	initialStateDigest: Sha256Digest,
+	mismatches: Set<ReplayMismatch>,
+): boolean {
+	const current = lifecycles.get(event.mutationId);
+	if (event.kind === "mutation_start") {
+		const operationOwner = mutationsByOperation.get(event.operationId);
+		if (
+			current ||
+			(operationOwner !== undefined && operationOwner !== event.mutationId) ||
+			(durable.revision !== null && event.baseRevision !== durable.revision)
+		) {
+			mismatches.add("mutation_lifecycle_invalid");
+			return false;
+		}
+		lifecycles.set(event.mutationId, {
+			operationId: event.operationId,
+			baseRevision: event.baseRevision,
+			baseStateDigest: durable.stateDigest ?? initialStateDigest,
+			crashPhase: null,
+			state: "started",
+		});
+		mutationsByOperation.set(event.operationId, event.mutationId);
+		return true;
+	}
+
+	if (!current) {
+		mismatches.add("mutation_lifecycle_invalid");
+		if (event.kind === "mutation_recovery") {
+			mismatches.add("recovery_without_crash");
+		}
+		return false;
+	}
+	if (event.kind === "mutation_commit" && current.state === "committed") {
+		mismatches.add("duplicate_mutation_commit");
+	}
+	if (current.operationId !== event.operationId) {
+		mismatches.add("mutation_lifecycle_invalid");
+		return false;
+	}
+	const durableStillAtBase =
+		durable.revision === null ||
+		(durable.revision === current.baseRevision &&
+			durable.stateDigest === current.baseStateDigest);
+	const nextRevision = current.baseRevision + 1;
+
+	switch (event.kind) {
+		case "mutation_commit":
+			if (
+				current.state !== "started" ||
+				event.revision !== nextRevision ||
+				!Number.isSafeInteger(nextRevision) ||
+				!durableStillAtBase ||
+				mutationsByRevision.get(event.revision) !== undefined
+			) {
+				mismatches.add("mutation_lifecycle_invalid");
+				return false;
+			}
+			current.state = "committed";
+			mutationsByRevision.set(event.revision, event.mutationId);
+			return true;
+		case "mutation_crash":
+			if (current.state !== "started") {
+				mismatches.add("mutation_lifecycle_invalid");
+				return false;
+			}
+			current.crashPhase = event.phase;
+			current.state = "crashed";
+			return true;
+		case "mutation_recovery": {
+			const statusMatchesPhase =
+				current.crashPhase === "before_write"
+					? event.status === "rolled_back" || event.status === "reapplied"
+					: current.crashPhase === "after_write_before_commit"
+						? true
+						: event.status === "commit_reused";
+			const expectedRevision =
+				event.status === "rolled_back" ? current.baseRevision : nextRevision;
+			const reusedObservedCommit =
+				event.status === "commit_reused" &&
+				durable.revision === event.revision &&
+				durable.stateDigest === event.stateDigest;
+			const recoveryPositionValid =
+				event.status === "commit_reused"
+					? durableStillAtBase || reusedObservedCommit
+					: durableStillAtBase;
+			const revisionOwner = mutationsByRevision.get(event.revision);
+			const revisionAvailable =
+				event.status === "rolled_back" ||
+				revisionOwner === undefined ||
+				revisionOwner === event.mutationId;
+			const rollbackDigestValid =
+				event.status !== "rolled_back" ||
+				event.stateDigest === current.baseStateDigest;
+			if (
+				current.state !== "crashed" ||
+				current.crashPhase === null ||
+				!statusMatchesPhase ||
+				event.revision !== expectedRevision ||
+				(event.status !== "rolled_back" &&
+					!Number.isSafeInteger(nextRevision)) ||
+				!recoveryPositionValid ||
+				!revisionAvailable ||
+				!rollbackDigestValid
+			) {
+				if (current.state === "started" || current.state === "committed") {
+					mismatches.add("recovery_without_crash");
+				}
+				mismatches.add("mutation_lifecycle_invalid");
+				return false;
+			}
+			current.state = "recovered";
+			if (event.status !== "rolled_back") {
+				mutationsByRevision.set(event.revision, event.mutationId);
+			}
+			return true;
+		}
+	}
 }
 
 function equalFingerprintMultiset(
@@ -440,11 +601,11 @@ function deriveTerminalTruth(signals: DerivedSignals): {
 	if (signals.malformedTelemetry) {
 		return { decision: "blocked", reason: "optional_telemetry_malformed" };
 	}
-	if (signals.mutationRecovered) {
-		return { decision: "recovered", reason: "mutation_recovered" };
-	}
 	if (signals.mutationIncomplete) {
 		return { decision: "blocked", reason: "mutation_incomplete" };
+	}
+	if (signals.mutationRecovered) {
+		return { decision: "recovered", reason: "mutation_recovered" };
 	}
 	if (signals.retryUnchanged) {
 		return { decision: "retry", reason: "finding_unchanged" };
@@ -538,10 +699,9 @@ export function replayScenario(
 	if (review.contradictoryVerdicts) {
 		mismatches.add("contradictory_review_verdicts");
 	}
-	const mutationStarts = new Set<OpaqueId>();
-	const mutationCommits = new Set<OpaqueId>();
-	const mutationRecoveries = new Set<OpaqueId>();
-	const mutationCrashes = new Set<OpaqueId>();
+	const mutationLifecycles = new Map<OpaqueId, MutationLifecycle>();
+	const mutationsByOperation = new Map<OpaqueId, OpaqueId>();
+	const mutationsByRevision = new Map<number, OpaqueId>();
 	const snapshotRevisions = new Map<OpaqueId, number>();
 	const terminalEvents: TerminalEvent[] = [];
 
@@ -556,19 +716,54 @@ export function replayScenario(
 		| "blocked"
 		| "completed"
 		| null = null;
+	let lastSessionStateRevision: number | null = null;
 	let sawSessionState = false;
 	let invalidHandoff = false;
 	let malformedTelemetry = false;
 	let staleValidation = false;
+	let invalidMutationCausality = false;
+	let invalidSessionCausality = false;
+	const acceptMutationTransition = (event: MutationEvent): boolean =>
+		advanceMutationLifecycle(
+			event,
+			mutationLifecycles,
+			mutationsByOperation,
+			mutationsByRevision,
+			{
+				revision: lastDurableRevision,
+				stateDigest: lastDurableDigest,
+			},
+			scenario.initialStateDigest,
+			mismatches,
+		);
 
 	for (const event of scenario.events) {
 		switch (event.kind) {
 			case "session_state":
+				if (event.sessionId !== scenario.sessionId) {
+					mismatches.add("session_identity_mismatch");
+					invalidSessionCausality = true;
+					break;
+				}
+				if (
+					lastDurableRevision !== null &&
+					(event.revision < lastDurableRevision ||
+						(event.revision === lastDurableRevision &&
+							(event.stateDigest !== lastDurableDigest ||
+								(lastSessionStateRevision === event.revision &&
+									(event.sessionStatus !== lastSessionStatus ||
+										event.featureStatus !== lastFeatureStatus)))))
+				) {
+					mismatches.add("durable_state_mismatch");
+					invalidSessionCausality = true;
+					break;
+				}
 				stateDigestRefs.add(event.stateDigest);
 				lastDurableRevision = event.revision;
 				lastDurableDigest = event.stateDigest;
 				lastFeatureStatus = event.featureStatus;
 				lastSessionStatus = event.sessionStatus;
+				lastSessionStateRevision = event.revision;
 				sawSessionState = true;
 				break;
 			case "validation": {
@@ -614,27 +809,31 @@ export function replayScenario(
 				break;
 			case "mutation_start":
 				mutableCounters.mutationStarts += 1;
-				mutationStarts.add(event.mutationId);
+				if (!acceptMutationTransition(event)) {
+					invalidMutationCausality = true;
+				}
 				break;
 			case "mutation_commit":
 				mutableCounters.mutationCommits += 1;
-				if (mutationCommits.has(event.mutationId)) {
-					mismatches.add("duplicate_mutation_commit");
+				if (!acceptMutationTransition(event)) {
+					invalidMutationCausality = true;
+					break;
 				}
-				mutationCommits.add(event.mutationId);
 				stateDigestRefs.add(event.stateDigest);
 				lastDurableRevision = event.revision;
 				lastDurableDigest = event.stateDigest;
 				break;
 			case "mutation_crash":
 				mutableCounters.crashes += 1;
-				mutationCrashes.add(event.mutationId);
+				if (!acceptMutationTransition(event)) {
+					invalidMutationCausality = true;
+				}
 				break;
 			case "mutation_recovery":
 				mutableCounters.recoveries += 1;
-				mutationRecoveries.add(event.mutationId);
-				if (!mutationCrashes.has(event.mutationId)) {
-					mismatches.add("recovery_without_crash");
+				if (!acceptMutationTransition(event)) {
+					invalidMutationCausality = true;
+					break;
 				}
 				stateDigestRefs.add(event.stateDigest);
 				lastDurableRevision = event.revision;
@@ -650,21 +849,20 @@ export function replayScenario(
 	}
 
 	let mutationIncomplete = false;
-	for (const mutationId of mutationStarts) {
-		if (
-			!mutationCommits.has(mutationId) &&
-			!mutationRecoveries.has(mutationId)
-		) {
+	let mutationRecovered = false;
+	for (const lifecycle of mutationLifecycles.values()) {
+		if (lifecycle.state === "started" || lifecycle.state === "crashed") {
 			mismatches.add("mutation_left_uncommitted");
 			mutationIncomplete = true;
 		}
+		if (lifecycle.state === "recovered") mutationRecovered = true;
 	}
 
 	const signals: DerivedSignals = {
 		contradictoryVerdicts: review.contradictoryVerdicts,
 		invalidHandoff,
 		malformedTelemetry,
-		mutationRecovered: mutationRecoveries.size > 0,
+		mutationRecovered,
 		mutationIncomplete,
 		retryUnchanged: review.retryUnchanged,
 		retryResolved: review.retryResolved,
@@ -705,7 +903,9 @@ export function replayScenario(
 	const causallyImpossible =
 		terminalEvents.length !== 1 ||
 		mismatches.has("terminal_not_final") ||
-		review.invalidCausality;
+		review.invalidCausality ||
+		invalidMutationCausality ||
+		invalidSessionCausality;
 	const actual: { decision: ReplayDecision; reason: ReplayReason } =
 		causallyImpossible
 			? { decision: "failed", reason: "schema_invalid" }

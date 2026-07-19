@@ -1,8 +1,8 @@
 # Parallel pass manifest
 
-Read this only after `parallel-decision.md` selects a parallel or candidate
-pass. The manifest is the pre-fan-out coverage gate and the accounting contract
-for every worker result.
+Read this only after `flow/references/parallel-decision.md` selects a parallel
+or candidate pass. The manifest is the pre-fan-out coverage gate and the
+accounting contract for every worker result.
 
 ## Orient and slice
 
@@ -51,7 +51,7 @@ Add an implementation decision row even when no worker is spawned. Record:
 
 - `kind: "implementation-decision"`
 - the valid decision, eligibility, and candidate-decision pairing from
-  `parallel-decision.md`
+  `flow/references/parallel-decision.md`
 - `decisionFactors`, `decisionReason`, and `writeScope: "manager-serial"`
 - `workerCount: 0`, a stable row id, verification status, and outcome
 

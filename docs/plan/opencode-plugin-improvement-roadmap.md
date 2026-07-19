@@ -1,11 +1,16 @@
 # OpenCode Plugin Improvement Roadmap
 
-Status: implemented
+Status: implemented / historical snapshot
 Created: 2026-06-18
 
 Implementation note: implemented through Flow session
 `d675ab0e-d4ba-417c-b678-d54def2a0d96`. Priority 5 remains a deferred
 ergonomics/evaluation backlog.
+
+The paths, package versions, counts, and findings below are frozen evidence from
+the implementation period. They are not a current repository map. Use
+`docs/index.md`, `docs/development.md`, and `docs/maintainer-contract.md` for the
+maintained contract.
 
 ## Purpose
 

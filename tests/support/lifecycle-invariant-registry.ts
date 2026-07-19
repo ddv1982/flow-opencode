@@ -101,10 +101,10 @@ export type ProofAssertions = {
 	): void;
 };
 
-export type ProofExecution = {
+export type ProofExecution = Readonly<{
 	assertionCount: number;
-	evidence: string[];
-};
+	evidence: readonly string[];
+}>;
 
 export type ExecutableProof = {
 	description: string;
@@ -116,12 +116,28 @@ type ProofImplementation = (
 	assertions: ProofAssertions,
 ) => void | Promise<void>;
 
+function cacheSuccessfulProofExecution(
+	proof: ExecutableProof,
+): ExecutableProof {
+	let cachedExecution: Promise<ProofExecution> | undefined;
+	return {
+		...proof,
+		run() {
+			cachedExecution ??= proof.run().catch((error: unknown) => {
+				cachedExecution = undefined;
+				throw error;
+			});
+			return cachedExecution;
+		},
+	};
+}
+
 export function executableProof(
 	description: string,
 	implementation: ProofImplementation,
 	requiredEvidence: readonly string[] = ["assertions"],
 ): ExecutableProof {
-	return {
+	return cacheSuccessfulProofExecution({
 		description,
 		requiredEvidence,
 		async run() {
@@ -166,9 +182,12 @@ export function executableProof(
 				[],
 				`${description} omitted required evidence dimensions.`,
 			);
-			return { assertionCount, evidence: [...evidence].sort() };
+			return Object.freeze({
+				assertionCount,
+				evidence: Object.freeze([...evidence].sort()),
+			});
 		},
-	};
+	});
 }
 
 export type LifecycleInvariantRegistry = {
@@ -249,7 +268,7 @@ export async function executeLifecycleInvariantRegistry(
 		invariantId: LifecycleInvariantId;
 		proofClass: string;
 		assertionCount: number;
-		evidence: string[];
+		evidence: readonly string[];
 	}>
 > {
 	const missing = missingLifecycleProofs(registry);
@@ -262,7 +281,7 @@ export async function executeLifecycleInvariantRegistry(
 		invariantId: LifecycleInvariantId;
 		proofClass: string;
 		assertionCount: number;
-		evidence: string[];
+		evidence: readonly string[];
 	}> = [];
 	for (const [invariantId, requiredProofs] of Object.entries(
 		LIFECYCLE_INVARIANT_REQUIREMENTS,

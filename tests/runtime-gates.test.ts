@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FlowResponse } from "../src/application/flow-service.js";
@@ -42,6 +42,7 @@ type TestFlowResponse = FlowResponse & {
 };
 
 let operationSequence = 0;
+const temporaryWorkspaces = new Set<string>();
 const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
 const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
 
@@ -480,8 +481,20 @@ async function flowSessionClose(
 }
 
 async function tempWorkspace(): Promise<string> {
-	return mkdtemp(join(tmpdir(), "flow-runtime-"));
+	const workspace = await mkdtemp(join(tmpdir(), "flow-runtime-"));
+	temporaryWorkspaces.add(workspace);
+	return workspace;
 }
+
+afterEach(async () => {
+	const workspaces = [...temporaryWorkspaces];
+	temporaryWorkspaces.clear();
+	await Promise.all(
+		workspaces.map((workspace) =>
+			rm(workspace, { force: true, recursive: true }),
+		),
+	);
+});
 
 function twoFeaturePlan() {
 	return {
@@ -966,6 +979,41 @@ describe("Flow runtime gates", () => {
 		expect(session.latestHistoryEntry.orchestrationPasses[1]?.writeScope).toBe(
 			"exact-path",
 		);
+	});
+
+	test("saturates orchestration counters without invalidating feature outcomes", async () => {
+		const workspace = await tempWorkspace();
+		await approvedTwoFeatureSession(workspace);
+		await flowRunStart(workspace, {});
+
+		const first = await completeSuccessfully(workspace, {
+			featureId: "first-feature",
+			validationScope: "targeted",
+			orchestrationPasses: [
+				orchestrationPass("max-workers-one", {
+					workerCount: Number.MAX_SAFE_INTEGER,
+				}),
+				orchestrationPass("max-workers-two", {
+					workerCount: Number.MAX_SAFE_INTEGER,
+				}),
+			],
+		});
+		expect(first.status).toBe("ok");
+		expect((await orchestrationTelemetry(workspace)).workerCount).toBe(
+			Number.MAX_SAFE_INTEGER,
+		);
+
+		await flowRunStart(workspace, {});
+		const final = await completeSuccessfully(workspace, {
+			featureId: "final-feature",
+			validationScope: "broad",
+			includeFinalReview: true,
+			orchestrationPasses: [orchestrationPass("post-saturation-worker")],
+		});
+		expect(final.status).toBe("ok");
+		const persisted = await orchestrationTelemetry(workspace);
+		expect(persisted.workerCount).toBe(Number.MAX_SAFE_INTEGER);
+		expect(persisted.passCount).toBe(3);
 	});
 
 	test("counts only eligible skipped implementation candidates as skipped", async () => {

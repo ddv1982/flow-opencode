@@ -98,14 +98,15 @@ Dependencies and write scope: <verified dependencies; approved write scope>
 Do: <bounded actions>
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
 Return only the Flow handoff in this exact shape:
-<matching handoff template copied verbatim from handoff-format.md>
+<matching handoff template copied verbatim from flow/references/handoff-format.md>
 ```
 
 Hidden workers cannot load skills, references, or conversation history. Copy the
-matching block from `handoff-format.md`; a filename alone is insufficient. Cite
-paths to any prerequisite synthesis artifact instead of restating accumulated
-chat. For current-doc research, require checks for versioned or time-sensitive
-facts. Remind candidate workers not to revert unrelated changes.
+matching block from `flow/references/handoff-format.md`; a filename alone is
+insufficient. Cite paths to any prerequisite synthesis artifact instead of
+restating accumulated chat. For current-doc research, require checks for
+versioned or time-sensitive facts. Remind candidate workers not to revert
+unrelated changes.
 
 Continue only non-overlapping manager work while workers run.
 

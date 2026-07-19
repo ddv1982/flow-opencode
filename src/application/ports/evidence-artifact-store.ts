@@ -2,7 +2,6 @@ import type { EvidenceArtifactRef } from "../../domain/session.js";
 
 export const MAX_EVIDENCE_ARTIFACT_BYTES = 8 * 1024 * 1024;
 
-export type EvidenceArtifactDigest = `sha256:${string}`;
 export type { EvidenceArtifactRef } from "../../domain/session.js";
 
 export interface EvidenceArtifactStore {

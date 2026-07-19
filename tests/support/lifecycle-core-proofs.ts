@@ -2,6 +2,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../../package.json" with { type: "json" };
+import { PACKED_PACKAGE_PATHS } from "../../scripts/lib/package-surface.js";
 import {
 	createFlowService,
 	type FlowService,
@@ -1666,17 +1667,9 @@ export const exactV4SchemaProof = executableProof(
 export const packageSurfaceProof = executableProof(
 	"The actual built tarball exposes valid metadata, declarations, CLI, type consumer, and runtime consumer.",
 	async (assertions: ProofAssertions) => {
-		assertions.deepEqual(packageJson.files, [
-			"dist",
-			"LICENSE",
-			"README.md",
-			"CHANGELOG.md",
-		]);
-		assertions.equal(
-			packageJson.files.some((path) =>
-				/^(?:tests|skills|docs|scripts)(?:\/|$)/.test(path),
-			),
-			false,
+		assertions.deepEqual(
+			[...packageJson.files].sort(),
+			PACKED_PACKAGE_PATHS.filter((path) => path !== "package.json").sort(),
 		);
 		const evidence = await runPackageSurfaceSmoke();
 		assertions.cover("build");

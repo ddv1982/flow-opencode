@@ -1,8 +1,9 @@
 # Parallel pass example
 
-Use this example only after `parallel-orchestration.md` routes a broad Flow task
-to fan-out. It illustrates the manifest, execution, and synthesis references;
-derive real slices from the actual repo during serial orientation.
+Use this example only after `flow/references/parallel-orchestration.md` routes a
+broad Flow task to fan-out. It illustrates the manifest, execution, and
+synthesis references; derive real slices from the actual repo during serial
+orientation.
 
 Goal: review whether a web app's API error handling is consistent before
 planning a refactor.
@@ -34,7 +35,7 @@ Dependencies and write scope: none; none.
 Do: report each route's error paths, status codes, and middleware usage with file:line evidence.
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
 Return only the Flow handoff in this exact shape:
-<matching handoff template copied verbatim from handoff-format.md>
+<matching handoff template copied verbatim from flow/references/handoff-format.md>
 ```
 
 ```text
@@ -47,7 +48,7 @@ Dependencies and write scope: none; none.
 Do: separate blocking findings from advisory notes and cite file:line evidence.
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
 Return only the Flow handoff in this exact shape:
-<matching handoff template copied verbatim from handoff-format.md>
+<matching handoff template copied verbatim from flow/references/handoff-format.md>
 ```
 
 ```text
@@ -60,7 +61,7 @@ Dependencies and write scope: none; none.
 Do: check each claimed error path against the shared middleware contract and report divergences with evidence.
 Do not: call state-changing Flow tools, edit .flow/**, own sibling slices, or make the final Flow verdict.
 Return only the Flow handoff in this exact shape:
-<matching handoff template copied verbatim from handoff-format.md>
+<matching handoff template copied verbatim from flow/references/handoff-format.md>
 ```
 
 Accounting: three manifest rows spawned means three handoffs collected before

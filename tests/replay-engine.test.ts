@@ -73,6 +73,89 @@ type RetryFindingDeltaEvent = Extract<
 	{ kind: "retry_finding_delta" }
 >;
 
+type MutationEvent = Extract<
+	ReplayScenario["events"][number],
+	{
+		kind:
+			| "mutation_start"
+			| "mutation_commit"
+			| "mutation_crash"
+			| "mutation_recovery";
+	}
+>;
+
+type MutationStartEvent = Extract<MutationEvent, { kind: "mutation_start" }>;
+type MutationCrashEvent = Extract<MutationEvent, { kind: "mutation_crash" }>;
+type MutationRecoveryEvent = Extract<
+	MutationEvent,
+	{ kind: "mutation_recovery" }
+>;
+type MutationCommitEvent = Extract<MutationEvent, { kind: "mutation_commit" }>;
+type SessionStateEvent = Extract<
+	ReplayScenario["events"][number],
+	{ kind: "session_state" }
+>;
+
+function sessionStateEvent(): SessionStateEvent {
+	const state = scenarioById(
+		"active_final_feature_awaiting_review",
+	).events.find((event) => event.kind === "session_state");
+	if (state?.kind !== "session_state") {
+		throw new Error("Expected session state fixture.");
+	}
+	return state;
+}
+
+function mutationEvents(): {
+	start: MutationStartEvent;
+	crash: MutationCrashEvent;
+	recovery: MutationRecoveryEvent;
+	commit: MutationCommitEvent;
+} {
+	const scenario = scenarioById("crash_replay_around_mutation");
+	const start = scenario.events.find(
+		(event) => event.kind === "mutation_start",
+	);
+	const crash = scenario.events.find(
+		(event) => event.kind === "mutation_crash",
+	);
+	const recovery = scenario.events.find(
+		(event) => event.kind === "mutation_recovery",
+	);
+	if (
+		start?.kind !== "mutation_start" ||
+		crash?.kind !== "mutation_crash" ||
+		recovery?.kind !== "mutation_recovery"
+	) {
+		throw new Error("Expected complete mutation lifecycle fixture.");
+	}
+	return {
+		start,
+		crash,
+		recovery,
+		commit: {
+			kind: "mutation_commit",
+			seq: 0,
+			atMs: 0,
+			source: "flow_ledger",
+			operationId: start.operationId,
+			mutationId: start.mutationId,
+			revision: recovery.revision,
+			stateDigest: recovery.stateDigest,
+		},
+	};
+}
+
+function withMutationEvents(events: readonly MutationEvent[]): ReplayScenario {
+	const scenario = scenarioById("crash_replay_around_mutation");
+	const terminal = terminalOf(scenario);
+	scenario.events = [
+		...events.map((event) => structuredClone(event)),
+		structuredClone(terminal),
+	];
+	return resequence(scenario);
+}
+
 function reviewAttemptOf(
 	scenario: ReplayScenario,
 	attemptId: string,
@@ -593,6 +676,440 @@ describe("deterministic replay oracle", () => {
 		});
 		expect(first.mismatches).not.toContain("duplicate_mutation_commit");
 		expect(first.derivedRevision).toBe(21);
+	});
+
+	test("enumerates the legal per-mutation lifecycle sequences", () => {
+		const { start, crash, recovery, commit } = mutationEvents();
+		const started = replayScenario(withMutationEvents([start]), "A");
+		expect(started.decision).toBe("blocked");
+		expect(started.reason).toBe("mutation_incomplete");
+		expect(started.mismatches).not.toContain("mutation_lifecycle_invalid");
+
+		const crashed = replayScenario(withMutationEvents([start, crash]), "A");
+		expect(crashed.decision).toBe("blocked");
+		expect(crashed.reason).toBe("mutation_incomplete");
+		expect(crashed.mismatches).not.toContain("mutation_lifecycle_invalid");
+
+		const committed = replayScenario(withMutationEvents([start, commit]), "A");
+		expect(committed.mismatches).not.toContain("mutation_lifecycle_invalid");
+		expect(committed.mismatches).not.toContain("mutation_left_uncommitted");
+		expect(committed.derivedRevision).toBe(commit.revision);
+		expect(committed.derivedStateDigest).toBe(commit.stateDigest);
+
+		const recovered = replayScenario(
+			withMutationEvents([start, crash, recovery]),
+			"A",
+		);
+		expect(recovered.decision).toBe("recovered");
+		expect(recovered.reason).toBe("mutation_recovered");
+		expect(recovered.mismatches).not.toContain("mutation_lifecycle_invalid");
+		expect(recovered.mismatches).not.toContain("mutation_left_uncommitted");
+	});
+
+	test("binds recovery status to crash phase and revision semantics", () => {
+		const { start, crash, recovery } = mutationEvents();
+		const baseStateDigest = scenarioById(
+			"crash_replay_around_mutation",
+		).initialStateDigest;
+		const combinations: ReadonlyArray<{
+			phase: MutationCrashEvent["phase"];
+			status: MutationRecoveryEvent["status"];
+			valid: boolean;
+		}> = [
+			{ phase: "before_write", status: "rolled_back", valid: true },
+			{ phase: "before_write", status: "reapplied", valid: true },
+			{ phase: "before_write", status: "commit_reused", valid: false },
+			{
+				phase: "after_write_before_commit",
+				status: "rolled_back",
+				valid: true,
+			},
+			{
+				phase: "after_write_before_commit",
+				status: "reapplied",
+				valid: true,
+			},
+			{
+				phase: "after_write_before_commit",
+				status: "commit_reused",
+				valid: true,
+			},
+			{ phase: "after_commit", status: "rolled_back", valid: false },
+			{ phase: "after_commit", status: "reapplied", valid: false },
+			{ phase: "after_commit", status: "commit_reused", valid: true },
+		];
+
+		for (const { phase, status, valid } of combinations) {
+			const candidateCrash: MutationCrashEvent = { ...crash, phase };
+			const candidateRecovery: MutationRecoveryEvent = {
+				...recovery,
+				status,
+				revision:
+					status === "rolled_back"
+						? start.baseRevision
+						: start.baseRevision + 1,
+				stateDigest:
+					status === "rolled_back" ? baseStateDigest : recovery.stateDigest,
+			};
+			const result = replayScenario(
+				withMutationEvents([start, candidateCrash, candidateRecovery]),
+				"A",
+			);
+			if (valid) {
+				expect(result.mismatches, `${phase}/${status}`).not.toContain(
+					"mutation_lifecycle_invalid",
+				);
+				expect(result.derivedRevision, `${phase}/${status}`).toBe(
+					candidateRecovery.revision,
+				);
+			} else {
+				expect(result.decision, `${phase}/${status}`).toBe("failed");
+				expect(result.reason, `${phase}/${status}`).toBe("schema_invalid");
+				expect(result.mismatches, `${phase}/${status}`).toContain(
+					"mutation_lifecycle_invalid",
+				);
+				expect(result.derivedRevision, `${phase}/${status}`).toBeNull();
+			}
+		}
+	});
+
+	test("reconciles only an exactly observed reused commit", () => {
+		const { start, crash, recovery } = mutationEvents();
+		const observedCommit = {
+			...sessionStateEvent(),
+			sessionId: "session_9" as const,
+			revision: start.baseRevision + 1,
+			stateDigest: recovery.stateDigest,
+		};
+		const afterCommitCrash: MutationCrashEvent = {
+			...crash,
+			phase: "after_commit",
+		};
+		const reused: MutationRecoveryEvent = {
+			...recovery,
+			status: "commit_reused",
+		};
+		const scenario = withMutationEvents([start, afterCommitCrash, reused]);
+		scenario.events.splice(2, 0, observedCommit);
+		resequence(scenario);
+
+		const accepted = replayScenario(scenario, "A");
+		expect(accepted.decision).toBe("recovered");
+		expect(accepted.mismatches).not.toContain("mutation_lifecycle_invalid");
+		expect(accepted.derivedRevision).toBe(reused.revision);
+		expect(accepted.derivedStateDigest).toBe(reused.stateDigest);
+
+		const conflicting = structuredClone(scenario);
+		const conflictingRecovery = conflicting.events.find(
+			(event) => event.kind === "mutation_recovery",
+		);
+		if (conflictingRecovery?.kind !== "mutation_recovery") {
+			throw new Error("Expected recovery fixture.");
+		}
+		conflictingRecovery.stateDigest = "f".repeat(64);
+		const rejected = replayScenario(conflicting, "A");
+		expect(rejected.decision).toBe("failed");
+		expect(rejected.mismatches).toContain("mutation_lifecycle_invalid");
+		expect(rejected.derivedStateDigest).toBe(observedCommit.stateDigest);
+	});
+
+	test("rejects regressing or conflicting durable state observations", () => {
+		const { start, commit } = mutationEvents();
+		const invalidStates: ReadonlyArray<{
+			name: string;
+			state: SessionStateEvent;
+		}> = [
+			{
+				name: "revision regression",
+				state: {
+					...sessionStateEvent(),
+					sessionId: "session_9",
+					revision: 0,
+					stateDigest: "e".repeat(64),
+				},
+			},
+			{
+				name: "equal revision digest collision",
+				state: {
+					...sessionStateEvent(),
+					sessionId: "session_9",
+					revision: commit.revision,
+					stateDigest: "f".repeat(64),
+				},
+			},
+		];
+
+		for (const { name, state } of invalidStates) {
+			const scenario = withMutationEvents([start, commit]);
+			scenario.events.splice(-1, 0, state);
+			const terminal = terminalOf(scenario);
+			terminal.decision = "failed";
+			terminal.reason = "schema_invalid";
+			terminal.revision = state.revision;
+			terminal.stateDigest = state.stateDigest;
+			resequence(scenario);
+
+			const result = replayScenario(scenario, "A");
+			expect(result.decision, name).toBe("failed");
+			expect(result.reason, name).toBe("schema_invalid");
+			expect(result.mismatches, name).toContain("durable_state_mismatch");
+			expect(result.derivedRevision, name).toBe(commit.revision);
+			expect(result.derivedStateDigest, name).toBe(commit.stateDigest);
+			expect(result.stateDigestRefs, name).not.toContain(state.stateDigest);
+		}
+
+		const repeated = withMutationEvents([start, commit]);
+		repeated.events.splice(-1, 0, {
+			...sessionStateEvent(),
+			sessionId: repeated.sessionId,
+			revision: commit.revision,
+			stateDigest: commit.stateDigest,
+		});
+		resequence(repeated);
+		const idempotent = replayScenario(repeated, "A");
+		expect(idempotent.mismatches).not.toContain("durable_state_mismatch");
+		expect(idempotent.derivedRevision).toBe(commit.revision);
+		expect(idempotent.derivedStateDigest).toBe(commit.stateDigest);
+
+		const statusCollision = structuredClone(repeated);
+		const observed = statusCollision.events.find(
+			(event) => event.kind === "session_state",
+		);
+		if (observed?.kind !== "session_state") {
+			throw new Error("Expected session state observation.");
+		}
+		statusCollision.events.splice(-1, 0, {
+			...observed,
+			sessionStatus: "completed",
+			featureStatus: "completed",
+		});
+		resequence(statusCollision);
+		const conflictingStatus = replayScenario(statusCollision, "A");
+		expect(conflictingStatus.decision).toBe("failed");
+		expect(conflictingStatus.reason).toBe("schema_invalid");
+		expect(conflictingStatus.mismatches).toContain("durable_state_mismatch");
+		expect(conflictingStatus.derivedRevision).toBe(commit.revision);
+		expect(conflictingStatus.derivedStateDigest).toBe(commit.stateDigest);
+	});
+
+	test("rejects recovery revisions and rollback digests that contradict the start", () => {
+		const { start, crash, recovery, commit } = mutationEvents();
+		const invalidTerminals: ReadonlyArray<{
+			name: string;
+			event: MutationCommitEvent | MutationRecoveryEvent;
+		}> = [
+			{
+				name: "commit retained base revision",
+				event: { ...commit, revision: start.baseRevision },
+			},
+			{
+				name: "commit skipped a revision",
+				event: { ...commit, revision: start.baseRevision + 2 },
+			},
+			{
+				name: "reapplied recovery regressed",
+				event: { ...recovery, revision: 0 },
+			},
+			{
+				name: "reapplied recovery retained base revision",
+				event: { ...recovery, revision: start.baseRevision },
+			},
+			{
+				name: "reapplied recovery skipped a revision",
+				event: { ...recovery, revision: start.baseRevision + 2 },
+			},
+			{
+				name: "rollback advanced revision",
+				event: {
+					...recovery,
+					status: "rolled_back",
+					revision: start.baseRevision + 1,
+					stateDigest: scenarioById("crash_replay_around_mutation")
+						.initialStateDigest,
+				},
+			},
+			{
+				name: "rollback changed base digest",
+				event: {
+					...recovery,
+					status: "rolled_back",
+					revision: start.baseRevision,
+				},
+			},
+		];
+
+		for (const { name, event } of invalidTerminals) {
+			const events: MutationEvent[] =
+				event.kind === "mutation_commit"
+					? [start, event]
+					: [start, crash, event];
+			const scenario = withMutationEvents(events);
+			if (event.kind === "mutation_recovery" && event.revision === 0) {
+				const terminal = terminalOf(scenario);
+				terminal.revision = 0;
+				terminal.stateDigest = event.stateDigest;
+			}
+			const result = replayScenario(scenario, "A");
+			expect(result.decision, name).toBe("failed");
+			expect(result.reason, name).toBe("schema_invalid");
+			expect(result.mismatches, name).toContain("mutation_lifecycle_invalid");
+			expect(result.derivedRevision, name).toBeNull();
+			if (event.stateDigest !== scenario.initialStateDigest) {
+				expect(result.stateDigestRefs, name).not.toContain(event.stateDigest);
+			}
+		}
+	});
+
+	test("rejects operation reuse and interleaved revision collisions", () => {
+		const { start, crash, recovery, commit } = mutationEvents();
+		const collidingOperationStart: MutationStartEvent = {
+			...start,
+			mutationId: "mutation_91",
+		};
+		const operationCollision = replayScenario(
+			withMutationEvents([start, collidingOperationStart, crash, recovery]),
+			"A",
+		);
+		expect(operationCollision.decision).toBe("failed");
+		expect(operationCollision.mismatches).toContain(
+			"mutation_lifecycle_invalid",
+		);
+
+		const interleavedStart: MutationStartEvent = {
+			...start,
+			operationId: "operation_91",
+			mutationId: "mutation_91",
+		};
+		const interleavedCommit: MutationCommitEvent = {
+			...commit,
+			operationId: "operation_91",
+			mutationId: "mutation_91",
+			stateDigest: "e".repeat(64),
+		};
+		const revisionCollision = replayScenario(
+			withMutationEvents([start, interleavedStart, commit, interleavedCommit]),
+			"A",
+		);
+		expect(revisionCollision.decision).toBe("failed");
+		expect(revisionCollision.mismatches).toContain(
+			"mutation_lifecycle_invalid",
+		);
+		expect(revisionCollision.derivedRevision).toBe(commit.revision);
+		expect(revisionCollision.derivedStateDigest).toBe(commit.stateDigest);
+		expect(revisionCollision.stateDigestRefs).not.toContain(
+			interleavedCommit.stateDigest,
+		);
+
+		const sequentialStart: MutationStartEvent = {
+			...interleavedStart,
+			baseRevision: commit.revision,
+		};
+		const sequentialCommit: MutationCommitEvent = {
+			...interleavedCommit,
+			revision: commit.revision + 1,
+		};
+		const sequential = replayScenario(
+			withMutationEvents([start, commit, sequentialStart, sequentialCommit]),
+			"A",
+		);
+		expect(sequential.mismatches).not.toContain("mutation_lifecycle_invalid");
+		expect(sequential.derivedRevision).toBe(sequentialCommit.revision);
+		expect(sequential.derivedStateDigest).toBe(sequentialCommit.stateDigest);
+	});
+
+	test("fails every event ordering outside the mutation lifecycle", () => {
+		const { start, crash, recovery, commit } = mutationEvents();
+		const wrongOperationCrash = {
+			...crash,
+			operationId: "operation_91" as const,
+		};
+		const invalidSequences: ReadonlyArray<{
+			name: string;
+			events: readonly MutationEvent[];
+		}> = [
+			{ name: "commit without start", events: [commit] },
+			{ name: "crash without start", events: [crash] },
+			{ name: "recovery without start", events: [recovery] },
+			{ name: "duplicate start", events: [start, start] },
+			{ name: "recovery without crash", events: [start, recovery] },
+			{ name: "duplicate crash", events: [start, crash, crash] },
+			{ name: "duplicate commit", events: [start, commit, commit] },
+			{
+				name: "duplicate recovery",
+				events: [start, crash, recovery, recovery],
+			},
+			{ name: "event after commit", events: [start, commit, crash] },
+			{
+				name: "event after recovery",
+				events: [start, crash, recovery, commit],
+			},
+			{
+				name: "operation identity changed",
+				events: [start, wrongOperationCrash],
+			},
+		];
+
+		for (const { name, events } of invalidSequences) {
+			const scenario = withMutationEvents(events);
+			const first = replayScenario(scenario, "A");
+			const second = replayScenario(scenario, "A");
+			expect(first, name).toEqual(second);
+			expect(first.decision, name).toBe("failed");
+			expect(first.reason, name).toBe("schema_invalid");
+			expect(first.mismatches, name).toContain("mutation_lifecycle_invalid");
+			expect(first.mismatches, name).toEqual([...first.mismatches].sort());
+		}
+
+		const noStart = replayScenario(withMutationEvents([recovery]), "A");
+		expect(noStart.mismatches).toContain("recovery_without_crash");
+		expect(noStart.derivedRevision).toBeNull();
+		expect(noStart.stateDigestRefs).not.toContain(recovery.stateDigest);
+
+		const duplicateCommit = replayScenario(
+			withMutationEvents([start, commit, commit]),
+			"A",
+		);
+		expect(duplicateCommit.mismatches).toContain("duplicate_mutation_commit");
+	});
+
+	test("does not let one recovered mutation mask another incomplete mutation", () => {
+		const { start, crash, recovery } = mutationEvents();
+		const secondStart: MutationStartEvent = {
+			...start,
+			operationId: "operation_91",
+			mutationId: "mutation_91",
+			baseRevision: recovery.revision,
+		};
+		const result = replayScenario(
+			withMutationEvents([start, crash, recovery, secondStart]),
+			"A",
+		);
+
+		expect(result.decision).toBe("blocked");
+		expect(result.reason).toBe("mutation_incomplete");
+		expect(result.mismatches).toContain("mutation_left_uncommitted");
+		expect(result.mismatches).not.toContain("mutation_lifecycle_invalid");
+	});
+
+	test("fails closed on a foreign session state at the direct replay boundary", () => {
+		const scenario = scenarioById("active_final_feature_awaiting_review");
+		const state = scenario.events.find(
+			(event) => event.kind === "session_state",
+		);
+		if (state?.kind !== "session_state") {
+			throw new Error("Expected session state fixture.");
+		}
+		state.sessionId = "session_99";
+		state.revision = 999;
+		state.stateDigest = "f".repeat(64);
+
+		const result = replayScenario(scenario, "A");
+		expect(result.decision).toBe("failed");
+		expect(result.reason).toBe("schema_invalid");
+		expect(result.mismatches).toContain("session_identity_mismatch");
+		expect(result.derivedRevision).toBeNull();
+		expect(result.derivedStateDigest).toBeNull();
+		expect(result.stateDigestRefs).not.toContain("f".repeat(64));
 	});
 
 	test("reports duplicate commits and abandoned mutations explicitly", () => {

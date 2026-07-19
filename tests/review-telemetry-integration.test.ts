@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionSchema } from "../src/application/schema.js";
@@ -16,6 +16,17 @@ import {
 const FEATURE_ID = "review-feature";
 const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
 let operationSequence = 0;
+const temporaryWorkspaces = new Set<string>();
+
+afterEach(async () => {
+	const workspaces = [...temporaryWorkspaces];
+	temporaryWorkspaces.clear();
+	await Promise.all(
+		workspaces.map((workspace) =>
+			rm(workspace, { force: true, recursive: true }),
+		),
+	);
+});
 
 function flowReviewStart(workspace: string, request: unknown) {
 	return executeFlowReviewStart(workspace, { request });
@@ -35,7 +46,9 @@ const finding = {
 };
 
 async function tempWorkspace(): Promise<string> {
-	return mkdtemp(join(tmpdir(), "flow-review-telemetry-"));
+	const workspace = await mkdtemp(join(tmpdir(), "flow-review-telemetry-"));
+	temporaryWorkspaces.add(workspace);
+	return workspace;
 }
 
 async function requireSession(workspace: string): Promise<Session> {

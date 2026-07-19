@@ -1,17 +1,23 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+	appendFile,
 	chmod,
 	mkdir,
 	mkdtemp,
 	readdir,
 	readFile,
+	rm,
 	stat,
 	symlink,
+	truncate,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
 	EvidenceArtifactCollisionError,
 	EvidenceArtifactIntegrityError,
@@ -40,9 +46,16 @@ import {
 } from "../src/infrastructure/fs/workspace-flow-service.js";
 
 const utf8 = new TextEncoder();
+const execFileAsync = promisify(execFile);
+const ancestorRaceProbe = fileURLToPath(
+	new URL("./support/ancestor-directory-race-probe.ts", import.meta.url),
+);
+const temporaryWorkspaces: string[] = [];
 
 async function tempWorkspace(): Promise<string> {
-	return mkdtemp(join(tmpdir(), "flow-evidence-artifacts-"));
+	const workspace = await mkdtemp(join(tmpdir(), "flow-evidence-artifacts-"));
+	temporaryWorkspaces.push(workspace);
+	return workspace;
 }
 
 function bytes(value: string): Uint8Array {
@@ -74,6 +87,14 @@ async function ensureArtifactParents(
 	return shard;
 }
 
+afterEach(async () => {
+	await Promise.all(
+		temporaryWorkspaces
+			.splice(0)
+			.map((workspace) => rm(workspace, { recursive: true, force: true })),
+	);
+});
+
 describe("restricted evidence artifact persistence", () => {
 	test("publishes owner-only hash-addressed bytes and verifies reads", async () => {
 		const workspace = await tempWorkspace();
@@ -102,7 +123,7 @@ describe("restricted evidence artifact persistence", () => {
 		await expect(
 			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
 		).resolves.toBe(
-			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+			"session.json\n/session.json.*.*.tmp\nhistory/\nevidence/\nsession.lock/\n.gitignore\n/.gitignore.*.*.tmp\n",
 		);
 	});
 
@@ -147,6 +168,21 @@ describe("restricted evidence artifact persistence", () => {
 		await expect(stat(flowDir(workspace))).rejects.toMatchObject({
 			code: "ENOENT",
 		});
+	});
+
+	test("reads the byte limit and rejects a stored limit-plus-one artifact", async () => {
+		const workspace = await tempWorkspace();
+		const store = createFileEvidenceArtifactStore(workspace);
+		const content = new Uint8Array(MAX_EVIDENCE_ARTIFACT_BYTES);
+		const ref = await store.publishEvidenceArtifact(content);
+
+		expect((await store.readEvidenceArtifact(ref)).byteLength).toBe(
+			MAX_EVIDENCE_ARTIFACT_BYTES,
+		);
+		await appendFile(evidenceArtifactPath(workspace, ref), Buffer.from([1]));
+		await expect(store.readEvidenceArtifact(ref)).rejects.toBeInstanceOf(
+			EvidenceArtifactTooLargeError,
+		);
 	});
 
 	test("rejects invalid and missing references without creating directories", async () => {
@@ -207,6 +243,23 @@ describe("restricted evidence artifact persistence", () => {
 		await expect(store.readEvidenceArtifact(ref)).rejects.toBeInstanceOf(
 			EvidenceArtifactIntegrityError,
 		);
+	});
+
+	test("bounds verification of an oversized collision target", async () => {
+		const workspace = await tempWorkspace();
+		const content = bytes("bounded collision verification");
+		const ref = evidenceArtifactRefForBytes(content);
+		const target = evidenceArtifactPath(workspace, ref);
+		await ensureArtifactParents(workspace, digest(content));
+		await writeFile(target, "", { mode: 0o600 });
+		await truncate(target, MAX_EVIDENCE_ARTIFACT_BYTES + 1);
+
+		await expect(
+			createFileEvidenceArtifactStore(workspace).publishEvidenceArtifact(
+				content,
+			),
+		).rejects.toBeInstanceOf(EvidenceArtifactCollisionError);
+		expect((await stat(target)).size).toBe(MAX_EVIDENCE_ARTIFACT_BYTES + 1);
 	});
 
 	test("fails closed on byte-length and permission mismatches", async () => {
@@ -289,6 +342,49 @@ describe("restricted evidence artifact persistence", () => {
 			),
 		).rejects.toBeInstanceOf(UnsafeFlowWorkspaceLayoutError);
 		expect(await readFile(outsideFile, "utf8")).toBe("outside\n");
+	});
+
+	test("never follows a symlink when reading an artifact", async () => {
+		if (process.platform === "win32") return;
+		const workspace = await tempWorkspace();
+		const outside = await tempWorkspace();
+		const content = bytes("outside evidence");
+		const ref = evidenceArtifactRefForBytes(content);
+		await ensureArtifactParents(workspace, digest(content));
+		const outsideFile = join(outside, "artifact");
+		await writeFile(outsideFile, content, { mode: 0o600 });
+		await symlink(outsideFile, evidenceArtifactPath(workspace, ref));
+
+		await expect(
+			createFileEvidenceArtifactStore(workspace).readEvidenceArtifact(ref),
+		).rejects.toBeInstanceOf(UnsafeFlowWorkspaceLayoutError);
+		expect(await readFile(outsideFile)).toEqual(Buffer.from(content));
+	});
+
+	test("fails closed when a validated artifact ancestor is substituted", async () => {
+		if (process.platform === "win32") return;
+		await execFileAsync(process.execPath, [ancestorRaceProbe, "evidence"]);
+	});
+
+	test("pins publication to the validated shard during substitution", async () => {
+		if (process.platform === "win32") return;
+		await execFileAsync(process.execPath, [
+			ancestorRaceProbe,
+			"evidence-publish",
+		]);
+	});
+
+	test("revalidates the canonical shard after an idempotent replay", async () => {
+		if (process.platform === "win32") return;
+		await execFileAsync(process.execPath, [
+			ancestorRaceProbe,
+			"evidence-replay",
+		]);
+	});
+
+	test("bounds a collision target that grows after descriptor inspection", async () => {
+		if (process.platform === "win32") return;
+		await execFileAsync(process.execPath, [ancestorRaceProbe, "evidence-grow"]);
 	});
 
 	test("replays safely with target-plus-temp crash residue", async () => {
@@ -395,7 +491,7 @@ describe("restricted evidence artifact persistence", () => {
 		await expect(
 			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
 		).resolves.toBe(
-			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+			"session.json\n/session.json.*.*.tmp\nhistory/\nevidence/\nsession.lock/\n.gitignore\n/.gitignore.*.*.tmp\n",
 		);
 	});
 
@@ -415,7 +511,7 @@ describe("restricted evidence artifact persistence", () => {
 		await expect(
 			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
 		).resolves.toBe(
-			"maintainer-scratch/\n!evidence/**\nsession.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+			"maintainer-scratch/\n!evidence/**\nsession.json\n/session.json.*.*.tmp\nhistory/\nevidence/\nsession.lock/\n.gitignore\n/.gitignore.*.*.tmp\n",
 		);
 	});
 });

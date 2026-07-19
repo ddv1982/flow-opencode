@@ -300,7 +300,7 @@ const MANAGER_OPENINGS = {
 
 const PUBLIC_COMMAND_STARTUP = literalFragment({
 	id: "public-command.startup-and-archive-recovery",
-	source: "src/prompt-surfaces.ts#PUBLIC_COMMAND_SETUP",
+	source: "src/prompt-surfaces.ts#PUBLIC_COMMAND_STARTUP",
 	kind: "procedure",
 	roles: MANAGER_ROLE,
 	text: [
@@ -698,13 +698,14 @@ function deduplicateExactParagraphs(text: string): string {
 function compileBaselineCommand(
 	surface: keyof typeof BASELINE_COMMAND_SOURCES,
 ): CompiledFlowPrompt {
+	const role = surface === "flow-review" ? REVIEWER_ROLE : MANAGER_ROLE;
 	const fragments = BASELINE_COMMAND_SOURCES[surface].map(
 		([skill, path], index) =>
 			wholeSourceFragment({
 				id: `baseline.${surface}.${index}.${skill}.${path}`,
 				skill,
 				path,
-				roles: MANAGER_ROLE,
+				roles: role,
 				conditional:
 					path.includes("parallel") ||
 					path.includes("handoff") ||
@@ -721,7 +722,7 @@ function compileBaselineCommand(
 	return {
 		surface,
 		variant: "baseline",
-		role: surface === "flow-review" ? "reviewer" : "manager",
+		role: role[0],
 		text,
 		fragments,
 	};
@@ -975,6 +976,12 @@ const HANDOFF_REQUIRED_HEADINGS: Record<
 	],
 };
 
+// Placeholder templates are standalone angle-bracket tokens. Requiring a
+// boundary before `<` avoids treating ordinary type syntax such as
+// `Map<string, number>` as an unfinished handoff.
+const UNRESOLVED_HANDOFF_PLACEHOLDER =
+	/(?:^|[\s([{=])<[^<>\n]+>(?=$|[\s)\]},.!?:;])/m;
+
 export function validateFlowWorkerHandoff(
 	kind: FlowWorkerHandoffKind,
 	text: string,
@@ -1006,7 +1013,7 @@ export function validateFlowWorkerHandoff(
 			errors.push(`missing heading: ${heading}`);
 		} else if (!body) {
 			errors.push(`empty section: ${heading}`);
-		} else if (/<[^>\n]+>/.test(body)) {
+		} else if (UNRESOLVED_HANDOFF_PLACEHOLDER.test(body)) {
 			errors.push(`unresolved placeholder in section: ${heading}`);
 		}
 	}

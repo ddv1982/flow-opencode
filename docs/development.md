@@ -8,10 +8,18 @@ bun install
 bun run check
 ```
 
-`bun run check` runs typecheck (including repository scripts), Biome, the
-deterministic offline prompt-quality report, build, and the focused test suite.
-`bun run build` first removes the generated `dist/` tree so renamed or deleted
-declarations cannot survive into a packed release.
+`bun run check` runs typecheck (including repository scripts), Biome (including
+its own configuration), exact release-metadata validation, the deterministic
+offline prompt-quality report, build, and the focused test suite. `bun run
+build` first removes the generated `dist/` tree and then prunes declaration emit
+to the three-file public root import chain, so renamed, deleted, or unsupported
+internal declarations cannot survive into a packed release. Package smoke
+asserts the complete tarball allowlist rather than accepting arbitrary `dist/`
+contents.
+
+Network-backed advisory data is intentionally outside the reproducible local
+gate. Blocking CI runs `bun audit --audit-level=high` in a separate job; local
+contributors may run the same command when network access is available.
 
 ## TypeScript 7 posture
 

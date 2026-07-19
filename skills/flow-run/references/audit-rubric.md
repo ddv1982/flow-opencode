@@ -1,6 +1,6 @@
 # Audit findings rubric
 
-What counts as a valid finding when the feature's deliverable is a findings report: a codebase audit, a review-first feature, or any report whose findings a later feature will fix. The commands you run are still governed by `validation-rubric.md`; this rubric governs the findings themselves.
+What counts as a valid finding when the feature's deliverable is a findings report: a codebase audit, a review-first feature, or any report whose findings a later feature will fix. The commands you run are still governed by `flow-run/references/validation-rubric.md`; this rubric governs the findings themselves.
 
 A findings report is a set of claims about code you did not write. Its failure mode is not "missed something" — it is the confident, accurately-cited finding that is wrong because the mitigating code path was never read. Accurate citations are necessary, never sufficient: a citation proves you found the suspicious site, not that the suspicion survives contact with the rest of the codebase.
 
@@ -16,7 +16,7 @@ A finding that survives this pass is worth reporting. A finding you did not try 
 
 ## Parallel audit slices
 
-For broad audits, start with `../../flow/references/parallel-orchestration.md` to split
+For broad audits, start with `flow/references/parallel-orchestration.md` to split
 read-only slices by module, data flow, or risk lens. Workers surface candidates;
 the audit author owns the report. Apply its handoff format and verification
 gates. Before blocking severity, dedupe, trace guards, fill cross-layer checks,

@@ -11,13 +11,14 @@ execution, validation, review, and orchestration judgment, while the plugin
 runtime stays deliberately small — it keeps the session ledger and enforces the
 hard gates prompts should not be trusted to remember.
 
-Full project documentation is available in the
-[Flow OpenCode wiki](https://github.com/ddv1982/flow-opencode/wiki).
+The maintained documentation starts at [docs/index.md](docs/index.md). The
+tracked `droid-wiki/` tree is an archived generated snapshot and is not a
+current product or contributor contract.
 
 ## Quick start
 
 ```bash
-opencode plugin opencode-plugin-flow@5.2.1 --global --force
+opencode plugin opencode-plugin-flow@5.2.2 --global --force
 ```
 
 Start or restart OpenCode, then give Flow a goal:
@@ -235,14 +236,14 @@ or sync command is required. To preview recoverable migration of pristine v4
 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.2.1 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.2.2 legacy-cleanup --dry-run
 ```
 
 ## Development
 
 ```bash
 bun install
-bun run check        # typecheck + lint + prompt quality + build + tests
+bun run check        # typecheck + lint + release metadata + prompt quality + build + tests
 bun run smoke:live   # boots a real OpenCode server against the packed tarball
 ```
 

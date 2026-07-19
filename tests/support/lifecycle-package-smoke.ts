@@ -11,8 +11,12 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import packageJson from "../../package.json" with { type: "json" };
+import {
+	PACKED_PACKAGE_PATHS,
+	PUBLIC_DECLARATION_PATHS,
+} from "../../scripts/lib/package-surface.js";
 
 export type PackageSurfaceSmokeEvidence = {
 	packageVersion: string;
@@ -104,26 +108,11 @@ async function executePackageSurfaceSmoke(): Promise<PackageSurfaceSmokeEvidence
 		const tarEntries = runCommand("tar", ["-tzf", tarballPath])
 			.stdout.split(/\r?\n/)
 			.filter(Boolean);
-		for (const expected of [
-			"package/dist/index.js",
-			"package/dist/index.d.ts",
-			"package/dist/cli.js",
-			"package/README.md",
-			"package/CHANGELOG.md",
-		]) {
-			assert.ok(tarEntries.includes(expected), `Missing ${expected}.`);
-		}
-		for (const removedSurface of [
-			"package/dist/runtime/",
-			"package/dist/adapters/",
-			"package/dist/platform/opencode/tool-input-schemas.d.ts",
-		]) {
-			assert.equal(
-				tarEntries.some((entry) => entry.startsWith(removedSurface)),
-				false,
-				`Packed deprecated surface ${removedSurface}.`,
-			);
-		}
+		assert.deepEqual(
+			[...tarEntries].sort(),
+			PACKED_PACKAGE_PATHS.map((path) => `package/${path}`).sort(),
+			"Packed package files must match the intentional public allowlist.",
+		);
 
 		const extractDirectory = await createTemporaryDirectory("flow-extract");
 		runCommand("tar", ["-xzf", tarballPath, "-C", extractDirectory]);
@@ -163,7 +152,13 @@ async function executePackageSurfaceSmoke(): Promise<PackageSurfaceSmokeEvidence
 		)
 			.filter((entry) => entry.isFile() && entry.name.endsWith(".d.ts"))
 			.map((entry) => join(entry.parentPath, entry.name));
-		assert.ok(declarations.length > 0);
+		assert.deepEqual(
+			declarations
+				.map((path) => relative(extractedPackage, path).split(sep).join("/"))
+				.sort(),
+			[...PUBLIC_DECLARATION_PATHS].sort(),
+			"Packed declarations must match the supported root import chain.",
+		);
 		for (const declaration of declarations) {
 			const source = await readFile(declaration, "utf8");
 			assert.equal(source.includes("node_modules"), false);

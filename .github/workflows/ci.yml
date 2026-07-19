@@ -19,7 +19,26 @@ jobs:
 
       - name: Lint workflow syntax
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspaces" -w /workspaces rhysd/actionlint:1.7.7
+          docker run --rm -v "${{ github.workspace }}:/workspaces" -w /workspaces rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Advisory data is network-dependent, so keep this blocking CI signal
+      # separate from the deterministic local `bun run check` contract.
+      - name: Audit high-severity dependency advisories
+        run: bun audit --audit-level=high
 
   validate:
     strategy:

@@ -7,17 +7,20 @@ state-changing `flow_*` call throughout the pass.
 
 ## Load only the selected branch
 
-1. Read `parallel-decision.md` whenever deciding whether work should fan out.
+1. Read `flow/references/parallel-decision.md` whenever deciding whether work
+   should fan out.
 2. Stop loading parallel references when the decision is serial. Record the
    implementation decision when the active execution requires one.
 3. After selecting a parallel or candidate pass, read
-   `parallel-manifest.md`, then `parallel-execution.md`.
-4. When handoffs return, read `parallel-synthesis.md` before accepting claims,
-   recording evidence, or presenting a result.
-5. Copy exactly one matching worker response template from `handoff-format.md`
-   into each worker prompt. Hidden workers cannot load skills or references.
-6. Read `parallel-pass-example.md` only when a concrete end-to-end example is
-   needed.
+   `flow/references/parallel-manifest.md`, then
+   `flow/references/parallel-execution.md`.
+4. When handoffs return, read `flow/references/parallel-synthesis.md` before
+   accepting claims, recording evidence, or presenting a result.
+5. Copy exactly one matching worker response template from
+   `flow/references/handoff-format.md` into each worker prompt. Hidden workers
+   cannot load skills or references.
+6. Read `flow/references/parallel-pass-example.md` only when a concrete
+   end-to-end example is needed.
 
 Do not preload the manifest, worker, and synthesis runbooks merely because a
 task could be parallel. The decision reference is enough to keep serial work

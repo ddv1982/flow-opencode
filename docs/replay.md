@@ -24,6 +24,50 @@ one. A schema-valid but causally impossible layout — a missing, duplicated, or
 non-final terminal event — resolves to a `failed` / `schema_invalid` decision
 instead of selecting the last observed label.
 
+Each `session_state` event must carry the enclosing scenario's `sessionId`.
+The schema rejects a cross-session event, and the replay reducer independently
+fails closed if it receives one through the typed API boundary. Durable state
+observations are monotonic: revisions cannot regress, and an equal revision must
+retain the same digest and previously observed session/feature statuses. A
+conflicting observation is reported but cannot replace the last accepted durable
+state.
+
+## Mutation causality
+
+Mutation histories are tracked independently by `mutationId`, with every event
+bound to the `operationId` recorded by its start event. The accepted state
+transitions are deliberately small:
+
+| Current state | Event | Next state | Durable evidence accepted |
+| --- | --- | --- | --- |
+| absent | `mutation_start` | started | no |
+| started | `mutation_commit` | committed | yes |
+| started | `mutation_crash` | crashed | no |
+| crashed | `mutation_recovery` | recovered | yes |
+
+Any other transition, a changed operation identity, or a terminal mutation
+event without a start is causally invalid. Invalid commits and recoveries do
+not contribute a revision or digest. A mutation left started or crashed is
+reported as incomplete; incompleteness takes precedence over an independently
+recovered mutation when terminal truth is derived.
+
+The start event binds the mutation's base revision and the durable base digest
+visible at that point. A commit, reapplied recovery, or reused commit advances
+exactly once to `baseRevision + 1`. A rolled-back recovery retains the base
+revision and base digest. No terminal event may overwrite an intervening
+durable state; `commit_reused` may only reconcile an already-observed advanced
+state when both its revision and digest agree. Operation IDs and advancing
+revisions each have one mutation owner, so interleaved histories cannot commit
+two mutations into the same causal slot.
+
+Recovery status is also constrained by the recorded crash phase:
+
+| Crash phase | Accepted recovery statuses |
+| --- | --- |
+| `before_write` | `rolled_back`, `reapplied` |
+| `after_write_before_commit` | `rolled_back`, `reapplied`, `commit_reused` |
+| `after_commit` | `commit_reused` |
+
 ## Review and retry causality
 
 Review attempts form one scenario-wide `attemptId` index and are projected by

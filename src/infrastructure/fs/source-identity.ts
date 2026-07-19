@@ -1,7 +1,14 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import type { Dirent, Stats } from "node:fs";
-import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
+import { constants, type Dir, type Dirent, type Stats } from "node:fs";
+import {
+	type FileHandle,
+	lstat,
+	open,
+	opendir,
+	readlink,
+	realpath,
+} from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -48,22 +55,33 @@ type Manifest = {
 	worktree: WorktreeEntry[];
 };
 
-type Budget = { entries: number; bytes: number };
+type Budget = { entries: number; bytes: number; maxEntries: number };
+
+type SourceIdentityProviderOptions = {
+	maxEntries?: number;
+};
 
 type GitWorkspace = {
 	root: string;
 	gitDir: string;
 };
 
-function newBudget(): Budget {
-	return { entries: 0, bytes: 0 };
+type SourceDirectoryGuard = {
+	absolutePath: string;
+	relativePath: string;
+	handle: FileHandle | null;
+	info: Stats;
+};
+
+function newBudget(maxEntries: number): Budget {
+	return { entries: 0, bytes: 0, maxEntries };
 }
 
 function countEntry(budget: Budget): void {
 	budget.entries += 1;
-	if (budget.entries > MAX_SOURCE_ENTRIES) {
+	if (budget.entries > budget.maxEntries) {
 		throw new SourceIdentityOverflowError(
-			`Source exceeds the ${MAX_SOURCE_ENTRIES}-entry measurement limit.`,
+			`Source exceeds the ${budget.maxEntries}-entry measurement limit.`,
 		);
 	}
 }
@@ -115,7 +133,11 @@ function digestOfManifest(manifest: Manifest): SourceDigest {
  * the caller preserves size and mtime.
  */
 function fileIdentity(info: Stats): string {
-	return `${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+	return `${info.dev}:${info.ino}:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+}
+
+function directoryIdentity(info: Stats): string {
+	return `${info.dev}:${info.ino}:${info.mode}:${info.nlink}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
 }
 
 async function safeLstat(
@@ -129,6 +151,248 @@ async function safeLstat(
 			`Source entry '${relativePath}' could not be read.`,
 			{ cause: error },
 		);
+	}
+}
+
+async function openSourceDirectory(
+	absolutePath: string,
+	relativePath: string,
+): Promise<SourceDirectoryGuard> {
+	const info = await safeLstat(absolutePath, relativePath);
+	if (info.isSymbolicLink()) {
+		throw new SourceIdentityUnsafeSymlinkError(
+			`Source directory '${relativePath}' must not be a symlink.`,
+		);
+	}
+	if (!info.isDirectory()) {
+		throw new SourceIdentityUnreadableError(
+			`Source directory '${relativePath}' is not a directory.`,
+		);
+	}
+	if (process.platform === "win32") {
+		// Node cannot portably open directory handles on Windows. Retain the
+		// before/after path identity check there; POSIX additionally pins the inode.
+		return { absolutePath, relativePath, handle: null, info };
+	}
+
+	const directoryFlags =
+		constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+	let handle: FileHandle;
+	try {
+		handle = await open(absolutePath, directoryFlags);
+	} catch (error) {
+		if (errorCode(error) === "ELOOP" || errorCode(error) === "ENOTDIR") {
+			throw new SourceIdentityRaceError(
+				`Source directory '${relativePath}' changed while it was being measured.`,
+				{ cause: error },
+			);
+		}
+		throw new SourceIdentityUnreadableError(
+			`Source directory '${relativePath}' could not be read.`,
+			{ cause: error },
+		);
+	}
+
+	try {
+		const openedInfo = await handle.stat();
+		if (
+			!openedInfo.isDirectory() ||
+			directoryIdentity(openedInfo) !== directoryIdentity(info)
+		) {
+			throw new SourceIdentityRaceError(
+				`Source directory '${relativePath}' changed while it was being measured.`,
+			);
+		}
+		return { absolutePath, relativePath, handle, info: openedInfo };
+	} catch (error) {
+		await handle.close();
+		throw error;
+	}
+}
+
+async function validateSourceDirectory(
+	guard: SourceDirectoryGuard,
+): Promise<void> {
+	let openedInfo: Stats;
+	let pathInfo: Stats;
+	try {
+		[openedInfo, pathInfo] = await Promise.all([
+			guard.handle ? guard.handle.stat() : Promise.resolve(guard.info),
+			lstat(guard.absolutePath),
+		]);
+	} catch (error) {
+		throw new SourceIdentityRaceError(
+			`Source directory '${guard.relativePath}' changed while it was being measured.`,
+			{ cause: error },
+		);
+	}
+	if (
+		!openedInfo.isDirectory() ||
+		pathInfo.isSymbolicLink() ||
+		!pathInfo.isDirectory() ||
+		directoryIdentity(openedInfo) !== directoryIdentity(guard.info) ||
+		directoryIdentity(pathInfo) !== directoryIdentity(guard.info)
+	) {
+		throw new SourceIdentityRaceError(
+			`Source directory '${guard.relativePath}' changed while it was being measured.`,
+		);
+	}
+}
+
+async function closeSourceDirectories(
+	guards: readonly SourceDirectoryGuard[],
+): Promise<void> {
+	for (let index = guards.length - 1; index >= 0; index -= 1) {
+		await guards[index]?.handle?.close();
+	}
+}
+
+async function guardedGitWorktreeEntry(
+	root: string,
+	relativePath: string,
+	indexOnlyIfAbsent: boolean,
+	task: () => Promise<WorktreeEntry>,
+): Promise<WorktreeEntry> {
+	const segments = relativePath.split("/");
+	if (
+		segments.some(
+			(segment) => segment.length === 0 || segment === "." || segment === "..",
+		)
+	) {
+		throw new SourceIdentityGitError(
+			"Git worktree path could not be represented safely.",
+		);
+	}
+	const guards: SourceDirectoryGuard[] = [];
+	let directory = root;
+	let relativeDirectory = "";
+	try {
+		for (const segment of segments.slice(0, -1)) {
+			directory = join(directory, segment);
+			relativeDirectory = relativeDirectory
+				? `${relativeDirectory}/${segment}`
+				: segment;
+			try {
+				guards.push(
+					await openSourceDirectory(directory, relativeDirectory || "."),
+				);
+			} catch (error) {
+				if (
+					indexOnlyIfAbsent &&
+					error instanceof SourceIdentityUnreadableError &&
+					errorCode(error.cause) === "ENOENT"
+				) {
+					return await task();
+				}
+				throw error;
+			}
+		}
+		const entry = await task();
+		for (let index = guards.length - 1; index >= 0; index -= 1) {
+			const guard = guards[index];
+			if (guard) await validateSourceDirectory(guard);
+		}
+		return entry;
+	} finally {
+		await closeSourceDirectories(guards);
+	}
+}
+
+async function openSourceFile(
+	absolutePath: string,
+	relativePath: string,
+): Promise<FileHandle> {
+	const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+	try {
+		return await open(absolutePath, constants.O_RDONLY | noFollow);
+	} catch (error) {
+		if (errorCode(error) === "ELOOP") {
+			throw new SourceIdentityRaceError(
+				`Source entry '${relativePath}' changed while it was being measured.`,
+				{ cause: error },
+			);
+		}
+		throw new SourceIdentityUnreadableError(
+			`Source entry '${relativePath}' could not be read.`,
+			{ cause: error },
+		);
+	}
+}
+
+async function readSourceFile(
+	absolutePath: string,
+	relativePath: string,
+	initialInfo: Stats,
+): Promise<Buffer> {
+	const handle = await openSourceFile(absolutePath, relativePath);
+	try {
+		let openedInfo: Stats;
+		try {
+			openedInfo = await handle.stat();
+		} catch (error) {
+			throw new SourceIdentityUnreadableError(
+				`Source entry '${relativePath}' could not be read.`,
+				{ cause: error },
+			);
+		}
+		if (!openedInfo.isFile()) {
+			throw new SourceIdentityRaceError(
+				`Source entry '${relativePath}' changed while it was being measured.`,
+			);
+		}
+		if (fileIdentity(openedInfo) !== fileIdentity(initialInfo)) {
+			throw new SourceIdentityRaceError(
+				`Source entry '${relativePath}' changed while it was being measured.`,
+			);
+		}
+		if (openedInfo.size > MAX_SOURCE_FILE_BYTES) {
+			throw new SourceIdentityOverflowError(
+				`Source entry '${relativePath}' exceeds the ${MAX_SOURCE_FILE_BYTES}-byte per-file limit.`,
+			);
+		}
+
+		const content = Buffer.allocUnsafe(openedInfo.size);
+		let offset = 0;
+		try {
+			while (offset < content.byteLength) {
+				const { bytesRead } = await handle.read(
+					content,
+					offset,
+					content.byteLength - offset,
+					offset,
+				);
+				if (bytesRead === 0) break;
+				offset += bytesRead;
+			}
+		} catch (error) {
+			throw new SourceIdentityUnreadableError(
+				`Source entry '${relativePath}' could not be read.`,
+				{ cause: error },
+			);
+		}
+
+		let finalInfo: Stats;
+		try {
+			finalInfo = await handle.stat();
+		} catch (error) {
+			throw new SourceIdentityUnreadableError(
+				`Source entry '${relativePath}' could not be read.`,
+				{ cause: error },
+			);
+		}
+		const finalPathInfo = await safeLstat(absolutePath, relativePath);
+		if (
+			offset !== content.byteLength ||
+			fileIdentity(finalInfo) !== fileIdentity(openedInfo) ||
+			fileIdentity(finalPathInfo) !== fileIdentity(openedInfo)
+		) {
+			throw new SourceIdentityRaceError(
+				`Source entry '${relativePath}' changed while it was being measured.`,
+			);
+		}
+		return content;
+	} finally {
+		await handle.close();
 	}
 }
 
@@ -224,24 +488,7 @@ async function worktreeEntry(
 			`Source exceeds the ${MAX_SOURCE_TOTAL_BYTES}-byte measurement limit.`,
 		);
 	}
-	const beforeIdentity = fileIdentity(info);
-	let content: Buffer;
-	try {
-		content = await readFile(absolutePath);
-	} catch (error) {
-		throw new SourceIdentityUnreadableError(
-			`Source entry '${relativePath}' could not be read.`,
-			{ cause: error },
-		);
-	}
-	const afterIdentity = fileIdentity(
-		await safeLstat(absolutePath, relativePath),
-	);
-	if (afterIdentity !== beforeIdentity) {
-		throw new SourceIdentityRaceError(
-			`Source entry '${relativePath}' changed while it was being measured.`,
-		);
-	}
+	const content = await readSourceFile(absolutePath, relativePath, info);
 	return {
 		path: relativePath,
 		type: "file",
@@ -423,12 +670,18 @@ async function gitManifest(
 			continue;
 		}
 		worktree.push(
-			await worktreeEntry(
+			await guardedGitWorktreeEntry(
 				workspace.root,
 				path,
-				join(workspace.root, path),
-				budget,
 				indexed.has(path),
+				() =>
+					worktreeEntry(
+						workspace.root,
+						path,
+						join(workspace.root, path),
+						budget,
+						indexed.has(path),
+					),
 			),
 		);
 	}
@@ -443,25 +696,48 @@ async function walkTree(
 	budget: Budget,
 	entries: WorktreeEntry[],
 ): Promise<void> {
-	let dirents: Dirent[];
+	const relativeDirectory = toPosixRelative(root, directory) || ".";
+	const guard = await openSourceDirectory(directory, relativeDirectory);
 	try {
-		dirents = await readdir(directory, { withFileTypes: true });
-	} catch (error) {
-		throw new SourceIdentityUnreadableError(
-			`Source directory '${toPosixRelative(root, directory) || "."}' could not be read.`,
-			{ cause: error },
-		);
-	}
-	for (const dirent of dirents) {
-		const absolutePath = join(directory, dirent.name);
-		const relativePath = toPosixRelative(root, absolutePath);
-		if (isFlowOrGitInternal(relativePath)) continue;
-		if (dirent.isDirectory()) {
-			await walkTree(root, absolutePath, budget, entries);
-			continue;
+		let directoryHandle: Dir;
+		try {
+			directoryHandle = await opendir(directory);
+		} catch (error) {
+			throw new SourceIdentityUnreadableError(
+				`Source directory '${relativeDirectory}' could not be read.`,
+				{ cause: error },
+			);
 		}
-		countEntry(budget);
-		entries.push(await worktreeEntry(root, relativePath, absolutePath, budget));
+		try {
+			while (true) {
+				let dirent: Dirent | null;
+				try {
+					dirent = await directoryHandle.read();
+				} catch (error) {
+					throw new SourceIdentityUnreadableError(
+						`Source directory '${relativeDirectory}' could not be read.`,
+						{ cause: error },
+					);
+				}
+				if (!dirent) break;
+				const absolutePath = join(directory, dirent.name);
+				const relativePath = toPosixRelative(root, absolutePath);
+				if (isFlowOrGitInternal(relativePath)) continue;
+				countEntry(budget);
+				if (dirent.isDirectory()) {
+					await walkTree(root, absolutePath, budget, entries);
+				} else {
+					entries.push(
+						await worktreeEntry(root, relativePath, absolutePath, budget),
+					);
+				}
+			}
+		} finally {
+			await directoryHandle.close();
+		}
+		await validateSourceDirectory(guard);
+	} finally {
+		await guard.handle?.close();
 	}
 }
 
@@ -561,8 +837,11 @@ async function gitWorkspace(root: string): Promise<GitWorkspace | null> {
 	return workspace;
 }
 
-async function buildManifest(root: string): Promise<Manifest> {
-	const budget = newBudget();
+async function buildManifest(
+	root: string,
+	maxEntries: number,
+): Promise<Manifest> {
+	const budget = newBudget(maxEntries);
 	const workspace = await gitWorkspace(root);
 	return workspace
 		? gitManifest(workspace, budget)
@@ -588,26 +867,39 @@ async function buildManifest(root: string): Promise<Manifest> {
  */
 export function createFileSourceIdentityProvider(
 	root: string,
+	options: SourceIdentityProviderOptions = {},
 ): SourceIdentityProvider {
+	const maxEntries = options.maxEntries ?? MAX_SOURCE_ENTRIES;
+	if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+		throw new RangeError(
+			"Source entry limit must be a non-negative safe integer.",
+		);
+	}
 	return {
 		async computeSourceIdentity(): Promise<SourceIdentity> {
-			const first = await buildManifest(root);
-			// A bounded second full computation detects structural changes (added,
-			// removed, or re-typed entries) that a single pass cannot observe; the
-			// per-file pre/post identity check inside each pass detects content
-			// mutated during a read.
-			const second = await buildManifest(root);
-			const digest = digestOfManifest(first);
-			if (digest !== digestOfManifest(second)) {
-				throw new SourceIdentityRaceError(
-					"The workspace changed while its source identity was being measured.",
-				);
+			const rootGuard = await openSourceDirectory(root, ".");
+			try {
+				const first = await buildManifest(root, maxEntries);
+				// A bounded second full computation detects structural changes (added,
+				// removed, or re-typed entries) that a single pass cannot observe; the
+				// per-file and directory-descriptor checks inside each pass detect state
+				// mutated during reads and ancestor substitution.
+				const second = await buildManifest(root, maxEntries);
+				const digest = digestOfManifest(first);
+				if (digest !== digestOfManifest(second)) {
+					throw new SourceIdentityRaceError(
+						"The workspace changed while its source identity was being measured.",
+					);
+				}
+				await validateSourceDirectory(rootGuard);
+				return {
+					digest,
+					mode: first.mode,
+					entryCount: first.worktree.length,
+				};
+			} finally {
+				await rootGuard.handle?.close();
 			}
-			return {
-				digest,
-				mode: first.mode,
-				entryCount: first.worktree.length,
-			};
 		},
 	};
 }

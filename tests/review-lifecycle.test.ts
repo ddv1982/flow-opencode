@@ -1,13 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { ExecutionHistoryEntrySchema } from "../src/application/schema.js";
 import {
+	ExecutionHistoryEntrySchema,
+	SessionSchema,
+} from "../src/application/schema.js";
+import {
+	type ReviewAssignment,
 	type ReviewExecutionFindingInput,
 	toFeatureId,
 	toSessionId,
 } from "../src/domain/session.js";
+import { validateSessionInvariants } from "../src/domain/session-invariants.js";
 import {
 	applyPlan,
 	approvePlan,
+	canonicalLogicalReviewPassId,
+	canonicalReviewAttemptId,
+	canonicalReviewPacketDigest,
+	canonicalValidationCommandDigest,
 	createSession,
 	stableReviewFindingFingerprint,
 	startRun,
@@ -116,6 +125,86 @@ describe("Session v4 review lifecycle", () => {
 				taxonomy: "evidence_gap",
 			}),
 		).not.toBe(baseline);
+	});
+
+	test("matches independent digest and finding-fingerprint golden vectors", () => {
+		expect(canonicalValidationCommandDigest("abc")).toBe(
+			"sha256:33e06c9f83f000fa49137c43206cdd7372b272abf39040a91e6111adaaf09255",
+		);
+		expect(canonicalValidationCommandDigest("  bun test — café 🚀  ")).toBe(
+			"sha256:1edb70a72aae0ffe6e4c2e4c0ad4eea10dd6013756df3b253a1f1df15d84d2e2",
+		);
+		expect(stableReviewFindingFingerprint(finding)).toBe(
+			"finding-v1-1ae5019e799ab914e3db3d0f60af77cb",
+		);
+	});
+
+	test("rejects duplicate pending assignments for one run and review kind", () => {
+		const planned = unwrap(
+			applyPlan(
+				createSession("Reject ambiguous pending review", environment),
+				{
+					summary: "Pending review invariant",
+					overview: "Keep one recoverable assignment per run and kind.",
+					features: [
+						{
+							id: featureId,
+							title: "Pending assignment",
+							summary: "Reject ambiguous persisted review ownership.",
+						},
+					],
+				},
+				environment,
+			),
+		);
+		const approved = unwrap(approvePlan(planned, environment));
+		const running = unwrap(startRun(approved, environment, featureId)).session;
+		if (!running.activeFeatureRunId) {
+			throw new Error("Expected an active feature run.");
+		}
+		const pendingAssignment = (id: string): ReviewAssignment => {
+			const identity = {
+				featureRunId:
+					running.activeFeatureRunId as ReviewAssignment["featureRunId"],
+				featureId,
+				reviewKind: "feature" as const,
+				validationScope: "targeted" as const,
+				validationEvidenceRefs: [`sha256:${"a".repeat(64)}`],
+				sourceDigest: `sha256:${"b".repeat(64)}`,
+				packetSummary: "Review the active feature.",
+				riskLenses: [],
+				prerequisite: null,
+			};
+			return {
+				id,
+				operationId: `start-${id}`,
+				...identity,
+				packetDigest: canonicalReviewPacketDigest(identity),
+				attemptId: canonicalReviewAttemptId(id),
+				logicalPassId: canonicalLogicalReviewPassId(
+					running.activeFeatureRunId as ReviewAssignment["featureRunId"],
+					"feature",
+				),
+				startedAt: environment.now(),
+				requiredDepth: "standard",
+				status: "pending",
+				completedAt: null,
+				invalidatedAt: null,
+				invalidationReason: null,
+			};
+		};
+		const corrupted = {
+			...running,
+			reviewAssignments: [
+				pendingAssignment("review-assignment:first"),
+				pendingAssignment("review-assignment:second"),
+			],
+		};
+
+		expect(validateSessionInvariants(corrupted)).toContain(
+			"multiple pending feature review assignments",
+		);
+		expect(SessionSchema.safeParse(corrupted).success).toBe(false);
 	});
 
 	test("keeps the active final feature in progress until assignment completion", () => {

@@ -135,11 +135,16 @@ type ScriptedCall = {
 
 type ScriptedModel = {
 	baseUrl: string;
+	commandRequests: Array<{
+		toolNames: string[];
+		transcript: string;
+	}>;
 	modelVisibleSchemas: Map<string, JsonSchema>;
 	recoveredRetryOperationId: string | null;
 	rejectionMutationChecks: string[];
 	stateValidationChecks: string[];
 	toolCalls: ScriptedCall[];
+	beginCommandObservation(): void;
 	close(): Promise<void>;
 };
 
@@ -432,6 +437,8 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 	let phase = 0;
 	let phaseStep = 0;
 	let responseSequence = 0;
+	let observeCommandRequests = false;
+	const commandRequests: ScriptedModel["commandRequests"] = [];
 
 	const sessionBytes = async (): Promise<string | null> => {
 		try {
@@ -1084,6 +1091,14 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 			let rawBody = "";
 			for await (const chunk of request) rawBody += String(chunk);
 			const body = JSON.parse(rawBody) as ChatCompletionBody;
+			if (observeCommandRequests) {
+				commandRequests.push({
+					toolNames: (body.tools ?? [])
+						.map((candidate) => candidate.function?.name)
+						.filter((name): name is string => Boolean(name)),
+					transcript: JSON.stringify(body.messages ?? []),
+				});
+			}
 			captureModelVisibleSchemas(body.tools ?? []);
 			await observePendingCall(body);
 			const selected = await nextToolCall(body);
@@ -1170,6 +1185,7 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 	const address = server.address() as AddressInfo;
 	return {
 		baseUrl: `http://127.0.0.1:${address.port}/v1`,
+		commandRequests,
 		modelVisibleSchemas,
 		get recoveredRetryOperationId() {
 			return recoveredRetryOperationId;
@@ -1177,6 +1193,9 @@ async function startScriptedModel(project: string): Promise<ScriptedModel> {
 		rejectionMutationChecks,
 		stateValidationChecks,
 		toolCalls,
+		beginCommandObservation: () => {
+			observeCommandRequests = true;
+		},
 		close: () => closeServer(server),
 	};
 }
@@ -1638,6 +1657,55 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					"final-completion-from-persisted-assignment",
 				);
 				liveProofEvidence["S4-HOST-01"].add("close-retry-archive-published");
+
+				const commandSession = (await postJson(`${baseUrl}/session`, {
+					title: "Packed Flow command preflight smoke",
+				})) as { id?: string };
+				if (!commandSession.id) {
+					throw new Error("OpenCode did not create a command smoke session.");
+				}
+				scriptedModel.beginCommandObservation();
+				await postJson(
+					`${baseUrl}/session/${commandSession.id}/command`,
+					{
+						arguments: "packed-manager-command-marker",
+						command: "flow-plan",
+						model: "flow-smoke/smoke-model",
+					},
+					2 * DATA_REQUEST_TIMEOUT_MS,
+				);
+				await postJson(
+					`${baseUrl}/session/${commandSession.id}/command`,
+					{
+						arguments: "packed-reviewer-command-marker",
+						command: "flow-review",
+						model: "flow-smoke/smoke-model",
+					},
+					2 * DATA_REQUEST_TIMEOUT_MS,
+				);
+
+				const managerCommandRequest = scriptedModel.commandRequests.find(
+					(request) =>
+						request.transcript.includes("packed-manager-command-marker"),
+				);
+				expect(managerCommandRequest?.transcript).toContain(
+					"# Flow plan command contract",
+				);
+				expect(managerCommandRequest?.toolNames).toContain("flow_plan_save");
+				const reviewerCommandRequest = scriptedModel.commandRequests.find(
+					(request) =>
+						request.transcript.includes("packed-reviewer-command-marker"),
+				);
+				expect(reviewerCommandRequest?.transcript).toContain(
+					"# Flow review assignment",
+				);
+				expect(reviewerCommandRequest?.toolNames).toContain("flow_status");
+				expect(reviewerCommandRequest?.toolNames).not.toContain(
+					"flow_review_start",
+				);
+				liveProofEvidence["S4-HOST-01"].add(
+					"manager-and-reviewer-command-preflight",
+				);
 				if (OPENCODE_VERSION === PINNED_LIVE_OPENCODE_VERSION) {
 					assertLifecycleLiveProofObservation({
 						boundary: "packed-plugin-real-opencode",

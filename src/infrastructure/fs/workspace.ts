@@ -11,7 +11,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { dirname, join, parse, resolve } from "node:path";
+import { basename, dirname, join, parse, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
 	UnreadableFlowSessionError,
@@ -324,7 +324,7 @@ type ManagedPathIdentity = {
 };
 
 type PinnedFileRead = {
-	contents: string;
+	contents: Buffer;
 	identity: ManagedPathIdentity;
 };
 
@@ -340,8 +340,10 @@ type PinnedHelperResult =
 			identity: ManagedPathIdentity;
 	  }
 	| { status: "listed"; entries: PinnedArchiveEntry[] }
+	| { status: "directory" }
 	| { status: "published" }
 	| { status: "exists"; contents: string }
+	| { status: "existsTooLarge" }
 	| { status: "removed" };
 
 type ArchiveAndClearTestHooks = {
@@ -383,6 +385,14 @@ function sameIdentity(actual, expected) {
   return actual.dev === expected.dev && actual.ino === expected.ino;
 }
 
+function sameFileState(actual, expected, ignoreCtime) {
+  return sameIdentity(identity(actual), identity(expected)) &&
+    String(actual.mode) === String(expected.mode) &&
+    String(actual.size) === String(expected.size) &&
+    String(actual.mtimeNs) === String(expected.mtimeNs) &&
+	(ignoreCtime || String(actual.ctimeNs) === String(expected.ctimeNs));
+}
+
 function directoryIdentity(target, label) {
   const info = fs.lstatSync(target, { bigint: true });
   if (info.isSymbolicLink() || !info.isDirectory()) {
@@ -419,7 +429,7 @@ function safeBasename(name) {
   return name;
 }
 
-function readRegularPath(name) {
+function readRegularPath(name, maxBytes, ignoreCtime) {
   const before = fs.lstatSync(name, { bigint: true });
   if (before.isSymbolicLink() || !before.isFile()) {
     fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper refuses a non-regular managed file.");
@@ -431,25 +441,70 @@ function readRegularPath(name) {
     if (!opened.isFile()) {
       fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper opened a non-regular managed file.");
     }
-    return { bytes: fs.readFileSync(fd), identity: identity(opened) };
+	if (!sameFileState(opened, before, ignoreCtime)) {
+	  fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper detected a managed file change while opening it.");
+	}
+	if (maxBytes !== undefined && opened.size > BigInt(maxBytes)) {
+	  fail("FLOW_PINNED_FILE_TOO_LARGE", "Pinned helper refused an oversized managed file.");
+	}
+	const byteLength = Number(opened.size);
+	if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+	  fail("FLOW_PINNED_FILE_TOO_LARGE", "Pinned helper refused an unrepresentable managed file size.");
+	}
+	const bytes = Buffer.alloc(byteLength);
+	let offset = 0;
+	while (offset < byteLength) {
+	  const bytesRead = fs.readSync(fd, bytes, offset, byteLength - offset, offset);
+	  if (bytesRead === 0) break;
+	  offset += bytesRead;
+	}
+	const growthProbe = Buffer.allocUnsafe(1);
+	const extraBytes = fs.readSync(fd, growthProbe, 0, 1, byteLength);
+	const after = fs.fstatSync(fd, { bigint: true });
+	const finalPath = fs.lstatSync(name, { bigint: true });
+	if (maxBytes !== undefined && after.size > BigInt(maxBytes)) {
+	  fail("FLOW_PINNED_FILE_TOO_LARGE", "Pinned helper refused a managed file that grew past its limit.");
+	}
+	if (
+	  offset !== byteLength ||
+	  extraBytes !== 0 ||
+	  !finalPath.isFile() ||
+	  finalPath.isSymbolicLink() ||
+	  !sameFileState(after, opened, ignoreCtime) ||
+	  !sameFileState(finalPath, opened, ignoreCtime)
+	) {
+	  fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper detected a managed file change while reading it.");
+	}
+	return { bytes, identity: identity(opened), mode: Number(opened.mode) };
   } finally {
     fs.closeSync(fd);
   }
 }
 
-function readRegular(name) {
+function readRegular(name, maxBytes, ignoreCtime) {
   safeBasename(name);
-  return readRegularPath(name);
+	return readRegularPath(name, maxBytes, ignoreCtime);
 }
 
 function requireExactDirectoryEntry(directory, expectedName) {
-  const matches = fs.readdirSync(directory).filter(
-    (entry) => entry.toLowerCase() === expectedName.toLowerCase(),
-  );
-  if (matches.length !== 1 || matches[0] !== expectedName) {
+	let match;
+	const handle = fs.opendirSync(directory);
+	try {
+	  for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
+	    if (entry.name.toLowerCase() === expectedName.toLowerCase()) {
+	      if (match !== undefined) {
+	        fail("FLOW_ARCHIVE_CASE_COLLISION", "Managed directory contains multiple case-folded filename matches.");
+	      }
+	      match = entry.name;
+	    }
+	  }
+	} finally {
+	  handle.closeSync();
+	}
+	if (match !== expectedName) {
     fail(
       "FLOW_ARCHIVE_CASE_COLLISION",
-      "Archive history no longer contains exactly the expected filename spelling.",
+      "Managed directory no longer contains exactly the expected filename spelling.",
     );
   }
 }
@@ -472,7 +527,7 @@ try {
   validatePinned(request);
 
   if (request.operation === "read") {
-    const value = readRegular(request.name);
+	    const value = readRegular(request.name);
     output({
       status: "read",
       contents: value.bytes.toString("base64"),
@@ -497,7 +552,28 @@ try {
       entries.push({ filename, contents: value.bytes.toString("base64") });
     }
     output({ status: "listed", entries });
-  } else if (request.operation === "publish") {
+	  } else if (request.operation === "mkdir") {
+	    const name = safeBasename(request.name);
+	    let created = false;
+	    try {
+	      try {
+	        fs.mkdirSync(name, { mode: 0o700 });
+	        created = true;
+	      } catch (error) {
+	        if (!error || error.code !== "EEXIST") throw error;
+	      }
+	      directoryIdentity(name, "Managed child directory");
+	      validatePinned(request);
+	      syncCwd();
+	      output({ status: "directory" });
+	    } catch (error) {
+	      if (created && error && error.code === "FLOW_PINNED_DIRECTORY_MISMATCH") {
+	        try { fs.rmdirSync(name); } catch {}
+	        try { syncCwd(); } catch {}
+	      }
+	      throw error;
+	    }
+	  } else if (request.operation === "publish") {
     const target = safeBasename(request.targetName);
     const temporary = safeBasename(request.tempName);
     let temporaryCreated = false;
@@ -520,11 +596,11 @@ try {
 	  linkAttempted = true;
 	  fs.linkSync(temporary, target);
       published = true;
-      validatePinned(request);
       syncCwd();
       fs.unlinkSync(temporary);
       temporaryCreated = false;
       syncCwd();
+      validatePinned(request);
       output({ status: "published" });
     } catch (error) {
       if (temporaryCreated) {
@@ -536,8 +612,23 @@ try {
       }
 	  if (linkAttempted && error && error.code === "EEXIST") {
 		requireExactDirectoryEntry(".", target);
-        const existing = readRegular(target);
-        output({ status: "exists", contents: existing.bytes.toString("base64") });
+		try {
+	          const existing = readRegular(target, request.maxBytes, true);
+		  if (request.ownerOnly && process.platform !== "win32" && (existing.mode & 0o077) !== 0) {
+		    fail("FLOW_PINNED_DIRECTORY_MISMATCH", "Pinned helper refuses a non-owner-only managed file.");
+		  }
+		  requireExactDirectoryEntry(".", target);
+		  validatePinned(request);
+	          output({ status: "exists", contents: existing.bytes.toString("base64") });
+		} catch (verificationError) {
+		  if (verificationError && verificationError.code === "FLOW_PINNED_FILE_TOO_LARGE") {
+		    requireExactDirectoryEntry(".", target);
+		    validatePinned(request);
+		    output({ status: "existsTooLarge" });
+		  } else {
+		    throw verificationError;
+		  }
+		}
       } else {
         throw error;
       }
@@ -665,7 +756,7 @@ function pinnedHelperEnvironment(
 async function runPinnedDirectoryHelper(
 	cwd: string,
 	request: Record<string, unknown>,
-	input = "",
+	input: string | Buffer = "",
 	afterPinned?: () => Promise<void>,
 	options: PinnedHelperRunOptions = {},
 ): Promise<PinnedHelperResult> {
@@ -865,6 +956,92 @@ function pinnedRequest(
 	};
 }
 
+export async function ensurePinnedManagedDirectory(
+	path: string,
+	description: string,
+): Promise<void> {
+	const parent = dirname(path);
+	const parentParent = dirname(parent);
+	const [parentIdentity, parentParentIdentity] = await Promise.all([
+		managedDirectoryIdentity(parent, `the parent of ${description}`),
+		managedDirectoryIdentity(
+			parentParent,
+			`the parent directory containing the parent of ${description}`,
+		),
+	]);
+	const result = await runPinnedDirectoryHelper(
+		parent,
+		pinnedRequest(
+			"mkdir",
+			parent,
+			parentIdentity,
+			parentParent,
+			parentParentIdentity,
+			{ name: basename(path) },
+		),
+	);
+	if (result.status !== "directory") {
+		throw new Error(
+			"Flow pinned filesystem helper returned the wrong directory result.",
+		);
+	}
+	if ((await managedDirectoryState(path, description)) !== "present") {
+		throw new UnsafeFlowWorkspaceLayoutError(
+			`Flow could not create ${description}: ${path}.`,
+		);
+	}
+}
+
+export type PinnedManagedFilePublication =
+	| { status: "published" }
+	| { status: "exists"; contents: Buffer }
+	| { status: "existsTooLarge" };
+
+export async function publishPinnedManagedFile(
+	directory: string,
+	targetName: string,
+	temporaryName: string,
+	input: Buffer,
+	maxExistingBytes: number,
+): Promise<PinnedManagedFilePublication> {
+	const parent = dirname(directory);
+	const [directoryIdentity, parentIdentity] = await Promise.all([
+		managedDirectoryIdentity(directory, "the managed publication directory"),
+		managedDirectoryIdentity(
+			parent,
+			"the managed publication parent directory",
+		),
+	]);
+	const result = await runPinnedDirectoryHelper(
+		directory,
+		pinnedRequest(
+			"publish",
+			directory,
+			directoryIdentity,
+			parent,
+			parentIdentity,
+			{
+				targetName,
+				tempName: temporaryName,
+				maxBytes: maxExistingBytes,
+				ownerOnly: true,
+			},
+		),
+		input,
+	);
+	if (result.status === "published") return result;
+	if (result.status === "exists") {
+		return {
+			status: "exists",
+			contents: Buffer.from(result.contents, "base64"),
+		};
+	}
+	if (result.status === "existsTooLarge") return result;
+	throw new Error(
+		"Flow pinned filesystem helper returned the wrong publication result.",
+	);
+}
+
 async function readPinnedFile(
 	directory: string,
 	directoryIdentity: ManagedPathIdentity,
@@ -893,7 +1070,7 @@ async function readPinnedFile(
 		);
 	}
 	return {
-		contents: Buffer.from(result.contents, "base64").toString("utf8"),
+		contents: Buffer.from(result.contents, "base64"),
 		identity: result.identity,
 	};
 }
@@ -1299,7 +1476,7 @@ export async function quarantineUnreadableSession(
 		throw error;
 	}
 	const activeSha256 = createHash("sha256")
-		.update(active.contents, "utf8")
+		.update(active.contents)
 		.digest("hex");
 	const targetFilename = `quarantine-${activeSha256}.json`;
 	const target = join(historyDir(root), targetFilename);
@@ -1322,8 +1499,7 @@ export async function quarantineUnreadableSession(
 	);
 	if (
 		publication.status === "exists" &&
-		Buffer.from(publication.contents, "base64").toString("utf8") !==
-			active.contents
+		!Buffer.from(publication.contents, "base64").equals(active.contents)
 	) {
 		throw new ArchiveCollisionError(
 			"Flow quarantine target already exists with different contents.",
@@ -1355,7 +1531,7 @@ export async function quarantineUnreadableSession(
 		targetFilename,
 		hooks,
 	);
-	if (quarantined.contents !== active.contents) {
+	if (!quarantined.contents.equals(active.contents)) {
 		throw new ArchiveCollisionError(
 			"Flow could not verify quarantined session contents before cleanup.",
 		);
@@ -1438,8 +1614,11 @@ export async function archiveAndClearSession(
 	);
 	const targetFilename = archivedSessionFilename(normalized.id);
 	const targetPath = archivedSessionPath(root, normalized.id);
-	const normalizeContents = (contents: string): string | null => {
-		const parsed = parseStrictJsonObject(contents, "Flow session archive");
+	const normalizeContents = (contents: string | Buffer): string | null => {
+		const parsed = parseStrictJsonObject(
+			typeof contents === "string" ? contents : contents.toString("utf8"),
+			"Flow session archive",
+		);
 		if (!parsed.ok) return null;
 		const result = SessionSchema.safeParse(parsed.value);
 		return result.success ? `${JSON.stringify(result.data, null, 2)}\n` : null;
@@ -1575,7 +1754,7 @@ export async function archiveAndClearSession(
 			name: "session.json",
 			expectedFileIdentity: active.identity,
 			expectedSha256: createHash("sha256")
-				.update(active.contents, "utf8")
+				.update(active.contents)
 				.digest("hex"),
 			expectedHistoryIdentity: historyIdentity,
 			expectedArchiveName: targetFilename,
@@ -1609,17 +1788,48 @@ export async function archiveAndClearSession(
 
 const FLOW_GITIGNORE_CONTENT = [
 	"session.json",
+	// Ignore the root-level atomic-write residue namespace. Gitignore cannot
+	// validate PID/UUID syntax, so these patterns intentionally cover any
+	// dotted temporary suffix while remaining anchored beneath `.flow`.
+	"/session.json.*.*.tmp",
 	"history/",
 	"evidence/",
 	"session.lock/",
 	".gitignore",
+	"/.gitignore.*.*.tmp",
 	"",
 ].join("\n");
 
-const LEGACY_FLOW_GITIGNORE_CONTENTS = new Set([
-	"session.lock/",
-	["session.json", "history/", "session.lock/", ".gitignore"].join("\n"),
-]);
+const LEGACY_FLOW_GITIGNORE_CONTENTS = [
+	["session.lock/", ""].join("\n"),
+	["session.json", "history/", "session.lock/", ".gitignore", ""].join("\n"),
+	[
+		"session.json",
+		"history/",
+		"evidence/",
+		"session.lock/",
+		".gitignore",
+		"",
+	].join("\n"),
+];
+
+function trailingDelimitedBlockStart(
+	contents: string,
+	block: string,
+): number | null {
+	const candidate = contents.replace(/\n+$/u, "");
+	const expected = block.replace(/\n+$/u, "");
+	if (candidate === expected) return 0;
+	const start = candidate.length - expected.length;
+	if (
+		start > 0 &&
+		candidate[start - 1] === "\n" &&
+		candidate.slice(start) === expected
+	) {
+		return start;
+	}
+	return null;
+}
 
 async function writeFlowGitignoreAtomically(
 	path: string,
@@ -1660,9 +1870,20 @@ export async function ensureFlowGitignore(worktree: string): Promise<void> {
 	}
 	try {
 		const existing = await readManagedFile(path, "the Flow ignore file");
-		if (LEGACY_FLOW_GITIGNORE_CONTENTS.has(existing.trimEnd())) {
-			await writeFlowGitignoreAtomically(path, FLOW_GITIGNORE_CONTENT);
-		} else if (!existing.trimEnd().endsWith(FLOW_GITIGNORE_CONTENT.trimEnd())) {
+		if (
+			trailingDelimitedBlockStart(existing, FLOW_GITIGNORE_CONTENT) !== null
+		) {
+			return;
+		}
+		const legacyStart = LEGACY_FLOW_GITIGNORE_CONTENTS.map((block) =>
+			trailingDelimitedBlockStart(existing, block),
+		).find((start): start is number => start !== null);
+		if (legacyStart !== undefined) {
+			await writeFlowGitignoreAtomically(
+				path,
+				`${existing.replace(/\n+$/u, "").slice(0, legacyStart)}${FLOW_GITIGNORE_CONTENT}`,
+			);
+		} else {
 			// Preserve maintainer-owned entries, but finish with Flow's complete
 			// ignore block so an earlier negation cannot expose restricted runtime
 			// evidence to ordinary Git staging.

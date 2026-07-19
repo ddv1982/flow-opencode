@@ -2,6 +2,36 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.2.2] - 2026-07-19
+
+Code-quality and persistence-hardening lore makes Flow safer at its input,
+replay, packaging, and filesystem boundaries without changing valid Session v4
+workflows:
+
+- Lifecycle admission now applies exact UTF-8 and collection bounds before
+  state I/O, reserves reachable execution and reviewer projections including
+  the longest persisted run identity, validates dependency graphs iteratively,
+  rejects duplicate pending assignments, and requires explicit timestamp
+  offsets.
+- Optional orchestration telemetry has bounded raw and retained collections,
+  keeps malformed optional records warning-only, and saturates aggregate
+  counters instead of allowing valid large observations to corrupt persisted
+  state.
+- Replay validates session identity, complete mutation sequencing, crash and
+  recovery revision ownership, and monotonic durable revision, digest, and
+  status observations while preserving deterministic report bytes.
+- Source and evidence persistence use bounded descriptor reads, identity and
+  topology revalidation, streaming traversal, exact filename checks, and
+  deterministic publication, collision, growth, and ancestor-substitution
+  probes.
+- Release and package gates validate exact metadata, prune internal declaration
+  output, assert the complete packed-file allowlist, audit high-severity
+  advisories separately, pin workflow tooling, and keep Linux, macOS, Windows,
+  Node 24/26, and the real OpenCode host as blocking compatibility signals.
+- Maintained documentation is indexed and source-checked; stale guidance,
+  confirmed dead exports and aliases, debug-era wrappers, and test cleanup
+  leaks are removed while uncertain external surfaces remain intact.
+
 ## [5.2.1] - 2026-07-19
 
 Desktop helper runtime lore restores durable session closure under OpenCode

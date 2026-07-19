@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { MAX_ORCHESTRATION_PASSES } from "../domain/limits.js";
 import type {
 	CausalMutationRecord,
 	EvidenceRecord,
@@ -43,13 +42,16 @@ import {
 	ArtifactSchema,
 	CausalRevisionSchema,
 	FeatureIdSchema,
+	GoalSchema,
 	OperationIdSchema,
-	OrchestrationPassRecordSchema,
+	OrchestrationPassCollectionSchema,
 	PlanInputSchema,
+	RawOrchestrationTelemetrySchema,
 	ReviewAssignmentIdSchema,
 	ReviewAssignmentResultInputSchema,
 	SnapshotIdSchema,
 	ValidationObservationSchema,
+	WorkflowProseInputSchema,
 } from "./schema.js";
 
 type WorkflowData = {
@@ -136,7 +138,7 @@ export const FlowStatusSchema = z
 
 export const FlowPlanSaveSchema = z
 	.object({
-		goal: z.string().trim().min(1).optional(),
+		goal: z.string().trim().pipe(GoalSchema).optional(),
 		plan: PlanInputSchema.optional(),
 	})
 	.strict();
@@ -164,7 +166,7 @@ const FlowSessionCloseRequestSchema = z.discriminatedUnion("mode", [
 			expectedRevision: CausalRevisionSchema,
 			expectedSnapshotId: SnapshotIdSchema,
 			kind: z.enum(["completed", "deferred", "abandoned"]),
-			summary: z.string().trim().min(1).optional(),
+			summary: WorkflowProseInputSchema.optional(),
 		})
 		.strict(),
 	z
@@ -188,9 +190,9 @@ const CompletionGuardShape = {
 
 const CompletedResultBaseShape = {
 	kind: z.literal("completed"),
-	summary: z.string().trim().min(1),
+	summary: WorkflowProseInputSchema,
 	artifactsChanged: z.array(ArtifactSchema).max(100).default([]),
-	orchestrationPasses: z.unknown().optional(),
+	orchestrationPasses: RawOrchestrationTelemetrySchema.optional(),
 } as const;
 
 const PassedSubmittedReviewAssignmentResultSchema =
@@ -244,10 +246,10 @@ const FlowFeatureCompleteRequestSchema = z
 			z
 				.object({
 					kind: z.literal("blocked"),
-					summary: z.string().trim().min(1),
+					summary: WorkflowProseInputSchema,
 					review: FailedReviewAssignmentResultSchema,
-					resolutionHint: z.string().trim().min(1).optional(),
-					orchestrationPasses: z.unknown().optional(),
+					resolutionHint: WorkflowProseInputSchema.optional(),
+					orchestrationPasses: RawOrchestrationTelemetrySchema.optional(),
 				})
 				.strict(),
 		]),
@@ -260,7 +262,7 @@ export const FlowFeatureCompleteToolSchema = z
 
 const ReviewPacketSchema = z
 	.object({
-		summary: z.string().trim().min(1).max(2_000),
+		summary: WorkflowProseInputSchema,
 		riskLenses: z.array(z.string().trim().min(1).max(240)).max(16).default([]),
 	})
 	.strict();
@@ -292,10 +294,6 @@ const FlowReviewStartRequestSchema = z.discriminatedUnion("reviewKind", [
 export const FlowReviewStartSchema = z
 	.object({ request: FlowReviewStartRequestSchema })
 	.strict();
-
-const OrchestrationPassCollectionSchema = z
-	.array(OrchestrationPassRecordSchema)
-	.max(MAX_ORCHESTRATION_PASSES);
 
 const MALFORMED_ORCHESTRATION_WARNING =
 	"Optional orchestration telemetry was malformed or over the record limit and was ignored; completion evidence was still evaluated.";
@@ -426,7 +424,7 @@ function mutationResponse(
 	session: Session,
 	status: "ok" | "error",
 	summary: string,
-	extraWorkflowData: Omit<WorkflowData, "session" | "receipt"> = {},
+	extraWorkflowData: Omit<WorkflowData, "receipt"> = {},
 	warnings: readonly string[] = [],
 	operationId?: string,
 	operationKind?: CausalMutationRecord["operationKind"],

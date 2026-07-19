@@ -53,5 +53,4 @@ export function canonicalizeReplayJson(value: CanonicalJsonValue): string {
 	return canonicalize(value);
 }
 
-export const canonicalizeJson = canonicalizeReplayJson;
 export const canonicalReplayJson = canonicalizeReplayJson;

@@ -119,6 +119,16 @@ review counts, per-feature-run failed review attempts, and bounded orchestration
 pass accounting. Review retry exhaustion uses the ordinary blocked-feature
 state and resumes only through `flow_feature_reset` and a fresh run.
 
+Plan and goal admission must preserve reachability of the bounded runtime
+views. A goal must leave room for the smallest 12 KiB execution projection; an
+accepted plan must fit every feature's final and non-final execution projection
+and the smallest feature/final reviewer projections. Plans and each of their
+requirements, decisions, targets, validation, and dependency collections are
+bounded to 500 entries, with cardinality checked before deep parsing or copying.
+Dependency validation must remain iterative. Persisted timestamps are valid ISO
+datetimes with an explicit offset, and one feature run may have at most one
+pending assignment of each review kind.
+
 Runtime pass accounting is deliberately bounded: counts, recent pass ids,
 worker counts, candidate/verifier usage, skipped candidate decisions, handoff
 references, verification status, outcome, and synthesis references. Full worker
@@ -128,10 +138,15 @@ restricted, size-bounded `.flow/evidence/**` store when explicitly published;
 ordinary status and mutation responses expose its digest/length reference, not
 its bytes, absolute path, or low-level filesystem errors. Distilled conclusions
 may enter plan prose or completion summaries when they are the Flow artifact
-being recorded. Completion accepts at most 50 pass records, and `latestPasses`
-retains at most 50. Pass ids deduplicate within a payload and while they remain
-in that window; an evicted id may be counted again because this is telemetry,
-not a permanent idempotency ledger.
+being recorded. The raw optional telemetry boundary rejects non-JSON values and
+payloads above 65,536 serialized UTF-8 bytes. Structurally malformed input and
+otherwise valid collections above 50 pass records remain warning-and-drop
+telemetry failures, not feature-outcome failures. `latestPasses` retains the
+newest records fitting both 50 records and 65,536 bytes. Aggregate counters
+saturate at the largest safe JavaScript integer so optional telemetry cannot
+invalidate a core feature outcome. Pass ids deduplicate within a payload and
+while they remain in that window; an evicted id may be counted again because
+this is telemetry, not a permanent idempotency ledger.
 
 Writes must stay locked, atomic, duplicate-key-safe on read, and guarded against
 filesystem roots, `$HOME`, and symbolic links at every Flow-managed path. Root
@@ -406,7 +421,9 @@ domain and application layers.
 
 Release tags drive `.github/workflows/release.yml`. Before tagging, make sure
 `package.json`, README install pins, `CHANGELOG.md`, and the tag name all use
-the same version.
+the same version. `bun run release:metadata` performs exact equality checks and
+extracts only the matching changelog section; near matches, prerelease suffixes,
+and prefix matches are release failures.
 
 npm publishing uses trusted publishing through GitHub Actions OIDC. Do not add
 `NPM_TOKEN` back to the workflow for normal releases. The npm package settings
@@ -433,3 +450,7 @@ Use focused tests for changed behavior, then run:
 ```bash
 bun run check
 ```
+
+The deterministic gate includes exact package/release metadata and tarball
+surface checks. CI separately runs the network-dependent high-severity
+dependency audit and SHA/digest-pinned workflow linting.

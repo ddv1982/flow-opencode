@@ -357,6 +357,17 @@ describe("Flow prompt quality", () => {
 				"skills/flow/references/parallel-execution.md#flow-prompt:worker-role-",
 			);
 		}
+
+		for (const [surface, compiled] of Object.entries(
+			compiledFlowPromptSurfaces("baseline"),
+		)) {
+			for (const fragment of compiled.fragments) {
+				expect(
+					fragment.roles,
+					`${surface} baseline includes role-inapplicable fragment ${fragment.id}`,
+				).toContain(compiled.role);
+			}
+		}
 	});
 
 	test("bookends manager prompts without repeating the complete contract", () => {
@@ -680,6 +691,23 @@ describe("Flow prompt quality", () => {
 					error.startsWith("unresolved placeholder"),
 				),
 			).toBe(true);
+			for (const suffix of [":", ";"]) {
+				const punctuatedPlaceholder = validateFlowWorkerHandoff(
+					kind,
+					valid.replace("covered", `<missing>${suffix}`),
+				);
+				expect(punctuatedPlaceholder.ok).toBe(false);
+				expect(
+					punctuatedPlaceholder.errors.some((error) =>
+						error.startsWith("unresolved placeholder"),
+					),
+				).toBe(true);
+			}
+			const genericType = validateFlowWorkerHandoff(
+				kind,
+				valid.replace("covered", "Map<string, number>"),
+			);
+			expect(genericType.ok).toBe(true);
 		}
 	});
 

@@ -1,25 +1,36 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFile } from "node:child_process";
 import {
+	appendFile,
 	lstat,
 	mkdir,
 	mkdtemp,
 	rm,
 	symlink,
+	truncate,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
 	SourceIdentityGitError,
+	SourceIdentityOverflowError,
+	SourceIdentityRaceError,
 	SourceIdentityUnreadableError,
 	SourceIdentityUnsafeSymlinkError,
 } from "../src/application/ports/source-identity.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
-import { createFileSourceIdentityProvider } from "../src/infrastructure/fs/source-identity.js";
+import {
+	createFileSourceIdentityProvider,
+	MAX_SOURCE_FILE_BYTES,
+} from "../src/infrastructure/fs/source-identity.js";
 
 const execFileAsync = promisify(execFile);
+const ancestorRaceProbe = fileURLToPath(
+	new URL("./support/ancestor-directory-race-probe.ts", import.meta.url),
+);
 const temporaryRoots: string[] = [];
 
 async function temporaryRoot(): Promise<string> {
@@ -49,6 +60,20 @@ async function initializeRepository(
 	}
 }
 
+async function createEmptyDirectories(
+	root: string,
+	count: number,
+): Promise<void> {
+	const batchSize = 250;
+	for (let offset = 0; offset < count; offset += batchSize) {
+		await Promise.all(
+			Array.from({ length: Math.min(batchSize, count - offset) }, (_, index) =>
+				mkdir(join(root, `empty-${String(offset + index).padStart(5, "0")}`)),
+			),
+		);
+	}
+}
+
 afterEach(async () => {
 	await Promise.all(
 		temporaryRoots
@@ -70,6 +95,109 @@ describe("source identity", () => {
 			mode: "non-git",
 			entryCount: 0,
 		});
+	});
+
+	test("measures an ordinary populated non-Git tree deterministically", async () => {
+		const root = await temporaryRoot();
+		await mkdir(join(root, "src"));
+		await writeFile(join(root, "README.md"), "alpha\n", "utf8");
+		await writeFile(join(root, "src", "index.ts"), "export {};\n", "utf8");
+		const provider = createFileSourceIdentityProvider(root);
+
+		const populated = await provider.computeSourceIdentity();
+		await mkdir(join(root, "empty"));
+		const withEmptyDirectory = await provider.computeSourceIdentity();
+
+		expect(populated).toEqual(withEmptyDirectory);
+		expect(populated).toEqual({
+			digest:
+				"sha256:4ed393d303547518f485616e2a525135317fbd98509750c7e01c95c0d8500911",
+			mode: "non-git",
+			entryCount: 2,
+		});
+	});
+
+	test("accepts the per-file byte limit and rejects limit plus one", async () => {
+		const root = await temporaryRoot();
+		const source = join(root, "bounded.bin");
+		await writeFile(source, "");
+		await truncate(source, MAX_SOURCE_FILE_BYTES);
+
+		const identity =
+			await createFileSourceIdentityProvider(root).computeSourceIdentity();
+
+		expect(identity.entryCount).toBe(1);
+		await truncate(source, MAX_SOURCE_FILE_BYTES + 1);
+		await expect(
+			createFileSourceIdentityProvider(root).computeSourceIdentity(),
+		).rejects.toBeInstanceOf(SourceIdentityOverflowError);
+	});
+
+	test("counts empty directories toward the traversal limit", async () => {
+		const root = await temporaryRoot();
+		const maxEntries = 64;
+		await createEmptyDirectories(root, maxEntries);
+		const provider = createFileSourceIdentityProvider(root, { maxEntries });
+
+		const identity = await provider.computeSourceIdentity();
+
+		expect(identity.entryCount).toBe(0);
+		await mkdir(join(root, "overflow"));
+		await expect(provider.computeSourceIdentity()).rejects.toBeInstanceOf(
+			SourceIdentityOverflowError,
+		);
+	});
+
+	test("records safe symlinks without following their targets", async () => {
+		if (process.platform === "win32") return;
+		const root = await temporaryRoot();
+		await mkdir(join(root, ".flow"));
+		await writeFile(join(root, ".flow", "ignored.bin"), "");
+		await truncate(
+			join(root, ".flow", "ignored.bin"),
+			MAX_SOURCE_FILE_BYTES + 1,
+		);
+		await symlink(".flow/ignored.bin", join(root, "source-link"));
+
+		const identity =
+			await createFileSourceIdentityProvider(root).computeSourceIdentity();
+
+		expect(identity.mode).toBe("non-git");
+		expect(identity.entryCount).toBe(1);
+	});
+
+	test("fails closed while a source file grows during measurement", async () => {
+		const root = await temporaryRoot();
+		const source = join(root, "changing.bin");
+		await writeFile(source, Buffer.alloc(1024 * 1024));
+		let keepGrowing = true;
+		let signalFirstAppend: (() => void) | undefined;
+		const firstAppend = new Promise<void>((resolve) => {
+			signalFirstAppend = resolve;
+		});
+		const mutator = (async () => {
+			let appendCount = 0;
+			while (keepGrowing) {
+				await appendFile(source, Buffer.from([appendCount % 256]));
+				appendCount += 1;
+				if (appendCount === 1) signalFirstAppend?.();
+			}
+		})();
+		await firstAppend;
+
+		try {
+			await expect(
+				createFileSourceIdentityProvider(root).computeSourceIdentity(),
+			).rejects.toBeInstanceOf(SourceIdentityRaceError);
+		} finally {
+			keepGrowing = false;
+			await mutator;
+		}
+	});
+
+	test("fails closed when a validated source ancestor is substituted", async () => {
+		if (process.platform === "win32") return;
+		await execFileAsync(process.execPath, [ancestorRaceProbe, "source"]);
 	});
 
 	test("accepts an ordinary Git directory and an unborn HEAD", async () => {

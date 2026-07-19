@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFlowService } from "../src/application/flow-service.js";
@@ -29,6 +29,23 @@ import {
 } from "../src/infrastructure/fs/workspace-flow-service.js";
 
 const OUTPUT_DIGEST = `sha256:${"c".repeat(64)}`;
+const temporaryWorkspaces = new Set<string>();
+
+async function tempWorkspace(prefix: string): Promise<string> {
+	const workspace = await mkdtemp(join(tmpdir(), prefix));
+	temporaryWorkspaces.add(workspace);
+	return workspace;
+}
+
+afterEach(async () => {
+	const workspaces = [...temporaryWorkspaces];
+	temporaryWorkspaces.clear();
+	await Promise.all(
+		workspaces.map((workspace) =>
+			rm(workspace, { force: true, recursive: true }),
+		),
+	);
+});
 
 function monotonicEnvironment(): TransitionEnvironment {
 	let tick = 0;
@@ -71,7 +88,7 @@ function assignment(session: Session, assignmentId: string): ReviewAssignment {
 }
 
 async function runningWorkspace() {
-	const workspace = await mkdtemp(join(tmpdir(), "flow-assignment-lifecycle-"));
+	const workspace = await tempWorkspace("flow-assignment-lifecycle-");
 	await writeFile(join(workspace, "source.ts"), "export const value = 1;\n");
 	expect(
 		(
@@ -722,7 +739,7 @@ describe("runtime-owned review assignment lifecycle", () => {
 	});
 
 	test("requires broad validation to start after the bound feature result and accepts equality", async () => {
-		const workspace = await mkdtemp(join(tmpdir(), "flow-final-chronology-"));
+		const workspace = await tempWorkspace("flow-final-chronology-");
 		const service = createFlowService(
 			createFileSessionRepository(workspace),
 			monotonicEnvironment(),

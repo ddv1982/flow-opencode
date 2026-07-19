@@ -1,13 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import {
-	type FileHandle,
-	link,
-	lstat,
-	mkdir,
-	open,
-	rm,
-} from "node:fs/promises";
+import { constants, type Stats } from "node:fs";
+import { type FileHandle, lstat, open } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	EvidenceArtifactCollisionError,
@@ -22,16 +15,34 @@ import {
 import {
 	assertMutableWorkspaceRoot,
 	ensureFlowGitignore,
+	ensurePinnedManagedDirectory,
 	flowDir,
+	publishPinnedManagedFile,
 	UnsafeFlowWorkspaceLayoutError,
 } from "./workspace.js";
 
 const EVIDENCE_KIND = "restricted_evidence_v1";
 const SHA256_DIGEST_PATTERN = /^sha256:([a-f0-9]{64})$/;
-const DIRECTORY_MODE = 0o700;
-const FILE_MODE = 0o600;
 
 type PathState = "missing" | "present";
+
+type OpenArtifact = {
+	handle: FileHandle;
+	info: Stats;
+};
+
+type EvidenceDirectoryGuard = {
+	path: string;
+	description: string;
+	restricted: boolean;
+	handle: FileHandle | null;
+	info: Stats;
+};
+
+type GuardedArtifactShard = {
+	path: string;
+	guards: EvidenceDirectoryGuard[];
+};
 
 function sha256(bytes: Uint8Array): string {
 	return createHash("sha256").update(bytes).digest("hex");
@@ -63,6 +74,18 @@ function digestHex(ref: EvidenceArtifactRef): string {
 		);
 	}
 	return match[1];
+}
+
+function artifactIdentity(info: Stats): string {
+	// Do not include ctime: publishing uses a hard link, and removing the
+	// publisher's temporary link can change ctime while another publisher safely
+	// verifies the immutable target. Content changes still alter mtime and are
+	// independently caught by the digest check.
+	return `${info.dev}:${info.ino}:${info.mode}:${info.size}:${info.mtimeMs}`;
+}
+
+function directoryIdentity(info: Stats): string {
+	return `${info.dev}:${info.ino}:${info.mode}`;
 }
 
 function assertRestrictedMode(
@@ -101,65 +124,6 @@ async function restrictedDirectoryState(
 	}
 }
 
-async function ensureRestrictedDirectory(
-	path: string,
-	description: string,
-): Promise<void> {
-	if ((await restrictedDirectoryState(path, description)) === "present") return;
-	try {
-		await mkdir(path, { recursive: false, mode: DIRECTORY_MODE });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-	}
-	if ((await restrictedDirectoryState(path, description)) !== "present") {
-		throw new UnsafeFlowWorkspaceLayoutError(
-			`Flow could not create ${description}: ${path}.`,
-		);
-	}
-}
-
-async function syncDirectory(path: string): Promise<void> {
-	if (process.platform === "win32") return;
-	let handle: FileHandle;
-	try {
-		handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ELOOP") {
-			throw new UnsafeFlowWorkspaceLayoutError(
-				`Flow refuses to follow a symbolic link as an evidence directory: ${path}.`,
-				{ cause: error },
-			);
-		}
-		throw error;
-	}
-	try {
-		const info = await handle.stat();
-		if (!info.isDirectory()) {
-			throw new UnsafeFlowWorkspaceLayoutError(
-				`Flow requires an evidence directory to remain a directory: ${path}.`,
-			);
-		}
-		assertRestrictedMode(info.mode, path, "an evidence directory");
-		await handle.sync();
-	} finally {
-		await handle.close();
-	}
-}
-
-async function openPublisherTemporary(
-	shard: string,
-): Promise<{ path: string; handle: FileHandle }> {
-	for (let attempt = 0; attempt < 8; attempt += 1) {
-		const path = join(shard, `.publish-${process.pid}-${randomUUID()}.tmp`);
-		try {
-			return { path, handle: await open(path, "wx", FILE_MODE) };
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-		}
-	}
-	throw new Error("Flow could not allocate a unique evidence temporary file.");
-}
-
 function artifactRoot(root: string): string {
 	return join(flowDir(root), "evidence", "v1", "sha256");
 }
@@ -174,32 +138,34 @@ async function ensureArtifactShard(root: string, hex: string): Promise<string> {
 	const version = join(evidence, "v1");
 	const algorithm = join(version, "sha256");
 	const shard = join(algorithm, hex.slice(0, 2));
-	await ensureRestrictedDirectory(evidence, "the Flow evidence directory");
-	await ensureRestrictedDirectory(
-		version,
-		"the Flow evidence format directory",
-	);
-	await ensureRestrictedDirectory(
-		algorithm,
-		"the Flow evidence digest directory",
-	);
-	await ensureRestrictedDirectory(shard, "the Flow evidence shard directory");
+	const directories = [
+		[evidence, "the Flow evidence directory"],
+		[version, "the Flow evidence format directory"],
+		[algorithm, "the Flow evidence digest directory"],
+		[shard, "the Flow evidence shard directory"],
+	] as const;
+	for (const [path, description] of directories) {
+		if ((await restrictedDirectoryState(path, description)) === "missing") {
+			await ensurePinnedManagedDirectory(path, description);
+		}
+		if ((await restrictedDirectoryState(path, description)) !== "present") {
+			throw new UnsafeFlowWorkspaceLayoutError(
+				`Flow could not create ${description}: ${path}.`,
+			);
+		}
+	}
 	return shard;
 }
 
-async function requireArtifactShard(
-	root: string,
-	hex: string,
+async function openArtifactDirectory(
+	path: string,
+	description: string,
+	restricted: boolean,
 	ref: EvidenceArtifactRef,
-): Promise<string> {
-	const flow = flowDir(root);
+): Promise<EvidenceDirectoryGuard> {
+	let pathInfo: Stats;
 	try {
-		const flowInfo = await lstat(flow);
-		if (flowInfo.isSymbolicLink() || !flowInfo.isDirectory()) {
-			throw new UnsafeFlowWorkspaceLayoutError(
-				`Flow requires the Flow state directory to be a real directory: ${flow}.`,
-			);
-		}
+		pathInfo = await lstat(path);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
 			throw new EvidenceArtifactNotFoundError(
@@ -209,46 +175,175 @@ async function requireArtifactShard(
 		}
 		throw error;
 	}
+	if (pathInfo.isSymbolicLink()) {
+		throw new UnsafeFlowWorkspaceLayoutError(
+			`Flow refuses to use a symbolic link as ${description}: ${path}.`,
+		);
+	}
+	if (!pathInfo.isDirectory()) {
+		throw new UnsafeFlowWorkspaceLayoutError(
+			`Flow requires ${description} to be a directory: ${path}.`,
+		);
+	}
+	if (restricted) assertRestrictedMode(pathInfo.mode, path, description);
+	if (process.platform === "win32") {
+		// Directory handles are not portable in Node on Windows. Path identity is
+		// still rechecked after the read; POSIX additionally pins each directory.
+		return {
+			path,
+			description,
+			restricted,
+			handle: null,
+			info: pathInfo,
+		};
+	}
 
+	const directoryFlags =
+		constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+	let handle: FileHandle;
+	try {
+		handle = await open(path, directoryFlags);
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code === "ELOOP" || code === "ENOTDIR") {
+			throw new UnsafeFlowWorkspaceLayoutError(
+				`Flow refuses an unsafe ${description}: ${path}.`,
+				{ cause: error },
+			);
+		}
+		if (code === "ENOENT") {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact directory changed while it was opened: ${ref.digest}.`,
+				{ cause: error },
+			);
+		}
+		throw error;
+	}
+
+	try {
+		const info = await handle.stat();
+		if (
+			!info.isDirectory() ||
+			directoryIdentity(info) !== directoryIdentity(pathInfo)
+		) {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact directory changed while it was opened: ${ref.digest}.`,
+			);
+		}
+		if (restricted) assertRestrictedMode(info.mode, path, description);
+		return { path, description, restricted, handle, info };
+	} catch (error) {
+		await handle.close();
+		throw error;
+	}
+}
+
+async function validateArtifactDirectories(
+	guards: readonly EvidenceDirectoryGuard[],
+	ref: EvidenceArtifactRef,
+): Promise<void> {
+	for (let index = guards.length - 1; index >= 0; index -= 1) {
+		const guard = guards[index];
+		if (!guard) continue;
+		let openedInfo: Stats;
+		let pathInfo: Stats;
+		try {
+			[openedInfo, pathInfo] = await Promise.all([
+				guard.handle ? guard.handle.stat() : Promise.resolve(guard.info),
+				lstat(guard.path),
+			]);
+		} catch (error) {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact directory changed while it was read: ${ref.digest}.`,
+				{ cause: error },
+			);
+		}
+		if (pathInfo.isSymbolicLink() || !pathInfo.isDirectory()) {
+			throw new UnsafeFlowWorkspaceLayoutError(
+				`Flow requires ${guard.description} to remain a real directory: ${guard.path}.`,
+			);
+		}
+		if (guard.restricted) {
+			assertRestrictedMode(pathInfo.mode, guard.path, guard.description);
+			assertRestrictedMode(openedInfo.mode, guard.path, guard.description);
+		}
+		if (
+			!openedInfo.isDirectory() ||
+			directoryIdentity(openedInfo) !== directoryIdentity(guard.info) ||
+			directoryIdentity(pathInfo) !== directoryIdentity(guard.info)
+		) {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact directory changed while it was read: ${ref.digest}.`,
+			);
+		}
+	}
+}
+
+async function closeArtifactDirectories(
+	guards: readonly EvidenceDirectoryGuard[],
+): Promise<void> {
+	for (let index = guards.length - 1; index >= 0; index -= 1) {
+		await guards[index]?.handle?.close();
+	}
+}
+
+async function requireArtifactShard(
+	root: string,
+	hex: string,
+	ref: EvidenceArtifactRef,
+): Promise<GuardedArtifactShard> {
+	const flow = flowDir(root);
 	const directories = [
-		[join(flow, "evidence"), "the Flow evidence directory"],
-		[join(flow, "evidence", "v1"), "the Flow evidence format directory"],
+		[root, "the workspace root", false],
+		[flow, "the Flow state directory", false],
+		[join(flow, "evidence"), "the Flow evidence directory", true],
+		[join(flow, "evidence", "v1"), "the Flow evidence format directory", true],
 		[
 			join(flow, "evidence", "v1", "sha256"),
 			"the Flow evidence digest directory",
+			true,
 		],
 		[
 			join(flow, "evidence", "v1", "sha256", hex.slice(0, 2)),
 			"the Flow evidence shard directory",
+			true,
 		],
 	] as const;
-	for (const [path, description] of directories) {
-		if ((await restrictedDirectoryState(path, description)) === "missing") {
-			throw new EvidenceArtifactNotFoundError(
-				`Flow evidence artifact is missing: ${ref.digest}.`,
+	const guards: EvidenceDirectoryGuard[] = [];
+	try {
+		for (const [path, description, restricted] of directories) {
+			guards.push(
+				await openArtifactDirectory(path, description, restricted, ref),
 			);
 		}
+		return {
+			path: join(flow, "evidence", "v1", "sha256", hex.slice(0, 2)),
+			guards,
+		};
+	} catch (error) {
+		await closeArtifactDirectories(guards);
+		throw error;
 	}
-	return join(flow, "evidence", "v1", "sha256", hex.slice(0, 2));
 }
 
 async function openArtifact(
 	path: string,
 	ref: EvidenceArtifactRef,
-): Promise<FileHandle> {
+): Promise<OpenArtifact> {
+	let pathInfo: Stats;
 	try {
-		const info = await lstat(path);
-		if (info.isSymbolicLink()) {
+		pathInfo = await lstat(path);
+		if (pathInfo.isSymbolicLink()) {
 			throw new UnsafeFlowWorkspaceLayoutError(
 				`Flow refuses to follow a symbolic link as an evidence artifact: ${path}.`,
 			);
 		}
-		if (!info.isFile()) {
+		if (!pathInfo.isFile()) {
 			throw new UnsafeFlowWorkspaceLayoutError(
 				`Flow requires an evidence artifact to be a regular file: ${path}.`,
 			);
 		}
-		assertRestrictedMode(info.mode, path, "an evidence artifact");
+		assertRestrictedMode(pathInfo.mode, path, "an evidence artifact");
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
 			throw new EvidenceArtifactNotFoundError(
@@ -260,8 +355,9 @@ async function openArtifact(
 	}
 
 	const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+	let handle: FileHandle;
 	try {
-		return await open(path, constants.O_RDONLY | noFollow);
+		handle = await open(path, constants.O_RDONLY | noFollow);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ELOOP") {
 			throw new UnsafeFlowWorkspaceLayoutError(
@@ -277,13 +373,6 @@ async function openArtifact(
 		}
 		throw error;
 	}
-}
-
-async function readArtifactAtPath(
-	path: string,
-	ref: EvidenceArtifactRef,
-): Promise<Buffer> {
-	const handle = await openArtifact(path, ref);
 	try {
 		const info = await handle.stat();
 		if (!info.isFile()) {
@@ -292,6 +381,24 @@ async function readArtifactAtPath(
 			);
 		}
 		assertRestrictedMode(info.mode, path, "an evidence artifact");
+		if (artifactIdentity(info) !== artifactIdentity(pathInfo)) {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact changed while it was opened: ${ref.digest}.`,
+			);
+		}
+		return { handle, info };
+	} catch (error) {
+		await handle.close();
+		throw error;
+	}
+}
+
+async function readArtifactAtPath(
+	path: string,
+	ref: EvidenceArtifactRef,
+): Promise<Buffer> {
+	const { handle, info } = await openArtifact(path, ref);
+	try {
 		if (info.size > MAX_EVIDENCE_ARTIFACT_BYTES) {
 			throw new EvidenceArtifactTooLargeError(
 				`Flow evidence artifact exceeds ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes: ${ref.digest}.`,
@@ -302,7 +409,49 @@ async function readArtifactAtPath(
 				`Flow evidence artifact byte length does not match its reference: ${ref.digest}.`,
 			);
 		}
-		const bytes = await handle.readFile();
+		const bytes = Buffer.allocUnsafe(info.size);
+		let offset = 0;
+		while (offset < bytes.byteLength) {
+			const { bytesRead } = await handle.read(
+				bytes,
+				offset,
+				bytes.byteLength - offset,
+				offset,
+			);
+			if (bytesRead === 0) break;
+			offset += bytesRead;
+		}
+
+		const finalInfo = await handle.stat();
+		if (finalInfo.size > MAX_EVIDENCE_ARTIFACT_BYTES) {
+			throw new EvidenceArtifactTooLargeError(
+				`Flow evidence artifact exceeds ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes: ${ref.digest}.`,
+			);
+		}
+		let finalPathInfo: Stats;
+		try {
+			finalPathInfo = await lstat(path);
+		} catch (error) {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact changed while it was read: ${ref.digest}.`,
+				{ cause: error },
+			);
+		}
+		if (finalPathInfo.isSymbolicLink() || !finalPathInfo.isFile()) {
+			throw new UnsafeFlowWorkspaceLayoutError(
+				`Flow requires an evidence artifact to remain a regular file: ${path}.`,
+			);
+		}
+		assertRestrictedMode(finalPathInfo.mode, path, "an evidence artifact");
+		if (
+			offset !== bytes.byteLength ||
+			artifactIdentity(finalInfo) !== artifactIdentity(info) ||
+			artifactIdentity(finalPathInfo) !== artifactIdentity(info)
+		) {
+			throw new EvidenceArtifactIntegrityError(
+				`Flow evidence artifact changed while it was read: ${ref.digest}.`,
+			);
+		}
 		if (`sha256:${sha256(bytes)}` !== ref.digest) {
 			throw new EvidenceArtifactIntegrityError(
 				`Flow evidence artifact digest verification failed: ${ref.digest}.`,
@@ -354,51 +503,36 @@ export function createFileEvidenceArtifactStore(
 			const ref = referenceFor(bytes);
 			const hex = digestHex(ref);
 			const shard = await ensureArtifactShard(root, hex);
-			const target = artifactPath(root, hex);
-			const temporaryFile = await openPublisherTemporary(shard);
-			const temporary = temporaryFile.path;
-			let handle: FileHandle | null = temporaryFile.handle;
-			try {
-				await handle.writeFile(bytes);
-				await handle.sync();
-				await handle.close();
-				handle = null;
-				try {
-					await link(temporary, target);
-					await syncDirectory(shard);
-				} catch (error) {
-					if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-					let existing: Buffer;
-					try {
-						existing = await readArtifactAtPath(target, ref);
-					} catch (verificationError) {
-						if (verificationError instanceof UnsafeFlowWorkspaceLayoutError) {
-							throw verificationError;
-						}
-						throw new EvidenceArtifactCollisionError(
-							`Flow evidence artifact target exists with different contents: ${ref.digest}.`,
-							{ cause: verificationError },
-						);
-					}
-					if (!existing.equals(bytes)) {
-						throw new EvidenceArtifactCollisionError(
-							`Flow evidence artifact target exists with different contents: ${ref.digest}.`,
-						);
-					}
-					await syncDirectory(shard);
-				}
-				return ref;
-			} finally {
-				await handle?.close();
-				await rm(temporary, { force: true });
-				await syncDirectory(shard);
+			const publication = await publishPinnedManagedFile(
+				shard,
+				hex.slice(2),
+				`.publish-${process.pid}-${randomUUID()}.tmp`,
+				bytes,
+				MAX_EVIDENCE_ARTIFACT_BYTES,
+			);
+			if (
+				publication.status === "existsTooLarge" ||
+				(publication.status === "exists" && !publication.contents.equals(bytes))
+			) {
+				throw new EvidenceArtifactCollisionError(
+					`Flow evidence artifact target exists with different contents: ${ref.digest}.`,
+				);
 			}
+			return ref;
 		},
 		readEvidenceArtifact: async (ref) => {
 			const hex = digestHex(ref);
-			await requireArtifactShard(root, hex, ref);
-			const bytes = await readArtifactAtPath(artifactPath(root, hex), ref);
-			return Uint8Array.from(bytes);
+			const shard = await requireArtifactShard(root, hex, ref);
+			try {
+				const bytes = await readArtifactAtPath(
+					join(shard.path, hex.slice(2)),
+					ref,
+				);
+				await validateArtifactDirectories(shard.guards, ref);
+				return Uint8Array.from(bytes);
+			} finally {
+				await closeArtifactDirectories(shard.guards);
+			}
 		},
 	};
 }

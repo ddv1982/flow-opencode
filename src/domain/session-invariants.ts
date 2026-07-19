@@ -15,10 +15,16 @@ import {
 	canonicalReviewAssignmentResultDigest,
 	canonicalReviewAttemptId,
 	canonicalReviewPacketDigest,
+	planProjectionBudgetFailure,
 	stableReviewFindingFingerprint,
+	validatePlan,
 } from "./transitions.js";
 
+const ISO_OFFSET_DATETIME_PATTERN =
+	/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
 function time(value: string): number | null {
+	if (!ISO_OFFSET_DATETIME_PATTERN.test(value)) return null;
 	const parsed = Date.parse(value);
 	return Number.isFinite(parsed) ? parsed : null;
 }
@@ -78,43 +84,6 @@ function assignmentExecution(
 	);
 }
 
-function validatePlanGraph(plan: Plan): string | null {
-	const featureIds = new Set<string>();
-	for (const feature of plan.features) {
-		if (featureIds.has(feature.id)) {
-			return `Plan feature '${feature.id}' is duplicated.`;
-		}
-		featureIds.add(feature.id);
-	}
-	for (const feature of plan.features) {
-		for (const dependency of feature.dependsOn) {
-			if (!featureIds.has(dependency)) {
-				return `Plan feature '${feature.id}' depends on missing feature '${dependency}'.`;
-			}
-			if (dependency === feature.id) {
-				return `Plan feature '${feature.id}' cannot depend on itself.`;
-			}
-		}
-	}
-	const byId = new Map(plan.features.map((feature) => [feature.id, feature]));
-	const visiting = new Set<FeatureId>();
-	const visited = new Set<FeatureId>();
-	function visitsCycle(featureId: FeatureId): boolean {
-		if (visited.has(featureId)) return false;
-		if (visiting.has(featureId)) return true;
-		visiting.add(featureId);
-		for (const dependency of byId.get(featureId)?.dependsOn ?? []) {
-			if (visitsCycle(dependency)) return true;
-		}
-		visiting.delete(featureId);
-		visited.add(featureId);
-		return false;
-	}
-	return plan.features.some((feature) => visitsCycle(feature.id))
-		? "Plan feature dependencies contain a cycle."
-		: null;
-}
-
 function resetAffectedFeatureIds(
 	plan: Plan,
 	targetFeatureId: FeatureId,
@@ -158,6 +127,15 @@ export function validateSessionInvariants(session: Session): string | null {
 		"Review assignment",
 	);
 	if (duplicateAssignment) return duplicateAssignment;
+	const pendingAssignments = new Set<string>();
+	for (const assignment of session.reviewAssignments) {
+		if (assignment.status !== "pending") continue;
+		const key = `${assignment.featureRunId}\u0000${assignment.reviewKind}`;
+		if (pendingAssignments.has(key)) {
+			return `Feature run '${assignment.featureRunId}' has multiple pending ${assignment.reviewKind} review assignments.`;
+		}
+		pendingAssignments.add(key);
+	}
 	const duplicateExecution = uniqueBy(
 		session.budget.reviewExecutions,
 		(execution) => execution.assignmentId,
@@ -218,8 +196,13 @@ export function validateSessionInvariants(session: Session): string | null {
 		return "Session completed status must agree with its valid completion timestamp.";
 	}
 	if (session.plan) {
-		const planGraphError = validatePlanGraph(session.plan);
+		const planGraphError = validatePlan(session.plan);
 		if (planGraphError) return planGraphError;
+		const planBudgetError = planProjectionBudgetFailure(
+			session.goal,
+			session.plan,
+		);
+		if (planBudgetError) return planBudgetError;
 		const pendingCount = session.plan.features.filter(
 			(feature) => feature.status === "pending",
 		).length;

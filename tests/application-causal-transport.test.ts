@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFlowService } from "../src/application/flow-service.js";
@@ -19,6 +19,23 @@ import {
 import { systemTransitionEnvironment } from "../src/infrastructure/system/transition-environment.js";
 
 const OUTPUT_DIGEST = `sha256:${"c".repeat(64)}`;
+const temporaryWorkspaces = new Set<string>();
+
+async function tempWorkspace(prefix: string): Promise<string> {
+	const workspace = await mkdtemp(join(tmpdir(), prefix));
+	temporaryWorkspaces.add(workspace);
+	return workspace;
+}
+
+afterEach(async () => {
+	const workspaces = [...temporaryWorkspaces];
+	temporaryWorkspaces.clear();
+	await Promise.all(
+		workspaces.map((workspace) =>
+			rm(workspace, { force: true, recursive: true }),
+		),
+	);
+});
 
 function flowStatus(workspace: string, request: unknown) {
 	return executeFlowStatus(workspace, { request });
@@ -36,7 +53,7 @@ async function runningWorkspace(): Promise<{
 	workspace: string;
 	session: Session;
 }> {
-	const workspace = await mkdtemp(join(tmpdir(), "flow-causal-transport-"));
+	const workspace = await tempWorkspace("flow-causal-transport-");
 	expect(
 		(
 			await flowPlanSave(workspace, {
@@ -140,7 +157,7 @@ function completionPayload(session: Session, id: string, operationId: string) {
 
 describe("application causal transport", () => {
 	test("reports accepted session initialization without inventing an operation", async () => {
-		const workspace = await mkdtemp(join(tmpdir(), "flow-session-ready-"));
+		const workspace = await tempWorkspace("flow-session-ready-");
 		const response = await flowPlanSave(workspace, {
 			goal: "Prepare a planning session",
 		});

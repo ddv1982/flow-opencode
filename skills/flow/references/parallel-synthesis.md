@@ -88,8 +88,8 @@ validation in the Flow-managed workspace.
 
 ## Record bounded accounting
 
-Use the canonical manager record in `handoff-format.md` for every material pass
-or implementation decision. Runtime semantics are:
+Use the canonical manager record in `flow/references/handoff-format.md` for
+every material pass or implementation decision. Runtime semantics are:
 
 - `candidateDecision: "used"` requires actual candidate execution evidence.
 - `candidateDecision: "serial_required"` means candidate work was ineligible.

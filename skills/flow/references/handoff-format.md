@@ -163,8 +163,8 @@ implementation decision; keep handoffs and long artifacts outside `.flow/**`.
 The candidate accounting rules — which `candidateEligibility`,
 `candidateDecision`, and `decision` combinations validate, and what counts as
 candidate execution evidence — live in
-[parallel-decision.md](parallel-decision.md) under "Implementation pass
-decision"; note `decision: "parallel"` is not valid on
+`flow/references/parallel-decision.md` under "Implementation pass decision";
+note `decision: "parallel"` is not valid on
 `implementation-decision` records.
 
 ```json

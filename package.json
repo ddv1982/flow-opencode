@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "5.2.1",
+	"version": "5.2.2",
 	"description": "Stateful planning and execution workflow plugin for OpenCode",
 	"type": "module",
 	"repository": {
@@ -20,7 +20,13 @@
 		"opencode-plugin-flow": "./dist/cli.js"
 	},
 	"files": [
-		"dist",
+		"dist/index.js",
+		"dist/index.js.map",
+		"dist/index.d.ts",
+		"dist/platform/opencode/plugin.d.ts",
+		"dist/platform/opencode/sdk.d.ts",
+		"dist/cli.js",
+		"dist/cli.js.map",
 		"LICENSE",
 		"README.md",
 		"CHANGELOG.md"
@@ -29,11 +35,12 @@
 		"build": "bun run clean && bun run build:plugin && bun run build:cli && bun run build:types",
 		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --sourcemap=external ./src/index.ts",
 		"build:cli": "bun build --target=node --outdir=./dist --entry-naming=cli.js --banner='#!/usr/bin/env node' --sourcemap=external ./src/cli.ts",
-		"build:types": "tsc -p tsconfig.types.json",
+		"build:types": "tsc -p tsconfig.types.json && bun run scripts/prune-dist-declarations.ts",
 		"clean": "bun run scripts/clean-dist.ts",
-		"lint": "bunx biome check src tests scripts --files-ignore-unknown=true --vcs-use-ignore-file=true",
+		"lint": "bunx biome check biome.json src tests scripts --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"prompt:quality": "bun run scripts/prompt-quality.ts",
 		"prompt:model-eval": "bun run scripts/prompt-model-eval.ts",
+		"release:metadata": "bun run scripts/release-metadata.ts",
 		"replay:report": "bun run scripts/replay-report.ts",
 		"transport:report": "bun run scripts/causal-transport-report.ts",
 		"package:smoke": "bun test tests/package-smoke.test.ts",
@@ -45,7 +52,7 @@
 		"verify:lifecycle": "bun run test:lifecycle:invariants && bun run test:lifecycle:recovery && bun run test:contracts",
 		"test": "bun test tests",
 		"typecheck": "tsc --noEmit",
-		"check": "bun run typecheck && bun run lint && bun run prompt:quality && bun run build && bun run test"
+		"check": "bun run typecheck && bun run lint && bun run release:metadata && bun run prompt:quality && bun run build && bun run test"
 	},
 	"keywords": [
 		"opencode",

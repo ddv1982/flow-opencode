@@ -1,4 +1,9 @@
-import { MAX_HISTORY_ENTRIES, MAX_ORCHESTRATION_PASSES } from "./limits.js";
+import {
+	MAX_HISTORY_ENTRIES,
+	MAX_ORCHESTRATION_PASSES,
+	MAX_REVIEW_ASSIGNMENT_RESULT_BYTES,
+	MAX_SESSION_ID_LENGTH,
+} from "./limits.js";
 import {
 	hasCandidateExecutionEvidence,
 	hasVerifierExecutionEvidence,
@@ -33,9 +38,16 @@ import type {
 
 export const MAX_EXECUTION_PROJECTION_BYTES = 12 * 1024;
 export const MAX_REVIEWER_PROJECTION_BYTES = 3_000;
+export const MAX_PLAN_FEATURES = MAX_HISTORY_ENTRIES;
+export const MAX_ORCHESTRATION_COLLECTION_BYTES =
+	MAX_REVIEW_ASSIGNMENT_RESULT_BYTES;
 
 const MAX_EXECUTION_REVISION = Number.MAX_SAFE_INTEGER;
 const MAX_EXECUTION_SNAPSHOT_ID = `sha256:${"f".repeat(64)}`;
+const MAX_EXECUTION_FEATURE_RUN_ID = "f".repeat(
+	MAX_SESSION_ID_LENGTH,
+) as FeatureRunId;
+const MAX_PERSISTED_REVIEW_ID = "r".repeat(MAX_SESSION_ID_LENGTH);
 
 export type TransitionEnvironment = {
 	now(): string;
@@ -519,9 +531,7 @@ function reviewExecutionSignature(execution: ReviewExecution): string {
 	});
 }
 
-// Bound the persisted history so a long autonomous retry loop cannot grow
-// session.json without limit (every mutation re-reads/re-validates the whole
-// file). The cap is generous; only pathological loops ever reach it.
+// A feature run gets one initial review attempt and one autonomous retry.
 const MAX_FAILED_REVIEW_ATTEMPTS_PER_FEATURE = 2;
 
 const FINDING_FINGERPRINT_VERSION = "finding-v1";
@@ -585,6 +595,15 @@ function cloneBudgetTelemetry(session: Session): BudgetTelemetry {
 	};
 }
 
+function saturatingOrchestrationTotal(
+	current: number,
+	increment: number,
+): number {
+	return increment >= Number.MAX_SAFE_INTEGER - current
+		? Number.MAX_SAFE_INTEGER
+		: current + increment;
+}
+
 function recordOrchestrationPasses(
 	budget: BudgetTelemetry,
 	passes: readonly OrchestrationPassRecord[],
@@ -612,7 +631,10 @@ function recordOrchestrationPasses(
 		skippedCandidateDecisionCount: 0,
 	};
 	for (const pass of newPasses) {
-		tally.workerCount += pass.workerCount;
+		tally.workerCount = saturatingOrchestrationTotal(
+			tally.workerCount,
+			pass.workerCount,
+		);
 		if (hasCandidateExecutionEvidence(pass)) tally.candidatePassCount += 1;
 		if (hasVerifierExecutionEvidence(pass)) tally.verifierPassCount += 1;
 		// The schema restricts candidate accounting decisions to
@@ -631,32 +653,51 @@ function recordOrchestrationPasses(
 			tally.skippedCandidateDecisionCount += 1;
 		}
 	}
-	const latestPasses = [...budget.orchestration.latestPasses, ...newPasses];
+	let latestPasses = [...budget.orchestration.latestPasses, ...newPasses].slice(
+		-MAX_ORCHESTRATION_PASSES,
+	);
+	while (
+		latestPasses.length > 0 &&
+		serializedUtf8JsonBytes(latestPasses) > MAX_ORCHESTRATION_COLLECTION_BYTES
+	) {
+		latestPasses = latestPasses.slice(1);
+	}
 	return {
 		...budget,
 		orchestration: {
-			passCount: budget.orchestration.passCount + newPasses.length,
-			workerCount: budget.orchestration.workerCount + tally.workerCount,
-			candidatePassCount:
-				budget.orchestration.candidatePassCount + tally.candidatePassCount,
-			verifierPassCount:
-				budget.orchestration.verifierPassCount + tally.verifierPassCount,
-			candidateEligibleCount:
-				budget.orchestration.candidateEligibleCount +
+			passCount: saturatingOrchestrationTotal(
+				budget.orchestration.passCount,
+				newPasses.length,
+			),
+			workerCount: saturatingOrchestrationTotal(
+				budget.orchestration.workerCount,
+				tally.workerCount,
+			),
+			candidatePassCount: saturatingOrchestrationTotal(
+				budget.orchestration.candidatePassCount,
+				tally.candidatePassCount,
+			),
+			verifierPassCount: saturatingOrchestrationTotal(
+				budget.orchestration.verifierPassCount,
+				tally.verifierPassCount,
+			),
+			candidateEligibleCount: saturatingOrchestrationTotal(
+				budget.orchestration.candidateEligibleCount,
 				tally.candidateEligibleCount,
-			candidateUsedDecisionCount:
-				budget.orchestration.candidateUsedDecisionCount +
+			),
+			candidateUsedDecisionCount: saturatingOrchestrationTotal(
+				budget.orchestration.candidateUsedDecisionCount,
 				tally.candidateUsedDecisionCount,
-			candidateSerialRequiredDecisionCount:
-				budget.orchestration.candidateSerialRequiredDecisionCount +
+			),
+			candidateSerialRequiredDecisionCount: saturatingOrchestrationTotal(
+				budget.orchestration.candidateSerialRequiredDecisionCount,
 				tally.candidateSerialRequiredDecisionCount,
-			skippedCandidateDecisionCount:
-				budget.orchestration.skippedCandidateDecisionCount +
+			),
+			skippedCandidateDecisionCount: saturatingOrchestrationTotal(
+				budget.orchestration.skippedCandidateDecisionCount,
 				tally.skippedCandidateDecisionCount,
-			latestPasses:
-				latestPasses.length > MAX_ORCHESTRATION_PASSES
-					? latestPasses.slice(latestPasses.length - MAX_ORCHESTRATION_PASSES)
-					: latestPasses,
+			),
+			latestPasses,
 		},
 	};
 }
@@ -867,7 +908,7 @@ function appendEvidenceForCompletion(
 		) {
 			return fail(
 				`Evidence '${evidence.evidenceId}' contains an unsafe artifact reference.`,
-				"Use a workspace-relative safe artifact reference; never publish absolute paths or raw command arguments.",
+				"Use the digest and byte-length reference returned by the supported evidence publisher; never publish paths or raw command arguments.",
 				session,
 			);
 		}
@@ -940,40 +981,82 @@ function clonePlan(input: PlanInput): Plan {
 	};
 }
 
-function validatePlan(plan: Plan): string | null {
+function planCardinalityFailure(plan: Plan | PlanInput): string | null {
+	if (plan.features.length === 0) {
+		return "Plan must contain at least one feature.";
+	}
+	if (plan.features.length > MAX_PLAN_FEATURES) {
+		return `Plan cannot contain more than ${MAX_PLAN_FEATURES} features.`;
+	}
+	for (const [name, values] of [
+		["requirements", plan.requirements ?? []],
+		["decisions", plan.decisions ?? []],
+	] as const) {
+		if (values.length > MAX_PLAN_FEATURES) {
+			return `Plan ${name} cannot contain more than ${MAX_PLAN_FEATURES} items.`;
+		}
+	}
+	for (const feature of plan.features) {
+		for (const [name, values] of [
+			["targets", feature.targets ?? []],
+			["validation commands", feature.validation ?? []],
+			["dependencies", feature.dependsOn ?? []],
+		] as const) {
+			if (values.length > MAX_PLAN_FEATURES) {
+				return `Plan feature '${feature.id}' cannot contain more than ${MAX_PLAN_FEATURES} ${name}.`;
+			}
+		}
+	}
+	return null;
+}
+
+export function validatePlan(plan: Plan): string | null {
+	const cardinalityError = planCardinalityFailure(plan);
+	if (cardinalityError) return cardinalityError;
 	const seen = new Set<string>();
 	for (const feature of plan.features) {
-		if (seen.has(feature.id)) return `Duplicate feature id '${feature.id}'.`;
+		if (seen.has(feature.id)) {
+			return `Plan feature '${feature.id}' is duplicated.`;
+		}
 		seen.add(feature.id);
 	}
 	for (const feature of plan.features) {
 		for (const dependency of feature.dependsOn) {
 			if (!seen.has(dependency)) {
-				return `Feature '${feature.id}' depends on unknown feature '${dependency}'.`;
+				return `Plan feature '${feature.id}' depends on unknown feature '${dependency}'.`;
 			}
 			if (dependency === feature.id) {
-				return `Feature '${feature.id}' cannot depend on itself.`;
+				return `Plan feature '${feature.id}' cannot depend on itself.`;
 			}
 		}
 	}
 
-	const visiting = new Set<FeatureId>();
-	const visited = new Set<FeatureId>();
-	const byId = new Map(plan.features.map((feature) => [feature.id, feature]));
-	function visit(id: FeatureId): boolean {
-		if (visited.has(id)) return false;
-		if (visiting.has(id)) return true;
-		visiting.add(id);
-		for (const dependency of byId.get(id)?.dependsOn ?? []) {
-			if (visit(dependency)) return true;
+	const remainingDependencies = new Map<FeatureId, number>();
+	const dependents = new Map<FeatureId, FeatureId[]>();
+	const ready: FeatureId[] = [];
+	for (const feature of plan.features) {
+		remainingDependencies.set(feature.id, feature.dependsOn.length);
+		if (feature.dependsOn.length === 0) ready.push(feature.id);
+		for (const dependency of feature.dependsOn) {
+			const current = dependents.get(dependency) ?? [];
+			current.push(feature.id);
+			dependents.set(dependency, current);
 		}
-		visiting.delete(id);
-		visited.add(id);
-		return false;
 	}
-	return plan.features.some((feature) => visit(feature.id))
-		? "Feature dependencies contain a cycle."
-		: null;
+	let visitedCount = 0;
+	for (let index = 0; index < ready.length; index += 1) {
+		const featureId = ready[index];
+		if (!featureId) continue;
+		visitedCount += 1;
+		for (const dependent of dependents.get(featureId) ?? []) {
+			const remaining = (remainingDependencies.get(dependent) ?? 0) - 1;
+			remainingDependencies.set(dependent, remaining);
+			if (remaining === 0) ready.push(dependent);
+		}
+	}
+	return visitedCount === plan.features.length
+		? null
+		: "Plan feature dependencies contain a cycle.";
 }
 
 export function createSession(
@@ -1165,14 +1248,16 @@ export function applyPlan(
 			"Approved plans cannot be changed. Reset or start a new session.",
 		);
 	}
+	const cardinalityError = planCardinalityFailure(planInput);
+	if (cardinalityError) return fail(cardinalityError);
 	const plan = clonePlan(planInput);
 	const planError = validatePlan(plan);
 	if (planError) return fail(planError);
-	const executionBudgetError = planExecutionBudgetFailure(session.goal, plan);
-	if (executionBudgetError) {
+	const projectionBudgetError = planProjectionBudgetFailure(session.goal, plan);
+	if (projectionBudgetError) {
 		return fail(
-			executionBudgetError,
-			"Shorten the goal or active-feature execution context and save the complete plan again.",
+			projectionBudgetError,
+			"Shorten the goal, plan context, feature ids, or assigned target references and save the complete plan again.",
 		);
 	}
 	const requestDigest = canonicalOperationRequestDigest("plan_save", plan);
@@ -1719,7 +1804,7 @@ export function startReviewAssignment(
 	) {
 		return fail(
 			`Reviewer assignment exceeds the ${MAX_REVIEWER_PROJECTION_BYTES}-byte projection limit.`,
-			"Shorten the packet summary or risk lenses and retry with the same operation id.",
+			"Shorten the packet summary or risk lenses and retry with the same operation id; if a minimal packet still fails, preserve the session for invalid-plan recovery.",
 			session,
 		);
 	}
@@ -2068,6 +2153,23 @@ export function preflightAssignedFeatureCompletion(
 	if (causal) return causal;
 	const pendingArchive = pendingArchiveFailure<"new" | "replay">(session);
 	if (pendingArchive) return pendingArchive;
+	if (input.result.orchestrationPasses.length > MAX_ORCHESTRATION_PASSES) {
+		return fail(
+			`Optional orchestration telemetry cannot contain more than ${MAX_ORCHESTRATION_PASSES} passes.`,
+			"Omit older optional pass records and submit only the bounded current completion telemetry.",
+			session,
+		);
+	}
+	const orchestrationBytes = serializedUtf8JsonBytes(
+		input.result.orchestrationPasses,
+	);
+	if (orchestrationBytes > MAX_ORCHESTRATION_COLLECTION_BYTES) {
+		return fail(
+			`Optional orchestration telemetry requires ${orchestrationBytes} UTF-8 bytes; the maximum is ${MAX_ORCHESTRATION_COLLECTION_BYTES}.`,
+			"Omit the optional telemetry or shorten its bounded identifiers, reasons, and references.",
+			session,
+		);
+	}
 	const requestDigest = canonicalOperationRequestDigest(
 		"feature_complete",
 		input,
@@ -2837,6 +2939,59 @@ function buildExecutionProjection(
 	};
 }
 
+type ReviewerProjectionSource = Pick<
+	ReviewAssignment,
+	| "id"
+	| "status"
+	| "featureRunId"
+	| "featureId"
+	| "reviewKind"
+	| "requiredDepth"
+	| "packetSummary"
+	| "riskLenses"
+	| "validationScope"
+	| "validationEvidenceRefs"
+>;
+
+function assignedReviewScope(
+	plan: Plan,
+	feature: Feature,
+	reviewKind: ReviewAssignment["reviewKind"],
+): string[] {
+	return reviewKind === "final"
+		? [...new Set(plan.features.flatMap((item) => item.targets))]
+				.slice(0, 32)
+				.map(boundedScopeReference)
+		: feature.targets.slice(0, 12).map(boundedScopeReference);
+}
+
+function buildReviewerProjection(
+	plan: Plan,
+	feature: Feature,
+	assignment: ReviewerProjectionSource,
+	assignedScope = assignedReviewScope(plan, feature, assignment.reviewKind),
+): ReviewerProjection {
+	return {
+		view: "reviewer",
+		assignmentId: assignment.id,
+		assignmentStatus: assignment.status,
+		featureRunId: assignment.featureRunId,
+		featureId: assignment.featureId,
+		reviewKind: assignment.reviewKind,
+		assignedScope: [...assignedScope],
+		requiredDepth: assignment.requiredDepth,
+		packetSummary: boundedText(assignment.packetSummary, 1_000),
+		riskLenses: boundedStrings(assignment.riskLenses, 16, 240),
+		validationScope: assignment.validationScope,
+		validationEvidenceCount: assignment.validationEvidenceRefs.length,
+		terminalDisposition:
+			assignment.status === "submitted" ||
+			assignment.status === "observed_unsubmitted"
+				? assignment.status
+				: null,
+	};
+}
+
 function planExecutionBudgetFailure(goal: string, plan: Plan): string | null {
 	for (const feature of plan.features) {
 		for (const isFinalFeature of [false, true]) {
@@ -2844,7 +2999,7 @@ function planExecutionBudgetFailure(goal: string, plan: Plan): string | null {
 				goal,
 				plan,
 				feature,
-				undefined,
+				MAX_EXECUTION_FEATURE_RUN_ID,
 				isFinalFeature,
 				MAX_EXECUTION_REVISION,
 				MAX_EXECUTION_SNAPSHOT_ID,
@@ -2856,6 +3011,95 @@ function planExecutionBudgetFailure(goal: string, plan: Plan): string | null {
 		}
 	}
 	return null;
+}
+
+const MINIMUM_EXECUTION_FEATURE: Feature = {
+	id: "x" as FeatureId,
+	title: "x",
+	summary: "x",
+	status: "pending",
+	reviewDepth: "quick",
+	targets: [],
+	validation: [],
+	dependsOn: [],
+};
+
+const MINIMUM_EXECUTION_PLAN: Plan = {
+	summary: "x",
+	overview: "x",
+	requirements: [],
+	decisions: [],
+	finalReviewPolicy: "broad",
+	features: [MINIMUM_EXECUTION_FEATURE],
+};
+
+export function goalProjectionBudgetFailure(goal: string): string | null {
+	let requiredBytes = 0;
+	for (const isFinalFeature of [false, true]) {
+		requiredBytes = Math.max(
+			requiredBytes,
+			serializedUtf8JsonBytes(
+				buildExecutionProjection(
+					goal,
+					MINIMUM_EXECUTION_PLAN,
+					MINIMUM_EXECUTION_FEATURE,
+					MAX_EXECUTION_FEATURE_RUN_ID,
+					isFinalFeature,
+					MAX_EXECUTION_REVISION,
+					MAX_EXECUTION_SNAPSHOT_ID,
+				),
+			),
+		);
+	}
+	return requiredBytes > MAX_EXECUTION_PROJECTION_BYTES
+		? `A Flow goal leaves no room for the smallest execution context (${requiredBytes} UTF-8 bytes; maximum ${MAX_EXECUTION_PROJECTION_BYTES}).`
+		: null;
+}
+
+function planReviewerBudgetFailure(plan: Plan): string | null {
+	const firstFeature = plan.features[0];
+	if (!firstFeature) return "Plan must contain at least one feature.";
+	const finalScope = assignedReviewScope(plan, firstFeature, "final");
+	for (const feature of plan.features) {
+		for (const reviewKind of ["feature", "final"] as const) {
+			const projection = buildReviewerProjection(
+				plan,
+				feature,
+				{
+					id: MAX_PERSISTED_REVIEW_ID as ReviewAssignmentId,
+					status: "pending",
+					featureRunId: MAX_PERSISTED_REVIEW_ID as FeatureRunId,
+					featureId: feature.id,
+					reviewKind,
+					requiredDepth:
+						reviewKind === "final"
+							? plan.finalReviewPolicy
+							: feature.reviewDepth,
+					packetSummary: "x",
+					riskLenses: [],
+					validationScope: reviewKind === "final" ? "broad" : "targeted",
+					validationEvidenceRefs: [MAX_EXECUTION_SNAPSHOT_ID as EvidenceId],
+				},
+				reviewKind === "final"
+					? finalScope
+					: assignedReviewScope(plan, feature, reviewKind),
+			);
+			const bytes = serializedUtf8JsonBytes(projection);
+			if (bytes > MAX_REVIEWER_PROJECTION_BYTES) {
+				return `Feature '${feature.id}' requires a smallest ${reviewKind} reviewer projection of ${bytes} UTF-8 bytes; the maximum is ${MAX_REVIEWER_PROJECTION_BYTES}.`;
+			}
+		}
+	}
+	return null;
+}
+
+export function planProjectionBudgetFailure(
+	goal: string,
+	plan: Plan,
+): string | null {
+	return (
+		planExecutionBudgetFailure(goal, plan) ?? planReviewerBudgetFailure(plan)
+	);
 }
 
 function boundedMutation(record: CausalMutationRecord): CausalMutationRecord {
@@ -3115,34 +3359,14 @@ export function reviewerSessionProjection(
 				: "Start a new feature run and create a new review assignment; historical assignments cannot be recovered as active work.",
 		);
 	}
-	const feature = session.plan?.features.find(
+	const plan = session.plan;
+	const feature = plan?.features.find(
 		(candidate) => candidate.id === assignment.featureId,
 	);
-	if (!feature) {
+	if (!plan || !feature) {
 		return fail("The review assignment references a missing plan feature.");
 	}
-	const assignedScope =
-		assignment.reviewKind === "final" && session.plan
-			? [...new Set(session.plan.features.flatMap((item) => item.targets))]
-					.slice(0, 32)
-					.map(boundedScopeReference)
-			: feature.targets.slice(0, 12).map(boundedScopeReference);
-	return ok({
-		view: "reviewer",
-		assignmentId: assignment.id,
-		assignmentStatus: assignment.status,
-		featureRunId: assignment.featureRunId,
-		featureId: assignment.featureId,
-		reviewKind: assignment.reviewKind,
-		assignedScope,
-		requiredDepth: assignment.requiredDepth,
-		packetSummary: boundedText(assignment.packetSummary, 1_000),
-		riskLenses: boundedStrings(assignment.riskLenses, 16, 240),
-		validationScope: assignment.validationScope,
-		validationEvidenceCount: assignment.validationEvidenceRefs.length,
-		terminalDisposition:
-			assignment.status === "pending" ? null : assignment.status,
-	});
+	return ok(buildReviewerProjection(plan, feature, assignment));
 }
 
 export function mutationReceiptProjection(

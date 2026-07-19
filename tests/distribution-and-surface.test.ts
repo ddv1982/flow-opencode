@@ -34,6 +34,7 @@ import FlowPlugin from "../src/index.js";
 import { createFlowLog } from "../src/platform/opencode/logging.js";
 import { createTools } from "../src/platform/opencode/tools.js";
 import { auditLifecycleFlatRequestExamples } from "../src/prompt-quality.js";
+import { compiledFlowPromptSurfaces } from "../src/prompt-surfaces.js";
 import { resolveFlowPluginVersion } from "../src/version.js";
 
 async function tempDirectory(prefix: string): Promise<string> {
@@ -92,6 +93,40 @@ function expectSafeFrontmatter(path: string, markdown: string): void {
 	expect(unsafe, `${path} unquoted YAML values`).toEqual([]);
 }
 
+function nonCanonicalFlowGuidanceReferences(markdown: string): string[] {
+	const referenceIdByBasename = new Map(
+		FLOW_GUIDANCE_IDS.filter((id) => id.includes("/references/")).map(
+			(id) => [id.slice(id.lastIndexOf("/") + 1), id] as const,
+		),
+	);
+	const violations = new Set<string>();
+	for (const match of markdown.matchAll(
+		/(?<![A-Za-z0-9_.-])(\/?(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.md(?:#[A-Za-z0-9_./-]+)?)/g,
+	)) {
+		const reference = match[1];
+		if (!reference) continue;
+		const path = reference.split("#", 1)[0];
+		if (!path) continue;
+		const basename = path.slice(path.lastIndexOf("/") + 1);
+		const expected = referenceIdByBasename.get(basename);
+		const withoutTraversal = path.replace(/^(?:\/|(?:\.\.?\/)+)/, "");
+		const looksLikeGuidancePath =
+			withoutTraversal.startsWith("references/") ||
+			/^flow(?:-[a-z-]+)?\/references\//.test(withoutTraversal);
+		const isBareKnownGuidanceName =
+			expected !== undefined && !path.includes("/");
+		if (
+			(expected &&
+				(isBareKnownGuidanceName || looksLikeGuidancePath) &&
+				reference !== expected) ||
+			(!expected && looksLikeGuidancePath)
+		) {
+			violations.add(reference);
+		}
+	}
+	return [...violations].sort();
+}
+
 async function installPristineLegacyTopic(
 	home: string,
 	topic: string,
@@ -136,7 +171,7 @@ describe("embedded guidance and plugin surface", () => {
 		]);
 	});
 
-	test("keeps every guidance id stable, unique, embedded, and retrievable", async () => {
+	test("keeps every guidance id and model-visible reference callable", async () => {
 		expect(FLOW_GUIDANCE_TOPICS).toEqual([
 			"flow",
 			"flow-plan",
@@ -153,23 +188,55 @@ describe("embedded guidance and plugin surface", () => {
 			expect(getFlowGuidance(document.id)).toBe(document);
 			expect(document.content.length).toBeGreaterThan(40);
 			expect(
+				nonCanonicalFlowGuidanceReferences(document.content),
+				`${document.id} contains a noncanonical or unknown guidance reference`,
+			).toEqual([]);
+			expect(
 				auditLifecycleFlatRequestExamples(document.content),
 				`${document.id} contains a flat lifecycle request example`,
 			).toEqual([]);
-			for (const match of document.content.matchAll(
-				/`((?:flow(?:-(?:plan|run|test|review|deslop|ui-quality|commit))?\/references\/[^`]+\.md))`/g,
-			)) {
-				const reference = match[1];
-				if (!reference) throw new Error("Expected guidance reference capture");
-				expect(
-					FLOW_GUIDANCE_IDS as readonly string[],
-					`${document.id} references unknown guidance ${reference}`,
-				).toContain(reference);
-			}
 			if (document.relativePath === "SKILL.md") {
 				expectSafeFrontmatter(document.id, document.content);
 			}
 		}
+		for (const [surface, compiled] of Object.entries(
+			compiledFlowPromptSurfaces(),
+		)) {
+			expect(
+				nonCanonicalFlowGuidanceReferences(compiled.text),
+				`${surface} contains a noncanonical or unknown guidance reference`,
+			).toEqual([]);
+		}
+		expect(
+			nonCanonicalFlowGuidanceReferences(
+				[
+					"`../../flow/references/parallel-synthesis.md`",
+					"`parallel-decision.md`",
+					"`references/review-rubric.md`",
+					"`/flow/references/parallel-decision.md`",
+					"`flow/references/not-shipped.md`",
+					"[handoff](handoff-format.md)",
+					"```text",
+					"flow/references/parallel-synthesis.md#record-bounded-accounting",
+					"```",
+					"`flow-rnu/references/parallel-decision.md`",
+				].join("\n"),
+			),
+		).toEqual([
+			"../../flow/references/parallel-synthesis.md",
+			"/flow/references/parallel-decision.md",
+			"flow-rnu/references/parallel-decision.md",
+			"flow/references/not-shipped.md",
+			"flow/references/parallel-synthesis.md#record-bounded-accounting",
+			"handoff-format.md",
+			"parallel-decision.md",
+			"references/review-rubric.md",
+		]);
+		expect(
+			nonCanonicalFlowGuidanceReferences(
+				"Ordinary artifacts such as `README.md`, `docs/operations.md`, `docs/review-rubric.md`, `examples/parallel-decision.md`, `CHANGELOG.md`, `docs/auth.md`, `/tmp/flow-handoff.md`, and `/tmp/flow-synthesis.md` are not guidance ids.",
+			),
+		).toEqual([]);
 
 		const guidanceTool = createTools({}).flow_guidance;
 		if (!guidanceTool) throw new Error("Expected flow_guidance tool");

@@ -22,7 +22,7 @@ Use the strongest practical tier. For risky work, combine tiers.
   or skipped checks must be resolved or reported as blockers before assignment.
 - Do not claim a command was run unless it was run in this session or directly reported by a trusted worker with raw output.
 - Worker-reported command output must satisfy the acceptance and verification
-  rules in `../../flow/references/parallel-synthesis.md`: exact command, status,
+  rules in `flow/references/parallel-synthesis.md`: exact command, status,
   raw outcome summary, coverage, and manager acceptance.
 - Include scope in the summary: what behavior, files, routes, or states the check covered.
 - UI work should include browser or screenshot evidence when the app can run locally.

@@ -209,4 +209,25 @@ describe("sanitized replay contract", () => {
 		};
 		expect(ReplayScenarioSchema.safeParse(duplicate).success).toBe(false);
 	});
+
+	test("rejects session state from a different scenario session", () => {
+		const invalid = scenario(REPLAY_SCENARIO_IDS[0], 1);
+		const state = invalid.events.find(
+			(event) => event.kind === "session_state",
+		);
+		if (state?.kind !== "session_state") {
+			throw new Error("Expected session state fixture.");
+		}
+		state.sessionId = "session_2";
+
+		const parsed = ReplayScenarioSchema.safeParse(invalid);
+		expect(parsed.success).toBe(false);
+		if (parsed.success) throw new Error("Expected session identity rejection.");
+		expect(parsed.error.issues).toContainEqual(
+			expect.objectContaining({
+				path: ["events", 0, "sessionId"],
+				message: "Session state must match the scenario session identity.",
+			}),
+		);
+	});
 });

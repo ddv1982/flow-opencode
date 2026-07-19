@@ -1,10 +1,23 @@
 import { type Hooks, type ToolContext, tool } from "@opencode-ai/plugin";
 import type { FlowResponse } from "../../application/flow-service.js";
 import {
+	MAX_WORKFLOW_PROSE_BYTES,
+	orchestrationTelemetryResourceIssues,
+	planResourceIssues,
+} from "../../application/schema.js";
+import {
 	FEATURE_ID_MESSAGE,
 	FEATURE_ID_PATTERN,
 } from "../../domain/feature-id.js";
-import { MAX_REVIEW_ASSIGNMENT_RESULT_BYTES } from "../../domain/limits.js";
+import {
+	MAX_REVIEW_ASSIGNMENT_RESULT_BYTES,
+	MAX_SESSION_ID_LENGTH,
+} from "../../domain/limits.js";
+import {
+	goalProjectionBudgetFailure,
+	MAX_EXECUTION_PROJECTION_BYTES,
+	MAX_PLAN_FEATURES,
+} from "../../domain/transitions.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
@@ -20,7 +33,42 @@ import {
 import { createFlowLog } from "./logging.js";
 
 const host = tool.schema;
-const featureId = host.string().regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
+const utf8Encoder = new TextEncoder();
+
+function boundedUtf8String(maximumBytes: number, description: string) {
+	return host
+		.string()
+		.min(1)
+		.superRefine((value, context) => {
+			if (utf8Encoder.encode(value).byteLength <= maximumBytes) return;
+			context.addIssue({
+				code: "custom",
+				message: `${description} cannot exceed ${maximumBytes} UTF-8 bytes.`,
+			});
+		});
+}
+
+const executionContextText = boundedUtf8String(
+	MAX_EXECUTION_PROJECTION_BYTES,
+	"Execution-context text",
+);
+const workflowProse = boundedUtf8String(
+	MAX_WORKFLOW_PROSE_BYTES,
+	"Workflow prose",
+);
+const workflowProseInput = host.string().trim().pipe(workflowProse);
+const goal = boundedUtf8String(
+	MAX_EXECUTION_PROJECTION_BYTES,
+	"A Flow goal",
+).superRefine((value, context) => {
+	const failure = goalProjectionBudgetFailure(value);
+	if (!failure) return;
+	context.addIssue({ code: "custom", message: failure });
+});
+const featureId = host
+	.string()
+	.max(MAX_SESSION_ID_LENGTH, "Feature id is too long.")
+	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
 const nonEmptyString = host.string().min(1);
 const digest = host.string().regex(/^sha256:[a-f0-9]{64}$/);
 const operationId = host
@@ -29,6 +77,13 @@ const operationId = host
 	.max(128)
 	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
 const causalRevision = host.number().int().safe().nonnegative();
+const rawOrchestrationTelemetry = host
+	.unknown()
+	.superRefine((value, context) => {
+		for (const issue of orchestrationTelemetryResourceIssues(value)) {
+			context.addIssue({ code: "custom", ...issue });
+		}
+	});
 
 const featureStatus = host.enum([
 	"pending",
@@ -147,14 +202,16 @@ const failedReviewAssignmentResult = host
 		}
 	});
 
+// Artifact paths have no application-level maximum yet; preserve exact parity
+// by requiring only the existing non-empty string contract here.
 const artifact = host.object({ path: nonEmptyString }).strict();
 
 // A single public observation declares the validation and attests its result;
 // Flow derives status, command class, evidence identity, and source identity.
 const validationObservation = host
 	.object({
-		command: host.string().trim().min(1),
-		summary: host.string().trim().min(1),
+		command: host.string().trim().pipe(executionContextText),
+		summary: workflowProseInput,
 		startedAt: host.string().datetime({ offset: true }),
 		completedAt: host.string().datetime({ offset: true }),
 		exitCode: host.literal(0),
@@ -185,26 +242,44 @@ const validationObservation = host
 const planFeature = host
 	.object({
 		id: featureId,
-		title: nonEmptyString,
-		summary: nonEmptyString,
+		title: executionContextText,
+		summary: executionContextText,
 		status: featureStatus.optional(),
 		reviewDepth: featureReviewDepth.optional(),
-		targets: host.array(nonEmptyString).optional(),
-		validation: host.array(nonEmptyString).optional(),
-		dependsOn: host.array(featureId).optional(),
+		targets: host.array(executionContextText).max(MAX_PLAN_FEATURES).optional(),
+		validation: host
+			.array(executionContextText)
+			.max(MAX_PLAN_FEATURES)
+			.optional(),
+		dependsOn: host.array(featureId).max(MAX_PLAN_FEATURES).optional(),
 	})
 	.strict();
 
-const plan = host
+const planObject = host
 	.object({
-		summary: nonEmptyString,
-		overview: nonEmptyString,
-		requirements: host.array(nonEmptyString).default([]),
-		decisions: host.array(nonEmptyString).default([]),
+		summary: executionContextText,
+		overview: executionContextText,
+		requirements: host
+			.array(executionContextText)
+			.max(MAX_PLAN_FEATURES)
+			.default([]),
+		decisions: host
+			.array(executionContextText)
+			.max(MAX_PLAN_FEATURES)
+			.default([]),
 		finalReviewPolicy: finalReviewPolicy.optional(),
-		features: host.array(planFeature).min(1),
+		features: host.array(planFeature).min(1).max(MAX_PLAN_FEATURES),
 	})
 	.strict();
+
+const plan = host.preprocess((value, context) => {
+	const issues = planResourceIssues(value);
+	if (issues.length === 0) return value;
+	for (const issue of issues) {
+		context.addIssue({ code: "custom", ...issue });
+	}
+	return host.NEVER;
+}, planObject);
 
 const flowGuidanceToolInput = host
 	.object({ id: host.enum(FLOW_GUIDANCE_IDS) })
@@ -213,7 +288,7 @@ const FlowGuidanceToolArgs = flowGuidanceToolInput.shape;
 
 const flowPlanSaveToolInput = host
 	.object({
-		goal: host.string().trim().min(1).optional(),
+		goal: host.string().trim().pipe(goal).optional(),
 		plan: plan.optional(),
 	})
 	.strict();
@@ -272,7 +347,7 @@ const flowSessionCloseRequest = host.discriminatedUnion("mode", [
 			expectedRevision: causalRevision,
 			expectedSnapshotId: digest,
 			kind: host.enum(["completed", "deferred", "abandoned"]),
-			summary: host.string().trim().min(1).optional(),
+			summary: workflowProseInput.optional(),
 		})
 		.strict(),
 	host
@@ -297,9 +372,9 @@ const completionGuardShape = {
 
 const completedResultBaseShape = {
 	kind: host.literal("completed"),
-	summary: host.string().trim().min(1),
+	summary: workflowProseInput,
 	artifactsChanged: host.array(artifact).max(100).default([]),
-	orchestrationPasses: host.unknown().optional(),
+	orchestrationPasses: rawOrchestrationTelemetry.optional(),
 } as const;
 
 const featureCompleteRequest = host
@@ -323,10 +398,10 @@ const featureCompleteRequest = host
 			host
 				.object({
 					kind: host.literal("blocked"),
-					summary: host.string().trim().min(1),
+					summary: workflowProseInput,
 					review: failedReviewAssignmentResult,
-					resolutionHint: host.string().trim().min(1).optional(),
-					orchestrationPasses: host.unknown().optional(),
+					resolutionHint: workflowProseInput.optional(),
+					orchestrationPasses: rawOrchestrationTelemetry.optional(),
 				})
 				.strict(),
 		]),
@@ -340,7 +415,7 @@ const FlowFeatureCompleteToolArgs = flowFeatureCompleteToolInput.shape;
 
 const reviewPacket = host
 	.object({
-		summary: host.string().trim().min(1).max(2_000),
+		summary: workflowProseInput,
 		riskLenses: host
 			.array(host.string().trim().min(1).max(240))
 			.max(16)

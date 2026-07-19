@@ -100,10 +100,18 @@ Canonical history must also carry a non-null explicit closure: publication
 rejects closureless Session v4 state, and lookup treats a closureless archive as
 invalid rather than as retry authority.
 
-Plan admission serializes every feature's final and non-final execution shape
-with worst-case causal guard widths and rejects any projection above 12 KiB.
-Runtime repeats the check for invalid or hand-edited state. Execution scope is
-never truncated, paginated, or redirected to a detail fallback.
+Goal admission reserves enough of the 12 KiB execution envelope for the
+smallest valid plan and feature. Plan admission then serializes every feature's
+final and non-final execution shape with worst-case causal guard widths and
+rejects any projection above 12 KiB. It also verifies that the smallest feature
+and final reviewer projections fit the 3,000-byte reviewer envelope. Runtime
+repeats the checks for invalid or hand-edited state. Execution scope is never
+truncated, paginated, or redirected to a detail fallback.
+
+Plans contain at most 500 features, requirements, decisions, targets,
+validation commands, and dependencies per feature. Admission checks these
+cardinalities before copying or deeply validating caller input, and dependency
+cycle detection is iterative and bounded by the accepted graph size.
 
 Before scope references enter execution, reviewer, or detail projections, Flow
 normalizes them with NFKC and trimming. It deterministically digests POSIX
@@ -114,7 +122,8 @@ platform-independent and runs before bounded-view shortening.
 
 Hard UTF-8 budgets are tested for six-feature compact status (3,000 bytes),
 complete execution context (12,288 bytes), reviewer context (3,000 bytes),
-ordinary receipts (2,000 bytes), and delta pages (3,000 bytes).
+ordinary receipts (2,000 bytes), delta pages (3,000 bytes), workflow prose
+(2,000 bytes), and orchestration identifiers (128 bytes).
 
 ## Restricted evidence artifacts
 
@@ -125,26 +134,35 @@ Optional exact validation output is published beneath:
 ```
 
 The application ledger stores only `{ kind, digest, byteLength }`. Publication
-copies caller bytes, enforces an 8 MiB ceiling, uses owner-only directories and
-files, fsyncs before exclusive no-clobber publication, and verifies an existing
-target byte-for-byte on replay. Reads refuse symlinks and non-regular files and
-verify permissions, length, and SHA-256 before returning bytes inside the
-application boundary.
+copies caller bytes, enforces an 8 MiB ceiling, requests owner-only directories
+and files, fsyncs before exclusive no-clobber publication, and verifies an
+existing target byte-for-byte on replay. On POSIX, reads enforce the resulting
+owner-only mode; on Windows, Node's mode flags inherit filesystem ACL behavior
+and Flow does not claim equivalent owner/group/other enforcement. Reads refuse
+symlinks and non-regular files and verify the applicable permissions, length,
+and SHA-256 before returning bytes inside the application boundary.
 
 Artifact failures become one curated tool error. Raw bytes, absolute paths, and
 filesystem diagnostics never enter ordinary model-visible responses. Evidence
 blobs are not automatically deleted when active state is unreadable; no
-automatic cleanup or index exists. `.flow/.gitignore` finishes with Flow's canonical ignore block,
-while preserving maintainer-owned entries, so restricted evidence is not
-accidentally staged.
+automatic cleanup or index exists. `.flow/.gitignore` finishes with Flow's
+canonical ignore block, while preserving maintainer-owned entries, so
+restricted evidence is not accidentally staged.
 
 ## Threat model and rollback
 
 Flow defends against static symlinks/non-regular components, unsafe roots, and
 uncoordinated Flow writers through its existing workspace checks and session
-lock. A hostile same-UID process continuously swapping already validated parent
-directories is outside the current cooperative filesystem threat model; a
-future stronger boundary would require dirfd/openat-style platform support.
+lock. Evidence-directory creation and publication run in a short-lived helper
+whose working directory is pinned before mutation and whose canonical parent
+identity is revalidated. On POSIX, source and evidence reads additionally keep
+directory descriptors open and revalidate both descriptor and path identity;
+Windows uses path-identity checks before and after the read because Node does
+not expose a portable directory-handle equivalent there. These finite checks
+reject the covered ancestor substitutions, but they are not a secret boundary
+against a hostile same-UID process that can swap a path away and restore it
+between observations. A complete boundary against that actor would require
+openat-style relative operations or equivalent platform support.
 
 Compact and delta selection can be disabled while keeping the causal ledger and
 explicit detail view. Do not strip causal fields from a live session or rewrite

@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	chmod,
 	mkdir,
@@ -32,6 +33,7 @@ import {
 	archivedSessionFilename,
 	archivedSessionPath,
 	assertMutableWorkspaceRoot,
+	ensureFlowGitignore,
 	findArchivedSessionByOperationId,
 	flowDir,
 	historyDir,
@@ -58,7 +60,29 @@ import { systemTransitionEnvironment } from "../src/infrastructure/system/transi
 
 const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
 const OUTPUT_DIGEST = `sha256:${"d".repeat(64)}`;
+const EXPECTED_FLOW_GITIGNORE = [
+	"session.json",
+	"/session.json.*.*.tmp",
+	"history/",
+	"evidence/",
+	"session.lock/",
+	".gitignore",
+	"/.gitignore.*.*.tmp",
+	"",
+].join("\n");
+const temporaryTestPaths = new Set<string>();
 let operationSequence = 0;
+
+function trackTemporaryTestPath(path: string): string {
+	temporaryTestPaths.add(path);
+	return path;
+}
+
+afterAll(async () => {
+	for (const path of temporaryTestPaths) {
+		await rm(path, { recursive: true, force: true });
+	}
+});
 
 async function expectPinnedDirectorySwapRejected(
 	action: () => Promise<unknown>,
@@ -285,9 +309,48 @@ async function flowStatus(workspace: string, input: unknown = {}) {
 }
 
 async function tempWorkspace(): Promise<string> {
-	const root = join(tmpdir(), `flow-workspace-${crypto.randomUUID()}`);
+	const root = trackTemporaryTestPath(
+		join(tmpdir(), `flow-workspace-${crypto.randomUUID()}`),
+	);
 	await mkdir(root, { recursive: true });
 	return root;
+}
+
+async function gitExitCode(
+	workspace: string,
+	args: readonly string[],
+): Promise<number | null> {
+	const child = spawn("git", args, {
+		cwd: workspace,
+		stdio: ["ignore", "ignore", "pipe"],
+	});
+	const result = await waitForChild(child);
+	if (result.code !== 0 && result.code !== 1) {
+		throw new Error(
+			`git ${args.join(" ")} failed with ${result.code}: ${result.stderr}`,
+		);
+	}
+	return result.code;
+}
+
+async function initializeGitRepository(workspace: string): Promise<void> {
+	const code = await gitExitCode(workspace, ["init", "--quiet"]);
+	if (code !== 0)
+		throw new Error("git init did not create the test repository.");
+}
+
+async function isGitIgnored(
+	workspace: string,
+	relativePath: string,
+): Promise<boolean> {
+	return (
+		(await gitExitCode(workspace, [
+			"check-ignore",
+			"--quiet",
+			"--",
+			relativePath,
+		])) === 0
+	);
 }
 
 async function waitForPath(path: string, timeoutMs = 2_000): Promise<void> {
@@ -347,7 +410,9 @@ describe("Flow workspace persistence", () => {
 
 	test("canonicalizes workspace aliases and still rejects aliases to HOME", async () => {
 		const workspace = await tempWorkspace();
-		const alias = join(tmpdir(), `flow-workspace-alias-${crypto.randomUUID()}`);
+		const alias = trackTemporaryTestPath(
+			join(tmpdir(), `flow-workspace-alias-${crypto.randomUUID()}`),
+		);
 		await symlink(workspace, alias, "dir");
 		expect(assertMutableWorkspaceRoot(alias)).toBe(
 			assertMutableWorkspaceRoot(workspace),
@@ -1016,6 +1081,29 @@ describe("Flow workspace persistence", () => {
 		await rm(outside, { recursive: true, force: true });
 	});
 
+	test("quarantines invalid UTF-8 without changing bytes or blocking cleanup", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowDir(workspace), { recursive: true });
+		const unreadableBytes = Buffer.from([
+			0x7b, 0x22, 0x67, 0x6f, 0x61, 0x6c, 0x22, 0x3a, 0x22, 0xff, 0xfe, 0x22,
+			0x7d, 0x0a,
+		]);
+		await writeFile(sessionPath(workspace), unreadableBytes);
+		const digest = createHash("sha256").update(unreadableBytes).digest("hex");
+		const expectedPath = join(
+			historyDir(assertMutableWorkspaceRoot(workspace)),
+			`quarantine-${digest}.json`,
+		);
+
+		const quarantined = await quarantineUnreadableSession(workspace);
+
+		expect(quarantined).toBe(expectedPath);
+		expect(await readFile(expectedPath)).toEqual(unreadableBytes);
+		await expect(stat(sessionPath(workspace))).rejects.toMatchObject({
+			code: "ENOENT",
+		});
+	});
+
 	test("upgrades generated Flow gitignore to ignore runtime state", async () => {
 		const workspace = await tempWorkspace();
 		await mkdir(join(workspace, ".flow"), { recursive: true });
@@ -1025,9 +1113,93 @@ describe("Flow workspace persistence", () => {
 
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toBe(
-			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
+		).resolves.toBe(EXPECTED_FLOW_GITIGNORE);
+	});
+
+	test("ignores active Flow files and the root atomic-write residue namespace", async () => {
+		const workspace = await tempWorkspace();
+		await initializeGitRepository(workspace);
+		await ensureFlowGitignore(workspace);
+
+		for (const relativePath of [
+			".flow/session.json",
+			".flow/session.json.1234.2e8f80be-1e97-4628-a907-f505755f0d59.tmp",
+			".flow/history/closed.json",
+			".flow/evidence/artifact.json",
+			".flow/session.lock/owner.json",
+			".flow/.gitignore",
+			".flow/.gitignore.1234.2e8f80be-1e97-4628-a907-f505755f0d59.tmp",
+			".flow/session.json.not-a-pid.not-a-uuid.tmp",
+			".flow/session.json.foo.bar.baz.tmp",
+			".flow/.gitignore.not-a-pid.not-a-uuid.tmp",
+		]) {
+			expect(await isGitIgnored(workspace, relativePath)).toBe(true);
+		}
+		expect(await isGitIgnored(workspace, ".flow/session.json.1234.tmp")).toBe(
+			false,
 		);
+		expect(await isGitIgnored(workspace, ".flow/.gitignore.1234.tmp")).toBe(
+			false,
+		);
+		expect(
+			await isGitIgnored(
+				workspace,
+				".flow/nested/session.json.1234.2e8f80be-1e97-4628-a907-f505755f0d59.tmp",
+			),
+		).toBe(false);
+	});
+
+	test("requires a newline-delimited Flow ignore block and preserves custom entries", async () => {
+		const workspace = await tempWorkspace();
+		await initializeGitRepository(workspace);
+		await mkdir(flowDir(workspace), { recursive: true });
+		const malformedSuffix = [
+			"custom-cache/",
+			"notsession.json",
+			"/session.json.*.*.tmp",
+			"history/",
+			"evidence/",
+			"session.lock/",
+			".gitignore",
+			"/.gitignore.*.*.tmp",
+			"",
+		].join("\n");
+		await writeFile(
+			join(flowDir(workspace), ".gitignore"),
+			malformedSuffix,
+			"utf8",
+		);
+
+		expect(await isGitIgnored(workspace, ".flow/session.json")).toBe(false);
+		await ensureFlowGitignore(workspace);
+
+		await expect(
+			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
+		).resolves.toBe(`${malformedSuffix}${EXPECTED_FLOW_GITIGNORE}`);
+		expect(await isGitIgnored(workspace, ".flow/session.json")).toBe(true);
+	});
+
+	test("migrates a trailing legacy Flow ignore block without dropping custom entries", async () => {
+		const workspace = await tempWorkspace();
+		await mkdir(flowDir(workspace), { recursive: true });
+		await writeFile(
+			join(flowDir(workspace), ".gitignore"),
+			[
+				"custom-cache/",
+				"session.json",
+				"history/",
+				"session.lock/",
+				".gitignore",
+				"",
+			].join("\n"),
+			"utf8",
+		);
+
+		await ensureFlowGitignore(workspace);
+
+		await expect(
+			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
+		).resolves.toBe(`custom-cache/\n${EXPECTED_FLOW_GITIGNORE}`);
 	});
 
 	test.skipIf(process.platform === "win32")(
@@ -1071,9 +1243,7 @@ if (failureCode !== "EIO") process.exitCode = 2;`,
 			expect(await waitForChild(child)).toEqual({ code: 0, stderr: "" });
 			await expect(
 				readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-			).resolves.toBe(
-				"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
-			);
+			).resolves.toBe(EXPECTED_FLOW_GITIGNORE);
 		},
 	);
 
@@ -2361,9 +2531,7 @@ if (failureCode !== "EIO") process.exitCode = 2;`,
 		).toEqual(close);
 		await expect(
 			readFile(join(workspace, ".flow", ".gitignore"), "utf8"),
-		).resolves.toBe(
-			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
-		);
+		).resolves.toBe(EXPECTED_FLOW_GITIGNORE);
 	});
 
 	test("a completed session must be archived before starting a new goal", async () => {
@@ -2560,9 +2728,7 @@ describe("invalid session handling", () => {
 		expect(archived.some((name) => name.startsWith("quarantine-"))).toBe(true);
 		await expect(
 			readFile(join(flowDir(workspace), ".gitignore"), "utf8"),
-		).resolves.toBe(
-			"session.json\nhistory/\nevidence/\nsession.lock/\n.gitignore\n",
-		);
+		).resolves.toBe(EXPECTED_FLOW_GITIGNORE);
 
 		const next = await flowPlanSave(workspace, { goal: "Recover cleanly" });
 		expect(next.status).toBe("ok");

@@ -27,7 +27,7 @@ These instructions run in two contexts, and only one of them can load helpers:
   evidence, and record a coverage gap for any judgment that would have needed
   a helper skill or a command run. The bundled hidden reviewer prompt uses the
   canonical role-safe contract in
-  `references/hidden-reviewer-contract.md`.
+  `flow-review/references/hidden-reviewer-contract.md`.
 
 ## Start
 
@@ -46,7 +46,7 @@ These instructions run in two contexts, and only one of them can load helpers:
 - Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
 - For final review, also compare the original goal, full feature list, completed
   feature evidence, changed artifacts, and final validation against the
-  convergence checklist in `references/review-rubric.md`.
+  convergence checklist in `flow-review/references/review-rubric.md`.
 - Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
 - In manager context, request `flow-test` through `flow_guidance` for validation-heavy,
   regression-sensitive, browser QA, or unclear coverage reviews. If it is

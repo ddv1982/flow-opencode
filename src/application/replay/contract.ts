@@ -69,7 +69,6 @@ export const SourceCategorySchema = z.enum([
 	"supplied_observation",
 	"replay_derived",
 ]);
-export type SourceCategory = z.infer<typeof SourceCategorySchema>;
 
 export const AvailabilityReasonSchema = z.enum([
 	"not_recorded",
@@ -78,7 +77,6 @@ export const AvailabilityReasonSchema = z.enum([
 	"privacy_redacted",
 	"unreconciled",
 ]);
-export type AvailabilityReason = z.infer<typeof AvailabilityReasonSchema>;
 
 export const UnsignedAvailabilitySchema = z.discriminatedUnion("status", [
 	z.strictObject({
@@ -90,7 +88,6 @@ export const UnsignedAvailabilitySchema = z.discriminatedUnion("status", [
 		reason: AvailabilityReasonSchema,
 	}),
 ]);
-export type UnsignedAvailability = z.infer<typeof UnsignedAvailabilitySchema>;
 
 export const REVIEW_LIFECYCLE_AGGREGATE_METRICS = [
 	"review_assignment_attempt_count",
@@ -146,13 +143,11 @@ export const AggregateMetricSchema = z.enum([
 	"terminal_decision_count",
 	...REVIEW_LIFECYCLE_AGGREGATE_METRICS,
 ]);
-export type AggregateMetric = z.infer<typeof AggregateMetricSchema>;
 
 export const ApprovedAggregateFactSchema = z.strictObject({
 	metric: AggregateMetricSchema,
 	availability: UnsignedAvailabilitySchema,
 });
-export type ApprovedAggregateFact = z.infer<typeof ApprovedAggregateFactSchema>;
 
 export const SourceProjectionSchema = z.strictObject({
 	category: SourceCategorySchema,
@@ -411,7 +406,6 @@ export const ReplayEventSchema = z.discriminatedUnion("kind", [
 	MutationRecoveryEventSchema,
 	TerminalDecisionEventSchema,
 ]);
-export type ReplayEvent = z.infer<typeof ReplayEventSchema>;
 
 export const ReplayScenarioSchema = z
 	.strictObject({
@@ -437,6 +431,16 @@ export const ReplayScenarioSchema = z
 		let priorSeq = -1;
 		let priorAtMs = -1;
 		for (const [index, event] of scenario.events.entries()) {
+			if (
+				event.kind === "session_state" &&
+				event.sessionId !== scenario.sessionId
+			) {
+				context.addIssue({
+					code: "custom",
+					path: ["events", index, "sessionId"],
+					message: "Session state must match the scenario session identity.",
+				});
+			}
 			if (event.seq <= priorSeq) {
 				context.addIssue({
 					code: "custom",
