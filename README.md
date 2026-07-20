@@ -1,27 +1,28 @@
 # Flow Plugin for OpenCode
 
 `opencode-plugin-flow` gives OpenCode a small, durable workflow for coding work
-that benefits from an approved plan and an independent review. Flow v6 is
-serial by design:
+that benefits from an approved plan and an independent review. Flow v6 keeps
+its durable lifecycle serial while allowing bounded parallel implementation
+inside one active feature:
 
 ```text
-plan → approve → run one feature → validate → one independent review → close
+plan → approve → one active feature → optional worker wave → integrate → validate → independent review → next or close
 ```
 
 For multi-feature plans, the run/validate/review step repeats one feature at a
-time. State lives in `.flow/session.json`, so the workflow can resume after a
-restart or context change without turning Flow into a general orchestration
-framework.
+time. Only the implementation work inside that run may fan out. State lives in
+`.flow/session.json`, so the workflow can resume after a restart or context
+change without turning Flow into a general orchestration framework.
 
 ## Install
 
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.0.0 --global --force
+opencode plugin opencode-plugin-flow@6.1.0 --global --force
 ```
 
-Omit `--global` for project scope. To update, replace `6.0.0` with the new exact
+Omit `--global` for project scope. To update, replace `6.1.0` with the new exact
 release and rerun the command. OpenCode owns package installation and config
 mutation; Flow does not scan projects, delete caches, elect versions, or repair
 configuration.
@@ -31,7 +32,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.0.0"]
+  "plugin": ["opencode-plugin-flow@6.1.0"]
 }
 ```
 
@@ -75,16 +76,34 @@ and only one run may be active.
 
 For each run:
 
-1. The manager implements the feature.
-2. `flow_validation_start` binds the current run and workspace-content digest
+1. The manager implements the feature serially by default. Flow guidance permits
+   an ephemeral worker cohort only when it can name two or three genuinely
+   independent slices with exact, non-overlapping ownership.
+2. Each `flow-worker` instance returns its bounded contribution and evidence to
+   the manager. Workers cannot delegate, operate outside the project, call Flow
+   tools, or approve their own work. One targeted follow-up cohort may address a
+   concrete gap, retry, or consequential verification; automatic further waves
+   are not allowed.
+3. The manager inspects and integrates the combined work, accepts or rejects
+   worker evidence, and remains the only owner of lifecycle mutations. Shared
+   contracts and integration files stay manager-owned.
+4. `flow_validation_start` binds the current run and workspace-content digest
    to the exact next Bash command.
-3. OpenCode observes that command's structured exit status and output
+5. OpenCode observes that command's structured exit status and output
    completeness, then records the observation directly in Session v5.
-4. `flow_review_start` records the changed artifact paths, selects applicable
+6. `flow_review_start` records the changed artifact paths, selects applicable
    passing validation, and creates one durable assignment for the hidden
    `flow-reviewer`.
-5. `flow_feature_complete` records the review result and marks the run complete
+7. `flow_feature_complete` records the review result and marks the run complete
    or blocked.
+
+The worker wave is an execution convenience, not another lifecycle. Flow writes
+no wave ledger, manifest, or sidecar file. If execution is interrupted, the
+manager recovers from ordinary Flow status and worktree inspection, then reruns
+or finishes uncovered work. The manager always performs combined authoritative
+validation before the one independent review. The cohort limit is a guidance
+contract, not a scheduler or admission gate; the runtime enforces worker
+permissions and the existing one-run validation/review boundary.
 
 The final runnable feature derives a `final` review instead of adding a second
 review pass. It requires broad passing validation for current workspace
@@ -106,9 +125,13 @@ as deferred or abandoned.
 | `/flow-review` | Dispatch the independent read-only reviewer. |
 | `/flow-status` | Inspect the active session and next action. |
 
-Flow registers exactly one hidden worker: `flow-reviewer`. It can read reviewer
-status but cannot edit files, run Bash, load skills, delegate work, or call
-state-changing Flow tools. The root manager owns every mutation.
+Flow registers exactly two hidden subagents: `flow-worker` and
+`flow-reviewer`. The implementation worker is reusable across a bounded wave;
+edits and Bash require host approval, while external-directory access, skill
+loading, delegation, and every Flow tool are denied. The reviewer remains
+read-only and can read reviewer status, but cannot edit files, run Bash, load
+skills, delegate work, or call state-changing Flow tools. The root manager owns
+the lifecycle, integration, and evidence acceptance.
 
 ## Tools
 
@@ -133,6 +156,17 @@ stable operation ID. Repeating the exact accepted operation is idempotent;
 reusing its ID for different input fails. `flow_guidance` is the one exception:
 it accepts `{ "id": "..." }` and returns the guide as Markdown.
 
+## Guides
+
+Flow exposes exactly four concise guides through `flow_guidance`:
+
+| Guide | Purpose |
+| --- | --- |
+| `flow` | Orient the manager to the complete lifecycle and authority boundary. |
+| `flow-plan` | Create a small approved feature DAG. |
+| `flow-run` | Execute one feature, optionally using a bounded worker wave. |
+| `flow-review` | Perform the run's independent review assignment. |
+
 ## What the runtime enforces
 
 - Session v5 is the only active document format supported by Flow v6. Finish or
@@ -140,7 +174,8 @@ it accepts `{ "id": "..." }` and returns the guide as Markdown.
 - Lifecycle order is carried by revisions and durable record order, not UTC
   timestamps or caller clocks.
 - Plans are immutable after approval, dependencies must be acyclic, and only one
-  run can be active.
+  durable run can be active. An ephemeral worker wave does not create additional
+  runs or concurrent Flow state.
 - Validation must be observed from the exact armed Bash command. Failed,
   incomplete, stale-source, or mismatched observations cannot authorize review.
 - Each run has one review. Final-feature review requires broad validation;
@@ -158,10 +193,12 @@ it accepts `{ "id": "..." }` and returns the guide as Markdown.
 - Duplicate runtime copies for one project fail closed. This is a safety guard,
   not version election or automatic configuration repair.
 
-Flow deliberately does not include orchestration profiles, optional-worker
-admission, audit-ledger rendering, replay reports, detached validation receipts,
-or automatic activation and cache repair. Those systems increased protocol
-surface without improving the core serial workflow.
+Flow deliberately does not include orchestration profiles, worker admission,
+wave telemetry or ledgers, audit-ledger rendering, replay reports, detached
+validation receipts, or automatic activation and cache repair. Bounded waves
+restore useful host-native parallel contribution without reviving that
+machinery. They are a capability boundary, not a claim of measured performance
+improvement.
 
 ## Development
 
@@ -181,7 +218,8 @@ Maintained documentation starts at [docs/index.md](docs/index.md). See
 [development](docs/development.md) for repository structure and focused checks,
 [troubleshooting](docs/troubleshooting.md) for recovery, and
 [ADR 0005](docs/adr/0005-flow-v6-session-v5-simplicity-first.md) for the v6
-tradeoffs.
+tradeoffs. [ADR 0006](docs/adr/0006-bounded-intra-feature-waves.md) defines the
+bounded intra-feature wave amendment.
 
 ## License
 

@@ -17,6 +17,7 @@ const SURFACES: readonly FlowPromptSurfaceName[] = [
 	"flow-review",
 	"flow-status",
 	"flow-reviewer",
+	"flow-worker",
 ];
 
 describe("production Flow prompts", () => {
@@ -34,7 +35,7 @@ describe("production Flow prompts", () => {
 		}
 	});
 
-	test("assembles six direct runtime surfaces with no evaluator variants", () => {
+	test("assembles seven direct runtime surfaces with no evaluator variants", () => {
 		for (const surface of SURFACES) {
 			expect(compileFlowPromptSurface(surface).trim().length).toBeGreaterThan(
 				40,
@@ -73,6 +74,16 @@ describe("production Flow prompts", () => {
 		expect(run).toContain("reset the feature");
 	});
 
+	test("launches only bounded host-native worker waves", () => {
+		const run = compileFlowPromptSurface("flow-run");
+		expect(run).toContain("Work serially by default");
+		expect(run).toMatch(/two or three\s+`flow-worker` instances/);
+		expect(run).toContain("Launch the cohort concurrently");
+		expect(run).toContain("At most one targeted follow-up wave");
+		expect(run).toMatch(/Do not\s+start an automatic third wave/);
+		expect(run).toMatch(/create\s+no manifest, sidecar, Session field/);
+	});
+
 	test("reserves independent review and denies reviewer mutation", () => {
 		const command = compileFlowPromptSurface("flow-review");
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
@@ -83,5 +94,30 @@ describe("production Flow prompts", () => {
 		expect(reviewer).toContain("actual changed artifacts");
 		expect(reviewer).toContain("Every blocker must cite");
 		expect(reviewer).toContain("Return exactly one assignment result");
+	});
+
+	test("bounds worker scope and requires one structured handoff", () => {
+		const worker = compileFlowPromptSurface("flow-worker");
+		expect(worker).toContain("single slice explicitly assigned");
+		expect(worker).toContain("Preserve all unrelated work");
+		expect(worker).toContain("run concurrently with sibling workers");
+		expect(worker).toContain("Do not call any `flow_*` tool");
+		expect(worker).toContain("Do not delegate, spawn subtasks");
+		expect(worker).toContain("Do not stage, commit, push, publish");
+		expect(worker).toContain("exact, non-overlapping write paths");
+		expect(worker).toContain("stop and return a partial or blocked handoff");
+		expect(worker).toContain("checks are advisory");
+		expect(worker).toContain("authoritative combined validation");
+		expect(worker).toContain("Return exactly one concise handoff");
+		for (const heading of [
+			"## Status",
+			"## Scope & coverage",
+			"## Findings / changed paths",
+			"## Checks",
+			"## Gaps & risks",
+			"## Integration notes",
+		]) {
+			expect(worker).toContain(heading);
+		}
 	});
 });

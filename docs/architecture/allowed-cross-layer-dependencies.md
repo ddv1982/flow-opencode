@@ -26,8 +26,8 @@ flowchart LR
   observation, the project-scoped duplicate guard, and result rendering.
 - `src/guidance/**` and `skills/**` own workflow judgment embedded in the
   package.
-- Prompt surfaces compile commands and the one reviewer role from concise
-  guidance; they do not own lifecycle state.
+- Prompt surfaces compile commands and the hidden worker and reviewer roles
+  from concise guidance; they do not own lifecycle state.
 - `src/index.ts` is the package entrypoint.
 
 There is no runtime/adapters compatibility tree or activation/distribution

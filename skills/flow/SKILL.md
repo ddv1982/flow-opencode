@@ -6,8 +6,10 @@ description: Manage a Flow goal from planning through implementation, validation
 # Flow
 
 Flow is a small state ledger around ordinary coding work. The root manager owns
-the session and every state-changing `flow_*` call. The reserved
-`flow-reviewer` independently reviews; it never edits or mutates Flow state.
+the session, every state-changing `flow_*` call, integration, validation,
+review dispatch, reset, and closure. Bounded `flow-worker` instances may
+contribute disjoint work inside the active feature. The reserved `flow-reviewer`
+independently reviews; it never edits or mutates Flow state.
 
 ## Route from status
 
@@ -31,7 +33,8 @@ report that the plugin is not fully loaded instead of simulating state changes.
 
 - Approved plans do not change. Reset affected work or close the session before
   changing direction.
-- Only one feature runs at a time.
+- Only one durable feature run is active at a time. Conversation-local worker
+  waves do not create additional runs or Flow state.
 - Work stays inside the active feature and preserves unrelated user changes.
 - A passing feature needs successful current-source validation and one
   independent reviewer assignment. The final feature uses broad validation and

@@ -14,9 +14,12 @@ v5. The public overview and installation instructions live in the
   layer boundaries; its older lifecycle decision is superseded.
 - [ADR 0005](adr/0005-flow-v6-session-v5-simplicity-first.md) — the current
   simplicity-first lifecycle and its intentional tradeoffs.
+- [ADR 0006](adr/0006-bounded-intra-feature-waves.md) — bounded host-native
+  worker waves inside one serial durable feature lifecycle.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 
 Completed implementation plans, QA-scribe case-study material, prompt labs,
 replay reports, causal-transport reports, and the Session v4 review/harness ADRs
 were removed in v6. They are repository history, not current product contracts.
+The bounded wave contract does not restore those systems.

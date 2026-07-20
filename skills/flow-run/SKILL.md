@@ -5,9 +5,10 @@ description: Implement, validate, independently review, and record one approved 
 
 # Flow Run
 
-Work on exactly one approved feature. The root manager owns edits and every
-state-changing `flow_*` call; the reserved `flow-reviewer` owns the independent
-review.
+Work on exactly one approved feature. The root manager owns the session, every
+state-changing `flow_*` call, integration, validation, review dispatch, reset,
+and closure. Bounded `flow-worker` instances may contribute disjoint work; the
+reserved `flow-reviewer` owns the independent review.
 
 ## Start and scope
 
@@ -33,9 +34,35 @@ normally be one stable Markdown artifact; JSON requires an explicit request.
 Do not stage, commit, push, publish, or mutate releases unless the user asks for
 that separate action.
 
+## Bounded worker waves
+
+Work serially by default. After manager orientation, fan out only when at least
+two genuinely independent slices can be named. Run one cohort of two or three
+`flow-worker` instances at a time. Launch the cohort concurrently through
+OpenCode's native task/subagent facility; do not wait for one slice before
+launching the next. Each prompt must name a stable slice id, the exact outcome
+and read or write scope, expected coverage and checks, dependencies, and a stop
+condition. Edit scopes must be exact and non-overlapping. Shared contracts,
+lockfiles, and generated outputs remain manager-owned unless one worker
+receives the whole relevant scope.
+
+Workers cannot call Flow tools or spawn children. Each returns one concise
+handoff containing status, scope and coverage, evidence or changed paths,
+checks, gaps and risks, and integration notes. Missing, partial, or blocked
+output remains an explicit coverage gap; worker checks are advisory.
+
+After all workers stop, inspect the combined diff and evidence and reconcile
+conflicts before validation. At most one targeted follow-up wave may address a
+failed slice, newly unlocked dependency, or material claim verification. Do not
+start an automatic third wave. Coordination stays in the conversation: create
+no manifest, sidecar, Session field, durable handoff, or recovery ledger. After
+an interruption, inspect Flow status and the worktree and treat partial worker
+edits as untrusted.
+
 ## Validate
 
-Choose checks from the changed behavior and risk:
+Only validate after every worker has stopped and integration is settled. Choose
+checks from the changed behavior and risk:
 
 - Prefer focused behavioral tests that would fail without the change.
 - Cover persistence, integration, API, browser, accessibility, package, or

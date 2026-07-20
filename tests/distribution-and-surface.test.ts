@@ -85,14 +85,17 @@ afterEach(async () => {
 });
 
 describe("Flow v6 distribution surface", () => {
-	test("ships ten tools, five commands, one reviewer, and four guides", async () => {
+	test("ships ten tools, five commands, two hidden agents, and four guides", async () => {
 		expect(new Set(Object.keys(createRegisteredTools()))).toEqual(
 			new Set(TOOL_NAMES),
 		);
 
 		const config = createFlowCoreConfigEntries();
 		expect(Object.keys(config.command).sort()).toEqual([...COMMAND_NAMES]);
-		expect(Object.keys(config.agent)).toEqual(["flow-reviewer"]);
+		expect(Object.keys(config.agent)).toEqual(["flow-reviewer", "flow-worker"]);
+		for (const agent of Object.values(config.agent)) {
+			expect(agent.hidden).toBe(true);
+		}
 
 		expect(FLOW_GUIDANCE_IDS).toEqual([
 			"flow",
@@ -106,9 +109,10 @@ describe("Flow v6 distribution surface", () => {
 		expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([...TOOL_NAMES]);
 	});
 
-	test("keeps reviewer permissions read-only and manager dispatch separate", () => {
+	test("isolates worker permissions while keeping manager and reviewer dispatch separate", () => {
 		const { agent, command } = createFlowCoreConfigEntries();
 		const reviewer = agent["flow-reviewer"];
+		const worker = agent["flow-worker"];
 		expect(reviewer).toBeDefined();
 		expect(reviewer?.hidden).toBe(true);
 		expect(reviewer?.permission).toMatchObject({
@@ -120,6 +124,19 @@ describe("Flow v6 distribution surface", () => {
 			"flow_*": "deny",
 			flow_status: "allow",
 		});
+		expect(worker).toBeDefined();
+		expect(worker?.hidden).toBe(true);
+		expect(worker?.mode).toBe("subagent");
+		expect(worker?.permission).toEqual({
+			edit: "ask",
+			bash: "ask",
+			external_directory: "deny",
+			skill: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+		});
+		expect(worker).not.toHaveProperty("model");
+		expect(worker).not.toHaveProperty("steps");
 
 		for (const name of [
 			"flow-auto",
@@ -134,6 +151,11 @@ describe("Flow v6 distribution surface", () => {
 			subtask: true,
 			agent: "flow-reviewer",
 		});
+		expect(
+			Object.values(command).some(
+				(entry) => "agent" in entry && entry.agent === "flow-worker",
+			),
+		).toBe(false);
 	});
 });
 

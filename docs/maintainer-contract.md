@@ -4,15 +4,17 @@ This document defines the small set of invariants Flow v6 must preserve.
 
 ## Product boundary
 
-Flow is a serial workflow plugin, not a general orchestration framework. It
-owns planning state, one active run, observed validation, one independent
-review, reset, and closure. It exposes ten tools, five commands, and one hidden
-read-only reviewer.
+Flow is a serial durable workflow plugin, not a general orchestration framework.
+It owns planning state, one active run, observed validation, one independent
+review, reset, and closure. Implementation inside that run may use one bounded,
+ephemeral host-native worker wave. Flow exposes ten tools, five commands, four
+guides, and two hidden subagents.
 
 Flow does not own plugin installation, automatic activation, cache cleanup,
 configuration repair, optional worker admission, audit schemas, benchmark
-promotion, replay reporting, narrow correction protocols, or cross-version
-active-state migration.
+promotion, replay reporting, narrow correction protocols, durable wave state,
+worker recovery, concurrent active features, or cross-version active-state
+migration.
 
 ## Session v5
 
@@ -59,6 +61,35 @@ workspace or Flow state. A failed verdict requires an evidence-backed blocking
 finding; a passed verdict cannot contain one.
 Observed-but-unsubmitted work fails closed.
 
+## Bounded worker waves
+
+Serial means one durable active feature run and one authoritative combined
+validation/review chain. The manager implements serially by default. It may use
+a bounded wave only when it can define two or three genuinely independent
+slices with exact, non-overlapping ownership.
+
+- One initial cohort is permitted, followed by at most one targeted cohort for
+  a named gap, retry, newly available dependency, or consequential verification.
+- The reusable hidden `flow-worker` may edit or run Bash only with host approval.
+  External-directory access, skill loading, delegation, and every Flow tool are
+  denied. Nested waves are impossible by permission.
+- A worker returns a bounded contribution and evidence; it cannot accept
+  evidence, approve work, validate the aggregate, dispatch review, or mutate
+  lifecycle state.
+- The manager owns slice selection, shared and integration files, combined diff
+  inspection, evidence acceptance, integration, authoritative validation, and
+  review dispatch.
+- The hidden `flow-reviewer` remains independent of implementation workers and
+  receives only the runtime-created assignment after combined validation.
+
+Wave state is intentionally ephemeral. Flow does not persist a wave manifest,
+handoff ledger, telemetry record, admission decision, or recovery protocol in
+Session or a sidecar. On restart, ordinary Flow status and worktree inspection
+are authoritative; missing coverage is rerun or completed serially. Cohort
+eligibility and count are guidance contracts, not runtime admission. Runtime
+enforcement remains the worker permission envelope plus the existing one-run,
+validation, and review invariants.
+
 ## Persistence
 
 - Workspace resolution is canonical and project-scoped.
@@ -101,10 +132,12 @@ Tools:
 - `flow_feature_reset`
 - `flow_session_close`
 
-The only hidden agent is `flow-reviewer`. It denies edit, Bash, skill loading,
-delegation, and all Flow tools except reviewer status. User configuration may
-select its model and step budget with `OPENCODE_FLOW_REVIEWER_MODEL` and
-`OPENCODE_FLOW_REVIEWER_STEPS`.
+The hidden agents are exactly `flow-worker` and `flow-reviewer`.
+`flow-worker` requires approval for edit and Bash and denies external-directory
+access, skill loading, delegation, and all Flow tools. `flow-reviewer` denies
+edit, Bash, skill loading, delegation, and all Flow tools except reviewer
+status. User configuration may select the reviewer's model and step budget with
+`OPENCODE_FLOW_REVIEWER_MODEL` and `OPENCODE_FLOW_REVIEWER_STEPS`.
 
 Duplicate plugin instances for the same canonical project fail closed through a
 small process-global guard. Instances for different projects do not conflict.
@@ -122,4 +155,6 @@ targeted platform persistence coverage, dependency and workflow checks, a real
 OpenCode live smoke, package smoke, and release publication. Removed lifecycle
 soaks, prompt evaluators, harness promotion, replay, and cross-version active
 session gates must not return without a new ADR that removes an equal or larger
-amount of product machinery.
+amount of product machinery. Bounded-wave coverage should test the real agent
+permissions, manager guidance, and host-visible configuration without adding a
+scheduler or tests-of-tests.

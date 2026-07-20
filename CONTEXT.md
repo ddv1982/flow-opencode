@@ -1,7 +1,8 @@
 # Flow Runtime Context
 
-Flow coordinates one approved plan through serial execution, observed
-validation, independent review, and explicit closure.
+Flow coordinates one approved plan through a serial durable lifecycle, observed
+validation, independent review, and explicit closure. Implementation inside one
+active feature may use an ephemeral bounded worker wave.
 
 ## Versions
 
@@ -21,7 +22,14 @@ attempt number, validation observations, review assignment, result, artifacts,
 and state. Avoid separate “history entry” or copied feature-status concepts.
 
 **Active run**: The one run currently allowed to receive validation or review.
-Flow has no lanes or concurrent execution state.
+Flow has no lanes, concurrent active features, or durable worker execution
+state.
+
+**Bounded wave**: An optional ephemeral cohort of two or three `flow-worker`
+instances contributing exact, non-overlapping slices inside one active run. One
+targeted follow-up cohort may close a concrete gap, retry, or verification need.
+A wave is not Session state and cannot approve, validate, review, or complete a
+feature.
 
 **Validation observation**: Host-observed command, scope, source digest, exit
 code, output digest, and completeness stored directly on the active run. It is
@@ -59,6 +67,15 @@ converges after interruption by session and operation identity.
 
 ## Ownership
 
-The root manager owns planning, implementation, validation dispatch, state
-changes, reset, and closure. `flow-reviewer` is the only hidden agent and is
-read-only. Guidance supplies judgment; the runtime enforces lifecycle safety.
+The root manager owns planning, lifecycle state, slice selection, integration,
+evidence acceptance, authoritative validation dispatch, reset, and closure. It
+implements serially by default and may delegate exact disjoint contributions to
+the hidden `flow-worker`; those workers cannot call Flow tools, delegate again,
+or approve work. The hidden `flow-reviewer` remains independent and read-only.
+Guidance supplies wave and review judgment; the runtime enforces lifecycle
+safety.
+
+Wave coordination is conversational and disposable. Flow persists no manifest,
+handoff ledger, telemetry, or worker recovery state. After interruption, the
+manager uses existing status plus worktree inspection and reruns or completes
+uncovered slices before combined validation.

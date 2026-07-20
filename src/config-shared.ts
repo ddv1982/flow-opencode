@@ -46,6 +46,21 @@ export const FLOW_CORE_AGENTS = {
 			flow_status: "allow",
 		},
 	},
+	"flow-worker": {
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Bounded worker for one read-only evidence or exact-scope implementation slice.",
+		prompt: compileFlowPromptSurface("flow-worker"),
+		permission: {
+			edit: "ask",
+			bash: "ask",
+			external_directory: "deny",
+			skill: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+		},
+	},
 } satisfies Record<string, FlowAgentConfig>;
 
 export const FLOW_CORE_COMMANDS = {
@@ -112,6 +127,13 @@ export function createFlowCoreConfigEntries(options?: {
 				...(steps ? { steps } : {}),
 				permission: {
 					...FLOW_CORE_AGENTS["flow-reviewer"].permission,
+					task: { "*": "deny" },
+				},
+			},
+			"flow-worker": {
+				...FLOW_CORE_AGENTS["flow-worker"],
+				permission: {
+					...FLOW_CORE_AGENTS["flow-worker"].permission,
 					task: { "*": "deny" },
 				},
 			},

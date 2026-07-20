@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { FLOW_CORE_AGENTS, FLOW_CORE_COMMANDS } from "../src/config-shared.js";
+import {
+	FLOW_CORE_AGENTS,
+	FLOW_CORE_COMMANDS,
+	type FlowAgentConfig,
+} from "../src/config-shared.js";
+import { FLOW_GUIDANCE_IDS } from "../src/guidance/ids.js";
 import FlowPlugin from "../src/index.js";
 
 function section(markdown: string, heading: string): string {
@@ -57,43 +62,69 @@ describe("Flow v6 documentation contract", () => {
 		expect(block).toBeDefined();
 		expect(JSON.parse(block ?? "null")).toEqual({
 			$schema: "https://opencode.ai/config.json",
-			plugin: ["opencode-plugin-flow@6.0.0"],
+			plugin: ["opencode-plugin-flow@6.1.0"],
 		});
 		expect(install).toContain("https://opencode.ai/docs/plugins/");
 		expect(install).toContain(
-			"opencode plugin opencode-plugin-flow@6.0.0 --global --force",
+			"opencode plugin opencode-plugin-flow@6.1.0 --global --force",
 		);
 		expect(install).toContain("Flow has no installer or activation CLI");
 		expect(install).not.toContain("npx");
 		expect(install).not.toContain("activation-check");
 	});
 
-	test("keeps command, tool, and hidden-agent inventories source-derived", async () => {
+	test("keeps command, tool, guide, and hidden-agent inventories source-derived", async () => {
 		const readme = await readFile("README.md", "utf8");
 		const commands = firstColumnCodeValues(section(readme, "Commands"))
 			.map((value) => value.split(/\s+/, 1)[0]?.replace(/^\//, "") ?? "")
 			.sort();
 		const tools = firstColumnCodeValues(section(readme, "Tools")).sort();
+		const guides = firstColumnCodeValues(section(readme, "Guides")).sort();
+		const agents: Readonly<Record<string, FlowAgentConfig>> = FLOW_CORE_AGENTS;
+		const worker = agents["flow-worker"];
 
 		expect(commands).toEqual(Object.keys(FLOW_CORE_COMMANDS).sort());
 		expect(tools).toEqual(await registeredToolNames());
 		expect(tools).toHaveLength(10);
-		expect(Object.keys(FLOW_CORE_AGENTS)).toEqual(["flow-reviewer"]);
+		expect(guides).toEqual([...FLOW_GUIDANCE_IDS].sort());
+		expect(guides).toHaveLength(4);
+		expect(Object.keys(FLOW_CORE_AGENTS).sort()).toEqual([
+			"flow-reviewer",
+			"flow-worker",
+		]);
 		expect(FLOW_CORE_AGENTS["flow-reviewer"].hidden).toBe(true);
-		expect(readme).toContain("exactly one hidden worker");
+		expect(worker?.hidden).toBe(true);
+		expect(worker?.permission).toMatchObject({
+			edit: "ask",
+			bash: "ask",
+			external_directory: "deny",
+			skill: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+		});
+		expect(worker?.permission?.flow_status).not.toBe("allow");
+		expect(readme).toContain("exactly two hidden subagents");
 		expect(readme).toContain("one independent review");
+		expect(readme).toContain("two or three genuinely");
+		expect(readme).toContain("no wave ledger, manifest, or sidecar file");
 	});
 
 	test("keeps only the current concise documentation set", async () => {
 		const files = (await markdownFiles("docs")).map((path) =>
 			relative(".", path),
 		);
-		const [index, context, adr, changelog] = await Promise.all([
-			readFile("docs/index.md", "utf8"),
-			readFile("CONTEXT.md", "utf8"),
-			readFile("docs/adr/0005-flow-v6-session-v5-simplicity-first.md", "utf8"),
-			readFile("CHANGELOG.md", "utf8"),
-		]);
+		const [index, context, adr, waveAdr, maintainer, changelog] =
+			await Promise.all([
+				readFile("docs/index.md", "utf8"),
+				readFile("CONTEXT.md", "utf8"),
+				readFile(
+					"docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+					"utf8",
+				),
+				readFile("docs/adr/0006-bounded-intra-feature-waves.md", "utf8"),
+				readFile("docs/maintainer-contract.md", "utf8"),
+				readFile("CHANGELOG.md", "utf8"),
+			]);
 
 		expect(files.filter((path) => path.startsWith("docs/plan/"))).toEqual([]);
 		expect(files).not.toContain("docs/causal-state.md");
@@ -110,11 +141,22 @@ describe("Flow v6 documentation contract", () => {
 			code: "ENOENT",
 		});
 		expect(index).toContain("Flow v6 and Session\nv5");
+		expect(index).toContain("ADR 0006");
 		expect(context).toContain("Revision");
 		expect(context).toContain("not wall-clock time");
+		expect(context).toContain("Bounded wave");
+		expect(context).toContain("no manifest");
 		expect(adr).toContain("## Intentional tradeoffs");
 		expect(adr).toContain("ten tools, five commands, and one hidden");
-		expect(changelog).toContain("## [6.0.0] - 2026-07-21");
+		expect(waveAdr).toContain("Date: 2026-07-21");
+		expect(waveAdr).toContain("Accepted. Amends ADR 0005");
+		expect(waveAdr).toContain("does not supersede");
+		expect(waveAdr).toContain("## Guardrail fit");
+		expect(waveAdr).toContain("## Rejected alternatives");
+		expect(maintainer).toContain("ten tools, five commands, four\nguides");
+		expect(maintainer).toContain("exactly `flow-worker` and `flow-reviewer`");
+		expect(changelog).toContain("## [6.1.0] - 2026-07-21");
+		expect(section(changelog, "[Unreleased]")).toContain("No changes yet.");
 	});
 
 	test("keeps CI focused on normal checks, platforms, live smoke, and release", async () => {

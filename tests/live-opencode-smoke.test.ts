@@ -9,7 +9,9 @@ import packageJson from "../package.json" with { type: "json" };
 // This test deliberately proves only the host boundary. Domain and persistence
 // behavior belongs in fast deterministic tests; the live smoke verifies that a
 // packed release loads in a real OpenCode process with the intended commands
-// and reviewer isolation.
+// and hidden-agent isolation. Actual model-driven fan-out is deliberately not
+// part of this smoke: it would require provider credentials and would make a
+// deterministic package/host compatibility gate depend on model behavior.
 const LIVE = process.env.FLOW_LIVE_SMOKE === "1";
 const PINNED_OPENCODE_VERSION =
 	packageJson.devDependencies["@opencode-ai/plugin"];
@@ -39,6 +41,8 @@ const EXPECTED_TOOLS = [
 	"flow_validation_start",
 ] as const;
 
+const EXPECTED_AGENTS = ["flow-reviewer", "flow-worker"] as const;
+
 type PermissionRule = {
 	permission: string;
 	pattern: string;
@@ -47,6 +51,7 @@ type PermissionRule = {
 
 type ResolvedAgent = {
 	name: string;
+	mode?: "subagent" | "primary" | "all";
 	permission?: PermissionRule[];
 };
 
@@ -138,6 +143,7 @@ describe("live OpenCode smoke configuration", () => {
 		).toBe(OPENCODE_VERSION);
 		expect(EXPECTED_COMMANDS).toHaveLength(5);
 		expect(EXPECTED_TOOLS).toHaveLength(10);
+		expect(EXPECTED_AGENTS).toHaveLength(2);
 	});
 });
 
@@ -251,11 +257,14 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				const flowAgents = agents.filter((agent) =>
 					agent.name.startsWith("flow-"),
 				);
-				expect(flowAgents.map((agent) => agent.name)).toEqual([
-					"flow-reviewer",
+				expect(flowAgents.map((agent) => agent.name).sort()).toEqual([
+					...EXPECTED_AGENTS,
 				]);
-				const reviewer = flowAgents[0];
+				const reviewer = flowAgents.find(
+					(agent) => agent.name === "flow-reviewer",
+				);
 				if (!reviewer) throw new Error("Flow reviewer was not registered.");
+				expect(reviewer.mode).toBe("subagent");
 				for (const permission of [
 					"edit",
 					"bash",
@@ -271,6 +280,27 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				expect(permissionFor(reviewer.permission ?? [], "flow_status")).toBe(
 					"allow",
 				);
+
+				const worker = flowAgents.find((agent) => agent.name === "flow-worker");
+				if (!worker) throw new Error("Flow worker was not registered.");
+				expect(worker.mode).toBe("subagent");
+				for (const permission of ["edit", "bash"] as const) {
+					expect(permissionFor(worker.permission ?? [], permission)).toBe(
+						"ask",
+					);
+				}
+				for (const permission of [
+					"external_directory",
+					"skill",
+					"task",
+					"flow_status",
+					"flow_plan_save",
+					"flow_feature_complete",
+				]) {
+					expect(permissionFor(worker.permission ?? [], permission)).toBe(
+						"deny",
+					);
+				}
 				await expect(lstat(join(project, ".flow"))).rejects.toMatchObject({
 					code: "ENOENT",
 				});

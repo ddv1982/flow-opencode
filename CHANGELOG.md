@@ -6,6 +6,20 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.1.0] - 2026-07-21
+
+Bounded intra-feature wave lore restores useful host-native parallel
+contribution without restoring the former orchestration framework:
+
+- A reusable hidden `flow-worker` can run as two or three concurrent instances
+  with exact, non-overlapping slices inside the one active run, followed by at
+  most one targeted follow-up cohort.
+- The manager still owns integration, evidence acceptance, authoritative
+  validation, and review dispatch. No wave state, sidecar, admission profile,
+  telemetry, or concurrent feature lifecycle is added.
+- This restores a capability; it does not claim a measured performance gain.
+- Installation guidance now pins the exact `6.1.0` npm release.
+
 ## [6.0.0] - 2026-07-21
 
 Simplicity-first lifecycle lore turns Flow back into a small, durable serial
