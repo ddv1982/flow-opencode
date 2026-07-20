@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
-const sourceRoot = resolve(import.meta.dir, "../src");
+const repositoryRoot = resolve(import.meta.dir, "..");
+const sourceRoot = join(repositoryRoot, "src");
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {
 	domain: new Set(["domain"]),
@@ -32,41 +33,46 @@ function sourceLayer(path: string): string {
 	return relative(sourceRoot, path).split(sep)[0] ?? "";
 }
 
-describe("v5 architecture boundaries", () => {
-	test("has no legacy runtime or adapter source trees", async () => {
-		for (const legacyPath of [
-			"runtime",
-			"adapters",
-			"distribution/sync.ts",
-			"distribution/flow-skill-definitions.ts",
+async function expectMissing(path: string): Promise<void> {
+	await expect(stat(join(repositoryRoot, path))).rejects.toMatchObject({
+		code: "ENOENT",
+	});
+}
+
+describe("v6 architecture boundaries", () => {
+	test("keeps deleted framework subsystems out of the runtime", async () => {
+		for (const path of [
+			"src/application/replay/index.ts",
+			"src/application/harness/resource-report.ts",
+			"src/application/validation-receipts.ts",
+			"src/cli.ts",
+			"src/distribution/activation.ts",
+			"src/distribution/markdown-modules.d.ts",
+			"src/domain/audit-ledger.ts",
+			"src/domain/orchestration-policy.ts",
+			"src/domain/validation-receipt.ts",
+			"src/infrastructure/fs/evidence-artifact-store.ts",
+			"src/platform/opencode/harness-tools.ts",
+			"src/platform/opencode/observation.ts",
+			"src/platform/opencode/orchestration-admission.ts",
 		]) {
-			await expect(stat(join(sourceRoot, legacyPath))).rejects.toMatchObject({
-				code: "ENOENT",
-			});
+			await expectMissing(path);
 		}
 	});
 
-	test("keeps global skill maintenance out of the plugin runtime graph", async () => {
-		const violations: string[] = [];
-		for (const file of await sourceFiles()) {
-			const relativeFile = relative(sourceRoot, file);
-			const source = await readFile(file, "utf8");
-			if (
-				relativeFile !== join("distribution", "legacy-cleanup.ts") &&
-				/(?:\.flow-skill-version|setup\.skills|runFlowSkillSync|syncFlowSkills)/.test(
-					source,
-				)
-			) {
-				violations.push(relativeFile);
-			}
-			if (
-				relativeFile.startsWith(`platform${sep}`) &&
-				/(?:from\s+|import\s*)["'][^"']*distribution\//.test(source)
-			) {
-				violations.push(`${relativeFile} imports distribution`);
-			}
-		}
-		expect(violations).toEqual([]);
+	test("keeps the runtime deliberately small", async () => {
+		const files = await sourceFiles();
+		const measurements = await Promise.all(
+			files.map(async (path) => ({
+				path: relative(sourceRoot, path),
+				lines: (await readFile(path, "utf8")).split("\n").length,
+			})),
+		);
+		const total = measurements.reduce((sum, item) => sum + item.lines, 0);
+		const oversized = measurements.filter((item) => item.lines > 1_000);
+
+		expect(total).toBeLessThanOrEqual(6_000);
+		expect(oversized).toEqual([]);
 	});
 
 	test("keeps domain, application, and infrastructure dependencies inward", async () => {
@@ -87,10 +93,10 @@ describe("v5 architecture boundaries", () => {
 
 			if (
 				(layer === "domain" || layer === "application") &&
-				/(?:from\s+|import\s*)["'](?:node:|@opencode-ai\/)/.test(source)
+				/(?:from\s+|import\s*)["']@opencode-ai\//.test(source)
 			) {
 				violations.push(
-					`${relative(sourceRoot, file)} imports a host or system module`,
+					`${relative(sourceRoot, file)} imports the OpenCode host`,
 				);
 			}
 		}

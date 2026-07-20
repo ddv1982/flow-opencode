@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 # This non-blocking scheduled signal catches upcoming OpenCode drift without
-# making an unreviewed host release part of the reproducible v5 build.
+# making an unreviewed host release part of the reproducible v6 build.
 jobs:
   latest-opencode:
     runs-on: ubuntu-latest
@@ -29,9 +29,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Build plugin
-        run: bun run build
 
       - name: Run live OpenCode smoke
         env:

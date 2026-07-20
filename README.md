@@ -1,354 +1,188 @@
 # Flow Plugin for OpenCode
 
-`opencode-plugin-flow` gives OpenCode a durable, resumable planning-and-execution
-loop for larger coding work: plan a goal as discrete features, approve the plan,
-then implement one feature at a time with enforced validation and review
-evidence. State lives in `.flow/session.json`, so a session survives restarts,
-model switches, and context loss.
+`opencode-plugin-flow` gives OpenCode a small, durable workflow for coding work
+that benefits from an approved plan and an independent review. Flow v6 is
+serial by design:
 
-The design is guidance-first: package-owned Markdown carries planning,
-execution, validation, review, and orchestration judgment, while the plugin
-runtime stays bounded and policy-focused — it keeps the session ledger and
-enforces the hard gates prompts should not be trusted to remember.
+```text
+plan → approve → run one feature → validate → one independent review → close
+```
 
-The maintained documentation starts at [docs/index.md](docs/index.md). The
-tracked `droid-wiki/` tree is an archived generated snapshot and is not a
-current product or contributor contract.
+For multi-feature plans, the run/validate/review step repeats one feature at a
+time. State lives in `.flow/session.json`, so the workflow can resume after a
+restart or context change without turning Flow into a general orchestration
+framework.
+
+## Install
+
+Install the exact npm release through OpenCode:
+
+```bash
+opencode plugin opencode-plugin-flow@6.0.0 --global --force
+```
+
+Omit `--global` for project scope. To update, replace `6.0.0` with the new exact
+release and rerun the command. OpenCode owns package installation and config
+mutation; Flow does not scan projects, delete caches, elect versions, or repair
+configuration.
+
+The equivalent manual project configuration is:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-plugin-flow@6.0.0"]
+}
+```
+
+Then restart OpenCode. OpenCode resolves npm plugins from this configuration;
+see the official [OpenCode plugin documentation](https://opencode.ai/docs/plugins/).
+
+Flow has no installer or activation CLI. Removing the configuration entry
+disables Flow. If two Flow copies load for the same project, both fail closed
+until the duplicate is removed.
 
 ## Quick start
 
-```bash
-npx -y opencode-plugin-flow@latest install \
-  --project "$PWD" --scope global
-```
-
-`install` resolves npm's current release before it starts, writes that package's
-embedded exact version as the sole Flow activation, and permanently removes
-positively identified older Flow wrappers and OpenCode cache artifacts. It
-refuses a downgrade when a newer installed version is detected. The final check
-performed by that same fetched CLI must report exactly one active Flow source at
-the installed exact version and no proven inactive Flow cache artifacts. Do not
-resolve `@latest` a second time for post-install verification. Inventory covers
-global sources plus the selected `--project`; it does not scan unrelated project
-trees. Run the installer from each project that has its own OpenCode config. Use
-`--scope project` when the canonical pin should live with that selected project
-instead of global config.
-
-For a read-only preview, run `activation-apply` without `--apply` using an exact
-package version. Flow refuses ambiguous local wrappers, cache entries, unsafe
-links, and config it cannot change conservatively rather than guessing which
-copy is authoritative.
-
-Start or restart OpenCode, then give Flow a goal:
+Start a complete workflow:
 
 ```text
 /flow-auto add rate limiting to the public API
 ```
 
-Flow inspects the repo, saves a plan of features, asks for approval (or
-proceeds if you already authorized autonomous work), then runs the loop:
-implement one feature → validate it → review it → record evidence → next
-feature. `/flow-status` shows where you are at any point, including after a
-restart.
+Flow inspects the Git worktree, saves a feature DAG, and asks for approval unless
+the request already grants that authority. It then starts one runnable feature,
+arms the exact validation command, creates one independent review assignment,
+and records the result. `/flow-status` reports the durable next action at any
+time.
 
-`/flow-auto` still respects the scope of the request. If you ask for a plan
-only or explicitly say not to implement, it saves and summarizes the plan and
-stops before `flow_run_start`.
-
-## What a session looks like
+Use a narrower command when you want to control the phase:
 
 ```text
-> /flow-auto add rate limiting to the public API
-
-  flow_plan_save    goal: "add rate limiting to the public API"
-                    features: rate-limit-middleware, per-route-config, docs-update
-  (you approve the plan)
-  flow_plan_approve plan locked — features are now immutable
-  flow_run_start    mutation acknowledged
-  flow_status       request.view: execution, feature: rate-limit-middleware
-  ... implementation, tests ...
-  flow_validation_start
-                    command: exact next Bash command
-                    coverageScope: focused
-  bash              exact armed command
-                    [flow-validation-receipt] immutable receipt reference
-  flow_review_start request.validationRefs: [receipt reference]
-                    request.reviewKind: feature
-                    request.validationScope: targeted
-                    assignmentId: review-assignment:runtime-id
-  flow_status       request.view: reviewer
-                    request.assignmentId: review-assignment:runtime-id
-  ... independent review ...
-  flow_feature_complete
-                    request.result.kind: completed
-                    request.result.validationScope: targeted
-                    request.result.featureReview.assignmentId: review-assignment:runtime-id
-                    request.result.featureReview.verdict: passed
-  flow_run_start    mutation acknowledged
-  flow_status       request.view: execution, feature: per-route-config
-  ...
-
-> /flow-status
-  status: ok
-  workflowData.projection.view: compact
-  workflowData.projection.status: running
-  workflowData.projection.progress: { completed: 1, total: 3, remaining: 2 }
-
-> /flow-run
-  flow_status       request.view: execution
-                    workflowData.projection: full active-feature scope
+/flow-plan add rate limiting to the public API
+/flow-run
+/flow-status
 ```
 
-`flow_status` returns workflow state under `workflowData.projection`: compact is
-routing-only, execution is the full active-feature working scope, detail is
-diagnostic, and reviewer is narrow assignment context. State-changing tools
-return `workflowData.receipt` acknowledgements; a receipt never replaces a
-fresh status projection. Rejected mutations explicitly report
-`operationAccepted: false` and `operationIdConsumed: false`; accepted results,
-including durable review blockers, report the corresponding accepted receipt.
+Asking for a plan only stops after planning. Flow does not infer permission to
+implement, commit, push, or publish from a planning request.
 
-Interrupt at any point; `/flow-run` resumes the next approved feature. On the
-final feature Flow requires broad project-level validation and a final review
-whose depth matches the approved plan before the session can close as
-completed.
+## Lifecycle
+
+An approved plan is immutable and contains a directed acyclic graph of
+features. The runtime starts only a feature whose dependencies are complete,
+and only one run may be active.
+
+For each run:
+
+1. The manager implements the feature.
+2. `flow_validation_start` binds the current run and workspace-content digest
+   to the exact next Bash command.
+3. OpenCode observes that command's structured exit status and output
+   completeness, then records the observation directly in Session v5.
+4. `flow_review_start` records the changed artifact paths, selects applicable
+   passing validation, and creates one durable assignment for the hidden
+   `flow-reviewer`.
+5. `flow_feature_complete` records the review result and marks the run complete
+   or blocked.
+
+The final runnable feature derives a `final` review instead of adding a second
+review pass. It requires broad passing validation for current workspace
+content. Every other run derives a feature review. A failed review blocks the
+feature; `flow_feature_reset` supersedes the failed run and creates a fresh full
+attempt with no carried validation or review.
+
+After every feature passes, `flow_session_close` records the terminal
+disposition and archives the session. A session may also be closed explicitly
+as deferred or abandoned.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `/flow-auto <goal>` | Drive the authorized loop; stop after planning when requested. |
+| `/flow-auto <goal>` | Drive the authorized lifecycle, stopping after planning when requested. |
 | `/flow-plan <goal>` | Create or approve a plan. |
-| `/flow-run` | Execute one approved feature. |
-| `/flow-review` | Run a read-only review. |
-| `/flow-status` | Show the active session and next action. |
+| `/flow-run` | Run or resume one approved feature. |
+| `/flow-review` | Dispatch the independent read-only reviewer. |
+| `/flow-status` | Inspect the active session and next action. |
 
-Commands are compiled entrypoints: manager commands carry only their applicable
-core instructions, while `/flow-review` runs against the reserved reviewer's
-role-specific agent contract. Flow does not install files into OpenCode's
-global skill registry and does not depend on native skill discovery.
-
-`flow-test`, `flow-deslop`, `flow-ui-quality`, and `flow-commit` are optional
-package-owned guides loaded on demand through `flow_guidance`, not public
-commands. `flow-commit` is user-triggered only and stays outside the autonomous
-loop.
+Flow registers exactly one hidden worker: `flow-reviewer`. It can read reviewer
+status but cannot edit files, run Bash, load skills, delegate work, or call
+state-changing Flow tools. The root manager owns every mutation.
 
 ## Tools
 
-The plugin exposes 12 tools. Nine own the durable lifecycle; three add bounded
-harness admission, runtime-attested validation, and deterministic audit
-rendering:
+The plugin exposes ten tools:
 
 | Tool | Purpose |
 | --- | --- |
-| `flow_guidance` | Load exact package-owned guidance by stable id. |
-| `flow_status` | Read the active session and next action. |
-| `flow_plan_save` | Create a session or update its active same-goal draft. |
-| `flow_plan_approve` | Approve the draft plan. |
-| `flow_run_start` | Start the next runnable feature. |
-| `flow_review_start` | Bind validation to current source and create a runtime-owned reviewer assignment; final review also binds the passing feature result. |
-| `flow_feature_complete` | Atomically record a completed or blocked assignment result. |
-| `flow_feature_reset` | Reset one feature and its dependents. |
-| `flow_session_close` | Archive the active session as completed, deferred, or abandoned. |
-| `flow_orchestration_admit` | Evaluate and arm one bounded optional-worker proposal for the active harness profile. |
-| `flow_validation_start` | Arm capture for the exact next Bash command against current causal guards, feature run, and source. |
-| `flow_audit_render` | Validate `AuditLedgerV1` and render its reconciled Markdown deterministically. |
+| `flow_guidance` | Load one concise package-owned guide. |
+| `flow_status` | Read compact, execution, detail, or reviewer state. |
+| `flow_plan_save` | Create or replace the active draft plan. |
+| `flow_plan_approve` | Approve and lock the current plan. |
+| `flow_run_start` | Start one runnable approved feature. |
+| `flow_validation_start` | Arm observation for the exact next Bash command. |
+| `flow_review_start` | Create the run's one independent review assignment. |
+| `flow_feature_complete` | Record the review result and feature outcome atomically. |
+| `flow_feature_reset` | Reset a feature and its dependents for a fresh full retry. |
+| `flow_session_close` | Close and archive a session in one operation. |
 
-Only the root manager calls `flow_review_start`. Reviewers recover the exact
-assignment with
-`flow_status { request: { view: "reviewer", assignmentId } }` and return only
-the assignment id, verdict, typed findings, reported time, and terminal
-disposition. The runtime derives all attempt, pass, source, packet, run,
-start-time, and required-depth identity. Final assignment creation durably binds
-the exact passing feature-assignment result. The final feature outcome submits
-only the final-assignment result; Flow records both results atomically from the
-durable binding.
-
-Validation input is no longer a caller-authored success claim. Immediately
-before a check, call `flow_validation_start` with the exact command and current
-guards, execute that exact command as the next Bash call, and copy the emitted
-immutable receipt reference into `flow_review_start.request.validationRefs`.
-Flow verifies receipt bytes, run, feature, current source, host-observed exit,
-output completeness, and scope before materializing Session v4 evidence. A
-failed, truncated, missing, stale, altered, or duplicate receipt is rejected
-without consuming the review-start operation id.
-
-The first final assignment pins that binding for every same-source final-review
-retry. A manager recovering context loads detail status and copies
-`workflowData.projection.finalReviewRetry.prerequisite.result` unchanged into
-the new final review start's `request.featureReview`. Compact and reviewer views
-omit the aggregate. A mismatch records nothing and leaves its operation id
-reusable; a source edit requires a new targeted feature-review sequence.
+The nine lifecycle tools use a strict nested `request` object and return state
+under `workflowData`. Mutations require the current session revision and a
+stable operation ID. Repeating the exact accepted operation is idempotent;
+reusing its ID for different input fails. `flow_guidance` is the one exception:
+it accepts `{ "id": "..." }` and returns the guide as Markdown.
 
 ## What the runtime enforces
 
-The runtime owns only safety; judgment lives in package-owned guidance:
+- Session v5 is the only active document format supported by Flow v6. Finish or
+  close older active sessions before upgrading; old archives are inert history.
+- Lifecycle order is carried by revisions and durable record order, not UTC
+  timestamps or caller clocks.
+- Plans are immutable after approval, dependencies must be acyclic, and only one
+  run can be active.
+- Validation must be observed from the exact armed Bash command. Failed,
+  incomplete, stale-source, or mismatched observations cannot authorize review.
+- Each run has one review. Final-feature review requires broad validation;
+  there is no targeted-then-broad dual pass.
+- Completion fails if workspace content changed after review started.
+- Failed review retries are full resets, not correction modes or delta-scoped
+  review protocols.
+- Every blocking review finding carries concrete artifact, missing-evidence, or
+  unmet-requirement evidence.
+- `.flow/session.json` is written under a project lock with schema validation,
+  atomic replacement, quarantine for unreadable state, and no-follow path
+  checks. Closed state is archived beneath `.flow/history/`.
+- Source binding requires a readable Git worktree. Git submodules are rejected
+  explicitly; Flow does not claim to fingerprint work split across repositories.
+- Duplicate runtime copies for one project fail closed. This is a safety guard,
+  not version election or automatic configuration repair.
 
-- `.flow/session.json` is the single source of truth; writes are locked and
-  atomic, and closed sessions are archived under `.flow/history/`.
-- Plans cannot be changed after approval.
-- A different-goal plan save cannot replace an unclosed session, including an
-  unapproved draft. Close it explicitly as `deferred` or `abandoned` and finish
-  archive publication before saving the new goal.
-- Only one feature run can be active at a time; reset preserves its audit
-  history but the next start receives a fresh run id.
-- Reviewer assignment requires source-bound passing validation: `targeted` for
-  feature review and `broad` for final review. A source edit invalidates stale
-  pending review work when its replacement is created.
-- Validation receipts are host-attested from the exact next Bash execution.
-  Callers cannot supply validation timestamps, exit status, command class, or
-  output digest to `flow_review_start`.
-- Feature outcome uses a nested `completed` or `blocked` result. Invalid or stale
-  input records nothing and does not consume its operation id.
-- Each OpenCode handler validates the registered nested schema again at entry;
-  invalid host invocations fail as tool errors before Flow state I/O.
-- The runtime derives review depth from the approved plan and owns assignment,
-  attempt, logical-pass, packet, source, and start-time identity.
-- Failed reviews are bounded: an accepted blocker returns operation status
-  `ok`, and autonomous repair is limited to one repair plus one retry before
-  the feature blocks.
-- Review exhaustion uses the ordinary blocked-feature state; continuing requires
-  an explicit `flow_feature_reset`, not a second checkpoint protocol.
-- A passing final feature outcome marks progress completed but leaves closure null;
-  `flow_session_close` exclusively records and archives it.
-- Once a closure is recorded, the session is archive-only. If publication fails,
-  compact status supplies `closure.retryOperationId`; retry only with
-  `flow_session_close { request: { mode: "retry", operationId } }`. No new
-  close, run, reset, approval, or replan can reopen or adopt it.
-- A new close operation id must be absent from the active causal chain and every
-  mutation in canonical Session v4 workspace history. Any archived match is a
-  collision; malformed or ambiguous canonical history fails closed before
-  active state changes.
-- Archive publication requires explicit non-null closure. Closureless Session
-  v4 state may remain active, but it is rejected as canonical history and makes
-  canonical lookup fail closed if found there.
-- Every closure is quiescent: no active execution or pending review assignment
-  remains. A session can close as `completed` only after the final feature
-  outcome has passed.
-- Host-observed validation times and reviewer-reported result times must follow
-  run, validation, and assignment order and cannot postdate runtime acceptance.
-- Session locks fail closed: Flow never guesses that an old lock is abandoned,
-  and only the unique owner may release it. Only a valid Session v4 document can
-  become active state; canonical history additionally requires explicit
-  non-null closure.
-- Flow writes `.flow/.gitignore` so session state stays out of Git by default.
-- `.flow/session.json` is the only active-state representation. Canonical Flow
-  commands call `flow_status` before acting; plugin configuration does not read,
-  refresh, or project workspace state.
-- Exactly one Flow runtime instance may operate in an OpenCode process. If
-  duplicate copies load, every copy fails closed; the highest semantic version
-  is named only as a diagnostic leader and does not become operational.
-
-## Hidden workers
-
-For broad work, Flow's manager can fan out isolated hidden workers
-(`flow-evidence-worker`, `flow-validation-worker`, `flow-audit-worker`,
-`flow-candidate-worker`, `flow-verifier-worker`, and the `flow-reviewer`) with
-locked-down permissions. Workers gather evidence; they never approve plans,
-complete features, or close sessions. Flow reserves those agent ids and the
-public command ids while the plugin is enabled, and warns if they collide with
-your own config.
-
-Each hidden worker receives only its applicable handoff schema. The manager
-contract treats empty or malformed handoffs as coverage gaps instead of
-success. The offline handoff validator detects missing headings, empty sections,
-unresolved placeholders, and invalid statuses; current OpenCode worker output
-remains plain text, so runtime acceptance still depends on the manager applying
-that contract. Inspect rendered surfaces and static contracts with
-`bun run prompt:quality`; run opt-in model decisions with
-`bun run prompt:model-eval -- --model <provider/model> --timeout-ms 300000`;
-see
-[docs/prompt-quality.md](docs/prompt-quality.md).
-
-The trusted command footer selects one harness profile with
-`OPENCODE_FLOW_HARNESS_PROFILE=control|standard|assurance` (default
-`standard`) and one admission rollout with
-`OPENCODE_FLOW_ROLLOUT_MODE=control|observe|enforce` (default `observe`).
-`control` preserves discretionary optional-worker behavior without admission
-ceremony. `standard` admits a small bounded discovery/challenge path;
-`assurance` permits broader bounded evidence and audit coverage when risk
-justifies it. In `observe`, a policy violation is reported but does not block;
-in `enforce`, the exact admitted optional worker class and count must be
-dispatched. Lifecycle-required reviewer and validation workers are not optional
-passes and do not use orchestration admission. Validation receipts remain
-mandatory in every profile.
-
-Hidden worker routing can be tuned without changing the domain contract. Set
-`OPENCODE_FLOW_READONLY_WORKER_MODEL`,
-`OPENCODE_FLOW_REVIEW_WORKER_MODEL`, or
-`OPENCODE_FLOW_CANDIDATE_WORKER_MODEL`, with
-`OPENCODE_FLOW_WORKER_MODEL` as the fallback. Matching `*_WORKER_STEPS`
-variables set OpenCode's current `steps` limit; values must be integers from 1
-through 1000.
-
-For broad implementation, the manager records whether work stayed serial,
-used exact-path candidate workers, used isolated worktrees, ran a tournament, or
-skipped eligible candidates. Feature completion can carry bounded
-`result.orchestrationPasses` with candidate eligibility, decision, and structured
-factors. Bounded projections report the relevant aggregate while full worker
-handoffs remain outside `.flow/**`.
-
-## Install details and legacy cleanup
-
-See [docs/troubleshooting.md](docs/troubleshooting.md) for updates,
-activation refusal and duplicate-runtime recovery, stuck session recovery, and
-removal of global Flow skill folders left by v4.
-
-To update, run the same `@latest install` command. The installer inventories
-OpenCode's global sources plus the selected project's project, `.opencode`,
-custom, inline, and readable managed configuration; singular and plural plugin
-directories; and the Flow package cache. Other project trees are deliberately
-not discovered; run the command from each project with project-local OpenCode
-configuration. It preserves unrelated plugins, removes recognized Flow config
-entries outside the selected canonical scope, and permanently removes only
-marker-proven wrappers, the exact known legacy wrapper format, and
-manifest-proven inactive cache artifacts. Applied changes receive config
-backups and a recovery journal. Obsolete artifacts are staged reversibly while
-activation changes are verified, restored if activation fails, and deleted
-before installation reports success.
-Sources that cannot be proved safe—including unknown wrappers, ambiguous cache
-artifacts, JSONC that would require a lossy rewrite, inline config, and
-administrator-managed config—produce manual remediation instead of mutation.
-If an applied multi-source change fails, Flow attempts exact safe rollback and
-records either `rolled-back` or `rollback-failed` in the recovery journal;
-concurrent or unsafe state is preserved for manual recovery. Remote and
-managed-preference sources that cannot be decoded offline remain covered by
-fail-closed runtime leadership within each OpenCode project context. A later
-install reconciles interrupted v2 journals before planning: pre-commit work is
-rolled back, while committed removal work finishes verified deletion.
-
-To preview recoverable migration of pristine v4 global skill folders:
-
-```bash
-npx -y opencode-plugin-flow@5.3.4 legacy-cleanup --dry-run
-```
+Flow deliberately does not include orchestration profiles, optional-worker
+admission, audit-ledger rendering, replay reports, detached validation receipts,
+or automatic activation and cache repair. Those systems increased protocol
+surface without improving the core serial workflow.
 
 ## Development
 
+Requirements: Git, Node.js 24 or newer, Bun 1.3.14, and the versions pinned in
+`package.json`.
+
 ```bash
-bun install
-bun run check        # typecheck + lint + release metadata + prompt quality + build + tests
-bun run harness:report # sanitized control/candidate resource and quality status
-bun run smoke:live   # boots a real OpenCode server against the packed tarball
+bun install --frozen-lockfile
+bun run check
 ```
 
-The package exports only the OpenCode plugin entrypoint:
+The normal check runs typechecking, formatting/lint checks, build verification,
+tests, and package smoke. Release CI also exercises the packed plugin in a real
+OpenCode host.
 
-```ts
-import flowPlugin from "opencode-plugin-flow";
-```
+Maintained documentation starts at [docs/index.md](docs/index.md). See
+[development](docs/development.md) for repository structure and focused checks,
+[troubleshooting](docs/troubleshooting.md) for recovery, and
+[ADR 0005](docs/adr/0005-flow-v6-session-v5-simplicity-first.md) for the v6
+tradeoffs.
 
-See [docs/development.md](docs/development.md) and
-[docs/maintainer-contract.md](docs/maintainer-contract.md) for the
-v5 domain/application/infrastructure/platform boundaries, guidance split, and
-release process.
+## License
 
-## Credits
-
-Flow's parallel orchestration guidance was inspired by Ray Fernando's skill
-work on parallel agent workflows. Flow also draws conceptual inspiration from
-[RepoPrompt CE](https://github.com/repoprompt/repoprompt-ce), especially its
-emphasis on codebase orientation, context engineering, agent orchestration,
-and reviewable handoffs.
-
-The Flow version is its own OpenCode-native design: package-owned guidance,
-manager-owned state, hidden workers, and no extra runtime ledger.
+MIT

@@ -1,238 +1,289 @@
 import { describe, expect, test } from "bun:test";
 import type {
-	ValidationReceiptRef,
-	ValidationReceiptV1,
-} from "../src/domain/validation-receipt.js";
+	ObservedValidation,
+	PreparedValidation,
+} from "../src/application/prepare-validation.js";
+import type {
+	SourceDigest,
+	ValidationObservation,
+} from "../src/domain/session.js";
 import {
 	ValidationCaptureCoordinator,
 	ValidationCaptureError,
 } from "../src/platform/opencode/validation-capture.js";
 
-const sourceDigest = `sha256:${"a".repeat(64)}` as const;
-const receiptRef: ValidationReceiptRef = {
-	kind: "validation_receipt_ref_v1",
-	digest: `sha256:${"b".repeat(64)}`,
-	byteLength: 321,
+const SOURCE = `sha256:${"a".repeat(64)}` as SourceDigest;
+const prepared: PreparedValidation = {
+	featureId: "runtime-kernel",
+	runId: "run-1",
+	command: "bun test tests/runtime-gates.test.ts",
+	scope: "focused",
+	sourceDigest: SOURCE,
 };
 
-function arm(
-	coordinator: ValidationCaptureCoordinator,
-	overrides: Partial<Parameters<typeof coordinator.arm>[0]> = {},
-) {
-	return coordinator.arm({
-		sessionID: "session-1",
-		worktree: "/worktree",
-		featureRunId: "feature-run:1",
-		featureId: "feature-1",
-		sourceDigest,
-		command: "bun test tests/unit.test.ts",
-		coverageScope: "focused",
-		environmentKeys: ["CI"],
-		...overrides,
-	});
+function persistedObservation(
+	input: ObservedValidation,
+	recordedRevision = 4,
+): ValidationObservation {
+	return {
+		id: input.captureId,
+		featureId: input.featureId,
+		runId: input.runId,
+		scope: input.scope,
+		command: input.command,
+		sourceDigest: input.sourceDigest,
+		exitCode: input.exitCode,
+		outputDigest: input.outputDigest,
+		outputComplete: input.outputComplete,
+		recordedRevision,
+	};
 }
 
-describe("validation capture coordinator", () => {
-	test("attests exact next Bash execution with runtime timing and no raw output artifact", async () => {
-		let now = Date.parse("2026-07-19T20:00:00.000Z");
-		const receipts: ValidationReceiptV1[] = [];
+describe("OpenCode validation capture", () => {
+	test("captures the exact next Bash command and persists its structured observation directly", async () => {
+		const calls: Array<{
+			workspace: string;
+			input: ObservedValidation;
+		}> = [];
 		const coordinator = new ValidationCaptureCoordinator({
-			now: () => now,
 			randomId: () => "capture-1",
-			publishReceipt: (_worktree, receipt) => {
-				receipts.push(receipt);
-				return Promise.resolve(receiptRef);
+			persistObservation: (workspace, input) => {
+				calls.push({ workspace, input });
+				return Promise.resolve(persistedObservation(input));
 			},
 		});
-		const armed = arm(coordinator);
-		expect(armed.captureId).toBe("capture-1");
 
-		now += 10;
+		expect(
+			coordinator.arm("opencode-session-1", "/workspace", prepared),
+		).toEqual({ captureId: "capture-1", expiresInMs: 15 * 60 * 1_000 });
 		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session-1", callID: "call-1" },
-			{ args: { command: "bun test tests/unit.test.ts" } },
+			{ tool: "read", sessionID: "opencode-session-1", callID: "read-1" },
+			{ args: { path: "package.json" } },
 		);
-		now += 20;
+		expect(coordinator.pendingCount()).toBe(1);
+
+		coordinator.observeToolBefore(
+			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
+			{ args: { command: prepared.command } },
+		);
 		const output = {
-			title: "test",
-			output: "1 pass\n0 fail",
+			title: "Focused tests",
+			output: "3 pass\n0 fail",
 			metadata: { exit: 0, truncated: false },
 		};
-		expect(
-			await coordinator.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: "session-1",
-					callID: "call-1",
-					args: { command: "bun test tests/unit.test.ts" },
-				},
-				output,
-			),
-		).toEqual(receiptRef);
-		expect(receipts).toHaveLength(1);
-		expect(receipts[0]).toMatchObject({
-			startedAt: "2026-07-19T20:00:00.010Z",
-			completedAt: "2026-07-19T20:00:00.030Z",
-			exitCode: 0,
-			outputCompleteness: "complete",
+		const result = await coordinator.observeToolAfter(
+			{
+				tool: "bash",
+				sessionID: "opencode-session-1",
+				callID: "bash-1",
+				args: { command: prepared.command },
+			},
+			output,
+		);
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				id: "capture-1",
+				exitCode: 0,
+				outputComplete: true,
+				recordedRevision: 4,
+			}),
+		);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatchObject({
+			workspace: "/workspace",
+			input: {
+				captureId: "capture-1",
+				featureId: "runtime-kernel",
+				runId: "run-1",
+				command: prepared.command,
+				scope: "focused",
+				sourceDigest: SOURCE,
+				exitCode: 0,
+				outputComplete: true,
+			},
 		});
-		expect(receipts[0]).not.toHaveProperty("exactOutputArtifactRef");
-		expect(output.output).toContain("[flow-validation-receipt]");
-		expect(output.output).not.toContain("/worktree");
+		expect(calls[0]?.input.outputDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+		expect(output.output).toContain(
+			'[flow-validation] {"id":"capture-1","scope":"focused","passed":true}',
+		);
+		expect(output.output).not.toContain("/workspace");
 		expect(coordinator.pendingCount()).toBe(0);
 	});
 
-	test("cancels rather than capturing a different Bash command", () => {
+	test("cancels when the next Bash command does not exactly match", () => {
+		let persisted = false;
 		const coordinator = new ValidationCaptureCoordinator({
-			publishReceipt: () => Promise.resolve(receiptRef),
+			randomId: () => "capture-mismatch",
+			persistObservation: (_workspace, input) => {
+				persisted = true;
+				return Promise.resolve(persistedObservation(input));
+			},
 		});
-		arm(coordinator);
+		coordinator.arm("opencode-session-1", "/workspace", prepared);
+
 		expect(() =>
 			coordinator.observeToolBefore(
-				{ tool: "bash", sessionID: "session-1", callID: "call-1" },
-				{ args: { command: "rm -rf unrelated" } },
+				{
+					tool: "bash",
+					sessionID: "opencode-session-1",
+					callID: "bash-wrong",
+				},
+				{ args: { command: `${prepared.command} --watch` } },
 			),
 		).toThrow(ValidationCaptureError);
 		expect(coordinator.pendingCount()).toBe(0);
+		expect(persisted).toBe(false);
 	});
 
-	test("refuses a command mutated by a later before-hook", async () => {
-		let published = false;
-		const coordinator = new ValidationCaptureCoordinator({
-			publishReceipt: () => {
-				published = true;
-				return Promise.resolve(receiptRef);
-			},
-		});
-		arm(coordinator);
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session-1", callID: "call-1" },
-			{ args: { command: "bun test tests/unit.test.ts" } },
-		);
-		await expect(
-			coordinator.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: "session-1",
-					callID: "call-1",
-					args: { command: "printf mutated" },
-				},
-				{
-					title: "test",
-					output: "mutated",
-					metadata: { exit: 0, truncated: false },
-				},
-			),
-		).rejects.toThrow("no longer matched");
-		expect(published).toBe(false);
-		expect(coordinator.pendingCount()).toBe(0);
-	});
-
-	test("refuses unstructured exit status instead of guessing success", async () => {
-		const coordinator = new ValidationCaptureCoordinator({
-			publishReceipt: () => Promise.resolve(receiptRef),
-		});
-		arm(coordinator);
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session-1", callID: "call-1" },
-			{ args: { command: "bun test tests/unit.test.ts" } },
-		);
-		await expect(
-			coordinator.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: "session-1",
-					callID: "call-1",
-					args: { command: "bun test tests/unit.test.ts" },
-				},
-				{ title: "test", output: "ok", metadata: {} },
-			),
-		).rejects.toThrow("structured Bash exit code");
-	});
-
-	test("records truncation explicitly and leaves it unusable for review", async () => {
-		let captured: ValidationReceiptV1 | undefined;
-		const coordinator = new ValidationCaptureCoordinator({
-			publishReceipt: (_worktree, receipt) => {
-				captured = receipt;
-				return Promise.resolve(receiptRef);
-			},
-		});
-		arm(coordinator);
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session-1", callID: "call-1" },
-			{ args: { command: "bun test tests/unit.test.ts" } },
-		);
-		await coordinator.observeToolAfter(
-			{
-				tool: "bash",
-				sessionID: "session-1",
-				callID: "call-1",
-				args: { command: "bun test tests/unit.test.ts" },
-			},
-			{
-				title: "test",
-				output: "partial",
-				metadata: { exit: 0, truncated: true },
-			},
-		);
-		expect(captured?.outputCompleteness).toBe("truncated");
-	});
-
-	test("bounds concurrent captures and expires orphaned arms", () => {
-		let now = 0;
+	test("expires a started capture before processing a late after-hook", async () => {
+		let now = 1_000;
+		let persisted = false;
 		const coordinator = new ValidationCaptureCoordinator({
 			now: () => now,
-			maxCaptures: 1,
-			captureTtlMs: 10,
-			publishReceipt: () => Promise.resolve(receiptRef),
+			randomId: () => "capture-started",
+			persistObservation: (_workspace, input) => {
+				persisted = true;
+				return Promise.resolve(persistedObservation(input));
+			},
 		});
-		arm(coordinator);
-		expect(() => arm(coordinator, { sessionID: "session-2" })).toThrow(
-			"bounded pending",
-		);
-		now = 11;
-		expect(() => arm(coordinator, { sessionID: "session-2" })).not.toThrow();
-		expect(coordinator.pendingCount()).toBe(1);
-	});
-
-	test("does not expire a Bash call after execution has started", async () => {
-		let now = 0;
-		const coordinator = new ValidationCaptureCoordinator({
-			now: () => now,
-			captureTtlMs: 10,
-			publishReceipt: () => Promise.resolve(receiptRef),
-		});
-		arm(coordinator);
+		coordinator.arm("opencode-session-1", "/workspace", prepared);
 		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session-1", callID: "call-1" },
-			{ args: { command: "bun test tests/unit.test.ts" } },
+			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
+			{ args: { command: prepared.command } },
 		);
-		now = 60_000;
+
+		now += 15 * 60 * 1_000 + 1;
 		expect(
 			await coordinator.observeToolAfter(
 				{
 					tool: "bash",
-					sessionID: "session-1",
-					callID: "call-1",
-					args: { command: "bun test tests/unit.test.ts" },
+					sessionID: "opencode-session-1",
+					callID: "bash-1",
+					args: { command: prepared.command },
 				},
 				{
-					title: "test",
-					output: "ok",
+					title: "Late validation",
+					output: "1 pass",
 					metadata: { exit: 0, truncated: false },
 				},
 			),
-		).toEqual(receiptRef);
+		).toBeNull();
+		expect(persisted).toBe(false);
+		expect(coordinator.pendingCount()).toBe(0);
 	});
 
-	test("requires explicit cancellation identity when supplied", () => {
+	test("rearms after an expired started capture loses its after-hook", () => {
+		let now = 1_000;
+		let nextCapture = 0;
 		const coordinator = new ValidationCaptureCoordinator({
-			randomId: () => "capture-1",
-			publishReceipt: () => Promise.resolve(receiptRef),
+			now: () => now,
+			randomId: () => `capture-${++nextCapture}`,
+			persistObservation: (_workspace, input) =>
+				Promise.resolve(persistedObservation(input)),
 		});
-		arm(coordinator);
-		expect(coordinator.cancel("session-1", "wrong")).toBe(false);
-		expect(coordinator.cancel("session-1", "capture-1")).toBe(true);
+		expect(
+			coordinator.arm("opencode-session-1", "/workspace", prepared),
+		).toEqual({ captureId: "capture-1", expiresInMs: 15 * 60 * 1_000 });
+		coordinator.observeToolBefore(
+			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
+			{ args: { command: prepared.command } },
+		);
+
+		now += 15 * 60 * 1_000 + 1;
+		expect(
+			coordinator.arm("opencode-session-1", "/workspace", prepared),
+		).toEqual({ captureId: "capture-2", expiresInMs: 15 * 60 * 1_000 });
+		expect(coordinator.pendingCount()).toBe(1);
+	});
+
+	test("requires a structured Bash exit code", async () => {
+		let persisted = false;
+		const coordinator = new ValidationCaptureCoordinator({
+			randomId: () => "capture-no-exit",
+			persistObservation: (_workspace, input) => {
+				persisted = true;
+				return Promise.resolve(persistedObservation(input));
+			},
+		});
+		coordinator.arm("opencode-session-1", "/workspace", prepared);
+		coordinator.observeToolBefore(
+			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
+			{ args: { command: prepared.command } },
+		);
+
+		await expect(
+			coordinator.observeToolAfter(
+				{
+					tool: "bash",
+					sessionID: "opencode-session-1",
+					callID: "bash-1",
+					args: { command: prepared.command },
+				},
+				{ title: "Unknown", output: "ok", metadata: {} },
+			),
+		).rejects.toThrow("structured Bash exit code");
+		expect(persisted).toBe(false);
+		expect(coordinator.pendingCount()).toBe(0);
+	});
+
+	test("persists failed and incomplete observations without presenting either as passed", async () => {
+		const cases = [
+			{
+				name: "failed",
+				metadata: { exit: 1, truncated: false },
+				exitCode: 1,
+				outputComplete: true,
+			},
+			{
+				name: "incomplete",
+				metadata: { exit: 0, truncated: true },
+				exitCode: 0,
+				outputComplete: false,
+			},
+		] as const;
+
+		for (const item of cases) {
+			const observations: ObservedValidation[] = [];
+			const coordinator = new ValidationCaptureCoordinator({
+				randomId: () => `capture-${item.name}`,
+				persistObservation: (_workspace, input) => {
+					observations.push(input);
+					return Promise.resolve(persistedObservation(input));
+				},
+			});
+			coordinator.arm(`session-${item.name}`, "/workspace", prepared);
+			coordinator.observeToolBefore(
+				{
+					tool: "bash",
+					sessionID: `session-${item.name}`,
+					callID: `bash-${item.name}`,
+				},
+				{ args: { command: prepared.command } },
+			);
+			const output = {
+				title: item.name,
+				output: `${item.name} output`,
+				metadata: item.metadata,
+			};
+			await coordinator.observeToolAfter(
+				{
+					tool: "bash",
+					sessionID: `session-${item.name}`,
+					callID: `bash-${item.name}`,
+					args: { command: prepared.command },
+				},
+				output,
+			);
+
+			expect(observations).toEqual([
+				expect.objectContaining({
+					captureId: `capture-${item.name}`,
+					exitCode: item.exitCode,
+					outputComplete: item.outputComplete,
+				}),
+			]);
+			expect(output.output).toContain('"passed":false');
+		}
 	});
 });

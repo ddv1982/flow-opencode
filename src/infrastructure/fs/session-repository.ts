@@ -1,14 +1,9 @@
-import type {
-	SessionRepository,
-	SessionTransaction,
-} from "../../application/ports/session-repository.js";
-import { createFileEvidenceArtifactStore } from "./evidence-artifact-store.js";
+import type { SessionRepository } from "../../application/ports/session-repository.js";
 import { createFileSourceIdentityProvider } from "./source-identity.js";
 import {
 	archiveAndClearSession,
 	assertMutableWorkspaceRoot,
-	findArchivedSessionByCloseRetryOperationId,
-	findArchivedSessionByOperationId,
+	loadArchivedSession,
 	loadSession,
 	quarantineUnreadableSession,
 	saveSession,
@@ -19,24 +14,16 @@ export function createFileSessionRepository(
 	workspace: string,
 ): SessionRepository {
 	const root = assertMutableWorkspaceRoot(workspace);
-	const evidenceArtifacts = createFileEvidenceArtifactStore(root);
-	const sourceIdentity = createFileSourceIdentityProvider(root);
-	const computeSourceManifest = sourceIdentity.computeSourceManifest;
-	if (!computeSourceManifest) {
-		throw new Error("File source identity provider lacks manifest support.");
-	}
-	const transaction: SessionTransaction = {
-		...evidenceArtifacts,
-		computeSourceIdentity: () => sourceIdentity.computeSourceIdentity(),
-		computeSourceManifest: () => computeSourceManifest(),
+	const source = createFileSourceIdentityProvider(root);
+	const transaction = {
 		load: () => loadSession(root),
-		findArchivedByCloseRetryOperationId: (operationId) =>
-			findArchivedSessionByCloseRetryOperationId(root, operationId),
-		findArchivedByOperationId: (operationId) =>
-			findArchivedSessionByOperationId(root, operationId),
-		save: (session) => saveSession(root, session),
-		archiveAndClear: (session) => archiveAndClearSession(root, session),
+		loadArchive: (sessionId: string) => loadArchivedSession(root, sessionId),
+		save: (session: Parameters<typeof saveSession>[1]) =>
+			saveSession(root, session),
+		archiveAndClear: (session: Parameters<typeof archiveAndClearSession>[1]) =>
+			archiveAndClearSession(root, session),
 		quarantineUnreadable: () => quarantineUnreadableSession(root),
+		computeSourceDigest: () => source.computeSourceDigest(),
 	};
 	return {
 		read: transaction.load,

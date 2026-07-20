@@ -8,5 +8,5 @@
 		"outDir": "dist",
 		"rootDir": "src"
 	},
-	"include": ["src/index.ts", "src/distribution/markdown-modules.d.ts"]
+	"include": ["src/index.ts", "src/markdown-modules.d.ts"]
 }

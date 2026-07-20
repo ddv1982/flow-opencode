@@ -1,46 +1,35 @@
-# Source Ownership
+# Allowed cross-layer dependencies
 
-Flow v5 uses inward-only dependencies:
+Flow v6 uses inward-only source dependencies:
 
 ```mermaid
 flowchart LR
-    Platform[platform/opencode] --> Infrastructure[infrastructure]
+    Platform["platform/opencode"] --> Infrastructure[infrastructure]
     Platform --> Application[application]
-    Infrastructure --> Application[application]
-    Infrastructure --> Domain[domain]
-    Application --> Domain[domain]
-    Platform --> Domain
+    Platform --> Domain[domain]
     Platform --> Guidance[guidance]
     Platform --> Config[config-shared]
-    Platform --> Harness[application/harness]
-    Config --> Prompts[prompt modules]
+    Infrastructure --> Application
+    Infrastructure --> Domain
+    Application --> Domain
+    Config --> Prompts["prompt surfaces"]
     Prompts --> Guidance
-    Distribution[distribution activation and legacy cleanup] --> Guidance
-    CLI[cli] --> Distribution
 ```
 
-- `src/domain/**` owns values, invariants, state, and pure transitions. It may
-  not import application, infrastructure, platform, distribution, or host APIs.
-- `src/application/**` owns use cases and ports. It may import domain only.
-- `src/infrastructure/**` implements application ports for local filesystems and
-  process services. It may import application and domain.
-- `src/platform/opencode/**` is the outer composition and transport layer. It
-  may import the inward layers, config, and embedded guidance. It owns
-  project-scoped runtime leadership through a shared process registry, bounded
-  host observation, optional-worker admission coordination, Bash receipt
-  capture, and private host schemas. Host schema objects stay private in this
-  layer and never appear in emitted public types.
-- `src/guidance/**` owns stable ids and Markdown embedded into the package.
-- `src/application/harness/**` owns the provider-neutral sanitized resource and
-  quality oracle. It consumes bounded projections rather than host SDK values.
-- `src/distribution/**` owns explicit single-version activation inventory and
-  convergence plus recoverable legacy cleanup. It is not imported by plugin
-  startup and does not import workflow behavior.
-- `src/prompt-*.ts` compiles host-neutral prompt fragments and evaluation
-  contracts from bundled guidance definitions.
-- `src/cli.ts` is a thin outer adapter over distribution APIs.
-- `src/index.ts` is the ESM package entrypoint.
+- `src/domain/**` owns Session v5 values, invariants, and pure transitions. It
+  may use standard-library primitives but imports no application,
+  infrastructure, platform, or host APIs.
+- `src/application/**` owns use cases and ports. It imports domain only.
+- `src/infrastructure/**` implements application ports for local persistence,
+  workspace resolution, and source fingerprinting.
+- `src/platform/opencode/**` owns OpenCode hooks, host schemas, validation
+  observation, the project-scoped duplicate guard, and result rendering.
+- `src/guidance/**` and `skills/**` own workflow judgment embedded in the
+  package.
+- Prompt surfaces compile commands and the one reviewer role from concise
+  guidance; they do not own lifecycle state.
+- `src/index.ts` is the package entrypoint.
 
-The removed `src/runtime/**` and `src/adapters/**` trees have no compatibility
-entrypoints. `tests/architecture-boundaries.test.ts` enforces both their absence
-and the inward dependency rules above.
+There is no runtime/adapters compatibility tree or activation/distribution
+layer or Flow-owned CLI entrypoint. Architecture tests enforce dependency
+direction and the absence of retired layers.

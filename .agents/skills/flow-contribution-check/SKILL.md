@@ -15,8 +15,8 @@ boundaries, stage files, or write commit messages.
 
 This is a repo-local contributor skill, not a managed Flow runtime skill.
 Preflight output is commit/push readiness evidence only: it does not become
-Flow `validationRun`, `featureReview`, or `finalReview` evidence, and it never
-reads or mutates `.flow/**` session state.
+Session v5 validation or review evidence, and it never reads or mutates
+`.flow/**` session state.
 
 ## Before committing
 
@@ -50,8 +50,8 @@ use push mode, when broad validation evidence is needed.
 Push mode validates only the current branch against its configured upstream, or
 `origin/main` for a non-`main` branch with no upstream. It does not validate
 tags, mirrors, or arbitrary refspecs. Push mode requires a clean worktree before
-running whole-worktree `bun run check` and selected focused checks, including the
-distribution/surface test when `skills/**` changes are present.
+running whole-worktree `bun run check` and selected focused checks, including
+the OpenCode surface tests when `skills/**` changes are present.
 
 ## Escalate before risky operations
 

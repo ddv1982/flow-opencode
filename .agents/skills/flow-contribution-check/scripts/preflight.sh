@@ -159,19 +159,20 @@ ensure_tmp_root
 files="$tmp_root/range-files.z"
 write_range_files "$files"
 
-if range_contains "$files" '^(src/runtime/|tests/runtime|tests/completion|tests/.*runtime.*\.test\.ts)'; then
+if range_contains "$files" '^(src/domain/|src/application/|src/infrastructure/fs/|tests/(domain-transitions|runtime-gates|workspace-persistence|source-identity)\.test\.ts)'; then
   log "Run runtime focused checks"
-  bun test tests/runtime-gates.test.ts tests/workspace-persistence.test.ts
+  bun test tests/domain-transitions.test.ts tests/runtime-gates.test.ts tests/workspace-persistence.test.ts tests/source-identity.test.ts
 fi
 
-if range_contains "$files" '^(src/adapters/opencode/|src/config-shared\.ts|src/config\.ts|tests/config/|skills/)'; then
-  log "Run distribution and surface focused checks"
-  bun test tests/distribution-and-surface.test.ts
+if range_contains "$files" '^(src/platform/opencode/|src/config-shared\.ts|src/guidance/|src/prompt-surfaces\.ts|skills/)'; then
+  log "Run OpenCode surface focused checks"
+  bun test tests/distribution-and-surface.test.ts tests/opencode-schema-contract.test.ts tests/prompt-quality.test.ts
 fi
 
-if range_contains "$files" '^(src/distribution/|src/cli\.ts|package\.json|README\.md|scripts/cross-area/(opencode-smoke|release-smoke|pack-invariants)\.mjs)'; then
-	log "Run build for distribution-sensitive changes"
-	bun run build
+if range_contains "$files" '^(package\.json|README\.md|src/index\.ts|src/platform/opencode/|scripts/lib/package-surface\.ts)'; then
+  log "Run packed surface checks"
+  bun run build
+  bun run package:smoke
 fi
 
 cat <<'EOF'

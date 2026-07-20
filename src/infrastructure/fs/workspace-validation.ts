@@ -1,13 +1,24 @@
 import {
-	type PreparedValidation,
-	type PrepareValidationInput,
+	type ObservedValidation,
+	persistObservedValidation,
 	prepareValidation,
 } from "../../application/prepare-validation.js";
+import type { ValidationStartRequest } from "../../application/schema.js";
 import { createFileSessionRepository } from "./session-repository.js";
 
 export function prepareWorkspaceValidation(
 	workspace: string,
-	input: PrepareValidationInput,
-): Promise<PreparedValidation> {
+	input: ValidationStartRequest,
+) {
 	return prepareValidation(createFileSessionRepository(workspace), input);
+}
+
+export function persistWorkspaceValidation(
+	workspace: string,
+	input: ObservedValidation,
+) {
+	return persistObservedValidation(
+		createFileSessionRepository(workspace),
+		input,
+	);
 }

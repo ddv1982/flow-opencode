@@ -35,39 +35,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Advisory data is network-dependent, so keep this blocking CI signal
-      # separate from the deterministic local `bun run check` contract.
       - name: Audit high-severity dependency advisories
         run: bun audit --audit-level=high
 
-  # This is an observation-only control report. It validates that the sanitized
-  # fixture remains readable and exposes candidate status, but deliberately does
-  # not use `--require`: the current fixture has no same-corpus candidate that
-  # can justify making standard or assurance enforcement a default CI gate.
-  harness-report:
+  check:
     runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.14
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Report harness control and candidate status
-        run: bun run harness:report -- --json
-
-  validate:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: [24, 26]
-    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -75,7 +47,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -88,9 +60,32 @@ jobs:
       - name: Run checks
         run: bun run check
 
-  # Boots a real OpenCode server against the packed tarball and verifies
-  # the Flow surface over HTTP. Catches host-boundary drift the mocked
-  # adapter tests cannot.
+  platform-persistence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run platform persistence checks
+        run: bun test tests/workspace-persistence.test.ts tests/source-identity.test.ts tests/flow-leadership.test.ts
+
   live-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -110,32 +105,5 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build plugin
-        run: bun run build
-
       - name: Run live OpenCode smoke
         run: bun run smoke:live
-
-  # Keep Windows as a first-class blocking signal. This covers USERPROFILE,
-  # no-directory-fsync paths, and Windows rename/handle timing.
-  validate-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.14
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Run checks
-        run: bun run check

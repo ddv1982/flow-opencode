@@ -4,21 +4,24 @@ Date: 2026-06-14
 
 ## Status
 
-Accepted. The runtime tool-count, session-version, and review-recording
-consequences are superseded by ADR 0003; the skills-first minimal-runtime
-decision remains current.
+Accepted. Lifecycle details are superseded by
+[ADR 0005](0005-flow-v6-session-v5-simplicity-first.md); the minimal-runtime
+direction remains current.
 
 ## Decision
 
-Flow v4 is a breaking simplification. The plugin keeps only a minimal runtime ledger and hard completion gates. Planning quality, context gathering, validation judgment, review depth, cleanup guidance, UI quality, and recovery choices live in skills.
+Flow keeps only durable workflow state and safety gates in TypeScript. Planning,
+implementation, validation judgment, review judgment, and recovery guidance
+remain concise package-owned Markdown.
+
+The runtime must not grow into project mapping, readiness scoring, execution
+lanes, general worker orchestration, or a second instruction/state system.
 
 ## Consequences
 
-- Unsupported session formats and retired tools are not migrated.
-- The runtime originally exposed seven tools; ADR 0003 defines the current
-  assignment-based surface.
-- `.flow/session.json` replaces the former multi-file
-  active/stored/completed directory layout.
-- `flow_context`, context quality, readiness projections, project maps, feature doc drilldowns, lanes, and decision gates are removed.
-- The original completion-carried review design is superseded by ADR 0003's
-  durable review assignments and atomic recorded review executions.
+- `.flow/session.json` is the sole active workflow document.
+- Guidance may evolve without adding persisted protocol fields.
+- Safety-critical ordering, validation applicability, independent review, and
+  closure remain runtime-enforced.
+- A new subsystem must replace existing machinery or justify why guidance and
+  the current state machine cannot express the need.

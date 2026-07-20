@@ -1,20 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-type VersionedDocument = {
-	path: string;
-	content: string;
-};
-
 export type ReleaseMetadataInput = {
 	packageVersion: string;
 	tag?: string | undefined;
 	changelog: string;
-	installDocuments: readonly VersionedDocument[];
 };
 
 export type ReleaseMetadataResult = {
 	releaseNotes: string;
-	pinnedInstallVersions: readonly string[];
 };
 
 function changelogHeadingVersion(line: string): string | null {
@@ -47,14 +40,6 @@ export function releaseNotesForVersion(
 	return `${lines.slice(start, end).join("\n").trimEnd()}\n`;
 }
 
-function installVersions(documents: readonly VersionedDocument[]): string[] {
-	return documents.flatMap(({ content }) =>
-		[...content.matchAll(/opencode-plugin-flow@([^\s`"'<>()[\]{},;]+)/g)].map(
-			(match) => match[1] as string,
-		),
-	);
-}
-
 export function validateReleaseMetadata(
 	input: ReleaseMetadataInput,
 ): ReleaseMetadataResult {
@@ -67,27 +52,7 @@ export function validateReleaseMetadata(
 		input.changelog,
 		input.packageVersion,
 	);
-	const installReferences = installVersions(input.installDocuments);
-	if (installReferences.length === 0) {
-		throw new Error(
-			"README.md and docs/troubleshooting.md contain no opencode-plugin-flow install snippets.",
-		);
-	}
-	for (const document of input.installDocuments) {
-		for (const version of installVersions([document])) {
-			if (version !== "latest" && version !== input.packageVersion) {
-				throw new Error(
-					`${document.path} pins opencode-plugin-flow@${version}, expected ${input.packageVersion}.`,
-				);
-			}
-		}
-	}
-	return {
-		releaseNotes,
-		pinnedInstallVersions: [
-			...new Set(installReferences.filter((version) => version !== "latest")),
-		].sort(),
-	};
+	return { releaseNotes };
 }
 
 function optionValue(
@@ -132,16 +97,10 @@ async function main(args: readonly string[]): Promise<void> {
 		packageVersion: packageMetadata.version,
 		...(tag ? { tag } : {}),
 		changelog: await readFile("CHANGELOG.md", "utf8"),
-		installDocuments: await Promise.all(
-			["README.md", "docs/troubleshooting.md"].map(async (path) => ({
-				path,
-				content: await readFile(path, "utf8"),
-			})),
-		),
 	});
 	if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
 	process.stdout.write(
-		`Release metadata matches ${packageMetadata.version}; ${result.pinnedInstallVersions.length} release pin(s) and @latest install snippets validated.\n`,
+		`Release metadata matches ${packageMetadata.version}.\n`,
 	);
 }
 

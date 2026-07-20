@@ -1,150 +1,56 @@
 ---
 name: flow-plan
-description: "Use when Flow work needs planning before implementation: a new goal to turn into an approved Flow feature plan, a draft plan to revise, or a decomposition or plan-approval decision in the v5 runtime. For executing an approved feature use flow-run; for the full goal-to-closure loop use flow."
+description: Create, revise, or approve a concise Flow plan before implementation. Use for new goals, draft-plan changes, and plan-only requests.
 ---
 
 # Flow Plan
 
-Use this skill before implementation. The output is a concise plan the runtime can enforce and future agents can execute without rediscovering the goal.
+Plan only after reading the repository facts that determine the work. A useful
+plan is short enough to scan and concrete enough that another agent can execute
+it without rediscovering the goal.
 
-## Planning runtime availability
+## Start
 
-If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and tell the user to check that `opencode-plugin-flow` is loaded in OpenCode. Planning requires the loaded Flow runtime.
+- Call `flow_status { request: { view: "compact" } }` first.
+- Do not replace an unclosed different goal. Close or finish it explicitly.
+- If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and report
+  that the Flow plugin is not fully loaded.
+- Inspect relevant code, tests, docs, package scripts, and local conventions.
+  Resolve repository facts by inspection; ask the user only when a missing
+  product choice would materially change the outcome.
 
-`flow_plan_save` may revise only the active same-goal draft. If compact status
-shows any unclosed session for a different goal, do not replace or implicitly
-archive it. Close unfinished work explicitly as `deferred` or `abandoned`, let
-archive publication converge, then save the new goal. Completed progress uses
-an explicit `completed` close.
+## Plan contract
 
-## Inspect first
+Save one plan with:
 
-- Read the files, docs, tests, package scripts, and local conventions that determine the work.
-- For broad discovery, request `flow-plan/references/parallel-discovery.md`
-  from `flow_guidance` after a serial orientation pass. When multiple workers
-  may help, start with `flow/references/parallel-orchestration.md` and request
-  only the branch it selects.
-- Helper rule: load named helper guidance with `flow_guidance`; if that tool is
-  unavailable, record a planning gap and keep the corresponding claims
-  conservative instead of simulating its checks.
-- When validation is complex, regression-sensitive, browser-based, route-based,
-  failure-prone checks, or uncertain test strategy, request `flow-test`.
-- For cleanup/refactor goals, request `flow-deslop`.
-- For UI/frontend goals, request `flow-ui-quality`.
-- Do not invent findings. Broad "review and fix" goals start with a review-first feature whose deliverable is evidence-backed findings.
-- A findings-report audit delivers strict `AuditLedgerV1` plus the canonical
-  Markdown and derived summary from `flow_audit_render`; the Markdown is not a
-  second hand-maintained source of truth.
+- `summary`: the promised result in one sentence.
+- `overview`: the implementation approach and important boundaries.
+- `requirements`: acceptance criteria, constraints, and non-goals.
+- `decisions`: assumptions and architecture or scope choices already made.
+- `features`: ordered outcome slices, each with a stable `id`, `title`,
+  `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 
-## Delivery intent and assurance profile
+Each feature should have one coherent outcome and a validation story. Split
+only for a real dependency, an independently testable boundary, or safely
+disjoint ownership. Keep overlapping changes together. Avoid step-shaped
+features such as “update files” and vague checks such as “run tests.”
 
-Classify broad review work before decomposing it. Record both values verbatim in
-plan `decisions` so later features do not infer scope from conversation memory:
+Before saving, confirm:
 
-- `deliveryIntent: review_only` returns the evidence-backed audit without a fix
-  plan or edits.
-- `deliveryIntent: review_and_plan` makes the audit an evidence boundary, then
-  plans only findings that survive refutation. This is the default for an
-  ambiguous broad request such as "review this repository".
-- `deliveryIntent: review_and_implement` may plan and execute verified fixes only
-  when the user explicitly asks for implementation.
+- every requirement maps to a feature or an explicit non-goal;
+- targets name real files, modules, routes, commands, or artifacts;
+- validation names the behavior or contract the check will prove;
+- dependencies capture true ordering without circular or hidden work;
+- assumptions and intentional gaps are visible in `decisions`.
 
-Also record `assuranceProfile: standard` or `assuranceProfile: assurance`.
-`standard` is the default; `assurance` is reserved for explicitly requested or
-high-consequence independent challenge. The profile changes claim verification,
-not implementation authorization. Follow the profile mechanics in
-`flow/references/parallel-decision.md`; neither profile authorizes blanket
-rereading or speculative remediation.
+## Save and approve
 
-## Reduce uncertainty before decomposing
+Call `flow_plan_save` with one nested request containing a stable operation id,
+the current revision (`0` for a new session), the goal, and the complete draft.
+Summarize the outcome, feature order, validation, and material decisions for
+the user. Call `flow_plan_approve` with a fresh operation id and current
+revision only after explicit approval or when the user already authorized
+autonomous implementation. Approval locks the plan.
 
-A vague goal does not slice into reliable features yet. Name what is uncertain,
-because the two kinds resolve differently:
-
-- **Specification uncertainty** — what the user wants: ambiguous goal, missing
-  acceptance criteria, unstated constraints. Resolve by stating an explicit
-  assumption in `decisions` and proceeding, or by asking only when a wrong
-  guess would be expensive to undo.
-- **Environment uncertainty** — facts the repo, docs, commands, or data can
-  answer: code shape, schema, API behavior, current conventions. Resolve by
-  inspecting or by a discovery pass, never by asking the user.
-
-Spend the cheapest probe that removes the most uncertainty first: local reads
-before worker fan-out, fan-out before user questions. Decompose into features
-only once the remaining uncertainty is low enough that `targets` and
-`validation` can be stated concretely; otherwise the first feature is a
-review-first or discovery deliverable that produces the missing evidence.
-
-## Plan shape
-
-Call `flow_plan_save` with:
-
-```json
-{
-  "goal": "user-visible goal",
-  "plan": {
-    "summary": "one-sentence outcome",
-    "overview": "implementation strategy and boundaries",
-    "requirements": ["constraints, acceptance criteria, user promises"],
-    "decisions": ["architecture or scope decisions already made"],
-    "finalReviewPolicy": "detailed",
-    "features": [
-      {
-        "id": "lowercase-kebab-case",
-        "title": "Short title",
-        "summary": "Outcome this feature delivers",
-        "reviewDepth": "standard",
-        "targets": ["files, modules, routes, commands, or docs in scope"],
-        "validation": ["focused checks expected before a passing outcome"],
-        "dependsOn": []
-      }
-    ]
-  }
-}
-```
-
-Use only `finalReviewPolicy: "broad"` or `"detailed"`. These are the canonical final-review policy and `reviewDepth` enum values. Use `"broad"` only for low-risk, narrow work. Use `"detailed"` for behavioral changes, cross-module edits, migrations, releases, security-sensitive code, or large refactors.
-
-Set each feature's `reviewDepth` to one of:
-
-- `quick`: docs, comments, config-only changes, generated output, or mechanical changes fully covered by tooling.
-- `standard`: the default for ordinary implementation slices. The review reads every changed file and relevant tests.
-- `detailed`: persistence, migrations, concurrency, security, cross-module behavior, release/package surfaces, large refactors, weak validation, or any work where a missed edge case would be expensive.
-
-Do not make reviews shallower to save tokens. Reduce token use by splitting features, keeping `targets` precise, and using scoped review packets during execution.
-
-## Plan quality gate
-
-Before saving or asking for approval, request
-`flow-plan/references/plan-quality-checklist.md` from `flow_guidance` and check the draft against it. Revise the
-plan until it passes, or record the remaining gap in `decisions` when the gap is
-an intentional assumption. Do not approve a plan whose outcome, requirements,
-targets, validation, or dependency order are still too vague for another agent
-to execute.
-
-## Feature sizing
-
-- Each feature should have one owner, one coherent outcome, and a validation story.
-- Split by dependency order: foundations before callers, schema before consumers, implementation before docs when docs depend on behavior.
-- Avoid "misc cleanup" features. Tie cleanup to evidence and targets.
-- Keep feature ids stable once the plan is approved.
-- Put scope boundaries in `targets` and expected checks in `validation`. Each
-  validation entry should name the expected test level, such as targeted unit,
-  integration, browser/e2e, package/build, docs/static, cleanup preservation, or
-  broad project gate.
-- When a feature may benefit from parallel implementation, make `targets`
-  precise enough for later ownership decisions: name exact modules, docs,
-  commands, or route groups, and use `dependsOn` to preserve prerequisite order.
-  Broad shared-contract work should stay in one feature or an earlier foundation
-  feature so later candidate passes can own disjoint paths safely.
-- Assign `reviewDepth` from risk. Use `detailed` for persistence, migration,
-  concurrency, security, final-delivery-adjacent, or cross-module slices; use
-  `standard` for normal code changes; reserve `quick` for low-risk non-behavioral
-  work.
-
-## Approval
-
-After saving, summarize the plan to the user. Call `flow_plan_approve` only after explicit user approval, unless the user already authorized autonomous implementation. Approved plans are immutable; changing them later requires reset/closure rather than silent edits.
-
-Request `flow-plan/references/planning-examples.md` from `flow_guidance` for
-payload examples and decomposition anti-patterns.
+Do not begin implementation during a plan-only request. Do not create a plan
+document in the repository unless the user explicitly requests one.

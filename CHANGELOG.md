@@ -2,6 +2,35 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [Unreleased]
+
+No changes yet.
+
+## [6.0.0] - 2026-07-21
+
+Simplicity-first lifecycle lore turns Flow back into a small, durable serial
+workflow:
+
+- Session v5 replaces Session v4 with one canonical feature-run aggregate,
+  revision/operation-ID idempotency, session-native validation, derived status,
+  and no wall-clock correctness fields.
+- Every run receives one independent review. The final feature derives one
+  final review requiring broad validation; failed reviews reset to a fresh full
+  run instead of entering correction modes, and blocking findings require
+  concrete evidence.
+- The public surface is reduced to ten tools, five commands, and one hidden
+  read-only `flow-reviewer`.
+- Orchestration profiles and admission, audit-ledger rendering, replay and
+  prompt-evaluation systems, detached validation receipts, and activation/cache
+  repair are removed.
+- Installation uses OpenCode's own plugin command with an exact npm version.
+  Flow ships no installer, cache inventory, or automatic configuration repair.
+
+Breaking changes: Flow v6 does not migrate active pre-v6 sessions or replay
+their operations. Finish or close them before upgrading. Old archives remain
+inert history. Validation interrupted before Session v5 persistence must be
+rerun, and plugin configuration conflicts require manual repair.
+
 ## [5.3.4] - 2026-07-20
 
 Retry-safe release publishing lore makes partial registry or GitHub outages

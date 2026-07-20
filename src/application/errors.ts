@@ -1,7 +1,6 @@
 export class UnreadableFlowSessionError extends Error {
 	readonly code = "UNREADABLE_FLOW_SESSION";
 	readonly reason: string;
-
 	constructor(message: string, reason: string) {
 		super(message);
 		this.name = "UnreadableFlowSessionError";
@@ -12,10 +11,9 @@ export class UnreadableFlowSessionError extends Error {
 export class UnsupportedFlowSessionVersionError extends Error {
 	readonly code = "UNSUPPORTED_FLOW_SESSION_VERSION";
 	readonly actualVersion: unknown;
-
 	constructor(actualVersion: unknown) {
 		super(
-			"Flow supports only Session v4 state; the active session uses an unsupported version.",
+			"Flow v6 supports only Session v5 active state. Close active older sessions before upgrading; archived history remains inert.",
 		);
 		this.name = "UnsupportedFlowSessionVersionError";
 		this.actualVersion = actualVersion;

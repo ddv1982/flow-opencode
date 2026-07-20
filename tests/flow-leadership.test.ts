@@ -1,314 +1,134 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
 	FlowLeadershipHandle,
 	FlowPluginIdentity,
 } from "../src/platform/opencode/leadership.js";
 import {
-	compareSemanticVersions,
 	createFlowPluginInstanceId,
-	FLOW_LEADERSHIP_MAX_INSTANCES,
 	FLOW_LEADERSHIP_PROTOCOL_VERSION,
 	FLOW_LEADERSHIP_REGISTRY_SYMBOL,
-	FlowLeadershipError,
-	queryFlowPluginLeadership,
 	registerFlowPluginInstance,
-	unregisterFlowPluginInstance,
 } from "../src/platform/opencode/leadership.js";
 
-const PACKAGE_NAME = "opencode-plugin-flow";
-const DEFAULT_SCOPE = "/projects/default";
-
-function identity(
-	version: string,
-	instanceId: string,
-	protocolVersion = FLOW_LEADERSHIP_PROTOCOL_VERSION,
-): FlowPluginIdentity {
-	return { packageName: PACKAGE_NAME, version, protocolVersion, instanceId };
-}
+const DEFAULT_PROJECT = "/projects/default";
 
 function register(
-	version: string,
 	instanceId: string,
-	protocolVersion = FLOW_LEADERSHIP_PROTOCOL_VERSION,
-	scopeId = DEFAULT_SCOPE,
+	project = DEFAULT_PROJECT,
+	identity: Partial<FlowPluginIdentity> = {},
 ): FlowLeadershipHandle {
-	return registerFlowPluginInstance(
-		scopeId,
-		identity(version, instanceId, protocolVersion),
-	);
+	return registerFlowPluginInstance(project, {
+		packageName: "opencode-plugin-flow",
+		version: "5.3.4",
+		protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
+		instanceId,
+		...identity,
+	});
 }
 
-function clearRegistry(): void {
+afterEach(() => {
 	Reflect.deleteProperty(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL);
-}
+});
 
-afterEach(clearRegistry);
-
-describe("Flow project-scoped process leadership", () => {
-	test("keeps independent OpenCode project contexts operational", () => {
-		const handles = Array.from({ length: 11 }, (_, index) =>
-			register("5.3.3", `project-${index}`, undefined, `/projects/${index}`),
-		);
-
-		for (const handle of handles) {
-			expect(handle.query()).toMatchObject({
-				operational: true,
-				role: "leader",
-				reason: "sole-instance",
-				registeredCount: 1,
-			});
-		}
-	});
-
-	test("isolates a duplicate conflict to its own project context", () => {
-		const unaffected = register(
-			"5.3.3",
-			"unaffected",
-			undefined,
-			"/projects/unaffected",
-		);
-		const low = register("5.3.2", "low", undefined, "/projects/conflicted");
-		const high = register("5.3.3", "high", undefined, "/projects/conflicted");
-
-		expect(unaffected.isOperational()).toBe(true);
-		expect(low.isOperational()).toBe(false);
-		expect(high.query()).toMatchObject({
-			operational: false,
-			role: "leader",
-			reason: "duplicate-instances",
-			registeredCount: 2,
-		});
-	});
-
-	test("releasing one project context leaves another operational", () => {
-		const first = register("5.3.3", "first", undefined, "/projects/one");
-		const second = register("5.3.3", "second", undefined, "/projects/two");
-
-		expect(first.isOperational()).toBe(true);
-		expect(second.isOperational()).toBe(true);
-		expect(first.release()).toBe(true);
-		expect(second.isOperational()).toBe(true);
-	});
-
-	test("fails closed around an unscoped registration from an older Flow runtime", () => {
-		Reflect.set(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL, {
-			kind: "opencode-plugin-flow.runtime-leadership",
-			formatVersion: 1,
-			registrations: new Map([["legacy", identity("5.3.2", "legacy")]]),
-			capacityExceeded: false,
-		});
-
-		const current = register(
-			"5.3.3",
-			"current",
-			undefined,
-			"/projects/current",
-		);
-		expect(current.query()).toMatchObject({
-			operational: false,
-			reason: "duplicate-instances",
-			registeredCount: 2,
-			diagnosticLeader: expect.objectContaining({ version: "5.3.3" }),
-		});
-	});
-
-	test("keeps the shared registry envelope compatible with older Flow runtimes", () => {
-		const current = register(
-			"5.3.3",
-			"current",
-			undefined,
-			"/projects/current",
-		);
-		const registry = Reflect.get(
-			globalThis,
-			FLOW_LEADERSHIP_REGISTRY_SYMBOL,
-		) as {
-			kind?: unknown;
-			formatVersion?: unknown;
-			registrations?: Map<string, { scopeId?: unknown }>;
-			capacityExceeded?: unknown;
-		};
-
-		expect(registry).toMatchObject({
-			kind: "opencode-plugin-flow.runtime-leadership",
-			formatVersion: 1,
-			capacityExceeded: false,
-		});
-		expect(registry.registrations).toBeInstanceOf(Map);
-		expect(
-			registry.registrations?.get(current.identity.instanceId)?.scopeId,
-		).toBe("/projects/current");
-	});
-
-	for (const loadOrder of [
-		["4.9.0", "5.2.2"],
-		["5.2.2", "4.9.0"],
+describe("Flow project-scoped duplicate guard", () => {
+	for (const example of [
+		{
+			name: "keeps distinct projects independent",
+			firstProject: "/projects/one",
+			secondProject: "/projects/two",
+			expectedOperational: true,
+		},
+		{
+			name: "canonicalizes equivalent project paths",
+			firstProject: "/projects/one/../same",
+			secondProject: "/projects/same",
+			expectedOperational: false,
+		},
 	] as const) {
-		test(`elects the highest diagnostic version in ${loadOrder.join(" then ")} load order while failing closed`, () => {
-			const handles = loadOrder.map((version) =>
-				register(version, `instance-${version}`),
-			);
-			for (const handle of handles) {
-				const status = handle.query();
-				expect(status.reason).toBe("duplicate-instances");
-				expect(status.operational).toBe(false);
-				expect(status.registeredCount).toBe(2);
-				expect(status.diagnosticLeader?.version).toBe("5.2.2");
-			}
-			expect(
-				handles.find((handle) => handle.identity.version === "5.2.2")?.query()
-					.role,
-			).toBe("leader");
-			expect(
-				handles.find((handle) => handle.identity.version === "4.9.0")?.query()
-					.role,
-			).toBe("nonleader");
-			expect(() => handles[0]?.assertOperational("change Flow state")).toThrow(
-				FlowLeadershipError,
-			);
+		test(example.name, () => {
+			const first = register("first", example.firstProject);
+			const second = register("second", example.secondProject);
+
+			expect(first.isOperational()).toBe(example.expectedOperational);
+			expect(second.isOperational()).toBe(example.expectedOperational);
 		});
 	}
 
-	test("uses a stable instance-ID tie-breaker for same-version duplicates", () => {
-		const later = register("5.2.2", "zeta");
-		const earlier = register("5.2.2", "alpha");
+	test("canonicalizes symlink aliases to one project identity", async () => {
+		if (process.platform === "win32") return;
+		const root = await mkdtemp(join(tmpdir(), "flow-leadership-"));
+		try {
+			const project = join(root, "project");
+			const alias = join(root, "project-alias");
+			await mkdir(project);
+			await symlink(project, alias, "dir");
 
-		expect(later.query()).toMatchObject({
-			operational: false,
-			role: "nonleader",
-			reason: "duplicate-instances",
-		});
-		expect(earlier.query()).toMatchObject({
-			operational: false,
-			role: "leader",
-			reason: "duplicate-instances",
-		});
-		expect(later.query().diagnosticLeader?.instanceId).toBe("alpha");
-	});
+			const first = register("real-path", project);
+			const second = register("symlink-path", alias);
 
-	test("elects one deterministic diagnostic leader across three versions", () => {
-		const middle = register("10.0.0-rc.1", "middle");
-		const low = register("1.99.99", "low");
-		const high = register("10.0.0", "high");
-
-		for (const handle of [middle, low, high]) {
-			expect(handle.isOperational()).toBe(false);
-			expect(handle.query().registeredCount).toBe(3);
-			expect(handle.query().diagnosticLeader?.instanceId).toBe("high");
+			expect(first.query().reason).toBe("duplicate-instances");
+			expect(second.query().reason).toBe("duplicate-instances");
+			expect(first.scopeId).toBe(second.scopeId);
+		} finally {
+			await rm(root, { recursive: true, force: true });
 		}
-		expect(high.query().role).toBe("leader");
 	});
 
-	test("compares exact semantic versions without numeric precision loss", () => {
-		expect(compareSemanticVersions("5.2.2-rc.2", "5.2.2-rc.10")).toBe(-1);
-		expect(compareSemanticVersions("5.2.2+build.1", "5.2.2+build.2")).toBe(0);
-		expect(
-			compareSemanticVersions(
-				"999999999999999999999999.0.0",
-				"999999999999999999999998.999.999",
-			),
-		).toBe(1);
-	});
+	for (const versions of [
+		["1.0.0", "99.0.0"],
+		["99.0.0", "1.0.0"],
+		["development", "release"],
+	] as const) {
+		test(`fails every duplicate closed without electing by version: ${versions.join(" then ")}`, () => {
+			const first = register("first", DEFAULT_PROJECT, {
+				version: versions[0],
+			});
+			expect(first.isOperational()).toBe(true);
+			const second = register("second", DEFAULT_PROJECT, {
+				version: versions[1],
+			});
 
-	for (const invalidVersion of [
-		"5",
-		"v5.2.2",
-		"5.02.2",
-		"5.2.2-01",
-		"5.2.2-",
-		"5.2.2+",
-		"5.2.2 latest",
-	]) {
-		test(`rejects invalid exact version '${invalidVersion}'`, () => {
-			expect(() => register(invalidVersion, "invalid-version")).toThrow(
-				"valid exact semantic version",
-			);
-			expect(
-				Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL),
-			).toBeUndefined();
+			for (const handle of [first, second]) {
+				expect(handle.query()).toMatchObject({
+					registered: true,
+					operational: false,
+					role: "indeterminate",
+					reason: "duplicate-instances",
+					registeredCount: 2,
+					diagnosticLeader: null,
+				});
+				expect(() => handle.assertOperational("change Flow state")).toThrow(
+					"duplicate-instances",
+				);
+			}
 		});
 	}
 
-	test("keeps repeated registration idempotent for one instance", () => {
-		const first = register("5.2.2", "same-instance");
-		const second = register("5.2.2", "same-instance");
+	test("rechecks dynamically and restores the remaining instance on release", () => {
+		const first = register("first");
+		const duplicate = register("duplicate");
 
+		expect(first.isOperational()).toBe(false);
+		expect(duplicate.release()).toBe(true);
+		expect(duplicate.query().reason).toBe("released");
+		expect(duplicate.release()).toBe(false);
 		expect(first.query()).toMatchObject({
-			registered: true,
-			operational: true,
-			registeredCount: 1,
-			reason: "sole-instance",
-		});
-		expect(second.query().registrations).toHaveLength(1);
-		expect(second.release()).toBe(true);
-		expect(first.query()).toMatchObject({
-			registered: false,
-			operational: false,
-			reason: "not-registered",
-		});
-		expect(second.release()).toBe(false);
-	});
-
-	test("rejects reuse of an instance ID with different identity data", () => {
-		const original = register("5.2.2", "colliding-instance");
-		expect(() => register("5.2.3", "colliding-instance")).toThrow(
-			"already registered with different identity data",
-		);
-		expect(original.isOperational()).toBe(true);
-	});
-
-	test("unregisters and re-elects the remaining instance at query time", () => {
-		const low = register("4.0.0", "low");
-		const high = register("5.0.0", "high");
-
-		expect(low.isOperational()).toBe(false);
-		expect(high.query().role).toBe("leader");
-		expect(high.release()).toBe(true);
-		expect(high.query().reason).toBe("released");
-		expect(low.query()).toMatchObject({
 			operational: true,
 			role: "leader",
 			reason: "sole-instance",
 			registeredCount: 1,
 		});
+		expect(first.release()).toBe(true);
+		expect(
+			Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL),
+		).toBeUndefined();
 	});
 
-	test("leaves an incompatible preexisting symbol value untouched and fails closed", () => {
-		const occupied = Object.freeze({ owner: "another runtime" });
-		Reflect.set(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL, occupied);
-
-		const handle = register("5.2.2", "blocked");
-		expect(handle.query()).toMatchObject({
-			registered: false,
-			operational: false,
-			role: "indeterminate",
-			reason: "incompatible-registry",
-			registeredCount: null,
-		});
-		expect(Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL)).toBe(
-			occupied,
-		);
-		expect(() => handle.assertOperational("execute a command")).toThrow(
-			"process-global leadership registry is incompatible",
-		);
-		expect(handle.release()).toBe(false);
-	});
-
-	for (const { name, article, value } of [
-		{ name: "empty", article: "an", value: "" },
-		{ name: "null-containing", article: "a", value: "invalid\0scope" },
-	]) {
-		test(`rejects ${article} ${name} project leadership scope`, () => {
-			expect(() =>
-				register("5.2.2", "invalid-scope", undefined, value),
-			).toThrow("scope ID");
-			expect(
-				Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL),
-			).toBeUndefined();
-		});
-	}
-
-	test("shares registry semantics with a separately evaluated module API", async () => {
+	test("shares one process-global guard across separately loaded module copies", async () => {
+		const first = register("first");
 		const moduleUrl = new URL(
 			"../src/platform/opencode/leadership.ts",
 			import.meta.url,
@@ -317,53 +137,77 @@ describe("Flow project-scoped process leadership", () => {
 		const independent = (await import(
 			moduleUrl.href
 		)) as typeof import("../src/platform/opencode/leadership.js");
-		const handle = register("5.2.2", "cross-module");
+		const duplicate = independent.registerFlowPluginInstance(DEFAULT_PROJECT, {
+			packageName: "opencode-plugin-flow",
+			version: "6.0.0",
+			protocolVersion: independent.FLOW_LEADERSHIP_PROTOCOL_VERSION,
+			instanceId: "independent",
+		});
 
 		expect(independent.FLOW_LEADERSHIP_REGISTRY_SYMBOL).toBe(
 			FLOW_LEADERSHIP_REGISTRY_SYMBOL,
 		);
-		expect(
-			independent.queryFlowPluginLeadership(DEFAULT_SCOPE, "cross-module"),
-		).toMatchObject({
-			registered: true,
-			operational: true,
-			reason: "sole-instance",
-		});
-		expect(
-			independent.unregisterFlowPluginInstance(DEFAULT_SCOPE, "cross-module"),
-		).toBe(true);
-		expect(handle.isOperational()).toBe(false);
+		expect(first.isOperational()).toBe(false);
+		expect(duplicate.isOperational()).toBe(false);
+		expect(duplicate.release()).toBe(true);
+		expect(first.isOperational()).toBe(true);
 	});
 
-	test("bounds registrations and keeps every tracked instance closed after overflow", () => {
-		const unaffected = register(
-			"5.2.2",
-			"unaffected-by-overflow",
-			undefined,
-			"/projects/unaffected",
-		);
-		const handles = Array.from(
-			{ length: FLOW_LEADERSHIP_MAX_INSTANCES },
-			(_, index) => register("5.2.2", `bounded-${index}`),
-		);
-		const overflow = register("5.2.2", "bounded-overflow");
+	for (const occupied of [
+		Object.freeze({ owner: "another plugin" }),
+		Object.freeze({
+			kind: "opencode-plugin-flow.runtime-leadership",
+			formatVersion: 1,
+			projects: new Map(),
+		}),
+	] as const) {
+		test("leaves an incompatible registry or protocol untouched and fails closed", () => {
+			Reflect.set(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL, occupied);
+			const handle = register("blocked");
 
-		expect(overflow.query()).toMatchObject({
-			registered: false,
-			operational: false,
-			reason: "registry-capacity-exceeded",
-			registeredCount: FLOW_LEADERSHIP_MAX_INSTANCES,
+			expect(handle.query()).toMatchObject({
+				registered: false,
+				operational: false,
+				role: "indeterminate",
+				reason: "incompatible-registry",
+				registeredCount: null,
+			});
+			expect(Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL)).toBe(
+				occupied,
+			);
+			expect(handle.release()).toBe(false);
 		});
-		expect(handles[0]?.query()).toMatchObject({
+	}
+
+	test("fails a caller with an unsupported runtime protocol closed", () => {
+		const current = register("current");
+		const handle = register("future", DEFAULT_PROJECT, {
+			protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION + 1,
+		});
+
+		expect(current.query().reason).toBe("duplicate-instances");
+		expect(handle.query()).toMatchObject({
 			registered: true,
 			operational: false,
-			reason: "registry-capacity-exceeded",
+			reason: "incompatible-registry",
 		});
-		expect(
-			queryFlowPluginLeadership(DEFAULT_SCOPE, "bounded-overflow").registered,
-		).toBe(false);
-		expect(unregisterFlowPluginInstance(DEFAULT_SCOPE, "bounded-0")).toBe(true);
-		expect(handles[1]?.isOperational()).toBe(false);
-		expect(unaffected.isOperational()).toBe(true);
+		expect(handle.release()).toBe(true);
+	});
+
+	test("keeps repeated registration idempotent and rejects identity collisions", () => {
+		const first = register("same");
+		const repeated = register("same");
+
+		expect(first.isOperational()).toBe(true);
+		expect(repeated.query().registeredCount).toBe(1);
+		expect(() =>
+			register("same", DEFAULT_PROJECT, { version: "other" }),
+		).toThrow("already registered with different identity data");
+		expect(repeated.release()).toBe(true);
+		expect(first.query().reason).toBe("not-registered");
+	});
+
+	test("creates distinct runtime instance IDs", () => {
+		expect(createFlowPluginInstanceId()).not.toBe(createFlowPluginInstanceId());
 	});
 });

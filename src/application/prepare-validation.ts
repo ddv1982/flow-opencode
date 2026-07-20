@@ -1,68 +1,73 @@
-import type { FeatureId, FeatureRunId } from "../domain/session.js";
+import type {
+	SourceDigest,
+	ValidationObservation,
+	ValidationScope,
+} from "../domain/session.js";
+import { activeRun, recordValidation } from "../domain/transitions.js";
 import type { SessionRepository } from "./ports/session-repository.js";
-import type { SourceDigest } from "./ports/source-identity.js";
+import type { ValidationStartRequest } from "./schema.js";
 
-export type PrepareValidationInput = {
-	expectedRevision: number;
-	expectedSnapshotId: string;
+export type PreparedValidation = Readonly<{
 	featureId: string;
-};
-
-export type PreparedValidation = {
-	featureRunId: FeatureRunId;
-	featureId: FeatureId;
+	runId: string;
+	command: string;
+	scope: ValidationScope;
 	sourceDigest: SourceDigest;
-};
+}>;
 
-export class ValidationPreparationError extends Error {
-	readonly code = "FLOW_VALIDATION_PREPARATION";
-}
+export type ObservedValidation = PreparedValidation &
+	Readonly<{
+		captureId: string;
+		exitCode: number;
+		outputDigest: SourceDigest;
+		outputComplete: boolean;
+	}>;
 
-/**
- * Bind an ephemeral validation capture to the current causal guard and source.
- * This does not mutate Session v4; review start rechecks both the receipt and
- * current source before materializing assignment-owned evidence.
- */
 export async function prepareValidation(
 	repository: SessionRepository,
-	input: PrepareValidationInput,
+	input: ValidationStartRequest,
 ): Promise<PreparedValidation> {
 	return repository.transact(async (transaction) => {
 		const session = await transaction.load();
-		if (!session) {
-			throw new ValidationPreparationError(
-				"No active Flow session exists for validation capture.",
+		if (!session) throw new Error("No active Flow session exists.");
+		if (session.revision !== input.expectedRevision) {
+			throw new Error(
+				`Stale revision ${input.expectedRevision}; refresh Flow status and use revision ${session.revision}.`,
 			);
 		}
-		if (
-			input.expectedRevision !== session.causal.revision ||
-			input.expectedSnapshotId !== session.causal.snapshotId
-		) {
-			throw new ValidationPreparationError(
-				"Validation capture used stale causal guards; reload compact status.",
-			);
+		const run = activeRun(session);
+		if (!run || run.featureId !== input.featureId) {
+			throw new Error("Validation must target the active feature run.");
 		}
-		if (
-			input.featureId !== session.activeFeatureId ||
-			!session.activeFeatureRunId
-		) {
-			throw new ValidationPreparationError(
-				"Validation capture must target the active native feature run.",
-			);
+		if (run.reviews.length > 0) {
+			throw new Error("Validation cannot start after review has begun.");
 		}
-		const run = session.featureRuns.find(
-			(candidate) => candidate.id === session.activeFeatureRunId,
-		);
-		if (run?.status !== "active" || run.featureId !== input.featureId) {
-			throw new ValidationPreparationError(
-				"The active validation feature run is internally inconsistent.",
-			);
-		}
-		const source = await transaction.computeSourceIdentity();
 		return {
-			featureRunId: run.id,
 			featureId: run.featureId,
-			sourceDigest: source.digest,
+			runId: run.id,
+			command: input.command,
+			scope: input.scope,
+			sourceDigest: await transaction.computeSourceDigest(),
 		};
+	});
+}
+
+export async function persistObservedValidation(
+	repository: SessionRepository,
+	input: ObservedValidation,
+): Promise<ValidationObservation> {
+	return repository.transact(async (transaction) => {
+		const session = await transaction.load();
+		if (!session)
+			throw new Error("The Flow session ended before validation was recorded.");
+		const currentDigest = await transaction.computeSourceDigest();
+		if (currentDigest !== input.sourceDigest) {
+			throw new Error(
+				"Workspace content changed during validation; rerun the command against the final content.",
+			);
+		}
+		const result = recordValidation(session, input);
+		await transaction.save(result.session);
+		return result.value;
 	});
 }

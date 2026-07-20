@@ -8,8 +8,6 @@ export const PACKED_PACKAGE_PATHS = [
 	"CHANGELOG.md",
 	"LICENSE",
 	"README.md",
-	"dist/cli.js",
-	"dist/cli.js.map",
 	"dist/index.d.ts",
 	"dist/index.js",
 	"dist/index.js.map",

@@ -1,115 +1,37 @@
-# ADR 0002: TypeScript 7 and the Flow v5 Hard Cutover
+# ADR 0002: TypeScript 7 Toolchain and Inward Layers
 
 Date: 2026-07-17
 
 ## Status
 
-Accepted. The original persisted-session decision is superseded by ADR 0003;
-the TypeScript, platform, layering, and distribution decisions remain current.
-
-## Context
-
-The pre-v5 implementation is host-neutral at runtime, but its state machine, persistence, tool
-transport, and distribution concerns are still concentrated in a few large
-modules. The package also relies on implicit compatibility between the Zod
-version used by Flow and the Zod version embedded in the OpenCode plugin SDK.
-
-TypeScript 7 is now stable and gives Flow a substantially faster native
-compiler. OpenCode 1.18.3 remains the stable plugin API; its v2 plugin exports
-are beta and do not yet expose every integration used by Flow.
+Accepted for toolchain, platform, and source-layer decisions. Its earlier Flow
+v5 lifecycle and distribution decisions are superseded by
+[ADR 0005](0005-flow-v6-session-v5-simplicity-first.md).
 
 ## Decision
 
-Flow v5 is an ESM-only, intentionally breaking rewrite with these minimum
-platforms:
+Flow is an ESM package with these minimums:
 
-- TypeScript 7.0.2 for build and declaration emit.
-- Bun 1.3.14 for development, tests, builds, and release packaging.
-- Node.js 24 or newer for the published runtime and CLI.
-- OpenCode plugin API 1.18.3 or newer within the 1.x stable line.
-- Zod 4.4.3 for Flow's domain and persistence boundaries.
+- TypeScript 7.0.2;
+- Bun 1.3.14 for development, tests, builds, and packaging;
+- Node.js 24 or newer;
+- the stable OpenCode 1.x plugin API declared in `package.json`;
+- Zod 4.4.3 for application and persistence boundaries.
 
-Dependencies and toolchain versions are pinned exactly. CI validates Node 24
-and 26 and uses the pinned Bun version. A scheduled compatibility job may test
-the latest OpenCode release, but release gates use the pinned version.
+Dependencies are pinned. Source and declaration checking use NodeNext semantics
+and explicit `.js` relative imports. OpenCode transport schemas stay in the
+platform layer; application persistence schemas use Flow's direct Zod
+dependency.
 
-Source and declaration checking use `module: "NodeNext"` and explicit `.js`
-relative specifiers. Bun still bundles the two runtime entrypoints, but its
-resolver is not allowed to hide imports that would be invalid in a Node ESM
-consumer. Package smoke compiles the packed declarations under strict NodeNext
-resolution without `skipLibCheck` and imports the packed plugin with Node.
-
-OpenCode transport schemas are owned by `src/platform/opencode`. They use the
-schema implementation exported by `@opencode-ai/plugin`; domain and persisted
-data use Flow's direct Zod dependency. The two schema graphs never cross the
-platform boundary. Shared valid and invalid contract fixtures prove that both
-boundaries accept and reject the same wire payloads.
-
-The v5 source dependency direction is:
-
-1. `domain` — values, invariants, and pure transitions; no host or filesystem.
-2. `application` — use cases and ports; depends only on domain.
-3. `infrastructure` — filesystem implementations of application ports.
-4. `platform/opencode` — OpenCode hooks, transport schemas, and result rendering.
-5. `guidance` and prompts — stable ids, embedded Markdown, and compiled command
-   surfaces.
-6. `distribution` and `cli` — explicit recoverable legacy cleanup, never plugin
-   startup behavior.
-
-Flow does not use OpenCode native skill registration or global skill files as a
-plugin contribution mechanism. Core guidance is compiled from the package
-catalog, and optional guidance is progressively disclosed through the stable
-`flow_guidance` tool. Plugin initialization must not read or write the global
-skills root. The CLI may only archive marker-proven pristine v4 folders when a
-user explicitly invokes `legacy-cleanup --apply`; dry-run makes no writes and
-the migration never deletes.
-
-Flow also does not project active session state into `config.instructions`.
-The config hook registers commands and agents without workspace filesystem I/O;
-canonical commands load the sole active representation, `.flow/session.json`,
-through `flow_status` at the point of action.
-
-ADR 0003 replaces the original v5 persisted-session decision with the sole
-Session v4 assignment lifecycle. Other versions are generic unsupported input,
-not compatibility or canonical-history formats.
-
-Public use-case results are discriminated unions rather than open-ended
-`Record<string, unknown>` values. IDs are branded at the domain boundary,
-transitions are exhaustive and immutable, and time and ID creation are
-injected rather than read by domain code. Every completion outcome has an
-explicit `kind`; defaulted union discriminators are forbidden at transport
-boundaries. Caller-owned collections are copied before they enter session
-state.
-
-## Non-goals
-
-- Supporting pre-v5 source APIs or pre-cutover session documents.
-- Targeting OpenCode's beta v2 plugin API before its migration contract is
-  complete.
-- Reintroducing startup skill synchronization, setup-health state, or a second
-  instruction or active-state source outside the installed package.
-- Using TypeScript's unstable programmatic compiler API.
-- Enabling `isolatedDeclarations`; Flow publishes a single plugin entrypoint and
-  the annotation cost currently exceeds its value.
-- Disabling `skipLibCheck` while Bun's ambient declarations conflict internally.
-
-## Cutover gates
-
-The v5 release requires:
-
-- typecheck, lint, declaration emit, unit tests, package smoke, and live OpenCode
-  smoke to pass on the pinned toolchain;
-- contract tests across the OpenCode and core schema boundary;
-- Node 24 and Node 26 package-consumer tests;
-- no imports that violate the documented dependency direction;
-- no compatibility readers, adapters, aliases, or deprecated pre-v5 entrypoints.
+Dependencies point inward: domain → standard library only, with no outer Flow
+layers or host APIs; application → domain; infrastructure →
+application/domain; platform → inward layers plus guidance and configuration.
 
 ## Consequences
 
-- Only the Session v4 document defined by ADR 0003 can become active state or
-  canonical history; pre-cutover documents are generic unsupported input.
-- Consumers must upgrade their Node and OpenCode installations with Flow v5.
-- The OpenCode adapter duplicates a deliberately small wire-schema description;
-  contract fixtures prevent that description from drifting from core parsing.
-- Flow can upgrade its core validation independently of the host SDK's internal
-  validator version.
+- Package smoke verifies the packed ESM entrypoint and declarations.
+- Host validator objects never enter public declarations or domain code.
+- The OpenCode adapter may duplicate a small wire schema, backed by contract
+  tests, so SDK validation internals do not leak inward.
+- Flow v6 no longer has the CLI/distribution layer described by the original
+  decision.

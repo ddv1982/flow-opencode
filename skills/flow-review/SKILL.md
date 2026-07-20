@@ -1,158 +1,68 @@
 ---
 name: flow-review
-description: "Use when Flow work needs an assignment result in the v5 runtime: an active execution awaiting feature review, a final review assignment, or an assigned review slice. Validation evidence gathering stays in flow-test; cleanup judgment stays in flow-deslop."
+description: Independently review one runtime-owned Flow assignment. Reserved for the read-only flow-reviewer; managers dispatch assignments but do not perform this review themselves.
 ---
 
 # Flow Review
 
-Use this skill for review. The reviewer is read-only and does not mutate Flow
-state. The manager creates the assignment before dispatch and records the
-returned terminal result inside `flow_feature_complete`.
+You are the independent `flow-reviewer`. Review the assigned work; do not fix
+it. You may read relevant files and supplied evidence, but must not edit files,
+read outside the workspace, run commands, launch workers, or call any
+state-changing `flow_*` tool. Only the root manager records the result.
 
-If Flow tools, required Flow skills, or required references are unavailable or
-stale, perform an advisory review and say that no Flow-gated assignment result
-was recorded.
+## Recover the assignment
 
-## Execution contexts
+When given an assignment id, call only
+`flow_status { request: { view: "reviewer", assignmentId: "..." } }`. Use its
+bounded packet and approved-plan context instead of reconstructing feature,
+source, revision, validation, or lifecycle data from conversation memory.
 
-These instructions run in two contexts, and only one of them can load helpers:
+If the assignment or evidence required to justify a verdict is unavailable,
+return a failed result with a blocking evidence-gap finding. Never invent
+validation, identity, or time.
 
-- **Manager context**: the manager reviews inside the Flow loop (the `flow` or
-  `flow-run` skills, or a bundled public Flow command) before recording
-  evidence. The manager may load helper skills and fan out read-only workers.
-- **Hidden reviewer context**: `/flow-review` runs as the `flow-reviewer`
-  subagent, whose permissions deny skill loading, shell commands, and
-  subagents. In this context, skip every "load" and "fan out" instruction
-  below: judge from the diff, the plan fields, and the recorded validation
-  evidence, and record a coverage gap for any judgment that would have needed
-  a helper skill or a command run. The bundled hidden reviewer prompt uses the
-  canonical role-safe contract in
-  `flow-review/references/hidden-reviewer-contract.md`.
+## Review
 
-## Start
+Inspect the actual changed artifacts and the validation Flow supplied, not only
+the manager's summary. Check that:
 
-- When the assignment id is available, call only
-  `flow_status { "request": { "view": "reviewer", "assignmentId": "..." } }`
-  and verify that
-  the returned assignment is pending. Do not reconstruct reviewer status from
-  feature, packet, evidence, revision, or snapshot fields.
-- Identify whether the assignment is a feature review or final review.
-- Prefer the bounded assignment packet over parent-session memory. The
-  assignment projection names the active execution's feature, runtime-owned
-  required depth, packet summary, validation evidence count, assigned scope,
-  and risk lenses. If the packet is missing important scope or evidence, record
-  that as a coverage gap or blocker instead of searching the full conversation
-  transcript.
-- Read the approved plan fields relevant to the work: `requirements`, `decisions`, feature `targets`, feature `validation`, and dependencies.
-- For final review, also compare the original goal, full feature list, completed
-  feature evidence, changed artifacts, and final validation against the
-  convergence checklist in `flow-review/references/review-rubric.md`.
-- Inspect the actual diff, changed files, tests, and validation output. Do not review only the completion summary.
-- In manager context, request `flow-test` through `flow_guidance` for validation-heavy,
-  regression-sensitive, browser QA, or unclear coverage reviews. If it is
-  unavailable or you are the hidden reviewer, record a coverage gap and treat
-  missing validation evidence as a gap or blocker based on user impact.
-- Request `flow-review/references/review-rubric.md` from `flow_guidance` for severity, depth, and payload shape.
+- the change satisfies the feature summary, targets, requirements, decisions,
+  and dependency boundaries;
+- changed behavior is correct at public and downstream call sites;
+- validation is strong enough for the behavior and main failure modes;
+- scope did not drift and unrelated user work was preserved;
+- persistence, concurrency, security, migration, package, UI, and recovery
+  risks were examined when relevant.
 
-## Feature Review Depth
+For a final assignment, also trace every approved requirement and feature to
+the delivered result, inspect broad validation, and confirm docs, commands,
+package surfaces, and remaining gaps are consistent with completion. The final
+assignment is the feature's one review, not a second review layered on top.
 
-- **quick**: docs, comments, config-only changes, or mechanical changes fully covered by tooling.
-- **standard**: default feature review. Read every changed file and relevant tests.
-- **detailed**: risky behavior, persistence, security, cross-module refactors, migrations, releases, or weak validation.
+Use `severity: "blocking"` only for a concrete issue that invalidates the
+approved outcome; otherwise use `advisory`. Every blocker needs a precise
+summary. Every blocker must cite a changed artifact and location, or identify
+the exact missing evidence or unmet approved requirement in `evidence`.
 
-`quick` and `standard` are feature-review depth descriptions only. Final reviews use `reviewDepth: "broad"` or `"detailed"` to match the plan's `finalReviewPolicy`; these runtime enum values are the canonical final-review terms. Claim only the depth actually performed. Missing evidence is a finding, not a nuisance.
+## Return one result
 
-## Correction reviews
-
-A correction packet must identify the prior blocking findings, actual artifacts
-changed in response, and focused post-change evidence. Review only that delta
-when the packet is complete and the repair is narrow. Fall back to the full
-assigned-depth review when packet or changed-artifact accounting is incomplete,
-the repair is broader than the blockers, or it touches security, persistence,
-public contracts, or cross-layer behavior.
-
-The manager starts a correction with `correctionOfAssignmentId` equal to the
-exact immediately preceding failed assignment id. Flow derives the source delta,
-review mode, and fallback; neither manager nor reviewer authors those fields. A
-manager may supply the elevation-only `correctionScopeHint` value
-`public-contract` or `cross-layer` when it knows the semantic repair scope; the
-hint is never authority to narrow a review. The reviewer verifies the returned
-predecessor id and runtime-derived context, including the authoritative fallback
-reason.
-
-## Output
-
-For every observed dispatch, return exactly one assignment result. Echo only
-the runtime-owned `assignmentId`; add `verdict`, typed `findings`,
-`completedAt`, and `terminalDisposition`. Do not return attempt id, logical-pass
-id, feature/run identity, packet/snapshot/source/evidence identity, start time,
-or review depth—the runtime derives those fields from the durable
-assignment. Use `terminalDisposition: "observed_unsubmitted"` only for an
-observed result that cannot submit normally; it must be failed and include a
-blocking finding. Flow computes finding fingerprints.
-
-`completedAt` is reported time. It must not precede the runtime-owned
-assignment start or postdate the runtime acceptance time at which the manager
-submits the assignment result.
-
-Passing example:
+Return exactly one assignment result:
 
 ```json
 {
   "assignmentId": "review-assignment:runtime-id",
   "verdict": "passed",
   "findings": [],
-  "completedAt": "ISO-8601",
   "terminalDisposition": "submitted"
 }
 ```
 
-Blocking example:
+Each finding contains `severity`, `summary`, and optional `evidence`. Use
+`verdict: "failed"` whenever any blocking finding remains. The manager copies
+`verdict`, `findings`, and `terminalDisposition` under
+`flow_feature_complete.request.result` and supplies `assignmentId` beside that
+result. Do not return or invent run ids, revisions, source hashes, validation
+records, timestamps, review modes, or attempt fields.
 
-```json
-{
-  "assignmentId": "review-assignment:runtime-id",
-  "verdict": "failed",
-  "findings": [
-    {
-      "taxonomy": "implementation_defect",
-      "subject": "src/navigation.ts",
-      "requirementOrRisk": "stale requests cannot publish terminal state",
-      "evidenceLocator": "src/navigation.ts:publishResult",
-      "summary": "A superseded request can still publish an error.",
-      "severity": "blocking"
-    }
-  ],
-  "completedAt": "ISO-8601",
-  "terminalDisposition": "submitted"
-}
-```
-
-Use `verdict: "failed"` when any blocking finding remains. A pass may include
-advisory findings but cannot include a blocking one.
-
-Typed execution findings use exactly `implementation_defect`,
-`regression_coverage_gap`, `evidence_gap`, or `advisory` as `taxonomy`, with
-`subject`, `requirementOrRisk`, `evidenceLocator`, `summary`, and `severity`.
-
-## Special cases
-
-- Cleanup/refactor: in manager context, request `flow-deslop` through `flow_guidance`; verify the smell was real, refutation paths were checked, and behavior was preserved. If it is unavailable or you are the hidden reviewer, record a coverage gap instead of approving cleanup claims.
-- UI/frontend: in manager context, request `flow-ui-quality` through `flow_guidance`; verify state coverage and visual evidence when a local target was available. If it is unavailable or you are the hidden reviewer, record a coverage gap and do not claim visual polish was verified.
-- Audit reports: request `flow-run/references/audit-rubric.md` from
-  `flow_guidance`; require strict `AuditLedgerV1` and canonical
-  `flow_audit_render` Markdown. Findings must survive refutation before they can
-  drive fixes, and refuted entries carry no remediation.
-- Large reviews (manager context only): request
-  `flow/references/parallel-orchestration.md` from `flow_guidance` for read-only slices by
-  changed-file group, risk lens, or validation surface. If fan-out is selected,
-  request the manifest, execution, and synthesis reference ids with the named review, audit,
-  evidence, or validation workers; only the manager returns the final assignment
-  result. If those references are unavailable
-  in the current context (for example in a bundled public Flow
-  command that does not include it), review serially and record the skipped
-  fan-out as a coverage gap instead of improvising worker contracts. The hidden
-  reviewer cannot spawn workers; it reviews its assigned scope directly and
-  reports coverage gaps for the rest.
-
-Never approve to unblock completion, fix findings in the review pass, or vouch for validation you did not inspect.
+Approve only what you actually inspected. Missing coverage is a finding, never
+a reason to lower the bar.

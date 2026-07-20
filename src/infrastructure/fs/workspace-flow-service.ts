@@ -1,69 +1,46 @@
 import {
 	createFlowService,
 	type FlowResponse,
-	type FlowService,
 } from "../../application/flow-service.js";
 import { systemTransitionEnvironment } from "../system/transition-environment.js";
 import { createFileSessionRepository } from "./session-repository.js";
 
-export function createWorkspaceFlowService(workspace: string): FlowService {
+function service(workspace: string) {
 	return createFlowService(
 		createFileSessionRepository(workspace),
 		systemTransitionEnvironment,
 	);
 }
 
-export async function flowStatus(
+export const flowStatus = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).status(input);
-}
-
-export async function flowPlanSave(
+): Promise<FlowResponse> => service(workspace).status(input);
+export const flowPlanSave = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).planSave(input);
-}
-
-export async function flowPlanApprove(
-	workspace: string,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).planApprove();
-}
-
-export async function flowRunStart(
+): Promise<FlowResponse> => service(workspace).planSave(input);
+export const flowPlanApprove = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).runStart(input);
-}
-
-export async function flowFeatureComplete(
+): Promise<FlowResponse> => service(workspace).planApprove(input);
+export const flowRunStart = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).featureComplete(input);
-}
-
-export async function flowReviewStart(
+): Promise<FlowResponse> => service(workspace).runStart(input);
+export const flowReviewStart = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).reviewStart(input);
-}
-
-export async function flowFeatureReset(
+): Promise<FlowResponse> => service(workspace).reviewStart(input);
+export const flowFeatureComplete = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).featureReset(input);
-}
-
-export async function flowSessionClose(
+): Promise<FlowResponse> => service(workspace).featureComplete(input);
+export const flowFeatureReset = (
 	workspace: string,
 	input: unknown,
-): Promise<FlowResponse> {
-	return createWorkspaceFlowService(workspace).sessionClose(input);
-}
+): Promise<FlowResponse> => service(workspace).featureReset(input);
+export const flowSessionClose = (
+	workspace: string,
+	input: unknown,
+): Promise<FlowResponse> => service(workspace).sessionClose(input);

@@ -1,172 +1,60 @@
 ---
 name: flow
-description: Manage the end-to-end Flow loop for OpenCode work. Use when a user asks for Flow-guided delivery from goal to closure, resumable autonomous delivery, or resuming or closing a Flow session. For plan-only work use flow-plan; for executing one approved feature use flow-run.
+description: Manage a Flow goal from planning through implementation, validation, independent review, and closure. Use for end-to-end or resumed Flow work; use flow-plan for plan-only work and flow-run for one approved feature.
 ---
 
 # Flow
 
-Use Flow as a minimal state ledger, not as a framework. Package-owned guidance provides judgment; the runtime only records the approved plan, active execution, validation evidence, recorded review executions, and closure.
+Flow is a small state ledger around ordinary coding work. The root manager owns
+the session and every state-changing `flow_*` call. The reserved
+`flow-reviewer` independently reviews; it never edits or mutates Flow state.
 
-Routing: the root manager owns the whole loop and every state-changing `flow_*` call. Public commands embed the core `flow-plan`, `flow-run`, and `flow-review` guidance. Answer status-only questions with `flow_status`. Load optional helpers through `flow_guidance`: `flow-test`, `flow-deslop`, and `flow-ui-quality` may be used inside the loop; `flow-commit` is user-triggered only and never part of the autonomous loop.
+## Route from status
 
-## Loop
+1. Call `flow_status { request: { view: "compact" } }` first. Trust its
+   projection over conversation memory.
+2. If there is no session or the plan is still a draft, call
+   `flow_guidance { id: "flow-plan" }` and follow that contract. Stop after
+   planning when the user asked for a plan only.
+3. If an approved feature is ready or already running, call
+   `flow_guidance { id: "flow-run" }` and follow that contract for exactly that
+   feature.
+4. After the feature outcome, read compact status again. Start the next ready
+   feature, report the real blocker, or close a completed session with one
+   `flow_session_close` request.
 
-1. Call `flow_status { request: { view: "compact" } }`; read state only from
-   `workflowData.projection`. If `projection.closure.retryOperationId` exists,
-   call `flow_session_close { request: { mode: "retry", operationId } }` with
-   that complete value and stop ordinary mutation.
-2. Without a session, use `flow-plan` to save and, after explicit approval or
-   prior autonomous authorization, approve the user's goal. Ask when no goal exists.
-   If the user explicitly requested planning only or said not to implement,
-   stop after the saved approval summary even when this guide was invoked by
-   `/flow-auto`. That request does not authorize `flow_run_start`.
-3. When ready, call `flow_run_start`; its receipt only acknowledges the start.
-   For fresh or resumed running work, load `flow_status` with
-   `{ request: { view: "execution" } }` and use its active-execution scope and
-   causal guards.
-4. Implement and validate exactly that scope. Call `flow_review_start` with one
-   strict `request` containing the current execution guards and immutable
-   `validationRefs` appended by runtime-attested Bash capture, dispatch the returned
-   assignment to the reviewer, then submit its terminal result through
-   `flow_feature_complete`. Record a failed terminal review result before any
-   repair or edit, then refresh compact status and follow runtime state rather
-   than remembered retry counts. Load `flow-test` for complex or failure-prone
-   validation.
-5. On the final feature, economy mode is exactly `targeted validation -> feature
-   review -> one authorized bounded repair/retry if needed -> broad validation
-   after the last functional edit -> final flow_review_start bound to the exact
-   passing feature-assignment result -> final review -> one atomic
-   flow_feature_complete` carrying only the final-assignment result. Flow reads
-   the feature result from the durable bound prerequisite. Final review depth matches
-   `finalReviewPolicy`.
-6. Immediately call `flow_status { request: { view: "compact" } }` after the
-   feature outcome.
-   If status is `completed` and closure is null, call a new guarded
-   `flow_session_close { request: { mode: "start", kind: "completed", ...guards } }`.
-   If closure exists, retry only by `closure.retryOperationId`. Otherwise start
-   the next ready feature and load
-   execution, or report the blocker. Never route from a receipt.
+Core contracts are bundled in the plugin; load them through `flow_guidance` and
+do not depend on native skill discovery. If a required Flow tool is unavailable,
+report that the plugin is not fully loaded instead of simulating state changes.
 
-For broad discovery, audit, validation, review, verification, or candidate work,
-request `flow/references/parallel-orchestration.md` from `flow_guidance` as the
-routing index, then request the exact reference ids it selects. Request
-`flow/references/parallel-decision.md` first. Load `flow/references/parallel-manifest.md`
-and `flow/references/parallel-execution.md` only after selecting fan-out, then load
-`flow/references/parallel-synthesis.md` when handoffs return. Paste the matching template from
-`flow/references/handoff-format.md` into each worker prompt. Hidden Flow workers
-are injected by plugin config. Obey the trusted active runtime-profile footer
-when present; default to `standard` only when it is absent. `control` preserves
-legacy optional-worker behavior without admission ceremony, `standard` uses
-admitted bounded discovery and claim verification, and `assurance` permits the
-larger admitted audit wave. Validation receipts remain mandatory in every
-profile. Under `standard` or `assurance`, before each bounded discovery, audit,
-verification, or candidate-implementation proposal, the root manager calls
-`flow_orchestration_admit` once and dispatches exactly the admitted evidence,
-audit, verifier, or candidate workers. Mandatory reviewer assignments remain
-assignment-gated and validation workers remain receipt-gated; neither uses
-orchestration admission. The manager owns every durable `flow_*` state change.
+## Invariants
 
-Do not commit, push, amend, rebase, publish, or mutate releases during the
-autonomous Flow loop. Call `flow_guidance` with `id: "flow-commit"` only when
-the user explicitly asks for commit preparation or commit creation.
-
-## Guidance Availability
-
-Core command guidance is compiled into the plugin and optional documents are
-returned directly by `flow_guidance`; neither path depends on native skill
-discovery or files under the user's OpenCode configuration directory. Use the
-exact stable id named by the current guide. If the tool itself is unavailable,
-the Flow plugin is not fully loaded: continue only with explicit coverage gaps
-and do not claim helper checks were completed.
-
-## Runtime Surface
-
-- `flow_guidance`: load exact package-owned guidance by stable id; it never changes Flow state.
-- `flow_status`: read a bounded projection; compact is routing-only, execution
-  is the full active-feature working scope, detail is diagnostic, and reviewer
-  is narrow review assignment context.
-- `flow_plan_save`: create a session or update the active same-goal draft; it
-  never replaces a different unclosed goal.
-- `flow_plan_approve`: lock the draft plan.
-- `flow_run_start`: start one runnable feature.
-- `flow_orchestration_admit`: evaluate and arm one bounded discovery, audit,
-  verification, or candidate-implementation proposal before its exact hidden
-  workers are dispatched.
-- `flow_validation_start`: arm runtime capture for the exact next Bash command;
-  the host appends one immutable validation receipt ref after execution.
-- `flow_audit_render`: validate strict `AuditLedgerV1` data and return canonical
-  reconciled Markdown plus derived counts.
-- `flow_review_start`: bind current-source validation to one runtime-owned
-  reviewer assignment from `validationRefs`; only the root manager may call it.
-- `flow_feature_complete`: atomically record one completed or blocked result
-  using the returned assignment id. Broad final outcome submits only the
-  final-assignment result.
-- `flow_feature_reset`: reset one feature and its dependents.
-- `flow_session_close`: archive the active session as `completed`, `deferred`, or `abandoned`.
-
-There is no `flow_context`, no reviewer-owned mutation tool, and no multi-session
-activation surface. `flow_review_start` creates identity before dispatch; it
-does not record a verdict. The single active source of truth is
-`.flow/session.json`; closed sessions are archived under `.flow/history/`.
-
-Planning and running require loaded Flow tools; do not simulate plan approval
-or a feature outcome when the runtime is unavailable. Review may still return
-advisory output when tools, guidance, or required evidence is unavailable, but
-the manager must not record it as a Flow-gated assignment result.
-
-## Hard Gates
-
-- Approved plans are immutable. To change direction, reset affected features or close the session and start a new goal.
-- A different-goal plan save never archives or replaces the current session,
-  including an unapproved draft. Explicitly close unfinished work as `deferred`
-  or `abandoned`, converge archive publication, then save the new goal.
-- Only one feature can be active at a time.
-- Each run has runtime-owned feature-run and reviewer-assignment identity.
-- `flow_review_start` requires passing runtime-attested, source/run-bound
-  validation receipt refs: targeted for a feature assignment and broad for a
-  final assignment. Starting again after a source edit invalidates the stale
-  pending assignment and returns a replacement.
-- A non-final feature outcome requires `validationScope: "targeted"` plus one passing
-  feature-assignment result.
-- Final feature outcome requires `validationScope: "broad"` plus one passing
-  final-assignment result in economy order. Final assignment start durably binds
-  the passing feature-assignment result; Flow consumes that binding atomically.
-- Review depth comes from the approved plan; callers and reviewers do not
-  author it in the feature outcome.
-- Failed reviews pause the loop by default. Autonomous repair may make at most
-  one repair plus one retry review before stopping. First record the failed
-  terminal result and refresh compact status; never infer retry exhaustion from
-  conversation memory or reviewer prose.
-- A passing final feature outcome leaves closure null; `flow_session_close`
-  alone records and
-  archives the closure.
-- A stored closure makes the session archive-only; retry `flow_session_close`
-  only with `{ request: { mode: "retry", operationId: closure.retryOperationId } }`
-  until archive publication succeeds.
-- Every closure is quiescent: no active execution or pending assignment remains.
-- Runtime-attested validation and reported review times must follow lifecycle
-  order and cannot postdate runtime acceptance.
-- The `flow_session_close.request` start branch accepts `kind: "completed"`
-  only after an approved plan has passed its final feature outcome.
+- Approved plans do not change. Reset affected work or close the session before
+  changing direction.
+- Only one feature runs at a time.
+- Work stays inside the active feature and preserves unrelated user changes.
+- A passing feature needs successful current-source validation and one
+  independent reviewer assignment. The final feature uses broad validation and
+  a final review; it does not add a second review pass.
+- A failed review is recorded honestly. Any retry is a fresh run with full
+  validation and review.
+- Use runtime revisions and operation ids for ordering and idempotency. Supply
+  only fields requested by the current tool schema.
+- Do not create reports or sidecars outside `.flow/**` unless the user asks for
+  a durable artifact. Prefer one readable Markdown file; JSON is opt-in.
+- Do not stage, commit, push, publish, or mutate releases unless the user
+  explicitly asks for that Git or release action.
 
 ## Recovery
 
-- Confused state: call `flow_status { request: { view: "compact" } }` and follow
-  `nextAction`.
-- Wrong assumption or failed implementation path: use `flow_feature_reset` for the feature and dependents, then rerun from the corrected plan.
-- Missing validation or an assignment result: call `flow_validation_start`
-  immediately before each exact Bash command, collect the appended receipt
-  refs, create a fresh assignment with `flow_review_start`, then submit its
-  terminal result.
-- Source changed after assignment: rerun validation and call `flow_review_start`;
-  Flow invalidates the stale pending assignment while creating its replacement.
-- Same-source final-review retry after context loss: load detail status and copy
-  the exact `.finalReviewRetry.prerequisite.result` value unchanged into the new
-  final assignment request. Compact and reviewer status omit the binding. If
-  source changed, restart targeted feature review first.
-- Plan or goal is materially wrong: revise only a same-goal planning draft.
-  Otherwise reset affected approved work or explicitly close the session before
-  starting a new goal.
-- Unknown runtime error: read `summary` and `recovery`; request `flow/references/recovery-playbook.md` from `flow_guidance` for common cases.
+On confusion or interruption, read compact status and follow its next action.
+Use execution status for the active feature and reviewer status for a returned
+assignment id. If status is closed with `archiveRetry`, call
+`flow_session_close` with that projected request byte-for-byte; do not create a
+new operation id or revision. Never infer completion, retry count, or closure
+from prose.
 
-Never fabricate validation output, backfill review approval you did not perform, or close as `deferred`/`abandoned` merely to avoid an unfinished-work blocker.
+For a newly completed session, close with one request containing the
+status-projected session id, a fresh operation id, current revision, closure
+kind, and optional summary. Repeating that exact request converges; there is no
+separate retry mode.

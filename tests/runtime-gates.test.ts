@@ -1,1956 +1,515 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { FlowResponse } from "../src/application/flow-service.js";
+import { describe, expect, test } from "bun:test";
+import { UnreadableFlowSessionError } from "../src/application/errors.js";
 import {
-	type OrchestrationPassRecord,
-	type OrchestrationTelemetry,
-	SessionSchema,
-} from "../src/application/schema.js";
+	createFlowService,
+	type FlowResponse,
+	type FlowService,
+} from "../src/application/flow-service.js";
 import type {
-	ReviewAssignment,
-	ReviewAssignmentResultInput,
-	ReviewExecutionFindingInput,
-	Session,
-} from "../src/domain/session.js";
-import { loadSession } from "../src/infrastructure/fs/workspace.js";
+	SessionRepository,
+	SessionTransaction,
+} from "../src/application/ports/session-repository.js";
 import {
-	flowFeatureComplete as executeFlowFeatureComplete,
-	flowFeatureReset as executeFlowFeatureReset,
-	flowPlanApprove as executeFlowPlanApprove,
-	flowPlanSave as executeFlowPlanSave,
-	flowReviewStart as executeFlowReviewStart,
-	flowRunStart as executeFlowRunStart,
-	flowSessionClose as executeFlowSessionClose,
-	flowStatus as executeFlowStatus,
-} from "../src/infrastructure/fs/workspace-flow-service.js";
-import { publishValidationReceiptForWorkspace } from "./support/validation-receipt.js";
+	persistObservedValidation,
+	prepareValidation,
+} from "../src/application/prepare-validation.js";
+import type {
+	Plan,
+	ReviewAssignment,
+	Session,
+	SourceDigest,
+} from "../src/domain/session.js";
+import type { TransitionEnvironment } from "../src/domain/transitions.js";
 
-type TestSession = Session & {
-	sourceSummary: string;
-	features: NonNullable<Session["plan"]>["features"];
-	nextFeature: NonNullable<Session["plan"]>["features"][number] | null;
-	pendingFeatures: NonNullable<Session["plan"]>["features"];
-	latestHistoryEntry: Session["history"][number] | null;
-	historyCount: number;
-	progress: { completed: number; total: number; remaining: number };
+const FEATURE = "runtime-kernel";
+const SOURCE_A = `sha256:${"a".repeat(64)}` as SourceDigest;
+const SOURCE_B = `sha256:${"b".repeat(64)}` as SourceDigest;
+const OUTPUT = `sha256:${"c".repeat(64)}` as SourceDigest;
+
+const plan: Plan = {
+	summary: "Implement the runtime kernel.",
+	overview: "Exercise the public application boundary.",
+	requirements: ["Persist validation directly in Session v5."],
+	decisions: ["Use a single final review for the final feature."],
+	features: [
+		{
+			id: FEATURE,
+			title: "Runtime kernel",
+			summary: "Implement and verify the kernel.",
+			targets: ["src"],
+			validation: ["bun test"],
+			dependsOn: [],
+		},
+	],
 };
 
-type TestFlowResponse = FlowResponse & {
-	workflowData?: NonNullable<FlowResponse["workflowData"]> & {
-		session?: TestSession;
+class MemorySessionRepository implements SessionRepository {
+	session: Session | null = null;
+	sourceDigest = SOURCE_A;
+	archiveFailure: Error | null = null;
+	readFailure: Error | null = null;
+	quarantineCount = 0;
+	readonly archives = new Map<string, Session>();
+
+	readonly transaction: SessionTransaction = {
+		load: () => Promise.resolve(this.session),
+		loadArchive: (sessionId) =>
+			Promise.resolve(this.archives.get(sessionId) ?? null),
+		save: (session) => {
+			this.session = session;
+			return Promise.resolve(session);
+		},
+		archiveAndClear: (session) => {
+			if (this.archiveFailure) return Promise.reject(this.archiveFailure);
+			this.archives.set(session.id, session);
+			this.session = null;
+			return Promise.resolve();
+		},
+		quarantineUnreadable: () => {
+			this.quarantineCount += 1;
+			this.session = null;
+			return Promise.resolve("memory://quarantined-session");
+		},
+		computeSourceDigest: () => Promise.resolve(this.sourceDigest),
 	};
-};
 
-let operationSequence = 0;
-const temporaryWorkspaces = new Set<string>();
-const SOURCE_DIGEST = `sha256:${"c".repeat(64)}`;
+	read(): Promise<Session | null> {
+		if (this.readFailure) return Promise.reject(this.readFailure);
+		return Promise.resolve(this.session);
+	}
 
-type CompletedResult =
-	| {
-			kind: "completed";
-			summary: string;
-			artifactsChanged: Array<{ path: string }>;
-			validationScope: "targeted";
-			featureReview: ReviewAssignmentResultInput;
-			orchestrationPasses?: unknown;
-	  }
-	| {
-			kind: "completed";
-			summary: string;
-			artifactsChanged: Array<{ path: string }>;
-			validationScope: "broad";
-			finalReview: ReviewAssignmentResultInput;
-			orchestrationPasses?: unknown;
-	  };
-
-type BlockedResult = {
-	kind: "blocked";
-	summary: string;
-	review: ReviewAssignmentResultInput;
-	resolutionHint?: string;
-	orchestrationPasses?: unknown;
-};
-
-function activeRun(session: Session) {
-	const run = session.featureRuns.find(
-		(candidate) => candidate.id === session.activeFeatureRunId,
-	);
-	if (!run) throw new Error("Expected an active feature run.");
-	return run;
+	transact<T>(
+		task: (transaction: SessionTransaction) => Promise<T>,
+	): Promise<T> {
+		return task(this.transaction);
+	}
 }
 
-function flowReviewStartRequest(workspace: string, request: unknown) {
-	return executeFlowReviewStart(workspace, { request });
-}
-
-function decorateSession(session: Session): TestSession {
-	const features = session.plan?.features ?? [];
-	const completed = features.filter(
-		(feature) => feature.status === "completed",
-	).length;
-	const nextFeature =
-		features.find((feature) => feature.status === "pending") ?? null;
+function deterministicEnvironment(): TransitionEnvironment {
+	const sequences = new Map<string, number>();
 	return {
-		...session,
-		sourceSummary:
-			session.history.at(-1)?.summary ?? session.plan?.summary ?? session.goal,
-		features,
-		nextFeature,
-		pendingFeatures: features.filter(
-			(feature) => feature.status !== "completed",
-		),
-		latestHistoryEntry: session.history.at(-1) ?? null,
-		historyCount: session.history.length,
-		progress: {
-			completed,
-			total: features.length,
-			remaining: features.length - completed,
+		newId(kind) {
+			const next = (sequences.get(kind) ?? 0) + 1;
+			sequences.set(kind, next);
+			return `${kind}-${next}`;
 		},
 	};
 }
 
-async function withTestSession(
-	workspace: string,
-	response: FlowResponse,
-): Promise<TestFlowResponse> {
-	try {
-		const session = await loadSession(workspace);
-		if (!session) return response;
-		const features = session.plan?.features ?? [];
-		const completed = features.filter(
-			(feature) => feature.status === "completed",
-		).length;
-		const active = session.activeFeatureId;
-		const next = features.find((feature) => feature.status === "pending")?.id;
-		return {
-			...response,
-			statusSummary:
-				response.statusSummary ??
-				`Progress ${completed}/${features.length}${active ? `; active: ${active}` : next ? `; next: ${next}` : ""}`,
-			workflowData: {
-				...response.workflowData,
-				session: decorateSession(session),
-			},
-		};
-	} catch {
-		return response;
-	}
+function revision(repository: MemorySessionRepository): number {
+	if (!repository.session) throw new Error("Expected an active session.");
+	return repository.session.revision;
 }
 
-async function flowStatus(
-	workspace: string,
-	input: unknown = {},
-): Promise<TestFlowResponse> {
-	const payload =
-		typeof input === "object" && input !== null
-			? (input as Record<string, unknown>)
-			: {};
-	return withTestSession(
-		workspace,
-		await executeFlowStatus(workspace, {
-			request: {
-				...(payload.view ? {} : { view: "compact" }),
-				...payload,
-			},
-		}),
-	);
+function activeReview(repository: MemorySessionRepository): ReviewAssignment {
+	const review = repository.session?.runs
+		.find((run) => run.state === "active")
+		?.reviews.at(-1);
+	if (!review) throw new Error("Expected a review assignment.");
+	return review;
 }
 
-async function flowPlanSave(
-	workspace: string,
-	input: unknown,
-): Promise<TestFlowResponse> {
-	return withTestSession(
-		workspace,
-		await executeFlowPlanSave(workspace, input),
-	);
+function expectOk(response: FlowResponse): void {
+	expect(response.status).toBe("ok");
+	if (response.status !== "ok") throw new Error(response.summary);
 }
 
-async function flowPlanApprove(workspace: string): Promise<TestFlowResponse> {
-	return withTestSession(workspace, await executeFlowPlanApprove(workspace));
-}
-
-async function flowRunStart(
-	workspace: string,
-	input: unknown,
-): Promise<TestFlowResponse> {
-	return withTestSession(
-		workspace,
-		await executeFlowRunStart(workspace, input),
-	);
-}
-
-async function flowFeatureComplete(
-	workspace: string,
-	input: unknown,
-): Promise<TestFlowResponse> {
-	const session = await loadSession(workspace);
-	const payload =
-		typeof input === "object" && input !== null
-			? (input as Record<string, unknown>)
-			: {};
-	return withTestSession(
-		workspace,
-		await executeFlowFeatureComplete(workspace, {
-			request: {
-				operationId: `runtime-operation-${++operationSequence}`,
-				expectedRevision: session?.causal.revision ?? 0,
-				expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
-				...payload,
-			},
-		}),
-	);
-}
-
-async function startReview(
-	workspace: string,
-	input: {
-		featureId: string;
-		reviewKind: "feature" | "final";
-		validationScope: "targeted" | "broad";
-		packetSummary?: string;
-		featureReview?: ReviewAssignmentResultInput;
-	},
-): Promise<ReviewAssignment> {
-	const current = await loadSession(workspace);
-	if (!current) throw new Error("Expected an active runtime session.");
-	const pending = current.reviewAssignments.find(
-		(assignment) =>
-			assignment.featureRunId === current.activeFeatureRunId &&
-			assignment.reviewKind === input.reviewKind &&
-			assignment.status === "pending",
-	);
-	if (pending) return pending;
-	const run = activeRun(current);
-	const validationAt =
-		input.reviewKind === "final" && input.featureReview
-			? input.featureReview.completedAt
-			: run.startedAt;
-	const validationRef = await publishValidationReceiptForWorkspace(workspace, {
-		startedAt: validationAt,
-		command: `bun test ${input.featureId}`,
-		coverageScope: input.reviewKind === "final" ? "broad" : "focused",
-	});
-	const response = await executeFlowReviewStart(workspace, {
+async function startSession(
+	repository: MemorySessionRepository,
+	environment: TransitionEnvironment,
+): Promise<FlowService> {
+	const flow = createFlowService(repository, environment);
+	const saved = await flow.planSave({
 		request: {
-			operationId: `runtime-operation-${++operationSequence}`,
-			expectedRevision: current.causal.revision,
-			expectedSnapshotId: current.causal.snapshotId,
-			featureId: input.featureId,
-			reviewKind: input.reviewKind,
-			validationScope: input.validationScope,
-			...(input.featureReview ? { featureReview: input.featureReview } : {}),
-			packet: {
-				summary:
-					input.packetSummary ?? `Runtime gate ${input.reviewKind} review.`,
-				riskLenses: [],
-			},
-			validationRefs: [validationRef],
+			operationId: "plan-save-runtime",
+			expectedRevision: 0,
+			goal: "Ship the runtime",
+			plan,
 		},
 	});
-	if (response.status !== "ok") {
-		throw new Error(`Expected review assignment: ${response.summary}`);
-	}
-	const projection = response.workflowData?.projection as
-		| { assignmentId?: string }
-		| undefined;
-	const persisted = await loadSession(workspace);
-	const assignment = persisted?.reviewAssignments.find(
-		(candidate) => candidate.id === projection?.assignmentId,
-	);
-	if (!assignment) throw new Error("Expected a persisted review assignment.");
-	return assignment;
-}
-
-function passedReview(
-	assignment: ReviewAssignment,
-): ReviewAssignmentResultInput {
-	return {
-		assignmentId: assignment.id,
-		verdict: "passed",
-		findings: [],
-		completedAt: assignment.startedAt,
-		terminalDisposition: "submitted",
-	};
-}
-
-function blockingFinding(
-	featureId: string,
-	reviewKind: "feature" | "final",
-	summary = "Missing behavior test.",
-): ReviewExecutionFindingInput {
-	return {
-		taxonomy: "implementation_defect",
-		subject: featureId,
-		requirementOrRisk: `${reviewKind} review must pass`,
-		evidenceLocator: featureId,
-		summary,
-		severity: "blocking",
-	};
-}
-
-function failedReview(
-	assignment: ReviewAssignment,
-	summary?: string,
-): ReviewAssignmentResultInput {
-	return {
-		assignmentId: assignment.id,
-		verdict: "failed",
-		findings: [
-			blockingFinding(assignment.featureId, assignment.reviewKind, summary),
-		],
-		completedAt: assignment.startedAt,
-		terminalDisposition: "submitted",
-	};
-}
-
-async function completeSuccessfully(
-	workspace: string,
-	input: {
-		featureId: string;
-		validationScope: "targeted" | "broad";
-		includeFinalReview?: boolean;
-		orchestrationPasses?: unknown;
-	},
-): Promise<TestFlowResponse> {
-	const featureAssignment = await startReview(workspace, {
-		featureId: input.featureId,
-		reviewKind: "feature",
-		validationScope: input.includeFinalReview
-			? "targeted"
-			: input.validationScope,
+	expectOk(saved);
+	const approved = await flow.planApprove({
+		request: {
+			operationId: "plan-approve-runtime",
+			expectedRevision: revision(repository),
+		},
 	});
-	const finalAssignment = input.includeFinalReview
-		? await startReview(workspace, {
-				featureId: input.featureId,
-				reviewKind: "final",
-				validationScope: "broad",
-				featureReview: passedReview(featureAssignment),
-			})
-		: null;
-	const result: CompletedResult = finalAssignment
-		? {
-				kind: "completed",
-				summary: `Completed ${input.featureId}.`,
-				artifactsChanged: [{ path: `src/${input.featureId}.ts` }],
-				validationScope: "broad",
-				finalReview: passedReview(finalAssignment),
-				...(input.orchestrationPasses === undefined
-					? {}
-					: { orchestrationPasses: input.orchestrationPasses }),
-			}
-		: {
-				kind: "completed",
-				summary: `Completed ${input.featureId}.`,
-				artifactsChanged: [{ path: `src/${input.featureId}.ts` }],
-				validationScope: "targeted",
-				featureReview: passedReview(featureAssignment),
-				...(input.orchestrationPasses === undefined
-					? {}
-					: { orchestrationPasses: input.orchestrationPasses }),
-			};
-	return flowFeatureComplete(workspace, {
-		featureId: input.featureId,
-		result,
+	expectOk(approved);
+	const started = await flow.runStart({
+		request: {
+			operationId: "run-start-runtime",
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+		},
 	});
+	expectOk(started);
+	return flow;
 }
 
-async function submitFailedAssignment(
-	workspace: string,
-	input: {
-		featureId: string;
-		reviewKind?: "feature" | "final";
-		summary: string;
-		resolutionHint?: string;
-		orchestrationPasses?: unknown;
-		operationId?: string;
-	},
-): Promise<TestFlowResponse> {
-	const reviewKind = input.reviewKind ?? "feature";
-	const featurePrerequisite =
-		reviewKind === "final"
-			? await startReview(workspace, {
-					featureId: input.featureId,
-					reviewKind: "feature",
-					validationScope: "targeted",
-				})
-			: null;
-	const assignment = await startReview(workspace, {
-		featureId: input.featureId,
-		reviewKind,
-		validationScope: reviewKind === "final" ? "broad" : "targeted",
-		...(featurePrerequisite
-			? { featureReview: passedReview(featurePrerequisite) }
-			: {}),
-	});
-	const result: BlockedResult = {
-		kind: "blocked",
-		summary: input.summary,
-		review: failedReview(assignment),
-		...(input.resolutionHint ? { resolutionHint: input.resolutionHint } : {}),
-		...(input.orchestrationPasses === undefined
-			? {}
-			: { orchestrationPasses: input.orchestrationPasses }),
-	};
-	return flowFeatureComplete(workspace, {
-		...(input.operationId ? { operationId: input.operationId } : {}),
-		featureId: input.featureId,
-		result,
-	});
-}
-
-async function exhaustReviewRetryBudget(
-	workspace: string,
-	input: Parameters<typeof submitFailedAssignment>[1],
-): Promise<TestFlowResponse> {
-	const first = await submitFailedAssignment(workspace, input);
-	if (first.status !== "ok") return first;
-	return submitFailedAssignment(workspace, input);
-}
-
-async function flowFeatureReset(
-	workspace: string,
-	input: unknown,
-): Promise<TestFlowResponse> {
-	const session = await loadSession(workspace);
-	const payload =
-		typeof input === "object" && input !== null
-			? (input as Record<string, unknown>)
-			: {};
-	return withTestSession(
-		workspace,
-		await executeFlowFeatureReset(workspace, {
-			operationId: `runtime-operation-${++operationSequence}`,
-			expectedRevision: session?.causal.revision ?? 0,
-			expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
-			...payload,
-		}),
-	);
-}
-
-async function flowSessionClose(
-	workspace: string,
-	input: unknown,
-): Promise<TestFlowResponse> {
-	const session = await loadSession(workspace);
-	const payload =
-		typeof input === "object" && input !== null
-			? (input as Record<string, unknown>)
-			: {};
-	return withTestSession(
-		workspace,
-		await executeFlowSessionClose(workspace, {
+describe("Flow application runtime gates", () => {
+	test("does not quarantine state repaired before the transaction lock", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = createFlowService(repository, deterministicEnvironment());
+		const saved = await flow.planSave({
 			request: {
-				mode: "start",
-				operationId: `runtime-operation-${++operationSequence}`,
-				expectedRevision: session?.causal.revision ?? 0,
-				expectedSnapshotId: session?.causal.snapshotId ?? SOURCE_DIGEST,
-				...payload,
+				operationId: "plan-save-before-repair",
+				expectedRevision: 0,
+				goal: "Preserve repaired state",
+				plan,
 			},
-		}),
-	);
-}
-
-async function tempWorkspace(): Promise<string> {
-	const workspace = await mkdtemp(join(tmpdir(), "flow-runtime-"));
-	temporaryWorkspaces.add(workspace);
-	return workspace;
-}
-
-afterEach(async () => {
-	const workspaces = [...temporaryWorkspaces];
-	temporaryWorkspaces.clear();
-	await Promise.all(
-		workspaces.map((workspace) =>
-			rm(workspace, { force: true, recursive: true }),
-		),
-	);
-});
-
-function twoFeaturePlan() {
-	return {
-		summary: "Deliver the requested change.",
-		overview: "Implement the first feature, then the dependent final feature.",
-		requirements: ["Keep scope explicit."],
-		decisions: ["Use the Flow v5 layered architecture."],
-		finalReviewPolicy: "detailed" as const,
-		features: [
-			{
-				id: "first-feature",
-				title: "First feature",
-				summary: "Deliver the first part.",
-				targets: ["src/first.ts"],
-				validation: ["targeted test"],
-				dependsOn: [],
-			},
-			{
-				id: "final-feature",
-				title: "Final feature",
-				summary: "Finish the delivery.",
-				targets: ["src/final.ts"],
-				validation: ["broad check"],
-				dependsOn: ["first-feature"],
-			},
-		],
-	};
-}
-
-function orchestrationPass(
-	id: string,
-	overrides: Partial<OrchestrationPassRecord> = {},
-): OrchestrationPassRecord {
-	return {
-		id,
-		kind: "validation",
-		modes: [],
-		candidateEligibility: "unknown",
-		decisionFactors: [],
-		workerCount: 1,
-		candidateWorkerCount: 0,
-		verifierWorkerCount: 0,
-		sliceIds: [],
-		dependsOn: [],
-		writeScope: "none",
-		handoffRefs: [],
-		verificationStatus: "passed",
-		outcome: "accepted",
-		...overrides,
-	};
-}
-
-function fourFeaturePlan() {
-	return {
-		...twoFeaturePlan(),
-		features: [
-			{
-				id: "feature-one",
-				title: "Feature one",
-				summary: "Deliver part one.",
-				targets: ["src/one.ts"],
-				validation: ["targeted test one"],
-				dependsOn: [],
-			},
-			{
-				id: "feature-two",
-				title: "Feature two",
-				summary: "Deliver part two.",
-				targets: ["src/two.ts"],
-				validation: ["targeted test two"],
-				dependsOn: ["feature-one"],
-			},
-			{
-				id: "feature-three",
-				title: "Feature three",
-				summary: "Deliver part three.",
-				targets: ["src/three.ts"],
-				validation: ["targeted test three"],
-				dependsOn: ["feature-two"],
-			},
-			{
-				id: "feature-four",
-				title: "Feature four",
-				summary: "Deliver part four.",
-				targets: ["src/four.ts"],
-				validation: ["broad check"],
-				dependsOn: ["feature-three"],
-			},
-		],
-	};
-}
-
-async function approvedTwoFeatureSession(workspace: string): Promise<void> {
-	expect(
-		(
-			await flowPlanSave(workspace, {
-				goal: "Deliver a two-feature change",
-				plan: twoFeaturePlan(),
-			})
-		).status,
-	).toBe("ok");
-	expect((await flowPlanApprove(workspace)).status).toBe("ok");
-}
-
-function workflowSession(response: Awaited<ReturnType<typeof flowStatus>>) {
-	const session = response.workflowData?.session;
-	if (!session) throw new Error("Expected workflow session data.");
-	return session;
-}
-
-async function orchestrationTelemetry(
-	workspace: string,
-): Promise<OrchestrationTelemetry> {
-	const status = await flowStatus(workspace);
-	return (
-		workflowSession(status) as {
-			budget: { orchestration: OrchestrationTelemetry };
-		}
-	).budget.orchestration;
-}
-
-describe("Flow runtime gates", () => {
-	test("keeps repository-controlled prose inside workflowData", async () => {
-		const sentinel = "REPOSITORY_PROSE_MUST_STAY_DATA_ONLY";
-		const workspace = await tempWorkspace();
-		const assertBoundary = (
-			response: Awaited<ReturnType<typeof flowStatus>>,
-		) => {
-			const { workflowData, ...trustedResponse } = response;
-			expect(JSON.stringify(trustedResponse)).not.toContain(sentinel);
-			expect(JSON.stringify(workflowData)).toContain(sentinel);
-		};
-
-		assertBoundary(
-			await flowPlanSave(workspace, {
-				goal: sentinel,
-				plan: {
-					...twoFeaturePlan(),
-					summary: sentinel,
-					overview: sentinel,
-					requirements: [sentinel],
-					decisions: [sentinel],
-					features: twoFeaturePlan().features.map((feature) => ({
-						...feature,
-						title: sentinel,
-						summary: sentinel,
-					})),
-				},
-			}),
-		);
-		assertBoundary(await flowPlanApprove(workspace));
-
-		assertBoundary(await flowStatus(workspace));
-		assertBoundary(await flowRunStart(workspace, {}));
-		assertBoundary(
-			await exhaustReviewRetryBudget(workspace, {
-				featureId: "first-feature",
-				summary: sentinel,
-			}),
-		);
-		assertBoundary(
-			await flowFeatureReset(workspace, {
-				featureId: "first-feature",
-				[sentinel]: sentinel,
-			}),
-		);
-		assertBoundary(
-			await flowSessionClose(workspace, {
-				kind: "deferred",
-				summary: sentinel,
-			}),
+		});
+		expectOk(saved);
+		const repaired = repository.session;
+		repository.readFailure = new UnreadableFlowSessionError(
+			"Initial state was malformed.",
+			"invalid JSON",
 		);
 
-		const unreadableWorkspace = await tempWorkspace();
-		await flowPlanSave(unreadableWorkspace, { goal: "Create active state" });
-		await Bun.write(
-			join(unreadableWorkspace, ".flow", "session.json"),
-			`${JSON.stringify({ version: sentinel })}\n`,
-		);
-		const unreadable = await flowStatus(unreadableWorkspace);
-		expect(unreadable.status).toBe("error");
-		expect(JSON.stringify(unreadable)).not.toContain(sentinel);
+		const status = await flow.status({ request: { view: "compact" } });
+
+		expect(status.status).toBe("error");
+		expect(status.workflowData.failure).toMatchObject({
+			recovery: expect.stringContaining("current state was left untouched"),
+		});
+		expect(repository.quarantineCount).toBe(0);
+		expect(repository.session).toBe(repaired);
 	});
 
-	test("rejects invalid feature dependency graphs", async () => {
-		const workspace = await tempWorkspace();
-		const cyclic = {
-			...twoFeaturePlan(),
-			features: [
-				{ ...twoFeaturePlan().features[0], dependsOn: ["final-feature"] },
-				{ ...twoFeaturePlan().features[1], dependsOn: ["first-feature"] },
-			],
-		};
+	test("returns exact operation replays while rejecting conflicts and stale revisions", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = createFlowService(repository, deterministicEnvironment());
+		const input = {
+			request: {
+				operationId: "plan-save-exact",
+				expectedRevision: 0,
+				goal: "Ship the runtime",
+				plan,
+			},
+		} as const;
 
-		const result = await flowPlanSave(workspace, {
-			goal: "Reject invalid graph",
-			plan: cyclic,
+		const first = await flow.planSave(input);
+		const replay = await flow.planSave(input);
+		expectOk(first);
+		expectOk(replay);
+		expect(replay.workflowData.operation).toMatchObject({
+			operationId: "plan-save-exact",
+			revision: 1,
+			replayed: true,
 		});
-		expect(result.status).toBe("error");
-		expect(String(result.workflowData?.failure?.summary)).toContain("cycle");
+		expect(repository.session?.operations).toHaveLength(1);
 
-		const unknownDependency = await flowPlanSave(await tempWorkspace(), {
-			goal: "Reject unknown dependency",
-			plan: {
-				...twoFeaturePlan(),
+		const conflict = await flow.planSave({
+			request: { ...input.request, goal: "Different work" },
+		});
+		expect(conflict.status).toBe("error");
+		expect(conflict.summary).toContain(
+			"operationId was already used for different work",
+		);
+		expect(conflict).not.toHaveProperty("operationAccepted");
+		expect(conflict).not.toHaveProperty("operationIdConsumed");
+		const status = await flow.status({ request: { view: "compact" } });
+		expect(status).not.toHaveProperty("operationAccepted");
+		expect(status).not.toHaveProperty("operationIdConsumed");
+
+		const stale = await flow.planApprove({
+			request: {
+				operationId: "stale-approval",
+				expectedRevision: 0,
+			},
+		});
+		expect(stale.status).toBe("error");
+		expect(stale.summary).toContain("Stale revision 0");
+		expect(repository.session?.revision).toBe(1);
+	});
+
+	test("persists validation in the active run and binds completion to reviewed workspace content", async () => {
+		const repository = new MemorySessionRepository();
+		const environment = deterministicEnvironment();
+		const flow = await startSession(repository, environment);
+		const prepared = await prepareValidation(repository, {
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "broad",
+		});
+
+		expect(prepared).toEqual({
+			featureId: FEATURE,
+			runId: "run-1",
+			command: "bun test",
+			scope: "broad",
+			sourceDigest: SOURCE_A,
+		});
+		const observedInput = {
+			...prepared,
+			captureId: "capture-1",
+			exitCode: 0,
+			outputDigest: OUTPUT,
+			outputComplete: true,
+		} as const;
+		const observation = await persistObservedValidation(
+			repository,
+			observedInput,
+		);
+		expect(observation).toMatchObject({
+			id: "capture-1",
+			runId: "run-1",
+			recordedRevision: 4,
+		});
+		expect(repository.session?.runs[0]?.validations).toEqual([observation]);
+		expect(await persistObservedValidation(repository, observedInput)).toEqual(
+			observation,
+		);
+		await expect(
+			persistObservedValidation(repository, {
+				...observedInput,
+				exitCode: 1,
+			}),
+		).rejects.toThrow(
+			"Validation capture id was already used for a different observation",
+		);
+
+		const reviewRequest = {
+			request: {
+				operationId: "review-start-runtime",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "src/domain/transitions.ts" }],
+				packet: {
+					summary: "Review the complete runtime.",
+					riskLenses: ["state integrity"],
+				},
+			},
+		} as const;
+		const reviewResponse = await flow.reviewStart(reviewRequest);
+		expectOk(reviewResponse);
+		expect(reviewResponse.workflowData.projection).toMatchObject({
+			planContext: {
+				summary: plan.summary,
+				overview: plan.overview,
+				requirements: plan.requirements,
+				decisions: plan.decisions,
 				features: [
-					twoFeaturePlan().features[0],
 					{
-						...twoFeaturePlan().features[1],
-						dependsOn: ["missing-feature"],
+						id: FEATURE,
+						title: plan.features[0]?.title,
+						summary: plan.features[0]?.summary,
+						dependsOn: [],
 					},
 				],
 			},
+			feature: plan.features[0],
+			artifactsChanged: [{ path: "src/domain/transitions.ts" }],
+			validations: [observation],
+			completedFeatureIds: [],
 		});
-		expect(unknownDependency.status).toBe("error");
-		expect(String(unknownDependency.workflowData?.failure?.summary)).toContain(
-			"unknown feature",
+		expect(reviewResponse.workflowData.projection).not.toHaveProperty("plan");
+		expect(reviewResponse.workflowData.projection).not.toHaveProperty(
+			"completedOutcomes",
 		);
-
-		const selfDependency = await flowPlanSave(await tempWorkspace(), {
-			goal: "Reject self dependency",
-			plan: {
-				...twoFeaturePlan(),
-				features: [
-					{
-						...twoFeaturePlan().features[0],
-						dependsOn: ["first-feature"],
-					},
-					twoFeaturePlan().features[1],
-				],
-			},
+		const assignment = activeReview(repository);
+		expect(assignment).toMatchObject({
+			id: "review-1",
+			kind: "final",
+			sourceDigest: SOURCE_A,
+			validationIds: ["capture-1"],
 		});
-		expect(selfDependency.status).toBe("error");
-		expect(String(selfDependency.workflowData?.failure?.summary)).toContain(
-			"itself",
-		);
-	});
+		await expect(
+			prepareValidation(repository, {
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "broad",
+			}),
+		).rejects.toThrow("after review has begun");
+		await expect(
+			persistObservedValidation(repository, {
+				...observedInput,
+				captureId: "capture-after-review",
+			}),
+		).rejects.toThrow("after review has begun");
 
-	test("approved plans are immutable and only one feature can run", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-
-		expect(
-			(
-				await flowPlanSave(workspace, {
-					goal: "Deliver a two-feature change",
-					plan: { ...twoFeaturePlan(), summary: "Changed after approval." },
-				})
-			).status,
-		).toBe("error");
-
-		expect((await flowRunStart(workspace, {})).status).toBe("ok");
-		const secondStart = await flowRunStart(workspace, {
-			featureId: "final-feature",
-		});
-		expect(secondStart.status).toBe("error");
-		expect(String(secondStart.workflowData?.failure?.summary)).toContain(
-			"already in progress",
-		);
-	});
-
-	test("completion requires validation and review evidence", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const beforeMissing = await loadSession(workspace);
-		if (!beforeMissing) throw new Error("Expected running session.");
-		const missingValidation = await flowReviewStartRequest(workspace, {
-			operationId: "missing-validation-review",
-			expectedRevision: beforeMissing.causal.revision,
-			expectedSnapshotId: beforeMissing.causal.snapshotId,
-			featureId: "first-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-			packet: { summary: "Review without validation.", riskLenses: [] },
-			validationRefs: [],
-		});
-		expect(missingValidation.status).toBe("error");
-		expect(String(missingValidation.workflowData?.failure?.summary)).toContain(
-			"validationRefs",
-		);
-
-		const failedValidationRef = await publishValidationReceiptForWorkspace(
-			workspace,
-			{
-				startedAt: activeRun(beforeMissing).startedAt,
-				command: "bun test first-feature",
-				coverageScope: "focused",
-				exitCode: 1,
-			},
-		);
-		const failedValidation = await flowReviewStartRequest(workspace, {
-			operationId: "failed-validation-review",
-			expectedRevision: beforeMissing.causal.revision,
-			expectedSnapshotId: beforeMissing.causal.snapshotId,
-			featureId: "first-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-			packet: { summary: "Review failed validation.", riskLenses: [] },
-			validationRefs: [failedValidationRef],
-		});
-		expect(failedValidation.status).toBe("error");
-		expect(String(failedValidation.workflowData?.failure?.summary)).toContain(
-			"Failed validation receipts",
-		);
-
-		const featureAssignment = await startReview(workspace, {
-			featureId: "first-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-		});
-		const broadNonFinal = await flowFeatureComplete(workspace, {
-			featureId: "first-feature",
-			result: {
+		const prematureClose = await flow.sessionClose({
+			request: {
+				operationId: "close-premature",
+				expectedRevision: revision(repository),
+				sessionId: repository.session?.id,
 				kind: "completed",
-				summary: "First feature completed.",
-				artifactsChanged: [],
-				validationScope: "broad",
-				finalReview: passedReview(featureAssignment),
+				summary: "Not complete yet.",
 			},
 		});
-		expect(broadNonFinal.status).toBe("error");
-		expect(String(broadNonFinal.workflowData?.failure?.summary)).toContain(
-			"final assignment",
+		expect(prematureClose.status).toBe("error");
+		expect(prematureClose.summary).toContain(
+			"requires every planned feature to pass review",
 		);
 
-		const failedReviewResult = await submitFailedAssignment(workspace, {
-			featureId: "first-feature",
-			summary: "A blocker remains.",
+		repository.sourceDigest = SOURCE_B;
+		const replayedReview = await flow.reviewStart(reviewRequest);
+		expectOk(replayedReview);
+		expect(replayedReview.workflowData.operation).toMatchObject({
+			operationId: "review-start-runtime",
+			replayed: true,
 		});
-		expect(failedReviewResult.status).toBe("ok");
 
-		const status = await flowStatus(workspace);
-		expect(status.workflowData?.session?.status).toBe("running");
-	});
-
-	test("review assignments derive planned feature review depth", async () => {
-		const workspace = await tempWorkspace();
-		await flowPlanSave(workspace, {
-			goal: "Require detailed review",
-			plan: {
-				...twoFeaturePlan(),
-				features: [
-					{ ...twoFeaturePlan().features[0], reviewDepth: "detailed" as const },
-					twoFeaturePlan().features[1],
-				],
+		const completeRequest = {
+			request: {
+				operationId: "complete-runtime",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				assignmentId: assignment.id,
+				summary: "Runtime complete.",
+				result: {
+					verdict: "passed",
+					findings: [],
+					terminalDisposition: "submitted",
+				},
 			},
-		});
-		await flowPlanApprove(workspace);
-		await flowRunStart(workspace, {});
-
-		const session = await loadSession(workspace);
-		if (!session) throw new Error("Expected running session.");
-		const validationRef = await publishValidationReceiptForWorkspace(
-			workspace,
-			{
-				startedAt: activeRun(session).startedAt,
-				command: "bun test first-feature",
-				coverageScope: "focused",
-			},
+		} as const;
+		const changedSource = await flow.featureComplete(completeRequest);
+		expect(changedSource.status).toBe("error");
+		expect(changedSource.summary).toContain(
+			"Workspace content changed after review started",
 		);
-		const assignment = await flowReviewStartRequest(workspace, {
-			operationId: "detailed-depth-assignment",
-			expectedRevision: session.causal.revision,
-			expectedSnapshotId: session.causal.snapshotId,
-			featureId: "first-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-			packet: { summary: "Review at planned depth.", riskLenses: [] },
-			validationRefs: [validationRef],
-		});
-		expect(assignment.status).toBe("ok");
-		expect(assignment.workflowData?.projection).toMatchObject({
-			requiredDepth: "detailed",
-		});
-	});
+		expect(repository.session?.revision).toBe(5);
+		expect(activeReview(repository).result).toBeNull();
 
-	test("records bounded orchestration pass accounting", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				{
-					id: "first-feature-implementation-decision",
-					kind: "implementation-decision" as const,
-					decision: "serial" as const,
-					decisionReason:
-						"Shared contract edits made manager-serial implementation safer.",
-					candidateEligibility: "not_eligible" as const,
-					candidateDecision: "serial_required" as const,
-					decisionFactors: [
-						"shared_state" as const,
-						"overlapping_files" as const,
-						"needs_manager_judgment" as const,
-					],
-					writeScope: "manager-serial" as const,
-					verificationStatus: "not-needed" as const,
-					outcome: "accepted" as const,
-				},
-				{
-					id: "first-feature-candidate-docs",
-					kind: "candidate" as const,
-					decision: "candidate-exact-path" as const,
-					decisionReason:
-						"Docs target was disjoint from runtime implementation files.",
-					candidateEligibility: "eligible" as const,
-					candidateDecision: "used" as const,
-					decisionFactors: [
-						"independent_surface" as const,
-						"validation_available" as const,
-					],
-					modes: ["candidate-implementation" as const],
-					workerCount: 1,
-					candidateWorkerCount: 1,
-					sliceIds: ["docs-slice"],
-					writeScope: "exact-path" as const,
-					handoffRefs: ["/tmp/flow/first-feature-candidate.md"],
-					verificationStatus: "passed" as const,
-					outcome: "accepted" as const,
-					synthesisRef: "/tmp/flow/first-feature-synthesis.md",
-				},
-				{
-					id: "first-feature-review-claim-check",
-					kind: "verification" as const,
-					modes: ["verifier" as const],
-					workerCount: 1,
-					verifierWorkerCount: 1,
-					sliceIds: ["claim-review-coverage"],
-					dependsOn: ["first-feature-candidate-docs"],
-					verificationStatus: "passed" as const,
-					outcome: "accepted" as const,
-				},
-			],
+		repository.sourceDigest = SOURCE_A;
+		const completed = await flow.featureComplete(completeRequest);
+		expectOk(completed);
+		expect(repository.session?.runs[0]?.state).toBe("completed");
+		const staleReviewer = await flow.status({
+			request: { view: "reviewer", assignmentId: assignment.id },
 		});
-		expect(completed.status).toBe("ok");
+		expect(staleReviewer.status).toBe("error");
+		expect(staleReviewer.summary).toContain("no longer pending");
+		const replayedRun = await flow.runStart({
+			request: {
+				operationId: "run-start-runtime",
+				expectedRevision: 2,
+				featureId: FEATURE,
+			},
+		});
+		expectOk(replayedRun);
+		expect(replayedRun.workflowData.operation).toMatchObject({
+			replayed: true,
+			entity: { id: "run-1", state: "completed" },
+		});
+		repository.sourceDigest = SOURCE_B;
+		const replayedCompletion = await flow.featureComplete(completeRequest);
+		expectOk(replayedCompletion);
+		expect(replayedCompletion.workflowData.operation).toMatchObject({
+			operationId: "complete-runtime",
+			replayed: true,
+		});
 
-		const status = await flowStatus(workspace);
-		const session = workflowSession(status) as {
-			budget: { orchestration: OrchestrationTelemetry };
-			latestHistoryEntry: {
-				orchestrationPasses: Array<{ id: string; writeScope: string }>;
-			};
+		const sessionId = repository.session?.id;
+		if (!sessionId) throw new Error("Expected a session id.");
+		const closeRequest = {
+			request: {
+				operationId: "close-runtime",
+				expectedRevision: revision(repository),
+				sessionId,
+				kind: "completed" as const,
+				summary: "Runtime shipped.",
+			},
 		};
-		expect(session.budget.orchestration).toMatchObject({
-			passCount: 3,
-			workerCount: 2,
-			candidatePassCount: 1,
-			verifierPassCount: 1,
-			candidateEligibleCount: 0,
-			candidateUsedDecisionCount: 0,
-			candidateSerialRequiredDecisionCount: 1,
-			skippedCandidateDecisionCount: 0,
-		});
-		expect(
-			session.budget.orchestration.latestPasses.map((pass) => pass.id),
-		).toEqual([
-			"first-feature-implementation-decision",
-			"first-feature-candidate-docs",
-			"first-feature-review-claim-check",
-		]);
-		expect(session.budget.orchestration.latestPasses[0]).toMatchObject({
-			candidateEligibility: "not_eligible",
-			candidateDecision: "serial_required",
-			decisionFactors: [
-				"shared_state",
-				"overlapping_files",
-				"needs_manager_judgment",
-			],
-		});
-		expect(session.budget.orchestration.latestPasses[1]).toMatchObject({
-			candidateEligibility: "eligible",
-			candidateDecision: "used",
-			decisionFactors: ["independent_surface", "validation_available"],
-		});
-		expect(session.budget.orchestration.latestPasses[1]?.handoffRefs).toEqual([
-			"/tmp/flow/first-feature-candidate.md",
-		]);
-		expect(session.budget.orchestration.latestPasses[2]?.dependsOn).toEqual([
-			"first-feature-candidate-docs",
-		]);
-		expect(session.latestHistoryEntry.orchestrationPasses).toHaveLength(3);
-		expect(session.latestHistoryEntry.orchestrationPasses[1]?.writeScope).toBe(
-			"exact-path",
-		);
-	});
-
-	test("saturates orchestration counters without invalidating feature outcomes", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const first = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("max-workers-one", {
-					workerCount: Number.MAX_SAFE_INTEGER,
-				}),
-				orchestrationPass("max-workers-two", {
-					workerCount: Number.MAX_SAFE_INTEGER,
-				}),
-			],
-		});
-		expect(first.status).toBe("ok");
-		expect((await orchestrationTelemetry(workspace)).workerCount).toBe(
-			Number.MAX_SAFE_INTEGER,
-		);
-
-		await flowRunStart(workspace, {});
-		const final = await completeSuccessfully(workspace, {
-			featureId: "final-feature",
-			validationScope: "broad",
-			includeFinalReview: true,
-			orchestrationPasses: [orchestrationPass("post-saturation-worker")],
-		});
-		expect(final.status).toBe("ok");
-		const persisted = await orchestrationTelemetry(workspace);
-		expect(persisted.workerCount).toBe(Number.MAX_SAFE_INTEGER);
-		expect(persisted.passCount).toBe(3);
-	});
-
-	test("saturates orchestration totals without failing feature persistence", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const first = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("near-maximum-worker-total", {
-					workerCount: Number.MAX_SAFE_INTEGER - 1,
-				}),
-			],
-		});
-		expect(first.status).toBe("ok");
-		expect((await orchestrationTelemetry(workspace)).workerCount).toBe(
-			Number.MAX_SAFE_INTEGER - 1,
-		);
-
-		expect((await flowRunStart(workspace, {})).status).toBe("ok");
-		const final = await completeSuccessfully(workspace, {
-			featureId: "final-feature",
-			validationScope: "broad",
-			includeFinalReview: true,
-			orchestrationPasses: [
-				orchestrationPass("saturating-worker-increment", { workerCount: 2 }),
-			],
-		});
-		expect(final.status).toBe("ok");
-
-		const persisted = await loadSession(workspace);
-		expect(persisted).not.toBeNull();
-		if (!persisted) throw new Error("Expected completed persisted session.");
-		expect(() => SessionSchema.parse(persisted)).not.toThrow();
-		expect(persisted.status).toBe("completed");
-		expect(persisted.history).toHaveLength(2);
-		expect(persisted.budget.orchestration).toMatchObject({
-			passCount: 2,
-			workerCount: Number.MAX_SAFE_INTEGER,
-		});
-	});
-
-	test("counts only eligible skipped implementation candidates as skipped", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-too-tight", {
-					kind: "implementation-decision",
-					decision: "serial",
-					decisionReason:
-						"A shared lifecycle invariant required one manager-owned edit.",
-					candidateEligibility: "not_eligible",
-					candidateDecision: "serial_required",
-					decisionFactors: ["shared_state", "overlapping_files"],
-					workerCount: 0,
-					writeScope: "manager-serial",
-					verificationStatus: "not-needed",
-				}),
-				orchestrationPass("first-feature-frontend-skipped", {
-					kind: "implementation-decision",
-					decision: "skipped",
-					decisionReason:
-						"Frontend slice was independent with targeted validation, but the manager chose serial.",
-					candidateEligibility: "eligible",
-					candidateDecision: "skipped",
-					decisionFactors: [
-						"independent_surface",
-						"validation_available",
-						"small_slice",
-					],
-					workerCount: 0,
-					writeScope: "manager-serial",
-					verificationStatus: "not-needed",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.candidateEligibleCount).toBe(1);
-		expect(telemetry.candidateUsedDecisionCount).toBe(0);
-		expect(telemetry.candidateSerialRequiredDecisionCount).toBe(1);
-		expect(telemetry.skippedCandidateDecisionCount).toBe(1);
-		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
-			"first-feature-too-tight",
-			"first-feature-frontend-skipped",
-		]);
-	});
-
-	test("bounds pass idempotency to the retained telemetry window", async () => {
-		const workspace = await tempWorkspace();
-		expect(
-			(
-				await flowPlanSave(workspace, {
-					goal: "Exercise bounded pass idempotency",
-					plan: fourFeaturePlan(),
-				})
-			).status,
-		).toBe("ok");
-		expect((await flowPlanApprove(workspace)).status).toBe("ok");
-		await flowRunStart(workspace, {});
-
-		const retainedWindow = Array.from({ length: 50 }, (_, index) =>
-			orchestrationPass(`feature-one-pass-${index}`),
-		);
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "feature-one",
-			validationScope: "targeted",
-			orchestrationPasses: retainedWindow,
-		});
-		expect(completed.status).toBe("ok");
-		const afterFirst = await orchestrationTelemetry(workspace);
-		expect(afterFirst.passCount).toBe(50);
-		expect(afterFirst.latestPasses).toHaveLength(50);
-
-		await flowRunStart(workspace, {});
-		const evictOldest = await completeSuccessfully(workspace, {
-			featureId: "feature-two",
-			validationScope: "targeted",
-			orchestrationPasses: [orchestrationPass("feature-two-fresh-pass")],
-		});
-		expect(evictOldest.status).toBe("ok");
-
-		// feature-one-pass-0 has now left the bounded window. Reusing that id is
-		// intentionally counted again; this telemetry is not a permanent ledger.
-		await flowRunStart(workspace, {});
-		const reuseEvictedId = await completeSuccessfully(workspace, {
-			featureId: "feature-three",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("feature-one-pass-0"),
-				orchestrationPass("feature-three-fresh-pass"),
-			],
-		});
-		expect(reuseEvictedId.status).toBe("ok");
-		const afterSecond = await orchestrationTelemetry(workspace);
-		expect(afterSecond.passCount).toBe(53);
-		expect(afterSecond.workerCount).toBe(53);
-		expect(afterSecond.latestPasses).toHaveLength(50);
-	});
-
-	test("drops candidate decision usage without execution evidence", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-decision-only-candidate", {
-					kind: "implementation-decision",
-					decision: "candidate-exact-path",
-					decisionReason:
-						"Decision selected a candidate-capable exact-path shape.",
-					candidateEligibility: "eligible",
-					candidateDecision: "used",
-					decisionFactors: ["independent_surface", "validation_available"],
-					workerCount: 0,
-					candidateWorkerCount: 0,
-					writeScope: "exact-path",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-		expect(completed.warnings).toHaveLength(1);
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.candidatePassCount).toBe(0);
-		expect(telemetry.candidateUsedDecisionCount).toBe(0);
-		expect(telemetry.latestPasses).toEqual([]);
-	});
-
-	test("drops serial implementation decisions that claim candidate usage", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-serial-used-candidate", {
-					kind: "implementation-decision",
-					decision: "serial",
-					decisionReason:
-						"Serial manager-owned work cannot also claim candidate usage.",
-					candidateEligibility: "eligible",
-					candidateDecision: "used",
-					decisionFactors: ["independent_surface", "validation_available"],
-					workerCount: 1,
-					candidateWorkerCount: 1,
-					writeScope: "manager-serial",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-		expect(completed.warnings).toHaveLength(1);
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(0);
-		expect(telemetry.candidatePassCount).toBe(0);
-		expect(telemetry.candidateUsedDecisionCount).toBe(0);
-		expect(telemetry.latestPasses).toEqual([]);
-	});
-
-	test("drops candidate accounting decisions on non-implementation passes", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-validation-skipped-candidate", {
-					kind: "validation",
-					decisionReason:
-						"Validation cannot record a manager implementation skip.",
-					candidateEligibility: "eligible",
-					candidateDecision: "skipped",
-					verificationStatus: "passed",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-		expect(completed.warnings).toHaveLength(1);
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(0);
-		expect(telemetry.candidateEligibleCount).toBe(0);
-		expect(telemetry.candidateSerialRequiredDecisionCount).toBe(0);
-		expect(telemetry.skippedCandidateDecisionCount).toBe(0);
-		expect(telemetry.latestPasses).toEqual([]);
-	});
-
-	test("drops orchestration subtype worker counts above total workers", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-impossible-worker-counts", {
-					kind: "implementation-decision",
-					decision: "candidate-exact-path",
-					decisionReason:
-						"Candidate worker count cannot exceed total worker count.",
-					candidateEligibility: "eligible",
-					candidateDecision: "used",
-					decisionFactors: ["independent_surface", "validation_available"],
-					workerCount: 0,
-					candidateWorkerCount: 1,
-					writeScope: "exact-path",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-		expect(completed.warnings).toHaveLength(1);
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(0);
-		expect(telemetry.workerCount).toBe(0);
-		expect(telemetry.candidatePassCount).toBe(0);
-		expect(telemetry.latestPasses).toEqual([]);
-	});
-
-	test("counts valid candidate implementation decisions with worker evidence", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-candidate-worker-decision", {
-					kind: "implementation-decision",
-					decision: "candidate-exact-path",
-					decisionReason:
-						"Candidate worker owned a disjoint exact-path implementation.",
-					candidateEligibility: "eligible",
-					candidateDecision: "used",
-					decisionFactors: ["independent_surface", "validation_available"],
-					workerCount: 1,
-					candidateWorkerCount: 1,
-					writeScope: "exact-path",
-					verificationStatus: "passed",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(1);
-		expect(telemetry.workerCount).toBe(1);
-		expect(telemetry.candidatePassCount).toBe(1);
-		expect(telemetry.candidateEligibleCount).toBe(1);
-		expect(telemetry.candidateUsedDecisionCount).toBe(1);
-		expect(telemetry.candidateSerialRequiredDecisionCount).toBe(0);
-		expect(telemetry.skippedCandidateDecisionCount).toBe(0);
-		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
-			"first-feature-candidate-worker-decision",
-		]);
-	});
-
-	test("counts verifier worker count as verifier pass evidence", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-verifier-worker-count", {
-					kind: "validation",
-					decisionReason:
-						"A verifier worker checked claims after manager synthesis.",
-					workerCount: 1,
-					verifierWorkerCount: 1,
-					verificationStatus: "passed",
-				}),
-			],
-		});
-		expect(completed.status).toBe("ok");
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(1);
-		expect(telemetry.workerCount).toBe(1);
-		expect(telemetry.verifierPassCount).toBe(1);
-		expect(telemetry.candidatePassCount).toBe(0);
-		expect(telemetry.latestPasses.map((pass) => pass.id)).toEqual([
-			"first-feature-verifier-worker-count",
-		]);
-	});
-
-	test("does not record completion telemetry when review validation fails", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const session = await loadSession(workspace);
-		if (!session) throw new Error("Expected running session.");
-		const failedValidationRef = await publishValidationReceiptForWorkspace(
-			workspace,
-			{
-				startedAt: activeRun(session).startedAt,
-				command: "bun test first-feature",
-				coverageScope: "focused",
-				exitCode: 1,
+		repository.archiveFailure = new Error("injected archive interruption");
+		const interruptedClose = await flow.sessionClose(closeRequest);
+		expect(interruptedClose.status).toBe("error");
+		expect(interruptedClose.summary).toContain("durably accepted");
+		expect(interruptedClose.workflowData).toMatchObject({
+			operation: { operationId: "close-runtime", replayed: false },
+			closeState: {
+				durableAccepted: true,
+				archiveConfirmed: false,
+				retryExactRequest: true,
+				retryRequest: closeRequest.request,
 			},
-		);
-		const failed = await flowReviewStartRequest(workspace, {
-			operationId: "failed-review-validation",
-			expectedRevision: session.causal.revision,
-			expectedSnapshotId: session.causal.snapshotId,
-			featureId: "first-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-			packet: { summary: "Reject failed validation.", riskLenses: [] },
-			validationRefs: [failedValidationRef],
+			failure: {
+				summary: "injected archive interruption",
+				recovery: expect.stringContaining("same operation ID and payload"),
+			},
 		});
-		expect(failed.status).toBe("error");
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(0);
-		expect(telemetry.workerCount).toBe(0);
-		expect(telemetry.latestPasses).toEqual([]);
-	});
-
-	test("does not double count orchestration passes across review retries", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const pass = orchestrationPass("first-feature-review-pass", {
-			kind: "review",
-			modes: ["review"],
-		});
-		const failedReviewResult = await submitFailedAssignment(workspace, {
-			featureId: "first-feature",
-			summary: "A blocker remains.",
-			orchestrationPasses: [pass, pass],
-		});
-		expect(failedReviewResult.status).toBe("ok");
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: [pass],
-		});
-		expect(completed.status).toBe("ok");
-
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(1);
-		expect(telemetry.latestPasses.map((item) => item.id)).toEqual([
-			"first-feature-review-pass",
-		]);
-	});
-
-	test("records orchestration telemetry when a feature needs input", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const blocked = await exhaustReviewRetryBudget(workspace, {
-			featureId: "first-feature",
-			summary: "Need a product decision.",
-			orchestrationPasses: [
-				orchestrationPass("first-feature-question-discovery", {
-					kind: "discovery",
-					modes: ["evidence"],
-				}),
-			],
-		});
-		expect(blocked.status).toBe("ok");
-
-		const status = await flowStatus(workspace);
-		expect(status.workflowData?.session?.status).toBe("blocked");
-		const session = workflowSession(status) as {
-			budget: {
-				orchestration: {
-					passCount: number;
-					latestPasses: Array<{ id: string }>;
-				};
-			};
-			latestHistoryEntry: {
-				orchestrationPasses: Array<{ id: string }>;
-			};
-		};
-		expect(session.budget.orchestration.passCount).toBe(1);
-		expect(session.budget.orchestration.latestPasses[0]?.id).toBe(
-			"first-feature-question-discovery",
-		);
-		expect(session.latestHistoryEntry.orchestrationPasses[0]?.id).toBe(
-			"first-feature-question-discovery",
-		);
-	});
-
-	test("drops completion telemetry above the orchestration pass limit", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-			orchestrationPasses: Array.from({ length: 51 }, (_, index) =>
-				orchestrationPass(`first-feature-pass-${index}`),
+		expect(repository.session?.closure?.kind).toBe("completed");
+		expect(
+			repository.session?.operations.some(
+				(operation) => operation.id === "close-runtime",
 			),
-		});
-		expect(completed.status).toBe("ok");
-		expect(completed.warnings).toHaveLength(1);
+		).toBe(true);
 
-		const telemetry = await orchestrationTelemetry(workspace);
-		expect(telemetry.passCount).toBe(0);
-		expect(telemetry.workerCount).toBe(0);
-		expect(telemetry.latestPasses).toEqual([]);
-	});
-
-	test("failed review retry budget blocks after one autonomous retry", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const firstAssignment = await startReview(workspace, {
-			featureId: "first-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-		});
-		const beforeFirstFailure = await loadSession(workspace);
-		if (!beforeFirstFailure) throw new Error("Expected assignment state.");
-		const failedReviewRequest = {
-			operationId: "first-feature-review-failure-1",
-			expectedRevision: beforeFirstFailure.causal.revision,
-			expectedSnapshotId: beforeFirstFailure.causal.snapshotId,
-			featureId: "first-feature",
-			result: {
-				kind: "blocked" as const,
-				summary: "A blocker remains.",
-				review: failedReview(firstAssignment),
-			},
-		};
-		const firstFailure = await flowFeatureComplete(
-			workspace,
-			failedReviewRequest,
-		);
-		expect(firstFailure.status).toBe("ok");
-		expect((await flowStatus(workspace)).workflowData?.session?.status).toBe(
-			"running",
-		);
-
-		const duplicateFailure = await flowFeatureComplete(
-			workspace,
-			failedReviewRequest,
-		);
-		expect(duplicateFailure.status).toBe("ok");
-		expect(duplicateFailure.workflowData?.session?.status).toBe("running");
-		expect(
-			duplicateFailure.workflowData?.session?.budget.failedReviewCount,
-		).toBe(1);
-
-		const retryFailure = await submitFailedAssignment(workspace, {
-			featureId: "first-feature",
-			summary: "A blocker remains after retry.",
-		});
-		expect(retryFailure.status).toBe("ok");
-		const retrySession = workflowSession(retryFailure);
-		expect(retrySession.status).toBe("blocked");
-		expect(String(retryFailure.nextAction)).toContain(
-			"Reset the blocked feature",
-		);
-		const status = await flowStatus(workspace);
-		expect(status.workflowData?.session?.status).toBe("blocked");
-		expect(
-			(workflowSession(status) as { budget: { failedReviewCount: number } })
-				.budget.failedReviewCount,
-		).toBe(2);
-	});
-
-	test("failed final review uses the ordinary blocked-feature state", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-		expect(
-			(
-				await completeSuccessfully(workspace, {
-					featureId: "first-feature",
-					validationScope: "targeted",
-				})
-			).status,
-		).toBe("ok");
-		await flowRunStart(workspace, {});
-
-		const finalAssignment = await startReview(workspace, {
-			featureId: "final-feature",
-			reviewKind: "final",
-			validationScope: "broad",
-			featureReview: passedReview(
-				await startReview(workspace, {
-					featureId: "final-feature",
-					reviewKind: "feature",
-					validationScope: "targeted",
-				}),
-			),
-		});
-		const beforeFinalFailure = await loadSession(workspace);
-		if (!beforeFinalFailure)
-			throw new Error("Expected final assignment state.");
-		const failedFinalReviewRequest = {
-			operationId: "final-feature-review-failure-1",
-			expectedRevision: beforeFinalFailure.causal.revision,
-			expectedSnapshotId: beforeFinalFailure.causal.snapshotId,
-			featureId: "final-feature",
-			result: {
-				kind: "blocked" as const,
-				summary: "Final review still finds a blocker.",
-				review: failedReview(finalAssignment, "Release gate is not covered."),
-			},
-		};
-		const firstFailure = await flowFeatureComplete(
-			workspace,
-			failedFinalReviewRequest,
-		);
-		expect(firstFailure.status).toBe("ok");
-		expect((await flowStatus(workspace)).workflowData?.session?.status).toBe(
-			"running",
-		);
-
-		const duplicateFailure = await flowFeatureComplete(
-			workspace,
-			failedFinalReviewRequest,
-		);
-		expect(duplicateFailure.status).toBe("ok");
-		expect(duplicateFailure.workflowData?.session?.status).toBe("running");
-		expect(
-			duplicateFailure.workflowData?.session?.budget.failedReviewCount,
-		).toBe(1);
-
-		const retryFailure = await submitFailedAssignment(workspace, {
-			featureId: "final-feature",
-			reviewKind: "final",
-			summary: "Final review still finds a blocker after retry.",
-		});
-		expect(retryFailure.status).toBe("ok");
-		const retrySession = workflowSession(retryFailure) as {
-			budget: {
-				failedReviewCount: number;
-			};
-			features: Array<{ id: string; status: string }>;
-		};
-		expect(retrySession.budget.failedReviewCount).toBe(2);
-		expect(
-			retrySession.features.find((feature) => feature.id === "final-feature")
-				?.status,
-		).toBe("blocked");
-		expect((await flowStatus(workspace)).workflowData?.session?.status).toBe(
-			"blocked",
-		);
-	});
-
-	test("does not stop a plan after three completed features", async () => {
-		const workspace = await tempWorkspace();
-		await flowPlanSave(workspace, {
-			goal: "Deliver a four-feature change",
-			plan: fourFeaturePlan(),
-		});
-		await flowPlanApprove(workspace);
-
-		for (const featureId of ["feature-one", "feature-two", "feature-three"]) {
-			expect((await flowRunStart(workspace, {})).status).toBe("ok");
-			expect(
-				(
-					await completeSuccessfully(workspace, {
-						featureId,
-						validationScope: "targeted",
-					})
-				).status,
-			).toBe("ok");
-		}
-
-		const status = await flowStatus(workspace);
-		expect(status.status).toBe("ok");
-		expect(status.workflowData?.session?.status).toBe("ready");
-		expect(String(status.statusSummary)).toContain("Progress 3/4");
-		expect(String(status.statusSummary)).toContain("feature-four");
-		expect(String(status.nextAction)).toContain(
-			"workflowData.projection.feature",
-		);
-		expect(
-			(workflowSession(status) as { nextFeature: { id: string } | null })
-				.nextFeature?.id,
-		).toBe("feature-four");
-		expect(
-			(
-				workflowSession(status) as {
-					pendingFeatures: Array<{ id: string }>;
-					progress: { remaining: number };
-				}
-			).pendingFeatures.map((feature) => feature.id),
-		).toEqual(["feature-four"]);
-		expect(
-			(
-				workflowSession(status) as {
-					pendingFeatures: Array<{ id: string }>;
-					progress: { remaining: number };
-				}
-			).progress.remaining,
-		).toBe(1);
-		expect(
-			(workflowSession(status) as { budget: { reviewCount: number } }).budget
-				.reviewCount,
-		).toBe(3);
-
-		const nextStart = await flowRunStart(workspace, {});
-		expect(nextStart.status).toBe("ok");
-		const runningStatus = await flowStatus(workspace);
-		expect(String(runningStatus.statusSummary)).toContain(
-			"active: feature-four",
-		);
-		expect(String(runningStatus.nextAction)).toContain(
-			"workflowData.projection.feature",
-		);
-		expect(
-			(workflowSession(runningStatus) as { budget: { reviewCount: number } })
-				.budget.reviewCount,
-		).toBe(3);
-	});
-
-	test("final feature requires broad validation and final review", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-		expect(
-			(
-				await completeSuccessfully(workspace, {
-					featureId: "first-feature",
-					validationScope: "targeted",
-				})
-			).status,
-		).toBe("ok");
-
-		expect((await flowRunStart(workspace, {})).status).toBe("ok");
-		const featureAssignment = await startReview(workspace, {
-			featureId: "final-feature",
-			reviewKind: "feature",
-			validationScope: "targeted",
-		});
-		await startReview(workspace, {
-			featureId: "final-feature",
-			reviewKind: "final",
-			validationScope: "broad",
-			featureReview: passedReview(featureAssignment),
-		});
-		const targetedFinal = await flowFeatureComplete(workspace, {
-			featureId: "final-feature",
-			result: {
-				kind: "completed",
-				summary: "Final feature completed with targeted validation.",
-				artifactsChanged: [],
-				validationScope: "targeted",
-				featureReview: passedReview(featureAssignment),
-			},
-		});
-		expect(targetedFinal.status).toBe("error");
-		expect(String(targetedFinal.workflowData?.failure?.summary)).toContain(
-			"final-review assignment",
-		);
-
-		const withoutFinalReview = await flowFeatureComplete(workspace, {
-			featureId: "final-feature",
-			result: {
-				kind: "completed",
-				summary: "Final feature completed without final review.",
-				artifactsChanged: [],
-				validationScope: "broad",
-			},
-		});
-		expect(withoutFinalReview.status).toBe("error");
-		expect(String(withoutFinalReview.workflowData?.failure?.summary)).toContain(
-			"request.result",
-		);
-
-		const failedFinalReview = await submitFailedAssignment(workspace, {
-			featureId: "final-feature",
-			reviewKind: "final",
-			summary: "Final review found a blocker.",
-		});
-		expect(failedFinalReview.status).toBe("ok");
-		expect((await flowStatus(workspace)).workflowData?.session?.status).toBe(
-			"running",
-		);
-
-		const beforeFinalAssignment = await loadSession(workspace);
-		if (!beforeFinalAssignment) throw new Error("Expected running session.");
-		const finalValidationRef = await publishValidationReceiptForWorkspace(
-			workspace,
-			{
-				startedAt: passedReview(featureAssignment).completedAt,
-				command: "bun test final-feature",
-				coverageScope: "broad",
-			},
-		);
-		const finalAssignment = await flowReviewStartRequest(workspace, {
-			operationId: `runtime-operation-${++operationSequence}`,
-			expectedRevision: beforeFinalAssignment.causal.revision,
-			expectedSnapshotId: beforeFinalAssignment.causal.snapshotId,
-			featureId: "final-feature",
-			reviewKind: "final",
-			validationScope: "broad",
-			featureReview: passedReview(featureAssignment),
-			packet: {
-				summary: "Runtime-derived final review policy.",
-				riskLenses: [],
-			},
-			validationRefs: [finalValidationRef],
-		});
-		expect(finalAssignment.status).toBe("ok");
-		expect(finalAssignment.workflowData?.projection).toMatchObject({
-			requiredDepth: "detailed",
+		const retryStatus = await flow.status({ request: { view: "compact" } });
+		expectOk(retryStatus);
+		expect(retryStatus.workflowData.projection).toMatchObject({
+			status: "closed",
+			nextAction: "flow_session_close",
+			archiveRetry: closeRequest,
 		});
 
-		const completed = await completeSuccessfully(workspace, {
-			featureId: "final-feature",
-			validationScope: "broad",
-			includeFinalReview: true,
-		});
-		expect(completed.status).toBe("ok");
-		expect((await flowStatus(workspace)).workflowData?.session?.status).toBe(
-			"completed",
-		);
-	});
-
-	test("completed close refuses unfinished features", async () => {
-		const planlessWorkspace = await tempWorkspace();
-		await flowPlanSave(planlessWorkspace, {
-			goal: "Close without a plan",
-		});
-		const planlessClose = await flowSessionClose(planlessWorkspace, {
-			kind: "completed",
-			summary: "Done.",
-		});
-		expect(planlessClose.status).toBe("error");
-		expect(String(planlessClose.workflowData?.failure?.summary)).toContain(
-			"approved plan",
-		);
-
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-
-		const close = await flowSessionClose(workspace, {
-			kind: "completed",
-			summary: "Done.",
-		});
-		expect(close.status).toBe("error");
-		expect(String(close.workflowData?.failure?.summary)).toContain(
-			"unfinished features",
-		);
-	});
-
-	test("blocked sessions expose blocker details and require reset before rerun", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-
-		const blocked = await exhaustReviewRetryBudget(workspace, {
-			featureId: "first-feature",
-			summary: "Need operator credentials.",
-			resolutionHint: "Provide API_TOKEN or reset with a mocked check.",
-		});
-		expect(blocked.status).toBe("ok");
-
-		const status = await flowStatus(workspace);
-		expect(status.status).toBe("ok");
-		expect(status.workflowData?.session?.status).toBe("blocked");
-		expect(status.summary).toBe("Flow session status loaded.");
-		expect(status.workflowData?.session?.sourceSummary).toBe(
-			"Need operator credentials.",
-		);
-		expect(
-			(
-				workflowSession(status) as {
-					latestHistoryEntry: { outcome?: { resolutionHint?: string } };
-				}
-			).latestHistoryEntry.outcome?.resolutionHint,
-		).toContain("API_TOKEN");
-
-		const rerun = await flowRunStart(workspace, {});
-		expect(rerun.status).toBe("error");
-		expect(String(rerun.workflowData?.failure?.summary)).toContain("reset");
-
-		const unrelatedReset = await flowFeatureReset(workspace, {
-			featureId: "final-feature",
-		});
-		expect(unrelatedReset.status).toBe("ok");
-
-		const stillBlocked = await flowStatus(workspace);
-		expect(stillBlocked.workflowData?.session?.status).toBe("blocked");
-		expect(
-			(
-				workflowSession(stillBlocked) as {
-					features: Array<{ id: string; status: string }>;
-				}
-			).features.find((feature) => feature.id === "first-feature")?.status,
-		).toBe("blocked");
-
-		const requestedBlocked = await flowRunStart(workspace, {
-			featureId: "first-feature",
-		});
-		expect(requestedBlocked.status).toBe("error");
-		expect(String(requestedBlocked.workflowData?.failure?.summary)).toContain(
-			"reset",
-		);
-
-		const resetBlocked = await flowFeatureReset(workspace, {
-			featureId: "first-feature",
-		});
-		expect(resetBlocked.status).toBe("ok");
-		expect(
-			(await flowRunStart(workspace, { featureId: "first-feature" })).status,
-		).toBe("ok");
-	});
-
-	test("reset clears a feature and its dependents", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-		await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
-		});
-
-		const reset = await flowFeatureReset(workspace, {
-			featureId: "first-feature",
-		});
-		expect(reset.status).toBe("ok");
-
-		const status = await flowStatus(workspace);
-		const features = (
-			workflowSession(status) as {
-				features: Array<{ id: string; status: string }>;
+		repository.archiveFailure = null;
+		const projectedRetry = (
+			retryStatus.workflowData.projection as {
+				archiveRetry: { request: typeof closeRequest.request };
 			}
-		).features;
-		expect(
-			features.find((feature) => feature.id === "first-feature")?.status,
-		).toBe("pending");
-		expect(
-			features.find((feature) => feature.id === "final-feature")?.status,
-		).toBe("pending");
-	});
-
-	test("a completed session requires explicit close and cannot be reset", async () => {
-		const workspace = await tempWorkspace();
-		await approvedTwoFeatureSession(workspace);
-		await flowRunStart(workspace, {});
-		await completeSuccessfully(workspace, {
-			featureId: "first-feature",
-			validationScope: "targeted",
+		).archiveRetry;
+		const closed = await flow.sessionClose(projectedRetry);
+		expectOk(closed);
+		expect(closed.workflowData.projection).toMatchObject({
+			archived: true,
+			nextAction: null,
+			archiveRetry: null,
 		});
-		await flowRunStart(workspace, {});
-		await completeSuccessfully(workspace, {
-			featureId: "final-feature",
-			validationScope: "broad",
-			includeFinalReview: true,
+		expect(repository.session).toBeNull();
+		expect(repository.archives.get(sessionId)?.closure?.kind).toBe("completed");
+
+		const replayedClose = await flow.sessionClose(closeRequest);
+		expectOk(replayedClose);
+		expect(replayedClose.workflowData.operation).toMatchObject({
+			operationId: "close-runtime",
+			replayed: true,
 		});
-
-		const completed = await flowStatus(workspace);
-		expect(completed.workflowData?.session?.status).toBe("completed");
-		expect(
-			(workflowSession(completed) as { closure: null }).closure,
-		).toBeNull();
-
-		const reset = await flowFeatureReset(workspace, {
-			featureId: "first-feature",
+		expect(replayedClose.workflowData.projection).toMatchObject({
+			archived: true,
+			nextAction: null,
+			archiveRetry: null,
 		});
-		expect(reset.status).toBe("error");
-		expect(String(reset.workflowData?.failure?.summary)).toContain("completed");
-
-		const status = await flowStatus(workspace);
-		expect(status.workflowData?.session?.status).toBe("completed");
-		expect(String(status.nextAction)).toContain("flow_session_close");
-		expect(
-			(
-				workflowSession(status) as {
-					progress: { completed: number; total: number; remaining: number };
-				}
-			).progress,
-		).toEqual({ completed: 2, total: 2, remaining: 0 });
-		expect(
-			(
-				workflowSession(status) as {
-					timestamps: { completedAt: string | null };
-				}
-			).timestamps.completedAt,
-		).not.toBeNull();
-		const features = (
-			workflowSession(status) as {
-				features: Array<{ id: string; status: string }>;
-			}
-		).features;
-		expect(features.every((feature) => feature.status === "completed")).toBe(
-			true,
+		const archivedSession = repository.archives.get(sessionId);
+		if (!archivedSession?.closure)
+			throw new Error("Expected archived closure.");
+		repository.session = {
+			...archivedSession,
+			closure: {
+				...archivedSession.closure,
+				operationId: archivedSession.operations[0]?.id ?? "missing-operation",
+			},
+		};
+		const malformedCloseStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expect(malformedCloseStatus.status).toBe("error");
+		expect(malformedCloseStatus.summary).toContain(
+			"not bound to a valid close operation",
 		);
-		expect(
-			(workflowSession(status) as { historyCount: number }).historyCount,
-		).toBe(2);
-		expect(
-			(workflowSession(status) as { latestHistoryEntry: { featureId: string } })
-				.latestHistoryEntry.featureId,
-		).toBe("final-feature");
+		repository.session = null;
+
+		const nextPlan = await flow.planSave({
+			request: {
+				operationId: "plan-save-next-session",
+				expectedRevision: 0,
+				goal: "Ship the next runtime",
+				plan,
+			},
+		});
+		expectOk(nextPlan);
+		const nextSession = await repository.read();
+		if (!nextSession) throw new Error("Expected the next active session.");
+		expect(nextSession.id).not.toBe(sessionId);
+
+		const delayedCloseReplay = await flow.sessionClose(closeRequest);
+		expectOk(delayedCloseReplay);
+		expect(delayedCloseReplay.workflowData.operation).toMatchObject({
+			operationId: "close-runtime",
+			replayed: true,
+		});
+		expect(await repository.read()).toBe(nextSession);
 	});
 });
