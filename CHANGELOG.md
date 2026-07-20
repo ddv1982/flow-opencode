@@ -2,6 +2,18 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.3.4] - 2026-07-20
+
+Retry-safe release publishing lore makes partial registry or GitHub outages
+recoverable without moving a tag or weakening package integrity:
+
+- A rerun skips an existing npm version only when the registry SHA-512 exactly
+  matches the freshly packed tarball; conflicting bytes fail closed.
+- GitHub release metadata is created independently from tarball and checksum
+  uploads, so one failed asset no longer rolls back the release transaction.
+- Idempotent release edits and asset uploads use bounded retries, while release
+  lookup distinguishes a missing release from an unavailable GitHub API.
+
 ## [5.3.3] - 2026-07-20
 
 Project-scoped runtime leadership lore restores global Flow activation in the

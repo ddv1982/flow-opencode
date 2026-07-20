@@ -535,6 +535,12 @@ must trust provider `GitHub Actions`, owner `ddv1982`, repository
 `flow-opencode`, and workflow `release.yml`; leave the npm trusted-publisher
 environment blank unless the GitHub workflow starts using an environment.
 
+The release workflow is safe to rerun after partial publication. An existing
+npm version is skipped only when its registry SHA-512 exactly matches the newly
+packed tarball; a mismatch fails closed. GitHub release metadata is created or
+updated separately from idempotent, bounded-retry asset uploads, so a transient
+upload outage does not require moving a tag or republishing an npm version.
+
 The normal release path is: commit the versioned release changes, push `main`,
 then create and push a fresh `vX.Y.Z` tag. Avoid moving existing release tags
 unless a maintainer explicitly chooses that rollback or repair path.

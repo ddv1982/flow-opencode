@@ -319,7 +319,7 @@ rolled back, while committed removal work finishes verified deletion.
 To preview recoverable migration of pristine v4 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.3 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.4 legacy-cleanup --dry-run
 ```
 
 ## Development

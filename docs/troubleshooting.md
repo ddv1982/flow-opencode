@@ -65,7 +65,7 @@ one exact pin, for example:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.3.3"]
+  "plugin": ["opencode-plugin-flow@5.3.4"]
 }
 ```
 
@@ -119,13 +119,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.3 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.4 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.3 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.3.4 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to

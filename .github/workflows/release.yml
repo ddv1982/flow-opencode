@@ -61,7 +61,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm publish opencode-plugin-flow-*.tgz --access public
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
+          local_integrity="$(node --input-type=module -e '
+            import { createHash } from "node:crypto";
+            import { readFileSync } from "node:fs";
+            process.stdout.write("sha512-" + createHash("sha512").update(readFileSync(process.argv[1])).digest("base64"));
+          ' "$tarball")"
+          registry_error_file="$(mktemp)"
+
+          if published_integrity="$(npm view "${package_name}@${package_version}" dist.integrity 2>"$registry_error_file")"; then
+            if [[ "$published_integrity" != "$local_integrity" ]]; then
+              echo "::error::npm already contains ${package_name}@${package_version} with different tarball integrity."
+              exit 1
+            fi
+            echo "npm already contains the exact ${package_name}@${package_version} tarball; skipping publish."
+          else
+            registry_error="$(<"$registry_error_file")"
+            if [[ "$registry_error" != *"E404"* && "$registry_error" != *"No match found"* ]]; then
+              printf '%s\n' "$registry_error" >&2
+              exit 1
+            fi
+            npm publish "$tarball" --access public
+          fi
 
       - name: Publish GitHub release assets
         env:
@@ -71,10 +94,34 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
+          release_query_error_file="$(mktemp)"
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --notes-file release-notes.md
-            gh release upload "$tag" "$tarball" "${tarball}.sha256" --clobber
+          retry_idempotent() {
+            local attempt=1
+            local maximum_attempts=5
+            local retry_delay_seconds
+
+            until "$@"; do
+              if (( attempt >= maximum_attempts )); then
+                return 1
+              fi
+              retry_delay_seconds=$((attempt * 15))
+              echo "Retrying idempotent GitHub release operation in ${retry_delay_seconds}s (attempt $((attempt + 1))/${maximum_attempts})."
+              sleep "$retry_delay_seconds"
+              attempt=$((attempt + 1))
+            done
+          }
+
+          if gh release view "$tag" >/dev/null 2>"$release_query_error_file"; then
+            retry_idempotent gh release edit "$tag" --title "$tag" --notes-file release-notes.md
           else
-            gh release create "$tag" "$tarball" "${tarball}.sha256" --title "$tag" --notes-file release-notes.md
+            release_query_error="$(<"$release_query_error_file")"
+            if [[ "$release_query_error" != *"release not found"* && "$release_query_error" != *"HTTP 404"* ]]; then
+              printf '%s\n' "$release_query_error" >&2
+              exit 1
+            fi
+            gh release create "$tag" --title "$tag" --notes-file release-notes.md
           fi
+
+          retry_idempotent gh release upload "$tag" "$tarball" --clobber
+          retry_idempotent gh release upload "$tag" "${tarball}.sha256" --clobber
