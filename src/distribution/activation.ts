@@ -1389,7 +1389,7 @@ async function activationLimitations(
 			coverage: "runtime-leadership",
 			blocking: false,
 			detail:
-				"Authenticated .well-known and organization API configs cannot be inspected offline; Flow runtime leadership detects duplicate loaded versions and fails closed.",
+				"Authenticated .well-known and organization API configs cannot be inspected offline; Flow runtime leadership detects duplicate loaded versions within each OpenCode project context and fails closed there.",
 		},
 	];
 	if (paths.managedPreferencePaths.length > 0) {
@@ -1409,8 +1409,8 @@ async function activationLimitations(
 			blocking: false,
 			detail:
 				detected.length > 0
-					? `Detected managed preference source(s) ${detected.join(", ")}; plist/MDM plugin values are not decoded by this dependency-free preflight, and runtime leadership fails closed on duplicates.`
-					: "macOS MDM preferences may add runtime config outside readable JSON/JSONC files; Flow runtime leadership fails closed on duplicate loaded versions.",
+					? `Detected managed preference source(s) ${detected.join(", ")}; plist/MDM plugin values are not decoded by this dependency-free preflight, and runtime leadership fails closed on same-project duplicates.`
+					: "macOS MDM preferences may add runtime config outside readable JSON/JSONC files; Flow runtime leadership fails closed on duplicate loaded versions within each OpenCode project context.",
 		});
 	}
 	return limitations;

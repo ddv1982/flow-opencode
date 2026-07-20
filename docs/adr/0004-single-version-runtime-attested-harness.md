@@ -75,11 +75,14 @@ apply reconciles nonterminal journals before planning, while read-only checks
 report them as blocking.
 
 Every initialized Flow runtime also registers exact package, version, protocol,
-and instance identity in a bounded process-global registry. Exactly one
-registration is operational. With duplicate, incompatible, or over-capacity
-state, Flow commands and tools fail closed. The highest semantic version is
-reported as a deterministic diagnostic leader only; it receives no operational
-authority until all other registrations are gone.
+and instance identity in a bounded project scope inside a shared process
+registry. OpenCode legitimately initializes one global plugin entry for every
+open project, so independent project directories remain operational. Within one
+project context exactly one registration is operational. Duplicate,
+incompatible, or over-capacity state fails closed only for that project. The
+highest semantic version is reported as a deterministic diagnostic leader only;
+it receives no operational authority until the conflicting registrations in
+that project are gone.
 
 ### Runtime-attested validation receipts
 
@@ -197,8 +200,9 @@ and ordinary CI cannot silently enable enforcement.
 
 - Installing the latest Flow release is a convergence operation, not an
   adjacent installation. Ambiguous sources need human ownership decisions.
-- Runtime leadership makes hidden duplicate sources safe by disabling Flow, at
-  the cost of an explicit repair before work can continue.
+- Project-scoped runtime leadership makes hidden duplicate sources safe by
+  disabling Flow only in the affected project, at the cost of an explicit repair
+  before work can continue there.
 - The public tool surface grows from nine to 12 tools. Lifecycle schema remains
   Session v4; there is no dual validation input or compatibility alias.
 - Validation correctness is grounded in host-observed execution, while coverage
@@ -215,7 +219,8 @@ and ordinary CI cannot silently enable enforcement.
 ## Verification and rollback
 
 Verification covers activation inventory/dry-run/apply/refusal/recovery,
-duplicate leadership, host/application schema parity for all 12 tools, exact
+same-project duplicate leadership, simultaneous independent project contexts,
+host/application schema parity for all 12 tools, exact
 Bash capture and receipt-integrity failures, review applicability and replay,
 correction delta/fallback/two-failure behavior, audit policy/render parity,
 admission class/count enforcement, observation bounds/privacy, oracle fixture

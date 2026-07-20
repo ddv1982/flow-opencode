@@ -42,7 +42,7 @@ instructions are compiled into the plugin, and optional guides are returned by
 `.opencode`, custom, inline, and managed JSON/JSONC configuration; singular and
 plural plugin directories; and package-cache artifacts. Authenticated remote
 configuration and some managed preferences cannot be decoded offline. They are
-reported as limitations, and process-global runtime leadership is the final
+reported as limitations, and project-scoped runtime leadership is the final
 fail-closed duplicate guard.
 
 ## Activation was refused
@@ -65,7 +65,7 @@ one exact pin, for example:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@5.3.2"]
+  "plugin": ["opencode-plugin-flow@5.3.3"]
 }
 ```
 
@@ -87,11 +87,13 @@ reports any unresolved journal as blocking.
 
 ## Duplicate runtime leadership error
 
-When more than one Flow runtime registers in one OpenCode process, all Flow
-commands and tools fail closed. The diagnostic reports every registered
-identity and labels one deterministic highest-semantic-version copy as the
-diagnostic leader. That label is not authority: no copy operates until only one
-remains.
+When more than one Flow runtime registers for the same OpenCode project context,
+that project's Flow commands and tools fail closed. A global plugin is normally
+initialized once for every open project; those independent project instances do
+not conflict. The diagnostic reports every conflicting identity in the affected
+project and labels one deterministic highest-semantic-version copy as the
+diagnostic leader. That label is not authority: no conflicting copy operates
+until only one remains.
 
 Close OpenCode, run `activation-check` for the affected project, converge config
 and proven cache/wrapper state with `activation-apply`, resolve any reported
@@ -117,13 +119,13 @@ Versions before v5 could copy Flow skills into
 future guidance. Preview migration explicitly:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.2 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.3 legacy-cleanup --dry-run
 ```
 
 Apply only after reviewing the report:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.2 legacy-cleanup --apply
+npx -y opencode-plugin-flow@5.3.3 legacy-cleanup --apply
 ```
 
 The command never deletes a folder. It moves only marker-proven Flow folders to

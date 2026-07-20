@@ -312,14 +312,14 @@ If an applied multi-source change fails, Flow attempts exact safe rollback and
 records either `rolled-back` or `rollback-failed` in the recovery journal;
 concurrent or unsafe state is preserved for manual recovery. Remote and
 managed-preference sources that cannot be decoded offline remain covered by
-fail-closed runtime leadership. A later install reconciles interrupted v2
-journals before planning: pre-commit work is rolled back, while committed
-removal work finishes verified deletion.
+fail-closed runtime leadership within each OpenCode project context. A later
+install reconciles interrupted v2 journals before planning: pre-commit work is
+rolled back, while committed removal work finishes verified deletion.
 
 To preview recoverable migration of pristine v4 global skill folders:
 
 ```bash
-npx -y opencode-plugin-flow@5.3.2 legacy-cleanup --dry-run
+npx -y opencode-plugin-flow@5.3.3 legacy-cleanup --dry-run
 ```
 
 ## Development

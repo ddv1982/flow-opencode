@@ -252,7 +252,7 @@ function guardFlowTools(
 const FlowPlugin: Plugin = async (ctx) => {
 	const log = createFlowLog(ctx);
 	const version = resolveFlowPluginVersion();
-	const leadership = registerFlowPluginInstance({
+	const leadership = registerFlowPluginInstance(ctx.directory, {
 		packageName: "opencode-plugin-flow",
 		version,
 		protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
@@ -266,6 +266,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 			version,
 			protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
 			instanceId: leadership.identity.instanceId,
+			projectDirectory: leadership.scopeId,
 			leadershipReason: initialLeadership.reason,
 			registeredCount: initialLeadership.registeredCount,
 		},

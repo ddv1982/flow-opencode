@@ -2,6 +2,22 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [5.3.3] - 2026-07-20
+
+Project-scoped runtime leadership lore restores global Flow activation in the
+OpenCode desktop app without weakening duplicate-version safety:
+
+- One exact globally installed Flow version may initialize independently for
+  every open project. Those legitimate project instances no longer disable one
+  another.
+- Duplicate Flow copies or versions within the same project context still fail
+  closed, while unrelated projects remain operational.
+- Scoped registrations retain the existing shared registry envelope so an
+  unscoped older runtime remains a conservative conflict during upgrades.
+- Unit and composed-plugin regressions cover eleven simultaneous projects,
+  isolated same-project conflicts, cleanup, capacity, and older-runtime
+  compatibility; package and pinned OpenCode smoke remain release gates.
+
 ## [5.3.2] - 2026-07-20
 
 Crash-safe single-version installation lore makes upgrading converge on the

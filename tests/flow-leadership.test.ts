@@ -16,6 +16,7 @@ import {
 } from "../src/platform/opencode/leadership.js";
 
 const PACKAGE_NAME = "opencode-plugin-flow";
+const DEFAULT_SCOPE = "/projects/default";
 
 function identity(
 	version: string,
@@ -29,8 +30,10 @@ function register(
 	version: string,
 	instanceId: string,
 	protocolVersion = FLOW_LEADERSHIP_PROTOCOL_VERSION,
+	scopeId = DEFAULT_SCOPE,
 ): FlowLeadershipHandle {
 	return registerFlowPluginInstance(
+		scopeId,
 		identity(version, instanceId, protocolVersion),
 	);
 }
@@ -41,7 +44,102 @@ function clearRegistry(): void {
 
 afterEach(clearRegistry);
 
-describe("Flow process-global leadership", () => {
+describe("Flow project-scoped process leadership", () => {
+	test("keeps independent OpenCode project contexts operational", () => {
+		const handles = Array.from({ length: 11 }, (_, index) =>
+			register("5.3.3", `project-${index}`, undefined, `/projects/${index}`),
+		);
+
+		for (const handle of handles) {
+			expect(handle.query()).toMatchObject({
+				operational: true,
+				role: "leader",
+				reason: "sole-instance",
+				registeredCount: 1,
+			});
+		}
+	});
+
+	test("isolates a duplicate conflict to its own project context", () => {
+		const unaffected = register(
+			"5.3.3",
+			"unaffected",
+			undefined,
+			"/projects/unaffected",
+		);
+		const low = register("5.3.2", "low", undefined, "/projects/conflicted");
+		const high = register("5.3.3", "high", undefined, "/projects/conflicted");
+
+		expect(unaffected.isOperational()).toBe(true);
+		expect(low.isOperational()).toBe(false);
+		expect(high.query()).toMatchObject({
+			operational: false,
+			role: "leader",
+			reason: "duplicate-instances",
+			registeredCount: 2,
+		});
+	});
+
+	test("releasing one project context leaves another operational", () => {
+		const first = register("5.3.3", "first", undefined, "/projects/one");
+		const second = register("5.3.3", "second", undefined, "/projects/two");
+
+		expect(first.isOperational()).toBe(true);
+		expect(second.isOperational()).toBe(true);
+		expect(first.release()).toBe(true);
+		expect(second.isOperational()).toBe(true);
+	});
+
+	test("fails closed around an unscoped registration from an older Flow runtime", () => {
+		Reflect.set(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL, {
+			kind: "opencode-plugin-flow.runtime-leadership",
+			formatVersion: 1,
+			registrations: new Map([["legacy", identity("5.3.2", "legacy")]]),
+			capacityExceeded: false,
+		});
+
+		const current = register(
+			"5.3.3",
+			"current",
+			undefined,
+			"/projects/current",
+		);
+		expect(current.query()).toMatchObject({
+			operational: false,
+			reason: "duplicate-instances",
+			registeredCount: 2,
+			diagnosticLeader: expect.objectContaining({ version: "5.3.3" }),
+		});
+	});
+
+	test("keeps the shared registry envelope compatible with older Flow runtimes", () => {
+		const current = register(
+			"5.3.3",
+			"current",
+			undefined,
+			"/projects/current",
+		);
+		const registry = Reflect.get(
+			globalThis,
+			FLOW_LEADERSHIP_REGISTRY_SYMBOL,
+		) as {
+			kind?: unknown;
+			formatVersion?: unknown;
+			registrations?: Map<string, { scopeId?: unknown }>;
+			capacityExceeded?: unknown;
+		};
+
+		expect(registry).toMatchObject({
+			kind: "opencode-plugin-flow.runtime-leadership",
+			formatVersion: 1,
+			capacityExceeded: false,
+		});
+		expect(registry.registrations).toBeInstanceOf(Map);
+		expect(
+			registry.registrations?.get(current.identity.instanceId)?.scopeId,
+		).toBe("/projects/current");
+	});
+
 	for (const loadOrder of [
 		["4.9.0", "5.2.2"],
 		["5.2.2", "4.9.0"],
@@ -196,6 +294,20 @@ describe("Flow process-global leadership", () => {
 		expect(handle.release()).toBe(false);
 	});
 
+	for (const { name, article, value } of [
+		{ name: "empty", article: "an", value: "" },
+		{ name: "null-containing", article: "a", value: "invalid\0scope" },
+	]) {
+		test(`rejects ${article} ${name} project leadership scope`, () => {
+			expect(() =>
+				register("5.2.2", "invalid-scope", undefined, value),
+			).toThrow("scope ID");
+			expect(
+				Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL),
+			).toBeUndefined();
+		});
+	}
+
 	test("shares registry semantics with a separately evaluated module API", async () => {
 		const moduleUrl = new URL(
 			"../src/platform/opencode/leadership.ts",
@@ -210,18 +322,26 @@ describe("Flow process-global leadership", () => {
 		expect(independent.FLOW_LEADERSHIP_REGISTRY_SYMBOL).toBe(
 			FLOW_LEADERSHIP_REGISTRY_SYMBOL,
 		);
-		expect(independent.queryFlowPluginLeadership("cross-module")).toMatchObject(
-			{
-				registered: true,
-				operational: true,
-				reason: "sole-instance",
-			},
-		);
-		expect(independent.unregisterFlowPluginInstance("cross-module")).toBe(true);
+		expect(
+			independent.queryFlowPluginLeadership(DEFAULT_SCOPE, "cross-module"),
+		).toMatchObject({
+			registered: true,
+			operational: true,
+			reason: "sole-instance",
+		});
+		expect(
+			independent.unregisterFlowPluginInstance(DEFAULT_SCOPE, "cross-module"),
+		).toBe(true);
 		expect(handle.isOperational()).toBe(false);
 	});
 
 	test("bounds registrations and keeps every tracked instance closed after overflow", () => {
+		const unaffected = register(
+			"5.2.2",
+			"unaffected-by-overflow",
+			undefined,
+			"/projects/unaffected",
+		);
 		const handles = Array.from(
 			{ length: FLOW_LEADERSHIP_MAX_INSTANCES },
 			(_, index) => register("5.2.2", `bounded-${index}`),
@@ -239,10 +359,11 @@ describe("Flow process-global leadership", () => {
 			operational: false,
 			reason: "registry-capacity-exceeded",
 		});
-		expect(queryFlowPluginLeadership("bounded-overflow").registered).toBe(
-			false,
-		);
-		expect(unregisterFlowPluginInstance("bounded-0")).toBe(true);
+		expect(
+			queryFlowPluginLeadership(DEFAULT_SCOPE, "bounded-overflow").registered,
+		).toBe(false);
+		expect(unregisterFlowPluginInstance(DEFAULT_SCOPE, "bounded-0")).toBe(true);
 		expect(handles[1]?.isOperational()).toBe(false);
+		expect(unaffected.isOperational()).toBe(true);
 	});
 });

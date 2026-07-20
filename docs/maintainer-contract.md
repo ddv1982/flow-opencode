@@ -337,8 +337,10 @@ unreadable remote or managed configuration must be surfaced for manual
 remediation. A subsequent apply reconciles every nonterminal v2 journal before
 planning: pre-commit state rolls back, committed state completes verified
 deletion, and unsafe recovery refuses. Read-only inventory reports nonterminal
-journals as blocking. Runtime leadership remains the final duplicate guard for
-sources offline inventory cannot decode.
+journals as blocking. Project-scoped runtime leadership remains the final
+duplicate guard for sources offline inventory cannot decode. The process-global
+registry is partitioned by OpenCode's project directory; independent projects
+must never count as duplicate activations of one global plugin entry.
 
 Plugin initialization must never read or write OpenCode's global skills root.
 There is no sync health, `setup.skills`, marker update, backup, doctor, sync, or

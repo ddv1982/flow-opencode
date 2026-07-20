@@ -3,6 +3,7 @@ const REGISTRY_FORMAT_VERSION = 1;
 const MAX_PACKAGE_NAME_LENGTH = 214;
 const MAX_VERSION_LENGTH = 256;
 const MAX_INSTANCE_ID_LENGTH = 128;
+const MAX_SCOPE_ID_LENGTH = 32_768;
 
 export const FLOW_LEADERSHIP_PROTOCOL_VERSION = 1;
 export const FLOW_LEADERSHIP_MAX_INSTANCES = 32;
@@ -29,13 +30,16 @@ export interface FlowPluginIdentity {
 	readonly instanceId: string;
 }
 
-interface RegisteredFlowInstance extends FlowPluginIdentity {}
+interface RegisteredFlowInstance extends FlowPluginIdentity {
+	readonly scopeId?: string;
+}
 
 interface FlowLeadershipRegistry {
 	readonly kind: typeof REGISTRY_KIND;
 	readonly formatVersion: typeof REGISTRY_FORMAT_VERSION;
 	readonly registrations: Map<string, RegisteredFlowInstance>;
 	capacityExceeded: boolean;
+	capacityExceededScopes?: Set<string>;
 }
 
 export type FlowLeadershipRole =
@@ -66,6 +70,7 @@ export interface FlowLeadershipStatus {
 
 export interface FlowLeadershipHandle {
 	readonly identity: FlowPluginIdentity;
+	readonly scopeId: string;
 	query(): FlowLeadershipStatus;
 	isOperational(): boolean;
 	assertOperational(action?: string): void;
@@ -219,6 +224,18 @@ function validateIdentity(identity: FlowPluginIdentity): void {
 	}
 }
 
+function validateScopeId(scopeId: string): void {
+	if (
+		scopeId.length === 0 ||
+		scopeId.length > MAX_SCOPE_ID_LENGTH ||
+		scopeId.includes("\0")
+	) {
+		throw new TypeError(
+			`Flow leadership scope ID must be a non-empty string without null bytes and at most ${MAX_SCOPE_ID_LENGTH} characters.`,
+		);
+	}
+}
+
 function snapshotIdentity(identity: FlowPluginIdentity): FlowPluginIdentity {
 	return Object.freeze({
 		packageName: identity.packageName,
@@ -226,6 +243,13 @@ function snapshotIdentity(identity: FlowPluginIdentity): FlowPluginIdentity {
 		protocolVersion: identity.protocolVersion,
 		instanceId: identity.instanceId,
 	});
+}
+
+function scopedRegistration(
+	identity: FlowPluginIdentity,
+	scopeId: string,
+): RegisteredFlowInstance {
+	return Object.freeze({ ...identity, scopeId });
 }
 
 function isRegisteredFlowInstance(
@@ -246,7 +270,12 @@ function isRegisteredFlowInstance(
 		typeof candidate.instanceId === "string" &&
 		candidate.instanceId.length > 0 &&
 		candidate.instanceId.length <= MAX_INSTANCE_ID_LENGTH &&
-		candidate.instanceId.trim() === candidate.instanceId
+		candidate.instanceId.trim() === candidate.instanceId &&
+		(candidate.scopeId === undefined ||
+			(typeof candidate.scopeId === "string" &&
+				candidate.scopeId.length > 0 &&
+				candidate.scopeId.length <= MAX_SCOPE_ID_LENGTH &&
+				!candidate.scopeId.includes("\0")))
 	);
 }
 
@@ -258,9 +287,22 @@ function isCompatibleRegistry(value: unknown): value is FlowLeadershipRegistry {
 		candidate.formatVersion !== REGISTRY_FORMAT_VERSION ||
 		!(candidate.registrations instanceof Map) ||
 		typeof candidate.capacityExceeded !== "boolean" ||
-		candidate.registrations.size > FLOW_LEADERSHIP_MAX_INSTANCES
+		(candidate.capacityExceededScopes !== undefined &&
+			!(candidate.capacityExceededScopes instanceof Set))
 	) {
 		return false;
+	}
+	if (candidate.capacityExceededScopes) {
+		for (const scopeId of candidate.capacityExceededScopes) {
+			if (
+				typeof scopeId !== "string" ||
+				scopeId.length === 0 ||
+				scopeId.length > MAX_SCOPE_ID_LENGTH ||
+				scopeId.includes("\0")
+			) {
+				return false;
+			}
+		}
 	}
 	for (const [instanceId, registration] of candidate.registrations) {
 		if (
@@ -288,6 +330,7 @@ function createRegistry(): FlowLeadershipRegistry {
 		formatVersion: REGISTRY_FORMAT_VERSION,
 		registrations: new Map(),
 		capacityExceeded: false,
+		capacityExceededScopes: new Set(),
 	};
 }
 
@@ -390,6 +433,7 @@ function incompatibleStatus(instanceId: string): FlowLeadershipStatus {
 }
 
 function queryRegistryStatus(
+	scopeId: string,
 	instanceId: string,
 	expectedRecord: RegisteredFlowInstance | null,
 	matchAnyRecord: boolean,
@@ -431,14 +475,25 @@ function queryRegistryStatus(
 		});
 	}
 	if (!isCompatibleRegistry(value)) return incompatibleStatus(instanceId);
-	const records = [...value.registrations.values()].sort(compareRegistrations);
+	const records = [...value.registrations.values()]
+		.filter(
+			(registration) =>
+				registration.scopeId === undefined || registration.scopeId === scopeId,
+		)
+		.sort(compareRegistrations);
 	const current = value.registrations.get(instanceId);
 	const registered =
-		current !== undefined && (matchAnyRecord || current === expectedRecord);
+		current !== undefined &&
+		(current.scopeId === undefined || current.scopeId === scopeId) &&
+		(matchAnyRecord || current === expectedRecord);
 	const leader = diagnosticLeader(records);
 	const registrations = records.map(snapshotIdentity);
 	const leaderSnapshot = leader ? snapshotIdentity(leader) : null;
-	if (value.capacityExceeded || localReason === "registry-capacity-exceeded") {
+	if (
+		value.capacityExceeded ||
+		value.capacityExceededScopes?.has(scopeId) ||
+		localReason === "registry-capacity-exceeded"
+	) {
 		return freezeStatus({
 			instanceId,
 			registered,
@@ -453,7 +508,7 @@ function queryRegistryStatus(
 			registeredCount: records.length,
 			diagnosticLeader: leaderSnapshot,
 			registrations,
-			message: `Flow is disabled because the leadership registry exceeded its bounded capacity of ${FLOW_LEADERSHIP_MAX_INSTANCES} instances.`,
+			message: `Flow is disabled because this project leadership scope exceeded its bounded capacity of ${FLOW_LEADERSHIP_MAX_INSTANCES} instances.`,
 		});
 	}
 	if (!registered || !current) {
@@ -500,7 +555,7 @@ function queryRegistryStatus(
 		registeredCount: records.length,
 		diagnosticLeader: snapshotIdentity(leader),
 		registrations,
-		message: `Flow is disabled while ${records.length} instances are registered. The deterministic diagnostic leader is ${identityLabel(leader)}.`,
+		message: `Flow is disabled while ${records.length} instances are registered in this project context. The deterministic diagnostic leader is ${identityLabel(leader)}.`,
 	});
 }
 
@@ -526,22 +581,42 @@ function removeEmptyRegistry(registry: FlowLeadershipRegistry): void {
 	}
 }
 
+function clearEmptyScopeCapacity(
+	registry: FlowLeadershipRegistry,
+	scopeId: string,
+): void {
+	if (
+		[...registry.registrations.values()].some(
+			(registration) => registration.scopeId === scopeId,
+		)
+	) {
+		return;
+	}
+	registry.capacityExceededScopes?.delete(scopeId);
+}
+
 export function createFlowPluginInstanceId(): string {
 	return globalThis.crypto.randomUUID();
 }
 
 export function queryFlowPluginLeadership(
+	scopeId: string,
 	instanceId: string,
 ): FlowLeadershipStatus {
+	validateScopeId(scopeId);
 	assertNonemptyBoundedString(
 		instanceId,
 		"instance ID",
 		MAX_INSTANCE_ID_LENGTH,
 	);
-	return queryRegistryStatus(instanceId, null, true, null, false);
+	return queryRegistryStatus(scopeId, instanceId, null, true, null, false);
 }
 
-export function unregisterFlowPluginInstance(instanceId: string): boolean {
+export function unregisterFlowPluginInstance(
+	scopeId: string,
+	instanceId: string,
+): boolean {
+	validateScopeId(scopeId);
 	assertNonemptyBoundedString(
 		instanceId,
 		"instance ID",
@@ -549,16 +624,27 @@ export function unregisterFlowPluginInstance(instanceId: string): boolean {
 	);
 	const value = readRegistrySlot();
 	if (!isCompatibleRegistry(value)) return false;
-	if (!value.registrations.delete(instanceId)) return false;
+	const registration = value.registrations.get(instanceId);
+	if (
+		!registration ||
+		(registration.scopeId !== undefined && registration.scopeId !== scopeId) ||
+		!value.registrations.delete(instanceId)
+	) {
+		return false;
+	}
+	clearEmptyScopeCapacity(value, scopeId);
 	removeEmptyRegistry(value);
 	return true;
 }
 
 export function registerFlowPluginInstance(
+	scopeId: string,
 	input: FlowPluginIdentity,
 ): FlowLeadershipHandle {
+	validateScopeId(scopeId);
 	validateIdentity(input);
 	const identity = snapshotIdentity(input);
+	const registration = scopedRegistration(identity, scopeId);
 	const acquired = acquireRegistry();
 	let record: RegisteredFlowInstance | null = null;
 	let localReason: FlowLeadershipReason | null = null;
@@ -567,27 +653,36 @@ export function registerFlowPluginInstance(
 	} else {
 		const existing = acquired.registry.registrations.get(identity.instanceId);
 		if (existing) {
-			if (!identitiesMatch(existing, identity)) {
+			if (
+				!identitiesMatch(existing, identity) ||
+				existing.scopeId !== scopeId
+			) {
 				throw new Error(
 					`Flow leadership instance ID '${identity.instanceId}' is already registered with different identity data.`,
 				);
 			}
 			record = existing;
 		} else if (
-			acquired.registry.registrations.size >= FLOW_LEADERSHIP_MAX_INSTANCES
+			[...acquired.registry.registrations.values()].filter(
+				(candidate) =>
+					candidate.scopeId === undefined || candidate.scopeId === scopeId,
+			).length >= FLOW_LEADERSHIP_MAX_INSTANCES
 		) {
-			acquired.registry.capacityExceeded = true;
+			acquired.registry.capacityExceededScopes ??= new Set();
+			acquired.registry.capacityExceededScopes.add(scopeId);
 			localReason = "registry-capacity-exceeded";
 		} else {
-			record = identity;
+			record = registration;
 			acquired.registry.registrations.set(identity.instanceId, record);
 		}
 	}
 	let released = false;
 	return Object.freeze({
 		identity,
+		scopeId,
 		query(): FlowLeadershipStatus {
 			return queryRegistryStatus(
+				scopeId,
 				identity.instanceId,
 				record,
 				false,
@@ -605,14 +700,13 @@ export function registerFlowPluginInstance(
 		release(): boolean {
 			if (released || !record) return false;
 			const value = readRegistrySlot();
-			if (
-				!isCompatibleRegistry(value) ||
-				value.registrations.get(identity.instanceId) !== record
-			) {
+			if (!isCompatibleRegistry(value)) return false;
+			if (value.registrations.get(identity.instanceId) !== record) {
 				return false;
 			}
 			value.registrations.delete(identity.instanceId);
 			released = true;
+			clearEmptyScopeCapacity(value, scopeId);
 			removeEmptyRegistry(value);
 			return true;
 		},

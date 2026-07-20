@@ -26,10 +26,10 @@ flowchart LR
   process services. It may import application and domain.
 - `src/platform/opencode/**` is the outer composition and transport layer. It
   may import the inward layers, config, and embedded guidance. It owns
-  process-global runtime leadership, bounded host observation, optional-worker
-  admission coordination, Bash receipt capture, and private host schemas. Host
-  schema objects stay private in this layer and never appear in emitted public
-  types.
+  project-scoped runtime leadership through a shared process registry, bounded
+  host observation, optional-worker admission coordination, Bash receipt
+  capture, and private host schemas. Host schema objects stay private in this
+  layer and never appear in emitted public types.
 - `src/guidance/**` owns stable ids and Markdown embedded into the package.
 - `src/application/harness/**` owns the provider-neutral sanitized resource and
   quality oracle. It consumes bounded projections rather than host SDK values.

@@ -962,9 +962,10 @@ The implementation now covers the planned harness phases as small contracts:
    post-mutation failure attempts exact rollback and records `rolled-back` or
    journal-backed `rollback-failed` recovery. Interrupted v2 journals are
    reconciled before a later apply: pre-commit work rolls back and committed
-   removal work finishes verified deletion. Process-global leadership permits
-   one operational runtime; duplicates disable every copy and expose a
-   highest-semantic-version identity for diagnosis only.
+   removal work finishes verified deletion. A shared process registry permits
+   one operational runtime per OpenCode project context; independent projects
+   coexist, while duplicates within one project disable every conflicting copy
+   and expose a highest-semantic-version identity for diagnosis only.
 2. **Runtime-attested validation.** `flow_validation_start` binds current causal
    guards, feature run, source, coverage scope, environment-key names, and the
    exact next Bash command. The host hook supplies timing, structured exit,

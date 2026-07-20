@@ -433,6 +433,34 @@ describe("embedded guidance and plugin surface", () => {
 });
 
 describe("command and config hooks", () => {
+	test("keeps Flow operational across simultaneous OpenCode project contexts", async () => {
+		const workspaces = await Promise.all(
+			Array.from({ length: 11 }, () => tempWorkspace()),
+		);
+		const hooksByProject = await Promise.all(
+			workspaces.map((workspace) => loadFlowPlugin(pluginContext(workspace))),
+		);
+
+		for (const hooks of hooksByProject) {
+			const config = {};
+			if (!hooks.config) throw new Error("Expected config hook");
+			await hooks.config(config);
+
+			const preflight = hooks["command.execute.before"];
+			if (!preflight) throw new Error("Expected command preflight hook");
+			const output = { parts: [{ type: "text", text: "stale" }] };
+			await preflight(
+				{
+					command: "flow-plan",
+					sessionID: "multi-project",
+					arguments: "verify project isolation",
+				},
+				output as unknown as Parameters<typeof preflight>[1],
+			);
+			expect(output.parts[1]?.text).toContain("Bundled flow-plan/SKILL.md");
+		}
+	});
+
 	test.each([
 		{
 			profile: "control",
