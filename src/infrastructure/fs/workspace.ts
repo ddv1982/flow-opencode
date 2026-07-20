@@ -216,6 +216,26 @@ async function syncDirectory(path: string): Promise<void> {
 	}
 }
 
+async function renameReplacing(temporary: string, path: string): Promise<void> {
+	let retry = 0;
+	while (true) {
+		try {
+			await rename(temporary, path);
+			return;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			const transientWindowsError =
+				process.platform === "win32" &&
+				(code === "EACCES" || code === "EBUSY" || code === "EPERM");
+			if (!transientWindowsError || retry >= 20) throw error;
+			retry += 1;
+			// Preserve atomic replacement: wait for short-lived readers instead of
+			// unlinking the destination and exposing missing or partial state.
+			await sleep(retry * 5);
+		}
+	}
+}
+
 async function writeAtomically(path: string, contents: string): Promise<void> {
 	const temporary = join(
 		dirname(path),
@@ -232,7 +252,7 @@ async function writeAtomically(path: string, contents: string): Promise<void> {
 	}
 	await handle.close();
 	try {
-		await rename(temporary, path);
+		await renameReplacing(temporary, path);
 		await syncDirectory(dirname(path));
 	} catch (error) {
 		await rm(temporary, { force: true });
