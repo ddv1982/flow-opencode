@@ -385,7 +385,7 @@ describe("atomic persistence and archival", () => {
 			},
 		});
 
-		const canonicalWorkspace = await realpath(workspace);
+		const canonicalWorkspace = assertMutableWorkspaceRoot(workspace);
 		expect(synchronized).toEqual([
 			flowDir(canonicalWorkspace),
 			canonicalWorkspace,
