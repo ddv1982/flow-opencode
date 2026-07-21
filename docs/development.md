@@ -57,9 +57,10 @@ native plugin command and normal plugin configuration.
   instead of adding parallel ledgers or cached counters.
 - Every mutation needs a revision guard and stable operation ID. Exact replay is
   safe; conflicting reuse fails.
-- Only the reserved reviewer may create a new completion. Other callers can
-  receive an exact accepted completion replay through a read-only path that does
-  not cancel validation or write session state.
+- Only the reserved reviewer may create a new completion. While the Session v5
+  workflow remains active, every caller receives an exact accepted completion
+  replay through a read-only path that does not cancel validation or write
+  session state.
 - Keep validation host-observed and session-native. Do not add caller-authored
   success, detached receipt stores, or clock requirements.
 - Treat validation scope as a coverage claim. `broad` means the canonical

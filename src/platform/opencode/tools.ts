@@ -249,14 +249,13 @@ function executeMutation(
 
 function executeReviewerMutation(
 	context: ToolContext,
-	validation: ValidationCaptureCoordinator,
 	handler: (workspace: string) => Promise<FlowResponse>,
 	replayHandler: (workspace: string) => Promise<FlowResponse>,
 ): Promise<string> {
 	if (context.agent !== "flow-reviewer") {
 		return execute(context, replayHandler);
 	}
-	return executeMutation(context, validation, handler);
+	return execute(context, handler);
 }
 
 export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
@@ -334,12 +333,11 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 		}),
 		flow_feature_complete: tool({
 			description:
-				"Submit a pending review result; only the reviewer may create a new completion, while exact accepted requests remain replayable.",
+				"Submit a pending review result; only the reviewer may create a new completion, while exact accepted requests remain replayable for an active Session v5 workflow.",
 			args: FeatureCompleteArgs,
 			execute: (args, context) =>
 				executeReviewerMutation(
 					context,
-					options.validation,
 					(workspace) => flowFeatureComplete(workspace, args),
 					(workspace) => flowFeatureCompleteReplay(workspace, args),
 				),

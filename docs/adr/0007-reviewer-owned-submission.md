@@ -33,10 +33,11 @@ fresh validation, and a new review; that assignment is not redispatched. Manager
 status rechecks source content for a pending review so this recovery survives a
 lost submission error without adding persisted state.
 
-An exact previously accepted completion remains replayable without another
-mutation, regardless of caller identity. This read-only compatibility path
-cannot submit a new result and preserves Session v5 operation-ID idempotency
-across same-major upgrades.
+While its Session v5 workflow remains active, an exact previously accepted
+completion remains replayable without another mutation, regardless of caller
+identity. This read-only compatibility path neither cancels validation nor
+writes session state, cannot submit a new result, and preserves operation-ID
+idempotency across same-major upgrades.
 
 This replaces proxy submission. It adds no public tool, persisted provenance,
 review pass, lifecycle state, receipt, or recovery protocol. Existing revision,

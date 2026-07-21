@@ -6,6 +6,26 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.3.1] - 2026-07-21
+
+Read-only retry lore closes the recovery and documentation gaps in 6.3.0:
+
+- While Session v5 remains active, every caller with tool access now receives an
+  exact accepted completion through the read-only replay path before a new
+  reviewer submission is considered. Reviewer retries no longer cancel
+  validation capture or write session state.
+- Replay documentation now states the active Session v5 boundary, and release
+  language accurately describes secret avoidance as manager guidance rather
+  than runtime filtering or redaction.
+- The documentation contract keeps the rolling `Unreleased` changelog heading
+  without requiring its contents to remain `No changes yet.`
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.3.1 --global --force
+```
+
 ## [6.3.0] - 2026-07-21
 
 Reviewer-owned submission lore strengthens independent review without turning
@@ -20,8 +40,8 @@ Flow back into a heavy orchestration framework:
   revalidation, and fingerprint failures fail closed with repair guidance.
 - Final reviewers receive the approved plan targets and validation intent,
   completed feature IDs, and only assignment-linked evidence. Broad validation
-  is treated as a coverage claim; durable commands exclude secrets, and raw
-  output is reduced to completeness plus a digest.
+  is treated as a coverage claim; manager guidance warns against putting secrets
+  in durable commands, and raw output is reduced to completeness plus a digest.
 - Closed-world permission tests and the pinned OpenCode host smoke cover every
   registered Flow tool. Documentation distinguishes lifecycle mutation from
   fail-closed quarantine maintenance.

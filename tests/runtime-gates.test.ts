@@ -50,6 +50,8 @@ class MemorySessionRepository implements SessionRepository {
 	archiveFailure: Error | null = null;
 	readFailure: Error | null = null;
 	quarantineCount = 0;
+	saveCount = 0;
+	transactionCount = 0;
 	readonly archives = new Map<string, Session>();
 
 	readonly transaction: SessionTransaction = {
@@ -57,6 +59,7 @@ class MemorySessionRepository implements SessionRepository {
 		loadArchive: (sessionId) =>
 			Promise.resolve(this.archives.get(sessionId) ?? null),
 		save: (session) => {
+			this.saveCount += 1;
 			this.session = session;
 			return Promise.resolve(session);
 		},
@@ -85,6 +88,7 @@ class MemorySessionRepository implements SessionRepository {
 	transact<T>(
 		task: (transaction: SessionTransaction) => Promise<T>,
 	): Promise<T> {
+		this.transactionCount += 1;
 		return task(this.transaction);
 	}
 }
@@ -598,18 +602,24 @@ describe("Flow application runtime gates", () => {
 			entity: { id: "run-1", state: "completed" },
 		});
 		repository.sourceDigest = SOURCE_B;
+		const savesBeforeReplay = repository.saveCount;
+		const transactionsBeforeReplay = repository.transactionCount;
 		const replayedCompletion = await flow.featureComplete(completeRequest);
 		expectOk(replayedCompletion);
 		expect(replayedCompletion.workflowData.operation).toMatchObject({
 			operationId: "complete-runtime",
 			replayed: true,
 		});
+		expect(repository.saveCount).toBe(savesBeforeReplay);
+		expect(repository.transactionCount).toBe(transactionsBeforeReplay);
 		const readOnlyReplay = await flow.featureCompleteReplay(completeRequest);
 		expectOk(readOnlyReplay);
 		expect(readOnlyReplay.workflowData.operation).toMatchObject({
 			operationId: "complete-runtime",
 			replayed: true,
 		});
+		expect(repository.saveCount).toBe(savesBeforeReplay);
+		expect(repository.transactionCount).toBe(transactionsBeforeReplay);
 
 		const sessionId = repository.session?.id;
 		if (!sessionId) throw new Error("Expected a session id.");

@@ -45,7 +45,8 @@ The string `broad` does not make a narrow check comprehensive.
 one independent review. The hidden `flow-reviewer` reads it through reviewer
 status and submits its verdict plus findings directly through
 `flow_feature_complete`. The host checks the reserved reviewer identity for new
-submissions; exact accepted requests remain read-only replays.
+submissions; exact accepted requests remain read-only replays while the Session
+v5 workflow is active.
 
 **Feature review**: The one review derived for a non-final run.
 

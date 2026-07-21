@@ -64,10 +64,10 @@ describe("Flow v6 documentation contract", () => {
 
 		expect(JSON.parse(block ?? "null")).toEqual({
 			$schema: "https://opencode.ai/config.json",
-			plugin: ["opencode-plugin-flow@6.3.0"],
+			plugin: ["opencode-plugin-flow@6.3.1"],
 		});
 		expect(install).toContain(
-			"opencode plugin opencode-plugin-flow@6.3.0 --global --force",
+			"opencode plugin opencode-plugin-flow@6.3.1 --global --force",
 		);
 		expect(install).toMatch(
 			/Exact version pins do not update\s+automatically\./,
@@ -212,7 +212,8 @@ describe("Flow v6 documentation contract", () => {
 		expect(
 			section(troubleshooting, "Completion says workspace content changed"),
 		).toMatch(/Reset the feature[\s\S]+Do not redispatch/i);
-		expect(changelog).toContain("## [6.3.0] - 2026-07-21");
+		expect(changelog).toMatch(/^## \[Unreleased\]$/m);
+		expect(changelog).toContain("## [6.3.1] - 2026-07-21");
 	});
 
 	test("keeps CI focused on normal checks, platforms, live smoke, and release", async () => {

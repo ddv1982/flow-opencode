@@ -225,11 +225,29 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			status: string;
 		};
 		expect(completedProjection.status).toBe("completed");
-		expect(completionCancellations).toBe(
-			completionCancellationsBeforeManager + 1,
-		);
+		expect(completionCancellations).toBe(completionCancellationsBeforeManager);
 
 		const stateBeforeReplay = await readFile(sessionPath(workspace), "utf8");
+		const reviewerReplay = ok(
+			JSON.parse(
+				String(
+					await completionTool.execute(
+						completionInput,
+						toolContext(workspace, "flow-reviewer"),
+					),
+				),
+			) as FlowResponse,
+		);
+		expect(reviewerReplay.workflowData.operation).toMatchObject({
+			operationId: "complete-lifecycle",
+			revision: completedProjection.revision,
+			replayed: true,
+		});
+		expect(completionCancellations).toBe(completionCancellationsBeforeManager);
+		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
+			stateBeforeReplay,
+		);
+
 		const managerReplay = ok(
 			JSON.parse(
 				String(
@@ -245,9 +263,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			revision: completedProjection.revision,
 			replayed: true,
 		});
-		expect(completionCancellations).toBe(
-			completionCancellationsBeforeManager + 1,
-		);
+		expect(completionCancellations).toBe(completionCancellationsBeforeManager);
 		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
 			stateBeforeReplay,
 		);
@@ -269,9 +285,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		expect(alteredReplay.summary).toContain(
 			"may replay only an exact previously accepted request",
 		);
-		expect(completionCancellations).toBe(
-			completionCancellationsBeforeManager + 1,
-		);
+		expect(completionCancellations).toBe(completionCancellationsBeforeManager);
 		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
 			stateBeforeReplay,
 		);

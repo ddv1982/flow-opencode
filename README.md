@@ -16,11 +16,11 @@ parallel before it validates and reviews the combined result.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.3.0 --global --force
+opencode plugin opencode-plugin-flow@6.3.1 --global --force
 ```
 
 Omit `--global` for project scope. Exact version pins do not update
-automatically. To update, replace `6.3.0` with the new release and rerun the
+automatically. To update, replace `6.3.1` with the new release and rerun the
 command.
 
 Before upgrading from Flow v5 or earlier, finish or explicitly close any active
@@ -32,7 +32,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.3.0"]
+  "plugin": ["opencode-plugin-flow@6.3.1"]
 }
 ```
 

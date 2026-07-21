@@ -305,6 +305,26 @@ function featureCompleteResponse(
 	);
 }
 
+function exactFeatureCompleteReplay(
+	session: Session,
+	request: FeatureCompleteRequest,
+): Readonly<{ session: Session; run: FeatureRun }> | null {
+	const priorOperation = session.operations.find(
+		(operation) => operation.id === request.operationId,
+	);
+	if (
+		priorOperation?.kind !== "feature-complete" ||
+		priorOperation.inputDigest !== operationInputDigest(request)
+	) {
+		return null;
+	}
+	const result = completeFeature(session, request);
+	if (!result.replayed) {
+		throw new Error("Expected an exact feature-completion replay.");
+	}
+	return { session: result.session, run: result.value };
+}
+
 async function loadExactArchivedClose(
 	transaction: SessionTransaction,
 	request: SessionCloseRequest,
@@ -582,9 +602,30 @@ export function createFlowService(
 		async featureComplete(input) {
 			try {
 				const request = FeatureCompleteInputSchema.parse(input).request;
+				const current = await repository.read();
+				if (current) {
+					const replay = exactFeatureCompleteReplay(current, request);
+					if (replay) {
+						return featureCompleteResponse(
+							replay.session,
+							request,
+							replay.run,
+							true,
+						);
+					}
+				}
 				return await repository.transact(async (transaction) => {
 					const session = await transaction.load();
 					if (!session) throw new Error("No active Flow session exists.");
+					const racedReplay = exactFeatureCompleteReplay(session, request);
+					if (racedReplay) {
+						return featureCompleteResponse(
+							racedReplay.session,
+							request,
+							racedReplay.run,
+							true,
+						);
+					}
 					const priorOperation = session.operations.find(
 						(operation) => operation.id === request.operationId,
 					);
@@ -622,25 +663,16 @@ export function createFlowService(
 				const request = FeatureCompleteInputSchema.parse(input).request;
 				const session = await repository.read();
 				if (!session) throw new Error("No active Flow session exists.");
-				const priorOperation = session.operations.find(
-					(operation) => operation.id === request.operationId,
-				);
-				if (
-					priorOperation?.kind !== "feature-complete" ||
-					priorOperation.inputDigest !== operationInputDigest(request)
-				) {
+				const replay = exactFeatureCompleteReplay(session, request);
+				if (!replay) {
 					throw new Error(
 						"Only the Flow reviewer may submit a new feature completion; other agents may replay only an exact previously accepted request.",
 					);
 				}
-				const result = completeFeature(session, request);
-				if (!result.replayed) {
-					throw new Error("Expected an exact feature-completion replay.");
-				}
 				return featureCompleteResponse(
-					result.session,
+					replay.session,
 					request,
-					result.value,
+					replay.run,
 					true,
 				);
 			} catch (error) {

@@ -369,7 +369,7 @@ describe("Flow v6 OpenCode host schemas", () => {
 		}
 	});
 
-	test("cancels validation only after mutation actor authorization", async () => {
+	test("keeps completion authorization separate from validation cancellation", async () => {
 		const cancelled: string[] = [];
 		const tools = createTools(
 			{},
@@ -416,10 +416,9 @@ describe("Flow v6 OpenCode host schemas", () => {
 			...context,
 			agent: "flow-reviewer",
 		});
-		expect(cancelled).toEqual([
-			...managerMutations.map(() => "schema-contract-session"),
-			"schema-contract-session",
-		]);
+		expect(cancelled).toEqual(
+			managerMutations.map(() => "schema-contract-session"),
+		);
 	});
 
 	test("keeps guidance as the sole non-request tool", () => {

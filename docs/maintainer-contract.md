@@ -71,10 +71,11 @@ context, its full assignment, declared artifacts, assignment-linked validation,
 and completed feature IDs. It is workspace-read-only; its allowed Flow tools are
 `flow_status` and `flow_feature_complete`, while its guidance restricts status
 use to the assigned reviewer view. The platform accepts a new completion only
-from the reserved reviewer identity; a caller with tool access may receive the
-read-only result of an exact previously accepted completion request. A failed
-verdict requires an evidence-backed blocking finding; a passed verdict cannot
-contain one.
+from the reserved reviewer identity. While that Session v5 workflow remains
+active, every caller with tool access may receive the read-only result of an
+exact previously accepted completion request without validation cancellation or
+a session write. A failed verdict requires an evidence-backed blocking finding;
+a passed verdict cannot contain one.
 
 Result submission is the reviewer's sole lifecycle mutation. `flow_status` may
 fail-closed quarantine unreadable active state; that is recovery maintenance,
@@ -157,7 +158,7 @@ user starting point.
 | `flow_run_start` | Start one runnable approved feature. |
 | `flow_validation_start` | Arm observation of the exact next Bash command. |
 | `flow_review_start` | Create the run's independent review assignment. |
-| `flow_feature_complete` | Reviewer-only new result submission; exact accepted requests remain read-only replays. |
+| `flow_feature_complete` | Reviewer-only new result submission; exact accepted requests remain read-only replays while the Session v5 workflow is active. |
 | `flow_feature_reset` | Supersede a failed attempt for a fresh full retry. |
 | `flow_session_close` | Close and archive the session. |
 
