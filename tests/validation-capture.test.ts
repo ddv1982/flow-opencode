@@ -136,24 +136,49 @@ describe("OpenCode validation capture", () => {
 		expect(persisted).toBe(false);
 	});
 
-	test("expires a started capture before processing a late after-hook", async () => {
+	test("expires an unstarted capture after the arming window", () => {
 		let now = 1_000;
 		let persisted = false;
 		const coordinator = new ValidationCaptureCoordinator({
 			now: () => now,
-			randomId: () => "capture-started",
+			randomId: () => "capture-unstarted",
 			persistObservation: (_workspace, input) => {
 				persisted = true;
 				return Promise.resolve(persistedObservation(input));
 			},
 		});
 		coordinator.arm("opencode-session-1", "/workspace", prepared);
+
+		now += 15 * 60 * 1_000 + 1;
+		expect(coordinator.pendingCount()).toBe(0);
+		expect(persisted).toBe(false);
+	});
+
+	test("persists a started capture when its after-hook arrives after the original arming window", async () => {
+		let now = 1_000;
+		const observations: ObservedValidation[] = [];
+		const coordinator = new ValidationCaptureCoordinator({
+			now: () => now,
+			randomId: () => "capture-started",
+			persistObservation: (_workspace, input) => {
+				observations.push(input);
+				return Promise.resolve(persistedObservation(input));
+			},
+		});
+		expect(
+			coordinator.arm("opencode-session-1", "/workspace", prepared),
+		).toEqual({ captureId: "capture-started", expiresInMs: 15 * 60 * 1_000 });
 		coordinator.observeToolBefore(
 			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
 			{ args: { command: prepared.command } },
 		);
 
 		now += 15 * 60 * 1_000 + 1;
+		const output = {
+			title: "Late validation",
+			output: "1 pass",
+			metadata: { exit: 0, truncated: false },
+		};
 		expect(
 			await coordinator.observeToolAfter(
 				{
@@ -162,39 +187,35 @@ describe("OpenCode validation capture", () => {
 					callID: "bash-1",
 					args: { command: prepared.command },
 				},
-				{
-					title: "Late validation",
-					output: "1 pass",
-					metadata: { exit: 0, truncated: false },
-				},
+				output,
 			),
-		).toBeNull();
-		expect(persisted).toBe(false);
+		).toEqual(expect.objectContaining({ id: "capture-started", exitCode: 0 }));
+		expect(observations).toHaveLength(1);
+		expect(output.output).toContain('"passed":true');
 		expect(coordinator.pendingCount()).toBe(0);
 	});
 
-	test("rearms after an expired started capture loses its after-hook", () => {
+	test("keeps a started capture until the existing cancellation path resolves it", () => {
 		let now = 1_000;
-		let nextCapture = 0;
 		const coordinator = new ValidationCaptureCoordinator({
 			now: () => now,
-			randomId: () => `capture-${++nextCapture}`,
+			randomId: () => "capture-started",
 			persistObservation: (_workspace, input) =>
 				Promise.resolve(persistedObservation(input)),
 		});
-		expect(
-			coordinator.arm("opencode-session-1", "/workspace", prepared),
-		).toEqual({ captureId: "capture-1", expiresInMs: 15 * 60 * 1_000 });
+		coordinator.arm("opencode-session-1", "/workspace", prepared);
 		coordinator.observeToolBefore(
 			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
 			{ args: { command: prepared.command } },
 		);
 
 		now += 15 * 60 * 1_000 + 1;
-		expect(
-			coordinator.arm("opencode-session-1", "/workspace", prepared),
-		).toEqual({ captureId: "capture-2", expiresInMs: 15 * 60 * 1_000 });
 		expect(coordinator.pendingCount()).toBe(1);
+		expect(() =>
+			coordinator.arm("opencode-session-1", "/workspace", prepared),
+		).toThrow("already has an armed validation command");
+		expect(coordinator.cancel("opencode-session-1")).toBe(true);
+		expect(coordinator.pendingCount()).toBe(0);
 	});
 
 	test("requires a structured Bash exit code", async () => {

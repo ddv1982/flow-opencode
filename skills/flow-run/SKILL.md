@@ -38,26 +38,29 @@ that separate action.
 
 Work serially by default. After manager orientation, fan out only when at least
 two genuinely independent slices can be named. Run one cohort of two or three
-`flow-worker` instances at a time. Launch the cohort concurrently through
-OpenCode's native task/subagent facility; do not wait for one slice before
-launching the next. Each prompt must name a stable slice id, the exact outcome
-and read or write scope, expected coverage and checks, dependencies, and a stop
-condition. Edit scopes must be exact and non-overlapping. Shared contracts,
-lockfiles, and generated outputs remain manager-owned unless one worker
-receives the whole relevant scope.
+`flow-worker` instances at a time. Issue every cohort Task call in the same
+assistant tool-use turn before consuming any result. If the host or model
+serializes those calls, treat and report that execution as serial instead of
+claiming parallelism. Each prompt must name a stable slice id, the exact outcome
+and read or write scope, expected coverage, recommended manager checks,
+dependencies, and a stop condition. Edit scopes must be exact and
+non-overlapping. Shared contracts, lockfiles, and generated outputs remain
+manager-owned unless one worker receives the whole relevant scope.
 
 Workers cannot call Flow tools or spawn children. Each returns one concise
 handoff containing status, scope and coverage, evidence or changed paths,
-checks, gaps and risks, and integration notes. Missing, partial, or blocked
-output remains an explicit coverage gap; worker checks are advisory.
+recommended manager checks, gaps and risks, and integration notes. Workers do
+not run Bash; all executable checks remain manager-owned. Missing, partial, or
+blocked output remains an explicit coverage gap.
 
-After all workers stop, inspect the combined diff and evidence and reconcile
+After all workers stop, compare actual changed paths with every assigned scope,
+then inspect the combined diff and evidence and reconcile unexpected paths or
 conflicts before validation. At most one targeted follow-up wave may address a
-failed slice, newly unlocked dependency, or material claim verification. Do not
-start an automatic third wave. Coordination stays in the conversation: create
-no manifest, sidecar, Session field, durable handoff, or recovery ledger. After
-an interruption, inspect Flow status and the worktree and treat partial worker
-edits as untrusted.
+failed slice, newly unlocked dependency, or material claim verification. Do
+not start an automatic third wave. Coordination stays in the conversation:
+create no manifest, sidecar, Session field, durable handoff, or recovery ledger.
+After an interruption, inspect Flow status and the worktree and treat partial
+worker edits as untrusted.
 
 ## Validate
 

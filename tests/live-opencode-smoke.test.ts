@@ -66,13 +66,14 @@ function wildcardMatches(input: string, pattern: string): boolean {
 function permissionFor(
 	rules: readonly PermissionRule[],
 	permission: string,
+	pattern = "*",
 ): PermissionRule["action"] {
 	for (let index = rules.length - 1; index >= 0; index -= 1) {
 		const rule = rules[index];
 		if (
 			rule &&
 			wildcardMatches(permission, rule.permission) &&
-			wildcardMatches("*", rule.pattern)
+			wildcardMatches(pattern, rule.pattern)
 		) {
 			return rule.action;
 		}
@@ -284,11 +285,22 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				const worker = flowAgents.find((agent) => agent.name === "flow-worker");
 				if (!worker) throw new Error("Flow worker was not registered.");
 				expect(worker.mode).toBe("subagent");
-				for (const permission of ["edit", "bash"] as const) {
-					expect(permissionFor(worker.permission ?? [], permission)).toBe(
-						"ask",
-					);
+				expect(
+					permissionFor(worker.permission ?? [], "edit", "src/index.ts"),
+				).toBe("allow");
+				for (const protectedPath of [
+					".flow",
+					".flow/session.json",
+					".git",
+					".git/config",
+				]) {
+					expect(
+						permissionFor(worker.permission ?? [], "edit", protectedPath),
+					).toBe("deny");
 				}
+				expect(permissionFor(worker.permission ?? [], "bash", "bun test")).toBe(
+					"deny",
+				);
 				for (const permission of [
 					"external_directory",
 					"skill",

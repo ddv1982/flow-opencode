@@ -1,8 +1,8 @@
 import { compileFlowPromptSurface } from "./prompt-surfaces.js";
 
 export type FlowPermissionConfig = {
-	edit?: string;
-	bash?: string;
+	edit?: string | Record<string, string>;
+	bash?: string | Record<string, string>;
 	skill?: string | Record<string, string>;
 	task?: Record<string, string>;
 	[toolPattern: string]: string | Record<string, string> | undefined;
@@ -53,8 +53,14 @@ export const FLOW_CORE_AGENTS = {
 			"Bounded worker for one read-only evidence or exact-scope implementation slice.",
 		prompt: compileFlowPromptSurface("flow-worker"),
 		permission: {
-			edit: "ask",
-			bash: "ask",
+			edit: {
+				"*": "allow",
+				".flow": "deny",
+				".flow/**": "deny",
+				".git": "deny",
+				".git/**": "deny",
+			},
+			bash: "deny",
 			external_directory: "deny",
 			skill: "deny",
 			task: { "*": "deny" },

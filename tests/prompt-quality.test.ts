@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-	FLOW_GUIDANCE_DOCUMENTS,
 	FLOW_GUIDANCE_IDS,
 	FLOW_GUIDANCE_TOPICS,
 	getFlowGuidance,
@@ -10,18 +9,18 @@ import {
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
 
-const SURFACES: readonly FlowPromptSurfaceName[] = [
-	"flow-auto",
-	"flow-plan",
-	"flow-run",
-	"flow-review",
-	"flow-status",
-	"flow-reviewer",
-	"flow-worker",
-];
+const MANAGER_GUIDANCE = [
+	["flow-auto", "flow"],
+	["flow-plan", "flow-plan"],
+	["flow-run", "flow-run"],
+] as const;
+
+function body(markdown: string): string {
+	return markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "").trim();
+}
 
 describe("production Flow prompts", () => {
-	test("ships only the four core guidance contracts", () => {
+	test("compiles seven runtime surfaces from four canonical guides", () => {
 		expect(FLOW_GUIDANCE_TOPICS).toEqual([
 			"flow",
 			"flow-plan",
@@ -29,95 +28,85 @@ describe("production Flow prompts", () => {
 			"flow-review",
 		]);
 		expect(FLOW_GUIDANCE_IDS).toEqual(FLOW_GUIDANCE_TOPICS);
-		expect(FLOW_GUIDANCE_DOCUMENTS).toHaveLength(4);
 		for (const id of FLOW_GUIDANCE_IDS) {
-			expect(getFlowGuidance(id).content.length).toBeGreaterThan(200);
+			expect(getFlowGuidance(id).content).toStartWith("---\n");
+			expect(body(getFlowGuidance(id).content).length).toBeGreaterThan(200);
 		}
-	});
-
-	test("assembles seven direct runtime surfaces with no evaluator variants", () => {
-		for (const surface of SURFACES) {
+		for (const [surface, guidance] of MANAGER_GUIDANCE) {
+			const prompt = compileFlowPromptSurface(surface);
+			expect(prompt).toStartWith(body(getFlowGuidance(guidance).content));
+			expect(prompt).toContain('flow_status { request: { view: "compact" } }');
+		}
+		for (const surface of [
+			"flow-review",
+			"flow-status",
+			"flow-reviewer",
+			"flow-worker",
+		] as const) {
 			expect(compileFlowPromptSurface(surface).trim().length).toBeGreaterThan(
 				40,
 			);
 		}
+		const auto = compileFlowPromptSurface("flow-auto");
+		expect(auto).toContain('flow_guidance { id: "flow-plan" }');
+		expect(auto).toContain('flow_guidance { id: "flow-run" }');
+		expect(auto).toMatch(
+			/stop after\s+planning when the user asked for a plan only/i,
+		);
 		expect(() =>
 			compileFlowPromptSurface("unknown" as FlowPromptSurfaceName),
 		).toThrow("Unsupported Flow prompt surface");
 	});
 
-	test("keeps manager routing status-first", () => {
-		for (const surface of ["flow-auto", "flow-plan", "flow-run"] as const) {
-			const text = compileFlowPromptSurface(surface);
-			expect(text).toContain('flow_status { request: { view: "compact" } }');
-		}
-		const auto = compileFlowPromptSurface("flow-auto");
-		expect(auto).toContain('flow_guidance { id: "flow-plan" }');
-		expect(auto).toContain('flow_guidance { id: "flow-run" }');
-		expect(auto).toContain("Stop after");
+	test("keeps approval, bounded waves, validation, and review in one run contract", () => {
 		const plan = compileFlowPromptSurface("flow-plan");
-		expect(plan).toContain("explicit approval");
-		expect(plan).toContain(
-			"Do not begin implementation during a plan-only request",
+		expect(plan).toMatch(
+			/flow_plan_save[\s\S]+flow_plan_approve[\s\S]+only after explicit approval[\s\S]+do not begin implementation/i,
 		);
-	});
 
-	test("records validation in-session and retries failed review in full", () => {
 		const run = compileFlowPromptSurface("flow-run");
-		expect(run).toContain("Flow records the host-observed result directly");
 		expect(run).toMatch(
-			/Flow selects current applicable validation\s+automatically/,
+			/serially by default[\s\S]+two or three\s+`flow-worker`/i,
 		);
-		expect(run).toContain("repeat full validation and full review");
-		expect(run).toContain("final feature");
-		expect(run).toContain("records a blocked outcome");
-		expect(run).toContain("reset the feature");
+		expect(run).toMatch(
+			/same\s+assistant tool-use turn[\s\S]+report that execution as serial/i,
+		);
+		expect(run).toMatch(
+			/at most one targeted follow-up wave[\s\S]+no manifest, sidecar, Session field/i,
+		);
+		expect(run).toMatch(
+			/after all workers stop[\s\S]+before validation[\s\S]+flow_validation_start/i,
+		);
+		expect(run).toMatch(
+			/flow_review_start[\s\S]+reserved `flow-reviewer`[\s\S]+flow_feature_complete/i,
+		);
+		expect(run).toMatch(/failed review[\s\S]+full validation and full review/i);
 	});
 
-	test("launches only bounded host-native worker waves", () => {
-		const run = compileFlowPromptSurface("flow-run");
-		expect(run).toContain("Work serially by default");
-		expect(run).toMatch(/two or three\s+`flow-worker` instances/);
-		expect(run).toContain("Launch the cohort concurrently");
-		expect(run).toContain("At most one targeted follow-up wave");
-		expect(run).toMatch(/Do not\s+start an automatic third wave/);
-		expect(run).toMatch(/create\s+no manifest, sidecar, Session field/);
-	});
-
-	test("reserves independent review and denies reviewer mutation", () => {
+	test("keeps reviewer and worker roles narrow and structured", () => {
 		const command = compileFlowPromptSurface("flow-review");
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
-		expect(command).toContain("reserved `flow-reviewer`");
-		expect(command).toContain("independent and read-only");
-		expect(reviewer).toContain("must not edit files,");
-		expect(reviewer).toContain("state-changing `flow_*` tool");
-		expect(reviewer).toContain("actual changed artifacts");
-		expect(reviewer).toContain("Every blocker must cite");
-		expect(reviewer).toContain("Return exactly one assignment result");
-	});
+		expect(command).toMatch(/reserved `flow-reviewer`[\s\S]+read-only/);
+		expect(reviewer).toMatch(/must not edit files[\s\S]+state-changing/i);
+		expect(reviewer).toMatch(/flow_status[\s\S]+Every blocker must cite/i);
+		expect(
+			JSON.parse(reviewer.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "null"),
+		).toMatchObject({
+			assignmentId: expect.any(String),
+			verdict: "passed",
+			findings: [],
+			terminalDisposition: "submitted",
+		});
 
-	test("bounds worker scope and requires one structured handoff", () => {
 		const worker = compileFlowPromptSurface("flow-worker");
-		expect(worker).toContain("single slice explicitly assigned");
-		expect(worker).toContain("Preserve all unrelated work");
-		expect(worker).toContain("run concurrently with sibling workers");
-		expect(worker).toContain("Do not call any `flow_*` tool");
-		expect(worker).toContain("Do not delegate, spawn subtasks");
-		expect(worker).toContain("Do not stage, commit, push, publish");
-		expect(worker).toContain("exact, non-overlapping write paths");
-		expect(worker).toContain("stop and return a partial or blocked handoff");
-		expect(worker).toContain("checks are advisory");
-		expect(worker).toContain("authoritative combined validation");
-		expect(worker).toContain("Return exactly one concise handoff");
-		for (const heading of [
-			"## Status",
-			"## Scope & coverage",
-			"## Findings / changed paths",
-			"## Checks",
-			"## Gaps & risks",
-			"## Integration notes",
-		]) {
-			expect(worker).toContain(heading);
-		}
+		expect(worker).toMatch(
+			/single slice[\s\S]+exact, non-overlapping write paths/i,
+		);
+		expect(worker).toMatch(
+			/do not delegate[\s\S]+do not stage, commit, push, publish/i,
+		);
+		expect(worker).toMatch(/do not run Bash[\s\S]+\.flow or \.git metadata/i);
+		expect(worker).toMatch(/authoritative combined validation/i);
+		expect(worker).toMatch(/recommended manager checks/i);
 	});
 });

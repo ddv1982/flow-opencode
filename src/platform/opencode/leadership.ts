@@ -28,22 +28,13 @@ export type FlowLeadershipReason =
 	| "incompatible-registry";
 
 export interface FlowLeadershipStatus {
-	readonly instanceId: string;
-	readonly registered: boolean;
 	readonly operational: boolean;
-	readonly role: "leader" | "unregistered" | "indeterminate";
 	readonly reason: FlowLeadershipReason;
-	readonly registeredCount: number | null;
-	readonly diagnosticLeader: FlowPluginIdentity | null;
-	readonly registrations: readonly FlowPluginIdentity[];
 	readonly message: string;
 }
 
 export interface FlowLeadershipHandle {
-	readonly identity: FlowPluginIdentity;
-	readonly scopeId: string;
 	query(): FlowLeadershipStatus;
-	isOperational(): boolean;
 	assertOperational(action?: string): void;
 	release(): boolean;
 }
@@ -72,7 +63,7 @@ function validIdentity(value: unknown): value is FlowPluginIdentity {
 
 function canonicalProjectId(scopeId: string): string {
 	if (!boundedText(scopeId))
-		throw new TypeError("Flow leadership scope ID must be a non-empty path.");
+		throw new TypeError("Flow runtime scope must be a non-empty path.");
 	const projectId = resolve(scopeId);
 	try {
 		return realpathSync(projectId);
@@ -132,29 +123,11 @@ function snapshot(identity: FlowPluginIdentity): FlowPluginIdentity {
 	return Object.freeze({ ...identity });
 }
 
-function makeStatus(
-	identity: FlowPluginIdentity,
-	reason: FlowLeadershipReason,
-	registrations: readonly FlowPluginIdentity[] = [],
-	registered = false,
-): FlowLeadershipStatus {
+function makeStatus(reason: FlowLeadershipReason): FlowLeadershipStatus {
 	const operational = reason === "sole-instance";
 	return Object.freeze({
-		instanceId: identity.instanceId,
-		registered,
 		operational,
-		role: operational
-			? "leader"
-			: registered || reason === "incompatible-registry"
-				? "indeterminate"
-				: "unregistered",
 		reason,
-		registeredCount:
-			reason === "incompatible-registry" && !registered
-				? null
-				: registrations.length,
-		diagnosticLeader: operational ? identity : null,
-		registrations: Object.freeze([...registrations]),
 		message: operational
 			? "Flow is active for this project."
 			: `Flow is not operational (${reason}).`,
@@ -181,7 +154,7 @@ export function registerFlowPluginInstance(
 ): FlowLeadershipHandle {
 	const projectId = canonicalProjectId(scopeId);
 	if (!validIdentity(input)) {
-		throw new TypeError("Flow leadership identity is invalid.");
+		throw new TypeError("Flow runtime identity is invalid.");
 	}
 	const identity = snapshot(input);
 	const registry = acquireRegistry();
@@ -195,7 +168,7 @@ export function registerFlowPluginInstance(
 		const existing = project.get(identity.instanceId);
 		if (existing && !sameIdentity(existing, identity)) {
 			throw new Error(
-				`Flow leadership instance ID '${identity.instanceId}' is already registered with different identity data.`,
+				`Flow runtime instance ID '${identity.instanceId}' is already registered with different identity data.`,
 			);
 		}
 		record = existing ?? identity;
@@ -204,32 +177,27 @@ export function registerFlowPluginInstance(
 
 	let released = false;
 	const query = (): FlowLeadershipStatus => {
-		if (released) return makeStatus(identity, "released");
+		if (released) return makeStatus("released");
 		const currentRegistry = readRegistry();
-		if (!record) return makeStatus(identity, "incompatible-registry");
-		if (currentRegistry === undefined)
-			return makeStatus(identity, "not-registered");
+		if (!record) return makeStatus("incompatible-registry");
+		if (currentRegistry === undefined) return makeStatus("not-registered");
 		if (!compatibleRegistry(currentRegistry))
-			return makeStatus(identity, "incompatible-registry");
+			return makeStatus("incompatible-registry");
 		const project = currentRegistry.projects.get(projectId);
-		const registrations = project ? [...project.values()].map(snapshot) : [];
-		if (project?.get(identity.instanceId) !== record) {
-			return makeStatus(identity, "not-registered", registrations);
+		if (!project || project.get(identity.instanceId) !== record) {
+			return makeStatus("not-registered");
 		}
 		if (identity.protocolVersion !== FLOW_LEADERSHIP_PROTOCOL_VERSION) {
-			return makeStatus(identity, "incompatible-registry", registrations, true);
+			return makeStatus("incompatible-registry");
 		}
-		if (registrations.length !== 1) {
-			return makeStatus(identity, "duplicate-instances", registrations, true);
+		if (project.size !== 1) {
+			return makeStatus("duplicate-instances");
 		}
-		return makeStatus(identity, "sole-instance", registrations, true);
+		return makeStatus("sole-instance");
 	};
 
 	return Object.freeze({
-		identity,
-		scopeId: projectId,
 		query,
-		isOperational: () => query().operational,
 		assertOperational(action?: string): void {
 			const current = query();
 			if (!current.operational) {

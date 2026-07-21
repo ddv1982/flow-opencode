@@ -103,7 +103,7 @@ type FlowTools = NonNullable<Hooks["tool"]>;
 
 function guardTools(
 	tools: FlowTools,
-	leadership: FlowLeadershipHandle,
+	runtimeGuard: FlowLeadershipHandle,
 ): FlowTools {
 	return Object.fromEntries(
 		Object.entries(tools).map(([name, definition]) => [
@@ -111,12 +111,12 @@ function guardTools(
 			{
 				...definition,
 				execute: async (...args: Parameters<typeof definition.execute>) => {
-					if (!leadership.isOperational()) {
+					const status = runtimeGuard.query();
+					if (!status.operational) {
 						return JSON.stringify({
 							status: "error",
-							summary:
-								"Flow is disabled because more than one runtime is registered for this project.",
-							workflowData: { runtimeGuard: leadership.query() },
+							summary: status.message,
+							workflowData: { runtimeGuard: status },
 						});
 					}
 					return definition.execute(...args);
@@ -129,13 +129,16 @@ function guardTools(
 const FlowPlugin: Plugin = async (ctx) => {
 	const log = createFlowLog(ctx);
 	const version = resolveFlowPluginVersion();
-	const leadership = registerFlowPluginInstance(ctx.worktree ?? ctx.directory, {
-		packageName: "opencode-plugin-flow",
-		version,
-		protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
-		instanceId: createFlowPluginInstanceId(),
-	});
-	const initial = leadership.query();
+	const runtimeGuard = registerFlowPluginInstance(
+		ctx.worktree ?? ctx.directory,
+		{
+			packageName: "opencode-plugin-flow",
+			version,
+			protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
+			instanceId: createFlowPluginInstanceId(),
+		},
+	);
+	const initial = runtimeGuard.query();
 	log(
 		initial.operational ? "info" : "error",
 		`Flow ${version}: ${initial.message}`,
@@ -151,11 +154,11 @@ const FlowPlugin: Plugin = async (ctx) => {
 
 	return {
 		config: createConfigHook(ctx, {
-			assertOperational: (action) => leadership.assertOperational(action),
+			assertOperational: (action) => runtimeGuard.assertOperational(action),
 		}),
-		tool: guardTools(tools, leadership),
+		tool: guardTools(tools, runtimeGuard),
 		"command.execute.before": createCommandHook((action) =>
-			leadership.assertOperational(action),
+			runtimeGuard.assertOperational(action),
 		),
 		event: async (input) => {
 			const event = input.event as {
@@ -181,7 +184,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 			}
 		},
 		dispose: async () => {
-			leadership.release();
+			runtimeGuard.release();
 		},
 	} satisfies Hooks;
 };

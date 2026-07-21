@@ -17,6 +17,7 @@ import {
 	MAX_SESSION_ID_LENGTH,
 	MAX_TEXT_BYTES,
 } from "../../domain/limits.js";
+import { reviewResultSemanticIssues } from "../../domain/session.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
@@ -116,41 +117,8 @@ const reviewResult = host
 	})
 	.strict()
 	.superRefine((result, context) => {
-		const blocking = result.findings.some(
-			(finding) => finding.severity === "blocking",
-		);
-		for (const [index, finding] of result.findings.entries()) {
-			if (finding.severity === "blocking" && !finding.evidence) {
-				context.addIssue({
-					code: "custom",
-					path: ["findings", index, "evidence"],
-					message: "A blocking finding requires concrete evidence.",
-				});
-			}
-		}
-		if (result.verdict === "failed" && !blocking) {
-			context.addIssue({
-				code: "custom",
-				path: ["findings"],
-				message: "A failed review requires a blocking finding.",
-			});
-		}
-		if (result.verdict === "passed" && blocking) {
-			context.addIssue({
-				code: "custom",
-				path: ["findings"],
-				message: "A passed review cannot contain blocking findings.",
-			});
-		}
-		if (
-			result.terminalDisposition === "observed_unsubmitted" &&
-			result.verdict !== "failed"
-		) {
-			context.addIssue({
-				code: "custom",
-				path: ["terminalDisposition"],
-				message: "Observed-but-unsubmitted review work must fail closed.",
-			});
+		for (const issue of reviewResultSemanticIssues(result)) {
+			context.addIssue({ code: "custom", ...issue });
 		}
 	});
 

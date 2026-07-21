@@ -315,7 +315,13 @@ describe("Flow v6 OpenCode host schemas", () => {
 			},
 			{
 				verdict: "passed",
-				findings: [{ severity: "blocking", summary: "Still broken" }],
+				findings: [
+					{
+						severity: "blocking",
+						summary: "Still broken",
+						evidence: "src/example.ts:1",
+					},
+				],
 				terminalDisposition: "submitted",
 			},
 			{

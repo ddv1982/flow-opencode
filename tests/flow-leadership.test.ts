@@ -22,7 +22,7 @@ function register(
 ): FlowLeadershipHandle {
 	return registerFlowPluginInstance(project, {
 		packageName: "opencode-plugin-flow",
-		version: "5.3.4",
+		version: "6.2.0",
 		protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
 		instanceId,
 		...identity,
@@ -52,8 +52,8 @@ describe("Flow project-scoped duplicate guard", () => {
 			const first = register("first", example.firstProject);
 			const second = register("second", example.secondProject);
 
-			expect(first.isOperational()).toBe(example.expectedOperational);
-			expect(second.isOperational()).toBe(example.expectedOperational);
+			expect(first.query().operational).toBe(example.expectedOperational);
+			expect(second.query().operational).toBe(example.expectedOperational);
 		});
 	}
 
@@ -71,7 +71,6 @@ describe("Flow project-scoped duplicate guard", () => {
 
 			expect(first.query().reason).toBe("duplicate-instances");
 			expect(second.query().reason).toBe("duplicate-instances");
-			expect(first.scopeId).toBe(second.scopeId);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
@@ -86,20 +85,17 @@ describe("Flow project-scoped duplicate guard", () => {
 			const first = register("first", DEFAULT_PROJECT, {
 				version: versions[0],
 			});
-			expect(first.isOperational()).toBe(true);
+			expect(first.query().operational).toBe(true);
 			const second = register("second", DEFAULT_PROJECT, {
 				version: versions[1],
 			});
 
 			for (const handle of [first, second]) {
 				expect(handle.query()).toMatchObject({
-					registered: true,
 					operational: false,
-					role: "indeterminate",
 					reason: "duplicate-instances",
-					registeredCount: 2,
-					diagnosticLeader: null,
 				});
+				expect(handle.query()).not.toHaveProperty("registrations");
 				expect(() => handle.assertOperational("change Flow state")).toThrow(
 					"duplicate-instances",
 				);
@@ -111,15 +107,13 @@ describe("Flow project-scoped duplicate guard", () => {
 		const first = register("first");
 		const duplicate = register("duplicate");
 
-		expect(first.isOperational()).toBe(false);
+		expect(first.query().operational).toBe(false);
 		expect(duplicate.release()).toBe(true);
 		expect(duplicate.query().reason).toBe("released");
 		expect(duplicate.release()).toBe(false);
 		expect(first.query()).toMatchObject({
 			operational: true,
-			role: "leader",
 			reason: "sole-instance",
-			registeredCount: 1,
 		});
 		expect(first.release()).toBe(true);
 		expect(
@@ -147,10 +141,10 @@ describe("Flow project-scoped duplicate guard", () => {
 		expect(independent.FLOW_LEADERSHIP_REGISTRY_SYMBOL).toBe(
 			FLOW_LEADERSHIP_REGISTRY_SYMBOL,
 		);
-		expect(first.isOperational()).toBe(false);
-		expect(duplicate.isOperational()).toBe(false);
+		expect(first.query().operational).toBe(false);
+		expect(duplicate.query().operational).toBe(false);
 		expect(duplicate.release()).toBe(true);
-		expect(first.isOperational()).toBe(true);
+		expect(first.query().operational).toBe(true);
 	});
 
 	for (const occupied of [
@@ -166,11 +160,8 @@ describe("Flow project-scoped duplicate guard", () => {
 			const handle = register("blocked");
 
 			expect(handle.query()).toMatchObject({
-				registered: false,
 				operational: false,
-				role: "indeterminate",
 				reason: "incompatible-registry",
-				registeredCount: null,
 			});
 			expect(Reflect.get(globalThis, FLOW_LEADERSHIP_REGISTRY_SYMBOL)).toBe(
 				occupied,
@@ -187,7 +178,6 @@ describe("Flow project-scoped duplicate guard", () => {
 
 		expect(current.query().reason).toBe("duplicate-instances");
 		expect(handle.query()).toMatchObject({
-			registered: true,
 			operational: false,
 			reason: "incompatible-registry",
 		});
@@ -198,8 +188,8 @@ describe("Flow project-scoped duplicate guard", () => {
 		const first = register("same");
 		const repeated = register("same");
 
-		expect(first.isOperational()).toBe(true);
-		expect(repeated.query().registeredCount).toBe(1);
+		expect(first.query().operational).toBe(true);
+		expect(repeated.query().reason).toBe("sole-instance");
 		expect(() =>
 			register("same", DEFAULT_PROJECT, { version: "other" }),
 		).toThrow("already registered with different identity data");

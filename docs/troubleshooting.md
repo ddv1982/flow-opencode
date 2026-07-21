@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.1.0 --global --force
+opencode plugin opencode-plugin-flow@6.2.0 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.1.0"]
+  "plugin": ["opencode-plugin-flow@6.2.0"]
 }
 ```
 
@@ -60,6 +60,11 @@ wait timed out; a live writer may still own it.
 `flow_validation_start` arms the exact next Bash command. Any different Bash
 command cancels capture. Arm it again, run the displayed command unchanged, and
 wait for the `[flow-validation]` marker.
+
+An armed capture expires if its matching command does not begin within 15
+minutes. Once that exact command begins, it remains eligible for the after-hook
+even when the command runs past the original waiting deadline. Do not re-arm a
+long-running command that is already in progress.
 
 An absent structured exit code, truncated output, nonzero exit, source edit, or
 session/run change is recorded as unusable or fails closed. Run the final

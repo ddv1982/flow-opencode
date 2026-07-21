@@ -57,6 +57,48 @@ export type ReviewResult = Readonly<{
 	recordedRevision: number;
 }>;
 
+export function reviewResultSemanticIssues(
+	result: Pick<ReviewResult, "verdict" | "findings" | "terminalDisposition">,
+) {
+	const issues: Array<{
+		path: Array<string | number>;
+		message: string;
+	}> = [];
+	const blocking = result.findings.some(
+		(finding) => finding.severity === "blocking",
+	);
+	for (const [index, finding] of result.findings.entries()) {
+		if (finding.severity === "blocking" && !finding.evidence?.trim()) {
+			issues.push({
+				path: ["findings", index, "evidence"],
+				message: "A blocking finding requires concrete evidence.",
+			});
+		}
+	}
+	if (result.verdict === "failed" && !blocking) {
+		issues.push({
+			path: ["findings"],
+			message: "A failed review requires a blocking finding.",
+		});
+	}
+	if (result.verdict === "passed" && blocking) {
+		issues.push({
+			path: ["findings"],
+			message: "A passed review cannot contain blocking findings.",
+		});
+	}
+	if (
+		result.terminalDisposition === "observed_unsubmitted" &&
+		result.verdict !== "failed"
+	) {
+		issues.push({
+			path: ["terminalDisposition"],
+			message: "Observed-but-unsubmitted review work must fail closed.",
+		});
+	}
+	return issues;
+}
+
 export type ReviewAssignment = Readonly<{
 	id: string;
 	operationId: string;

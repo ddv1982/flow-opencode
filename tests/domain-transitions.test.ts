@@ -12,6 +12,7 @@ import {
 	approvePlan,
 	closeSession,
 	completeFeature,
+	type FeatureCompleteInput,
 	recordValidation,
 	resetFeature,
 	savePlan,
@@ -500,6 +501,53 @@ describe("Session v5 domain state machine", () => {
 		});
 		const review = requestReview(session, FOUNDATION, environment);
 		session = review.session;
+		const invalidResults: Array<{
+			result: FeatureCompleteInput["result"];
+			message: string;
+		}> = [
+			{
+				result: {
+					verdict: "failed",
+					findings: [],
+					terminalDisposition: "submitted",
+				},
+				message: "requires a blocking finding",
+			},
+			{
+				result: {
+					verdict: "passed",
+					findings: [
+						{
+							severity: "blocking",
+							summary: "Supported blocker.",
+							evidence: "src/domain/transitions.ts: completion gate",
+						},
+					],
+					terminalDisposition: "submitted",
+				},
+				message: "cannot contain blocking findings",
+			},
+			{
+				result: {
+					verdict: "passed",
+					findings: [],
+					terminalDisposition: "observed_unsubmitted",
+				},
+				message: "must fail closed",
+			},
+		];
+		for (const [index, { result, message }] of invalidResults.entries()) {
+			expect(() =>
+				completeFeature(session, {
+					operationId: `invalid-review-${index}`,
+					expectedRevision: session.revision,
+					featureId: FOUNDATION,
+					assignmentId: review.assignment.id,
+					summary: "The review result is inconsistent.",
+					result,
+				}),
+			).toThrow(message);
+		}
 		expect(() =>
 			completeFeature(session, {
 				operationId: "feature-failed-without-evidence",

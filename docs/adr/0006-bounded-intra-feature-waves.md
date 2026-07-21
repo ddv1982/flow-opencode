@@ -22,59 +22,43 @@ validation chain, one independent review, and explicit closure.
 
 ## Decision
 
-Flow restores optional bounded waves inside one active feature run.
+Flow restores optional host-native waves inside one active feature run:
 
-- Serial remains the default. A manager may open a wave only when it can name
-  two or three genuinely independent slices with exact, non-overlapping
-  ownership.
-- One initial cohort is allowed. At most one targeted follow-up cohort may close
-  a named gap, retry a failed slice, use a newly available dependency, or verify
-  a consequential claim. Workers cannot spawn workers.
-- All instances use one reusable hidden `flow-worker`. Edit and Bash require host
-  approval. External-directory access, skill loading, delegation, and every
-  Flow tool are denied.
-- A worker contributes only within its assigned boundary and returns its result
-  and evidence to the manager. It cannot accept evidence, approve work, or own a
-  lifecycle transition.
-- The manager owns lifecycle state, slice selection, shared and integration
-  files, combined diff inspection, evidence acceptance, integration, and the
-  final result.
-- After integration, the manager runs authoritative combined validation through
-  the existing observation contract. Only then does the existing hidden
-  `flow-reviewer` receive the run's one independent assignment.
-- Wave coordination is ephemeral. Session v5 gains no wave fields, concurrent
-  run identity, admission record, handoff ledger, telemetry, or recovery state.
-  Flow writes no wave sidecar. After interruption, the manager uses existing
-  status and worktree inspection, then reruns or finishes missing coverage.
+- Serial remains the default. A manager may delegate only genuinely independent,
+  non-overlapping slices to one reusable hidden `flow-worker`, with one initial
+  cohort and at most one targeted follow-up. Workers cannot delegate.
+- Workers contribute within their assignment; the manager retains integration,
+  evidence acceptance, authoritative combined validation, and review dispatch.
+- Runtime enforcement stops at the worker permission envelope and the existing
+  one-run validation/review boundary. Eligibility and cohort size remain
+  guidance, not a scheduler.
+- The worker may edit ordinary project files without an approval round trip,
+  but Bash, `.flow` and `.git` metadata paths, nested delegation, and Flow tools
+  are denied. Exact slice paths remain manager-audited guidance because the
+  reusable static agent cannot carry a different host ACL for every assignment.
+- Session v5 and the public lifecycle gain no wave state, phase, telemetry,
+  recovery protocol, or sidecar.
 
-The cohort limit and eligibility test are manager guidance, not runtime
-admission. Runtime enforcement is deliberately limited to the worker permission
-envelope and the existing single-run validation/review invariants.
-
-This amends ADR 0005's root-only edit ownership: the manager now owns lifecycle,
-integration, and acceptance while bounded workers may make disjoint
-contributions. It does not amend ADR 0005's one-active-run state model or its
-validation, review, reset, closure, installation, and compatibility decisions.
+This amends ADR 0005's root-only edit ownership without changing its serial
+durable lifecycle. The package's `flow-run` guide holds the executable slice,
+handoff, and convergence rules; the
+[maintainer contract](../maintainer-contract.md) records the supported surface
+and invariants.
 
 ## Consequences
 
-Flow regains visible host-native parallel contribution for tasks that divide
-cleanly while retaining one durable source of truth and one convergence point.
-Tasks without two independent slices remain serial. Shared contracts, generated
-artifacts, and integration-sensitive files remain manager-owned.
-
-The worker role and prompt contract add a small amount of configuration and test
-surface. Worker output remains a claim until the manager inspects it and runs
-combined validation. Restoring the capability is not evidence of a measured
-speed, cost, or quality improvement; any such claim requires real canary data.
+Flow regains parallel contribution for cleanly divisible tasks while retaining
+one source of durable truth and one convergence point. Worker output remains a
+claim until the manager inspects the aggregate and validates it. The capability
+does not itself establish a speed, cost, or quality improvement; those claims
+require real canary evidence.
 
 ## Guardrail fit
 
-This decision replaces the root-only implementation concept with
-manager-owned integration plus bounded contributions. It does not add a durable
-lifecycle concept, public tool, command, guide, or persisted document. One
-reusable worker replaces the former specialized worker set, admission profiles,
-rollout controls, telemetry, ledgers, and promotion harness.
+This decision adds no durable lifecycle concept, public tool, command, guide, or
+persisted document. One reusable worker replaces the former specialized worker
+set, admission profiles, rollout controls, telemetry, ledgers, and promotion
+harness.
 
 Future wave changes must preserve the one-active-run and manager-owned
 convergence boundary. A scheduler, durable worker identity, or another public

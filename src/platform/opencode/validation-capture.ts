@@ -76,7 +76,7 @@ export class ValidationCaptureCoordinator {
 	#prune(): void {
 		const cutoff = this.#now() - CAPTURE_TTL_MS;
 		for (const [sessionID, capture] of this.#pending) {
-			if (capture.armedAt < cutoff) {
+			if (capture.callID === null && capture.armedAt < cutoff) {
 				this.#pending.delete(sessionID);
 			}
 		}

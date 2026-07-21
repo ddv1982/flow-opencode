@@ -24,6 +24,9 @@ flowchart LR
   workspace resolution, and source fingerprinting.
 - `src/platform/opencode/**` owns OpenCode hooks, host schemas, validation
   observation, the project-scoped duplicate guard, and result rendering.
+- The duplicate guard keeps only canonical project registrations and a compact
+  reason status. It does not elect a leader or expose registered runtime
+  identities through tool diagnostics.
 - `src/guidance/**` and `skills/**` own workflow judgment embedded in the
   package.
 - Prompt surfaces compile commands and the hidden worker and reviewer roles

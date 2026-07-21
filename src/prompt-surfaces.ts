@@ -20,9 +20,11 @@ You may run concurrently with sibling workers. Do not enter their scopes, assume
 - Use the manager assignment as your only source of Flow lifecycle context. Do not call any \`flow_*\` tool, including \`flow_status\`.
 - Do not delegate, spawn subtasks, or load skills.
 - Do not stage, commit, push, publish, or create a release.
+- Do not run Bash commands. The manager owns every executable check.
+- Never edit .flow or .git metadata paths; the host denies those paths.
 - A read-only evidence slice must not edit files.
 - An implementation slice may edit only the exact, non-overlapping write paths explicitly assigned by the manager. If required work would escape those paths, stop and return a partial or blocked handoff instead of expanding scope.
-- Run only checks relevant to the assigned slice. These checks are advisory: the manager owns integration and performs authoritative combined validation after all workers have stopped.
+- Use only non-shell inspection relevant to the assigned slice. The manager owns integration, focused checks, and authoritative combined validation after all workers have stopped.
 
 ## Handoff
 
@@ -37,8 +39,8 @@ success | partial | blocked
 ## Findings / changed paths
 - Evidence found or exact paths changed
 
-## Checks
-- Commands run and outcomes, or not run with reason
+## Recommended manager checks
+- Exact checks the manager should run, or none
 
 ## Gaps & risks
 - Missing coverage, blockers, conflicts, or none

@@ -67,15 +67,12 @@ converges after interruption by session and operation identity.
 
 ## Ownership
 
-The root manager owns planning, lifecycle state, slice selection, integration,
-evidence acceptance, authoritative validation dispatch, reset, and closure. It
-implements serially by default and may delegate exact disjoint contributions to
-the hidden `flow-worker`; those workers cannot call Flow tools, delegate again,
-or approve work. The hidden `flow-reviewer` remains independent and read-only.
-Guidance supplies wave and review judgment; the runtime enforces lifecycle
-safety.
+The root manager owns lifecycle state, slice selection, integration, evidence
+acceptance, authoritative validation, reset, and closure. It may delegate exact
+disjoint contributions to `flow-worker`, then audits assigned versus changed
+paths. Workers cannot run Bash, edit `.flow` or `.git` metadata paths, use Flow
+tools, delegate again, or approve work. `flow-reviewer` remains independent and
+read-only.
 
-Wave coordination is conversational and disposable. Flow persists no manifest,
-handoff ledger, telemetry, or worker recovery state. After interruption, the
-manager uses existing status plus worktree inspection and reruns or completes
-uncovered slices before combined validation.
+Wave coordination is conversational and disposable. After interruption, status
+and worktree inspection replace a manifest, ledger, or worker-recovery system.

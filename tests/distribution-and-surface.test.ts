@@ -128,8 +128,14 @@ describe("Flow v6 distribution surface", () => {
 		expect(worker?.hidden).toBe(true);
 		expect(worker?.mode).toBe("subagent");
 		expect(worker?.permission).toEqual({
-			edit: "ask",
-			bash: "ask",
+			edit: {
+				"*": "allow",
+				".flow": "deny",
+				".flow/**": "deny",
+				".git": "deny",
+				".git/**": "deny",
+			},
+			bash: "deny",
 			external_directory: "deny",
 			skill: "deny",
 			task: { "*": "deny" },
@@ -262,15 +268,21 @@ describe("duplicate runtime guard", () => {
 			const guidance = hooks.tool?.flow_guidance;
 			if (!guidance) throw new Error("Missing guarded guidance tool.");
 			const output = await guidance.execute({ id: "flow" }, context);
-			expect(JSON.parse(String(output))).toMatchObject({
+			const parsed = JSON.parse(String(output));
+			expect(parsed).toMatchObject({
 				status: "error",
-				summary: expect.stringContaining("more than one runtime"),
+				summary: expect.stringContaining("duplicate-instances"),
 				workflowData: {
 					runtimeGuard: {
 						operational: false,
 						reason: "duplicate-instances",
 					},
 				},
+			});
+			expect(parsed.workflowData.runtimeGuard).toEqual({
+				operational: false,
+				reason: "duplicate-instances",
+				message: "Flow is not operational (duplicate-instances).",
 			});
 		}
 

@@ -48,6 +48,12 @@ and current workspace-content digest. The OpenCode after-hook accepts only a
 structured exit code, records output completeness and digests the output. The
 observation is persisted directly on the run.
 
+An armed capture waits at most 15 minutes for its exact Bash command to begin.
+An unrelated Bash command cancels it. Once the exact command begins, the
+after-hook remains eligible even if the command finishes after that original
+waiting deadline. Session, run, source, exit-code, and output-completeness gates
+still apply.
+
 Only exit-zero, complete validation for the review's current source is
 applicable. Final review additionally requires broad scope. A source change
 during validation prevents recording; a source change after assignment prevents
@@ -64,31 +70,22 @@ Observed-but-unsubmitted work fails closed.
 ## Bounded worker waves
 
 Serial means one durable active feature run and one authoritative combined
-validation/review chain. The manager implements serially by default. It may use
-a bounded wave only when it can define two or three genuinely independent
-slices with exact, non-overlapping ownership.
+validation/review chain. The manager works serially by default, but may delegate
+two or three exact, non-overlapping slices to one initial `flow-worker` cohort
+and at most one targeted follow-up cohort.
 
-- One initial cohort is permitted, followed by at most one targeted cohort for
-  a named gap, retry, newly available dependency, or consequential verification.
-- The reusable hidden `flow-worker` may edit or run Bash only with host approval.
-  External-directory access, skill loading, delegation, and every Flow tool are
-  denied. Nested waves are impossible by permission.
-- A worker returns a bounded contribution and evidence; it cannot accept
-  evidence, approve work, validate the aggregate, dispatch review, or mutate
-  lifecycle state.
-- The manager owns slice selection, shared and integration files, combined diff
-  inspection, evidence acceptance, integration, authoritative validation, and
-  review dispatch.
-- The hidden `flow-reviewer` remains independent of implementation workers and
-  receives only the runtime-created assignment after combined validation.
-
-Wave state is intentionally ephemeral. Flow does not persist a wave manifest,
-handoff ledger, telemetry record, admission decision, or recovery protocol in
-Session or a sidecar. On restart, ordinary Flow status and worktree inspection
-are authoritative; missing coverage is rerun or completed serially. Cohort
-eligibility and count are guidance contracts, not runtime admission. Runtime
-enforcement remains the worker permission envelope plus the existing one-run,
-validation, and review invariants.
+Workers contribute only inside their assigned boundary. The manager owns shared
+files, integration, evidence acceptance, the combined diff, authoritative
+validation, and review dispatch. Ordinary worker edits are allowed so a cohort
+can run without approval interruptions; Bash, `.flow` and `.git` metadata
+paths, nested delegation, and Flow-state tools are denied. Exact per-assignment
+paths remain a prompt contract because one static reusable agent cannot express
+a dynamic file ACL; the manager audits assigned versus changed paths after
+every cohort. No wave state is persisted; after interruption, ordinary status
+and worktree inspection remain authoritative.
+[ADR 0006](adr/0006-bounded-intra-feature-waves.md) records the rationale and
+rejected heavier designs; the package's `flow-run` guidance is the executable
+manager contract.
 
 ## Persistence
 
@@ -111,32 +108,56 @@ validation, and review invariants.
 
 ## OpenCode surface
 
-Commands:
+### Commands
 
-- `flow-auto`
-- `flow-plan`
-- `flow-run`
-- `flow-review`
-- `flow-status`
+| Command | Contract |
+| --- | --- |
+| `flow-auto` | Drive only the authorized lifecycle. |
+| `flow-plan` | Create, revise, or approve a plan. |
+| `flow-run` | Run or resume one approved feature. |
+| `flow-review` | Internal/recovery dispatch for a runtime-created reviewer assignment. |
+| `flow-status` | Project compact durable state and the next action. |
 
-Tools:
+`flow-review` stays in the public inventory because OpenCode dispatches the
+reserved reviewer through it and recovery may need it. It is not an ordinary
+user starting point.
 
-- `flow_guidance`
-- `flow_status`
-- `flow_plan_save`
-- `flow_plan_approve`
-- `flow_run_start`
-- `flow_validation_start`
-- `flow_review_start`
-- `flow_feature_complete`
-- `flow_feature_reset`
-- `flow_session_close`
+### Tools
 
-The hidden agents are exactly `flow-worker` and `flow-reviewer`.
-`flow-worker` requires approval for edit and Bash and denies external-directory
-access, skill loading, delegation, and all Flow tools. `flow-reviewer` denies
-edit, Bash, skill loading, delegation, and all Flow tools except reviewer
-status. User configuration may select the reviewer's model and step budget with
+| Tool | Contract |
+| --- | --- |
+| `flow_guidance` | Load one package-owned guide. |
+| `flow_status` | Read compact, execution, detail, or reviewer state. |
+| `flow_plan_save` | Create or replace the active draft plan. |
+| `flow_plan_approve` | Approve and lock the draft plan. |
+| `flow_run_start` | Start one runnable approved feature. |
+| `flow_validation_start` | Arm observation of the exact next Bash command. |
+| `flow_review_start` | Create the run's independent review assignment. |
+| `flow_feature_complete` | Record review result and feature outcome atomically. |
+| `flow_feature_reset` | Supersede a failed attempt for a fresh full retry. |
+| `flow_session_close` | Close and archive the session. |
+
+The nine lifecycle tools accept a nested `request`, return state under
+`workflowData`, and require the current revision plus a stable operation ID for
+mutations. `flow_guidance` instead accepts a guide ID and returns Markdown.
+
+### Guides
+
+| Guide | Contract |
+| --- | --- |
+| `flow` | Manager orientation and authority boundary. |
+| `flow-plan` | Planning and conversational approval. |
+| `flow-run` | Serial execution and optional bounded waves. |
+| `flow-review` | Independent review of one runtime assignment. |
+
+### Hidden agents
+
+| Agent | Boundary |
+| --- | --- |
+| `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Bash, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
+| `flow-reviewer` | Independent read-only workspace inspection; only `flow_status` is allowed among Flow tools. |
+
+User configuration may select the reviewer's model and step budget with
 `OPENCODE_FLOW_REVIEWER_MODEL` and `OPENCODE_FLOW_REVIEWER_STEPS`.
 
 Duplicate plugin instances for the same canonical project fail closed through a

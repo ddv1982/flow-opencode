@@ -6,6 +6,28 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.2.0] - 2026-07-21
+
+Low-friction bounded-wave lore keeps Flow small while making parallel
+contribution practical:
+
+- Ordinary worker edits no longer stop for approval. Bash, `.flow` and `.git`
+  metadata paths, external-directory access, skills, delegation, and Flow
+  lifecycle tools stay denied; the manager runs every executable check and
+  audits assigned versus changed paths.
+- `flow-run` now instructs the manager to issue every cohort task in one
+  tool-use turn and report a serialized host/model execution honestly. Serial,
+  two-worker, three-worker, and one-follow-up canaries exercised failure,
+  convergence, validation, review, and closure; a final candidate canary also
+  completed an overlapping two-worker run with zero approval prompts. None of
+  this adds a scheduler or durable wave state.
+- An exact validation command that has started remains eligible for its
+  after-hook; only a command that never starts expires after 15 minutes.
+- Review-result semantics now have one domain-owned rule set, and the duplicate
+  runtime guard exposes only its operational result, reason, and message.
+- Operator documentation is shorter and leads with exact install/update,
+  approval, status, and recovery behavior. Installation now pins `6.2.0`.
+
 ## [6.1.0] - 2026-07-21
 
 Bounded intra-feature wave lore restores useful host-native parallel

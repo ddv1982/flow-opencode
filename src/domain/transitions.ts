@@ -23,6 +23,7 @@ import type {
 	ValidationObservation,
 	ValidationScope,
 } from "./session.js";
+import { reviewResultSemanticIssues } from "./session.js";
 
 export type TransitionEnvironment = Readonly<{
 	newId: (kind: "session" | "run" | "validation" | "review") => string;
@@ -565,25 +566,8 @@ function assertReviewResult(
 	if (result.findings.length > MAX_REVIEW_FINDINGS) {
 		fail(`A review may contain at most ${MAX_REVIEW_FINDINGS} findings.`);
 	}
-	const blocking = result.findings.some(
-		(finding) => finding.severity === "blocking",
-	);
-	const unsupported = result.findings.some(
-		(finding) => finding.severity === "blocking" && !finding.evidence?.trim(),
-	);
-	if (unsupported) fail("A blocking finding requires concrete evidence.");
-	if (result.verdict === "failed" && !blocking) {
-		fail("A failed review requires a blocking finding.");
-	}
-	if (result.verdict === "passed" && blocking) {
-		fail("A passed review cannot contain a blocking finding.");
-	}
-	if (
-		result.terminalDisposition === "observed_unsubmitted" &&
-		result.verdict !== "failed"
-	) {
-		fail("Observed-but-unsubmitted review work must fail closed.");
-	}
+	const issue = reviewResultSemanticIssues(result)[0];
+	if (issue) fail(issue.message);
 }
 
 export function completeFeature(
