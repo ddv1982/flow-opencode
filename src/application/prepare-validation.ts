@@ -1,11 +1,13 @@
+import { MAX_VALIDATION_ID_LENGTH } from "../domain/limits.js";
 import type {
+	Session,
 	SourceDigest,
 	ValidationObservation,
 	ValidationScope,
 } from "../domain/session.js";
 import { activeRun, recordValidation } from "../domain/transitions.js";
 import type { SessionRepository } from "./ports/session-repository.js";
-import type { ValidationStartRequest } from "./schema.js";
+import { SessionSchema, type ValidationStartRequest } from "./schema.js";
 
 export type PreparedValidation = Readonly<{
 	featureId: string;
@@ -22,6 +24,50 @@ export type ObservedValidation = PreparedValidation &
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
 	}>;
+
+function maximumSerializedUnusedCaptureId(session: Session): string {
+	// Every code unit is JSON-escaped as six bytes while the binary suffix keeps
+	// the probe distinct from any capture id already recorded in this session.
+	const used = new Set(
+		session.runs.flatMap((run) =>
+			run.validations.map((validation) => validation.id),
+		),
+	);
+	for (let index = 0; index <= used.size; index += 1) {
+		const discriminator = [...index.toString(2)]
+			.map((bit) => (bit === "0" ? "\u0000" : "\u0001"))
+			.join("");
+		const candidate = `${"\u0000".repeat(
+			MAX_VALIDATION_ID_LENGTH - discriminator.length,
+		)}${discriminator}`;
+		if (!used.has(candidate)) return candidate;
+	}
+	throw new Error("Flow could not reserve a validation capacity probe id.");
+}
+
+function maximumSerializedObservation(
+	session: Session,
+	prepared: PreparedValidation,
+): ObservedValidation {
+	return {
+		...prepared,
+		captureId: maximumSerializedUnusedCaptureId(session),
+		exitCode: Number.MIN_SAFE_INTEGER,
+		outputDigest: prepared.sourceDigest,
+		outputComplete: false,
+	};
+}
+
+function assertValidationCanBeRecorded(
+	session: Session,
+	prepared: PreparedValidation,
+): void {
+	const prospective = recordValidation(
+		session,
+		maximumSerializedObservation(session, prepared),
+	).session;
+	SessionSchema.parse(prospective);
+}
 
 export async function prepareValidation(
 	repository: SessionRepository,
@@ -42,13 +88,15 @@ export async function prepareValidation(
 		if (run.reviews.length > 0) {
 			throw new Error("Validation cannot start after review has begun.");
 		}
-		return {
+		const prepared = {
 			featureId: run.featureId,
 			runId: run.id,
 			command: input.command,
 			scope: input.scope,
 			sourceDigest: await transaction.computeSourceDigest(),
 		};
+		assertValidationCanBeRecorded(session, prepared);
+		return prepared;
 	});
 }
 

@@ -7,18 +7,53 @@ description: Implement, validate, independently review, and record one approved 
 
 Work on exactly one approved feature. The root manager owns the session,
 integration, validation, review dispatch, reset, closure, and every
-lifecycle mutation except review submission. Bounded `flow-worker`
+manager-owned lifecycle mutation. Bounded `flow-worker`
 instances may contribute disjoint work; the reserved `flow-reviewer` owns the
 independent review and submits its own result.
 
 ## Start and scope
 
 1. Call `flow_status { request: { view: "compact" } }` first. Treat
-   `nextAction` as authoritative workflow state, not as a permission grant.
-2. Call `flow_run_start` when a ready feature is not already running.
-3. Read `flow_status { request: { view: "execution" } }` and use that
+   `nextAction` as the durable default workflow direction, not as a permission
+   grant.
+2. If compact status contains `archiveRetry`, call `flow_session_close` once
+   with that projected request byte-for-byte. Report `workflowData.delivery`;
+   if archive publication still fails, refresh compact status. This exact
+   cleanup grants no new work, so it precedes goal alignment. Stop after the
+   cleanup outcome either way.
+3. Before any other manager-owned lifecycle mutation, align the compact-projected
+   goal with the current direct `/flow-run` request. Continue only for the same
+   goal or a compatible narrowing. Compatible narrowing changes method or
+   emphasis only; it must not add, drop, reorder, or weaken an approved
+   requirement or feature outcome. A completed-but-unclosed session must close
+   as completed before a new request proceeds. Otherwise, for materially new
+   or expanded work, perform no mutation, say the request has not started, and
+   offer to continue the active goal, defer it, or abandon it. Keep this
+   comparison conversational; create no classifier or state.
+4. If compact status is `completed`, call `flow_session_close` once with its
+   session id and revision, a fresh operation id, and `kind: "completed"`.
+   Report `workflowData.delivery`. If archive publication is unconfirmed,
+   follow the projected `archiveRetry` once byte-for-byte and stop on any
+   remaining failure. Then stop. A materially new request can enter the
+   appropriate Flow planning route afterward; do not fabricate a run.
+5. If compact status is already `blocked`, load
+   `flow_status { request: { view: "detail" } }` exactly once before any reset.
+   Apply the retry and checkpoint rule under **Review and record**. If it permits
+   a fresh run, call `flow_feature_reset`, refresh compact status, and continue
+   this invocation. Otherwise report the checkpoint and stop.
+6. If compact status is `running` and `nextAction` is `flow_feature_reset`, the
+   pending review is source-stale. Call `flow_feature_reset`, refresh compact
+   status, and continue with a fresh run. Do not redispatch that assignment.
+7. If compact status is `running` and `nextAction` is
+   `dispatch-flow-reviewer`, skip run start, implementation, and validation;
+   continue at **Review and record** with the existing pending assignment.
+8. A durable `nextAction` can still be rejected after status by an
+   environment-sensitive guard. On rejection, refresh compact status and
+   handle the exact error instead of forcing a stale action.
+9. Call `flow_run_start` when a ready feature is not already running.
+10. Read `flow_status { request: { view: "execution" } }` and use that
    projection as the active scope and source of revision guards.
-4. Read the feature summary, targets, validation, dependencies, requirements,
+11. Read the feature summary, targets, validation, dependencies, requirements,
    and decisions before editing.
 
 Preserve unrelated worktree changes and stay inside the active feature. Leave
@@ -95,6 +130,15 @@ secrets. Raw output is deliberately neither persisted nor projected: the
 durable evidence is the command, exit code, output completeness, and output
 digest, while the manager must inspect the live output.
 
+Exact plan-listed gate commands are recorded byte-for-byte.
+A known failed exact plan-listed gate
+cannot be discharged by substitute broad validation before new review
+admission. If that gate cannot pass, the normal completed path remains
+unavailable; fix the gate or ask the user to choose deferred or abandoned
+closure. An already accepted review is grandfathered: do not reopen it or add a
+retroactive close-time veto. Plan-listed validation prose that has never run as
+an exact command remains reviewer judgment, not a fabricated pass or failure.
+
 Every host-observed validation advances the session revision through the
 after-hook. Immediately refresh
 `flow_status { request: { view: "compact" } }` after the command and before the
@@ -126,16 +170,29 @@ reviewer remains workspace-read-only and may make only this exact result
 submission as its sole lifecycle mutation.
 
 After the reviewer returns, read compact status rather than treating prose as
-the outcome. Redispatch the same pending assignment after interruption or an
-unconfirmed reviewer return. If submission reports `Workspace content changed
-after review started`, call `flow_feature_reset` and do not redispatch that
-source-stale assignment; start a fresh run and repeat full validation and
-review. Never fabricate a verdict. A submitted pass completes the feature; a
-submitted blocking finding records a blocked outcome.
+the outcome. If it records a blocked outcome, immediately load
+`flow_status { request: { view: "detail" } }` exactly once for the handoff or
+checkpoint. Redispatch the same pending assignment after interruption or an
+unconfirmed reviewer return only while compact status is `running` and
+`nextAction` is `dispatch-flow-reviewer`. If status remains `running` with that
+pending assignment and `nextAction` is `flow_feature_reset`, or submission
+reports `Workspace content changed after review started`, call
+`flow_feature_reset` and do not redispatch the source-stale assignment; start a
+fresh run and repeat full validation and review. Never fabricate a verdict. A
+submitted pass completes the feature; a submitted blocking finding records a
+blocked outcome.
 
-When implementation is already authorized, an in-scope failed review needs no
-new permission: reset the feature, fix it, and repeat full validation and full
-review in a fresh run.
+Use compact `blockedFeature.failedReviewCount` and that one detail projection
+together. A `[scope-blocker]` checkpoints immediately and must not reset
+automatically. Otherwise treat the first recorded failed review as in-scope;
+when implementation is already authorized, it may receive one automatic
+`flow_feature_reset`. Fix only its blocking findings, then repeat full
+validation and full review in a fresh run. A second recorded failed review
+awaits explicit user direction; report recurring and new blockers, possible
+feature mis-sizing, and any repair that would exceed approved scope while
+remaining inside Flow. A current aligned request counts as direction only when
+it explicitly authorizes one additional attempt. If that review fails,
+checkpoint again.
 
 Read compact status after every recorded outcome. When invoked directly through
 `/flow-run`, report that one feature's outcome and `nextAction`, then stop. When

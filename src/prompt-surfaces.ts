@@ -87,7 +87,7 @@ export function compileFlowPromptSurface(
 		case "flow-run":
 			return managerCommand(surface);
 		case "flow-status":
-			return 'Call `flow_status { request: { view: "compact" } }` and report the runtime projection plus its next action.';
+			return 'Call `flow_status { request: { view: "compact" } }` and report the runtime projection plus its durable default next action. Do not mutate. For a first blocked review, say that `/flow-run` must read detail before reset because a `[scope-blocker]` may refine that default.';
 		case "flow-review":
 			return [
 				"# Flow review command",

@@ -3,6 +3,7 @@ import { createFileSourceIdentityProvider } from "./source-identity.js";
 import {
 	archiveAndClearSession,
 	assertMutableWorkspaceRoot,
+	confirmActiveSessionDurability,
 	loadArchivedSession,
 	loadSession,
 	quarantineUnreadableSession,
@@ -20,6 +21,9 @@ export function createFileSessionRepository(
 		loadArchive: (sessionId: string) => loadArchivedSession(root, sessionId),
 		save: (session: Parameters<typeof saveSession>[1]) =>
 			saveSession(root, session),
+		confirmActiveDurability: (
+			session: Parameters<typeof confirmActiveSessionDurability>[1],
+		) => confirmActiveSessionDurability(root, session),
 		archiveAndClear: (session: Parameters<typeof archiveAndClearSession>[1]) =>
 			archiveAndClearSession(root, session),
 		quarantineUnreadable: () => quarantineUnreadableSession(root),

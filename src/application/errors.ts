@@ -19,3 +19,11 @@ export class UnsupportedFlowSessionVersionError extends Error {
 		this.actualVersion = actualVersion;
 	}
 }
+
+export class ArchiveCollisionError extends Error {
+	readonly code = "FLOW_ARCHIVE_COLLISION";
+	constructor(message: string) {
+		super(message);
+		this.name = "ArchiveCollisionError";
+	}
+}

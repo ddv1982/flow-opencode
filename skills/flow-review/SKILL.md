@@ -21,7 +21,8 @@ completed feature IDs instead of reconstructing feature, source,
 revision, validation, or lifecycle data from conversation memory.
 
 If the reviewer projection is available but evidence required to justify a
-verdict is missing, submit a failed result with a blocking evidence-gap finding.
+verdict is missing, submit a failed result with an ordinary blocking finding
+that precisely identifies the missing evidence.
 If the assignment itself is unavailable, report that failure without another
 state change so the manager can inspect compact status. Never invent validation,
 identity, revision, or time.
@@ -51,9 +52,17 @@ package surfaces, and remaining gaps are consistent with completion. The final
 assignment is the feature's one review, not a second review layered on top.
 
 Use `severity: "blocking"` only for a concrete issue that invalidates the
-approved outcome; otherwise use `advisory`. Every blocker needs a precise
-summary. Every blocker must cite a changed artifact and location, or identify
-the exact missing evidence or unmet approved requirement in `evidence`.
+approved outcome; otherwise use `advisory`. Prefix a blocking finding's summary
+with `[scope-blocker]` only when resolving it requires material work outside the
+approved plan, and identify that boundary in `evidence`. No other finding tag
+is defined: ordinary in-scope blocking findings and advisory findings need no
+tag. Missing evidence is an ordinary, precise blocking finding, not a
+`[scope-blocker]`.
+
+Every blocker must map to an approved requirement, changed behavior, or exact
+missing evidence. Keep its summary precise. In `evidence`, cite a changed
+artifact and location or identify the exact missing evidence or unmet approved
+requirement.
 
 ## Submit one result
 

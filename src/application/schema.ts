@@ -13,6 +13,7 @@ import {
 	MAX_SESSION_BYTES,
 	MAX_SESSION_ID_LENGTH,
 	MAX_TEXT_BYTES,
+	MAX_VALIDATION_ID_LENGTH,
 	MAX_VALIDATIONS_PER_RUN,
 } from "../domain/limits.js";
 import type { Session, SourceDigest } from "../domain/session.js";
@@ -119,7 +120,7 @@ export const PublicReviewResultSchema = z
 
 const ValidationObservationSchema = z
 	.object({
-		id: z.string().min(1).max(256),
+		id: z.string().min(1).max(MAX_VALIDATION_ID_LENGTH),
 		featureId: FeatureIdSchema,
 		runId: z.string().min(1).max(256),
 		scope: z.enum(["focused", "broad"]),
@@ -154,7 +155,7 @@ const ReviewAssignmentSchema = z
 		kind: z.enum(["feature", "final"]),
 		sourceDigest: SourceDigestSchema,
 		validationIds: z
-			.array(z.string().min(1).max(256))
+			.array(z.string().min(1).max(MAX_VALIDATION_ID_LENGTH))
 			.min(1)
 			.max(MAX_VALIDATIONS_PER_RUN),
 		packet: z

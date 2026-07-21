@@ -4,6 +4,7 @@ export type SessionTransaction = Readonly<{
 	load(): Promise<Session | null>;
 	loadArchive(sessionId: string): Promise<Session | null>;
 	save(session: Session): Promise<Session>;
+	confirmActiveDurability(session: Session): Promise<void>;
 	archiveAndClear(session: Session): Promise<void>;
 	quarantineUnreadable(): Promise<string | null>;
 	computeSourceDigest(): Promise<SourceDigest>;

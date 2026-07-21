@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.4.0 --global --force
+opencode plugin opencode-plugin-flow@6.5.0 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.4.0"]
+  "plugin": ["opencode-plugin-flow@6.5.0"]
 }
 ```
 
@@ -103,8 +103,14 @@ deferred or abandoned only when that is the intended terminal disposition.
 
 An interrupted close remains durably recorded in active state. Compact status
 returns `nextAction: "flow_session_close"` and an `archiveRetry.request`. Replay
-that request exactly. A fresh operation ID or the current closed revision is a
-different request and is rejected.
+that request exactly once. A fresh operation ID or the current closed revision
+is a different request and is rejected. The replay confirms the existing active
+document without rewriting it and re-confirms archive publication and cleanup.
+
+If the response instead sets `manualRecoveryRequired`, Flow found conflicting
+active or archived state. It deliberately returns no `archiveRetry`. Preserve
+both documents, inspect the collision, and do not overwrite, delete, or loop the
+close request automatically.
 
 ## Session state is unreadable
 

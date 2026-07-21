@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
+	ArchiveCollisionError,
 	UnreadableFlowSessionError,
 	UnsupportedFlowSessionVersionError,
 } from "../../application/errors.js";
@@ -26,6 +27,8 @@ import {
 import type { Session } from "../../domain/session.js";
 import { parseStrictJsonObject } from "./strict-json-object.js";
 
+export { ArchiveCollisionError } from "../../application/errors.js";
+
 export class InvalidFlowWorkspaceRootError extends Error {
 	readonly code = "INVALID_FLOW_WORKSPACE_ROOT";
 }
@@ -34,8 +37,13 @@ export class UnsafeFlowWorkspaceLayoutError extends Error {
 	readonly code = "UNSAFE_FLOW_WORKSPACE_LAYOUT";
 }
 
-export class ArchiveCollisionError extends Error {
-	readonly code = "FLOW_ARCHIVE_COLLISION";
+function provesManagedStateCollision(error: unknown): boolean {
+	return (
+		error instanceof ArchiveCollisionError ||
+		error instanceof UnreadableFlowSessionError ||
+		error instanceof UnsupportedFlowSessionVersionError ||
+		error instanceof UnsafeFlowWorkspaceLayoutError
+	);
 }
 
 export function normalizeWorkspaceRoot(
@@ -188,10 +196,15 @@ async function ensureHistoryDirectory(workspace: string): Promise<void> {
 	await ensureDirectory(historyDir(workspace), "the Flow history directory");
 }
 
-async function readManaged(path: string, description: string): Promise<string> {
+async function readManaged(
+	path: string,
+	description: string,
+	synchronizeFile = false,
+): Promise<string> {
 	await pathKind(path, "file", description);
 	const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-	const handle = await open(path, constants.O_RDONLY | noFollow);
+	const access = synchronizeFile ? constants.O_RDWR : constants.O_RDONLY;
+	const handle = await open(path, access | noFollow);
 	try {
 		const stat = await handle.stat();
 		if (!stat.isFile() || stat.size > MAX_SESSION_BYTES) {
@@ -200,7 +213,9 @@ async function readManaged(path: string, description: string): Promise<string> {
 				"state exceeds the supported session size",
 			);
 		}
-		return await handle.readFile("utf8");
+		const contents = await handle.readFile("utf8");
+		if (synchronizeFile) await handle.sync();
+		return contents;
 	} finally {
 		await handle.close();
 	}
@@ -215,6 +230,10 @@ async function syncDirectory(path: string): Promise<void> {
 		await handle.close();
 	}
 }
+
+export type WorkspacePersistenceOptions = Readonly<{
+	synchronizeDirectory?: (path: string) => Promise<void>;
+}>;
 
 async function renameReplacing(temporary: string, path: string): Promise<void> {
 	let retry = 0;
@@ -297,42 +316,61 @@ export async function loadSession(workspace: string): Promise<Session | null> {
 	);
 }
 
+async function loadArchivedSessionDocument(
+	workspace: string,
+	sessionId: string,
+	synchronizeFile: boolean,
+): Promise<Session | null> {
+	try {
+		const root = assertMutableWorkspaceRoot(workspace);
+		if (
+			(await pathKind(
+				flowDir(root),
+				"directory",
+				"the Flow state directory",
+			)) === "missing"
+		) {
+			return null;
+		}
+		if (
+			(await pathKind(
+				historyDir(root),
+				"directory",
+				"the Flow history directory",
+			)) === "missing"
+		) {
+			return null;
+		}
+		const path = archivedSessionPath(root, sessionId);
+		if (
+			(await pathKind(path, "file", "the Flow archived session")) === "missing"
+		) {
+			return null;
+		}
+		const session = parseSession(
+			await readManaged(path, "the Flow archived session", synchronizeFile),
+			"Flow archived session",
+		);
+		if (session.id !== sessionId || !session.closure) {
+			throw new ArchiveCollisionError(
+				"Archived session identity or closure is invalid.",
+			);
+		}
+		return session;
+	} catch (error) {
+		if (!provesManagedStateCollision(error)) throw error;
+		if (error instanceof ArchiveCollisionError) throw error;
+		throw new ArchiveCollisionError(
+			"Flow could not verify the existing archive as canonical closed state.",
+		);
+	}
+}
+
 export async function loadArchivedSession(
 	workspace: string,
 	sessionId: string,
 ): Promise<Session | null> {
-	const root = assertMutableWorkspaceRoot(workspace);
-	if (
-		(await pathKind(flowDir(root), "directory", "the Flow state directory")) ===
-		"missing"
-	) {
-		return null;
-	}
-	if (
-		(await pathKind(
-			historyDir(root),
-			"directory",
-			"the Flow history directory",
-		)) === "missing"
-	) {
-		return null;
-	}
-	const path = archivedSessionPath(root, sessionId);
-	if (
-		(await pathKind(path, "file", "the Flow archived session")) === "missing"
-	) {
-		return null;
-	}
-	const session = parseSession(
-		await readManaged(path, "the Flow archived session"),
-		"Flow archived session",
-	);
-	if (session.id !== sessionId || !session.closure) {
-		throw new ArchiveCollisionError(
-			"Archived session identity or closure is invalid.",
-		);
-	}
-	return session;
+	return loadArchivedSessionDocument(workspace, sessionId, false);
 }
 
 export async function saveSession(
@@ -343,23 +381,66 @@ export async function saveSession(
 	const parsed = SessionSchema.parse(session);
 	await ensureFlowDirectory(root);
 	await pathKind(sessionPath(root), "file", "the Flow session file");
-	await writeAtomically(
-		sessionPath(root),
-		`${JSON.stringify(parsed, null, 2)}\n`,
-	);
+	await writeAtomically(sessionPath(root), JSON.stringify(parsed));
+	await syncDirectory(root);
 	return parsed;
+}
+
+export async function confirmActiveSessionDurability(
+	workspace: string,
+	session: Session,
+	options: WorkspacePersistenceOptions = {},
+): Promise<void> {
+	const root = assertMutableWorkspaceRoot(workspace);
+	const canonical = SessionSchema.parse(session);
+	const path = sessionPath(root);
+	let active: Session;
+	try {
+		if ((await pathKind(path, "file", "the Flow session file")) === "missing") {
+			throw new ArchiveCollisionError(
+				"Active state disappeared before durability confirmation.",
+			);
+		}
+		active = parseSession(
+			await readManaged(path, "the Flow session file", true),
+			"Flow session file",
+		);
+	} catch (error) {
+		if (!provesManagedStateCollision(error)) throw error;
+		if (error instanceof ArchiveCollisionError) throw error;
+		throw new ArchiveCollisionError(
+			"Flow could not verify canonical active state before durability confirmation.",
+		);
+	}
+	if (JSON.stringify(active) !== JSON.stringify(canonical)) {
+		throw new ArchiveCollisionError(
+			"Active state changed before durability confirmation; Flow left it untouched.",
+		);
+	}
+	const synchronizeDirectory = options.synchronizeDirectory ?? syncDirectory;
+	await synchronizeDirectory(flowDir(root));
+	await synchronizeDirectory(root);
 }
 
 export async function archiveAndClearSession(
 	workspace: string,
 	session: Session,
+	options: WorkspacePersistenceOptions = {},
 ): Promise<void> {
 	const root = assertMutableWorkspaceRoot(workspace);
+	const synchronizeDirectory = options.synchronizeDirectory ?? syncDirectory;
 	if (!session.closure)
 		throw new Error("Flow archives only explicitly closed sessions.");
 	const canonical = SessionSchema.parse(session);
-	const canonicalBytes = `${JSON.stringify(canonical, null, 2)}\n`;
-	await ensureHistoryDirectory(root);
+	const canonicalBytes = JSON.stringify(canonical);
+	try {
+		await ensureHistoryDirectory(root);
+	} catch (error) {
+		if (!provesManagedStateCollision(error)) throw error;
+		throw new ArchiveCollisionError(
+			"Flow could not verify a safe archive directory; it left active state untouched.",
+		);
+	}
 	const target = archivedSessionPath(root, canonical.id);
 	const temporary = join(
 		historyDir(root),
@@ -373,28 +454,52 @@ export async function archiveAndClearSession(
 		} finally {
 			await handle.close();
 		}
-		await link(temporary, target);
-		await syncDirectory(historyDir(root));
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-		const existing = await loadArchivedSession(root, canonical.id);
-		if (!existing || JSON.stringify(existing) !== JSON.stringify(canonical)) {
-			throw new ArchiveCollisionError(
-				"Flow refused to overwrite a different archived session.",
-			);
+		try {
+			await link(temporary, target);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			let existing: Session | null;
+			try {
+				existing = await loadArchivedSessionDocument(root, canonical.id, true);
+			} catch (error) {
+				if (!provesManagedStateCollision(error)) throw error;
+				throw new ArchiveCollisionError(
+					"Flow could not verify that the existing archive is identical; it left both documents untouched.",
+				);
+			}
+			if (!existing || JSON.stringify(existing) !== JSON.stringify(canonical)) {
+				throw new ArchiveCollisionError(
+					"Flow refused to overwrite a different archived session.",
+				);
+			}
 		}
+		await rm(temporary, { force: true });
+		await synchronizeDirectory(historyDir(root));
+		await synchronizeDirectory(flowDir(root));
+		await synchronizeDirectory(root);
 	} finally {
 		await rm(temporary, { force: true });
 	}
-	const active = await loadSession(root);
-	if (!active) return;
+	let active: Session | null;
+	try {
+		active = await loadSession(root);
+	} catch (error) {
+		if (!provesManagedStateCollision(error)) throw error;
+		throw new ArchiveCollisionError(
+			"Flow could not verify that active state is identical; it left both documents untouched.",
+		);
+	}
+	if (!active) {
+		await synchronizeDirectory(flowDir(root));
+		return;
+	}
 	if (JSON.stringify(active) !== JSON.stringify(canonical)) {
 		throw new ArchiveCollisionError(
 			"Active state changed before archive cleanup; Flow left it untouched.",
 		);
 	}
 	await unlink(sessionPath(root));
-	await syncDirectory(flowDir(root));
+	await synchronizeDirectory(flowDir(root));
 }
 
 export async function quarantineUnreadableSession(

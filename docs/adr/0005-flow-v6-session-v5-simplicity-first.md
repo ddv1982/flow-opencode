@@ -44,6 +44,21 @@ schema.
 - Older active sessions must be finished or closed before upgrading. Existing
   archives are inert; there is no active-state compatibility reader.
 
+These refinements preserve this subtraction boundary. Managers align the active
+goal before every mutation without persisting an intent classifier; a same-goal
+approved plan-only request reports immutable state and stops. Prospectively, new
+review admission requires a byte-identical current-source pass after an exact
+plan-listed command has a known failure, while accepted same-schema Session v5
+reviews remain grandfathered and close adds no retroactive veto. Only the first
+in-scope failed review receives an automatic fresh full retry;
+`[scope-blocker]` and a second failure checkpoint for user direction. Every
+accepted close returns a deterministic delivery derived from canonical Session
+data instead of asking the conversation to reconstruct the result. Exact replay
+re-confirms existing active bytes and the archive/cleanup durability boundaries
+without rewriting Session v5. A true archive collision is preserved for manual
+recovery and ends automatic retry; neither case adds a recovery ledger or
+migration.
+
 ## Intentional tradeoffs
 
 Flow v6 gives up optional orchestration experiments, machine-canonical audit
@@ -55,10 +70,15 @@ The result may rerun more validation after a crash or failed review. Invalid
 configuration and duplicate sources still require manual repair. Those costs
 are accepted in exchange for a smaller state model, fewer failure modes, clearer
 reviewer scope, less prompt ceremony, and a product that can be understood from
-one short contract.
+one short contract. Newer v6 builds read earlier Session v5 state, but active
+rollback to an older build is unsupported after a newer writer uses widened
+bounds; Flow does not add capability negotiation or migration machinery for
+that edge.
 
 ## Guardrail
 
 Future complexity must remove or replace an existing concept. Moving a rule to
 another layer, adding a compatibility stack, or creating tests-of-tests does not
-count as simplification.
+count as simplification. These refinements must remain derived rules: they do not
+justify a persisted intent classifier, retry counter, delivery document, or new
+orchestration subsystem.

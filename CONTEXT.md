@@ -6,7 +6,15 @@ active feature may use an ephemeral bounded worker wave.
 
 An active Flow session is authoritative for its goal until a completed,
 deferred, or abandoned close is recorded. Work on that goal must not silently
-fall back to an ordinary non-Flow workflow.
+fall back to an ordinary non-Flow workflow. Before every manager-owned lifecycle
+mutation, including direct planning or execution, the root manager compares the
+compact-projected goal with the current request. This is a semantic manager
+judgment, not a persisted intent classifier: a continuation or compatible
+narrowing may proceed, while a materially new or expanded request makes no
+mutation and has not started. The manager offers to continue, defer, or abandon
+the active work; completed-but-unclosed work is closed as completed before a new
+request begins. Exact projected recovery of an already-accepted close runs
+before this comparison because it authorizes no new work.
 
 ## Versions
 
@@ -16,10 +24,17 @@ fall back to an ordinary non-Flow workflow.
 documents are not migrated. Historical archives are inert and are never used to
 resume work.
 
+Compatibility is forward-reading within v5: newer Flow builds accept state
+written by earlier v6 builds. Rolling an active session back is unsupported once
+a newer writer has used a widened bounded collection, such as the 65-observation
+ceiling needed for 64 exact planned gates plus separate broad evidence. This is
+an explicit no-migration boundary, not a capability-negotiation subsystem.
+
 ## Core terms
 
 **Plan**: An approved directed acyclic graph of features. Approval makes it
-immutable.
+immutable. A same-goal approved plan-only request reports that plan and current
+progress, then stops without another mutation or implementation.
 
 **Feature run**: The canonical aggregate for one attempt. It owns its feature,
 attempt number, validation observations, review assignment, result, artifacts,
@@ -29,9 +44,12 @@ and state. Avoid separate “history entry” or copied feature-status concepts.
 Flow has no lanes, concurrent active features, or durable worker execution
 state.
 
-**Next action**: The runtime's authoritative workflow direction at the current
-revision. It identifies the next Flow transition; it neither grants new user
-permission nor revokes authority already given.
+**Next action**: The runtime's durable default workflow direction at the current
+revision. It neither grants new user permission nor revokes authority already
+given. Environment-sensitive transition guards remain authoritative when that
+direction is attempted. On a first failed review, compact status defaults to
+reset; the manager reads detail once and lets a scope blocker refine that
+default without persisting tag-specific state.
 
 **Bounded wave**: An optional ephemeral cohort of two or three `flow-worker`
 instances contributing exact, non-overlapping slices inside one active run. One
@@ -49,6 +67,16 @@ secrets.
 canonical applicable gate or a justified equivalent for the delivered state.
 The string `broad` does not make a narrow check comprehensive.
 
+**Known failed exact planned command**: A validation command is plan-listed only
+when its stored bytes exactly equal an entry in the active feature's validation
+list; Flow does not parse prose into commands. After that exact command fails or
+produces incomplete output on any attempt, reset does not erase the failure. At
+new review admission, the active run must contain a latest complete exit-zero
+observation of the same command for the review's current source; another broad
+command cannot substitute for it. This guard is prospective: accepted
+same-schema Session v5 pending and completed reviews are grandfathered, and
+closure does not add a retroactive planned-gate veto.
+
 **Review assignment**: The durable identity and bounded packet for the run's
 one independent review. The hidden `flow-reviewer` reads it through reviewer
 status and submits its verdict plus findings directly through
@@ -63,7 +91,14 @@ requires broad passing validation and replaces, rather than follows, a feature
 review.
 
 **Blocked run**: A run whose review failed or was observed but not submitted.
-Retry requires an explicit full reset; old run data is superseded, not reused.
+Old run data is superseded, not reused. Only the first in-scope recorded failed
+review may be reset and retried automatically as one fresh full run; a
+`[scope-blocker]` checkpoints immediately. Other blocking findings are treated
+as in-scope. A second recorded failed review for that feature projects
+`await-user-direction`;
+explicit user direction grants one additional attempt. The failure count is
+derived from recorded failed review results, not from pre-review resets,
+rejected stale-source submissions, or a persisted retry counter.
 
 **Workspace-content digest**: A SHA-256 fingerprint of effective tracked and
 nonignored workspace content. It binds validation and review to source without
@@ -79,9 +114,25 @@ replays; different input under the same ID conflicts.
 Completed closure requires every planned feature to have a passing run.
 Deferred and abandoned closure require an explicit user choice.
 
+**Delivery projection**: The concise deterministic handoff returned after a
+close is durably accepted. It is derived from the closed Session on the initial
+response, archive-pending recovery, and exact or delayed replay; it is never
+persisted as another state model. It summarizes the goal, closure, progress, each
+feature's attempt count, latest outcome, terminal findings, and Flow-reported
+artifact paths from latest attempts versus superseded attempts only. These paths
+are declarations supplied to Flow, not an exact Git delta, existence proof, or
+exhaustive workspace inventory.
+
 **Archive publication**: No-overwrite publication of closed state into
 `.flow/history/`, followed by active-state cleanup. Repeating the exact close
-converges after interruption by session and operation identity.
+converges after interruption by session and operation identity. Exact active
+replay confirms the existing canonical bytes and durability boundary without a
+rewrite. Exact archived replay re-confirms publication and active cleanup, even
+when cleanup is already absent; delayed replay never clears a different active
+session. A conflicting active or history document is preserved and projected as
+manual, non-retry recovery; closed status re-derives that decision from the
+existing archive after interruption. These rules add no Session field or retry
+ledger.
 
 ## Ownership
 

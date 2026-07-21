@@ -165,7 +165,13 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				summary: "Lifecycle completed.",
 				result: {
 					verdict: "passed" as const,
-					findings: [],
+					findings: [
+						{
+							severity: "advisory" as const,
+							summary: "Lifecycle evidence remains concise.",
+							evidence: "source.ts:1",
+						},
+					],
 					terminalDisposition: "submitted" as const,
 				},
 			},
@@ -299,11 +305,40 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				summary: "Lifecycle archived.",
 			},
 		};
-		ok(await flowSessionClose(workspace, closeInput));
+		const closed = ok(await flowSessionClose(workspace, closeInput));
+		expect(closed.workflowData.delivery).toEqual({
+			goal: "Ship one file-backed lifecycle",
+			closure: {
+				kind: "completed",
+				summary: "Lifecycle archived.",
+			},
+			progress: { completed: 1, total: 1 },
+			features: [
+				{
+					id: FEATURE_ID,
+					title: "Lifecycle",
+					attempts: 1,
+					latestState: "completed",
+					outcomeSummary: "Lifecycle completed.",
+					terminalFindings: [
+						{
+							severity: "advisory",
+							summary: "Lifecycle evidence remains concise.",
+						},
+					],
+				},
+			],
+			reportedArtifacts: {
+				latestAttempts: ["source.ts"],
+				supersededAttemptsOnly: [],
+			},
+		});
 		expect(await loadSession(workspace)).toBeNull();
-		expect(
-			await loadArchivedSession(workspace, savedProjection.sessionId),
-		).toMatchObject({
+		const archived = await loadArchivedSession(
+			workspace,
+			savedProjection.sessionId,
+		);
+		expect(archived).toMatchObject({
 			closure: { operationId: "close-lifecycle", kind: "completed" },
 			runs: [
 				{
@@ -312,17 +347,20 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				},
 			],
 		});
+		expect(archived).not.toHaveProperty("delivery");
 
 		const archivePath = archivedSessionPath(
 			workspace,
 			savedProjection.sessionId,
 		);
 		const archiveBeforeReplay = await readFile(archivePath, "utf8");
+		expect(JSON.parse(archiveBeforeReplay)).not.toHaveProperty("delivery");
 		const replay = ok(await flowSessionClose(workspace, closeInput));
 		expect(replay.workflowData.operation).toMatchObject({
 			operationId: "close-lifecycle",
 			replayed: true,
 		});
+		expect(replay.workflowData.delivery).toEqual(closed.workflowData.delivery);
 		expect(await readFile(archivePath, "utf8")).toBe(archiveBeforeReplay);
 	} finally {
 		await rm(workspace, { recursive: true, force: true });

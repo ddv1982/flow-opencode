@@ -20,6 +20,21 @@ function body(markdown: string): string {
 	return markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "").trim();
 }
 
+function section(markdown: string, heading: string): string {
+	const start = markdown.indexOf(`## ${heading}`);
+	expect(start).toBeGreaterThanOrEqual(0);
+	const contentStart = markdown.indexOf("\n", start) + 1;
+	const end = markdown.indexOf("\n## ", contentStart);
+	return markdown.slice(contentStart, end < 0 ? undefined : end);
+}
+
+function expectBefore(text: string, before: string, after: string): void {
+	const beforeIndex = text.indexOf(before);
+	const afterIndex = text.indexOf(after);
+	expect(beforeIndex).toBeGreaterThanOrEqual(0);
+	expect(afterIndex).toBeGreaterThan(beforeIndex);
+}
+
 describe("production Flow prompts", () => {
 	test("compiles seven runtime surfaces from four canonical guides", () => {
 		expect(FLOW_GUIDANCE_TOPICS).toEqual([
@@ -43,98 +58,107 @@ describe("production Flow prompts", () => {
 			"flow-status",
 			"flow-reviewer",
 			"flow-worker",
-		] as const) {
+		] as const)
 			expect(compileFlowPromptSurface(surface).trim().length).toBeGreaterThan(
 				40,
 			);
-		}
+
 		const auto = compileFlowPromptSurface("flow-auto");
 		expect(auto).toContain('flow_guidance { id: "flow-plan" }');
 		expect(auto).toContain('flow_guidance { id: "flow-run" }');
-		expect(auto).toMatch(
-			/stop after\s+planning when the user asked for a plan only/i,
-		);
 		expect(() =>
 			compileFlowPromptSurface("unknown" as FlowPromptSurfaceName),
 		).toThrow("Unsupported Flow prompt surface");
 	});
 
-	test("keeps approval, bounded waves, validation, and review in one run contract", () => {
-		const plan = compileFlowPromptSurface("flow-plan");
-		expect(plan).toMatch(
-			/flow_plan_save[\s\S]+flow_plan_approve[\s\S]+only after explicit approval[\s\S]+do not begin implementation/i,
+	test("cleans accepted archives before goal alignment on every manager entry", () => {
+		const entries = [
+			["flow-auto", "Route from status", false],
+			["flow-plan", "Start", false],
+			["flow-run", "Start and scope", true],
+		] as const;
+		for (const [surface, heading, stops] of entries) {
+			const prompt = section(compileFlowPromptSurface(surface), heading);
+			expect(prompt).toMatch(
+				/archiveRetry[\s\S]+flow_session_close[\s\S]+byte-for-byte[\s\S]+grants no new work/i,
+			);
+			expectBefore(prompt, "archiveRetry", "align the compact-projected");
+			if (stops)
+				expect(prompt).toMatch(/stop after the[\s\S]+outcome either way/i);
+			else
+				expect(prompt).toMatch(
+					/refresh compact status[\s\S]+refreshed projection/i,
+				);
+		}
+	});
+
+	test("uses one scope marker and bounds failed-review retries", () => {
+		const run = section(
+			compileFlowPromptSurface("flow-run"),
+			"Review and record",
+		);
+		expect(run).toMatch(/\[scope-blocker\][\s\S]+checkpoints immediately/i);
+		expect(run).toMatch(/first recorded[\s\S]+in-scope[\s\S]+one automatic/i);
+		expect(run).toMatch(
+			/second recorded[\s\S]+(?:failure|failed review)[\s\S]+explicit user direction/i,
+		);
+		expect(run).toMatch(
+			/full[\s\S]+validation[\s\S]+full[\s\S]+review[\s\S]+one additional\s+attempt/i,
+		);
+		const auto = section(
+			compileFlowPromptSurface("flow-auto"),
+			"Route from status",
+		);
+		expect(auto).toMatch(
+			/blocked outcome[\s\S]+loaded `flow-run` retry and checkpoint contract/i,
 		);
 
-		const run = compileFlowPromptSurface("flow-run");
-		expect(run).toMatch(
-			/serially by default[\s\S]+two or three\s+`flow-worker`/i,
+		const reviewer = compileFlowPromptSurface("flow-reviewer");
+		const markers = reviewer.match(/\[[a-z][a-z-]*\]/gi) ?? [];
+		expect(new Set(markers)).toEqual(new Set(["[scope-blocker]"]));
+		expect(reviewer).toMatch(
+			/\[scope-blocker\][\s\S]+only when[\s\S]+material work outside the[\s\S]+approved plan/i,
 		);
-		expect(run).toMatch(
-			/same\s+assistant tool-use turn[\s\S]+report that execution as serial/i,
-		);
-		expect(run).toMatch(
-			/at most one targeted follow-up wave[\s\S]+no manifest, sidecar, Session field/i,
-		);
-		expect(run).toMatch(
-			/after all workers stop[\s\S]+before validation[\s\S]+flow_validation_start/i,
-		);
-		expect(run).toMatch(
-			/flow_review_start[\s\S]+reserved `flow-reviewer`[\s\S]+flow_feature_complete/i,
-		);
-		expect(run).toMatch(
-			/never copy or submit its\s+verdict[\s\S]+read compact status/i,
-		);
-		expect(run).toMatch(/scope: "broad"[\s\S]+canonical applicable gate/i);
-		expect(run).toMatch(
-			/failed review[\s\S]+full validation and full\s+review/i,
-		);
-		expect(run).toMatch(
-			/workspace content changed[\s\S]+flow_feature_reset[\s\S]+do not redispatch/i,
-		);
-		const auto = compileFlowPromptSurface("flow-auto");
-		expect(auto).toMatch(
-			/workspace content changed[\s\S]+flow_feature_reset[\s\S]+must not be redispatched/i,
+		expect(reviewer).toMatch(
+			/ordinary in-scope blocking findings and advisory findings need no[\s\S]+tag[\s\S]+missing evidence is an ordinary, precise blocking finding/i,
 		);
 	});
 
-	test("keeps an active Flow goal continuous within existing authority", () => {
-		const auto = compileFlowPromptSurface("flow-auto");
-		expect(auto).toMatch(
-			/active Flow session is\s+authoritative[\s\S]+do\s+not silently fall back to ordinary non-Flow coding/i,
+	test("keeps plan, run, and delivery boundaries decision-complete", () => {
+		const plan = compileFlowPromptSurface("flow-plan");
+		expect(plan).toMatch(
+			/observable outcome[\s\S]+bounded evidence[\s\S]+exact[\s\S]+plan-listed command byte-for-byte/i,
 		);
-		expect(auto).toMatch(
-			/nextAction[\s\S]+authoritative\s+workflow state[\s\S]+not permission/i,
-		);
-		expect(auto).toMatch(
-			/existing implementation authority[\s\S]+continue after approval[\s\S]+feature outcome[\s\S]+failed-review[\s\S]+without asking\s+again/i,
-		);
-		expect(auto).toMatch(
-			/pause only for[\s\S]+material product or scope choice[\s\S]+external Git or release action[\s\S]+hard operational failure/i,
-		);
-		expect(auto).toMatch(
-			/only the user may choose[\s\S]+non-completed closure kind/i,
+		expect(plan).toMatch(
+			/flow_plan_save[\s\S]+flow_plan_approve[\s\S]+explicit approval[\s\S]+do not begin implementation/i,
 		);
 
 		const run = compileFlowPromptSurface("flow-run");
-		expect(run).not.toMatch(/stop and replan/i);
-		expect(run).toMatch(
-			/stay inside the active feature[\s\S]+changes owned by another planned feature/i,
+		const runStart = section(run, "Start and scope");
+		expect(runStart).toMatch(
+			/status is `running`[\s\S]+nextAction` is `flow_feature_reset`[\s\S]+pending review is source-stale[\s\S]+call `flow_feature_reset`[\s\S]+do not redispatch/i,
+		);
+		expect(runStart).toMatch(
+			/status is `running`[\s\S]+nextAction` is[\s\S]+`dispatch-flow-reviewer`[\s\S]+skip run start[\s\S]+existing pending assignment/i,
 		);
 		expect(run).toMatch(
-			/outside the approved plan, stop editing[\s\S]+finish the\s+approved plan[\s\S]+deferred or abandoned closure[\s\S]+never replan the active approved session in place/i,
+			/serially by default[\s\S]+two or three genuinely independent[\s\S]+same[\s\S]+assistant tool-use turn[\s\S]+at most one targeted follow-up wave/i,
 		);
 		expect(run).toMatch(
-			/existing implementation authority covers a qualifying\s+worker wave[\s\S]+do not ask for separate approval/i,
+			/known failed exact plan-listed gate[\s\S]+cannot be discharged by substitute broad validation[\s\S]+already accepted review is grandfathered/i,
 		);
-		expect(run).toMatch(
-			/two or three genuinely independent, non-overlapping slices[\s\S]+clear benefit/i,
+		expect(section(run, "Review and record")).toMatch(
+			/redispatch[\s\S]+only while compact status is `running`[\s\S]+`dispatch-flow-reviewer`[\s\S]+status remains `running`[\s\S]+pending assignment[\s\S]+`flow_feature_reset`[\s\S]+do not redispatch[\s\S]+source-stale assignment/i,
 		);
-		expect(run).toMatch(
-			/host-observed validation advances the session revision[\s\S]+refresh[\s\S]+view: "compact"[\s\S]+before the\s+next `flow_validation_start` or `flow_review_start`/i,
+
+		const auto = compileFlowPromptSurface("flow-auto");
+		expect(section(auto, "Recovery")).toMatch(
+			/load `flow-run`[\s\S]+exact[\s\S]+review-recovery path/i,
 		);
-		expect(run).toMatch(
-			/invoked directly through\s+`\/flow-run`[\s\S]+one feature's outcome[\s\S]+then stop[\s\S]+active driver is `\/flow-auto`[\s\S]+start the next\s+feature/i,
+		expect(auto).toMatch(
+			/workflowData\.delivery[\s\S]+attempt count[\s\S]+terminal findings[\s\S]+never describe them as an exact Git delta/i,
 		);
+		expect(auto).toMatch(/do not create reports[\s\S]+JSON is opt-in/i);
 	});
 
 	test("keeps reviewer and worker roles narrow and structured", () => {
@@ -144,16 +168,12 @@ describe("production Flow prompts", () => {
 			/reserved `flow-reviewer`[\s\S]+workspace-read-only[\s\S]+submit only its own result/i,
 		);
 		expect(reviewer).toMatch(
-			/do not edit files[\s\S]+sole lifecycle mutation/i,
+			/do not edit files[\s\S]+sole lifecycle mutation[\s\S]+assignment id, first call[\s\S]+flow_status/i,
 		);
-		expect(reviewer).toMatch(
-			/workspace-local, non-shell inspection tools[\s\S]+among Flow lifecycle tools[\s\S]+flow_status[\s\S]+flow_feature_complete/i,
-		);
-		expect(reviewer).toMatch(/assignment id, first call[\s\S]+flow_status/i);
-		expect(reviewer).toMatch(/flow_status[\s\S]+Every blocker must cite/i);
 		expect(reviewer).toMatch(
 			/workspace content changed[\s\S]+reset[\s\S]+do not recommend redispatch/i,
 		);
+
 		const example = JSON.parse(
 			reviewer.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "null",
 		);
@@ -165,7 +185,6 @@ describe("production Flow prompts", () => {
 				expectedRevision: expect.any(Number),
 				featureId: expect.any(String),
 				assignmentId: expect.any(String),
-				summary: expect.any(String),
 				result: {
 					verdict: "passed",
 					findings: [],
@@ -176,13 +195,7 @@ describe("production Flow prompts", () => {
 
 		const worker = compileFlowPromptSurface("flow-worker");
 		expect(worker).toMatch(
-			/single slice[\s\S]+exact, non-overlapping write paths/i,
+			/single slice[\s\S]+do not run Bash[\s\S]+exact, non-overlapping write paths[\s\S]+authoritative combined validation/i,
 		);
-		expect(worker).toMatch(
-			/do not delegate[\s\S]+do not stage, commit, push, publish/i,
-		);
-		expect(worker).toMatch(/do not run Bash[\s\S]+\.flow or \.git metadata/i);
-		expect(worker).toMatch(/authoritative combined validation/i);
-		expect(worker).toMatch(/recommended manager checks/i);
 	});
 });

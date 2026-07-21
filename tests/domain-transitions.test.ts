@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { SessionSchema } from "../src/application/schema.js";
+import {
+	MAX_PLAN_FEATURES,
+	MAX_VALIDATIONS_PER_RUN,
+} from "../src/domain/limits.js";
 import type {
 	FeatureId,
 	Plan,
@@ -21,9 +25,14 @@ import {
 	startRun,
 	type TransitionEnvironment,
 } from "../src/domain/transitions.js";
+import { unresolvedKnownFailedPlanCommands } from "../src/domain/validation.js";
 
 const FOUNDATION = "foundation";
 const DELIVERY = "delivery";
+const PLANNED_GATE = "bun run verify:fast";
+const PROSE_VALIDATION =
+	"Exercise the delivered behavior and its main failure mode.";
+const SUBSTITUTE_GATE = "bun run frontend:check && cargo test --workspace";
 const SOURCE_A = `sha256:${"a".repeat(64)}` as SourceDigest;
 const SOURCE_B = `sha256:${"b".repeat(64)}` as SourceDigest;
 const OUTPUT = `sha256:${"f".repeat(64)}` as SourceDigest;
@@ -52,6 +61,18 @@ const plan: Plan = {
 		},
 	],
 };
+
+function oneFeaturePlan(validation: string[]): Plan {
+	const feature = plan.features.find(({ id }) => id === DELIVERY);
+	if (!feature) throw new Error("Expected the delivery plan feature.");
+	return { ...plan, features: [{ ...feature, validation, dependsOn: [] }] };
+}
+
+const plannedGatePlan = oneFeaturePlan([
+	PROSE_VALIDATION,
+	PLANNED_GATE,
+	PLANNED_GATE,
+]);
 
 function deterministicEnvironment(): TransitionEnvironment {
 	const sequences = new Map<string, number>();
@@ -105,8 +126,9 @@ function validate(
 	session: Session,
 	options: {
 		id: string;
-		featureId: FeatureId;
-		scope: ValidationScope;
+		featureId?: FeatureId;
+		scope?: ValidationScope;
+		command?: string;
 		sourceDigest?: SourceDigest;
 		exitCode?: number;
 		outputComplete?: boolean;
@@ -116,10 +138,16 @@ function validate(
 	if (!run) throw new Error("Expected an active run.");
 	return recordValidation(session, {
 		captureId: options.id,
-		featureId: options.featureId,
+		featureId: options.featureId ?? DELIVERY,
 		runId: run.id,
-		scope: options.scope,
-		command: options.scope === "broad" ? "bun test" : "bun test focused",
+		scope: options.scope ?? "broad",
+		command:
+			options.command ??
+			(options.featureId === undefined
+				? PLANNED_GATE
+				: options.scope === "focused"
+					? "bun test focused"
+					: "bun test"),
 		sourceDigest: options.sourceDigest ?? SOURCE_A,
 		exitCode: options.exitCode ?? 0,
 		outputDigest: OUTPUT,
@@ -132,20 +160,26 @@ function requestReview(
 	featureId: FeatureId,
 	environment: TransitionEnvironment,
 	operationId = `review-start-${featureId}`,
-): { session: Session; assignment: ReviewAssignment } {
+	sourceDigest = SOURCE_A,
+	expectedRevision = session.revision,
+): { session: Session; assignment: ReviewAssignment; replayed: boolean } {
 	const result = startReview(
 		session,
 		{
 			operationId,
-			expectedRevision: session.revision,
+			expectedRevision,
 			featureId,
-			sourceDigest: SOURCE_A,
+			sourceDigest,
 			artifactsChanged: [{ path: `src/${featureId}.ts` }],
 			packet: { summary: `Review ${featureId}.`, riskLenses: [] },
 		},
 		environment,
 	);
-	return { session: result.session, assignment: result.value };
+	return {
+		session: result.session,
+		assignment: result.value,
+		replayed: result.replayed,
+	};
 }
 
 function pass(
@@ -166,6 +200,26 @@ function pass(
 			terminalDisposition: "submitted",
 		},
 	}).session;
+}
+
+function beginPlannedGateSession(environment: TransitionEnvironment): Session {
+	return begin(
+		approve(saveDraft(environment, { plan: plannedGatePlan })),
+		DELIVERY,
+		environment,
+	);
+}
+
+function retryPlannedGate(
+	session: Session,
+	environment: TransitionEnvironment,
+): Session {
+	const reset = resetFeature(session, {
+		operationId: "reset-planned-gate",
+		expectedRevision: session.revision,
+		featureId: DELIVERY,
+	}).session;
+	return begin(reset, DELIVERY, environment, "run-start-planned-gate-retry");
 }
 
 describe("Session v5 domain state machine", () => {
@@ -616,36 +670,185 @@ describe("Session v5 domain state machine", () => {
 			artifactsChanged: [],
 		});
 		expect(SessionSchema.safeParse(structuredClone(retry)).success).toBe(true);
+		expect(
+			SessionSchema.safeParse({
+				...structuredClone(retry),
+				runs: [...structuredClone(retry.runs)].reverse(),
+			}).success,
+		).toBe(false);
 	});
 
-	test("bounds validation observations and assigns every applicable passing observation", () => {
+	test("enforces exact planned gates across observations and retries", () => {
+		const rejecting: Array<
+			[
+				name: string,
+				observations: Array<Parameters<typeof validate>[1]>,
+				source?: SourceDigest,
+			]
+		> = [
+			["immediate", [{ id: "immediate-failure", exitCode: 1 }]],
+			[
+				"latest-incomplete",
+				[
+					{ id: "first-pass" },
+					{ id: "latest-incomplete", outputComplete: false },
+				],
+			],
+			[
+				"current-source",
+				[
+					{ id: "source-a-failure", exitCode: 1 },
+					{ id: "source-b-pass", sourceDigest: SOURCE_B },
+					{ id: "source-a-substitute", command: SUBSTITUTE_GATE },
+				],
+				SOURCE_A,
+			],
+		];
+		for (const [name, observations, source] of rejecting) {
+			const environment = deterministicEnvironment();
+			let session = beginPlannedGateSession(environment);
+			for (const observation of observations) {
+				session = validate(session, observation);
+			}
+			expect(() =>
+				requestReview(
+					session,
+					DELIVERY,
+					environment,
+					`review-${name}`,
+					source ?? SOURCE_A,
+				),
+			).toThrow(PLANNED_GATE);
+		}
+
+		const retryEnvironment = deterministicEnvironment();
+		let retry = validate(beginPlannedGateSession(retryEnvironment), {
+			id: "prior-attempt-failure",
+			exitCode: 1,
+		});
+		const failedRun = retry.runs.at(-1);
+		if (!failedRun) throw new Error("Expected the failed planned-gate run.");
+		expect(
+			unresolvedKnownFailedPlanCommands(retry, failedRun, SOURCE_A),
+		).toEqual([PLANNED_GATE]);
+		retry = validate(retry, { id: "prior-attempt-pass" });
+		const passedRun = retry.runs.at(-1);
+		if (!passedRun) throw new Error("Expected the passing planned-gate run.");
+		expect(
+			unresolvedKnownFailedPlanCommands(retry, passedRun, SOURCE_A),
+		).toEqual([]);
+		retry = retryPlannedGate(retry, retryEnvironment);
+		retry = validate(retry, {
+			id: "retry-substitute",
+			command: SUBSTITUTE_GATE,
+		});
+		expect(() =>
+			requestReview(retry, DELIVERY, retryEnvironment, "review-substitute"),
+		).toThrow(PLANNED_GATE);
+		retry = validate(retry, { id: "retry-exact-pass" });
+		expect(
+			requestReview(retry, DELIVERY, retryEnvironment, "review-retry")
+				.assignment.validationIds,
+		).toEqual(["retry-substitute", "retry-exact-pass"]);
+		expect(retry.plan?.features[0]?.validation).toEqual([
+			PROSE_VALIDATION,
+			PLANNED_GATE,
+			PLANNED_GATE,
+		]);
+	});
+
+	test("admits the maximum planned gates plus separate broad evidence", () => {
+		expect(MAX_VALIDATIONS_PER_RUN).toBe(MAX_PLAN_FEATURES + 1);
+		const commands = Array.from(
+			{ length: MAX_PLAN_FEATURES },
+			(_, index) => `bun run planned:${index + 1}`,
+		);
 		const environment = deterministicEnvironment();
 		let session = begin(
-			approve(saveDraft(environment)),
-			FOUNDATION,
+			approve(saveDraft(environment, { plan: oneFeaturePlan(commands) })),
+			DELIVERY,
 			environment,
 		);
-		for (let index = 1; index <= 16; index += 1) {
+		for (const [index, command] of commands.entries()) {
 			session = validate(session, {
-				id: `validation-${index}`,
-				featureId: FOUNDATION,
-				scope: index % 2 === 0 ? "broad" : "focused",
+				id: `prior-failure-${index + 1}`,
+				command,
+				exitCode: 1,
+				scope: "focused",
 			});
 		}
+		session = retryPlannedGate(session, environment);
+		const passingIds: string[] = [];
+		for (const [index, command] of commands.entries()) {
+			const id = `current-pass-${index + 1}`;
+			passingIds.push(id);
+			session = validate(session, { id, command, scope: "focused" });
+		}
+		passingIds.push("current-broad");
+		session = validate(session, {
+			id: "current-broad",
+			command: SUBSTITUTE_GATE,
+		});
 		expect(() =>
-			validate(session, {
-				id: "validation-over-limit",
-				featureId: FOUNDATION,
-				scope: "focused",
-			}),
-		).toThrow("at most 16 validation observations");
-
-		const review = requestReview(session, FOUNDATION, environment);
-		expect(review.assignment.validationIds).toEqual(
-			Array.from({ length: 16 }, (_, index) => `validation-${index + 1}`),
+			validate(session, { id: "over-limit", command: "bun run extra" }),
+		).toThrow(`at most ${MAX_VALIDATIONS_PER_RUN} validation observations`);
+		const review = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-maximum-plan",
 		);
+		expect(review.assignment).toMatchObject({
+			kind: "final",
+			validationIds: passingIds,
+		});
+		SessionSchema.parse(structuredClone(review.session));
+	});
+
+	test("grandfathers review assignments admitted before exact-gate policy", () => {
+		const environment = deterministicEnvironment();
+		let prospective = validate(beginPlannedGateSession(environment), {
+			id: "legacy-exact-failure",
+			exitCode: 1,
+		});
+		prospective = validate(prospective, {
+			id: "legacy-substitute-pass",
+			command: SUBSTITUTE_GATE,
+		});
+		expect(() =>
+			requestReview(prospective, DELIVERY, environment, "new-admission"),
+		).toThrow(PLANNED_GATE);
+
+		const accepted = requestReview(
+			{ ...prospective, plan: oneFeaturePlan([PROSE_VALIDATION]) },
+			DELIVERY,
+			environment,
+			"legacy-admission",
+		);
+		const legacySession = accepted.session;
+		const grandfathered: Session = { ...legacySession, plan: prospective.plan };
+		expect(accepted.assignment.validationIds).toHaveLength(1);
+		expect(accepted.assignment.validationIds[0]).toBe("legacy-substitute-pass");
+		SessionSchema.parse(structuredClone(grandfathered));
 		expect(
-			SessionSchema.safeParse(structuredClone(review.session)).success,
+			requestReview(
+				grandfathered,
+				DELIVERY,
+				environment,
+				"legacy-admission",
+				SOURCE_A,
+				prospective.revision,
+			).replayed,
 		).toBe(true);
+		const completed = pass(grandfathered, DELIVERY, accepted.assignment);
+		expect(sessionStatus(completed)).toBe("completed");
+		const closed = closeSession(completed, {
+			operationId: "close-grandfathered",
+			expectedRevision: completed.revision,
+			sessionId: completed.id,
+			kind: "completed",
+			summary: "Previously accepted review completed.",
+		}).session;
+		expect(sessionStatus(closed)).toBe("closed");
 	});
 });

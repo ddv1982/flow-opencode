@@ -85,6 +85,9 @@ describe("Flow v6 documentation contract", () => {
 			/Exact version pins do not update\s+automatically\./,
 		);
 		expect(install).toMatch(/Flow v5 or earlier[\s\S]+Session v5/);
+		expect(install).toMatch(
+			/do not roll an active session back[\s\S]+newer v6 builds read earlier Session v5[\s\S]+no capability or\s+migration layer/i,
+		);
 		expect(install).toContain("https://opencode.ai/docs/plugins/");
 		expect(install).not.toMatch(/\bnpx\b|activation-check/);
 	});
@@ -107,6 +110,18 @@ describe("Flow v6 documentation contract", () => {
 			expect(quickStart).toContain(command);
 		}
 		expect(quickStart).toMatch(/approve (?:it|the plan) conversationally/i);
+		expect(quickStart).toMatch(
+			/before every manager-owned Flow mutation[\s\S]+direct `\/flow-plan`[\s\S]+`\/flow-run`[\s\S]+materially\s+new or\s+expanded request[\s\S]+does not start or mutate/i,
+		);
+		expect(quickStart).toMatch(
+			/projected `archiveRetry`[\s\S]+exception[\s\S]+already-accepted[\s\S]+before that comparison[\s\S]+no authority for new work/i,
+		);
+		expect(quickStart).toMatch(
+			/only the first in-scope failed review[\s\S]+automatically resets[\s\S]+\[scope-blocker\][\s\S]+checkpoints immediately[\s\S]+second failed review[\s\S]+await-user-direction/i,
+		);
+		expect(quickStart).toMatch(
+			/same-goal plan-only request[\s\S]+immutable plan[\s\S]+current progress[\s\S]+stops/i,
+		);
 		expect(commandsSection).toMatch(
 			/\| `\/flow-review` \| [^\n|]*(?:internal|recovery)/i,
 		);
@@ -132,6 +147,21 @@ describe("Flow v6 documentation contract", () => {
 
 		expect(commands).toEqual(Object.keys(FLOW_CORE_COMMANDS).sort());
 		expect(tools).toEqual(await registeredToolNames());
+		expect(section(surface, "Tools", 3)).toMatch(
+			/\| `flow_session_close` \| [^\n|]*derived delivery/i,
+		);
+		expect(maintainer).toMatch(
+			/prospectively[\s\S]+new\s+review[\s\S]+accepted same-schema Session v5[\s\S]+grandfathered[\s\S]+retroactive planned-gate veto/i,
+		);
+		expect(maintainer).toMatch(
+			/`nextAction` is durable default workflow direction[\s\S]+environment-sensitive transition guards remain authoritative/i,
+		);
+		expect(maintainer).toMatch(
+			/first failure[\s\S]+compact `flow_feature_reset`[\s\S]+count-derived default[\s\S]+reads detail once[\s\S]+scope-blocker[\s\S]+checkpoint/i,
+		);
+		expect(maintainer).toMatch(
+			/exact active close replay[\s\S]+does not[\s\S]+rewrite[\s\S]+collision[\s\S]+manualRecoveryRequired[\s\S]+no `archiveRetry`/i,
+		);
 		expect(guides).toEqual([...FLOW_GUIDANCE_IDS].sort());
 		expect(agents).toEqual(Object.keys(FLOW_CORE_AGENTS).sort());
 		for (const agent of Object.values(FLOW_CORE_AGENTS)) {
@@ -224,6 +254,14 @@ describe("Flow v6 documentation contract", () => {
 		expect(
 			section(troubleshooting, "Completion says workspace content changed"),
 		).toMatch(/Reset the feature[\s\S]+Do not redispatch/i);
+		expect(
+			section(
+				troubleshooting,
+				"Status shows a closed session still awaiting archive publication",
+			),
+		).toMatch(
+			/exactly once[\s\S]+without rewriting[\s\S]+manualRecoveryRequired[\s\S]+no `archiveRetry`[\s\S]+do not overwrite, delete, or loop/i,
+		);
 		expect(changelog).toMatch(/^## \[Unreleased\]$/m);
 		const releaseHeadings = [
 			...changelog.matchAll(/^## \[([^\]]+)\](?: - ([^\n]+))?$/gm),

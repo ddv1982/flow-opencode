@@ -13,34 +13,67 @@ guides, and two hidden subagents.
 An active Flow session is authoritative for its goal until an explicit close
 records completed, deferred, or abandoned disposition. The manager must not
 silently continue that goal through an ordinary non-Flow workflow. Runtime
-`nextAction` is authoritative workflow state, not a new permission grant.
+`nextAction` is durable default workflow direction, not a new permission grant.
+Environment-sensitive transition guards remain authoritative when a mutation is
+attempted.
+
+Before every manager-owned lifecycle mutation, including direct `/flow-plan` or
+`/flow-run` use, the manager compares the compact-projected goal with the current
+request. Exact projected recovery of an already-accepted close runs first and
+grants no authority for new work. The comparison is a semantic judgment made by
+the manager, not a runtime intent classifier. A continuation or compatible
+narrowing may proceed. A materially new or expanded request causes no mutation
+and has not started; the manager offers to continue, defer, or abandon the
+active work. A completed but unclosed session is closed as completed before a
+new request begins. A same-goal approved plan-only request reports the immutable
+plan and current progress, then stops without saving, approving, or starting a
+run.
 
 Within existing implementation authority, the manager continues after plan
-approval, each feature outcome, and an in-scope failed-review repair without
-asking again. It pauses only for a material product or scope choice, missing
-authority for an external Git or release action, a hard operational failure, or
-the user's explicit choice of deferred or abandoned closure. Only the user may
-select either non-completed disposition.
+approval and each passing feature outcome. Only the first in-scope recorded
+failed review may be reset and retried automatically as one fresh full run. A
+`[scope-blocker]` checkpoints immediately; any other blocking finding is
+in-scope by default. A second recorded failed review for the feature projects
+`await-user-direction`: the
+manager reports the blockers and waits for explicit user direction before one
+additional attempt. It does not leave Flow while waiting. It otherwise pauses
+only for a material product or scope choice, missing authority for an external
+Git or release action, a hard operational failure, or the user's explicit choice
+of deferred or abandoned closure. Only the user may select either non-completed
+disposition.
 
 Flow does not own plugin installation, automatic activation, cache cleanup,
 configuration repair, optional worker admission, audit schemas, benchmark
 promotion, replay reporting, narrow correction protocols, durable wave state,
 worker recovery, concurrent active features, or cross-version active-state
-migration.
+migration. It also owns no persisted request-intent classifier, retry counter,
+or delivery document.
 
 ## Session v5
 
 - Session v5 is the only active schema. Older documents never hydrate as active
   state and old archives never authorize work.
+- Within Session v5, compatibility runs from older writer to newer reader. An
+  older Flow build is not a supported reader after a newer build writes values
+  beyond its historical bounds. In particular, a run may retain 64 exact
+  planned gates plus one separate broad observation. Users must finish or close
+  active work before downgrade; Flow adds no rollback capability layer.
 - A plan is a bounded DAG and is immutable after approval.
 - If implementation would require material scope outside an approved plan, stop
   editing. Finish the approved plan or explicitly close it before creating a
   different plan; never replan the active approved session in place.
 - A feature run is the canonical attempt aggregate. It contains validation,
   review, result, and artifacts; status and progress are derived.
+- Runs remain in strictly increasing durable start-revision order, so derived
+  latest-attempt delivery cannot disagree with canonical progress.
 - At most one run is active. Dependencies must be complete before a run starts.
 - A failed review blocks the run. Reset supersedes the selected feature and its
-  dependent runs; the next attempt starts empty.
+  dependent runs; the next attempt starts empty. Automatic convergence is
+  bounded by recorded failed review results: only the first in-scope failure may
+  retry automatically, `[scope-blocker]` checkpoints immediately, and the second
+  failure projects `await-user-direction` before another user-authorized attempt.
+  Pre-review resets and rejected stale-source submissions do not increment that
+  derived count.
 - Completed close is allowed only after every feature has a passing current run.
   Deferred and abandoned close explicitly supersede active work.
 
@@ -69,6 +102,16 @@ output digest, and source binding are the evidence. `broad` means the
 repository's canonical applicable gate or a justified equivalent, not merely a
 caller label.
 
+A command becomes an exact planned command only when its stored bytes equal one
+entry in the active feature's validation list; Flow does not parse validation
+prose into commands. Once that exact command has failed or produced incomplete
+output on any attempt, reset preserves the known failure. Prospectively, a new
+review remains unavailable until the active run has a latest complete exit-zero
+observation of that same command for the review's current source; a different
+passing broad command cannot discharge it. Accepted same-schema Session v5
+pending or completed reviews are grandfathered. Flow neither reopens them nor
+adds a retroactive planned-gate veto during completion or close.
+
 An armed capture waits at most 15 minutes for its exact Bash command to begin.
 An unrelated Bash command cancels it. Once the exact command begins, the
 after-hook remains eligible even if the command finishes after that original
@@ -91,6 +134,19 @@ active, every caller with tool access may receive the read-only result of an
 exact previously accepted completion request without validation cancellation or
 a session write. A failed verdict requires an evidence-backed blocking finding;
 a passed verdict cannot contain one.
+
+New reviewer guidance uses only an optional `[scope-blocker]` summary marker
+when satisfying a blocking finding would require material work outside the
+approved plan. All other routing comes from the existing severity and recorded
+failure count. This remains a convention inside the finding shape, not a
+structured Session or audit schema.
+
+`artifactsChanged` is a caller declaration associated with the review
+assignment. Flow validates bounded normalized workspace-relative paths, but it
+does not prove that each path exists or changed and does not infer an exhaustive
+Git delta. User-facing delivery therefore calls them Flow-reported artifacts and
+separates paths reported by latest attempts from paths reported only by
+superseded attempts.
 
 Result submission is the reviewer's sole lifecycle mutation. `flow_status` may
 fail-closed quarantine unreadable active state; that is recovery maintenance,
@@ -145,6 +201,24 @@ manager contract.
 - Close first records the terminal state durably, then publishes a no-overwrite
   archive and clears active state; compact status projects the exact retry
   request needed to converge after interruption.
+- Exact active close replay confirms that the canonical active bytes still
+  match, synchronizes the file and `.flow` durability boundary, and does not
+  rewrite the Session. Exact archived replay re-synchronizes no-overwrite
+  publication and active cleanup, including when cleanup is already absent. A
+  delayed replay must not clear a different active session.
+- An archive or active-state collision preserves both documents and returns
+  `manualRecoveryRequired` with no `archiveRetry`; callers stop automatic retry
+  rather than overwrite or delete either side. Closed status re-derives an
+  archive collision from the existing history document, so interruption cannot
+  restore automatic retry. This behavior adds no persisted recovery state.
+- Every close path whose terminal state was durably accepted returns the same
+  derived `workflowData.delivery`: initial success, archive-pending recovery,
+  exact retry, and delayed replay from history. The projection contains the
+  goal, closure, completed/total progress, every planned feature's attempt count,
+  latest outcome, terminal findings, and Flow-reported artifact groups.
+- Delivery is recomputed from the canonical closed Session or archive. It is not
+  written into Session v5 or archive JSON and is not a report artifact unless
+  the user separately requests one.
 - Source identity hashes sorted effective workspace path/type/content tuples;
   `.git` and `.flow` are excluded. It is a content fingerprint, not a Git audit
   chain.
@@ -155,13 +229,24 @@ manager contract.
 
 ## OpenCode surface
 
+Compact `flow_status` includes the active goal so the manager can align the
+current request before mutation. When blocked, it also includes
+`blockedFeature.featureId`, the latest attempt number, and a
+`failedReviewCount` derived only from recorded failed review results. No intent
+classification or retry budget is persisted. After the second failure its
+`nextAction` is `await-user-direction`. The manager checkpoints a
+`[scope-blocker]` immediately without persisting tag-specific state. On the
+first failure, compact `flow_feature_reset` is only the count-derived default;
+the manager reads detail once before reset, and a scope-blocker refines that
+default to a checkpoint.
+
 ### Commands
 
 | Command | Contract |
 | --- | --- |
 | `flow-auto` | Normal end-to-end driver for the authorized lifecycle. |
-| `flow-plan` | Plan-only/advanced creation, revision, and approval. |
-| `flow-run` | Advanced/recovery execution of one approved feature. |
+| `flow-plan` | Plan-only/advanced creation, revision, and approval; same-goal approved plans are reported without mutation. |
+| `flow-run` | Advanced/recovery execution of one approved feature after request alignment. |
 | `flow-review` | Internal/recovery dispatch for a runtime-created reviewer assignment. |
 | `flow-status` | Advanced/recovery projection of compact durable state and the next action. |
 
@@ -174,7 +259,7 @@ user starting point.
 | Tool | Contract |
 | --- | --- |
 | `flow_guidance` | Load one package-owned guide. |
-| `flow_status` | Read compact, execution, detail, or reviewer state. |
+| `flow_status` | Read compact, execution, detail, or reviewer state; compact state includes the goal and derived blocked convergence summary. |
 | `flow_plan_save` | Create or replace the active draft plan. |
 | `flow_plan_approve` | Approve and lock the draft plan. |
 | `flow_run_start` | Start one runnable approved feature. |
@@ -182,11 +267,12 @@ user starting point.
 | `flow_review_start` | Create the run's independent review assignment. |
 | `flow_feature_complete` | Reviewer-only new result submission; exact accepted requests remain read-only replays while the Session v5 workflow is active. |
 | `flow_feature_reset` | Supersede a failed attempt for a fresh full retry. |
-| `flow_session_close` | Close and archive the session. |
+| `flow_session_close` | Close and archive the session, returning the same concise derived delivery on every durably accepted close path. |
 
 The nine lifecycle tools accept a nested `request`, return state under
 `workflowData`, and require the current revision plus a stable operation ID for
-mutations. `flow_guidance` instead accepts a guide ID and returns Markdown.
+mutations. `flow_session_close` additionally returns derived delivery under
+`workflowData`; `flow_guidance` instead accepts a guide ID and returns Markdown.
 
 ### Guides
 

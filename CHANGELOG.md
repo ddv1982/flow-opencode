@@ -6,6 +6,44 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.5.0] - 2026-07-22
+
+Convergence-safe recovery lore makes long Flow sessions easier to trust
+without adding another state model:
+
+- Before every manager-owned mutation, Flow aligns the request with the active
+  goal. Same-goal approved plan-only requests report immutable plan progress and
+  stop; materially new or expanded work waits for explicit closure. Exact
+  cleanup of an already-accepted close runs before alignment and grants no new
+  work authority.
+- Prospectively, a known failed exact plan-listed command needs a byte-identical
+  current-source pass at new review admission. Accepted Session v5 pending and
+  completed reviews remain grandfathered; close adds no retroactive veto.
+- A run can retain the maximum 64 exact planned gates plus separate broad
+  evidence. This widens a Session v5 writer bound, so active rollback to an
+  older Flow build is intentionally unsupported rather than hidden behind a
+  migration or capability layer.
+- Only the first in-scope failed review receives one automatic fresh full retry.
+  A `[scope-blocker]` is the sole special finding marker and checkpoints
+  immediately, while a second failure projects `await-user-direction` before
+  another user-authorized attempt.
+- Every durably accepted close returns the same concise delivery summary on
+  success, archive recovery, or replay. Delivery is derived rather than
+  persisted, reporting each feature's attempt count, latest outcome, terminal
+  findings, and explicitly Flow-reported artifact paths rather than an exact Git
+  delta.
+- Exact close replay confirms the existing active document and filesystem
+  durability boundary without rewriting Session v5. Archive recovery re-syncs
+  publication and cleanup even when a previous attempt already removed active
+  state; closed status re-derives a conflicting archive so automatic retry stays
+  stopped for manual inspection after interruption.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.5.0 --global --force
+```
+
 ## [6.4.0] - 2026-07-21
 
 Continuous-flow lore keeps an authorized goal inside Flow while preserving the

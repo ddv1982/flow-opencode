@@ -13,30 +13,37 @@ parallel before it validates and reviews the combined result.
 
 Once a Flow session starts, it remains the workflow for that goal until Flow
 records completed, deferred, or abandoned closure. It never silently falls back
-to ordinary non-Flow coding.
+to ordinary non-Flow coding, and it does not fold a materially different request
+into the active goal.
 
 ## Install
 
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.4.0 --global --force
+opencode plugin opencode-plugin-flow@6.5.0 --global --force
 ```
 
 Omit `--global` for project scope. Exact version pins do not update
-automatically. To update, replace `6.4.0` with the new release and rerun the
+automatically. To update, replace `6.5.0` with the new release and rerun the
 command.
 
 Before upgrading from Flow v5 or earlier, finish or explicitly close any active
 session with its original Flow version. Flow v6 opens only Session v5 active
 state; older archives remain inert history.
 
+Do not roll an active session back to an older Flow build after a newer build
+has written it. Newer v6 builds read earlier Session v5 state, but Session v5 is
+not a promise that older readers understand later widened safety bounds. Finish
+or close the active session before downgrading; Flow adds no capability or
+migration layer for rollback.
+
 The equivalent manual project configuration is:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.4.0"]
+  "plugin": ["opencode-plugin-flow@6.5.0"]
 }
 ```
 
@@ -57,9 +64,25 @@ Start a complete workflow:
 Flow inspects the worktree, proposes a feature plan, and asks for approval
 unless your request already authorized implementation. It then runs one
 runnable feature at a time, validates the actual workspace, obtains an
-independent review, and repeats until it can close the session. Existing
-implementation authority carries across approval, feature outcomes, and
-in-scope failed-review repairs; Flow does not ask for the same permission again.
+independent review, and repeats until it can close the session.
+
+Before every manager-owned Flow mutation, including direct `/flow-plan` and
+`/flow-run` use, the manager compares the current request with the active goal.
+A projected `archiveRetry` is the one exception: it finishes an already-accepted
+close before that comparison and grants no authority for new work.
+A continuation or compatible narrowing may proceed. A materially new or
+expanded request does not start or mutate the active session; Flow offers to
+continue, defer, or abandon the active work. If that work is completed but not
+closed, Flow closes it as completed before starting the new request.
+
+Existing implementation authority carries across approval and feature outcomes.
+Only the first in-scope failed review automatically resets for one fresh full
+retry; a `[scope-blocker]` checkpoints immediately. A second failed review
+projects `await-user-direction`, so Flow reports the blocker and waits for
+explicit direction before one additional attempt. The active session remains
+authoritative while it waits. Ordinary blocking findings are in-scope by
+default; a reviewer uses `[scope-blocker]` only when the required repair would
+materially exceed the approved plan.
 
 For plan-only or advanced use, plan first:
 
@@ -70,6 +93,8 @@ For plan-only or advanced use, plan first:
 Review the proposed plan and approve it conversationally. `/flow-plan` does not
 silently grant permission to implement, commit, push, or publish. After
 approval of a plan-only request, `/flow-run` can run or recover one feature.
+Repeating a same-goal plan-only request after approval reports the immutable plan
+and current progress, then stops without rewriting the plan or starting work.
 
 `/flow-run` and `/flow-status` are advanced/recovery controls. At any point,
 `/flow-status` reports the durable state and next action.
@@ -81,9 +106,15 @@ approval of a plan-only request, `/flow-run` can run or recover one feature.
 3. The manager implements it serially or integrates an optional bounded worker
    wave.
 4. Flow observes the exact armed validation command against the current
-   workspace, then creates one independent review assignment.
+   workspace, then creates one independent review assignment. At new review
+   admission, a known-failed exact planned gate needs a current-source pass;
+   already accepted Session v5 pending or completed reviews are not reopened or
+   vetoed later at close.
 5. A passing feature advances the plan. A blocked feature is reset as a fresh
-   full attempt. The final passing feature allows explicit closure.
+   full attempt within the retry boundary above. The final passing feature
+   allows explicit closure. Every accepted close returns a concise delivery
+   summary with each feature's attempt count, latest outcome, and terminal
+   findings, derived from Flow's recorded state.
 
 State lives in `.flow/session.json`, so `/flow-status` can recover the next
 action after a restart or context change.
@@ -116,11 +147,20 @@ plan-only, advanced, internal, or recovery controls.
 
 ## Recovery
 
-Start with `/flow-status`; its next action is authoritative workflow state, not
-permission to exceed the user's authority. Do not hand-edit `.flow/session.json`
-to bypass a gate. If validation, review, locking,
+Start with `/flow-status`; its next action is durable default workflow
+direction, not permission to exceed the user's authority. For a first failed
+review, read detail once before reset because scope-blocker findings refine the
+compact default. Environment-sensitive transition guards remain authoritative
+when a mutation is attempted. Do not hand-edit
+`.flow/session.json` to bypass a gate. If validation, review, locking,
 fingerprinting, or archive publication fails, follow the focused steps in
 [troubleshooting](docs/troubleshooting.md).
+
+For an interrupted accepted close, replay the projected `archiveRetry.request`
+exactly once. Flow confirms the existing bytes without rewriting Session v5 and
+re-confirms archive cleanup. A real archive collision removes the automatic
+retry instruction and requires manual inspection; preserve both documents and
+do not overwrite, delete, or loop the request.
 
 ## Development
 

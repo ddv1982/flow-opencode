@@ -2,6 +2,7 @@ import { artifactIssues } from "./artifact.js";
 import {
 	MAX_REVIEW_FINDINGS,
 	MAX_SESSION_ID_LENGTH,
+	MAX_VALIDATION_ID_LENGTH,
 	MAX_VALIDATIONS_PER_RUN,
 } from "./limits.js";
 import { closureOperationIssue, operationInputDigest } from "./operation.js";
@@ -24,6 +25,7 @@ import type {
 	ValidationScope,
 } from "./session.js";
 import { reviewResultSemanticIssues } from "./session.js";
+import { unresolvedKnownFailedPlanCommands } from "./validation.js";
 
 export type TransitionEnvironment = Readonly<{
 	newId: (kind: "session" | "run" | "validation" | "review") => string;
@@ -400,8 +402,13 @@ export function recordValidation(
 		outputComplete: boolean;
 	}>,
 ): MutationResult<ValidationObservation> {
-	if (input.captureId.length < 1 || input.captureId.length > 256) {
-		fail("Validation capture id must contain 1-256 characters.");
+	if (
+		input.captureId.length < 1 ||
+		input.captureId.length > MAX_VALIDATION_ID_LENGTH
+	) {
+		fail(
+			`Validation capture id must contain 1-${MAX_VALIDATION_ID_LENGTH} characters.`,
+		);
 	}
 	const prior = session.runs
 		.flatMap((run) => run.validations)
@@ -500,6 +507,16 @@ export function startReview(
 	}
 	if (run.reviews.length > 0) {
 		fail("Reset the feature before starting another full review.");
+	}
+	const unresolved = unresolvedKnownFailedPlanCommands(
+		session,
+		run,
+		input.sourceDigest,
+	);
+	if (unresolved.length > 0) {
+		fail(
+			`Review requires passing exact planned commands for the current workspace content: ${unresolved.map((command) => JSON.stringify(command)).join(", ")}.`,
+		);
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
 	const applicable = run.validations.filter(
@@ -820,6 +837,7 @@ export function sessionInvariantIssues(session: Session): string[] {
 	const validationIds = new Set<string>();
 	const reviewIds = new Set<string>();
 	let activeCount = 0;
+	let previousRunStartedRevision = 0;
 	for (const run of session.runs) {
 		if (runIds.has(run.id)) issues.push(`Duplicate run id '${run.id}'.`);
 		runIds.add(run.id);
@@ -828,6 +846,13 @@ export function sessionInvariantIssues(session: Session): string[] {
 		if (run.startedRevision < 1 || run.startedRevision > session.revision) {
 			issues.push(`Run '${run.id}' has an invalid start revision.`);
 		}
+		if (run.startedRevision <= previousRunStartedRevision) {
+			issues.push("Runs must remain in their durable start order.");
+		}
+		previousRunStartedRevision = Math.max(
+			previousRunStartedRevision,
+			run.startedRevision,
+		);
 		if (run.reviews.length > 1) {
 			issues.push(`Run '${run.id}' has more than one review.`);
 		}

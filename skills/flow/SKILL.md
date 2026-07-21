@@ -6,10 +6,10 @@ description: Drive a Flow goal from planning through implementation, validation,
 # Flow
 
 Flow is a small state ledger around coding work. An active Flow session is
-authoritative for its goal until completed, deferred, or abandoned closure; do
-not silently fall back to ordinary non-Flow coding. The root manager owns
+authoritative for its goal until completed, deferred, or abandoned closure.
+Do not silently fall back to ordinary non-Flow coding. The root manager owns
 the session, integration, validation, review dispatch, reset, closure, and every
-lifecycle mutation except review submission. Bounded `flow-worker`
+manager-owned lifecycle mutation. Bounded `flow-worker`
 instances may contribute disjoint work inside the active feature. The reserved
 `flow-reviewer` independently reviews and submits its own result through
 `flow_feature_complete`; it cannot edit the workspace or make any other
@@ -18,25 +18,50 @@ lifecycle mutation.
 ## Route from status
 
 1. Call `flow_status { request: { view: "compact" } }` first. Trust its
-   projection over conversation memory. Treat `nextAction` as authoritative
-   workflow state, not permission to exceed or a reason to discard existing
-   user authority.
-2. If there is no session or the plan is still a draft, call
+   projection over conversation memory. Treat `nextAction` as the durable
+   default workflow direction, not permission to exceed or a reason to discard
+   existing user authority.
+   If compact status contains `archiveRetry`, the close was already accepted:
+   call `flow_session_close` once with that projected request byte-for-byte,
+   then refresh compact status. Stop if archive publication remains
+   unconfirmed; otherwise continue from the refreshed projection. This exact
+   cleanup grants no new work, so it precedes goal alignment.
+   Before any other manager-owned lifecycle mutation, align the compact-projected
+   goal with the current user request. Continuation and compatible narrowing
+   proceed inside the approved goal. Compatible narrowing changes method or
+   emphasis only; it must not add, drop, reorder, or weaken an approved
+   requirement or feature outcome. For materially new or expanded work,
+   perform no mutation. Say the new request has not started, and offer to
+   continue the active goal, defer it, or abandon it. A completed-but-unclosed
+   session must close as completed before the new request proceeds. This
+   comparison is conversational only: create no queue, classifier, or new
+   state. A durable `nextAction` can still be rejected after status by an
+   environment-sensitive guard; refresh compact status and handle the exact
+   rejection instead of forcing a stale action.
+2. If the user asked only for a plan and an approved same-goal session already
+   exists, load `flow_status { request: { view: "detail" } }` once. Report the
+   immutable active plan and current progress, then stop. Do not call
+   `flow-plan` or `flow-run`.
+3. If there is no session or the plan is still a draft, call
    `flow_guidance { id: "flow-plan" }` and follow that contract. Stop after
    planning when the user asked for a plan only.
-3. If an approved feature is ready or already running, call
+4. If an approved feature is ready, running, or blocked, call
    `flow_guidance { id: "flow-run" }` and follow that contract for exactly that
-   feature.
-4. After the feature outcome, read compact status again. Start the next ready
-   feature, repair an in-scope failed review, report a real blocker, or close a
-   completed session with one `flow_session_close` request.
+   feature, including its retry and checkpoint routing.
+5. After `flow-run` stops, read compact status again. Reuse its one detail
+   projection for any blocked handoff or checkpoint. Otherwise start the next
+   ready feature or close a completed session with one `flow_session_close`
+   request.
 
-Within existing implementation authority, continue after approval, every
-feature outcome, and an in-scope failed-review reset and repair without asking
-again. Pause only for a material product or scope choice, missing authority for
-an external Git or release action, a hard operational failure, or the user's
-explicit selection of deferred or abandoned closure. Only the user may choose
-either non-completed closure kind.
+Within existing implementation authority, continue after approval and every
+passing feature outcome without asking again. For a blocked outcome, follow the
+loaded `flow-run` retry and checkpoint contract. The session remains
+authoritative while blocked.
+
+Pause only for a convergence checkpoint, a material product or scope choice,
+missing authority for an external Git or release action,
+a hard operational failure, or the user's explicit choice of deferred or
+abandoned closure. Only the user may choose either non-completed kind.
 
 Core contracts are bundled in the plugin; load them through `flow_guidance` and
 do not depend on native skill discovery. If a required Flow tool is unavailable,
@@ -64,22 +89,30 @@ report that the plugin is not fully loaded instead of simulating state changes.
 - Do not stage, commit, push, publish, or mutate releases unless the user
   explicitly asks for that Git or release action.
 
+## Blocked handoff
+
+A blocked handoff must be self-contained and label the result overall
+incomplete. From the one detail projection, report the goal and progress;
+blocked feature, attempt, failure count, and findings; completed and untouched
+features; validation and artifact evidence; Git and release mutation status;
+and whether the newest request started, mapped to the goal, or was held.
+
 ## Recovery
 
-On confusion or interruption, read compact status and follow its next action.
-Use execution status for the active feature and reviewer status for a returned
-assignment id. Redispatch a pending assignment after interruption or an
-unconfirmed reviewer return; the manager never invents or submits a verdict. If
-completion reports `Workspace content changed after review started`, call
-`flow_feature_reset`; that source-stale assignment must not be redispatched.
-Start a fresh run and repeat full validation and review. After the reviewer
-returns, read compact status to learn the durable outcome. If status is closed
-with `archiveRetry`, call
-`flow_session_close` with that projected request byte-for-byte; do not create a
-new operation id or revision. Never infer completion, retry count, or closure
-from prose.
+On confusion or interruption, read compact status and route with the rules
+above; load `flow-run` for an active or blocked feature and apply its exact
+review-recovery path. Use execution status for active work and reviewer status
+for a returned assignment id. Never invent or submit a verdict, or infer
+completion, retry count, or closure from prose.
 
 For a newly completed session, close with one request containing the
 status-projected session id, a fresh operation id, current revision, closure
 kind, and optional summary. Repeating that exact request converges; there is no
 separate retry mode.
+
+After a durably accepted close, build the final handoff from
+`workflowData.delivery`. For each feature, report its attempt count, latest
+outcome, and terminal findings. Label its artifact groups Flow-reported
+artifacts from latest attempts and Flow-reported artifacts from superseded
+attempts only. Never describe them as an exact Git delta. Do not create a
+report unless the user asks for one.

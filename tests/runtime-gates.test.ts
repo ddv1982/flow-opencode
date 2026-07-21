@@ -1,97 +1,31 @@
 import { describe, expect, test } from "bun:test";
 import { UnreadableFlowSessionError } from "../src/application/errors.js";
-import {
-	createFlowService,
-	type FlowResponse,
-	type FlowService,
-} from "../src/application/flow-service.js";
-import type {
-	SessionRepository,
-	SessionTransaction,
-} from "../src/application/ports/session-repository.js";
+import { createFlowService } from "../src/application/flow-service.js";
+import type { SessionTransaction } from "../src/application/ports/session-repository.js";
 import {
 	persistObservedValidation,
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
-import type {
-	Plan,
-	ReviewAssignment,
-	Session,
-	SourceDigest,
-} from "../src/domain/session.js";
-import type { TransitionEnvironment } from "../src/domain/transitions.js";
-
-const FEATURE = "runtime-kernel";
-const SOURCE_A = `sha256:${"a".repeat(64)}` as SourceDigest;
-const SOURCE_B = `sha256:${"b".repeat(64)}` as SourceDigest;
-const OUTPUT = `sha256:${"c".repeat(64)}` as SourceDigest;
-
-const plan: Plan = {
-	summary: "Implement the runtime kernel.",
-	overview: "Exercise the public application boundary.",
-	requirements: ["Persist validation directly in Session v5."],
-	decisions: ["Use a single final review for the final feature."],
-	features: [
-		{
-			id: FEATURE,
-			title: "Runtime kernel",
-			summary: "Implement and verify the kernel.",
-			targets: ["src"],
-			validation: ["bun test"],
-			dependsOn: [],
-		},
-	],
-};
-
-class MemorySessionRepository implements SessionRepository {
-	session: Session | null = null;
-	sourceDigest = SOURCE_A;
-	sourceDigestFailure: Error | null = null;
-	archiveFailure: Error | null = null;
-	readFailure: Error | null = null;
-	quarantineCount = 0;
-	saveCount = 0;
-	transactionCount = 0;
-	readonly archives = new Map<string, Session>();
-
-	readonly transaction: SessionTransaction = {
-		load: () => Promise.resolve(this.session),
-		loadArchive: (sessionId) =>
-			Promise.resolve(this.archives.get(sessionId) ?? null),
-		save: (session) => {
-			this.saveCount += 1;
-			this.session = session;
-			return Promise.resolve(session);
-		},
-		archiveAndClear: (session) => {
-			if (this.archiveFailure) return Promise.reject(this.archiveFailure);
-			this.archives.set(session.id, session);
-			this.session = null;
-			return Promise.resolve();
-		},
-		quarantineUnreadable: () => {
-			this.quarantineCount += 1;
-			this.session = null;
-			return Promise.resolve("memory://quarantined-session");
-		},
-		computeSourceDigest: () =>
-			this.sourceDigestFailure
-				? Promise.reject(this.sourceDigestFailure)
-				: Promise.resolve(this.sourceDigest),
-	};
-
-	read(): Promise<Session | null> {
-		if (this.readFailure) return Promise.reject(this.readFailure);
-		return Promise.resolve(this.session);
-	}
-
-	transact<T>(
-		task: (transaction: SessionTransaction) => Promise<T>,
-	): Promise<T> {
-		this.transactionCount += 1;
-		return task(this.transaction);
-	}
-}
+import type { Plan, Session } from "../src/domain/session.js";
+import {
+	activeReview,
+	approveSession,
+	deterministicEnvironment,
+	expectOk,
+	FEATURE,
+	MemorySessionRepository,
+	OUTPUT,
+	plan,
+	recordObservedValidation,
+	resetFeatureRun,
+	revision,
+	SOURCE_A,
+	SOURCE_B,
+	startFeatureRun,
+	startReviewedRun,
+	startSession,
+	submitReview,
+} from "./runtime-test-support.js";
 
 class CompletionRaceRepository extends MemorySessionRepository {
 	private completionReadReleases: Array<() => void> | null = null;
@@ -128,68 +62,132 @@ class CompletionRaceRepository extends MemorySessionRepository {
 	}
 }
 
-function deterministicEnvironment(): TransitionEnvironment {
-	const sequences = new Map<string, number>();
-	return {
-		newId(kind) {
-			const next = (sequences.get(kind) ?? 0) + 1;
-			sequences.set(kind, next);
-			return `${kind}-${next}`;
-		},
-	};
-}
-
-function revision(repository: MemorySessionRepository): number {
-	if (!repository.session) throw new Error("Expected an active session.");
-	return repository.session.revision;
-}
-
-function activeReview(repository: MemorySessionRepository): ReviewAssignment {
-	const review = repository.session?.runs
-		.find((run) => run.state === "active")
-		?.reviews.at(-1);
-	if (!review) throw new Error("Expected a review assignment.");
-	return review;
-}
-
-function expectOk(response: FlowResponse): void {
-	expect(response.status).toBe("ok");
-	if (response.status !== "ok") throw new Error(response.summary);
-}
-
-async function startSession(
-	repository: MemorySessionRepository,
-	environment: TransitionEnvironment,
-): Promise<FlowService> {
-	const flow = createFlowService(repository, environment);
-	const saved = await flow.planSave({
-		request: {
-			operationId: "plan-save-runtime",
-			expectedRevision: 0,
-			goal: "Ship the runtime",
-			plan,
-		},
-	});
-	expectOk(saved);
-	const approved = await flow.planApprove({
-		request: {
-			operationId: "plan-approve-runtime",
-			expectedRevision: revision(repository),
-		},
-	});
-	expectOk(approved);
-	const started = await flow.runStart({
-		request: {
-			operationId: "run-start-runtime",
-			expectedRevision: revision(repository),
-			featureId: FEATURE,
-		},
-	});
-	expectOk(started);
-	return flow;
-}
-
 describe("Flow application runtime gates", () => {
+	test("keeps the active goal visible in the compact projection", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+
+		const status = await flow.status({ request: { view: "compact" } });
+
+		expectOk(status);
+		expect(status.workflowData.projection).toMatchObject({
+			goal: "Ship the runtime",
+		});
+	});
+
+	test("requires the exact planned command again after a failed attempt", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await recordObservedValidation(repository, {
+			captureId: "capture-planned-failure",
+			exitCode: 1,
+		});
+		expectOk(
+			await flow.featureReset({
+				request: {
+					operationId: "reset-planned-failure",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+				},
+			}),
+		);
+		expectOk(
+			await flow.runStart({
+				request: {
+					operationId: "run-start-after-planned-failure",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+				},
+			}),
+		);
+		await recordObservedValidation(repository, {
+			captureId: "capture-broad-substitute",
+			command: "bun test tests/runtime-gates.test.ts",
+		});
+
+		const substituteStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expectOk(substituteStatus);
+		expect(substituteStatus.workflowData.projection).toMatchObject({
+			nextAction: "flow_validation_start",
+		});
+
+		await recordObservedValidation(repository, {
+			captureId: "capture-planned-retry",
+		});
+		const plannedStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expectOk(plannedStatus);
+		expect(plannedStatus.workflowData.projection).toMatchObject({
+			nextAction: "flow_review_start",
+		});
+	});
+
+	test("projects only actual failed reviews in the blocked convergence summary", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await resetFeatureRun(flow, repository, FEATURE, "before-review");
+		await startReviewedRun(flow, repository, {
+			suffix: "failed-review-2",
+			artifacts: ["src/failed-review-2.ts"],
+		});
+		await submitReview(flow, repository, {
+			suffix: "failed-review-2",
+			summary: "Attempt 2 remains blocked.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary: "Blocking finding 2.",
+					evidence: "src/failed-review-2.ts:1",
+				},
+			],
+		});
+		const firstFailure = await flow.status({ request: { view: "compact" } });
+		expectOk(firstFailure);
+		expect(firstFailure.workflowData.projection).toMatchObject({
+			status: "blocked",
+			nextAction: "flow_feature_reset",
+			blockedFeature: {
+				featureId: FEATURE,
+				attempt: 2,
+				failedReviewCount: 1,
+			},
+		});
+
+		await resetFeatureRun(flow, repository, FEATURE, "failed-review-2");
+		await startReviewedRun(flow, repository, {
+			suffix: "failed-review-3",
+			artifacts: ["src/failed-review-3.ts"],
+		});
+		await submitReview(flow, repository, {
+			suffix: "failed-review-3",
+			summary: "Attempt 3 remains blocked.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary: "Blocking finding 3.",
+					evidence: "src/failed-review-3.ts:1",
+				},
+			],
+			terminalDisposition: "observed_unsubmitted",
+		});
+		const secondFailure = await flow.status({ request: { view: "compact" } });
+		expectOk(secondFailure);
+		expect(secondFailure.workflowData.projection).toMatchObject({
+			status: "blocked",
+			nextAction: "await-user-direction",
+			blockedFeature: {
+				featureId: FEATURE,
+				attempt: 3,
+				failedReviewCount: 2,
+			},
+		});
+	});
+
 	test("does not quarantine state repaired before the transaction lock", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = createFlowService(repository, deterministicEnvironment());
@@ -363,107 +361,35 @@ describe("Flow application runtime gates", () => {
 			],
 		};
 		const repository = new MemorySessionRepository();
-		const flow = createFlowService(repository, deterministicEnvironment());
-		expectOk(
-			await flow.planSave({
-				request: {
-					operationId: "plan-save-multi-feature",
-					expectedRevision: 0,
-					goal: "Ship the multi-feature runtime",
-					plan: multiFeaturePlan,
-				},
-			}),
-		);
-		expectOk(
-			await flow.planApprove({
-				request: {
-					operationId: "plan-approve-multi-feature",
-					expectedRevision: revision(repository),
-				},
-			}),
-		);
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			goal: "Ship the multi-feature runtime",
+			plan: multiFeaturePlan,
+			suffix: "multi-feature",
+		});
+		await startReviewedRun(flow, repository, {
+			featureId: foundation,
+			suffix: "foundation",
+			command: "bun test capture-foundation",
+			artifacts: ["src/domain/foundation.ts"],
+		});
+		await submitReview(flow, repository, {
+			featureId: foundation,
+			suffix: "foundation",
+			summary: "Runtime foundation completed.",
+			verdict: "passed",
+		});
 
-		async function recordPassingValidation(
-			featureId: string,
-			captureId: string,
-			scope: "focused" | "broad",
-		) {
-			const prepared = await prepareValidation(repository, {
-				expectedRevision: revision(repository),
-				featureId,
-				command: `bun test ${captureId}`,
-				scope,
-			});
-			return persistObservedValidation(repository, {
-				...prepared,
-				captureId,
-				exitCode: 0,
-				outputDigest: OUTPUT,
-				outputComplete: true,
-			});
-		}
-
-		expectOk(
-			await flow.runStart({
-				request: {
-					operationId: "run-start-foundation",
-					expectedRevision: revision(repository),
-					featureId: foundation,
-				},
-			}),
-		);
-		await recordPassingValidation(foundation, "capture-foundation", "focused");
-		expectOk(
-			await flow.reviewStart({
-				request: {
-					operationId: "review-start-foundation",
-					expectedRevision: revision(repository),
-					featureId: foundation,
-					artifactsChanged: [{ path: "src/domain/foundation.ts" }],
-					packet: {
-						summary: "Review the runtime foundation.",
-						riskLenses: ["state integrity"],
-					},
-				},
-			}),
-		);
-		const foundationReview = activeReview(repository);
-		expectOk(
-			await flow.featureComplete({
-				request: {
-					operationId: "feature-complete-foundation",
-					expectedRevision: revision(repository),
-					featureId: foundation,
-					assignmentId: foundationReview.id,
-					summary: "Runtime foundation completed.",
-					result: {
-						verdict: "passed",
-						findings: [],
-						terminalDisposition: "submitted",
-					},
-				},
-			}),
-		);
-
-		expectOk(
-			await flow.runStart({
-				request: {
-					operationId: "run-start-final-runtime",
-					expectedRevision: revision(repository),
-					featureId: FEATURE,
-				},
-			}),
-		);
-		const assignedFocused = await recordPassingValidation(
-			FEATURE,
-			"capture-final-focused",
-			"focused",
-		);
-		const assignedBroad = await recordPassingValidation(
-			FEATURE,
-			"capture-final-broad",
-			"broad",
-		);
+		await startFeatureRun(flow, repository, FEATURE, "final-runtime");
+		const assignedFocused = await recordObservedValidation(repository, {
+			captureId: "capture-final-focused",
+			command: "bun test capture-final-focused",
+			scope: "focused",
+		});
+		const assignedBroad = await recordObservedValidation(repository, {
+			captureId: "capture-final-broad",
+			command: "bun test capture-final-broad",
+			scope: "broad",
+		});
 		const review = await flow.reviewStart({
 			request: {
 				operationId: "review-start-final-runtime",
@@ -786,17 +712,6 @@ describe("Flow application runtime gates", () => {
 		expect(repository.session).toBeNull();
 		expect(repository.archives.get(sessionId)?.closure?.kind).toBe("completed");
 
-		const replayedClose = await flow.sessionClose(closeRequest);
-		expectOk(replayedClose);
-		expect(replayedClose.workflowData.operation).toMatchObject({
-			operationId: "close-runtime",
-			replayed: true,
-		});
-		expect(replayedClose.workflowData.projection).toMatchObject({
-			archived: true,
-			nextAction: null,
-			archiveRetry: null,
-		});
 		const archivedSession = repository.archives.get(sessionId);
 		if (!archivedSession?.closure)
 			throw new Error("Expected archived closure.");
@@ -815,26 +730,5 @@ describe("Flow application runtime gates", () => {
 			"not bound to a valid close operation",
 		);
 		repository.session = null;
-
-		const nextPlan = await flow.planSave({
-			request: {
-				operationId: "plan-save-next-session",
-				expectedRevision: 0,
-				goal: "Ship the next runtime",
-				plan,
-			},
-		});
-		expectOk(nextPlan);
-		const nextSession = await repository.read();
-		if (!nextSession) throw new Error("Expected the next active session.");
-		expect(nextSession.id).not.toBe(sessionId);
-
-		const delayedCloseReplay = await flow.sessionClose(closeRequest);
-		expectOk(delayedCloseReplay);
-		expect(delayedCloseReplay.workflowData.operation).toMatchObject({
-			operationId: "close-runtime",
-			replayed: true,
-		});
-		expect(await repository.read()).toBe(nextSession);
 	});
 });

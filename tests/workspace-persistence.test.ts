@@ -2,12 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";
 import {
 	access,
+	chmod,
 	mkdir,
 	mkdtemp,
 	readdir,
 	readFile,
 	realpath,
 	rm,
+	stat,
 	symlink,
 	writeFile,
 } from "node:fs/promises";
@@ -25,6 +27,7 @@ import {
 	archiveAndClearSession,
 	archivedSessionPath,
 	assertMutableWorkspaceRoot,
+	confirmActiveSessionDurability,
 	flowDir,
 	historyDir,
 	loadArchivedSession,
@@ -252,6 +255,55 @@ describe("atomic persistence and archival", () => {
 		expect(await loadSession(workspace)).toEqual(collision);
 	});
 
+	test("treats an unreadable existing archive as a preserved collision", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("unreadable-archive");
+		await saveSession(workspace, session);
+		await mkdir(historyDir(workspace));
+		await writeFile(
+			archivedSessionPath(workspace, session.id),
+			'{"version":5,"version":5}\n',
+		);
+
+		await expect(
+			archiveAndClearSession(workspace, session),
+		).rejects.toBeInstanceOf(ArchiveCollisionError);
+		expect(await loadSession(workspace)).toEqual(session);
+		expect(
+			await readFile(archivedSessionPath(workspace, session.id), "utf8"),
+		).toBe('{"version":5,"version":5}\n');
+	});
+
+	test("treats an unsafe archive directory as manual recovery", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("unsafe-history");
+		await saveSession(workspace, session);
+		await writeFile(historyDir(workspace), "not a directory\n");
+
+		await expect(
+			archiveAndClearSession(workspace, session),
+		).rejects.toBeInstanceOf(ArchiveCollisionError);
+		expect(await loadSession(workspace)).toEqual(session);
+		expect(await readFile(historyDir(workspace), "utf8")).toBe(
+			"not a directory\n",
+		);
+	});
+
+	test("preserves unreadable active state after publishing the archive", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("unreadable-active");
+		await saveSession(workspace, session);
+		await writeFile(sessionPath(workspace), '{"version":5,"version":5}\n');
+
+		await expect(
+			archiveAndClearSession(workspace, session),
+		).rejects.toBeInstanceOf(ArchiveCollisionError);
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
+			'{"version":5,"version":5}\n',
+		);
+	});
+
 	test("converges when an identical archive exists but active cleanup did not finish", async () => {
 		const workspace = await temporaryRoot();
 		const session = closedSession("crash-session");
@@ -264,6 +316,167 @@ describe("atomic persistence and archival", () => {
 
 		await archiveAndClearSession(workspace, session);
 
+		expect(await loadSession(workspace)).toBeNull();
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+	});
+
+	test("makes the complete archive namespace durable before active cleanup", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("archive-namespace-order");
+		await saveSession(workspace, session);
+		const canonicalWorkspace = assertMutableWorkspaceRoot(workspace);
+		const synchronized: Array<Readonly<{ path: string; active: boolean }>> = [];
+
+		await archiveAndClearSession(workspace, session, {
+			synchronizeDirectory: async (path) => {
+				synchronized.push({
+					path,
+					active: await exists(sessionPath(canonicalWorkspace)),
+				});
+			},
+		});
+
+		expect(synchronized).toEqual([
+			{ path: historyDir(canonicalWorkspace), active: true },
+			{ path: flowDir(canonicalWorkspace), active: true },
+			{ path: canonicalWorkspace, active: true },
+			{ path: flowDir(canonicalWorkspace), active: false },
+		]);
+		expect(await loadSession(workspace)).toBeNull();
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+	});
+
+	test("does not clear active state until an existing archive inode can be synchronized", async () => {
+		if (process.platform === "win32" || process.getuid?.() === 0) return;
+		const workspace = await temporaryRoot();
+		const session = closedSession("unsynchronized-existing-archive");
+		await saveSession(workspace, session);
+		await mkdir(historyDir(workspace));
+		const archive = archivedSessionPath(workspace, session.id);
+		await writeFile(archive, `${JSON.stringify(session, null, 2)}\n`);
+		await chmod(archive, 0o400);
+
+		try {
+			await expect(
+				archiveAndClearSession(workspace, session),
+			).rejects.toMatchObject({ code: "EACCES" });
+			expect(await loadSession(workspace)).toEqual(session);
+		} finally {
+			await chmod(archive, 0o600);
+		}
+
+		await archiveAndClearSession(workspace, session);
+		expect(await loadSession(workspace)).toBeNull();
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+	});
+
+	test("confirms the same active document durably without rewriting it", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("confirm-active");
+		await saveSession(workspace, session);
+		const path = sessionPath(workspace);
+		const bytesBefore = await readFile(path, "utf8");
+		const inodeBefore = (await stat(path)).ino;
+		const synchronized: string[] = [];
+
+		await confirmActiveSessionDurability(workspace, session, {
+			synchronizeDirectory: async (path) => {
+				synchronized.push(path);
+			},
+		});
+
+		const canonicalWorkspace = await realpath(workspace);
+		expect(synchronized).toEqual([
+			flowDir(canonicalWorkspace),
+			canonicalWorkspace,
+		]);
+		expect(await readFile(path, "utf8")).toBe(bytesBefore);
+		expect((await stat(path)).ino).toBe(inodeBefore);
+		await expect(
+			confirmActiveSessionDurability(
+				workspace,
+				closedSession("confirm-active", "Different close"),
+				{
+					synchronizeDirectory: async () => {
+						throw new Error("mismatched state must not be synchronized");
+					},
+				},
+			),
+		).rejects.toBeInstanceOf(ArchiveCollisionError);
+		expect(await readFile(path, "utf8")).toBe(bytesBefore);
+		await writeFile(path, '{"version":5,"version":5}\n');
+		await expect(
+			confirmActiveSessionDurability(workspace, session),
+		).rejects.toBeInstanceOf(ArchiveCollisionError);
+	});
+
+	test("re-syncs an interrupted archive publication before clearing active state", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("archive-sync-retry");
+		await saveSession(workspace, session);
+		const canonicalWorkspace = assertMutableWorkspaceRoot(workspace);
+		let archiveSyncAttempts = 0;
+		let flowSyncAttempts = 0;
+		let workspaceSyncAttempts = 0;
+		let activePresentDuringRetrySync = false;
+		const synchronizeDirectory = async (path: string) => {
+			if (path === historyDir(canonicalWorkspace)) {
+				archiveSyncAttempts += 1;
+				expect(
+					(await readdir(path)).some((name) => name.endsWith(".tmp")),
+				).toBe(false);
+				if (archiveSyncAttempts === 1) {
+					throw new Error("injected archive directory sync failure");
+				}
+				activePresentDuringRetrySync = await exists(
+					sessionPath(canonicalWorkspace),
+				);
+				return;
+			}
+			if (path === flowDir(canonicalWorkspace)) {
+				flowSyncAttempts += 1;
+				return;
+			}
+			expect(path).toBe(canonicalWorkspace);
+			workspaceSyncAttempts += 1;
+		};
+
+		await expect(
+			archiveAndClearSession(workspace, session, { synchronizeDirectory }),
+		).rejects.toThrow("injected archive directory sync failure");
+		expect(await loadSession(workspace)).toEqual(session);
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+
+		await archiveAndClearSession(workspace, session, { synchronizeDirectory });
+
+		expect(archiveSyncAttempts).toBe(2);
+		expect(flowSyncAttempts).toBe(2);
+		expect(workspaceSyncAttempts).toBe(1);
+		expect(activePresentDuringRetrySync).toBe(true);
+		expect(await loadSession(workspace)).toBeNull();
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+	});
+
+	test("re-syncs the Flow directory when identical archive cleanup is already absent", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("cleanup-sync-retry");
+		await saveSession(workspace, session);
+		await archiveAndClearSession(workspace, session);
+		const canonicalWorkspace = assertMutableWorkspaceRoot(workspace);
+		const synchronized: string[] = [];
+
+		await archiveAndClearSession(workspace, session, {
+			synchronizeDirectory: async (path) => {
+				synchronized.push(path);
+			},
+		});
+
+		expect(synchronized).toEqual([
+			historyDir(canonicalWorkspace),
+			flowDir(canonicalWorkspace),
+			canonicalWorkspace,
+			flowDir(canonicalWorkspace),
+		]);
 		expect(await loadSession(workspace)).toBeNull();
 		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
 	});
