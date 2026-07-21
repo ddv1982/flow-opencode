@@ -34,7 +34,8 @@ export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
 		mode: "subagent",
 		hidden: true,
-		description: "Independent read-only reviewer for one Flow assignment.",
+		description:
+			"Independent workspace-read-only reviewer that submits one Flow result.",
 		prompt: compileFlowPromptSurface("flow-reviewer"),
 		permission: {
 			edit: "deny",
@@ -44,6 +45,7 @@ export const FLOW_CORE_AGENTS = {
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
+			flow_feature_complete: "allow",
 		},
 	},
 	"flow-worker": {
@@ -86,7 +88,7 @@ export const FLOW_CORE_COMMANDS = {
 		template: compileFlowPromptSurface("flow-run"),
 	},
 	"flow-review": {
-		description: "Run one independent read-only Flow review",
+		description: "Run one independent workspace-read-only Flow review",
 		agent: "flow-reviewer",
 		subtask: true,
 		template: compileFlowPromptSurface("flow-review"),

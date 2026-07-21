@@ -270,17 +270,22 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					"edit",
 					"bash",
 					"external_directory",
+					"skill",
 					"task",
-					"flow_plan_save",
-					"flow_feature_complete",
 				]) {
 					expect(permissionFor(reviewer.permission ?? [], permission)).toBe(
 						"deny",
 					);
 				}
-				expect(permissionFor(reviewer.permission ?? [], "flow_status")).toBe(
-					"allow",
-				);
+				const reviewerAllowedTools = new Set([
+					"flow_status",
+					"flow_feature_complete",
+				]);
+				for (const toolId of EXPECTED_TOOLS) {
+					expect(permissionFor(reviewer.permission ?? [], toolId)).toBe(
+						reviewerAllowedTools.has(toolId) ? "allow" : "deny",
+					);
+				}
 
 				const worker = flowAgents.find((agent) => agent.name === "flow-worker");
 				if (!worker) throw new Error("Flow worker was not registered.");

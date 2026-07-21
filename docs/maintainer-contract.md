@@ -48,6 +48,12 @@ and current workspace-content digest. The OpenCode after-hook accepts only a
 structured exit code, records output completeness and digests the output. The
 observation is persisted directly on the run.
 
+Validation commands are durable and must not contain inline secrets. Raw output
+is neither persisted nor projected; the command, exit code, completeness,
+output digest, and source binding are the evidence. `broad` means the
+repository's canonical applicable gate or a justified equivalent, not merely a
+caller label.
+
 An armed capture waits at most 15 minutes for its exact Bash command to begin.
 An unrelated Bash command cancels it. Once the exact command begins, the
 after-hook remains eligible even if the command finishes after that original
@@ -60,12 +66,30 @@ during validation prevents recording; a source change after assignment prevents
 completion.
 
 Each run has at most one review assignment. The runtime derives `feature` or
-`final`; callers do not choose it. The hidden reviewer receives compact approved
-plan context, the full current feature and assignment, the run's declared
-artifacts and validations, and completed feature IDs. It cannot mutate the
-workspace or Flow state. A failed verdict requires an evidence-backed blocking
-finding; a passed verdict cannot contain one.
-Observed-but-unsubmitted work fails closed.
+`final`; callers do not choose it. The hidden reviewer receives approved plan
+context, its full assignment, declared artifacts, assignment-linked validation,
+and completed feature IDs. It is workspace-read-only; its allowed Flow tools are
+`flow_status` and `flow_feature_complete`, while its guidance restricts status
+use to the assigned reviewer view. The platform accepts a new completion only
+from the reserved reviewer identity; a caller with tool access may receive the
+read-only result of an exact previously accepted completion request. A failed
+verdict requires an evidence-backed blocking finding; a passed verdict cannot
+contain one.
+
+Result submission is the reviewer's sole lifecycle mutation. `flow_status` may
+fail-closed quarantine unreadable active state; that is recovery maintenance,
+not a lifecycle transition.
+
+The manager creates and dispatches the assignment, then reads compact status;
+it never copies or submits the verdict. A pending assignment may be redispatched
+after interruption or an unconfirmed reviewer return. A source-binding failure
+instead requires reset, fresh validation, and a new review.
+Manager status rechecks workspace content only while a review is pending and
+projects `flow_feature_reset` when that assignment's source binding is stale.
+If fingerprinting is unavailable, status fails closed with repair guidance and
+does not recommend redispatch.
+Observed-but-unsubmitted work fails closed. [ADR
+0007](adr/0007-reviewer-owned-submission.md) records the rationale.
 
 ## Bounded worker waves
 
@@ -133,7 +157,7 @@ user starting point.
 | `flow_run_start` | Start one runnable approved feature. |
 | `flow_validation_start` | Arm observation of the exact next Bash command. |
 | `flow_review_start` | Create the run's independent review assignment. |
-| `flow_feature_complete` | Record review result and feature outcome atomically. |
+| `flow_feature_complete` | Reviewer-only new result submission; exact accepted requests remain read-only replays. |
 | `flow_feature_reset` | Supersede a failed attempt for a fresh full retry. |
 | `flow_session_close` | Close and archive the session. |
 
@@ -155,7 +179,7 @@ mutations. `flow_guidance` instead accepts a guide ID and returns Markdown.
 | Agent | Boundary |
 | --- | --- |
 | `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Bash, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
-| `flow-reviewer` | Independent read-only workspace inspection; only `flow_status` is allowed among Flow tools. |
+| `flow-reviewer` | Independent workspace-read-only inspection; only `flow_status` and its exact `flow_feature_complete` lifecycle submission are allowed among Flow tools. |
 
 User configuration may select the reviewer's model and step budget with
 `OPENCODE_FLOW_REVIEWER_MODEL` and `OPENCODE_FLOW_REVIEWER_STEPS`.
@@ -179,3 +203,6 @@ session gates must not return without a new ADR that removes an equal or larger
 amount of product machinery. Bounded-wave coverage should test the real agent
 permissions, manager guidance, and host-visible configuration without adding a
 scheduler or tests-of-tests.
+
+See [Model-driven wave evidence](development.md#model-driven-wave-evidence) for
+the manual canary policy.

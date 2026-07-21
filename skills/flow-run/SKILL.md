@@ -5,10 +5,11 @@ description: Implement, validate, independently review, and record one approved 
 
 # Flow Run
 
-Work on exactly one approved feature. The root manager owns the session, every
-state-changing `flow_*` call, integration, validation, review dispatch, reset,
-and closure. Bounded `flow-worker` instances may contribute disjoint work; the
-reserved `flow-reviewer` owns the independent review.
+Work on exactly one approved feature. The root manager owns the session,
+integration, validation, review dispatch, reset, closure, and every
+lifecycle mutation except review submission. Bounded `flow-worker`
+instances may contribute disjoint work; the reserved `flow-reviewer` owns the
+independent review and submits its own result.
 
 ## Start and scope
 
@@ -74,17 +75,25 @@ checks from the changed behavior and risk:
   sufficient alone only for genuinely mechanical or documentation-only work.
 - UI claims need visual inspection when a runnable target is available.
 - Cleanup claims need behavior-preservation evidence, not formatting alone.
+- `scope: "broad"` is a claim about coverage, not a stronger label. Use it only
+  for the repository's canonical applicable gate or a justified equivalent
+  that covers the delivered repository state.
 
 Immediately before each Bash command used as evidence, call
 `flow_validation_start` with the current revision, feature id, the exact
 command, and `scope` (`focused` or `broad`). Run that byte-for-byte command next
 and inspect its complete outcome. Flow records the host-observed result directly
-in the session; do not copy host-observed fields into a later request.
+in the session; do not copy host-observed fields into a later request. The exact
+command is durable, so never inline tokens, passwords, credentials, or other
+secrets. Raw output is deliberately neither persisted nor projected: the
+durable evidence is the command, exit code, output completeness, and output
+digest, while the manager must inspect the live output.
 
 Use focused validation for ordinary features. For the final feature, run the
 repository's broad applicable gate after the last relevant edit. A source edit
 invalidates earlier applicability. Failed or unavailable checks are blockers,
-not passing evidence.
+not passing evidence. If the canonical gate cannot run, explain why the chosen
+equivalent is broad enough; otherwise record the narrower evidence as focused.
 
 ## Review and record
 
@@ -98,9 +107,19 @@ automatically and derives `feature` versus `final` review from plan progress;
 callers do not supply the review kind.
 
 Dispatch the returned assignment only to the reserved `flow-reviewer`. Do not
-perform the independent review in manager context. Submit its exact assignment
-result through `flow_feature_complete` with fresh guards. A pass completes the
-feature; a blocking finding records a blocked outcome.
+perform the independent review in manager context and never copy or submit its
+verdict. The reviewer reads its assignment, inspects the workspace, and calls
+`flow_feature_complete` directly; the runtime verifies the calling agent. The
+reviewer remains workspace-read-only and may make only this exact result
+submission as its sole lifecycle mutation.
+
+After the reviewer returns, read compact status rather than treating prose as
+the outcome. Redispatch the same pending assignment after interruption or an
+unconfirmed reviewer return. If submission reports `Workspace content changed
+after review started`, call `flow_feature_reset` and do not redispatch that
+source-stale assignment; start a fresh run and repeat full validation and
+review. Never fabricate a verdict. A submitted pass completes the feature; a
+submitted blocking finding records a blocked outcome.
 
 If repair is authorized after a failed review, reset the feature, fix it, and
 repeat full validation and full review in a fresh run.

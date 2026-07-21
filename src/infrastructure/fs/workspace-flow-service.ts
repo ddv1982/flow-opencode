@@ -36,6 +36,10 @@ export const flowFeatureComplete = (
 	workspace: string,
 	input: unknown,
 ): Promise<FlowResponse> => service(workspace).featureComplete(input);
+export const flowFeatureCompleteReplay = (
+	workspace: string,
+	input: unknown,
+): Promise<FlowResponse> => service(workspace).featureCompleteReplay(input);
 export const flowFeatureReset = (
 	workspace: string,
 	input: unknown,

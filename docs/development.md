@@ -57,10 +57,20 @@ native plugin command and normal plugin configuration.
   instead of adding parallel ledgers or cached counters.
 - Every mutation needs a revision guard and stable operation ID. Exact replay is
   safe; conflicting reuse fails.
+- Only the reserved reviewer may create a new completion. Other callers can
+  receive an exact accepted completion replay through a read-only path that does
+  not cancel validation or write session state.
 - Keep validation host-observed and session-native. Do not add caller-authored
   success, detached receipt stores, or clock requirements.
+- Treat validation scope as a coverage claim. `broad` means the canonical
+  repository gate or a justified applicable equivalent; do not promote a
+  narrow command by relabeling it.
+- Validation commands are persisted. Never inline secrets. Raw output is
+  intentionally reduced to completeness and a digest rather than stored or
+  projected.
 - Keep one review per run. A final review requires broad validation and is not a
-  second pass.
+  second pass. The reviewer submits through `flow_feature_complete`; the
+  manager never proxies its verdict.
 - Prefer deletion when a test or document exists only for a removed concept.
   Do not preserve a dual stack for pre-v6 active state.
 - Use table-driven lifecycle and persistence tests. Avoid registries that test
@@ -71,6 +81,25 @@ native plugin command and normal plugin configuration.
 Update the README, maintainer contract, ADR, and changelog when a public
 lifecycle or installation contract changes. Documentation must describe only
 the current product; Git history owns superseded plans and experiments.
+
+## Model-driven wave evidence
+
+Deterministic CI validates schemas, permissions, prompts, and host integration
+without provider credentials. It does not claim that a model actually overlaps
+workers. Changes to wave behavior should therefore be exercised manually with a
+real provider when available and accompanied by sanitized evidence of:
+
+- worker start/end times with a positive common overlap;
+- assigned versus changed paths and any scope drift;
+- permission prompts or denials and worker Bash calls; and
+- reviewer-owned `flow_feature_complete` submission.
+
+Every wave-behavior change must include this evidence when marked verified, but
+it is not a deterministic release gate. When a provider is unavailable, mark
+the behavior unverified, record the review risk, and avoid performance or
+reliability claims. Do not persist prompts, secrets, raw provider payloads, or a
+wave ledger, and do not add provider credentials, a scheduler, or telemetry to
+CI.
 
 ## Release
 

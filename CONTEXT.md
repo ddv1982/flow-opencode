@@ -33,11 +33,19 @@ feature.
 
 **Validation observation**: Host-observed command, scope, source digest, exit
 code, output digest, and completeness stored directly on the active run. It is
-not a detached receipt or caller-authored success claim.
+not a detached receipt or caller-authored success claim. Raw output is
+deliberately not persisted or projected, and durable commands must not inline
+secrets.
+
+**Broad validation**: A coverage claim that the command is the repository's
+canonical applicable gate or a justified equivalent for the delivered state.
+The string `broad` does not make a narrow check comprehensive.
 
 **Review assignment**: The durable identity and bounded packet for the run's
 one independent review. The hidden `flow-reviewer` reads it through reviewer
-status and returns a verdict plus findings.
+status and submits its verdict plus findings directly through
+`flow_feature_complete`. The host checks the reserved reviewer identity for new
+submissions; exact accepted requests remain read-only replays.
 
 **Feature review**: The one review derived for a non-final run.
 
@@ -67,12 +75,17 @@ converges after interruption by session and operation identity.
 
 ## Ownership
 
-The root manager owns lifecycle state, slice selection, integration, evidence
-acceptance, authoritative validation, reset, and closure. It may delegate exact
-disjoint contributions to `flow-worker`, then audits assigned versus changed
-paths. Workers cannot run Bash, edit `.flow` or `.git` metadata paths, use Flow
-tools, delegate again, or approve work. `flow-reviewer` remains independent and
-read-only.
+The root manager owns slice selection, integration, evidence acceptance,
+authoritative validation, review dispatch, reset, closure, and every lifecycle
+mutation except reviewer-result submission. It may delegate exact disjoint
+contributions to `flow-worker`, then audits assigned versus changed paths.
+Workers cannot run Bash, edit `.flow` or `.git` metadata paths, use Flow tools,
+delegate again, or approve work. `flow-reviewer` remains independent and
+workspace-read-only; its sole lifecycle mutation is submitting its own pending
+result. Status may quarantine unreadable Flow state as fail-closed recovery
+maintenance, not as a lifecycle transition. The manager reads compact status
+afterward and never copies or fabricates that verdict. Exact accepted completion
+requests remain read-only replays for same-major active-session compatibility.
 
 Wave coordination is conversational and disposable. After interruption, status
 and worktree inspection replace a manifest, ledger, or worker-recovery system.

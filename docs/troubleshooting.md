@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.2.0 --global --force
+opencode plugin opencode-plugin-flow@6.3.0 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.2.0"]
+  "plugin": ["opencode-plugin-flow@6.3.0"]
 }
 ```
 
@@ -44,6 +44,10 @@ operation first succeeded.
 Flow requires a readable Git worktree because validation and review are bound
 to effective Git workspace content. Initialize or repair Git before starting a
 Flow session.
+
+Pending-review status also fails closed when it cannot fingerprint the current
+workspace. Repair fingerprinting before recovery; do not redispatch the review
+until Flow can check its source binding.
 
 Tracked Git submodules are intentionally unsupported. Use one repository for a
 Flow session, or run separate sessions inside the relevant repositories.
@@ -80,8 +84,8 @@ than creating another.
 ## Completion says workspace content changed
 
 The files changed after review started. Reset the feature, begin a fresh full
-run, validate the final content, and request one new review. Flow does not reuse
-a narrow correction result.
+run, validate the final content, and request one new review. Do not redispatch
+the source-stale assignment; Flow does not reuse a narrow correction result.
 
 ## A review blocked the feature
 

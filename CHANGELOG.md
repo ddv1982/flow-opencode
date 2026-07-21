@@ -6,6 +6,32 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.3.0] - 2026-07-21
+
+Reviewer-owned submission lore strengthens independent review without turning
+Flow back into a heavy orchestration framework:
+
+- The reserved reviewer now submits its own result through
+  `flow_feature_complete`. The host authorizes new completions by agent identity,
+  while exact previously accepted requests remain read-only replays for active
+  Session v5 workflows.
+- Pending-review recovery is source-aware: current assignments can be
+  redispatched after interruption, stale source routes to reset and full
+  revalidation, and fingerprint failures fail closed with repair guidance.
+- Final reviewers receive the approved plan targets and validation intent,
+  completed feature IDs, and only assignment-linked evidence. Broad validation
+  is treated as a coverage claim; durable commands exclude secrets, and raw
+  output is reduced to completeness plus a digest.
+- Closed-world permission tests and the pinned OpenCode host smoke cover every
+  registered Flow tool. Documentation distinguishes lifecycle mutation from
+  fail-closed quarantine maintenance.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.3.0 --global --force
+```
+
 ## [6.2.0] - 2026-07-21
 
 Low-friction bounded-wave lore keeps Flow small while making parallel

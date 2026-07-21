@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { FeatureCompleteInputSchema } from "../src/application/schema.js";
 import {
 	FLOW_GUIDANCE_IDS,
 	FLOW_GUIDANCE_TOPICS,
@@ -80,22 +81,51 @@ describe("production Flow prompts", () => {
 		expect(run).toMatch(
 			/flow_review_start[\s\S]+reserved `flow-reviewer`[\s\S]+flow_feature_complete/i,
 		);
+		expect(run).toMatch(
+			/never copy or submit its\s+verdict[\s\S]+read compact status/i,
+		);
+		expect(run).toMatch(/scope: "broad"[\s\S]+canonical applicable gate/i);
 		expect(run).toMatch(/failed review[\s\S]+full validation and full review/i);
+		expect(run).toMatch(
+			/workspace content changed[\s\S]+flow_feature_reset[\s\S]+do not redispatch/i,
+		);
+		const auto = compileFlowPromptSurface("flow-auto");
+		expect(auto).toMatch(
+			/workspace content changed[\s\S]+flow_feature_reset[\s\S]+must not be redispatched/i,
+		);
 	});
 
 	test("keeps reviewer and worker roles narrow and structured", () => {
 		const command = compileFlowPromptSurface("flow-review");
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
-		expect(command).toMatch(/reserved `flow-reviewer`[\s\S]+read-only/);
-		expect(reviewer).toMatch(/must not edit files[\s\S]+state-changing/i);
+		expect(command).toMatch(
+			/reserved `flow-reviewer`[\s\S]+workspace-read-only[\s\S]+submit only its own result/i,
+		);
+		expect(reviewer).toMatch(
+			/must not edit files[\s\S]+sole lifecycle mutation/i,
+		);
 		expect(reviewer).toMatch(/flow_status[\s\S]+Every blocker must cite/i);
-		expect(
-			JSON.parse(reviewer.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "null"),
-		).toMatchObject({
-			assignmentId: expect.any(String),
-			verdict: "passed",
-			findings: [],
-			terminalDisposition: "submitted",
+		expect(reviewer).toMatch(
+			/workspace content changed[\s\S]+reset[\s\S]+do not recommend redispatch/i,
+		);
+		const example = JSON.parse(
+			reviewer.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "null",
+		);
+		const parsedExample = FeatureCompleteInputSchema.parse(example);
+		expect(parsedExample).toEqual(example);
+		expect(parsedExample).toMatchObject({
+			request: {
+				operationId: expect.any(String),
+				expectedRevision: expect.any(Number),
+				featureId: expect.any(String),
+				assignmentId: expect.any(String),
+				summary: expect.any(String),
+				result: {
+					verdict: "passed",
+					findings: [],
+					terminalDisposition: "submitted",
+				},
+			},
 		});
 
 		const worker = compileFlowPromptSurface("flow-worker");

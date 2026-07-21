@@ -64,10 +64,10 @@ describe("Flow v6 documentation contract", () => {
 
 		expect(JSON.parse(block ?? "null")).toEqual({
 			$schema: "https://opencode.ai/config.json",
-			plugin: ["opencode-plugin-flow@6.2.0"],
+			plugin: ["opencode-plugin-flow@6.3.0"],
 		});
 		expect(install).toContain(
-			"opencode plugin opencode-plugin-flow@6.2.0 --global --force",
+			"opencode plugin opencode-plugin-flow@6.3.0 --global --force",
 		);
 		expect(install).toMatch(
 			/Exact version pins do not update\s+automatically\./,
@@ -131,19 +131,27 @@ describe("Flow v6 documentation contract", () => {
 		const files = (await markdownFiles("docs"))
 			.map((path) => relative(".", path))
 			.sort();
-		const [context, waveAdr, maintainer, troubleshooting, changelog] =
-			await Promise.all([
-				readFile("CONTEXT.md", "utf8"),
-				readFile("docs/adr/0006-bounded-intra-feature-waves.md", "utf8"),
-				readFile("docs/maintainer-contract.md", "utf8"),
-				readFile("docs/troubleshooting.md", "utf8"),
-				readFile("CHANGELOG.md", "utf8"),
-			]);
+		const [
+			context,
+			waveAdr,
+			reviewerAdr,
+			maintainer,
+			troubleshooting,
+			changelog,
+		] = await Promise.all([
+			readFile("CONTEXT.md", "utf8"),
+			readFile("docs/adr/0006-bounded-intra-feature-waves.md", "utf8"),
+			readFile("docs/adr/0007-reviewer-owned-submission.md", "utf8"),
+			readFile("docs/maintainer-contract.md", "utf8"),
+			readFile("docs/troubleshooting.md", "utf8"),
+			readFile("CHANGELOG.md", "utf8"),
+		]);
 
 		expect(files).toEqual(
 			expect.arrayContaining([
 				"docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
 				"docs/adr/0006-bounded-intra-feature-waves.md",
+				"docs/adr/0007-reviewer-owned-submission.md",
 				"docs/index.md",
 				"docs/maintainer-contract.md",
 				"docs/troubleshooting.md",
@@ -172,6 +180,21 @@ describe("Flow v6 documentation contract", () => {
 				"Rejected alternatives",
 			]),
 		);
+		expect(headings(reviewerAdr)).toEqual(
+			expect.arrayContaining([
+				"Status",
+				"Context",
+				"Decision",
+				"Consequences",
+				"Rejected alternatives",
+			]),
+		);
+		expect(reviewerAdr).toMatch(
+			/sole lifecycle mutation[\s\S]+quarantine unreadable active state[\s\S]+recovery maintenance/i,
+		);
+		expect(reviewerAdr).toMatch(
+			/source-binding rejection[\s\S]+not redispatched/i,
+		);
 		expect(headings(maintainer)).toEqual(
 			expect.arrayContaining([
 				"Causality and idempotency",
@@ -186,8 +209,10 @@ describe("Flow v6 documentation contract", () => {
 		expect(
 			section(troubleshooting, "Validation capture was cancelled"),
 		).toMatch(/15\s+minutes[\s\S]+begins[\s\S]+after-hook/);
-		expect(changelog).toContain("## [6.2.0] - 2026-07-21");
-		expect(section(changelog, "[Unreleased]")).toContain("No changes yet.");
+		expect(
+			section(troubleshooting, "Completion says workspace content changed"),
+		).toMatch(/Reset the feature[\s\S]+Do not redispatch/i);
+		expect(changelog).toContain("## [6.3.0] - 2026-07-21");
 	});
 
 	test("keeps CI focused on normal checks, platforms, live smoke, and release", async () => {

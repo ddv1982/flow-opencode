@@ -48,6 +48,7 @@ export const OperationIdSchema = z
 	.min(1)
 	.max(128)
 	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
+const ReviewAssignmentIdSchema = z.string().min(1).max(256);
 export const RevisionSchema = z.number().int().safe().nonnegative();
 export const SourceDigestSchema = z.custom<SourceDigest>(
 	(value) => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value),
@@ -146,7 +147,7 @@ const ArtifactSchema = z
 
 const ReviewAssignmentSchema = z
 	.object({
-		id: z.string().min(1).max(256),
+		id: ReviewAssignmentIdSchema,
 		operationId: OperationIdSchema,
 		featureId: FeatureIdSchema,
 		runId: z.string().min(1).max(256),
@@ -295,7 +296,7 @@ export const FeatureCompleteInputSchema = z
 			.object({
 				...guarded,
 				featureId: FeatureIdSchema,
-				assignmentId: z.string().min(1).max(256),
+				assignmentId: ReviewAssignmentIdSchema,
 				summary: boundedText("Feature result summary"),
 				result: PublicReviewResultSchema,
 			})
@@ -346,7 +347,7 @@ export const StatusInputSchema = z
 			z
 				.object({
 					view: z.literal("reviewer"),
-					assignmentId: z.string().min(1).max(256),
+					assignmentId: ReviewAssignmentIdSchema,
 				})
 				.strict(),
 		]),

@@ -46,6 +46,7 @@ const plan: Plan = {
 class MemorySessionRepository implements SessionRepository {
 	session: Session | null = null;
 	sourceDigest = SOURCE_A;
+	sourceDigestFailure: Error | null = null;
 	archiveFailure: Error | null = null;
 	readFailure: Error | null = null;
 	quarantineCount = 0;
@@ -70,7 +71,10 @@ class MemorySessionRepository implements SessionRepository {
 			this.session = null;
 			return Promise.resolve("memory://quarantined-session");
 		},
-		computeSourceDigest: () => Promise.resolve(this.sourceDigest),
+		computeSourceDigest: () =>
+			this.sourceDigestFailure
+				? Promise.reject(this.sourceDigestFailure)
+				: Promise.resolve(this.sourceDigest),
 	};
 
 	read(): Promise<Session | null> {
@@ -222,6 +226,165 @@ describe("Flow application runtime gates", () => {
 		expect(repository.session?.revision).toBe(1);
 	});
 
+	test("projects the full approved plan and only assignment-linked validation to a final reviewer", async () => {
+		const foundation = "runtime-foundation";
+		const runtimeFeature = plan.features[0];
+		if (!runtimeFeature)
+			throw new Error("Expected the runtime feature fixture.");
+		const multiFeaturePlan: Plan = {
+			...plan,
+			summary: "Build the runtime in two features.",
+			features: [
+				{
+					id: foundation,
+					title: "Runtime foundation",
+					summary: "Prepare the runtime foundation.",
+					targets: ["src/domain"],
+					validation: ["bun test tests/domain-transitions.test.ts"],
+					dependsOn: [],
+				},
+				{
+					...runtimeFeature,
+					dependsOn: [foundation],
+				},
+			],
+		};
+		const repository = new MemorySessionRepository();
+		const flow = createFlowService(repository, deterministicEnvironment());
+		expectOk(
+			await flow.planSave({
+				request: {
+					operationId: "plan-save-multi-feature",
+					expectedRevision: 0,
+					goal: "Ship the multi-feature runtime",
+					plan: multiFeaturePlan,
+				},
+			}),
+		);
+		expectOk(
+			await flow.planApprove({
+				request: {
+					operationId: "plan-approve-multi-feature",
+					expectedRevision: revision(repository),
+				},
+			}),
+		);
+
+		async function recordPassingValidation(
+			featureId: string,
+			captureId: string,
+			scope: "focused" | "broad",
+		) {
+			const prepared = await prepareValidation(repository, {
+				expectedRevision: revision(repository),
+				featureId,
+				command: `bun test ${captureId}`,
+				scope,
+			});
+			return persistObservedValidation(repository, {
+				...prepared,
+				captureId,
+				exitCode: 0,
+				outputDigest: OUTPUT,
+				outputComplete: true,
+			});
+		}
+
+		expectOk(
+			await flow.runStart({
+				request: {
+					operationId: "run-start-foundation",
+					expectedRevision: revision(repository),
+					featureId: foundation,
+				},
+			}),
+		);
+		await recordPassingValidation(foundation, "capture-foundation", "focused");
+		expectOk(
+			await flow.reviewStart({
+				request: {
+					operationId: "review-start-foundation",
+					expectedRevision: revision(repository),
+					featureId: foundation,
+					artifactsChanged: [{ path: "src/domain/foundation.ts" }],
+					packet: {
+						summary: "Review the runtime foundation.",
+						riskLenses: ["state integrity"],
+					},
+				},
+			}),
+		);
+		const foundationReview = activeReview(repository);
+		expectOk(
+			await flow.featureComplete({
+				request: {
+					operationId: "feature-complete-foundation",
+					expectedRevision: revision(repository),
+					featureId: foundation,
+					assignmentId: foundationReview.id,
+					summary: "Runtime foundation completed.",
+					result: {
+						verdict: "passed",
+						findings: [],
+						terminalDisposition: "submitted",
+					},
+				},
+			}),
+		);
+
+		expectOk(
+			await flow.runStart({
+				request: {
+					operationId: "run-start-final-runtime",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+				},
+			}),
+		);
+		const successfulUnassigned = await recordPassingValidation(
+			FEATURE,
+			"capture-final-focused",
+			"focused",
+		);
+		const assignedBroad = await recordPassingValidation(
+			FEATURE,
+			"capture-final-broad",
+			"broad",
+		);
+		const review = await flow.reviewStart({
+			request: {
+				operationId: "review-start-final-runtime",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "src/application/flow-service.ts" }],
+				packet: {
+					summary: "Review the full runtime delivery.",
+					riskLenses: ["projection completeness"],
+				},
+			},
+		});
+		expectOk(review);
+		expect(review.workflowData.projection).toMatchObject({
+			planContext: {
+				summary: multiFeaturePlan.summary,
+				overview: multiFeaturePlan.overview,
+				requirements: multiFeaturePlan.requirements,
+				decisions: multiFeaturePlan.decisions,
+				features: multiFeaturePlan.features,
+			},
+			feature: multiFeaturePlan.features[1],
+			assignment: {
+				kind: "final",
+				validationIds: [assignedBroad.id],
+			},
+			validations: [assignedBroad],
+			completedFeatureIds: [foundation],
+		});
+		expect(review.workflowData.projection).not.toMatchObject({
+			validations: [successfulUnassigned],
+		});
+	});
+
 	test("persists validation in the active run and binds completion to reviewed workspace content", async () => {
 		const repository = new MemorySessionRepository();
 		const environment = deterministicEnvironment();
@@ -247,6 +410,11 @@ describe("Flow application runtime gates", () => {
 			outputDigest: OUTPUT,
 			outputComplete: true,
 		} as const;
+		const failedObservation = await persistObservedValidation(repository, {
+			...observedInput,
+			captureId: "capture-failed",
+			exitCode: 1,
+		});
 		const observation = await persistObservedValidation(
 			repository,
 			observedInput,
@@ -254,9 +422,12 @@ describe("Flow application runtime gates", () => {
 		expect(observation).toMatchObject({
 			id: "capture-1",
 			runId: "run-1",
-			recordedRevision: 4,
+			recordedRevision: 5,
 		});
-		expect(repository.session?.runs[0]?.validations).toEqual([observation]);
+		expect(repository.session?.runs[0]?.validations).toEqual([
+			failedObservation,
+			observation,
+		]);
 		expect(await persistObservedValidation(repository, observedInput)).toEqual(
 			observation,
 		);
@@ -294,6 +465,8 @@ describe("Flow application runtime gates", () => {
 						id: FEATURE,
 						title: plan.features[0]?.title,
 						summary: plan.features[0]?.summary,
+						targets: ["src"],
+						validation: ["bun test"],
 						dependsOn: [],
 					},
 				],
@@ -370,10 +543,40 @@ describe("Flow application runtime gates", () => {
 		expect(changedSource.summary).toContain(
 			"Workspace content changed after review started",
 		);
-		expect(repository.session?.revision).toBe(5);
+		expect(changedSource.workflowData.failure).toMatchObject({
+			recovery: expect.stringMatching(
+				/flow_feature_reset[\s\S]+Do not redispatch/i,
+			),
+		});
+		expect(repository.session?.revision).toBe(6);
 		expect(activeReview(repository).result).toBeNull();
+		repository.sourceDigestFailure = new Error(
+			"Workspace fingerprint is unavailable.",
+		);
+		const unavailablePendingStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expect(unavailablePendingStatus.status).toBe("error");
+		expect(unavailablePendingStatus.workflowData.failure).toMatchObject({
+			recovery: expect.stringMatching(
+				/Repair workspace fingerprinting[\s\S]+Do not redispatch/i,
+			),
+		});
+		repository.sourceDigestFailure = null;
+		const stalePendingStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expect(stalePendingStatus.workflowData.projection).toMatchObject({
+			nextAction: "flow_feature_reset",
+		});
 
 		repository.sourceDigest = SOURCE_A;
+		const currentPendingStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expect(currentPendingStatus.workflowData.projection).toMatchObject({
+			nextAction: "dispatch-flow-reviewer",
+		});
 		const completed = await flow.featureComplete(completeRequest);
 		expectOk(completed);
 		expect(repository.session?.runs[0]?.state).toBe("completed");
@@ -398,6 +601,12 @@ describe("Flow application runtime gates", () => {
 		const replayedCompletion = await flow.featureComplete(completeRequest);
 		expectOk(replayedCompletion);
 		expect(replayedCompletion.workflowData.operation).toMatchObject({
+			operationId: "complete-runtime",
+			replayed: true,
+		});
+		const readOnlyReplay = await flow.featureCompleteReplay(completeRequest);
+		expectOk(readOnlyReplay);
+		expect(readOnlyReplay.workflowData.operation).toMatchObject({
 			operationId: "complete-runtime",
 			replayed: true,
 		});

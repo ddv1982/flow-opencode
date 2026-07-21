@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { ToolContext } from "@opencode-ai/plugin";
 import type { FlowResponse } from "../src/application/flow-service.js";
 import type { SourceDigest } from "../src/domain/session.js";
 import {
@@ -13,7 +14,6 @@ import {
 	sessionPath,
 } from "../src/infrastructure/fs/workspace.js";
 import {
-	flowFeatureComplete,
 	flowPlanApprove,
 	flowPlanSave,
 	flowReviewStart,
@@ -24,6 +24,7 @@ import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
 } from "../src/infrastructure/fs/workspace-validation.js";
+import { createTools } from "../src/platform/opencode/tools.js";
 
 const execFileAsync = promisify(execFile);
 const FEATURE_ID = "lifecycle";
@@ -33,6 +34,19 @@ function ok(response: FlowResponse): FlowResponse {
 	expect(response.status).toBe("ok");
 	if (response.status !== "ok") throw new Error(response.summary);
 	return response;
+}
+
+function toolContext(workspace: string, agent: string): ToolContext {
+	return {
+		sessionID: `lifecycle-${agent}`,
+		messageID: `message-${agent}`,
+		agent,
+		directory: workspace,
+		worktree: workspace,
+		abort: new AbortController().signal,
+		metadata() {},
+		async ask() {},
+	};
 }
 
 test("persists one complete workspace lifecycle and replays its exact close", async () => {
@@ -142,27 +156,125 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			"capture-lifecycle",
 		]);
 
-		const completed = ok(
-			await flowFeatureComplete(workspace, {
-				request: {
-					operationId: "complete-lifecycle",
-					expectedRevision: reviewProjection.revision,
-					featureId: FEATURE_ID,
-					assignmentId: reviewProjection.assignment.id,
-					summary: "Lifecycle completed.",
-					result: {
-						verdict: "passed",
-						findings: [],
-						terminalDisposition: "submitted",
-					},
+		const completionInput = {
+			request: {
+				operationId: "complete-lifecycle",
+				expectedRevision: reviewProjection.revision,
+				featureId: FEATURE_ID,
+				assignmentId: reviewProjection.assignment.id,
+				summary: "Lifecycle completed.",
+				result: {
+					verdict: "passed" as const,
+					findings: [],
+					terminalDisposition: "submitted" as const,
 				},
-			}),
+			},
+		};
+		let completionCancellations = 0;
+		const completionTool = createTools(
+			{},
+			{
+				validation: {
+					cancel() {
+						completionCancellations += 1;
+						return true;
+					},
+				} as never,
+				prepareValidation: async () => {
+					throw new Error("Validation preparation is not used here.");
+				},
+			},
+		).flow_feature_complete;
+		if (!completionTool) throw new Error("Missing completion tool.");
+
+		const completionCancellationsBeforeManager = completionCancellations;
+		const stateBeforeManagerAttempt = await readFile(
+			sessionPath(workspace),
+			"utf8",
+		);
+		const managerAttempt = JSON.parse(
+			String(
+				await completionTool.execute(
+					completionInput,
+					toolContext(workspace, "build"),
+				),
+			),
+		) as FlowResponse;
+		expect(managerAttempt.status).toBe("error");
+		expect(managerAttempt.summary).toContain(
+			"Only the Flow reviewer may submit a new feature completion",
+		);
+		expect(completionCancellations).toBe(completionCancellationsBeforeManager);
+		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
+			stateBeforeManagerAttempt,
+		);
+		expect((await loadSession(workspace))?.runs[0]?.state).toBe("active");
+
+		const completed = ok(
+			JSON.parse(
+				String(
+					await completionTool.execute(
+						completionInput,
+						toolContext(workspace, "flow-reviewer"),
+					),
+				),
+			) as FlowResponse,
 		);
 		const completedProjection = completed.workflowData.projection as {
 			revision: number;
 			status: string;
 		};
 		expect(completedProjection.status).toBe("completed");
+		expect(completionCancellations).toBe(
+			completionCancellationsBeforeManager + 1,
+		);
+
+		const stateBeforeReplay = await readFile(sessionPath(workspace), "utf8");
+		const managerReplay = ok(
+			JSON.parse(
+				String(
+					await completionTool.execute(
+						completionInput,
+						toolContext(workspace, "build"),
+					),
+				),
+			) as FlowResponse,
+		);
+		expect(managerReplay.workflowData.operation).toMatchObject({
+			operationId: "complete-lifecycle",
+			revision: completedProjection.revision,
+			replayed: true,
+		});
+		expect(completionCancellations).toBe(
+			completionCancellationsBeforeManager + 1,
+		);
+		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
+			stateBeforeReplay,
+		);
+
+		const alteredReplay = JSON.parse(
+			String(
+				await completionTool.execute(
+					{
+						request: {
+							...completionInput.request,
+							summary: "Different completion payload.",
+						},
+					},
+					toolContext(workspace, "build"),
+				),
+			),
+		) as FlowResponse;
+		expect(alteredReplay.status).toBe("error");
+		expect(alteredReplay.summary).toContain(
+			"may replay only an exact previously accepted request",
+		);
+		expect(completionCancellations).toBe(
+			completionCancellationsBeforeManager + 1,
+		);
+		expect(await readFile(sessionPath(workspace), "utf8")).toBe(
+			stateBeforeReplay,
+		);
 
 		const closeInput = {
 			request: {

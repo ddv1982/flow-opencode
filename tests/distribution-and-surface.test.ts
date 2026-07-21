@@ -115,7 +115,7 @@ describe("Flow v6 distribution surface", () => {
 		const worker = agent["flow-worker"];
 		expect(reviewer).toBeDefined();
 		expect(reviewer?.hidden).toBe(true);
-		expect(reviewer?.permission).toMatchObject({
+		expect(reviewer?.permission).toEqual({
 			edit: "deny",
 			bash: "deny",
 			external_directory: "deny",
@@ -123,6 +123,7 @@ describe("Flow v6 distribution surface", () => {
 			task: { "*": "deny" },
 			"flow_*": "deny",
 			flow_status: "allow",
+			flow_feature_complete: "allow",
 		});
 		expect(worker).toBeDefined();
 		expect(worker?.hidden).toBe(true);

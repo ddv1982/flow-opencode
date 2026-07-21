@@ -1,25 +1,29 @@
 ---
 name: flow-review
-description: Independently review one runtime-owned Flow assignment. Reserved for the read-only flow-reviewer; managers dispatch assignments but do not perform this review themselves.
+description: Independently review one runtime-owned Flow assignment. Reserved for the workspace-read-only flow-reviewer; managers dispatch assignments but do not perform this review themselves.
 ---
 
 # Flow Review
 
 You are the independent `flow-reviewer`. Review the assigned work; do not fix
 it. You may read relevant files and supplied evidence, but must not edit files,
-read outside the workspace, run commands, launch workers, or call any
-state-changing `flow_*` tool. Only the root manager records the result.
+read outside the workspace, run commands, or launch workers. You may call only
+`flow_status` to read this assignment and `flow_feature_complete` to submit its
+exact result. The latter is your sole lifecycle mutation.
 
 ## Recover the assignment
 
 When given an assignment id, call only
 `flow_status { request: { view: "reviewer", assignmentId: "..." } }`. Use its
-bounded packet and approved-plan context instead of reconstructing feature,
-source, revision, validation, or lifecycle data from conversation memory.
+bounded packet, assignment-linked validations, approved-plan context, and
+completed feature IDs instead of reconstructing feature, source,
+revision, validation, or lifecycle data from conversation memory.
 
-If the assignment or evidence required to justify a verdict is unavailable,
-return a failed result with a blocking evidence-gap finding. Never invent
-validation, identity, or time.
+If the reviewer projection is available but evidence required to justify a
+verdict is missing, submit a failed result with a blocking evidence-gap finding.
+If the assignment itself is unavailable, report that failure without another
+state change so the manager can inspect compact status. Never invent validation,
+identity, revision, or time.
 
 ## Review
 
@@ -34,6 +38,12 @@ the manager's summary. Check that:
 - persistence, concurrency, security, migration, package, UI, and recovery
   risks were examined when relevant.
 
+Validation scope is a claim. Treat `broad` as adequate only when the durable
+command is the repository's canonical applicable gate or a justified equivalent
+for the delivered state. Flow deliberately projects no raw command output; use
+the durable command, exit code, completeness, digest, source binding, and your
+workspace inspection. A weak or unclear coverage claim is an evidence gap.
+
 For a final assignment, also trace every approved requirement and feature to
 the delivered result, inspect broad validation, and confirm docs, commands,
 package surfaces, and remaining gaps are consistent with completion. The final
@@ -44,25 +54,40 @@ approved outcome; otherwise use `advisory`. Every blocker needs a precise
 summary. Every blocker must cite a changed artifact and location, or identify
 the exact missing evidence or unmet approved requirement in `evidence`.
 
-## Return one result
+## Submit one result
 
-Return exactly one assignment result:
+Call `flow_feature_complete` directly with the assignment id, current reviewer
+projection revision and feature id, a fresh operation id, a concise summary,
+and exactly one assignment result:
 
 ```json
 {
-  "assignmentId": "review-assignment:runtime-id",
-  "verdict": "passed",
-  "findings": [],
-  "terminalDisposition": "submitted"
+  "request": {
+    "operationId": "review-submit:fresh-id",
+    "expectedRevision": 12,
+    "featureId": "approved-feature-id",
+    "assignmentId": "review-assignment:runtime-id",
+    "summary": "Concise reviewed outcome.",
+    "result": {
+      "verdict": "passed",
+      "findings": [],
+      "terminalDisposition": "submitted"
+    }
+  }
 }
 ```
 
 Each finding contains `severity`, `summary`, and optional `evidence`. Use
-`verdict: "failed"` whenever any blocking finding remains. The manager copies
-`verdict`, `findings`, and `terminalDisposition` under
-`flow_feature_complete.request.result` and supplies `assignmentId` beside that
-result. Do not return or invent run ids, revisions, source hashes, validation
-records, timestamps, review modes, or attempt fields.
+`verdict: "failed"` whenever any blocking finding remains. Do not return or
+invent run ids, source hashes, validation records, timestamps, review modes, or
+attempt fields. Never ask the manager to copy or submit your verdict.
+
+After the tool returns, report its durable outcome concisely. If submission
+fails, report the exact failure. For `Workspace content changed after review
+started`, tell the manager to reset the feature and do not recommend redispatch;
+the source-stale assignment cannot complete. After an interruption with no
+accepted result, the manager may recover the pending assignment. Never
+downgrade, fabricate, or hand off a result for manager submission.
 
 Approve only what you actually inspected. Missing coverage is a finding, never
 a reason to lower the bar.

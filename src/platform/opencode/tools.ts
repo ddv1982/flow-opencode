@@ -22,6 +22,7 @@ import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
 	flowFeatureComplete,
+	flowFeatureCompleteReplay,
 	flowFeatureReset,
 	flowPlanApprove,
 	flowPlanSave,
@@ -65,6 +66,7 @@ const operationId = host
 	.min(1)
 	.max(128)
 	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
+const reviewAssignmentId = host.string().min(1).max(256);
 const revision = host.number().int().safe().nonnegative();
 const guard = { operationId, expectedRevision: revision } as const;
 const artifact = host
@@ -128,7 +130,10 @@ const StatusArgs = {
 		host.object({ view: host.literal("detail") }).strict(),
 		host.object({ view: host.literal("execution") }).strict(),
 		host
-			.object({ view: host.literal("reviewer"), assignmentId: text.max(256) })
+			.object({
+				view: host.literal("reviewer"),
+				assignmentId: reviewAssignmentId,
+			})
 			.strict(),
 	]),
 };
@@ -169,7 +174,7 @@ const FeatureCompleteArgs = {
 		.object({
 			...guard,
 			featureId,
-			assignmentId: text.max(256),
+			assignmentId: reviewAssignmentId,
 			summary: text,
 			result: reviewResult,
 		})
@@ -240,6 +245,18 @@ function executeMutation(
 ): Promise<string> {
 	validation.cancel(context.sessionID);
 	return execute(context, handler);
+}
+
+function executeReviewerMutation(
+	context: ToolContext,
+	validation: ValidationCaptureCoordinator,
+	handler: (workspace: string) => Promise<FlowResponse>,
+	replayHandler: (workspace: string) => Promise<FlowResponse>,
+): Promise<string> {
+	if (context.agent !== "flow-reviewer") {
+		return execute(context, replayHandler);
+	}
+	return executeMutation(context, validation, handler);
 }
 
 export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
@@ -317,11 +334,14 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 		}),
 		flow_feature_complete: tool({
 			description:
-				"Atomically record the pending review result and feature outcome.",
+				"Submit a pending review result; only the reviewer may create a new completion, while exact accepted requests remain replayable.",
 			args: FeatureCompleteArgs,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
-					flowFeatureComplete(workspace, args),
+				executeReviewerMutation(
+					context,
+					options.validation,
+					(workspace) => flowFeatureComplete(workspace, args),
+					(workspace) => flowFeatureCompleteReplay(workspace, args),
 				),
 		}),
 		flow_feature_reset: tool({

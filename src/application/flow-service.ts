@@ -27,6 +27,7 @@ import type {
 } from "./ports/session-repository.js";
 import {
 	FeatureCompleteInputSchema,
+	type FeatureCompleteRequest,
 	FeatureResetInputSchema,
 	PlanApproveInputSchema,
 	PlanSaveInputSchema,
@@ -51,6 +52,7 @@ export type FlowService = Readonly<{
 	runStart(input: unknown): Promise<FlowResponse>;
 	reviewStart(input: unknown): Promise<FlowResponse>;
 	featureComplete(input: unknown): Promise<FlowResponse>;
+	featureCompleteReplay(input: unknown): Promise<FlowResponse>;
 	featureReset(input: unknown): Promise<FlowResponse>;
 	sessionClose(input: unknown): Promise<FlowResponse>;
 }>;
@@ -97,7 +99,16 @@ function featureProgress(session: Session): {
 	return { completed, total, remaining: total - completed };
 }
 
-function nextAction(session: Session): string {
+function activePendingReview(session: Session): ReviewAssignment | null {
+	return (
+		activeRun(session)?.reviews.find((review) => review.result === null) ?? null
+	);
+}
+
+function nextAction(
+	session: Session,
+	pendingReviewSourceStale = false,
+): string {
 	const status = sessionStatus(session);
 	if (status === "planning") {
 		return session.plan ? "flow_plan_approve" : "flow_plan_save";
@@ -108,8 +119,11 @@ function nextAction(session: Session): string {
 	if (status === "closed") return "flow_session_close";
 	const run = activeRun(session);
 	if (!run) return "flow_status";
-	const pending = run.reviews.find((review) => review.result === null);
-	if (pending) return "dispatch-flow-reviewer";
+	if (activePendingReview(session)) {
+		return pendingReviewSourceStale
+			? "flow_feature_reset"
+			: "dispatch-flow-reviewer";
+	}
 	const finalRun =
 		session.plan?.features.every(
 			(feature) =>
@@ -125,7 +139,10 @@ function nextAction(session: Session): string {
 	return "flow_review_start";
 }
 
-function compactProjection(session: Session): Record<string, unknown> {
+function compactProjection(
+	session: Session,
+	pendingReviewSourceStale = false,
+): Record<string, unknown> {
 	const run = activeRun(session);
 	const retryRequest = closureRetryRequest(session);
 	if (session.closure && !retryRequest) {
@@ -140,7 +157,7 @@ function compactProjection(session: Session): Record<string, unknown> {
 		activeFeatureId: run?.featureId ?? null,
 		activeRunId: run?.id ?? null,
 		progress: featureProgress(session),
-		nextAction: nextAction(session),
+		nextAction: nextAction(session, pendingReviewSourceStale),
 		archiveRetry: retryRequest ? { request: retryRequest } : null,
 	};
 }
@@ -154,13 +171,16 @@ function archivedProjection(session: Session): Record<string, unknown> {
 	};
 }
 
-function executionProjection(session: Session): Record<string, unknown> {
+function executionProjection(
+	session: Session,
+	pendingReviewSourceStale = false,
+): Record<string, unknown> {
 	const run = activeRun(session);
 	const feature = session.plan?.features.find(
 		(item) => item.id === run?.featureId,
 	);
 	return {
-		...compactProjection(session),
+		...compactProjection(session, pendingReviewSourceStale),
 		view: "execution",
 		goal: session.goal,
 		feature: feature ?? null,
@@ -194,6 +214,7 @@ function reviewerProjection(
 		(item) => item.id === assignment?.featureId,
 	);
 	const plan = session.plan;
+	const assignedValidationIds = new Set(assignment.validationIds);
 	return {
 		view: "reviewer",
 		sessionId: session.id,
@@ -209,6 +230,8 @@ function reviewerProjection(
 						id: candidate.id,
 						title: candidate.title,
 						summary: candidate.summary,
+						targets: [...candidate.targets],
+						validation: [...candidate.validation],
 						dependsOn: [...candidate.dependsOn],
 					})),
 				}
@@ -216,7 +239,9 @@ function reviewerProjection(
 		feature: feature ?? null,
 		assignment,
 		artifactsChanged: run.artifactsChanged,
-		validations: run.validations,
+		validations: run.validations.filter((validation) =>
+			assignedValidationIds.has(validation.id),
+		),
 		completedFeatureIds:
 			plan?.features
 				.filter((candidate) => isFeatureComplete(session, candidate.id))
@@ -227,14 +252,19 @@ function reviewerProjection(
 function project(
 	session: Session,
 	request: StatusRequest,
+	pendingReviewSourceStale = false,
 ): Record<string, unknown> {
-	if (request.view === "compact") return compactProjection(session);
-	if (request.view === "execution") return executionProjection(session);
+	if (request.view === "compact") {
+		return compactProjection(session, pendingReviewSourceStale);
+	}
+	if (request.view === "execution") {
+		return executionProjection(session, pendingReviewSourceStale);
+	}
 	if (request.view === "reviewer") {
 		return reviewerProjection(session, request.assignmentId);
 	}
 	return {
-		...compactProjection(session),
+		...compactProjection(session, pendingReviewSourceStale),
 		view: "detail",
 		goal: session.goal,
 		plan: session.plan,
@@ -256,6 +286,23 @@ function operationResult(
 		replayed,
 		...(entity === undefined ? {} : { entity }),
 	};
+}
+
+function featureCompleteResponse(
+	session: Session,
+	request: FeatureCompleteRequest,
+	run: FeatureRun,
+	replayed: boolean,
+): FlowResponse {
+	return ok(
+		request.result.verdict === "passed"
+			? "Feature completed."
+			: "Feature blocked by review.",
+		{
+			operation: operationResult(session, request.operationId, replayed, run),
+			projection: compactProjection(session),
+		},
+	);
 }
 
 async function loadExactArchivedClose(
@@ -348,6 +395,38 @@ export function createFlowService(
 							revision: 0,
 							nextAction: "flow_plan_save",
 						},
+					});
+				}
+				if (request.view !== "reviewer" && activePendingReview(session)) {
+					return await repository.transact(async (transaction) => {
+						const current = await transaction.load();
+						if (!current) {
+							return ok("No active Flow session.", {
+								projection: {
+									view: request.view,
+									status: "idle",
+									revision: 0,
+									nextAction: "flow_plan_save",
+								},
+							});
+						}
+						const pending = activePendingReview(current);
+						let pendingReviewSourceStale = false;
+						if (pending) {
+							try {
+								pendingReviewSourceStale =
+									(await transaction.computeSourceDigest()) !==
+									pending.sourceDigest;
+							} catch (error) {
+								return errorResponse(
+									error,
+									"Repair workspace fingerprinting before recovering this pending review. Do not redispatch the assignment until its source can be checked.",
+								);
+							}
+						}
+						return ok("Flow status loaded.", {
+							projection: project(current, request, pendingReviewSourceStale),
+						});
 					});
 				}
 				return ok("Flow status loaded.", {
@@ -518,28 +597,52 @@ export function createFlowService(
 							(await transaction.computeSourceDigest()) !==
 							assignment.sourceDigest
 						) {
-							throw new Error(
-								"Workspace content changed after review started; reset and rerun validation and review.",
+							return errorResponse(
+								new Error("Workspace content changed after review started."),
+								"Call flow_feature_reset, start a fresh run, and repeat full validation and review. Do not redispatch this source-stale assignment.",
 							);
 						}
 					}
 					const result = completeFeature(session, request);
 					await transaction.save(result.session);
-					return ok(
-						request.result.verdict === "passed"
-							? "Feature completed."
-							: "Feature blocked by review.",
-						{
-							operation: operationResult(
-								result.session,
-								request.operationId,
-								result.replayed,
-								result.value,
-							),
-							projection: compactProjection(result.session),
-						},
+					return featureCompleteResponse(
+						result.session,
+						request,
+						result.value,
+						result.replayed,
 					);
 				});
+			} catch (error) {
+				return errorResponse(error);
+			}
+		},
+
+		async featureCompleteReplay(input) {
+			try {
+				const request = FeatureCompleteInputSchema.parse(input).request;
+				const session = await repository.read();
+				if (!session) throw new Error("No active Flow session exists.");
+				const priorOperation = session.operations.find(
+					(operation) => operation.id === request.operationId,
+				);
+				if (
+					priorOperation?.kind !== "feature-complete" ||
+					priorOperation.inputDigest !== operationInputDigest(request)
+				) {
+					throw new Error(
+						"Only the Flow reviewer may submit a new feature completion; other agents may replay only an exact previously accepted request.",
+					);
+				}
+				const result = completeFeature(session, request);
+				if (!result.replayed) {
+					throw new Error("Expected an exact feature-completion replay.");
+				}
+				return featureCompleteResponse(
+					result.session,
+					request,
+					result.value,
+					true,
+				);
 			} catch (error) {
 				return errorResponse(error);
 			}

@@ -16,6 +16,8 @@ v5. The public overview and installation instructions live in the
   simplicity-first lifecycle and its intentional tradeoffs.
 - [ADR 0006](adr/0006-bounded-intra-feature-waves.md) — bounded host-native
   worker waves inside one serial durable feature lifecycle.
+- [ADR 0007](adr/0007-reviewer-owned-submission.md) — reviewer-owned result
+  submission with host-checked reviewer identity and no additional protocol.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

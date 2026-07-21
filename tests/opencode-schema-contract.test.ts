@@ -29,7 +29,9 @@ const LIFECYCLE_TOOL_NAMES = [
 type LifecycleToolName = (typeof LIFECYCLE_TOOL_NAMES)[number];
 
 type SafeSchema = {
-	safeParse(value: unknown): { success: boolean };
+	safeParse(
+		value: unknown,
+	): { success: true; data: unknown } | { success: false; error: unknown };
 };
 
 function createRegisteredTools() {
@@ -90,6 +92,7 @@ function collectPropertyNames(schema: JsonSchema, result = new Set<string>()) {
 
 const guard = { operationId: "operation-1", expectedRevision: 0 };
 const featureId = "simplify-flow";
+const assignmentId = "  review-assignment:1  ";
 const plan = {
 	summary: "Simplify Flow",
 	overview: "Keep one serial lifecycle.",
@@ -111,7 +114,9 @@ const validInputs: Record<
 	LifecycleToolName,
 	{ request: Record<string, unknown> }
 > = {
-	flow_status: { request: { view: "compact" } },
+	flow_status: {
+		request: { view: "reviewer", assignmentId },
+	},
 	flow_plan_save: {
 		request: { ...guard, goal: "Ship a simpler Flow", plan },
 	},
@@ -130,18 +135,17 @@ const validInputs: Record<
 			...guard,
 			featureId,
 			artifactsChanged: [{ path: "src/example.ts" }],
-			packet: { summary: "Review the feature", riskLenses: ["regression"] },
+			packet: { summary: "  Review the feature  " },
 		},
 	},
 	flow_feature_complete: {
 		request: {
 			...guard,
 			featureId,
-			assignmentId: "review-assignment:1",
-			summary: "Feature completed",
+			assignmentId,
+			summary: "  Feature completed  ",
 			result: {
 				verdict: "passed",
-				findings: [],
 				terminalDisposition: "submitted",
 			},
 		},
@@ -174,13 +178,17 @@ function expectParity(
 	input: unknown,
 	expected: boolean,
 ): void {
-	expect(hostSchema(name).safeParse(input).success, `${name} host schema`).toBe(
+	const hostResult = hostSchema(name).safeParse(input);
+	const applicationResult = applicationSchemas[name].safeParse(input);
+	expect(hostResult.success, `${name} host schema`).toBe(expected);
+	expect(applicationResult.success, `${name} application schema`).toBe(
 		expected,
 	);
-	expect(
-		applicationSchemas[name].safeParse(input).success,
-		`${name} application schema`,
-	).toBe(expected);
+	if (hostResult.success && applicationResult.success) {
+		expect(hostResult.data as Record<string, unknown>).toEqual(
+			applicationResult.data as Record<string, unknown>,
+		);
+	}
 }
 
 describe("Flow v6 OpenCode host schemas", () => {
@@ -245,6 +253,19 @@ describe("Flow v6 OpenCode host schemas", () => {
 		expect(
 			property(emittedHostSchema("flow_status"), "request").anyOf,
 		).toHaveLength(4);
+	});
+
+	test("preserves opaque review assignment ids", () => {
+		for (const name of ["flow_status", "flow_feature_complete"] as const) {
+			for (const schema of [hostSchema(name), applicationSchemas[name]]) {
+				const result = schema.safeParse(validInputs[name]);
+				if (!result.success) throw new Error(`Expected valid ${name} input.`);
+				expect(
+					(result.data as { request: { assignmentId: string } }).request
+						.assignmentId,
+				).toBe(assignmentId);
+			}
+		}
 	});
 
 	test("matches UTF-8 bounds, plan bounds, and review-result semantics", () => {
@@ -348,7 +369,7 @@ describe("Flow v6 OpenCode host schemas", () => {
 		}
 	});
 
-	test("cancels armed validation before every state mutation", async () => {
+	test("cancels validation only after mutation actor authorization", async () => {
 		const cancelled: string[] = [];
 		const tools = createTools(
 			{},
@@ -366,22 +387,39 @@ describe("Flow v6 OpenCode host schemas", () => {
 		);
 		const context = {
 			sessionID: "schema-contract-session",
+			agent: "build",
 			directory: process.cwd(),
 			worktree: process.cwd(),
 		} as ToolContext;
-		const mutations = [
+		const managerMutations = [
 			"flow_plan_save",
 			"flow_plan_approve",
 			"flow_run_start",
 			"flow_review_start",
-			"flow_feature_complete",
 			"flow_feature_reset",
 			"flow_session_close",
 		] as const;
-		for (const name of mutations) {
+		for (const name of managerMutations) {
 			await tools[name]?.execute({ request: {} } as never, context);
 		}
-		expect(cancelled).toEqual(mutations.map(() => "schema-contract-session"));
+		expect(cancelled).toEqual(
+			managerMutations.map(() => "schema-contract-session"),
+		);
+
+		await tools.flow_feature_complete?.execute(
+			{ request: {} } as never,
+			context,
+		);
+		expect(cancelled).toHaveLength(managerMutations.length);
+
+		await tools.flow_feature_complete?.execute({ request: {} } as never, {
+			...context,
+			agent: "flow-reviewer",
+		});
+		expect(cancelled).toEqual([
+			...managerMutations.map(() => "schema-contract-session"),
+			"schema-contract-session",
+		]);
 	});
 
 	test("keeps guidance as the sole non-request tool", () => {

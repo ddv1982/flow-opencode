@@ -92,7 +92,7 @@ export function compileFlowPromptSurface(
 			return [
 				"# Flow review command",
 				"",
-				"Run this assignment only as the reserved `flow-reviewer`. The reviewer is independent and read-only; it must not edit files or mutate Flow state.",
+				"Run this assignment only as the reserved `flow-reviewer`. The reviewer is independent and workspace-read-only; it may read reviewer status and submit only its own result through `flow_feature_complete`.",
 				"",
 				"Assignment: $ARGUMENTS",
 			].join("\n");

@@ -23,7 +23,10 @@ flowchart LR
 - `src/infrastructure/**` implements application ports for local persistence,
   workspace resolution, and source fingerprinting.
 - `src/platform/opencode/**` owns OpenCode hooks, host schemas, validation
-  observation, the project-scoped duplicate guard, and result rendering.
+  observation, the project-scoped duplicate guard, result rendering, and host
+  caller-identity checks. It checks the reserved reviewer identity before any
+  new completion; non-reviewers can reach only the application's read-only exact
+  replay path.
 - The duplicate guard keeps only canonical project registrations and a compact
   reason status. It does not elect a leader or expose registered runtime
   identities through tool diagnostics.
@@ -36,3 +39,6 @@ flowchart LR
 There is no runtime/adapters compatibility tree or activation/distribution
 layer or Flow-owned CLI entrypoint. Architecture tests enforce dependency
 direction and the absence of retired layers.
+
+[ADR 0007](../adr/0007-reviewer-owned-submission.md) records the reviewer
+authority decision.
