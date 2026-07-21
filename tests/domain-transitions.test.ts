@@ -357,7 +357,10 @@ describe("Session v5 domain state machine", () => {
 		expect(finalReview.assignment).toMatchObject({
 			id: "review-2",
 			kind: "final",
-			validationIds: ["validation-delivery-broad"],
+			validationIds: [
+				"validation-delivery-focused",
+				"validation-delivery-broad",
+			],
 		});
 		expect(
 			session.runs.find((run) => run.featureId === DELIVERY)?.reviews,

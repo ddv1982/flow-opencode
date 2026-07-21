@@ -1,6 +1,6 @@
 ---
 name: flow-run
-description: Implement, validate, independently review, and record one approved Flow feature. Use only after a Flow plan is approved.
+description: Implement, validate, independently review, and record one approved Flow feature. Use after plan approval as an advanced or recovery control; flow-auto is the normal end-to-end driver.
 ---
 
 # Flow Run
@@ -13,17 +13,21 @@ independent review and submits its own result.
 
 ## Start and scope
 
-1. Call `flow_status { request: { view: "compact" } }` first.
+1. Call `flow_status { request: { view: "compact" } }` first. Treat
+   `nextAction` as authoritative workflow state, not as a permission grant.
 2. Call `flow_run_start` when a ready feature is not already running.
 3. Read `flow_status { request: { view: "execution" } }` and use that
    projection as the active scope and source of revision guards.
 4. Read the feature summary, targets, validation, dependencies, requirements,
    and decisions before editing.
 
-Preserve unrelated worktree changes. Stop and replan when implementation needs
-material scope outside the active feature. Use `flow_feature_reset` when a
-wrong design or invalid assumption requires a fresh run; do not layer a retry
-onto a bad execution.
+Preserve unrelated worktree changes and stay inside the active feature. Leave
+changes owned by another planned feature for that feature. If implementation
+needs material scope outside the approved plan, stop editing. Finish the
+approved plan or have the user explicitly choose deferred or abandoned closure
+before starting a new plan; never replan the active approved session in place.
+Use `flow_feature_reset` when a wrong design or invalid assumption requires a
+fresh run within the active feature; do not layer a retry onto a bad execution.
 
 ## Implement
 
@@ -37,8 +41,10 @@ that separate action.
 
 ## Bounded worker waves
 
-Work serially by default. After manager orientation, fan out only when at least
-two genuinely independent slices can be named. Run one cohort of two or three
+Work serially by default. Existing implementation authority covers a qualifying
+worker wave; do not ask for separate approval. After manager orientation, fan
+out only when two or three genuinely independent, non-overlapping slices can be
+named and parallel execution has clear benefit. Run one cohort of two or three
 `flow-worker` instances at a time. Issue every cohort Task call in the same
 assistant tool-use turn before consuming any result. If the host or model
 serializes those calls, treat and report that execution as serial instead of
@@ -89,6 +95,12 @@ secrets. Raw output is deliberately neither persisted nor projected: the
 durable evidence is the command, exit code, output completeness, and output
 digest, while the manager must inspect the live output.
 
+Every host-observed validation advances the session revision through the
+after-hook. Immediately refresh
+`flow_status { request: { view: "compact" } }` after the command and before the
+next `flow_validation_start` or `flow_review_start` mutation; the revision used
+to arm the command is stale.
+
 Use focused validation for ordinary features. For the final feature, run the
 repository's broad applicable gate after the last relevant edit. A source edit
 invalidates earlier applicability. Failed or unavailable checks are blockers,
@@ -121,8 +133,11 @@ source-stale assignment; start a fresh run and repeat full validation and
 review. Never fabricate a verdict. A submitted pass completes the feature; a
 submitted blocking finding records a blocked outcome.
 
-If repair is authorized after a failed review, reset the feature, fix it, and
-repeat full validation and full review in a fresh run.
+When implementation is already authorized, an in-scope failed review needs no
+new permission: reset the feature, fix it, and repeat full validation and full
+review in a fresh run.
 
-Read compact status after every recorded outcome. Follow runtime state to start
-the next feature, report a blocker, or close the completed session.
+Read compact status after every recorded outcome. When invoked directly through
+`/flow-run`, report that one feature's outcome and `nextAction`, then stop. When
+the active driver is `/flow-auto`, return to its loop so it can start the next
+feature, report a blocker, or close the completed session.

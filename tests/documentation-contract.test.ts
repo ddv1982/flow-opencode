@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import packageJson from "../package.json" with { type: "json" };
 import { FLOW_CORE_AGENTS, FLOW_CORE_COMMANDS } from "../src/config-shared.js";
 import { FLOW_GUIDANCE_IDS } from "../src/guidance/ids.js";
 import FlowPlugin from "../src/index.js";
+
+const packageVersion = packageJson.version;
 
 function section(markdown: string, heading: string, level = 2): string {
 	const marker = `${"#".repeat(level)} ${heading}`;
@@ -61,14 +64,23 @@ describe("Flow v6 documentation contract", () => {
 		const readme = await readFile("README.md", "utf8");
 		const install = section(readme, "Install");
 		const block = install.match(/```json\n([\s\S]*?)\n```/)?.[1];
+		const exactPackage = `opencode-plugin-flow@${packageVersion}`;
 
 		expect(JSON.parse(block ?? "null")).toEqual({
 			$schema: "https://opencode.ai/config.json",
-			plugin: ["opencode-plugin-flow@6.3.1"],
+			plugin: [exactPackage],
 		});
 		expect(install).toContain(
-			"opencode plugin opencode-plugin-flow@6.3.1 --global --force",
+			`opencode plugin ${exactPackage} --global --force`,
 		);
+		expect(install).toContain(
+			`To update, replace \`${packageVersion}\` with the new release`,
+		);
+		expect(
+			[...install.matchAll(/opencode-plugin-flow@([^\s"\]]+)/g)].map(
+				(match) => match[1],
+			),
+		).toEqual([packageVersion, packageVersion]);
 		expect(install).toMatch(
 			/Exact version pins do not update\s+automatically\./,
 		);
@@ -213,7 +225,22 @@ describe("Flow v6 documentation contract", () => {
 			section(troubleshooting, "Completion says workspace content changed"),
 		).toMatch(/Reset the feature[\s\S]+Do not redispatch/i);
 		expect(changelog).toMatch(/^## \[Unreleased\]$/m);
-		expect(changelog).toContain("## [6.3.1] - 2026-07-21");
+		const releaseHeadings = [
+			...changelog.matchAll(/^## \[([^\]]+)\](?: - ([^\n]+))?$/gm),
+		];
+		expect(releaseHeadings[0]?.[1]).toBe("Unreleased");
+		const currentRelease = releaseHeadings[1];
+		expect(currentRelease?.[1]).toBe(packageVersion);
+		const releaseDate = currentRelease?.[2] ?? "";
+		expect(releaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		expect(
+			new Date(`${releaseDate}T00:00:00.000Z`).toISOString().slice(0, 10),
+		).toBe(releaseDate);
+		expect(
+			section(changelog, `[${packageVersion}] - ${releaseDate}`),
+		).toContain(
+			`opencode plugin opencode-plugin-flow@${packageVersion} --global --force`,
+		);
 	});
 
 	test("keeps CI focused on normal checks, platforms, live smoke, and release", async () => {

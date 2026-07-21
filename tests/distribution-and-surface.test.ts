@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@opencode-ai/plugin";
@@ -70,6 +70,13 @@ function toolContext(workspace: string): ToolContext {
 
 type PluginHooks = Awaited<ReturnType<typeof FlowPlugin>>;
 const activeHooks: PluginHooks[] = [];
+const activeWorkspaces: string[] = [];
+
+async function createTestWorkspace(prefix: string): Promise<string> {
+	const workspace = await mkdtemp(join(tmpdir(), prefix));
+	activeWorkspaces.push(workspace);
+	return workspace;
+}
 
 async function loadPlugin(
 	workspace: string,
@@ -81,7 +88,24 @@ async function loadPlugin(
 }
 
 afterEach(async () => {
-	for (const hooks of activeHooks.splice(0).reverse()) await hooks.dispose?.();
+	const cleanupErrors: unknown[] = [];
+	for (const hooks of activeHooks.splice(0).reverse()) {
+		try {
+			await hooks.dispose?.();
+		} catch (error) {
+			cleanupErrors.push(error);
+		}
+	}
+	for (const workspace of activeWorkspaces.splice(0).reverse()) {
+		try {
+			await rm(workspace, { recursive: true, force: true });
+		} catch (error) {
+			cleanupErrors.push(error);
+		}
+	}
+	if (cleanupErrors.length > 0) {
+		throw new AggregateError(cleanupErrors, "Flow surface cleanup failed.");
+	}
 });
 
 describe("Flow v6 distribution surface", () => {
@@ -104,7 +128,7 @@ describe("Flow v6 distribution surface", () => {
 			"flow-review",
 		]);
 
-		const workspace = await mkdtemp(join(tmpdir(), "flow-surface-"));
+		const workspace = await createTestWorkspace("flow-surface-");
 		const hooks = await loadPlugin(workspace);
 		expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([...TOOL_NAMES]);
 	});
@@ -168,7 +192,7 @@ describe("Flow v6 distribution surface", () => {
 
 describe("command preflight", () => {
 	test("rewrites manager text and the exact reviewer subtask", async () => {
-		const workspace = await mkdtemp(join(tmpdir(), "flow-command-"));
+		const workspace = await createTestWorkspace("flow-command-");
 		const hooks = await loadPlugin(workspace);
 		const before = hooks["command.execute.before"];
 		if (!before) throw new Error("Missing command preflight hook.");
@@ -214,7 +238,7 @@ describe("command preflight", () => {
 	});
 
 	test("fails closed for mixed manager or malformed reviewer dispatch", async () => {
-		const workspace = await mkdtemp(join(tmpdir(), "flow-command-fail-"));
+		const workspace = await createTestWorkspace("flow-command-fail-");
 		const hooks = await loadPlugin(workspace);
 		const before = hooks["command.execute.before"];
 		if (!before) throw new Error("Missing command preflight hook.");
@@ -257,7 +281,7 @@ describe("command preflight", () => {
 
 describe("duplicate runtime guard", () => {
 	test("disables every copy dynamically until one project runtime remains", async () => {
-		const workspace = await mkdtemp(join(tmpdir(), "flow-duplicate-"));
+		const workspace = await createTestWorkspace("flow-duplicate-");
 		const firstDirectory = join(workspace, "first-directory");
 		const secondDirectory = join(workspace, "second-directory");
 		await Promise.all([mkdir(firstDirectory), mkdir(secondDirectory)]);

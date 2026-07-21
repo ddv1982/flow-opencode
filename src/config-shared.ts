@@ -73,17 +73,17 @@ export const FLOW_CORE_AGENTS = {
 
 export const FLOW_CORE_COMMANDS = {
 	"flow-auto": {
-		description: "Drive the authorized Flow lifecycle",
+		description: "Drive one authorized Flow goal end to end",
 		subtask: false,
 		template: compileFlowPromptSurface("flow-auto"),
 	},
 	"flow-plan": {
-		description: "Create or approve a Flow plan",
+		description: "Plan-only or advanced Flow planning",
 		subtask: false,
 		template: compileFlowPromptSurface("flow-plan"),
 	},
 	"flow-run": {
-		description: "Run one approved Flow feature",
+		description: "Advanced or recovery execution of one Flow feature",
 		subtask: false,
 		template: compileFlowPromptSurface("flow-run"),
 	},
@@ -94,7 +94,7 @@ export const FLOW_CORE_COMMANDS = {
 		template: compileFlowPromptSurface("flow-review"),
 	},
 	"flow-status": {
-		description: "Inspect the active Flow session",
+		description: "Advanced or recovery inspection of Flow state",
 		subtask: false,
 		template: compileFlowPromptSurface("flow-status"),
 	},
@@ -111,7 +111,7 @@ function reviewerSteps(
 ) {
 	const raw = envValue(env, "OPENCODE_FLOW_REVIEWER_STEPS");
 	if (!raw) return undefined;
-	if (!/^[1-9][0-9]{0,2}$/.test(raw) || Number(raw) > 1000) {
+	if (!/^[1-9][0-9]*$/.test(raw) || Number(raw) > 1000) {
 		onWarning?.(
 			"OPENCODE_FLOW_REVIEWER_STEPS must be an integer from 1 through 1000; ignoring it.",
 		);

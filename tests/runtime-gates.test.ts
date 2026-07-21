@@ -93,6 +93,41 @@ class MemorySessionRepository implements SessionRepository {
 	}
 }
 
+class CompletionRaceRepository extends MemorySessionRepository {
+	private completionReadReleases: Array<() => void> | null = null;
+	private transactionTail: Promise<void> = Promise.resolve();
+	completionOuterReadCount = 0;
+
+	holdCompletionReadsUntilBothArrive(): void {
+		this.completionReadReleases = [];
+	}
+
+	override read(): Promise<Session | null> {
+		const releases = this.completionReadReleases;
+		if (!releases) return super.read();
+		const snapshot = this.session;
+		this.completionOuterReadCount += 1;
+		return new Promise((resolve) => {
+			releases.push(() => resolve(snapshot));
+			if (releases.length !== 2) return;
+			this.completionReadReleases = null;
+			for (const release of releases) release();
+		});
+	}
+
+	override transact<T>(
+		task: (transaction: SessionTransaction) => Promise<T>,
+	): Promise<T> {
+		this.transactionCount += 1;
+		const result = this.transactionTail.then(() => task(this.transaction));
+		this.transactionTail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+}
+
 function deterministicEnvironment(): TransitionEnvironment {
 	const sequences = new Map<string, number>();
 	return {
@@ -230,7 +265,81 @@ describe("Flow application runtime gates", () => {
 		expect(repository.session?.revision).toBe(1);
 	});
 
-	test("projects the full approved plan and only assignment-linked validation to a final reviewer", async () => {
+	test("replays an exact feature completion that loses the serialized transaction race", async () => {
+		const repository = new CompletionRaceRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		const prepared = await prepareValidation(repository, {
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "broad",
+		});
+		await persistObservedValidation(repository, {
+			...prepared,
+			captureId: "capture-completion-race",
+			exitCode: 0,
+			outputDigest: OUTPUT,
+			outputComplete: true,
+		});
+		expectOk(
+			await flow.reviewStart({
+				request: {
+					operationId: "review-start-completion-race",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [{ path: "src/application/flow-service.ts" }],
+					packet: {
+						summary: "Review concurrent completion replay.",
+						riskLenses: ["transaction serialization"],
+					},
+				},
+			}),
+		);
+		const assignment = activeReview(repository);
+		const completeRequest = {
+			request: {
+				operationId: "complete-runtime-concurrently",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				assignmentId: assignment.id,
+				summary: "Runtime completed exactly once.",
+				result: {
+					verdict: "passed",
+					findings: [],
+					terminalDisposition: "submitted",
+				},
+			},
+		} as const;
+		const revisionBeforeCompletion = revision(repository);
+		const setupSaveCount = repository.saveCount;
+		expect(setupSaveCount).toBe(5);
+		repository.holdCompletionReadsUntilBothArrive();
+
+		const firstCompletion = flow.featureComplete(completeRequest);
+		const secondCompletion = flow.featureComplete(completeRequest);
+		const responses = await Promise.all([firstCompletion, secondCompletion]);
+
+		for (const response of responses) expectOk(response);
+		const replayFlags = responses
+			.map(
+				(response) =>
+					(response.workflowData.operation as { replayed: boolean }).replayed,
+			)
+			.sort((left, right) => Number(left) - Number(right));
+		expect(replayFlags).toEqual([false, true]);
+		expect(repository.completionOuterReadCount).toBe(2);
+		expect(revision(repository)).toBe(revisionBeforeCompletion + 1);
+		expect(repository.saveCount).toBe(setupSaveCount + 1);
+		expect(
+			repository.session?.operations.filter(
+				(operation) => operation.kind === "feature-complete",
+			),
+		).toEqual([
+			expect.objectContaining({ id: "complete-runtime-concurrently" }),
+		]);
+	});
+
+	test("projects the full approved plan and all applicable validation to a final reviewer", async () => {
 		const foundation = "runtime-foundation";
 		const runtimeFeature = plan.features[0];
 		if (!runtimeFeature)
@@ -345,7 +454,7 @@ describe("Flow application runtime gates", () => {
 				},
 			}),
 		);
-		const successfulUnassigned = await recordPassingValidation(
+		const assignedFocused = await recordPassingValidation(
 			FEATURE,
 			"capture-final-focused",
 			"focused",
@@ -379,13 +488,10 @@ describe("Flow application runtime gates", () => {
 			feature: multiFeaturePlan.features[1],
 			assignment: {
 				kind: "final",
-				validationIds: [assignedBroad.id],
+				validationIds: [assignedFocused.id, assignedBroad.id],
 			},
-			validations: [assignedBroad],
+			validations: [assignedFocused, assignedBroad],
 			completedFeatureIds: [foundation],
-		});
-		expect(review.workflowData.projection).not.toMatchObject({
-			validations: [successfulUnassigned],
 		});
 	});
 

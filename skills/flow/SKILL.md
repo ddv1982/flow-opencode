@@ -1,11 +1,13 @@
 ---
 name: flow
-description: Manage a Flow goal from planning through implementation, validation, independent review, and closure. Use for end-to-end or resumed Flow work; use flow-plan for plan-only work and flow-run for one approved feature.
+description: Drive a Flow goal from planning through implementation, validation, independent review, and explicit closure. Use flow-auto as the normal end-to-end interface; use flow-plan for plan-only work and flow-run or flow-status for advanced recovery.
 ---
 
 # Flow
 
-Flow is a small state ledger around ordinary coding work. The root manager owns
+Flow is a small state ledger around coding work. An active Flow session is
+authoritative for its goal until completed, deferred, or abandoned closure; do
+not silently fall back to ordinary non-Flow coding. The root manager owns
 the session, integration, validation, review dispatch, reset, closure, and every
 lifecycle mutation except review submission. Bounded `flow-worker`
 instances may contribute disjoint work inside the active feature. The reserved
@@ -16,7 +18,9 @@ lifecycle mutation.
 ## Route from status
 
 1. Call `flow_status { request: { view: "compact" } }` first. Trust its
-   projection over conversation memory.
+   projection over conversation memory. Treat `nextAction` as authoritative
+   workflow state, not permission to exceed or a reason to discard existing
+   user authority.
 2. If there is no session or the plan is still a draft, call
    `flow_guidance { id: "flow-plan" }` and follow that contract. Stop after
    planning when the user asked for a plan only.
@@ -24,8 +28,15 @@ lifecycle mutation.
    `flow_guidance { id: "flow-run" }` and follow that contract for exactly that
    feature.
 4. After the feature outcome, read compact status again. Start the next ready
-   feature, report the real blocker, or close a completed session with one
-   `flow_session_close` request.
+   feature, repair an in-scope failed review, report a real blocker, or close a
+   completed session with one `flow_session_close` request.
+
+Within existing implementation authority, continue after approval, every
+feature outcome, and an in-scope failed-review reset and repair without asking
+again. Pause only for a material product or scope choice, missing authority for
+an external Git or release action, a hard operational failure, or the user's
+explicit selection of deferred or abandoned closure. Only the user may choose
+either non-completed closure kind.
 
 Core contracts are bundled in the plugin; load them through `flow_guidance` and
 do not depend on native skill discovery. If a required Flow tool is unavailable,
@@ -33,8 +44,10 @@ report that the plugin is not fully loaded instead of simulating state changes.
 
 ## Invariants
 
-- Approved plans do not change. Reset affected work or close the session before
-  changing direction.
+- Approved plans do not change. If implementation requires material scope
+  outside the plan, stop editing. Finish the approved plan or have the user
+  explicitly choose deferred or abandoned closure before starting a new plan;
+  do not replan in place.
 - Only one durable feature run is active at a time. Conversation-local worker
   waves do not create additional runs or Flow state.
 - Work stays inside the active feature and preserves unrelated user changes.

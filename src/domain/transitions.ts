@@ -506,10 +506,13 @@ export function startReview(
 		(validation) =>
 			validation.exitCode === 0 &&
 			validation.outputComplete &&
-			validation.sourceDigest === input.sourceDigest &&
-			(kind === "feature" || validation.scope === "broad"),
+			validation.sourceDigest === input.sourceDigest,
 	);
-	if (applicable.length === 0) {
+	const hasRequiredValidation =
+		kind === "feature"
+			? applicable.length > 0
+			: applicable.some((validation) => validation.scope === "broad");
+	if (!hasRequiredValidation) {
 		fail(
 			kind === "final"
 				? "Final review requires passing broad validation for the current workspace content."

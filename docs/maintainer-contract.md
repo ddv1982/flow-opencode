@@ -10,6 +10,18 @@ review, reset, and closure. Implementation inside that run may use one bounded,
 ephemeral host-native worker wave. Flow exposes ten tools, five commands, four
 guides, and two hidden subagents.
 
+An active Flow session is authoritative for its goal until an explicit close
+records completed, deferred, or abandoned disposition. The manager must not
+silently continue that goal through an ordinary non-Flow workflow. Runtime
+`nextAction` is authoritative workflow state, not a new permission grant.
+
+Within existing implementation authority, the manager continues after plan
+approval, each feature outcome, and an in-scope failed-review repair without
+asking again. It pauses only for a material product or scope choice, missing
+authority for an external Git or release action, a hard operational failure, or
+the user's explicit choice of deferred or abandoned closure. Only the user may
+select either non-completed disposition.
+
 Flow does not own plugin installation, automatic activation, cache cleanup,
 configuration repair, optional worker admission, audit schemas, benchmark
 promotion, replay reporting, narrow correction protocols, durable wave state,
@@ -21,6 +33,9 @@ migration.
 - Session v5 is the only active schema. Older documents never hydrate as active
   state and old archives never authorize work.
 - A plan is a bounded DAG and is immutable after approval.
+- If implementation would require material scope outside an approved plan, stop
+  editing. Finish the approved plan or explicitly close it before creating a
+  different plan; never replan the active approved session in place.
 - A feature run is the canonical attempt aggregate. It contains validation,
   review, result, and artifacts; status and progress are derived.
 - At most one run is active. Dependencies must be complete before a run starts.
@@ -92,12 +107,19 @@ does not recommend redispatch.
 Observed-but-unsubmitted work fails closed. [ADR
 0007](adr/0007-reviewer-owned-submission.md) records the rationale.
 
+Every host-observed validation advances the revision indirectly through the
+after-hook. The manager must refresh compact status after each observation and
+before another validation or review mutation; the revision used to arm the
+command is no longer current.
+
 ## Bounded worker waves
 
 Serial means one durable active feature run and one authoritative combined
 validation/review chain. The manager works serially by default, but may delegate
 two or three exact, non-overlapping slices to one initial `flow-worker` cohort
-and at most one targeted follow-up cohort.
+when parallel work has clear benefit, and at most one targeted follow-up cohort.
+Existing implementation authority covers a qualifying wave; workers need no
+separate user approval.
 
 Workers contribute only inside their assigned boundary. The manager owns shared
 files, integration, evidence acceptance, the combined diff, authoritative
@@ -137,11 +159,11 @@ manager contract.
 
 | Command | Contract |
 | --- | --- |
-| `flow-auto` | Drive only the authorized lifecycle. |
-| `flow-plan` | Create, revise, or approve a plan. |
-| `flow-run` | Run or resume one approved feature. |
+| `flow-auto` | Normal end-to-end driver for the authorized lifecycle. |
+| `flow-plan` | Plan-only/advanced creation, revision, and approval. |
+| `flow-run` | Advanced/recovery execution of one approved feature. |
 | `flow-review` | Internal/recovery dispatch for a runtime-created reviewer assignment. |
-| `flow-status` | Project compact durable state and the next action. |
+| `flow-status` | Advanced/recovery projection of compact durable state and the next action. |
 
 `flow-review` stays in the public inventory because OpenCode dispatches the
 reserved reviewer through it and recovery may need it. It is not an ordinary

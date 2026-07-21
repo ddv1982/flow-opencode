@@ -22,7 +22,7 @@ function register(
 ): FlowLeadershipHandle {
 	return registerFlowPluginInstance(project, {
 		packageName: "opencode-plugin-flow",
-		version: "6.3.1",
+		version: "fixture-version",
 		protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
 		instanceId,
 		...identity,

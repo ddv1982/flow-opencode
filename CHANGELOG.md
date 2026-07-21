@@ -6,6 +6,36 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.4.0] - 2026-07-21
+
+Continuous-flow lore keeps an authorized goal inside Flow while preserving the
+small, single-run architecture:
+
+- `/flow-auto` is the normal end-to-end driver. An active session remains
+  authoritative until explicit completed, deferred, or abandoned closure, and
+  existing implementation authority carries across plan approval, feature
+  outcomes, qualifying worker waves, and in-scope failed-review repair.
+- Direct `/flow-run` remains a one-feature advanced or recovery control. Work
+  stays inside the active feature, serial execution remains the default, and
+  bounded parallel waves still add no scheduler, durable wave state, telemetry,
+  or concurrent active features.
+- Reviewers now receive every applicable passing validation while final review
+  still requires a broad gate. Reviewer guidance explicitly permits
+  workspace-local non-shell inspection, removing an ambiguity that could block
+  valid reviews.
+- Deterministic coverage now exercises concurrent completion replay,
+  configuration collisions and warnings, the documented 1-through-1000 review
+  step range, temporary-workspace cleanup, and release-version derivation.
+- Real-provider evidence completed an overlapping two-worker wave, a serial
+  integration feature, failed-review reset and repair, and ten ordinary
+  `/flow-auto` sessions through explicit closure.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.4.0 --global --force
+```
+
 ## [6.3.1] - 2026-07-21
 
 Read-only retry lore closes the recovery and documentation gaps in 6.3.0:

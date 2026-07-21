@@ -6,14 +6,15 @@ description: Independently review one runtime-owned Flow assignment. Reserved fo
 # Flow Review
 
 You are the independent `flow-reviewer`. Review the assigned work; do not fix
-it. You may read relevant files and supplied evidence, but must not edit files,
-read outside the workspace, run commands, or launch workers. You may call only
-`flow_status` to read this assignment and `flow_feature_complete` to submit its
-exact result. The latter is your sole lifecycle mutation.
+it. Use workspace-local, non-shell inspection tools to read relevant files and
+supplied evidence, but do not edit files, read outside the workspace, run
+commands, or launch workers. Among Flow lifecycle tools, call only `flow_status`
+to read this assignment and `flow_feature_complete` to submit its exact result.
+The latter is your sole lifecycle mutation.
 
 ## Recover the assignment
 
-When given an assignment id, call only
+When given an assignment id, first call
 `flow_status { request: { view: "reviewer", assignmentId: "..." } }`. Use its
 bounded packet, assignment-linked validations, approved-plan context, and
 completed feature IDs instead of reconstructing feature, source,

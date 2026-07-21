@@ -85,13 +85,55 @@ describe("production Flow prompts", () => {
 			/never copy or submit its\s+verdict[\s\S]+read compact status/i,
 		);
 		expect(run).toMatch(/scope: "broad"[\s\S]+canonical applicable gate/i);
-		expect(run).toMatch(/failed review[\s\S]+full validation and full review/i);
+		expect(run).toMatch(
+			/failed review[\s\S]+full validation and full\s+review/i,
+		);
 		expect(run).toMatch(
 			/workspace content changed[\s\S]+flow_feature_reset[\s\S]+do not redispatch/i,
 		);
 		const auto = compileFlowPromptSurface("flow-auto");
 		expect(auto).toMatch(
 			/workspace content changed[\s\S]+flow_feature_reset[\s\S]+must not be redispatched/i,
+		);
+	});
+
+	test("keeps an active Flow goal continuous within existing authority", () => {
+		const auto = compileFlowPromptSurface("flow-auto");
+		expect(auto).toMatch(
+			/active Flow session is\s+authoritative[\s\S]+do\s+not silently fall back to ordinary non-Flow coding/i,
+		);
+		expect(auto).toMatch(
+			/nextAction[\s\S]+authoritative\s+workflow state[\s\S]+not permission/i,
+		);
+		expect(auto).toMatch(
+			/existing implementation authority[\s\S]+continue after approval[\s\S]+feature outcome[\s\S]+failed-review[\s\S]+without asking\s+again/i,
+		);
+		expect(auto).toMatch(
+			/pause only for[\s\S]+material product or scope choice[\s\S]+external Git or release action[\s\S]+hard operational failure/i,
+		);
+		expect(auto).toMatch(
+			/only the user may choose[\s\S]+non-completed closure kind/i,
+		);
+
+		const run = compileFlowPromptSurface("flow-run");
+		expect(run).not.toMatch(/stop and replan/i);
+		expect(run).toMatch(
+			/stay inside the active feature[\s\S]+changes owned by another planned feature/i,
+		);
+		expect(run).toMatch(
+			/outside the approved plan, stop editing[\s\S]+finish the\s+approved plan[\s\S]+deferred or abandoned closure[\s\S]+never replan the active approved session in place/i,
+		);
+		expect(run).toMatch(
+			/existing implementation authority covers a qualifying\s+worker wave[\s\S]+do not ask for separate approval/i,
+		);
+		expect(run).toMatch(
+			/two or three genuinely independent, non-overlapping slices[\s\S]+clear benefit/i,
+		);
+		expect(run).toMatch(
+			/host-observed validation advances the session revision[\s\S]+refresh[\s\S]+view: "compact"[\s\S]+before the\s+next `flow_validation_start` or `flow_review_start`/i,
+		);
+		expect(run).toMatch(
+			/invoked directly through\s+`\/flow-run`[\s\S]+one feature's outcome[\s\S]+then stop[\s\S]+active driver is `\/flow-auto`[\s\S]+start the next\s+feature/i,
 		);
 	});
 
@@ -102,8 +144,12 @@ describe("production Flow prompts", () => {
 			/reserved `flow-reviewer`[\s\S]+workspace-read-only[\s\S]+submit only its own result/i,
 		);
 		expect(reviewer).toMatch(
-			/must not edit files[\s\S]+sole lifecycle mutation/i,
+			/do not edit files[\s\S]+sole lifecycle mutation/i,
 		);
+		expect(reviewer).toMatch(
+			/workspace-local, non-shell inspection tools[\s\S]+among Flow lifecycle tools[\s\S]+flow_status[\s\S]+flow_feature_complete/i,
+		);
+		expect(reviewer).toMatch(/assignment id, first call[\s\S]+flow_status/i);
 		expect(reviewer).toMatch(/flow_status[\s\S]+Every blocker must cite/i);
 		expect(reviewer).toMatch(
 			/workspace content changed[\s\S]+reset[\s\S]+do not recommend redispatch/i,

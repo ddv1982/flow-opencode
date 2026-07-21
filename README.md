@@ -11,16 +11,20 @@ Flow keeps one durable active feature run at a time. When implementation divides
 cleanly, the manager may ask a small host-native worker cohort to contribute in
 parallel before it validates and reviews the combined result.
 
+Once a Flow session starts, it remains the workflow for that goal until Flow
+records completed, deferred, or abandoned closure. It never silently falls back
+to ordinary non-Flow coding.
+
 ## Install
 
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.3.1 --global --force
+opencode plugin opencode-plugin-flow@6.4.0 --global --force
 ```
 
 Omit `--global` for project scope. Exact version pins do not update
-automatically. To update, replace `6.3.1` with the new release and rerun the
+automatically. To update, replace `6.4.0` with the new release and rerun the
 command.
 
 Before upgrading from Flow v5 or earlier, finish or explicitly close any active
@@ -32,7 +36,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.3.1"]
+  "plugin": ["opencode-plugin-flow@6.4.0"]
 }
 ```
 
@@ -53,9 +57,11 @@ Start a complete workflow:
 Flow inspects the worktree, proposes a feature plan, and asks for approval
 unless your request already authorized implementation. It then runs one
 runnable feature at a time, validates the actual workspace, obtains an
-independent review, and repeats until it can close the session.
+independent review, and repeats until it can close the session. Existing
+implementation authority carries across approval, feature outcomes, and
+in-scope failed-review repairs; Flow does not ask for the same permission again.
 
-For more control, plan first:
+For plan-only or advanced use, plan first:
 
 ```text
 /flow-plan add rate limiting to the public API
@@ -63,9 +69,10 @@ For more control, plan first:
 
 Review the proposed plan and approve it conversationally. `/flow-plan` does not
 silently grant permission to implement, commit, push, or publish. After
-approval, use `/flow-run` to run or resume one feature.
+approval of a plan-only request, `/flow-run` can run or recover one feature.
 
-At any point, `/flow-status` reports the durable state and next action.
+`/flow-run` and `/flow-status` are advanced/recovery controls. At any point,
+`/flow-status` reports the durable state and next action.
 
 ## How Flow works
 
@@ -86,7 +93,8 @@ action after a restart or context change.
 Parallel contribution is optional and local to one active feature. The manager
 may launch two or three `flow-worker` instances only for exact,
 non-overlapping slices, then inspect and integrate their work. At most one
-targeted follow-up wave may address a concrete gap.
+targeted follow-up wave may address a concrete gap. Once implementation is
+authorized, a qualifying wave needs no separate approval.
 
 Workers cannot delegate, call Flow lifecycle tools, or approve their own work.
 Flow persists no wave state: the manager remains responsible for the combined
@@ -97,20 +105,20 @@ integration-heavy tasks stay serial.
 
 | Command | Purpose |
 | --- | --- |
-| `/flow-auto <goal>` | Drive the authorized lifecycle; stop after planning if implementation was not authorized. |
-| `/flow-plan <goal>` | Create, revise, or approve a plan through conversation. |
-| `/flow-run` | Run or resume one approved feature. |
+| `/flow-auto <goal>` | Normal end-to-end driver for the authorized lifecycle; stop after planning if implementation was not authorized. |
+| `/flow-plan <goal>` | Plan-only/advanced creation, revision, and approval. |
+| `/flow-run` | Advanced/recovery execution of one approved feature. |
 | `/flow-review` | Internal/recovery dispatch for a runtime-created reviewer assignment. |
-| `/flow-status` | Inspect the active session and next action. |
+| `/flow-status` | Advanced/recovery inspection of the active session and next action. |
 
-Ordinary workflows start with `/flow-auto`, `/flow-plan`, `/flow-run`, or
-`/flow-status`. `/flow-review` remains public for runtime dispatch and recovery,
-but it is not an ordinary starting point.
+Use `/flow-auto` for the ordinary end-to-end workflow. The other commands expose
+plan-only, advanced, internal, or recovery controls.
 
 ## Recovery
 
-Start with `/flow-status`; its next action is authoritative. Do not hand-edit
-`.flow/session.json` to bypass a gate. If validation, review, locking,
+Start with `/flow-status`; its next action is authoritative workflow state, not
+permission to exceed the user's authority. Do not hand-edit `.flow/session.json`
+to bypass a gate. If validation, review, locking,
 fingerprinting, or archive publication fails, follow the focused steps in
 [troubleshooting](docs/troubleshooting.md).
 

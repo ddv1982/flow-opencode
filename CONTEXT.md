@@ -4,6 +4,10 @@ Flow coordinates one approved plan through a serial durable lifecycle, observed
 validation, independent review, and explicit closure. Implementation inside one
 active feature may use an ephemeral bounded worker wave.
 
+An active Flow session is authoritative for its goal until a completed,
+deferred, or abandoned close is recorded. Work on that goal must not silently
+fall back to an ordinary non-Flow workflow.
+
 ## Versions
 
 **Flow v6** is the plugin and product generation.
@@ -24,6 +28,10 @@ and state. Avoid separate “history entry” or copied feature-status concepts.
 **Active run**: The one run currently allowed to receive validation or review.
 Flow has no lanes, concurrent active features, or durable worker execution
 state.
+
+**Next action**: The runtime's authoritative workflow direction at the current
+revision. It identifies the next Flow transition; it neither grants new user
+permission nor revokes authority already given.
 
 **Bounded wave**: An optional ephemeral cohort of two or three `flow-worker`
 instances contributing exact, non-overlapping slices inside one active run. One
@@ -69,6 +77,7 @@ replays; different input under the same ID conflicts.
 
 **Closure**: The explicit completed, deferred, or abandoned terminal state.
 Completed closure requires every planned feature to have a passing run.
+Deferred and abandoned closure require an explicit user choice.
 
 **Archive publication**: No-overwrite publication of closed state into
 `.flow/history/`, followed by active-state cleanup. Repeating the exact close
