@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { ToolContext } from "@opencode-ai/plugin";
-import type { FlowResponse } from "../src/application/flow-service.js";
+import type { FlowService } from "../src/application/flow-service.js";
 import type { SourceDigest } from "../src/domain/session.js";
 import {
 	archivedSessionPath,
@@ -29,11 +29,26 @@ import { createTools } from "../src/platform/opencode/tools.js";
 const execFileAsync = promisify(execFile);
 const FEATURE_ID = "lifecycle";
 const OUTPUT_DIGEST = `sha256:${"b".repeat(64)}` as SourceDigest;
+type FeatureCompleteResponse = Awaited<
+	ReturnType<FlowService["featureComplete"]>
+>;
 
-function ok(response: FlowResponse): FlowResponse {
+function assertOk<
+	T extends Readonly<{ status: "ok" | "error"; summary: string }>,
+>(response: T): asserts response is Extract<T, { status: "ok" }> {
 	expect(response.status).toBe("ok");
 	if (response.status !== "ok") throw new Error(response.summary);
+}
+
+function ok<T extends Readonly<{ status: "ok" | "error"; summary: string }>>(
+	response: T,
+): Extract<T, { status: "ok" }> {
+	assertOk(response);
 	return response;
+}
+
+function parseFeatureCompleteResponse(value: unknown): FeatureCompleteResponse {
+	return JSON.parse(String(value)) as FeatureCompleteResponse;
 }
 
 function toolContext(workspace: string, agent: string): ToolContext {
@@ -83,10 +98,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				},
 			}),
 		);
-		const savedProjection = saved.workflowData.projection as {
-			sessionId: string;
-			revision: number;
-		};
+		const savedProjection = saved.workflowData.projection;
 		expect(savedProjection.revision).toBe(1);
 
 		const approved = ok(
@@ -97,9 +109,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				},
 			}),
 		);
-		const approvedRevision = (
-			approved.workflowData.projection as { revision: number }
-		).revision;
+		const approvedRevision = approved.workflowData.projection.revision;
 		const started = ok(
 			await flowRunStart(workspace, {
 				request: {
@@ -109,9 +119,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				},
 			}),
 		);
-		const startedRevision = (
-			started.workflowData.projection as { revision: number }
-		).revision;
+		const startedRevision = started.workflowData.projection.revision;
 		expect(
 			JSON.parse(await readFile(sessionPath(workspace), "utf8")),
 		).toMatchObject({
@@ -148,10 +156,10 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				},
 			}),
 		);
-		const reviewProjection = review.workflowData.projection as {
-			revision: number;
-			assignment: { id: string; validationIds: string[] };
-		};
+		const reviewProjection = review.workflowData.projection;
+		if (reviewProjection.view !== "reviewer") {
+			throw new Error("Expected an actionable review projection.");
+		}
 		expect(reviewProjection.assignment.validationIds).toEqual([
 			"capture-lifecycle",
 		]);
@@ -198,14 +206,12 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			sessionPath(workspace),
 			"utf8",
 		);
-		const managerAttempt = JSON.parse(
-			String(
-				await completionTool.execute(
-					completionInput,
-					toolContext(workspace, "build"),
-				),
+		const managerAttempt = parseFeatureCompleteResponse(
+			await completionTool.execute(
+				completionInput,
+				toolContext(workspace, "build"),
 			),
-		) as FlowResponse;
+		);
 		expect(managerAttempt.status).toBe("error");
 		expect(managerAttempt.summary).toContain(
 			"Only the Flow reviewer may submit a new feature completion",
@@ -217,32 +223,25 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		expect((await loadSession(workspace))?.runs[0]?.state).toBe("active");
 
 		const completed = ok(
-			JSON.parse(
-				String(
-					await completionTool.execute(
-						completionInput,
-						toolContext(workspace, "flow-reviewer"),
-					),
+			parseFeatureCompleteResponse(
+				await completionTool.execute(
+					completionInput,
+					toolContext(workspace, "flow-reviewer"),
 				),
-			) as FlowResponse,
+			),
 		);
-		const completedProjection = completed.workflowData.projection as {
-			revision: number;
-			status: string;
-		};
+		const completedProjection = completed.workflowData.projection;
 		expect(completedProjection.status).toBe("completed");
 		expect(completionCancellations).toBe(completionCancellationsBeforeManager);
 
 		const stateBeforeReplay = await readFile(sessionPath(workspace), "utf8");
 		const reviewerReplay = ok(
-			JSON.parse(
-				String(
-					await completionTool.execute(
-						completionInput,
-						toolContext(workspace, "flow-reviewer"),
-					),
+			parseFeatureCompleteResponse(
+				await completionTool.execute(
+					completionInput,
+					toolContext(workspace, "flow-reviewer"),
 				),
-			) as FlowResponse,
+			),
 		);
 		expect(reviewerReplay.workflowData.operation).toMatchObject({
 			operationId: "complete-lifecycle",
@@ -255,14 +254,12 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		);
 
 		const managerReplay = ok(
-			JSON.parse(
-				String(
-					await completionTool.execute(
-						completionInput,
-						toolContext(workspace, "build"),
-					),
+			parseFeatureCompleteResponse(
+				await completionTool.execute(
+					completionInput,
+					toolContext(workspace, "build"),
 				),
-			) as FlowResponse,
+			),
 		);
 		expect(managerReplay.workflowData.operation).toMatchObject({
 			operationId: "complete-lifecycle",
@@ -274,19 +271,17 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			stateBeforeReplay,
 		);
 
-		const alteredReplay = JSON.parse(
-			String(
-				await completionTool.execute(
-					{
-						request: {
-							...completionInput.request,
-							summary: "Different completion payload.",
-						},
+		const alteredReplay = parseFeatureCompleteResponse(
+			await completionTool.execute(
+				{
+					request: {
+						...completionInput.request,
+						summary: "Different completion payload.",
 					},
-					toolContext(workspace, "build"),
-				),
+				},
+				toolContext(workspace, "build"),
 			),
-		) as FlowResponse;
+		);
 		expect(alteredReplay.status).toBe("error");
 		expect(alteredReplay.summary).toContain(
 			"may replay only an exact previously accepted request",

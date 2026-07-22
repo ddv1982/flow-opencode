@@ -87,7 +87,16 @@ export function compileFlowPromptSurface(
 		case "flow-run":
 			return managerCommand(surface);
 		case "flow-status":
-			return 'Call `flow_status { request: { view: "compact" } }` and report the runtime projection plus its durable default next action. Do not mutate. For a first blocked review, say that `/flow-run` must read detail before reset because a `[scope-blocker]` may refine that default.';
+			return [
+				'Call `flow_status { request: { view: "compact" } }` first.',
+				"Do not mutate.",
+				"If the top-level response status is `error`, report its exact summary and `workflowData.failure.recovery` when present; otherwise say no recovery guidance was supplied. State that `/flow-status` made no Git or release mutation, report any lifecycle state effect disclosed by the response, and stop. Do not interpret recovery guidance as a blocked review.",
+				'If `projection.status` is `blocked`, call `flow_status { request: { view: "detail" } }` exactly once and label the result overall incomplete.',
+				"From that detail projection, report the goal and progress; blocked feature, attempt, `failedReviewCount`, and findings; completed and untouched features; validations and `artifactsChanged` as Flow-reported artifact evidence; and the exact `nextAction`.",
+				"For a blocked first failed review, explain that `flow_feature_reset` is only the default and `/flow-run` must inspect any `[scope-blocker]` before reset.",
+				"For blocked `await-user-direction`, explain that another attempt requires explicit user direction.",
+				"Otherwise report the compact projection and its exact `nextAction`, state that `/flow-status` made no lifecycle, Git, or release mutation, and stop.",
+			].join(" ");
 		case "flow-review":
 			return [
 				"# Flow review command",

@@ -14,6 +14,7 @@ import { UnreadableFlowSessionError } from "./errors.js";
 import {
 	errorResponse,
 	type FlowResponse,
+	type OperationResult,
 	ok,
 	operationResult,
 } from "./flow-response.js";
@@ -31,29 +32,56 @@ import {
 	type StatusRequest,
 } from "./schema.js";
 import {
+	type ArchiveCollisionStatusResponse,
+	type CloseSessionResponse,
 	closedArchiveCollisionStatus,
 	closeSessionTransaction,
 } from "./session-close.js";
 import {
+	type ActiveSessionProjection,
 	activePendingReview,
+	type CompactProjection,
 	compactProjection,
+	type ExecutionProjection,
 	executionProjection,
+	idleProjection,
 	project,
+	type ReviewerProjection,
 	reviewerProjection,
+	type StatusProjection,
 } from "./session-projection.js";
 
 export type { FlowResponse } from "./flow-response.js";
 
+type StatusWorkflowData = Readonly<{ projection: StatusProjection }>;
+type StatusResponse =
+	| FlowResponse<StatusWorkflowData>
+	| ArchiveCollisionStatusResponse;
+type MutationWorkflowData<P extends ActiveSessionProjection> = Readonly<{
+	operation: OperationResult;
+	projection: P;
+}>;
+
+type CompactMutationResponse = FlowResponse<
+	MutationWorkflowData<CompactProjection>
+>;
+
 export type FlowService = Readonly<{
-	status(input: unknown): Promise<FlowResponse>;
-	planSave(input: unknown): Promise<FlowResponse>;
-	planApprove(input: unknown): Promise<FlowResponse>;
-	runStart(input: unknown): Promise<FlowResponse>;
-	reviewStart(input: unknown): Promise<FlowResponse>;
-	featureComplete(input: unknown): Promise<FlowResponse>;
-	featureCompleteReplay(input: unknown): Promise<FlowResponse>;
-	featureReset(input: unknown): Promise<FlowResponse>;
-	sessionClose(input: unknown): Promise<FlowResponse>;
+	status(input: unknown): Promise<StatusResponse>;
+	planSave(input: unknown): Promise<CompactMutationResponse>;
+	planApprove(input: unknown): Promise<CompactMutationResponse>;
+	runStart(
+		input: unknown,
+	): Promise<FlowResponse<MutationWorkflowData<ExecutionProjection>>>;
+	reviewStart(
+		input: unknown,
+	): Promise<
+		FlowResponse<MutationWorkflowData<ReviewerProjection | CompactProjection>>
+	>;
+	featureComplete(input: unknown): Promise<CompactMutationResponse>;
+	featureCompleteReplay(input: unknown): Promise<CompactMutationResponse>;
+	featureReset(input: unknown): Promise<CompactMutationResponse>;
+	sessionClose(input: unknown): Promise<CloseSessionResponse>;
 }>;
 
 function featureCompleteResponse(
@@ -61,7 +89,7 @@ function featureCompleteResponse(
 	request: FeatureCompleteRequest,
 	run: FeatureRun,
 	replayed: boolean,
-): FlowResponse {
+): CompactMutationResponse {
 	return ok(
 		request.result.verdict === "passed"
 			? "Feature completed."
@@ -109,12 +137,7 @@ export function createFlowService(
 				const session = await repository.read();
 				if (!session) {
 					return ok("No active Flow session.", {
-						projection: {
-							view: request.view,
-							status: "idle",
-							revision: 0,
-							nextAction: "flow_plan_save",
-						},
+						projection: idleProjection(request.view),
 					});
 				}
 				if (
@@ -125,12 +148,7 @@ export function createFlowService(
 						const current = await transaction.load();
 						if (!current) {
 							return ok("No active Flow session.", {
-								projection: {
-									view: request.view,
-									status: "idle",
-									revision: 0,
-									nextAction: "flow_plan_save",
-								},
+								projection: idleProjection(request.view),
 							});
 						}
 						const collisionResponse = await closedArchiveCollisionStatus(

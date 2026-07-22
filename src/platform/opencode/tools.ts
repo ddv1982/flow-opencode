@@ -1,5 +1,4 @@
 import { type Hooks, type ToolContext, tool } from "@opencode-ai/plugin";
-import type { FlowResponse } from "../../application/flow-service.js";
 import {
 	ValidationStartInputSchema,
 	type ValidationStartRequest,
@@ -211,8 +210,18 @@ type ToolOptions = Readonly<{
 }>;
 
 function json(value: unknown): string {
-	return JSON.stringify(value, null, 2);
+	const serialized = JSON.stringify(value, null, 2);
+	if (serialized === undefined) {
+		throw new Error("Flow tool response could not be serialized.");
+	}
+	return serialized;
 }
+
+type FlowToolResponse = Readonly<{
+	status: "ok" | "error";
+	summary: string;
+	workflowData: object;
+}>;
 
 function toolError(error: unknown): string {
 	return json({
@@ -227,9 +236,9 @@ function toolError(error: unknown): string {
 	});
 }
 
-async function execute(
+async function execute<T extends FlowToolResponse>(
 	context: ToolContext,
-	handler: (workspace: string) => Promise<FlowResponse>,
+	handler: (workspace: string) => Promise<T>,
 ): Promise<string> {
 	try {
 		return json(await handler(resolveWorkspaceRoot(context)));
@@ -238,19 +247,19 @@ async function execute(
 	}
 }
 
-function executeMutation(
+function executeMutation<T extends FlowToolResponse>(
 	context: ToolContext,
 	validation: ValidationCaptureCoordinator,
-	handler: (workspace: string) => Promise<FlowResponse>,
+	handler: (workspace: string) => Promise<T>,
 ): Promise<string> {
 	validation.cancel(context.sessionID);
 	return execute(context, handler);
 }
 
-function executeReviewerMutation(
+function executeReviewerMutation<T extends FlowToolResponse>(
 	context: ToolContext,
-	handler: (workspace: string) => Promise<FlowResponse>,
-	replayHandler: (workspace: string) => Promise<FlowResponse>,
+	handler: (workspace: string) => Promise<T>,
+	replayHandler: (workspace: string) => Promise<T>,
 ): Promise<string> {
 	if (context.agent !== "flow-reviewer") {
 		return execute(context, replayHandler);

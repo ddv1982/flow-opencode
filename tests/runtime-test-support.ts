@@ -2,7 +2,6 @@ import { expect } from "bun:test";
 import { ArchiveCollisionError } from "../src/application/errors.js";
 import {
 	createFlowService,
-	type FlowResponse,
 	type FlowService,
 } from "../src/application/flow-service.js";
 import type {
@@ -149,9 +148,20 @@ export function activeReview(
 	return review;
 }
 
-export function expectOk(response: FlowResponse): void {
+export function expectOk<
+	T extends Readonly<{ status: "ok" | "error"; summary: string }>,
+>(response: T): asserts response is Extract<T, { status: "ok" }> {
 	expect(response.status).toBe("ok");
 	if (response.status !== "ok") throw new Error(response.summary);
+}
+
+export function expectError<
+	T extends Readonly<{ status: "ok" | "error"; summary: string }>,
+>(response: T): asserts response is Extract<T, { status: "error" }> {
+	expect(response.status).toBe("error");
+	if (response.status !== "error") {
+		throw new Error(`Expected an error response: ${response.summary}`);
+	}
 }
 
 export async function startSession(

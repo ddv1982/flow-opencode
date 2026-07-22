@@ -35,6 +35,19 @@ function expectBefore(text: string, before: string, after: string): void {
 	expect(afterIndex).toBeGreaterThan(beforeIndex);
 }
 
+function expectInOrder(text: string, fragments: string[]): void {
+	let offset = 0;
+	for (const fragment of fragments) {
+		const index = text.indexOf(fragment, offset);
+		expect(index).toBeGreaterThanOrEqual(offset);
+		offset = index + fragment.length;
+	}
+}
+
+function expectOnce(text: string, fragment: string): void {
+	expect(text.split(fragment)).toHaveLength(2);
+}
+
 describe("production Flow prompts", () => {
 	test("compiles seven runtime surfaces from four canonical guides", () => {
 		expect(FLOW_GUIDANCE_TOPICS).toEqual([
@@ -80,11 +93,18 @@ describe("production Flow prompts", () => {
 		for (const [surface, heading, stops] of entries) {
 			const prompt = section(compileFlowPromptSurface(surface), heading);
 			expect(prompt).toMatch(
-				/archiveRetry[\s\S]+flow_session_close[\s\S]+byte-for-byte[\s\S]+grants no new work/i,
+				/archiveRetry[\s\S]+flow_session_close[\s\S]+byte-for-byte/i,
 			);
-			expectBefore(prompt, "archiveRetry", "align the compact-projected");
+			expect(prompt).toMatch(/grants no new\s+work/i);
+			expectBefore(
+				prompt,
+				"archiveRetry",
+				surface === "flow-run"
+					? "align it with the current"
+					: "align the compact-projected",
+			);
 			if (stops)
-				expect(prompt).toMatch(/stop after the[\s\S]+outcome either way/i);
+				expect(prompt).toMatch(/stop after this cleanup outcome either way/i);
 			else
 				expect(prompt).toMatch(
 					/refresh compact status[\s\S]+refreshed projection/i,
@@ -98,12 +118,15 @@ describe("production Flow prompts", () => {
 			"Review and record",
 		);
 		expect(run).toMatch(/\[scope-blocker\][\s\S]+checkpoints immediately/i);
-		expect(run).toMatch(/first recorded[\s\S]+in-scope[\s\S]+one automatic/i);
 		expect(run).toMatch(
-			/second recorded[\s\S]+(?:failure|failed review)[\s\S]+explicit user direction/i,
+			/first ordinary failed review[\s\S]+one automatic `flow_feature_reset`/i,
 		);
 		expect(run).toMatch(
-			/full[\s\S]+validation[\s\S]+full[\s\S]+review[\s\S]+one additional\s+attempt/i,
+			/second failed review[\s\S]+explicitly authorizes one additional attempt/i,
+		);
+		expect(run).toMatch(/full validation[\s\S]+full independent review/i);
+		expect(run).toMatch(
+			/latest repair fixed[\s\S]+recurring and new blocking findings[\s\S]+validations[\s\S]+`artifactsChanged`[\s\S]+explicit authorization/i,
 		);
 		const auto = section(
 			compileFlowPromptSurface("flow-auto"),
@@ -111,6 +134,26 @@ describe("production Flow prompts", () => {
 		);
 		expect(auto).toMatch(
 			/blocked outcome[\s\S]+loaded `flow-run` retry and checkpoint contract/i,
+		);
+
+		const status = compileFlowPromptSurface("flow-status");
+		expectOnce(status, 'flow_status { request: { view: "compact" } }');
+		expectOnce(status, 'flow_status { request: { view: "detail" } }');
+		expect(status).toMatch(
+			/blocked[\s\S]+exactly once[\s\S]+attempt[\s\S]+`failedReviewCount`[\s\S]+findings[\s\S]+validations[\s\S]+`artifactsChanged`[\s\S]+`nextAction`/i,
+		);
+		expect(status).toMatch(/Do not mutate/i);
+		expectInOrder(status, [
+			"top-level response status is `error`",
+			"and stop",
+			"`projection.status` is `blocked`",
+		]);
+		expect(status).toMatch(
+			/`workflowData\.failure\.recovery` when present[\s\S]+no recovery guidance was supplied/i,
+		);
+		expect(status).toMatch(/recovery guidance[\s\S]+blocked review/i);
+		expect(status).toMatch(
+			/blocked `await-user-direction`[\s\S]+requires explicit user direction/i,
 		);
 
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
@@ -135,11 +178,31 @@ describe("production Flow prompts", () => {
 
 		const run = compileFlowPromptSurface("flow-run");
 		const runStart = section(run, "Start and scope");
+		expectInOrder(runStart, [
+			'flow_status { request: { view: "compact" } }',
+			"top-level response status is `error`",
+			"archiveRetry",
+			"align it with the current",
+			"status is `idle` or `planning`",
+			"`flow_session_close`:",
+			"`await-user-direction`",
+			"blocked `flow_feature_reset`",
+			"Running `flow_feature_reset`",
+			"`dispatch-flow-reviewer`:",
+			"`flow_run_start`:",
+			"`flow_validation_start`:",
+			"`flow_review_start`:",
+			"Use execution status",
+		]);
+		expectOnce(run, 'flow_status { request: { view: "detail" } }');
 		expect(runStart).toMatch(
-			/status is `running`[\s\S]+nextAction` is `flow_feature_reset`[\s\S]+pending review is source-stale[\s\S]+call `flow_feature_reset`[\s\S]+do not redispatch/i,
+			/top-level response status is `error`[\s\S]+recovery when present[\s\S]+initial read made no lifecycle/i,
 		);
 		expect(runStart).toMatch(
-			/status is `running`[\s\S]+nextAction` is[\s\S]+`dispatch-flow-reviewer`[\s\S]+skip run start[\s\S]+existing pending assignment/i,
+			/Running `flow_feature_reset`[\s\S]+pending review is source-stale[\s\S]+Never redispatch/i,
+		);
+		expect(runStart).toMatch(
+			/`dispatch-flow-reviewer`[\s\S]+read execution status[\s\S]+If that read errors[\s\S]+stop without dispatching[\s\S]+route that refreshed[\s\S]+only if `nextAction` is still[\s\S]+running[\s\S]+`flow_feature_reset`[\s\S]+never dispatch[\s\S]+that assignment[\s\S]+Skip run[\s\S]+start, implementation, and validation/i,
 		);
 		expect(run).toMatch(
 			/serially by default[\s\S]+two or three genuinely independent[\s\S]+same[\s\S]+assistant tool-use turn[\s\S]+at most one targeted follow-up wave/i,
@@ -147,9 +210,18 @@ describe("production Flow prompts", () => {
 		expect(run).toMatch(
 			/known failed exact plan-listed gate[\s\S]+cannot be discharged by substitute broad validation[\s\S]+already accepted review is grandfathered/i,
 		);
-		expect(section(run, "Review and record")).toMatch(
-			/redispatch[\s\S]+only while compact status is `running`[\s\S]+`dispatch-flow-reviewer`[\s\S]+status remains `running`[\s\S]+pending assignment[\s\S]+`flow_feature_reset`[\s\S]+do not redispatch[\s\S]+source-stale assignment/i,
+		const runReview = section(run, "Review and record");
+		expect(runReview).toMatch(
+			/status remains running[\s\S]+`dispatch-flow-reviewer`[\s\S]+running `flow_feature_reset` route above/i,
 		);
+		expect(runReview).not.toContain(
+			'flow_status { request: { view: "detail" } }',
+		);
+		expect(runReview).not.toContain("apply the error stop above");
+		expect(runReview).toMatch(
+			/latest lifecycle state could not be confirmed[\s\S]+stop[\s\S]+without further mutation[\s\S]+Do not claim this invocation made no lifecycle[\s\S]+mutation/i,
+		);
+		expect(runReview).toMatch(/Use that already-loaded compact status/i);
 
 		const auto = compileFlowPromptSurface("flow-auto");
 		expect(section(auto, "Recovery")).toMatch(

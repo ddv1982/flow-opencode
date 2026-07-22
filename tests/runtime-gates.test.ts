@@ -11,6 +11,7 @@ import {
 	activeReview,
 	approveSession,
 	deterministicEnvironment,
+	expectError,
 	expectOk,
 	FEATURE,
 	MemorySessionRepository,
@@ -73,6 +74,43 @@ describe("Flow application runtime gates", () => {
 		expect(status.workflowData.projection).toMatchObject({
 			goal: "Ship the runtime",
 		});
+	});
+
+	test("projects idle and planning entry actions without status mutation", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = createFlowService(repository, deterministicEnvironment());
+
+		const idle = await flow.status({ request: { view: "compact" } });
+		expectOk(idle);
+		expect(idle.workflowData.projection).toEqual({
+			view: "compact",
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		expect(repository.saveCount).toBe(0);
+
+		expectOk(
+			await flow.planSave({
+				request: {
+					operationId: "plan-save-entry-routing",
+					expectedRevision: 0,
+					goal: "Route a draft plan",
+					plan,
+				},
+			}),
+		);
+		const savesAfterPlan = repository.saveCount;
+		const planning = await flow.status({ request: { view: "compact" } });
+		expectOk(planning);
+		expect(planning.workflowData.projection).toMatchObject({
+			view: "compact",
+			status: "planning",
+			approval: "pending",
+			nextAction: "flow_plan_approve",
+		});
+		expect(repository.saveCount).toBe(savesAfterPlan);
+		expect(repository.session?.revision).toBe(1);
 	});
 
 	test("requires the exact planned command again after a failed attempt", async () => {
@@ -140,8 +178,13 @@ describe("Flow application runtime gates", () => {
 			findings: [
 				{
 					severity: "blocking",
-					summary: "Blocking finding 2.",
+					summary: "Shared contract is still incomplete.",
 					evidence: "src/failed-review-2.ts:1",
+				},
+				{
+					severity: "blocking",
+					summary: "Legacy branch still returns stale data.",
+					evidence: "src/failed-review-2.ts:2",
 				},
 			],
 		});
@@ -169,8 +212,13 @@ describe("Flow application runtime gates", () => {
 			findings: [
 				{
 					severity: "blocking",
-					summary: "Blocking finding 3.",
+					summary: "Shared contract is still incomplete.",
 					evidence: "src/failed-review-3.ts:1",
+				},
+				{
+					severity: "blocking",
+					summary: "New edge case drops recovery evidence.",
+					evidence: "src/failed-review-3.ts:2",
 				},
 			],
 			terminalDisposition: "observed_unsubmitted",
@@ -186,6 +234,58 @@ describe("Flow application runtime gates", () => {
 				failedReviewCount: 2,
 			},
 		});
+
+		const revisionBeforeDetail = repository.session?.revision;
+		const savesBeforeDetail = repository.saveCount;
+		const detail = await flow.status({ request: { view: "detail" } });
+		expectOk(detail);
+		const projection = detail.workflowData.projection;
+		if (!("runs" in projection)) {
+			throw new Error("Expected a detail projection.");
+		}
+		expect(projection).toMatchObject({
+			view: "detail",
+			nextAction: "await-user-direction",
+			blockedFeature: {
+				featureId: FEATURE,
+				attempt: 3,
+				failedReviewCount: 2,
+			},
+		});
+		expect(projection.runs.slice(-2)).toMatchObject([
+			{
+				attempt: 2,
+				artifactsChanged: [{ path: "src/failed-review-2.ts" }],
+				validations: [{ id: "capture-failed-review-2" }],
+				reviews: [
+					{
+						result: {
+							findings: [
+								{ summary: "Shared contract is still incomplete." },
+								{ summary: "Legacy branch still returns stale data." },
+							],
+						},
+					},
+				],
+			},
+			{
+				attempt: 3,
+				artifactsChanged: [{ path: "src/failed-review-3.ts" }],
+				validations: [{ id: "capture-failed-review-3" }],
+				reviews: [
+					{
+						result: {
+							findings: [
+								{ summary: "Shared contract is still incomplete." },
+								{ summary: "New edge case drops recovery evidence." },
+							],
+						},
+					},
+				],
+			},
+		]);
+		expect(repository.session?.revision).toBe(revisionBeforeDetail);
+		expect(repository.saveCount).toBe(savesBeforeDetail);
 	});
 
 	test("does not quarantine state repaired before the transaction lock", async () => {
@@ -208,7 +308,7 @@ describe("Flow application runtime gates", () => {
 
 		const status = await flow.status({ request: { view: "compact" } });
 
-		expect(status.status).toBe("error");
+		expectError(status);
 		expect(status.workflowData.failure).toMatchObject({
 			recovery: expect.stringContaining("current state was left untouched"),
 		});
@@ -242,7 +342,7 @@ describe("Flow application runtime gates", () => {
 		const conflict = await flow.planSave({
 			request: { ...input.request, goal: "Different work" },
 		});
-		expect(conflict.status).toBe("error");
+		expectError(conflict);
 		expect(conflict.summary).toContain(
 			"operationId was already used for different work",
 		);
@@ -258,7 +358,7 @@ describe("Flow application runtime gates", () => {
 				expectedRevision: 0,
 			},
 		});
-		expect(stale.status).toBe("error");
+		expectError(stale);
 		expect(stale.summary).toContain("Stale revision 0");
 		expect(repository.session?.revision).toBe(1);
 	});
@@ -317,12 +417,11 @@ describe("Flow application runtime gates", () => {
 		const secondCompletion = flow.featureComplete(completeRequest);
 		const responses = await Promise.all([firstCompletion, secondCompletion]);
 
-		for (const response of responses) expectOk(response);
 		const replayFlags = responses
-			.map(
-				(response) =>
-					(response.workflowData.operation as { replayed: boolean }).replayed,
-			)
+			.map((response) => {
+				expectOk(response);
+				return response.workflowData.operation.replayed;
+			})
 			.sort((left, right) => Number(left) - Number(right));
 		expect(replayFlags).toEqual([false, true]);
 		expect(repository.completionOuterReadCount).toBe(2);
@@ -547,7 +646,7 @@ describe("Flow application runtime gates", () => {
 				summary: "Not complete yet.",
 			},
 		});
-		expect(prematureClose.status).toBe("error");
+		expectError(prematureClose);
 		expect(prematureClose.summary).toContain(
 			"requires every planned feature to pass review",
 		);
@@ -575,7 +674,7 @@ describe("Flow application runtime gates", () => {
 			},
 		} as const;
 		const changedSource = await flow.featureComplete(completeRequest);
-		expect(changedSource.status).toBe("error");
+		expectError(changedSource);
 		expect(changedSource.summary).toContain(
 			"Workspace content changed after review started",
 		);
@@ -586,13 +685,16 @@ describe("Flow application runtime gates", () => {
 		});
 		expect(repository.session?.revision).toBe(6);
 		expect(activeReview(repository).result).toBeNull();
+		const pendingRunId = assignment.runId;
+		const pendingRevision = repository.session?.revision;
+		const savesBeforeRecoveryStatus = repository.saveCount;
 		repository.sourceDigestFailure = new Error(
 			"Workspace fingerprint is unavailable.",
 		);
 		const unavailablePendingStatus = await flow.status({
 			request: { view: "compact" },
 		});
-		expect(unavailablePendingStatus.status).toBe("error");
+		expectError(unavailablePendingStatus);
 		expect(unavailablePendingStatus.workflowData.failure).toMatchObject({
 			recovery: expect.stringMatching(
 				/Repair workspace fingerprinting[\s\S]+Do not redispatch/i,
@@ -602,24 +704,48 @@ describe("Flow application runtime gates", () => {
 		const stalePendingStatus = await flow.status({
 			request: { view: "compact" },
 		});
+		expectOk(stalePendingStatus);
 		expect(stalePendingStatus.workflowData.projection).toMatchObject({
+			status: "running",
+			activeRunId: pendingRunId,
 			nextAction: "flow_feature_reset",
 		});
+		expect(repository.session?.revision).toBe(pendingRevision);
+		expect(repository.saveCount).toBe(savesBeforeRecoveryStatus);
 
 		repository.sourceDigest = SOURCE_A;
 		const currentPendingStatus = await flow.status({
 			request: { view: "compact" },
 		});
+		expectOk(currentPendingStatus);
 		expect(currentPendingStatus.workflowData.projection).toMatchObject({
+			status: "running",
+			activeRunId: pendingRunId,
 			nextAction: "dispatch-flow-reviewer",
 		});
+		expect(repository.session?.revision).toBe(pendingRevision);
+		expect(repository.saveCount).toBe(savesBeforeRecoveryStatus);
+		const executionStatus = await flow.status({
+			request: { view: "execution" },
+		});
+		expectOk(executionStatus);
+		const executionProjection = executionStatus.workflowData.projection;
+		if (!("run" in executionProjection)) {
+			throw new Error("Expected an execution projection.");
+		}
+		expect(executionProjection.run).toMatchObject({
+			id: pendingRunId,
+			reviews: [{ id: assignment.id, result: null }],
+		});
+		expect(repository.session?.revision).toBe(pendingRevision);
+		expect(repository.saveCount).toBe(savesBeforeRecoveryStatus);
 		const completed = await flow.featureComplete(completeRequest);
 		expectOk(completed);
 		expect(repository.session?.runs[0]?.state).toBe("completed");
 		const staleReviewer = await flow.status({
 			request: { view: "reviewer", assignmentId: assignment.id },
 		});
-		expect(staleReviewer.status).toBe("error");
+		expectError(staleReviewer);
 		expect(staleReviewer.summary).toContain("no longer pending");
 		const replayedRun = await flow.runStart({
 			request: {
@@ -666,7 +792,7 @@ describe("Flow application runtime gates", () => {
 		};
 		repository.archiveFailure = new Error("injected archive interruption");
 		const interruptedClose = await flow.sessionClose(closeRequest);
-		expect(interruptedClose.status).toBe("error");
+		expectError(interruptedClose);
 		expect(interruptedClose.summary).toContain("durably accepted");
 		expect(interruptedClose.workflowData).toMatchObject({
 			operation: { operationId: "close-runtime", replayed: false },
@@ -697,11 +823,11 @@ describe("Flow application runtime gates", () => {
 		});
 
 		repository.archiveFailure = null;
-		const projectedRetry = (
-			retryStatus.workflowData.projection as {
-				archiveRetry: { request: typeof closeRequest.request };
-			}
-		).archiveRetry;
+		const retryProjection = retryStatus.workflowData.projection;
+		if (!("archiveRetry" in retryProjection) || !retryProjection.archiveRetry) {
+			throw new Error("Expected an exact projected archive retry.");
+		}
+		const projectedRetry = retryProjection.archiveRetry;
 		const closed = await flow.sessionClose(projectedRetry);
 		expectOk(closed);
 		expect(closed.workflowData.projection).toMatchObject({
@@ -725,7 +851,7 @@ describe("Flow application runtime gates", () => {
 		const malformedCloseStatus = await flow.status({
 			request: { view: "compact" },
 		});
-		expect(malformedCloseStatus.status).toBe("error");
+		expectError(malformedCloseStatus);
 		expect(malformedCloseStatus.summary).toContain(
 			"not bound to a valid close operation",
 		);

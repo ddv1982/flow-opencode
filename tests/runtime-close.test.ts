@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { DeliveryProjection } from "../src/application/delivery.js";
 import { ArchiveCollisionError } from "../src/application/errors.js";
 import { createFlowService } from "../src/application/flow-service.js";
 import type { Plan, Session } from "../src/domain/session.js";
 import {
 	approveSession,
 	deterministicEnvironment,
+	expectError,
 	expectOk,
 	FEATURE,
 	MemorySessionRepository,
@@ -52,7 +54,7 @@ describe("Flow close recovery and delivery", () => {
 
 		const ambiguous = await flow.sessionClose(closeRequest);
 
-		expect(ambiguous.status).toBe("error");
+		expectError(ambiguous);
 		expect(ambiguous.summary).toBe("injected active directory sync failure");
 		expect(repository.session?.closure?.operationId).toBe(
 			"close-ambiguous-save",
@@ -66,7 +68,7 @@ describe("Flow close recovery and delivery", () => {
 		);
 		const unconfirmed = await flow.sessionClose(closeRequest);
 
-		expect(unconfirmed.status).toBe("error");
+		expectError(unconfirmed);
 		expect(unconfirmed.summary).toBe(
 			"injected active durability confirmation failure",
 		);
@@ -80,7 +82,26 @@ describe("Flow close recovery and delivery", () => {
 		);
 		const collision = await flow.sessionClose(closeRequest);
 
-		expect(collision.status).toBe("error");
+		expectError(collision);
+		if (!collision.workflowData.closeState) {
+			throw new Error("Expected manual close recovery state.");
+		}
+		if (
+			collision.workflowData.closeState.retryExactRequest ||
+			collision.workflowData.closeState.durableAccepted
+		) {
+			throw new Error("Expected unconfirmed manual recovery.");
+		}
+		if (!collision.workflowData.operation) {
+			throw new Error("Expected the attempted close operation.");
+		}
+		expect(collision.workflowData.operation.operationId).toBe(
+			"close-ambiguous-save",
+		);
+		expect(collision.workflowData.projection.nextAction).toBe(
+			"await-user-direction",
+		);
+		expect(collision.workflowData.delivery).toBeUndefined();
 		expect(collision.workflowData).toMatchObject({
 			closeState: {
 				durableAccepted: false,
@@ -99,12 +120,33 @@ describe("Flow close recovery and delivery", () => {
 		repository.archiveFailure = new Error("injected archive sync failure");
 		const confirmed = await flow.sessionClose(closeRequest);
 
-		expect(confirmed.status).toBe("error");
+		expectError(confirmed);
+		if (!confirmed.workflowData.closeState) {
+			throw new Error("Expected close recovery state.");
+		}
+		if (!confirmed.workflowData.closeState.retryExactRequest) {
+			throw new Error("Expected exact close retry recovery.");
+		}
+		if (!confirmed.workflowData.operation || !confirmed.workflowData.delivery) {
+			throw new Error("Expected accepted close recovery evidence.");
+		}
 		expect(confirmed.workflowData.closeState).toMatchObject({
 			durableAccepted: true,
 			archiveConfirmed: false,
 			retryExactRequest: true,
 		});
+		expect(confirmed.workflowData.closeState.retryRequest).toEqual(
+			closeRequest.request,
+		);
+		expect(confirmed.workflowData.operation.operationId).toBe(
+			"close-ambiguous-save",
+		);
+		expect(confirmed.workflowData.projection.archiveRetry).toEqual(
+			closeRequest,
+		);
+		expect(confirmed.workflowData.delivery.goal).toBe(
+			"Retire an ambiguous close",
+		);
 		expect(repository.confirmActiveCount).toBe(3);
 		expect(repository.saveCount).toBe(1);
 		expect(repository.archiveCount).toBe(1);
@@ -132,7 +174,7 @@ describe("Flow close recovery and delivery", () => {
 
 		const interrupted = await flow.sessionClose(closeRequest);
 
-		expect(interrupted.status).toBe("error");
+		expectError(interrupted);
 		expect(repository.session).toBeNull();
 		expect(
 			repository.archives.get("post-unlink-close")?.closure,
@@ -169,7 +211,28 @@ describe("Flow close recovery and delivery", () => {
 			},
 		});
 
-		expect(collision.status).toBe("error");
+		expectError(collision);
+		if (!collision.workflowData.closeState) {
+			throw new Error("Expected manual close recovery state.");
+		}
+		if (
+			collision.workflowData.closeState.retryExactRequest ||
+			!collision.workflowData.closeState.durableAccepted
+		) {
+			throw new Error("Expected accepted manual recovery.");
+		}
+		if (!collision.workflowData.operation || !collision.workflowData.delivery) {
+			throw new Error("Expected accepted close recovery evidence.");
+		}
+		expect(collision.workflowData.operation.operationId).toBe(
+			"close-collision",
+		);
+		expect(collision.workflowData.projection.nextAction).toBe(
+			"await-user-direction",
+		);
+		expect(collision.workflowData.delivery.goal).toBe(
+			"Retire a colliding close",
+		);
 		expect(collision.summary).toContain("manual recovery");
 		expect(collision.workflowData).toMatchObject({
 			closeState: {
@@ -198,7 +261,17 @@ describe("Flow close recovery and delivery", () => {
 
 		const refreshed = await flow.status({ request: { view: "compact" } });
 
-		expect(refreshed.status).toBe("error");
+		expectError(refreshed);
+		if (!refreshed.workflowData.closeState) {
+			throw new Error("Expected status recovery state.");
+		}
+		expect(refreshed.workflowData.closeState.manualRecoveryRequired).toBe(true);
+		expect(refreshed.workflowData.projection.nextAction).toBe(
+			"await-user-direction",
+		);
+		expect(refreshed.workflowData.delivery.goal).toBe(
+			"Retire a colliding close",
+		);
 		expect(refreshed.workflowData).toMatchObject({
 			closeState: {
 				durableAccepted: true,
@@ -321,7 +394,7 @@ describe("Flow close recovery and delivery", () => {
 				summary: "Deterministic delivery shipped.",
 			},
 		};
-		const expectedDelivery = {
+		const expectedDelivery: DeliveryProjection = {
 			goal: "Ship deterministic delivery",
 			closure: {
 				kind: "completed",
@@ -359,15 +432,18 @@ describe("Flow close recovery and delivery", () => {
 
 		repository.archiveFailure = new Error("injected delivery archive failure");
 		const interrupted = await flow.sessionClose(closeRequest);
-		expect(interrupted.status).toBe("error");
+		expectError(interrupted);
+		if (!("delivery" in interrupted.workflowData)) {
+			throw new Error("Expected accepted close delivery data.");
+		}
 		expect(interrupted.workflowData.delivery).toEqual(expectedDelivery);
 		const retryStatus = await flow.status({ request: { view: "compact" } });
 		expectOk(retryStatus);
-		const retryRequest = (
-			retryStatus.workflowData.projection as {
-				archiveRetry: typeof closeRequest;
-			}
-		).archiveRetry;
+		const retryProjection = retryStatus.workflowData.projection;
+		if (!("archiveRetry" in retryProjection) || !retryProjection.archiveRetry) {
+			throw new Error("Expected an exact projected archive retry.");
+		}
+		const retryRequest = retryProjection.archiveRetry;
 		repository.archiveFailure = null;
 		repository.saveFailure = new Error("closed state must not be rewritten");
 		const savesBeforeRetry = repository.saveCount;

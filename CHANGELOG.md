@@ -6,6 +6,36 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.6.0] - 2026-07-22
+
+Projection-guided recovery lore makes Flow's next step easier to understand
+without adding persisted diagnostics or more orchestration:
+
+- `/flow-run` now follows one ordered compact-status route, handles idle and
+  planning entry explicitly, and refreshes execution state before dispatching a
+  recovered reviewer assignment so stale work is reset rather than redispatched.
+- Status failures report the exact summary and optional recovery guidance.
+  Post-review uncertainty no longer incorrectly claims that no lifecycle
+  mutation occurred.
+- Blocked-review handoffs now explain attempts, recurring and new findings,
+  validation evidence, Flow-reported artifacts, completed and untouched work,
+  the exact next action, and whether another repair attempt needs authorization.
+  `/flow-status` obtains that evidence through one detail read.
+- Typed status, execution, reviewer, detail, delivery, operation, and close
+  recovery projections replace broad record casts. Accepted archive retry,
+  accepted manual recovery, unconfirmed replay, and archive lookup collision
+  remain distinct without changing Session v5 or persisted state.
+- OpenCode tool serialization preserves those specialized response types while
+  requiring every handler to return the Flow response envelope. Expanded prompt,
+  runtime, close-recovery, and integration tests cover the contracts; the
+  failed-review retry boundary and bounded worker waves remain unchanged.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.6.0 --global --force
+```
+
 ## [6.5.0] - 2026-07-22
 
 Convergence-safe recovery lore makes long Flow sessions easier to trust

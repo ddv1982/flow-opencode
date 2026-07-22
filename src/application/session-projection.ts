@@ -1,8 +1,17 @@
-import { closureRetryRequest } from "../domain/operation.js";
+import {
+	type ClosureRetryRequest,
+	closureRetryRequest,
+} from "../domain/operation.js";
 import type {
 	FeatureRun,
+	OperationRecord,
+	Plan,
+	PlanFeature,
 	ReviewAssignment,
 	Session,
+	SessionClosure,
+	SessionStatus,
+	ValidationObservation,
 } from "../domain/session.js";
 import {
 	activeRun,
@@ -12,11 +21,104 @@ import {
 import { unresolvedKnownFailedPlanCommands } from "../domain/validation.js";
 import type { StatusRequest } from "./schema.js";
 
-function featureProgress(session: Session): {
+export type FlowNextAction =
+	| "flow_plan_save"
+	| "flow_plan_approve"
+	| "flow_run_start"
+	| "flow_feature_reset"
+	| "await-user-direction"
+	| "flow_session_close"
+	| "flow_status"
+	| "dispatch-flow-reviewer"
+	| "flow_validation_start"
+	| "flow_review_start";
+
+export type FeatureProgress = Readonly<{
 	completed: number;
 	total: number;
 	remaining: number;
-} {
+}>;
+
+export type BlockedFeatureProjection = Readonly<{
+	featureId: string;
+	attempt: number;
+	failedReviewCount: number;
+}>;
+
+export type ArchiveRetryProjection = Readonly<{
+	request: ClosureRetryRequest;
+}>;
+
+export type CompactProjection = Readonly<{
+	view: "compact";
+	sessionId: string;
+	revision: number;
+	goal: string;
+	status: SessionStatus;
+	approval: Session["approval"];
+	activeFeatureId: string | null;
+	activeRunId: string | null;
+	blockedFeature: BlockedFeatureProjection | null;
+	progress: FeatureProgress;
+	nextAction: FlowNextAction;
+	archiveRetry: ArchiveRetryProjection | null;
+}>;
+
+export type ArchivedProjection = Readonly<
+	Omit<CompactProjection, "nextAction" | "archiveRetry"> & {
+		nextAction: null;
+		archiveRetry: null;
+		archived: true;
+	}
+>;
+
+export type ExecutionProjection = Readonly<
+	Omit<CompactProjection, "view"> & {
+		view: "execution";
+		feature: PlanFeature | null;
+		run: FeatureRun | null;
+	}
+>;
+
+export type DetailProjection = Readonly<
+	Omit<CompactProjection, "view"> & {
+		view: "detail";
+		plan: Plan | null;
+		runs: FeatureRun[];
+		closure: SessionClosure | null;
+		operations: OperationRecord[];
+	}
+>;
+
+export type ReviewerProjection = Readonly<{
+	view: "reviewer";
+	sessionId: string;
+	revision: number;
+	goal: string;
+	planContext: Plan | null;
+	feature: PlanFeature | null;
+	assignment: ReviewAssignment;
+	artifactsChanged: FeatureRun["artifactsChanged"];
+	validations: ValidationObservation[];
+	completedFeatureIds: string[];
+}>;
+
+export type IdleProjection = Readonly<{
+	view: StatusRequest["view"];
+	status: "idle";
+	revision: 0;
+	nextAction: "flow_plan_save";
+}>;
+
+export type ActiveSessionProjection =
+	| CompactProjection
+	| DetailProjection
+	| ExecutionProjection
+	| ReviewerProjection;
+
+export type StatusProjection = ActiveSessionProjection | IdleProjection;
+
+function featureProgress(session: Session): FeatureProgress {
 	const total = session.plan?.features.length ?? 0;
 	const completed =
 		session.plan?.features.filter((feature) =>
@@ -30,12 +132,6 @@ export function activePendingReview(session: Session): ReviewAssignment | null {
 		activeRun(session)?.reviews.find((review) => review.result === null) ?? null
 	);
 }
-
-type BlockedFeatureProjection = Readonly<{
-	featureId: string;
-	attempt: number;
-	failedReviewCount: number;
-}>;
 
 function blockedFeatureProjection(
 	session: Session,
@@ -59,7 +155,7 @@ function nextAction(
 	session: Session,
 	pendingReviewSourceStale = false,
 	blockedFeature = blockedFeatureProjection(session),
-): string {
+): FlowNextAction {
 	const status = sessionStatus(session);
 	if (status === "planning") {
 		return session.plan ? "flow_plan_approve" : "flow_plan_save";
@@ -100,7 +196,7 @@ function nextAction(
 export function compactProjection(
 	session: Session,
 	pendingReviewSourceStale = false,
-): Record<string, unknown> {
+): CompactProjection {
 	const run = activeRun(session);
 	const blockedFeature = blockedFeatureProjection(session);
 	const retryRequest = closureRetryRequest(session);
@@ -123,7 +219,7 @@ export function compactProjection(
 	};
 }
 
-export function archivedProjection(session: Session): Record<string, unknown> {
+export function archivedProjection(session: Session): ArchivedProjection {
 	return {
 		...compactProjection(session),
 		nextAction: null,
@@ -135,7 +231,7 @@ export function archivedProjection(session: Session): Record<string, unknown> {
 export function executionProjection(
 	session: Session,
 	pendingReviewSourceStale = false,
-): Record<string, unknown> {
+): ExecutionProjection {
 	const run = activeRun(session);
 	const feature = session.plan?.features.find(
 		(item) => item.id === run?.featureId,
@@ -151,7 +247,7 @@ export function executionProjection(
 export function reviewerProjection(
 	session: Session,
 	assignmentId: string,
-): Record<string, unknown> {
+): ReviewerProjection {
 	let assignment: ReviewAssignment | null = null;
 	let run: FeatureRun | null = null;
 	for (const candidate of session.runs) {
@@ -209,20 +305,10 @@ export function reviewerProjection(
 	};
 }
 
-export function project(
+function detailProjection(
 	session: Session,
-	request: StatusRequest,
 	pendingReviewSourceStale = false,
-): Record<string, unknown> {
-	if (request.view === "compact") {
-		return compactProjection(session, pendingReviewSourceStale);
-	}
-	if (request.view === "execution") {
-		return executionProjection(session, pendingReviewSourceStale);
-	}
-	if (request.view === "reviewer") {
-		return reviewerProjection(session, request.assignmentId);
-	}
+): DetailProjection {
 	return {
 		...compactProjection(session, pendingReviewSourceStale),
 		view: "detail",
@@ -231,4 +317,30 @@ export function project(
 		closure: session.closure,
 		operations: session.operations,
 	};
+}
+
+export function idleProjection(view: StatusRequest["view"]): IdleProjection {
+	return {
+		view,
+		status: "idle",
+		revision: 0,
+		nextAction: "flow_plan_save",
+	};
+}
+
+export function project(
+	session: Session,
+	request: StatusRequest,
+	pendingReviewSourceStale = false,
+): ActiveSessionProjection {
+	switch (request.view) {
+		case "compact":
+			return compactProjection(session, pendingReviewSourceStale);
+		case "detail":
+			return detailProjection(session, pendingReviewSourceStale);
+		case "execution":
+			return executionProjection(session, pendingReviewSourceStale);
+		case "reviewer":
+			return reviewerProjection(session, request.assignmentId);
+	}
 }
