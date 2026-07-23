@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SessionSchema } from "../src/application/schema.js";
+import { compactProjection } from "../src/application/session-projection.js";
 import {
 	MAX_PLAN_FEATURES,
 	MAX_VALIDATIONS_PER_RUN,
@@ -197,6 +198,32 @@ function pass(
 		result: {
 			verdict: "passed",
 			findings: [],
+			terminalDisposition: "submitted",
+		},
+	}).session;
+}
+
+function rejectReview(
+	session: Session,
+	featureId: FeatureId,
+	assignment: ReviewAssignment,
+	operationId = `feature-reject-${featureId}`,
+): Session {
+	return completeFeature(session, {
+		operationId,
+		expectedRevision: session.revision,
+		featureId,
+		assignmentId: assignment.id,
+		summary: `Review blocked ${featureId}.`,
+		result: {
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary: `${featureId} still has a defect.`,
+					evidence: `src/${featureId}.ts:1`,
+				},
+			],
 			terminalDisposition: "submitted",
 		},
 	}).session;
@@ -511,6 +538,19 @@ describe("Session v5 domain state machine", () => {
 			})),
 		};
 		expect(SessionSchema.safeParse(mismatchedSource).success).toBe(false);
+		const ineligibleReviewEvidence: Session = {
+			...closed,
+			runs: closed.runs.map((run) => ({
+				...run,
+				validations: run.validations.map((validation) => ({
+					...validation,
+					ineligibleReason: "source-drift",
+				})),
+			})),
+		};
+		expect(SessionSchema.safeParse(ineligibleReviewEvidence).success).toBe(
+			false,
+		);
 		const downgradedFinal: Session = {
 			...closed,
 			runs: closed.runs.map((run) =>
@@ -645,14 +685,33 @@ describe("Session v5 domain state machine", () => {
 		expect(() =>
 			begin(session, DELIVERY, environment, "start-other-while-blocked"),
 		).toThrow("Reset blocked feature 'foundation'");
+		const blockedRevision = session.revision;
+		expect(() =>
+			resetFeature(
+				session,
+				{
+					operationId: "reset-foundation-start-dependent",
+					expectedRevision: session.revision,
+					featureId: FOUNDATION,
+					nextFeatureId: DELIVERY,
+				},
+				environment,
+			),
+		).toThrow("incomplete dependencies");
+		expect(session.revision).toBe(blockedRevision);
 
-		const reset = resetFeature(session, {
+		const resetInput = {
 			operationId: "reset-foundation",
 			expectedRevision: session.revision,
 			featureId: FOUNDATION,
-		});
+		} as const;
+		const reset = resetFeature(session, resetInput);
 		expect(reset.value).toEqual([FOUNDATION, DELIVERY]);
 		expect(reset.session.runs[0]?.state).toBe("superseded");
+		expect(resetFeature(reset.session, resetInput)).toMatchObject({
+			replayed: true,
+			value: [FOUNDATION, DELIVERY],
+		});
 
 		const retry = begin(
 			reset.session,
@@ -676,6 +735,126 @@ describe("Session v5 domain state machine", () => {
 				runs: [...structuredClone(retry.runs)].reverse(),
 			}).success,
 		).toBe(false);
+	});
+
+	test("requires explicit retries while independent untouched work continues", () => {
+		const environment = deterministicEnvironment();
+		const templateFeature = plan.features[0];
+		if (!templateFeature) throw new Error("Expected a template feature.");
+		const independentPlan: Plan = {
+			...plan,
+			features: ["feature-a", "feature-b", "feature-c"].map((id) => ({
+				...templateFeature,
+				id,
+				title: id,
+				dependsOn: [],
+			})),
+		};
+		let session = begin(
+			approve(saveDraft(environment, { plan: independentPlan })),
+			"feature-a",
+			environment,
+		);
+		session = validate(session, {
+			id: "validation-a",
+			featureId: "feature-a",
+			scope: "focused",
+		});
+		const reviewA = requestReview(session, "feature-a", environment);
+		session = rejectReview(reviewA.session, "feature-a", reviewA.assignment);
+
+		const resetInput = {
+			operationId: "reset-a-start-b",
+			expectedRevision: session.revision,
+			featureId: "feature-a",
+			nextFeatureId: "feature-b",
+		} as const;
+		const atomic = resetFeature(session, resetInput, environment);
+		expect(atomic.value).toMatchObject({
+			featureId: "feature-b",
+			state: "active",
+		});
+		expect(atomic.session.revision).toBe(session.revision + 1);
+		expect(atomic.session.operations.at(-1)).toMatchObject({
+			kind: "feature-reset",
+			entityId: "run-2",
+		});
+		expect(SessionSchema.safeParse(atomic.session).success).toBe(true);
+		expect(() =>
+			resetFeature(
+				atomic.session,
+				{ ...resetInput, nextFeatureId: "feature-c" },
+				environment,
+			),
+		).toThrow("operationId was already used for different work");
+
+		session = validate(atomic.session, {
+			id: "validation-b",
+			featureId: "feature-b",
+			scope: "focused",
+		});
+		const reviewB = requestReview(session, "feature-b", environment);
+		session = pass(reviewB.session, "feature-b", reviewB.assignment);
+		const replay = resetFeature(session, resetInput, environment);
+		expect(replay).toMatchObject({
+			replayed: true,
+			value: { id: "run-2", featureId: "feature-b", state: "completed" },
+		});
+		expect(compactProjection(replay.session).status).toBe("ready");
+
+		const defaultC = startRun(
+			session,
+			{
+				operationId: "run-start-default-c",
+				expectedRevision: session.revision,
+			},
+			environment,
+		);
+		expect(defaultC.value.featureId).toBe("feature-c");
+		session = validate(defaultC.session, {
+			id: "validation-c",
+			featureId: "feature-c",
+			scope: "focused",
+		});
+		const reviewC = requestReview(session, "feature-c", environment);
+		session = pass(reviewC.session, "feature-c", reviewC.assignment);
+		expect(compactProjection(session).nextAction).toBe("await-user-direction");
+		expect(() =>
+			startRun(
+				session,
+				{
+					operationId: "implicit-retry-a",
+					expectedRevision: session.revision,
+				},
+				environment,
+			),
+		).toThrow("No runnable feature");
+
+		session = begin(session, "feature-a", environment, "explicit-retry-a");
+		expect(session.runs.at(-1)).toMatchObject({
+			featureId: "feature-a",
+			attempt: 2,
+		});
+		const activeRetryRevision = session.revision;
+		expect(() =>
+			resetFeature(
+				session,
+				{
+					operationId: "reset-a-start-completed-b",
+					expectedRevision: session.revision,
+					featureId: "feature-a",
+					nextFeatureId: "feature-b",
+				},
+				environment,
+			),
+		).toThrow("Feature 'feature-b' is complete");
+		expect(session.revision).toBe(activeRetryRevision);
+		session = resetFeature(session, {
+			operationId: "reset-unreviewed-retry-a",
+			expectedRevision: session.revision,
+			featureId: "feature-a",
+		}).session;
+		expect(compactProjection(session).nextAction).toBe("await-user-direction");
 	});
 
 	test("enforces exact planned gates across observations and retries", () => {
@@ -755,6 +934,42 @@ describe("Session v5 domain state machine", () => {
 			PLANNED_GATE,
 			PLANNED_GATE,
 		]);
+	});
+
+	test("does not reuse broad evidence observed before a later failure", () => {
+		const environment = deterministicEnvironment();
+		let session = begin(
+			approve(saveDraft(environment, { plan: oneFeaturePlan(["bun test"]) })),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "old-broad-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		session = validate(session, {
+			id: "later-failure",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 1,
+		});
+		session = validate(session, {
+			id: "fresh-focused-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "focused",
+		});
+		expect(() =>
+			requestReview(
+				session,
+				DELIVERY,
+				environment,
+				"review-with-stale-broad-pass",
+			),
+		).toThrow("Final review requires passing broad validation");
 	});
 
 	test("admits the maximum planned gates plus separate broad evidence", () => {

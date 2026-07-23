@@ -23,8 +23,11 @@ You may run concurrently with sibling workers. Do not enter their scopes, assume
 - Do not run Bash commands. The manager owns every executable check.
 - Never edit .flow or .git metadata paths; the host denies those paths.
 - A read-only evidence slice must not edit files.
+- The assignment must include an adversarial acceptance and risk checklist prepared before coding. If it is missing, stop without editing and report the gap.
 - An implementation slice may edit only the exact, non-overlapping write paths explicitly assigned by the manager. If required work would escape those paths, stop and return a partial or blocked handoff instead of expanding scope.
 - Use only non-shell inspection relevant to the assigned slice. The manager owns integration, focused checks, and authoritative combined validation after all workers have stopped.
+
+Before editing, apply the supplied checklist to primary behavior, failure and cleanup ordering, adjacent state transitions, repeated or interrupted operation, overlapping invariants, and relevant persistence, concurrency, security, compatibility, or file-metadata risks. Preserve every named finding or requirement ID in your handoff.
 
 ## Handoff
 
@@ -91,10 +94,11 @@ export function compileFlowPromptSurface(
 				'Call `flow_status { request: { view: "compact" } }` first.',
 				"Do not mutate.",
 				"If the top-level response status is `error`, report its exact summary and `workflowData.failure.recovery` when present; otherwise say no recovery guidance was supplied. State that `/flow-status` made no Git or release mutation, report any lifecycle state effect disclosed by the response, and stop. Do not interpret recovery guidance as a blocked review.",
-				'If `projection.status` is `blocked`, call `flow_status { request: { view: "detail" } }` exactly once and label the result overall incomplete.',
-				"From that detail projection, report the goal and progress; blocked feature, attempt, `failedReviewCount`, and findings; completed and untouched features; validations and `artifactsChanged` as Flow-reported artifact evidence; and the exact `nextAction`.",
+				'If `projection.status` is `blocked` or `projection.nextAction` is `await-user-direction`, call `flow_status { request: { view: "detail" } }` exactly once and label the result overall incomplete.',
+				"From that detail projection, report the goal and progress; any blocked feature, attempt, `failedReviewCount`, and findings; every retry-required feature whose latest relevant reviewed outcome remains failed; completed and untouched features; validations and `artifactsChanged` as Flow-reported artifact evidence; and the exact status and `nextAction`.",
 				"For a blocked first failed review, explain that `flow_feature_reset` is only the default and `/flow-run` must inspect any `[scope-blocker]` before reset.",
-				"For blocked `await-user-direction`, explain that another attempt requires explicit user direction.",
+				"For blocked `await-user-direction`, explain that an authorized retry or independent choice uses atomic `flow_feature_reset` with `nextFeatureId`. For ready `await-user-direction`, explain that no blocked run remains, so an authorized retry uses `flow_run_start` with an explicit `featureId`, never reset or default selection.",
+				"When `workflowData.autoTiming` is present, report `activeMs` as non-authoritative process-local wall time classified active, not CPU or pure work, and `waitingForUserMs` as only projected `flow_plan_approve` plus `await-user-direction` time for the latest `/flow-auto`. State that paused, inactive, errored, and unprojected waits are excluded.",
 				"Otherwise report the compact projection and its exact `nextAction`, state that `/flow-status` made no lifecycle, Git, or release mutation, and stop.",
 			].join(" ");
 		case "flow-review":

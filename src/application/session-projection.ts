@@ -16,9 +16,14 @@ import type {
 import {
 	activeRun,
 	isFeatureComplete,
+	nextRunnableFeature,
 	sessionStatus,
 } from "../domain/transitions.js";
-import { unresolvedKnownFailedPlanCommands } from "../domain/validation.js";
+import {
+	isValidationEligible,
+	isValidationFresh,
+	unresolvedKnownFailedPlanCommands,
+} from "../domain/validation.js";
 import type { StatusRequest } from "./schema.js";
 
 export type FlowNextAction =
@@ -160,6 +165,8 @@ function nextAction(
 	if (status === "planning") {
 		return session.plan ? "flow_plan_approve" : "flow_plan_save";
 	}
+	if (status === "ready" && !nextRunnableFeature(session))
+		return "await-user-direction";
 	if (status === "ready") return "flow_run_start";
 	if (status === "blocked") {
 		return (blockedFeature?.failedReviewCount ?? 0) >= 2
@@ -182,8 +189,8 @@ function nextAction(
 		) ?? false;
 	const hasPassingValidation = run.validations.some(
 		(validation) =>
-			validation.exitCode === 0 &&
-			validation.outputComplete &&
+			isValidationEligible(validation) &&
+			isValidationFresh(session, run, validation) &&
 			(!finalRun || validation.scope === "broad"),
 	);
 	if (!hasPassingValidation) return "flow_validation_start";

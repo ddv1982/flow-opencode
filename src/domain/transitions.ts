@@ -2,7 +2,6 @@ import { artifactIssues } from "./artifact.js";
 import {
 	MAX_REVIEW_FINDINGS,
 	MAX_SESSION_ID_LENGTH,
-	MAX_VALIDATION_ID_LENGTH,
 	MAX_VALIDATIONS_PER_RUN,
 } from "./limits.js";
 import { closureOperationIssue, operationInputDigest } from "./operation.js";
@@ -21,39 +20,38 @@ import type {
 	SessionClosure,
 	SessionStatus,
 	SourceDigest,
-	ValidationObservation,
-	ValidationScope,
 } from "./session.js";
 import { reviewResultSemanticIssues } from "./session.js";
-import { unresolvedKnownFailedPlanCommands } from "./validation.js";
+import { FlowTransitionError } from "./transition-error.js";
+import {
+	isValidationEligible,
+	isValidationFresh,
+	unresolvedKnownFailedPlanCommands,
+} from "./validation.js";
 
+export { FlowTransitionError } from "./transition-error.js";
+export { recordValidation } from "./validation.js";
 export type TransitionEnvironment = Readonly<{
 	newId: (kind: "session" | "run" | "validation" | "review") => string;
 }>;
-
-export class FlowTransitionError extends Error {
-	readonly code = "FLOW_TRANSITION_REJECTED";
-}
-
 export type MutationResult<T> = Readonly<{
 	session: Session;
 	value: T;
 	replayed: boolean;
 }>;
-
 export type PlanSaveInput = Readonly<{
 	operationId: string;
 	expectedRevision: number;
 	goal: string;
 	plan: Plan;
 }>;
-
 export type GuardedFeatureInput = Readonly<{
 	operationId: string;
 	expectedRevision: number;
 	featureId: FeatureId;
 }>;
-
+export type FeatureResetInput = GuardedFeatureInput &
+	Readonly<{ nextFeatureId?: FeatureId | undefined }>;
 export type ReviewStartInput = GuardedFeatureInput &
 	Readonly<{
 		sourceDigest: SourceDigest;
@@ -63,14 +61,12 @@ export type ReviewStartInput = GuardedFeatureInput &
 			riskLenses: string[];
 		}>;
 	}>;
-
 export type FeatureCompleteInput = GuardedFeatureInput &
 	Readonly<{
 		assignmentId: string;
 		summary: string;
 		result: Omit<ReviewResult, "recordedRevision">;
 	}>;
-
 export type SessionCloseInput = Readonly<{
 	operationId: string;
 	expectedRevision: number;
@@ -301,17 +297,61 @@ export function approvePlan(
 	};
 }
 
-function nextRunnableFeature(session: Session): FeatureId | null {
+function requiresExplicitRetry(
+	session: Session,
+	featureId: FeatureId,
+): boolean {
+	const reviewed = session.runs.findLast(
+		(run) => run.featureId === featureId && run.reviews.at(-1)?.result,
+	);
+	return reviewed?.reviews.at(-1)?.result?.verdict === "failed";
+}
+
+export function nextRunnableFeature(session: Session): FeatureId | null {
 	if (!session.plan) return null;
 	for (const feature of session.plan.features) {
 		const state = currentRun(session, feature.id)?.state;
 		if (state === "completed") continue;
 		if (state === "blocked") continue;
+		if (requiresExplicitRetry(session, feature.id)) continue;
 		if (feature.dependsOn.every((id) => isFeatureComplete(session, id))) {
 			return feature.id;
 		}
 	}
 	return null;
+}
+
+function assertFeatureRunnable(session: Session, featureId: FeatureId): void {
+	const feature = session.plan?.features.find((item) => item.id === featureId);
+	if (!feature) fail(`Unknown feature '${featureId}'.`);
+	const existing = currentRun(session, featureId);
+	if (existing?.state === "completed")
+		fail(`Feature '${featureId}' is complete.`);
+	if (existing?.state === "blocked") {
+		fail(`Reset blocked feature '${featureId}' before retrying it.`);
+	}
+	if (!feature.dependsOn.every((id) => isFeatureComplete(session, id))) {
+		fail(`Feature '${featureId}' has incomplete dependencies.`);
+	}
+}
+
+function createRun(
+	session: Session,
+	featureId: FeatureId,
+	environment: TransitionEnvironment,
+): FeatureRun {
+	return {
+		id: environment.newId("run"),
+		featureId,
+		attempt:
+			session.runs.filter((run) => run.featureId === featureId).length + 1,
+		state: "active",
+		startedRevision: session.revision + 1,
+		summary: null,
+		artifactsChanged: [],
+		validations: [],
+		reviews: [],
+	};
 }
 
 export function startRun(
@@ -348,125 +388,17 @@ export function startRun(
 	}
 	const featureId = input.featureId ?? nextRunnableFeature(session);
 	if (!featureId) fail("No runnable feature is available.");
-	const feature = session.plan.features.find((item) => item.id === featureId);
-	if (!feature) fail(`Unknown feature '${featureId}'.`);
-	const existing = currentRun(session, featureId);
-	if (existing?.state === "completed")
-		fail(`Feature '${featureId}' is complete.`);
-	if (existing?.state === "blocked") {
-		fail(`Reset blocked feature '${featureId}' before retrying it.`);
-	}
-	if (!feature.dependsOn.every((id) => isFeatureComplete(session, id))) {
-		fail(`Feature '${featureId}' has incomplete dependencies.`);
-	}
-	const runId = environment.newId("run");
-	const attempt =
-		session.runs.filter((run) => run.featureId === featureId).length + 1;
-	let created: FeatureRun | null = null;
+	assertFeatureRunnable(session, featureId);
+	const created = createRun(session, featureId, environment);
 	const next = commit(
 		session,
 		"run-start",
 		input.operationId,
 		input,
-		(draft, revision) => {
-			created = {
-				id: runId,
-				featureId,
-				attempt,
-				state: "active",
-				startedRevision: revision,
-				summary: null,
-				artifactsChanged: [],
-				validations: [],
-				reviews: [],
-			};
-			return { ...draft, runs: [...draft.runs, created] };
-		},
-		runId,
+		(draft) => ({ ...draft, runs: [...draft.runs, created] }),
+		created.id,
 	);
-	if (!created) fail("Flow could not create the feature run.");
 	return { session: next, value: created, replayed: false };
-}
-
-export function recordValidation(
-	session: Session,
-	input: Readonly<{
-		captureId: string;
-		featureId: FeatureId;
-		runId: string;
-		scope: ValidationScope;
-		command: string;
-		sourceDigest: SourceDigest;
-		exitCode: number;
-		outputDigest: SourceDigest;
-		outputComplete: boolean;
-	}>,
-): MutationResult<ValidationObservation> {
-	if (
-		input.captureId.length < 1 ||
-		input.captureId.length > MAX_VALIDATION_ID_LENGTH
-	) {
-		fail(
-			`Validation capture id must contain 1-${MAX_VALIDATION_ID_LENGTH} characters.`,
-		);
-	}
-	const prior = session.runs
-		.flatMap((run) => run.validations)
-		.find((validation) => validation.id === input.captureId);
-	if (prior) {
-		if (
-			prior.featureId !== input.featureId ||
-			prior.runId !== input.runId ||
-			prior.scope !== input.scope ||
-			prior.command !== input.command ||
-			prior.sourceDigest !== input.sourceDigest ||
-			prior.exitCode !== input.exitCode ||
-			prior.outputDigest !== input.outputDigest ||
-			prior.outputComplete !== input.outputComplete
-		) {
-			fail(
-				"Validation capture id was already used for a different observation.",
-			);
-		}
-		return { session, value: prior, replayed: true };
-	}
-	assertMutable(session);
-	const run = activeRun(session);
-	if (!run || run.id !== input.runId || run.featureId !== input.featureId) {
-		fail("Validation no longer belongs to the active feature run.");
-	}
-	if (run.reviews.length > 0) {
-		fail("Validation cannot be recorded after review has begun.");
-	}
-	if (run.validations.length >= MAX_VALIDATIONS_PER_RUN) {
-		fail(
-			`A feature run may contain at most ${MAX_VALIDATIONS_PER_RUN} validation observations.`,
-		);
-	}
-	const revision = session.revision + 1;
-	const observation: ValidationObservation = {
-		id: input.captureId,
-		featureId: input.featureId,
-		runId: input.runId,
-		scope: input.scope,
-		command: input.command,
-		sourceDigest: input.sourceDigest,
-		exitCode: input.exitCode,
-		outputDigest: input.outputDigest,
-		outputComplete: input.outputComplete,
-		recordedRevision: revision,
-	};
-	const draft = copy(session);
-	const runs = draft.runs.map((item) =>
-		item.id === run.id
-			? { ...item, validations: [...item.validations, observation] }
-			: item,
-	);
-	return {
-		session: { ...draft, revision, runs },
-		value: observation,
-		replayed: false,
-	};
 }
 
 function isFinalFeatureRun(session: Session, run: FeatureRun): boolean {
@@ -521,9 +453,8 @@ export function startReview(
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
 	const applicable = run.validations.filter(
 		(validation) =>
-			validation.exitCode === 0 &&
-			validation.outputComplete &&
-			validation.sourceDigest === input.sourceDigest,
+			isValidationEligible(validation, input.sourceDigest) &&
+			isValidationFresh(session, run, validation),
 	);
 	const hasRequiredValidation =
 		kind === "feature"
@@ -675,8 +606,9 @@ function dependentClosure(plan: Plan, featureId: string): Set<string> {
 
 export function resetFeature(
 	session: Session,
-	input: GuardedFeatureInput,
-): MutationResult<string[]> {
+	input: FeatureResetInput,
+	environment?: TransitionEnvironment,
+): MutationResult<string[] | FeatureRun> {
 	const replay = existingOperation(
 		session,
 		"feature-reset",
@@ -685,6 +617,11 @@ export function resetFeature(
 	);
 	if (replay) {
 		if (!session.plan) fail("The replayed reset has no approved plan.");
+		if (replay.entityId) {
+			const run = session.runs.find((item) => item.id === replay.entityId);
+			if (!run) fail("The replayed reset run no longer exists.");
+			return { session, value: run, replayed: true };
+		}
 		return {
 			session,
 			value: [...dependentClosure(session.plan, input.featureId)],
@@ -709,7 +646,26 @@ export function resetFeature(
 		fail("Reset requires an active or blocked feature run.");
 	}
 	const affected = dependentClosure(session.plan, input.featureId);
-	const ids = [...affected];
+	const runs = copy(session.runs).map((run) =>
+		affected.has(run.featureId) && run.state !== "superseded"
+			? { ...run, state: "superseded" as const }
+			: run,
+	);
+	let created: FeatureRun | null = null;
+	if (input.nextFeatureId !== undefined) {
+		if (!environment)
+			fail("Atomic reset and run start requires an environment.");
+		const reset = { ...session, runs };
+		if (
+			session.plan.features.some(
+				(feature) => currentRun(reset, feature.id)?.state === "blocked",
+			)
+		) {
+			fail("Reset remaining blocked features before starting another run.");
+		}
+		assertFeatureRunnable(reset, input.nextFeatureId);
+		created = createRun(reset, input.nextFeatureId, environment);
+	}
 	return {
 		session: commit(
 			session,
@@ -718,14 +674,11 @@ export function resetFeature(
 			input,
 			(draft) => ({
 				...draft,
-				runs: draft.runs.map((run) =>
-					affected.has(run.featureId) && run.state !== "superseded"
-						? { ...run, state: "superseded" }
-						: run,
-				),
+				runs: created ? [...runs, created] : runs,
 			}),
+			created?.id,
 		),
-		value: ids,
+		value: created ?? [...affected],
 		replayed: false,
 	};
 }
@@ -912,9 +865,7 @@ export function sessionInvariantIssues(session: Session): string[] {
 			if (
 				referenced.some(
 					(validation) =>
-						validation.exitCode !== 0 ||
-						!validation.outputComplete ||
-						validation.sourceDigest !== review.sourceDigest,
+						!isValidationEligible(validation, review.sourceDigest),
 				)
 			) {
 				issues.push(`Review '${review.id}' uses inapplicable validation.`);

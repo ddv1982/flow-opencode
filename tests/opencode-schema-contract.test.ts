@@ -234,6 +234,12 @@ describe("Flow v6 OpenCode host schemas", () => {
 				"result",
 				"summary",
 			],
+			flow_feature_reset: [
+				"expectedRevision",
+				"featureId",
+				"nextFeatureId",
+				"operationId",
+			],
 			flow_session_close: [
 				"expectedRevision",
 				"kind",
@@ -253,6 +259,16 @@ describe("Flow v6 OpenCode host schemas", () => {
 		expect(
 			property(emittedHostSchema("flow_status"), "request").anyOf,
 		).toHaveLength(4);
+		expectParity(
+			"flow_feature_reset",
+			{
+				request: {
+					...validInputs.flow_feature_reset.request,
+					nextFeatureId: "independent-feature",
+				},
+			},
+			true,
+		);
 	});
 
 	test("preserves opaque review assignment ids", () => {

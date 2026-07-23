@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 const repositoryRoot = resolve(import.meta.dir, "..");
 const sourceRoot = join(repositoryRoot, "src");
+const MAX_RUNTIME_SOURCE_LINES = 6_400;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {
 	domain: new Set(["domain"]),
@@ -71,7 +72,7 @@ describe("v6 architecture boundaries", () => {
 		const total = measurements.reduce((sum, item) => sum + item.lines, 0);
 		const oversized = measurements.filter((item) => item.lines > 1_000);
 
-		expect(total).toBeLessThanOrEqual(6_000);
+		expect(total).toBeLessThanOrEqual(MAX_RUNTIME_SOURCE_LINES);
 		expect(oversized).toEqual([]);
 	});
 

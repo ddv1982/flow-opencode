@@ -4,6 +4,7 @@ import type {
 	PreparedValidation,
 } from "../../application/prepare-validation.js";
 import type { ValidationObservation } from "../../domain/session.js";
+import { isValidationEligible } from "../../domain/validation.js";
 import type { Hooks } from "./sdk.js";
 
 const MAX_CAPTURES = 128;
@@ -162,7 +163,11 @@ export class ValidationCaptureCoordinator {
 		output.output = `${output.output}\n\n[flow-validation] ${JSON.stringify({
 			id: observation.id,
 			scope: observation.scope,
-			passed: observation.exitCode === 0 && observation.outputComplete,
+			passed: isValidationEligible(observation),
+			recordedRevision: observation.recordedRevision,
+			...(observation.ineligibleReason
+				? { ineligibleReason: observation.ineligibleReason }
+				: {}),
 		})}`;
 		return observation;
 	}

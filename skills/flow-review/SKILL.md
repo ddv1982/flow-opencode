@@ -33,12 +33,23 @@ Inspect the actual changed artifacts and the validation Flow supplied, not only
 the manager's summary. Check that:
 
 - the change satisfies the feature summary, targets, requirements, decisions,
-  and dependency boundaries;
+  dependency boundaries, and every named finding or requirement ID preserved
+  in the feature prose;
 - changed behavior is correct at public and downstream call sites;
 - validation is strong enough for the behavior and main failure modes;
 - scope did not drift and unrelated user work was preserved;
-- persistence, concurrency, security, migration, package, UI, and recovery
-  risks were examined when relevant.
+- relevant adjacent states, failure/cleanup ordering, repetition, retry,
+  interruption, reentrancy, concurrency, and overlapping invariants still work;
+- the feature's actual base diff includes no unexplained deletion, rename, file
+  type, generated artifact, or executable/file-mode change; and
+- persistence, concurrency, security, migration, compatibility, package, UI,
+  and recovery risks were examined when relevant.
+
+Use the manager-supplied baseline inventory in the assignment for Git-only
+metadata, and independently inspect the projected changed artifacts with your
+read-only access. It is evidence, not a verdict. Lack of shell access alone is
+not a failure; a missing or conflicting baseline fact, or a material mode,
+platform, race, or failure-path claim without proof, is.
 
 Validation scope is a claim. Treat `broad` as adequate only when the durable
 command is the repository's canonical applicable gate or a justified equivalent
@@ -63,6 +74,10 @@ Every blocker must map to an approved requirement, changed behavior, or exact
 missing evidence. Keep its summary precise. In `evidence`, cite a changed
 artifact and location or identify the exact missing evidence or unmet approved
 requirement.
+
+For missing proof, fail with a precise blocker naming the manager-owned
+scenario, command or environment, and expected observable result. Do not pass
+conditionally or ask the manager to proxy your verdict.
 
 ## Submit one result
 

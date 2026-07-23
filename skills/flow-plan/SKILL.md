@@ -57,16 +57,26 @@ a merge. A reviewer should not re-audit the whole product to decide whether one
 feature passed. Avoid step-shaped features such as “update files” and vague
 checks such as “run tests.”
 
+When the request or its source material names stable finding, issue, or
+requirement IDs, preserve those exact IDs in the relevant saved feature
+`summary` or `validation` prose. Do not replace an ID such as `F3`, `B12`, or
+`ISSUE-42` with an unnamed generalization. Every named ID must remain traceable
+from the immutable plan to one feature outcome and its evidence.
+
 When a `validation` entry names an executable command, record the exact
 plan-listed command byte-for-byte. Behavior-oriented prose that has never run
 as an exact command remains reviewer judgment rather than a fabricated command
-result.
+result. Name any required operating system, architecture, service, credential,
+external setting, hardware, or other evidence environment explicitly enough
+that `flow-run` can preflight it before implementation.
 
 Before saving, confirm:
 
 - every requirement maps to a feature or an explicit non-goal;
 - targets name real files, modules, routes, commands, or artifacts;
 - validation names the behavior or contract the check will prove;
+- every required evidence environment has an identified execution path, and
+  any path needing user or external authority is explicit;
 - dependencies capture true ordering without circular or hidden work;
 - assumptions and intentional gaps are visible in `decisions`.
 
@@ -77,7 +87,10 @@ the current revision (`0` for a new session), the goal, and the complete draft.
 Summarize the outcome, feature order, validation, and material decisions for
 the user. Call `flow_plan_approve` with a fresh operation id and current
 revision only after explicit approval or when the user already authorized
-autonomous implementation. Approval locks the plan.
+autonomous implementation. Approval locks the plan. When `/flow-auto` needs
+conversational approval, ask for it without requiring a second command; a reply
+may resume the same process-local auto interaction only after approval advances
+the same Flow session.
 
 Do not begin implementation during a plan-only request. Do not create a plan
 document in the repository unless the user explicitly requests one.

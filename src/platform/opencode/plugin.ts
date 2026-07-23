@@ -1,9 +1,11 @@
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
+import { flowStatus } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
 } from "../../infrastructure/fs/workspace-validation.js";
 import { resolveFlowPluginVersion } from "../../version.js";
+import { AutoDriveCoordinator } from "./auto-drive.js";
 import { createConfigHook } from "./config.js";
 import {
 	createFlowPluginInstanceId,
@@ -35,11 +37,16 @@ function commandPrompt(command: FlowCommandName, args: string): string {
 	);
 }
 
-function textPart(text: string, synthetic = false): Part {
+function textPart(
+	text: string,
+	synthetic = false,
+	metadata?: Readonly<Record<string, unknown>>,
+): Part {
 	return {
 		type: "text",
 		text,
 		...(synthetic ? { synthetic: true } : {}),
+		...(metadata ? { metadata } : {}),
 	} as TextPart;
 }
 
@@ -86,6 +93,7 @@ function rewriteReviewerCommand(
 
 function createCommandHook(
 	assertOperational: (action: string) => void,
+	autoDrive: AutoDriveCoordinator,
 ): NonNullable<Hooks["command.execute.before"]> {
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
@@ -95,6 +103,23 @@ function createCommandHook(
 			rewriteReviewerCommand(command, input.arguments, output);
 		} else {
 			rewriteManagerCommand(command, input.arguments, output);
+		}
+		if (command !== "flow-auto") {
+			autoDrive.deactivate(input.sessionID);
+		} else {
+			const metadata = await autoDrive.activate(input.sessionID);
+			const instruction = output.parts.find(
+				(part): part is TextPart =>
+					part.type === "text" && part.synthetic === true,
+			);
+			if (!instruction) {
+				autoDrive.deactivate(input.sessionID);
+				throw new Error("/flow-auto is missing its synthetic instruction.");
+			}
+			instruction.metadata = {
+				...(instruction.metadata ?? {}),
+				...metadata,
+			};
 		}
 	};
 }
@@ -144,12 +169,51 @@ const FlowPlugin: Plugin = async (ctx) => {
 		`Flow ${version}: ${initial.message}`,
 	);
 
+	const workspace = ctx.worktree ?? ctx.directory;
+	const autoDrive = new AutoDriveCoordinator({
+		readProjection: async () => {
+			const response = await flowStatus(workspace, {
+				request: { view: "compact" },
+			});
+			if (response.status !== "ok") throw new Error(response.summary);
+			const projection = response.workflowData.projection;
+			if (projection.view !== "compact")
+				throw new Error("Flow auto-drive received a non-compact projection.");
+			return {
+				sessionId: "sessionId" in projection ? projection.sessionId : undefined,
+				status: projection.status,
+				revision: projection.revision,
+				nextAction: projection.nextAction,
+			};
+		},
+		prompt: async (sessionID, prompt, delivery, metadata) => {
+			await ctx.client.session.promptAsync({
+				path: { id: sessionID },
+				query: { directory: ctx.directory },
+				body: {
+					agent: delivery.agent,
+					model: delivery.model,
+					parts: [
+						{
+							type: "text",
+							text: prompt,
+							synthetic: true,
+							metadata: { ...metadata },
+						},
+					],
+				},
+				throwOnError: true,
+			});
+		},
+		onWarning: (message) => log("warn", message),
+	});
 	const validation = new ValidationCaptureCoordinator({
 		persistObservation: persistWorkspaceValidation,
 	});
 	const tools = createTools(ctx, {
 		validation,
 		prepareValidation: prepareWorkspaceValidation,
+		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
 	});
 
 	return {
@@ -157,19 +221,54 @@ const FlowPlugin: Plugin = async (ctx) => {
 			assertOperational: (action) => runtimeGuard.assertOperational(action),
 		}),
 		tool: guardTools(tools, runtimeGuard),
-		"command.execute.before": createCommandHook((action) =>
-			runtimeGuard.assertOperational(action),
+		"command.execute.before": createCommandHook(
+			(action) => runtimeGuard.assertOperational(action),
+			autoDrive,
 		),
+		"chat.message": async (input, output) => {
+			const observed = await autoDrive.observeMessage(
+				input.sessionID,
+				{
+					agent: output.message.agent,
+					model: output.message.model,
+				},
+				output.parts,
+			);
+			if (observed === "stale-continuation") {
+				throw new Error("Discarded a stale Flow auto continuation.");
+			}
+		},
+		"experimental.session.compacting": async (input, output) => {
+			const context = autoDrive.compactionContext(input.sessionID);
+			if (context) output.context.push(context);
+		},
 		event: async (input) => {
-			const event = input.event as {
-				type?: string;
-				properties?: { sessionID?: unknown };
-			};
+			const event = input.event;
+			if (event.type === "session.deleted" || event.type === "session.error") {
+				const sessionID =
+					event.type === "session.deleted"
+						? event.properties.info.id
+						: event.properties.sessionID;
+				if (sessionID) {
+					validation.cancel(sessionID);
+					autoDrive.deactivate(sessionID);
+				} else {
+					autoDrive.clear();
+				}
+				return;
+			}
 			if (event.type !== "session.idle" && event.type !== "session.compacted") {
 				return;
 			}
 			const sessionID = event.properties?.sessionID;
-			if (typeof sessionID === "string") validation.cancel(sessionID);
+			validation.cancel(sessionID);
+			if (event.type === "session.idle") {
+				if (runtimeGuard.query().operational) {
+					await autoDrive.onIdle(sessionID);
+				} else {
+					autoDrive.deactivate(sessionID);
+				}
+			}
 		},
 		"tool.execute.before": async (input, output) => {
 			validation.observeToolBefore(input, output);
@@ -184,6 +283,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 			}
 		},
 		dispose: async () => {
+			autoDrive.clear();
 			runtimeGuard.release();
 		},
 	} satisfies Hooks;

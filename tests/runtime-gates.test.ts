@@ -163,6 +163,180 @@ describe("Flow application runtime gates", () => {
 		});
 	});
 
+	test("requires a fresh current-source pass after later source drift", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		const preparedAtA = await prepareValidation(repository, {
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "broad",
+		});
+		const oldPassAtA = await persistObservedValidation(repository, {
+			...preparedAtA,
+			captureId: "capture-before-source-drift",
+			exitCode: 0,
+			outputDigest: OUTPUT,
+			outputComplete: true,
+		});
+
+		repository.sourceDigest = SOURCE_B;
+		const preparedAtB = await prepareValidation(repository, {
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "broad",
+		});
+		const observed = {
+			...preparedAtB,
+			captureId: "capture-source-drift",
+			exitCode: 0,
+			outputDigest: OUTPUT,
+			outputComplete: true,
+		} as const;
+
+		repository.sourceDigest = SOURCE_A;
+		const drifted = await persistObservedValidation(repository, observed);
+		expect(drifted).toMatchObject({
+			id: "capture-source-drift",
+			sourceDigest: SOURCE_B,
+			exitCode: 0,
+			outputComplete: true,
+			ineligibleReason: "source-drift",
+		});
+		expect(repository.session?.runs[0]?.validations).toEqual([
+			oldPassAtA,
+			drifted,
+		]);
+		const revertedStatus = await flow.status({
+			request: { view: "compact" },
+		});
+		expectOk(revertedStatus);
+		expect(revertedStatus.workflowData.projection).toMatchObject({
+			nextAction: "flow_validation_start",
+		});
+		repository.sourceDigest = SOURCE_B;
+		await expect(
+			persistObservedValidation(repository, observed),
+		).rejects.toThrow(
+			"Validation capture id was already used for a different observation",
+		);
+		repository.sourceDigest = SOURCE_A;
+		const rejectedReview = await flow.reviewStart({
+			request: {
+				operationId: "review-source-drift",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "src/domain/validation.ts" }],
+				packet: {
+					summary: "Review validation source-drift handling.",
+					riskLenses: ["stale evidence admission"],
+				},
+			},
+		});
+		expectError(rejectedReview);
+		expect(rejectedReview.summary).toContain(
+			"requires passing exact planned commands",
+		);
+
+		const preparedFresh = await prepareValidation(repository, {
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "broad",
+		});
+		const fresh = await persistObservedValidation(repository, {
+			...preparedFresh,
+			captureId: "capture-after-source-drift",
+			exitCode: 0,
+			outputDigest: OUTPUT,
+			outputComplete: true,
+		});
+		const admittedReview = await flow.reviewStart({
+			request: {
+				operationId: "review-after-source-drift",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "src/domain/validation.ts" }],
+				packet: {
+					summary: "Review validation source-drift handling.",
+					riskLenses: ["stale evidence admission"],
+				},
+			},
+		});
+		expectOk(admittedReview);
+		expect(admittedReview.workflowData.projection).toMatchObject({
+			assignment: {
+				validationIds: [fresh.id],
+			},
+			validations: [fresh],
+		});
+	});
+
+	test("does not reuse stale broad evidence after a later command failure", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await recordObservedValidation(repository, {
+			captureId: "capture-stale-broad",
+			scope: "broad",
+		});
+		await recordObservedValidation(repository, {
+			captureId: "capture-later-failure",
+			exitCode: 1,
+			scope: "focused",
+		});
+		const freshFocused = await recordObservedValidation(repository, {
+			captureId: "capture-fresh-focused",
+			scope: "focused",
+		});
+		const status = await flow.status({ request: { view: "compact" } });
+		expectOk(status);
+		expect(status.workflowData.projection).toMatchObject({
+			nextAction: "flow_validation_start",
+		});
+
+		const rejected = await flow.reviewStart({
+			request: {
+				operationId: "review-with-stale-broad",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "src/domain/validation.ts" }],
+				packet: {
+					summary: "Review validation evidence freshness.",
+					riskLenses: ["stale broad evidence"],
+				},
+			},
+		});
+		expectError(rejected);
+		expect(rejected.summary).toContain(
+			"Final review requires passing broad validation",
+		);
+
+		const freshBroad = await recordObservedValidation(repository, {
+			captureId: "capture-fresh-broad",
+			scope: "broad",
+		});
+		const admitted = await flow.reviewStart({
+			request: {
+				operationId: "review-with-fresh-broad",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "src/domain/validation.ts" }],
+				packet: {
+					summary: "Review fresh validation evidence.",
+					riskLenses: ["stale broad evidence"],
+				},
+			},
+		});
+		expectOk(admitted);
+		expect(admitted.workflowData.projection).toMatchObject({
+			assignment: {
+				validationIds: [freshFocused.id, freshBroad.id],
+			},
+			validations: [freshFocused, freshBroad],
+		});
+	});
+
 	test("projects only actual failed reviews in the blocked convergence summary", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());

@@ -130,6 +130,7 @@ const ValidationObservationSchema = z
 		outputDigest: SourceDigestSchema,
 		outputComplete: z.boolean(),
 		recordedRevision: RevisionSchema,
+		ineligibleReason: z.literal("source-drift").optional(),
 	})
 	.strict();
 
@@ -307,7 +308,13 @@ export const FeatureCompleteInputSchema = z
 
 export const FeatureResetInputSchema = z
 	.object({
-		request: z.object({ ...guarded, featureId: FeatureIdSchema }).strict(),
+		request: z
+			.object({
+				...guarded,
+				featureId: FeatureIdSchema,
+				nextFeatureId: FeatureIdSchema.optional(),
+			})
+			.strict(),
 	})
 	.strict();
 

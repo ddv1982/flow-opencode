@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.6.0 --global --force
+opencode plugin opencode-plugin-flow@6.7.0 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.6.0"]
+  "plugin": ["opencode-plugin-flow@6.7.0"]
 }
 ```
 
@@ -65,14 +65,30 @@ wait timed out; a live writer may still own it.
 command cancels capture. Arm it again, run the displayed command unchanged, and
 wait for the `[flow-validation]` marker.
 
+`recordedRevision` is only a concurrency token. When the marker reports
+`passed: true`, use that revision for `flow_review_start` only if every runtime
+review gate still holds; it may also arm the next validation. A `passed: false`
+marker—failed, incomplete, or source-drifted—may use its revision only to arm
+fresh validation, never review. No status refresh is needed solely to recover an
+eligible token. Refresh compact status if the marker is missing or malformed,
+the capture was rejected, or routing state must be reconfirmed.
+`ineligibleReason: "source-drift"` means the digest recomputed at persistence
+differed from the armed digest, so the result was recorded but is not passing
+evidence. This endpoint comparison cannot detect a transient edit that returns
+to the armed bytes before persistence.
+Returning the workspace to an older digest does not revive a pass recorded
+before that drift. New review admission needs a current-source pass recorded
+after the latest relevant failed or source-drifted observation. A review that
+Flow already accepted remains grandfathered.
+
 An armed capture expires if its matching command does not begin within 15
 minutes. Once that exact command begins, it remains eligible for the after-hook
 even when the command runs past the original waiting deadline. Do not re-arm a
 long-running command that is already in progress.
 
-An absent structured exit code, truncated output, nonzero exit, source edit, or
-session/run change is recorded as unusable or fails closed. Run the final
-command again after the workspace is stable.
+An absent structured exit code, truncated output, nonzero exit, persistence-time
+digest mismatch, or session/run change is recorded as unusable or fails closed.
+Run the final command again after the workspace is stable.
 
 ## Review cannot start
 
@@ -89,9 +105,25 @@ the source-stale assignment; Flow does not reuse a narrow correction result.
 
 ## A review blocked the feature
 
-Inspect the blocking findings, fix the problem, then call
-`flow_feature_reset`. Reset supersedes the old attempt and any dependent work;
-the next run starts with no validation or review carried forward.
+Inspect the blocking findings and the compact failed-review count. A feature
+whose latest relevant reviewed outcome remains failed is not selected
+implicitly. `/flow-auto` may continue an untouched dependency-independent
+feature; if only retry-required candidates remain, status is ready and projects
+`await-user-direction`.
+
+If status is blocked, call `flow_feature_reset` after the retry or independent
+feature is authorized, with that exact feature as optional `nextFeatureId`.
+Reset supersedes the failed attempt and affected dependent work, then starts the
+chosen run atomically with no validation or review carried forward. Do not
+perform reset first and rely on a later default `flow_run_start`; interruption
+between those operations could lose the user's exact choice.
+
+If status is ready with `await-user-direction`, the failed run was already
+superseded while independent and untouched work continued. Read detail once to
+identify the exact retry-required feature, then call `flow_run_start` with its
+explicit `featureId` after user authorization. Do not call
+`flow_feature_reset`: there is no blocked run left, and the failed feature
+remains ineligible for default selection.
 
 ## The session cannot close as completed
 

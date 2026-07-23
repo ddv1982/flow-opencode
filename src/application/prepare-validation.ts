@@ -48,13 +48,14 @@ function maximumSerializedUnusedCaptureId(session: Session): string {
 function maximumSerializedObservation(
 	session: Session,
 	prepared: PreparedValidation,
-): ObservedValidation {
+): ObservedValidation & Readonly<{ ineligibleReason: "source-drift" }> {
 	return {
 		...prepared,
 		captureId: maximumSerializedUnusedCaptureId(session),
 		exitCode: Number.MIN_SAFE_INTEGER,
 		outputDigest: prepared.sourceDigest,
 		outputComplete: false,
+		ineligibleReason: "source-drift",
 	};
 }
 
@@ -109,12 +110,12 @@ export async function persistObservedValidation(
 		if (!session)
 			throw new Error("The Flow session ended before validation was recorded.");
 		const currentDigest = await transaction.computeSourceDigest();
-		if (currentDigest !== input.sourceDigest) {
-			throw new Error(
-				"Workspace content changed during validation; rerun the command against the final content.",
-			);
-		}
-		const result = recordValidation(session, input);
+		const result = recordValidation(session, {
+			...input,
+			...(currentDigest !== input.sourceDigest
+				? { ineligibleReason: "source-drift" as const }
+				: {}),
+		});
 		await transaction.save(result.session);
 		return result.value;
 	});

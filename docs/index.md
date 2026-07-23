@@ -18,6 +18,9 @@ v5. The public overview and installation instructions live in the
   worker waves inside one serial durable feature lifecycle.
 - [ADR 0007](adr/0007-reviewer-owned-submission.md) — reviewer-owned result
   submission with host-checked reviewer identity and no additional protocol.
+- [ADR 0008](adr/0008-bounded-auto-continuation.md) — authority-bound host
+  continuation, derived retry selection, source-drift freshness, and
+  process-local timing.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

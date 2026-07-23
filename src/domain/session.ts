@@ -30,6 +30,7 @@ export type Plan = Readonly<{
 }>;
 
 export type ValidationScope = "focused" | "broad";
+export type ValidationIneligibleReason = "source-drift";
 
 export type ValidationObservation = Readonly<{
 	id: string;
@@ -42,6 +43,12 @@ export type ValidationObservation = Readonly<{
 	outputDigest: SourceDigest;
 	outputComplete: boolean;
 	recordedRevision: number;
+	/**
+	 * Optional so existing Session v5 documents remain readable. Once recorded,
+	 * an ineligible observation is diagnostic history and can never satisfy a
+	 * validation or review gate.
+	 */
+	ineligibleReason?: ValidationIneligibleReason | undefined;
 }>;
 
 export type ReviewFinding = Readonly<{

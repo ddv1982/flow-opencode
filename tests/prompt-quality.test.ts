@@ -119,7 +119,7 @@ describe("production Flow prompts", () => {
 		);
 		expect(run).toMatch(/\[scope-blocker\][\s\S]+checkpoints immediately/i);
 		expect(run).toMatch(
-			/first ordinary failed review[\s\S]+one automatic `flow_feature_reset`/i,
+			/first ordinary failed review[\s\S]+one automatic `flow_feature_reset`[\s\S]+blocked `featureId`[\s\S]+`nextFeatureId`[\s\S]+atomically starts/i,
 		);
 		expect(run).toMatch(
 			/second failed review[\s\S]+explicitly authorizes one additional attempt/i,
@@ -128,19 +128,32 @@ describe("production Flow prompts", () => {
 		expect(run).toMatch(
 			/latest repair fixed[\s\S]+recurring and new blocking findings[\s\S]+validations[\s\S]+`artifactsChanged`[\s\S]+explicit authorization/i,
 		);
+		expect(run).toMatch(
+			/explicit direction instead selects another planned[\s\S]*dependency-independent feature[\s\S]*exact `featureId`[\s\S]*`nextFeatureId`[\s\S]*one transaction[\s\S]*do not reset first[\s\S]*`flow_run_start` separately[\s\S]*default selection/i,
+		);
+		expect(run).toMatch(
+			/latest relevant reviewed outcome remains failed is never\s+selected implicitly/i,
+		);
+		expect(run).toMatch(
+			/untouched,[\s\S]+dependency-independent feature[\s\S]+every runnable candidate requires a\s+retry[\s\S]+await-user-direction/i,
+		);
+		expect(run).toMatch(
+			/ready[\s\S]+await-user-direction[\s\S]+failed run[\s\S]+already been superseded[\s\S]+detail once[\s\S]+flow_run_start[\s\S]+exact retry feature ID[\s\S]+do not reset/i,
+		);
 		const auto = section(
 			compileFlowPromptSurface("flow-auto"),
 			"Route from status",
 		);
 		expect(auto).toMatch(
-			/blocked outcome[\s\S]+loaded `flow-run` retry and checkpoint contract/i,
+			/blocked outcome[\s\S]+loaded `flow-run` retry and checkpoint\s+contract/i,
 		);
 
 		const status = compileFlowPromptSurface("flow-status");
 		expectOnce(status, 'flow_status { request: { view: "compact" } }');
 		expectOnce(status, 'flow_status { request: { view: "detail" } }');
+		expect(status).not.toContain('view: "impediments"');
 		expect(status).toMatch(
-			/blocked[\s\S]+exactly once[\s\S]+attempt[\s\S]+`failedReviewCount`[\s\S]+findings[\s\S]+validations[\s\S]+`artifactsChanged`[\s\S]+`nextAction`/i,
+			/blocked[\s\S]+or `projection\.nextAction` is `await-user-direction`[\s\S]+exactly once[\s\S]+attempt[\s\S]+`failedReviewCount`[\s\S]+retry-required feature[\s\S]+validations[\s\S]+`artifactsChanged`[\s\S]+status and `nextAction`/i,
 		);
 		expect(status).toMatch(/Do not mutate/i);
 		expectInOrder(status, [
@@ -153,7 +166,10 @@ describe("production Flow prompts", () => {
 		);
 		expect(status).toMatch(/recovery guidance[\s\S]+blocked review/i);
 		expect(status).toMatch(
-			/blocked `await-user-direction`[\s\S]+requires explicit user direction/i,
+			/blocked `await-user-direction`[\s\S]+atomic `flow_feature_reset`[\s\S]+`nextFeatureId`[\s\S]+ready `await-user-direction`[\s\S]+no blocked run remains[\s\S]+`flow_run_start`[\s\S]+explicit `featureId`[\s\S]+never reset or default selection/i,
+		);
+		expect(status).toMatch(
+			/`workflowData\.autoTiming`[\s\S]+`activeMs`[\s\S]+non-authoritative process-local wall time[\s\S]+not CPU or pure work[\s\S]+`waitingForUserMs`[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+latest `\/flow-auto`[\s\S]+paused, inactive, errored, and unprojected waits are excluded/i,
 		);
 
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
@@ -173,7 +189,16 @@ describe("production Flow prompts", () => {
 			/observable outcome[\s\S]+bounded evidence[\s\S]+exact[\s\S]+plan-listed command byte-for-byte/i,
 		);
 		expect(plan).toMatch(
+			/stable finding, issue, or[\s\S]+IDs[\s\S]+preserve those exact IDs[\s\S]+saved feature[\s\S]+every named ID[\s\S]+traceable/i,
+		);
+		expect(plan).toMatch(
+			/operating system[\s\S]+architecture[\s\S]+service[\s\S]+external setting[\s\S]+preflight it before implementation/i,
+		);
+		expect(plan).toMatch(
 			/flow_plan_save[\s\S]+flow_plan_approve[\s\S]+explicit approval[\s\S]+do not begin implementation/i,
+		);
+		expect(plan).toMatch(
+			/conversational approval[\s\S]+without requiring a second command[\s\S]+same process-local auto interaction[\s\S]+same Flow session/i,
 		);
 
 		const run = compileFlowPromptSurface("flow-run");
@@ -186,7 +211,6 @@ describe("production Flow prompts", () => {
 			"status is `idle` or `planning`",
 			"`flow_session_close`:",
 			"`await-user-direction`",
-			"blocked `flow_feature_reset`",
 			"Running `flow_feature_reset`",
 			"`dispatch-flow-reviewer`:",
 			"`flow_run_start`:",
@@ -195,11 +219,15 @@ describe("production Flow prompts", () => {
 			"Use execution status",
 		]);
 		expectOnce(run, 'flow_status { request: { view: "detail" } }');
+		expect(run).not.toContain('view: "impediments"');
 		expect(runStart).toMatch(
 			/top-level response status is `error`[\s\S]+recovery when present[\s\S]+initial read made no lifecycle/i,
 		);
 		expect(runStart).toMatch(
 			/Running `flow_feature_reset`[\s\S]+pending review is source-stale[\s\S]+Never redispatch/i,
+		);
+		expect(runStart).toMatch(
+			/await-user-direction[\s\S]+detail[\s\S]+exactly once[\s\S]+distinguish[\s\S]+Ready `await-user-direction`[\s\S]+no blocked run[\s\S]+flow_run_start[\s\S]+exact `featureId`[\s\S]+never call `flow_feature_reset`[\s\S]+blocked status[\s\S]+nextFeatureId[\s\S]+atomic/i,
 		);
 		expect(runStart).toMatch(
 			/`dispatch-flow-reviewer`[\s\S]+read execution status[\s\S]+If that read errors[\s\S]+stop without dispatching[\s\S]+route that refreshed[\s\S]+only if `nextAction` is still[\s\S]+running[\s\S]+`flow_feature_reset`[\s\S]+never dispatch[\s\S]+that assignment[\s\S]+Skip run[\s\S]+start, implementation, and validation/i,
@@ -208,7 +236,7 @@ describe("production Flow prompts", () => {
 			/serially by default[\s\S]+two or three genuinely independent[\s\S]+same[\s\S]+assistant tool-use turn[\s\S]+at most one targeted follow-up wave/i,
 		);
 		expect(run).toMatch(
-			/known failed exact plan-listed gate[\s\S]+cannot be discharged by substitute broad validation[\s\S]+already accepted review is grandfathered/i,
+			/failed, incomplete, or source-drifted exact plan-listed observation[\s\S]+freshness boundary[\s\S]+current source[\s\S]+after its latest relevant[\s\S]+returning to an older digest[\s\S]+substitute broad validation cannot discharge[\s\S]+already accepted review is\s+grandfathered/i,
 		);
 		const runReview = section(run, "Review and record");
 		expect(runReview).toMatch(
@@ -233,6 +261,56 @@ describe("production Flow prompts", () => {
 		expect(auto).toMatch(/do not create reports[\s\S]+JSON is opt-in/i);
 	});
 
+	test("mechanically loops auto and preflights evidence and risk before coding", () => {
+		const auto = compileFlowPromptSurface("flow-auto");
+		const loop = section(auto, "End-to-end loop");
+		expect(loop).toMatch(
+			/mechanical loop states[\s\S]+for `ready`[\s\S]+after every recorded result[\s\S]+for `completed`[\s\S]+return only after closure/i,
+		);
+		expect(loop).toMatch(
+			/intermediate progress[\s\S]+flow_run_start[\s\S]+not terminal[\s\S]+return only after closure/i,
+		);
+		expect(loop).toMatch(
+			/provisional compact baseline[\s\S]+initiating\s+turn creates a Flow session from idle[\s\S]+advances that same Flow session[\s\S]+unchanged pre-existing ready session[\s\S]+replacement session fails closed/i,
+		);
+		expect(loop).toMatch(
+			/conversational `flow_plan_approve`[\s\S]+blocked or ready `await-user-direction`[\s\S]+reply advances that same\s+session/i,
+		);
+		expect(loop).toMatch(
+			/never implicitly select[\s\S]+latest\s+relevant reviewed outcome remains failed/i,
+		);
+		expect(loop).toMatch(
+			/untouched dependency-independent[\s\S]+only retry-required candidates[\s\S]+await-user-direction/i,
+		);
+		expect(loop).toMatch(
+			/status is blocked[\s\S]+nextFeatureId[\s\S]+flow_feature_reset[\s\S]+status is ready[\s\S]+already superseded[\s\S]+detail once[\s\S]+flow_run_start[\s\S]+exact `featureId`[\s\S]+never reset from ready[\s\S]+no hold or\s+retry ledger/i,
+		);
+		expect(auto).toMatch(
+			/do not return [“"]ready for the next feature[,”"]?[\s\S]+wait for another user turn/i,
+		);
+
+		const run = compileFlowPromptSurface("flow-run");
+		expectBefore(run, "## Evidence and risk preflight", "## Implement");
+		const preflight = section(run, "Evidence and risk preflight");
+		expect(preflight).toMatch(
+			/before editing or dispatching a worker[\s\S]+exact commands[\s\S]+operating system[\s\S]+available, authorized path/i,
+		);
+		expect(preflight).toMatch(
+			/adversarial checklist[\s\S]+failure and[\s\S]+cleanup ordering[\s\S]+adjacent states[\s\S]+repetition[\s\S]+overlapping/i,
+		);
+		expect(preflight).toMatch(
+			/required evidence needs user or external authority[\s\S]+stop before\s+implementation and ask[\s\S]+knowingly skipped[\s\S]+unavailable[\s\S]+manager policy forbids calling[\s\S]+flow_review_start[\s\S]+no\s+skipped-evidence ledger[\s\S]+reviewer treats missing proof as blocking/i,
+		);
+
+		const validate = section(run, "Validate");
+		expect(validate).toMatch(
+			/\[flow-validation\][\s\S]+passed[\s\S]+recordedRevision[\s\S]+only a concurrency token[\s\S]+passed: true[\s\S]+flow_review_start[\s\S]+runtime review gates[\s\S]+passed: false[\s\S]+only to arm fresh\s+validation[\s\S]+never review[\s\S]+do not refresh compact status solely[\s\S]+absent or malformed[\s\S]+refresh compact status/i,
+		);
+		expect(validate).toMatch(
+			/do not call `flow_review_start`[\s\S]+known required behavior or environment evidence is skipped or unavailable[\s\S]+manager\s+workflow policy[\s\S]+persisted runtime gate/i,
+		);
+	});
+
 	test("keeps reviewer and worker roles narrow and structured", () => {
 		const command = compileFlowPromptSurface("flow-review");
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
@@ -244,6 +322,15 @@ describe("production Flow prompts", () => {
 		);
 		expect(reviewer).toMatch(
 			/workspace content changed[\s\S]+reset[\s\S]+do not recommend redispatch/i,
+		);
+		expect(reviewer).toMatch(
+			/adjacent states[\s\S]+repetition[\s\S]+overlapping invariants[\s\S]+base diff[\s\S]+executable\/file-mode/i,
+		);
+		expect(reviewer).toMatch(
+			/manager-supplied baseline inventory[\s\S]+independently inspect[\s\S]+evidence, not a verdict[\s\S]+lack of shell access alone is\s+not a failure/i,
+		);
+		expect(reviewer).toMatch(
+			/missing proof[\s\S]+precise blocker[\s\S]+manager-owned[\s\S]+scenario[\s\S]+expected observable result/i,
 		);
 
 		const example = JSON.parse(
@@ -268,6 +355,20 @@ describe("production Flow prompts", () => {
 		const worker = compileFlowPromptSurface("flow-worker");
 		expect(worker).toMatch(
 			/single slice[\s\S]+do not run Bash[\s\S]+exact, non-overlapping write paths[\s\S]+authoritative combined validation/i,
+		);
+		expect(worker).toMatch(
+			/adversarial acceptance and risk checklist prepared before coding[\s\S]+if it is missing[\s\S]+stop without editing/i,
+		);
+		expect(worker).toMatch(
+			/before editing[\s\S]+failure and cleanup ordering[\s\S]+adjacent state transitions[\s\S]+named finding or requirement ID/i,
+		);
+
+		const run = compileFlowPromptSurface("flow-run");
+		expect(run).toMatch(
+			/never use generic or[\s\S]+general-purpose agents for active Flow work/i,
+		);
+		expect(run).toMatch(
+			/worker must receive the checklist before it[\s\S]+codes[\s\S]+never substitute a generic agent/i,
 		);
 	});
 });

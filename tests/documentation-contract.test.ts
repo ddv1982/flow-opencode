@@ -117,16 +117,42 @@ describe("Flow v6 documentation contract", () => {
 			/projected `archiveRetry`[\s\S]+exception[\s\S]+already-accepted[\s\S]+before that comparison[\s\S]+no authority for new work/i,
 		);
 		expect(quickStart).toMatch(
-			/only the first in-scope failed review[\s\S]+automatically resets[\s\S]+\[scope-blocker\][\s\S]+checkpoints immediately[\s\S]+second failed review[\s\S]+await-user-direction/i,
+			/only the first in-scope failed review[\s\S]+automatically[\s\S]+fresh full retry[\s\S]+\[scope-blocker\][\s\S]+checkpoints immediately/i,
+		);
+		expect(quickStart).toMatch(
+			/latest relevant reviewed outcome remains failed[\s\S]+never selected\s+implicitly/i,
+		);
+		expect(quickStart).toMatch(
+			/untouched, dependency-independent[\s\S]+only retry-required candidates[\s\S]+await-user-direction/i,
+		);
+		expect(quickStart).toMatch(
+			/failed run is still blocked[\s\S]+flow_feature_reset[\s\S]+nextFeatureId[\s\S]+one operation/i,
+		);
+		expect(quickStart).toMatch(
+			/status is ready with[\s\S]+await-user-direction[\s\S]+explicit retry[\s\S]+flow_run_start[\s\S]+exact `featureId`[\s\S]+no blocked run left to reset/i,
 		);
 		expect(quickStart).toMatch(
 			/same-goal plan-only request[\s\S]+immutable plan[\s\S]+current progress[\s\S]+stops/i,
+		);
+		expect(quickStart).toContain(
+			"`ready` and `completed` are internal loop\nstates",
+		);
+		expect(quickStart).toContain("does not hand back");
+		expect(quickStart).toContain("ready for the next feature");
+		expect(quickStart).toMatch(
+			/before coding each feature[\s\S]+inventories required evidence[\s\S]+adversarial risk checklist[\s\S]+knowingly skipped[\s\S]+manager policy forbids[\s\S]+requesting review/i,
+		);
+		expect(quickStart).toMatch(
+			/reviewer treats missing proof as blocking[\s\S]+persists no skipped-evidence ledger[\s\S]+asking the user\s+remains the default/i,
+		);
+		expect(section(readme, "How Flow works")).toMatch(
+			/preflights required evidence[\s\S]+checklist[\s\S]+adjacent and repeated state transitions[\s\S]+base-diff[\s\S]+file-mode inventory[\s\S]+precise blocking\s+evidence request/i,
 		);
 		expect(commandsSection).toMatch(
 			/\| `\/flow-review` \| [^\n|]*(?:internal|recovery)/i,
 		);
 		expect(section(readme, "Bounded parallelism")).toMatch(
-			/two or three[\s\S]+no wave state/i,
+			/two or three[\s\S]+generic or general-purpose agents are not used[\s\S]+no wave state/i,
 		);
 		expect(headings(readme)).not.toContain("Tools");
 		expect(headings(readme)).not.toContain("Guides");
@@ -151,17 +177,59 @@ describe("Flow v6 documentation contract", () => {
 			/\| `flow_session_close` \| [^\n|]*derived delivery/i,
 		);
 		expect(maintainer).toMatch(
-			/prospectively[\s\S]+new\s+review[\s\S]+accepted same-schema Session v5[\s\S]+grandfathered[\s\S]+retroactive planned-gate veto/i,
+			/freshness boundary[\s\S]+new\s+review[\s\S]+newer than the latest relevant failed, incomplete, or source-drifted[\s\S]+older source digest[\s\S]+accepted same-schema Session v5[\s\S]+grandfathered[\s\S]+retroactive planned-gate\s+veto/i,
 		);
 		expect(maintainer).toMatch(
 			/`nextAction` is durable default workflow direction[\s\S]+environment-sensitive transition guards remain authoritative/i,
 		);
 		expect(maintainer).toMatch(
-			/first failure[\s\S]+compact `flow_feature_reset`[\s\S]+count-derived default[\s\S]+reads detail once[\s\S]+scope-blocker[\s\S]+checkpoint/i,
+			/first failure[\s\S]+compact[\s\S]+flow_feature_reset[\s\S]+count-derived default[\s\S]+detail may refine[\s\S]+checkpoint/i,
 		);
 		expect(maintainer).toMatch(
 			/exact active close replay[\s\S]+does not[\s\S]+rewrite[\s\S]+collision[\s\S]+manualRecoveryRequired[\s\S]+no `archiveRetry`/i,
 		);
+		expect(maintainer).toMatch(
+			/under `\/flow-auto`[\s\S]+`ready`[\s\S]+`completed`[\s\S]+mechanical loop states[\s\S]+never\s+returns[\s\S]+ready for the next feature/i,
+		);
+		expect(maintainer).toMatch(
+			/initiating turn proves authority[\s\S]+creating a Flow session[\s\S]+idle baseline[\s\S]+advancing the same Flow session[\s\S]+provisional\s+baseline/i,
+		);
+		expect(maintainer).toMatch(
+			/unchanged already-ready baseline or replacement session fails\s+closed[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+blocked or ready[\s\S]+conversational\s+checkpoints/i,
+		);
+		expect(maintainer).toMatch(
+			/latest relevant reviewed outcome remains failed[\s\S]+never\s+selected implicitly[\s\S]+untouched[\s\S]+dependency-independent[\s\S]+only retry-required candidates[\s\S]+ready[\s\S]+await-user-direction/i,
+		);
+		expect(maintainer).toMatch(
+			/blocked\s+checkpoint[\s\S]+nextFeatureId[\s\S]+flow_feature_reset[\s\S]+one\s+transaction[\s\S]+failed run is already superseded[\s\S]+ready[\s\S]+await-user-direction[\s\S]+flow_run_start\(featureId\)[\s\S]+not another reset/i,
+		);
+		expect(maintainer).toMatch(
+			/reset-only compatibility request never makes the failed[\s\S]+feature eligible for default selection/i,
+		);
+		expect(maintainer).toMatch(
+			/stable finding, issue, and requirement IDs[\s\S]+verbatim[\s\S]+saved feature[\s\S]+traceable/i,
+		);
+		expect(maintainer).toContain(
+			"Before implementation, the manager inventories every exact",
+		);
+		expect(maintainer).toContain("its required environment");
+		expect(maintainer).toContain("adversarial acceptance and risk");
+		expect(maintainer).toMatch(
+			/required behavior or environment evidence[\s\S]+knowingly skipped[\s\S]+manager workflow policy forbids calling[\s\S]+flow_review_start[\s\S]+reviewer records precise missing proof as blocking[\s\S]+runtime persists no skipped-evidence field[\s\S]+does not derive this policy as an\s+admission gate/i,
+		);
+		expect(maintainer).toMatch(
+			/before\/during\/after state transitions[\s\S]+repeated\/retried\/interrupted\/concurrent[\s\S]+manager-supplied base-diff[\s\S]+executable modes[\s\S]+does not fail merely[\s\S]+precise\s+missing-evidence/i,
+		);
+		expect(maintainer).toMatch(
+			/\[flow-validation\][\s\S]+`passed`[\s\S]+`recordedRevision`[\s\S]+only a concurrency token[\s\S]+passed: true[\s\S]+flow_review_start[\s\S]+runtime review gates[\s\S]+passed: false[\s\S]+only fresh validation[\s\S]+never review[\s\S]+no compact refresh is needed solely/i,
+		);
+		expect(maintainer).toMatch(
+			/timing for the latest `\/flow-auto`[\s\S]+current plugin process[\s\S]+activeMs[\s\S]+process-local\s+wall time[\s\S]+not CPU time or\s+pure coding time[\s\S]+waitingForUserMs[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+paused, inactive,\s+errored, and unprojected waits are excluded[\s\S]+never enters Session v5 or a projection[\s\S]+never authorizes or blocks/i,
+		);
+		expect(maintainer).toMatch(
+			/generic agents may not substitute[\s\S]+`flow-worker`[\s\S]+reserved reviewer/i,
+		);
+		expect(section(surface, "Tools", 3)).not.toContain("flow_feature_hold");
 		expect(guides).toEqual([...FLOW_GUIDANCE_IDS].sort());
 		expect(agents).toEqual(Object.keys(FLOW_CORE_AGENTS).sort());
 		for (const agent of Object.values(FLOW_CORE_AGENTS)) {
@@ -177,6 +245,7 @@ describe("Flow v6 documentation contract", () => {
 			context,
 			waveAdr,
 			reviewerAdr,
+			continuationAdr,
 			maintainer,
 			troubleshooting,
 			changelog,
@@ -184,6 +253,7 @@ describe("Flow v6 documentation contract", () => {
 			readFile("CONTEXT.md", "utf8"),
 			readFile("docs/adr/0006-bounded-intra-feature-waves.md", "utf8"),
 			readFile("docs/adr/0007-reviewer-owned-submission.md", "utf8"),
+			readFile("docs/adr/0008-bounded-auto-continuation.md", "utf8"),
 			readFile("docs/maintainer-contract.md", "utf8"),
 			readFile("docs/troubleshooting.md", "utf8"),
 			readFile("CHANGELOG.md", "utf8"),
@@ -194,6 +264,7 @@ describe("Flow v6 documentation contract", () => {
 				"docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
 				"docs/adr/0006-bounded-intra-feature-waves.md",
 				"docs/adr/0007-reviewer-owned-submission.md",
+				"docs/adr/0008-bounded-auto-continuation.md",
 				"docs/index.md",
 				"docs/maintainer-contract.md",
 				"docs/troubleshooting.md",
@@ -237,6 +308,31 @@ describe("Flow v6 documentation contract", () => {
 		expect(reviewerAdr).toMatch(
 			/source-binding rejection[\s\S]+not redispatched/i,
 		);
+		expect(headings(continuationAdr)).toEqual(
+			expect.arrayContaining([
+				"Status",
+				"Context",
+				"Decision",
+				"Simplicity boundary",
+				"Consequences",
+				"Rejected alternatives",
+			]),
+		);
+		expect(continuationAdr).toMatch(
+			/ready[\s\S]+flow_run_start[\s\S]+planning awaiting `flow_plan_approve`[\s\S]+await-user-direction[\s\S]+blocked or ready[\s\S]+conversational\s+checkpoints[\s\S]+running[\s\S]+do not auto-route/i,
+		);
+		expect(continuationAdr).toMatch(
+			/provisional continuation[\s\S]+baseline[\s\S]+unchanged already-ready[\s\S]+replacement Flow session fail closed/i,
+		);
+		expect(continuationAdr).toMatch(
+			/autoTiming[\s\S]+activeMs[\s\S]+not CPU time or pure[\s\S]+waitingForUserMs[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+paused, inactive,\s+errored, and unprojected[\s\S]+non-authoritative[\s\S]+never enters Session v5[\s\S]+6,400 lines/i,
+		);
+		expect(continuationAdr).toMatch(
+			/latest relevant reviewed outcome remains failed[\s\S]+never chosen\s+implicitly[\s\S]+untouched[\s\S]+dependency-independent[\s\S]+only retry-required candidates[\s\S]+ready[\s\S]+await-user-direction/i,
+		);
+		expect(continuationAdr).toMatch(
+			/blocked checkpoint[\s\S]+nextFeatureId[\s\S]+atomically[\s\S]+failed run is already superseded[\s\S]+ready checkpoint[\s\S]+flow_run_start\(featureId\)[\s\S]+reset is invalid[\s\S]+no durable\s+hold, retry ledger/i,
+		);
 		expect(headings(maintainer)).toEqual(
 			expect.arrayContaining([
 				"Causality and idempotency",
@@ -248,9 +344,17 @@ describe("Flow v6 documentation contract", () => {
 				"Hidden agents",
 			]),
 		);
+		expect(maintainer).toMatch(
+			/workspace digest recomputed at persistence[\s\S]+differs[\s\S]+digest recorded when validation was armed[\s\S]+source-drifted[\s\S]+permanently\s+ineligible[\s\S]+endpoint comparison[\s\S]+does not\s+detect a transient edit[\s\S]+returns to the armed bytes/i,
+		);
+		expect(maintainer).toMatch(
+			/returning to an older source digest does not revive[\s\S]+accepted same-schema Session v5[\s\S]+grandfathered/i,
+		);
 		expect(
 			section(troubleshooting, "Validation capture was cancelled"),
-		).toMatch(/15\s+minutes[\s\S]+begins[\s\S]+after-hook/);
+		).toMatch(
+			/recordedRevision[\s\S]+only a concurrency token[\s\S]+passed: true[\s\S]+runtime\s+review gate[\s\S]+passed: false[\s\S]+fresh validation[\s\S]+never review[\s\S]+no status refresh[\s\S]+endpoint comparison[\s\S]+transient edit[\s\S]+15\s+minutes[\s\S]+begins[\s\S]+after-hook/i,
+		);
 		expect(
 			section(troubleshooting, "Completion says workspace content changed"),
 		).toMatch(/Reset the feature[\s\S]+Do not redispatch/i);

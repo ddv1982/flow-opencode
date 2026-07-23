@@ -105,7 +105,7 @@ describe("OpenCode validation capture", () => {
 		});
 		expect(calls[0]?.input.outputDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
 		expect(output.output).toContain(
-			'[flow-validation] {"id":"capture-1","scope":"focused","passed":true}',
+			'[flow-validation] {"id":"capture-1","scope":"focused","passed":true,"recordedRevision":4}',
 		);
 		expect(output.output).not.toContain("/workspace");
 		expect(coordinator.pendingCount()).toBe(0);
@@ -306,5 +306,38 @@ describe("OpenCode validation capture", () => {
 			]);
 			expect(output.output).toContain('"passed":false');
 		}
+	});
+
+	test("marks a source-drifted observation ineligible", async () => {
+		const coordinator = new ValidationCaptureCoordinator({
+			randomId: () => "capture-drifted",
+			persistObservation: (_workspace, input) =>
+				Promise.resolve({
+					...persistedObservation(input),
+					ineligibleReason: "source-drift",
+				}),
+		});
+		coordinator.arm("session-drifted", "/workspace", prepared);
+		coordinator.observeToolBefore(
+			{ tool: "bash", sessionID: "session-drifted", callID: "bash-drifted" },
+			{ args: { command: prepared.command } },
+		);
+		const output = {
+			title: "Drifted",
+			output: "ok",
+			metadata: { exit: 0, truncated: false },
+		};
+		await coordinator.observeToolAfter(
+			{
+				tool: "bash",
+				sessionID: "session-drifted",
+				callID: "bash-drifted",
+				args: { command: prepared.command },
+			},
+			output,
+		);
+		expect(output.output).toContain(
+			'"passed":false,"recordedRevision":4,"ineligibleReason":"source-drift"',
+		);
 	});
 });

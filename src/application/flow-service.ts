@@ -413,9 +413,9 @@ export function createFlowService(
 				return await repository.transact(async (transaction) => {
 					const session = await transaction.load();
 					if (!session) throw new Error("No active Flow session exists.");
-					const result = resetFeature(session, request);
+					const result = resetFeature(session, request, environment);
 					await transaction.save(result.session);
-					return ok("Feature and dependents reset for a full retry.", {
+					return ok("Feature reset committed.", {
 						operation: operationResult(
 							result.session,
 							request.operationId,

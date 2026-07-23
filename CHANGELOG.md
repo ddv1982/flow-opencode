@@ -6,6 +6,53 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.7.0] - 2026-07-23
+
+Bounded auto-continuation lore keeps user-authorized goals moving while making
+checkpoints, retries, and validation freshness explicit:
+
+- `/flow-auto` now treats ready features and completed sessions as mechanical
+  loop states, so authorized work continues without an intermediate “ready for
+  the next feature” handoff. Its host lease starts from a provisional compact
+  baseline and auto-routes only after the initiating turn advances that same
+  Flow session; unchanged or replacement sessions fail closed, while
+  conversational plan approval remains resumable.
+- Failed features are never selected implicitly while their latest relevant
+  reviewed outcome remains failed. Auto mode may continue untouched independent
+  work; when only retry-required candidates remain it waits for direction.
+  While a failed run is blocked, optional `nextFeatureId` makes its authorized
+  reset and exact next run atomic. Once that run is superseded and status is
+  ready, explicit `flow_run_start(featureId)` starts its authorized retry. This
+  adds no durable hold or retry ledger.
+- Each feature now receives a before-edit evidence/environment preflight and
+  adversarial risk checklist. Manager policy withholds review while required
+  evidence is knowingly skipped, and reviewers treat missing proof as blocking;
+  no skipped-evidence state is persisted. Workers receive the checklist before
+  coding, and reviewers explicitly inspect adjacent/repeated transitions,
+  overlapping invariants, base diffs, and file modes.
+- Stable source finding IDs remain traceable in immutable feature prose.
+  Active Flow work uses only the reserved worker and reviewer roles, while
+  precise missing-evidence review failures can request manager-run proof.
+- Accepted validation markers expose their recorded revision as a concurrency
+  token, avoiding status reads made only to recover it. Only `passed: true` may
+  feed review while all runtime gates hold; failed, incomplete, and
+  source-drifted observations may use the token only for fresh validation. A
+  drifted marker reports `passed: false` plus its explicit ineligibility reason.
+  New review admission requires its current-source pass to be newer than the
+  latest relevant failure or drift; accepted reviews remain grandfathered.
+- Status workflow data now includes a small non-authoritative timer for the
+  latest `/flow-auto` in the current plugin process. Active milliseconds are
+  coordinator-classified wall time, not CPU or pure coding time; user-wait
+  milliseconds cover only projected plan-approval and
+  `await-user-direction` checkpoints. Paused, inactive, errored, and
+  unprojected waits are excluded, and reload resets the timer.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.7.0 --global --force
+```
+
 ## [6.6.0] - 2026-07-22
 
 Projection-guided recovery lore makes Flow's next step easier to understand

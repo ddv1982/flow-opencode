@@ -30,6 +30,7 @@ import {
 	flowSessionClose,
 	flowStatus,
 } from "../../infrastructure/fs/workspace-flow-service.js";
+import type { AutoTimingSnapshot } from "./auto-drive.js";
 import type { ValidationCaptureCoordinator } from "./validation-capture.js";
 
 const host = tool.schema;
@@ -180,7 +181,9 @@ const FeatureCompleteArgs = {
 		.strict(),
 };
 const FeatureResetArgs = {
-	request: host.object({ ...guard, featureId }).strict(),
+	request: host
+		.object({ ...guard, featureId, nextFeatureId: featureId.optional() })
+		.strict(),
 };
 const SessionCloseArgs = {
 	request: host
@@ -207,6 +210,7 @@ type ToolOptions = Readonly<{
 		scope: "focused" | "broad";
 		sourceDigest: `sha256:${string}`;
 	}>;
+	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
 }>;
 
 function json(value: unknown): string {
@@ -234,6 +238,26 @@ function toolError(error: unknown): string {
 			},
 		},
 	});
+}
+
+function withAutoTiming(
+	response: FlowToolResponse,
+	snapshot: ToolOptions["autoTimingSnapshot"],
+): FlowToolResponse {
+	if (!snapshot) return response;
+	try {
+		const timing = snapshot();
+		if (!timing) return response;
+		return {
+			...response,
+			workflowData: {
+				...response.workflowData,
+				autoTiming: timing,
+			},
+		};
+	} catch {
+		return response;
+	}
 }
 
 async function execute<T extends FlowToolResponse>(
@@ -278,7 +302,12 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			description: "Read compact, execution, detail, or reviewer Flow state.",
 			args: StatusArgs,
 			execute: (args, context) =>
-				execute(context, (workspace) => flowStatus(workspace, args)),
+				execute(context, async (workspace) =>
+					withAutoTiming(
+						await flowStatus(workspace, args),
+						options.autoTimingSnapshot,
+					),
+				),
 		}),
 		flow_plan_save: tool({
 			description: "Create or replace the active draft plan.",
@@ -352,7 +381,8 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 				),
 		}),
 		flow_feature_reset: tool({
-			description: "Reset a feature and dependents for a fresh full retry.",
+			description:
+				"Reset dependents and optionally start one exact next run atomically.",
 			args: FeatureResetArgs,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>

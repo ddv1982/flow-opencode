@@ -7,6 +7,7 @@ import { createFlowCoreConfigEntries } from "../src/config-shared.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../src/guidance/catalog.js";
 import FlowPlugin from "../src/index.js";
 import { createTools } from "../src/platform/opencode/tools.js";
+import { plan } from "./runtime-test-support.js";
 
 const TOOL_NAMES = [
 	"flow_feature_complete",
@@ -43,9 +44,21 @@ function createRegisteredTools() {
 	);
 }
 
-function pluginContext(workspace: string, directory = workspace) {
+function pluginContext(
+	workspace: string,
+	directory = workspace,
+	promptCalls?: unknown[],
+) {
 	return {
-		client: { app: { log() {} } },
+		client: {
+			app: { log() {} },
+			session: {
+				promptAsync(input: unknown) {
+					promptCalls?.push(input);
+					return Promise.resolve({ data: undefined });
+				},
+			},
+		},
 		project: {},
 		directory,
 		worktree: workspace,
@@ -81,8 +94,11 @@ async function createTestWorkspace(prefix: string): Promise<string> {
 async function loadPlugin(
 	workspace: string,
 	directory = workspace,
+	promptCalls?: unknown[],
 ): Promise<PluginHooks> {
-	const hooks = await FlowPlugin(pluginContext(workspace, directory));
+	const hooks = await FlowPlugin(
+		pluginContext(workspace, directory, promptCalls),
+	);
 	activeHooks.push(hooks);
 	return hooks;
 }
@@ -275,6 +291,174 @@ describe("command preflight", () => {
 					parts: [...parts],
 				} as unknown as Parameters<typeof before>[1]),
 			).rejects.toThrow();
+		}
+	});
+});
+
+describe("flow-auto host continuation", () => {
+	test("retains auto authority through compaction and nudges a ready lifecycle", async () => {
+		const workspace = await createTestWorkspace("flow-auto-");
+		const promptCalls: unknown[] = [];
+		const hooks = await loadPlugin(workspace, workspace, promptCalls);
+		const context = toolContext(workspace);
+		const planSave = hooks.tool?.flow_plan_save;
+		const planApprove = hooks.tool?.flow_plan_approve;
+		if (!planSave || !planApprove) throw new Error("Missing plan tools.");
+		const saved = JSON.parse(
+			String(
+				await planSave.execute(
+					{
+						request: {
+							operationId: "auto-plan-save",
+							expectedRevision: 0,
+							goal: "Exercise durable auto continuation.",
+							plan,
+						},
+					},
+					context,
+				),
+			),
+		);
+		expect(saved.status).toBe("ok");
+
+		const before = hooks["command.execute.before"];
+		const chat = hooks["chat.message"];
+		const compacting = hooks["experimental.session.compacting"];
+		if (!before || !chat || !compacting || !hooks.event) {
+			throw new Error("Missing auto-drive hooks.");
+		}
+		const commandOutput = {
+			parts: [{ type: "text", text: "stale" }],
+		} as unknown as Parameters<typeof before>[1];
+		await before(
+			{ command: "flow-auto", sessionID: "auto-host", arguments: "" },
+			commandOutput,
+		);
+		await chat({ sessionID: "auto-host" }, {
+			message: {
+				agent: "build",
+				model: { providerID: "provider", modelID: "model" },
+			},
+			parts: commandOutput.parts,
+		} as unknown as Parameters<typeof chat>[1]);
+
+		const compactingOutput = { context: [] as string[] };
+		await compacting({ sessionID: "auto-host" }, compactingOutput);
+		expect(compactingOutput.context.join(" ")).toContain(
+			"/flow-auto continuation",
+		);
+
+		await hooks.event({
+			event: {
+				type: "session.idle",
+				properties: { sessionID: "auto-host" },
+			},
+		} as Parameters<NonNullable<typeof hooks.event>>[0]);
+		expect(promptCalls).toHaveLength(0);
+
+		await chat({ sessionID: "auto-host" }, {
+			message: {
+				agent: "build",
+				model: { providerID: "provider", modelID: "model" },
+			},
+			parts: [{ type: "text", text: "Approve the plan." }],
+		} as unknown as Parameters<typeof chat>[1]);
+		const approved = JSON.parse(
+			String(
+				await planApprove.execute(
+					{
+						request: {
+							operationId: "auto-plan-approve",
+							expectedRevision: saved.workflowData.projection.revision,
+						},
+					},
+					context,
+				),
+			),
+		);
+		expect(approved.workflowData.projection.status).toBe("ready");
+		await hooks.event({
+			event: {
+				type: "session.idle",
+				properties: { sessionID: "auto-host" },
+			},
+		} as Parameters<NonNullable<typeof hooks.event>>[0]);
+		expect(promptCalls).toHaveLength(1);
+		expect(promptCalls[0]).toMatchObject({
+			path: { id: "auto-host" },
+			query: { directory: workspace },
+			body: {
+				agent: "build",
+				model: { providerID: "provider", modelID: "model" },
+				parts: [
+					{
+						type: "text",
+						synthetic: true,
+						text: expect.stringContaining("flow_run_start"),
+					},
+				],
+			},
+			throwOnError: true,
+		});
+
+		const status = hooks.tool?.flow_status;
+		if (!status) throw new Error("Missing status tool.");
+		const statusResponse = JSON.parse(
+			String(await status.execute({ request: { view: "compact" } }, context)),
+		);
+		expect(statusResponse.workflowData.autoTiming).toMatchObject({
+			scope: "latest-flow-auto-in-current-plugin-process",
+			authoritative: false,
+			state: "active",
+		});
+		expect(statusResponse.workflowData.projection).not.toHaveProperty(
+			"autoTiming",
+		);
+
+		await hooks.event({
+			event: {
+				type: "session.error",
+				properties: {
+					sessionID: "auto-host",
+					error: { name: "MessageAbortedError" },
+				},
+			},
+		} as Parameters<NonNullable<typeof hooks.event>>[0]);
+		const afterOldError = { context: [] as string[] };
+		await compacting({ sessionID: "auto-host" }, afterOldError);
+		expect(afterOldError.context).toEqual([]);
+		await hooks.event({
+			event: {
+				type: "session.idle",
+				properties: { sessionID: "auto-host" },
+			},
+		} as Parameters<NonNullable<typeof hooks.event>>[0]);
+		expect(promptCalls).toHaveLength(1);
+
+		for (const terminalEvent of [
+			{
+				type: "session.deleted",
+				properties: { info: { id: "auto-host" } },
+			},
+			{ type: "session.error", properties: {} },
+		]) {
+			await before(
+				{ command: "flow-auto", sessionID: "auto-host", arguments: "" },
+				commandOutput,
+			);
+			await chat({ sessionID: "auto-host" }, {
+				message: {
+					agent: "build",
+					model: { providerID: "provider", modelID: "model" },
+				},
+				parts: commandOutput.parts,
+			} as unknown as Parameters<typeof chat>[1]);
+			await hooks.event({
+				event: terminalEvent,
+			} as Parameters<NonNullable<typeof hooks.event>>[0]);
+			const afterTerminal = { context: [] as string[] };
+			await compacting({ sessionID: "auto-host" }, afterTerminal);
+			expect(afterTerminal.context).toEqual([]);
 		}
 	});
 });

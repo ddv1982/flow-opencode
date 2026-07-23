@@ -4,7 +4,7 @@ Date: 2026-07-20
 
 ## Status
 
-Accepted. Supersedes ADR 0003 and ADR 0004.
+Accepted. Supersedes ADR 0003 and ADR 0004; amended by ADR 0008.
 
 ## Context
 
@@ -47,17 +47,22 @@ schema.
 These refinements preserve this subtraction boundary. Managers align the active
 goal before every mutation without persisting an intent classifier; a same-goal
 approved plan-only request reports immutable state and stops. Prospectively, new
-review admission requires a byte-identical current-source pass after an exact
-plan-listed command has a known failure, while accepted same-schema Session v5
-reviews remain grandfathered and close adds no retroactive veto. Only the first
-in-scope failed review receives an automatic fresh full retry;
-`[scope-blocker]` and a second failure checkpoint for user direction. Every
-accepted close returns a deterministic delivery derived from canonical Session
-data instead of asking the conversation to reconstruct the result. Exact replay
-re-confirms existing active bytes and the archive/cleanup durability boundaries
-without rewriting Session v5. A true archive collision is preserved for manual
-recovery and ends automatic retry; neither case adds a recovery ledger or
-migration.
+review admission requires a byte-identical current-source pass newer than the
+latest relevant failed or source-drifted observation, while accepted same-schema
+Session v5 reviews remain grandfathered and close adds no retroactive veto. Only
+the first in-scope failed review receives an automatic fresh full retry;
+`[scope-blocker]` and a second failure checkpoint for user direction. A feature
+whose latest relevant reviewed outcome remains failed is not selected
+implicitly. From blocked status, reset may atomically start one explicitly
+chosen retry or untouched dependency-independent feature through optional
+`nextFeatureId`. Once that failed run is superseded and status is ready,
+explicit `flow_run_start(featureId)` starts its authorized retry; this adds no
+hold or retry ledger. Every accepted close returns a deterministic delivery
+derived from canonical Session data instead of asking the conversation to
+reconstruct the result. Exact replay re-confirms existing active bytes and the
+archive/cleanup durability boundaries without rewriting Session v5. A true
+archive collision is preserved for manual recovery and ends automatic retry;
+neither case adds a recovery ledger or migration.
 
 ## Intentional tradeoffs
 
@@ -80,5 +85,5 @@ that edge.
 Future complexity must remove or replace an existing concept. Moving a rule to
 another layer, adding a compatibility stack, or creating tests-of-tests does not
 count as simplification. These refinements must remain derived rules: they do not
-justify a persisted intent classifier, retry counter, delivery document, or new
-orchestration subsystem.
+justify a persisted intent classifier, retry counter, hold, delivery document,
+or new orchestration subsystem.
