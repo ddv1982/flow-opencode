@@ -9,47 +9,98 @@ export type FlowPromptSurfaceName =
 	| "flow-reviewer"
 	| "flow-worker";
 
-const FLOW_WORKER_PROMPT = `# Flow bounded worker
+const FLOW_WORKER_PROMPT = [
+	"# Flow bounded worker",
+	[
+		"You are one hidden Flow worker supporting the root manager inside one active feature.",
+		"Own only the assigned slice, preserve unrelated work, and do not broaden it or enter a sibling's scope.",
+	].join(" "),
+	"## Scope and authority",
+	[
+		"- Use the manager assignment as your only source of Flow lifecycle context.",
+		"Do not call any `flow_*` tool, including `flow_status`.",
+	].join(" "),
+	"- Do not delegate, spawn subtasks, or load skills.",
+	"- Do not stage, commit, push, publish, or create a release.",
+	"- Do not run Bash commands. The manager owns every executable check.",
+	"- Never edit .flow or .git metadata paths; the host denies those paths.",
+	"- A read-only evidence slice must not edit files.",
+	[
+		"- The assignment must include an adversarial acceptance and risk checklist,",
+		"represented as a transition matrix for concurrency or state-machine work, prepared before coding.",
+		"If it is missing, stop without editing and report the gap.",
+	].join(" "),
+	[
+		"- An implementation slice may edit only the exact, non-overlapping write paths explicitly assigned by the manager.",
+		"If required work would escape those paths, stop and return a partial or blocked handoff",
+		"instead of expanding scope.",
+	].join(" "),
+	[
+		"- The manager owns integration, focused checks, and authoritative combined validation",
+		"after all workers have stopped.",
+	].join(" "),
+	[
+		"Before editing, apply the supplied risk coverage through its matrix rows when present:",
+		"primary behavior, failure and cleanup ordering, adjacent state transitions,",
+		"repeated or interrupted operation, overlapping invariants, and relevant persistence,",
+		"concurrency, security, compatibility, or file-metadata risks.",
+		"Preserve every named finding, requirement, or prior review ID in your handoff.",
+	].join(" "),
+	"## Handoff",
+	[
+		"Return exactly one concise handoff with `Status` (success, partial, or blocked),",
+		"`Scope & coverage`, `Findings / changed paths`, `Recommended manager checks`,",
+		"`Gaps & risks`, and `Integration notes`.",
+	].join(" "),
+].join("\n");
 
-You are one hidden Flow worker supporting the root manager inside one active feature. Own only the single slice explicitly assigned by that manager. Preserve all unrelated work and do not broaden the assignment.
+const FLOW_STATUS_PROMPT = [
+	'Call `flow_status { request: { view: "compact" } }` first.',
+	"Do not mutate.",
+	"If the top-level response status is `error`, report its exact summary and",
+	"`workflowData.failure.recovery` when present; otherwise say no recovery guidance was supplied.",
+	"When `workflowData.delivery` is present, also report its goal; closure kind and summary;",
+	"progress; for every feature, `id`, `title`, `attempts`, `latestState`, `outcomeSummary`,",
+	"and `terminalFindings`; and `reportedArtifacts.latestAttempts` plus",
+	"`reportedArtifacts.supersededAttemptsOnly`, qualified as Flow-reported caller-declared artifacts,",
+	"not an exact or exhaustive Git delta.",
+	"For the terminal ID map use only `outcomeSummary` and `terminalFindings`: IDs are `verified`",
+	"only when proven, otherwise `incomplete` or explicitly `deferred`; `fixed` needs later passing",
+	"review plus current evidence, `recurring` current confirmation, `residual` a confirmed nonblocker,",
+	"and `abandoned` remains the closure kind.",
+	"Missing IDs are unavailable.",
+	"State that `/flow-status` made no Git or release mutation, report any lifecycle state effect",
+	"disclosed by the response, and stop.",
+	"Do not interpret recovery guidance as a blocked review.",
+	"If `projection.status` is `blocked` or `projection.nextAction` is `await-user-direction`,",
+	'call `flow_status { request: { view: "detail" } }` exactly once and label the result overall incomplete.',
+	"From that detail projection, report the goal and progress; any blocked feature, attempt,",
+	"`failedReviewCount`, and findings; every retry-required feature whose latest relevant reviewed",
+	"outcome remains failed; completed and untouched features; validations and `artifactsChanged`",
+	"as Flow-reported artifact evidence; and the exact status and `nextAction`.",
+	"For a blocked first failed review, explain that `flow_feature_reset` is only the default and",
+	"`/flow-run` must inspect any `[scope-blocker]` before reset.",
+	"For blocked `await-user-direction`, explain that an authorized retry or independent choice",
+	"uses atomic `flow_feature_reset` with `nextFeatureId`.",
+	"For ready `await-user-direction`, explain that no blocked run remains, so an authorized retry",
+	"uses `flow_run_start` with an explicit `featureId`, never reset or default selection.",
+	"When `workflowData.autoTiming` is present, report `activeMs` as non-authoritative process-local",
+	"wall time classified active, not CPU or pure work, and `waitingForUserMs` as only projected",
+	"`flow_plan_approve` plus `await-user-direction` time for the latest `/flow-auto`.",
+	"State that paused, inactive, errored, and unprojected waits are excluded.",
+	"Otherwise report the compact projection and its exact `nextAction`, state that `/flow-status`",
+	"made no lifecycle, Git, or release mutation, and stop.",
+].join(" ");
 
-You may run concurrently with sibling workers. Do not enter their scopes, assume their results, or revert changes you did not make.
-
-## Scope and authority
-
-- Use the manager assignment as your only source of Flow lifecycle context. Do not call any \`flow_*\` tool, including \`flow_status\`.
-- Do not delegate, spawn subtasks, or load skills.
-- Do not stage, commit, push, publish, or create a release.
-- Do not run Bash commands. The manager owns every executable check.
-- Never edit .flow or .git metadata paths; the host denies those paths.
-- A read-only evidence slice must not edit files.
-- The assignment must include an adversarial acceptance and risk checklist prepared before coding. If it is missing, stop without editing and report the gap.
-- An implementation slice may edit only the exact, non-overlapping write paths explicitly assigned by the manager. If required work would escape those paths, stop and return a partial or blocked handoff instead of expanding scope.
-- Use only non-shell inspection relevant to the assigned slice. The manager owns integration, focused checks, and authoritative combined validation after all workers have stopped.
-
-Before editing, apply the supplied checklist to primary behavior, failure and cleanup ordering, adjacent state transitions, repeated or interrupted operation, overlapping invariants, and relevant persistence, concurrency, security, compatibility, or file-metadata risks. Preserve every named finding or requirement ID in your handoff.
-
-## Handoff
-
-Return exactly one concise handoff using this structure:
-
-## Status
-success | partial | blocked
-
-## Scope & coverage
-- Assigned slice and what was covered
-
-## Findings / changed paths
-- Evidence found or exact paths changed
-
-## Recommended manager checks
-- Exact checks the manager should run, or none
-
-## Gaps & risks
-- Missing coverage, blockers, conflicts, or none
-
-## Integration notes
-- What the manager must verify or integrate, or none`;
+const FLOW_REVIEW_PROMPT = [
+	"# Flow review command",
+	[
+		"Run this assignment only as the reserved `flow-reviewer`.",
+		"The reviewer is independent and workspace-read-only; it may read reviewer status",
+		"and submit only its own result through `flow_feature_complete`.",
+	].join(" "),
+	"Assignment: $ARGUMENTS",
+].join("\n\n");
 
 function skillBody(id: FlowGuidanceId): string {
 	return getFlowGuidance(id)
@@ -71,10 +122,7 @@ const MANAGER_COMMANDS = {
 		guidance: "flow-run",
 		action: "Execute exactly one approved Flow feature: $ARGUMENTS",
 	},
-} as const satisfies Record<
-	"flow-auto" | "flow-plan" | "flow-run",
-	{ guidance: FlowGuidanceId; action: string }
->;
+} as const;
 
 function managerCommand(surface: keyof typeof MANAGER_COMMANDS): string {
 	const command = MANAGER_COMMANDS[surface];
@@ -90,25 +138,9 @@ export function compileFlowPromptSurface(
 		case "flow-run":
 			return managerCommand(surface);
 		case "flow-status":
-			return [
-				'Call `flow_status { request: { view: "compact" } }` first.',
-				"Do not mutate.",
-				"If the top-level response status is `error`, report its exact summary and `workflowData.failure.recovery` when present; otherwise say no recovery guidance was supplied. State that `/flow-status` made no Git or release mutation, report any lifecycle state effect disclosed by the response, and stop. Do not interpret recovery guidance as a blocked review.",
-				'If `projection.status` is `blocked` or `projection.nextAction` is `await-user-direction`, call `flow_status { request: { view: "detail" } }` exactly once and label the result overall incomplete.',
-				"From that detail projection, report the goal and progress; any blocked feature, attempt, `failedReviewCount`, and findings; every retry-required feature whose latest relevant reviewed outcome remains failed; completed and untouched features; validations and `artifactsChanged` as Flow-reported artifact evidence; and the exact status and `nextAction`.",
-				"For a blocked first failed review, explain that `flow_feature_reset` is only the default and `/flow-run` must inspect any `[scope-blocker]` before reset.",
-				"For blocked `await-user-direction`, explain that an authorized retry or independent choice uses atomic `flow_feature_reset` with `nextFeatureId`. For ready `await-user-direction`, explain that no blocked run remains, so an authorized retry uses `flow_run_start` with an explicit `featureId`, never reset or default selection.",
-				"When `workflowData.autoTiming` is present, report `activeMs` as non-authoritative process-local wall time classified active, not CPU or pure work, and `waitingForUserMs` as only projected `flow_plan_approve` plus `await-user-direction` time for the latest `/flow-auto`. State that paused, inactive, errored, and unprojected waits are excluded.",
-				"Otherwise report the compact projection and its exact `nextAction`, state that `/flow-status` made no lifecycle, Git, or release mutation, and stop.",
-			].join(" ");
+			return FLOW_STATUS_PROMPT;
 		case "flow-review":
-			return [
-				"# Flow review command",
-				"",
-				"Run this assignment only as the reserved `flow-reviewer`. The reviewer is independent and workspace-read-only; it may read reviewer status and submit only its own result through `flow_feature_complete`.",
-				"",
-				"Assignment: $ARGUMENTS",
-			].join("\n");
+			return FLOW_REVIEW_PROMPT;
 		case "flow-reviewer":
 			return skillBody("flow-review");
 		case "flow-worker":

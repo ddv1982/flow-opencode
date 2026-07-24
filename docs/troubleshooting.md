@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.7.0 --global --force
+opencode plugin opencode-plugin-flow@6.8.0 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.7.0"]
+  "plugin": ["opencode-plugin-flow@6.8.0"]
 }
 ```
 

@@ -5,46 +5,40 @@ description: Implement, validate, independently review, and record one approved 
 
 # Flow Run
 
-Work on exactly one approved feature. The root manager owns the session,
-integration, validation, review dispatch, reset, closure, and every
-manager-owned lifecycle mutation. Bounded `flow-worker`
-instances may contribute disjoint work; the reserved `flow-reviewer` owns the
-independent review and submits its own result. Never use generic or
-general-purpose agents for active Flow work.
+Work on exactly one approved feature.
 
 ## Start and scope
 
 1. Call `flow_status { request: { view: "compact" } }` first. Treat
    `nextAction` as the durable default workflow direction, not as permission.
 2. If the top-level response status is `error`, report its exact summary and
-   recovery when present. State that this initial read made no lifecycle, Git,
-   or release mutation, and stop. Do not route an error projection's
-   `nextAction` as feature recovery.
+   recovery when present and, if `workflowData.delivery` exists, the handoff
+   below. State this initial read made no lifecycle, Git, or release mutation;
+   stop and never route its `nextAction`.
 3. If compact status contains `archiveRetry`, call `flow_session_close` once
-   with that projected request byte-for-byte and report
-   `workflowData.delivery`. If archive publication remains unconfirmed, refresh
-   compact status. Stop after this cleanup outcome either way; it grants no new
-   work and therefore precedes goal alignment.
+   with the projected request byte-for-byte. Report delivery under the contract
+   below. Refresh only if publication is unconfirmed. Stop after this cleanup
+   outcome either way; it precedes goal alignment and grants no work.
 4. When the projection contains an active goal, align it with the current
-   direct `/flow-run` request before any other manager-owned lifecycle mutation.
-   Continue only for the same goal or a compatible narrowing. Compatible
-   narrowing may change method or emphasis, but must not add, drop, reorder, or
-   weaken an approved requirement or feature outcome. A completed-but-unclosed
-   session must close as completed before a new request proceeds. For other
-   materially new or expanded work, make no mutation, say the request has not
-   started, and offer to continue the active goal, defer it, or abandon it.
-   Keep this comparison conversational; add no classifier or state.
-5. If status is `idle` or `planning`, report its projected planning action,
+   `/flow-run` request before another manager lifecycle mutation. Continue only
+   for the same goal or a method/emphasis narrowing that preserves all outcomes;
+   close completed work. Unless step 5 applies, new/expanded work makes no
+   mutation: say it has not started and offer continue, defer, or abandon. Add no
+   classifier or state.
+5. If the aligned request explicitly chooses deferred or abandoned closure for
+   a non-completed session, call `flow_session_close` with compact session id and
+   revision, fresh operation id, that kind, and optional summary. Report delivery
+   under the contract below, follow a projected exact `archiveRetry`, and stop.
+6. If status is `idle` or `planning`, report its projected planning action,
    explain that `/flow-run` requires an approved feature, and stop without
    mutation.
 
 Route every compact projection in this order:
 
-- `flow_session_close`: close a completed session with its projected session id
-  and revision, a fresh operation id, and `kind: "completed"`. Report
-  `workflowData.delivery`, follow one projected exact `archiveRetry` if needed,
-  and stop. A materially new request can enter Flow planning afterward; do not
-  fabricate a run.
+- `flow_session_close`: close completed work with its projected session
+  id/revision, fresh operation id, and `kind: "completed"`. Report delivery
+  under the contract below, follow one exact `archiveRetry` if needed, and stop.
+  New work may enter planning afterward; do not fabricate a run.
 - `await-user-direction` or blocked `flow_feature_reset`: call
   `flow_status { request: { view: "detail" } }` exactly once, then distinguish
   the projected status:
@@ -77,86 +71,92 @@ Route every compact projection in this order:
 - Any other action: report it and stop unless the runtime explicitly identifies
   an active execution path.
 
-Use execution status as the active scope and source of revision guards. Read
-the feature summary, targets, validation, dependencies, requirements, and
-decisions before editing. A projected action may still fail an
-environment-sensitive guard; refresh compact status and handle that exact
-rejection instead of forcing the stale action.
+Use execution status for active scope/revision guards. Before editing, read the
+feature summary, targets, validation, dependencies, requirements, and decisions.
+If a projected action fails an environment-sensitive guard, refresh compact and
+handle that rejection; never force it.
 
-Preserve unrelated worktree changes and stay inside the active feature. Leave
-changes owned by another planned feature for that feature. If implementation
-needs material scope outside the approved plan, stop editing. Finish the
-approved plan or have the user explicitly choose deferred or abandoned closure
-before starting a new plan; never replan the active approved session in place.
-Use `flow_feature_reset` when a wrong design or invalid assumption requires a
-fresh run within the active feature; do not layer a retry onto a bad execution.
+When resuming attempt 2 or later and prior findings are not already available,
+read detail once and recover still-live IDs from superseded attempts' latest
+relevant failure before preflight.
+
+Summaries keep plan/source IDs `verified` or `incomplete`. A prior finding
+`fixed` needs passing review plus current evidence. A failed review carries
+every prior ID forward: use `terminal fixed pending pass` plus concise evidence
+for a proven repair, unverified-fixed for an unproven repair, `recurring` when
+confirmed, or `residual` for a confirmed nonblocker. Blockers remain terminal.
+Delivery handoff: goal; closure kind/summary; progress; per-feature
+ID/title/attempts/latest state/outcome summary/terminal findings; and
+`reportedArtifacts.latestAttempts` plus
+`reportedArtifacts.supersededAttemptsOnly`, qualified as Flow-reported
+caller-declared artifacts, not an exact/exhaustive Git delta. Map IDs only from
+delivery `outcomeSummary`/`terminalFindings`; requirements are `verified`,
+`incomplete`, or explicitly `deferred`, and `abandoned` remains the kind.
+If delivery is absent, report exact recovery and no map; never invent or read
+detail solely for closure. On revision conflict, refresh compact; retry only for
+the same session and goal while status still permits the selected closure kind;
+never close a replacement.
+
+Preserve unrelated work and stay inside the feature. Out-of-plan work stops;
+finish or obtain explicit deferred/abandoned closure before a new plan. Never
+replan in place. Use `flow_feature_reset` for a wrong design or assumption; do
+not layer retries.
 
 ## Evidence and risk preflight
 
 Before editing or dispatching a worker, perform one preflight from the approved
 feature and current worktree:
 
-- Preserve every named finding or requirement ID from the feature prose and
-  map it to an observable acceptance outcome.
-- Inventory exact commands and behavior evidence, including any required
-  operating system, architecture, tool, service, credential, external setting,
-  or hardware. Confirm an available, authorized path for each.
-- Inspect the baseline and unrelated work, including deletions, renames, file
-  types, and executable modes.
-- Write one concise adversarial checklist covering the outcome, failure and
-  cleanup ordering, adjacent states, repetition/retry/interruption/concurrency,
-  overlapping invariants, and other relevant platform or persistence risks.
+- Preserve every named finding/requirement and still-live prior review ID; map
+  each to an observable acceptance outcome.
+- Inventory exact commands, behavior evidence, required operating system,
+  architecture, service, credential, external setting, or hardware, and an
+  authorized path for each.
+- Reuse one conversational run baseline of unrelated work, deletions, renames,
+  file types, and executable modes. Refresh changed facts; give each review only
+  facts the feature changes or depends on, and give final review the full
+  inventory.
+- Write one concise adversarial checklist covering failure and cleanup ordering,
+  adjacent states, repetition, retry, interruption, concurrency, overlapping
+  invariants, and relevant platform or persistence risks. For concurrency or
+  state-machine work, express it as a compact matrix with `state/interleaving`,
+  `event`, `expected outcome`, `cleanup/invariant`, and `evidence` columns.
 
-Use the checklist and named IDs in every worker assignment and the review
-packet. If required evidence needs user or external authority, stop before
-implementation and ask. While required behavior or environment evidence is
-knowingly skipped or unavailable, manager policy forbids calling
-`flow_review_start`; a substitute pass does not cure the gap. Flow persists no
-skipped-evidence ledger, and the reviewer treats missing proof as blocking if
-the gap reaches its packet.
+Carry the checklist/IDs through workers and review; on retry preserve still-live
+prior IDs/dispositions. Required evidence needing user or external authority
+stops before implementation. If skipped or unavailable, it forbids
+`flow_review_start`; a substitute pass cannot cure it. Flow persists no
+skipped-evidence ledger; the reviewer blocks the gap.
 
 ## Implement
 
-Prefer the smallest change that satisfies the approved outcome. Follow the
-repository's existing boundaries and conventions. Do not create lifecycle,
-validation, audit, or handoff sidecars. Durable user-requested reports should
-normally be one stable Markdown artifact; JSON requires an explicit request.
+Make the smallest change satisfying the approved outcome and repository
+boundaries. Create no lifecycle, validation, audit, or handoff sidecars. A
+durable user-requested report is normally one stable Markdown artifact; JSON
+requires an explicit request.
 
-Do not stage, commit, push, publish, or mutate releases unless the user asks for
-that separate action.
+Do not stage, commit, push, publish, or mutate releases unless asked separately.
 
 ## Bounded worker waves
 
-Work serially by default. Existing implementation authority covers a qualifying
-worker wave; do not ask for separate approval. After manager orientation, fan
-out only when two or three genuinely independent, non-overlapping slices can be
-named and parallel execution has clear benefit. Run one cohort of two or three
-`flow-worker` instances at a time. Issue every cohort Task call in the same
-assistant tool-use turn before consuming any result. If the host or model
-serializes those calls, treat and report that execution as serial instead of
-claiming parallelism. Each prompt must name a stable slice id, the exact outcome
-and read or write scope, expected coverage, recommended manager checks,
-dependencies, a stop condition, and the applicable adversarial acceptance and
-risk checklist from preflight. A worker must receive the checklist before it
-codes. Edit scopes must be exact and non-overlapping. Shared contracts,
-lockfiles, and generated outputs remain manager-owned unless one worker
-receives the whole relevant scope. Never substitute a generic agent for
-`flow-worker`, including for read-only evidence gathering.
+Work serially by default; existing authority covers a qualifying worker wave.
+After manager orientation, fan out only two or three genuinely independent,
+non-overlapping slices with clear benefit. Issue one cohort's Task calls in the
+same assistant tool-use turn; report host serialization as serial. Each
+assignment names a stable id, exact outcome/read-write scope, coverage, manager
+checks, dependencies, stop condition, and preflight risk checklist. The worker
+must receive the checklist before it codes. Shared contracts, lockfiles, and generated
+output stay manager-owned unless wholly assigned to one worker.
 
-Workers cannot call Flow tools or spawn children. Each returns one concise
-handoff containing status, scope and coverage, evidence or changed paths,
-recommended manager checks, gaps and risks, and integration notes. Workers do
-not run Bash; all executable checks remain manager-owned. Missing, partial, or
-blocked output remains an explicit coverage gap.
+Workers call no Flow tools, spawn no children, and run no Bash. Each returns
+status, scope/coverage, evidence/changed paths, manager checks, gaps/risks, and
+integration notes; missing or blocked output is a coverage gap.
 
-After all workers stop, compare actual changed paths with every assigned scope,
-then inspect the combined diff and evidence and reconcile unexpected paths or
-conflicts before validation. At most one targeted follow-up wave may address a
-failed slice, newly unlocked dependency, or material claim verification. Do
-not start an automatic third wave. Coordination stays in the conversation:
-create no manifest, sidecar, Session field, durable handoff, or recovery ledger.
-After an interruption, inspect Flow status and the worktree and treat partial
-worker edits as untrusted.
+After workers stop, reconcile paths/scopes and inspect combined diff/evidence
+before validation. At most one targeted follow-up wave may repair a slice,
+unlock a dependency, or verify a material claim; never a third. Create no
+coordination ledger/sidecar. After interruption, inspect status/worktree and
+treat partial worker edits as untrusted.
 
 ## Validate
 
@@ -174,15 +174,13 @@ checks from the changed behavior and risk:
   for the repository's canonical applicable gate or a justified equivalent
   that covers the delivered repository state.
 
-Immediately before each Bash command used as evidence, call
-`flow_validation_start` with the current revision, feature id, the exact
-command, and `scope` (`focused` or `broad`). Run that byte-for-byte command next
-and inspect its complete outcome. Flow records the host-observed result directly
-in the session; do not copy host-observed fields into a later request. The exact
-command is durable, so never inline tokens, passwords, credentials, or other
-secrets. Raw output is deliberately neither persisted nor projected: the
-durable evidence is the command, exit code, output completeness, and output
-digest, while the manager must inspect the live output.
+Immediately before each evidence Bash command, call `flow_validation_start`
+with current revision, feature id, exact command, and `scope` (`focused` or
+`broad`). Run it byte-for-byte next and inspect the complete outcome. Flow
+records the host observation; copy no host-observed fields into a later request.
+The command is durable, so include no secrets. Raw output is neither persisted
+nor projected: durable evidence is command, exit code, completeness, and digest;
+the manager inspects live output.
 
 Exact plan-listed gate commands are recorded byte-for-byte.
 A failed, incomplete, or source-drifted exact plan-listed observation creates a
@@ -231,26 +229,29 @@ changed no repository artifact. Flow selects current applicable validation
 automatically and derives `feature` versus `final` review from plan progress;
 callers do not supply the review kind.
 
-The packet must preserve the feature's named finding and requirement IDs and
-summarize the preflight checklist, adjacent state transitions, repeated and
-failure-path behavior, overlapping feature invariants, and the inspected base
-diff including deletions, renames, file types, and executable-mode changes.
-Call out any item that needs independent reviewer scrutiny; do not hide a known
-evidence gap in prose.
+Keep the packet bounded. Map IDs to current-source commands or scenarios,
+environment, and results. Put the feature-specific risk checklist under
+`Risks/Matrix:`, representing it as a transition matrix for concurrency or
+state-machine work. Include `Baseline:` facts only when this feature changes or
+depends on them, except that final review receives the full inventory. Under
+`Prior findings:`, preserve each still-live prior ID's original severity and
+current `terminal fixed pending pass`, `recurring`, `residual`, or
+unverified-fixed state. Ordinary-review plan/source IDs are limited to
+active-feature mappings or IDs explicitly supplied for its packet; final review
+includes every approved requirement/feature ID. Always carry still-live prior
+findings. Omit empty optional sections; state `none` only for a relevant
+inspected absence. Never hide a gap.
 
-Dispatch the returned assignment only to the reserved `flow-reviewer`. Do not
-perform the independent review in manager context and never copy or submit its
-verdict. The reviewer reads its assignment, inspects the workspace, and calls
-`flow_feature_complete` directly; the runtime verifies the calling agent. The
-reviewer remains workspace-read-only and may make only this exact result
-submission as its sole lifecycle mutation.
+Dispatch only to reserved `flow-reviewer`; never review, copy, or submit its
+verdict in manager context. It reads the assignment/workspace and calls
+`flow_feature_complete` directly; runtime verifies the caller. It stays
+workspace-read-only, with that result submission as its sole lifecycle mutation.
 
-After dispatch, read compact status rather than trusting reviewer prose. If the
-top-level response is an error, report its exact summary and recovery when
-present, say the latest lifecycle state could not be confirmed, and stop
-without further mutation. Do not claim this invocation made no lifecycle
-mutation: it may already have started review or recorded a reviewer result.
-Never invent or submit a verdict. If status remains running, apply the
+After dispatch, read compact status. On top-level error, report exact
+summary/recovery, say the latest lifecycle state could not be confirmed, and
+stop without further mutation. Do not claim this invocation made no lifecycle
+mutation: review may have started or recorded a result. Never invent or submit a
+verdict. If status remains running, apply the
 `dispatch-flow-reviewer` or running `flow_feature_reset` route above. If status
 is blocked, load detail through the single blocked route above. A recorded pass
 completes the feature.
@@ -260,10 +261,11 @@ completes the feature.
 Use compact `blockedFeature.failedReviewCount` with the one detail projection.
 
 - A `[scope-blocker]` checkpoints immediately. Do not reset automatically.
-- On the first ordinary failed review, existing implementation authority
-  permits one automatic `flow_feature_reset` with the blocked `featureId` as
-  `nextFeatureId`. That call atomically starts the fresh full retry. Fix only its
-  blocking findings, then run full validation and full independent review.
+- Only when `failedReviewCount === 1` and there is no `[scope-blocker]`,
+  existing implementation authority permits one automatic `flow_feature_reset`
+  with the blocked `featureId` as `nextFeatureId`. That call atomically starts
+  the fresh full retry. Fix only its blocking findings, then run full validation
+  and full independent review.
 - A feature whose latest relevant reviewed outcome remains failed is never
   selected implicitly. `/flow-auto` may still continue an untouched,
   dependency-independent feature. When every runnable candidate requires a
@@ -271,7 +273,7 @@ Use compact `blockedFeature.failedReviewCount` with the one detail projection.
   has already been superseded: after explicit direction, read detail once and
   call `flow_run_start` with the exact retry feature ID. Do not reset from that
   ready checkpoint.
-- After the second failed review, retry only when the current aligned request
+- When `failedReviewCount >= 2`, retry only when the current aligned request
   explicitly authorizes one additional attempt. Pass the blocked feature as
   `nextFeatureId` on `flow_feature_reset`; if that attempt fails, checkpoint
   again.
@@ -281,13 +283,12 @@ Use compact `blockedFeature.failedReviewCount` with the one detail projection.
   attempts and starts that exact run in one transaction. Do not reset first,
   call `flow_run_start` separately, or rely on default selection.
 
-When stopping blocked, label the result overall incomplete. Report what the
-latest repair fixed; recurring and new blocking findings; the goal and progress;
-the blocked feature, attempt, and failure count; completed and untouched
-features; latest validations and `artifactsChanged` as Flow-reported artifact
-evidence; Git and release mutation status; whether the current request started
-and matched the active goal; the exact `nextAction`; and whether another attempt
-requires explicit authorization.
+When stopping blocked, label overall incomplete. Report the latest repair proved
+pending a passing review; recurring and new blockers; goal/progress; blocked
+feature, attempt, and failure count; completed/untouched features; latest
+validations and `artifactsChanged` as Flow-reported artifact evidence; Git/release
+mutation status; whether this request started and matched the goal; exact
+`nextAction`; and whether another attempt requires explicit authorization.
 
 Use that already-loaded compact status after every recorded outcome. Direct
 `/flow-run` reports this one feature's cumulative outcome and `nextAction`, then

@@ -1,51 +1,56 @@
+import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
 export const FLOW_AUTO_METADATA_KEY = "opencode-plugin-flow/auto";
-
-export type AutoDriveProjection = Readonly<{
-	sessionId?: string | undefined;
-	status: string;
-	revision: number;
-	nextAction: string | null;
-}>;
-
-export type AutoDriveMessagePart = Readonly<{
-	type?: string;
-	synthetic?: boolean;
-	metadata?: Readonly<Record<string, unknown>>;
-}>;
-
-export type AutoDriveDelivery = Readonly<{
-	agent: string;
-	model: Readonly<{ providerID: string; modelID: string }>;
-}>;
-
-export type AutoTimingSnapshot = Readonly<{
-	scope: "latest-flow-auto-in-current-plugin-process";
-	authoritative: false;
-	state: "active" | "waiting-for-user" | "paused" | "inactive";
-	activeMs: number;
-	waitingForUserMs: number;
-	pausedTimeExcluded: true;
-}>;
-
+export interface AutoDriveProjection {
+	readonly sessionId?: string | undefined;
+	readonly status: string;
+	readonly revision: number;
+	readonly nextAction: string | null;
+}
+export interface AutoDriveMessagePart {
+	readonly type?: string;
+	readonly text?: string;
+	readonly synthetic?: boolean;
+	readonly metadata?: Readonly<Record<string, unknown>>;
+}
+export interface AutoDriveDelivery {
+	readonly agent: string;
+	readonly model: Readonly<{ providerID: string; modelID: string }>;
+}
+type HostMessage = Record<"id" | "role", string> & {
+	parentID?: string;
+	summary?: unknown;
+};
+type HostPart = { type: string; messageID: string; auto?: boolean };
+type Compaction = Record<"authority" | "user", string> &
+	Partial<Record<"summary" | "successor", string>>;
+type Checkpoint = { revision: number; answered: boolean; advance?: number };
+export interface AutoTimingSnapshot {
+	readonly scope: "latest-flow-auto-in-current-plugin-process";
+	readonly authoritative: false;
+	readonly state: "active" | "waiting-for-user" | "paused" | "inactive";
+	readonly activeMs: number;
+	readonly waitingForUserMs: number;
+	readonly pausedTimeExcluded: true;
+}
 type Lease = {
 	hostSessionId: string;
 	token: string;
 	baseline: AutoDriveProjection | null;
-	flowSessionId: string | null;
 	delivery: AutoDriveDelivery | null;
 	lastPromptedRevision: number | null;
-	checkpoint: { revision: number; answered: boolean } | null;
-	pendingReply: AutoDriveDelivery | null;
-	inFlight: "status" | "prompt" | null;
+	checkpoint: Checkpoint | null;
+	pendingReply: boolean;
+	inFlight: "status" | "reply-status" | "prompt" | null;
+	idlePending: boolean;
+	messageId: string | null;
+	assistantParents: Map<string, string>;
+	lastAssistantParent: string | null;
+	compaction: Compaction | null;
 };
-
+type TimingField = "state" | "activeMs" | "waitingForUserMs";
 type Timing = {
-	state: AutoTimingSnapshot["state"];
-	since: number;
-	activeMs: number;
-	waitingForUserMs: number;
-};
-
+	-readonly [Key in TimingField]: AutoTimingSnapshot[Key];
+} & { since: number };
 type AutoDriveOptions = Readonly<{
 	readProjection: () => Promise<AutoDriveProjection>;
 	prompt: (
@@ -58,45 +63,55 @@ type AutoDriveOptions = Readonly<{
 	createToken?: (() => string) | undefined;
 	now?: (() => number) | undefined;
 }>;
+const STOP = /^(?:(?:stop|cancel) \/flow-auto|\/flow-auto (?:stop|cancel))$/i;
+const CONTINUATION_ROUTE = [
+	"Load flow-run guidance before any feature or closure route;",
+	"for a fresh close use compact session id/revision plus a fresh operation id,",
+	"and replay archiveRetry exactly from its projected request.",
+].join(" ");
 
-function continuationToken(
-	parts: readonly AutoDriveMessagePart[],
-): string | null {
+function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
+	let token: string | null = null;
+	let text = "";
+	let user = false;
 	for (const part of parts) {
-		const token = part.metadata?.[FLOW_AUTO_METADATA_KEY];
-		if (part.synthetic === true && typeof token === "string") return token;
+		if (part.synthetic === true) {
+			const value = part.metadata?.[FLOW_AUTO_METADATA_KEY];
+			if (typeof value === "string") token = value;
+		} else {
+			user = true;
+			text += ` ${part.text ?? ""}`;
+		}
 	}
-	return null;
+	return { token, user, text: text.trim().replace(/\s+/g, " ") };
 }
-
 function isMechanical(projection: AutoDriveProjection): boolean {
-	return (
-		(projection.status === "ready" &&
-			projection.nextAction === "flow_run_start") ||
-		((projection.status === "completed" || projection.status === "closed") &&
-			projection.nextAction === "flow_session_close")
-	);
+	return projection.nextAction === "flow_run_start"
+		? projection.status === "ready"
+		: projection.nextAction === "flow_session_close" &&
+				(projection.status === "completed" || projection.status === "closed");
 }
-
 function isCheckpoint(projection: AutoDriveProjection): boolean {
 	return ["flow_plan_approve", "await-user-direction"].includes(
 		projection.nextAction ?? "",
 	);
 }
-
+function isPendingReviewer(projection: AutoDriveProjection): boolean {
+	return (
+		projection.status === "running" &&
+		projection.nextAction === "dispatch-flow-reviewer"
+	);
+}
 export class AutoDriveCoordinator {
 	#lease: Lease | null = null;
 	#timing: Timing | null = null;
 	readonly #options: AutoDriveOptions;
-
 	constructor(options: AutoDriveOptions) {
 		this.#options = options;
 	}
-
 	#now(): number {
 		return this.#options.now?.() ?? performance.now();
 	}
-
 	#setTiming(state: Timing["state"]): void {
 		const timing = this.#timing;
 		if (!timing) return;
@@ -107,34 +122,36 @@ export class AutoDriveCoordinator {
 		timing.state = state;
 		timing.since = now;
 	}
-
 	#warn(message: string): void {
 		try {
 			this.#options.onWarning?.(message);
-		} catch {
-			// Logging must not affect the continuation lease.
-		}
+		} catch {}
 	}
-
 	#stop(lease: Lease, warning?: string): void {
 		if (this.#lease !== lease) return;
-		this.#lease = null;
-		this.#setTiming("inactive");
+		this.deactivate(lease.hostSessionId);
 		if (warning) this.#warn(warning);
 	}
-
+	#rejectOrigin(lease: Lease, kind: "compaction" | "mutation"): void {
+		this.#stop(lease, `Flow: ${kind} origin was unavailable.`);
+	}
+	#waitAt(lease: Lease, revision: number): void {
+		const current = lease.checkpoint;
+		lease.checkpoint =
+			current?.revision === revision ? current : { revision, answered: false };
+		lease.checkpoint.answered = false;
+		lease.messageId = null;
+		lease.lastPromptedRevision = null;
+		this.#setTiming("waiting-for-user");
+	}
 	async #read(lease: Lease): Promise<AutoDriveProjection | null> {
 		try {
 			return await this.#options.readProjection();
 		} catch (error) {
-			this.#stop(
-				lease,
-				`Flow auto-drive stopped because compact status failed: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			this.#stop(lease, `Flow auto status failed: ${String(error)}`);
 			return null;
 		}
 	}
-
 	async activate(hostSessionId: string): Promise<Record<string, unknown>> {
 		const token = this.#options.createToken?.() ?? crypto.randomUUID();
 		this.#timing = {
@@ -147,88 +164,159 @@ export class AutoDriveCoordinator {
 			hostSessionId,
 			token,
 			baseline: null,
-			flowSessionId: null,
 			delivery: null,
 			lastPromptedRevision: null,
 			checkpoint: null,
-			pendingReply: null,
+			pendingReply: false,
 			inFlight: null,
+			idlePending: false,
+			messageId: null,
+			assistantParents: new Map(),
+			lastAssistantParent: null,
+			compaction: null,
 		};
 		const lease = this.#lease;
 		const baseline = await this.#read(lease);
 		if (!baseline) throw new Error("Flow auto-drive compact status failed.");
 		lease.baseline = baseline;
-		if (this.#lease !== lease)
-			throw new Error("Flow auto-drive activation superseded.");
-		lease.flowSessionId = lease.baseline.sessionId ?? null;
+		if (this.#lease !== lease) throw new Error("Flow auto-drive superseded.");
+		if (!isPendingReviewer(baseline))
+			lease.checkpoint = { revision: baseline.revision, answered: false };
 		return { [FLOW_AUTO_METADATA_KEY]: token };
 	}
-
 	deactivate(hostSessionId: string): boolean {
 		if (this.#lease?.hostSessionId !== hostSessionId) return false;
-		this.#lease = null;
-		this.#setTiming("inactive");
+		this.clear();
 		return true;
 	}
-
 	clear(): void {
 		if (this.#lease) this.#setTiming("inactive");
 		this.#lease = null;
 	}
-
 	async observeMessage(
 		hostSessionId: string,
 		delivery: AutoDriveDelivery,
 		parts: readonly AutoDriveMessagePart[],
+		messageId: string,
 	): Promise<"accepted" | "stale-continuation"> {
 		const lease = this.#lease;
-		const token = continuationToken(parts);
-		if (token !== null) {
+		const message = inspectMessage(parts);
+		if (lease?.hostSessionId === hostSessionId && STOP.test(message.text)) {
+			this.deactivate(hostSessionId);
+			return "accepted";
+		}
+		if (message.token !== null) {
 			if (
 				!lease ||
 				lease.hostSessionId !== hostSessionId ||
-				lease.token !== token
-			) {
+				lease.token !== message.token
+			)
 				return "stale-continuation";
-			}
 			lease.delivery = delivery;
+			lease.messageId = messageId;
+			if (!lease.checkpoint && lease.lastPromptedRevision !== null)
+				lease.checkpoint = {
+					revision: lease.lastPromptedRevision,
+					answered: false,
+				};
 			this.#setTiming("active");
-		} else if (
-			lease?.hostSessionId === hostSessionId &&
-			!parts.every((part) => part.synthetic === true)
-		) {
-			if (lease.inFlight === "status") {
-				lease.pendingReply = delivery;
-			} else if (!lease.checkpoint) {
-				this.deactivate(hostSessionId);
-			} else {
-				const projection = await this.#read(lease);
-				if (!projection) return "accepted";
-				if (
-					this.#lease !== lease ||
-					projection.sessionId !== lease.flowSessionId
-				) {
-					this.#stop(lease);
-					return "accepted";
-				}
-				lease.checkpoint.revision = Math.max(
-					lease.checkpoint.revision,
-					projection.revision,
-				);
-				lease.checkpoint.answered = true;
-				lease.delivery = delivery;
-				this.#setTiming("active");
-			}
+			return "accepted";
+		}
+		if (lease?.hostSessionId !== hostSessionId || !message.user)
+			return "accepted";
+		if (lease.checkpoint?.answered || lease.pendingReply) {
+			this.deactivate(hostSessionId);
+			return "accepted";
+		}
+		if (lease.checkpoint) delete lease.checkpoint.advance;
+		if (!lease.checkpoint && lease.inFlight !== "status")
+			this.deactivate(hostSessionId);
+		else {
+			lease.messageId = messageId;
+			lease.delivery = delivery;
+			lease.pendingReply = true;
+			if (!lease.inFlight) await this.onIdle(hostSessionId);
 		}
 		return "accepted";
 	}
-
 	compactionContext(hostSessionId: string): string | null {
-		return this.#lease?.hostSessionId === hostSessionId
-			? "An in-memory /flow-auto continuation remains active. Follow authoritative compact Flow state after compaction without expanding the approved goal; stop for required user direction, a hard blocker, or confirmed closure."
-			: null;
+		if (this.#lease?.hostSessionId !== hostSessionId) return null;
+		const context = [
+			"An in-memory /flow-auto continuation remains active.",
+			"Read compact Flow state first.",
+			CONTINUATION_ROUTE,
+			"Do not expand the approved goal; stop for required user direction, a hard blocker, or confirmed closure.",
+		].join(" ");
+		return `${context}\n\n${FLOW_MANAGER_KERNEL}`;
 	}
-
+	observeHostMessage(host: string, message: HostMessage): void {
+		const lease = this.#lease;
+		if (lease?.hostSessionId !== host) return;
+		if (message.role === "assistant" && message.parentID !== undefined) {
+			lease.assistantParents.set(message.id, message.parentID);
+			if (message.summary !== true) {
+				lease.lastAssistantParent = message.parentID;
+				if (lease.compaction) lease.compaction = null;
+			} else if (lease.compaction) {
+				if (
+					message.parentID === lease.compaction.user &&
+					lease.messageId === lease.compaction.authority
+				)
+					lease.compaction.summary = message.id;
+				else lease.compaction = null;
+			}
+		} else if (message.role === "user" && lease.compaction) {
+			const compaction = lease.compaction;
+			if (
+				compaction.summary &&
+				(!compaction.successor || compaction.successor === message.id)
+			)
+				compaction.successor = message.id;
+			else lease.compaction = null;
+		}
+	}
+	observeHostPart(host: string, part: HostPart): void {
+		const lease = this.#lease;
+		if (
+			lease?.hostSessionId !== host ||
+			part.type !== "compaction" ||
+			part.auto !== true
+		)
+			return;
+		lease.compaction =
+			lease.lastAssistantParent && lease.lastAssistantParent === lease.messageId
+				? { authority: lease.lastAssistantParent, user: part.messageID }
+				: null;
+	}
+	observeCompaction(host: string): void {
+		const lease = this.#lease;
+		if (lease?.hostSessionId !== host || lease.messageId === null) return;
+		const compaction = lease.compaction;
+		lease.compaction = null;
+		if (!compaction?.successor || lease.messageId !== compaction.authority)
+			return void this.#rejectOrigin(lease, "compaction");
+		lease.messageId = compaction.successor;
+	}
+	observeMutation(
+		host: string,
+		revision: number,
+		created: string | undefined,
+		assistantId: string,
+		reviewerPending: boolean,
+	): void {
+		const lease = this.#lease;
+		if (lease?.hostSessionId !== host || !lease.messageId) return;
+		const origin = lease.assistantParents.get(assistantId);
+		if (origin === undefined) return void this.#rejectOrigin(lease, "mutation");
+		if (origin !== lease.messageId) return;
+		const baseline = lease.baseline;
+		if (baseline && baseline.sessionId === undefined && created)
+			lease.baseline = { ...baseline, sessionId: created };
+		const point = lease.checkpoint;
+		if (!point) return;
+		if (revision > point.revision)
+			point.advance = revision + Number(reviewerPending);
+	}
 	timingSnapshot(): AutoTimingSnapshot | null {
 		const timing = this.#timing;
 		if (!timing) return null;
@@ -244,119 +332,103 @@ export class AutoDriveCoordinator {
 			pausedTimeExcluded: true,
 		};
 	}
-
 	async onIdle(hostSessionId: string): Promise<void> {
 		const lease = this.#lease;
-		if (!lease || lease.hostSessionId !== hostSessionId || lease.inFlight)
+		if (!lease || lease.hostSessionId !== hostSessionId) return;
+		if (lease.inFlight) {
+			if (
+				lease.inFlight !== "reply-status" ||
+				!lease.pendingReply ||
+				lease.checkpoint?.advance !== undefined
+			)
+				lease.idlePending = true;
 			return;
-		lease.inFlight = "status";
+		}
+		lease.inFlight = lease.pendingReply ? "reply-status" : "status";
 		try {
 			const projection = await this.#read(lease);
 			if (!projection) return;
 			if (this.#lease !== lease) return;
 			const baseline = lease.baseline;
-			if (!baseline) {
-				this.#stop(lease);
-				return;
-			}
-			if (projection.status === "idle" || projection.nextAction === null) {
-				this.deactivate(hostSessionId);
-				return;
-			}
-			if (lease.flowSessionId && projection.sessionId !== lease.flowSessionId) {
-				this.#stop(lease, "Flow auto-drive stopped: Flow session changed.");
-				return;
-			}
-			lease.flowSessionId = projection.sessionId ?? lease.flowSessionId;
-
+			if (!baseline) return this.#stop(lease);
+			const anchored = lease.checkpoint !== null;
+			if (projection.status === "idle" || projection.nextAction === null)
+				return void this.deactivate(hostSessionId);
+			if (projection.sessionId !== baseline.sessionId)
+				return this.#stop(lease, "Flow auto-drive stopped: unowned session.");
+			const checkpoint = lease.checkpoint;
+			const boundary = isCheckpoint(projection);
+			const advance = checkpoint?.advance;
+			const mutationAdvanced =
+				advance !== undefined &&
+				projection.revision === advance &&
+				isMechanical(projection);
 			if (lease.pendingReply) {
-				const delivery = lease.pendingReply;
-				lease.pendingReply = null;
-				if (!lease.checkpoint && !isCheckpoint(projection)) {
-					this.deactivate(hostSessionId);
-					return;
-				}
-				lease.checkpoint = {
-					revision: projection.revision,
-					answered: true,
-				};
-				lease.delivery = delivery;
+				lease.pendingReply = false;
+				if (
+					boundary &&
+					(!checkpoint || projection.revision > checkpoint.revision)
+				)
+					return void this.#waitAt(lease, projection.revision);
+				if (!checkpoint || (!boundary && !mutationAdvanced))
+					return void this.deactivate(hostSessionId);
+				checkpoint.answered = true;
 				this.#setTiming("active");
 				return;
 			}
-			if (lease.checkpoint && !lease.checkpoint.answered) return;
-			if (lease.checkpoint) {
-				if (projection.revision <= lease.checkpoint.revision) {
-					this.deactivate(hostSessionId);
-					return;
-				}
-				if (isCheckpoint(projection)) {
-					lease.checkpoint = { revision: projection.revision, answered: false };
-					this.#setTiming("waiting-for-user");
-					return;
-				}
-				if (!isMechanical(projection)) {
-					this.deactivate(hostSessionId);
-					return;
-				}
+			if (boundary) {
+				if (checkpoint && projection.revision < checkpoint.revision)
+					return void this.deactivate(hostSessionId);
+				return void this.#waitAt(lease, projection.revision);
+			}
+			if (checkpoint) {
+				if (projection.revision <= checkpoint.revision || !mutationAdvanced)
+					return void this.deactivate(hostSessionId);
 				lease.checkpoint = null;
 			}
-			if (!isMechanical(projection)) {
-				if (isCheckpoint(projection)) {
-					lease.checkpoint = { revision: projection.revision, answered: false };
-					lease.lastPromptedRevision = null;
-					this.#setTiming("waiting-for-user");
-				} else {
-					this.deactivate(hostSessionId);
-				}
-				return;
+			if (!isMechanical(projection)) return void this.deactivate(hostSessionId);
+			if (lease.lastPromptedRevision === projection.revision) {
+				this.#setTiming("paused");
+				return this.#warn(
+					`Flow auto-drive paused after revision ${projection.revision} made no lifecycle progress.`,
+				);
 			}
 			if (
 				baseline.sessionId
-					? projection.revision <= baseline.revision
+					? projection.revision <= baseline.revision ||
+						(!anchored && !isPendingReviewer(baseline))
 					: projection.sessionId === undefined
-			) {
-				this.#stop(
-					lease,
-					"Flow auto-drive stopped: initiating turn made no progress.",
-				);
-				return;
-			}
-			if (lease.lastPromptedRevision === projection.revision) {
-				this.#setTiming("paused");
-				this.#warn(
-					`Flow auto-drive paused after revision ${projection.revision} made no lifecycle progress.`,
-				);
-				return;
-			}
-			if (!lease.delivery) {
-				this.#stop(
-					lease,
-					"Flow auto-drive stopped: originating delivery was unavailable.",
-				);
-				return;
-			}
-
+			)
+				return this.#stop(lease, "Flow auto-drive stopped: no progress.");
+			if (!lease.delivery)
+				return this.#stop(lease, "Flow auto-drive stopped: no delivery.");
 			lease.lastPromptedRevision = projection.revision;
+			lease.messageId = null;
 			this.#setTiming("active");
 			lease.inFlight = "prompt";
 			try {
+				const continuation = [
+					`Continue the same user-authorized /flow-auto lifecycle from compact revision ${projection.revision}.`,
+					"Call flow_status with the compact view first.",
+					CONTINUATION_ROUTE,
+					`Then follow ${projection.nextAction} without expanding the approved goal.`,
+				].join(" ");
 				await this.#options.prompt(
 					hostSessionId,
-					`Continue the same user-authorized /flow-auto lifecycle from compact revision ${projection.revision}. Call flow_status with the compact view first, then follow ${projection.nextAction} without expanding the approved goal.`,
+					`${continuation}\n\n${FLOW_MANAGER_KERNEL}`,
 					lease.delivery,
 					{ [FLOW_AUTO_METADATA_KEY]: lease.token },
 				);
 			} catch (error) {
-				if (this.#lease === lease) {
-					this.#stop(
-						lease,
-						`Flow auto-drive stopped because continuation could not be enqueued: ${error instanceof Error ? error.message : String(error)}`,
-					);
-				}
+				this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
 			}
 		} finally {
-			if (this.#lease === lease) lease.inFlight = null;
+			if (this.#lease === lease) {
+				const rerun = lease.idlePending;
+				lease.idlePending = false;
+				lease.inFlight = null;
+				if (rerun) await this.onIdle(hostSessionId);
+			}
 		}
 	}
 }

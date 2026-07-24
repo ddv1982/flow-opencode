@@ -21,11 +21,11 @@ into the active goal.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.7.0 --global --force
+opencode plugin opencode-plugin-flow@6.8.0 --global --force
 ```
 
 Omit `--global` for project scope. Exact version pins do not update
-automatically. To update, replace `6.7.0` with the new release and rerun the
+automatically. To update, replace `6.8.0` with the new release and rerun the
 command.
 
 Before upgrading from Flow v5 or earlier, finish or explicitly close any active
@@ -43,7 +43,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.7.0"]
+  "plugin": ["opencode-plugin-flow@6.8.0"]
 }
 ```
 
@@ -67,7 +67,14 @@ runnable feature at a time, validates the actual workspace, obtains an
 independent review, and repeats until it can close the session. While
 implementation remains authorized, `ready` and `completed` are internal loop
 states: `/flow-auto` does not hand back “ready for the next feature” or wait for
-another command between passing features.
+another command between passing features. From idle, auto-routing first requires
+a same-host accepted non-replayed `flow_plan_save` for the created Flow session;
+an active baseline that already has a pending reviewer retains a narrow temporal
+exception for that completion.
+
+Send `/flow-auto stop` or `/flow-auto cancel` in the same OpenCode session to
+revoke only the process-local continuation lease. This does not close, defer,
+abandon, or otherwise mutate the durable Flow session.
 
 Before every manager-owned Flow mutation, including direct `/flow-plan` and
 `/flow-run` use, the manager compares the current request with the active goal.
@@ -79,8 +86,8 @@ continue, defer, or abandon the active work. If that work is completed but not
 closed, Flow closes it as completed before starting the new request.
 
 Existing implementation authority carries across approval and feature outcomes.
-Only the first in-scope failed review may automatically reset and atomically
-start one fresh full retry; a `[scope-blocker]` checkpoints immediately. A
+Only when `failedReviewCount === 1` and no `[scope-blocker]` is present may Flow
+automatically reset and atomically start one fresh full retry. A
 feature whose latest relevant reviewed outcome remains failed is never selected
 implicitly. `/flow-auto` may continue untouched, dependency-independent
 features, but when only retry-required candidates remain it projects
@@ -93,20 +100,39 @@ the superseded failed feature remains, status is ready with
 feature's exact `featureId`, because there is no blocked run left to reset. The
 active session remains authoritative while it waits. Ordinary blocking findings
 are in-scope by default; a reviewer uses `[scope-blocker]` only when the required
-repair would materially exceed the approved plan.
+repair would materially exceed the approved plan. After a user checkpoint, the
+process-local continuation resumes only after that same OpenCode session observes
+an accepted non-replayed Flow mutation whose tool assistant ID resolves, through
+the cached `message.updated` `parentID`, to the authoritative user reply. A
+missing or mismatched origin fails closed. Another host cannot establish that
+authority. The mechanical projection must match the credited revision exactly;
+the sole successor allowance is one revision after an authenticated
+`flow_review_start`, where the state machine admits the reserved reviewer result.
+Compaction transfers the reply authority only across an authenticated trigger
+assistant, automatic compaction marker, summary assistant, and successor user
+lineage while the authority is unchanged; an incomplete or unrelated lineage
+fails closed.
 
 Before coding each feature, Flow inventories required evidence and its
 environment, then applies an adversarial risk checklist covering failure
 ordering, repeated and interrupted operations, adjacent state transitions,
 overlapping invariants, and relevant file-mode or platform risks. While required
 behavior or environment evidence is knowingly skipped, manager policy forbids
-requesting review; the reviewer treats missing proof as blocking if the gap
-reaches its packet. Flow persists no skipped-evidence ledger. Asking the user
-remains the default when external evidence or authority is missing. At a blocked
-checkpoint, atomic reset-and-start can discard that attempt and continue the
+requesting review; the reviewer treats proof required to approve the outcome as
+blocking if it is missing from the packet. Flow persists no skipped-evidence
+ledger. Asking the user remains the default when external evidence or authority
+is missing. At a blocked checkpoint, atomic reset-and-start can discard that
+attempt and continue the
 exact authorized retry or dependency-independent feature. At a ready retry
 checkpoint, explicit feature start resumes the already superseded failure.
 Neither route adds a hold or second blocker ledger.
+
+Flow guidance represents the checklist for concurrency and state-machine work
+as one compact transition matrix shared by workers and the reviewer. Review
+packets reuse a refreshed run baseline, carry only feature-relevant file facts
+until final review, and preserve source IDs, current-source evidence, risk
+coverage, and prior finding dispositions in existing text fields—no new audit
+schema.
 
 For plan-only or advanced use, plan first:
 
@@ -147,8 +173,10 @@ inactive, errored, and unprojected waits are excluded.
    not reopened or vetoed later at close.
 6. The reviewer inspects adjacent and repeated state transitions, overlapping
    feature invariants, the changed artifacts, and the packet's base-diff and
-   file-mode inventory. Missing proof is recorded as a precise blocking
-   evidence request.
+   file-mode inventory. Stable finding IDs survive retries; reviewer guidance
+   requires checking prior dispositions and completing the supplied risk
+   checklist, represented as a bounded matrix when applicable. Missing proof is
+   a precise blocker only when it is required to approve the outcome.
 7. A passing feature advances the plan. A failed feature is not selected again
    by default. From blocked status, reset atomically starts the exact authorized
    retry or independent feature through optional `nextFeatureId`. From ready
@@ -156,7 +184,18 @@ inactive, errored, and unprojected waits are excluded.
    `flow_run_start(featureId)` begins its retry. The final passing feature allows
    explicit closure. Every accepted close returns a concise delivery summary
    with each feature's attempt count, latest outcome, and terminal findings,
-   derived from Flow's recorded state.
+   derived from Flow's recorded state. Ordinary reviewer summaries carry IDs
+   mapped to the active feature or explicitly supplied in its packet; final
+   review carries every approved requirement or feature ID. Both carry each
+   still-live prior finding with its severity and disposition into the latest
+   `outcomeSummary`. Terminal
+   `fixed` requires a later passing review and current evidence. If a failed
+   retry proves one repair but finds another blocker, it carries that ID and a
+   concise evidence reference forward as terminal fixed pending pass; it cannot
+   drop the ID or call it fixed. Unproven fixes stay unverified, `recurring`
+   confirms recurrence, and `residual` requires a confirmed nonblocker. Only a
+   passing review may remove fixed history from the live carry-forward set.
+   Terminal findings retain unresolved blockers and the handoff stays bounded.
 
 State lives in `.flow/session.json`, so `/flow-status` can recover the next
 action after a restart or context change.
@@ -206,11 +245,18 @@ mutation is attempted. Do not hand-edit
 fingerprinting, or archive publication fails, follow the focused steps in
 [troubleshooting](docs/troubleshooting.md).
 
-For an interrupted accepted close, replay the projected `archiveRetry.request`
-exactly once. Flow confirms the existing bytes without rewriting Session v5 and
-re-confirms archive cleanup. A real archive collision removes the automatic
-retry instruction and requires manual inspection; preserve both documents and
-do not overwrite, delete, or loop the request.
+For an interrupted accepted close, compact `/flow-status` supplies
+`archiveRetry.request`. Replay that request exactly once before any additional
+or detail recovery read. Flow confirms the existing bytes without rewriting
+Session v5, re-confirms archive cleanup, and returns the existing concise
+`workflowData.delivery`. Reconstruct only the plan-bounded, terminal disposition
+map from its latest `outcomeSummary` and terminal findings. If delivery is absent,
+report the exact recovery and claim no map. On a close revision conflict,
+refresh compact status and retry only after confirming the same session and goal
+and that status still permits the selected
+closure kind; never close a replacement. A real archive collision removes the
+automatic retry instruction and requires manual inspection; preserve both
+documents and do not overwrite, delete, or loop the request.
 
 ## Development
 

@@ -36,22 +36,46 @@ approval and each passing feature outcome. Under `/flow-auto`, compact `ready`
 and `completed` projections are mechanical loop states, not user handoffs: the
 manager starts the next runnable feature or closes the session in the same
 authorized auto drive. An internal host-triggered continuation may cross model
-turns only after the initiating turn proves authority by creating a Flow session
-from an idle baseline or advancing the same Flow session beyond its provisional
-baseline. An unchanged already-ready baseline or replacement session fails
-closed. Planning awaiting `flow_plan_approve` and any
+turns from idle only after a same-host accepted non-replayed `flow_plan_save`
+establishes the created Flow session. For an active provisional baseline,
+temporal progress in that same session lets a dispatched pending reviewer submit
+its owned result without pretending reviewer submission is manager provenance.
+An unchanged already-ready baseline or replacement session fails closed.
+Planning awaiting `flow_plan_approve` and any
 `await-user-direction`, whether blocked or ready, remain conversational
-checkpoints; a reply may retain the lease only after it advances the same
-session to a mechanical state. Flow never returns “ready for the next feature”
-while that proven lease can safely start it.
+checkpoints. A clarification ending at the same recognized checkpoint revision
+re-arms waiting without auto-routing; a reply resumes only after it advances the
+same session to a mechanical state through an accepted non-replayed manager
+mutation observed in that OpenCode host session. The mutation is credited only
+when the tool assistant ID resolves through the cached `message.updated`
+`parentID` to the authoritative user reply; a missing mapping or mismatch fails
+closed. Another host cannot establish that reply authority, though a reviewer
+child may contribute only the one state-constrained successor revision after an
+authenticated `flow_review_start`; every other mechanical projection must equal
+the credited mutation revision. Compaction transfers authority only
+after the same host authenticates the trigger assistant → automatic compaction
+marker → summary assistant → successor user lineage while the captured
+authority remains unchanged. Missing, stale, or unrelated lineage fails closed.
+This provenance remains process-local and adds no Session v5 field. Flow never
+returns “ready for the next feature” while that proven lease can safely start
+it.
+
+`/flow-auto stop` and `/flow-auto cancel` revoke only the process-local lease in
+that OpenCode session. They do not mutate or close the durable Flow session.
+
+Initial auto/run prompts, compaction context, and synthetic continuations share
+one concise manager kernel: root ownership of manager mutations and
+reviewer-owned result submission, reserved Flow roles, the exact
+`failedReviewCount === 1` retry gate, and current-source plus relevant base-diff
+evidence. This
+repetition adds no runtime role registry or durable policy state.
 
 A feature whose latest relevant reviewed outcome remains failed is never
 selected implicitly. `/flow-auto` may continue an untouched,
 dependency-independent feature; when only retry-required candidates remain,
-compact status is `ready` with `await-user-direction`. Only the first in-scope
-recorded failed review may be reset and retried automatically as one fresh full
-run. A `[scope-blocker]` checkpoints immediately; any other blocking finding is
-in-scope by default. A second recorded failure also checkpoints. At a blocked
+compact status is `ready` with `await-user-direction`. An automatic fresh full
+retry is allowed only when `failedReviewCount === 1` and no `[scope-blocker]` is
+present. Any scope blocker or count of two or greater checkpoints. At a blocked
 checkpoint, optional `nextFeatureId` on `flow_feature_reset` names the exact
 authorized retry or independent feature, and reset plus run start occur in one
 transaction. If that reset selects independent work, then all untouched work
@@ -97,8 +121,8 @@ or delivery document.
   feature is excluded from implicit selection while its latest relevant reviewed
   outcome remains failed; untouched dependency-independent features remain
   eligible. Automatic convergence is bounded by recorded failed review results:
-  only the first in-scope failure may retry automatically,
-  `[scope-blocker]` checkpoints immediately, and the second failure projects
+  only `failedReviewCount === 1` without a `[scope-blocker]` may retry
+  automatically; every scope blocker or count of two or greater projects
   `await-user-direction` before another user-authorized attempt. When all
   runnable candidates require an explicit retry, status is `ready` and also
   projects `await-user-direction`. Detail identifies the failed feature from
@@ -137,16 +161,32 @@ authorized execution path. It also prepares an adversarial acceptance and risk
 checklist covering failure ordering, adjacent state transitions, repeated and
 interrupted operations, overlapping feature invariants, and relevant
 platform/file-mode risks. That checklist is supplied to every worker before
-editing and later to review.
+editing and later to review. Concurrency and state-machine work expresses the
+bounded checklist as a matrix of state/interleaving, event, expected outcome,
+cleanup/invariant, and evidence. Race-heavy lifecycle invariants are planned
+separately from independently acceptable UI, persistence, or accessibility
+outcomes.
+
+The manager reuses one conversational baseline inventory across a run and
+refreshes changed facts. A feature review receives only baseline facts it
+changes or depends on; final review receives the full inventory. Its bounded
+packet maps IDs to current-source evidence, carries the feature risk checklist
+represented as a transition matrix when applicable, and preserves prior finding
+dispositions. Empty optional sections are omitted rather than repeated as a text
+manifest.
+
+When resuming attempt 2 or later without prior findings in conversation, the
+manager reads detail once and recovers their IDs from superseded runs before
+preflight.
 
 When required behavior or environment evidence is knowingly skipped,
 unavailable, or inapplicable, manager workflow policy forbids calling
 `flow_review_start` even when a substitute broad command passes. If such a gap
-reaches review, the reviewer records precise missing proof as blocking. The
-runtime persists no skipped-evidence field and does not derive this policy as an
-admission gate. Missing external evidence checkpoints for user direction. The
-existing reset or explicit closure path handles the user's decision; Flow adds
-no parallel blocker ledger.
+reaches review, the reviewer records proof required to approve the outcome as a
+precise blocker. The runtime persists no skipped-evidence field and does not
+derive this policy as an admission gate. Missing external evidence checkpoints
+for user direction. The existing reset or explicit closure path handles the
+user's decision; Flow adds no parallel blocker ledger.
 
 `flow_validation_start` prepares the active run, exact next Bash command, scope,
 and current workspace-content digest. The OpenCode after-hook accepts only a
@@ -215,6 +255,43 @@ when satisfying a blocking finding would require material work outside the
 approved plan. All other routing comes from the existing severity and recorded
 failure count. This remains a convention inside the finding shape, not a
 structured Session or audit schema.
+
+Every finding receives a stable feature-local identity in its existing summary:
+the feature ID, assignment-created revision, and local sequence prevent reuse
+after history is dropped following a qualifying pass. Only a scope blocker
+prefixes that identity with `[scope-blocker]`. A retry reuses the identity for
+the same issue and preserves every still-live prior ID and disposition in the
+next packet. The reviewer checks each claim against current source and evidence
+and completes the supplied risk checklist through its bounded matrix when
+applicable so independently detectable issues can arrive in one cohort. An
+ordinary-review summary preserves only plan/source IDs mapped to the active
+feature or explicitly supplied in its packet; a final-review summary preserves
+every approved requirement or feature ID. Both preserve each still-live
+prior-finding ID with its severity and disposition. Only a passing verdict with
+current evidence may state terminal `fixed`. A failed verdict carries every
+prior ID forward: if repair F1 is proven but blocker F2 fails the review, F1
+remains `repair proven; terminal fixed pending pass` with a concise evidence
+reference. An unproven fixed claim is marked unverified; `recurring` requires
+current recurrence and `residual` a confirmed nonblocker. The summary becomes
+the latest `outcomeSummary`; terminal findings retain unresolved blockers. Only
+IDs fixed by a passing review leave the live carry-forward set.
+
+A fresh close constructs its request from the compact-projected session id and
+revision, a fresh operation id, the selected closure kind, and an optional
+summary. An `archiveRetry` instead replays only its compact-projected request
+byte-for-byte. Both run first without a prerequisite detail read. The accepted
+response returns terminal data through the existing concise
+`workflowData.delivery`; its latest `outcomeSummary` and terminal findings
+supply only the plan-bounded, terminal-only conversational disposition map. If
+delivery is absent, the manager reports the exact recovery and claims no map. A
+close revision conflict requires a compact refresh. Retry only after confirming
+the same session and goal while
+status still permits the selected closure kind; it never closes a replacement.
+`fixed` requires later passing independent review and current-source evidence;
+`residual` means a confirmed nonblocking issue remains; `deferred` requires
+explicit user authority for non-completed closure; and `abandoned` remains the
+actual closure kind. This adds no finding field, historical-finding manifest, or
+second ledger.
 
 `artifactsChanged` is a caller declaration associated with the review
 assignment. Flow validates bounded normalized workspace-relative paths, but it
@@ -322,9 +399,10 @@ failure, blocked status has `nextAction: await-user-direction`; the same action
 is projected with ready status when every runnable candidate requires an
 explicit retry. For either form the manager reads detail once and reports the
 retry-required feature or features. It checkpoints a `[scope-blocker]`
-immediately without persisting tag-specific state. On the first failure, compact
-`flow_feature_reset` is only the count-derived default; detail may refine that
-default to a checkpoint. While blocked, an authorized choice is passed as
+immediately without persisting tag-specific state. At
+`failedReviewCount === 1`, compact `flow_feature_reset` is only the count-derived
+default; detail may refine that default to a checkpoint. While blocked, an
+authorized choice is passed as
 optional `nextFeatureId` so reset and exact run start are atomic. Once ready,
 there is no blocked run to reset: explicit `flow_run_start(featureId)` starts
 the authorized retry. A reset-only compatibility request never makes the failed

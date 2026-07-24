@@ -19,16 +19,37 @@ export {
 	type FlowGuidanceId,
 	type FlowGuidanceTopic,
 } from "./ids.js";
-
 export type FlowGuidanceFile = {
 	relativePath: "SKILL.md";
 	content: string;
 };
 
+export const FLOW_MANAGER_KERNEL = [
+	"## Flow manager kernel",
+	"",
+	[
+		"- The root manager owns manager lifecycle mutations, integration, validation, and review dispatch;",
+		"the independent reviewer submits only its own result.",
+	].join(" "),
+	[
+		"- Delegate active Flow work only to `flow-worker` and independent review only to `flow-reviewer`;",
+		"never use generic or general-purpose agents.",
+	].join(" "),
+	[
+		"- Make one automatic fresh full retry only when `failedReviewCount === 1`",
+		"and no `[scope-blocker]` is present; otherwise checkpoint.",
+	].join(" "),
+	[
+		"- Before review, require current-source evidence appropriate to the changed outcome,",
+		"including behavior evidence when behavior changes, plus relevant base-diff, deletion,",
+		"rename, file-type, and executable-mode facts.",
+	].join(" "),
+].join("\n");
+
 const GUIDANCE_CONTENT: Record<FlowGuidanceTopic, string> = {
-	flow: flowSkill,
+	flow: `${flowSkill.trimEnd()}\n\n${FLOW_MANAGER_KERNEL}\n`,
 	"flow-plan": flowPlanSkill,
-	"flow-run": flowRunSkill,
+	"flow-run": `${flowRunSkill.trimEnd()}\n\n${FLOW_MANAGER_KERNEL}\n`,
 	"flow-review": flowReviewSkill,
 };
 

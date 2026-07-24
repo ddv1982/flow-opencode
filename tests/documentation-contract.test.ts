@@ -117,7 +117,7 @@ describe("Flow v6 documentation contract", () => {
 			/projected `archiveRetry`[\s\S]+exception[\s\S]+already-accepted[\s\S]+before that comparison[\s\S]+no authority for new work/i,
 		);
 		expect(quickStart).toMatch(
-			/only the first in-scope failed review[\s\S]+automatically[\s\S]+fresh full retry[\s\S]+\[scope-blocker\][\s\S]+checkpoints immediately/i,
+			/only when `failedReviewCount === 1`[\s\S]+no `\[scope-blocker\]` is present[\s\S]+automatically reset[\s\S]+one fresh full retry/i,
 		);
 		expect(quickStart).toMatch(
 			/latest relevant reviewed outcome remains failed[\s\S]+never selected\s+implicitly/i,
@@ -132,6 +132,15 @@ describe("Flow v6 documentation contract", () => {
 			/status is ready with[\s\S]+await-user-direction[\s\S]+explicit retry[\s\S]+flow_run_start[\s\S]+exact `featureId`[\s\S]+no blocked run left to reset/i,
 		);
 		expect(quickStart).toMatch(
+			/from idle[\s\S]+same-host accepted non-replayed[\s\S]+flow_plan_save[\s\S]+created Flow session[\s\S]+active baseline[\s\S]+pending reviewer/i,
+		);
+		expect(quickStart).toMatch(
+			/after a user checkpoint[\s\S]+same OpenCode session[\s\S]+accepted non-replayed Flow mutation[\s\S]+another host cannot establish[\s\S]+authority[\s\S]+mechanical projection must match the credited revision exactly[\s\S]+sole successor allowance[\s\S]+one revision after an authenticated[\s\S]+`flow_review_start`[\s\S]+reserved reviewer result/i,
+		);
+		expect(quickStart).toMatch(
+			/tool assistant ID[\s\S]+cached `message\.updated` `parentID`[\s\S]+authoritative user reply[\s\S]+missing or mismatched origin fails closed[\s\S]+trigger[\s\S]+assistant[\s\S]+automatic compaction marker[\s\S]+summary assistant[\s\S]+successor user[\s\S]+authority is unchanged[\s\S]+lineage[\s\S]+fails closed/i,
+		);
+		expect(quickStart).toMatch(
 			/same-goal plan-only request[\s\S]+immutable plan[\s\S]+current progress[\s\S]+stops/i,
 		);
 		expect(quickStart).toContain(
@@ -140,13 +149,40 @@ describe("Flow v6 documentation contract", () => {
 		expect(quickStart).toContain("does not hand back");
 		expect(quickStart).toContain("ready for the next feature");
 		expect(quickStart).toMatch(
+			/`\/flow-auto stop`[\s\S]+`\/flow-auto cancel`[\s\S]+process-local continuation lease[\s\S]+does not close[\s\S]+durable Flow session/i,
+		);
+		expect(quickStart).toMatch(
 			/before coding each feature[\s\S]+inventories required evidence[\s\S]+adversarial risk checklist[\s\S]+knowingly skipped[\s\S]+manager policy forbids[\s\S]+requesting review/i,
 		);
 		expect(quickStart).toMatch(
-			/reviewer treats missing proof as blocking[\s\S]+persists no skipped-evidence ledger[\s\S]+asking the user\s+remains the default/i,
+			/proof required to approve the outcome[\s\S]+blocking[\s\S]+persists no\s+skipped-evidence\s+ledger[\s\S]+asking the user\s+remains the default/i,
+		);
+		expect(quickStart).toMatch(
+			/Flow guidance[\s\S]+concurrency and state-machine[\s\S]+transition matrix[\s\S]+run baseline[\s\S]+feature-relevant[\s\S]+file facts[\s\S]+source IDs[\s\S]+current-source evidence[\s\S]+prior finding dispositions[\s\S]+no new audit[\s\S]+schema/i,
 		);
 		expect(section(readme, "How Flow works")).toMatch(
-			/preflights required evidence[\s\S]+checklist[\s\S]+adjacent and repeated state transitions[\s\S]+base-diff[\s\S]+file-mode inventory[\s\S]+precise blocking\s+evidence request/i,
+			/preflights required evidence[\s\S]+checklist[\s\S]+adjacent and repeated state transitions[\s\S]+base-diff[\s\S]+file-mode inventory[\s\S]+precise blocker[\s\S]+required to approve the outcome/i,
+		);
+		expect(section(readme, "How Flow works")).toMatch(
+			/stable finding IDs survive retries[\s\S]+reviewer guidance[\s\S]+prior dispositions[\s\S]+bounded matrix/i,
+		);
+		expect(section(readme, "How Flow works")).toMatch(
+			/ordinary reviewer summaries[\s\S]+active feature[\s\S]+explicitly supplied[\s\S]+packet[\s\S]+final\s+review[\s\S]+every approved requirement or feature ID[\s\S]+still-live prior finding[\s\S]+latest[\s\S]+`outcomeSummary`[\s\S]+terminal[\s\S]+`fixed` requires a later passing review and current evidence/i,
+		);
+		expect(section(readme, "How Flow works")).toMatch(
+			/failed[\s\S]+retry proves one repair but finds another blocker[\s\S]+carries that ID[\s\S]+evidence reference[\s\S]+terminal fixed pending pass[\s\S]+cannot[\s\S]+drop the ID or call it fixed/i,
+		);
+		expect(section(readme, "How Flow works")).toMatch(
+			/unproven fixes stay unverified[\s\S]+`recurring`[\s\S]+`residual`[\s\S]+only a[\s\S]+passing review may remove fixed history[\s\S]+terminal findings retain unresolved blockers[\s\S]+handoff stays bounded/i,
+		);
+		expect(section(readme, "Recovery")).toMatch(
+			/interrupted accepted close[\s\S]+compact `\/flow-status` supplies[\s\S]+`archiveRetry\.request`[\s\S]+replay that request exactly once[\s\S]+before any additional[\s\S]+detail recovery read[\s\S]+`workflowData\.delivery`[\s\S]+latest\s+`outcomeSummary`[\s\S]+terminal\s+findings/i,
+		);
+		expect(section(readme, "Recovery")).not.toMatch(
+			/before any recovery read/i,
+		);
+		expect(section(readme, "Recovery")).toMatch(
+			/delivery is absent[\s\S]+exact recovery[\s\S]+no\s+map[\s\S]+revision conflict[\s\S]+same session and\s+goal[\s\S]+status still permits the selected[\s\S]+closure kind[\s\S]+never close a replacement/i,
 		);
 		expect(commandsSection).toMatch(
 			/\| `\/flow-review` \| [^\n|]*(?:internal|recovery)/i,
@@ -183,7 +219,7 @@ describe("Flow v6 documentation contract", () => {
 			/`nextAction` is durable default workflow direction[\s\S]+environment-sensitive transition guards remain authoritative/i,
 		);
 		expect(maintainer).toMatch(
-			/first failure[\s\S]+compact[\s\S]+flow_feature_reset[\s\S]+count-derived default[\s\S]+detail may refine[\s\S]+checkpoint/i,
+			/`failedReviewCount === 1`[\s\S]+compact `flow_feature_reset`[\s\S]+count-derived[\s\S]+default[\s\S]+detail may refine[\s\S]+checkpoint/i,
 		);
 		expect(maintainer).toMatch(
 			/exact active close replay[\s\S]+does not[\s\S]+rewrite[\s\S]+collision[\s\S]+manualRecoveryRequired[\s\S]+no `archiveRetry`/i,
@@ -192,10 +228,31 @@ describe("Flow v6 documentation contract", () => {
 			/under `\/flow-auto`[\s\S]+`ready`[\s\S]+`completed`[\s\S]+mechanical loop states[\s\S]+never\s+returns[\s\S]+ready for the next feature/i,
 		);
 		expect(maintainer).toMatch(
-			/initiating turn proves authority[\s\S]+creating a Flow session[\s\S]+idle baseline[\s\S]+advancing the same Flow session[\s\S]+provisional\s+baseline/i,
+			/from idle[\s\S]+same-host accepted non-replayed[\s\S]+flow_plan_save[\s\S]+created Flow session[\s\S]+active provisional baseline[\s\S]+temporal progress[\s\S]+pending reviewer/i,
 		);
 		expect(maintainer).toMatch(
 			/unchanged already-ready baseline or replacement session fails\s+closed[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+blocked or ready[\s\S]+conversational\s+checkpoints/i,
+		);
+		expect(maintainer).toMatch(
+			/clarification ending at the same recognized checkpoint revision[\s\S]+re-arms waiting without auto-routing/i,
+		);
+		expect(maintainer).toMatch(
+			/accepted non-replayed manager[\s\S]+mutation observed in that OpenCode host session[\s\S]+another host cannot establish[\s\S]+reply authority[\s\S]+reviewer[\s\S]+child may contribute only the one state-constrained successor revision[\s\S]+authenticated `flow_review_start`[\s\S]+every other mechanical projection must equal[\s\S]+credited mutation revision/i,
+		);
+		expect(maintainer).toMatch(
+			/tool assistant ID[\s\S]+cached `message\.updated`[\s\S]+`parentID`[\s\S]+authoritative user reply[\s\S]+missing mapping or mismatch fails[\s\S]+trigger assistant[\s\S]+automatic compaction[\s\S]+summary assistant[\s\S]+successor user[\s\S]+authority remains unchanged[\s\S]+lineage fails closed/i,
+		);
+		expect(maintainer).toMatch(
+			/provenance remains process-local and adds no Session v5 field/i,
+		);
+		expect(maintainer).toMatch(
+			/share[\s\S]+manager kernel[\s\S]+exact[\s\S]+`failedReviewCount === 1` retry gate[\s\S]+no runtime role registry or durable\s+policy state/i,
+		);
+		expect(maintainer).toMatch(
+			/automatic fresh full[\s\S]+retry is allowed only when `failedReviewCount === 1`[\s\S]+no `\[scope-blocker\]`[\s\S]+scope blocker or count of two or greater checkpoints/i,
+		);
+		expect(maintainer).toMatch(
+			/only `failedReviewCount === 1` without a `\[scope-blocker\]` may retry[\s\S]+automatically[\s\S]+every scope blocker or count of two or greater projects[\s\S]+`await-user-direction`/i,
 		);
 		expect(maintainer).toMatch(
 			/latest relevant reviewed outcome remains failed[\s\S]+never\s+selected implicitly[\s\S]+untouched[\s\S]+dependency-independent[\s\S]+only retry-required candidates[\s\S]+ready[\s\S]+await-user-direction/i,
@@ -215,10 +272,43 @@ describe("Flow v6 documentation contract", () => {
 		expect(maintainer).toContain("its required environment");
 		expect(maintainer).toContain("adversarial acceptance and risk");
 		expect(maintainer).toMatch(
-			/required behavior or environment evidence[\s\S]+knowingly skipped[\s\S]+manager workflow policy forbids calling[\s\S]+flow_review_start[\s\S]+reviewer records precise missing proof as blocking[\s\S]+runtime persists no skipped-evidence field[\s\S]+does not derive this policy as an\s+admission gate/i,
+			/required behavior or environment evidence[\s\S]+knowingly skipped[\s\S]+manager workflow policy forbids calling[\s\S]+flow_review_start/i,
+		);
+		expect(maintainer).toMatch(
+			/proof required to approve the outcome[\s\S]+precise blocker[\s\S]+runtime persists no skipped-evidence field[\s\S]+does not[\s\S]+derive this policy as an admission gate/i,
 		);
 		expect(maintainer).toMatch(
 			/before\/during\/after state transitions[\s\S]+repeated\/retried\/interrupted\/concurrent[\s\S]+manager-supplied base-diff[\s\S]+executable modes[\s\S]+does not fail merely[\s\S]+precise\s+missing-evidence/i,
+		);
+		expect(maintainer).toMatch(
+			/state\/interleaving[\s\S]+event[\s\S]+expected outcome[\s\S]+cleanup\/invariant[\s\S]+evidence[\s\S]+conversational baseline inventory[\s\S]+only baseline facts it[\s\S]+changes or depends on[\s\S]+final review receives the full inventory[\s\S]+empty optional[\s\S]+sections are omitted/i,
+		);
+		expect(maintainer).toMatch(
+			/resuming attempt 2 or later[\s\S]+prior findings in conversation[\s\S]+reads detail[\s\S]+once[\s\S]+IDs from superseded runs[\s\S]+before[\s\S]+preflight/i,
+		);
+		expect(maintainer).toMatch(
+			/stable feature-local identity[\s\S]+qualifying pass[\s\S]+\[scope-blocker\][\s\S]+retry reuses the identity[\s\S]+preserves every still-live prior ID[\s\S]+checks each claim against current source and evidence/i,
+		);
+		expect(maintainer).toMatch(
+			/ordinary-review summary[\s\S]+plan\/source IDs mapped to the active\s+feature[\s\S]+explicitly supplied[\s\S]+packet[\s\S]+final-review summary[\s\S]+every approved requirement or feature ID[\s\S]+both preserve[\s\S]+still-live[\s\S]+prior-finding ID[\s\S]+severity[\s\S]+passing verdict with[\s\S]+current evidence[\s\S]+terminal `fixed`/i,
+		);
+		expect(maintainer).toMatch(
+			/failed verdict carries every[\s\S]+prior ID forward[\s\S]+repair F1 is proven[\s\S]+blocker F2 fails[\s\S]+terminal fixed pending pass[\s\S]+evidence[\s\S]+reference/i,
+		);
+		expect(maintainer).toMatch(
+			/unproven fixed claim[\s\S]+unverified[\s\S]+`recurring`[\s\S]+`residual`[\s\S]+latest `outcomeSummary`[\s\S]+terminal findings retain unresolved blockers[\s\S]+only[\s\S]+IDs fixed by a passing review leave the live carry-forward set/i,
+		);
+		expect(maintainer).toMatch(
+			/fresh close[\s\S]+compact-projected session id and[\s\S]+revision[\s\S]+fresh operation id[\s\S]+selected closure kind[\s\S]+optional[\s\S]+summary[\s\S]+`archiveRetry`[\s\S]+replays only[\s\S]+compact-projected request[\s\S]+byte-for-byte[\s\S]+without a prerequisite detail read[\s\S]+`workflowData\.delivery`[\s\S]+plan-bounded[\s\S]+terminal-only/i,
+		);
+		expect(maintainer).toMatch(
+			/delivery is absent[\s\S]+exact recovery[\s\S]+no map[\s\S]+revision conflict[\s\S]+compact refresh[\s\S]+same session[\s\S]+goal[\s\S]+status still permits the selected closure kind[\s\S]+never[\s\S]+closes a replacement/i,
+		);
+		expect(maintainer).toMatch(
+			/no finding field[\s\S]+historical-finding manifest[\s\S]+second ledger/i,
+		);
+		expect(maintainer).toMatch(
+			/`\/flow-auto stop`[\s\S]+`\/flow-auto cancel`[\s\S]+process-local lease[\s\S]+do not mutate or close[\s\S]+durable Flow session/i,
 		);
 		expect(maintainer).toMatch(
 			/\[flow-validation\][\s\S]+`passed`[\s\S]+`recordedRevision`[\s\S]+only a concurrency token[\s\S]+passed: true[\s\S]+flow_review_start[\s\S]+runtime review gates[\s\S]+passed: false[\s\S]+only fresh validation[\s\S]+never review[\s\S]+no compact refresh is needed solely/i,
@@ -319,13 +409,34 @@ describe("Flow v6 documentation contract", () => {
 			]),
 		);
 		expect(continuationAdr).toMatch(
-			/ready[\s\S]+flow_run_start[\s\S]+planning awaiting `flow_plan_approve`[\s\S]+await-user-direction[\s\S]+blocked or ready[\s\S]+conversational\s+checkpoints[\s\S]+running[\s\S]+do not auto-route/i,
+			/ready[\s\S]+flow_run_start[\s\S]+planning awaiting `flow_plan_approve`[\s\S]+await-user-direction[\s\S]+blocked or ready[\s\S]+conversational\s+checkpoints[\s\S]+same-revision reply[\s\S]+remains\s+waiting[\s\S]+user turns outside[\s\S]+recognized\s+checkpoint[\s\S]+fail closed/i,
 		);
 		expect(continuationAdr).toMatch(
-			/provisional continuation[\s\S]+baseline[\s\S]+unchanged already-ready[\s\S]+replacement Flow session fail closed/i,
+			/provisional continuation[\s\S]+baseline[\s\S]+from idle[\s\S]+accepted non-replayed[\s\S]+flow_plan_save[\s\S]+OpenCode host[\s\S]+created Flow session/i,
 		);
 		expect(continuationAdr).toMatch(
-			/autoTiming[\s\S]+activeMs[\s\S]+not CPU time or pure[\s\S]+waitingForUserMs[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+paused, inactive,\s+errored, and unprojected[\s\S]+non-authoritative[\s\S]+never enters Session v5[\s\S]+6,400 lines/i,
+			/active baseline[\s\S]+temporal check[\s\S]+pending reviewer[\s\S]+unchanged[\s\S]+already-ready baseline[\s\S]+replacement Flow session fail closed/i,
+		);
+		expect(continuationAdr).toMatch(
+			/accepted[\s\S]+non-replayed manager mutation observed in the same OpenCode host session[\s\S]+another host cannot establish[\s\S]+authority[\s\S]+mechanical projection must equal the credited mutation revision[\s\S]+single state-constrained reviewer-result revision[\s\S]+authenticated `flow_review_start`/i,
+		);
+		expect(continuationAdr).toMatch(
+			/tool invocation's assistant message ID[\s\S]+cached[\s\S]+`message\.updated` `parentID`[\s\S]+authoritative user reply ID[\s\S]+missing[\s\S]+mapping or different parent fails closed[\s\S]+trigger assistant parented by the[\s\S]+current reply[\s\S]+automatic compaction marker[\s\S]+summary assistant parented by[\s\S]+compaction user[\s\S]+successor user[\s\S]+authority[\s\S]+remain unchanged[\s\S]+lineage fails closed/i,
+		);
+		expect(continuationAdr).toMatch(
+			/provenance is process-local and does not[\s\S]+enter Session v5[\s\S]+clarification[\s\S]+same recognized checkpoint revision[\s\S]+re-arms[\s\S]+waiting/i,
+		);
+		expect(continuationAdr).toMatch(
+			/canonical manager\s+kernel[\s\S]+`failedReviewCount === 1` retry gate[\s\S]+without a scope blocker[\s\S]+not a new authority registry or persisted policy model/i,
+		);
+		expect(continuationAdr).toMatch(
+			/34,000-byte manager envelope[\s\S]+4 KiB[\s\S]+29,904 UTF-8 bytes[\s\S]+exactly one compiled auto[\s\S]+one raw plan[\s\S]+one raw run[\s\S]+rewritten command[\s\S]+one 4 KiB argument[\s\S]+included exactly once[\s\S]+visible wrapper[\s\S]+inside[\s\S]+34,000-byte envelope[\s\S]+attachments[\s\S]+repeated[\s\S]+dynamic loads[\s\S]+outside/i,
+		);
+		expect(continuationAdr).toMatch(
+			/`\/flow-auto stop`[\s\S]+`\/flow-auto cancel`[\s\S]+revoke[\s\S]+process-local\s+lease[\s\S]+without mutating[\s\S]+durable Flow session/i,
+		);
+		expect(continuationAdr).toMatch(
+			/autoTiming[\s\S]+activeMs[\s\S]+not CPU time or pure[\s\S]+waitingForUserMs[\s\S]+flow_plan_approve[\s\S]+await-user-direction[\s\S]+paused, inactive,\s+errored, and unprojected[\s\S]+non-authoritative[\s\S]+never enters Session v5[\s\S]+TypeScript implementation[\s\S]+200 KiB UTF-8[\s\S]+1,000-line per-file[\s\S]+formatting cannot hide\s+growth[\s\S]+separate prompt\s+envelopes/i,
 		);
 		expect(continuationAdr).toMatch(
 			/latest relevant reviewed outcome remains failed[\s\S]+never chosen\s+implicitly[\s\S]+untouched[\s\S]+dependency-independent[\s\S]+only retry-required candidates[\s\S]+ready[\s\S]+await-user-direction/i,
@@ -343,6 +454,14 @@ describe("Flow v6 documentation contract", () => {
 				"Guides",
 				"Hidden agents",
 			]),
+		);
+		expect(
+			section(
+				await readFile("docs/development.md", "utf8"),
+				"Model-driven auto-continuation evidence",
+			),
+		).toMatch(
+			/promptAsync[\s\S]+idle `ready`[\s\S]+clarification[\s\S]+same-host accepted approval[\s\S]+exactly once[\s\S]+other-host[\s\S]+does not[\s\S]+compaction[\s\S]+automatic fresh retry only at `failedReviewCount === 1`[\s\S]+without a[\s\S]+`\[scope-blocker\]`[\s\S]+every higher count awaiting user direction[\s\S]+stable finding IDs[\s\S]+baseline facts[\s\S]+prior dispositions[\s\S]+transition matrix[\s\S]+completed closure[\s\S]+conversational disposition map[\s\S]+`workflowData\.delivery`[\s\S]+opt-in provider canary[\s\S]+not a CI model\s+evaluation/i,
 		);
 		expect(maintainer).toMatch(
 			/workspace digest recomputed at persistence[\s\S]+differs[\s\S]+digest recorded when validation was armed[\s\S]+source-drifted[\s\S]+permanently\s+ineligible[\s\S]+endpoint comparison[\s\S]+does not\s+detect a transient edit[\s\S]+returns to the armed bytes/i,
@@ -367,6 +486,7 @@ describe("Flow v6 documentation contract", () => {
 			/exactly once[\s\S]+without rewriting[\s\S]+manualRecoveryRequired[\s\S]+no `archiveRetry`[\s\S]+do not overwrite, delete, or loop/i,
 		);
 		expect(changelog).toMatch(/^## \[Unreleased\]$/m);
+		const unreleased = section(changelog, "[Unreleased]");
 		const releaseHeadings = [
 			...changelog.matchAll(/^## \[([^\]]+)\](?: - ([^\n]+))?$/gm),
 		];
@@ -378,9 +498,24 @@ describe("Flow v6 documentation contract", () => {
 		expect(
 			new Date(`${releaseDate}T00:00:00.000Z`).toISOString().slice(0, 10),
 		).toBe(releaseDate);
-		expect(
-			section(changelog, `[${packageVersion}] - ${releaseDate}`),
-		).toContain(
+		const currentReleaseNotes = section(
+			changelog,
+			`[${packageVersion}] - ${releaseDate}`,
+		);
+		const currentChangeNotes = /No changes yet\./i.test(unreleased)
+			? currentReleaseNotes
+			: unreleased;
+		expect(currentChangeNotes).toMatch(
+			/`\/flow-auto stop`[\s\S]+`\/flow-auto cancel`[\s\S]+process-local[\s\S]+without[\s\S]+mutating the durable Flow session/i,
+		);
+		expect(currentChangeNotes).toMatch(
+			/tool assistant[\s\S]+cached[\s\S]+`message\.updated` parentage[\s\S]+authoritative user reply[\s\S]+provenance fails closed[\s\S]+trigger[\s\S]+automatic compaction marker[\s\S]+summary assistant[\s\S]+successor user[\s\S]+authority remains unchanged[\s\S]+lineage[\s\S]+fails closed/i,
+		);
+		expect(currentChangeNotes).toContain("The Session v5 schema is unchanged.");
+		expect(currentChangeNotes).not.toMatch(
+			/public surface (?:is|are) unchanged/i,
+		);
+		expect(currentReleaseNotes).toContain(
 			`opencode plugin opencode-plugin-flow@${packageVersion} --global --force`,
 		);
 	});

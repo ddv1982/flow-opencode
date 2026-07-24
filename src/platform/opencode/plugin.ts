@@ -19,29 +19,48 @@ import { createTools } from "./tools.js";
 import { ValidationCaptureCoordinator } from "./validation-capture.js";
 
 type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
-type CommandOutput = Parameters<
-	NonNullable<Hooks["command.execute.before"]>
->[1];
+type CommandHook = NonNullable<Hooks["command.execute.before"]>;
+type CommandOutput = Parameters<CommandHook>[1];
 type Part = CommandOutput["parts"][number];
 type TextPart = Extract<Part, { type: "text" }>;
 type SubtaskPart = Extract<Part, { type: "subtask" }> & { command?: string };
-
+const MUTATION =
+	/^flow_(?:plan_save|plan_approve|run_start|review_start|feature_complete|feature_reset|session_close)$/;
+const AUTO_STOPPED = "Flow auto stopped.";
 function isFlowCommand(command: string): command is FlowCommandName {
 	return Object.hasOwn(FLOW_CORE_COMMANDS, command);
 }
-
-function commandPrompt(command: FlowCommandName, args: string): string {
-	return FLOW_CORE_COMMANDS[command].template.replaceAll(
-		"$ARGUMENTS",
-		() => args,
-	);
+function acceptedMutation(tool: string, output: string) {
+	if (!MUTATION.test(tool)) return null;
+	try {
+		const response = JSON.parse(output);
+		const data = response.workflowData;
+		const closeAccepted =
+			tool === "flow_session_close" &&
+			response.status === "error" &&
+			data?.closeState?.durableAccepted === true;
+		const revision = data?.projection?.revision;
+		if (
+			data?.operation?.replayed !== false ||
+			(response.status !== "ok" && !closeAccepted) ||
+			typeof revision !== "number" ||
+			!Number.isSafeInteger(revision)
+		)
+			return null;
+		const sessionId = data.projection?.sessionId;
+		return {
+			revision,
+			sessionId: typeof sessionId === "string" ? sessionId : undefined,
+		};
+	} catch {
+		return null;
+	}
 }
-
 function textPart(
 	text: string,
 	synthetic = false,
 	metadata?: Readonly<Record<string, unknown>>,
-): Part {
+): TextPart {
 	return {
 		type: "text",
 		text,
@@ -49,86 +68,79 @@ function textPart(
 		...(metadata ? { metadata } : {}),
 	} as TextPart;
 }
-
-function rewriteManagerCommand(
+function rewriteCommand(
 	command: FlowCommandName,
 	args: string,
 	output: CommandOutput,
 ): void {
-	if (output.parts.some((part) => part.type === "subtask")) {
-		throw new Error("Flow manager commands cannot contain subtask parts.");
-	}
-	const preserved = output.parts.filter((part) => part.type !== "text");
-	output.parts.splice(
-		0,
-		output.parts.length,
-		textPart(
-			args.trim() ? `Flow ${command}: ${args.trim()}` : `Flow ${command}`,
-		),
-		textPart(commandPrompt(command, args), true),
-		...preserved,
-	);
-}
-
-function rewriteReviewerCommand(
-	command: FlowCommandName,
-	args: string,
-	output: CommandOutput,
-): void {
-	if (output.parts.length !== 1 || output.parts[0]?.type !== "subtask") {
-		throw new Error(`/${command} requires exactly one reviewer subtask.`);
-	}
-	const subtask = output.parts[0] as SubtaskPart;
 	const config = FLOW_CORE_COMMANDS[command];
-	if (!config.subtask || subtask.agent !== config.agent) {
-		throw new Error(
-			`/${command} must dispatch to '${config.subtask ? config.agent : "none"}'.`,
+	const promptArgs = config.subtask
+		? args
+		: "the preceding non-synthetic Flow request";
+	const prompt = config.template.split("$ARGUMENTS").join(promptArgs);
+	if (!config.subtask) {
+		if (output.parts.some((part) => part.type === "subtask"))
+			throw new Error("Flow manager commands cannot contain subtask parts.");
+		const preserved = output.parts.filter((part) => part.type !== "text");
+		output.parts.splice(
+			0,
+			output.parts.length,
+			textPart(args.trim() ? `Flow ${command}: ${args}` : `Flow ${command}`),
+			textPart(prompt, true),
+			...preserved,
 		);
+		return;
 	}
-	if (subtask.command?.replace(/^\/+/, "") !== command) {
+	if (output.parts.length !== 1 || output.parts[0]?.type !== "subtask")
+		throw new Error(`/${command} requires exactly one reviewer subtask.`);
+	const subtask = output.parts[0] as SubtaskPart;
+	if (subtask.agent !== config.agent)
+		throw new Error(`/${command} must dispatch to '${config.agent}'.`);
+	if (subtask.command?.replace(/^\/+/, "") !== command)
 		throw new Error(`/${command} subtask identity did not match.`);
-	}
-	subtask.prompt = commandPrompt(command, args);
+	subtask.prompt = prompt;
 }
-
 function createCommandHook(
 	assertOperational: (action: string) => void,
 	autoDrive: AutoDriveCoordinator,
-): NonNullable<Hooks["command.execute.before"]> {
+): CommandHook {
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
 		if (!isFlowCommand(command)) return;
-		assertOperational(`execute /${command}`);
-		if (FLOW_CORE_COMMANDS[command].subtask) {
-			rewriteReviewerCommand(command, input.arguments, output);
-		} else {
-			rewriteManagerCommand(command, input.arguments, output);
-		}
-		if (command !== "flow-auto") {
-			autoDrive.deactivate(input.sessionID);
-		} else {
-			const metadata = await autoDrive.activate(input.sessionID);
-			const instruction = output.parts.find(
-				(part): part is TextPart =>
-					part.type === "text" && part.synthetic === true,
+		const action = input.arguments.trim();
+		if (command === "flow-auto" && /^(?:stop|cancel)$/i.test(action)) {
+			const confirmed = output.parts.some(
+				(part) => part.type === "text" && part.text === AUTO_STOPPED,
 			);
-			if (!instruction) {
-				autoDrive.deactivate(input.sessionID);
-				throw new Error("/flow-auto is missing its synthetic instruction.");
-			}
-			instruction.metadata = {
-				...(instruction.metadata ?? {}),
-				...metadata,
-			};
+			const response =
+				autoDrive.deactivate(input.sessionID) || confirmed
+					? AUTO_STOPPED
+					: "No Flow auto lease was active in this OpenCode session.";
+			output.parts[0] = textPart(response);
+			output.parts.length = 1;
+			return;
 		}
+		assertOperational(`execute /${command}`);
+		rewriteCommand(command, input.arguments, output);
+		if (command !== "flow-auto")
+			return void autoDrive.deactivate(input.sessionID);
+		const metadata = await autoDrive.activate(input.sessionID);
+		const instruction = output.parts.find(
+			(part): part is TextPart =>
+				part.type === "text" && part.synthetic === true,
+		);
+		if (!instruction) {
+			autoDrive.deactivate(input.sessionID);
+			throw new Error("/flow-auto is missing its synthetic instruction.");
+		}
+		instruction.metadata = { ...instruction.metadata, ...metadata };
 	};
 }
-
 type FlowTools = NonNullable<Hooks["tool"]>;
-
 function guardTools(
 	tools: FlowTools,
 	runtimeGuard: FlowLeadershipHandle,
+	autoDrive: AutoDriveCoordinator,
 ): FlowTools {
 	return Object.fromEntries(
 		Object.entries(tools).map(([name, definition]) => [
@@ -137,14 +149,26 @@ function guardTools(
 				...definition,
 				execute: async (...args: Parameters<typeof definition.execute>) => {
 					const status = runtimeGuard.query();
-					if (!status.operational) {
+					if (!status.operational)
 						return JSON.stringify({
 							status: "error",
 							summary: status.message,
 							workflowData: { runtimeGuard: status },
 						});
-					}
-					return definition.execute(...args);
+					const output = await definition.execute(...args);
+					const mutation = acceptedMutation(name, String(output));
+					const context = args[1];
+					if (mutation)
+						autoDrive.observeMutation(
+							context.sessionID,
+							mutation.revision,
+							name === "flow_plan_save" && mutation.revision === 1
+								? mutation.sessionId
+								: undefined,
+							context.messageID,
+							name === "flow_review_start",
+						);
+					return output;
 				},
 			},
 		]),
@@ -164,11 +188,8 @@ const FlowPlugin: Plugin = async (ctx) => {
 		},
 	);
 	const initial = runtimeGuard.query();
-	log(
-		initial.operational ? "info" : "error",
-		`Flow ${version}: ${initial.message}`,
-	);
-
+	const level = initial.operational ? "info" : "error";
+	log(level, `Flow ${version}: ${initial.message}`);
 	const workspace = ctx.worktree ?? ctx.directory;
 	const autoDrive = new AutoDriveCoordinator({
 		readProjection: async () => {
@@ -193,14 +214,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 				body: {
 					agent: delivery.agent,
 					model: delivery.model,
-					parts: [
-						{
-							type: "text",
-							text: prompt,
-							synthetic: true,
-							metadata: { ...metadata },
-						},
-					],
+					parts: [textPart(prompt, true, metadata)],
 				},
 				throwOnError: true,
 			});
@@ -215,12 +229,11 @@ const FlowPlugin: Plugin = async (ctx) => {
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
 	});
-
 	return {
 		config: createConfigHook(ctx, {
 			assertOperational: (action) => runtimeGuard.assertOperational(action),
 		}),
-		tool: guardTools(tools, runtimeGuard),
+		tool: guardTools(tools, runtimeGuard, autoDrive),
 		"command.execute.before": createCommandHook(
 			(action) => runtimeGuard.assertOperational(action),
 			autoDrive,
@@ -233,10 +246,10 @@ const FlowPlugin: Plugin = async (ctx) => {
 					model: output.message.model,
 				},
 				output.parts,
+				output.message.id,
 			);
-			if (observed === "stale-continuation") {
+			if (observed === "stale-continuation")
 				throw new Error("Discarded a stale Flow auto continuation.");
-			}
 		},
 		"experimental.session.compacting": async (input, output) => {
 			const context = autoDrive.compactionContext(input.sessionID);
@@ -244,35 +257,36 @@ const FlowPlugin: Plugin = async (ctx) => {
 		},
 		event: async (input) => {
 			const event = input.event;
+			if (event.type === "message.updated")
+				return autoDrive.observeHostMessage(
+					event.properties.info.sessionID,
+					event.properties.info,
+				);
+			if (event.type === "message.part.updated")
+				return autoDrive.observeHostPart(
+					event.properties.part.sessionID,
+					event.properties.part,
+				);
 			if (event.type === "session.deleted" || event.type === "session.error") {
 				const sessionID =
 					event.type === "session.deleted"
 						? event.properties.info.id
 						: event.properties.sessionID;
-				if (sessionID) {
-					validation.cancel(sessionID);
-					autoDrive.deactivate(sessionID);
-				} else {
-					autoDrive.clear();
-				}
-				return;
+				if (!sessionID) return autoDrive.clear();
+				validation.cancel(sessionID);
+				return void autoDrive.deactivate(sessionID);
 			}
-			if (event.type !== "session.idle" && event.type !== "session.compacted") {
+			if (event.type !== "session.idle" && event.type !== "session.compacted")
 				return;
-			}
 			const sessionID = event.properties?.sessionID;
 			validation.cancel(sessionID);
-			if (event.type === "session.idle") {
-				if (runtimeGuard.query().operational) {
-					await autoDrive.onIdle(sessionID);
-				} else {
-					autoDrive.deactivate(sessionID);
-				}
-			}
+			if (event.type === "session.compacted")
+				return autoDrive.observeCompaction(sessionID);
+			if (runtimeGuard.query().operational) return autoDrive.onIdle(sessionID);
+			autoDrive.deactivate(sessionID);
 		},
-		"tool.execute.before": async (input, output) => {
-			validation.observeToolBefore(input, output);
-		},
+		"tool.execute.before": async (input, output) =>
+			validation.observeToolBefore(input, output),
 		"tool.execute.after": async (input, output) => {
 			try {
 				await validation.observeToolAfter(input, output);

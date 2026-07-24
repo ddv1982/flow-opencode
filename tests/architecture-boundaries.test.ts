@@ -4,7 +4,8 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 const repositoryRoot = resolve(import.meta.dir, "..");
 const sourceRoot = join(repositoryRoot, "src");
-const MAX_RUNTIME_SOURCE_LINES = 6_400;
+const MAX_TYPESCRIPT_SOURCE_BYTES = 200 * 1024;
+const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {
 	domain: new Set(["domain"]),
@@ -61,18 +62,24 @@ describe("v6 architecture boundaries", () => {
 		}
 	});
 
-	test("keeps the runtime deliberately small", async () => {
+	test("keeps TypeScript source within 200 KiB and each file within 1,000 lines", async () => {
 		const files = await sourceFiles();
 		const measurements = await Promise.all(
-			files.map(async (path) => ({
-				path: relative(sourceRoot, path),
-				lines: (await readFile(path, "utf8")).split("\n").length,
-			})),
+			files.map(async (path) => {
+				const source = await readFile(path, "utf8");
+				return {
+					path: relative(sourceRoot, path),
+					bytes: Buffer.byteLength(source, "utf8"),
+					lines: source.split("\n").length,
+				};
+			}),
 		);
-		const total = measurements.reduce((sum, item) => sum + item.lines, 0);
-		const oversized = measurements.filter((item) => item.lines > 1_000);
+		const totalBytes = measurements.reduce((sum, item) => sum + item.bytes, 0);
+		const oversized = measurements.filter(
+			(item) => item.lines > MAX_TYPESCRIPT_FILE_LINES,
+		);
 
-		expect(total).toBeLessThanOrEqual(MAX_RUNTIME_SOURCE_LINES);
+		expect(totalBytes).toBeLessThanOrEqual(MAX_TYPESCRIPT_SOURCE_BYTES);
 		expect(oversized).toEqual([]);
 	});
 

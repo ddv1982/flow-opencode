@@ -102,6 +102,31 @@ reliability claims. Do not persist prompts, secrets, raw provider payloads, or a
 wave ledger, and do not add provider credentials, a scheduler, or telemetry to
 CI.
 
+## Model-driven auto-continuation evidence
+
+Deterministic tests exercise the coordinator through the real plugin hooks and
+the `promptAsync` client boundary. They do not prove how a configured model
+behaves after delivery. When auto-continuation behavior changes and a provider
+is available, run one packed-plugin canary that records sanitized evidence of:
+
+- idle `ready` delivery with the Flow token and compact revision;
+- recommendation or clarification at a checkpoint remaining waiting, followed
+  by a same-host accepted approval resuming exactly once while an other-host
+  revision advance does not;
+- compaction retaining the manager kernel and reserved Flow roles;
+- one automatic fresh retry only at `failedReviewCount === 1` without a
+  `[scope-blocker]`, with every higher count awaiting user direction;
+- one reviewed retry preserving stable finding IDs, refreshed baseline facts,
+  prior dispositions, and its applicable transition matrix; and
+- confirmed completed closure with the final conversational disposition map
+  reconstructed from the existing concise `workflowData.delivery`.
+
+Use the existing host transcript and Flow detail projection; add no telemetry or
+persisted continuation state. Keep credentials, raw provider payloads, and user
+content out of evidence. This is an opt-in provider canary, not a CI model
+evaluation. If unavailable, mark model behavior unverified while retaining the
+deterministic hook and lifecycle gates.
+
 ## Release
 
 Release tags use `v<package-version>`. Blocking release checks include the

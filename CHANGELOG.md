@@ -6,6 +6,50 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.8.0] - 2026-07-24
+
+Checkpoint-safe continuation and leaner review convergence:
+
+- `/flow-auto` now remains waiting through same-revision checkpoint replies and
+  enqueues exactly one continuation only after the same host observes an
+  accepted Flow mutation whose tool assistant resolves through cached
+  `message.updated` parentage to the authoritative user reply; missing or
+  mismatched provenance fails closed. Mechanical progress must match that
+  revision exactly, except for the single state-constrained reviewer-result
+  revision after an authenticated `flow_review_start`.
+- Compaction carries reply authority only across an authenticated trigger
+  assistant, automatic compaction marker, summary assistant, and successor user
+  lineage while authority remains unchanged; incomplete or unrelated lineage
+  fails closed.
+- From idle, auto-routing requires a same-host accepted non-replayed
+  `flow_plan_save` for the newly created Flow session; a baseline that already
+  has a pending reviewer retains a narrow temporal exception.
+- `/flow-auto stop` and `/flow-auto cancel` now revoke the process-local
+  continuation lease without closing, deferring, abandoning, or otherwise
+  mutating the durable Flow session.
+- Manager command rewrites preserve every nonblank raw request, including
+  exterior whitespace, exactly once while keeping synthetic guidance separate.
+- Initial auto/run prompts, dynamically loaded run guidance, compaction context,
+  and synthetic continuations share one concise manager kernel for reserved
+  roles, the exact `failedReviewCount === 1` retry gate, and current-source plus
+  relevant baseline evidence.
+- Guidance represents race-heavy risk checks as one transition matrix and
+  preserves stable finding IDs, relevant baseline facts, and prior dispositions.
+  Ordinary reviewer summaries keep IDs mapped to the active feature or supplied
+  explicitly in its packet; final review covers every approved requirement or
+  feature ID. Both keep each still-live prior finding through failed reviews; a
+  proven repair remains pending until a later passing review, so closure and
+  archive replay need no prerequisite detail read or unbounded historical
+  ledger. The Session v5 schema is unchanged.
+  Provider/model execution remains unverified unless the opt-in manual canary
+  is run.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.8.0 --global --force
+```
+
 ## [6.7.0] - 2026-07-23
 
 Bounded auto-continuation lore keeps user-authorized goals moving while making

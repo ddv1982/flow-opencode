@@ -5,150 +5,100 @@ description: Drive a Flow goal from planning through implementation, validation,
 
 # Flow
 
-Flow is a small state ledger around coding work. An active Flow session is
-authoritative for its goal until completed, deferred, or abandoned closure.
-Do not silently fall back to ordinary non-Flow coding. The root manager owns
-the session, integration, validation, review dispatch, reset, closure, and every
-manager-owned lifecycle mutation. Bounded `flow-worker`
-instances may contribute disjoint work inside the active feature. The reserved
-`flow-reviewer` independently reviews and submits its own result through
-`flow_feature_complete`; it cannot edit the workspace or make any other
-lifecycle mutation. Do not dispatch generic or general-purpose agents for
-active Flow planning, implementation, evidence gathering, or review. Use only
-the root manager and the two reserved Flow roles.
+Flow's active goal is authoritative until completed, deferred, or abandoned;
+never silently fall back.
 
 ## Route from status
 
 1. Call `flow_status { request: { view: "compact" } }` first. Trust its
-   projection over conversation memory. Treat `nextAction` as the durable
-   default workflow direction, not permission to exceed or a reason to discard
-   existing user authority.
-   If compact status contains `archiveRetry`, the close was already accepted:
-   call `flow_session_close` once with that projected request byte-for-byte,
-   then refresh compact status. Stop if archive publication remains
-   unconfirmed; otherwise continue from the refreshed projection. This exact
-   cleanup grants no new work, so it precedes goal alignment.
-   Before any other manager-owned lifecycle mutation, align the compact-projected
-   goal with the current user request. Continuation and compatible narrowing
-   proceed inside the approved goal. Compatible narrowing changes method or
-   emphasis only; it must not add, drop, reorder, or weaken an approved
-   requirement or feature outcome. For materially new or expanded work,
-   perform no mutation. Say the new request has not started, and offer to
-   continue the active goal, defer it, or abandon it. A completed-but-unclosed
-   session must close as completed before the new request proceeds. This
-   comparison is conversational only: create no queue, classifier, or new
-   state. A durable `nextAction` can still be rejected after status by an
-   environment-sensitive guard; refresh compact status and handle the exact
-   rejection instead of forcing a stale action.
-2. If the user asked only for a plan and an approved same-goal session already
-   exists, load `flow_status { request: { view: "detail" } }` once. Report the
-   immutable active plan and current progress, then stop. Do not call
-   `flow-plan` or `flow-run`.
-3. If there is no session or the plan is still a draft, call
-   `flow_guidance { id: "flow-plan" }` and follow that contract. Stop after
-   planning when the user asked for a plan only.
-4. If an approved feature is ready, running, or blocked, call
-   `flow_guidance { id: "flow-run" }` and follow that contract for exactly that
-   feature, including its retry and checkpoint routing.
-5. After applying `flow-run` to one feature, read compact status again. Reuse
-   its one detail projection for any blocked checkpoint. Under `/flow-auto`,
-   a passing feature and a compact status of `ready` or `completed` are loop
-   states, not handoff states: immediately apply `flow-run` to the next ready
-   feature, or close the completed session with one `flow_session_close`
-   request. Do not return “ready for the next feature,” offer `/flow-run`, or
-   wait for another user turn while an authorized next action is runnable. For
-   a blocked outcome, follow the loaded `flow-run` retry and checkpoint
-   contract.
+   `nextAction` as the durable default, not added authority.
+   If the top-level response is an error, report its exact summary and recovery;
+   when delivery is present, handle its bounded map under **Recovery**. Stop
+   without another mutation.
+   For `archiveRetry`, call the projected `flow_session_close` request
+   byte-for-byte and handle its delivery under **Recovery**. Refresh compact status;
+   stop if publication remains unconfirmed, otherwise continue from the
+   refreshed projection. This cleanup precedes goal alignment and grants no work.
+   Before another manager mutation, align the compact-projected goal with the
+   request. Continue only for the same goal or a narrowing that preserves every
+   outcome. Close a completed session as completed before new work. If the user
+   explicitly chooses deferred or abandoned closure for a non-completed session,
+   call `flow_session_close` with compact session id/revision, fresh operation
+   id, that kind, and optional summary; handle **Recovery**, follow a projected
+   exact `archiveRetry`, and stop. Otherwise new or expanded work makes no
+   mutation: say it has not started and offer continue, defer, or abandon. Keep
+   alignment conversational. On revision conflict, refresh compact status and
+   retry only after confirming the same session and goal and that status still
+   permits the selected closure kind; never close a replacement.
+2. For a plan-only request with an approved same-goal session, read detail once,
+   report the immutable plan and progress, and stop.
+3. With no session or a draft, load `flow_guidance { id: "flow-plan" }`; stop
+   after planning if implementation was not authorized.
+4. For an approved ready, running, or blocked feature, load
+   `flow_guidance { id: "flow-run" }` and follow it for exactly that feature.
+5. After `flow-run`, reload compact status. Route blocked outcomes through the
+   loaded retry and checkpoint contract; otherwise continue **End-to-end loop**.
 
 ## End-to-end loop
 
-Once implementation is authorized, `/flow-auto` treats compact `ready` and
-`completed` as mechanical loop states. A host-triggered continuation begins
-from a provisional compact baseline: it may route only after the initiating
-turn creates a Flow session from idle or advances that same Flow session.
-Command entry alone does not authorize an unchanged pre-existing ready session,
-and a replacement session fails closed. Conversational `flow_plan_approve` and
-blocked or ready `await-user-direction` replies remain part of the same Flow
-interaction, but auto-routing resumes only after the reply advances that same
-session to a mechanical state.
+`/flow-auto` loops `ready`/`completed` only after a same-host non-replayed
+`flow_plan_save` owns idle session creation, or an active baseline advances in
+that session. The latter temporal gate admits a pending reviewer result;
+unchanged ready or replacement fails closed;
+conversational `flow_plan_approve` and blocked or ready `await-user-direction`
+resume only when the reply's same-host accepted mutation advances it.
 
-1. For `ready`, load or reuse `flow-run` and run the projected feature.
-2. After every recorded result, reload compact status and route again.
-3. For `completed`, close and finish any exact `archiveRetry`.
+For `ready`, apply `flow-run`; after every recorded result reload compact. For `completed`,
+close and handle **Recovery** plus exact `archiveRetry`.
+`flow_run_start` and intermediate progress are not terminal: never return “ready
+for the next feature” or wait while an action is authorized. Return only after closure
+or a checkpoint. Direct `/flow-run` stops after one feature.
 
-Intermediate progress and `nextAction: "flow_run_start"` are not terminal.
-Return only after closure or a required checkpoint. Direct `/flow-run` still
-stops after one feature.
-
-Within existing implementation authority, continue after approval and every
-passing feature outcome without asking again. For a blocked outcome, follow the
-loaded `flow-run` retry and checkpoint contract. The session remains
-authoritative while blocked. Never implicitly select a feature whose latest
-relevant reviewed outcome remains failed. Untouched dependency-independent
-features may continue; if only retry-required candidates remain, wait at
-`await-user-direction` for the exact choice. If status is blocked, carry the
-authorized retry or independent choice atomically as `nextFeatureId` on
-`flow_feature_reset`. If status is ready, the failed run is already superseded:
-load detail once and use `flow_run_start` with the explicitly authorized
-retry's exact `featureId`. Never reset from ready status, and add no hold or
-retry ledger.
-
-Pause only for a convergence checkpoint, a material product or scope choice,
-missing authority for an external Git or release action,
-a hard operational failure, or the user's explicit choice of deferred or
-abandoned closure. Only the user may choose either non-completed kind.
-
-Core contracts are bundled in the plugin; load them through `flow_guidance` and
-do not depend on native skill discovery. If a required Flow tool is unavailable,
-report that the plugin is not fully loaded instead of simulating state changes.
+For blocked work, follow `flow-run` routing. Never implicitly select a feature
+whose latest relevant reviewed outcome remains failed.
+Untouched independent features may continue; if only retries remain, wait at
+`await-user-direction`. Otherwise pause only for a material
+choice, missing Git/release authority, hard failure, or user-chosen closure.
+If a Flow tool is absent, report an incomplete plugin load; never simulate state.
 
 ## Invariants
 
-- Approved plans do not change. If implementation requires material scope
-  outside the plan, stop editing. Finish the approved plan or have the user
-  explicitly choose deferred or abandoned closure before starting a new plan;
-  do not replan in place.
-- Only one durable feature run is active at a time. Conversation-local worker
-  waves do not create additional runs or Flow state.
-- Work stays inside the active feature and preserves unrelated user changes.
-- A passing feature needs successful current-source validation and one result
-  submitted directly by the assigned independent reviewer. The final feature
-  uses broad validation and a final review; it does not add a second review
-  pass.
-- A failed review is recorded honestly. Any retry is a fresh run with full
-  validation and review.
-- Use runtime revisions and operation ids for ordering and idempotency. Supply
-  only fields requested by the current tool schema.
-- Do not create reports or sidecars outside `.flow/**` unless the user asks for
-  a durable artifact. Prefer one readable Markdown file; JSON is opt-in.
-- Do not stage, commit, push, publish, or mutate releases unless the user
-  explicitly asks for that Git or release action.
-
-## Blocked handoff
-
-A blocked handoff must be self-contained and label the result overall
-incomplete. Use the one detail projection for a failed-review block. Report the
-goal and progress; blocked feature, attempt, failure count, findings; completed
-and untouched features; validation and artifact evidence; Git and release
-mutation status; and whether the newest request started and matched the active
-goal.
+- Plans are immutable. Out-of-plan work stops; finish or explicitly close, never
+  replan in place.
+- One durable feature run exists at a time; worker waves add no Flow state.
+- Preserve unrelated work and stay inside the active feature.
+- Passing requires current-source validation and one independent review; the
+  final feature uses broad validation, not another review.
+- Record failures honestly; retries are fresh full runs.
+- Use runtime revisions, fresh operation ids, and current-schema fields.
+- Do not create reports/sidecars, Git changes, or release mutations unless
+  requested; reports default to Markdown and JSON is opt-in.
 
 ## Recovery
 
-On confusion or interruption, read compact status and route with the rules
-above; load `flow-run` for an active or blocked feature and apply its exact
-review-recovery path. Use execution status for active work and reviewer status
-for a returned assignment id. Never invent or submit a verdict, or infer
-completion, retry count, or closure from prose.
+On interruption, read compact status; load `flow-run` for an active or blocked feature
+and use execution or reviewer status, never prose, for lifecycle truth.
 
-For a newly completed session, close with one request containing the
-status-projected session id, a fresh operation id, current revision, closure
-kind, and optional summary. Repeating that exact request converges; there is no
-separate retry mode.
+Summaries keep plan/source IDs `verified` or `incomplete`. A prior finding is
+terminally `fixed` only when review passes with current evidence. A failed
+verdict carries every prior ID forward: report a proven repair as `terminal
+fixed pending pass` with concise evidence, an
+unproven repair as unverified-fixed, a recurrence as `recurring`, or a confirmed
+nonblocker as `residual`. Blockers stay terminal.
 
-After a durably accepted close, build the final handoff from
-`workflowData.delivery`. For each feature, report its attempt count, latest
-outcome, and terminal findings. Label its artifact groups Flow-reported
-artifacts from latest attempts and Flow-reported artifacts from superseded
-attempts only. Never describe them as an exact Git delta. Do not create a
-report unless the user asks for one.
+For an accepted close, map only `workflowData.delivery`
+`outcomeSummary`/`terminalFindings`.
+Requirements are proven `verified`, otherwise `incomplete` or explicit
+`deferred`. Apply the finding rules above, using `incomplete` for an unproven
+terminal claim; `abandoned` stays the kind. Missing IDs are unavailable: never
+invent or read detail solely for closure. Without delivery, report exact
+recovery and no map.
+
+Unresolved blockers forbid completed closure. Fresh close: projected session
+id/revision, fresh operation id, kind, optional summary. Replay byte-for-byte
+only the `archiveRetry` of a durably accepted close. Rejected revision conflict:
+refresh compact, confirm the same session/goal, then build a fresh request.
+From delivery report each feature's attempt count, latest outcome, terminal
+findings, and Flow-reported latest/superseded artifacts. Report external prerequisites only
+from terminal text; otherwise mark them unavailable. Artifacts are not an exact
+Git delta. Create no other ledger or report.

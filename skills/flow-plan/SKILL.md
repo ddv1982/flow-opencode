@@ -5,37 +5,46 @@ description: Create, revise, or approve a concise Flow plan before implementatio
 
 # Flow Plan
 
-Plan only after reading the repository facts that determine the work. A useful
-plan is short enough to scan and concrete enough that another agent can execute
-it without rediscovering the goal.
+Inspect determining repository facts. Keep the plan scannable and executable
+without rediscovering the goal.
 
 ## Start
 
 - Call `flow_status { request: { view: "compact" } }` first.
-- If compact status contains `archiveRetry`, finish that already-accepted close
-  by calling `flow_session_close` once with the projected request byte-for-byte,
-  then refresh compact status. Stop without saving a plan if archive publication
-  remains unconfirmed; otherwise continue from the refreshed projection. This
-  exact cleanup grants no new work, so it precedes goal alignment. Apply the
-  same rule if closing a completed session later returns archive-pending.
-- Before any other manager-owned lifecycle mutation, align the compact-projected
-  goal with the current direct `/flow-plan` request. Continue only for the same
-  goal or a compatible narrowing that changes method or emphasis, not requested
-  outcomes. A completed-but-unclosed session must close as completed before a
-  new request proceeds or a new plan is saved. Otherwise a materially new or
-  expanded request makes no mutation; offer to continue, defer, or abandon the
-  active session. Keep this a conversational judgment with no classifier or new
-  state.
+- On top-level error, report exact summary/recovery and, if
+  `workflowData.delivery` exists, the handoff below. State this initial read
+  made no lifecycle, Git, or release mutation; stop.
+- For `archiveRetry`, replay the projected `flow_session_close` request
+  byte-for-byte. Report delivery; if absent, report exact recovery and no map.
+  Refresh only if publication is unconfirmed; continue from the confirmed
+  projection or stop without saving. This precedes alignment and grants no work.
+- On close conflict, refresh compact and retry only for the same session/goal
+  while status permits that kind; never close a replacement.
+- Before mutation, align the projected goal with `/flow-plan`; continue only for
+  the same goal or a method/emphasis narrowing that preserves every requested
+  outcome, and close completed work. For a non-completed session, an
+  explicit deferred/abandoned choice calls
+  `flow_session_close` with compact id/revision, fresh operation id, that kind,
+  and optional summary; report delivery, follow exact `archiveRetry`, and stop.
+  Other new scope makes no mutation; conversationally offer continue, defer, or
+  abandon.
+- Delivery handoff: goal; closure kind/summary; progress; per-feature
+  ID/title/attempts/latest state/outcome summary/terminal findings; and
+  `reportedArtifacts.latestAttempts` plus
+  `reportedArtifacts.supersededAttemptsOnly`, qualified as Flow-reported
+  caller-declared artifacts, not an exact/exhaustive Git delta. Map IDs only
+  from `outcomeSummary`/`terminalFindings`: `verified` only when proven,
+  otherwise `incomplete` or explicit `deferred`; `fixed` needs passing review
+  plus current evidence, `recurring` current confirmation, `residual` a
+  confirmed nonblocker, and `abandoned` stays the closure kind. Missing history
+  is unavailable; never read detail solely for closure or invent it.
 - If the user asked only for a plan and an approved same-goal session already
-  exists, load `flow_status { request: { view: "detail" } }` once. Report the
-  immutable active plan and current progress, then stop. Do not save, approve,
-  or run anything.
-- Do not replace an unclosed different goal. Close or finish it explicitly.
+  exists, read detail once, report its immutable plan/progress, and stop without
+  saving, approving, or running.
 - If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and report
-  that the Flow plugin is not fully loaded.
-- Inspect relevant code, tests, docs, package scripts, and local conventions.
-  Resolve repository facts by inspection; ask the user only when a missing
-  product choice would materially change the outcome.
+  an incomplete plugin load.
+- Inspect relevant code, tests, docs, scripts, and conventions. Ask only for a
+  missing product choice that materially changes the outcome.
 
 ## Plan contract
 
@@ -48,27 +57,21 @@ Save one plan with:
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 
-Each feature should have one observable outcome that a reviewer can judge
-pass/fail from bounded evidence, plus one focused validation story. Split only
-when two outcomes can fail independently or a true dependency requires ordered
-acceptance. Keep behavior together when it shares one invariant or neither part
-can be accepted alone. Overlapping files by themselves force neither a split nor
-a merge. A reviewer should not re-audit the whole product to decide whether one
-feature passed. Avoid step-shaped features such as “update files” and vague
-checks such as “run tests.”
+Each feature needs one observable outcome judgeable from bounded evidence and
+focused validation. Split only independent failures or true dependencies; file
+overlap decides neither. Separate a race or state-machine invariant from
+independently acceptable UI, persistence, or accessibility outcomes; merge only
+under one indivisible invariant. Avoid step-shaped features and vague checks.
 
-When the request or its source material names stable finding, issue, or
-requirement IDs, preserve those exact IDs in the relevant saved feature
-`summary` or `validation` prose. Do not replace an ID such as `F3`, `B12`, or
-`ISSUE-42` with an unnamed generalization. Every named ID must remain traceable
-from the immutable plan to one feature outcome and its evidence.
+Preserve stable finding, issue, or requirement IDs exactly in the saved feature
+`summary` or `validation`; each stays traceable from the immutable plan to one
+outcome and its evidence.
 
-When a `validation` entry names an executable command, record the exact
-plan-listed command byte-for-byte. Behavior-oriented prose that has never run
-as an exact command remains reviewer judgment rather than a fabricated command
-result. Name any required operating system, architecture, service, credential,
-external setting, hardware, or other evidence environment explicitly enough
-that `flow-run` can preflight it before implementation.
+When `validation` names an executable command, record the exact plan-listed
+command byte-for-byte. Unrun behavior prose remains reviewer judgment, never a
+fabricated command result. Explicitly name any required operating system,
+architecture, service, credential, external setting, hardware, or evidence
+environment for `flow-run` to preflight before implementation.
 
 Before saving, confirm:
 
@@ -82,15 +85,14 @@ Before saving, confirm:
 
 ## Save and approve
 
-Call `flow_plan_save` with one nested request containing a stable operation id,
-the current revision (`0` for a new session), the goal, and the complete draft.
-Summarize the outcome, feature order, validation, and material decisions for
-the user. Call `flow_plan_approve` with a fresh operation id and current
-revision only after explicit approval or when the user already authorized
-autonomous implementation. Approval locks the plan. When `/flow-auto` needs
-conversational approval, ask for it without requiring a second command; a reply
-may resume the same process-local auto interaction only after approval advances
-the same Flow session.
+Call `flow_plan_save` with one nested request: stable operation id, current
+revision (`0` for new), goal, and complete draft. Summarize outcome, feature
+order, validation, and material decisions. Call `flow_plan_approve` with a fresh
+operation id/current revision only after explicit approval or prior autonomous
+implementation authority. Approval locks the plan. Ask conversational
+`/flow-auto` approval without requiring a second command; a reply may resume its
+same process-local interaction only after approval advances the same Flow
+session.
 
 Do not begin implementation during a plan-only request. Do not create a plan
 document in the repository unless the user explicitly requests one.
