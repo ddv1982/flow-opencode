@@ -28,19 +28,28 @@ import FlowPlugin from "../src/index.js";
 const packageVersion = packageJson.version;
 
 /**
- * Maintained prose, excluding the append-only CHANGELOG. Baseline: 94,993.
+ * Maintained prose, excluding the append-only CHANGELOG. Baseline: 87,141.
  *
- * 6.9.0 documented three new runtime contracts here -- the typed `findingId` with
- * its enforced carry-forward, the runtime-rendered delivery `report`, and the two
- * host-capability validation ineligibility reasons -- and paid for all of them by
- * removing redundant prose rather than by raising this number. Headroom is now
- * single-digit bytes, so the next contract worth describing means finding prose
- * that has stopped earning its place. That is the intended pressure: lower this
- * when a doc is tightened, and do not raise it to admit new prose.
+ * Lowered from 95,000 by halving the README, which had accumulated the runtime's
+ * finest detail -- reply-authority lineage, compaction transfer, revision credit,
+ * finding disposition vocabulary -- none of which an operator installing a plugin
+ * needs and all of which `docs/maintainer-contract.md` already owns. The former
+ * ceiling had single-digit headroom, and that pressure was spent restating
+ * maintainer contracts instead of describing new ones.
+ *
+ * Lower this when a doc is tightened; never raise it to admit new prose. When a
+ * new runtime contract genuinely needs describing, find prose that has stopped
+ * earning its place.
  */
-const MAX_MAINTAINED_DOC_BYTES = 95_000;
+const MAX_MAINTAINED_DOC_BYTES = 87_141;
 
-/** No single maintained document should outgrow the operator-facing README. */
+/**
+ * No single maintained document should outgrow the operator-facing README.
+ *
+ * The README is now 7.6 KiB, so this no longer describes what it says it does; it
+ * is kept as a blunt ceiling on any one document. Lower it when the largest doc
+ * (`maintainer-contract.md`) is tightened.
+ */
 const MAX_SINGLE_DOC_BYTES = 30_000;
 
 function section(markdown: string, heading: string, level = 2): string {
