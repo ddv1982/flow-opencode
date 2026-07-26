@@ -19,8 +19,10 @@ import {
 import {
 	askedQuestions,
 	EvalHost,
+	formatRate,
 	type Outcome,
 	packPlugin,
+	passRates,
 	preparePackageCache,
 	sessionBoundaries,
 } from "./harness.js";
@@ -150,21 +152,6 @@ function promptFootprint(): {
 		total += bytes;
 	}
 	return { total, bySurface };
-}
-
-/** Passes per attempt for each scenario and model pair, in run order. */
-function passRates(
-	results: readonly RunResult[],
-): [string, { passed: number; attempts: number }][] {
-	const rates = new Map<string, { passed: number; attempts: number }>();
-	for (const result of results) {
-		const label = `${result.scenario} @ ${result.model}`;
-		const rate = rates.get(label) ?? { passed: 0, attempts: 0 };
-		rate.attempts += 1;
-		if (result.passed) rate.passed += 1;
-		rates.set(label, rate);
-	}
-	return [...rates];
 }
 
 /**
@@ -502,16 +489,14 @@ async function main(): Promise<void> {
 	// The aggregate hides the number that matters. Model behavior is stochastic, so
 	// a scenario passing 1 of 6 attempts is a different finding from one passing 6
 	// of 6, and reading that off the rows by eye is how it gets missed.
-	const rates = passRates(scored);
-	if (rates.length > 0 && rates.some(([, rate]) => rate.attempts > 1)) {
+	const rates = passRates(results);
+	if (
+		rates.length > 0 &&
+		rates.some(([, rate]) => rate.attempts + rate.unscored > 1)
+	) {
 		console.log(
 			`\nper scenario and model:\n${rates
-				.map(
-					([label, rate]) =>
-						`  ${label}: ${rate.passed}/${rate.attempts}${
-							rate.passed > 0 && rate.passed < rate.attempts ? "  FLAKY" : ""
-						}`,
-				)
+				.map(([label, rate]) => `  ${label}: ${formatRate(rate)}`)
 				.join("\n")}`,
 		);
 	}

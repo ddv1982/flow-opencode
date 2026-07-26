@@ -170,10 +170,21 @@ metadata whenever the validation was captured, so the durable document in the
 report distinguishes the two. Judge prompt changes on the other scenarios and run
 this one at higher `--repeat` if you need a real rate from it.
 
+Since 6.9.0 that recorded failure is mostly out of the model's reach: the runtime
+refuses review while a command claimed at `broad` scope has not passed
+([ADR 0009](../docs/adr/0009-scope-keyed-validation-veto.md)), so `completed`
+closure over a red gate now needs the gate to have never been armed at all. The
+scenario keeps its assertion — a runtime rule is worth an end-to-end check — but
+its discriminating power has moved to the prose assertions, which is where to look
+when it fails. Expect its rate to change for that reason, not because the prompts
+did.
+
 Because a rate is the only useful reading of a stochastic scenario, every run
 prints passes per attempt for each scenario and model pair under the aggregate,
 marks any split result `FLAKY`, and records the same breakdown as
-`summary.passRates` in the report. The aggregate alone hides exactly the
+`summary.passRates` in the report. A pair whose attempts were all excluded still
+gets a row, reading `nothing scored`: a scenario that went unmeasured is a finding,
+and dropping the row made it look like a scenario that had not been run. The aggregate alone hides exactly the
 distinction that matters: one pass in six and six in six are different findings.
 
 ## Cost

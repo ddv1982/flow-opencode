@@ -268,6 +268,45 @@ export function sessionBoundaries(
 }
 
 /**
+ * Passes per attempt for each scenario and model pair, in run order. Attempts that
+ * were not scored -- an allowed ask, a lost host -- are counted apart rather than
+ * dropped, so a scenario whose every attempt went unscored still gets a row saying
+ * so instead of leaving the table without a trace.
+ */
+export function passRates(
+	results: readonly {
+		readonly scenario: string;
+		readonly model: string;
+		readonly passed: boolean;
+		readonly environment?: boolean;
+		readonly unscored?: boolean;
+	}[],
+): [string, PassRate][] {
+	const rates = new Map<string, PassRate>();
+	for (const result of results) {
+		const label = `${result.scenario} @ ${result.model}`;
+		const rate = rates.get(label) ?? { passed: 0, attempts: 0, unscored: 0 };
+		if (result.environment || result.unscored) rate.unscored += 1;
+		else {
+			rate.attempts += 1;
+			if (result.passed) rate.passed += 1;
+		}
+		rates.set(label, rate);
+	}
+	return [...rates];
+}
+
+export type PassRate = { passed: number; attempts: number; unscored: number };
+
+/** One pass-rate row. Nothing scored says so, rather than reading as `0/0`. */
+export function formatRate(rate: PassRate): string {
+	const excluded = rate.unscored > 0 ? `  ${rate.unscored} excluded` : "";
+	if (rate.attempts === 0) return `nothing scored${excluded}`;
+	const flaky = rate.passed > 0 && rate.passed < rate.attempts ? "  FLAKY" : "";
+	return `${rate.passed}/${rate.attempts}${flaky}${excluded}`;
+}
+
+/**
  * The cost to report, or null when the provider priced nothing.
  *
  * `total` is null when no message carried a cost at all. Zero needs the same

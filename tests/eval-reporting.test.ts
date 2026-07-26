@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+	formatRate,
 	onlyAwaitingAnswer,
+	passRates,
 	reportedCost,
 	sessionBoundaries,
 } from "../evals/harness.js";
@@ -9,7 +11,8 @@ import {
 // a run *means* are proven here instead. Two were wrong in recorded runs: unpriced
 // spend printed as `$0.0000`, and a session blocked on an unanswerable question
 // burned its full twenty-minute timeout before being scored as a failure. The
-// third exists so a recovery failure can be read from the report at all.
+// rest exist so a recovery failure, and a scenario nothing scored, can be read
+// from the report at all.
 describe("eval run classification", () => {
 	test("ends the wait when a question is the only incomplete call", () => {
 		expect(onlyAwaitingAnswer(["question:running"])).toBe(true);
@@ -45,6 +48,48 @@ describe("eval session boundaries", () => {
 
 	test("reports every boundary, not just the first", () => {
 		expect(sessionBoundaries(calls([0, 1, 2]))).toEqual([1, 2]);
+	});
+});
+
+describe("eval pass rates", () => {
+	const attempt = (
+		scenario: string,
+		passed: boolean,
+		extra: { unscored?: boolean; environment?: boolean } = {},
+	) => ({ scenario, model: "m", passed, ...extra });
+
+	test("counts passes against scored attempts only", () => {
+		expect(
+			passRates([
+				attempt("gate", true),
+				attempt("gate", false),
+				attempt("gate", false, { unscored: true }),
+			]),
+		).toEqual([["gate @ m", { passed: 1, attempts: 2, unscored: 1 }]]);
+	});
+
+	test("keeps a row for a scenario nothing scored", () => {
+		// The reporting hole this closes: dropping unscored attempts removed the
+		// scenario from the table outright, so an all-asked scenario read as absent
+		// rather than as unmeasured.
+		const rates = passRates([
+			attempt("gate", false, { unscored: true }),
+			attempt("gate", false, { environment: true }),
+		]);
+		expect(rates).toEqual([
+			["gate @ m", { passed: 0, attempts: 0, unscored: 2 }],
+		]);
+		expect(formatRate({ passed: 0, attempts: 0, unscored: 2 })).toBe(
+			"nothing scored  2 excluded",
+		);
+	});
+
+	test("flags a split result and leaves a clean one unmarked", () => {
+		expect(formatRate({ passed: 1, attempts: 3, unscored: 0 })).toBe(
+			"1/3  FLAKY",
+		);
+		expect(formatRate({ passed: 3, attempts: 3, unscored: 0 })).toBe("3/3");
+		expect(formatRate({ passed: 0, attempts: 3, unscored: 0 })).toBe("0/3");
 	});
 });
 
