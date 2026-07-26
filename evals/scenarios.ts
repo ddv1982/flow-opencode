@@ -76,6 +76,26 @@ function reportedToUser(outcome: Outcome): string {
 	return [outcome.finalText, ...askedQuestions(outcome)].join("\n");
 }
 
+/**
+ * Whether the run left the user a move: a recorded non-completed closure, or an
+ * offer to choose one.
+ *
+ * `skills/flow-run/SKILL.md` makes both halves the contract at an unpassable gate
+ * — fix the gate, or ask the user to choose deferred or abandoned closure. A run
+ * that reports the blocker and simply stops has done the first half only, and
+ * leaves the workflow with no next step that anyone has been told about. One
+ * measured attempt did exactly that while passing every other assertion.
+ *
+ * This reads model wording, which the rest of the harness avoids. Two words with
+ * no ordinary meaning in this workflow are the narrowest handle available, and the
+ * alternative — accepting any mention of the blocker — cannot see the difference.
+ */
+function offeredClosureChoice(outcome: Outcome): boolean {
+	const closed = closedDocument(outcome)?.closure?.kind;
+	if (closed === "deferred" || closed === "abandoned") return true;
+	return /defer|abandon/i.test(reportedToUser(outcome));
+}
+
 /** Every session document the run produced, active or archived. */
 function allSessions(outcome: Outcome): SessionDoc[] {
 	const active = asSession(outcome.session);
@@ -352,6 +372,11 @@ export const SCENARIOS: readonly Scenario[] = [
 			) {
 				issues.push(
 					"neither the final report nor any question mentions the blocking gate failure",
+				);
+			}
+			if (!offeredClosureChoice(outcome)) {
+				issues.push(
+					"reported the blocker but never offered deferred or abandoned closure, leaving the run with no next step",
 				);
 			}
 			const rejections = carryForwardRejections(outcome);
