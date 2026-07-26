@@ -29,7 +29,7 @@ import { parseStrictJsonObject } from "./strict-json-object.js";
 
 export { ArchiveCollisionError } from "../../application/errors.js";
 
-export class InvalidFlowWorkspaceRootError extends Error {
+class InvalidFlowWorkspaceRootError extends Error {
 	readonly code = "INVALID_FLOW_WORKSPACE_ROOT";
 }
 
@@ -46,9 +46,7 @@ function provesManagedStateCollision(error: unknown): boolean {
 	);
 }
 
-export function normalizeWorkspaceRoot(
-	rawPath: string | undefined,
-): string | null {
+function normalizeWorkspaceRoot(rawPath: string | undefined): string | null {
 	const value = rawPath?.trim();
 	if (!value) return null;
 	const normalized = resolve(value);
@@ -120,7 +118,7 @@ export function historyDir(workspace: string): string {
 	return join(flowDir(workspace), "history");
 }
 
-export function archivedSessionFilename(sessionId: string): string {
+function archivedSessionFilename(sessionId: string): string {
 	if (sessionId.length < 1 || sessionId.length > MAX_SESSION_ID_LENGTH) {
 		throw new Error("Invalid session id.");
 	}
@@ -231,7 +229,7 @@ async function syncDirectory(path: string): Promise<void> {
 	}
 }
 
-export type WorkspacePersistenceOptions = Readonly<{
+type WorkspacePersistenceOptions = Readonly<{
 	synchronizeDirectory?: (path: string) => Promise<void>;
 }>;
 

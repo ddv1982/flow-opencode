@@ -6,7 +6,7 @@ import type {
 } from "../domain/session.js";
 import { isFeatureComplete } from "../domain/transitions.js";
 
-export type DeliveryFeatureProjection = Readonly<{
+type DeliveryFeatureProjection = Readonly<{
 	id: string;
 	title: string;
 	attempts: number;

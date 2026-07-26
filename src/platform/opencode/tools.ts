@@ -1,4 +1,3 @@
-import { type Hooks, type ToolContext, tool } from "@opencode-ai/plugin";
 import {
 	ValidationStartInputSchema,
 	type ValidationStartRequest,
@@ -16,6 +15,10 @@ import {
 	MAX_SESSION_ID_LENGTH,
 	MAX_TEXT_BYTES,
 } from "../../domain/limits.js";
+import {
+	FINDING_ID_MESSAGE,
+	FINDING_ID_PATTERN,
+} from "../../domain/review-findings.js";
 import { reviewResultSemanticIssues } from "../../domain/session.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
@@ -31,6 +34,7 @@ import {
 	flowStatus,
 } from "../../infrastructure/fs/workspace-flow-service.js";
 import type { AutoTimingSnapshot } from "./auto-drive.js";
+import { type Hooks, type ToolContext, tool } from "./sdk.js";
 import type { ValidationCaptureCoordinator } from "./validation-capture.js";
 
 const host = tool.schema;
@@ -109,6 +113,14 @@ const reviewFinding = host
 		severity: host.enum(["blocking", "advisory"]),
 		summary: text,
 		evidence: text.optional(),
+		/** True when the repair needs work outside the approved plan. */
+		scopeBlocker: host.boolean().optional(),
+		/** Prior id for a recurrence; omitted for a new issue the runtime numbers. */
+		findingId: host
+			.string()
+			.max(MAX_SESSION_ID_LENGTH)
+			.regex(FINDING_ID_PATTERN, FINDING_ID_MESSAGE)
+			.optional(),
 	})
 	.strict();
 const reviewResult = host

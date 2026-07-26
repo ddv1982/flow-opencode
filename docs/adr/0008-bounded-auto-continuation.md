@@ -116,7 +116,7 @@ errored, and unprojected wait time is excluded. The timer is non-authoritative,
 resets on plugin restart, never enters Session v5, and never affects a
 transition.
 
-The TypeScript implementation under `src/` stays within a 200 KiB UTF-8
+The TypeScript implementation under `src/` stays within a 208 KiB UTF-8
 footprint, with the 1,000-line per-file limit and inward dependency rules
 unchanged. This replaces the aggregate line ceiling so formatting cannot hide
 growth. Imported guide content remains bounded by the separate prompt

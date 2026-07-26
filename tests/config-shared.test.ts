@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	applyFlowConfig,
 	createFlowCoreConfigEntries,
+	FLOW_CORE_AGENTS,
 } from "../src/config-shared.js";
 import { createConfigHook } from "../src/platform/opencode/config.js";
 
@@ -71,6 +72,58 @@ describe("Flow configuration", () => {
 			expect(warnings).toEqual([...example.expectedWarnings]);
 		});
 	}
+
+	test("denies edit, bash, skill, and delegation for both hidden agents", () => {
+		const entries = createFlowCoreConfigEntries({ env: {} });
+
+		expect(entries.agent["flow-reviewer"].permission).toEqual({
+			edit: "deny",
+			bash: "deny",
+			external_directory: "deny",
+			skill: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+			flow_status: "allow",
+			flow_feature_complete: "allow",
+		});
+		expect(entries.agent["flow-worker"].permission).toEqual({
+			edit: {
+				"*": "allow",
+				".flow": "deny",
+				".flow/**": "deny",
+				".git": "deny",
+				".git/**": "deny",
+			},
+			bash: "deny",
+			external_directory: "deny",
+			skill: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+		});
+	});
+
+	test("gives every call its own deep copy of the deny lists", () => {
+		// The host owns the object it receives and may mutate it. Sharing any part
+		// of a deny list with the module constant would let one session's edit
+		// loosen a later session's permissions.
+		const first = createFlowCoreConfigEntries({ env: {} });
+		const second = createFlowCoreConfigEntries({ env: {} });
+
+		for (const name of ["flow-reviewer", "flow-worker"] as const) {
+			const permission = first.agent[name].permission;
+			const constant = FLOW_CORE_AGENTS[name].permission;
+			expect(permission, name).not.toBe(constant);
+			expect(permission, name).not.toBe(second.agent[name].permission);
+			expect(permission.task, name).not.toBe(constant.task);
+			expect(permission.task, name).not.toBe(
+				second.agent[name].permission.task,
+			);
+		}
+
+		const worker = first.agent["flow-worker"].permission.edit;
+		expect(worker).not.toBe(FLOW_CORE_AGENTS["flow-worker"].permission.edit);
+		expect(worker).not.toBe(second.agent["flow-worker"].permission.edit);
+	});
 
 	test("replaces Flow collisions while preserving unrelated entries", () => {
 		const unrelatedAgent = { description: "keep this agent" };

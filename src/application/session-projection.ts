@@ -31,7 +31,7 @@ import {
 } from "../domain/validation.js";
 import type { StatusRequest } from "./schema.js";
 
-export type FlowNextAction =
+type FlowNextAction =
 	| "flow_plan_save"
 	| "flow_plan_approve"
 	| "flow_run_start"
@@ -43,13 +43,13 @@ export type FlowNextAction =
 	| "flow_validation_start"
 	| "flow_review_start";
 
-export type FeatureProgress = Readonly<{
+type FeatureProgress = Readonly<{
 	completed: number;
 	total: number;
 	remaining: number;
 }>;
 
-export type BlockedFeatureProjection = Readonly<{
+type BlockedFeatureProjection = Readonly<{
 	featureId: string;
 	attempt: number;
 	failedReviewCount: number;
@@ -60,7 +60,7 @@ export type BlockedFeatureProjection = Readonly<{
 	scopeBlocker: boolean;
 }>;
 
-export type ArchiveRetryProjection = Readonly<{
+type ArchiveRetryProjection = Readonly<{
 	request: ClosureRetryRequest;
 }>;
 
@@ -95,7 +95,7 @@ export type ExecutionProjection = Readonly<
 	}
 >;
 
-export type DetailProjection = Readonly<
+type DetailProjection = Readonly<
 	Omit<CompactProjection, "view"> & {
 		view: "detail";
 		plan: Plan | null;
@@ -126,7 +126,7 @@ export type ReviewerProjection = Readonly<{
 	nextFindingIdPrefix: string;
 }>;
 
-export type IdleProjection = Readonly<{
+type IdleProjection = Readonly<{
 	view: StatusRequest["view"];
 	status: "idle";
 	revision: 0;

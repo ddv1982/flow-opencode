@@ -3,7 +3,6 @@ import { FeatureCompleteInputSchema } from "../src/application/schema.js";
 import { FLOW_CORE_COMMANDS } from "../src/config-shared.js";
 import {
 	FLOW_GUIDANCE_IDS,
-	FLOW_GUIDANCE_TOPICS,
 	FLOW_MANAGER_KERNEL,
 	getFlowGuidance,
 } from "../src/guidance/catalog.js";
@@ -136,13 +135,12 @@ function expectOnce(text: string, fragment: string): void {
 
 describe("Flow prompt structure", () => {
 	test("compiles seven runtime surfaces from four canonical guides", () => {
-		expect(FLOW_GUIDANCE_TOPICS).toEqual([
+		expect(FLOW_GUIDANCE_IDS).toEqual([
 			"flow",
 			"flow-plan",
 			"flow-run",
 			"flow-review",
 		]);
-		expect(FLOW_GUIDANCE_IDS).toEqual(FLOW_GUIDANCE_TOPICS);
 		for (const id of FLOW_GUIDANCE_IDS) {
 			expect(getFlowGuidance(id).content).toStartWith("---\n");
 			expect(body(getFlowGuidance(id).content).length).toBeGreaterThan(200);

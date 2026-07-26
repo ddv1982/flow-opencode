@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// The only JavaScript source in the repository, and so the only source outside
+// `tsc`. `release:monitor` runs it under plain `node` after publish, with no
+// build step or Bun dependency, so it stays `.mjs` deliberately; Biome and
+// tests/release-monitor.test.ts cover it instead.
 import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 

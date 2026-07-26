@@ -7,7 +7,7 @@ export type SessionStatus =
 	| "closed";
 
 export type FeatureId = string;
-export type SessionId = string;
+type SessionId = string;
 export type SourceDigest = `sha256:${string}`;
 
 export type Artifact = Readonly<{ path: string }>;

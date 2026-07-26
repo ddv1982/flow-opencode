@@ -1,6 +1,6 @@
 import type { Session } from "../domain/session.js";
 
-export type WorkflowFailure = Readonly<{
+type WorkflowFailure = Readonly<{
 	summary: string;
 	recovery?: string | undefined;
 }>;
@@ -9,14 +9,12 @@ export type FailureWorkflowData = Readonly<{
 	failure: WorkflowFailure;
 }>;
 
-export type OrdinaryFailureWorkflowData = FailureWorkflowData &
+type OrdinaryFailureWorkflowData = FailureWorkflowData &
 	Readonly<{ closeState?: never }>;
 
-export type WorkflowEnvelope<T extends object> = Readonly<
-	{ dataNote: string } & T
->;
+type WorkflowEnvelope<T extends object> = Readonly<{ dataNote: string } & T>;
 
-export type FlowOkResponse<T extends object> = Readonly<{
+type FlowOkResponse<T extends object> = Readonly<{
 	status: "ok";
 	summary: string;
 	workflowData: WorkflowEnvelope<T>;

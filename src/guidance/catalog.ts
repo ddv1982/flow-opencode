@@ -6,23 +6,9 @@ import flowReviewSkill from "../../skills/flow-review/SKILL.md" with {
 	type: "text",
 };
 import flowRunSkill from "../../skills/flow-run/SKILL.md" with { type: "text" };
-import {
-	FLOW_GUIDANCE_IDS,
-	FLOW_GUIDANCE_TOPICS,
-	type FlowGuidanceId,
-	type FlowGuidanceTopic,
-} from "./ids.js";
+import { FLOW_GUIDANCE_IDS, type FlowGuidanceId } from "./ids.js";
 
-export {
-	FLOW_GUIDANCE_IDS,
-	FLOW_GUIDANCE_TOPICS,
-	type FlowGuidanceId,
-	type FlowGuidanceTopic,
-} from "./ids.js";
-export type FlowGuidanceFile = {
-	relativePath: "SKILL.md";
-	content: string;
-};
+export { FLOW_GUIDANCE_IDS, type FlowGuidanceId } from "./ids.js";
 
 export const FLOW_MANAGER_KERNEL = [
 	"## Flow manager kernel",
@@ -46,25 +32,20 @@ export const FLOW_MANAGER_KERNEL = [
 	].join(" "),
 ].join("\n");
 
-const GUIDANCE_CONTENT: Record<FlowGuidanceTopic, string> = {
+const GUIDANCE_CONTENT: Record<FlowGuidanceId, string> = {
 	flow: `${flowSkill.trimEnd()}\n\n${FLOW_MANAGER_KERNEL}\n`,
 	"flow-plan": flowPlanSkill,
 	"flow-run": `${flowRunSkill.trimEnd()}\n\n${FLOW_MANAGER_KERNEL}\n`,
 	"flow-review": flowReviewSkill,
 };
 
-export type FlowGuidanceDocument = FlowGuidanceFile & {
+type FlowGuidanceDocument = {
 	id: FlowGuidanceId;
-	topic: FlowGuidanceTopic;
+	content: string;
 };
 
-export const FLOW_GUIDANCE_DOCUMENTS: readonly FlowGuidanceDocument[] =
-	FLOW_GUIDANCE_TOPICS.map((name) => ({
-		relativePath: "SKILL.md",
-		content: GUIDANCE_CONTENT[name],
-		id: name,
-		topic: name,
-	}));
+const FLOW_GUIDANCE_DOCUMENTS: readonly FlowGuidanceDocument[] =
+	FLOW_GUIDANCE_IDS.map((id) => ({ id, content: GUIDANCE_CONTENT[id] }));
 
 const FLOW_GUIDANCE_BY_ID = new Map(
 	FLOW_GUIDANCE_DOCUMENTS.map((document) => [document.id, document]),
@@ -74,8 +55,4 @@ export function getFlowGuidance(id: FlowGuidanceId): FlowGuidanceDocument {
 	const document = FLOW_GUIDANCE_BY_ID.get(id);
 	if (!document) throw new Error(`Missing bundled Flow guidance '${id}'.`);
 	return document;
-}
-
-if (FLOW_GUIDANCE_BY_ID.size !== FLOW_GUIDANCE_IDS.length) {
-	throw new Error("Bundled Flow guidance ids and documents are out of sync.");
 }

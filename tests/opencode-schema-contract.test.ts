@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ToolContext, tool } from "@opencode-ai/plugin";
+import { z } from "zod";
 import {
 	FeatureCompleteInputSchema,
 	FeatureResetInputSchema,
@@ -383,6 +384,80 @@ describe("Flow v6 OpenCode host schemas", () => {
 				false,
 			);
 		}
+	});
+
+	test("emits the same field names as the application schema for every tool", () => {
+		// The host needs its own zod instance to emit JSON Schema, so the two
+		// surfaces are necessarily separate declarations. Nothing but this parity
+		// check keeps them from drifting, and drift is silent: the host simply
+		// rejects a field the runtime still reads.
+		for (const name of LIFECYCLE_TOOL_NAMES) {
+			const application = z.toJSONSchema(
+				applicationSchemas[name] as z.ZodType,
+				{ io: "input", unrepresentable: "any" },
+			) as JsonSchema;
+			expect(
+				[...collectPropertyNames(emittedHostSchema(name))].sort(),
+				name,
+			).toEqual([...collectPropertyNames(application)].sort());
+		}
+	});
+
+	test("accepts the review finding fields the reviewer is instructed to send", () => {
+		// `skills/flow-review/SKILL.md` tells the reviewer to send `scopeBlocker`
+		// and `findingId`, and `nextAction` reads `scopeBlocker` to decide between
+		// an automatic reset and a user checkpoint. The strict host schema once
+		// omitted both, so every such submission was rejected at the host boundary
+		// while the application schema accepted it.
+		const names = collectPropertyNames(
+			emittedHostSchema("flow_feature_complete"),
+		);
+		for (const field of ["scopeBlocker", "findingId"])
+			expect(names.has(field), `emitted ${field}`).toBe(true);
+
+		expectParity(
+			"flow_feature_complete",
+			{
+				request: {
+					...validInputs.flow_feature_complete.request,
+					result: {
+						verdict: "failed",
+						findings: [
+							{
+								severity: "blocking",
+								summary: "Repair needs work outside the approved plan",
+								evidence: "src/example.ts:1",
+								scopeBlocker: true,
+								findingId: `${featureId}.R12-01`,
+							},
+						],
+						terminalDisposition: "submitted",
+					},
+				},
+			},
+			true,
+		);
+
+		expectParity(
+			"flow_feature_complete",
+			{
+				request: {
+					...validInputs.flow_feature_complete.request,
+					result: {
+						verdict: "failed",
+						findings: [
+							{
+								severity: "blocking",
+								summary: "Malformed recurrence id",
+								findingId: "not-a-finding-id",
+							},
+						],
+						terminalDisposition: "submitted",
+					},
+				},
+			},
+			false,
+		);
 	});
 
 	test("keeps completion authorization separate from validation cancellation", async () => {

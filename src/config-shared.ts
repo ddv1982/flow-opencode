@@ -1,6 +1,6 @@
 import { compileFlowPromptSurface } from "./prompt-surfaces.js";
 
-export type FlowPermissionConfig = {
+type FlowPermissionConfig = {
 	edit?: string | Record<string, string>;
 	bash?: string | Record<string, string>;
 	skill?: string | Record<string, string>;
@@ -8,7 +8,7 @@ export type FlowPermissionConfig = {
 	[toolPattern: string]: string | Record<string, string> | undefined;
 };
 
-export type FlowAgentConfig = {
+type FlowAgentConfig = {
 	mode: "subagent";
 	description: string;
 	prompt: string;
@@ -19,7 +19,7 @@ export type FlowAgentConfig = {
 };
 
 type CommandBase = { description: string; template: string };
-export type FlowCommandConfig =
+type FlowCommandConfig =
 	| (CommandBase & { subtask: false; agent?: never })
 	| (CommandBase & { subtask: true; agent: string });
 
@@ -133,17 +133,13 @@ export function createFlowCoreConfigEntries(options?: {
 				...FLOW_CORE_AGENTS["flow-reviewer"],
 				...(model ? { model } : {}),
 				...(steps ? { steps } : {}),
-				permission: {
-					...FLOW_CORE_AGENTS["flow-reviewer"].permission,
-					task: { "*": "deny" },
-				},
+				permission: structuredClone(
+					FLOW_CORE_AGENTS["flow-reviewer"].permission,
+				),
 			},
 			"flow-worker": {
 				...FLOW_CORE_AGENTS["flow-worker"],
-				permission: {
-					...FLOW_CORE_AGENTS["flow-worker"].permission,
-					task: { "*": "deny" },
-				},
+				permission: structuredClone(FLOW_CORE_AGENTS["flow-worker"].permission),
 			},
 		},
 		command: Object.fromEntries(

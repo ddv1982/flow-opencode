@@ -6,7 +6,7 @@ export interface AutoDriveProjection {
 	readonly revision: number;
 	readonly nextAction: string | null;
 }
-export interface AutoDriveMessagePart {
+interface AutoDriveMessagePart {
 	readonly type?: string;
 	readonly text?: string;
 	readonly synthetic?: boolean;
@@ -32,6 +32,7 @@ export interface AutoTimingSnapshot {
 	readonly waitingForUserMs: number;
 	readonly pausedTimeExcluded: true;
 }
+/** The single in-memory continuation lease; nothing here is durable. */
 type Lease = {
 	hostSessionId: string;
 	token: string;
@@ -40,6 +41,7 @@ type Lease = {
 	lastPromptedRevision: number | null;
 	checkpoint: Checkpoint | null;
 	pendingReply: boolean;
+	/** Serializes work so concurrent idle events cannot double-prompt. */
 	inFlight: "status" | "reply-status" | "prompt" | null;
 	idlePending: boolean;
 	messageId: string | null;
@@ -127,7 +129,9 @@ export class AutoDriveCoordinator {
 	#warn(message: string): void {
 		try {
 			this.#options.onWarning?.(message);
-		} catch {}
+		} catch {
+			// Warning delivery is best-effort; a failed host sink must not stop the lease.
+		}
 	}
 	#stop(lease: Lease, warning?: string): void {
 		if (this.#lease !== lease) return;
@@ -348,9 +352,21 @@ export class AutoDriveCoordinator {
 			pausedTimeExcluded: true,
 		};
 	}
+	/**
+	 * The single continuation decision point, run on every host idle event. Its
+	 * phases are: admit the event, read compact state, resolve a pending reply,
+	 * park at a boundary, require a mechanical action that advanced the revision,
+	 * then prompt. Each phase that does not continue stops or parks the lease, so
+	 * the default is to stop: a wrong continuation spends the user's
+	 * authorization on work they never approved.
+	 */
 	async onIdle(hostSessionId: string): Promise<void> {
 		const lease = this.#lease;
 		if (!lease || lease.hostSessionId !== hostSessionId) return;
+		// Another read or prompt owns the lease; remember to re-run once it lands.
+		// The exception is a reply-status read still waiting for the mutation it
+		// expects: that read resolves this idle event itself, so a queued re-run
+		// would only repeat the same decision against the same revision.
 		if (lease.inFlight) {
 			if (
 				lease.inFlight !== "reply-status" ||
@@ -379,6 +395,10 @@ export class AutoDriveCoordinator {
 				advance !== undefined &&
 				projection.revision === advance &&
 				isMechanical(projection);
+			// A reply to a checkpoint question. A boundary at a later revision is a
+			// fresh question, so park there instead of answering the old one. Anything
+			// that neither sits at a boundary nor advanced the revision mechanically
+			// means the reply went somewhere Flow does not model, so hand control back.
 			if (lease.pendingReply) {
 				lease.pendingReply = false;
 				if (
@@ -397,6 +417,9 @@ export class AutoDriveCoordinator {
 					return void this.deactivate(hostSessionId);
 				return void this.#waitAt(lease, projection.revision);
 			}
+			// Past an answered checkpoint. Leaving it requires the exact mutation the
+			// answer authorized; a revision at or behind the checkpoint, or one reached
+			// any other way, is not that mutation.
 			if (checkpoint) {
 				if (projection.revision <= checkpoint.revision || !mutationAdvanced)
 					return void this.deactivate(hostSessionId);
@@ -409,6 +432,11 @@ export class AutoDriveCoordinator {
 					`Flow auto-drive paused after revision ${projection.revision} made no lifecycle progress.`,
 				);
 			}
+			// Proof that this lifecycle actually moved since the lease was taken. With a
+			// baseline session, the revision must have grown, and an unanchored lease
+			// must have started from a pending review — otherwise the growth belongs to
+			// work this authorization never covered. With no baseline session, a session
+			// must at least exist by now.
 			if (
 				baseline.sessionId
 					? projection.revision <= baseline.revision ||

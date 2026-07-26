@@ -21,7 +21,7 @@ type PendingCapture = PreparedValidation &
 		armedAt: number;
 	}> & { callID: string | null };
 
-export type ValidationCaptureOptions = Readonly<{
+type ValidationCaptureOptions = Readonly<{
 	persistObservation: (
 		workspace: string,
 		observation: ObservedValidation,

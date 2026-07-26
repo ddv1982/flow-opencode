@@ -96,7 +96,7 @@ type CloseRecoveryWorkflowData =
 	| UnconfirmedManualRecoveryWorkflowData
 	| ArchiveLookupRecoveryWorkflowData;
 
-export type StatusRecoveryWorkflowData = FailureWorkflowData &
+type StatusRecoveryWorkflowData = FailureWorkflowData &
 	Readonly<{
 		operation?: never;
 		closeState: ManualRecoveryCloseState<true>;

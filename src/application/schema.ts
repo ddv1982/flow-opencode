@@ -45,23 +45,24 @@ function boundedText(
 		);
 }
 
-export const FeatureIdSchema = z
+const FeatureIdSchema = z
 	.string()
 	.max(MAX_SESSION_ID_LENGTH)
 	.regex(FEATURE_ID_PATTERN, FEATURE_ID_MESSAGE);
-export const OperationIdSchema = z
+const OperationIdSchema = z
 	.string()
 	.min(1)
 	.max(128)
 	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
 const ReviewAssignmentIdSchema = z.string().min(1).max(256);
-export const RevisionSchema = z.number().int().safe().nonnegative();
-export const SourceDigestSchema = z.custom<SourceDigest>(
+const RunIdSchema = z.string().min(1).max(256);
+const RevisionSchema = z.number().int().safe().nonnegative();
+const SourceDigestSchema = z.custom<SourceDigest>(
 	(value) => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value),
 	"Expected a sha256: content digest.",
 );
 
-export const PlanFeatureSchema = z
+const PlanFeatureSchema = z
 	.object({
 		id: FeatureIdSchema,
 		title: boundedText("Feature title"),
@@ -78,7 +79,7 @@ export const PlanFeatureSchema = z
 	})
 	.strict();
 
-export const PlanSchema = z
+const PlanSchema = z
 	.object({
 		summary: boundedText("Plan summary"),
 		overview: boundedText("Plan overview"),
@@ -102,7 +103,7 @@ export const PlanSchema = z
 		}
 	});
 
-export const ReviewFindingSchema = z
+const ReviewFindingSchema = z
 	.object({
 		severity: z.enum(["blocking", "advisory"]),
 		summary: boundedText("Review finding summary"),
@@ -118,7 +119,7 @@ export const ReviewFindingSchema = z
 	})
 	.strict();
 
-export const PublicReviewResultSchema = z
+const PublicReviewResultSchema = z
 	.object({
 		verdict: z.enum(["passed", "failed"]),
 		findings: z.array(ReviewFindingSchema).max(MAX_REVIEW_FINDINGS).default([]),
@@ -131,11 +132,18 @@ export const PublicReviewResultSchema = z
 		}
 	});
 
+const ReviewPacketSchema = z
+	.object({
+		summary: boundedText("Review packet summary"),
+		riskLenses: z.array(boundedText("Review risk lens")).max(16).default([]),
+	})
+	.strict();
+
 const ValidationObservationSchema = z
 	.object({
 		id: z.string().min(1).max(MAX_VALIDATION_ID_LENGTH),
 		featureId: FeatureIdSchema,
-		runId: z.string().min(1).max(256),
+		runId: RunIdSchema,
 		scope: z.enum(["focused", "broad"]),
 		command: boundedText("Validation command"),
 		sourceDigest: SourceDigestSchema,
@@ -175,22 +183,14 @@ const ReviewAssignmentSchema = z
 		id: ReviewAssignmentIdSchema,
 		operationId: OperationIdSchema,
 		featureId: FeatureIdSchema,
-		runId: z.string().min(1).max(256),
+		runId: RunIdSchema,
 		kind: z.enum(["feature", "final"]),
 		sourceDigest: SourceDigestSchema,
 		validationIds: z
 			.array(z.string().min(1).max(MAX_VALIDATION_ID_LENGTH))
 			.min(1)
 			.max(MAX_VALIDATIONS_PER_RUN),
-		packet: z
-			.object({
-				summary: boundedText("Review packet summary"),
-				riskLenses: z
-					.array(boundedText("Review risk lens"))
-					.max(16)
-					.default([]),
-			})
-			.strict(),
+		packet: ReviewPacketSchema,
 		createdRevision: RevisionSchema,
 		result: PersistedReviewResultSchema.nullable(),
 	})
@@ -198,7 +198,7 @@ const ReviewAssignmentSchema = z
 
 const FeatureRunSchema = z
 	.object({
-		id: z.string().min(1).max(256),
+		id: RunIdSchema,
 		featureId: FeatureIdSchema,
 		attempt: z.number().int().safe().positive(),
 		state: z.enum(["active", "completed", "blocked", "superseded"]),
@@ -301,15 +301,7 @@ export const ReviewStartInputSchema = z
 				...guarded,
 				featureId: FeatureIdSchema,
 				artifactsChanged: z.array(ArtifactSchema).max(MAX_ARTIFACTS),
-				packet: z
-					.object({
-						summary: boundedText("Review packet summary"),
-						riskLenses: z
-							.array(boundedText("Review risk lens"))
-							.max(16)
-							.default([]),
-					})
-					.strict(),
+				packet: ReviewPacketSchema,
 			})
 			.strict(),
 	})
@@ -385,19 +377,8 @@ export const StatusInputSchema = z
 	})
 	.strict();
 
-export type PlanSaveRequest = z.infer<typeof PlanSaveInputSchema>["request"];
-export type PlanApproveRequest = z.infer<
-	typeof PlanApproveInputSchema
->["request"];
-export type RunStartRequest = z.infer<typeof RunStartInputSchema>["request"];
-export type ReviewStartRequest = z.infer<
-	typeof ReviewStartInputSchema
->["request"];
 export type FeatureCompleteRequest = z.infer<
 	typeof FeatureCompleteInputSchema
->["request"];
-export type FeatureResetRequest = z.infer<
-	typeof FeatureResetInputSchema
 >["request"];
 export type SessionCloseRequest = z.infer<
 	typeof SessionCloseInputSchema

@@ -38,25 +38,25 @@ export { recordValidation } from "./validation.js";
 export type TransitionEnvironment = Readonly<{
 	newId: (kind: "session" | "run" | "validation" | "review") => string;
 }>;
-export type MutationResult<T> = Readonly<{
+type MutationResult<T> = Readonly<{
 	session: Session;
 	value: T;
 	replayed: boolean;
 }>;
-export type PlanSaveInput = Readonly<{
+type PlanSaveInput = Readonly<{
 	operationId: string;
 	expectedRevision: number;
 	goal: string;
 	plan: Plan;
 }>;
-export type GuardedFeatureInput = Readonly<{
+type GuardedFeatureInput = Readonly<{
 	operationId: string;
 	expectedRevision: number;
 	featureId: FeatureId;
 }>;
-export type FeatureResetInput = GuardedFeatureInput &
+type FeatureResetInput = GuardedFeatureInput &
 	Readonly<{ nextFeatureId?: FeatureId | undefined }>;
-export type ReviewStartInput = GuardedFeatureInput &
+type ReviewStartInput = GuardedFeatureInput &
 	Readonly<{
 		sourceDigest: SourceDigest;
 		artifactsChanged: Artifact[];
@@ -71,7 +71,7 @@ export type FeatureCompleteInput = GuardedFeatureInput &
 		summary: string;
 		result: Omit<ReviewResult, "recordedRevision">;
 	}>;
-export type SessionCloseInput = Readonly<{
+type SessionCloseInput = Readonly<{
 	operationId: string;
 	expectedRevision: number;
 	sessionId: string;
