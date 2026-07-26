@@ -156,9 +156,9 @@ checks from the changed behavior and risk:
   sufficient alone only for genuinely mechanical or documentation-only work.
 - UI claims need visual inspection when a runnable target is available.
 - Cleanup claims need behavior-preservation evidence, not formatting alone.
-- `scope: "broad"` is a claim about coverage, not a stronger label. Use it only
-  for the repository's canonical applicable gate or a justified equivalent
-  that covers the delivered repository state.
+- `scope: "broad"` is a coverage claim, not a stronger label. Use it only for the
+  repository's canonical applicable gate or a justified equivalent covering the
+  delivered repository state.
 
 Immediately before each evidence Bash command, call `flow_validation_start`
 with current revision, feature id, exact command, and `scope` (`focused` or
@@ -171,11 +171,13 @@ A failed, incomplete, or source-drifted exact plan-listed observation creates a
 freshness boundary. Before new review admission, that gate needs a complete
 exit-zero observation for current source recorded after its latest relevant
 failure or drift; returning to an older digest does not revive an earlier pass,
-and substitute broad validation cannot discharge it. If that gate cannot pass,
-the normal completed path remains unavailable; fix the gate or ask the user to
-choose deferred or abandoned closure. Plan-listed validation prose that has never
-run as an exact command remains reviewer judgment, not a fabricated pass or
-failure.
+and substitute broad validation cannot discharge it. Plan-listed validation prose
+that has never run as an exact command remains reviewer judgment, not a fabricated
+pass or failure.
+
+A gate that cannot pass withholds completed closure, and reporting the blocker is
+half the move. Fix the gate, or ask the user to choose deferred or abandoned
+closure. Ending the turn having done neither leaves the workflow with no next step.
 
 Every host-observed validation advances the session revision, so the revision
 that armed a completed command is stale. The `[flow-validation]` marker reports
@@ -187,7 +189,7 @@ Use focused validation for ordinary features. For the final feature, run the
 repository's broad applicable gate after the last relevant edit. A source edit
 invalidates earlier applicability. Failed or unavailable checks are blockers,
 not passing evidence. If the canonical gate cannot run, explain why the chosen
-equivalent is broad enough; otherwise record the narrower evidence as focused.
+equivalent is broad enough.
 
 Immediately before review admission, reconcile the preflight inventory against
 the recorded current-source observations. Do not call `flow_review_start` while

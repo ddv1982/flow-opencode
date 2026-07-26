@@ -142,7 +142,9 @@ describe("Flow application runtime gates", () => {
 		);
 		await recordObservedValidation(repository, {
 			captureId: "capture-broad-substitute",
-			command: "bun test tests/runtime-gates.test.ts",
+			// A second whole-suite gate, not a file list: `recordValidation` refuses a
+			// broad claim it can derive as narrow, so the veto is what must refuse this.
+			command: "bun run check",
 		});
 
 		const substituteStatus = await flow.status({

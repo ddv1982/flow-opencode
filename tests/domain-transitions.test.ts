@@ -970,11 +970,64 @@ describe("Session v5 domain state machine", () => {
 		).toThrow("Final review requires passing broad validation");
 	});
 
-	test("blocks a narrower command relabelled broad after the gate failed", () => {
+	test("refuses a broad claim on a command that names the tests it runs", () => {
+		const environment = deterministicEnvironment();
+		// The escape ADR 0009 left open, closed where it starts. A hand-picked file
+		// list passes, so no failing observation ever exists for the veto to key on,
+		// and final review needs only *a* broad pass. The command itself is the
+		// evidence that the claim is false, and this runs at arm time, so the model
+		// is told before it spends the Bash call.
+		const session = begin(
+			approve(
+				saveDraft(environment, { plan: oneFeaturePlan([PROSE_VALIDATION]) }),
+			),
+			DELIVERY,
+			environment,
+		);
+		expect(() =>
+			validate(session, {
+				id: "hand-picked",
+				featureId: DELIVERY,
+				command: "bun test src/greet.test.ts src/farewell.test.ts",
+				scope: "broad",
+			}),
+		).toThrow("cannot name the tests it runs");
+		// Recording the same evidence honestly is always available.
+		expect(() =>
+			validate(session, {
+				id: "hand-picked-focused",
+				featureId: DELIVERY,
+				command: "bun test src/greet.test.ts src/farewell.test.ts",
+				scope: "focused",
+			}),
+		).not.toThrow();
+		// A whole-suite gate keeps its claim, including when a flag or a directory
+		// narrows nothing the runtime can see.
+		for (const command of [
+			"bun test",
+			"bun run check",
+			"bun test --coverage",
+			"pytest tests/",
+			"bun run scripts/check.ts",
+		]) {
+			expect(() =>
+				validate(session, {
+					id: `broad-${command}`,
+					featureId: DELIVERY,
+					command,
+					scope: "broad",
+				}),
+			).not.toThrow();
+		}
+	});
+
+	test("blocks a substitute broad command after the gate failed", () => {
 		const environment = deterministicEnvironment();
 		// Prose-only plan validation, so nothing but the `broad` claim can engage the
 		// veto. This is the recorded failure mode: the gate is observed red, then a
-		// smaller command is armed under the same label and review accepts it.
+		// second broad command is armed and review accepts it in its place. The
+		// substitute names no test file, so it is the veto that has to refuse it --
+		// `recordValidation` never sees a claim it can derive as narrow.
 		let session = begin(
 			approve(
 				saveDraft(environment, { plan: oneFeaturePlan([PROSE_VALIDATION]) }),
@@ -990,9 +1043,9 @@ describe("Session v5 domain state machine", () => {
 			exitCode: 1,
 		});
 		session = validate(session, {
-			id: "narrower-relabelled",
+			id: "substitute-broad",
 			featureId: DELIVERY,
-			command: "bun test src/greet.test.ts",
+			command: "bun run check",
 			scope: "broad",
 		});
 		const run = session.runs.at(-1);
@@ -1014,7 +1067,7 @@ describe("Session v5 domain state machine", () => {
 		expect(
 			requestReview(session, DELIVERY, environment, "review-gate-pass")
 				.assignment.validationIds,
-		).toEqual(["narrower-relabelled", "gate-pass"]);
+		).toEqual(["substitute-broad", "gate-pass"]);
 	});
 
 	test("blocks the review of the feature the gate failed under", () => {
@@ -1046,9 +1099,9 @@ describe("Session v5 domain state machine", () => {
 			exitCode: 1,
 		});
 		session = validate(session, {
-			id: "foundation-relabelled",
+			id: "foundation-substitute",
 			featureId: FOUNDATION,
-			command: "bun test src/greet.test.ts",
+			command: "bun run check",
 			scope: "broad",
 		});
 		expect(() =>

@@ -37,6 +37,37 @@ export function isValidationEligible(
 	);
 }
 
+/**
+ * Test files a command names as arguments, which contradict a `broad` claim.
+ *
+ * `scope` is the one recorded field nothing corroborates, and the escape that
+ * survived ADR 0009 is arming a hand-picked file list under the broad label:
+ * every field of the resulting record true, exit zero, and the repository gate
+ * never run. A command that names the test files to run has already told the
+ * runtime it is narrow, so the claim is refused instead of trusted.
+ *
+ * Only test-file arguments count, because only they are unambiguous. The first
+ * token is the program, so a gate invoked as `bun run scripts/check.ts` keeps its
+ * claim, and a bare directory stays broad because `pytest tests/` is a whole
+ * suite in many repositories. Narrowing by test-name filter (`bun test -t greet`)
+ * is not derivable from the command and remains uncaught: the veto in
+ * `unresolvedVetoedCommands` is what still covers a gate observed red.
+ */
+function namedTestFiles(command: string): string[] {
+	return command
+		.split(/\s+/)
+		.slice(1)
+		.filter((token) => !token.startsWith("-"))
+		.filter((token) => {
+			const file = token.split("/").pop() ?? "";
+			return (
+				/\.(?:test|spec)\./.test(file) ||
+				/_test\.[a-z]+$/.test(file) ||
+				/^test_.+\.py$/.test(file)
+			);
+		});
+}
+
 export function recordValidation(
 	session: Session,
 	input: Readonly<{
@@ -110,6 +141,14 @@ export function recordValidation(
 		throw new FlowTransitionError(
 			`A feature run may contain at most ${MAX_VALIDATIONS_PER_RUN} validation observations.`,
 		);
+	}
+	if (input.scope === "broad") {
+		const named = namedTestFiles(input.command);
+		if (named.length > 0) {
+			throw new FlowTransitionError(
+				`A broad observation cannot name the tests it runs (${named.join(", ")}). Arm the repository's canonical gate, or record this command as focused.`,
+			);
+		}
 	}
 	const revision = session.revision + 1;
 	const observation: ValidationObservation = {
