@@ -142,6 +142,48 @@ describe("Flow auto-drive coordinator", () => {
 		});
 	});
 
+	test("names a host that reports no assistant message parentage", async () => {
+		// Continuation anchors on the assistant message that owns the lease, so a
+		// host emitting no `parentID` can never continue. It must fail closed, but
+		// the warning has to say the host cannot support it: otherwise stopping
+		// after every feature is indistinguishable from a Flow defect.
+		const state = harness({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 11,
+			nextAction: "flow_run_start",
+		});
+		await state.activate();
+		state.driver.observeMutation("host-1", 12, undefined, "assistant-x", false);
+
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(0);
+		expect(state.warnings.at(-1)).toContain(
+			"reports no assistant message parentage",
+		);
+		expect(state.warnings.at(-1)).toContain("/flow-run");
+
+		// A host that does report parentage keeps the precise diagnosis.
+		const capable = harness({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 11,
+			nextAction: "flow_run_start",
+		});
+		await capable.activate();
+		mutate(capable.driver, "host-1", 12);
+		capable.driver.observeMutation(
+			"host-1",
+			13,
+			undefined,
+			"assistant-unknown",
+			false,
+		);
+		expect(capable.warnings.at(-1)).toContain(
+			"mutation origin was unavailable",
+		);
+	});
+
 	test("separates an overnight checkpoint and resumes after durable progress", async () => {
 		const state = harness({
 			sessionId: "flow-1",

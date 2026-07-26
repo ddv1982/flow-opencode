@@ -30,7 +30,19 @@ export type Plan = Readonly<{
 }>;
 
 export type ValidationScope = "focused" | "broad";
-export type ValidationIneligibleReason = "source-drift";
+
+/**
+ * Why a recorded observation can never satisfy a gate.
+ *
+ * The two host-capability reasons exist so Flow works against any host, not only
+ * one that reports a structured Bash exit code and output-truncation flag. A host
+ * that reports neither still produces a durable, visibly-not-passing record
+ * instead of an aborted tool call.
+ */
+export type ValidationIneligibleReason =
+	| "source-drift"
+	| "exit-code-unavailable"
+	| "output-completeness-unknown";
 
 export type ValidationObservation = Readonly<{
 	id: string;
@@ -39,7 +51,12 @@ export type ValidationObservation = Readonly<{
 	scope: ValidationScope;
 	command: string;
 	sourceDigest: SourceDigest;
-	exitCode: number;
+	/**
+	 * `null` when the host exposed no structured exit code. Never eligible, and
+	 * always paired with an `ineligibleReason`, so a host that cannot report exit
+	 * status can never produce a passing validation.
+	 */
+	exitCode: number | null;
 	outputDigest: SourceDigest;
 	outputComplete: boolean;
 	recordedRevision: number;
@@ -55,6 +72,23 @@ export type ReviewFinding = Readonly<{
 	severity: "blocking" | "advisory";
 	summary: string;
 	evidence?: string | undefined;
+	/**
+	 * Stable identity across attempts, as `<feature-id>.R<revision>-<NN>`.
+	 *
+	 * A reviewer sets it to a prior id to report recurrence and omits it for a new
+	 * issue; the runtime then issues one. Optional so existing Session v5
+	 * documents remain readable, and so a submission never fails on bookkeeping.
+	 */
+	findingId?: string | undefined;
+	/**
+	 * Set when repairing this finding needs material work outside the approved
+	 * plan, which makes the feature ineligible for automatic retry.
+	 *
+	 * Optional so existing Session v5 documents remain readable; absent means
+	 * false. This was previously a `[scope-blocker]` marker the manager had to
+	 * spot inside `summary` prose, which no code path parsed.
+	 */
+	scopeBlocker?: boolean | undefined;
 }>;
 
 export type ReviewResult = Readonly<{
@@ -79,6 +113,12 @@ export function reviewResultSemanticIssues(
 			issues.push({
 				path: ["findings", index, "evidence"],
 				message: "A blocking finding requires concrete evidence.",
+			});
+		}
+		if (finding.scopeBlocker && finding.severity !== "blocking") {
+			issues.push({
+				path: ["findings", index, "scopeBlocker"],
+				message: "Only a blocking finding can be a scope blocker.",
 			});
 		}
 	}

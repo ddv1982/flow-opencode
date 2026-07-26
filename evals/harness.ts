@@ -1,0 +1,653 @@
+// Model-in-the-loop harness for Flow.
+//
+// tests/ proves the runtime and the *text* of prompts deterministically. This
+// harness proves the thing neither can: that a real model, driven by the real
+// prompts, actually reaches the intended workflow outcome. It asserts durable
+// state and the observed tool-call sequence, never prompt wording, so prompt
+// rewrites are cheap and prompt regressions are visible.
+//
+// Requires provider credentials, so it is never part of `bun run check`.
+
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import {
+	chmod,
+	copyFile,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
+import { createServer } from "node:net";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import packageJson from "../package.json" with { type: "json" };
+
+const STARTUP_TIMEOUT_MS = 180_000;
+const REQUEST_TIMEOUT_MS = 120_000;
+
+/** A single tool invocation observed in the transcript. */
+export type ObservedToolCall = {
+	readonly tool: string;
+	readonly status: "pending" | "running" | "completed" | "error";
+	readonly input: Record<string, unknown>;
+	/** Tool output, parsed as JSON when the tool returned a Flow envelope. */
+	readonly output: unknown;
+	readonly rawOutput: string;
+};
+
+/** Everything a scenario is allowed to assert against. */
+export type Outcome = {
+	/** Ordered `flow_*` calls only — the workflow's observable spine. */
+	readonly flowCalls: readonly ObservedToolCall[];
+	/** Every tool call, including host tools like bash/edit/task. */
+	readonly allCalls: readonly ObservedToolCall[];
+	/** Parsed `.flow/session.json`, or null when no active session exists. */
+	readonly session: Record<string, unknown> | null;
+	/** Parsed documents under `.flow/history/`. */
+	readonly archives: readonly Record<string, unknown>[];
+	/** Final assistant text, for reporting only — never assert on wording. */
+	readonly finalText: string;
+	readonly tokens: {
+		input: number;
+		output: number;
+		reasoning: number;
+		cacheRead: number;
+		cacheWrite: number;
+	};
+	/**
+	 * Total reported cost, or null when the provider returned none. Reporting an
+	 * absent cost as 0 reads as "this run was free", which is the opposite of
+	 * true: OpenAI omits cost from its usage payload entirely.
+	 */
+	readonly costUsd: number | null;
+	readonly assistantMessages: number;
+	readonly durationMs: number;
+	/** True when the host reported an error on any assistant message. */
+	readonly hostError: string | null;
+};
+
+export type Scenario = {
+	readonly id: string;
+	readonly description: string;
+	/** Files seeded into the fixture repository before the first command. */
+	readonly files: Readonly<Record<string, string>>;
+	/** Commands sent in order; each waits for the session to go quiet. */
+	readonly steps: readonly {
+		readonly command: string;
+		readonly arguments: string;
+	}[];
+	/** Returns a list of failures. Empty means the scenario passed. */
+	readonly check: (outcome: Outcome) => readonly string[];
+};
+
+/**
+ * The child host runs with its own XDG dirs so it never touches the developer's
+ * session database, but OpenCode keeps provider credentials in that same data
+ * directory. Without carrying `auth.json` over, every scenario fails on auth
+ * instead of on behavior unless the provider also reads an env var.
+ *
+ * Only the credential file is copied, into a 0700 scratch directory that is
+ * removed in `stop()`. Set `FLOW_EVAL_NO_AUTH_COPY=1` to opt out and rely purely
+ * on environment credentials.
+ */
+async function carryProviderCredentials(childData: string): Promise<void> {
+	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return;
+	const parentData =
+		process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share");
+	const source = join(parentData, "opencode", "auth.json");
+	const target = join(childData, "opencode", "auth.json");
+	await mkdir(join(childData, "opencode"), { recursive: true, mode: 0o700 });
+	try {
+		await copyFile(source, target);
+	} catch {
+		// No stored credentials; the provider may still authenticate from the env.
+	}
+}
+
+async function availablePort(): Promise<number> {
+	const server = createServer();
+	await new Promise<void>((resolve, reject) => {
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", resolve);
+	});
+	const address = server.address();
+	if (!address || typeof address === "string") {
+		throw new Error("Could not reserve a local port.");
+	}
+	await new Promise<void>((resolve, reject) =>
+		server.close((error) => (error ? reject(error) : resolve())),
+	);
+	return address.port;
+}
+
+async function fetchJson(
+	url: string,
+	timeout = REQUEST_TIMEOUT_MS,
+): Promise<unknown> {
+	const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
+	if (!response.ok) {
+		throw new Error(
+			`GET ${url} failed with ${response.status}: ${await response.text()}`,
+		);
+	}
+	return response.json();
+}
+
+async function postJson(
+	url: string,
+	body: unknown,
+	timeout = REQUEST_TIMEOUT_MS,
+): Promise<unknown> {
+	const response = await fetch(url, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(body),
+		signal: AbortSignal.timeout(timeout),
+	});
+	if (!response.ok) {
+		throw new Error(
+			`POST ${url} failed with ${response.status}: ${await response.text()}`,
+		);
+	}
+	return response.json();
+}
+
+/**
+ * Splits `providerID/modelID` on the *first* slash only.
+ *
+ * A gateway provider's model id contains slashes of its own — `openrouter`
+ * carries `openai/gpt-5.6-sol` — so splitting on the last slash, or on every
+ * slash, silently addresses the wrong model.
+ */
+export function splitModel(
+	model: string,
+): Readonly<{ providerID: string; modelID: string }> {
+	const boundary = model.indexOf("/");
+	if (boundary <= 0 || boundary === model.length - 1) {
+		throw new Error(
+			`Model id "${model}" is not in providerID/modelID form, as OpenCode requires.`,
+		);
+	}
+	return {
+		providerID: model.slice(0, boundary),
+		modelID: model.slice(boundary + 1),
+	};
+}
+
+/** Reduces a host error payload to one readable line. */
+function summarizeError(failure: unknown): string {
+	if (typeof failure === "string") return failure;
+	if (failure && typeof failure === "object") {
+		const record = failure as Record<string, unknown>;
+		const data = record.data as Record<string, unknown> | undefined;
+		const message = data?.message ?? record.message ?? record.name;
+		if (typeof message === "string" && message.trim()) {
+			return message.split("\n")[0] ?? message;
+		}
+	}
+	return JSON.stringify(failure);
+}
+
+/** Packs the working tree once and reuses the tarball across every run. */
+export async function packPlugin(
+	repositoryRoot: string,
+	into: string,
+): Promise<string> {
+	const build = spawnSync("bun", ["run", "build"], {
+		cwd: repositoryRoot,
+		encoding: "utf8",
+	});
+	if (build.status !== 0)
+		throw new Error(`build failed:\n${build.stdout}\n${build.stderr}`);
+	const pack = spawnSync("bun", ["pm", "pack", "--destination", into], {
+		cwd: repositoryRoot,
+		encoding: "utf8",
+	});
+	if (pack.status !== 0)
+		throw new Error(`pack failed:\n${pack.stdout}\n${pack.stderr}`);
+	return join(into, `opencode-plugin-flow-${packageJson.version}.tgz`);
+}
+
+type MessageEntry = {
+	info: {
+		role: string;
+		time?: { created: number; completed?: number };
+		error?: unknown;
+		cost?: number;
+		tokens?: {
+			input: number;
+			output: number;
+			reasoning: number;
+			cache?: { read: number; write: number };
+		};
+	};
+	parts: {
+		type: string;
+		tool?: string;
+		text?: string;
+		synthetic?: boolean;
+		state?: {
+			status: string;
+			input?: Record<string, unknown>;
+			output?: string;
+			error?: string;
+		};
+	}[];
+};
+
+export class EvalHost {
+	private server: ChildProcess | null = null;
+	private serverLog = "";
+	private baseUrl = "";
+
+	readonly project: string;
+	private readonly scratch: string;
+
+	private constructor(project: string, scratch: string) {
+		this.project = project;
+		this.scratch = scratch;
+	}
+
+	/** Boots a throwaway OpenCode host with the packed plugin over a git fixture. */
+	static async start(options: {
+		tarball: string;
+		opencodeVersion: string;
+		files: Readonly<Record<string, string>>;
+	}): Promise<EvalHost> {
+		const scratch = await mkdtemp(join(tmpdir(), "flow-eval-"));
+		await chmod(scratch, 0o700);
+		const childHome = join(scratch, "home");
+		const childCache = join(scratch, "cache");
+		const childData = join(childHome, ".local", "share");
+		const project = join(scratch, "project");
+		await mkdir(childHome, { recursive: true });
+		await mkdir(join(project, ".opencode"), { recursive: true });
+		await carryProviderCredentials(childData);
+
+		// Flow derives source identity from git, so the fixture must be a repo.
+		for (const [relative, contents] of Object.entries(options.files)) {
+			const target = join(project, relative);
+			await mkdir(join(target, ".."), { recursive: true });
+			await writeFile(target, contents, "utf8");
+		}
+		for (const argv of [
+			["init", "--initial-branch=main"],
+			["config", "user.email", "eval@example.com"],
+			["config", "user.name", "Flow Eval"],
+			["add", "-A"],
+			["commit", "-m", "fixture"],
+		]) {
+			const git = spawnSync("git", argv, { cwd: project, encoding: "utf8" });
+			if (git.status !== 0)
+				throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
+		}
+
+		// Populate OpenCode's exact-version cache from the candidate tarball so
+		// the eval exercises the bytes a user would install.
+		const packageCache = join(
+			childCache,
+			"opencode",
+			"packages",
+			`opencode-plugin-flow@${packageJson.version}`,
+		);
+		await mkdir(packageCache, { recursive: true });
+		await writeFile(
+			join(packageCache, "package.json"),
+			`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${options.tarball}` } }, null, 2)}\n`,
+			"utf8",
+		);
+		const install = spawnSync("bun", ["install"], {
+			cwd: packageCache,
+			encoding: "utf8",
+		});
+		if (install.status !== 0)
+			throw new Error(`cache install failed:\n${install.stderr}`);
+		await writeFile(
+			join(project, "opencode.json"),
+			`${JSON.stringify({ plugin: [`opencode-plugin-flow@${packageJson.version}`] }, null, 2)}\n`,
+			"utf8",
+		);
+
+		const host = new EvalHost(project, scratch);
+		const port = await availablePort();
+		host.baseUrl = `http://127.0.0.1:${port}`;
+		host.server = spawn(
+			"bunx",
+			[
+				`opencode-ai@${options.opencodeVersion}`,
+				"serve",
+				"--port",
+				String(port),
+				"--hostname",
+				"127.0.0.1",
+			],
+			{
+				cwd: project,
+				env: {
+					...process.env,
+					HOME: childHome,
+					XDG_CACHE_HOME: childCache,
+					XDG_CONFIG_HOME: join(childHome, ".config"),
+					XDG_DATA_HOME: childData,
+					XDG_STATE_HOME: join(childHome, ".local", "state"),
+				},
+				stdio: ["ignore", "pipe", "pipe"],
+			},
+		);
+		const record = (chunk: unknown) => {
+			host.serverLog += String(chunk);
+		};
+		host.server.stdout?.on("data", record);
+		host.server.stderr?.on("data", record);
+
+		const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+		for (;;) {
+			try {
+				const health = (await fetchJson(
+					`${host.baseUrl}/global/health`,
+					3_000,
+				)) as {
+					healthy?: boolean;
+				};
+				if (health.healthy) break;
+			} catch {
+				// still starting
+			}
+			if (Date.now() > deadline) {
+				throw new Error(`OpenCode did not become healthy.\n${host.serverLog}`);
+			}
+			await Bun.sleep(500);
+		}
+		return host;
+	}
+
+	get log(): string {
+		return this.serverLog;
+	}
+
+	get url(): string {
+		return this.baseUrl;
+	}
+
+	/**
+	 * Model ids the child host lists in its catalog, as `providerID/modelID`.
+	 *
+	 * This is a spelling check, not an entitlement check. OpenCode builds the
+	 * catalog from Models.dev overlaid with configured providers, so an id appears
+	 * here whenever the provider is configured and the catalog knows the model —
+	 * whether or not the stored credential may actually call it. Use
+	 * `probeModel` to establish that.
+	 */
+	async catalogModels(): Promise<string[]> {
+		const listed = (await fetchJson(`${this.baseUrl}/config/providers`)) as {
+			providers?: { id: string; models?: Record<string, unknown> }[];
+		};
+		return (listed.providers ?? []).flatMap((provider) =>
+			Object.keys(provider.models ?? {}).map(
+				(modelId) => `${provider.id}/${modelId}`,
+			),
+		);
+	}
+
+	/**
+	 * Sends one tiny real completion and reports why it failed, or `null` when the
+	 * model answered.
+	 *
+	 * A catalog hit does not prove the credential is entitled to the model, which
+	 * matters most for a freshly released or preview-gated model: the id resolves,
+	 * the run starts, and the provider rejects the first request partway into a
+	 * paid pass. One near-free request converts that into an upfront failure.
+	 */
+	async probeModel(model: string): Promise<string | null> {
+		const sessionId = await this.createSession(`flow-eval probe ${model}`);
+		try {
+			const reply = (await postJson(
+				`${this.baseUrl}/session/${sessionId}/message`,
+				{
+					// `/session/:id/message` takes a split model, unlike `/command`,
+					// which takes the joined string.
+					model: splitModel(model),
+					system: "Reply with the single word OK. Call no tools.",
+					parts: [{ type: "text", text: "ping" }],
+				},
+			)) as MessageEntry;
+			const failure = reply.info?.error;
+			return failure ? summarizeError(failure) : null;
+		} catch (error) {
+			return error instanceof Error ? error.message : String(error);
+		} finally {
+			await fetch(`${this.baseUrl}/session/${sessionId}`, {
+				method: "DELETE",
+			}).catch(() => {});
+		}
+	}
+
+	async createSession(title: string): Promise<string> {
+		const session = (await postJson(`${this.baseUrl}/session`, { title })) as {
+			id: string;
+		};
+		return session.id;
+	}
+
+	/**
+	 * Sends one slash command and returns when the session has been quiet for
+	 * `quietMs`. The quiet window (rather than a single idle event) is what lets
+	 * `/flow-auto` auto-continuation run to its natural stopping point.
+	 */
+	async runCommand(
+		sessionId: string,
+		command: string,
+		args: string,
+		model: string,
+		options: { quietMs?: number; timeoutMs?: number } = {},
+	): Promise<void> {
+		const quietMs = options.quietMs ?? 25_000;
+		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
+		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
+			command,
+			arguments: args,
+			model,
+		}).catch((error) => {
+			this.serverLog += `\ncommand POST rejected: ${String(error)}`;
+		});
+
+		const poll = 2_000;
+		// Deadlines are wall-clock, so suspending the machine mid-scenario blows
+		// them the instant it resumes and reports a hang that never happened. An
+		// iteration that took far longer than its own sleep is time this process
+		// did not observe, so it is credited back to every deadline rather than
+		// charged to the model.
+		const suspendFloor = poll * 10;
+		let deadline = Date.now() + timeoutMs;
+		let signature = "";
+		let settledAt = Date.now();
+		// Tracked separately from `settledAt`, which `busy` alone keeps alive: one
+		// tool part wedged in `running` resets the quiet timer forever while nothing
+		// progresses. Without this, a genuinely stuck session and a model looping
+		// productively both time out with the same message and neither is
+		// diagnosable after the fact.
+		let changedAt = Date.now();
+		let pending: string[] = [];
+		let suspendedMs = 0;
+		for (;;) {
+			const before = Date.now();
+			await Bun.sleep(poll);
+			const messages = (await this.messages(sessionId)) as MessageEntry[];
+			const unobserved = Date.now() - before;
+			if (unobserved >= suspendFloor) {
+				suspendedMs += unobserved;
+				deadline += unobserved;
+				settledAt += unobserved;
+				changedAt += unobserved;
+			}
+			pending = messages.flatMap((entry) =>
+				entry.parts
+					.filter(
+						(part) =>
+							part.type === "tool" &&
+							part.state?.status &&
+							part.state.status !== "completed" &&
+							part.state.status !== "error",
+					)
+					.map((part) => `${part.tool ?? "tool"}:${part.state?.status}`),
+			);
+			const busy =
+				pending.length > 0 ||
+				messages.some(
+					(entry) =>
+						entry.info.role === "assistant" && !entry.info.time?.completed,
+				);
+			const next = `${messages.length}:${messages.reduce((total, entry) => total + entry.parts.length, 0)}`;
+			const changed = next !== signature;
+			signature = next;
+			if (changed) changedAt = Date.now();
+			if (changed || busy) settledAt = Date.now();
+			else if (Date.now() - settledAt >= quietMs) return;
+			if (Date.now() > deadline) {
+				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
+					() => {},
+				);
+				const stalledSeconds = Math.round((Date.now() - changedAt) / 1_000);
+				const [count = "0", parts = "0"] = signature.split(":");
+				const suspended =
+					suspendedMs > 0
+						? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
+						: "";
+				throw new Error(
+					(stalledSeconds * 1_000 >= quietMs
+						? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. No new message or part for ${stalledSeconds}s while these tool calls stayed incomplete: ${pending.join(", ") || "none"}.`
+						: `Scenario exceeded ${timeoutMs}ms without going quiet: still working. The session was producing output up to the deadline (${count} messages, ${parts} parts), so it was working or looping rather than stuck.`) +
+						suspended,
+				);
+			}
+		}
+	}
+
+	private async messages(sessionId: string): Promise<unknown> {
+		return fetchJson(`${this.baseUrl}/session/${sessionId}/message`);
+	}
+
+	/** Collects the durable and observed outcome a scenario asserts against. */
+	async outcome(sessionId: string, durationMs: number): Promise<Outcome> {
+		const messages = (await this.messages(sessionId)) as MessageEntry[];
+		const allCalls: ObservedToolCall[] = [];
+		const tokens = {
+			input: 0,
+			output: 0,
+			reasoning: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+		};
+		let costUsd = 0;
+		let costReported = false;
+		let assistantMessages = 0;
+		let hostError: string | null = null;
+		let finalText = "";
+
+		for (const entry of messages) {
+			if (entry.info.role === "assistant") {
+				assistantMessages += 1;
+				if (typeof entry.info.cost === "number") {
+					costUsd += entry.info.cost;
+					costReported = true;
+				}
+				const used = entry.info.tokens;
+				if (used) {
+					tokens.input += used.input;
+					tokens.output += used.output;
+					tokens.reasoning += used.reasoning;
+					tokens.cacheRead += used.cache?.read ?? 0;
+					tokens.cacheWrite += used.cache?.write ?? 0;
+				}
+				if (entry.info.error && !hostError)
+					hostError = JSON.stringify(entry.info.error);
+			}
+			for (const part of entry.parts) {
+				if (
+					part.type === "text" &&
+					!part.synthetic &&
+					entry.info.role === "assistant"
+				) {
+					finalText = part.text ?? finalText;
+				}
+				if (part.type !== "tool" || !part.tool) continue;
+				const raw = part.state?.output ?? part.state?.error ?? "";
+				let parsed: unknown = raw;
+				try {
+					parsed = JSON.parse(raw);
+				} catch {
+					// Non-JSON output (flow_guidance returns markdown) stays a string.
+				}
+				allCalls.push({
+					tool: part.tool,
+					status:
+						(part.state?.status as ObservedToolCall["status"]) ?? "pending",
+					input: part.state?.input ?? {},
+					output: parsed,
+					rawOutput: raw,
+				});
+			}
+		}
+
+		return {
+			allCalls,
+			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
+			session: await this.readJson(join(this.project, ".flow", "session.json")),
+			archives: await this.readArchives(),
+			finalText,
+			tokens,
+			costUsd: costReported ? costUsd : null,
+			assistantMessages,
+			durationMs,
+			hostError,
+		};
+	}
+
+	private async readJson(
+		path: string,
+	): Promise<Record<string, unknown> | null> {
+		try {
+			return JSON.parse(await readFile(path, "utf8")) as Record<
+				string,
+				unknown
+			>;
+		} catch {
+			return null;
+		}
+	}
+
+	private async readArchives(): Promise<Record<string, unknown>[]> {
+		const history = join(this.project, ".flow", "history");
+		let names: string[];
+		try {
+			names = await readdir(history);
+		} catch {
+			return [];
+		}
+		const documents: Record<string, unknown>[] = [];
+		for (const name of names
+			.filter((entry) => entry.endsWith(".json"))
+			.sort()) {
+			const document = await this.readJson(join(history, name));
+			if (document) documents.push(document);
+		}
+		return documents;
+	}
+
+	async stop(): Promise<void> {
+		if (this.server && this.server.exitCode === null) {
+			this.server.kill("SIGTERM");
+			await Promise.race([
+				new Promise<void>((resolve) =>
+					this.server?.once("exit", () => resolve()),
+				),
+				Bun.sleep(3_000).then(() => {
+					if (this.server?.exitCode === null) this.server.kill("SIGKILL");
+				}),
+			]);
+		}
+		await rm(this.scratch, { recursive: true, force: true });
+	}
+}

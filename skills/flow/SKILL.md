@@ -41,12 +41,8 @@ never silently fall back.
 
 ## End-to-end loop
 
-`/flow-auto` loops `ready`/`completed` only after a same-host non-replayed
-`flow_plan_save` owns idle session creation, or an active baseline advances in
-that session. The latter temporal gate admits a pending reviewer result;
-unchanged ready or replacement fails closed;
-conversational `flow_plan_approve` and blocked or ready `await-user-direction`
-resume only when the reply's same-host accepted mutation advances it.
+The runtime decides when `/flow-auto` continues automatically; never assume a
+further turn, and finish the authorized work in this one.
 
 For `ready`, apply `flow-run`; after every recorded result reload compact. For `completed`,
 close and handle **Recovery** plus exact `archiveRetry`.
@@ -98,7 +94,6 @@ Unresolved blockers forbid completed closure. Fresh close: projected session
 id/revision, fresh operation id, kind, optional summary. Replay byte-for-byte
 only the `archiveRetry` of a durably accepted close. Rejected revision conflict:
 refresh compact, confirm the same session/goal, then build a fresh request.
-From delivery report each feature's attempt count, latest outcome, terminal
-findings, and Flow-reported latest/superseded artifacts. Report external prerequisites only
-from terminal text; otherwise mark them unavailable. Artifacts are not an exact
-Git delta. Create no other ledger or report.
+Report `workflowData.delivery.report` verbatim. Report external prerequisites only
+from terminal text; otherwise mark them unavailable. Create no other ledger or
+report.

@@ -29,7 +29,49 @@ export type DeliveryProjection = Readonly<{
 		latestAttempts: ReadonlyArray<string>;
 		supersededAttemptsOnly: ReadonlyArray<string>;
 	}>;
+	/**
+	 * The handoff, already formatted, for the caller to report verbatim.
+	 *
+	 * Formatting the same fields in the same order used to be prose restated across
+	 * four prompt surfaces, including the artifact qualifier that must not be
+	 * dropped. Rendering it here makes the shape a runtime guarantee instead of an
+	 * instruction each surface has to repeat and each model has to follow.
+	 */
+	report: ReadonlyArray<string>;
 }>;
+
+const NO_ARTIFACTS = "none reported";
+
+function formatFeature(feature: DeliveryFeatureProjection): string[] {
+	const findings = feature.terminalFindings.map(
+		(finding) => `  - ${finding.severity}: ${finding.summary}`,
+	);
+	return [
+		`- ${feature.id} — ${feature.title}`,
+		`  attempts: ${feature.attempts}; latest state: ${feature.latestState}`,
+		`  outcome: ${feature.outcomeSummary ?? "none recorded"}`,
+		findings.length > 0 ? "  terminal findings:" : "  terminal findings: none",
+		...findings,
+	];
+}
+
+function formatReport(delivery: Omit<DeliveryProjection, "report">): string[] {
+	const artifacts = delivery.reportedArtifacts;
+	return [
+		`Goal: ${delivery.goal}`,
+		`Closure: ${delivery.closure.kind}${
+			delivery.closure.summary ? ` — ${delivery.closure.summary}` : ""
+		}`,
+		`Progress: ${delivery.progress.completed} of ${delivery.progress.total} features complete`,
+		"Features:",
+		...delivery.features.flatMap(formatFeature),
+		"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+		`- latest attempts: ${artifacts.latestAttempts.join(", ") || NO_ARTIFACTS}`,
+		`- superseded attempts only: ${
+			artifacts.supersededAttemptsOnly.join(", ") || NO_ARTIFACTS
+		}`,
+	];
+}
 
 export function deliveryProjection(session: Session): DeliveryProjection {
 	if (!session.closure) {
@@ -54,7 +96,7 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 	const completed = planFeatures.filter((feature) =>
 		isFeatureComplete(session, feature.id),
 	).length;
-	return {
+	const delivery = {
 		goal: session.goal,
 		closure: {
 			kind: session.closure.kind,
@@ -83,5 +125,6 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 				.filter((path) => !latestArtifacts.has(path))
 				.sort(),
 		},
-	};
+	} satisfies Omit<DeliveryProjection, "report">;
+	return { ...delivery, report: formatReport(delivery) };
 }

@@ -92,8 +92,8 @@ review.
 
 **Blocked run**: A run whose review failed or was observed but not submitted.
 Old run data is superseded, not reused. Only the first in-scope recorded failed
-review may be reset and retried automatically as one fresh full run; a
-`[scope-blocker]` checkpoints immediately. Other blocking findings are treated
+review may be reset and retried automatically as one fresh full run; a finding
+with `scopeBlocker: true` checkpoints immediately. Other blocking findings are treated
 as in-scope. A second recorded failed review for that feature projects
 `await-user-direction`;
 explicit user direction grants one additional attempt. The failure count is
@@ -122,6 +122,11 @@ feature's attempt count, latest outcome, terminal findings, and Flow-reported
 artifact paths from latest attempts versus superseded attempts only. These paths
 are declarations supplied to Flow, not an exact Git delta, existence proof, or
 exhaustive workspace inventory.
+
+The projection also carries `report`: those same fields already formatted, with
+the artifact qualifier included, for the caller to relay verbatim. Rendering it
+in the runtime makes the handoff shape a guarantee rather than formatting
+instructions restated on every surface that can report a close.
 
 **Archive publication**: No-overwrite publication of closed state into
 `.flow/history/`, followed by active-state cleanup. Repeating the exact close

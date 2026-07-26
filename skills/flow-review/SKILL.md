@@ -16,9 +16,9 @@ The latter is your sole lifecycle mutation.
 
 When given an assignment id, first call
 `flow_status { request: { view: "reviewer", assignmentId: "..." } }`. Use its
-bounded packet, assignment-linked validations, approved-plan context, and
-completed feature IDs instead of reconstructing feature, source,
-revision, validation, or lifecycle data from conversation memory.
+bounded packet, assignment-linked validations, approved-plan context, completed
+feature IDs, and `priorFindings` instead of reconstructing feature, source,
+revision, validation, finding, or lifecycle data from conversation memory.
 
 If the reviewer projection is available but evidence required to approve the
 outcome is missing, submit a failed result with an ordinary blocking finding
@@ -57,9 +57,9 @@ context, not review claims. A final review traces and records dispositions for
 every approved requirement and feature. Regardless of kind, verify every
 still-live prior disposition against current source and evidence. Terminal `fixed`
 requires this review to pass and current evidence to prove the repair. On a
-failed verdict, preserve every prior ID: report a proven repair as
-`repair proven; terminal fixed pending pass` with a concise evidence reference
-and carry it into the next attempt. An unproven blocking repair fails under the same ID;
+failed verdict, report a proven repair as
+`repair proven; terminal fixed pending pass` with a concise evidence reference.
+An unproven blocking repair fails under the same ID;
 an unproven advisory repair stays advisory under that ID with its fixed claim
 unverified. Call it `residual` only when current evidence confirms the nonblocker
 remains. Escalate only when current evidence makes it outcome-blocking. A
@@ -82,20 +82,21 @@ commands, package surfaces, and remaining gaps are consistent with completion.
 The final assignment is the feature's one review, not a second review layered
 on top.
 
-Start every ordinary finding summary with
-`finding <feature-id>.R<assignment-createdRevision>-<NN> — …`; for example,
-`finding frontend-integrity.R12-01 — …`. Reuse a prior ID for recurrence and
-use the current assignment revision plus local sequence for a new issue, so
-dropped history after a qualifying pass cannot cause reuse. Preserve
-source-provided IDs in summary or evidence. Use `severity: "blocking"` only
-for a concrete issue that invalidates the approved outcome; otherwise use
-`advisory`. Only a blocking issue whose repair requires material work outside
-the approved plan uses the exception grammar
-`[scope-blocker] finding <feature-id>.R<assignment-createdRevision>-<NN> — …`;
-identify the boundary in
-`evidence`. The marker is forbidden on advisory findings and is the only
-bracketed routing marker. Missing outcome evidence is an ordinary, precise
-blocking finding, not a `[scope-blocker]`.
+Set `findingId` to the matching id from the projected `priorFindings` when this
+is the same issue, and omit it for a new issue so the runtime numbers it. A
+failed result that drops a live prior id is rejected. Preserve source-provided
+IDs in summary or evidence.
+
+Report every problem you find. Severity is a routing decision the runtime acts
+on, not a filter on what to mention: `blocking` when the issue invalidates the
+approved outcome, `advisory` otherwise. When you are unsure, report it as
+`advisory` rather than omitting it.
+
+Set `scopeBlocker: true` on a blocking finding whose repair requires material
+work outside the approved plan, and identify the boundary in `evidence`. The
+runtime routes any scope blocker straight to the user instead of retrying, so
+missing outcome evidence is an ordinary blocking finding rather than a scope
+blocker. The field is valid only on a blocking finding.
 
 Every blocker must map to an approved requirement, changed behavior, or exact
 missing evidence. Keep its summary precise. In `evidence`, cite a changed
@@ -115,14 +116,11 @@ and exactly one assignment result:
 Keep the summary bounded. For an ordinary review, list as proven `verified` or
 `incomplete` only plan/source IDs mapped to the active feature or explicitly
 supplied in its feature packet; for a final review, list every approved
-requirement/feature ID. For every still-live supplied prior-finding ID, preserve
-its ID, report current severity and any change from the supplied severity, and
-state confirmed `recurring`, confirmed `residual` only for a nonblocker, or that
-its fixed claim is unverified. Only a passing result may state proven `fixed`. A
-failed result carries every prior ID forward; for a proven repair use
-`repair proven; terminal fixed pending pass` plus a concise evidence reference. Copy no
-evidence prose; recurring blockers remain findings. Only IDs fixed by a passing
-review leave the live carry-forward set.
+requirement/feature ID. For every projected prior finding, report current
+severity and any change from it, and state confirmed `recurring`, confirmed
+`residual` only for a nonblocker, or that its fixed claim is unverified. Only a
+passing result may state proven `fixed`. Copy no evidence prose; recurring
+blockers remain findings.
 
 ```json
 {
@@ -141,7 +139,8 @@ review leave the live carry-forward set.
 }
 ```
 
-Each finding contains `severity`, `summary`, and optional `evidence`. Use
+Each finding contains `severity`, `summary`, optional `evidence`, optional
+`scopeBlocker`, and optional `findingId`. Use
 `verdict: "failed"` whenever any blocking finding remains. Do not return or
 invent run ids, source hashes, validation records, timestamps, review modes, or
 attempt fields. Never ask the manager to copy or submit your verdict.

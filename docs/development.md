@@ -115,9 +115,9 @@ is available, run one packed-plugin canary that records sanitized evidence of:
   revision advance does not;
 - compaction retaining the manager kernel and reserved Flow roles;
 - one automatic fresh retry only at `failedReviewCount === 1` without a
-  `[scope-blocker]`, with every higher count awaiting user direction;
-- one reviewed retry preserving stable finding IDs, refreshed baseline facts,
-  prior dispositions, and its applicable transition matrix; and
+  `scopeBlocker` finding, with every higher count awaiting user direction;
+- one reviewed retry preserving prior `findingId` values, refreshed baseline
+  facts, prior dispositions, and its applicable transition matrix; and
 - confirmed completed closure with the final conversational disposition map
   reconstructed from the existing concise `workflowData.delivery`.
 

@@ -106,6 +106,8 @@ export class AutoDriveCoordinator {
 	#lease: Lease | null = null;
 	#timing: Timing | null = null;
 	readonly #options: AutoDriveOptions;
+	/** Whether this host has ever reported assistant message parentage. */
+	#hostParentage = false;
 	constructor(options: AutoDriveOptions) {
 		this.#options = options;
 	}
@@ -133,7 +135,17 @@ export class AutoDriveCoordinator {
 		if (warning) this.#warn(warning);
 	}
 	#rejectOrigin(lease: Lease, kind: "compaction" | "mutation"): void {
-		this.#stop(lease, `Flow: ${kind} origin was unavailable.`);
+		// Continuation is anchored to the assistant message that owns the lease, so
+		// a host that never reports message parentage can never satisfy this check.
+		// That is a capability limit rather than a stale or foreign turn, and the
+		// two are indistinguishable from the rejection alone: naming it keeps
+		// `/flow-auto` stopping after every feature from reading as a Flow defect.
+		this.#stop(
+			lease,
+			this.#hostParentage
+				? `Flow: ${kind} origin was unavailable.`
+				: "Flow: this host reports no assistant message parentage, so /flow-auto cannot continue automatically. Drive each feature with /flow-run.",
+		);
 	}
 	#waitAt(lease: Lease, revision: number): void {
 		const current = lease.checkpoint;
@@ -250,6 +262,10 @@ export class AutoDriveCoordinator {
 		return `${context}\n\n${FLOW_MANAGER_KERNEL}`;
 	}
 	observeHostMessage(host: string, message: HostMessage): void {
+		// Recorded before the lease guard: parentage is a property of the host, not
+		// of the session that happens to hold the lease.
+		if (message.role === "assistant" && message.parentID !== undefined)
+			this.#hostParentage = true;
 		const lease = this.#lease;
 		if (lease?.hostSessionId !== host) return;
 		if (message.role === "assistant" && message.parentID !== undefined) {

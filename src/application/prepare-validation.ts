@@ -2,10 +2,12 @@ import { MAX_VALIDATION_ID_LENGTH } from "../domain/limits.js";
 import type {
 	Session,
 	SourceDigest,
+	ValidationIneligibleReason,
 	ValidationObservation,
 	ValidationScope,
 } from "../domain/session.js";
 import { activeRun, recordValidation } from "../domain/transitions.js";
+import { LONGEST_VALIDATION_INELIGIBLE_REASON } from "../domain/validation.js";
 import type { SessionRepository } from "./ports/session-repository.js";
 import { SessionSchema, type ValidationStartRequest } from "./schema.js";
 
@@ -20,9 +22,15 @@ export type PreparedValidation = Readonly<{
 export type ObservedValidation = PreparedValidation &
 	Readonly<{
 		captureId: string;
-		exitCode: number;
+		/** `null` when the host exposed no structured exit code. */
+		exitCode: number | null;
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
+		/**
+		 * Set by the capture adapter when the host could not supply the evidence a
+		 * passing validation requires. Source drift is detected here and overrides it.
+		 */
+		ineligibleReason?: ValidationIneligibleReason | undefined;
 	}>;
 
 function maximumSerializedUnusedCaptureId(session: Session): string {
@@ -48,14 +56,17 @@ function maximumSerializedUnusedCaptureId(session: Session): string {
 function maximumSerializedObservation(
 	session: Session,
 	prepared: PreparedValidation,
-): ObservedValidation & Readonly<{ ineligibleReason: "source-drift" }> {
+): ObservedValidation &
+	Readonly<{ ineligibleReason: ValidationIneligibleReason }> {
 	return {
 		...prepared,
 		captureId: maximumSerializedUnusedCaptureId(session),
+		// The widest exit code and the longest reason, so this probe stays an upper
+		// bound on the serialized size of any observation that could be recorded.
 		exitCode: Number.MIN_SAFE_INTEGER,
 		outputDigest: prepared.sourceDigest,
 		outputComplete: false,
-		ineligibleReason: "source-drift",
+		ineligibleReason: LONGEST_VALIDATION_INELIGIBLE_REASON,
 	};
 }
 

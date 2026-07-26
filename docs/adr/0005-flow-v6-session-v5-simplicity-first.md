@@ -50,8 +50,8 @@ approved plan-only request reports immutable state and stops. Prospectively, new
 review admission requires a byte-identical current-source pass newer than the
 latest relevant failed or source-drifted observation, while accepted same-schema
 Session v5 reviews remain grandfathered and close adds no retroactive veto. Only
-the first in-scope failed review receives an automatic fresh full retry;
-`[scope-blocker]` and a second failure checkpoint for user direction. A feature
+the first in-scope failed review receives an automatic fresh full retry; a
+`scopeBlocker` finding and a second failure checkpoint for user direction. A feature
 whose latest relevant reviewed outcome remains failed is not selected
 implicitly. From blocked status, reset may atomically start one explicitly
 chosen retry or untouched dependency-independent feature through optional

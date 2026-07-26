@@ -6,6 +6,88 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [6.9.0] - 2026-07-26
+
+Rules the prompts used to restate are now enforced by the runtime, and Flow no
+longer assumes an OpenCode-shaped host:
+
+- Review findings carry two typed fields instead of prose conventions. An
+  optional `scopeBlocker` boolean surfaces as `blockedFeature.scopeBlocker` and
+  is accounted for by `nextAction`, so a scope blocker checkpoints for user
+  direction at the first failed review rather than depending on the manager
+  noticing a `[scope-blocker]` marker; the marker is gone everywhere. A
+  `findingId` is set to a prior id for a recurrence and omitted for a new issue,
+  which the runtime numbers as `<feature-id>.R<revision>-<NN>` and supplies back
+  as `priorFindings` with `nextFindingIdPrefix`. A failed result that drops a
+  live prior id is rejected instead of silently losing that history.
+- The reviewer is asked to report every problem it finds and to use severity
+  purely for routing, replacing guidance that reserved `blocking` for issues
+  invalidating the outcome. Published guidance for current models indicates that
+  conservative review instructions suppress findings.
+- The delivery projection carries a runtime-rendered `report`, so every surface
+  relays one formatted handoff verbatim instead of restating the same field list
+  four times.
+- Validation on a host that reports no structured Bash exit code, or no
+  output-truncation flag, records a durable observation marked
+  `exit-code-unavailable` or `output-completeness-unknown` rather than failing the
+  capture. Such an observation never satisfies a gate, so the limitation is
+  visible instead of blocking. Worker-wave dispatch no longer instructs a single
+  assistant tool-use turn; a host that runs tasks serially is expected and
+  reported as serial.
+- A tool call rejected by the runtime guard returns the same
+  `workflowData.failure.recovery` envelope every other Flow failure uses, which is
+  what the prompts already told the model to read. `flow_guidance` answers in
+  markdown, so its rejection is markdown rather than a JSON blob.
+- `/flow-auto` on a host that reports no assistant message parentage now says so.
+  Continuation anchors on the assistant message owning the lease, so such a host
+  can never continue and correctly stops after each feature; previously that was
+  indistinguishable from a Flow defect. The warning now names the host limitation
+  and points at `/flow-run`.
+
+Prompt text is now measured rather than argued about. Total shipped prompt bytes
+drop from 42,466 to 38,495 and cross-surface near-duplicate rule statements from
+18 pairs to 12, with every removed instruction either replaced by an enforced
+guard or a runtime-rendered value, or verified against the model. `flow-run`, the
+dominant surface, loses 2,422 bytes: the elaborate revision-token protocol
+collapses to the one rule that routes (`passed: false` never arms review), the
+manager no longer reconstructs which prior findings are still live or tracks
+their disposition in prose now that the runtime supplies `priorFindings` with
+each finding's current severity and wording, and the prose describing internals
+Flow already enforces — the strict review-start schema, the derived review kind,
+the auto-continuation gate, and several statements that Flow persists no ledger —
+is gone. Absolute-rule markers in `flow-run` fall from 62 to 51, which both
+vendors' guidance treats as a compliance gain rather than a loss. `tests/prompt-quality.test.ts` and
+`tests/documentation-contract.test.ts` no longer pin ordered prose phrases; they
+assert structure, source-derived inventories, and budgets that ratchet down, so
+tightening prompts is cheap and growth is what fails. Model behaviour is measured
+by the new opt-in `evals/` harness, which drives the real slash commands against
+a real model in a throwaway OpenCode host and asserts durable session state.
+
+The harness arrived part-way through this release, so the cuts are not all
+evidenced equally. The last one — the manager-side prior-finding reconstruction,
+replaced by runtime `priorFindings` — was validated directly: `happy-path`,
+`plan-only-stops` and `goal-change-refused` each passed three of three attempts
+at the reduced footprint. Earlier cuts predate the harness and rest on the guards
+and rendered values that replaced them, checked against a repeat-3 baseline
+recorded once the harness existed. A fourth scenario, `failing-gate-blocks`,
+passes at roughly even odds; it was measured to be equally unreliable at 6.8.0,
+so it is reported but carries no signal about these prompts either way. Its cause
+is a pre-existing gap rather than a prompt defect: `exitCode` and `scope` on a
+validation observation are supplied by the model and never executed by Flow, so a
+model that misreports a red gate as green is accepted by every predicate. Treat a
+passing gate as a claim the model made, not one Flow verified.
+
+The Session v5 schema adds two optional finding fields and widens `exitCode` to
+allow `null`. Earlier v6 builds read the added fields as absent, but reject a
+document containing a `null` exit code, so finish or close active work before
+downgrading.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@6.9.0 --global --force
+```
+
 ## [6.8.0] - 2026-07-24
 
 Checkpoint-safe continuation and leaner review convergence:

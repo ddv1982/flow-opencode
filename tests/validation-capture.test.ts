@@ -36,6 +36,9 @@ function persistedObservation(
 		outputDigest: input.outputDigest,
 		outputComplete: input.outputComplete,
 		recordedRevision,
+		...(input.ineligibleReason
+			? { ineligibleReason: input.ineligibleReason }
+			: {}),
 	};
 }
 
@@ -218,34 +221,68 @@ describe("OpenCode validation capture", () => {
 		expect(coordinator.pendingCount()).toBe(0);
 	});
 
-	test("requires a structured Bash exit code", async () => {
-		let persisted = false;
-		const coordinator = new ValidationCaptureCoordinator({
-			randomId: () => "capture-no-exit",
-			persistObservation: (_workspace, input) => {
-				persisted = true;
-				return Promise.resolve(persistedObservation(input));
+	test("records an ineligible observation when the host reports no exit code or no completeness", async () => {
+		// Flow must stay usable on a host that reports either fact differently.
+		// Throwing here would lose the observation entirely; recording it ineligible
+		// keeps the evidence durable and can never satisfy a gate.
+		const cases = [
+			{
+				name: "no exit code",
+				metadata: { truncated: false },
+				exitCode: null,
+				outputComplete: true,
+				ineligibleReason: "exit-code-unavailable",
 			},
-		});
-		coordinator.arm("opencode-session-1", "/workspace", prepared);
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
-			{ args: { command: prepared.command } },
-		);
+			{
+				name: "no completeness flag",
+				metadata: { exit: 0 },
+				exitCode: 0,
+				outputComplete: false,
+				ineligibleReason: "output-completeness-unknown",
+			},
+		] as const;
 
-		await expect(
-			coordinator.observeToolAfter(
+		for (const item of cases) {
+			const observations: ObservedValidation[] = [];
+			const coordinator = new ValidationCaptureCoordinator({
+				randomId: () => `capture-${item.ineligibleReason}`,
+				persistObservation: (_workspace, input) => {
+					observations.push(input);
+					return Promise.resolve(persistedObservation(input));
+				},
+			});
+			coordinator.arm("opencode-session-1", "/workspace", prepared);
+			coordinator.observeToolBefore(
+				{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
+				{ args: { command: prepared.command } },
+			);
+			const output = {
+				title: "Unknown",
+				output: "ok",
+				metadata: item.metadata,
+			};
+			const recorded = await coordinator.observeToolAfter(
 				{
 					tool: "bash",
 					sessionID: "opencode-session-1",
 					callID: "bash-1",
 					args: { command: prepared.command },
 				},
-				{ title: "Unknown", output: "ok", metadata: {} },
-			),
-		).rejects.toThrow("structured Bash exit code");
-		expect(persisted).toBe(false);
-		expect(coordinator.pendingCount()).toBe(0);
+				output,
+			);
+
+			expect(observations, item.name).toEqual([
+				expect.objectContaining({
+					exitCode: item.exitCode,
+					outputComplete: item.outputComplete,
+					ineligibleReason: item.ineligibleReason,
+				}),
+			]);
+			expect(recorded?.ineligibleReason, item.name).toBe(item.ineligibleReason);
+			expect(output.output, item.name).toContain('"passed":false');
+			expect(output.output, item.name).toContain(item.ineligibleReason);
+			expect(coordinator.pendingCount()).toBe(0);
+		}
 	});
 
 	test("persists failed and incomplete observations without presenting either as passed", async () => {

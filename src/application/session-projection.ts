@@ -2,6 +2,11 @@ import {
 	type ClosureRetryRequest,
 	closureRetryRequest,
 } from "../domain/operation.js";
+import {
+	findingIdPrefix,
+	type LivePriorFinding,
+	livePriorFindings,
+} from "../domain/review-findings.js";
 import type {
 	FeatureRun,
 	OperationRecord,
@@ -48,6 +53,11 @@ export type BlockedFeatureProjection = Readonly<{
 	featureId: string;
 	attempt: number;
 	failedReviewCount: number;
+	/**
+	 * True when any failed review of this feature raised a scope blocker, which
+	 * makes the feature ineligible for automatic retry regardless of the count.
+	 */
+	scopeBlocker: boolean;
 }>;
 
 export type ArchiveRetryProjection = Readonly<{
@@ -106,6 +116,14 @@ export type ReviewerProjection = Readonly<{
 	artifactsChanged: FeatureRun["artifactsChanged"];
 	validations: ValidationObservation[];
 	completedFeatureIds: string[];
+	/**
+	 * Prior findings this review must still account for, carrying the text the
+	 * reviewer has to re-check, computed from durable state rather than recovered
+	 * from the manager's packet prose.
+	 */
+	priorFindings: ReadonlyArray<LivePriorFinding>;
+	/** Prefix the runtime uses when it numbers a new finding of this assignment. */
+	nextFindingIdPrefix: string;
 }>;
 
 export type IdleProjection = Readonly<{
@@ -145,14 +163,22 @@ function blockedFeatureProjection(
 		.reverse()
 		.find((run) => run.state === "blocked");
 	if (!blockedRun) return null;
+	const featureRuns = session.runs.filter(
+		(run) => run.featureId === blockedRun.featureId,
+	);
 	return {
 		featureId: blockedRun.featureId,
 		attempt: blockedRun.attempt,
-		failedReviewCount: session.runs.filter(
-			(run) =>
-				run.featureId === blockedRun.featureId &&
-				run.reviews.some((review) => review.result?.verdict === "failed"),
+		failedReviewCount: featureRuns.filter((run) =>
+			run.reviews.some((review) => review.result?.verdict === "failed"),
 		).length,
+		scopeBlocker: featureRuns.some((run) =>
+			run.reviews.some(
+				(review) =>
+					review.result?.verdict === "failed" &&
+					review.result.findings.some((finding) => finding.scopeBlocker),
+			),
+		),
 	};
 }
 
@@ -169,7 +195,11 @@ function nextAction(
 		return "await-user-direction";
 	if (status === "ready") return "flow_run_start";
 	if (status === "blocked") {
-		return (blockedFeature?.failedReviewCount ?? 0) >= 2
+		// A scope blocker or a second failure means the user decides, not the loop.
+		// Both halves of this rule are now enforced here; the scope-blocker half
+		// used to rely on the manager noticing a marker in free-text prose.
+		return (blockedFeature?.failedReviewCount ?? 0) >= 2 ||
+			blockedFeature?.scopeBlocker === true
 			? "await-user-direction"
 			: "flow_feature_reset";
 	}
@@ -309,6 +339,11 @@ export function reviewerProjection(
 			plan?.features
 				.filter((candidate) => isFeatureComplete(session, candidate.id))
 				.map((candidate) => candidate.id) ?? [],
+		priorFindings: livePriorFindings(session, assignment.featureId),
+		nextFindingIdPrefix: findingIdPrefix(
+			assignment.featureId,
+			assignment.createdRevision,
+		),
 	};
 }
 

@@ -327,6 +327,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				latestAttempts: ["source.ts"],
 				supersededAttemptsOnly: [],
 			},
+			report: expect.any(Array),
 		});
 		expect(await loadSession(workspace)).toBeNull();
 		const archived = await loadArchivedSession(

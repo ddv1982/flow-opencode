@@ -6,6 +6,11 @@ import {
 } from "./limits.js";
 import { closureOperationIssue, operationInputDigest } from "./operation.js";
 import { planIssue } from "./plan.js";
+import {
+	assignFindingIds,
+	droppedFindingIds,
+	findingIdPrefix,
+} from "./review-findings.js";
 import type {
 	Artifact,
 	FeatureId,
@@ -14,7 +19,6 @@ import type {
 	OperationRecord,
 	Plan,
 	ReviewAssignment,
-	ReviewFinding,
 	ReviewResult,
 	Session,
 	SessionClosure,
@@ -549,6 +553,24 @@ export function completeFeature(
 	if (!assignment || assignment.result) {
 		fail("Completion requires the active pending review assignment.");
 	}
+	// A failed verdict must carry every still-live prior id, so recurrence history
+	// survives a retry without the manager restating it in packet prose.
+	if (input.result.verdict === "failed") {
+		const dropped = droppedFindingIds(
+			session,
+			run.featureId,
+			input.result.findings,
+		);
+		if (dropped.length > 0) {
+			fail(
+				`A failed result must carry every live prior finding id forward; missing ${dropped.join(", ")}.`,
+			);
+		}
+	}
+	const findings = assignFindingIds(
+		input.result.findings,
+		findingIdPrefix(run.featureId, assignment.createdRevision),
+	);
 	const next = commit(
 		session,
 		"feature-complete",
@@ -568,9 +590,7 @@ export function completeFeature(
 									...review,
 									result: {
 										...input.result,
-										findings: input.result.findings.map(
-											(finding: ReviewFinding) => ({ ...finding }),
-										),
+										findings,
 										recordedRevision: revision,
 									},
 								}

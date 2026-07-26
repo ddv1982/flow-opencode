@@ -1386,10 +1386,11 @@ describe("duplicate runtime guard", () => {
 		const context = toolContext(workspace);
 
 		for (const hooks of [first, second]) {
-			const guidance = hooks.tool?.flow_guidance;
-			if (!guidance) throw new Error("Missing guarded guidance tool.");
-			const output = await guidance.execute({ id: "flow" }, context);
-			const parsed = JSON.parse(String(output));
+			const status = hooks.tool?.flow_status;
+			if (!status) throw new Error("Missing guarded status tool.");
+			const parsed = JSON.parse(
+				String(await status.execute({ request: { view: "compact" } }, context)),
+			);
 			expect(parsed).toMatchObject({
 				status: "error",
 				summary: expect.stringContaining("duplicate-instances"),
@@ -1405,6 +1406,24 @@ describe("duplicate runtime guard", () => {
 				reason: "duplicate-instances",
 				message: "Flow is not operational (duplicate-instances).",
 			});
+			// A guard rejection carries the same `failure` envelope every other Flow
+			// error uses, because the prompts tell the model to read exactly that.
+			expect(parsed.workflowData.dataNote).toEqual(expect.any(String));
+			expect(parsed.workflowData.failure).toEqual({
+				summary: "Flow is not operational (duplicate-instances).",
+				recovery: expect.stringContaining("Remove the duplicate installation"),
+			});
+
+			// `flow_guidance` answers in markdown, so its rejection must be markdown
+			// too rather than a JSON blob the caller is not parsing.
+			const guidance = hooks.tool?.flow_guidance;
+			if (!guidance) throw new Error("Missing guarded guidance tool.");
+			const rejected = String(await guidance.execute({ id: "flow" }, context));
+			expect(rejected).not.toContain("{");
+			expect(rejected).toContain(
+				"Flow is not operational (duplicate-instances).",
+			);
+			expect(rejected).toContain("Recovery: ");
 		}
 
 		await second.dispose?.();

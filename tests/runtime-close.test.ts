@@ -428,6 +428,26 @@ describe("Flow close recovery and delivery", () => {
 				latestAttempts: ["latest-a.ts", "latest-b.ts", "shared.ts"],
 				supersededAttemptsOnly: ["superseded-only.ts", "zeta.ts"],
 			},
+			// The runtime renders the handoff so its shape, ordering, and the artifact
+			// qualifier are guarantees rather than instructions restated per surface.
+			report: [
+				"Goal: Ship deterministic delivery",
+				"Closure: completed — Deterministic delivery shipped.",
+				"Progress: 2 of 2 features complete",
+				"Features:",
+				`- ${foundation} — Delivery foundation`,
+				"  attempts: 2; latest state: completed",
+				"  outcome: Foundation completed.",
+				"  terminal findings:",
+				"  - advisory: Keep delivery evidence concise.",
+				`- ${FEATURE} — Runtime kernel`,
+				"  attempts: 1; latest state: completed",
+				"  outcome: Runtime completed.",
+				"  terminal findings: none",
+				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+				"- latest attempts: latest-a.ts, latest-b.ts, shared.ts",
+				"- superseded attempts only: superseded-only.ts, zeta.ts",
+			],
 		};
 
 		repository.archiveFailure = new Error("injected delivery archive failure");
@@ -513,6 +533,15 @@ describe("Flow close recovery and delivery", () => {
 			},
 			progress: { completed: 0, total: 0 },
 			features: [],
+			report: [
+				"Goal: Retire an unplanned experiment",
+				"Closure: abandoned — No plan was approved or executed.",
+				"Progress: 0 of 0 features complete",
+				"Features:",
+				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+				"- latest attempts: none reported",
+				"- superseded attempts only: none reported",
+			],
 			reportedArtifacts: {
 				latestAttempts: [],
 				supersededAttemptsOnly: [],
@@ -621,7 +650,19 @@ describe("Flow close recovery and delivery", () => {
 					latestAttempts: ["src/runtime.ts"],
 					supersededAttemptsOnly: [],
 				},
+				// Rendering is asserted line-by-line in the delivery and planless cases;
+				// here the interesting part is the never-started feature.
+				report: expect.any(Array),
 			});
+			if (!("delivery" in deferred.workflowData)) {
+				throw new Error("Expected deferred close delivery data.");
+			}
+			expect(deferred.workflowData.delivery.report).toContain(
+				`- ${followup} — Runtime follow-up`,
+			);
+			expect(deferred.workflowData.delivery.report).toContain(
+				"  outcome: none recorded",
+			);
 		}
 	});
 });

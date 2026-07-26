@@ -4,10 +4,26 @@ import type {
 	FeatureRun,
 	Session,
 	SourceDigest,
+	ValidationIneligibleReason,
 	ValidationObservation,
 	ValidationScope,
 } from "./session.js";
 import { FlowTransitionError } from "./transition-error.js";
+
+export const VALIDATION_INELIGIBLE_REASONS = [
+	"source-drift",
+	"exit-code-unavailable",
+	"output-completeness-unknown",
+] as const satisfies readonly ValidationIneligibleReason[];
+
+/**
+ * The longest reason, so a capacity probe built from it stays an upper bound on
+ * the serialized size of any real observation.
+ */
+export const LONGEST_VALIDATION_INELIGIBLE_REASON =
+	VALIDATION_INELIGIBLE_REASONS.reduce((longest, reason) =>
+		reason.length > longest.length ? reason : longest,
+	);
 
 export function isValidationEligible(
 	observation: ValidationObservation,
@@ -30,7 +46,7 @@ export function recordValidation(
 		scope: ValidationScope;
 		command: string;
 		sourceDigest: SourceDigest;
-		exitCode: number;
+		exitCode: number | null;
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
 		ineligibleReason?: ValidationObservation["ineligibleReason"];
@@ -46,6 +62,11 @@ export function recordValidation(
 	) {
 		throw new FlowTransitionError(
 			`Validation capture id must contain 1-${MAX_VALIDATION_ID_LENGTH} characters.`,
+		);
+	}
+	if (input.exitCode === null && input.ineligibleReason === undefined) {
+		throw new FlowTransitionError(
+			"An observation without an exit code must record an ineligible reason.",
 		);
 	}
 	const prior = session.runs
@@ -141,6 +162,14 @@ export function isValidationFresh(
 		);
 }
 
+/**
+ * Matches `observation.command` against `feature.validation` by exact string.
+ * That field is free-form text and models write prose in it, matching no command,
+ * so this guard often does not engage although its tests, which pass bare
+ * commands, do. The exemption is deliberate (`PROSE_VALIDATION` in
+ * `tests/domain-transitions.test.ts`); typing the field as commands is the real
+ * fix and is a schema change not made here.
+ */
 export function unresolvedKnownFailedPlanCommands(
 	session: Session,
 	run: FeatureRun,

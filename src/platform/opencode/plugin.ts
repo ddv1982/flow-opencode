@@ -1,3 +1,4 @@
+import { dataNote } from "../../application/flow-response.js";
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
 import { flowStatus } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
@@ -11,6 +12,8 @@ import {
 	createFlowPluginInstanceId,
 	FLOW_LEADERSHIP_PROTOCOL_VERSION,
 	type FlowLeadershipHandle,
+	type FlowLeadershipReason,
+	type FlowLeadershipStatus,
 	registerFlowPluginInstance,
 } from "./leadership.js";
 import { createFlowLog } from "./logging.js";
@@ -137,6 +140,44 @@ function createCommandHook(
 	};
 }
 type FlowTools = NonNullable<Hooks["tool"]>;
+
+/**
+ * Tools whose successful output is markdown prose rather than a Flow response
+ * envelope. A guard rejection must stay in the same shape the caller is reading,
+ * so these get a markdown failure instead of a JSON blob.
+ */
+const MARKDOWN_TOOLS = new Set(["flow_guidance"]);
+
+/** Actionable recovery for each non-operational leadership reason. */
+function guardRecovery(reason: FlowLeadershipReason): string {
+	switch (reason) {
+		case "duplicate-instances":
+			return "Two Flow plugin instances are registered for this project. Remove the duplicate installation so exactly one remains, then restart OpenCode.";
+		case "incompatible-registry":
+			return "Another Flow build owns an incompatible runtime registry. Align the installed Flow versions, then restart OpenCode.";
+		default:
+			return "Flow is not registered for this project. Restart OpenCode to re-register, then retry.";
+	}
+}
+
+function guardRejection(name: string, status: FlowLeadershipStatus): string {
+	const recovery = guardRecovery(status.reason);
+	if (MARKDOWN_TOOLS.has(name)) {
+		return `${status.message}\n\nRecovery: ${recovery}`;
+	}
+	// The same envelope every other Flow failure uses, so a caller told to read
+	// `workflowData.failure.recovery` finds it here too.
+	return JSON.stringify({
+		status: "error",
+		summary: status.message,
+		workflowData: {
+			dataNote: dataNote(),
+			failure: { summary: status.message, recovery },
+			runtimeGuard: status,
+		},
+	});
+}
+
 function guardTools(
 	tools: FlowTools,
 	runtimeGuard: FlowLeadershipHandle,
@@ -149,12 +190,7 @@ function guardTools(
 				...definition,
 				execute: async (...args: Parameters<typeof definition.execute>) => {
 					const status = runtimeGuard.query();
-					if (!status.operational)
-						return JSON.stringify({
-							status: "error",
-							summary: status.message,
-							workflowData: { runtimeGuard: status },
-						});
+					if (!status.operational) return guardRejection(name, status);
 					const output = await definition.execute(...args);
 					const mutation = acceptedMutation(name, String(output));
 					const context = args[1];

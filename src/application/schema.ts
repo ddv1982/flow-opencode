@@ -16,9 +16,14 @@ import {
 	MAX_VALIDATION_ID_LENGTH,
 	MAX_VALIDATIONS_PER_RUN,
 } from "../domain/limits.js";
+import {
+	FINDING_ID_MESSAGE,
+	FINDING_ID_PATTERN,
+} from "../domain/review-findings.js";
 import type { Session, SourceDigest } from "../domain/session.js";
 import { reviewResultSemanticIssues } from "../domain/session.js";
 import { sessionInvariantIssues } from "../domain/transitions.js";
+import { VALIDATION_INELIGIBLE_REASONS } from "../domain/validation.js";
 
 const encoder = new TextEncoder();
 
@@ -102,6 +107,14 @@ export const ReviewFindingSchema = z
 		severity: z.enum(["blocking", "advisory"]),
 		summary: boundedText("Review finding summary"),
 		evidence: boundedText("Review finding evidence").optional(),
+		/** True when the repair needs work outside the approved plan. */
+		scopeBlocker: z.boolean().optional(),
+		/** Prior id for a recurrence; omitted for a new issue the runtime numbers. */
+		findingId: z
+			.string()
+			.max(MAX_SESSION_ID_LENGTH)
+			.regex(FINDING_ID_PATTERN, FINDING_ID_MESSAGE)
+			.optional(),
 	})
 	.strict();
 
@@ -126,13 +139,23 @@ const ValidationObservationSchema = z
 		scope: z.enum(["focused", "broad"]),
 		command: boundedText("Validation command"),
 		sourceDigest: SourceDigestSchema,
-		exitCode: z.number().int().safe(),
+		exitCode: z.number().int().safe().nullable(),
 		outputDigest: SourceDigestSchema,
 		outputComplete: z.boolean(),
 		recordedRevision: RevisionSchema,
-		ineligibleReason: z.literal("source-drift").optional(),
+		ineligibleReason: z.enum(VALIDATION_INELIGIBLE_REASONS).optional(),
 	})
-	.strict();
+	.strict()
+	.refine(
+		(observation) =>
+			observation.exitCode !== null ||
+			observation.ineligibleReason !== undefined,
+		{
+			error:
+				"An observation without an exit code must record an ineligible reason.",
+			path: ["ineligibleReason"],
+		},
+	);
 
 const PersistedReviewResultSchema = PublicReviewResultSchema.and(
 	z.object({ recordedRevision: RevisionSchema }).strict(),

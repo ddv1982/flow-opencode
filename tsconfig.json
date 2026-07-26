@@ -22,5 +22,5 @@
 		"skipLibCheck": true,
 		"types": ["bun"]
 	},
-	"include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
+	"include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "evals/**/*.ts"]
 }

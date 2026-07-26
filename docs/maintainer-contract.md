@@ -74,13 +74,12 @@ A feature whose latest relevant reviewed outcome remains failed is never
 selected implicitly. `/flow-auto` may continue an untouched,
 dependency-independent feature; when only retry-required candidates remain,
 compact status is `ready` with `await-user-direction`. An automatic fresh full
-retry is allowed only when `failedReviewCount === 1` and no `[scope-blocker]` is
-present. Any scope blocker or count of two or greater checkpoints. At a blocked
-checkpoint, optional `nextFeatureId` on `flow_feature_reset` names the exact
-authorized retry or independent feature, and reset plus run start occur in one
-transaction. If that reset selects independent work, then all untouched work
-finishes, the failed run is already superseded; ready
-`await-user-direction` resumes an authorized retry through
+retry is allowed only as the Session v5 convergence bound below permits. At a
+blocked checkpoint, optional `nextFeatureId` on `flow_feature_reset` names the
+exact authorized retry or independent feature, and reset plus run start occur in
+one transaction. If that reset selects independent work, then all untouched work
+finishes, the failed run is already superseded; ready `await-user-direction`
+resumes an authorized retry through
 `flow_run_start(featureId)`, not another reset. The session remains authoritative
 while waiting. Flow otherwise pauses only for a material product or scope
 choice, missing authority for an external Git or release action, a hard
@@ -121,7 +120,7 @@ or delivery document.
   feature is excluded from implicit selection while its latest relevant reviewed
   outcome remains failed; untouched dependency-independent features remain
   eligible. Automatic convergence is bounded by recorded failed review results:
-  only `failedReviewCount === 1` without a `[scope-blocker]` may retry
+  only `failedReviewCount === 1` without a `scopeBlocker` finding may retry
   automatically; every scope blocker or count of two or greater projects
   `await-user-direction` before another user-authorized attempt. When all
   runnable candidates require an explicit retry, status is `ready` and also
@@ -250,28 +249,29 @@ cannot prove a material claim, the reviewer fails with a precise
 missing-evidence finding naming the manager-owned reproduction, environment,
 and expected observable result. It does not pass conditionally.
 
-New reviewer guidance uses only an optional `[scope-blocker]` summary marker
-when satisfying a blocking finding would require material work outside the
-approved plan. All other routing comes from the existing severity and recorded
-failure count. This remains a convention inside the finding shape, not a
-structured Session or audit schema.
+A finding carries an optional `scopeBlocker` boolean, valid only on a blocking
+finding, set when satisfying it would require material work outside the approved
+plan. The projection surfaces it as `blockedFeature.scopeBlocker` and `nextAction`
+accounts for it, so routing is enforced rather than inferred from prose.
 
-Every finding receives a stable feature-local identity in its existing summary:
-the feature ID, assignment-created revision, and local sequence prevent reuse
-after history is dropped following a qualifying pass. Only a scope blocker
-prefixes that identity with `[scope-blocker]`. A retry reuses the identity for
-the same issue and preserves every still-live prior ID and disposition in the
-next packet. The reviewer checks each claim against current source and evidence
-and completes the supplied risk checklist through its bounded matrix when
-applicable so independently detectable issues can arrive in one cohort. An
-ordinary-review summary preserves only plan/source IDs mapped to the active
-feature or explicitly supplied in its packet; a final-review summary preserves
-every approved requirement or feature ID. Both preserve each still-live
-prior-finding ID with its severity and disposition. Only a passing verdict with
-current evidence may state terminal `fixed`. A failed verdict carries every
-prior ID forward: if repair F1 is proven but blocker F2 fails the review, F1
-remains `repair proven; terminal fixed pending pass` with a concise evidence
-reference. An unproven fixed claim is marked unverified; `recurring` requires
+Every finding carries a stable identity in its own `findingId` field, as
+`<feature-id>.R<assignment-createdRevision>-<NN>`. The reviewer sets it to a
+prior ID for recurrence and omits it for a new issue, which the runtime numbers;
+that composition prevents reuse after a qualifying pass drops history. The
+reviewer projection supplies the still-live set as `priorFindings` with
+`nextFindingIdPrefix`, each carrying its latest severity, summary, and evidence,
+so carry-forward never depends on packet prose, and `flow_feature_complete`
+rejects a failed result that drops a live prior ID. A passing review clears every
+ID it does not repeat. The reviewer checks each claim
+against current source and evidence and completes the supplied risk checklist
+through its bounded matrix when applicable so independently detectable issues can
+arrive in one cohort. An ordinary-review summary preserves only plan/source IDs
+mapped to the active feature or explicitly supplied in its packet; a final-review
+summary preserves every approved requirement or feature ID. Both report each
+still-live prior finding's severity and disposition. Only a passing verdict with
+current evidence may state terminal `fixed`. On a failed verdict, if repair F1 is
+proven but blocker F2 fails the review, F1 remains `repair proven; terminal fixed
+pending pass` with a concise evidence reference. An unproven fixed claim is marked unverified; `recurring` requires
 current recurrence and `residual` a confirmed nonblocker. The summary becomes
 the latest `outcomeSummary`; terminal findings retain unresolved blockers. Only
 IDs fixed by a passing review leave the live carry-forward set.
@@ -290,15 +290,13 @@ status still permits the selected closure kind; it never closes a replacement.
 `fixed` requires later passing independent review and current-source evidence;
 `residual` means a confirmed nonblocking issue remains; `deferred` requires
 explicit user authority for non-completed closure; and `abandoned` remains the
-actual closure kind. This adds no finding field, historical-finding manifest, or
-second ledger.
+actual closure kind. This adds no historical-finding manifest or second ledger.
 
 `artifactsChanged` is a caller declaration associated with the review
 assignment. Flow validates bounded normalized workspace-relative paths, but it
 does not prove that each path exists or changed and does not infer an exhaustive
-Git delta. User-facing delivery therefore calls them Flow-reported artifacts and
-separates paths reported by latest attempts from paths reported only by
-superseded attempts.
+Git delta. The rendered delivery `report` therefore labels them Flow-reported and
+separates latest-attempt paths from superseded-only paths.
 
 Result submission is the reviewer's sole lifecycle mutation. `flow_status` may
 fail-closed quarantine unreadable active state; that is recovery maintenance,
@@ -320,9 +318,13 @@ after-hook. An accepted `[flow-validation]` marker returns `passed` and the
 observation's `recordedRevision`. That revision is only a concurrency token. A
 `passed: true` marker may supply it for `flow_review_start` only while all
 runtime review gates still hold; it may also arm another validation. Failed,
-incomplete, and source-drifted markers report `passed: false` and their revision
-may arm only fresh validation, never review. A source-drifted marker additionally
-exposes `ineligibleReason`. No compact refresh is needed solely to recover an
+incomplete, and ineligible markers report `passed: false` and their revision
+may arm only fresh validation, never review. An ineligible marker exposes
+`ineligibleReason`: `source-drift`, or `exit-code-unavailable` and
+`output-completeness-unknown` when the host reports no structured exit code or
+truncation flag. Those two record a durable never-passing observation rather than
+failing the capture, so Flow stays usable on any host; `exitCode` is `null` for
+the first. No compact refresh is needed solely to recover an
 eligible token; missing, malformed, or rejected capture and uncertain routing
 still require one. The revision used to arm the completed command is no longer
 current.
@@ -398,12 +400,8 @@ classification, feature hold, or retry budget is persisted. After the second
 failure, blocked status has `nextAction: await-user-direction`; the same action
 is projected with ready status when every runnable candidate requires an
 explicit retry. For either form the manager reads detail once and reports the
-retry-required feature or features. It checkpoints a `[scope-blocker]`
-immediately without persisting tag-specific state. At
-`failedReviewCount === 1`, compact `flow_feature_reset` is only the count-derived
-default; detail may refine that default to a checkpoint. While blocked, an
-authorized choice is passed as
-optional `nextFeatureId` so reset and exact run start are atomic. Once ready,
+retry-required feature or features. While blocked, an authorized choice is passed
+as optional `nextFeatureId` so reset and exact run start are atomic. Once ready,
 there is no blocked run to reset: explicit `flow_run_start(featureId)` starts
 the authorized retry. A reset-only compatibility request never makes the failed
 feature eligible for default selection.

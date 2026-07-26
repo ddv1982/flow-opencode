@@ -6,6 +6,8 @@ import {
 	persistObservedValidation,
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
+import type { ReviewerProjection } from "../src/application/session-projection.js";
+import { liveFindingIds } from "../src/domain/review-findings.js";
 import type { Plan, Session } from "../src/domain/session.js";
 import {
 	activeReview,
@@ -375,10 +377,36 @@ describe("Flow application runtime gates", () => {
 		});
 
 		await resetFeatureRun(flow, repository, FEATURE, "failed-review-2");
-		await startReviewedRun(flow, repository, {
+		const retryAssignment = await startReviewedRun(flow, repository, {
 			suffix: "failed-review-3",
 			artifacts: ["src/failed-review-3.ts"],
 		});
+		// The reviewer learns the live carry-forward set, with the text it has to
+		// re-check, from the runtime rather than from the manager restating history
+		// in the packet.
+		const reviewerView = await flow.status({
+			request: { view: "reviewer", assignmentId: retryAssignment.id },
+		});
+		expectOk(reviewerView);
+		const reviewerProjection = reviewerView.workflowData.projection;
+		if (!("priorFindings" in reviewerProjection)) {
+			throw new Error("Expected a reviewer projection.");
+		}
+		expect(reviewerProjection.priorFindings).toEqual([
+			{
+				findingId: `${FEATURE}.R7-01`,
+				severity: "blocking",
+				summary: "Shared contract is still incomplete.",
+				evidence: "src/failed-review-2.ts:1",
+			},
+			{
+				findingId: `${FEATURE}.R7-02`,
+				severity: "blocking",
+				summary: "Legacy branch still returns stale data.",
+				evidence: "src/failed-review-2.ts:2",
+			},
+		]);
+		expect(reviewerProjection.nextFindingIdPrefix).toBe(`${FEATURE}.R12`);
 		await submitReview(flow, repository, {
 			suffix: "failed-review-3",
 			summary: "Attempt 3 remains blocked.",
@@ -386,8 +414,15 @@ describe("Flow application runtime gates", () => {
 			findings: [
 				{
 					severity: "blocking",
+					findingId: `${FEATURE}.R7-01`,
 					summary: "Shared contract is still incomplete.",
 					evidence: "src/failed-review-3.ts:1",
+				},
+				{
+					severity: "blocking",
+					findingId: `${FEATURE}.R7-02`,
+					summary: "Legacy branch still returns stale data.",
+					evidence: "src/failed-review-3.ts:3",
 				},
 				{
 					severity: "blocking",
@@ -435,8 +470,14 @@ describe("Flow application runtime gates", () => {
 					{
 						result: {
 							findings: [
-								{ summary: "Shared contract is still incomplete." },
-								{ summary: "Legacy branch still returns stale data." },
+								{
+									findingId: `${FEATURE}.R7-01`,
+									summary: "Shared contract is still incomplete.",
+								},
+								{
+									findingId: `${FEATURE}.R7-02`,
+									summary: "Legacy branch still returns stale data.",
+								},
 							],
 						},
 					},
@@ -449,9 +490,21 @@ describe("Flow application runtime gates", () => {
 				reviews: [
 					{
 						result: {
+							// Both live prior ids are preserved and the new issue is numbered
+							// under this assignment's revision, all by the runtime.
 							findings: [
-								{ summary: "Shared contract is still incomplete." },
-								{ summary: "New edge case drops recovery evidence." },
+								{
+									findingId: `${FEATURE}.R7-01`,
+									summary: "Shared contract is still incomplete.",
+								},
+								{
+									findingId: `${FEATURE}.R7-02`,
+									summary: "Legacy branch still returns stale data.",
+								},
+								{
+									findingId: `${FEATURE}.R12-01`,
+									summary: "New edge case drops recovery evidence.",
+								},
 							],
 						},
 					},
@@ -460,6 +513,251 @@ describe("Flow application runtime gates", () => {
 		]);
 		expect(repository.session?.revision).toBe(revisionBeforeDetail);
 		expect(repository.saveCount).toBe(savesBeforeDetail);
+	});
+
+	test("rejects a failed result that drops a live prior finding id", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await resetFeatureRun(flow, repository, FEATURE, "before-carry-forward");
+		await startReviewedRun(flow, repository, {
+			suffix: "carry-forward-1",
+			artifacts: ["src/carry-forward.ts"],
+		});
+		await submitReview(flow, repository, {
+			suffix: "carry-forward-1",
+			summary: "First attempt is blocked.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary: "Recovery path is unproven.",
+					evidence: "src/carry-forward.ts:1",
+				},
+			],
+		});
+		await resetFeatureRun(flow, repository, FEATURE, "carry-forward-1");
+		await startReviewedRun(flow, repository, {
+			suffix: "carry-forward-2",
+			artifacts: ["src/carry-forward.ts"],
+		});
+
+		// Preserving history was previously prose the reviewer had to follow. A
+		// dropped id is now a rejected submission rather than silently lost history.
+		const dropped = await flow.featureComplete({
+			request: {
+				operationId: "complete-carry-forward-drop",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				assignmentId: activeReview(repository).id,
+				summary: "Second attempt is still blocked.",
+				result: {
+					verdict: "failed",
+					findings: [
+						{
+							severity: "blocking",
+							summary: "An unrelated new problem.",
+							evidence: "src/carry-forward.ts:9",
+						},
+					],
+					terminalDisposition: "submitted",
+				},
+			},
+		});
+		expectError(dropped);
+		expect(dropped.summary).toContain(`${FEATURE}.R7-01`);
+
+		// A passing review proves the repair of anything it does not repeat, so the
+		// carried id leaves the live set and a later failure need not restate it.
+		await submitReview(flow, repository, {
+			suffix: "carry-forward-2",
+			summary: "Second attempt passes.",
+			verdict: "passed",
+			findings: [],
+		});
+		const settled = repository.session;
+		if (!settled) throw new Error("Expected a durable session.");
+		expect(liveFindingIds(settled, FEATURE)).toEqual([]);
+	});
+
+	test("carries the latest wording of a restated prior finding to the next reviewer", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await resetFeatureRun(flow, repository, FEATURE, "before-restatement");
+		await startReviewedRun(flow, repository, {
+			suffix: "restated-1",
+			artifacts: ["src/restated.ts"],
+		});
+		await submitReview(flow, repository, {
+			suffix: "restated-1",
+			summary: "First attempt is blocked.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "advisory",
+					summary: "Recovery path is unproven.",
+					evidence: "src/restated.ts:1",
+				},
+				{
+					severity: "blocking",
+					summary: "Retry loop never terminates.",
+					evidence: "src/restated.ts:2",
+				},
+			],
+		});
+
+		const carried = await priorFindingsFor(flow, repository, "restated-2");
+		expect(carried).toEqual([
+			{
+				findingId: `${FEATURE}.R7-01`,
+				severity: "advisory",
+				summary: "Recovery path is unproven.",
+				evidence: "src/restated.ts:1",
+			},
+			{
+				findingId: `${FEATURE}.R7-02`,
+				severity: "blocking",
+				summary: "Retry loop never terminates.",
+				evidence: "src/restated.ts:2",
+			},
+		]);
+
+		// A later review escalates the same id and rewords it. The reviewer after it
+		// must see that disposition, not the one first recorded, because a stale
+		// severity would let a blocker be re-checked as an advisory.
+		await submitReview(flow, repository, {
+			suffix: "restated-2",
+			summary: "Second attempt is blocked.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					findingId: `${FEATURE}.R7-01`,
+					summary: "Recovery path regresses under concurrent retries.",
+					evidence: "src/restated.ts:14",
+				},
+				{
+					severity: "blocking",
+					findingId: `${FEATURE}.R7-02`,
+					summary: "Retry loop never terminates.",
+					evidence: "src/restated.ts:2",
+				},
+			],
+		});
+		expect(await priorFindingsFor(flow, repository, "restated-3")).toEqual([
+			{
+				findingId: `${FEATURE}.R7-01`,
+				severity: "blocking",
+				summary: "Recovery path regresses under concurrent retries.",
+				evidence: "src/restated.ts:14",
+			},
+			{
+				findingId: `${FEATURE}.R7-02`,
+				severity: "blocking",
+				summary: "Retry loop never terminates.",
+				evidence: "src/restated.ts:2",
+			},
+		]);
+	});
+
+	test("checkpoints on a scope blocker at the first failure instead of retrying", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await resetFeatureRun(flow, repository, FEATURE, "before-scope-blocker");
+		await startReviewedRun(flow, repository, {
+			suffix: "scope-blocker",
+			artifacts: ["src/scope-blocker.ts"],
+		});
+		await submitReview(flow, repository, {
+			suffix: "scope-blocker",
+			summary: "Repair needs work outside the approved plan.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary:
+						"The approved plan cannot cover the required storage change.",
+					evidence: "src/scope-blocker.ts:1",
+					scopeBlocker: true,
+				},
+			],
+		});
+
+		// One failure would normally project a fresh automatic retry. A scope
+		// blocker must hand control back to the user without the manager having to
+		// notice a marker in prose.
+		const projected = await flow.status({ request: { view: "compact" } });
+		expectOk(projected);
+		expect(projected.workflowData.projection).toMatchObject({
+			status: "blocked",
+			nextAction: "await-user-direction",
+			blockedFeature: {
+				featureId: FEATURE,
+				failedReviewCount: 1,
+				scopeBlocker: true,
+			},
+		});
+	});
+
+	test("keeps automatic retry available when a first failure raises no scope blocker", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await resetFeatureRun(flow, repository, FEATURE, "before-ordinary-failure");
+		await startReviewedRun(flow, repository, {
+			suffix: "ordinary-failure",
+			artifacts: ["src/ordinary-failure.ts"],
+		});
+		await submitReview(flow, repository, {
+			suffix: "ordinary-failure",
+			summary: "Ordinary blocker inside the approved plan.",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary: "Recovery path drops the error envelope.",
+					evidence: "src/ordinary-failure.ts:1",
+				},
+			],
+		});
+
+		const projected = await flow.status({ request: { view: "compact" } });
+		expectOk(projected);
+		expect(projected.workflowData.projection).toMatchObject({
+			status: "blocked",
+			nextAction: "flow_feature_reset",
+			blockedFeature: { failedReviewCount: 1, scopeBlocker: false },
+		});
+	});
+
+	test("rejects a scope blocker on an advisory finding", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		await resetFeatureRun(flow, repository, FEATURE, "before-advisory-scope");
+		await startReviewedRun(flow, repository, {
+			suffix: "advisory-scope",
+			artifacts: ["src/advisory-scope.ts"],
+		});
+		const rejected = await flow.featureComplete({
+			request: {
+				operationId: "complete-advisory-scope",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				assignmentId: activeReview(repository).id,
+				summary: "Advisory finding wrongly marked as a scope blocker.",
+				result: {
+					verdict: "passed",
+					findings: [
+						{
+							severity: "advisory",
+							summary: "Naming could be clearer in the recovery helper.",
+							scopeBlocker: true,
+						},
+					],
+					terminalDisposition: "submitted",
+				},
+			},
+		});
+		expectError(rejected);
+		expect(rejected.summary).toMatch(/scope blocker/i);
 	});
 
 	test("does not quarantine state repaired before the transaction lock", async () => {
@@ -1032,3 +1330,25 @@ describe("Flow application runtime gates", () => {
 		repository.session = null;
 	});
 });
+
+/** Opens the next attempt's review and reads what the runtime carries into it. */
+async function priorFindingsFor(
+	flow: Awaited<ReturnType<typeof startSession>>,
+	repository: MemorySessionRepository,
+	suffix: string,
+): Promise<ReviewerProjection["priorFindings"]> {
+	await resetFeatureRun(flow, repository, FEATURE, suffix);
+	const assignment = await startReviewedRun(flow, repository, {
+		suffix,
+		artifacts: ["src/restated.ts"],
+	});
+	const view = await flow.status({
+		request: { view: "reviewer", assignmentId: assignment.id },
+	});
+	expectOk(view);
+	const projection = view.workflowData.projection;
+	if (!("priorFindings" in projection)) {
+		throw new Error("Expected a reviewer projection.");
+	}
+	return projection.priorFindings;
+}

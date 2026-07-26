@@ -18,13 +18,13 @@ Work on exactly one approved feature.
 3. If compact status contains `archiveRetry`, call `flow_session_close` once
    with the projected request byte-for-byte. Report delivery under the contract
    below. Refresh only if publication is unconfirmed. Stop after this cleanup
-   outcome either way; it precedes goal alignment and grants no work.
+   either way; it grants no work.
 4. When the projection contains an active goal, align it with the current
    `/flow-run` request before another manager lifecycle mutation. Continue only
    for the same goal or a method/emphasis narrowing that preserves all outcomes;
    close completed work. Unless step 5 applies, new/expanded work makes no
-   mutation: say it has not started and offer continue, defer, or abandon. Add no
-   classifier or state.
+   mutation: report that it has not started and offer continue, defer, or
+   abandon.
 5. If the aligned request explicitly chooses deferred or abandoned closure for
    a non-completed session, call `flow_session_close` with compact session id and
    revision, fresh operation id, that kind, and optional summary. Report delivery
@@ -76,20 +76,8 @@ feature summary, targets, validation, dependencies, requirements, and decisions.
 If a projected action fails an environment-sensitive guard, refresh compact and
 handle that rejection; never force it.
 
-When resuming attempt 2 or later and prior findings are not already available,
-read detail once and recover still-live IDs from superseded attempts' latest
-relevant failure before preflight.
-
-Summaries keep plan/source IDs `verified` or `incomplete`. A prior finding
-`fixed` needs passing review plus current evidence. A failed review carries
-every prior ID forward: use `terminal fixed pending pass` plus concise evidence
-for a proven repair, unverified-fixed for an unproven repair, `recurring` when
-confirmed, or `residual` for a confirmed nonblocker. Blockers remain terminal.
-Delivery handoff: goal; closure kind/summary; progress; per-feature
-ID/title/attempts/latest state/outcome summary/terminal findings; and
-`reportedArtifacts.latestAttempts` plus
-`reportedArtifacts.supersededAttemptsOnly`, qualified as Flow-reported
-caller-declared artifacts, not an exact/exhaustive Git delta. Map IDs only from
+Summaries keep plan/source IDs `verified` or `incomplete`.
+Delivery handoff: report `workflowData.delivery.report` verbatim. Map IDs only from
 delivery `outcomeSummary`/`terminalFindings`; requirements are `verified`,
 `incomplete`, or explicitly `deferred`, and `abandoned` remains the kind.
 If delivery is absent, report exact recovery and no map; never invent or read
@@ -107,8 +95,8 @@ not layer retries.
 Before editing or dispatching a worker, perform one preflight from the approved
 feature and current worktree:
 
-- Preserve every named finding/requirement and still-live prior review ID; map
-  each to an observable acceptance outcome.
+- Preserve every named finding/requirement; map each to an observable acceptance
+  outcome.
 - Inventory exact commands, behavior evidence, required operating system,
   architecture, service, credential, external setting, or hardware, and an
   authorized path for each.
@@ -122,11 +110,9 @@ feature and current worktree:
   state-machine work, express it as a compact matrix with `state/interleaving`,
   `event`, `expected outcome`, `cleanup/invariant`, and `evidence` columns.
 
-Carry the checklist/IDs through workers and review; on retry preserve still-live
-prior IDs/dispositions. Required evidence needing user or external authority
-stops before implementation. If skipped or unavailable, it forbids
-`flow_review_start`; a substitute pass cannot cure it. Flow persists no
-skipped-evidence ledger; the reviewer blocks the gap.
+Carry the checklist/IDs through workers and review. Required evidence needing
+user or external authority stops before implementation. If skipped or unavailable, it forbids
+`flow_review_start`; a substitute pass cannot cure it.
 
 ## Implement
 
@@ -141,8 +127,8 @@ Do not stage, commit, push, publish, or mutate releases unless asked separately.
 
 Work serially by default; existing authority covers a qualifying worker wave.
 After manager orientation, fan out only two or three genuinely independent,
-non-overlapping slices with clear benefit. Issue one cohort's Task calls in the
-same assistant tool-use turn; report host serialization as serial. Each
+non-overlapping slices with clear benefit. Dispatch one cohort together if the
+host runs concurrent tasks, otherwise sequentially; report serial either way. Each
 assignment names a stable id, exact outcome/read-write scope, coverage, manager
 checks, dependencies, stop condition, and preflight risk checklist. The worker
 must receive the checklist before it codes. Shared contracts, lockfiles, and generated
@@ -178,9 +164,7 @@ Immediately before each evidence Bash command, call `flow_validation_start`
 with current revision, feature id, exact command, and `scope` (`focused` or
 `broad`). Run it byte-for-byte next and inspect the complete outcome. Flow
 records the host observation; copy no host-observed fields into a later request.
-The command is durable, so include no secrets. Raw output is neither persisted
-nor projected: durable evidence is command, exit code, completeness, and digest;
-the manager inspects live output.
+The command is durable, so include no secrets.
 
 Exact plan-listed gate commands are recorded byte-for-byte.
 A failed, incomplete, or source-drifted exact plan-listed observation creates a
@@ -189,22 +173,15 @@ exit-zero observation for current source recorded after its latest relevant
 failure or drift; returning to an older digest does not revive an earlier pass,
 and substitute broad validation cannot discharge it. If that gate cannot pass,
 the normal completed path remains unavailable; fix the gate or ask the user to
-choose deferred or abandoned closure. An already accepted review is
-grandfathered: do not reopen it or add a retroactive close-time veto. Plan-listed
-validation prose that has never run as an exact command remains reviewer
-judgment, not a fabricated pass or failure.
+choose deferred or abandoned closure. Plan-listed validation prose that has never
+run as an exact command remains reviewer judgment, not a fabricated pass or
+failure.
 
-Every host-observed validation advances the session revision through the
-after-hook. The `[flow-validation]` marker for an accepted observation includes
-`passed` and `recordedRevision`; the revision is only a concurrency token. When
-`passed: true`, use that exact revision for `flow_review_start` only if all
-runtime review gates still hold, or use it for the next
-`flow_validation_start`. When `passed: false` because validation failed, output
-was incomplete, or the source digest drifted, use its revision only to arm fresh
-validation, never review. Do not refresh compact status solely to rediscover an
-eligible token. If the marker is absent or malformed, capture was rejected, or
-routing state must be reconfirmed, refresh compact status before mutating. In
-every case, the revision used to arm the completed command is stale.
+Every host-observed validation advances the session revision, so the revision
+that armed a completed command is stale. The `[flow-validation]` marker reports
+`passed` and `recordedRevision`. Use `recordedRevision` for the next
+`flow_validation_start`, or for `flow_review_start` only when `passed: true`. If
+the marker is absent or malformed, refresh compact status before mutating.
 
 Use focused validation for ordinary features. For the final feature, run the
 repository's broad applicable gate after the last relevant edit. A source edit
@@ -215,31 +192,23 @@ equivalent is broad enough; otherwise record the narrower evidence as focused.
 Immediately before review admission, reconcile the preflight inventory against
 the recorded current-source observations. Do not call `flow_review_start` while
 known required behavior or environment evidence is skipped or unavailable,
-including requirements that are not exact stored commands. This is manager
-workflow policy rather than a persisted runtime gate.
+including requirements that are not exact stored commands.
 
 ## Review and record
 
 After successful applicable validation, call `flow_review_start` with a fresh
-operation id, current revision, feature id, every changed workspace-relative
-artifact path, and a
-bounded packet summary plus risk lenses. Pass `artifactsChanged` as a top-level
-request field, not inside the packet; use an empty array only when the feature
-changed no repository artifact. Flow selects current applicable validation
-automatically and derives `feature` versus `final` review from plan progress;
-callers do not supply the review kind.
+operation id, current revision, feature id, `artifactsChanged` listing every
+changed workspace-relative artifact path, and a bounded packet summary plus risk
+lenses.
 
 Keep the packet bounded. Map IDs to current-source commands or scenarios,
 environment, and results. Put the feature-specific risk checklist under
 `Risks/Matrix:`, representing it as a transition matrix for concurrency or
 state-machine work. Include `Baseline:` facts only when this feature changes or
-depends on them, except that final review receives the full inventory. Under
-`Prior findings:`, preserve each still-live prior ID's original severity and
-current `terminal fixed pending pass`, `recurring`, `residual`, or
-unverified-fixed state. Ordinary-review plan/source IDs are limited to
-active-feature mappings or IDs explicitly supplied for its packet; final review
-includes every approved requirement/feature ID. Always carry still-live prior
-findings. Omit empty optional sections; state `none` only for a relevant
+depends on them, except that final review receives the full inventory.
+Ordinary-review plan/source IDs are limited to active-feature mappings or IDs
+explicitly supplied for its packet; final review includes every approved
+requirement/feature ID. Omit empty optional sections; state `none` only for a relevant
 inspected absence. Never hide a gap.
 
 Dispatch only to reserved `flow-reviewer`; never review, copy, or submit its
@@ -258,21 +227,19 @@ completes the feature.
 
 ### Blocked review
 
-Use compact `blockedFeature.failedReviewCount` with the one detail projection.
+Follow `nextAction` with the one detail projection. The runtime already weighs
+`failedReviewCount` and `blockedFeature.scopeBlocker`.
 
-- A `[scope-blocker]` checkpoints immediately. Do not reset automatically.
-- Only when `failedReviewCount === 1` and there is no `[scope-blocker]`,
-  existing implementation authority permits one automatic `flow_feature_reset`
-  with the blocked `featureId` as `nextFeatureId`. That call atomically starts
-  the fresh full retry. Fix only its blocking findings, then run full validation
-  and full independent review.
+- `await-user-direction` means checkpoint. Do not reset.
+- `flow_feature_reset` permits one automatic reset under existing
+  implementation authority, with the blocked `featureId` as `nextFeatureId`.
+  That call atomically starts the fresh full retry. Fix only its blocking
+  findings, then run full validation and full independent review.
 - A feature whose latest relevant reviewed outcome remains failed is never
   selected implicitly. `/flow-auto` may still continue an untouched,
   dependency-independent feature. When every runnable candidate requires a
-  retry, compact status is `ready` with `await-user-direction`. The failed run
-  has already been superseded: after explicit direction, read detail once and
-  call `flow_run_start` with the exact retry feature ID. Do not reset from that
-  ready checkpoint.
+  retry, compact status is `ready` with `await-user-direction`, handled by the
+  ready route above.
 - When `failedReviewCount >= 2`, retry only when the current aligned request
   explicitly authorizes one additional attempt. Pass the blocked feature as
   `nextFeatureId` on `flow_feature_reset`; if that attempt fails, checkpoint

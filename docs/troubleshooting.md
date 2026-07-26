@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.8.0 --global --force
+opencode plugin opencode-plugin-flow@6.9.0 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.8.0"]
+  "plugin": ["opencode-plugin-flow@6.9.0"]
 }
 ```
 
@@ -76,6 +76,11 @@ the capture was rejected, or routing state must be reconfirmed.
 differed from the armed digest, so the result was recorded but is not passing
 evidence. This endpoint comparison cannot detect a transient edit that returns
 to the armed bytes before persistence.
+`exit-code-unavailable` and `output-completeness-unknown` mean the host reported
+no structured exit code or truncation flag. The observation is still recorded and
+never passes, so such a host degrades visibly instead of failing the capture. To
+get passing validation there, wrap the gate in a command whose exit code the host
+does surface.
 Returning the workspace to an older digest does not revive a pass recorded
 before that drift. New review admission needs a current-source pass recorded
 after the latest relevant failed or source-drifted observation. A review that

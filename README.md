@@ -21,11 +21,11 @@ into the active goal.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.8.0 --global --force
+opencode plugin opencode-plugin-flow@6.9.0 --global --force
 ```
 
 Omit `--global` for project scope. Exact version pins do not update
-automatically. To update, replace `6.8.0` with the new release and rerun the
+automatically. To update, replace `6.9.0` with the new release and rerun the
 command.
 
 Before upgrading from Flow v5 or earlier, finish or explicitly close any active
@@ -43,7 +43,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.8.0"]
+  "plugin": ["opencode-plugin-flow@6.9.0"]
 }
 ```
 
@@ -86,8 +86,9 @@ continue, defer, or abandon the active work. If that work is completed but not
 closed, Flow closes it as completed before starting the new request.
 
 Existing implementation authority carries across approval and feature outcomes.
-Only when `failedReviewCount === 1` and no `[scope-blocker]` is present may Flow
-automatically reset and atomically start one fresh full retry. A
+Flow automatically resets and atomically starts one fresh full retry only when
+the projected `nextAction` is `flow_feature_reset`, which the runtime derives
+from `failedReviewCount` and `blockedFeature.scopeBlocker`. A
 feature whose latest relevant reviewed outcome remains failed is never selected
 implicitly. `/flow-auto` may continue untouched, dependency-independent
 features, but when only retry-required candidates remain it projects
@@ -99,8 +100,10 @@ the superseded failed feature remains, status is ready with
 `await-user-direction`; explicit retry then uses `flow_run_start` with that
 feature's exact `featureId`, because there is no blocked run left to reset. The
 active session remains authoritative while it waits. Ordinary blocking findings
-are in-scope by default; a reviewer uses `[scope-blocker]` only when the required
-repair would materially exceed the approved plan. After a user checkpoint, the
+are in-scope by default; a reviewer sets `scopeBlocker: true` on a finding only
+when the required repair would materially exceed the approved plan. Each finding
+also carries a runtime-issued `findingId`, and a failed result must carry every
+still-live prior ID forward, which `flow_feature_complete` enforces. After a user checkpoint, the
 process-local continuation resumes only after that same OpenCode session observes
 an accepted non-replayed Flow mutation whose tool assistant ID resolves, through
 the cached `message.updated` `parentID`, to the authoritative user reply. A
@@ -233,8 +236,8 @@ plan-only, advanced, internal, or recovery controls.
 
 Start with `/flow-status`; its next action is durable default workflow
 direction, not permission to exceed the user's authority. For a first failed
-review, read detail once before reset because scope-blocker findings refine the
-compact default. Pass the exact retry or dependency-independent choice as
+review, read detail once before reset to see the findings the retry must fix.
+Pass the exact retry or dependency-independent choice as
 `nextFeatureId` so reset and run start are atomic; do not reset and then rely on
 default selection. If status is ready with `await-user-direction`, read detail
 once and pass the explicitly authorized retry's exact `featureId` to
@@ -249,7 +252,8 @@ For an interrupted accepted close, compact `/flow-status` supplies
 `archiveRetry.request`. Replay that request exactly once before any additional
 or detail recovery read. Flow confirms the existing bytes without rewriting
 Session v5, re-confirms archive cleanup, and returns the existing concise
-`workflowData.delivery`. Reconstruct only the plan-bounded, terminal disposition
+`workflowData.delivery`. Relay its `report` lines verbatim, and reconstruct only
+the plan-bounded, terminal disposition
 map from its latest `outcomeSummary` and terminal findings. If delivery is absent,
 report the exact recovery and claim no map. On a close revision conflict,
 refresh compact status and retry only after confirming the same session and goal

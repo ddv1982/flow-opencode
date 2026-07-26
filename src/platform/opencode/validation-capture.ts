@@ -3,7 +3,10 @@ import type {
 	ObservedValidation,
 	PreparedValidation,
 } from "../../application/prepare-validation.js";
-import type { ValidationObservation } from "../../domain/session.js";
+import type {
+	ValidationIneligibleReason,
+	ValidationObservation,
+} from "../../domain/session.js";
 import { isValidationEligible } from "../../domain/validation.js";
 import type { Hooks } from "./sdk.js";
 
@@ -48,10 +51,20 @@ function exitCode(value: unknown): number | null {
 	return typeof exit === "number" && Number.isSafeInteger(exit) ? exit : null;
 }
 
-function completeOutput(value: unknown): boolean {
-	if (!value || typeof value !== "object") return false;
+/**
+ * Whether the host reported that it captured the whole command output.
+ *
+ * `null` means the host reported neither flag, which is different from reporting
+ * truncation: the output may well be complete, but Flow has no evidence of it, so
+ * the observation is recorded as ineligible rather than silently treated as
+ * truncated.
+ */
+function completeOutput(value: unknown): boolean | null {
+	if (!value || typeof value !== "object") return null;
 	const metadata = value as Record<string, unknown>;
-	return metadata.truncated === false || metadata.complete === true;
+	if (metadata.truncated === true || metadata.complete === false) return false;
+	if (metadata.truncated === false || metadata.complete === true) return true;
+	return null;
 }
 
 function digest(value: string) {
@@ -143,12 +156,17 @@ export class ValidationCaptureCoordinator {
 				"The executed Bash command changed after Flow armed it.",
 			);
 		}
+		// A host that reports no exit code or no completeness flag still gets a
+		// durable observation, recorded as ineligible. Failing closed by throwing
+		// would lose the record entirely and make Flow unusable on such a host.
 		const observedExit = exitCode(output.metadata);
-		if (observedExit === null) {
-			throw new ValidationCaptureError(
-				"OpenCode did not expose a structured Bash exit code; validation was not recorded.",
-			);
-		}
+		const observedComplete = completeOutput(output.metadata);
+		const hostGap: ValidationIneligibleReason | null =
+			observedExit === null
+				? "exit-code-unavailable"
+				: observedComplete === null
+					? "output-completeness-unknown"
+					: null;
 		const observation = await this.#persist(capture.workspace, {
 			featureId: capture.featureId,
 			runId: capture.runId,
@@ -158,7 +176,8 @@ export class ValidationCaptureCoordinator {
 			captureId: capture.captureId,
 			exitCode: observedExit,
 			outputDigest: digest(output.output),
-			outputComplete: completeOutput(output.metadata),
+			outputComplete: observedComplete === true,
+			...(hostGap ? { ineligibleReason: hostGap } : {}),
 		});
 		output.output = `${output.output}\n\n[flow-validation] ${JSON.stringify({
 			id: observation.id,

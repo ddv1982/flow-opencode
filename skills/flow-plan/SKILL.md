@@ -28,16 +28,9 @@ without rediscovering the goal.
   and optional summary; report delivery, follow exact `archiveRetry`, and stop.
   Other new scope makes no mutation; conversationally offer continue, defer, or
   abandon.
-- Delivery handoff: goal; closure kind/summary; progress; per-feature
-  ID/title/attempts/latest state/outcome summary/terminal findings; and
-  `reportedArtifacts.latestAttempts` plus
-  `reportedArtifacts.supersededAttemptsOnly`, qualified as Flow-reported
-  caller-declared artifacts, not an exact/exhaustive Git delta. Map IDs only
-  from `outcomeSummary`/`terminalFindings`: `verified` only when proven,
-  otherwise `incomplete` or explicit `deferred`; `fixed` needs passing review
-  plus current evidence, `recurring` current confirmation, `residual` a
-  confirmed nonblocker, and `abandoned` stays the closure kind. Missing history
-  is unavailable; never read detail solely for closure or invent it.
+- Delivery handoff: report `workflowData.delivery.report` verbatim and map IDs
+  only from `outcomeSummary`/`terminalFindings`. Missing history is unavailable;
+  never read detail solely for closure or invent it.
 - If the user asked only for a plan and an approved same-goal session already
   exists, read detail once, report its immutable plan/progress, and stop without
   saving, approving, or running.

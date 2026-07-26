@@ -36,8 +36,8 @@ export const FLOW_MANAGER_KERNEL = [
 		"never use generic or general-purpose agents.",
 	].join(" "),
 	[
-		"- Make one automatic fresh full retry only when `failedReviewCount === 1`",
-		"and no `[scope-blocker]` is present; otherwise checkpoint.",
+		"- Make one automatic fresh full retry only when the projected `nextAction`",
+		"is `flow_feature_reset`; otherwise checkpoint.",
 	].join(" "),
 	[
 		"- Before review, require current-source evidence appropriate to the changed outcome,",
