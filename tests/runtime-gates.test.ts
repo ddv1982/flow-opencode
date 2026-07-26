@@ -238,7 +238,7 @@ describe("Flow application runtime gates", () => {
 		});
 		expectError(rejectedReview);
 		expect(rejectedReview.summary).toContain(
-			"requires passing exact planned commands",
+			"requires passing these exact commands",
 		);
 
 		const preparedFresh = await prepareValidation(repository, {

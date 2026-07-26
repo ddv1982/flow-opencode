@@ -28,20 +28,24 @@ import FlowPlugin from "../src/index.js";
 const packageVersion = packageJson.version;
 
 /**
- * Maintained prose, excluding the append-only CHANGELOG. Baseline: 87,141.
+ * Maintained prose, excluding the append-only CHANGELOG. Baseline: 87,130.
  *
  * Lowered from 95,000 by halving the README, which had accumulated the runtime's
  * finest detail -- reply-authority lineage, compaction transfer, revision credit,
  * finding disposition vocabulary -- none of which an operator installing a plugin
- * needs and all of which `docs/maintainer-contract.md` already owns. The former
- * ceiling had single-digit headroom, and that pressure was spent restating
- * maintainer contracts instead of describing new ones.
+ * needs and all of which `docs/maintainer-contract.md` already owns.
+ *
+ * ADR 0009 was then admitted by paying for it: `CONTEXT.md` is a glossary, and its
+ * entries had grown into second copies of the delivery, archive, retry, and
+ * planned-command rules the maintainer contract owns. Definitions stayed; restated
+ * rules went. That is the intended trade -- a new decision record costs old prose,
+ * not a higher ceiling.
  *
  * Lower this when a doc is tightened; never raise it to admit new prose. When a
  * new runtime contract genuinely needs describing, find prose that has stopped
  * earning its place.
  */
-const MAX_MAINTAINED_DOC_BYTES = 87_141;
+const MAX_MAINTAINED_DOC_BYTES = 87_130;
 
 /**
  * No single maintained document should outgrow the operator-facing README.

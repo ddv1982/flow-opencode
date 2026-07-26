@@ -21,6 +21,8 @@ v5. The public overview and installation instructions live in the
 - [ADR 0008](adr/0008-bounded-auto-continuation.md) — authority-bound host
   continuation, derived retry selection, source-drift freshness, and
   process-local timing.
+- [ADR 0009](adr/0009-scope-keyed-validation-veto.md) — a `broad` claim vetoes
+  review until that same command passes.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

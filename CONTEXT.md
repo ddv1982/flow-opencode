@@ -47,9 +47,7 @@ state.
 **Next action**: The runtime's durable default workflow direction at the current
 revision. It neither grants new user permission nor revokes authority already
 given. Environment-sensitive transition guards remain authoritative when that
-direction is attempted. On a first failed review, compact status defaults to
-reset; the manager reads detail once and lets a scope blocker refine that
-default without persisting tag-specific state.
+direction is attempted.
 
 **Bounded wave**: An optional ephemeral cohort of two or three `flow-worker`
 instances contributing exact, non-overlapping slices inside one active run. One
@@ -59,23 +57,19 @@ feature.
 
 **Validation observation**: Host-observed command, scope, source digest, exit
 code, output digest, and completeness stored directly on the active run. It is
-not a detached receipt or caller-authored success claim. Raw output is
-deliberately not persisted or projected, and durable commands must not inline
-secrets.
+not a detached receipt or caller-authored success claim.
 
 **Broad validation**: A coverage claim that the command is the repository's
-canonical applicable gate or a justified equivalent for the delivered state.
-The string `broad` does not make a narrow check comprehensive.
+canonical applicable gate or a justified equivalent for the delivered state. The
+string `broad` does not make a narrow check comprehensive, and claiming it binds
+the claimant: a `broad` observation that does not pass vetoes review until that
+same command passes.
 
-**Known failed exact planned command**: A validation command is plan-listed only
-when its stored bytes exactly equal an entry in the active feature's validation
-list; Flow does not parse prose into commands. After that exact command fails or
-produces incomplete output on any attempt, reset does not erase the failure. At
-new review admission, the active run must contain a latest complete exit-zero
-observation of the same command for the review's current source; another broad
-command cannot substitute for it. This guard is prospective: accepted
-same-schema Session v5 pending and completed reviews are grandfathered, and
-closure does not add a retroactive planned-gate veto.
+**Vetoed command**: A command whose latest evidence blocks review until it passes
+again for the current source — one an observation claimed at `broad` scope, or one
+whose bytes equal an entry in the active feature's validation list. Reset does not
+erase the failure and no other passing command discharges it. The veto is
+prospective; the maintainer contract owns the exact admission rule.
 
 **Review assignment**: The durable identity and bounded packet for the run's
 one independent review. The hidden `flow-reviewer` reads it through reviewer
@@ -90,15 +84,11 @@ v5 workflow is active.
 requires broad passing validation and replaces, rather than follows, a feature
 review.
 
-**Blocked run**: A run whose review failed or was observed but not submitted.
-Old run data is superseded, not reused. Only the first in-scope recorded failed
-review may be reset and retried automatically as one fresh full run; a finding
-with `scopeBlocker: true` checkpoints immediately. Other blocking findings are treated
-as in-scope. A second recorded failed review for that feature projects
-`await-user-direction`;
-explicit user direction grants one additional attempt. The failure count is
-derived from recorded failed review results, not from pre-review resets,
-rejected stale-source submissions, or a persisted retry counter.
+**Blocked run**: A run whose review failed or was observed but not submitted. Old
+run data is superseded, not reused. Automatic convergence is bounded: the first
+in-scope failed review may retry as one fresh full run, while a scope blocker or a
+second failure checkpoints for user direction. The count is derived from recorded
+failed review results, never from a persisted retry counter.
 
 **Workspace-content digest**: A SHA-256 fingerprint of effective tracked and
 nonignored workspace content. It binds validation and review to source without
@@ -114,30 +104,18 @@ replays; different input under the same ID conflicts.
 Completed closure requires every planned feature to have a passing run.
 Deferred and abandoned closure require an explicit user choice.
 
-**Delivery projection**: The concise deterministic handoff returned after a
-close is durably accepted. It is derived from the closed Session on the initial
-response, archive-pending recovery, and exact or delayed replay; it is never
-persisted as another state model. It summarizes the goal, closure, progress, each
-feature's attempt count, latest outcome, terminal findings, and Flow-reported
-artifact paths from latest attempts versus superseded attempts only. These paths
-are declarations supplied to Flow, not an exact Git delta, existence proof, or
-exhaustive workspace inventory.
-
-The projection also carries `report`: those same fields already formatted, with
-the artifact qualifier included, for the caller to relay verbatim. Rendering it
-in the runtime makes the handoff shape a guarantee rather than formatting
-instructions restated on every surface that can report a close.
+**Delivery projection**: The concise deterministic handoff returned after a close
+is durably accepted, recomputed from the closed Session rather than persisted as
+another state model. Its artifact paths are declarations supplied to Flow, not an
+exact Git delta. It also carries `report`: the same fields already formatted, so
+the handoff shape is a runtime guarantee rather than formatting instructions
+restated on every surface that can report a close.
 
 **Archive publication**: No-overwrite publication of closed state into
 `.flow/history/`, followed by active-state cleanup. Repeating the exact close
-converges after interruption by session and operation identity. Exact active
-replay confirms the existing canonical bytes and durability boundary without a
-rewrite. Exact archived replay re-confirms publication and active cleanup, even
-when cleanup is already absent; delayed replay never clears a different active
-session. A conflicting active or history document is preserved and projected as
-manual, non-retry recovery; closed status re-derives that decision from the
-existing archive after interruption. These rules add no Session field or retry
-ledger.
+converges after interruption by session and operation identity, and a conflicting
+document is preserved for manual recovery rather than overwritten. These rules add
+no Session field or retry ledger.
 
 ## Ownership
 

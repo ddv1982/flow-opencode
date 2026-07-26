@@ -195,21 +195,22 @@ observation is persisted directly on the run.
 Validation commands are durable and must not contain inline secrets. Raw output
 is neither persisted nor projected; the command, exit code, completeness,
 output digest, and source binding are the evidence. `broad` means the
-repository's canonical applicable gate or a justified equivalent, not merely a
-caller label.
+repository's canonical applicable gate or a justified equivalent, and claiming it
+binds the claimant.
 
-A command becomes an exact planned command only when its stored bytes equal one
-entry in the active feature's validation list; Flow does not parse validation
-prose into commands. A failed, incomplete, or source-drifted observation creates
-a freshness boundary for that command across attempts. Prospectively, a new
-review remains unavailable until the active run has a complete exit-zero
-observation of that same command which matches the review's current source and
-is newer than the latest relevant failed, incomplete, or source-drifted
-observation. Returning to an older source digest does not revive a pass from
-before that boundary, and a different passing broad command cannot discharge
-it. Accepted same-schema Session v5 pending or completed reviews are
-grandfathered. Flow neither reopens them nor adds a retroactive planned-gate
-veto during completion or close.
+A failed, incomplete, or source-drifted observation creates a freshness boundary
+for its command across attempts. Prospectively, review remains unavailable until
+the active run holds a complete exit-zero observation of that same command which
+matches the review's current source and is newer than the latest relevant
+failure or drift. Returning to an older source digest does not revive a pass
+from before that boundary, and no other passing command discharges it — neither
+a substitute broad gate nor a narrower command relabelled `broad`. Two command
+sets are vetoed this way: any command whose stored bytes equal an entry in the
+active feature's validation list, since Flow does not parse validation prose
+into commands, and any command an observation recorded at `broad` scope.
+Accepted same-schema Session v5 pending or completed reviews are grandfathered;
+Flow neither reopens them nor adds a retroactive veto during completion or close.
+[ADR 0009](adr/0009-scope-keyed-validation-veto.md) records why the label binds.
 
 An armed capture waits at most 15 minutes for its exact Bash command to begin.
 An unrelated Bash command cancels it. Once the exact command begins, the
@@ -217,9 +218,8 @@ after-hook remains eligible even if the command finishes after that original
 waiting deadline. Session, run, source, exit-code, and output-completeness gates
 still apply.
 
-Only exit-zero, complete validation for the review's current source, newer than
-the latest relevant failure or drift, is applicable. Final review additionally
-requires broad scope. If the workspace digest recomputed at persistence differs
+Final review additionally requires broad scope. If the workspace digest
+recomputed at persistence differs
 from the digest recorded when validation was armed, the observation is recorded
 as source-drifted and permanently ineligible. This endpoint comparison does not
 detect a transient edit that returns to the armed bytes before persistence.

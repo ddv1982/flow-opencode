@@ -30,7 +30,7 @@ import { FlowTransitionError } from "./transition-error.js";
 import {
 	isValidationEligible,
 	isValidationFresh,
-	unresolvedKnownFailedPlanCommands,
+	unresolvedVetoedCommands,
 } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
@@ -444,14 +444,10 @@ export function startReview(
 	if (run.reviews.length > 0) {
 		fail("Reset the feature before starting another full review.");
 	}
-	const unresolved = unresolvedKnownFailedPlanCommands(
-		session,
-		run,
-		input.sourceDigest,
-	);
+	const unresolved = unresolvedVetoedCommands(session, run, input.sourceDigest);
 	if (unresolved.length > 0) {
 		fail(
-			`Review requires passing exact planned commands for the current workspace content: ${unresolved.map((command) => JSON.stringify(command)).join(", ")}.`,
+			`Review requires passing these exact commands for the current workspace content: ${unresolved.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
 		);
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";

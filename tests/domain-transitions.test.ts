@@ -26,7 +26,7 @@ import {
 	startRun,
 	type TransitionEnvironment,
 } from "../src/domain/transitions.js";
-import { unresolvedKnownFailedPlanCommands } from "../src/domain/validation.js";
+import { unresolvedVetoedCommands } from "../src/domain/validation.js";
 
 const FOUNDATION = "foundation";
 const DELIVERY = "delivery";
@@ -907,15 +907,13 @@ describe("Session v5 domain state machine", () => {
 		});
 		const failedRun = retry.runs.at(-1);
 		if (!failedRun) throw new Error("Expected the failed planned-gate run.");
-		expect(
-			unresolvedKnownFailedPlanCommands(retry, failedRun, SOURCE_A),
-		).toEqual([PLANNED_GATE]);
+		expect(unresolvedVetoedCommands(retry, failedRun, SOURCE_A)).toEqual([
+			PLANNED_GATE,
+		]);
 		retry = validate(retry, { id: "prior-attempt-pass" });
 		const passedRun = retry.runs.at(-1);
 		if (!passedRun) throw new Error("Expected the passing planned-gate run.");
-		expect(
-			unresolvedKnownFailedPlanCommands(retry, passedRun, SOURCE_A),
-		).toEqual([]);
+		expect(unresolvedVetoedCommands(retry, passedRun, SOURCE_A)).toEqual([]);
 		retry = retryPlannedGate(retry, retryEnvironment);
 		retry = validate(retry, {
 			id: "retry-substitute",
@@ -972,6 +970,53 @@ describe("Session v5 domain state machine", () => {
 		).toThrow("Final review requires passing broad validation");
 	});
 
+	test("blocks a narrower command relabelled broad after the gate failed", () => {
+		const environment = deterministicEnvironment();
+		// Prose-only plan validation, so nothing but the `broad` claim can engage the
+		// veto. This is the recorded failure mode: the gate is observed red, then a
+		// smaller command is armed under the same label and review accepts it.
+		let session = begin(
+			approve(
+				saveDraft(environment, { plan: oneFeaturePlan([PROSE_VALIDATION]) }),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-failure",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 1,
+		});
+		session = validate(session, {
+			id: "narrower-relabelled",
+			featureId: DELIVERY,
+			command: "bun test src/greet.test.ts",
+			scope: "broad",
+		});
+		const run = session.runs.at(-1);
+		if (!run) throw new Error("Expected the active run.");
+		expect(unresolvedVetoedCommands(session, run, SOURCE_A)).toEqual([
+			"bun test",
+		]);
+		expect(compactProjection(session).nextAction).toBe("flow_validation_start");
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-relabelled"),
+		).toThrow('"bun test"');
+		// The same command passing for current source is the only discharge.
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		expect(
+			requestReview(session, DELIVERY, environment, "review-gate-pass")
+				.assignment.validationIds,
+		).toEqual(["narrower-relabelled", "gate-pass"]);
+	});
+
 	test("admits the maximum planned gates plus separate broad evidence", () => {
 		expect(MAX_VALIDATIONS_PER_RUN).toBe(MAX_PLAN_FEATURES + 1);
 		const commands = Array.from(
@@ -1022,8 +1067,12 @@ describe("Session v5 domain state machine", () => {
 
 	test("grandfathers review assignments admitted before exact-gate policy", () => {
 		const environment = deterministicEnvironment();
+		// Focused, so only the plan listing vetoes it: the legacy admission below
+		// swaps in a prose-only plan to reconstruct state accepted before that veto
+		// existed, and a `broad` failure would be vetoed on its own evidence.
 		let prospective = validate(beginPlannedGateSession(environment), {
 			id: "legacy-exact-failure",
+			scope: "focused",
 			exitCode: 1,
 		});
 		prospective = validate(prospective, {

@@ -27,7 +27,7 @@ import {
 import {
 	isValidationEligible,
 	isValidationFresh,
-	unresolvedKnownFailedPlanCommands,
+	unresolvedVetoedCommands,
 } from "../domain/validation.js";
 import type { StatusRequest } from "./schema.js";
 
@@ -224,7 +224,7 @@ function nextAction(
 			(!finalRun || validation.scope === "broad"),
 	);
 	if (!hasPassingValidation) return "flow_validation_start";
-	if (unresolvedKnownFailedPlanCommands(session, run).length > 0) {
+	if (unresolvedVetoedCommands(session, run).length > 0) {
 		return "flow_validation_start";
 	}
 	return "flow_review_start";

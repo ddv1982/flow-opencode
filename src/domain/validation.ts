@@ -163,33 +163,52 @@ export function isValidationFresh(
 }
 
 /**
- * Matches `observation.command` against `feature.validation` by exact string.
- * That field is free-form text and models write prose in it, matching no command,
- * so this guard often does not engage although its tests, which pass bare
- * commands, do. The exemption is deliberate (`PROSE_VALIDATION` in
- * `tests/domain-transitions.test.ts`); typing the field as commands is the real
- * fix and is a schema change not made here.
+ * Commands whose latest evidence blocks review until that exact command passes
+ * again for the current workspace content.
+ *
+ * Two sets qualify. A plan-listed command is matched against `feature.validation`
+ * by exact string; that field is free-form text and models write prose in it,
+ * matching no command, so this half often does not engage although its tests,
+ * which pass bare commands, do (`PROSE_VALIDATION` in
+ * `tests/domain-transitions.test.ts`).
+ *
+ * A command an observation claimed at `broad` scope qualifies whatever the plan
+ * says, because `scope` is the one field in a recorded observation that nothing
+ * corroborates: capture byte-matches the armed command and takes the exit code
+ * from the host, so a caller cannot misreport either, but it can label a narrow
+ * command `broad`. Without this, a failing repository gate was discharged by
+ * arming something smaller under the same label -- every field of the resulting
+ * record true, and the gate never passed. Review only ever needed *a* broad pass,
+ * so it accepted that one.
  */
-export function unresolvedKnownFailedPlanCommands(
+export function unresolvedVetoedCommands(
 	session: Session,
 	run: FeatureRun,
 	sourceDigest?: SourceDigest,
 ): string[] {
-	if (session.approval !== "approved") return [];
-	const feature = session.plan?.features.find(
-		(candidate) => candidate.id === run.featureId,
-	);
-	if (!feature) return [];
-	const validations = session.runs
+	const planned =
+		session.approval === "approved"
+			? (session.plan?.features.find(
+					(candidate) => candidate.id === run.featureId,
+				)?.validation ?? [])
+			: [];
+	const failed = session.runs
 		.filter((candidate) => candidate.featureId === run.featureId)
-		.flatMap((candidate) => candidate.validations);
-	const commands = [...new Set(feature.validation)];
+		.flatMap((candidate) => candidate.validations)
+		.filter((observation) => !isValidationEligible(observation));
+	const commands = [
+		...new Set(
+			failed
+				.filter(
+					(observation) =>
+						observation.scope === "broad" ||
+						planned.includes(observation.command),
+				)
+				.map((observation) => observation.command),
+		),
+	];
 	return commands.filter(
 		(command) =>
-			validations.some(
-				(observation) =>
-					observation.command === command && !isValidationEligible(observation),
-			) &&
 			!run.validations.some(
 				(observation) =>
 					observation.command === command &&
