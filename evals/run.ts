@@ -16,7 +16,13 @@ import {
 	compileFlowPromptSurface,
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
-import { EvalHost, type Outcome, packPlugin } from "./harness.js";
+import {
+	askedQuestions,
+	EvalHost,
+	type Outcome,
+	packPlugin,
+	preparePackageCache,
+} from "./harness.js";
 import { SCENARIOS } from "./scenarios.js";
 
 const SURFACES: FlowPromptSurfaceName[] = [
@@ -41,11 +47,39 @@ type RunResult = {
 	 * counted as a regression.
 	 */
 	environment?: boolean;
+	/** True when the model asked the user and stopped, scored or not. */
+	escalated?: boolean;
+	/**
+	 * True when the run is excluded from the pass rate: it asked the user somewhere
+	 * the scenario does not treat as a terminal state, leaving the workflow
+	 * mid-flight and its durable state neither the intended outcome nor evidence
+	 * against the prompts.
+	 */
+	unscored?: boolean;
 	issues: readonly string[];
 	tokens: Outcome["tokens"];
 	costUsd: number | null;
 	assistantMessages: number;
 	flowCalls: string[];
+	/**
+	 * Every durable document the run produced, active and archived.
+	 *
+	 * The report used to keep tool names only, which left the question that matters
+	 * after a failure — was the gate's exit code host-observed or model-claimed? —
+	 * answerable only by paying for another run.
+	 */
+	documents: readonly Record<string, unknown>[];
+	/**
+	 * Final assistant text, recorded so a human can judge a stop after the fact —
+	 * above all an escalation, where whether asking was right is the whole question.
+	 * Never asserted on: scenarios read durable state, never wording.
+	 */
+	finalText: string;
+	/**
+	 * Anything the model asked the user. Whether asking was right is the whole
+	 * question about an escalation, and it cannot be judged without the question.
+	 */
+	questions: readonly string[];
 	durationMs: number;
 	hostError: string | null;
 	error?: string;
@@ -108,6 +142,37 @@ function promptFootprint(): {
 	return { total, bySurface };
 }
 
+/** Passes per attempt for each scenario and model pair, in run order. */
+function passRates(
+	results: readonly RunResult[],
+): [string, { passed: number; attempts: number }][] {
+	const rates = new Map<string, { passed: number; attempts: number }>();
+	for (const result of results) {
+		const label = `${result.scenario} @ ${result.model}`;
+		const rate = rates.get(label) ?? { passed: 0, attempts: 0 };
+		rate.attempts += 1;
+		if (result.passed) rate.passed += 1;
+		rates.set(label, rate);
+	}
+	return [...rates];
+}
+
+/**
+ * The `ok` cell. `FAIL` is reserved for a run that finished with the wrong durable
+ * outcome, which is the only class that is evidence about the prompts: a timeout
+ * reads `ABORT` rather than being conflated with one.
+ *
+ * An ask the scenario allows is scored like any other run, so the verdict leads
+ * and the ask is noted: it is the difference between a model that reached the
+ * outcome and one that reached the only end left to it.
+ */
+function verdict(result: RunResult): string {
+	if (result.environment) return "ENV";
+	if (result.error) return "ABORT";
+	if (result.unscored) return "ASKED";
+	return `${result.passed ? "PASS" : "FAIL"}${result.escalated ? "+ASK" : ""}`;
+}
+
 function formatTable(results: readonly RunResult[]): string {
 	const header = [
 		"scenario",
@@ -122,7 +187,7 @@ function formatTable(results: readonly RunResult[]): string {
 	const rows = results.map((result) => [
 		result.scenario,
 		result.model,
-		result.environment ? "ENV" : result.passed ? "PASS" : "FAIL",
+		verdict(result),
 		String(result.tokens.input),
 		String(result.tokens.output),
 		String(result.assistantMessages),
@@ -160,7 +225,7 @@ function formatTable(results: readonly RunResult[]): string {
  * preview-gated model and is invisible to the catalog.
  */
 async function preflight(
-	tarball: string,
+	packageCache: string,
 	opencodeVersion: string,
 	models: readonly string[],
 ): Promise<void> {
@@ -169,7 +234,7 @@ async function preflight(
 	let fatal: string | null = null;
 	try {
 		host = await EvalHost.start({
-			tarball,
+			packageCache,
 			opencodeVersion,
 			files: { "package.json": '{\n  "name": "preflight"\n}\n' },
 		});
@@ -243,8 +308,11 @@ async function main(): Promise<void> {
 	const packDir = await mkdtemp(join(tmpdir(), "flow-eval-pack-"));
 	const results: RunResult[] = [];
 	try {
-		const tarball = await packPlugin(repositoryRoot, packDir);
-		await preflight(tarball, opencodeVersion, models);
+		const packageCache = await preparePackageCache(
+			await packPlugin(repositoryRoot, packDir),
+			packDir,
+		);
+		await preflight(packageCache, opencodeVersion, models);
 		for (const model of models) {
 			for (const scenario of selected) {
 				for (let attempt = 1; attempt <= repeat; attempt += 1) {
@@ -254,62 +322,97 @@ async function main(): Promise<void> {
 					let host: EvalHost | null = null;
 					try {
 						host = await EvalHost.start({
-							tarball,
+							packageCache,
 							opencodeVersion,
 							files: scenario.files,
 						});
-						const sessionId = await host.createSession(
-							`flow-eval ${scenario.id}`,
-						);
+						const sessionIds = [
+							await host.createSession(`flow-eval ${scenario.id}`),
+						];
 						// A step that times out still produced tokens, messages, and tool
 						// calls, and those are the only evidence of how far the model got.
 						// Throwing here would discard them and report a run of zeroes, so
 						// the failure is remembered and the outcome collected regardless.
 						let stepError: string | null = null;
-						for (const step of scenario.steps) {
+						let escalatedStep: number | null = null;
+						for (const [index, step] of scenario.steps.entries()) {
 							try {
-								await host.runCommand(
-									sessionId,
+								if (step.freshSession) {
+									sessionIds.push(
+										await host.createSession(
+											`flow-eval ${scenario.id} resumed`,
+										),
+									);
+								}
+								const end = await host.runCommand(
+									sessionIds[sessionIds.length - 1] ?? "",
 									step.command,
 									step.arguments,
 									model,
 								);
+								if (end === "escalated") {
+									escalatedStep = index;
+									break;
+								}
 							} catch (error) {
 								stepError =
 									error instanceof Error ? error.message : String(error);
 								break;
 							}
 						}
-						const outcome = await host.outcome(sessionId, Date.now() - started);
+						const outcome = await host.outcome(
+							sessionIds,
+							Date.now() - started,
+						);
 						// A host-level error (bad model id, missing credentials) is not a
 						// prompt result, so it must not be reported as a scenario failure.
 						if (outcome.hostError && outcome.flowCalls.length === 0) {
 							throw new Error(`host rejected the turn: ${outcome.hostError}`);
 						}
-						// An aborted step leaves the workflow mid-flight, so `check` would
-						// report expected-but-meaningless gaps. The step failure is the
-						// finding; the collected evidence explains it.
-						const issues = stepError ? [] : scenario.check(outcome);
+						// Asking the user is the designed end of some scenarios, but only at the
+						// wall: a question during an earlier step ends the run before the step
+						// that probes the invariant ever runs, so there is nothing to check.
+						const askedAtTheWall =
+							escalatedStep !== null &&
+							scenario.mayEscalate === true &&
+							escalatedStep === scenario.steps.length - 1;
+						const unscored = escalatedStep !== null && !askedAtTheWall;
+						// An aborted or unscored step leaves the workflow mid-flight, so `check`
+						// would report expected-but-meaningless gaps. The stop is the finding;
+						// the collected evidence explains it.
+						const issues = stepError || unscored ? [] : scenario.check(outcome);
 						results.push({
 							scenario: scenario.id,
 							model,
 							attempt,
-							passed: stepError === null && issues.length === 0,
+							passed: stepError === null && !unscored && issues.length === 0,
+							...(escalatedStep !== null ? { escalated: true } : {}),
+							...(unscored ? { unscored: true } : {}),
 							issues,
 							...(stepError ? { error: stepError } : {}),
 							tokens: outcome.tokens,
 							costUsd: outcome.costUsd,
 							assistantMessages: outcome.assistantMessages,
 							flowCalls: outcome.flowCalls.map((call) => call.tool),
+							documents: [
+								...(outcome.session ? [outcome.session] : []),
+								...outcome.archives,
+							],
+							finalText: outcome.finalText,
+							questions: askedQuestions(outcome),
 							durationMs: outcome.durationMs,
 							hostError: outcome.hostError,
 						});
+						const scoreLabel =
+							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
 						console.log(
 							stepError
-								? `ABORTED (${stepError.split("\n")[0]})`
-								: issues.length === 0
-									? "PASS"
-									: `FAIL (${issues.length})`,
+								? `ABORT (${stepError.split("\n")[0]})`
+								: unscored
+									? "ASKED (the model asked the user; nothing answers, so the wait ended)"
+									: askedAtTheWall
+										? `${scoreLabel} (asked the user, which this scenario allows)`
+										: scoreLabel,
 						);
 					} catch (error) {
 						const message =
@@ -334,6 +437,9 @@ async function main(): Promise<void> {
 							costUsd: null,
 							assistantMessages: 0,
 							flowCalls: [],
+							documents: [],
+							finalText: "",
+							questions: [],
 							durationMs: Date.now() - started,
 							hostError: null,
 							error: message,
@@ -350,8 +456,12 @@ async function main(): Promise<void> {
 	}
 
 	console.log(`\n${formatTable(results)}\n`);
-	const scored = results.filter((result) => !result.environment);
-	const blocked = results.length - scored.length;
+	const scored = results.filter(
+		(result) => !result.environment && !result.unscored,
+	);
+	const blocked = results.filter((result) => result.environment).length;
+	const asked = results.filter((result) => result.escalated).length;
+	const askedUnscored = results.filter((result) => result.unscored).length;
 	const passed = scored.filter((result) => result.passed).length;
 	const totalIn = results.reduce((sum, result) => sum + result.tokens.input, 0);
 	const totalOut = results.reduce(
@@ -371,8 +481,28 @@ async function main(): Promise<void> {
 			blocked > 0
 				? `\n${blocked} run(s) never reached the model and are excluded; re-run them before trusting this pass rate.`
 				: ""
+		}${
+			asked > 0
+				? `\n${asked} run(s) ended with the model asking the user${askedUnscored > 0 ? `, ${askedUnscored} of them excluded from the rate` : ""}. Asking is often correct, so judge each one: read its \`questions\` and \`finalText\` in the report.`
+				: ""
 		}`,
 	);
+	// The aggregate hides the number that matters. Model behavior is stochastic, so
+	// a scenario passing 1 of 6 attempts is a different finding from one passing 6
+	// of 6, and reading that off the rows by eye is how it gets missed.
+	const rates = passRates(scored);
+	if (rates.length > 0 && rates.some(([, rate]) => rate.attempts > 1)) {
+		console.log(
+			`\nper scenario and model:\n${rates
+				.map(
+					([label, rate]) =>
+						`  ${label}: ${rate.passed}/${rate.attempts}${
+							rate.passed > 0 && rate.passed < rate.attempts ? "  FLAKY" : ""
+						}`,
+				)
+				.join("\n")}`,
+		);
+	}
 
 	const reportDir = join(repositoryRoot, "evals", "results");
 	await mkdir(reportDir, { recursive: true });
@@ -390,11 +520,14 @@ async function main(): Promise<void> {
 					passed,
 					scored: scored.length,
 					environmentBlocked: blocked,
+					escalated: asked,
+					escalationExcluded: askedUnscored,
 					total: results.length,
 					totalIn,
 					totalOut,
 					costUsd: priced.length === 0 ? null : cost,
 					costReportedRuns: priced.length,
+					passRates: Object.fromEntries(rates),
 				},
 				results,
 			},
@@ -405,7 +538,10 @@ async function main(): Promise<void> {
 	);
 	console.log(`Report: ${reportPath}`);
 
-	process.exit(passed === results.length ? 0 : 1);
+	// Status follows the scored runs, matching the pass rate above. Counting the
+	// excluded ones here is what made a run that printed "6/6 passed" exit 1 after
+	// one attempt lost the network. A pass with nothing scored is not a pass.
+	process.exit(scored.length > 0 && passed === scored.length ? 0 : 1);
 }
 
 await main();

@@ -12,6 +12,7 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
 	chmod,
 	copyFile,
+	cp,
 	mkdir,
 	mkdtemp,
 	readdir,
@@ -31,11 +32,30 @@ const REQUEST_TIMEOUT_MS = 120_000;
 export type ObservedToolCall = {
 	readonly tool: string;
 	readonly status: "pending" | "running" | "completed" | "error";
+	/**
+	 * Which of the run's sessions this call came from, in the order they were used.
+	 *
+	 * Transcripts are joined into one spine, so without this a scenario that crosses
+	 * a session boundary cannot tell what the resumed session did from what it had
+	 * already been told before the interruption.
+	 */
+	readonly sessionIndex: number;
 	readonly input: Record<string, unknown>;
 	/** Tool output, parsed as JSON when the tool returned a Flow envelope. */
 	readonly output: unknown;
 	readonly rawOutput: string;
 };
+
+/**
+ * How a step's wait ended.
+ *
+ * `escalated` means the model asked the user and stopped. That is often the right
+ * move — it is what a model should do when a gate cannot pass — but nothing here
+ * answers, so the session can never progress and its durable state is mid-flight
+ * by definition. It is reported apart from a pass or a failure rather than waited
+ * out and scored as one.
+ */
+export type CommandEnd = "quiet" | "escalated";
 
 /** Everything a scenario is allowed to assert against. */
 export type Outcome = {
@@ -57,9 +77,14 @@ export type Outcome = {
 		cacheWrite: number;
 	};
 	/**
-	 * Total reported cost, or null when the provider returned none. Reporting an
-	 * absent cost as 0 reads as "this run was free", which is the opposite of
-	 * true: OpenAI omits cost from its usage payload entirely.
+	 * Total reported cost, or null when the provider priced nothing. Reporting an
+	 * unpriced run as 0 reads as "this run was free", which is the opposite of
+	 * true.
+	 *
+	 * A provider that does not price a run reports zero rather than omitting the
+	 * field, so checking only for an absent number is not enough: every OpenAI run
+	 * measured here reported `cost: 0` on real token use and printed `$0.0000`. A
+	 * zero total against non-zero output tokens is an unknown spend.
 	 */
 	readonly costUsd: number | null;
 	readonly assistantMessages: number;
@@ -77,7 +102,28 @@ export type Scenario = {
 	readonly steps: readonly {
 		readonly command: string;
 		readonly arguments: string;
+		/**
+		 * Runs this step in a new host session over the same project directory.
+		 *
+		 * The model carries no transcript across that boundary, so it has to recover
+		 * the lifecycle from `.flow/` alone. That is what an interruption actually
+		 * looks like, and it is the only way to prove durable state — not
+		 * conversational memory — is what drives the next action.
+		 */
+		readonly freshSession?: boolean;
 	}[];
+	/**
+	 * Asking the user is an acceptable terminal state for this scenario, so a run
+	 * that ends by asking is checked rather than excluded from the pass rate.
+	 *
+	 * Set it where the contract leaves the model no move of its own: a gate that
+	 * cannot pass makes `completed` closure unavailable, and any other closure needs
+	 * authority only the user can grant, so asking is the correct end — not a
+	 * missing result. It counts only when the *last* step asked, because a question
+	 * during an earlier step ends the run before the step that probes the invariant
+	 * ever runs.
+	 */
+	readonly mayEscalate?: boolean;
 	/** Returns a list of failures. Empty means the scenario passed. */
 	readonly check: (outcome: Outcome) => readonly string[];
 };
@@ -176,6 +222,52 @@ export function splitModel(
 	};
 }
 
+/**
+ * True when every incomplete tool call is a question, so the session is waiting
+ * on an answer that will never come.
+ *
+ * Any other incomplete call means work could still land, and a long command is
+ * exactly that: `bash:running` alone, or beside a question, is progress waiting to
+ * happen and must not end the step.
+ */
+export function onlyAwaitingAnswer(pending: readonly string[]): boolean {
+	return (
+		pending.length > 0 && pending.every((call) => call.startsWith("question:"))
+	);
+}
+
+/**
+ * Everything the model asked the user, as recorded tool input.
+ *
+ * A model at a wall it may not climb puts the blocker in its question rather than
+ * in a closing summary, so this is where the reasoning for an escalation lives —
+ * both for a human judging whether asking was right and for a check that reads
+ * whether the blocker was named at all.
+ */
+export function askedQuestions(outcome: Outcome): string[] {
+	return outcome.allCalls
+		.filter((call) => call.tool === "question")
+		.map((call) => JSON.stringify(call.input));
+}
+
+/**
+ * The cost to report, or null when the provider priced nothing.
+ *
+ * `total` is null when no message carried a cost at all. Zero needs the same
+ * treatment: a provider that does not price a run reports `cost: 0` rather than
+ * omitting the field, and every OpenAI run measured here did exactly that, so
+ * checking only for an absent number printed `$0.0000` over real spend. A run that
+ * produced no output tokens really can be free, so only a zero against real output
+ * is unknown.
+ */
+export function reportedCost(
+	total: number | null,
+	outputTokens: number,
+): number | null {
+	if (total === null) return null;
+	return total > 0 || outputTokens === 0 ? total : null;
+}
+
 /** Reduces a host error payload to one readable line. */
 function summarizeError(failure: unknown): string {
 	if (typeof failure === "string") return failure;
@@ -208,6 +300,35 @@ export async function packPlugin(
 	if (pack.status !== 0)
 		throw new Error(`pack failed:\n${pack.stdout}\n${pack.stderr}`);
 	return join(into, `opencode-plugin-flow-${packageJson.version}.tgz`);
+}
+
+/**
+ * Installs the packed tarball once into a template of OpenCode's exact-version
+ * package cache, which every host then copies.
+ *
+ * Installing per host made one `bun install` per attempt, all of them reaching the
+ * registry for the same bytes: a fifteen-attempt pass took fifteen network round
+ * trips, and a single blip killed an attempt that had already paid for its host
+ * boot. Five consecutive attempts were lost this way in one recorded run.
+ */
+export async function preparePackageCache(
+	tarball: string,
+	into: string,
+): Promise<string> {
+	const cache = join(into, `opencode-plugin-flow@${packageJson.version}`);
+	await mkdir(cache, { recursive: true });
+	await writeFile(
+		join(cache, "package.json"),
+		`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${tarball}` } }, null, 2)}\n`,
+		"utf8",
+	);
+	const install = spawnSync("bun", ["install"], {
+		cwd: cache,
+		encoding: "utf8",
+	});
+	if (install.status !== 0)
+		throw new Error(`cache install failed:\n${install.stderr}`);
+	return cache;
 }
 
 type MessageEntry = {
@@ -252,7 +373,8 @@ export class EvalHost {
 
 	/** Boots a throwaway OpenCode host with the packed plugin over a git fixture. */
 	static async start(options: {
-		tarball: string;
+		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
+		packageCache: string;
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
 	}): Promise<EvalHost> {
@@ -284,26 +406,15 @@ export class EvalHost {
 				throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
 		}
 
-		// Populate OpenCode's exact-version cache from the candidate tarball so
-		// the eval exercises the bytes a user would install.
-		const packageCache = join(
-			childCache,
-			"opencode",
-			"packages",
-			`opencode-plugin-flow@${packageJson.version}`,
+		// Populate OpenCode's exact-version cache from the prepared install so the
+		// eval exercises the bytes a user would install, without touching the network.
+		const packages = join(childCache, "opencode", "packages");
+		await mkdir(packages, { recursive: true });
+		await cp(
+			options.packageCache,
+			join(packages, `opencode-plugin-flow@${packageJson.version}`),
+			{ recursive: true },
 		);
-		await mkdir(packageCache, { recursive: true });
-		await writeFile(
-			join(packageCache, "package.json"),
-			`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${options.tarball}` } }, null, 2)}\n`,
-			"utf8",
-		);
-		const install = spawnSync("bun", ["install"], {
-			cwd: packageCache,
-			encoding: "utf8",
-		});
-		if (install.status !== 0)
-			throw new Error(`cache install failed:\n${install.stderr}`);
 		await writeFile(
 			join(project, "opencode.json"),
 			`${JSON.stringify({ plugin: [`opencode-plugin-flow@${packageJson.version}`] }, null, 2)}\n`,
@@ -442,7 +553,7 @@ export class EvalHost {
 		args: string,
 		model: string,
 		options: { quietMs?: number; timeoutMs?: number } = {},
-	): Promise<void> {
+	): Promise<CommandEnd> {
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
 		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
@@ -477,10 +588,14 @@ export class EvalHost {
 			const messages = (await this.messages(sessionId)) as MessageEntry[];
 			const unobserved = Date.now() - before;
 			if (unobserved >= suspendFloor) {
-				suspendedMs += unobserved;
-				deadline += unobserved;
-				settledAt += unobserved;
-				changedAt += unobserved;
+				// Capped at one full timeout, because unbounded credit turns the ceiling
+				// into a suggestion: one recorded attempt ran 3h05m under a 20m cap after
+				// a long suspend. A suspend may double the budget, not decuple it.
+				const credit = Math.min(unobserved, timeoutMs - suspendedMs);
+				suspendedMs += credit;
+				deadline += credit;
+				settledAt += credit;
+				changedAt += credit;
 			}
 			pending = messages.flatMap((entry) =>
 				entry.parts
@@ -504,7 +619,18 @@ export class EvalHost {
 			signature = next;
 			if (changed) changedAt = Date.now();
 			if (changed || busy) settledAt = Date.now();
-			else if (Date.now() - settledAt >= quietMs) return;
+			else if (Date.now() - settledAt >= quietMs) return "quiet";
+			// A pending question keeps `busy` true forever, so the quiet window above
+			// can never close and only the deadline ends the wait. Nothing here answers
+			// questions, so that state is terminal rather than slow: four recorded
+			// attempts each burned their full twenty minutes producing nothing after the
+			// model asked.
+			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
+				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
+					() => {},
+				);
+				return "escalated";
+			}
 			if (Date.now() > deadline) {
 				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
 					() => {},
@@ -529,9 +655,23 @@ export class EvalHost {
 		return fetchJson(`${this.baseUrl}/session/${sessionId}/message`);
 	}
 
-	/** Collects the durable and observed outcome a scenario asserts against. */
-	async outcome(sessionId: string, durationMs: number): Promise<Outcome> {
-		const messages = (await this.messages(sessionId)) as MessageEntry[];
+	/**
+	 * Collects the durable and observed outcome a scenario asserts against.
+	 *
+	 * Sessions are read in the order they were used and their transcripts joined,
+	 * so a scenario that resumes in a fresh session still sees one continuous
+	 * tool-call spine.
+	 */
+	async outcome(
+		sessionIds: readonly string[],
+		durationMs: number,
+	): Promise<Outcome> {
+		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
+		for (const [sessionIndex, sessionId] of sessionIds.entries()) {
+			for (const entry of (await this.messages(sessionId)) as MessageEntry[]) {
+				messages.push({ sessionIndex, entry });
+			}
+		}
 		const allCalls: ObservedToolCall[] = [];
 		const tokens = {
 			input: 0,
@@ -546,7 +686,7 @@ export class EvalHost {
 		let hostError: string | null = null;
 		let finalText = "";
 
-		for (const entry of messages) {
+		for (const { sessionIndex, entry } of messages) {
 			if (entry.info.role === "assistant") {
 				assistantMessages += 1;
 				if (typeof entry.info.cost === "number") {
@@ -582,6 +722,7 @@ export class EvalHost {
 				}
 				allCalls.push({
 					tool: part.tool,
+					sessionIndex,
 					status:
 						(part.state?.status as ObservedToolCall["status"]) ?? "pending",
 					input: part.state?.input ?? {},
@@ -598,7 +739,7 @@ export class EvalHost {
 			archives: await this.readArchives(),
 			finalText,
 			tokens,
-			costUsd: costReported ? costUsd : null,
+			costUsd: reportedCost(costReported ? costUsd : null, tokens.output),
 			assistantMessages,
 			durationMs,
 			hostError,

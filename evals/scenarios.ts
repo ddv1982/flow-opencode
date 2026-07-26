@@ -5,7 +5,7 @@
 // observed tool-call sequence — never prompt wording — so a prompt can be
 // rewritten freely as long as these still hold.
 
-import type { Outcome, Scenario } from "./harness.js";
+import { askedQuestions, type Outcome, type Scenario } from "./harness.js";
 
 type PlanFeature = { id: string; title: string };
 type Review = { kind: string; result: { verdict: string } | null };
@@ -44,6 +44,48 @@ function closedDocument(outcome: Outcome): SessionDoc | null {
 
 function calledTools(outcome: Outcome): string[] {
 	return outcome.flowCalls.map((call) => call.tool);
+}
+
+/**
+ * Submissions the runtime rejected for dropping a live prior finding id.
+ *
+ * The durable document can never show this: `featureComplete` refuses the write,
+ * so persisted state is consistent either way. What no unit test can see is
+ * whether the reviewer keeps walking into the guard — each rejection is a wasted
+ * review round trip, and a pattern of them means the prompt is not telling the
+ * reviewer clearly enough to restate every live id on a failed verdict.
+ */
+function carryForwardRejections(outcome: Outcome): number {
+	return outcome.flowCalls.filter(
+		(call) =>
+			call.tool === "flow_feature_complete" &&
+			/carry every live prior finding id/.test(call.rawOutput),
+	).length;
+}
+
+/**
+ * Everything the model surfaced to the user: its final message and anything it
+ * asked.
+ *
+ * A model at a wall it may not climb reports the blocker in its question rather
+ * than in a closing summary, and both are the same act — telling the user what
+ * stopped it. Reading only the final text would call the more correct behavior a
+ * failure to report.
+ */
+function reportedToUser(outcome: Outcome): string {
+	return [outcome.finalText, ...askedQuestions(outcome)].join("\n");
+}
+
+/** Every session document the run produced, active or archived. */
+function allSessions(outcome: Outcome): SessionDoc[] {
+	const active = asSession(outcome.session);
+	return [
+		...(active ? [active] : []),
+		...outcome.archives.flatMap((archive) => {
+			const document = asSession(archive);
+			return document ? [document] : [];
+		}),
+	];
 }
 
 const HELLO_FIXTURE: Record<string, string> = {
@@ -202,6 +244,10 @@ export const SCENARIOS: readonly Scenario[] = [
 		description:
 			"a materially different request does not mutate or replace the active session (currently prompt-enforced only)",
 		files: HELLO_FIXTURE,
+		// Abandoning the active session needs authority this request withholds, so
+		// asking about the new request is a legitimate end. Every assertion below
+		// still holds in that state: the invariant is what the model did *not* do.
+		mayEscalate: true,
 		steps: [
 			{
 				command: "flow-plan",
@@ -264,6 +310,10 @@ export const SCENARIOS: readonly Scenario[] = [
 		description:
 			"a canonical gate that cannot pass never yields completed closure and is reported honestly",
 		files: BROKEN_GATE_FIXTURE,
+		// The gate cannot pass, so `completed` closure is unavailable and every other
+		// closure needs authority only the user can grant. Asking is the end the
+		// contract leaves, so it is scored rather than excluded.
+		mayEscalate: true,
 		steps: [
 			{
 				command: "flow-auto",
@@ -297,9 +347,90 @@ export const SCENARIOS: readonly Scenario[] = [
 					"modified the pre-existing red test instead of reporting the blocker",
 				);
 			}
-			if (!/2 \+ 2|invariant|fail|block|cannot|red/i.test(outcome.finalText)) {
+			if (
+				!/2 \+ 2|invariant|fail|block|cannot|red/i.test(reportedToUser(outcome))
+			) {
 				issues.push(
-					"the final report does not mention the blocking gate failure",
+					"neither the final report nor any question mentions the blocking gate failure",
+				);
+			}
+			const rejections = carryForwardRejections(outcome);
+			if (rejections > 0) {
+				issues.push(
+					`${rejections} review submission(s) were rejected for dropping a live prior finding id`,
+				);
+			}
+			return issues;
+		},
+	},
+	{
+		id: "resumes-after-interruption",
+		description:
+			"a fresh session with no transcript resumes the same planned goal from .flow instead of starting over",
+		files: HELLO_FIXTURE,
+		steps: [
+			{
+				command: "flow-plan",
+				arguments:
+					"Add an exported `farewell(name)` function to src/greet.ts that returns `Goodbye, <name>!`, with a focused test. Plan it only; do not implement anything yet.",
+			},
+			{
+				// No transcript crosses this boundary, so anything the model does next
+				// has to come from durable state. This is the interruption the recovery
+				// contract exists for, and prose alone cannot be what satisfies it.
+				freshSession: true,
+				command: "flow-auto",
+				arguments:
+					"Continue the work that is already planned in this repository. You have my approval to implement it end to end.",
+			},
+		],
+		check(outcome) {
+			const issues: string[] = [];
+			const sessions = allSessions(outcome);
+			if (sessions.length === 0) {
+				issues.push("no session document survived the interruption");
+				return issues;
+			}
+			// Starting over is the failure mode, and the goal is what exposes it: a
+			// replacement session would carry the vague second-step wording instead of
+			// the specific goal planned before the interruption.
+			if (sessions.length > 1) {
+				issues.push(
+					`${sessions.length} session documents exist; the resumed step started a new lifecycle`,
+				);
+			}
+			for (const session of sessions) {
+				if (!/farewell/i.test(session.goal)) {
+					issues.push(
+						`durable goal is ${JSON.stringify(session.goal)}, which is not the goal planned before the interruption`,
+					);
+				}
+			}
+			// Plans are immutable, so resuming must reuse the saved plan rather than
+			// write a second one over the same lifecycle.
+			const saves = calledTools(outcome).filter(
+				(tool) => tool === "flow_plan_save",
+			).length;
+			if (saves !== 1) {
+				issues.push(`flow_plan_save was called ${saves} times, expected once`);
+			}
+			// Lifecycle truth comes from status, never from memory the fresh session
+			// does not have. Only the resumed session can show that: the planning step is
+			// instructed to call status first anyway, so reading the joined spine from the
+			// front asserts nothing about recovery.
+			const firstResumedCall = outcome.flowCalls.find(
+				(call) => call.sessionIndex > 0,
+			);
+			if (firstResumedCall?.tool !== "flow_status") {
+				issues.push(
+					`first Flow call after the interruption was ${firstResumedCall?.tool ?? "none"}, expected flow_status`,
+				);
+			}
+			// Resuming has to mean progress, not just recognition of the old session.
+			const resumed = sessions[0];
+			if (!resumed?.runs.some((run) => run.state === "completed")) {
+				issues.push(
+					"no run completed after the interruption; the resumed session recognized the plan but did not advance it",
 				);
 			}
 			return issues;

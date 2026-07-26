@@ -57,12 +57,22 @@ git fixture, drives the real slash commands, then reads `.flow/session.json` and
 | `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run |
 | `plan-only-stops` | `/flow-plan` saves a plan and starts no run |
 | `goal-change-refused` | a materially different request does not mutate, replace, or close the active session |
-| `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, and the red test is reported rather than deleted |
+| `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, the red test is reported rather than deleted, and no review submission is rejected for dropping a live prior finding id (asking the user how to close is an accepted end) |
+| `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
-These four cover the invariants most of Flow's prompt text exists to protect.
+These cover the invariants most of Flow's prompt text exists to protect.
 `goal-change-refused` is the important one: goal alignment is the single
 most-repeated rule in the repository and has almost no runtime enforcement, so
 it is the rule most in need of evidence before its restatements are trimmed.
+
+`resumes-after-interruption` is the only scenario that crosses a session
+boundary. A step marked `freshSession` gets a new host session over the same
+project, so no transcript survives into it and the model has nothing but `.flow`
+to work from. Its transcript is appended to the earlier one, so assertions still
+read a single continuous tool-call spine. Recovery is the largest body of
+contract in the repository that a same-session step cannot exercise at all,
+because a model that simply remembers what it just did looks indistinguishable
+from one that re-derived it.
 
 ## Using evals to change prompts
 
@@ -84,15 +94,21 @@ durable way to encode a lesson; another paragraph of prompt text is not.
 
 ## Reading a failed run
 
-Three failure classes are reported differently, because they mean different
-things:
+Four outcomes short of a pass are reported differently, because they mean
+different things:
 
 - `FAIL` — the model ran and the durable outcome was wrong. This is the only
   class that is evidence about the prompts.
 - `ENV` — the run never reached a model: the host would not boot, the dependency
   install failed, the network dropped. Excluded from the pass rate and flagged
   separately, so a lost network cannot look like a prompt regression.
-- `ABORTED` — a step blew the timeout. The message says whether the session was
+- `ASKED` — the model asked the user and stopped, so the step ended there.
+  Excluded from the pass rate and flagged separately, because the workflow is
+  mid-flight: its durable state is neither the intended outcome nor evidence
+  against the prompts. A scenario that sets `mayEscalate` is the exception: there
+  the ask is the end the contract leaves, so the run is checked like any other and
+  reads `PASS+ASK` or `FAIL+ASK`.
+- `ABORT` — a step blew the timeout. The message says whether the session was
   `wedged` (no new message or part, with the incomplete tool calls named) or
   `still working` (producing output up to the deadline, so looping rather than
   stuck). Tokens and tool calls collected before the abort are kept.
@@ -102,25 +118,50 @@ model: an iteration that takes far longer than its own poll interval is time the
 process did not observe, so it extends the deadline and is named in any abort
 message.
 
-An `ABORTED` naming `question:running` is usually not a defect. Nothing answers
-the harness's questions, so a model that correctly escalates to the user — the
-right move when a gate cannot pass — waits out the full timeout and is reported
-as a failure. Read a wedge on `question` as "the model asked", and judge whether
-asking was right, before treating it as evidence about the prompts.
+Nothing answers the harness's questions, so a pending question can never resolve
+and the step ends as soon as the session goes quiet holding one. Four recorded
+attempts each burned their full twenty minutes in that state before it was
+reported apart.
+
+Whether asking was right is the whole question, and it is scenario-specific. Two
+scenarios set `mayEscalate` because the contract leaves the model no move of its
+own: a gate that cannot pass makes `completed` closure unavailable, and every other
+closure needs authority only the user can grant (`skills/flow-run/SKILL.md`). There
+asking is the intended end, and their checks hold on it — the blocker may be named
+in the question instead of a closing summary, and the invariant is what the model
+did *not* do. It counts only when the last step asked; a question during an earlier
+step ends the run before the step that probes the invariant ever runs.
+
+Everywhere else an ask is excluded and left to you. Where the prompt already
+granted authority to proceed, stopping to ask is closer to a defect than to
+caution. The report records every question, so read those and the run's
+`finalText` before concluding anything about the prompts.
 
 `failing-gate-blocks` is the scenario to be most careful with: it passes at
 roughly even odds, and was measured equally unreliable at 6.8.0, so a single
-attempt of it neither condemns nor vindicates a prompt change. It turns on
-whether the model reports its gate's exit code honestly, which no predicate can
-check, because `exitCode` is model-supplied and Flow never runs the command.
-Judge prompt changes on the other scenarios and run this one at higher `--repeat`
-if you need a real rate from it.
+attempt of it neither condemns nor vindicates a prompt change. Every failure of
+it recorded so far is the same one — closed as `completed` over a gate that
+cannot pass. Whether that is a dishonest report or a real observation is worth
+checking per failure: an exit code a model merely claims is unverifiable, but
+`src/platform/opencode/validation-capture.ts` reads one from the host's own bash
+metadata whenever the validation was captured, so the durable document in the
+report distinguishes the two. Judge prompt changes on the other scenarios and run
+this one at higher `--repeat` if you need a real rate from it.
+
+Because a rate is the only useful reading of a stochastic scenario, every run
+prints passes per attempt for each scenario and model pair under the aggregate,
+marks any split result `FLAKY`, and records the same breakdown as
+`summary.passRates` in the report. The aggregate alone hides exactly the
+distinction that matters: one pass in six and six in six are different findings.
 
 ## Cost
 
-A full pass is four scenarios of real agentic work. Expect a handful of dollars
+A full pass is five scenarios of real agentic work, one of them two commands
+long. Expect a handful of dollars
 per model on a flagship model, and use `--scenario` while iterating.
 
-Cost is whatever the provider reports. OpenAI omits it from the usage payload,
-so those runs read `cost not reported by provider` rather than `$0.0000` — an
+Cost is whatever the provider reports, and a provider that prices nothing reports
+zero rather than omitting the field: every OpenAI run measured here reported
+`cost: 0` on real token use. A zero total against non-zero output tokens is
+therefore read as unknown and printed as `cost not reported by provider` — an
 unknown spend is not a free one. Token counts are always real.
