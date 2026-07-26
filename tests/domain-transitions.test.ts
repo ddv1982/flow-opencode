@@ -1017,6 +1017,45 @@ describe("Session v5 domain state machine", () => {
 		).toEqual(["narrower-relabelled", "gate-pass"]);
 	});
 
+	test("blocks the review of the feature the gate failed under", () => {
+		const environment = deterministicEnvironment();
+		// What makes the veto's per-feature scope safe. A red broad gate cannot be
+		// walked away from by moving to a feature whose runs do not carry it: this
+		// feature's own review is blocked too, and `completed` closure needs every
+		// feature to pass. Prose-only validation again, so only the claim engages.
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...plan,
+						features: plan.features.map((feature) => ({
+							...feature,
+							validation: [PROSE_VALIDATION],
+						})),
+					},
+				}),
+			),
+			FOUNDATION,
+			environment,
+		);
+		session = validate(session, {
+			id: "foundation-gate-failure",
+			featureId: FOUNDATION,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 1,
+		});
+		session = validate(session, {
+			id: "foundation-relabelled",
+			featureId: FOUNDATION,
+			command: "bun test src/greet.test.ts",
+			scope: "broad",
+		});
+		expect(() =>
+			requestReview(session, FOUNDATION, environment, "review-foundation"),
+		).toThrow('"bun test"');
+	});
+
 	test("admits the maximum planned gates plus separate broad evidence", () => {
 		expect(MAX_VALIDATIONS_PER_RUN).toBe(MAX_PLAN_FEATURES + 1);
 		const commands = Array.from(

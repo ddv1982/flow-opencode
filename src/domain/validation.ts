@@ -180,6 +180,12 @@ export function isValidationFresh(
  * arming something smaller under the same label -- every field of the resulting
  * record true, and the gate never passed. Review only ever needed *a* broad pass,
  * so it accepted that one.
+ *
+ * Only the reviewed feature's runs are searched, and that is enough: every review
+ * consults this, an approved plan is immutable, and `completed` closure needs a
+ * passing run for every feature. So a red gate observed under one feature blocks
+ * that feature until the same command passes -- it cannot be walked away from by
+ * moving to another.
  */
 export function unresolvedVetoedCommands(
 	session: Session,
