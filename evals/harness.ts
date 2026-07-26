@@ -251,6 +251,23 @@ export function askedQuestions(outcome: Outcome): string[] {
 }
 
 /**
+ * Indices where a call came from a different session than the one before it.
+ *
+ * Transcripts are joined into one spine for assertion, which erases the boundary
+ * the recovery scenario turns on. Reporting the boundary keeps a failure of it
+ * diagnosable without paying for another run.
+ */
+export function sessionBoundaries(
+	calls: readonly { readonly sessionIndex: number }[],
+): number[] {
+	return calls.flatMap((call, index) =>
+		index > 0 && call.sessionIndex !== calls[index - 1]?.sessionIndex
+			? [index]
+			: [],
+	);
+}
+
+/**
  * The cost to report, or null when the provider priced nothing.
  *
  * `total` is null when no message carried a cost at all. Zero needs the same

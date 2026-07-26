@@ -22,6 +22,7 @@ import {
 	type Outcome,
 	packPlugin,
 	preparePackageCache,
+	sessionBoundaries,
 } from "./harness.js";
 import { SCENARIOS } from "./scenarios.js";
 
@@ -61,6 +62,15 @@ type RunResult = {
 	costUsd: number | null;
 	assistantMessages: number;
 	flowCalls: string[];
+	/**
+	 * Indices in `flowCalls` where a new host session begins, so a multi-session
+	 * run stays readable after the transcripts are joined into one spine.
+	 *
+	 * Empty for the single-session scenarios. `resumes-after-interruption` asserts
+	 * on what the *resumed* session did, and without this the boundary that
+	 * assertion turns on is invisible to whoever reads a failure.
+	 */
+	sessionBoundaries: number[];
 	/**
 	 * Every durable document the run produced, active and archived.
 	 *
@@ -394,6 +404,7 @@ async function main(): Promise<void> {
 							costUsd: outcome.costUsd,
 							assistantMessages: outcome.assistantMessages,
 							flowCalls: outcome.flowCalls.map((call) => call.tool),
+							sessionBoundaries: sessionBoundaries(outcome.flowCalls),
 							documents: [
 								...(outcome.session ? [outcome.session] : []),
 								...outcome.archives,
@@ -437,6 +448,7 @@ async function main(): Promise<void> {
 							costUsd: null,
 							assistantMessages: 0,
 							flowCalls: [],
+							sessionBoundaries: [],
 							documents: [],
 							finalText: "",
 							questions: [],
