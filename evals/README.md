@@ -173,11 +173,20 @@ this one at higher `--repeat` if you need a real rate from it.
 Since 6.9.0 that recorded failure is mostly out of the model's reach: the runtime
 refuses review while a command claimed at `broad` scope has not passed
 ([ADR 0009](../docs/adr/0009-scope-keyed-validation-veto.md)), so `completed`
-closure over a red gate now needs the gate to have never been armed at all. The
-scenario keeps its assertion — a runtime rule is worth an end-to-end check — but
-its discriminating power has moved to the prose assertions, which is where to look
-when it fails. Expect its rate to change for that reason, not because the prompts
-did.
+closure over a red gate needed the gate to have never been armed at all. A run
+then took that exact route, arming `bun test src/greet.test.ts
+src/farewell.test.ts` at `broad` for exit zero — the gate never run, every
+recorded field true. `recordValidation` now refuses a broad claim on a command
+that names the tests it runs, which closed it: the scenario went from three of
+five to five of five, and in all five the model armed the real `bun test`, took
+its non-zero exit, and recorded its file-scoped runs as `focused`.
+
+So the closure route is now runtime-blocked from both sides, and the scenario's
+discriminating power has moved to the prose assertions — whether the blocker is
+reported, and whether the user is left a deferred-or-abandoned choice. That is
+where to look when it fails, and its rate changed for that reason rather than
+because the prompts did. What no runtime rule covers is narrowing the command
+string does not reveal, such as a test-name filter; that is still the veto's job.
 
 Because a rate is the only useful reading of a stochastic scenario, every run
 prints passes per attempt for each scenario and model pair under the aggregate,
