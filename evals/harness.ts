@@ -137,18 +137,59 @@ export type Scenario = {
  * Only the credential file is copied, into a 0700 scratch directory that is
  * removed in `stop()`. Set `FLOW_EVAL_NO_AUTH_COPY=1` to opt out and rely purely
  * on environment credentials.
+ *
+ * Returns the source/target paths so `stop()` can sync any rotated tokens back,
+ * or `null` when opted out. Some providers (observed for both OpenAI and xAI)
+ * issue single-use, rotating OAuth refresh tokens: refreshing consumes the old
+ * one and the provider revokes it. A child host that refreshes only updates its
+ * own scratch copy, which `stop()` then deletes, so the real `auth.json` is left
+ * holding a now-dead refresh token. The *next* host copies that same stale file
+ * and fails outright, and — because the token was genuinely rotated against the
+ * provider, not merely misplaced locally — the credential is dead for the
+ * developer's own OpenCode too until they log in again. One recorded run lost
+ * an xAI account's refresh token this way after a single scenario.
  */
-async function carryProviderCredentials(childData: string): Promise<void> {
-	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return;
+function providerCredentialPaths(childData: string): {
+	source: string;
+	target: string;
+} {
 	const parentData =
 		process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share");
-	const source = join(parentData, "opencode", "auth.json");
-	const target = join(childData, "opencode", "auth.json");
+	return {
+		source: join(parentData, "opencode", "auth.json"),
+		target: join(childData, "opencode", "auth.json"),
+	};
+}
+
+async function carryProviderCredentials(
+	childData: string,
+): Promise<{ source: string; target: string } | null> {
+	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return null;
+	const paths = providerCredentialPaths(childData);
 	await mkdir(join(childData, "opencode"), { recursive: true, mode: 0o700 });
 	try {
-		await copyFile(source, target);
+		await copyFile(paths.source, paths.target);
 	} catch {
 		// No stored credentials; the provider may still authenticate from the env.
+	}
+	return paths;
+}
+
+/**
+ * Copies a host's (possibly refreshed) credential file back over the real
+ * `auth.json` it was copied from, so a rotated token propagates instead of
+ * being discarded with the scratch directory. Only ever called sequentially
+ * from `stop()`, so there is no concurrent-writer race to guard against.
+ */
+async function syncProviderCredentialsBack(
+	paths: { source: string; target: string } | null,
+): Promise<void> {
+	if (!paths) return;
+	try {
+		await copyFile(paths.target, paths.source);
+	} catch {
+		// The child never wrote a credential file (no refresh happened, or the
+		// provider authenticated purely from the env); nothing to carry back.
 	}
 }
 
@@ -441,6 +482,7 @@ export class EvalHost {
 
 	readonly project: string;
 	private readonly scratch: string;
+	private credentialPaths: { source: string; target: string } | null = null;
 
 	private constructor(project: string, scratch: string) {
 		this.project = project;
@@ -462,7 +504,7 @@ export class EvalHost {
 		const project = join(scratch, "project");
 		await mkdir(childHome, { recursive: true });
 		await mkdir(join(project, ".opencode"), { recursive: true });
-		await carryProviderCredentials(childData);
+		const credentialPaths = await carryProviderCredentials(childData);
 
 		// Flow derives source identity from git, so the fixture must be a repo.
 		for (const [relative, contents] of Object.entries(options.files)) {
@@ -498,6 +540,7 @@ export class EvalHost {
 		);
 
 		const host = new EvalHost(project, scratch);
+		host.credentialPaths = credentialPaths;
 		const port = await availablePort();
 		host.baseUrl = `http://127.0.0.1:${port}`;
 		host.server = spawn(
@@ -865,6 +908,11 @@ export class EvalHost {
 				}),
 			]);
 		}
+		// Must happen before the scratch directory is removed: a refresh the child
+		// performed lives only in its copy of `auth.json`, and losing it here is
+		// exactly what silently rotates the developer's own stored refresh token
+		// out from under them.
+		await syncProviderCredentialsBack(this.credentialPaths);
 		await rm(this.scratch, { recursive: true, force: true });
 	}
 }
