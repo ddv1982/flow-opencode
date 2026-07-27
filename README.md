@@ -20,7 +20,7 @@ context change, or a lost transcript.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@6.9.0 --global --force
+opencode plugin opencode-plugin-flow@7.0.0 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -31,7 +31,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@6.9.0"]
+  "plugin": ["opencode-plugin-flow@7.0.0"]
 }
 ```
 

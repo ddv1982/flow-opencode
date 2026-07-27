@@ -6,6 +6,58 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [7.0.0] - 2026-07-27
+
+A `broad` validation claim now has to be one, and the two review-finding fields
+6.9.0 introduced are reachable for the first time:
+
+- **Breaking.** A command recorded at `broad` scope is refused when it selects
+  which tests it runs, either by naming a test file or by filtering with `-t`,
+  `--test-name-pattern`, `--testNamePattern`, `-k`, `-run`, `--grep` or
+  `--filter`. 6.9.0 accepted all of these. A repository whose canonical gate is a
+  filtered command must record that command as `focused` and arm the whole suite
+  for the broad observation a final review requires.
+- **Breaking.** A failing broad observation now blocks its own feature's review
+  until that exact command passes again for the current workspace content.
+  Previously a red repository gate was discharged by arming something smaller
+  under the same label: every field of the resulting record true, and the gate
+  itself never passing.
+- `reviewFinding` in the host tool schema was `.strict()` without `scopeBlocker`
+  or `findingId`, so every submission the review skill instructs was rejected at
+  the boundary even though the durable schema accepts both and `nextAction`
+  already reads `scopeBlocker`. Both fields now pass, with a parity test holding
+  the host schema to the durable one.
+- An explicit grant of authority over already-planned work reads as continuation
+  rather than a goal change. A session planned with "do not implement anything
+  yet" and then told "you have my approval to implement it end to end" no longer
+  refuses the authorization it was just given. New or different outcomes are
+  still refused.
+- Three architecture gates make the layering enforceable rather than described:
+  every `src` export must be imported outside its declaring file, every
+  `@opencode-ai/*` import must route through `src/platform/opencode/sdk.ts`, and
+  the source and documentation budgets report their remaining headroom instead of
+  speaking up only once they are exceeded.
+
+The durable-invariant checker moved out of `transitions.ts` into
+`src/domain/session-invariants.ts`, with its rule families explained and eleven
+tests covering them; it previously had no direct coverage at all. The README is
+half its former size. ADR 0009 now records what the model-driven harness measured
+rather than what its guards were expected to do, including one escape left
+deliberately open: a `broad` command that cannot fail, such as `git diff --check`,
+is still accepted, because refusing it means deciding which commands count as
+tests.
+
+The Session v5 schema is unchanged, and no durable document written by a 6.x
+build is rejected on load. Both refusals above apply when new evidence is
+recorded, so a session carrying a filtered broad observation from 6.9.0 keeps it
+and needs a whole-suite pass before its final review.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.0.0 --global --force
+```
+
 ## [6.9.0] - 2026-07-26
 
 Rules the prompts used to restate are now enforced by the runtime, and Flow no
