@@ -21,7 +21,8 @@ never silently fall back.
    refreshed projection. This cleanup precedes goal alignment and grants no work.
    Before another manager mutation, align the compact-projected goal with the
    request. Continue only for the same goal or a narrowing that preserves every
-   outcome. Close a completed session as completed before new work. If the user
+   outcome; authority the request adds over those same outcomes is continuation,
+   not expansion. Close a completed session as completed before new work. If the user
    explicitly chooses deferred or abandoned closure for a non-completed session,
    call `flow_session_close` with compact session id/revision, fresh operation
    id, that kind, and optional summary; handle **Recovery**, follow a projected
