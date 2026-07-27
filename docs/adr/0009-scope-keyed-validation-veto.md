@@ -21,7 +21,8 @@ list, which holds prose, so it did not engage.
 
 An observation that claims `broad` and does not pass vetoes review until that
 same command passes for the current source. Plan-listed commands keep their
-veto; the two sets are unioned in one rule.
+veto; the two sets are unioned in one rule. A command that names the tests it
+runs is refused the claim at all.
 
 ## Consequences
 
@@ -29,6 +30,5 @@ Substituting a different gate after a failure was already refused for planned
 commands and now is refused for any claimed-broad command. Prompt guidance no
 longer carries this rule alone.
 
-Nothing forces the claim in the first place: a gate run unarmed leaves no
-observation to veto. Closing that needs breadth the runtime can derive, not a
-stricter label.
+What remains is narrowing the runtime cannot see: a test-name filter, or a gate
+never armed at all.
