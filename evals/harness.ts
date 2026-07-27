@@ -17,6 +17,7 @@ import {
 	mkdtemp,
 	readdir,
 	readFile,
+	rename,
 	rm,
 	writeFile,
 } from "node:fs/promises";
@@ -180,16 +181,50 @@ async function carryProviderCredentials(
  * `auth.json` it was copied from, so a rotated token propagates instead of
  * being discarded with the scratch directory. Only ever called sequentially
  * from `stop()`, so there is no concurrent-writer race to guard against.
+ *
+ * Two failure modes get guarded against explicitly, because what is being
+ * overwritten is the developer's own live credential store, not scratch state:
+ *
+ * - A child copy that fails to parse as JSON must never replace a good file —
+ *   this is what stands between a bug in a scenario and a broken `auth.json`.
+ * - The write itself goes to a temp file beside the real one and is `rename`d
+ *   into place, which is atomic on the same filesystem. A plain overwrite that
+ *   is interrupted (a kill, a crash, a lost power) would leave the real file
+ *   truncated instead.
  */
 async function syncProviderCredentialsBack(
 	paths: { source: string; target: string } | null,
 ): Promise<void> {
 	if (!paths) return;
+	let contents: string;
 	try {
-		await copyFile(paths.target, paths.source);
+		contents = await readFile(paths.target, "utf8");
 	} catch {
 		// The child never wrote a credential file (no refresh happened, or the
 		// provider authenticated purely from the env); nothing to carry back.
+		return;
+	}
+	try {
+		JSON.parse(contents);
+	} catch {
+		console.error(
+			`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
+		);
+		return;
+	}
+	const tempPath = `${paths.source}.eval-sync-${process.pid}.tmp`;
+	try {
+		await writeFile(tempPath, contents, { mode: 0o600 });
+		await rename(tempPath, paths.source);
+	} catch (error) {
+		// Failing to sync back must not crash the run over a host that already
+		// finished its scenario; it only means the next host risks the same stale
+		// credential this whole mechanism exists to avoid, which is no worse than
+		// before this fix existed.
+		console.error(
+			`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		await rm(tempPath, { force: true });
 	}
 }
 
