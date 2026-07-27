@@ -59,8 +59,15 @@ const packageVersion = packageJson.version;
  * that lived only in a prompt, and no amount of tightening existing text fixes
  * that. This is the one increase where the bytes *are* the deliverable; ordinary
  * growth still has to be paid for by deleting prose that stopped earning its place.
+ *
+ * Raised from 114,000, which had 2,919 bytes left, for ADR 0011. A decision record
+ * costs about five thousand, so that was the zero-headroom state this comment
+ * already describes: the alternative was to compress the reasoning for a schema
+ * change into whatever space an unrelated round of prose golf could find. The 2,500
+ * here is deliberately less than one more record — the next ADR is the prompt to
+ * tighten the contract, not to raise this again.
  */
-const MAX_MAINTAINED_DOC_BYTES = 114_000;
+const MAX_MAINTAINED_DOC_BYTES = 120_000;
 
 /**
  * No single maintained document should outgrow the operator-facing README.

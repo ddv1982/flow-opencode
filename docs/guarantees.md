@@ -36,6 +36,9 @@ and a rule that lives only in a prompt.
 - A `broad` observation must run the plan-declared `gate` byte-for-byte, and may
   not select which tests it runs.
 - Final review requires a passing broad observation for current source.
+- Final review and `completed` closure are refused while any command the plan
+  declared in `externalEvidence` has not passed. Feature reviews are not, so a goal
+  can be split into the half this host can prove and the half it cannot.
 - One revision per accepted mutation; an operation id replays exactly or conflicts.
 - Every mutation validates the whole schema and writes atomically under one
   cross-process lock.
@@ -71,8 +74,10 @@ reason Flow asks you to read the review rather than trust the verdict.
   `goal-change-refused` in `evals/` is the only evidence for it.
 - **Review substance.** That the reviewer read the artifacts, completed the risk
   checklist, and failed an unprovable claim instead of passing it conditionally.
-- **Evidence completeness.** That `flow_review_start` is not called while required
-  behavior or environment evidence is knowingly missing.
+- **Evidence completeness.** That an `externalEvidence` entry names the observation
+  the goal actually asks for, and a command that would really produce it. The
+  runtime enforces that the declared command passed; that it was the right command
+  is visible in the approved plan and judged there.
 - **Scope discipline.** That implementation stayed inside the approved plan, and
   that a worker wave respected its assigned paths.
 - **Honest reporting.** That the closing summary matches what happened.
@@ -81,8 +86,9 @@ reason Flow asks you to read the review rather than trust the verdict.
 
 - A declared `gate` that cannot fail. See Caller-declared above; deciding which
   commands count as tests is an open-ended whitelist, not an invariant.
-- Plans saved before `plan.gate` existed. They declare no gate and keep the older,
-  weaker rule where `broad` is the claimant's word.
+- Plans saved before `plan.gate` and `plan.externalEvidence` existed. They declare
+  neither and keep the older, weaker rules: `broad` is the claimant's word, and no
+  acceptance observation is owed.
 - Worker file boundaries beyond `.flow`, `.git`, and Bash denial. Exact per-slice
   write paths are a prompt contract the manager audits afterward.
 - `/flow-auto` continuation across model turns, which depends on an unversioned

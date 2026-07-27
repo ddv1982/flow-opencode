@@ -21,12 +21,49 @@ export type PlanFeature = Readonly<{
 	dependsOn: FeatureId[];
 }>;
 
+/**
+ * An acceptance observation that needs an environment this host may not be.
+ *
+ * `plan.gate` moved one claim out of prose and into a declared command. This is the
+ * same move for the claim that broke next: a measured run whose goal required
+ * observing Windows filesystem behavior wrote "this sandbox has no Windows OS" into
+ * `requirements` as a non-goal, implemented what was left, recorded a Wine script it
+ * had just written as the acceptance evidence, and closed `completed` — with a
+ * passing independent review. Every rule it broke existed, in prose, on the surface
+ * that ran it.
+ *
+ * `command` is what makes this checkable: the entry is satisfied only by a passing
+ * observation of that exact command, so the evidence has to be named before there is
+ * any pressure to substitute for it, in the plan the user approves. A proxy is still
+ * possible — but only by writing the proxy into the approved plan as the proof.
+ */
+export type ExternalEvidence = Readonly<{
+	/** What has to be observed, in the goal's own terms. */
+	requirement: string;
+	/** The environment that can observe it: an OS, service, credential, or device. */
+	environment: string;
+	/** The exact command whose passing is that observation. */
+	command: string;
+}>;
+
 export type Plan = Readonly<{
 	summary: string;
 	overview: string;
 	requirements: string[];
 	decisions: string[];
 	features: PlanFeature[];
+	/**
+	 * Acceptance evidence this host may be unable to produce, declared at planning
+	 * time. Empty when everything the goal asks for is observable here.
+	 *
+	 * A final review and a `completed` closure are both refused while any entry has
+	 * no passing observation of its exact command, so the honest routes out are the
+	 * environment, deferred closure, or abandoned closure.
+	 *
+	 * Optional so Session v5 stays forward-readable; `savePlan` requires it, so no
+	 * plan this build writes omits it.
+	 */
+	externalEvidence?: ExternalEvidence[] | undefined;
 	/**
 	 * The repository's canonical broad validation command, declared once at planning
 	 * time and locked by approval.

@@ -49,6 +49,17 @@ const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
  * `broad` scope meant. The field is a net subtraction: a typed command the runtime
  * matches byte-for-byte cost less prompt than the two paragraphs asking the model
  * to judge whether its own claim was honest, and it is checked rather than trusted.
+ *
+ * Held at 38,500 through `plan.externalEvidence`, which landed at 38,307, and the
+ * rule above is why: the ceiling forced the addition to be a field with a guard plus
+ * one bullet, and it paid for itself out of the prose the guard made redundant — the
+ * environment inventory the plan now enumerates, the review-admission reconciliation
+ * the veto performs, a fabricated-result sentence flow-plan already carried, and the
+ * sentence that let a reviewer accept "a justified equivalent" for the canonical
+ * gate. That last one was a licence to accept a substitute, on the surface whose
+ * measured failure was accepting one. The reviewer needed no new prose: it is
+ * already told that a platform claim without proof is a failure, and a final review
+ * over unsatisfied evidence is now refused before the reviewer is asked at all.
  */
 const MAX_TOTAL_PROMPT_BYTES = 38_500;
 

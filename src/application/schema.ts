@@ -79,6 +79,14 @@ const PlanFeatureSchema = z
 	})
 	.strict();
 
+const ExternalEvidenceSchema = z
+	.object({
+		requirement: boundedText("External evidence requirement"),
+		environment: boundedText("External evidence environment"),
+		command: boundedText("External evidence command"),
+	})
+	.strict();
+
 const PlanSchema = z
 	.object({
 		summary: boundedText("Plan summary"),
@@ -97,6 +105,16 @@ const PlanSchema = z
 		 * still hydrates; `savePlan` refuses a new plan without it.
 		 */
 		gate: boundedText("Plan gate").optional(),
+		/**
+		 * Optional for the same reason `gate` is: a plan written before the field
+		 * existed still hydrates, and `savePlan` refuses a new plan without it. An
+		 * empty array is the declared answer that nothing here needs another
+		 * environment, which is different from never having been asked.
+		 */
+		externalEvidence: z
+			.array(ExternalEvidenceSchema)
+			.max(MAX_PLAN_FEATURES)
+			.optional(),
 	})
 	.strict()
 	.superRefine((plan, context) => {

@@ -44,6 +44,7 @@ const plan: Plan = {
 	requirements: ["Keep lifecycle state canonical."],
 	decisions: ["Use one full review per run."],
 	gate: "bun test",
+	externalEvidence: [],
 	features: [
 		{
 			id: FOUNDATION,
@@ -1115,6 +1116,165 @@ describe("Session v5 domain state machine", () => {
 				plan: oneFeaturePlan([PROSE_VALIDATION], "bun test -t greet"),
 			}),
 		).toThrow("canonical gate cannot select which tests it runs");
+	});
+
+	test("requires a new plan to declare its external evidence", () => {
+		const environment = deterministicEnvironment();
+		const { externalEvidence: _omitted, ...withoutEvidence } = oneFeaturePlan([
+			PROSE_VALIDATION,
+		]);
+		expect(() => saveDraft(environment, { plan: withoutEvidence })).toThrow(
+			"must declare `externalEvidence`",
+		);
+		// An empty list is the answer, not the absence of one.
+		expect(
+			saveDraft(environment, {
+				plan: { ...withoutEvidence, externalEvidence: [] },
+			}).plan?.externalEvidence,
+		).toEqual([]);
+	});
+
+	test("refuses final review and completed closure until the declared command passes", () => {
+		const environment = deterministicEnvironment();
+		// The measured failure: a goal whose acceptance needs a machine this host is
+		// not, satisfied with a proxy the model wrote itself and then closed
+		// `completed` over, with a passing review. The declared command is the only
+		// discharge, so the proxy cannot be the evidence.
+		const probe = "bun scripts/windows-probe.mjs";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...oneFeaturePlan([PROSE_VALIDATION]),
+						externalEvidence: [
+							{
+								requirement:
+									"the original reserved name cannot be created and the safe one can",
+								environment: "Windows",
+								command: probe,
+							},
+						],
+					},
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		session = validate(session, {
+			id: "wine-proxy",
+			featureId: DELIVERY,
+			command: "bash /tmp/wintest/verify.sh",
+			scope: "focused",
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-with-proxy"),
+		).toThrow(JSON.stringify(probe));
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-with-proxy"),
+		).toThrow("deferred or abandoned closure");
+		// A recorded failure of the declared command is not satisfaction either.
+		session = validate(session, {
+			id: "probe-fails-off-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			exitCode: 3,
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-red-probe"),
+		).toThrow(JSON.stringify(probe));
+		session = validate(session, {
+			id: "probe-passes",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-probe",
+		);
+		const completed = pass(accepted.session, DELIVERY, accepted.assignment);
+		expect(sessionStatus(completed)).toBe("completed");
+		// The closure guard states the same rule independently of the review path, so
+		// a plan whose entry was never observed cannot be closed `completed` even if
+		// its features somehow completed.
+		const unobserved: Session = {
+			...completed,
+			plan: completed.plan && {
+				...completed.plan,
+				externalEvidence: [
+					{
+						requirement: "observed on Windows",
+						environment: "Windows",
+						command: "bun scripts/never-ran.mjs",
+					},
+				],
+			},
+		};
+		expect(() =>
+			closeSession(unobserved, {
+				operationId: "close-unobserved",
+				expectedRevision: unobserved.revision,
+				sessionId: unobserved.id,
+				kind: "completed",
+				summary: "Claimed complete.",
+			}),
+		).toThrow("Close deferred or abandoned instead");
+		expect(
+			closeSession(unobserved, {
+				operationId: "close-deferred",
+				expectedRevision: unobserved.revision,
+				sessionId: unobserved.id,
+				kind: "deferred",
+				summary: "Needs a Windows host.",
+			}).session.closure?.kind,
+		).toBe("deferred");
+	});
+
+	test("admits a feature review while plan-level external evidence is outstanding", () => {
+		const environment = deterministicEnvironment();
+		// The best outcome the eval matrix recorded, and one a blanket veto would
+		// refuse: split the goal into the half this host can prove and the half it
+		// cannot, then prove the first. Only the final review claims the whole plan.
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...plan,
+						features: plan.features.map((feature) => ({
+							...feature,
+							validation: [PROSE_VALIDATION],
+						})),
+						externalEvidence: [
+							{
+								requirement: "observed on Windows",
+								environment: "Windows",
+								command: "bun scripts/windows-probe.mjs",
+							},
+						],
+					},
+				}),
+			),
+			FOUNDATION,
+			environment,
+		);
+		session = validate(session, {
+			id: "foundation-focused",
+			featureId: FOUNDATION,
+			command: "bun test src/foundation.test.ts",
+			scope: "focused",
+		});
+		expect(
+			requestReview(session, FOUNDATION, environment).assignment.kind,
+		).toBe("feature");
 	});
 
 	test("requires a new plan to declare its canonical gate", () => {

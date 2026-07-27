@@ -85,6 +85,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 						requirements: ["Archive completed work."],
 						decisions: ["Use one final review."],
 						gate: "bun test",
+						externalEvidence: [],
 						features: [
 							{
 								id: FEATURE_ID,

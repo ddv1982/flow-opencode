@@ -13,6 +13,8 @@ once, by one person, from one model's output.
 | --- | --- | --- |
 | Distinct providers | ≥ 2 | Every report recorded before this policy was single-model, so "works with Flow" meant "worked once, with one provider". |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
+| Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask and runs that stopped at a blocker. |
+| Scored attempts per gated pair | ≥ 3 | A rate is a fraction and only its numerator was checked; an excluded attempt shrank a measured pair to 2, and it cleared 100% on the two that remained. |
 | `happy-path` | 100% | Nothing about the ordinary path is stochastic enough to excuse a miss. |
 | `plan-only-stops` | 100% | Same. |
 | `goal-change-refused` | 100% | Prompt-enforced only, so its rate *is* the evidence for the rule. |
@@ -26,16 +28,21 @@ report does not contain fails the same way: the runner takes `--scenario` and
 `bun run qualify` reads the newest report, so qualification is a full-suite claim or
 it is nothing.
 
-Reported but not gated: unsubmitted review assignments, reviewer silent passes,
-blocking and advisory finding counts, scope blockers, broad-scope refusals, token
-use, and cost. These are trend numbers. A reviewer whose every verdict is a silent
-pass is indistinguishable from one that reads nothing, and that is worth watching
-without being worth blocking on.
+An excluded attempt is not a smaller sample, it is a missing one: the runner drops
+an attempt that ended with the model asking, so a gated pair below the floor means
+re-run that pair rather than read the remainder as its rate.
 
-An unsubmitted assignment is a stalled lifecycle when the session closed around it,
-and an ordinary consequence of a run that stopped to ask the user or was timed out
-by the harness. This report cannot yet tell those apart, so the number is published
-rather than enforced; gate it once a recorded pass shows what zero looks like.
+Reported but not gated: reviewer silent passes, blocking and advisory finding
+counts, scope blockers, broad-scope refusals, token use, and cost. These are trend
+numbers. A reviewer whose every verdict is a silent pass is indistinguishable from
+one that reads nothing, and that is worth watching without being worth blocking on
+— the first full matrix recorded 20 of 22, which is a number to decide about from a
+second baseline, not to gate against this one.
+
+Token and cost totals are provider-shaped and reported as such. One model in the
+measured matrix priced no run at all, and another reported 38 input tokens beside
+479,640 cache reads for a turn its neighbour billed entirely as input, so the
+report prints cached input and the number of priced runs beside the totals.
 
 ## Cadence
 

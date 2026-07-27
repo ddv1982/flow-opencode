@@ -494,6 +494,14 @@ async function main(): Promise<void> {
 		(sum, result) => sum + result.tokens.output,
 		0,
 	);
+	// Printed beside the input total because providers split the two differently: one
+	// model in the measured matrix reported 38 input tokens against 479,640 cache
+	// reads for the same turn its neighbour billed entirely as input. Each field is
+	// honest on its own; an input total read across providers without this one is not.
+	const totalCached = results.reduce(
+		(sum, result) => sum + result.tokens.cacheRead,
+		0,
+	);
 	// A provider that omits cost from its usage payload (OpenAI does) must not be
 	// summarised as $0.0000: an unknown spend is not a free one.
 	const priced = results.filter((result) => result.costUsd !== null);
@@ -503,7 +511,7 @@ async function main(): Promise<void> {
 			? "cost not reported by provider"
 			: `$${cost.toFixed(4)}${priced.length < results.length ? ` over ${priced.length}/${results.length} runs; the rest unreported` : ""}`;
 	console.log(
-		`${passed}/${scored.length} passed | ${totalIn} input + ${totalOut} output tokens | ${spend}${
+		`${passed}/${scored.length} passed | ${totalIn} input (+${totalCached} cached) + ${totalOut} output tokens | ${spend}${
 			blocked > 0
 				? `\n${blocked} run(s) never reached the model and are excluded; re-run them before trusting this pass rate.`
 				: ""
@@ -593,6 +601,7 @@ async function main(): Promise<void> {
 					escalationExcluded: askedUnscored,
 					total: results.length,
 					totalIn,
+					totalCached,
 					totalOut,
 					costUsd: priced.length === 0 ? null : cost,
 					costReportedRuns: priced.length,

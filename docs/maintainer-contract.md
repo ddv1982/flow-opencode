@@ -225,6 +225,17 @@ the claimant's word. Nothing decides whether the declared command is a test;
 [ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
 caller declaration made at planning time.
 
+`savePlan` also requires `externalEvidence`: every acceptance observation needing an
+environment this host may not be, each with the exact command whose passing is that
+observation, or an empty list. An entry is satisfied only by an eligible observation
+of that exact command. `startReview` refuses a *final* review while any entry is
+unsatisfied for current source, and `closeSession` refuses a `completed` closure
+while any entry has never passed; both refusals name the remaining closures. Feature
+reviews are deliberately not vetoed, so a goal can be split into the half this host
+can prove and the half it cannot.
+[ADR 0011](adr/0011-declared-external-evidence.md) records the measured substitutions
+this replaced.
+
 A failed, incomplete, or source-drifted observation creates a freshness boundary
 for its command across attempts. Prospectively, review remains unavailable until
 the active run holds a complete exit-zero observation of that same command which

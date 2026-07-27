@@ -97,9 +97,8 @@ feature and current worktree:
 
 - Preserve every named finding/requirement; map each to an observable acceptance
   outcome.
-- Inventory exact commands, behavior evidence, required operating system,
-  architecture, service, credential, external setting, or hardware, and an
-  authorized path for each.
+- Inventory exact commands, behavior evidence, and an authorized path for each
+  environment the plan's `externalEvidence` declared.
 - Reuse one conversational run baseline of unrelated work, deletions, renames,
   file types, and executable modes. Refresh changed facts; give each review only
   facts the feature changes or depends on, and give final review the full
@@ -110,9 +109,9 @@ feature and current worktree:
   state-machine work, express it as a compact matrix with `state/interleaving`,
   `event`, `expected outcome`, `cleanup/invariant`, and `evidence` columns.
 
-Carry the checklist/IDs through workers and review. Required evidence needing
-user or external authority stops before implementation. If skipped or unavailable, it forbids
-`flow_review_start`; a substitute pass cannot cure it.
+Carry the checklist/IDs through workers and review. Evidence needing user or
+external authority stops before implementation, and the plan's `externalEvidence`
+names each command that discharges it.
 
 ## Implement
 
@@ -168,12 +167,12 @@ The command is durable, so include no secrets.
 A failed, incomplete, or source-drifted observation of a plan-listed command or of
 the declared `gate` blocks review until that same command passes for current
 source. No substitute discharges it, and reverting to an older source digest
-revives nothing. Plan-listed prose that never ran as a command stays reviewer
-judgment, not a fabricated result.
+revives nothing.
 
-A gate that cannot pass withholds completed closure, and reporting the blocker is
-half the move. Fix the gate, or ask the user to choose deferred or abandoned
-closure. Ending the turn having done neither leaves the workflow with no next step.
+A gate or `externalEvidence` command that cannot pass withholds completed closure,
+and reporting the blocker is half the move. Reach the passing command, or ask the
+user to choose deferred or abandoned closure. Ending the turn having done neither
+leaves the workflow with no next step, whatever the blocker was.
 
 Every host-observed validation advances the session revision, so the revision
 that armed a completed command is stale. The `[flow-validation]` marker reports
@@ -183,14 +182,11 @@ the marker is absent or malformed, refresh compact status before mutating.
 
 Use focused validation for ordinary features. For the final feature, run the
 plan's declared `gate` at broad scope after the last relevant edit. A source edit
-invalidates earlier applicability. Failed or unavailable checks are blockers,
-not passing evidence. If the declared gate cannot run at all, that is a blocker
-to report, not a reason to relabel a smaller check.
+invalidates earlier applicability. Failed or unavailable checks are blockers, not
+passing evidence.
 
-Immediately before review admission, reconcile the preflight inventory against
-the recorded current-source observations. Do not call `flow_review_start` while
-known required behavior or environment evidence is skipped or unavailable,
-including requirements that are not exact stored commands.
+Immediately before review admission, reconcile the preflight inventory against the
+recorded current-source observations.
 
 ## Review and record
 

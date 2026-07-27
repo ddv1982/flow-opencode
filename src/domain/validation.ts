@@ -1,5 +1,6 @@
 import { MAX_VALIDATION_ID_LENGTH, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import type {
+	ExternalEvidence,
 	FeatureId,
 	FeatureRun,
 	Session,
@@ -215,6 +216,36 @@ export function recordValidation(
 		value: observation,
 		replayed: false,
 	};
+}
+
+/**
+ * Declared external evidence with no passing observation of its exact command.
+ *
+ * The byte-match is the whole mechanism, and it is `plan.gate`'s: a command named
+ * before implementation cannot be swapped for a weaker one afterwards. Any run's
+ * observations count, because the environment is a property of the host and not of
+ * the feature that happened to need it first.
+ *
+ * `sourceDigest` narrows this to the current workspace content for review admission.
+ * Closure has no digest to compare against and passes none, so a closure check asks
+ * only whether the command ever passed — the final review it must have cleared
+ * already asked the stricter question.
+ */
+export function unsatisfiedExternalEvidence(
+	session: Session,
+	sourceDigest?: SourceDigest,
+): ExternalEvidence[] {
+	const declared = session.plan?.externalEvidence ?? [];
+	if (declared.length === 0) return [];
+	const observed = session.runs.flatMap((run) => run.validations);
+	return declared.filter(
+		(entry) =>
+			!observed.some(
+				(observation) =>
+					observation.command === entry.command &&
+					isValidationEligible(observation, sourceDigest),
+			),
+	);
 }
 
 export function isValidationFresh(

@@ -50,6 +50,13 @@ Save one plan with:
 - `gate`: the canonical whole-repository command, read from repository
   configuration. Broad evidence later runs this command byte-for-byte, so a check
   too weak to fail forecloses broad evidence for the session.
+- `externalEvidence`: each acceptance observation needing an operating system,
+  architecture, service, credential, setting, or hardware this host may lack, as
+  `requirement`, `environment`, and the exact `command` whose passing is that
+  observation. Empty when the goal is fully observable here. That command is what
+  satisfies it: final review and completed closure stay refused until it passes, and
+  an emulator is a different environment. Recording the gap as a `requirements`
+  non-goal declares nothing.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 
@@ -64,9 +71,7 @@ Preserve stable finding, issue, or requirement IDs exactly in the saved feature
 outcome and its evidence.
 
 A `validation` entry naming a command is recorded byte-for-byte; prose there stays
-reviewer judgment, never a fabricated result. Name any required operating system,
-architecture, service, credential, external setting, or hardware so `flow-run` can
-preflight it.
+reviewer judgment, never a fabricated result.
 
 Before saving, confirm:
 

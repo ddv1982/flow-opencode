@@ -27,6 +27,7 @@ import {
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
+	unsatisfiedExternalEvidence,
 } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
@@ -167,6 +168,24 @@ function assertDeclaredGate(plan: Plan): void {
 	}
 }
 
+/**
+ * A newly saved plan must answer whether anything the goal asks for is unobservable
+ * here.
+ *
+ * An empty list is a real answer and the common one. What the field removes is the
+ * third state: a run that noticed the gap, wrote it into `requirements` as a
+ * non-goal, and left nothing for the runtime to check. Requiring the field asks the
+ * question while the answer is still cheap, which is the same reason `gate` is
+ * required rather than inferred.
+ */
+function assertDeclaredExternalEvidence(plan: Plan): void {
+	if (plan.externalEvidence === undefined) {
+		fail(
+			"A saved plan must declare `externalEvidence`: every acceptance observation needing an environment this host may not be, each with the exact command whose passing is that observation. Declare an empty list when the goal is fully observable here.",
+		);
+	}
+}
+
 function assertArtifacts(artifacts: readonly Artifact[]): void {
 	const issue = artifactIssues(artifacts)[0];
 	if (issue) fail(issue);
@@ -221,6 +240,7 @@ export function savePlan(
 ): MutationResult<null> {
 	assertPlan(input.plan);
 	assertDeclaredGate(input.plan);
+	assertDeclaredExternalEvidence(input.plan);
 	if (!session) {
 		if (input.expectedRevision !== 0) {
 			fail("A new Flow session must start from expectedRevision 0.");
@@ -464,6 +484,30 @@ export function startReview(
 		);
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
+	// Only the final review, and deliberately: a run that split the goal into a
+	// feature this host can prove and one it cannot, then passed the first and
+	// blocked the second, produced the best outcome the eval matrix has recorded.
+	// Vetoing every feature review over a plan-level gap would refuse that work.
+	// The final review is where the whole plan is claimed verified, which is the
+	// claim declared external evidence exists to hold.
+	if (kind === "final") {
+		const unsatisfied = unsatisfiedExternalEvidence(
+			session,
+			input.sourceDigest,
+		);
+		if (unsatisfied.length > 0) {
+			fail(
+				`Final review requires the plan's declared external evidence to pass for the current workspace content: ${unsatisfied
+					.map(
+						(entry) =>
+							`${JSON.stringify(entry.command)} (${entry.environment}, for ${entry.requirement})`,
+					)
+					.join(
+						", ",
+					)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
+			);
+		}
+	}
 	const applicable = run.validations.filter(
 		(validation) =>
 			isValidationEligible(validation, input.sourceDigest) &&
@@ -732,6 +776,20 @@ export function closeSession(
 	assertMutable(session);
 	if (input.kind === "completed" && sessionStatus(session) !== "completed") {
 		fail("A completed close requires every planned feature to pass review.");
+	}
+	// Reachable only through a plan whose external evidence was satisfied and then
+	// invalidated, since the final review already checked it. Stated here anyway
+	// because this is the claim the field exists to hold, and it should not depend on
+	// which path reached the closure.
+	if (input.kind === "completed") {
+		const unsatisfied = unsatisfiedExternalEvidence(session);
+		if (unsatisfied.length > 0) {
+			fail(
+				`A completed close requires the plan's declared external evidence to have passed: ${unsatisfied
+					.map((entry) => JSON.stringify(entry.command))
+					.join(", ")}. Close deferred or abandoned instead.`,
+			);
+		}
 	}
 	let closure: SessionClosure | null = null;
 	const next = commit(

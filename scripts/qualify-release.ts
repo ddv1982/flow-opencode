@@ -41,6 +41,18 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 /** The minimum number of distinct providers a qualifying report must exercise. */
 const MIN_PROVIDERS = 2;
 
+/**
+ * The minimum number of *scored* attempts behind a gated pass rate.
+ *
+ * A rate is a fraction, and only the numerator was ever checked. An attempt that
+ * ended with the model asking the user is excluded from the denominator, so a
+ * measured run cleared a 100% threshold on two attempts instead of three — and the
+ * excluded one was the attempt that behaved correctly. Three is the documented
+ * default `--repeat`, so a report below it means re-run that pair, not accept a
+ * quietly smaller sample.
+ */
+const MIN_SCORED_ATTEMPTS = 3;
+
 type Report = {
 	flowVersion?: string;
 	opencodeVersion?: string;
@@ -120,12 +132,17 @@ export function qualificationFailures(report: Report): string[] {
 		);
 	}
 
-	// Unsubmitted review assignments are reported, not gated, for the same reason a
-	// new scenario is: there is no recorded baseline. A stalled review in a session
-	// that closed is a real defect, but this number also counts assignments left open
-	// by a run that correctly stopped to ask the user, and by one the harness timed
-	// out. Gating it at zero would fail a release over the honest outcomes before it
-	// ever caught the defect. Gate it once a report shows what zero looks like.
+	// Gated now that a report has shown what zero looks like: 54 runs across three
+	// providers recorded 22 assignments and no unsubmitted one, including runs that
+	// stopped to ask the user and runs that stopped at an unpassable blocker. The
+	// worry that made this a reported number — that the count would also catch honest
+	// stops — did not survive being measured.
+	const unsubmitted = summary.reviewer?.unsubmitted ?? 0;
+	if (unsubmitted > 0) {
+		failures.push(
+			`${unsubmitted} review assignment(s) of ${summary.reviewer?.assignments ?? 0} were never submitted; a review the workflow is still waiting on is a stalled lifecycle`,
+		);
+	}
 
 	const scenarios = new Set(
 		(report.results ?? []).flatMap((r) => (r.scenario ? [r.scenario] : [])),
@@ -158,6 +175,12 @@ export function qualificationFailures(report: Report): string[] {
 		if (rate.attempts === 0) {
 			failures.push(
 				`${label}: nothing scored (${rate.unscored} excluded), so this scenario is unmeasured`,
+			);
+			continue;
+		}
+		if (rate.attempts < MIN_SCORED_ATTEMPTS) {
+			failures.push(
+				`${label}: only ${rate.attempts} attempt(s) scored (${rate.unscored} excluded); a gated rate needs at least ${MIN_SCORED_ATTEMPTS}, so re-run this pair`,
 			);
 			continue;
 		}

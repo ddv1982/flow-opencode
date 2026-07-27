@@ -15,11 +15,23 @@ that rested on prompt prose are now measured.
   0009](docs/adr/0009-scope-keyed-validation-veto.md) recorded as open: a measured
   run had closed `completed` by claiming `git diff --check` as its gate — a command
   that cannot fail, so nothing was ever observed red.
+- **A plan declares evidence this host cannot produce.** `plan.externalEvidence`
+  names each acceptance observation needing an operating system, service, credential,
+  or device this machine may lack, with the exact command whose passing is that
+  observation. Final review and `completed` closure are both refused until that
+  command passes, so a self-written proxy cannot stand in for it. The first
+  three-provider eval matrix found three runs substituting one — two closed
+  `completed` over a Windows-only criterion on a Linux host, with the independent
+  review passing, and the suite's own false-completion metric reported zero. See
+  [ADR 0011](docs/adr/0011-declared-external-evidence.md).
 - **Session v5 schema:** `plan.gate` is a new optional string. A document written by
   an earlier build still hydrates and keeps the older rule where `broad` is the
   claimant's word; `flow_plan_save` requires the field for any new plan, so a plan
-  this build writes always declares one. Rolling an active session back to a build
-  without the field is not supported, as with every previous widening.
+  this build writes always declares one. `plan.externalEvidence` is a new optional
+  array under the same rule: older documents declare nothing and owe no acceptance
+  observation, and `flow_plan_save` requires the field — an empty list is the answer
+  when the goal is fully observable here. Rolling an active session back to a build
+  without either field is not supported, as with every previous widening.
 - **The bar is published, not described.** [What Flow
   guarantees](docs/guarantees.md) states which claims are enforced by types, attested
   by the host, declared by the caller, judged by a model, or unenforced.

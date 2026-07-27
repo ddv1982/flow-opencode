@@ -32,6 +32,7 @@ export const plan: Plan = {
 	requirements: ["Persist validation directly in Session v5."],
 	decisions: ["Use a single final review for the final feature."],
 	gate: "bun test",
+	externalEvidence: [],
 	features: [
 		{
 			id: FEATURE,

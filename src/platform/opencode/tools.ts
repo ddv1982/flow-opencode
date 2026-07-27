@@ -109,6 +109,19 @@ const plan = host
 		 * the field existed, and the two schemas stay at parity.
 		 */
 		gate: text.optional(),
+		/**
+		 * Acceptance observations needing an environment this host may not be, each
+		 * with the exact command whose passing is that observation. Optional and
+		 * required by `savePlan` for the same reason `gate` is.
+		 */
+		externalEvidence: host
+			.array(
+				host
+					.object({ requirement: text, environment: text, command: text })
+					.strict(),
+			)
+			.max(MAX_PLAN_FEATURES)
+			.optional(),
 	})
 	.strict()
 	.superRefine((value, context) => {

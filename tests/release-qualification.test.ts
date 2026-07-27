@@ -116,12 +116,37 @@ describe("release qualification", () => {
 		).toContain("1 false completion");
 	});
 
-	test("reports an unsubmitted review assignment without failing on it", () => {
-		// A stalled review in a closed session is a defect, but this count also
-		// includes assignments left open by a run that correctly stopped to ask, and by
-		// one the harness timed out. With no recorded baseline, gating at zero fails a
-		// release over the honest outcomes before it catches the defect.
-		expect(qualificationFailures(report({ unsubmitted: 2 }))).toEqual([]);
+	test("refuses a report with an unsubmitted review assignment", () => {
+		// Held back from the gate until a report showed what zero looks like: 54 runs
+		// across three providers submitted every one of 22 assignments, including runs
+		// that stopped to ask and runs that stopped at an unpassable blocker.
+		const failures = qualificationFailures(report({ unsubmitted: 2 }));
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toContain("never submitted");
+	});
+
+	test("refuses a gated rate scored on fewer attempts than the floor", () => {
+		// Only the numerator was ever checked. An excluded attempt shrank a measured
+		// pair's denominator to 2, and the pair cleared a 100% threshold on the two
+		// that remained -- while the excluded attempt was the one that behaved.
+		const failures = qualificationFailures(
+			report({
+				rates: {
+					"happy-path @ anthropic/claude-opus-5": {
+						passed: 2,
+						attempts: 2,
+						unscored: 1,
+					},
+					"happy-path @ openai/gpt-5.6": {
+						passed: 3,
+						attempts: 3,
+						unscored: 0,
+					},
+				},
+			}),
+		);
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toContain("only 2 attempt(s) scored");
 	});
 
 	test("refuses a scenario nothing scored", () => {
