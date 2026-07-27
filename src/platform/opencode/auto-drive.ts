@@ -24,6 +24,17 @@ type HostPart = { type: string; messageID: string; auto?: boolean };
 type Compaction = Record<"authority" | "user", string> &
 	Partial<Record<"summary" | "successor", string>>;
 type Checkpoint = { revision: number; answered: boolean; advance?: number };
+/**
+ * Whether this host can support `/flow-auto` continuation across model turns.
+ *
+ * Continuation is anchored to the assistant message that owns the lease, so a host
+ * that never reports assistant message parentage cannot continue at all — Flow
+ * stops after every feature and looks broken. The signal is process-local and
+ * observational, so it has three states rather than two: `unsupported` needs an
+ * assistant message that arrived *without* a parent, which is a real negative, and
+ * `unknown` is the honest answer before any assistant message exists.
+ */
+export type AutoContinuationSupport = "supported" | "unsupported" | "unknown";
 export interface AutoTimingSnapshot {
 	readonly scope: "latest-flow-auto-in-current-plugin-process";
 	readonly authoritative: false;
@@ -110,6 +121,8 @@ export class AutoDriveCoordinator {
 	readonly #options: AutoDriveOptions;
 	/** Whether this host has ever reported assistant message parentage. */
 	#hostParentage = false;
+	/** Whether any assistant message has arrived without a parent. */
+	#hostMissingParentage = false;
 	constructor(options: AutoDriveOptions) {
 		this.#options = options;
 	}
@@ -268,8 +281,10 @@ export class AutoDriveCoordinator {
 	observeHostMessage(host: string, message: HostMessage): void {
 		// Recorded before the lease guard: parentage is a property of the host, not
 		// of the session that happens to hold the lease.
-		if (message.role === "assistant" && message.parentID !== undefined)
-			this.#hostParentage = true;
+		if (message.role === "assistant") {
+			if (message.parentID === undefined) this.#hostMissingParentage = true;
+			else this.#hostParentage = true;
+		}
 		const lease = this.#lease;
 		if (lease?.hostSessionId !== host) return;
 		if (message.role === "assistant" && message.parentID !== undefined) {
@@ -336,6 +351,17 @@ export class AutoDriveCoordinator {
 		if (!point) return;
 		if (revision > point.revision)
 			point.advance = revision + Number(reviewerPending);
+	}
+	/**
+	 * What this process has observed about the host's continuation support.
+	 *
+	 * Reported rather than enforced: an `unsupported` host still gets the whole
+	 * lifecycle, one `/flow-run` at a time. The point is that the user hears it from
+	 * Flow instead of inferring it from a workflow that stops after every feature.
+	 */
+	continuationSupport(): AutoContinuationSupport {
+		if (this.#hostParentage) return "supported";
+		return this.#hostMissingParentage ? "unsupported" : "unknown";
 	}
 	timingSnapshot(): AutoTimingSnapshot | null {
 		const timing = this.#timing;

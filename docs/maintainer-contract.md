@@ -4,6 +4,17 @@ This document defines the small set of invariants Flow must preserve.
 
 ## Product boundary
 
+Flow is in preview. [Positioning](positioning.md) owns the audience and the cases
+Flow is the wrong tool for, and [what Flow guarantees](guarantees.md) is the public
+map of which claims are TS-enforced, host-attested, caller-declared, model-judgment,
+or unenforced. A claim in neither a test nor a scheduled eval is unmeasured and is
+labelled so there.
+
+The public surface — tools, commands, guides, agents, and the Session v5 shape —
+stays frozen while those guarantees are measured; additive optional fields are
+allowed, and a removal or rename waits for a major announced one release ahead.
+[Release qualification](release-qualification.md) owns the thresholds and cadence.
+
 Flow is a serial durable workflow plugin, not a general orchestration framework.
 It owns planning state, one active run, observed validation, one independent
 review, reset, and closure. Implementation inside that run may use one bounded,
@@ -102,7 +113,9 @@ or delivery document.
   beyond its historical bounds. In particular, a run may retain 64 exact
   planned gates plus one separate broad observation. Users must finish or close
   active work before downgrade; Flow adds no rollback capability layer.
-- A plan is a bounded DAG and is immutable after approval.
+- A plan is a bounded DAG and is immutable after approval. A newly saved plan
+  declares the canonical `gate`; the persisted field stays optional so an older
+  document still hydrates.
 - Stable finding, issue, and requirement IDs supplied by the source request
   remain verbatim in saved feature summary or validation prose so each ID is
   traceable to an immutable outcome and its evidence.
@@ -143,7 +156,16 @@ Revision and durable record order are authoritative. Session correctness must
 not depend on UTC time, model-provided time, elapsed duration, or timestamp
 repair.
 
-`flow_status` may add timing for the latest `/flow-auto` invocation in the
+`flow_status` may add process-local `/flow-auto` context to top-level workflow data:
+`autoContinuation` reports whether this host has been observed to report assistant
+message parentage, which continuation depends on. It has three states and only two
+are surfaced — `supported`, `unsupported` with a reason and recovery, and an
+unreported `unknown` before any assistant message exists, since the absence of a
+signal is not a limitation. `/flow-auto` activation states an `unsupported` host
+plainly instead of letting continuation fail silently after every feature. This
+adds no Session v5 field and never blocks a transition.
+
+`flow_status` may also add timing for the latest `/flow-auto` invocation in the
 current plugin process to top-level workflow data. `activeMs` is process-local
 wall time while the coordinator classifies the lease as active, not CPU time or
 pure coding time. `waitingForUserMs` counts only recognized projected
@@ -194,9 +216,14 @@ observation is persisted directly on the run.
 
 Validation commands are durable and must not contain inline secrets. Raw output
 is neither persisted nor projected; the command, exit code, completeness,
-output digest, and source binding are the evidence. `broad` means the
-repository's canonical applicable gate or a justified equivalent, and claiming it
-binds the claimant.
+output digest, and source binding are the evidence. `broad` means an observation of
+the plan's declared `gate`: `savePlan` requires that command for a new plan and
+refuses one that selects its own tests, `recordValidation` refuses a broad claim on
+any other command, and the declared gate is itself a vetoed command. A plan saved
+before the field existed declares none and keeps the older rule where the label is
+the claimant's word. Nothing decides whether the declared command is a test;
+[ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
+caller declaration made at planning time.
 
 A failed, incomplete, or source-drifted observation creates a freshness boundary
 for its command across attempts. Prospectively, review remains unavailable until
@@ -204,10 +231,11 @@ the active run holds a complete exit-zero observation of that same command which
 matches the review's current source and is newer than the latest relevant
 failure or drift. Returning to an older source digest does not revive a pass
 from before that boundary, and no other passing command discharges it — neither
-a substitute broad gate nor a narrower command relabelled `broad`. Two command
+a substitute broad gate nor a narrower command relabelled `broad`. Three command
 sets are vetoed this way: any command whose stored bytes equal an entry in the
 active feature's validation list, since Flow does not parse validation prose
-into commands, and any command an observation recorded at `broad` scope.
+into commands; the plan's declared `gate`; and any command an observation recorded
+at `broad` scope.
 Accepted same-schema Session v5 pending or completed reviews are grandfathered;
 Flow neither reopens them nor adds a retroactive veto during completion or close.
 [ADR 0009](adr/0009-scope-keyed-validation-veto.md) records why the label binds.
@@ -473,11 +501,20 @@ automatic repair.
 The deterministic local gate is `bun run check`. CI keeps a normal Linux check,
 targeted platform persistence coverage, dependency and workflow checks, a real
 OpenCode live smoke, package smoke, and release publication. Removed lifecycle
-soaks, prompt evaluators, harness promotion, replay, and cross-version active
-session gates must not return without a new ADR that removes an equal or larger
-amount of product machinery. Bounded-wave coverage should test the real agent
-permissions, manager guidance, and host-visible configuration without adding a
-scheduler or tests-of-tests.
+soaks, harness promotion, replay, and cross-version active session gates must not
+return without a new ADR that removes an equal or larger amount of product
+machinery.
+
+Model evals are the one exception, admitted by
+[ADR 0010](adr/0010-declared-canonical-gate.md) against the prompt prose the
+declared gate replaced. They run weekly and on demand in one workflow, never in a
+gate a contributor waits on, and skip themselves without a configured matrix or
+credentials. `bun run qualify` applies the published thresholds to a report; a
+scenario with no published threshold, or a gated scenario the report never ran,
+fails qualification.
+
+Bounded-wave coverage should test the real agent permissions, manager guidance, and
+host-visible configuration without adding a scheduler or tests-of-tests.
 
 See [Model-driven wave evidence](development.md#model-driven-wave-evidence) for
 the manual canary policy.

@@ -251,6 +251,26 @@ export function askedQuestions(outcome: Outcome): string[] {
 }
 
 /**
+ * Broad-scope claims the runtime refused, either for selecting which tests the
+ * command runs or for not being the plan-declared gate.
+ *
+ * The declared gate closed a real hole, but it also added a rule a model can walk
+ * into. Each refusal costs a turn, and no durable document can show one: the write
+ * never happened. A run that recovers looks identical to a run that never erred.
+ * Recovering is correct, so this is reported and never scored; a rising count means
+ * the plan surface is not naming the gate clearly enough.
+ */
+export function refusedBroadScope(
+	calls: readonly { readonly tool: string; readonly rawOutput: string }[],
+): number {
+	return calls.filter(
+		(call) =>
+			call.tool === "flow_validation_start" &&
+			/A broad observation (?:cannot select|must run)/.test(call.rawOutput),
+	).length;
+}
+
+/**
  * Indices where a call came from a different session than the one before it.
  *
  * Transcripts are joined into one spine for assertion, which erases the boundary

@@ -31,6 +31,7 @@ export const plan: Plan = {
 	overview: "Exercise the public application boundary.",
 	requirements: ["Persist validation directly in Session v5."],
 	decisions: ["Use a single final review for the final feature."],
+	gate: "bun test",
 	features: [
 		{
 			id: FEATURE,

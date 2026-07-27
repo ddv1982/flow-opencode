@@ -43,6 +43,7 @@ const plan: Plan = {
 	overview: "Build the kernel, then expose it.",
 	requirements: ["Keep lifecycle state canonical."],
 	decisions: ["Use one full review per run."],
+	gate: "bun test",
 	features: [
 		{
 			id: FOUNDATION,
@@ -63,17 +64,20 @@ const plan: Plan = {
 	],
 };
 
-function oneFeaturePlan(validation: string[]): Plan {
+function oneFeaturePlan(validation: string[], gate = "bun test"): Plan {
 	const feature = plan.features.find(({ id }) => id === DELIVERY);
 	if (!feature) throw new Error("Expected the delivery plan feature.");
-	return { ...plan, features: [{ ...feature, validation, dependsOn: [] }] };
+	return {
+		...plan,
+		gate,
+		features: [{ ...feature, validation, dependsOn: [] }],
+	};
 }
 
-const plannedGatePlan = oneFeaturePlan([
-	PROSE_VALIDATION,
+const plannedGatePlan = oneFeaturePlan(
+	[PROSE_VALIDATION, PLANNED_GATE, PLANNED_GATE],
 	PLANNED_GATE,
-	PLANNED_GATE,
-]);
+);
 
 function deterministicEnvironment(): TransitionEnvironment {
 	const sequences = new Map<string, number>();
@@ -878,7 +882,14 @@ describe("Session v5 domain state machine", () => {
 				[
 					{ id: "source-a-failure", exitCode: 1 },
 					{ id: "source-b-pass", sourceDigest: SOURCE_B },
-					{ id: "source-a-substitute", command: SUBSTITUTE_GATE },
+					// Recorded focused: a broad claim on anything but the declared gate is
+					// refused at arm time now, and what this row proves is that another
+					// passing command does not discharge the veto.
+					{
+						id: "source-a-substitute",
+						command: SUBSTITUTE_GATE,
+						scope: "focused",
+					},
 				],
 				SOURCE_A,
 			],
@@ -918,6 +929,7 @@ describe("Session v5 domain state machine", () => {
 		retry = validate(retry, {
 			id: "retry-substitute",
 			command: SUBSTITUTE_GATE,
+			scope: "focused",
 		});
 		expect(() =>
 			requestReview(retry, DELIVERY, retryEnvironment, "review-substitute"),
@@ -1020,20 +1032,27 @@ describe("Session v5 domain state machine", () => {
 			).toThrow("cannot select which tests it runs");
 		}
 		// A whole-suite gate keeps its claim, including when a flag or a directory
-		// narrows nothing the runtime can see.
+		// narrows nothing the runtime can see -- as the plan's declared gate, which is
+		// now the only command a broad observation may run.
 		for (const command of [
 			"bun test",
 			"bun run check",
 			"bun test --coverage",
 			"pytest tests/",
 			"bun run scripts/check.ts",
-			// Not a gate at all, and still accepted: nothing in the command contradicts
-			// breadth, it simply cannot fail. Measured closing a run over a red gate,
-			// and left open deliberately -- see ADR 0009.
-			"git diff --check && git diff --name-status",
 		]) {
+			const declared = deterministicEnvironment();
+			const withGate = begin(
+				approve(
+					saveDraft(declared, {
+						plan: oneFeaturePlan([PROSE_VALIDATION], command),
+					}),
+				),
+				DELIVERY,
+				declared,
+			);
 			expect(() =>
-				validate(session, {
+				validate(withGate, {
 					id: `broad-${command}`,
 					featureId: DELIVERY,
 					command,
@@ -1041,15 +1060,80 @@ describe("Session v5 domain state machine", () => {
 				}),
 			).not.toThrow();
 		}
+		// Any other command is refused whatever its shape, which is what closes the
+		// can't-fail escape ADR 0009 left open: `git diff --check` contradicts nothing
+		// about breadth and cannot fail, and it is no longer the claimant's call.
+		for (const command of [
+			"git diff --check && git diff --name-status",
+			"bun run check",
+			"true",
+		]) {
+			expect(() =>
+				validate(session, {
+					id: `undeclared-${command}`,
+					featureId: DELIVERY,
+					command,
+					scope: "broad",
+				}),
+			).toThrow("must run the plan-declared canonical gate");
+		}
+	});
+
+	test("keeps a can't-fail gate visible in the plan the user approves", () => {
+		const environment = deterministicEnvironment();
+		// The residual hole, pinned on purpose. Declaring `git diff --check` as the
+		// canonical gate is still accepted: deciding which commands are tests remains a
+		// whitelist. What changed is when and where the claim is made -- at planning
+		// time, in the immutable document approval locks, instead of mid-run against
+		// whatever the suite happened to be doing.
+		const cannotFail = "git diff --check && git diff --name-status";
+		const session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: oneFeaturePlan([PROSE_VALIDATION], cannotFail),
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		expect(
+			validate(session, {
+				id: "declared-cannot-fail",
+				featureId: DELIVERY,
+				command: cannotFail,
+				scope: "broad",
+			}).plan?.gate,
+		).toBe(cannotFail);
+	});
+
+	test("refuses a plan whose declared gate selects its own tests", () => {
+		const environment = deterministicEnvironment();
+		// The same rule one step earlier, where it is cheapest to fix: a plan cannot
+		// declare a hand-picked subset as the repository's whole-suite gate.
+		expect(() =>
+			saveDraft(environment, {
+				plan: oneFeaturePlan([PROSE_VALIDATION], "bun test -t greet"),
+			}),
+		).toThrow("canonical gate cannot select which tests it runs");
+	});
+
+	test("requires a new plan to declare its canonical gate", () => {
+		const environment = deterministicEnvironment();
+		const { gate: _omitted, ...withoutGate } = oneFeaturePlan([
+			PROSE_VALIDATION,
+		]);
+		expect(() => saveDraft(environment, { plan: withoutGate })).toThrow(
+			"must declare `gate`",
+		);
 	});
 
 	test("blocks a substitute broad command after the gate failed", () => {
 		const environment = deterministicEnvironment();
-		// Prose-only plan validation, so nothing but the `broad` claim can engage the
-		// veto. This is the recorded failure mode: the gate is observed red, then a
-		// second broad command is armed and review accepts it in its place. The
-		// substitute names no test file, so it is the veto that has to refuse it --
-		// `recordValidation` never sees a claim it can derive as narrow.
+		// Prose-only plan validation, so only the declared gate can engage the veto.
+		// This is the recorded failure mode: the gate is observed red, then a second
+		// command is armed and review accepts it in its place. It can no longer claim
+		// breadth, and the point stands without that -- review needs the failed command
+		// itself to pass, not a substitute of any scope.
 		let session = begin(
 			approve(
 				saveDraft(environment, { plan: oneFeaturePlan([PROSE_VALIDATION]) }),
@@ -1068,7 +1152,7 @@ describe("Session v5 domain state machine", () => {
 			id: "substitute-broad",
 			featureId: DELIVERY,
 			command: "bun run check",
-			scope: "broad",
+			scope: "focused",
 		});
 		const run = session.runs.at(-1);
 		if (!run) throw new Error("Expected the active run.");
@@ -1124,7 +1208,7 @@ describe("Session v5 domain state machine", () => {
 			id: "foundation-substitute",
 			featureId: FOUNDATION,
 			command: "bun run check",
-			scope: "broad",
+			scope: "focused",
 		});
 		expect(() =>
 			requestReview(session, FOUNDATION, environment, "review-foundation"),
@@ -1161,7 +1245,9 @@ describe("Session v5 domain state machine", () => {
 		passingIds.push("current-broad");
 		session = validate(session, {
 			id: "current-broad",
-			command: SUBSTITUTE_GATE,
+			// The declared gate, which is the only command a broad observation may run,
+			// and separate from all 64 planned focused commands.
+			command: "bun test",
 		});
 		expect(() =>
 			validate(session, { id: "over-limit", command: "bun run extra" }),
@@ -1189,10 +1275,23 @@ describe("Session v5 domain state machine", () => {
 			scope: "focused",
 			exitCode: 1,
 		});
-		prospective = validate(prospective, {
-			id: "legacy-substitute-pass",
-			command: SUBSTITUTE_GATE,
-		});
+		// Recorded against a plan that declared this command as its gate, then
+		// reattached to the planned-gate plan. A broad substitute can no longer be
+		// recorded against a plan that names a different gate, and this is state
+		// accepted before either rule existed.
+		prospective = {
+			...validate(
+				{
+					...prospective,
+					plan: oneFeaturePlan(
+						[PROSE_VALIDATION, PLANNED_GATE, PLANNED_GATE],
+						SUBSTITUTE_GATE,
+					),
+				},
+				{ id: "legacy-substitute-pass", command: SUBSTITUTE_GATE },
+			),
+			plan: prospective.plan,
+		};
 		expect(() =>
 			requestReview(prospective, DELIVERY, environment, "new-admission"),
 		).toThrow(PLANNED_GATE);

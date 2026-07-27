@@ -92,6 +92,11 @@ const PlanSchema = z
 			.max(MAX_PLAN_FEATURES)
 			.default([]),
 		features: z.array(PlanFeatureSchema).min(1).max(MAX_PLAN_FEATURES),
+		/**
+		 * Optional in the persisted schema so a plan written before the field existed
+		 * still hydrates; `savePlan` refuses a new plan without it.
+		 */
+		gate: boundedText("Plan gate").optional(),
 	})
 	.strict()
 	.superRefine((plan, context) => {

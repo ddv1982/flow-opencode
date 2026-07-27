@@ -35,6 +35,7 @@
 		"lint": "bunx biome check biome.json src tests scripts evals --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"release:metadata": "bun run scripts/release-metadata.ts",
 		"package:smoke": "bun test tests/package-smoke.test.ts",
+		"qualify": "bun run scripts/qualify-release.ts",
 		"release:monitor": "node scripts/release-monitor.mjs",
 		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
 		"test": "bun test tests",

@@ -120,12 +120,30 @@ function reviewerSteps(
 	return Number(raw);
 }
 
+/**
+ * What the reviewer's independence rests on, when nothing selects its model.
+ *
+ * Flow's structural guard against a model approving its own work is that the
+ * reviewer is a separate agent with no shell and no authority to edit. Without
+ * `OPENCODE_FLOW_REVIEWER_MODEL` the host also hands it the manager's model, so one
+ * family reviews its own output — the weakest form of the guarantee, and the one
+ * nobody is told they are getting.
+ *
+ * Flow does not choose a family itself: only ids this host has authenticated would
+ * work, that list is invisible at configuration time, and a guess produces a
+ * reviewer that fails to start.
+ */
+const SHARED_REVIEWER_MODEL_NOTICE =
+	"Flow: no OPENCODE_FLOW_REVIEWER_MODEL is set, so the independent reviewer runs on the same model as the manager. Independence is stronger with a different model family; set OPENCODE_FLOW_REVIEWER_MODEL to a provider/model this host can reach.";
+
 export function createFlowCoreConfigEntries(options?: {
 	env?: FlowEnvironment;
 	onWarning?: (warning: string) => void;
+	onNotice?: (notice: string) => void;
 }) {
 	const env = options?.env ?? process.env;
 	const model = envValue(env, "OPENCODE_FLOW_REVIEWER_MODEL");
+	if (!model) options?.onNotice?.(SHARED_REVIEWER_MODEL_NOTICE);
 	const steps = reviewerSteps(env, options?.onWarning);
 	return {
 		agent: {
@@ -156,10 +174,12 @@ export function applyFlowConfig(
 	options?: {
 		onCollision?: (kind: "agent" | "command", name: string) => void;
 		onWarning?: (warning: string) => void;
+		onNotice?: (notice: string) => void;
 	},
 ): void {
 	const entries = createFlowCoreConfigEntries({
 		...(options?.onWarning ? { onWarning: options.onWarning } : {}),
+		...(options?.onNotice ? { onNotice: options.onNotice } : {}),
 	});
 	for (const name of Object.keys(entries.agent)) {
 		if (config.agent && name in config.agent)

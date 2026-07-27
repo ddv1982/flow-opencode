@@ -144,6 +144,11 @@ deterministic hook and lifecycle gates.
 
 ## Release
 
+A release also needs a qualification pass: `bun run eval` against at least two
+providers, then `bun run qualify`, whose thresholds are published in
+[release qualification](release-qualification.md). The scheduled
+`.github/workflows/evals.yml` produces the same report weekly.
+
 Release tags use `v<package-version>`. Blocking release checks include the
 normal repository gate, package smoke, packed live OpenCode smoke, package
 integrity generation, npm publication, and GitHub release assets. There is no

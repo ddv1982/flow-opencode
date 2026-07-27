@@ -33,7 +33,10 @@ import {
 	flowSessionClose,
 	flowStatus,
 } from "../../infrastructure/fs/workspace-flow-service.js";
-import type { AutoTimingSnapshot } from "./auto-drive.js";
+import type {
+	AutoContinuationSupport,
+	AutoTimingSnapshot,
+} from "./auto-drive.js";
 import { type Hooks, type ToolContext, tool } from "./sdk.js";
 import type { ValidationCaptureCoordinator } from "./validation-capture.js";
 
@@ -98,6 +101,14 @@ const plan = host
 		requirements: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		decisions: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		features: host.array(planFeature).min(1).max(MAX_PLAN_FEATURES),
+		/**
+		 * The exact canonical command every broad observation must run.
+		 *
+		 * Optional here and required by `savePlan`, like every other plan rule the
+		 * domain owns: the persisted schema has to keep hydrating plans written before
+		 * the field existed, and the two schemas stay at parity.
+		 */
+		gate: text.optional(),
 	})
 	.strict()
 	.superRefine((value, context) => {
@@ -223,6 +234,7 @@ type ToolOptions = Readonly<{
 		sourceDigest: `sha256:${string}`;
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
+	autoContinuationSupport?: (() => AutoContinuationSupport) | undefined;
 }>;
 
 function json(value: unknown): string {
@@ -252,24 +264,49 @@ function toolError(error: unknown): string {
 	});
 }
 
-function withAutoTiming(
+/**
+ * Adds the process-local `/flow-auto` context to a status response: how long the
+ * latest lease has been active, and whether this host can carry a continuation at
+ * all. Both are observations about the process, never Session v5 state, and a
+ * failure to collect either leaves the response untouched.
+ */
+function withAutoContext(
 	response: FlowToolResponse,
-	snapshot: ToolOptions["autoTimingSnapshot"],
+	options: ToolOptions,
 ): FlowToolResponse {
-	if (!snapshot) return response;
+	let workflowData = response.workflowData;
 	try {
-		const timing = snapshot();
-		if (!timing) return response;
-		return {
-			...response,
-			workflowData: {
-				...response.workflowData,
-				autoTiming: timing,
-			},
-		};
+		const timing = options.autoTimingSnapshot?.();
+		if (timing) workflowData = { ...workflowData, autoTiming: timing };
 	} catch {
-		return response;
+		// Timing is diagnostic; losing it must not fail a status read.
 	}
+	try {
+		const support = options.autoContinuationSupport?.();
+		// `unknown` is withheld deliberately: before any assistant message exists it
+		// is the absence of a signal, and reporting it invites a caller to relay it as
+		// a limitation.
+		if (support === "supported" || support === "unsupported") {
+			workflowData = {
+				...workflowData,
+				autoContinuation: {
+					scope: "current-plugin-process",
+					support,
+					...(support === "unsupported"
+						? {
+								reason: "host-reports-no-assistant-message-parentage",
+								recovery: "Drive each feature with /flow-run.",
+							}
+						: {}),
+				},
+			};
+		}
+	} catch {
+		// Same: a capability probe never blocks a read.
+	}
+	return workflowData === response.workflowData
+		? response
+		: { ...response, workflowData };
 }
 
 async function execute<T extends FlowToolResponse>(
@@ -315,10 +352,7 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			args: StatusArgs,
 			execute: (args, context) =>
 				execute(context, async (workspace) =>
-					withAutoTiming(
-						await flowStatus(workspace, args),
-						options.autoTimingSnapshot,
-					),
+					withAutoContext(await flowStatus(workspace, args), options),
 				),
 		}),
 		flow_plan_save: tool({

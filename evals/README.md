@@ -54,10 +54,11 @@ git fixture, drives the real slash commands, then reads `.flow/session.json` and
 
 | id | invariant under test |
 | --- | --- |
-| `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run |
+| `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run, and with the plan's declared gate itself observed passing at `broad` scope |
 | `plan-only-stops` | `/flow-plan` saves a plan and starts no run |
 | `goal-change-refused` | a materially different request does not mutate, replace, or close the active session |
 | `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, the red test is reported rather than deleted, the user is left a deferred-or-abandoned choice, and no review submission is rejected for dropping a live prior finding id (asking the user how to close is an accepted end) |
+| `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.
@@ -80,6 +81,47 @@ Recovery is the largest body of
 contract in the repository that a same-session step cannot exercise at all,
 because a model that simply remembers what it just did looks indistinguishable
 from one that re-derived it.
+
+`unprovable-claim-refused` is the reviewer scenario. Its unprovable half is
+environmental rather than a seeded bug on purpose: a defect planted in the source is
+one the manager may simply fix, which measures implementation rather than review,
+while a Windows-only observable cannot be produced on this host by anyone. So the
+only honest outcomes are to stop before review or to fail it, and a passing verdict
+is the failure. It ships ungated in `scripts/qualify-release.ts` until it has a
+recorded baseline.
+
+## Cross-scenario metrics
+
+Three numbers are reported for every run and asserted by none. Two are derived from
+the durable documents (`evals/metrics.ts`):
+
+- **False completion** — a `completed` closure the document itself contradicts: a
+  planned feature with no completed run, a completed run with no passing validation
+  or no passing review, no final review, or a declared gate whose latest observation
+  failed. Anything short of a completed closure counts as nothing, because an honest
+  stop at an unpassable gate has the same gaps and is the correct outcome.
+- **Reviewer activity** — assignments, verdicts, unsubmitted assignments, findings by
+  severity, scope blockers, and *silent passes* (a pass with no finding at all). A
+  silent pass is not a defect; a reviewer whose every verdict is one is
+  indistinguishable from a reviewer that reads nothing.
+
+The third is read from the observed tool calls, because no document can record it:
+
+- **Broad-scope refusals** — how often the runtime refused a `broad` claim, either for
+  selecting which tests it runs or for not being the plan-declared gate. The refused
+  write left no trace, so a run that recovers looks identical to one that never erred.
+  Recovering is correct; a rising count means the plan surface is not naming the
+  declared gate clearly enough, which is a prompt defect the pass rate hides.
+
+All three appear under `summary` in the report, and `bun run qualify` turns the first
+two into a release decision. The refusal count is ungated until it has a baseline.
+
+## Multi-model matrix
+
+Every report recorded before this existed was single-model, so "works with Flow"
+meant "worked once, with one provider". Qualification needs at least two distinct
+providers, and `.github/workflows/evals.yml` runs the matrix weekly and on demand —
+never in a gate a contributor waits on, since a full pass costs real money.
 
 ## Using evals to change prompts
 

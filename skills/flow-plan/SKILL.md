@@ -47,6 +47,9 @@ Save one plan with:
 - `overview`: the implementation approach and important boundaries.
 - `requirements`: acceptance criteria, constraints, and non-goals.
 - `decisions`: assumptions and architecture or scope choices already made.
+- `gate`: the canonical whole-repository command, read from repository
+  configuration. Broad evidence later runs this command byte-for-byte, so a check
+  too weak to fail forecloses broad evidence for the session.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 
@@ -60,11 +63,10 @@ Preserve stable finding, issue, or requirement IDs exactly in the saved feature
 `summary` or `validation`; each stays traceable from the immutable plan to one
 outcome and its evidence.
 
-When `validation` names an executable command, record the exact plan-listed
-command byte-for-byte. Unrun behavior prose remains reviewer judgment, never a
-fabricated command result. Explicitly name any required operating system,
-architecture, service, credential, external setting, hardware, or evidence
-environment for `flow-run` to preflight before implementation.
+A `validation` entry naming a command is recorded byte-for-byte; prose there stays
+reviewer judgment, never a fabricated result. Name any required operating system,
+architecture, service, credential, external setting, or hardware so `flow-run` can
+preflight it.
 
 Before saving, confirm:
 

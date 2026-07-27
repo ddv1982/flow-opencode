@@ -4,6 +4,11 @@ This directory is the maintained documentation source for Flow v7 and Session
 v5. The public overview and installation instructions live in the
 [README](../README.md).
 
+- [Positioning](positioning.md) — what Flow is for, and when not to use it.
+- [What Flow guarantees](guarantees.md) — the guarantee map: which claims are
+  enforced, attested, declared, judged, or unenforced.
+- [Release qualification](release-qualification.md) — the published eval
+  thresholds and the release cadence.
 - [Development](development.md) — repository structure and verification.
 - [Maintainer contract](maintainer-contract.md) — runtime and release
   invariants.
@@ -23,6 +28,8 @@ v5. The public overview and installation instructions live in the
   process-local timing.
 - [ADR 0009](adr/0009-scope-keyed-validation-veto.md) — a `broad` claim vetoes
   review until that same command passes.
+- [ADR 0010](adr/0010-declared-canonical-gate.md) — the plan declares the canonical
+  gate, and the two claims that rested on prose are measured.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

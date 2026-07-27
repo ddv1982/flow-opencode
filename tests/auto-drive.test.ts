@@ -142,6 +142,46 @@ describe("Flow auto-drive coordinator", () => {
 		});
 	});
 
+	test("reports continuation support before anything depends on it", async () => {
+		// The preflight half of the same problem. The warning above arrives after the
+		// first continuation has already failed; this is what lets `/flow-auto` say so
+		// at the start, and it has three states because the negative needs evidence:
+		// no assistant message yet is not a host that cannot do it.
+		const state = harness({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 11,
+			nextAction: "flow_run_start",
+		});
+		expect(state.driver.continuationSupport()).toBe("unknown");
+		state.driver.observeHostMessage("host-1", {
+			id: "assistant-parentless",
+			role: "assistant",
+		});
+		expect(state.driver.continuationSupport()).toBe("unsupported");
+		// One parented assistant message settles it: the host does report parentage,
+		// and an earlier message without one says nothing about the capability.
+		state.driver.observeHostMessage("host-1", {
+			id: "assistant-parented",
+			role: "assistant",
+			parentID: "command-message",
+		});
+		expect(state.driver.continuationSupport()).toBe("supported");
+	});
+
+	test("keeps a user message out of the parentage signal", () => {
+		// User messages carry no `parentID` and never did; counting them would report
+		// every host as incapable.
+		const state = harness({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 1,
+			nextAction: "flow_run_start",
+		});
+		state.driver.observeHostMessage("host-1", { id: "user-1", role: "user" });
+		expect(state.driver.continuationSupport()).toBe("unknown");
+	});
+
 	test("names a host that reports no assistant message parentage", async () => {
 		// Continuation anchors on the assistant message that owns the lease, so a
 		// host emitting no `parentID` can never continue. It must fail closed, but

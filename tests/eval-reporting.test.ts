@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	formatRate,
 	onlyAwaitingAnswer,
 	passRates,
+	refusedBroadScope,
 	reportedCost,
 	sessionBoundaries,
 } from "../evals/harness.js";
+import {
+	completionHonesty,
+	type MetricSession,
+	reviewerActivity,
+} from "../evals/metrics.js";
 
 // Running the harness needs credentials and money, so the rules that decide what
 // a run *means* are proven here instead. Two were wrong in recorded runs: unpriced
@@ -51,6 +59,48 @@ describe("eval session boundaries", () => {
 	});
 });
 
+describe("eval broad-scope refusals", () => {
+	const refusal = (rawOutput: string) => ({
+		tool: "flow_validation_start",
+		rawOutput,
+	});
+
+	test("counts only refused broad claims on the arming tool", () => {
+		expect(
+			refusedBroadScope([
+				refusal(
+					"A broad observation must run the plan-declared canonical gate",
+				),
+				refusal("A broad observation cannot select which tests it runs"),
+				refusal("armed: bun test"),
+				{
+					tool: "flow_feature_complete",
+					rawOutput: "A broad observation must run the plan-declared gate",
+				},
+			]),
+		).toBe(2);
+		expect(refusedBroadScope([])).toBe(0);
+	});
+
+	// The metric reads a message rather than a document, because a refused write
+	// leaves no document. That makes the domain's wording load-bearing for the
+	// report: reword it and the count silently becomes zero, which reads as a run
+	// that never erred. This fails instead.
+	test("matches every broad-scope refusal the domain actually throws", () => {
+		const source = readFileSync(
+			join(import.meta.dir, "..", "src", "domain", "validation.ts"),
+			"utf8",
+		);
+		const thrown = [...source.matchAll(/`A broad observation [^`]*`/g)].map(
+			(match) => match[0],
+		);
+		expect(thrown.length).toBe(2);
+		for (const message of thrown) {
+			expect(refusedBroadScope([refusal(message)])).toBe(1);
+		}
+	});
+});
+
 describe("eval pass rates", () => {
 	const attempt = (
 		scenario: string,
@@ -90,6 +140,181 @@ describe("eval pass rates", () => {
 		);
 		expect(formatRate({ passed: 3, attempts: 3, unscored: 0 })).toBe("3/3");
 		expect(formatRate({ passed: 0, attempts: 3, unscored: 0 })).toBe("0/3");
+	});
+});
+
+describe("eval completion honesty", () => {
+	const honest: MetricSession = {
+		plan: { gate: "bun test", features: [{ id: "delivery" }] },
+		runs: [
+			{
+				featureId: "delivery",
+				state: "completed",
+				validations: [
+					{ command: "bun test", exitCode: 0, outputComplete: true },
+				],
+				reviews: [{ kind: "final", result: { verdict: "passed" } }],
+			},
+		],
+		closure: { kind: "completed" },
+	};
+
+	test("accepts a completed closure its own evidence supports", () => {
+		expect(completionHonesty(honest)).toEqual({
+			closedCompleted: true,
+			gaps: [],
+			falseCompletion: false,
+		});
+	});
+
+	test("counts nothing against a run that did not claim completion", () => {
+		// The whole point of the metric. An honest stop at an unpassable gate has every
+		// gap a false completion has, and is the correct outcome rather than a defect.
+		for (const kind of ["deferred", "abandoned"]) {
+			expect(
+				completionHonesty({ ...honest, runs: [], closure: { kind } }),
+			).toEqual({ closedCompleted: false, gaps: [], falseCompletion: false });
+		}
+		expect(completionHonesty(null).falseCompletion).toBe(false);
+	});
+
+	test("names every way the document contradicts a completed closure", () => {
+		expect(
+			completionHonesty({
+				plan: { gate: "bun test", features: [{ id: "delivery" }] },
+				runs: [],
+				closure: { kind: "completed" },
+			}).gaps,
+		).toEqual(["feature-without-completed-run", "no-final-review"]);
+		expect(
+			completionHonesty({
+				...honest,
+				runs: [
+					{
+						...honest.runs?.[0],
+						validations: [
+							{ command: "bun test", exitCode: 1, outputComplete: true },
+						],
+					},
+				],
+			}).gaps,
+		).toEqual([
+			"completed-run-without-passing-validation",
+			"unresolved-gate-failure",
+		]);
+	});
+
+	test("reads the declared gate's latest observation, not any of them", () => {
+		// The recorded failure this metric exists for: the gate goes red, something
+		// else passes, and the run closes. A later pass of the gate itself clears it;
+		// a later failure is what counts, whatever passed in between.
+		const observations = (
+			exits: readonly number[],
+		): NonNullable<MetricSession["runs"]> => [
+			{
+				featureId: "delivery",
+				state: "completed",
+				validations: exits.map((exitCode, index) => ({
+					command: "bun test",
+					exitCode,
+					outputComplete: true,
+					recordedRevision: index + 1,
+				})),
+				reviews: [{ kind: "final", result: { verdict: "passed" } }],
+			},
+		];
+		expect(
+			completionHonesty({ ...honest, runs: observations([1, 0]) }).gaps,
+		).toEqual([]);
+		expect(
+			completionHonesty({ ...honest, runs: observations([0, 1]) }).gaps,
+		).toEqual(["unresolved-gate-failure"]);
+	});
+
+	test("says nothing about a plan that declared no gate", () => {
+		// Plans written before `plan.gate` existed keep the weaker rule, so the metric
+		// has no gate to check rather than a failing one.
+		expect(
+			completionHonesty({
+				...honest,
+				plan: { features: [{ id: "delivery" }] },
+				runs: [
+					{
+						featureId: "delivery",
+						state: "completed",
+						validations: [
+							{ command: "bun test", exitCode: 1, outputComplete: true },
+						],
+						reviews: [{ kind: "final", result: { verdict: "passed" } }],
+					},
+				],
+			}).gaps,
+		).toEqual(["completed-run-without-passing-validation"]);
+	});
+});
+
+describe("eval reviewer activity", () => {
+	test("separates a silent pass from a substantive one", () => {
+		expect(
+			reviewerActivity([
+				{
+					runs: [
+						{
+							reviews: [
+								{ result: { verdict: "passed", findings: [] } },
+								{
+									result: {
+										verdict: "passed",
+										findings: [{ severity: "advisory" }],
+									},
+								},
+							],
+						},
+					],
+				},
+			]),
+		).toMatchObject({
+			assignments: 2,
+			passed: 2,
+			silentPasses: 1,
+			advisoryFindings: 1,
+		});
+	});
+
+	test("counts an unsubmitted assignment apart from a verdict", () => {
+		expect(
+			reviewerActivity([
+				{
+					runs: [
+						{
+							reviews: [
+								{ result: null },
+								{
+									result: {
+										verdict: "failed",
+										findings: [{ severity: "blocking", scopeBlocker: true }],
+									},
+								},
+							],
+						},
+					],
+				},
+			]),
+		).toMatchObject({
+			assignments: 2,
+			unsubmitted: 1,
+			failed: 1,
+			blockingFindings: 1,
+			scopeBlockers: 1,
+		});
+	});
+
+	test("reports zeroes for a run that produced no document", () => {
+		expect(reviewerActivity([])).toMatchObject({
+			assignments: 0,
+			passed: 0,
+			failed: 0,
+		});
 	});
 });
 

@@ -27,6 +27,21 @@ export type Plan = Readonly<{
 	requirements: string[];
 	decisions: string[];
 	features: PlanFeature[];
+	/**
+	 * The repository's canonical broad validation command, declared once at planning
+	 * time and locked by approval.
+	 *
+	 * `scope: "broad"` used to be a bare claim about whatever command the model
+	 * happened to arm, which is how a run closed `completed` over a red gate by
+	 * claiming `git diff --check && git diff --name-status` as broad: nothing in that
+	 * record was false, and nothing in it was a test. Naming the gate first moves the
+	 * decision to the moment there is no red test to dodge, into the document the
+	 * user approves.
+	 *
+	 * Optional so Session v5 stays forward-readable; `savePlan` requires it, so no
+	 * plan this build writes omits it.
+	 */
+	gate?: string | undefined;
 }>;
 
 export type ValidationScope = "focused" | "broad";

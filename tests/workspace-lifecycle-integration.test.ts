@@ -84,6 +84,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 						overview: "Persist every lifecycle transition through .flow.",
 						requirements: ["Archive completed work."],
 						decisions: ["Use one final review."],
+						gate: "bun test",
 						features: [
 							{
 								id: FEATURE_ID,

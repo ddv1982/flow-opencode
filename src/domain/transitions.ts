@@ -151,6 +151,22 @@ function assertPlan(plan: Plan): void {
 	if (issue) fail(issue);
 }
 
+/**
+ * A newly saved plan must name the repository's canonical gate.
+ *
+ * Checked here rather than in `planIssue` because it is a rule about what this
+ * build writes, not an invariant every Session v5 document satisfies: a plan saved
+ * before the field existed must still hydrate, and it keeps the weaker rule that a
+ * `broad` label is the claimant's word.
+ */
+function assertDeclaredGate(plan: Plan): void {
+	if (plan.gate === undefined) {
+		fail(
+			"A saved plan must declare `gate`: the exact canonical command that validates the whole repository, which every broad observation then has to run.",
+		);
+	}
+}
+
 function assertArtifacts(artifacts: readonly Artifact[]): void {
 	const issue = artifactIssues(artifacts)[0];
 	if (issue) fail(issue);
@@ -204,6 +220,7 @@ export function savePlan(
 	environment: TransitionEnvironment,
 ): MutationResult<null> {
 	assertPlan(input.plan);
+	assertDeclaredGate(input.plan);
 	if (!session) {
 		if (input.expectedRevision !== 0) {
 			fail("A new Flow session must start from expectedRevision 0.");

@@ -51,8 +51,16 @@ const packageVersion = packageJson.version;
  * Unlike `MAX_TOTAL_PROMPT_BYTES` in `tests/prompt-quality.test.ts`, this budget
  * buys nothing at runtime: documentation bytes are never sent to a model. That is
  * why this one has slack and the prompt ceiling does not.
+ *
+ * Raised from 92,000 for four documents that did not exist: the guarantee map, the
+ * positioning and "when not to use" statement, the published release-qualification
+ * thresholds, and ADR 0010. The first is the reason for the rest — the same
+ * confident prose used to describe a rule the runtime refuses to break and a rule
+ * that lived only in a prompt, and no amount of tightening existing text fixes
+ * that. This is the one increase where the bytes *are* the deliverable; ordinary
+ * growth still has to be paid for by deleting prose that stopped earning its place.
  */
-const MAX_MAINTAINED_DOC_BYTES = 92_000;
+const MAX_MAINTAINED_DOC_BYTES = 114_000;
 
 /**
  * No single maintained document should outgrow the operator-facing README.
@@ -60,8 +68,16 @@ const MAX_MAINTAINED_DOC_BYTES = 92_000;
  * The README is now 7.6 KiB, so this no longer describes what it says it does; it
  * is kept as a blunt ceiling on any one document. Lower it when the largest doc
  * (`maintainer-contract.md`) is tightened.
+ *
+ * Raised from 30,000 for the declared gate, the auto-continuation capability
+ * report, and the eval policy. All three are normative runtime and release rules,
+ * and this document is where those live: the cheaper way to fit them was to delete
+ * normative text and leave the rationale in an ADR, which inverts what each
+ * document is for. The real fix is to split the contract — validation and review is
+ * over a third of it — and that is the next move if it grows again, not another
+ * raise.
  */
-const MAX_SINGLE_DOC_BYTES = 30_000;
+const MAX_SINGLE_DOC_BYTES = 33_000;
 
 function section(markdown: string, heading: string, level = 2): string {
 	const marker = `${"#".repeat(level)} ${heading}`;
@@ -346,6 +362,7 @@ describe("Flow v6 documentation contract", () => {
 
 		expect(workflowNames).toEqual([
 			"ci.yml",
+			"evals.yml",
 			"opencode-compatibility.yml",
 			"release.yml",
 		]);
@@ -353,11 +370,29 @@ describe("Flow v6 documentation contract", () => {
 		expect(combined).toContain("bun run smoke:live");
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
 		expect(combined).toContain("npm publish");
-		// Model-driven evals need credentials and cost money: they stay opt-in and
-		// out of CI. `evals/` is the local harness for that work.
-		expect(combined).not.toMatch(
-			/harness|lifecycle-soak|cross-version|replay-report|prompt:model-eval|bun run eval/i,
-		);
+
+		// Model-driven evals need credentials and cost real money, so they run on a
+		// schedule and never on a pull request. `evals.yml` is the one workflow allowed
+		// to invoke them, and the property worth pinning is that no gate a contributor
+		// waits on can: the previous rule banned the word outright, which also banned
+		// the scheduled multi-model matrix that made "works with Flow" mean anything
+		// beyond one provider (docs/adr/0010-declared-canonical-gate.md).
+		const evals = await readFile(".github/workflows/evals.yml", "utf8");
+		expect(evals).toContain("bun run eval");
+		expect(evals).toContain("schedule:");
+		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);
+		for (const gate of [
+			"ci.yml",
+			"release.yml",
+			"opencode-compatibility.yml",
+		]) {
+			expect(
+				await readFile(join(".github/workflows", gate), "utf8"),
+				gate,
+			).not.toMatch(
+				/harness|lifecycle-soak|cross-version|replay-report|prompt:model-eval|bun run eval/i,
+			);
+		}
 	});
 
 	test("keeps maintained relative Markdown links resolvable", async () => {

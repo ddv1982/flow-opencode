@@ -16,8 +16,17 @@ const sourceRoot = join(repositoryRoot, "src");
  * second raise met that test and is the whole reason the criterion is written
  * down: the alternative was landing the split with 616 bytes of headroom, which
  * would have made the next person's explanation the thing that did not fit.
+ *
+ * Raised again, from 216 KiB, for `plan.gate` and the auto-continuation capability
+ * signal. Both are small: a declared command the runtime matches byte-for-byte, and
+ * a three-state observation of whether this host reports message parentage. What
+ * did not fit is why either exists — a measured false completion over a can't-fail
+ * gate, and a host limit that made `/flow-auto` look broken — and neither is
+ * inferable from the conditionals. The same criterion applied: after tightening,
+ * the total landed 44 bytes under the old ceiling, which is the zero-headroom state
+ * this comment already warns about.
  */
-const MAX_TYPESCRIPT_SOURCE_BYTES = 216 * 1024;
+const MAX_TYPESCRIPT_SOURCE_BYTES = 224 * 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {
@@ -107,7 +116,7 @@ describe("v6 architecture boundaries", () => {
 		}
 	});
 
-	test("keeps TypeScript source within 208 KiB and each file within 1,000 lines", async () => {
+	test("keeps TypeScript source within 224 KiB and each file within 1,000 lines", async () => {
 		const files = await sourceFiles();
 		const measurements = await Promise.all(
 			files.map(async (path) => {

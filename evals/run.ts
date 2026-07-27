@@ -24,8 +24,16 @@ import {
 	packPlugin,
 	passRates,
 	preparePackageCache,
+	refusedBroadScope,
 	sessionBoundaries,
 } from "./harness.js";
+import {
+	type CompletionHonesty,
+	completionHonesty,
+	type MetricSession,
+	type ReviewerActivity,
+	reviewerActivity,
+} from "./metrics.js";
 import { SCENARIOS } from "./scenarios.js";
 
 const SURFACES: FlowPromptSurfaceName[] = [
@@ -81,6 +89,16 @@ type RunResult = {
 	 * answerable only by paying for another run.
 	 */
 	documents: readonly Record<string, unknown>[];
+	/**
+	 * Whether a `completed` closure is supported by the evidence in its own
+	 * document. Reported for every run and scored by none: a scenario owns its
+	 * verdict, and this is the cross-scenario number the suite is judged on.
+	 */
+	honesty: CompletionHonesty;
+	/** What the independent review actually did, across every document. */
+	reviewer: ReviewerActivity;
+	/** Broad-scope claims the runtime refused, which no document records. */
+	refusedBroadScope: number;
 	/**
 	 * Final assistant text, recorded so a human can judge a stop after the fact —
 	 * above all an escalation, where whether asking was right is the whole question.
@@ -378,6 +396,10 @@ async function main(): Promise<void> {
 						// would report expected-but-meaningless gaps. The stop is the finding;
 						// the collected evidence explains it.
 						const issues = stepError || unscored ? [] : scenario.check(outcome);
+						const documents = [
+							...(outcome.session ? [outcome.session] : []),
+							...outcome.archives,
+						] as MetricSession[];
 						results.push({
 							scenario: scenario.id,
 							model,
@@ -392,10 +414,12 @@ async function main(): Promise<void> {
 							assistantMessages: outcome.assistantMessages,
 							flowCalls: outcome.flowCalls.map((call) => call.tool),
 							sessionBoundaries: sessionBoundaries(outcome.flowCalls),
-							documents: [
-								...(outcome.session ? [outcome.session] : []),
-								...outcome.archives,
-							],
+							documents,
+							honesty: completionHonesty(
+								documents.find((document) => document.closure) ?? null,
+							),
+							reviewer: reviewerActivity(documents),
+							refusedBroadScope: refusedBroadScope(outcome.flowCalls),
 							finalText: outcome.finalText,
 							questions: askedQuestions(outcome),
 							durationMs: outcome.durationMs,
@@ -437,6 +461,9 @@ async function main(): Promise<void> {
 							flowCalls: [],
 							sessionBoundaries: [],
 							documents: [],
+							honesty: completionHonesty(null),
+							reviewer: reviewerActivity([]),
+							refusedBroadScope: 0,
 							finalText: "",
 							questions: [],
 							durationMs: Date.now() - started,
@@ -486,6 +513,51 @@ async function main(): Promise<void> {
 				: ""
 		}`,
 	);
+	// The two cross-scenario numbers. A pass rate says whether the suite's intended
+	// outcomes were reached; these say whether a reported success was real and
+	// whether the independent review contributed anything, which no single
+	// scenario's verdict shows.
+	const falseCompletions = results.filter(
+		(result) => result.honesty.falseCompletion,
+	);
+	const closedCompleted = results.filter(
+		(result) => result.honesty.closedCompleted,
+	).length;
+	const reviewer = results.reduce(
+		(total, result) => ({
+			assignments: total.assignments + result.reviewer.assignments,
+			unsubmitted: total.unsubmitted + result.reviewer.unsubmitted,
+			passed: total.passed + result.reviewer.passed,
+			failed: total.failed + result.reviewer.failed,
+			blockingFindings:
+				total.blockingFindings + result.reviewer.blockingFindings,
+			advisoryFindings:
+				total.advisoryFindings + result.reviewer.advisoryFindings,
+			scopeBlockers: total.scopeBlockers + result.reviewer.scopeBlockers,
+			silentPasses: total.silentPasses + result.reviewer.silentPasses,
+		}),
+		reviewerActivity([]),
+	);
+	const broadScopeRefusals = results.reduce(
+		(sum, result) => sum + result.refusedBroadScope,
+		0,
+	);
+	console.log(
+		`\nfalse completions: ${falseCompletions.length}/${closedCompleted} completed closure(s)${
+			falseCompletions.length === 0
+				? ""
+				: `\n${falseCompletions
+						.map(
+							(result) =>
+								`  ${result.scenario} @ ${result.model} #${result.attempt}: ${result.honesty.gaps.join(", ")}`,
+						)
+						.join("\n")}`
+		}\nreviewer: ${reviewer.assignments} assignment(s), ${reviewer.passed} passed (${reviewer.silentPasses} with no finding), ${reviewer.failed} failed, ${reviewer.unsubmitted} unsubmitted, ${reviewer.blockingFindings} blocking + ${reviewer.advisoryFindings} advisory finding(s), ${reviewer.scopeBlockers} scope blocker(s)${
+			broadScopeRefusals === 0
+				? ""
+				: `\nbroad-scope refusals: ${broadScopeRefusals} across ${results.length} run(s); a rising number means the plan surface is not naming the declared gate clearly enough`
+		}`,
+	);
 	// The aggregate hides the number that matters. Model behavior is stochastic, so
 	// a scenario passing 1 of 6 attempts is a different finding from one passing 6
 	// of 6, and reading that off the rows by eye is how it gets missed.
@@ -525,6 +597,10 @@ async function main(): Promise<void> {
 					costUsd: priced.length === 0 ? null : cost,
 					costReportedRuns: priced.length,
 					passRates: Object.fromEntries(rates),
+					closedCompleted,
+					falseCompletions: falseCompletions.length,
+					reviewer,
+					broadScopeRefusals,
 				},
 				results,
 			},

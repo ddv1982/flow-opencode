@@ -42,8 +42,15 @@ const MANAGER_GUIDANCE = [
 const MAX_MANAGER_PROMPT_BYTES = 34_000;
 const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
 
-/** Total shipped prompt bytes across every surface. Baseline: 38,495. */
-const MAX_TOTAL_PROMPT_BYTES = 38_700;
+/**
+ * Total shipped prompt bytes across every surface. Baseline: 38,495.
+ *
+ * Ratcheted to 38,500 when `plan.gate` replaced the prose that told the model what
+ * `broad` scope meant. The field is a net subtraction: a typed command the runtime
+ * matches byte-for-byte cost less prompt than the two paragraphs asking the model
+ * to judge whether its own claim was honest, and it is checked rather than trusted.
+ */
+const MAX_TOTAL_PROMPT_BYTES = 38_500;
 
 /**
  * Absolute-rule markers per surface. Both Anthropic and OpenAI advise reserving
@@ -54,7 +61,7 @@ const MAX_TOTAL_PROMPT_BYTES = 38_700;
 const MAX_ABSOLUTE_RULES: Readonly<Record<FlowPromptSurfaceName, number>> = {
 	"flow-auto": 27,
 	"flow-plan": 17,
-	"flow-run": 51,
+	"flow-run": 49,
 	"flow-review": 3,
 	"flow-status": 7,
 	"flow-reviewer": 25,

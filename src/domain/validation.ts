@@ -56,12 +56,12 @@ export function isValidationEligible(
  * gate invoked as `bun run scripts/check.ts` keeps its claim, and a bare directory
  * stays broad because `pytest tests/` is a whole suite in many repositories.
  *
- * What this cannot see is a command that is not a gate at all. A run measured at
- * 6.9.0 closed `completed` over the red gate by claiming `git diff --check && git
- * diff --name-status` at broad scope: nothing about it contradicts breadth, it
- * simply cannot fail. Deciding which commands count as tests is an open-ended
- * whitelist, so that escape is documented rather than guessed at
- * (`docs/adr/0009-scope-keyed-validation-veto.md`).
+ * What this cannot see is a command that is not a gate at all: `git diff --check
+ * && git diff --name-status` contradicts nothing about breadth and simply cannot
+ * fail. Deciding which commands count as tests is an open-ended whitelist, so that
+ * shape is not guessed at here. `plan.gate` closes it from the other end instead —
+ * the gate is named before implementation and a broad claim must match it
+ * (`docs/adr/0010-declared-canonical-gate.md`).
  */
 const NARROWING_FLAGS = new Set([
 	"-t",
@@ -73,7 +73,7 @@ const NARROWING_FLAGS = new Set([
 	"--filter",
 ]);
 
-function narrowingArguments(command: string): string[] {
+export function narrowingArguments(command: string): string[] {
 	return command
 		.split(/\s+/)
 		.slice(1)
@@ -171,6 +171,16 @@ export function recordValidation(
 				`A broad observation cannot select which tests it runs (${narrowing.join(", ")}). Arm the repository's canonical gate, or record this command as focused.`,
 			);
 		}
+		// A plan that named its gate has already answered which command breadth
+		// means, so the label is no longer the claimant's to define. A plan saved
+		// before this rule existed declares nothing and keeps the older behavior;
+		// `savePlan` refuses a new one without a gate, so that set only shrinks.
+		const gate = session.plan?.gate;
+		if (gate !== undefined && input.command !== gate) {
+			throw new FlowTransitionError(
+				`A broad observation must run the plan-declared canonical gate (${gate}). Arm that exact command, or record this one as focused.`,
+			);
+		}
 	}
 	const revision = session.revision + 1;
 	const observation: ValidationObservation = {
@@ -227,11 +237,13 @@ export function isValidationFresh(
  * Commands whose latest evidence blocks review until that exact command passes
  * again for the current workspace content.
  *
- * Two sets qualify. A plan-listed command is matched against `feature.validation`
+ * Three sets qualify. A plan-listed command is matched against `feature.validation`
  * by exact string; that field is free-form text and models write prose in it,
  * matching no command, so this half often does not engage although its tests,
  * which pass bare commands, do (`PROSE_VALIDATION` in
- * `tests/domain-transitions.test.ts`).
+ * `tests/domain-transitions.test.ts`). `plan.gate` is the same rule on a field that
+ * is always a command, so the plan half now engages for the one command that
+ * matters most, whatever scope its observation was labelled.
  *
  * A command an observation claimed at `broad` scope qualifies whatever the plan
  * says, because `scope` is the one field in a recorded observation that nothing
@@ -253,11 +265,15 @@ export function unresolvedVetoedCommands(
 	run: FeatureRun,
 	sourceDigest?: SourceDigest,
 ): string[] {
+	const gate = session.plan?.gate;
 	const planned =
 		session.approval === "approved"
-			? (session.plan?.features.find(
-					(candidate) => candidate.id === run.featureId,
-				)?.validation ?? [])
+			? [
+					...(session.plan?.features.find(
+						(candidate) => candidate.id === run.featureId,
+					)?.validation ?? []),
+					...(gate === undefined ? [] : [gate]),
+				]
 			: [];
 	const failed = session.runs
 		.filter((candidate) => candidate.featureId === run.featureId)

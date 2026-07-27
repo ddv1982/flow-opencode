@@ -142,9 +142,11 @@ describe("Flow application runtime gates", () => {
 		);
 		await recordObservedValidation(repository, {
 			captureId: "capture-broad-substitute",
-			// A second whole-suite gate, not a file list: `recordValidation` refuses a
-			// broad claim it can derive as narrow, so the veto is what must refuse this.
+			// A second whole-suite gate, not a file list. It can no longer claim breadth
+			// -- only the plan's declared gate may -- and the veto is still what has to
+			// refuse it: no other passing command discharges the failed planned one.
 			command: "bun run check",
+			scope: "focused",
 		});
 
 		const substituteStatus = await flow.status({
@@ -943,6 +945,7 @@ describe("Flow application runtime gates", () => {
 			featureId: foundation,
 			suffix: "foundation",
 			command: "bun test capture-foundation",
+			scope: "focused",
 			artifacts: ["src/domain/foundation.ts"],
 		});
 		await submitReview(flow, repository, {
@@ -960,7 +963,8 @@ describe("Flow application runtime gates", () => {
 		});
 		const assignedBroad = await recordObservedValidation(repository, {
 			captureId: "capture-final-broad",
-			command: "bun test capture-final-broad",
+			// The plan's declared gate, which is the only command breadth may claim.
+			command: "bun test",
 			scope: "broad",
 		});
 		const review = await flow.reviewStart({

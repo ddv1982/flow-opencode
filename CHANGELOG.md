@@ -4,7 +4,40 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-No changes yet.
+The last route to a dishonest `completed` closure is closed, and the two claims
+that rested on prompt prose are now measured.
+
+- **A plan declares its canonical gate.** `plan.gate` is the exact command that
+  validates the whole repository, named at planning time and locked by approval. A
+  `broad` observation has to run that command byte-for-byte, and the gate joins the
+  vetoed-command set, so its latest failure blocks review whatever scope an
+  observation claimed. This closes the escape [ADR
+  0009](docs/adr/0009-scope-keyed-validation-veto.md) recorded as open: a measured
+  run had closed `completed` by claiming `git diff --check` as its gate — a command
+  that cannot fail, so nothing was ever observed red.
+- **Session v5 schema:** `plan.gate` is a new optional string. A document written by
+  an earlier build still hydrates and keeps the older rule where `broad` is the
+  claimant's word; `flow_plan_save` requires the field for any new plan, so a plan
+  this build writes always declares one. Rolling an active session back to a build
+  without the field is not supported, as with every previous widening.
+- **The bar is published, not described.** [What Flow
+  guarantees](docs/guarantees.md) states which claims are enforced by types, attested
+  by the host, declared by the caller, judged by a model, or unenforced.
+  [Release qualification](docs/release-qualification.md) publishes the eval
+  thresholds a release clears, and `bun run qualify` applies them.
+- **Evals measure false completion and reviewer activity**, derived from durable
+  documents rather than model prose, and a scheduled workflow runs the suite against
+  at least two providers weekly. A new scenario checks that a requirement no run can
+  observe is never reported as verified.
+- **`/flow-auto` says when your host cannot continue.** Continuation needs assistant
+  message parentage; a host that does not report it now gets a plain note at startup
+  and an `autoContinuation` field on status, instead of a lifecycle that appears to
+  stop after every feature for no reason.
+- **Positioning, including when not to use Flow.** See
+  [positioning](docs/positioning.md) and the new README section.
+
+The prompt surface got smaller, not larger: the typed gate replaced the prose that
+asked the model to judge whether its own coverage claim was honest.
 
 ## [7.0.2] - 2026-07-27
 
