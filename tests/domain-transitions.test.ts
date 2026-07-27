@@ -970,7 +970,7 @@ describe("Session v5 domain state machine", () => {
 		).toThrow("Final review requires passing broad validation");
 	});
 
-	test("refuses a broad claim on a command that names the tests it runs", () => {
+	test("refuses a broad claim on a command that selects its own tests", () => {
 		const environment = deterministicEnvironment();
 		// The escape ADR 0009 left open, closed where it starts. A hand-picked file
 		// list passes, so no failing observation ever exists for the veto to key on,
@@ -991,7 +991,7 @@ describe("Session v5 domain state machine", () => {
 				command: "bun test src/greet.test.ts src/farewell.test.ts",
 				scope: "broad",
 			}),
-		).toThrow("cannot name the tests it runs");
+		).toThrow("cannot select which tests it runs");
 		// Recording the same evidence honestly is always available.
 		expect(() =>
 			validate(session, {
@@ -1001,6 +1001,24 @@ describe("Session v5 domain state machine", () => {
 				scope: "focused",
 			}),
 		).not.toThrow();
+		// A test-name filter is the same claim by another route, and was measured
+		// excluding one red test by name to close a run as completed.
+		for (const command of [
+			"bun test --test-name-pattern '^(?!pre-existing invariant$).*'",
+			"bun test -t greet",
+			"pytest -k greet",
+			"go test ./... -run TestGreet",
+			"vitest --testNamePattern=greet",
+		]) {
+			expect(() =>
+				validate(session, {
+					id: `filtered-${command}`,
+					featureId: DELIVERY,
+					command,
+					scope: "broad",
+				}),
+			).toThrow("cannot select which tests it runs");
+		}
 		// A whole-suite gate keeps its claim, including when a flag or a directory
 		// narrows nothing the runtime can see.
 		for (const command of [
@@ -1009,6 +1027,10 @@ describe("Session v5 domain state machine", () => {
 			"bun test --coverage",
 			"pytest tests/",
 			"bun run scripts/check.ts",
+			// Not a gate at all, and still accepted: nothing in the command contradicts
+			// breadth, it simply cannot fail. Measured closing a run over a red gate,
+			// and left open deliberately -- see ADR 0009.
+			"git diff --check && git diff --name-status",
 		]) {
 			expect(() =>
 				validate(session, {

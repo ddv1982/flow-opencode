@@ -38,27 +38,49 @@ export function isValidationEligible(
 }
 
 /**
- * Test files a command names as arguments, which contradict a `broad` claim.
+ * Arguments that contradict a `broad` claim, named so the refusal can quote them.
  *
- * `scope` is the one recorded field nothing corroborates, and the escape that
- * survived ADR 0009 is arming a hand-picked file list under the broad label:
- * every field of the resulting record true, exit zero, and the repository gate
- * never run. A command that names the test files to run has already told the
- * runtime it is narrow, so the claim is refused instead of trusted.
+ * `scope` is the one recorded field nothing corroborates, and the escape ADR 0009
+ * left open is arming something narrow under the broad label: every field of the
+ * resulting record true, exit zero, and the repository gate never run. A command
+ * that has already told the runtime it is narrow is refused rather than trusted.
  *
- * Only test-file arguments count, because only they are unambiguous. The first
- * token is the program, so a gate invoked as `bun run scripts/check.ts` keeps its
- * claim, and a bare directory stays broad because `pytest tests/` is a whole
- * suite in many repositories. Narrowing by test-name filter (`bun test -t greet`)
- * is not derivable from the command and remains uncaught: the veto in
- * `unresolvedVetoedCommands` is what still covers a gate observed red.
+ * Two kinds say so unambiguously. Naming test files to run is one. Filtering by
+ * test name is the other, and it was measured being used to exclude the one red
+ * test by name (`bun test --test-name-pattern '^(?!pre-existing invariant$)...'`),
+ * which is a whole-suite gate in form and a hand-picked subset in effect. A gate
+ * that filters by test name is not a whole-suite gate, so the flags are refused
+ * even though a false positive costs a real repository its broad claim.
+ *
+ * Everything else stays broad on purpose. The first token is the program, so a
+ * gate invoked as `bun run scripts/check.ts` keeps its claim, and a bare directory
+ * stays broad because `pytest tests/` is a whole suite in many repositories.
+ *
+ * What this cannot see is a command that is not a gate at all. A run measured at
+ * 6.9.0 closed `completed` over the red gate by claiming `git diff --check && git
+ * diff --name-status` at broad scope: nothing about it contradicts breadth, it
+ * simply cannot fail. Deciding which commands count as tests is an open-ended
+ * whitelist, so that escape is documented rather than guessed at
+ * (`docs/adr/0009-scope-keyed-validation-veto.md`).
  */
-function namedTestFiles(command: string): string[] {
+const NARROWING_FLAGS = new Set([
+	"-t",
+	"--test-name-pattern",
+	"--testNamePattern",
+	"-k",
+	"-run",
+	"--grep",
+	"--filter",
+]);
+
+function narrowingArguments(command: string): string[] {
 	return command
 		.split(/\s+/)
 		.slice(1)
-		.filter((token) => !token.startsWith("-"))
 		.filter((token) => {
+			if (token.startsWith("-")) {
+				return NARROWING_FLAGS.has(token.split("=")[0] ?? token);
+			}
 			const file = token.split("/").pop() ?? "";
 			return (
 				/\.(?:test|spec)\./.test(file) ||
@@ -143,10 +165,10 @@ export function recordValidation(
 		);
 	}
 	if (input.scope === "broad") {
-		const named = namedTestFiles(input.command);
-		if (named.length > 0) {
+		const narrowing = narrowingArguments(input.command);
+		if (narrowing.length > 0) {
 			throw new FlowTransitionError(
-				`A broad observation cannot name the tests it runs (${named.join(", ")}). Arm the repository's canonical gate, or record this command as focused.`,
+				`A broad observation cannot select which tests it runs (${narrowing.join(", ")}). Arm the repository's canonical gate, or record this command as focused.`,
 			);
 		}
 	}

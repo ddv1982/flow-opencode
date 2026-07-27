@@ -1,25 +1,3 @@
-/**
- * Whether a durable session document is internally consistent.
- *
- * Flow's second defence, answering a different question from the first. The
- * transitions in `transitions.js` guard the step being taken: they see the current
- * session and the requested change, and refuse the ones that do not follow. This
- * sees a finished document with no idea how it got there, and asks whether any
- * legal sequence of steps could have produced it.
- *
- * That is needed because `.flow/session.json` is a file on disk: it survives
- * crashes mid-write, hand edits, git merges, and older builds of this plugin. So
- * `src/application/schema.ts` runs this on load and refuses a document that fails
- * rather than repairing it -- guessing what a broken document meant is how one
- * inconsistency becomes several.
- *
- * Every issue is returned rather than the first thrown, because a corrupt document
- * usually violates several invariants and the first is rarely the informative one.
- * No rule here may consult anything outside the document; at load time there is
- * nothing else to consult. The cost of the duality is that most rules restate a
- * transition guard from the other side, and the two must not drift: a new
- * transition rule a hand-edited document could violate belongs in both places.
- */
 import { artifactIssues } from "./artifact.js";
 import { MAX_REVIEW_FINDINGS, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import { closureOperationIssue } from "./operation.js";
@@ -53,6 +31,28 @@ function featurePassedBefore(
 	);
 }
 
+/**
+ * Whether a durable session document is internally consistent.
+ *
+ * Flow's second defence, answering a different question from the first. The
+ * transitions in `transitions.js` guard the step being taken: they see the current
+ * session and the requested change, and refuse the ones that do not follow. This
+ * sees a finished document with no idea how it got there, and asks whether any
+ * legal sequence of steps could have produced it.
+ *
+ * That is needed because `.flow/session.json` is a file on disk: it survives
+ * crashes mid-write, hand edits, git merges, and older builds of this plugin. So
+ * `src/application/schema.ts` runs this on load and refuses a document that fails
+ * rather than repairing it -- guessing what a broken document meant is how one
+ * inconsistency becomes several.
+ *
+ * Every issue is returned rather than the first thrown, because a corrupt document
+ * usually violates several invariants and the first is rarely the informative one.
+ * No rule here may consult anything outside the document; at load time there is
+ * nothing else to consult. The cost of the duality is that most rules restate a
+ * transition guard from the other side, and the two must not drift: a new
+ * transition rule a hand-edited document could violate belongs in both places.
+ */
 export function sessionInvariantIssues(session: Session): string[] {
 	const issues: string[] = [];
 	// First, because every rule below assumes the v5 shape; a v4 document is not a

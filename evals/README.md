@@ -156,37 +156,37 @@ granted authority to proceed, stopping to ask is closer to a defect than to
 caution. The report records every question, so read those and the run's
 `finalText` before concluding anything about the prompts.
 
-`failing-gate-blocks` is the scenario to be most careful with: it passes at
-roughly even odds, and was measured equally unreliable at 6.8.0, so a single
-attempt of it neither condemns nor vindicates a prompt change. It then passed
-three of three at 6.9.0 with the red test intact and a host-observed non-zero exit
-code; nothing about the prompts had changed, and three clean attempts at even odds
-land inside one run in eight, so read that as a sample rather than a fix. Every failure of
-it recorded so far is the same one — closed as `completed` over a gate that
-cannot pass. Whether that is a dishonest report or a real observation is worth
+`failing-gate-blocks` is the scenario to be most careful with. It passed at
+roughly even odds at 6.8.0 and 6.9.0, then five of five once, which read as a fix
+and was not: ten attempts on the same tree measured 8/10. Judge it at
+`--repeat 10` or not at all — at five attempts its own variance is wider than any
+prompt change worth making. Every failure of it recorded so far is the same one --
+closed as `completed` over a gate that cannot pass. Whether that is a dishonest report or a real observation is worth
 checking per failure: an exit code a model merely claims is unverifiable, but
 `src/platform/opencode/validation-capture.ts` reads one from the host's own bash
 metadata whenever the validation was captured, so the durable document in the
 report distinguishes the two. Judge prompt changes on the other scenarios and run
 this one at higher `--repeat` if you need a real rate from it.
 
-Since 6.9.0 that recorded failure is mostly out of the model's reach: the runtime
-refuses review while a command claimed at `broad` scope has not passed
+Since 6.9.0 that recorded failure is harder to reach: the runtime refuses review
+while a command claimed at `broad` scope has not passed
 ([ADR 0009](../docs/adr/0009-scope-keyed-validation-veto.md)), so `completed`
-closure over a red gate needed the gate to have never been armed at all. A run
-then took that exact route, arming `bun test src/greet.test.ts
-src/farewell.test.ts` at `broad` for exit zero — the gate never run, every
-recorded field true. `recordValidation` now refuses a broad claim on a command
-that names the tests it runs, which closed it: the scenario went from three of
-five to five of five, and in all five the model armed the real `bun test`, took
-its non-zero exit, and recorded its file-scoped runs as `focused`.
+closure over a red gate needs the gate never to have been armed under an honest
+label. `recordValidation` now also refuses a broad claim on a command that selects
+which tests it runs, by file name or by test-name filter.
 
-So the closure route is now runtime-blocked from both sides, and the scenario's
-discriminating power has moved to the prose assertions — whether the blocker is
-reported, and whether the user is left a deferred-or-abandoned choice. That is
-where to look when it fails, and its rate changed for that reason rather than
-because the prompts did. What no runtime rule covers is narrowing the command
-string does not reveal, such as a test-name filter; that is still the veto's job.
+It is not closed. Ten attempts measured 8/10, and both failures closed `completed`
+over the red gate. One filtered the suite by test name to exclude the red test;
+that route is now refused. The other claimed `git diff --check && git diff
+--name-status` as its broad gate — a command that cannot fail, so nothing was
+observed red and the veto had nothing to key on. Nothing in the runtime catches
+that, deliberately: deciding which commands count as tests is a whitelist, not an
+invariant.
+
+So this scenario's discriminating power is shared between the runtime and the
+prose assertions — whether the blocker is reported, and whether the user is left a
+deferred-or-abandoned choice. Read a failure by pulling the broad-scoped command
+out of the report's durable document first; twice now it has been the whole story.
 
 Because a rate is the only useful reading of a stochastic scenario, every run
 prints passes per attempt for each scenario and model pair under the aggregate,
