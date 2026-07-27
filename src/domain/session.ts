@@ -36,6 +36,13 @@ export type PlanFeature = Readonly<{
  * observation of that exact command, so the evidence has to be named before there is
  * any pressure to substitute for it, in the plan the user approves. A proxy is still
  * possible — but only by writing the proxy into the approved plan as the proof.
+ *
+ * `platform` closes the proxy the byte-match alone could not see. A measured run
+ * declared `environment: "Windows (win32) host with bun installed"` and discharged it
+ * with that exact command's exit zero on Linux — green precisely because the Windows
+ * case was skipped there. Every field of that record was true. Naming the OS as a
+ * value instead of prose lets the runtime compare it with the host the command
+ * actually ran on.
  */
 export type ExternalEvidence = Readonly<{
 	/** What has to be observed, in the goal's own terms. */
@@ -44,7 +51,21 @@ export type ExternalEvidence = Readonly<{
 	environment: string;
 	/** The exact command whose passing is that observation. */
 	command: string;
+	/**
+	 * The operating system that can observe it, or `other` when the missing
+	 * environment is not an OS: a service, credential, setting, or device. An OS
+	 * value is checked against the host each observation was recorded on; `other`
+	 * keeps the command-only rule, because Flow cannot see what a credential is, and
+	 * is judged where the plan is approved and in the review that is given the entry.
+	 *
+	 * Optional so Session v5 stays forward-readable; `savePlan` requires it, so no
+	 * plan this build writes omits it.
+	 */
+	platform?: EvidencePlatform | undefined;
 }>;
+
+/** See `EVIDENCE_PLATFORMS` for why the set is these four. */
+export type EvidencePlatform = "win32" | "darwin" | "linux" | "other";
 
 export type Plan = Readonly<{
 	summary: string;
@@ -112,6 +133,15 @@ export type ValidationObservation = Readonly<{
 	outputDigest: SourceDigest;
 	outputComplete: boolean;
 	recordedRevision: number;
+	/**
+	 * The host this command actually ran on, supplied by the capture adapter.
+	 *
+	 * This is what makes `ExternalEvidence.platform` checkable rather than another
+	 * claim. Optional so existing Session v5 documents remain readable; an
+	 * observation without it cannot satisfy an entry that names an OS, because a
+	 * record that never said where it ran is not evidence about where it ran.
+	 */
+	hostPlatform?: EvidencePlatform | undefined;
 	/**
 	 * Optional so existing Session v5 documents remain readable. Once recorded,
 	 * an ineligible observation is diagnostic history and can never satisfy a

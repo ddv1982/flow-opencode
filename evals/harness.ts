@@ -313,6 +313,27 @@ export function onlyAwaitingAnswer(pending: readonly string[]): boolean {
 }
 
 /**
+ * One incomplete tool call, named well enough to diagnose after the run.
+ *
+ * `bash:running` was the whole diagnostic a wedged attempt left behind, and it does
+ * not say whether the model armed something interactive or something slow. The
+ * command is already in the recorded input, bounded to its first line here because
+ * this goes into an error message. The tool name stays the prefix so
+ * `onlyAwaitingAnswer` keeps matching.
+ */
+export function pendingCallLabel(part: {
+	tool?: string;
+	state?: { status: string; input?: Record<string, unknown> };
+}): string {
+	const label = `${part.tool ?? "tool"}:${part.state?.status}`;
+	const command = part.state?.input?.command;
+	const line =
+		typeof command === "string" ? (command.split("\n")[0] ?? "") : "";
+	if (line === "") return label;
+	return `${label} (${line.length > 120 ? `${line.slice(0, 117)}...` : line})`;
+}
+
+/**
  * Everything the model asked the user, as recorded tool input.
  *
  * A model at a wall it may not climb puts the blocker in its question rather than
@@ -368,6 +389,11 @@ export function sessionBoundaries(
  * were not scored -- an allowed ask, a lost host -- are counted apart rather than
  * dropped, so a scenario whose every attempt went unscored still gets a row saying
  * so instead of leaving the table without a trace.
+ *
+ * An abort is counted apart for the same reason and was not: a wedged attempt ends
+ * with no issues and `passed: false`, which is indistinguishable in a rate from a run
+ * that reached the wrong outcome. One such attempt produced the only failing
+ * threshold in a measured report, on a guarantee that never ran.
  */
 export function passRates(
 	results: readonly {
@@ -376,13 +402,20 @@ export function passRates(
 		readonly passed: boolean;
 		readonly environment?: boolean;
 		readonly unscored?: boolean;
+		readonly error?: string;
 	}[],
 ): [string, PassRate][] {
 	const rates = new Map<string, PassRate>();
 	for (const result of results) {
 		const label = `${result.scenario} @ ${result.model}`;
-		const rate = rates.get(label) ?? { passed: 0, attempts: 0, unscored: 0 };
+		const rate = rates.get(label) ?? {
+			passed: 0,
+			attempts: 0,
+			unscored: 0,
+			aborted: 0,
+		};
 		if (result.environment || result.unscored) rate.unscored += 1;
+		else if (result.error !== undefined) rate.aborted += 1;
 		else {
 			rate.attempts += 1;
 			if (result.passed) rate.passed += 1;
@@ -392,14 +425,24 @@ export function passRates(
 	return [...rates];
 }
 
-export type PassRate = { passed: number; attempts: number; unscored: number };
+export type PassRate = {
+	passed: number;
+	attempts: number;
+	unscored: number;
+	/** Attempts that never finished: a wedge, a timeout, a lost turn. */
+	aborted: number;
+};
 
 /** One pass-rate row. Nothing scored says so, rather than reading as `0/0`. */
 export function formatRate(rate: PassRate): string {
-	const excluded = rate.unscored > 0 ? `  ${rate.unscored} excluded` : "";
-	if (rate.attempts === 0) return `nothing scored${excluded}`;
+	const excluded = [
+		rate.unscored > 0 ? `${rate.unscored} excluded` : "",
+		rate.aborted > 0 ? `${rate.aborted} aborted` : "",
+	].filter(Boolean);
+	const suffix = excluded.length === 0 ? "" : `  ${excluded.join(", ")}`;
+	if (rate.attempts === 0) return `nothing scored${suffix}`;
 	const flaky = rate.passed > 0 && rate.passed < rate.attempts ? "  FLAKY" : "";
-	return `${rate.passed}/${rate.attempts}${flaky}${excluded}`;
+	return `${rate.passed}/${rate.attempts}${flaky}${suffix}`;
 }
 
 /**
@@ -760,7 +803,7 @@ export class EvalHost {
 							part.state.status !== "completed" &&
 							part.state.status !== "error",
 					)
-					.map((part) => `${part.tool ?? "tool"}:${part.state?.status}`),
+					.map((part) => pendingCallLabel(part)),
 			);
 			const busy =
 				pending.length > 0 ||

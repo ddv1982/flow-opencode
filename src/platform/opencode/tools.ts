@@ -19,7 +19,9 @@ import {
 	FINDING_ID_MESSAGE,
 	FINDING_ID_PATTERN,
 } from "../../domain/review-findings.js";
+import type { EvidencePlatform } from "../../domain/session.js";
 import { reviewResultSemanticIssues } from "../../domain/session.js";
+import { EVIDENCE_PLATFORMS } from "../../domain/validation.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
@@ -117,7 +119,12 @@ const plan = host
 		externalEvidence: host
 			.array(
 				host
-					.object({ requirement: text, environment: text, command: text })
+					.object({
+						requirement: text,
+						environment: text,
+						command: text,
+						platform: host.enum(EVIDENCE_PLATFORMS).optional(),
+					})
 					.strict(),
 			)
 			.max(MAX_PLAN_FEATURES)
@@ -245,6 +252,7 @@ type ToolOptions = Readonly<{
 		command: string;
 		scope: "focused" | "broad";
 		sourceDigest: `sha256:${string}`;
+		hostPlatform: EvidencePlatform;
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
 	autoContinuationSupport?: (() => AutoContinuationSupport) | undefined;

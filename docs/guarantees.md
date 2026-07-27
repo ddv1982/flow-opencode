@@ -37,8 +37,9 @@ and a rule that lives only in a prompt.
   not select which tests it runs.
 - Final review requires a passing broad observation for current source.
 - Final review and `completed` closure are refused while any command the plan
-  declared in `externalEvidence` has not passed. Feature reviews are not, so a goal
-  can be split into the half this host can prove and the half it cannot.
+  declared in `externalEvidence` has not passed on the OS that entry declared.
+  Feature reviews are not, so a goal can be split into the half this host can prove
+  and the half it cannot.
 - One revision per accepted mutation; an operation id replays exactly or conflicts.
 - Every mutation validates the whole schema and writes atomically under one
   cross-process lock.
@@ -49,6 +50,9 @@ and a rule that lives only in a prompt.
   the host's own Bash metadata. A model cannot report these; a host that reports
   neither yields a durable never-passing observation rather than a silent pass.
 - That the executed command's bytes equal the armed command.
+- The **host platform** each observation ran on, normalized from what the runtime
+  reports. A model cannot claim it, and an `externalEvidence` entry naming an OS is
+  satisfied only by an observation recorded on it.
 - The **workspace-content digest** binding validation and review to source. It is a
   content fingerprint of tracked, non-ignored files — not a Git audit chain, and it
   cannot see an edit that reverts before persistence.
@@ -75,9 +79,11 @@ reason Flow asks you to read the review rather than trust the verdict.
 - **Review substance.** That the reviewer read the artifacts, completed the risk
   checklist, and failed an unprovable claim instead of passing it conditionally.
 - **Evidence completeness.** That an `externalEvidence` entry names the observation
-  the goal actually asks for, and a command that would really produce it. The
-  runtime enforces that the declared command passed; that it was the right command
-  is visible in the approved plan and judged there.
+  the goal actually asks for, a command that would really produce it, and the platform
+  it actually needs — `other` restores the command-only rule. The runtime
+  enforces that the declared command passed on the declared OS; that the entry
+  describes the goal is visible in the approved plan and in the reviewer's plan
+  context, and judged there.
 - **Scope discipline.** That implementation stayed inside the approved plan, and
   that a worker wave respected its assigned paths.
 - **Honest reporting.** That the closing summary matches what happened.
@@ -86,6 +92,11 @@ reason Flow asks you to read the review rather than trust the verdict.
 
 - A declared `gate` that cannot fail. See Caller-declared above; deciding which
   commands count as tests is an open-ended whitelist, not an invariant.
+- **A suite that skips instead of failing.** Flow records exit codes, not skip
+  counts, so a green run that skipped the case the evidence was about is
+  indistinguishable from one that ran it. This is why an `externalEvidence` entry is
+  checked against the host it ran on rather than against its result, and why an
+  `other` platform stays reviewer judgment.
 - Plans saved before `plan.gate` and `plan.externalEvidence` existed. They declare
   neither and keep the older, weaker rules: `broad` is the claimant's word, and no
   acceptance observation is owed.

@@ -13,6 +13,7 @@ import {
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
 import type {
+	EvidencePlatform,
 	Plan,
 	ReviewAssignment,
 	ReviewFinding,
@@ -328,14 +329,19 @@ export async function recordObservedValidation(
 		scope?: "focused" | "broad";
 		captureId: string;
 		exitCode?: number;
+		hostPlatform?: EvidencePlatform;
 	}>,
 ) {
-	const prepared = await prepareValidation(repository, {
-		expectedRevision: revision(repository),
-		featureId: options.featureId ?? FEATURE,
-		command: options.command ?? "bun test",
-		scope: options.scope ?? "broad",
-	});
+	const prepared = await prepareValidation(
+		repository,
+		{
+			expectedRevision: revision(repository),
+			featureId: options.featureId ?? FEATURE,
+			command: options.command ?? "bun test",
+			scope: options.scope ?? "broad",
+		},
+		options.hostPlatform ?? "linux",
+	);
 	return persistObservedValidation(repository, {
 		...prepared,
 		captureId: options.captureId,

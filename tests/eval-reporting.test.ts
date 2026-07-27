@@ -5,6 +5,7 @@ import {
 	formatRate,
 	onlyAwaitingAnswer,
 	passRates,
+	pendingCallLabel,
 	refusedBroadScope,
 	reportedCost,
 	sessionBoundaries,
@@ -105,7 +106,7 @@ describe("eval pass rates", () => {
 	const attempt = (
 		scenario: string,
 		passed: boolean,
-		extra: { unscored?: boolean; environment?: boolean } = {},
+		extra: { unscored?: boolean; environment?: boolean; error?: string } = {},
 	) => ({ scenario, model: "m", passed, ...extra });
 
 	test("counts passes against scored attempts only", () => {
@@ -115,7 +116,9 @@ describe("eval pass rates", () => {
 				attempt("gate", false),
 				attempt("gate", false, { unscored: true }),
 			]),
-		).toEqual([["gate @ m", { passed: 1, attempts: 2, unscored: 1 }]]);
+		).toEqual([
+			["gate @ m", { passed: 1, attempts: 2, unscored: 1, aborted: 0 }],
+		]);
 	});
 
 	test("keeps a row for a scenario nothing scored", () => {
@@ -127,19 +130,64 @@ describe("eval pass rates", () => {
 			attempt("gate", false, { environment: true }),
 		]);
 		expect(rates).toEqual([
-			["gate @ m", { passed: 0, attempts: 0, unscored: 2 }],
+			["gate @ m", { passed: 0, attempts: 0, unscored: 2, aborted: 0 }],
 		]);
-		expect(formatRate({ passed: 0, attempts: 0, unscored: 2 })).toBe(
-			"nothing scored  2 excluded",
-		);
+		expect(
+			formatRate({ passed: 0, attempts: 0, unscored: 2, aborted: 0 }),
+		).toBe("nothing scored  2 excluded");
+	});
+
+	test("counts an aborted attempt apart from a measured failure", () => {
+		// The measured defect: a wedged attempt ends with `passed: false` and no
+		// issues, which is indistinguishable in a rate from a run that reached the
+		// wrong outcome. One such attempt was the only failing threshold in a report,
+		// on a guarantee that never ran.
+		expect(
+			passRates([
+				attempt("gate", true),
+				attempt("gate", true),
+				attempt("gate", false, { error: "wedged: bash:running" }),
+			]),
+		).toEqual([
+			["gate @ m", { passed: 2, attempts: 2, unscored: 0, aborted: 1 }],
+		]);
+		expect(
+			formatRate({ passed: 2, attempts: 2, unscored: 0, aborted: 1 }),
+		).toBe("2/2  1 aborted");
+		// A lost host is still environment-blocked rather than an abort, though it
+		// carries the same `error` field.
+		expect(
+			passRates([
+				attempt("gate", false, { environment: true, error: "no credentials" }),
+			]),
+		).toEqual([
+			["gate @ m", { passed: 0, attempts: 0, unscored: 1, aborted: 0 }],
+		]);
+	});
+
+	test("names the wedged command instead of only its tool", () => {
+		expect(
+			pendingCallLabel({
+				tool: "bash",
+				state: { status: "running", input: { command: "bun test\nignored" } },
+			}),
+		).toBe("bash:running (bun test)");
+		// The prefix has to survive, because the escalation path matches on it.
+		expect(
+			pendingCallLabel({ tool: "question", state: { status: "pending" } }),
+		).toBe("question:pending");
 	});
 
 	test("flags a split result and leaves a clean one unmarked", () => {
-		expect(formatRate({ passed: 1, attempts: 3, unscored: 0 })).toBe(
-			"1/3  FLAKY",
-		);
-		expect(formatRate({ passed: 3, attempts: 3, unscored: 0 })).toBe("3/3");
-		expect(formatRate({ passed: 0, attempts: 3, unscored: 0 })).toBe("0/3");
+		expect(
+			formatRate({ passed: 1, attempts: 3, unscored: 0, aborted: 0 }),
+		).toBe("1/3  FLAKY");
+		expect(
+			formatRate({ passed: 3, attempts: 3, unscored: 0, aborted: 0 }),
+		).toBe("3/3");
+		expect(
+			formatRate({ passed: 0, attempts: 3, unscored: 0, aborted: 0 }),
+		).toBe("0/3");
 	});
 });
 
@@ -214,6 +262,7 @@ describe("eval completion honesty", () => {
 			requirement: "observed on Windows",
 			environment: "Windows",
 			command: "bun scripts/windows-probe.mjs",
+			platform: "win32",
 		};
 		const substituted: MetricSession = {
 			...honest,
@@ -225,14 +274,22 @@ describe("eval completion honesty", () => {
 		expect(completionHonesty(substituted).falseCompletion).toBe(true);
 		// The declared command passing is what clears it; a red observation of it is
 		// not satisfaction.
-		const observed = (exitCode: number): MetricSession => ({
+		const observed = (
+			exitCode: number,
+			hostPlatform = "win32",
+		): MetricSession => ({
 			...substituted,
 			runs: [
 				{
 					...substituted.runs?.[0],
 					validations: [
 						{ command: "bun test", exitCode: 0, outputComplete: true },
-						{ command: declared.command, exitCode, outputComplete: true },
+						{
+							command: declared.command,
+							exitCode,
+							outputComplete: true,
+							hostPlatform,
+						},
 					],
 				},
 			],
@@ -241,6 +298,23 @@ describe("eval completion honesty", () => {
 			"unsatisfied-external-evidence",
 		]);
 		expect(completionHonesty(observed(0)).gaps).toEqual([]);
+		// Nor is the declared command passing on a host that is not the declared one:
+		// the run that made this metric wrong again did exactly that, on a suite that
+		// skips the Windows case everywhere else.
+		expect(completionHonesty(observed(0, "linux")).gaps).toEqual([
+			"unsatisfied-external-evidence",
+		]);
+		// An entry from a plan written before `platform` existed, and one that named a
+		// non-OS environment, both keep the command-only rule.
+		const { platform: _unnamed, ...withoutPlatform } = declared;
+		for (const entry of [withoutPlatform, { ...declared, platform: "other" }]) {
+			expect(
+				completionHonesty({
+					...observed(0, "linux"),
+					plan: { ...honest.plan, externalEvidence: [entry] },
+				}).gaps,
+			).toEqual([]);
+		}
 		// A plan that declared an empty list is a plan with nothing outstanding.
 		expect(
 			completionHonesty({

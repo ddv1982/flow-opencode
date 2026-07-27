@@ -54,6 +54,13 @@ common and correct answer, and a different thing from never having been asked.
 of its exact command, byte-for-byte — ADR 0010's mechanism, applied per requirement
 instead of per repository.
 
+**And only on the host it named.** Each entry also carries `platform` — `win32`,
+`darwin`, `linux`, or `other` — and each observation records the host it ran on, so an
+entry naming an OS needs an eligible observation of its command on that OS. `other`
+covers a service, credential, setting, or device and keeps the command-only rule,
+because Flow cannot compare those with anything the host reports. The amendment below
+records the run that made this necessary.
+
 **Refuse the two claims that depend on it.** `flow_review_start` refuses a *final*
 review while any entry is unsatisfied for the current workspace content, and
 `closeSession` refuses a `completed` closure while any entry has never passed. Both
@@ -64,12 +71,28 @@ deferred and abandoned.
 `unsatisfied-external-evidence` gap, so the gated false-completion number does not
 depend on the veto it is measuring.
 
+## Amendment, 2026-07-28: the environment is a value, not prose
+
+The first matrix run with the field in place found the hole the byte-match alone
+could not see. An attempt declared a well-formed entry —
+`environment: "Windows (win32) host with bun installed"`,
+`command: "bun test src/platform.test.ts"` — then ran that exact command on the Linux
+host and discharged the entry with its exit zero, green *because* the Windows case is
+`test.skip`ped there. Every recorded field was true, the final review was admitted,
+`completed` was allowed, and `completionHonesty` reported zero false completions.
+
+Prose could not be compared with anything, so `platform` became a value checked
+against a host each observation now records. Flow still cannot see a suite that
+skips — it reads exit codes, not skip counts — which is why the check is on the host
+rather than on the result. Recorded as a limitation in
+[docs/guarantees.md](../guarantees.md).
+
 ## Simplicity boundary
 
-Three strings per entry on the plan, and no new state. No observation field, no
-per-entry id, no attestation step, no new tool: naming the command *is* the binding,
-which is why this costs one helper and two comparisons in transitions that already
-compare commands.
+Four fields per entry on the plan, one optional field on the observation, and no new
+state. No per-entry id, no attestation step, no new tool: naming the command *is* the
+binding, which is why this costs one helper and three comparisons in transitions that
+already compare commands.
 
 Only the final review is vetoed, not every feature review. The best outcome the
 matrix recorded split the goal into a feature the host can prove and one it cannot,
@@ -88,6 +111,13 @@ A goal whose acceptance cannot be a command — a human eyeballing a rendering �
 no honest entry, and so cannot reach `completed` closure. That is correct for a
 system that only trusts observations, and it is a real cost.
 
+`platform: "other"` restores the command-only rule, so declaring `other` for a goal
+that needs Windows is one word away from the state the amendment closed. Deliberate,
+and the same trade as the command: the wrong platform is a visible line in the plan the
+user approves, and `other` is the only honest answer for a credential or a device. The
+reviewer is now given the entries, so the claim can be checked by something other than
+the run that wrote it.
+
 Plans written before this field exists declare nothing and keep the older behavior,
 as with `gate`. That set only shrinks.
 
@@ -97,10 +127,18 @@ as with `gate`. That set only shrinks.
 nothing checkable at the other end. A field a model fills with prose is the state
 this ADR exists to leave.
 
-**An entry id bound to an observation.** Would add a field to
+**An entry id bound to an observation.** Would add a *claimed* field to
 `ValidationObservation`, a parameter to `flow_validation_start`, and a new way for
 the binding to be wrong. The command is already a unique, byte-matched key, and
-declaring it early is the part that does the work.
+declaring it early is the part that does the work. The amendment's `hostPlatform` is
+the opposite kind of field: the runtime writes it and no parameter exposes it.
+
+**Inferring the platform from the `environment` prose.** Parseable in the measured
+failure, and still nothing to compare it against until the host is recorded too. Once
+it is, asking for the value is smaller than guessing at it.
+
+**Requiring a prior failing observation of the command.** Sounds like proof the
+environment matters, and rules out a command that only ever runs on the right host.
 
 **Vetoing every review, or `flow_run_start`.** Stopping before implementation is
 what the prose already asked for and what two attempts did well. Making it a

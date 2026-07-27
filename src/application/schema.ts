@@ -23,7 +23,10 @@ import {
 import type { Session, SourceDigest } from "../domain/session.js";
 import { reviewResultSemanticIssues } from "../domain/session.js";
 import { sessionInvariantIssues } from "../domain/session-invariants.js";
-import { VALIDATION_INELIGIBLE_REASONS } from "../domain/validation.js";
+import {
+	EVIDENCE_PLATFORMS,
+	VALIDATION_INELIGIBLE_REASONS,
+} from "../domain/validation.js";
 
 const encoder = new TextEncoder();
 
@@ -84,6 +87,12 @@ const ExternalEvidenceSchema = z
 		requirement: boundedText("External evidence requirement"),
 		environment: boundedText("External evidence environment"),
 		command: boundedText("External evidence command"),
+		/**
+		 * Optional for the same reason the field around it is: an entry written before
+		 * `platform` existed still hydrates and keeps the command-only rule, while
+		 * `savePlan` refuses a new entry without it.
+		 */
+		platform: z.enum(EVIDENCE_PLATFORMS).optional(),
 	})
 	.strict();
 
@@ -174,6 +183,8 @@ const ValidationObservationSchema = z
 		outputDigest: SourceDigestSchema,
 		outputComplete: z.boolean(),
 		recordedRevision: RevisionSchema,
+		/** The host this command ran on; absent in documents written before it existed. */
+		hostPlatform: z.enum(EVIDENCE_PLATFORMS).optional(),
 		ineligibleReason: z.enum(VALIDATION_INELIGIBLE_REASONS).optional(),
 	})
 	.strict()

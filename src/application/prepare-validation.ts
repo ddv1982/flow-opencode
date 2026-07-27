@@ -1,5 +1,6 @@
 import { MAX_VALIDATION_ID_LENGTH } from "../domain/limits.js";
 import type {
+	EvidencePlatform,
 	Session,
 	SourceDigest,
 	ValidationIneligibleReason,
@@ -7,7 +8,10 @@ import type {
 	ValidationScope,
 } from "../domain/session.js";
 import { activeRun, recordValidation } from "../domain/transitions.js";
-import { LONGEST_VALIDATION_INELIGIBLE_REASON } from "../domain/validation.js";
+import {
+	LONGEST_EVIDENCE_PLATFORM,
+	LONGEST_VALIDATION_INELIGIBLE_REASON,
+} from "../domain/validation.js";
 import type { SessionRepository } from "./ports/session-repository.js";
 import { SessionSchema, type ValidationStartRequest } from "./schema.js";
 
@@ -17,6 +21,12 @@ export type PreparedValidation = Readonly<{
 	command: string;
 	scope: ValidationScope;
 	sourceDigest: SourceDigest;
+	/**
+	 * The host that will run this command, supplied by the caller because reading it
+	 * belongs to infrastructure. It is armed here rather than read when the
+	 * observation is persisted so the recorded host is the one Flow armed against.
+	 */
+	hostPlatform: EvidencePlatform;
 }>;
 
 export type ObservedValidation = PreparedValidation &
@@ -61,11 +71,13 @@ function maximumSerializedObservation(
 	return {
 		...prepared,
 		captureId: maximumSerializedUnusedCaptureId(session),
-		// The widest exit code and the longest reason, so this probe stays an upper
-		// bound on the serialized size of any observation that could be recorded.
+		// The widest exit code and the longest reason and platform, so this probe stays
+		// an upper bound on the serialized size of any observation that could be
+		// recorded.
 		exitCode: Number.MIN_SAFE_INTEGER,
 		outputDigest: prepared.sourceDigest,
 		outputComplete: false,
+		hostPlatform: LONGEST_EVIDENCE_PLATFORM,
 		ineligibleReason: LONGEST_VALIDATION_INELIGIBLE_REASON,
 	};
 }
@@ -84,6 +96,7 @@ function assertValidationCanBeRecorded(
 export async function prepareValidation(
 	repository: SessionRepository,
 	input: ValidationStartRequest,
+	hostPlatform: EvidencePlatform,
 ): Promise<PreparedValidation> {
 	return repository.transact(async (transaction) => {
 		const session = await transaction.load();
@@ -106,6 +119,7 @@ export async function prepareValidation(
 			command: input.command,
 			scope: input.scope,
 			sourceDigest: await transaction.computeSourceDigest(),
+			hostPlatform,
 		};
 		assertValidationCanBeRecorded(session, prepared);
 		return prepared;

@@ -60,7 +60,12 @@ type Report = {
 	summary?: {
 		passRates?: Record<
 			string,
-			{ passed: number; attempts: number; unscored: number }
+			{
+				passed: number;
+				attempts: number;
+				unscored: number;
+				aborted?: number;
+			}
 		>;
 		falseCompletions?: number;
 		closedCompleted?: number;
@@ -175,6 +180,16 @@ export function qualificationFailures(report: Report): string[] {
 		if (rate.attempts === 0) {
 			failures.push(
 				`${label}: nothing scored (${rate.unscored} excluded), so this scenario is unmeasured`,
+			);
+			continue;
+		}
+		// An abort is excluded from the rate, which is right, and would otherwise be
+		// silent: the pair still reads as measured on the attempts that survived. A
+		// gated guarantee is not measured by a run that never finished, so the report
+		// does not qualify until that pair is re-run.
+		if ((rate.aborted ?? 0) > 0) {
+			failures.push(
+				`${label}: ${rate.aborted} attempt(s) aborted mid-flight and are excluded from the rate; re-run this pair so the gated guarantee is actually measured`,
 			);
 			continue;
 		}

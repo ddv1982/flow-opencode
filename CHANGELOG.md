@@ -22,16 +22,31 @@ that rested on prompt prose are now measured.
   command passes, so a self-written proxy cannot stand in for it. The first
   three-provider eval matrix found three runs substituting one — two closed
   `completed` over a Windows-only criterion on a Linux host, with the independent
-  review passing, and the suite's own false-completion metric reported zero. See
+  review passing, and the suite's own false-completion metric reported zero. Each
+  entry also names the `platform` that can observe it — `win32`, `darwin`, `linux`, or
+  `other` for a service, credential, or device — and Flow records the host every
+  observation ran on, so the declared command passing on the wrong machine no longer
+  discharges it. The next matrix run found exactly that: a declared Windows entry
+  cleared by its own command's exit zero on Linux, green because the Windows case is
+  skipped there. The refusal now distinguishes a command never observed from one that
+  passed on the wrong host, because those call for opposite moves. See
   [ADR 0011](docs/adr/0011-declared-external-evidence.md).
+- **The reviewer can see the two commands the plan declares.** Its plan context now
+  carries `gate` and `externalEvidence`, which it was asked to judge and was never
+  shown: it could not tell a `broad` observation that ran the canonical gate from one
+  that ran something else, and could not check a declared environment against the host
+  the observation recorded.
 - **Session v5 schema:** `plan.gate` is a new optional string. A document written by
   an earlier build still hydrates and keeps the older rule where `broad` is the
   claimant's word; `flow_plan_save` requires the field for any new plan, so a plan
   this build writes always declares one. `plan.externalEvidence` is a new optional
   array under the same rule: older documents declare nothing and owe no acceptance
   observation, and `flow_plan_save` requires the field — an empty list is the answer
-  when the goal is fully observable here. Rolling an active session back to a build
-  without either field is not supported, as with every previous widening.
+  when the goal is fully observable here. Each entry carries an optional `platform`
+  that `flow_plan_save` likewise requires for a new plan, and each validation
+  observation carries an optional runtime-written `hostPlatform`; an entry hydrated
+  without a platform keeps the command-only rule. Rolling an active session back to a
+  build without these fields is not supported, as with every previous widening.
 - **The bar is published, not described.** [What Flow
   guarantees](docs/guarantees.md) states which claims are enforced by types, attested
   by the host, declared by the caller, judged by a model, or unenforced.
@@ -40,7 +55,11 @@ that rested on prompt prose are now measured.
 - **Evals measure false completion and reviewer activity**, derived from durable
   documents rather than model prose, and a scheduled workflow runs the suite against
   at least two providers weekly. A new scenario checks that a requirement no run can
-  observe is never reported as verified.
+  observe is never reported as verified. A run that aborts mid-flight is counted and
+  excluded rather than scored as a failure — one wedged attempt was the only failing
+  threshold in a measured report, on a guarantee that never ran — and `bun run
+  qualify` refuses a report holding one on a gated pair. A wedge diagnostic now names
+  the command each incomplete tool call was running.
 - **`/flow-auto` says when your host cannot continue.** Continuation needs assistant
   message parentage; a host that does not report it now gets a plain note at startup
   and an `autoContinuation` field on status, instead of a lifecycle that appears to

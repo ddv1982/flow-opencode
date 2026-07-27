@@ -24,6 +24,7 @@ import type {
 import { reviewResultSemanticIssues } from "./session.js";
 import { FlowTransitionError } from "./transition-error.js";
 import {
+	externalEvidenceRefusal,
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
@@ -182,6 +183,14 @@ function assertDeclaredExternalEvidence(plan: Plan): void {
 	if (plan.externalEvidence === undefined) {
 		fail(
 			"A saved plan must declare `externalEvidence`: every acceptance observation needing an environment this host may not be, each with the exact command whose passing is that observation. Declare an empty list when the goal is fully observable here.",
+		);
+	}
+	// Required for the same reason the command is: the entry has to name the host
+	// before there is any pressure to accept the wrong one. An entry hydrated from an
+	// older document keeps the weaker command-only rule.
+	if (plan.externalEvidence?.some((entry) => entry.platform === undefined)) {
+		fail(
+			"Every `externalEvidence` entry must declare `platform`: the operating system that can observe it (`win32`, `darwin`, or `linux`), or `other` when the missing environment is a service, credential, setting, or device rather than an OS. Flow compares an OS against the host the command actually ran on.",
 		);
 	}
 }
@@ -498,9 +507,8 @@ export function startReview(
 		if (unsatisfied.length > 0) {
 			fail(
 				`Final review requires the plan's declared external evidence to pass for the current workspace content: ${unsatisfied
-					.map(
-						(entry) =>
-							`${JSON.stringify(entry.command)} (${entry.environment}, for ${entry.requirement})`,
+					.map((entry) =>
+						externalEvidenceRefusal(session, entry, input.sourceDigest),
 					)
 					.join(
 						", ",
@@ -786,7 +794,7 @@ export function closeSession(
 		if (unsatisfied.length > 0) {
 			fail(
 				`A completed close requires the plan's declared external evidence to have passed: ${unsatisfied
-					.map((entry) => JSON.stringify(entry.command))
+					.map((entry) => externalEvidenceRefusal(session, entry))
 					.join(", ")}. Close deferred or abandoned instead.`,
 			);
 		}

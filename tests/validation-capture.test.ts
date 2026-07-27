@@ -19,6 +19,7 @@ const prepared: PreparedValidation = {
 	command: "bun test tests/runtime-gates.test.ts",
 	scope: "focused",
 	sourceDigest: SOURCE,
+	hostPlatform: "linux",
 };
 
 function persistedObservation(
@@ -36,6 +37,7 @@ function persistedObservation(
 		outputDigest: input.outputDigest,
 		outputComplete: input.outputComplete,
 		recordedRevision,
+		...(input.hostPlatform ? { hostPlatform: input.hostPlatform } : {}),
 		...(input.ineligibleReason
 			? { ineligibleReason: input.ineligibleReason }
 			: {}),

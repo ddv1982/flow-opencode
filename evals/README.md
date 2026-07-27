@@ -173,9 +173,15 @@ different things:
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
 - `ABORT` — a step blew the timeout. The message says whether the session was
-  `wedged` (no new message or part, with the incomplete tool calls named) or
-  `still working` (producing output up to the deadline, so looping rather than
-  stuck). Tokens and tool calls collected before the abort are kept.
+  `wedged` (no new message or part, with the incomplete tool calls named, each with
+  the first line of its command) or `still working` (producing output up to the
+  deadline, so looping rather than stuck). Tokens and tool calls collected before the
+  abort are kept. Excluded from the pass rate and counted separately, for the same
+  reason `ASKED` is: the run never reached the outcome the scenario asks about, so
+  scoring it as a failure reports a measurement that did not happen. One wedged
+  attempt was the only failing threshold in a recorded report. `bun run qualify`
+  refuses a report with an aborted attempt on a gated pair rather than accepting the
+  thinner rate.
 
 Suspending the machine mid-run is credited back rather than charged to the
 model: an iteration that takes far longer than its own poll interval is time the

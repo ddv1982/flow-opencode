@@ -1,5 +1,6 @@
 import { MAX_VALIDATION_ID_LENGTH, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import type {
+	EvidencePlatform,
 	ExternalEvidence,
 	FeatureId,
 	FeatureRun,
@@ -25,6 +26,38 @@ export const LONGEST_VALIDATION_INELIGIBLE_REASON =
 	VALIDATION_INELIGIBLE_REASONS.reduce((longest, reason) =>
 		reason.length > longest.length ? reason : longest,
 	);
+
+/**
+ * The host identities an external-evidence entry can name: the three
+ * `process.platform` values a developer host is almost always one of, plus `other`
+ * for everything Flow cannot compare — including the rarer Unixes, which stay
+ * judgment rather than being silently mismatched.
+ */
+export const EVIDENCE_PLATFORMS = [
+	"win32",
+	"darwin",
+	"linux",
+	"other",
+] as const satisfies readonly EvidencePlatform[];
+
+/** The longest platform, for the same capacity-probe reason. */
+export const LONGEST_EVIDENCE_PLATFORM = EVIDENCE_PLATFORMS.reduce(
+	(longest, platform) =>
+		platform.length > longest.length ? platform : longest,
+);
+
+/**
+ * The host identity Flow records, from whatever the runtime reports. Anything it
+ * cannot compare becomes `other`, which no OS entry accepts, so an unrecognized host
+ * fails closed rather than matching by accident.
+ */
+export function normalizeEvidencePlatform(value: string): EvidencePlatform {
+	return (
+		EVIDENCE_PLATFORMS.find(
+			(platform) => platform !== "other" && platform === value,
+		) ?? "other"
+	);
+}
 
 export function isValidationEligible(
 	observation: ValidationObservation,
@@ -103,6 +136,7 @@ export function recordValidation(
 		exitCode: number | null;
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
+		hostPlatform?: EvidencePlatform | undefined;
 		ineligibleReason?: ValidationObservation["ineligibleReason"];
 	}>,
 ): Readonly<{
@@ -136,6 +170,7 @@ export function recordValidation(
 			prior.exitCode !== input.exitCode ||
 			prior.outputDigest !== input.outputDigest ||
 			prior.outputComplete !== input.outputComplete ||
+			prior.hostPlatform !== input.hostPlatform ||
 			prior.ineligibleReason !== input.ineligibleReason
 		) {
 			throw new FlowTransitionError(
@@ -195,6 +230,7 @@ export function recordValidation(
 		outputDigest: input.outputDigest,
 		outputComplete: input.outputComplete,
 		recordedRevision: revision,
+		...(input.hostPlatform ? { hostPlatform: input.hostPlatform } : {}),
 		...(input.ineligibleReason
 			? { ineligibleReason: input.ineligibleReason }
 			: {}),
@@ -219,12 +255,73 @@ export function recordValidation(
 }
 
 /**
- * Declared external evidence with no passing observation of its exact command.
+ * Whether an observation ran on the host the entry declared it needed.
  *
- * The byte-match is the whole mechanism, and it is `plan.gate`'s: a command named
+ * `other` and a plan saved before `platform` existed both fall back to the
+ * command-only rule: neither named an OS, so there is nothing to compare and the
+ * judgment stays where the plan was approved.
+ */
+function isObservedOnDeclaredPlatform(
+	entry: ExternalEvidence,
+	observation: ValidationObservation,
+): boolean {
+	if (entry.platform === undefined || entry.platform === "other") return true;
+	return observation.hostPlatform === entry.platform;
+}
+
+/**
+ * Why an entry is still unsatisfied, in the terms whoever reads the refusal needs.
+ *
+ * Without this the two states read identically — "this command has not passed" — and
+ * they call for opposite moves. A command never observed is work to do. A command
+ * that passed on the wrong host is *done and useless*, and telling the reader to make
+ * it pass invites re-running the thing that already went green, which is how a wedged
+ * attempt gets spent.
+ */
+export function externalEvidenceRefusal(
+	session: Session,
+	entry: ExternalEvidence,
+	sourceDigest?: SourceDigest,
+): string {
+	const wrongHosts = [
+		...new Set(
+			session.runs
+				.flatMap((run) => run.validations)
+				.filter(
+					(observation) =>
+						observation.command === entry.command &&
+						isValidationEligible(observation, sourceDigest) &&
+						!isObservedOnDeclaredPlatform(entry, observation),
+				)
+				.map((observation) => observation.hostPlatform ?? "an unrecorded host"),
+		),
+	];
+	// `other` and a pre-`platform` entry have no OS to name, so the environment prose
+	// is all there is to say back.
+	const needs =
+		entry.platform === undefined || entry.platform === "other"
+			? entry.environment
+			: `${entry.environment} on ${entry.platform}`;
+	const detail =
+		wrongHosts.length > 0
+			? `passed on ${wrongHosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
+			: `needs ${needs}`;
+	return `${JSON.stringify(entry.command)} (${detail}, for ${entry.requirement})`;
+}
+
+/**
+ * Declared external evidence with no passing observation of its exact command on its
+ * declared host.
+ *
+ * The byte-match is most of the mechanism, and it is `plan.gate`'s: a command named
  * before implementation cannot be swapped for a weaker one afterwards. Any run's
  * observations count, because the environment is a property of the host and not of
  * the feature that happened to need it first.
+ *
+ * What the byte-match alone could not see is the same command run on the wrong host,
+ * where a suite skips the case that needed the missing OS and exits zero for it. So
+ * the declared `platform` is compared with the host the observation recorded
+ * (`docs/adr/0011-declared-external-evidence.md`).
  *
  * `sourceDigest` narrows this to the current workspace content for review admission.
  * Closure has no digest to compare against and passes none, so a closure check asks
@@ -243,6 +340,7 @@ export function unsatisfiedExternalEvidence(
 			!observed.some(
 				(observation) =>
 					observation.command === entry.command &&
+					isObservedOnDeclaredPlatform(entry, observation) &&
 					isValidationEligible(observation, sourceDigest),
 			),
 	);

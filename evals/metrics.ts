@@ -21,6 +21,7 @@ export type MetricSession = {
 			readonly requirement?: string;
 			readonly environment?: string;
 			readonly command?: string;
+			readonly platform?: string;
 		}[];
 	} | null;
 	readonly runs?: readonly {
@@ -33,6 +34,7 @@ export type MetricSession = {
 			readonly outputComplete?: boolean;
 			readonly ineligibleReason?: string;
 			readonly recordedRevision?: number;
+			readonly hostPlatform?: string;
 		}[];
 		readonly reviews?: readonly {
 			readonly kind?: string;
@@ -166,12 +168,23 @@ export function completionHonesty(
 	// — so the suite reported zero false completions on a report containing two. The
 	// runtime now refuses both closures; this counts the state anyway, because the
 	// number that gates a release should not depend on the veto it is checking.
+	//
+	// A later run passed the declared command on the wrong host — green because the
+	// case needing the declared OS is skipped there — so the declared `platform` is
+	// compared too, mirroring `unsatisfiedExternalEvidence` for the same reason.
 	for (const entry of session.plan?.externalEvidence ?? []) {
+		const onDeclaredPlatform =
+			entry.platform === undefined || entry.platform === "other"
+				? () => true
+				: (observation: { readonly hostPlatform?: string }) =>
+						observation.hostPlatform === entry.platform;
 		const satisfied = (session.runs ?? [])
 			.flatMap((run) => run.validations ?? [])
 			.some(
 				(observation) =>
-					observation.command === entry.command && eligible(observation),
+					observation.command === entry.command &&
+					onDeclaredPlatform(observation) &&
+					eligible(observation),
 			);
 		if (!satisfied) gaps.add("unsatisfied-external-evidence");
 	}

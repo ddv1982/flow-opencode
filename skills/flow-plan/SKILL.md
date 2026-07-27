@@ -52,11 +52,11 @@ Save one plan with:
   too weak to fail forecloses broad evidence for the session.
 - `externalEvidence`: each acceptance observation needing an operating system,
   architecture, service, credential, setting, or hardware this host may lack, as
-  `requirement`, `environment`, and the exact `command` whose passing is that
-  observation. Empty when the goal is fully observable here. That command is what
-  satisfies it: final review and completed closure stay refused until it passes, and
-  an emulator is a different environment. Recording the gap as a `requirements`
-  non-goal declares nothing.
+  `requirement`, `environment`, the exact `command` whose passing is that observation,
+  and `platform`: `win32`, `darwin`, `linux`, or `other` for a non-OS environment.
+  Empty when the goal is fully observable here. That command run on that platform is
+  what satisfies it: final review and completed closure stay refused until it passes
+  there. Recording the gap as a `requirements` non-goal declares nothing.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 

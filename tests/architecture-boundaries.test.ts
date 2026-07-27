@@ -25,8 +25,16 @@ const sourceRoot = join(repositoryRoot, "src");
  * inferable from the conditionals. The same criterion applied: after tightening,
  * the total landed 44 bytes under the old ceiling, which is the zero-headroom state
  * this comment already warns about.
+ *
+ * Raised again, from 224 KiB, for `ExternalEvidence.platform` and the host each
+ * observation was recorded on. The code is a four-value union, one normalizer, one
+ * added condition in `unsatisfiedExternalEvidence`, and two optional schema fields.
+ * What did not fit is why prose was not enough: a measured run declared it needed
+ * Windows, ran its exact declared command on Linux where the Windows case skips,
+ * and closed `completed` with every recorded field true. Nothing in the comparison
+ * says that, and 1,609 bytes of headroom would have bought only the union.
  */
-const MAX_TYPESCRIPT_SOURCE_BYTES = 224 * 1024;
+const MAX_TYPESCRIPT_SOURCE_BYTES = 232 * 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {

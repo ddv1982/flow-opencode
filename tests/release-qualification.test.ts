@@ -30,7 +30,12 @@ function report(overrides: {
 	scenarios?: string[];
 	rates?: Record<
 		string,
-		{ passed: number; attempts: number; unscored: number }
+		{
+			passed: number;
+			attempts: number;
+			unscored: number;
+			aborted?: number;
+		}
 	>;
 	falseCompletions?: number;
 	unsubmitted?: number;
@@ -147,6 +152,34 @@ describe("release qualification", () => {
 		);
 		expect(failures).toHaveLength(1);
 		expect(failures[0]).toContain("only 2 attempt(s) scored");
+	});
+
+	test("refuses a pair whose attempt aborted mid-flight", () => {
+		// The measured defect this closes from both ends: a wedged attempt used to be
+		// scored as a failure, which produced the only NOT QUALIFIED line in a report
+		// on a guarantee that never ran. Excluding it silently would have inverted the
+		// error -- the pair would read as measured on what survived -- so the exclusion
+		// is itself a qualification failure until the pair is re-run.
+		const failures = qualificationFailures(
+			report({
+				rates: {
+					"failing-gate-blocks @ anthropic/claude-opus-5": {
+						passed: 2,
+						attempts: 2,
+						unscored: 0,
+						aborted: 1,
+					},
+					"failing-gate-blocks @ openai/gpt-5.6": {
+						passed: 3,
+						attempts: 3,
+						unscored: 0,
+						aborted: 0,
+					},
+				},
+			}),
+		);
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toContain("aborted mid-flight");
 	});
 
 	test("refuses a scenario nothing scored", () => {

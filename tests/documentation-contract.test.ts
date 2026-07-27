@@ -66,8 +66,16 @@ const packageVersion = packageJson.version;
  * change into whatever space an unrelated round of prose golf could find. The 2,500
  * here is deliberately less than one more record — the next ADR is the prompt to
  * tighten the contract, not to raise this again.
+ *
+ * Raised from 120,000, which had 1,342 bytes left, for the ADR 0011 amendment that
+ * records why a declared environment had to become a value the runtime compares, two
+ * guarantee-map entries, and the ~700 bytes the contract split spent on a second
+ * document's front matter and cross-links. The tightening this comment asks for went
+ * first and is in the diff: the amendment was cut by a third, and the contract came
+ * out of this change smaller than it went in. The 1,800 left is again less than one
+ * record, for the same reason.
  */
-const MAX_MAINTAINED_DOC_BYTES = 120_000;
+const MAX_MAINTAINED_DOC_BYTES = 124_000;
 
 /**
  * No single maintained document should outgrow the operator-facing README.
@@ -83,8 +91,14 @@ const MAX_MAINTAINED_DOC_BYTES = 120_000;
  * document is for. The real fix is to split the contract — validation and review is
  * over a third of it — and that is the next move if it grows again, not another
  * raise.
+ *
+ * It grew again, by one clause about the platform an observation ran on, so the
+ * split happened: `validation-and-review.md` now owns those invariants and the
+ * contract points at it. Lowered from 33,000 to 21,000, which is the largest
+ * remaining document plus slack, and low enough that the next document to outgrow
+ * the set is caught rather than absorbed.
  */
-const MAX_SINGLE_DOC_BYTES = 33_000;
+const MAX_SINGLE_DOC_BYTES = 21_000;
 
 function section(markdown: string, heading: string, level = 2): string {
 	const marker = `${"#".repeat(level)} ${heading}`;

@@ -116,7 +116,7 @@ describe("Flow validation capacity gate", () => {
 		}).request;
 
 		await expect(
-			prepareValidation(fittingRepository, fittingRequest),
+			prepareValidation(fittingRepository, fittingRequest, "linux"),
 		).resolves.toMatchObject({ command, sourceDigest: SOURCE_A });
 		const fittingProspective = recordValidation(fitting, {
 			captureId: "capture-capacity-64",
@@ -128,6 +128,7 @@ describe("Flow validation capacity gate", () => {
 			exitCode: 0,
 			outputDigest: OUTPUT,
 			outputComplete: true,
+			hostPlatform: "linux",
 		}).session;
 		expect(
 			Buffer.byteLength(JSON.stringify(fittingProspective, null, 2), "utf8"),
@@ -162,6 +163,7 @@ describe("Flow validation capacity gate", () => {
 			exitCode: 0,
 			outputDigest: OUTPUT,
 			outputComplete: true,
+			hostPlatform: "linux",
 		}).session;
 		expect(() => SessionSchema.parse(prospective)).toThrow(
 			`Session cannot exceed ${MAX_SESSION_BYTES} UTF-8 bytes.`,
@@ -178,7 +180,7 @@ describe("Flow validation capacity gate", () => {
 		}).request;
 
 		await expect(
-			prepareValidation(overflowingRepository, overflowingRequest),
+			prepareValidation(overflowingRepository, overflowingRequest, "linux"),
 		).rejects.toThrow(
 			`Session cannot exceed ${MAX_SESSION_BYTES} UTF-8 bytes.`,
 		);

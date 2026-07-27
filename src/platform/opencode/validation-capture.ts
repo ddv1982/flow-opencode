@@ -173,6 +173,7 @@ export class ValidationCaptureCoordinator {
 			command: capture.command,
 			scope: capture.scope,
 			sourceDigest: capture.sourceDigest,
+			hostPlatform: capture.hostPlatform,
 			captureId: capture.captureId,
 			exitCode: observedExit,
 			outputDigest: digest(output.output),

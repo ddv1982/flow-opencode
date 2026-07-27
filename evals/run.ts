@@ -482,10 +482,18 @@ async function main(): Promise<void> {
 	}
 
 	console.log(`\n${formatTable(results)}\n`);
+	// An abort is excluded for the same reason an allowed ask is: the run never
+	// reached the outcome the scenario asks about, so counting it as a failure reports
+	// a measurement that did not happen. One wedged attempt was the only reason a
+	// measured report came back NOT QUALIFIED.
 	const scored = results.filter(
-		(result) => !result.environment && !result.unscored,
+		(result) =>
+			!result.environment && !result.unscored && result.error === undefined,
 	);
 	const blocked = results.filter((result) => result.environment).length;
+	const aborted = results.filter(
+		(result) => !result.environment && result.error !== undefined,
+	).length;
 	const asked = results.filter((result) => result.escalated).length;
 	const askedUnscored = results.filter((result) => result.unscored).length;
 	const passed = scored.filter((result) => result.passed).length;
@@ -514,6 +522,10 @@ async function main(): Promise<void> {
 		`${passed}/${scored.length} passed | ${totalIn} input (+${totalCached} cached) + ${totalOut} output tokens | ${spend}${
 			blocked > 0
 				? `\n${blocked} run(s) never reached the model and are excluded; re-run them before trusting this pass rate.`
+				: ""
+		}${
+			aborted > 0
+				? `\n${aborted} run(s) aborted mid-flight and are excluded; the stop is the finding, not the outcome, so re-run them before trusting this pass rate.`
 				: ""
 		}${
 			asked > 0
@@ -572,7 +584,7 @@ async function main(): Promise<void> {
 	const rates = passRates(results);
 	if (
 		rates.length > 0 &&
-		rates.some(([, rate]) => rate.attempts + rate.unscored > 1)
+		rates.some(([, rate]) => rate.attempts + rate.unscored + rate.aborted > 1)
 	) {
 		console.log(
 			`\nper scenario and model:\n${rates
@@ -597,6 +609,7 @@ async function main(): Promise<void> {
 					passed,
 					scored: scored.length,
 					environmentBlocked: blocked,
+					aborted,
 					escalated: asked,
 					escalationExcluded: askedUnscored,
 					total: results.length,

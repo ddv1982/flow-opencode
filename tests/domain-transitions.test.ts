@@ -6,6 +6,7 @@ import {
 	MAX_VALIDATIONS_PER_RUN,
 } from "../src/domain/limits.js";
 import type {
+	EvidencePlatform,
 	FeatureId,
 	Plan,
 	ReviewAssignment,
@@ -138,6 +139,7 @@ function validate(
 		sourceDigest?: SourceDigest;
 		exitCode?: number;
 		outputComplete?: boolean;
+		hostPlatform?: EvidencePlatform;
 	},
 ): Session {
 	const run = session.runs.find((candidate) => candidate.state === "active");
@@ -158,6 +160,7 @@ function validate(
 		exitCode: options.exitCode ?? 0,
 		outputDigest: OUTPUT,
 		outputComplete: options.outputComplete ?? true,
+		hostPlatform: options.hostPlatform ?? "linux",
 	}).session;
 }
 
@@ -1132,6 +1135,74 @@ describe("Session v5 domain state machine", () => {
 				plan: { ...withoutEvidence, externalEvidence: [] },
 			}).plan?.externalEvidence,
 		).toEqual([]);
+		// And an entry must name the host, because prose is what the runtime could not
+		// compare with the machine the command ran on.
+		expect(() =>
+			saveDraft(environment, {
+				plan: {
+					...withoutEvidence,
+					externalEvidence: [
+						{
+							requirement: "observed on Windows",
+							environment: "Windows (win32) host with bun installed",
+							command: "bun test src/platform.test.ts",
+						},
+					],
+				},
+			}),
+		).toThrow("must declare `platform`");
+	});
+
+	test("keeps a non-OS environment on the declared command alone", () => {
+		const environment = deterministicEnvironment();
+		// `other` is the honest answer for a service, credential, or device: Flow
+		// cannot compare it with anything the host reports, so the declared command
+		// stays the whole check and the environment stays reviewer judgment.
+		const probe = "bun scripts/live-billing-probe.mjs";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...oneFeaturePlan([PROSE_VALIDATION]),
+						externalEvidence: [
+							{
+								requirement: "the sandbox account is charged once",
+								environment: "Stripe test credentials",
+								command: probe,
+								platform: "other",
+							},
+						],
+					},
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		// Before it passes, the refusal has no OS to name and says the environment.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-before-probe"),
+		).toThrow("needs Stripe test credentials,");
+		session = validate(session, {
+			id: "billing-probe",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-billing-probe",
+		);
+		expect(
+			sessionStatus(pass(accepted.session, DELIVERY, accepted.assignment)),
+		).toBe("completed");
 	});
 
 	test("refuses final review and completed closure until the declared command passes", () => {
@@ -1152,6 +1223,7 @@ describe("Session v5 domain state machine", () => {
 									"the original reserved name cannot be created and the safe one can",
 								environment: "Windows",
 								command: probe,
+								platform: "win32",
 							},
 						],
 					},
@@ -1178,6 +1250,10 @@ describe("Session v5 domain state machine", () => {
 		expect(() =>
 			requestReview(session, DELIVERY, environment, "review-with-proxy"),
 		).toThrow("deferred or abandoned closure");
+		// Never observed at all is the other state, and reads as work to do.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-with-proxy"),
+		).toThrow("needs Windows on win32");
 		// A recorded failure of the declared command is not satisfaction either.
 		session = validate(session, {
 			id: "probe-fails-off-windows",
@@ -1189,11 +1265,30 @@ describe("Session v5 domain state machine", () => {
 		expect(() =>
 			requestReview(session, DELIVERY, environment, "review-after-red-probe"),
 		).toThrow(JSON.stringify(probe));
+		// Nor is the declared command passing on the host that was never the point:
+		// the measured false completion was exactly this, green because the case that
+		// needed Windows is skipped anywhere else.
+		session = validate(session, {
+			id: "probe-passes-off-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "linux",
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-linux-pass"),
+		).toThrow(JSON.stringify(probe));
+		// And the refusal has to say which of the two states this is. "Has not passed"
+		// about a command that just went green sends the reader to re-run it.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-linux-pass"),
+		).toThrow("passed on linux but this entry declares win32");
 		session = validate(session, {
 			id: "probe-passes",
 			featureId: DELIVERY,
 			command: probe,
 			scope: "focused",
+			hostPlatform: "win32",
 		});
 		const accepted = requestReview(
 			session,
@@ -1215,6 +1310,7 @@ describe("Session v5 domain state machine", () => {
 						requirement: "observed on Windows",
 						environment: "Windows",
 						command: "bun scripts/never-ran.mjs",
+						platform: "win32",
 					},
 				],
 			},
@@ -1258,6 +1354,7 @@ describe("Session v5 domain state machine", () => {
 								requirement: "observed on Windows",
 								environment: "Windows",
 								command: "bun scripts/windows-probe.mjs",
+								platform: "win32",
 							},
 						],
 					},

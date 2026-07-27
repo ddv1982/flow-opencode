@@ -12,6 +12,8 @@ v5. The public overview and installation instructions live in the
 - [Development](development.md) — repository structure and verification.
 - [Maintainer contract](maintainer-contract.md) — runtime and release
   invariants.
+- [Validation and review](validation-and-review.md) — the evidence, review, and
+  closure invariants, split out of the contract.
 - [Troubleshooting](troubleshooting.md) — configuration and session recovery.
 - [ADR 0001](adr/0001-skills-first-flow-architecture.md) — the minimal-runtime
   direction.
@@ -30,6 +32,8 @@ v5. The public overview and installation instructions live in the
   review until that same command passes.
 - [ADR 0010](adr/0010-declared-canonical-gate.md) — the plan declares the canonical
   gate, and the two claims that rested on prose are measured.
+- [ADR 0011](adr/0011-declared-external-evidence.md) — the plan declares acceptance
+  evidence this host cannot produce, as a command and the platform that observes it.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 
