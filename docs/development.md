@@ -1,6 +1,6 @@
 # Development
 
-Flow v6 is an ESM TypeScript package built and tested with Git and the versions
+Flow is an ESM TypeScript package built and tested with Git and the versions
 pinned in `package.json`.
 
 ## Local setup
@@ -30,6 +30,21 @@ cache; it does not use a separately installed OpenCode binary:
 ```bash
 bun run smoke:live
 ```
+
+### Bumping the pinned host
+
+`@opencode-ai/plugin` and `zod` are on the ignore list in
+`.github/dependabot.yml`, so they are raised by hand. The plugin pin is also the
+host version `smoke:live` launches, so bumping it is what puts a new host under
+test:
+
+1. Move the `devDependencies` pin, and `peerDependencies` too if the new version
+   falls outside the declared range.
+2. Run `bun run check`, then `bun run smoke:live` for the real host.
+
+Widen the peer range only for a host that has been smoke-tested; a range that
+admits versions no check has launched is a compatibility claim with nothing
+behind it.
 
 ## Source layout
 
