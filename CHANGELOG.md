@@ -6,6 +6,34 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [7.0.1] - 2026-07-27
+
+Dependency currency, with one bump that changes what is actually tested:
+
+- The pinned OpenCode host moves from 1.18.3 to 1.18.6. Flow's peer range has
+  always admitted it (`>=1.18.3 <2`), so anyone running a 1.18.4-1.18.6 host was
+  installing against a version no check here had launched. That pin is also the
+  host `bun run smoke:live` starts, so 7.0.1 is the first release whose live
+  smoke ran on 1.18.6.
+- Build-time only: `@biomejs/biome` 2.5.5, `@types/node` 26.1.1 (with the
+  repo-wide `overrides` entry moved with it), and `actions/checkout` v7.0.1
+  across all seven pinned workflow references. None of these reach the published
+  package.
+- `.github/dependabot.yml` referred maintainers to compatibility checks
+  "described in docs/development.md" that were never written there. They are now,
+  including why the peer range must not admit a host no check has launched.
+
+No runtime source changed. The Session v5 schema, every durable document, and
+Flow's behaviour are identical to 7.0.0; upgrade only if you run an OpenCode
+host newer than 1.18.3 and would rather it be one Flow has been smoke-tested
+against.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.0.1 --global --force
+```
+
 ## [7.0.0] - 2026-07-27
 
 A `broad` validation claim now has to be one, and the two review-finding fields
