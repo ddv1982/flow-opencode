@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@7.0.1 --global --force
+opencode plugin opencode-plugin-flow@7.0.2 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@7.0.1"]
+  "plugin": ["opencode-plugin-flow@7.0.2"]
 }
 ```
 
@@ -161,7 +161,7 @@ to bypass a gate.
 
 ## Upgrading from Flow v5 or earlier
 
-Flow v6 does not migrate active pre-v6 sessions. Finish or explicitly close the
+Flow does not migrate active pre-v6 sessions. Finish or explicitly close the
 session with its original Flow version before upgrading. Historical archives
-may be retained as inert files, but Flow v6 does not load them to authorize
+may be retained as inert files, but Flow does not load them to authorize
 replay or continuation.

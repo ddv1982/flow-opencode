@@ -1,6 +1,6 @@
 # Flow documentation
 
-This directory is the maintained documentation source for Flow v6 and Session
+This directory is the maintained documentation source for Flow v7 and Session
 v5. The public overview and installation instructions live in the
 [README](../README.md).
 

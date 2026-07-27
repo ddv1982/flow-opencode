@@ -6,6 +6,33 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [7.0.2] - 2026-07-27
+
+Documentation only. The docs still called the product Flow v6 two majors after
+the fact, including the sentence in `CONTEXT.md` whose whole job is to name the
+generation.
+
+- Where naming the generation is the point, it now reads v7. Where the version
+  added nothing to the sentence it is gone, so the claim cannot go stale a third
+  time: the layering diagram, the maintainer contract's invariants, and the
+  README's version-change note all describe Flow rather than a numbered Flow.
+- The forward-reading compatibility note said newer builds accept state written
+  by earlier *v6* builds, which stopped being the full truth when 7.0.0 shipped.
+  It now says earlier builds.
+- References to the v6 cutover itself are unchanged, because that boundary is
+  genuinely v6: pre-v6 active state is still not migrated, and the absence of a
+  cross-version gate still rests on v6 having been a hard cutover.
+
+No source, dependency, or behaviour change. The Session v5 schema and every
+durable document are exactly as in 7.0.1, so there is nothing here to upgrade
+for unless you read the docs from the package.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.0.2 --global --force
+```
+
 ## [7.0.1] - 2026-07-27
 
 Dependency currency, with one bump that changes what is actually tested:

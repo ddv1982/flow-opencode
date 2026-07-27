@@ -1,6 +1,6 @@
 # Maintainer Contract
 
-This document defines the small set of invariants Flow v6 must preserve.
+This document defines the small set of invariants Flow must preserve.
 
 ## Product boundary
 

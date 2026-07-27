@@ -20,7 +20,7 @@ context change, or a lost transcript.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@7.0.1 --global --force
+opencode plugin opencode-plugin-flow@7.0.2 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -31,7 +31,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@7.0.1"]
+  "plugin": ["opencode-plugin-flow@7.0.2"]
 }
 ```
 
@@ -42,7 +42,7 @@ or activation CLI, and removing the plugin entry disables it. If two Flow copies
 load for one project, both fail closed until the duplicate is removed.
 
 **Changing versions.** Finish or explicitly close any active session first, in
-either direction. Flow v6 opens only Session v5 active state, and an older build
+either direction. Flow opens only Session v5 active state, and an older build
 cannot be trusted to read state a newer one has already written. Older archives
 remain inert history, and there is no migration or rollback layer.
 

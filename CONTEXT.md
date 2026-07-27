@@ -18,14 +18,14 @@ before this comparison because it authorizes no new work.
 
 ## Versions
 
-**Flow v6** is the plugin and product generation.
+**Flow v7** is the plugin and product generation.
 
 **Session v5** is its sole active persisted-state contract. Older active
 documents are not migrated. Historical archives are inert and are never used to
 resume work.
 
 Compatibility is forward-reading within v5: newer Flow builds accept state
-written by earlier v6 builds. Rolling an active session back is unsupported once
+written by earlier builds. Rolling an active session back is unsupported once
 a newer writer has used a widened bounded collection, such as the 65-observation
 ceiling needed for 64 exact planned gates plus separate broad evidence. This is
 an explicit no-migration boundary, not a capability-negotiation subsystem.

@@ -1,6 +1,6 @@
 # Allowed cross-layer dependencies
 
-Flow v6 uses inward-only source dependencies:
+Flow uses inward-only source dependencies:
 
 ```mermaid
 flowchart LR
