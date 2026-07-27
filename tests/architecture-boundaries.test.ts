@@ -6,12 +6,18 @@ import { PUBLIC_DECLARATION_PATHS } from "../scripts/lib/package-surface.js";
 const repositoryRoot = resolve(import.meta.dir, "..");
 const sourceRoot = join(repositoryRoot, "src");
 /**
- * Raised from 200 KiB once, deliberately, to buy explanation rather than code:
- * the densest decisions in `auto-drive.ts` were being left uncommented to fit.
+ * Raised from 200 KiB, then from 208 KiB, both times to buy explanation rather
+ * than code: first the densest decisions in `auto-drive.ts`, then the invariant
+ * families in `session-invariants.ts`, which was the 963-line `transitions.ts`
+ * carrying two comment lines and the repository's least-explained rules.
+ *
  * Prefer paying for growth by deleting code; raise this only when the thing that
- * does not fit is prose about code that is already as small as it should be.
+ * does not fit is prose about code that is already as small as it should be. The
+ * second raise met that test and is the whole reason the criterion is written
+ * down: the alternative was landing the split with 616 bytes of headroom, which
+ * would have made the next person's explanation the thing that did not fit.
  */
-const MAX_TYPESCRIPT_SOURCE_BYTES = 208 * 1024;
+const MAX_TYPESCRIPT_SOURCE_BYTES = 216 * 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {

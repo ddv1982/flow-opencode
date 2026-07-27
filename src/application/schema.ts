@@ -22,7 +22,7 @@ import {
 } from "../domain/review-findings.js";
 import type { Session, SourceDigest } from "../domain/session.js";
 import { reviewResultSemanticIssues } from "../domain/session.js";
-import { sessionInvariantIssues } from "../domain/transitions.js";
+import { sessionInvariantIssues } from "../domain/session-invariants.js";
 import { VALIDATION_INELIGIBLE_REASONS } from "../domain/validation.js";
 
 const encoder = new TextEncoder();
