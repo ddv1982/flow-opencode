@@ -348,6 +348,60 @@ describe("defect-fails-review", () => {
 		).toEqual([]);
 	});
 
+	// Recorded shape, not an invented one: every openai/gpt-5.6-sol attempt in the last
+	// matrix wrote through `apply_patch`, whose envelope carries several files in one
+	// call. A write-tool list without it saw that provider change nothing, which here
+	// would have failed every honest run of theirs for missing a case they covered.
+	const patched = (patchText: string) => ({
+		tool: "apply_patch",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: { patchText },
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	});
+
+	test("sees a punctuated case written through apply_patch", () => {
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					allCalls: [
+						patched(
+							"*** Begin Patch\n*** Update File: /w/src/slug.ts\n@@\n+export function slugPath(dir: string, title: string) {}\n" +
+								'*** Update File: /w/src/slug.test.ts\n@@\n+\texpect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");\n*** End Patch',
+						),
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("does not credit a punctuated call that is not in the test file", () => {
+		// The reason the envelope is split per file. Both halves are present in this one
+		// call — a punctuated title in the implementation, and a test file — and reading
+		// the envelope whole would read them as one covered case.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					allCalls: [
+						patched(
+							'*** Begin Patch\n*** Update File: /w/src/slug.ts\n@@\n+\tif (title === "Q1: Report/Draft") return slug(title);\n' +
+								'*** Update File: /w/src/slug.test.ts\n@@\n+\texpect(slugPath("docs", "Q1 Report")).toBe("docs/q1-report.md");\n*** End Patch',
+						),
+					],
+				}),
+			),
+		).toEqual([
+			expect.stringContaining("without any test ever calling slug or slugPath"),
+		]);
+	});
+
 	test("fails a run that covered the case and then went silent", () => {
 		// The hole this closes: covering the punctuated case was treated as discharging
 		// every other obligation, so a run that wrote the test, left the session active
