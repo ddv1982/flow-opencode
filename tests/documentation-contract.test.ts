@@ -82,12 +82,22 @@ const packageVersion = packageJson.version;
  * guarantee it moved from Unenforced to Host-attested, which is real but is not the
  * contract split that was asked for.
  *
- * So this raise is on credit, and the terms are written down. The next phase collapses
- * the declared gate, the declared environment, and the declared results into one
- * evidence record with one satisfaction rule, which should *return* bytes here — three
- * records describe three rules that will become one. If it does not return them, the
- * answer is not a fifth raise: it is that the rules stopped being explainable, which is
- * the same signal the source budget is set up to give.
+ * That raise was taken on credit against collapsing the declared gate, the declared
+ * environment, and the declared results into one evidence record that would return the
+ * bytes. The credit is not good, and recording that here is more useful than leaving
+ * the promise standing:
+ *
+ * The collapse needs `plan.gate` and `plan.externalEvidence` to become one field, which
+ * is a removal and a rename on a surface `docs/release-qualification.md` freezes —
+ * additive optional fields only, deprecate in one release and remove no earlier than
+ * the next major. Doing it inside the runtime alone does not help either: the two
+ * satisfaction rules share exactly one primitive (`isValidationEligible`) and differ in
+ * every other part, so a shared abstraction over them adds a layer without removing a
+ * rule, and adds bytes here rather than returning them.
+ *
+ * So the collapse is a two-release change, and this budget should not be raised again
+ * before it lands. If the next evidence rule needs bytes here, that is the signal the
+ * consequences section of ADR 0012 already names: stop adding declarations.
  */
 const MAX_MAINTAINED_DOC_BYTES = 132_000;
 
