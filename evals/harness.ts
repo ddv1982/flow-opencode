@@ -41,10 +41,24 @@ export type ObservedToolCall = {
 	 * already been told before the interruption.
 	 */
 	readonly sessionIndex: number;
+	/**
+	 * The agent that made the call, as the host recorded it on the message.
+	 *
+	 * `flow_feature_complete` admits a new completion only from `flow-reviewer`, so
+	 * a recording that loses this cannot be replayed: the same arguments take the
+	 * replay path instead of the submitting one.
+	 */
+	readonly agent: string;
 	readonly input: Record<string, unknown>;
 	/** Tool output, parsed as JSON when the tool returned a Flow envelope. */
 	readonly output: unknown;
 	readonly rawOutput: string;
+	/**
+	 * Host-reported metadata for the call: for Bash, the `exit` code and the
+	 * truncation flag the validation capture hook reads. Recorded because those two
+	 * fields decide whether an observation can ever be eligible.
+	 */
+	readonly metadata: Record<string, unknown>;
 };
 
 /**
@@ -529,6 +543,7 @@ export async function preparePackageCache(
 type MessageEntry = {
 	info: {
 		role: string;
+		agent?: string;
 		time?: { created: number; completed?: number };
 		error?: unknown;
 		cost?: number;
@@ -549,6 +564,7 @@ type MessageEntry = {
 			input?: Record<string, unknown>;
 			output?: string;
 			error?: string;
+			metadata?: Record<string, unknown>;
 		};
 	}[];
 };
@@ -853,22 +869,82 @@ export class EvalHost {
 	}
 
 	/**
+	 * Every session descended from the given ones, breadth-first, appended after
+	 * them.
+	 *
+	 * A reviewer runs as a subtask in a child session, so its transcript is not in
+	 * the parent's. Reading only the parents left the whole independent review
+	 * invisible: no recorded report contained a single `flow_feature_complete` call,
+	 * and the check for submissions the runtime rejected could never fire.
+	 *
+	 * A host that does not expose children yields nothing rather than failing —
+	 * losing the subtask transcript is a smaller loss than losing the run.
+	 */
+	private async descendantSessions(
+		sessionIds: readonly string[],
+	): Promise<string[]> {
+		const known = new Set(sessionIds);
+		const found: string[] = [];
+		let frontier = [...sessionIds];
+		while (frontier.length > 0) {
+			const next: string[] = [];
+			for (const parent of frontier) {
+				let children: { id?: string }[];
+				try {
+					children = (await fetchJson(
+						`${this.baseUrl}/session/${parent}/children`,
+					)) as { id?: string }[];
+				} catch {
+					continue;
+				}
+				for (const child of Array.isArray(children) ? children : []) {
+					if (typeof child.id !== "string" || known.has(child.id)) continue;
+					known.add(child.id);
+					found.push(child.id);
+					next.push(child.id);
+				}
+			}
+			frontier = next;
+		}
+		return found;
+	}
+
+	/**
 	 * Collects the durable and observed outcome a scenario asserts against.
 	 *
-	 * Sessions are read in the order they were used and their transcripts joined,
-	 * so a scenario that resumes in a fresh session still sees one continuous
-	 * tool-call spine.
+	 * Sessions are read in the order they were used, their subtask sessions appended
+	 * after them, and every transcript merged in message-creation order — so a
+	 * scenario that resumes in a fresh session, or dispatches a reviewer subtask,
+	 * still sees one continuous tool-call spine in the order the calls happened.
+	 *
+	 * Merging by time rather than by session matters for the subtasks: a reviewer's
+	 * submission belongs between the manager's review dispatch and whatever the
+	 * manager did next, and appending it at the end would record a sequence no run
+	 * ever performed.
 	 */
 	async outcome(
 		sessionIds: readonly string[],
 		durationMs: number,
 	): Promise<Outcome> {
+		const ordered = [
+			...sessionIds,
+			...(await this.descendantSessions(sessionIds)),
+		];
 		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
-		for (const [sessionIndex, sessionId] of sessionIds.entries()) {
-			for (const entry of (await this.messages(sessionId)) as MessageEntry[]) {
-				messages.push({ sessionIndex, entry });
+		for (const [sessionIndex, sessionId] of ordered.entries()) {
+			let entries: MessageEntry[];
+			try {
+				entries = (await this.messages(sessionId)) as MessageEntry[];
+			} catch {
+				continue;
 			}
+			for (const entry of entries) messages.push({ sessionIndex, entry });
 		}
+		messages.sort(
+			(left, right) =>
+				(left.entry.info.time?.created ?? 0) -
+				(right.entry.info.time?.created ?? 0),
+		);
 		const allCalls: ObservedToolCall[] = [];
 		const tokens = {
 			input: 0,
@@ -905,7 +981,11 @@ export class EvalHost {
 				if (
 					part.type === "text" &&
 					!part.synthetic &&
-					entry.info.role === "assistant"
+					entry.info.role === "assistant" &&
+					// Only the sessions the scenario drove. A reviewer subtask reports to
+					// the manager, not to the user, so its closing text is not the run's
+					// final report and must not displace it.
+					sessionIndex < sessionIds.length
 				) {
 					finalText = part.text ?? finalText;
 				}
@@ -920,11 +1000,13 @@ export class EvalHost {
 				allCalls.push({
 					tool: part.tool,
 					sessionIndex,
+					agent: entry.info.agent ?? "",
 					status:
 						(part.state?.status as ObservedToolCall["status"]) ?? "pending",
 					input: part.state?.input ?? {},
 					output: parsed,
 					rawOutput: raw,
+					metadata: part.state?.metadata ?? {},
 				});
 			}
 		}

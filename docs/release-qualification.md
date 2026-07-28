@@ -74,6 +74,11 @@ bun run eval -- --model <anthropic-id> --model <openai-id> --repeat 3
 bun run qualify
 ```
 
+Each attempt also records its decisions, and `bun run replay` re-runs them against
+the runtime for free. That is a regression gate, not a qualification one: a replay
+proves a decision a model already made still reaches the same outcome, and only a
+live pass is evidence about the prompts. See [../evals/README.md](../evals/README.md).
+
 The scheduled workflow (`.github/workflows/evals.yml`) does the same weekly and
 publishes the report as an artifact. It skips itself when no model matrix or
 provider credentials are configured, because an unconfigured fork is a

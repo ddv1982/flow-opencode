@@ -50,6 +50,14 @@ Each run packs the working tree, boots a throwaway OpenCode host over a fresh
 git fixture, drives the real slash commands, then reads `.flow/session.json` and
 `.flow/history/`. Reports land in `evals/results/` (git-ignored).
 
+Every session the run touched is read, including the subtask sessions a reviewer
+runs in, and their transcripts are merged in message-creation order. Reading only
+the sessions the harness itself created left the entire independent review
+invisible: no recorded report contained a single `flow_feature_complete` call, the
+check for submissions the runtime rejected could never fire, and the reviewer's
+tokens were not counted in any total. Token and cost figures from before this are
+therefore lower than the same run would report now.
+
 ## Scenarios
 
 | id | invariant under test |
@@ -130,6 +138,66 @@ The third is read from the observed tool calls, because no document can record i
 All three appear under `summary` in the report, and `bun run qualify` turns false
 completions and unsubmitted assignments into a release decision. Silent passes and
 the refusal count are ungated until they have a baseline worth gating.
+
+## Replaying recorded decisions
+
+A live attempt is the only way to get a *new* model decision, and it is the wrong
+way to re-check an old one: every runtime change used to need another paid matrix
+before anyone knew whether it had broken a sequence a model already performed.
+
+So each attempt that reaches the model also writes a **cassette** — the ordered list
+of tool calls it made, with their arguments — into
+`evals/results/<stamp>.cassettes/`. `bun run replay` feeds those arguments back
+through the real tool handlers against a fresh workspace, with no model, no host,
+and no network, and grades the result with the same scenario `check` and the same
+metrics.
+
+```bash
+bun run replay                                        # the committed set
+bun run replay -- --from evals/results/<stamp>.cassettes
+bun run replay -- --accept                            # re-derive expectations
+```
+
+Deliberately the **decision layer** and not the HTTP wire. An HTTP cassette freezes
+tool *results* too, so on replay Flow's own handlers never execute and a broken
+refusal replays green — the exact class of defect this suite exists to catch. Here
+`recordValidation`, every transition guard, the two-schema arg parse, and both ADR
+0010 and ADR 0011 comparisons all genuinely run again.
+
+Three things a recording cannot hand over literally:
+
+- **Runtime-issued identifiers.** A replayed `flow_plan_save` mints its own session
+  id, `flow_review_start` its own assignment id, and a submission its own finding
+  ids, so a recorded argument naming one is translated through a map the driver
+  learns as it goes. An untranslated string passes through unchanged, which is what
+  keeps a recorded *wrong* id a recorded wrong id.
+- **The host a command ran on.** Injected from the cassette, never read from the
+  replaying machine, so a Linux recording keeps its Linux verdict on a Mac. Reading
+  `process.platform` here would silently re-decide every
+  `ExternalEvidence.platform` comparison.
+- **Bash.** Never re-executed. The recorded command, exit code, and truncation flag
+  go through the real capture coordinator, so the arming rule, the command-match
+  rule, and the eligibility rule all run for real; only the subprocess is absent.
+
+A cassette whose run recorded something a decision-layer replay cannot reproduce —
+source drift between arming and observing, an abort, an excluded ask — carries a
+`fidelity` note and is **reported, not gated**, on the same principle the
+thresholds use: gate what is measured, report what is not.
+
+Nothing credential-shaped is written into a cassette, and the recording host's
+project path is replaced by a token rather than baked in. The recording host copies
+the developer's real `auth.json` into its throwaway home, so this is a hard rule
+rather than a precaution; `tests/eval-replay.test.ts` pins it.
+
+Only recordings someone has read belong in the committed `evals/cassettes/` set,
+which is what CI gates on. `--accept` rewrites a cassette's recorded expectation
+from the current replay; it is a deliberate act, and the rewritten expectation
+lands in the diff to be reviewed like any other change to what the suite asserts.
+
+The driver itself is proven without a model: `tests/eval-replay.test.ts` hand-writes
+the decision sequence of a passing `happy-path` attempt, replays it, and grades it
+with the real check — so `bun run check` covers the tier even in a clone that has
+never paid for a matrix.
 
 ## Multi-model matrix
 

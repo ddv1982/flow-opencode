@@ -12,10 +12,17 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { normalizeEvidencePlatform } from "../src/domain/validation.js";
 import {
 	compileFlowPromptSurface,
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
+import {
+	buildCassette,
+	type Cassette,
+	cassetteFileName,
+	type FidelityNote,
+} from "./cassette.js";
 import {
 	askedQuestions,
 	EvalHost,
@@ -322,6 +329,10 @@ async function main(): Promise<void> {
 
 	const packDir = await mkdtemp(join(tmpdir(), "flow-eval-pack-"));
 	const results: RunResult[] = [];
+	// One decision-layer recording per attempt that reached the model, so the run's
+	// findings can be re-derived against a changed runtime without paying again.
+	const cassettes: Cassette[] = [];
+	const hostPlatform = normalizeEvidencePlatform(process.platform);
 	try {
 		const packageCache = await preparePackageCache(
 			await packPlugin(repositoryRoot, packDir),
@@ -425,6 +436,32 @@ async function main(): Promise<void> {
 							durationMs: outcome.durationMs,
 							hostError: outcome.hostError,
 						});
+						const recorded = results[results.length - 1];
+						if (recorded) {
+							const fidelity: FidelityNote[] = [];
+							if (stepError) fidelity.push("run-aborted");
+							if (unscored) fidelity.push("run-unscored");
+							if (outcome.hostError) fidelity.push("host-error");
+							cassettes.push(
+								buildCassette({
+									flowVersion: packageJson.version,
+									scenario: scenario.id,
+									model,
+									attempt,
+									hostPlatform,
+									files: scenario.files,
+									projectPath: host.project,
+									calls: outcome.allCalls,
+									finalText: outcome.finalText,
+									assistantMessages: outcome.assistantMessages,
+									verdict: verdict(recorded),
+									issues,
+									falseCompletion: recorded.honesty.falseCompletion,
+									documents,
+									extraFidelity: fidelity,
+								}),
+							);
+						}
 						const scoreLabel =
 							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
 						console.log(
@@ -632,6 +669,30 @@ async function main(): Promise<void> {
 		"utf8",
 	);
 	console.log(`Report: ${reportPath}`);
+
+	// Written beside the report rather than into the committed set: a recording is
+	// only worth gating on once someone has read the run it came from and decided
+	// which decisions are worth pinning.
+	if (cassettes.length > 0) {
+		const cassetteDir = join(reportDir, `${stamp}.cassettes`);
+		await mkdir(cassetteDir, { recursive: true });
+		for (const cassette of cassettes) {
+			await writeFile(
+				join(
+					cassetteDir,
+					cassetteFileName(cassette.scenario, cassette.model, cassette.attempt),
+				),
+				`${JSON.stringify(cassette, null, 2)}\n`,
+				"utf8",
+			);
+		}
+		const gated = cassettes.filter(
+			(cassette) => cassette.fidelity.length === 0,
+		).length;
+		console.log(
+			`Cassettes: ${cassettes.length} in ${cassetteDir} (${gated} reproducible without caveats). Replay with \`bun run replay -- --from evals/results/${stamp}.cassettes\`.`,
+		);
+	}
 
 	// Status follows the scored runs, matching the pass rate above. Counting the
 	// excluded ones here is what made a run that printed "6/6 passed" exit 1 after

@@ -36,6 +36,7 @@
 		"release:metadata": "bun run scripts/release-metadata.ts",
 		"package:smoke": "bun test tests/package-smoke.test.ts",
 		"qualify": "bun run scripts/qualify-release.ts",
+		"replay": "bun run evals/replay-run.ts",
 		"release:monitor": "node scripts/release-monitor.mjs",
 		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
 		"test": "bun test tests",

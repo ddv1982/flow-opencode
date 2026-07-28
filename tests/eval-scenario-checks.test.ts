@@ -30,9 +30,11 @@ function question(text: string) {
 		tool: "question",
 		status: "completed" as const,
 		sessionIndex: 0,
+		agent: "build",
 		input: { questions: [{ question: text }] },
 		output: null,
 		rawOutput: "",
+		metadata: {},
 	};
 }
 
@@ -255,9 +257,11 @@ describe("plan-only-stops", () => {
 							tool: "flow_plan_save",
 							status: "completed",
 							sessionIndex: 0,
+							agent: "build",
 							input: {},
 							output: null,
 							rawOutput: "",
+							metadata: {},
 						},
 					],
 				}),

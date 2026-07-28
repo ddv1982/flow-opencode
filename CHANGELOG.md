@@ -60,6 +60,20 @@ that rested on prompt prose are now measured.
   threshold in a measured report, on a guarantee that never ran — and `bun run
   qualify` refuses a report holding one on a gated pair. A wedge diagnostic now names
   the command each incomplete tool call was running.
+- **Recorded model decisions replay for free.** Every paid attempt now writes a
+  cassette — its tool calls, in order, with their arguments — and `bun run replay`
+  feeds those back through the real handlers against a fresh workspace with no model
+  and no host. It is deliberately the decision layer, not the HTTP wire: freezing tool
+  results too would mean Flow's own refusals never execute on replay, which is the one
+  class of defect this suite exists to catch. Every runtime change up to now needed
+  another paid matrix before anyone knew it had not broken a sequence a model already
+  performed. CI gates the committed cassettes; a run whose recording holds something a
+  decision-layer replay cannot reproduce is reported rather than gated.
+- **Eval reports now include the reviewer.** Subtask sessions are read too, so a
+  report finally contains the independent review's own tool calls. Before this, no
+  recorded report held a single `flow_feature_complete` call, the check for rejected
+  submissions could never fire, and the reviewer's tokens went uncounted — so token and
+  cost totals from earlier reports are lower than the same runs would report now.
 - **`/flow-auto` says when your host cannot continue.** Continuation needs assistant
   message parentage; a host that does not report it now gets a plain note at startup
   and an `autoContinuation` field on status, instead of a lifecycle that appears to
