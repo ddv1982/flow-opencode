@@ -252,6 +252,15 @@ function providerCredentialPaths(childData: string): {
 	};
 }
 
+/**
+ * Copies the developer's credentials into a host's scratch home, remembering what
+ * was copied so `syncProviderCredentialsBack` can tell a rotation from a carry.
+ *
+ * Returns null only when opted out, which is the one case where there is nothing to
+ * sync. A missing source file is not that: the host still runs, the provider may
+ * authenticate from the environment, and a login the child performs is still worth
+ * carrying back.
+ */
 async function carryProviderCredentials(
 	childData: string,
 ): Promise<CredentialSync | null> {
@@ -900,6 +909,20 @@ type MessageEntry = {
 	}[];
 };
 
+/**
+ * One throwaway OpenCode host, over one fixture repository, for one attempt.
+ *
+ * The isolation is the measurement. Every host gets its own port, its own XDG
+ * directories, its own scratch copy of the plugin and of `auth.json`, and its own
+ * git fixture — so nothing an attempt does can reach the developer's sessions, and
+ * nothing about the developer's machine can explain a result. `stop()` is what
+ * makes that true rather than aspirational, and it is why the credential sync has
+ * to happen before the scratch directory goes.
+ *
+ * Constructed through `start` rather than `new`, because a host is only meaningful
+ * once the server is listening and the fixture is committed, and a half-booted one
+ * would be scored as a failed attempt.
+ */
 export class EvalHost {
 	private server: ChildProcess | null = null;
 	private serverLog = "";

@@ -7,20 +7,34 @@
 
 import { askedQuestions, type Outcome, type Scenario } from "./harness.js";
 
-/**
- * The Session v5 document, narrowed to the fields the checks actually read.
- *
- * A partial mirror on purpose. Importing Flow's own schema would let a check assert
- * against the types the product was built from, which is how a scenario stops being
- * an independent measurement: the eval has to describe the document it expects to
- * find on disk, so a rename that breaks the contract fails a check rather than
- * silently travelling through it.
- */
+// Session v5, narrowed to the fields the checks actually read, and mirrored by hand
+// rather than imported from Flow's own schema. Importing it would let a check assert
+// against the types the product was built from, which is how a scenario stops being
+// an independent measurement: the eval has to describe the document it expects to
+// find on disk, so a rename that breaks the contract fails a check rather than
+// travelling silently through it.
+
+/** One planned feature. Only identity matters here; the checks never read titles. */
 type PlanFeature = { id: string; title: string };
+
+/**
+ * One review's verdict and findings, with `result` null while it is outstanding.
+ *
+ * That null is load-bearing: an unsubmitted review is a qualification failure, and
+ * it looks identical to a passing one in every other field.
+ */
 type Review = {
 	kind: string;
 	result: { verdict: string; findings?: { severity?: string }[] } | null;
 };
+
+/**
+ * One attempt at one feature, carrying the evidence that attempt produced.
+ *
+ * `validations` and `reviews` are both lists because a run can be re-validated and
+ * re-reviewed, and a check that read only the last one would miss a blocker that
+ * was raised and then walked past.
+ */
 type Run = {
 	featureId: string;
 	attempt: number;
@@ -28,6 +42,8 @@ type Run = {
 	validations: { command: string; scope: string; exitCode: number | null }[];
 	reviews: Review[];
 };
+
+/** The whole document: the goal, the approval it rests on, the runs, the closure. */
 type SessionDoc = {
 	version: number;
 	goal: string;
