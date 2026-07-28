@@ -54,7 +54,10 @@ spent 2.5h of wall clock on 2.5h of model time before this; three models now tak
 roughly a third of that for the same spend. Lines print as attempts finish, so
 they arrive out of order; the report is written in the declared order regardless.
 `--concurrency 1` restores the sequential run, which is easier to read when you
-are debugging a single failure.
+are debugging a single failure, and four workers is the ceiling however many
+models you name — each attempt is a whole host compiling a real project, and past
+that the machine's own contention starts being credited back to the deadline as if
+it were machine sleep.
 
 Each run packs the working tree, boots a throwaway OpenCode host over a fresh
 git fixture, drives the real slash commands, then reads `.flow/session.json` and

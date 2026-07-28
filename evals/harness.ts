@@ -207,12 +207,24 @@ async function carryProviderCredentials(
 }
 
 /**
+ * Serializes credential sync-backs, and counts them for unique temp names.
+ *
+ * Hosts run concurrently and every one of them ends in `stop()`, but they all
+ * write the *same* real `auth.json`, so the syncs have to be made sequential
+ * again by hand. Two concurrent `writeFile`s on one path can interleave and a
+ * `rename` then publishes the mix — and the JSON check cannot catch that,
+ * because it validates the child file before the write, not the bytes that
+ * land.
+ */
+const syncCredentials = sequencer();
+let credentialSyncCount = 0;
+
+/**
  * Copies a host's (possibly refreshed) credential file back over the real
  * `auth.json` it was copied from, so a rotated token propagates instead of
- * being discarded with the scratch directory. Only ever called sequentially
- * from `stop()`, so there is no concurrent-writer race to guard against.
+ * being discarded with the scratch directory.
  *
- * Two failure modes get guarded against explicitly, because what is being
+ * Three failure modes get guarded against explicitly, because what is being
  * overwritten is the developer's own live credential store, not scratch state:
  *
  * - A child copy that fails to parse as JSON must never replace a good file —
@@ -221,57 +233,81 @@ async function carryProviderCredentials(
  *   into place, which is atomic on the same filesystem. A plain overwrite that
  *   is interrupted (a kill, a crash, a lost power) would leave the real file
  *   truncated instead.
+ * - Concurrent hosts must not write at once. Every call takes a temp path no
+ *   other call can name and waits its turn in `syncCredentials`, so a parallel
+ *   matrix run reads and replaces the file one host at a time — and a failed
+ *   sync's cleanup can only ever remove its own temp file.
  */
-async function syncProviderCredentialsBack(
+export async function syncProviderCredentialsBack(
 	paths: { source: string; target: string } | null,
 ): Promise<void> {
 	if (!paths) return;
-	let contents: string;
-	try {
-		contents = await readFile(paths.target, "utf8");
-	} catch {
-		// The child never wrote a credential file (no refresh happened, or the
-		// provider authenticated purely from the env); nothing to carry back.
-		return;
-	}
-	try {
-		JSON.parse(contents);
-	} catch {
-		console.error(
-			`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
-		);
-		return;
-	}
-	const tempPath = `${paths.source}.eval-sync-${process.pid}.tmp`;
-	try {
-		await writeFile(tempPath, contents, { mode: 0o600 });
-		await rename(tempPath, paths.source);
-	} catch (error) {
-		// Failing to sync back must not crash the run over a host that already
-		// finished its scenario; it only means the next host risks the same stale
-		// credential this whole mechanism exists to avoid, which is no worse than
-		// before this fix existed.
-		console.error(
-			`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
-		);
-		await rm(tempPath, { force: true });
-	}
+	credentialSyncCount += 1;
+	const tempPath = `${paths.source}.eval-sync-${process.pid}-${credentialSyncCount}.tmp`;
+	await syncCredentials(async () => {
+		let contents: string;
+		try {
+			contents = await readFile(paths.target, "utf8");
+		} catch {
+			// The child never wrote a credential file (no refresh happened, or the
+			// provider authenticated purely from the env); nothing to carry back.
+			return;
+		}
+		try {
+			JSON.parse(contents);
+		} catch {
+			console.error(
+				`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
+			);
+			return;
+		}
+		try {
+			await writeFile(tempPath, contents, { mode: 0o600 });
+			await rename(tempPath, paths.source);
+		} catch (error) {
+			// Failing to sync back must not crash the run over a host that already
+			// finished its scenario; it only means the next host risks the same stale
+			// credential this whole mechanism exists to avoid, which is no worse than
+			// before this fix existed.
+			console.error(
+				`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+			await rm(tempPath, { force: true });
+		}
+	});
 }
 
+/**
+ * Ports this process has already handed out.
+ *
+ * The kernel picks a free port for a listener that asks for 0, but that
+ * listener has to be closed before the child server can take the port — and
+ * once it is closed the same port is free to be picked again. Sequentially the
+ * previous host still held its port, so a repeat was impossible; concurrently
+ * two hosts can be handed one port and the second dies on bind. Remembering
+ * what was handed out closes that, since all the hosts are in one process.
+ */
+const reservedPorts = new Set<number>();
+
 async function availablePort(): Promise<number> {
-	const server = createServer();
-	await new Promise<void>((resolve, reject) => {
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", resolve);
-	});
-	const address = server.address();
-	if (!address || typeof address === "string") {
-		throw new Error("Could not reserve a local port.");
+	for (let attempt = 0; attempt < 20; attempt += 1) {
+		const server = createServer();
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(0, "127.0.0.1", resolve);
+		});
+		const address = server.address();
+		const port =
+			address && typeof address !== "string" ? address.port : undefined;
+		await new Promise<void>((resolve, reject) =>
+			server.close((error) => (error ? reject(error) : resolve())),
+		);
+		if (port === undefined) break;
+		if (reservedPorts.has(port)) continue;
+		reservedPorts.add(port);
+		return port;
 	}
-	await new Promise<void>((resolve, reject) =>
-		server.close((error) => (error ? reject(error) : resolve())),
-	);
-	return address.port;
+	throw new Error("Could not reserve a local port.");
 }
 
 async function fetchJson(
@@ -364,14 +400,6 @@ export function pendingCallLabel(part: {
 }
 
 /**
- * Everything the model asked the user, as recorded tool input.
- *
- * A model at a wall it may not climb puts the blocker in its question rather than
- * in a closing summary, so this is where the reasoning for an escalation lives —
- * both for a human judging whether asking was right and for a check that reads
- * whether the blocker was named at all.
- */
-/**
  * Whether an error on an assistant message is one this harness caused.
  *
  * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
@@ -411,6 +439,25 @@ export function isWedged(
 }
 
 /**
+ * A gate that runs what it is handed one job at a time, in the order handed to it.
+ *
+ * For work that is only safe alone: writing the developer's real `auth.json`, which
+ * every host does on its way out and which concurrency turned from a sequence into
+ * a race. A promise chain rather than a lock, because there is one thread — each
+ * caller appends itself to the tail and waits on what is already there. The tail is
+ * always a settled-either-way promise, or one rejection would strand every job
+ * behind it.
+ */
+export function sequencer(): <T>(job: () => Promise<T>) => Promise<T> {
+	let tail: Promise<unknown> = Promise.resolve();
+	return <T>(job: () => Promise<T>) => {
+		const run = tail.then(job);
+		tail = run.catch(() => {});
+		return run;
+	};
+}
+
+/**
  * Runs `queues` with at most `concurrency` of them in flight, each queue in order.
  *
  * The nesting is the contract. Attempts across queues are independent — every one
@@ -444,6 +491,14 @@ export async function runQueues<Job, Result>(
 	return results;
 }
 
+/**
+ * Everything the model asked the user, as recorded tool input.
+ *
+ * A model at a wall it may not climb puts the blocker in its question rather than
+ * in a closing summary, so this is where the reasoning for an escalation lives —
+ * both for a human judging whether asking was right and for a check that reads
+ * whether the blocker was named at all.
+ */
 export function askedQuestions(outcome: Outcome): string[] {
 	return outcome.allCalls
 		.filter((call) => call.tool === "question")
@@ -663,7 +718,7 @@ export class EvalHost {
 	private serverLog = "";
 	private baseUrl = "";
 	/**
-	 * Whether this harness aborted a session itself.
+	 * When this harness last aborted a session itself, or 0 if it never did.
 	 *
 	 * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
 	 * escalation nothing here answers, or a deadline. OpenCode stamps
@@ -671,8 +726,14 @@ export class EvalHost {
 	 * error puts 88 false alarms in front of the 4 real timeouts across 408
 	 * recorded runs: escalating is the designed end of three scenarios, so almost
 	 * every one of them carried it.
+	 *
+	 * A timestamp rather than a flag, because a scenario runs several commands
+	 * against one host: a message an abort killed was created before that abort,
+	 * so an abort error on a message created *after* the last one this harness
+	 * issued is real news — something outside this process ended a later turn —
+	 * and a bare flag would have swallowed it for the rest of the attempt.
 	 */
-	private selfAborted = false;
+	private lastSelfAbortAt = 0;
 
 	readonly project: string;
 	private readonly scratch: string;
@@ -978,12 +1039,13 @@ export class EvalHost {
 	/**
 	 * Ends a wait this harness will not win, and remembers that it did.
 	 *
-	 * The flag is what keeps `outcome` from reporting Flow's own abort as a host
-	 * error. Set before the request rather than after it, because a rejected POST
-	 * does not mean the abort failed to land.
+	 * The timestamp is what keeps `outcome` from reporting Flow's own abort as a
+	 * host error. Stamped before the request rather than after it, because a
+	 * rejected POST does not mean the abort failed to land — and because every
+	 * message the abort can be blamed for was already created by now.
 	 */
 	private async abortSession(sessionId: string): Promise<void> {
-		this.selfAborted = true;
+		this.lastSelfAbortAt = Date.now();
 		await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
 			() => {},
 		);
@@ -1100,11 +1162,17 @@ export class EvalHost {
 					tokens.cacheWrite += used.cache?.write ?? 0;
 				}
 				// An abort this harness issued is not a condition of the host, so it is
-				// not reported as one.
+				// not reported as one. A message with no creation time cannot be placed
+				// against the abort, so it keeps the older, broader attribution.
+				const created = entry.info.time?.created;
 				if (
 					entry.info.error &&
 					!hostError &&
-					!isSelfAbortError(entry.info.error, this.selfAborted)
+					!isSelfAbortError(
+						entry.info.error,
+						this.lastSelfAbortAt > 0 &&
+							(created === undefined || created <= this.lastSelfAbortAt),
+					)
 				)
 					hostError = JSON.stringify(entry.info.error);
 			}

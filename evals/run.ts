@@ -123,6 +123,18 @@ type RunResult = {
 	error?: string;
 };
 
+/**
+ * The most attempts allowed in flight at once, however many models are named.
+ *
+ * Each attempt is a whole OpenCode server compiling and running a real project, so
+ * the ceiling is the machine's, not the providers'. Past it the harness starts
+ * lying about time: the suspend credit treats any 20s the poll loop did not observe
+ * as machine sleep and hands it back to the deadline, and enough contention to make
+ * a 20s gap is exactly what enough workers produce — which is how a run once took
+ * three hours under a twenty-minute cap.
+ */
+const MAX_CONCURRENCY = 4;
+
 /** One attempt to run, and the slot its result belongs in. */
 type Job = {
 	readonly model: string;
@@ -196,12 +208,17 @@ function parseArgs(argv: string[]) {
 	// One worker per model by default. Work is queued per model, so more workers than
 	// models cannot help, and `--concurrency 1` restores the sequential order that
 	// makes an interleaved failure easier to read.
-	return {
-		models,
-		scenarios,
-		repeat,
-		concurrency: Math.min(concurrency || models.length, models.length),
-	};
+	const workers = Math.min(
+		concurrency || models.length,
+		models.length,
+		MAX_CONCURRENCY,
+	);
+	if (concurrency > workers) {
+		console.error(
+			`--concurrency ${concurrency} lowered to ${workers}: at most one worker per model, and at most ${MAX_CONCURRENCY} overall.`,
+		);
+	}
+	return { models, scenarios, repeat, concurrency: workers };
 }
 
 /** Bytes of prompt text this build ships, per surface and in total. */

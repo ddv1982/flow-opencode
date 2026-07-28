@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	formatRate,
@@ -11,7 +13,9 @@ import {
 	refusedBroadScope,
 	reportedCost,
 	runQueues,
+	sequencer,
 	sessionBoundaries,
+	syncProviderCredentialsBack,
 } from "../evals/harness.js";
 import {
 	completionHonesty,
@@ -646,5 +650,95 @@ describe("eval cost reporting", () => {
 
 	test("reports zero for a run that produced no output", () => {
 		expect(reportedCost(0, 0)).toBe(0);
+	});
+});
+
+// What this guards is not eval state but the developer's own live credential
+// store: every host copies the real `auth.json` in and syncs a refreshed one
+// back, and hosts now finish concurrently. Two writers on one file publish a mix
+// of both, and the JSON check cannot catch it — it validates the child copy
+// before the write, not the bytes that land.
+describe("eval credential sync-back", () => {
+	test("runs one job at a time, in the order it was handed them", async () => {
+		const queue = sequencer();
+		const order: string[] = [];
+		let open = 0;
+		let overlapped = false;
+		const job = (name: string, pauses: number) => async () => {
+			open += 1;
+			if (open > 1) overlapped = true;
+			// Several awaits, because one write is several: a single suspension point
+			// would let a serial-looking implementation pass on luck alone.
+			for (let pause = 0; pause < pauses; pause += 1) await Bun.sleep(1);
+			order.push(name);
+			open -= 1;
+			return name;
+		};
+		// The slowest first, so anything that does not actually wait finishes early.
+		const done = await Promise.all([
+			queue(job("first", 5)),
+			queue(job("second", 3)),
+			queue(job("third", 1)),
+		]);
+		expect(overlapped).toBe(false);
+		expect(order).toEqual(["first", "second", "third"]);
+		expect(done).toEqual(["first", "second", "third"]);
+	});
+
+	test("keeps running later jobs after one of them throws", async () => {
+		// A sync that fails is a warning, not the end of the run — and must not take
+		// every host still to finish down with it.
+		const queue = sequencer();
+		const ran: string[] = [];
+		const failed = queue(async () => {
+			throw new Error("nope");
+		});
+		const after = queue(async () => {
+			ran.push("after");
+		});
+		await expect(failed).rejects.toThrow("nope");
+		await after;
+		expect(ran).toEqual(["after"]);
+	});
+
+	test("leaves the real auth.json whole when hosts finish at once", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "flow-eval-sync-"));
+		const source = join(dir, "auth.json");
+		await writeFile(source, JSON.stringify({ before: true }));
+		// Large enough that a write cannot land in one step, which is what let two
+		// concurrent writers interleave into a single temp path.
+		const hosts = await Promise.all(
+			[1, 2, 3, 4].map(async (host) => {
+				const target = join(dir, `child-${host}.json`);
+				await writeFile(
+					target,
+					JSON.stringify({ host, pad: "x".repeat(2_000_000) }),
+				);
+				return { source, target };
+			}),
+		);
+		const complaints = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			await Promise.all(hosts.map(syncProviderCredentialsBack));
+		} finally {
+			complaints.mockRestore();
+		}
+
+		// Every sync landed. A shared temp path fails here first: one host's cleanup
+		// removes the file another host is about to rename, so the rename ENOENTs.
+		expect(complaints.mock.calls).toEqual([]);
+		const landed = JSON.parse(await readFile(source, "utf8")) as {
+			host?: number;
+		};
+		// Exactly one host's file, not a splice of several and not the old one.
+		expect([1, 2, 3, 4]).toContain(landed.host ?? 0);
+		// And no temp file survives to be renamed over the real one later.
+		expect((await readdir(dir)).filter((name) => name.includes("eval-sync"))) //
+			.toEqual([]);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	test("does nothing for a host that carried no credentials", async () => {
+		await syncProviderCredentialsBack(null);
 	});
 });
