@@ -4,6 +4,7 @@ import { flowStatus } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
+	readWorkspaceTestReport,
 } from "../../infrastructure/fs/workspace-validation.js";
 import { resolveFlowPluginVersion } from "../../version.js";
 import { AutoDriveCoordinator } from "./auto-drive.js";
@@ -270,6 +271,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 	});
 	const validation = new ValidationCaptureCoordinator({
 		persistObservation: persistWorkspaceValidation,
+		readReport: readWorkspaceTestReport,
 	});
 	const tools = createTools(ctx, {
 		validation,

@@ -97,8 +97,9 @@ feature and current worktree:
 
 - Preserve every named finding/requirement; map each to an observable acceptance
   outcome.
-- Inventory exact commands, behavior evidence, and an authorized path for each
-  environment the plan's `externalEvidence` declared.
+- Inventory each `externalEvidence` command, its platform, and where it writes a
+  JUnit report: arm it with `resultsPath` naming that file, or its declared cases go
+  unobserved and the entry stays open on exit zero.
 - Reuse one conversational run baseline of unrelated work, deletions, renames,
   file types, and executable modes. Refresh changed facts; give each review only
   facts the feature changes or depends on, and give final review the full
@@ -110,8 +111,7 @@ feature and current worktree:
   `event`, `expected outcome`, `cleanup/invariant`, and `evidence` columns.
 
 Carry the checklist/IDs through workers and review. Evidence needing user or
-external authority stops before implementation, and the plan's `externalEvidence`
-names each command that discharges it.
+external authority stops before implementation.
 
 ## Implement
 
@@ -166,8 +166,7 @@ The command is durable, so include no secrets.
 
 A failed, incomplete, or source-drifted observation of a plan-listed command or of
 the declared `gate` blocks review until that same command passes for current
-source. No substitute discharges it, and reverting to an older source digest
-revives nothing.
+source. No substitute discharges it; reverting the source revives nothing.
 
 A gate or `externalEvidence` command that cannot pass withholds completed closure,
 and reporting the blocker is half the move. Reach the passing command, or ask the
@@ -176,7 +175,8 @@ leaves the workflow with no next step, whatever the blocker was.
 
 Every host-observed validation advances the session revision, so the revision
 that armed a completed command is stale. The `[flow-validation]` marker reports
-`passed` and `recordedRevision`. Use `recordedRevision` for the next
+`passed`, `recordedRevision`, and any declared `assertions` with what the report
+said about each. Use `recordedRevision` for the next
 `flow_validation_start`, or for `flow_review_start` only when `passed: true`. If
 the marker is absent or malformed, refresh compact status before mutating.
 

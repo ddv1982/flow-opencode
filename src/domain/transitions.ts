@@ -193,6 +193,13 @@ function assertDeclaredExternalEvidence(plan: Plan): void {
 			"Every `externalEvidence` entry must declare `platform`: the operating system that can observe it (`win32`, `darwin`, or `linux`), or `other` when the missing environment is a service, credential, setting, or device rather than an OS. Flow compares an OS against the host the command actually ran on.",
 		);
 	}
+	// Required for the same reason `platform` is, against the other half of the same
+	// measured failure: the declared command exited zero for a case that never ran.
+	if (plan.externalEvidence?.some((entry) => entry.assertions === undefined)) {
+		fail(
+			"Every `externalEvidence` entry must declare `assertions`: the test case names whose passing is that observation, so a run cannot discharge it by exiting zero for a case that was skipped. Declare an empty list when the evidence is not a test result — a credential, a device, or a setting has no case names.",
+		);
+	}
 }
 
 function assertArtifacts(artifacts: readonly Artifact[]): void {

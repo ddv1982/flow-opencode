@@ -62,6 +62,26 @@ export type ExternalEvidence = Readonly<{
 	 * plan this build writes omits it.
 	 */
 	platform?: EvidencePlatform | undefined;
+	/**
+	 * The test cases whose passing *is* this observation, by name.
+	 *
+	 * `platform` moved the environment out of prose; this moves the result out of the
+	 * exit code, the other half of the same measured failure — the declared command
+	 * exited zero for a case that never ran, because `test.skip` exits zero. An entry
+	 * that names cases is satisfied only by a report saying each one passed.
+	 *
+	 * An empty list is the honest and common answer, and keeps the exit-code rule: a
+	 * credential, a device, or a setting has no case names. Optional so Session v5
+	 * stays forward-readable; `savePlan` requires the field, so a new entry was asked.
+	 */
+	assertions?: string[] | undefined;
+}>;
+
+/** One declared assertion, as a report the command wrote described it. */
+export type ObservedAssertion = Readonly<{
+	name: string;
+	/** `absent` means no report mentioned it, which discharges nothing. */
+	status: "passed" | "failed" | "skipped" | "absent";
 }>;
 
 /** See `EVIDENCE_PLATFORMS` for why the set is these four. */
@@ -142,6 +162,17 @@ export type ValidationObservation = Readonly<{
 	 * record that never said where it ran is not evidence about where it ran.
 	 */
 	hostPlatform?: EvidencePlatform | undefined;
+	/**
+	 * The report the command wrote, and what it said about each name the plan declared
+	 * for this command.
+	 *
+	 * The names come from the approved plan and never from the caller, which is what
+	 * makes this an observation rather than another claim. The path is the caller's,
+	 * because only it knows where its own command reports — so the file must have been
+	 * written after arming to count. Both optional for forward-readability.
+	 */
+	resultsPath?: string | undefined;
+	observedAssertions?: ObservedAssertion[] | undefined;
 	/**
 	 * Optional so existing Session v5 documents remain readable. Once recorded,
 	 * an ineligible observation is diagnostic history and can never satisfy a

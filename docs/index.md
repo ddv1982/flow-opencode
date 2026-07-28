@@ -34,6 +34,9 @@ v5. The public overview and installation instructions live in the
   gate, and the two claims that rested on prose are measured.
 - [ADR 0011](adr/0011-declared-external-evidence.md) — the plan declares acceptance
   evidence this host cannot produce, as a command and the platform that observes it.
+- [ADR 0012](adr/0012-named-results-over-exit-codes.md) — acceptance evidence names
+  the test cases whose passing is the observation, so exit zero for a skipped case
+  discharges nothing.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

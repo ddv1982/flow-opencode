@@ -8,6 +8,7 @@ import {
 } from "../../domain/artifact.js";
 import {
 	MAX_ARTIFACTS,
+	MAX_DECLARED_ASSERTIONS,
 	MAX_PATH_BYTES,
 	MAX_PLAN_BYTES,
 	MAX_PLAN_FEATURES,
@@ -124,6 +125,10 @@ const plan = host
 						environment: text,
 						command: text,
 						platform: host.enum(EVIDENCE_PLATFORMS).optional(),
+						assertions: host
+							.array(text)
+							.max(MAX_DECLARED_ASSERTIONS)
+							.optional(),
 					})
 					.strict(),
 			)
@@ -194,6 +199,9 @@ const ValidationStartArgs = {
 			featureId,
 			command: text,
 			scope: host.enum(["focused", "broad"]),
+			resultsPath: boundedHostText("Validation results path", {
+				maxBytes: MAX_PATH_BYTES,
+			}).optional(),
 		})
 		.strict(),
 };
@@ -253,6 +261,8 @@ type ToolOptions = Readonly<{
 		scope: "focused" | "broad";
 		sourceDigest: `sha256:${string}`;
 		hostPlatform: EvidencePlatform;
+		assertions: readonly string[];
+		resultsPath: string | undefined;
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
 	autoContinuationSupport?: (() => AutoContinuationSupport) | undefined;

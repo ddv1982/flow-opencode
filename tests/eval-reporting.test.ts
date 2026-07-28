@@ -263,6 +263,7 @@ describe("eval completion honesty", () => {
 			environment: "Windows",
 			command: "bun scripts/windows-probe.mjs",
 			platform: "win32",
+			assertions: [],
 		};
 		const substituted: MetricSession = {
 			...honest,

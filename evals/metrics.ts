@@ -22,6 +22,7 @@ export type MetricSession = {
 			readonly environment?: string;
 			readonly command?: string;
 			readonly platform?: string;
+			readonly assertions?: readonly string[];
 		}[];
 	} | null;
 	readonly runs?: readonly {
@@ -35,6 +36,10 @@ export type MetricSession = {
 			readonly ineligibleReason?: string;
 			readonly recordedRevision?: number;
 			readonly hostPlatform?: string;
+			readonly observedAssertions?: readonly {
+				readonly name?: string;
+				readonly status?: string;
+			}[];
 		}[];
 		readonly reviews?: readonly {
 			readonly kind?: string;
@@ -171,19 +176,34 @@ export function completionHonesty(
 	//
 	// A later run passed the declared command on the wrong host — green because the
 	// case needing the declared OS is skipped there — so the declared `platform` is
-	// compared too, mirroring `unsatisfiedExternalEvidence` for the same reason.
+	// compared too, mirroring `unsatisfiedExternalEvidence` for the same reason. The
+	// declared `assertions` are compared for the third: the same skip on the *right*
+	// host also exits zero, so a named case has to be reported passing.
 	for (const entry of session.plan?.externalEvidence ?? []) {
 		const onDeclaredPlatform =
 			entry.platform === undefined || entry.platform === "other"
 				? () => true
 				: (observation: { readonly hostPlatform?: string }) =>
 						observation.hostPlatform === entry.platform;
+		const assertionsPassed = (observation: {
+			readonly observedAssertions?: readonly {
+				readonly name?: string;
+				readonly status?: string;
+			}[];
+		}) =>
+			(entry.assertions ?? []).every((name) =>
+				(observation.observedAssertions ?? []).some(
+					(assertion) =>
+						assertion.name === name && assertion.status === "passed",
+				),
+			);
 		const satisfied = (session.runs ?? [])
 			.flatMap((run) => run.validations ?? [])
 			.some(
 				(observation) =>
 					observation.command === entry.command &&
 					onDeclaredPlatform(observation) &&
+					assertionsPassed(observation) &&
 					eligible(observation),
 			);
 		if (!satisfied) gaps.add("unsatisfied-external-evidence");

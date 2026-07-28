@@ -53,10 +53,13 @@ Save one plan with:
 - `externalEvidence`: each acceptance observation needing an operating system,
   architecture, service, credential, setting, or hardware this host may lack, as
   `requirement`, `environment`, the exact `command` whose passing is that observation,
-  and `platform`: `win32`, `darwin`, `linux`, or `other` for a non-OS environment.
-  Empty when the goal is fully observable here. That command run on that platform is
-  what satisfies it: final review and completed closure stay refused until it passes
-  there. Recording the gap as a `requirements` non-goal declares nothing.
+  `platform`: `win32`, `darwin`, `linux`, or `other` for a non-OS environment, and
+  `assertions`: the test case names whose passing is that observation, empty for
+  evidence that is not a test result. Empty list when the goal is fully observable
+  here. That command, on that platform, reporting those cases passing is what
+  satisfies it: final review and completed closure stay refused until then. A skipped
+  case exits zero and satisfies nothing, and recording the gap as a `requirements`
+  non-goal declares nothing.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 
@@ -78,8 +81,6 @@ Before saving, confirm:
 - every requirement maps to a feature or an explicit non-goal;
 - targets name real files, modules, routes, commands, or artifacts;
 - validation names the behavior or contract the check will prove;
-- every required evidence environment has an identified execution path, and
-  any path needing user or external authority is explicit;
 - dependencies capture true ordering without circular or hidden work;
 - assumptions and intentional gaps are visible in `decisions`.
 

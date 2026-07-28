@@ -1,6 +1,8 @@
+import { ARTIFACT_PATH_MESSAGE, isArtifactPath } from "../domain/artifact.js";
 import { MAX_VALIDATION_ID_LENGTH } from "../domain/limits.js";
 import type {
 	EvidencePlatform,
+	ObservedAssertion,
 	Session,
 	SourceDigest,
 	ValidationIneligibleReason,
@@ -9,6 +11,7 @@ import type {
 } from "../domain/session.js";
 import { activeRun, recordValidation } from "../domain/transitions.js";
 import {
+	declaredAssertions,
 	LONGEST_EVIDENCE_PLATFORM,
 	LONGEST_VALIDATION_INELIGIBLE_REASON,
 } from "../domain/validation.js";
@@ -27,6 +30,16 @@ export type PreparedValidation = Readonly<{
 	 * observation is persisted so the recorded host is the one Flow armed against.
 	 */
 	hostPlatform: EvidencePlatform;
+	/** The test names the approved plan declares for this exact command. */
+	assertions: readonly string[];
+	/**
+	 * Where the caller says this command writes a JUnit report.
+	 *
+	 * The one half that must come from the caller, since only it knows what its own
+	 * command does — which is why the capture adapter reads nothing from a file that
+	 * was not written after this arming.
+	 */
+	resultsPath: string | undefined;
 }>;
 
 export type ObservedValidation = PreparedValidation &
@@ -36,6 +49,8 @@ export type ObservedValidation = PreparedValidation &
 		exitCode: number | null;
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
+		/** What the report said about each declared name; absent when none were declared. */
+		observedAssertions?: ObservedAssertion[] | undefined;
 		/**
 		 * Set by the capture adapter when the host could not supply the evidence a
 		 * passing validation requires. Source drift is detected here and overrides it.
@@ -78,6 +93,12 @@ function maximumSerializedObservation(
 		outputDigest: prepared.sourceDigest,
 		outputComplete: false,
 		hostPlatform: LONGEST_EVIDENCE_PLATFORM,
+		// The declared names and the caller's path are fixed by now, so the only free
+		// part is each outcome; `skipped` is the longest of the four.
+		observedAssertions: prepared.assertions.map((name) => ({
+			name,
+			status: "skipped" as const,
+		})),
 		ineligibleReason: LONGEST_VALIDATION_INELIGIBLE_REASON,
 	};
 }
@@ -113,6 +134,9 @@ export async function prepareValidation(
 		if (run.reviews.length > 0) {
 			throw new Error("Validation cannot start after review has begun.");
 		}
+		if (input.resultsPath !== undefined && !isArtifactPath(input.resultsPath)) {
+			throw new Error(`Validation results path: ${ARTIFACT_PATH_MESSAGE}`);
+		}
 		const prepared = {
 			featureId: run.featureId,
 			runId: run.id,
@@ -120,6 +144,8 @@ export async function prepareValidation(
 			scope: input.scope,
 			sourceDigest: await transaction.computeSourceDigest(),
 			hostPlatform,
+			assertions: declaredAssertions(session, input.command),
+			resultsPath: input.resultsPath,
 		};
 		assertValidationCanBeRecorded(session, prepared);
 		return prepared;

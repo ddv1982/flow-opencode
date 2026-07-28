@@ -8,6 +8,7 @@ import {
 import type {
 	EvidencePlatform,
 	FeatureId,
+	ObservedAssertion,
 	Plan,
 	ReviewAssignment,
 	Session,
@@ -140,6 +141,7 @@ function validate(
 		exitCode?: number;
 		outputComplete?: boolean;
 		hostPlatform?: EvidencePlatform;
+		observedAssertions?: ObservedAssertion[];
 	},
 ): Session {
 	const run = session.runs.find((candidate) => candidate.state === "active");
@@ -160,6 +162,9 @@ function validate(
 		exitCode: options.exitCode ?? 0,
 		outputDigest: OUTPUT,
 		outputComplete: options.outputComplete ?? true,
+		...(options.observedAssertions
+			? { observedAssertions: options.observedAssertions }
+			: {}),
 		hostPlatform: options.hostPlatform ?? "linux",
 	}).session;
 }
@@ -1170,6 +1175,7 @@ describe("Session v5 domain state machine", () => {
 								environment: "Stripe test credentials",
 								command: probe,
 								platform: "other",
+								assertions: [],
 							},
 						],
 					},
@@ -1224,6 +1230,7 @@ describe("Session v5 domain state machine", () => {
 								environment: "Windows",
 								command: probe,
 								platform: "win32",
+								assertions: [],
 							},
 						],
 					},
@@ -1311,6 +1318,7 @@ describe("Session v5 domain state machine", () => {
 						environment: "Windows",
 						command: "bun scripts/never-ran.mjs",
 						platform: "win32",
+						assertions: [],
 					},
 				],
 			},
@@ -1335,6 +1343,105 @@ describe("Session v5 domain state machine", () => {
 		).toBe("deferred");
 	});
 
+	test("refuses a declared command that exited zero for a case that never ran", () => {
+		const environment = deterministicEnvironment();
+		// The half `hostPlatform` left open. The command is right, the host is right,
+		// the exit code is zero — and the case the acceptance turns on was skipped,
+		// which is also exit zero. Nothing in the record before this said so.
+		const probe = "bun test src/platform.test.ts";
+		const acceptance = "creates the replacement on Windows";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...oneFeaturePlan([PROSE_VALIDATION]),
+						externalEvidence: [
+							{
+								requirement: "the safe name can be created on Windows",
+								environment: "Windows",
+								command: probe,
+								platform: "win32",
+								assertions: [acceptance],
+							},
+						],
+					},
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		session = validate(session, {
+			id: "skipped-on-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+			observedAssertions: [{ name: acceptance, status: "skipped" }],
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-skip"),
+		).toThrow(JSON.stringify(probe));
+		// And the refusal names which case, and what it did instead of passing: the two
+		// earlier states read "has not passed", which is wrong about a green command.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-skip"),
+		).toThrow(`${JSON.stringify(acceptance)} skipped`);
+		// Naming no report at all reaches the same place, which is what makes the
+		// field unskippable rather than one more thing to leave out.
+		session = validate(session, {
+			id: "no-report-named",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-without-report"),
+		).toThrow(`${JSON.stringify(acceptance)} absent`);
+		session = validate(session, {
+			id: "ran-on-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+			observedAssertions: [{ name: acceptance, status: "passed" }],
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-pass",
+		);
+		expect(
+			sessionStatus(pass(accepted.session, DELIVERY, accepted.assignment)),
+		).toBe("completed");
+	});
+
+	test("requires a new plan to declare assertions for every external entry", () => {
+		const environment = deterministicEnvironment();
+		expect(() =>
+			saveDraft(environment, {
+				plan: {
+					...oneFeaturePlan([PROSE_VALIDATION]),
+					externalEvidence: [
+						{
+							requirement: "observed on Windows",
+							environment: "Windows",
+							command: "bun test src/platform.test.ts",
+							platform: "win32",
+						},
+					],
+				},
+			}),
+		).toThrow("must declare `assertions`");
+	});
+
 	test("admits a feature review while plan-level external evidence is outstanding", () => {
 		const environment = deterministicEnvironment();
 		// The best outcome the eval matrix recorded, and one a blanket veto would
@@ -1355,6 +1462,7 @@ describe("Session v5 domain state machine", () => {
 								environment: "Windows",
 								command: "bun scripts/windows-probe.mjs",
 								platform: "win32",
+								assertions: [],
 							},
 						],
 					},

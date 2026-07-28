@@ -53,6 +53,10 @@ and a rule that lives only in a prompt.
 - The **host platform** each observation ran on, normalized from what the runtime
   reports. A model cannot claim it, and an `externalEvidence` entry naming an OS is
   satisfied only by an observation recorded on it.
+- **Which declared test cases the command reported passing**, read from a JUnit report
+  the command wrote after Flow armed it. An entry naming cases is satisfied only when
+  each is reported `passed`; `skipped` and `absent` discharge nothing, so exit zero for
+  a case that never ran no longer counts ([ADR 0012](adr/0012-named-results-over-exit-codes.md)).
 - The **workspace-content digest** binding validation and review to source. It is a
   content fingerprint of tracked, non-ignored files — not a Git audit chain, and it
   cannot see an edit that reverts before persistence.
@@ -92,11 +96,9 @@ reason Flow asks you to read the review rather than trust the verdict.
 
 - A declared `gate` that cannot fail. See Caller-declared above; deciding which
   commands count as tests is an open-ended whitelist, not an invariant.
-- **A suite that skips instead of failing.** Flow records exit codes, not skip
-  counts, so a green run that skipped the case the evidence was about is
-  indistinguishable from one that ran it. This is why an `externalEvidence` entry is
-  checked against the host it ran on rather than against its result, and why an
-  `other` platform stays reviewer judgment.
+- A suite that skips where no case names were declared. `assertions: []` keeps the
+  exit-code rule, which is the honest answer for a credential or a device and the
+  remaining escape for a test result. See Caller-declared.
 - Plans saved before `plan.gate` and `plan.externalEvidence` existed. They declare
   neither and keep the older, weaker rules: `broad` is the claimant's word, and no
   acceptance observation is owed.

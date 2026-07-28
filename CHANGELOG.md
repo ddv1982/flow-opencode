@@ -31,6 +31,19 @@ that rested on prompt prose are now measured.
   skipped there. The refusal now distinguishes a command never observed from one that
   passed on the wrong host, because those call for opposite moves. See
   [ADR 0011](docs/adr/0011-declared-external-evidence.md).
+- **Acceptance evidence names test cases, not exit codes.** Each `externalEvidence`
+  entry also declares `assertions`: the case names whose passing *is* that
+  observation. `flow_validation_start` takes `resultsPath`, the JUnit XML the command
+  writes, and Flow records what that report said about each declared name. An entry is
+  satisfied only when every one is reported `passed` — `skipped` and `absent`
+  discharge nothing. This closes the limitation ADR 0011 recorded rather than fixed:
+  comparing the host closed the *wrong machine* and left the same skip on the right
+  one, where a case guarded, filtered, renamed out of the run, or never written still
+  exits zero. The names come from the approved plan and never from the caller, and a
+  report that predates the arming is read as no report at all. Declare an empty list
+  when the evidence is not a test result; that keeps the exit-code rule, which is the
+  honest answer for a credential or a device. See
+  [ADR 0012](docs/adr/0012-named-results-over-exit-codes.md).
 - **The reviewer can see the two commands the plan declares.** Its plan context now
   carries `gate` and `externalEvidence`, which it was asked to judge and was never
   shown: it could not tell a `broad` observation that ran the canonical gate from one
@@ -45,8 +58,12 @@ that rested on prompt prose are now measured.
   when the goal is fully observable here. Each entry carries an optional `platform`
   that `flow_plan_save` likewise requires for a new plan, and each validation
   observation carries an optional runtime-written `hostPlatform`; an entry hydrated
-  without a platform keeps the command-only rule. Rolling an active session back to a
-  build without these fields is not supported, as with every previous widening.
+  without a platform keeps the command-only rule. Each entry also carries an optional
+  `assertions` list that `flow_plan_save` requires for a new plan, and each observation
+  may carry a `resultsPath` and the `observedAssertions` the runtime read from it; an
+  entry hydrated without assertions keeps the exit-code rule. Rolling an active session
+  back to a build without these fields is not supported, as with every previous
+  widening.
 - **The bar is published, not described.** [What Flow
   guarantees](docs/guarantees.md) states which claims are enforced by types, attested
   by the host, declared by the caller, judged by a model, or unenforced.

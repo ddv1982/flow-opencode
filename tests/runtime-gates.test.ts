@@ -1041,6 +1041,8 @@ describe("Flow application runtime gates", () => {
 			scope: "broad",
 			sourceDigest: SOURCE_A,
 			hostPlatform: "linux",
+			assertions: [],
+			resultsPath: undefined,
 		});
 		const observedInput = {
 			...prepared,

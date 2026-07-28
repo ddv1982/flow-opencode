@@ -6,6 +6,7 @@ import {
 } from "../domain/feature-id.js";
 import {
 	MAX_ARTIFACTS,
+	MAX_DECLARED_ASSERTIONS,
 	MAX_PATH_BYTES,
 	MAX_PLAN_BYTES,
 	MAX_PLAN_FEATURES,
@@ -93,6 +94,21 @@ const ExternalEvidenceSchema = z
 		 * `savePlan` refuses a new entry without it.
 		 */
 		platform: z.enum(EVIDENCE_PLATFORMS).optional(),
+		/**
+		 * Optional under the same rule: an entry written before `assertions` existed
+		 * keeps the exit-code rule, and `savePlan` refuses a new entry without it.
+		 */
+		assertions: z
+			.array(boundedText("External evidence assertion"))
+			.max(MAX_DECLARED_ASSERTIONS)
+			.optional(),
+	})
+	.strict();
+
+const ObservedAssertionSchema = z
+	.object({
+		name: boundedText("Observed assertion name"),
+		status: z.enum(["passed", "failed", "skipped", "absent"]),
 	})
 	.strict();
 
@@ -185,6 +201,14 @@ const ValidationObservationSchema = z
 		recordedRevision: RevisionSchema,
 		/** The host this command ran on; absent in documents written before it existed. */
 		hostPlatform: z.enum(EVIDENCE_PLATFORMS).optional(),
+		/** Where the command wrote a report, and what it said about each declared case. */
+		resultsPath: boundedText("Validation results path", {
+			maxBytes: MAX_PATH_BYTES,
+		}).optional(),
+		observedAssertions: z
+			.array(ObservedAssertionSchema)
+			.max(MAX_DECLARED_ASSERTIONS)
+			.optional(),
 		ineligibleReason: z.enum(VALIDATION_INELIGIBLE_REASONS).optional(),
 	})
 	.strict()
@@ -390,6 +414,15 @@ export const ValidationStartInputSchema = z
 				featureId: FeatureIdSchema,
 				command: boundedText("Validation command"),
 				scope: z.enum(["focused", "broad"]),
+				/**
+				 * Repository-relative JUnit XML the command writes, when the plan declared
+				 * test names for it. Only the caller knows where its own command reports,
+				 * which is why this is a parameter — and why the file has to be written
+				 * after the command is armed to count for anything.
+				 */
+				resultsPath: boundedText("Validation results path", {
+					maxBytes: MAX_PATH_BYTES,
+				}).optional(),
 			})
 			.strict(),
 	})

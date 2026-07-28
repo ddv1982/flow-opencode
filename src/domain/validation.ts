@@ -4,12 +4,14 @@ import type {
 	ExternalEvidence,
 	FeatureId,
 	FeatureRun,
+	ObservedAssertion,
 	Session,
 	SourceDigest,
 	ValidationIneligibleReason,
 	ValidationObservation,
 	ValidationScope,
 } from "./session.js";
+import { assertionsSatisfied, unmetAssertions } from "./test-results.js";
 import { FlowTransitionError } from "./transition-error.js";
 
 export const VALIDATION_INELIGIBLE_REASONS = [
@@ -124,6 +126,35 @@ export function narrowingArguments(command: string): string[] {
 		});
 }
 
+/**
+ * Every assertion the approved plan declares for this exact command. Read from the
+ * plan and never from the caller: the names are fixed in the approved document,
+ * before there is a report to write.
+ */
+export function declaredAssertions(
+	session: Session,
+	command: string,
+): string[] {
+	return [
+		...new Set(
+			(session.plan?.externalEvidence ?? [])
+				.filter((entry) => entry.command === command)
+				.flatMap((entry) => entry.assertions ?? []),
+		),
+	];
+}
+
+function sameAssertions(
+	left: readonly ObservedAssertion[] | undefined,
+	right: readonly ObservedAssertion[] | undefined,
+): boolean {
+	const serialize = (value: readonly ObservedAssertion[] | undefined) =>
+		JSON.stringify(
+			(value ?? []).map((assertion) => [assertion.name, assertion.status]),
+		);
+	return serialize(left) === serialize(right);
+}
+
 export function recordValidation(
 	session: Session,
 	input: Readonly<{
@@ -137,6 +168,8 @@ export function recordValidation(
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
 		hostPlatform?: EvidencePlatform | undefined;
+		resultsPath?: string | undefined;
+		observedAssertions?: ObservedAssertion[] | undefined;
 		ineligibleReason?: ValidationObservation["ineligibleReason"];
 	}>,
 ): Readonly<{
@@ -171,6 +204,8 @@ export function recordValidation(
 			prior.outputDigest !== input.outputDigest ||
 			prior.outputComplete !== input.outputComplete ||
 			prior.hostPlatform !== input.hostPlatform ||
+			prior.resultsPath !== input.resultsPath ||
+			!sameAssertions(prior.observedAssertions, input.observedAssertions) ||
 			prior.ineligibleReason !== input.ineligibleReason
 		) {
 			throw new FlowTransitionError(
@@ -231,6 +266,10 @@ export function recordValidation(
 		outputComplete: input.outputComplete,
 		recordedRevision: revision,
 		...(input.hostPlatform ? { hostPlatform: input.hostPlatform } : {}),
+		...(input.resultsPath ? { resultsPath: input.resultsPath } : {}),
+		...(input.observedAssertions && input.observedAssertions.length > 0
+			? { observedAssertions: input.observedAssertions }
+			: {}),
 		...(input.ineligibleReason
 			? { ineligibleReason: input.ineligibleReason }
 			: {}),
@@ -283,19 +322,37 @@ export function externalEvidenceRefusal(
 	entry: ExternalEvidence,
 	sourceDigest?: SourceDigest,
 ): string {
+	const eligible = session.runs
+		.flatMap((run) => run.validations)
+		.filter(
+			(observation) =>
+				observation.command === entry.command &&
+				isValidationEligible(observation, sourceDigest),
+		);
 	const wrongHosts = [
 		...new Set(
-			session.runs
-				.flatMap((run) => run.validations)
+			eligible
 				.filter(
-					(observation) =>
-						observation.command === entry.command &&
-						isValidationEligible(observation, sourceDigest) &&
-						!isObservedOnDeclaredPlatform(entry, observation),
+					(observation) => !isObservedOnDeclaredPlatform(entry, observation),
 				)
 				.map((observation) => observation.hostPlatform ?? "an unrecorded host"),
 		),
 	];
+	// The command passed on the right host and still did not prove the entry, which
+	// is the third distinct state and the one the exit code cannot show. Naming the
+	// cases is the whole recovery: run them, or stop declaring them.
+	//
+	// The latest such observation, not the first: the reader is about to act, and what
+	// the most recent run reported is what they need. An early skip that a later run
+	// still did not fix is described by that later run.
+	const unmet = eligible
+		.filter((observation) => isObservedOnDeclaredPlatform(entry, observation))
+		.toSorted((left, right) => left.recordedRevision - right.recordedRevision)
+		.map((observation) =>
+			unmetAssertions(entry.assertions ?? [], observation.observedAssertions),
+		)
+		.filter((names) => names.length > 0)
+		.at(-1);
 	// `other` and a pre-`platform` entry have no OS to name, so the environment prose
 	// is all there is to say back.
 	const needs =
@@ -305,7 +362,9 @@ export function externalEvidenceRefusal(
 	const detail =
 		wrongHosts.length > 0
 			? `passed on ${wrongHosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
-			: `needs ${needs}`;
+			: unmet
+				? `passed on ${entry.platform ?? "the declared host"} but reported no passing result for ${unmet.join(", ")}; arm it again with \`resultsPath\` naming the report the command writes, and make those cases run`
+				: `needs ${needs}`;
 	return `${JSON.stringify(entry.command)} (${detail}, for ${entry.requirement})`;
 }
 
@@ -322,6 +381,11 @@ export function externalEvidenceRefusal(
  * where a suite skips the case that needed the missing OS and exits zero for it. So
  * the declared `platform` is compared with the host the observation recorded
  * (`docs/adr/0011-declared-external-evidence.md`).
+ *
+ * That closed the wrong machine, not the same skip on the *right* one, where a case
+ * can be guarded, filtered, or renamed out of the run and the process still exits
+ * zero. Declared `assertions` close that: each named case has to be reported passing
+ * (`docs/adr/0012-named-results-over-exit-codes.md`).
  *
  * `sourceDigest` narrows this to the current workspace content for review admission.
  * Closure has no digest to compare against and passes none, so a closure check asks
@@ -341,6 +405,10 @@ export function unsatisfiedExternalEvidence(
 				(observation) =>
 					observation.command === entry.command &&
 					isObservedOnDeclaredPlatform(entry, observation) &&
+					assertionsSatisfied(
+						entry.assertions ?? [],
+						observation.observedAssertions,
+					) &&
 					isValidationEligible(observation, sourceDigest),
 			),
 	);

@@ -55,10 +55,16 @@ caller declaration made at planning time.
 
 `savePlan` also requires `externalEvidence`: every acceptance observation needing an
 environment this host may not be, each with the exact command whose passing is that
-observation and the `platform` (`win32`, `darwin`, `linux`, or `other`) that can
-observe it, or an empty list. An entry is satisfied only by an eligible observation of
-that exact command recorded on the platform it declared, with `other` keeping the
-command-only rule. A plan saved before either field existed declares neither and keeps
+observation, the `platform` (`win32`, `darwin`, `linux`, or `other`) that can observe
+it, and `assertions`: the test case names whose passing is that observation, or an
+empty list. An entry is satisfied only by an eligible observation of that exact command
+recorded on the platform it declared and reporting every declared case as `passed`;
+`other` and an empty `assertions` each keep the command-only rule. Case outcomes come
+from a JUnit report the command wrote, named by `resultsPath` when the command is
+armed, and only if that file was modified after arming — the names come from the
+approved plan, never from the caller. Nothing named, nothing readable, and nothing
+parseable all record each case as `absent`, which discharges nothing
+([ADR 0012](adr/0012-named-results-over-exit-codes.md)). A plan saved before either field existed declares neither and keeps
 the older rules: `broad` is the claimant's word, and no observation is owed.
 `startReview` refuses a *final* review while any entry is
 unsatisfied for current source, and `closeSession` refuses a `completed` closure

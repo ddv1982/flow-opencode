@@ -60,6 +60,15 @@ const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
  * measured failure was accepting one. The reviewer needed no new prose: it is
  * already told that a platform claim without proof is a failure, and a final review
  * over unsatisfied evidence is now refused before the reviewer is asked at all.
+ *
+ * Held at 38,500 again through declared `assertions` and `resultsPath`, which landed
+ * at 38,485 — fifteen bytes of headroom, and the same rule did the work. Two cuts paid
+ * for the addition: the plan-time confirmation that "every required evidence
+ * environment has an identified execution path", which is now the field the runtime
+ * refuses a plan without, and the flow-run inventory sentence that said the same thing
+ * a second time. A ceiling this tight is the point — it is why each of the last three
+ * evidence rules arrived as a checked field rather than another paragraph asking the
+ * model to be careful.
  */
 const MAX_TOTAL_PROMPT_BYTES = 38_500;
 
