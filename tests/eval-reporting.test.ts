@@ -8,6 +8,7 @@ import {
 	formatRate,
 	isSelfAbortError,
 	isWedged,
+	mergeCredentials,
 	onlyAwaitingAnswer,
 	passRates,
 	pendingCallLabel,
@@ -756,7 +757,7 @@ describe("eval credential sync-back", () => {
 					target,
 					JSON.stringify({ host, pad: "x".repeat(2_000_000) }),
 				);
-				return { source, target };
+				return { source, target, snapshot: null };
 			}),
 		);
 		const complaints = spyOn(console, "error").mockImplementation(() => {});
@@ -782,5 +783,133 @@ describe("eval credential sync-back", () => {
 
 	test("does nothing for a host that carried no credentials", async () => {
 		await syncProviderCredentialsBack(null);
+	});
+
+	// Serializing the writes stopped two of them landing as one file, and left the
+	// worse half of the same bug: every host writes back a full copy of one shared
+	// snapshot, so the last host out decides the whole file. What it reverts is not
+	// stale local state -- a consumed refresh token is revoked at the provider, so
+	// restoring the snapshot's copy kills the credential for the developer too.
+	describe("merging one host's rotations into the real file", () => {
+		const snapshot = JSON.stringify({
+			alpha: { refresh: "alpha-1" },
+			beta: { refresh: "beta-1" },
+		});
+
+		test("does not revert a rotation from a host that refreshed nothing", () => {
+			// The matrix case. Two hosts copy the same file; one refreshes `beta` and
+			// syncs first; the other carried `beta` untouched and syncs second.
+			const rotated = JSON.stringify({
+				alpha: { refresh: "alpha-1" },
+				beta: { refresh: "beta-2" },
+			});
+			const merged = mergeCredentials(rotated, snapshot, snapshot);
+			// Nothing of its own to publish, so it does not write at all.
+			expect(merged).toBeNull();
+		});
+
+		test("keeps both when two hosts rotate different providers", () => {
+			// One host per model, each authenticating to its own provider, is the
+			// ordinary shape of a matrix run rather than a corner of it.
+			const afterAlpha = mergeCredentials(
+				snapshot,
+				JSON.stringify({
+					alpha: { refresh: "alpha-2" },
+					beta: { refresh: "beta-1" },
+				}),
+				snapshot,
+			);
+			expect(afterAlpha).not.toBeNull();
+			const afterBeta = mergeCredentials(
+				afterAlpha ?? "",
+				JSON.stringify({
+					alpha: { refresh: "alpha-1" },
+					beta: { refresh: "beta-2" },
+				}),
+				snapshot,
+			);
+			expect(JSON.parse(afterBeta ?? "")).toEqual({
+				alpha: { refresh: "alpha-2" },
+				beta: { refresh: "beta-2" },
+			});
+		});
+
+		test("leaves a provider only the real file knows about alone", () => {
+			// A provider the developer logged into after the snapshot was taken, or one
+			// another host added. Absent from both the snapshot and the child, so the
+			// child has said nothing about it and must not remove it.
+			const merged = mergeCredentials(
+				JSON.stringify({ ...JSON.parse(snapshot), gamma: { refresh: "g-1" } }),
+				JSON.stringify({
+					alpha: { refresh: "alpha-2" },
+					beta: { refresh: "beta-1" },
+				}),
+				snapshot,
+			);
+			expect(JSON.parse(merged ?? "")).toEqual({
+				alpha: { refresh: "alpha-2" },
+				beta: { refresh: "beta-1" },
+				gamma: { refresh: "g-1" },
+			});
+		});
+
+		test("carries a logout across as the change it is", () => {
+			// Dropped against the snapshot rather than merely absent, which is the one
+			// case a merge of present keys alone would silently undo.
+			const merged = mergeCredentials(
+				snapshot,
+				JSON.stringify({ alpha: { refresh: "alpha-1" } }),
+				snapshot,
+			);
+			expect(JSON.parse(merged ?? "")).toEqual({
+				alpha: { refresh: "alpha-1" },
+			});
+		});
+
+		test("merges over the current file when there is no snapshot to diff", () => {
+			// Opted out of the copy, or there was no credential file to copy. Every
+			// child entry reads as changed, which is the old whole-file behaviour
+			// narrowed to the keys the child actually holds.
+			const merged = mergeCredentials(
+				JSON.stringify({ gamma: { refresh: "g-1" } }),
+				JSON.stringify({ alpha: { refresh: "alpha-1" } }),
+				null,
+			);
+			expect(JSON.parse(merged ?? "")).toEqual({
+				gamma: { refresh: "g-1" },
+				alpha: { refresh: "alpha-1" },
+			});
+		});
+
+		test("falls back to the child when the real file is unreadable", () => {
+			// Nothing coherent to merge into, so the child's copy is both the only
+			// option and better than leaving a broken file in place.
+			expect(mergeCredentials("", snapshot, snapshot)).toBe(snapshot);
+			expect(mergeCredentials("[]", snapshot, snapshot)).toBe(snapshot);
+		});
+
+		test("refuses a child that holds no entries", () => {
+			// The caller already rejects an unparseable child; an array or a bare value
+			// is the same refusal, since there is nothing in it to carry out.
+			expect(mergeCredentials(snapshot, "[]", snapshot)).toBeNull();
+			expect(mergeCredentials(snapshot, "null", snapshot)).toBeNull();
+		});
+
+		test("writes nothing through the real sync when no token rotated", async () => {
+			// End to end, because the merge being right is only half of it: a host with
+			// nothing to say must leave the file's own bytes untouched.
+			const dir = await mkdtemp(join(tmpdir(), "flow-eval-merge-"));
+			const source = join(dir, "auth.json");
+			const target = join(dir, "child.json");
+			const rotated = JSON.stringify({
+				alpha: { refresh: "alpha-1" },
+				beta: { refresh: "beta-2" },
+			});
+			await writeFile(source, rotated);
+			await writeFile(target, snapshot);
+			await syncProviderCredentialsBack({ source, target, snapshot });
+			expect(await readFile(source, "utf8")).toBe(rotated);
+			await rm(dir, { recursive: true, force: true });
+		});
 	});
 });

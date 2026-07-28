@@ -11,7 +11,6 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
 	chmod,
-	copyFile,
 	cp,
 	mkdir,
 	mkdtemp,
@@ -205,6 +204,20 @@ export type Scenario = {
  * developer's own OpenCode too until they log in again. One recorded run lost
  * an xAI account's refresh token this way after a single scenario.
  */
+export type CredentialSync = {
+	readonly source: string;
+	readonly target: string;
+	/**
+	 * The bytes this host was handed, or null when there was no file to copy.
+	 *
+	 * Kept for the whole life of the host because it is the only thing that can
+	 * tell a token this host rotated from one it merely carried: at sync time the
+	 * real file may already hold another host's newer credential, and the child
+	 * copy cannot say which of its own entries are stale.
+	 */
+	readonly snapshot: string | null;
+};
+
 function providerCredentialPaths(childData: string): {
 	source: string;
 	target: string;
@@ -219,16 +232,91 @@ function providerCredentialPaths(childData: string): {
 
 async function carryProviderCredentials(
 	childData: string,
-): Promise<{ source: string; target: string } | null> {
+): Promise<CredentialSync | null> {
 	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return null;
 	const paths = providerCredentialPaths(childData);
 	await mkdir(join(childData, "opencode"), { recursive: true, mode: 0o700 });
+	let snapshot: string | null = null;
 	try {
-		await copyFile(paths.source, paths.target);
+		// Read-then-write rather than `copyFile`, because the bytes handed to the
+		// child have to be the same bytes remembered as the snapshot. Copying and
+		// then reading the source again would let a concurrent host's sync land in
+		// between, and the snapshot would describe a file this host never saw.
+		snapshot = await readFile(paths.source, "utf8");
+		await writeFile(paths.target, snapshot, { mode: 0o600 });
 	} catch {
 		// No stored credentials; the provider may still authenticate from the env.
 	}
-	return paths;
+	return { ...paths, snapshot };
+}
+
+/**
+ * The real file's contents with this host's own credential changes applied, or
+ * null when it rotated nothing.
+ *
+ * Serializing the writes was only half the fix. Every host copies the same
+ * snapshot, so a host that refreshed nothing still holds a full credential file,
+ * and writing it back wholesale reverts every rotation that landed while it was
+ * running. Concurrently that is the ordinary case rather than a corner: a matrix
+ * runs one host per model, each authenticating to a different provider, so the
+ * last host out would discard the other two providers' new refresh tokens — and
+ * a discarded rotation is dead at the provider, not merely misplaced here.
+ *
+ * So a sync carries entries and not files. Per top-level key, which is per
+ * provider in OpenCode's `auth.json`:
+ *
+ * - Changed against the snapshot: this host rotated it, so it wins.
+ * - Equal to the snapshot: this host only carried it, so whatever the real file
+ *   holds now wins — that is either the same value or a newer host's rotation.
+ * - Present in the snapshot and gone from the child: the child logged out of it,
+ *   which is a change like any other and is applied as a removal.
+ * - Present in the real file and in neither: another host's new provider, left
+ *   alone.
+ *
+ * With no snapshot there is nothing to diff against, so every child entry reads
+ * as changed and merges over the current file. That is the pre-existing
+ * behaviour, narrowed from the whole file to the keys the child actually holds.
+ */
+export function mergeCredentials(
+	current: string,
+	child: string,
+	snapshot: string | null,
+): string | null {
+	const asRecord = (text: string | null): Record<string, unknown> | null => {
+		if (text === null) return null;
+		try {
+			const parsed: unknown = JSON.parse(text);
+			return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+				? (parsed as Record<string, unknown>)
+				: null;
+		} catch {
+			return null;
+		}
+	};
+	const childEntries = asRecord(child);
+	// The caller has already refused an unparseable child; a non-object one is the
+	// same refusal, since there are no entries to carry out of it.
+	if (!childEntries) return null;
+	const currentEntries = asRecord(current);
+	// Nothing coherent to merge into. Returning the child whole is the old
+	// behaviour and the only one available, and it beats leaving a broken file.
+	if (!currentEntries) return child;
+	const before = asRecord(snapshot) ?? {};
+
+	const merged: Record<string, unknown> = { ...currentEntries };
+	const same = (left: unknown, right: unknown) =>
+		JSON.stringify(left) === JSON.stringify(right);
+	for (const [provider, value] of Object.entries(childEntries)) {
+		if (!same(value, before[provider])) merged[provider] = value;
+	}
+	for (const provider of Object.keys(before)) {
+		if (!(provider in childEntries)) delete merged[provider];
+	}
+
+	// A host that rotated nothing does not write at all, which is the common case
+	// and the one worth not touching the developer's credential store over.
+	if (same(merged, currentEntries)) return null;
+	return `${JSON.stringify(merged, null, 2)}\n`;
 }
 
 /**
@@ -245,15 +333,19 @@ const syncCredentials = sequencer();
 let credentialSyncCount = 0;
 
 /**
- * Copies a host's (possibly refreshed) credential file back over the real
- * `auth.json` it was copied from, so a rotated token propagates instead of
- * being discarded with the scratch directory.
+ * Carries a host's rotated credentials back into the real `auth.json` it was
+ * copied from, so a refresh propagates instead of being discarded with the
+ * scratch directory — and so it propagates without reverting anyone else's.
  *
- * Three failure modes get guarded against explicitly, because what is being
+ * Four failure modes get guarded against explicitly, because what is being
  * overwritten is the developer's own live credential store, not scratch state:
  *
  * - A child copy that fails to parse as JSON must never replace a good file —
  *   this is what stands between a bug in a scenario and a broken `auth.json`.
+ * - A host must not write back what it did not change. `mergeCredentials` says
+ *   why at length; the short version is that every host holds a full copy of the
+ *   same snapshot, so writing files instead of entries makes the last host out
+ *   the one that decides, and revokes what the others rotated.
  * - The write itself goes to a temp file beside the real one and is `rename`d
  *   into place, which is atomic on the same filesystem. A plain overwrite that
  *   is interrupted (a kill, a crash, a lost power) would leave the real file
@@ -261,10 +353,12 @@ let credentialSyncCount = 0;
  * - Concurrent hosts must not write at once. Every call takes a temp path no
  *   other call can name and waits its turn in `syncCredentials`, so a parallel
  *   matrix run reads and replaces the file one host at a time — and a failed
- *   sync's cleanup can only ever remove its own temp file.
+ *   sync's cleanup can only ever remove its own temp file. The read of the real
+ *   file happens inside that turn, since a merge that read it before waiting
+ *   would compute its result against a file another host has since replaced.
  */
 export async function syncProviderCredentialsBack(
-	paths: { source: string; target: string } | null,
+	paths: CredentialSync | null,
 ): Promise<void> {
 	if (!paths) return;
 	credentialSyncCount += 1;
@@ -286,8 +380,19 @@ export async function syncProviderCredentialsBack(
 			);
 			return;
 		}
+		let current = "";
 		try {
-			await writeFile(tempPath, contents, { mode: 0o600 });
+			current = await readFile(paths.source, "utf8");
+		} catch {
+			// The real file is gone — the developer logged out mid-run, or there was
+			// never one to copy. The child's own entries are all there is.
+		}
+		const merged = mergeCredentials(current, contents, paths.snapshot);
+		// Nothing this host rotated, so nothing to publish. Leaving the file alone is
+		// the point: an untouched credential store cannot be damaged by a sync.
+		if (merged === null) return;
+		try {
+			await writeFile(tempPath, merged, { mode: 0o600 });
 			await rename(tempPath, paths.source);
 		} catch (error) {
 			// Failing to sync back must not crash the run over a host that already
@@ -762,7 +867,7 @@ export class EvalHost {
 
 	readonly project: string;
 	private readonly scratch: string;
-	private credentialPaths: { source: string; target: string } | null = null;
+	private credentialPaths: CredentialSync | null = null;
 
 	private constructor(project: string, scratch: string) {
 		this.project = project;
