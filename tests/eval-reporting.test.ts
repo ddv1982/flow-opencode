@@ -3,11 +3,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	formatRate,
+	isSelfAbortError,
+	isWedged,
 	onlyAwaitingAnswer,
 	passRates,
 	pendingCallLabel,
 	refusedBroadScope,
 	reportedCost,
+	runQueues,
 	sessionBoundaries,
 } from "../evals/harness.js";
 import {
@@ -37,6 +40,90 @@ describe("eval run classification", () => {
 			false,
 		);
 		expect(onlyAwaitingAnswer([])).toBe(false);
+	});
+
+	// The measured defect: 92 of 408 recorded runs carried a `MessageAbortedError`
+	// and only 4 of them were timeouts. The rest were this harness ending an
+	// escalation nothing answers — the designed end of three scenarios — and
+	// reporting its own abort as a condition of the host buried the real ones.
+	test("does not report its own abort as a host error", () => {
+		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };
+		expect(isSelfAbortError(abort, true)).toBe(true);
+	});
+
+	test("reports an abort nobody here issued, and every other error always", () => {
+		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };
+		// No abort issued makes an abort error real news: something outside this
+		// process ended the turn, which is exactly what the field is for.
+		expect(isSelfAbortError(abort, false)).toBe(false);
+		expect(isSelfAbortError({ name: "ProviderAuthError" }, true)).toBe(false);
+		expect(isSelfAbortError("Aborted", true)).toBe(false);
+		expect(isSelfAbortError(null, true)).toBe(false);
+	});
+
+	// Three of the four real timeouts sat on the same incomplete tool call for the
+	// full twenty minutes, then printed the diagnostic that said so. Calling it at
+	// three reaches the same finding on the same evidence.
+	test("calls a session wedged once nothing changes while a call stays open", () => {
+		expect(isWedged(["bash:running"], 180_000, 180_000)).toBe(true);
+		expect(isWedged(["bash:running"], 200_000, 180_000)).toBe(true);
+	});
+
+	// The matrix spent 2.5h of wall clock on 2.5h of model time because it ran one
+	// attempt at a time. Only money would otherwise be the first thing to test the
+	// scheduler that fixes it, so the nesting it promises is proven here.
+	test("runs queues concurrently and every job in every queue", async () => {
+		const inFlight: string[] = [];
+		let peak = 0;
+		const run = async (job: string) => {
+			inFlight.push(job);
+			peak = Math.max(peak, inFlight.length);
+			await Bun.sleep(1);
+			inFlight.splice(inFlight.indexOf(job), 1);
+			return job;
+		};
+		const done = await runQueues(
+			[
+				["a1", "a2", "a3"],
+				["b1", "b2", "b3"],
+			],
+			2,
+			run,
+		);
+		expect(done.sort()).toEqual(["a1", "a2", "a3", "b1", "b2", "b3"]);
+		expect(peak).toBe(2);
+	});
+
+	test("never runs two jobs from one queue at once", async () => {
+		// The whole point of keying a queue by model: overlap inside one queue would
+		// race one provider's rate limit against itself.
+		let open = 0;
+		let overlapped = false;
+		await runQueues([["a1", "a2", "a3", "a4"]], 4, async () => {
+			open += 1;
+			if (open > 1) overlapped = true;
+			await Bun.sleep(1);
+			open -= 1;
+		});
+		expect(overlapped).toBe(false);
+	});
+
+	test("never idles a worker and never starves a queue", async () => {
+		// More workers than queues cannot help, and fewer must still drain every one.
+		const seen: number[] = [];
+		await runQueues([[1], [2], [3]], 2, async (job) => {
+			seen.push(job);
+		});
+		expect(seen.sort()).toEqual([1, 2, 3]);
+		expect(await runQueues([], 4, async (job) => job)).toEqual([]);
+	});
+
+	test("waits on a session that is slow rather than stopped", () => {
+		// Under the threshold the model may still be working, and no incomplete call
+		// means the session is between turns — the quiet window's business, not this
+		// one's, and ending it here would score a truncated run as a failure.
+		expect(isWedged(["bash:running"], 179_999, 180_000)).toBe(false);
+		expect(isWedged([], 600_000, 180_000)).toBe(false);
 	});
 });
 

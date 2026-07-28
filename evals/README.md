@@ -46,6 +46,16 @@ to skip the copy and rely on environment credentials only.
 `FLOW_EVAL_MODEL` accepts a comma-separated list as an alternative to `--model`.
 `FLOW_OPENCODE_SMOKE_VERSION` overrides the pinned host.
 
+Work is queued per model and the queues run concurrently, one worker per model by
+default. Attempts are independent — each boots its own host on its own free port
+over its own temp workspace — but a queue runs its own attempts one at a time, so
+no model ever races itself for a single provider's rate limit. The 63-run matrix
+spent 2.5h of wall clock on 2.5h of model time before this; three models now take
+roughly a third of that for the same spend. Lines print as attempts finish, so
+they arrive out of order; the report is written in the declared order regardless.
+`--concurrency 1` restores the sequential run, which is easier to read when you
+are debugging a single failure.
+
 Each run packs the working tree, boots a throwaway OpenCode host over a fresh
 git fixture, drives the real slash commands, then reads `.flow/session.json` and
 `.flow/history/`. Reports land in `evals/results/` (git-ignored).
@@ -292,16 +302,27 @@ different things:
   against the prompts. A scenario that sets `mayEscalate` is the exception: there
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
-- `ABORT` — a step blew the timeout. The message says whether the session was
-  `wedged` (no new message or part, with the incomplete tool calls named, each with
-  the first line of its command) or `still working` (producing output up to the
-  deadline, so looping rather than stuck). Tokens and tool calls collected before the
-  abort are kept. Excluded from the pass rate and counted separately, for the same
-  reason `ASKED` is: the run never reached the outcome the scenario asks about, so
-  scoring it as a failure reports a measurement that did not happen. One wedged
-  attempt was the only failing threshold in a recorded report. `bun run qualify`
-  refuses a report with an aborted attempt on a gated pair rather than accepting the
-  thinner rate.
+- `ABORT` — a step ended without going quiet, either `wedged` (no new message or
+  part while tool calls stayed incomplete, each named with the first line of its
+  command) or `still working` (producing output up to the deadline, so looping
+  rather than stuck). A wedge is called at three minutes of no change rather than
+  waited out to the twenty-minute deadline: three of the four recorded timeouts sat
+  on the same incomplete tool call for the full twenty and then printed exactly that
+  diagnostic, so the remaining seventeen minutes bought no evidence. Tokens and tool
+  calls collected before the abort are kept. Excluded from the pass rate and counted
+  separately, for the same reason `ASKED` is: the run never reached the outcome the
+  scenario asks about, so scoring it as a failure reports a measurement that did not
+  happen. One wedged attempt was the only failing threshold in a recorded report.
+  `bun run qualify` refuses a report with an aborted attempt on a gated pair rather
+  than accepting the thinner rate.
+
+`hostError` is only an error the harness did not cause. It aborts sessions itself —
+to end an escalation nothing answers, or at a deadline — and OpenCode stamps
+`MessageAbortedError` on the message it kills. Reporting that as a condition of the
+host put 92 abort records in front of the 4 real timeouts across 408 recorded runs,
+since escalating is the designed end of three scenarios. An abort error with no
+abort issued still reports, because then something outside the process ended the
+turn.
 
 Suspending the machine mid-run is credited back rather than charged to the
 model: an iteration that takes far longer than its own poll interval is time the

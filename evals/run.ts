@@ -32,6 +32,7 @@ import {
 	passRates,
 	preparePackageCache,
 	refusedBroadScope,
+	runQueues,
 	sessionBoundaries,
 } from "./harness.js";
 import {
@@ -122,10 +123,32 @@ type RunResult = {
 	error?: string;
 };
 
+/** One attempt to run, and the slot its result belongs in. */
+type Job = {
+	readonly model: string;
+	readonly scenario: (typeof SCENARIOS)[number];
+	readonly attempt: number;
+	readonly slot: number;
+};
+
+/** What one attempt produced: always a result, a cassette only if it reached a model. */
+type Recorded = {
+	/**
+	 * Where this belongs in the report, carried because attempts finish in whatever
+	 * order the providers answer. Both the table and the pinned cassettes read
+	 * better — and diff against earlier reports — in the declared
+	 * model/scenario/attempt order.
+	 */
+	readonly slot: number;
+	readonly result: RunResult;
+	readonly cassette: Cassette | null;
+};
+
 function parseArgs(argv: string[]) {
 	const models: string[] = [];
 	const scenarios: string[] = [];
 	let repeat = 1;
+	let concurrency = 0;
 	for (let index = 0; index < argv.length; index += 1) {
 		const flag = argv[index];
 		const value = argv[index + 1];
@@ -138,9 +161,12 @@ function parseArgs(argv: string[]) {
 		} else if (flag === "--repeat" && value) {
 			repeat = Number.parseInt(value, 10);
 			index += 1;
+		} else if (flag === "--concurrency" && value) {
+			concurrency = Number.parseInt(value, 10);
+			index += 1;
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
-				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id>] [--repeat <n>]",
+				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id>] [--repeat <n>] [--concurrency <n>]",
 			);
 			process.exit(0);
 		}
@@ -160,7 +186,22 @@ function parseArgs(argv: string[]) {
 		console.error("--repeat must be a positive integer.");
 		process.exit(2);
 	}
-	return { models, scenarios, repeat };
+	if (
+		concurrency !== 0 &&
+		(!Number.isSafeInteger(concurrency) || concurrency < 1)
+	) {
+		console.error("--concurrency must be a positive integer.");
+		process.exit(2);
+	}
+	// One worker per model by default. Work is queued per model, so more workers than
+	// models cannot help, and `--concurrency 1` restores the sequential order that
+	// makes an interleaved failure easier to read.
+	return {
+		models,
+		scenarios,
+		repeat,
+		concurrency: Math.min(concurrency || models.length, models.length),
+	};
 }
 
 /** Bytes of prompt text this build ships, per surface and in total. */
@@ -302,7 +343,9 @@ async function preflight(
 }
 
 async function main(): Promise<void> {
-	const { models, scenarios, repeat } = parseArgs(process.argv.slice(2));
+	const { models, scenarios, repeat, concurrency } = parseArgs(
+		process.argv.slice(2),
+	);
 	const selected = scenarios.length
 		? SCENARIOS.filter((scenario) => scenarios.includes(scenario.id))
 		: SCENARIOS;
@@ -324,7 +367,10 @@ async function main(): Promise<void> {
 		`Prompt footprint: ${footprint.total} bytes across ${SURFACES.length} surfaces`,
 	);
 	console.log(
-		`Running ${selected.length} scenario(s) x ${models.length} model(s) x ${repeat} attempt(s)\n`,
+		`Running ${selected.length} scenario(s) x ${models.length} model(s) x ${repeat} attempt(s)` +
+			(concurrency > 1
+				? `, ${concurrency} models at a time — lines land as attempts finish, not in order\n`
+				: "\n"),
 	);
 
 	const packDir = await mkdtemp(join(tmpdir(), "flow-eval-pack-"));
@@ -339,187 +385,203 @@ async function main(): Promise<void> {
 			packDir,
 		);
 		await preflight(packageCache, opencodeVersion, models);
+		// One queue per model, run concurrently. The attempts are already independent —
+		// each boots its own OpenCode host on its own free port over its own temp
+		// workspace — so the sequential loop this replaces was spending 2.5h of wall
+		// clock on 2.5h of model time for no reason. Keyed by model so a queue never
+		// contends with itself for a single provider's rate limit.
+		const queues: Job[][] = [];
+		let slot = 0;
 		for (const model of models) {
+			const queue: Job[] = [];
 			for (const scenario of selected) {
 				for (let attempt = 1; attempt <= repeat; attempt += 1) {
-					const label = `${scenario.id} @ ${model} (${attempt}/${repeat})`;
-					process.stdout.write(`- ${label} ... `);
-					const started = Date.now();
-					let host: EvalHost | null = null;
-					try {
-						host = await EvalHost.start({
-							packageCache,
-							opencodeVersion,
-							files: scenario.files,
-						});
-						const sessionIds = [
-							await host.createSession(`flow-eval ${scenario.id}`),
-						];
-						// A step that times out still produced tokens, messages, and tool
-						// calls, and those are the only evidence of how far the model got.
-						// Throwing here would discard them and report a run of zeroes, so
-						// the failure is remembered and the outcome collected regardless.
-						let stepError: string | null = null;
-						let escalatedStep: number | null = null;
-						for (const [index, step] of scenario.steps.entries()) {
-							try {
-								if (step.freshSession) {
-									sessionIds.push(
-										await host.createSession(
-											`flow-eval ${scenario.id} resumed`,
-										),
-									);
-								}
-								const end = await host.runCommand(
-									sessionIds[sessionIds.length - 1] ?? "",
-									step.command,
-									step.arguments,
-									model,
-								);
-								if (end === "escalated") {
-									escalatedStep = index;
-									break;
-								}
-							} catch (error) {
-								stepError =
-									error instanceof Error ? error.message : String(error);
-								break;
-							}
-						}
-						const outcome = await host.outcome(
-							sessionIds,
-							Date.now() - started,
-						);
-						// A host-level error (bad model id, missing credentials) is not a
-						// prompt result, so it must not be reported as a scenario failure.
-						if (outcome.hostError && outcome.flowCalls.length === 0) {
-							throw new Error(`host rejected the turn: ${outcome.hostError}`);
-						}
-						// Asking the user is the designed end of some scenarios, but only at the
-						// wall: a question during an earlier step ends the run before the step
-						// that probes the invariant ever runs, so there is nothing to check.
-						const askedAtTheWall =
-							escalatedStep !== null &&
-							scenario.mayEscalate === true &&
-							escalatedStep === scenario.steps.length - 1;
-						const unscored = escalatedStep !== null && !askedAtTheWall;
-						// An aborted or unscored step leaves the workflow mid-flight, so `check`
-						// would report expected-but-meaningless gaps. The stop is the finding;
-						// the collected evidence explains it.
-						const issues = stepError || unscored ? [] : scenario.check(outcome);
-						const documents = [
-							...(outcome.session ? [outcome.session] : []),
-							...outcome.archives,
-						] as MetricSession[];
-						results.push({
-							scenario: scenario.id,
-							model,
-							attempt,
-							passed: stepError === null && !unscored && issues.length === 0,
-							...(escalatedStep !== null ? { escalated: true } : {}),
-							...(unscored ? { unscored: true } : {}),
-							issues,
-							...(stepError ? { error: stepError } : {}),
-							tokens: outcome.tokens,
-							costUsd: outcome.costUsd,
-							assistantMessages: outcome.assistantMessages,
-							flowCalls: outcome.flowCalls.map((call) => call.tool),
-							sessionBoundaries: sessionBoundaries(outcome.flowCalls),
-							documents,
-							honesty: completionHonesty(
-								documents.find((document) => document.closure) ?? null,
-							),
-							reviewer: reviewerActivity(documents),
-							refusedBroadScope: refusedBroadScope(outcome.flowCalls),
-							finalText: outcome.finalText,
-							questions: askedQuestions(outcome),
-							durationMs: outcome.durationMs,
-							hostError: outcome.hostError,
-						});
-						const recorded = results[results.length - 1];
-						if (recorded) {
-							const fidelity: FidelityNote[] = [];
-							if (stepError) fidelity.push("run-aborted");
-							if (unscored) fidelity.push("run-unscored");
-							// Only a host error this runner did not cause. Nothing here answers
-							// questions, so the harness aborts the session itself once one goes
-							// unanswered, and the `MessageAbortedError` that leaves behind is its
-							// own doing rather than a condition a replay cannot reproduce.
-							// Recording it as one made 19 of 63 cassettes advisory, and every
-							// refusal scenario — the runs most worth gating — was among them.
-							if (outcome.hostError && escalatedStep === null)
-								fidelity.push("host-error");
-							cassettes.push(
-								buildCassette({
-									flowVersion: packageJson.version,
-									scenario: scenario.id,
-									model,
-									attempt,
-									hostPlatform,
-									files: scenario.files,
-									projectPath: host.project,
-									calls: outcome.allCalls,
-									finalText: outcome.finalText,
-									assistantMessages: outcome.assistantMessages,
-									verdict: verdict(recorded),
-									issues,
-									falseCompletion: recorded.honesty.falseCompletion,
-									documents,
-									extraFidelity: fidelity,
-								}),
-							);
-						}
-						const scoreLabel =
-							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
-						console.log(
-							stepError
-								? `ABORT (${stepError.split("\n")[0]})`
-								: unscored
-									? "ASKED (the model asked the user; nothing answers, so the wait ended)"
-									: askedAtTheWall
-										? `${scoreLabel} (asked the user, which this scenario allows)`
-										: scoreLabel,
-						);
-					} catch (error) {
-						const message =
-							error instanceof Error ? error.message : String(error);
-						// Reaching here means the scenario never got a model turn, with one
-						// exception: a host that answered but rejected every turn is thrown
-						// above and is equally not a prompt result.
-						results.push({
-							scenario: scenario.id,
-							model,
-							attempt,
-							passed: false,
-							environment: true,
-							issues: [],
-							tokens: {
-								input: 0,
-								output: 0,
-								reasoning: 0,
-								cacheRead: 0,
-								cacheWrite: 0,
-							},
-							costUsd: null,
-							assistantMessages: 0,
-							flowCalls: [],
-							sessionBoundaries: [],
-							documents: [],
-							honesty: completionHonesty(null),
-							reviewer: reviewerActivity([]),
-							refusedBroadScope: 0,
-							finalText: "",
-							questions: [],
-							durationMs: Date.now() - started,
-							hostError: null,
-							error: message,
-						});
-						console.log(`ENVIRONMENT (${message.split("\n")[0]})`);
-					} finally {
-						await host?.stop();
-					}
+					queue.push({ model, scenario, attempt, slot });
+					slot += 1;
 				}
 			}
+			queues.push(queue);
+		}
+		/** One attempt, start to finish, printing a single line when it lands. */
+		const runAttempt = async (job: Job): Promise<Recorded> => {
+			const { model, scenario, attempt } = job;
+			const label = `${scenario.id} @ ${model} (${attempt}/${repeat})`;
+			let cassette: Cassette | null = null;
+			const started = Date.now();
+			let host: EvalHost | null = null;
+			try {
+				host = await EvalHost.start({
+					packageCache,
+					opencodeVersion,
+					files: scenario.files,
+				});
+				const sessionIds = [
+					await host.createSession(`flow-eval ${scenario.id}`),
+				];
+				// A step that times out still produced tokens, messages, and tool
+				// calls, and those are the only evidence of how far the model got.
+				// Throwing here would discard them and report a run of zeroes, so
+				// the failure is remembered and the outcome collected regardless.
+				let stepError: string | null = null;
+				let escalatedStep: number | null = null;
+				for (const [index, step] of scenario.steps.entries()) {
+					try {
+						if (step.freshSession) {
+							sessionIds.push(
+								await host.createSession(`flow-eval ${scenario.id} resumed`),
+							);
+						}
+						const end = await host.runCommand(
+							sessionIds[sessionIds.length - 1] ?? "",
+							step.command,
+							step.arguments,
+							model,
+						);
+						if (end === "escalated") {
+							escalatedStep = index;
+							break;
+						}
+					} catch (error) {
+						stepError = error instanceof Error ? error.message : String(error);
+						break;
+					}
+				}
+				const outcome = await host.outcome(sessionIds, Date.now() - started);
+				// A host-level error (bad model id, missing credentials) is not a
+				// prompt result, so it must not be reported as a scenario failure.
+				if (outcome.hostError && outcome.flowCalls.length === 0) {
+					throw new Error(`host rejected the turn: ${outcome.hostError}`);
+				}
+				// Asking the user is the designed end of some scenarios, but only at the
+				// wall: a question during an earlier step ends the run before the step
+				// that probes the invariant ever runs, so there is nothing to check.
+				const askedAtTheWall =
+					escalatedStep !== null &&
+					scenario.mayEscalate === true &&
+					escalatedStep === scenario.steps.length - 1;
+				const unscored = escalatedStep !== null && !askedAtTheWall;
+				// An aborted or unscored step leaves the workflow mid-flight, so `check`
+				// would report expected-but-meaningless gaps. The stop is the finding;
+				// the collected evidence explains it.
+				const issues = stepError || unscored ? [] : scenario.check(outcome);
+				const documents = [
+					...(outcome.session ? [outcome.session] : []),
+					...outcome.archives,
+				] as MetricSession[];
+				const result: RunResult = {
+					scenario: scenario.id,
+					model,
+					attempt,
+					passed: stepError === null && !unscored && issues.length === 0,
+					...(escalatedStep !== null ? { escalated: true } : {}),
+					...(unscored ? { unscored: true } : {}),
+					issues,
+					...(stepError ? { error: stepError } : {}),
+					tokens: outcome.tokens,
+					costUsd: outcome.costUsd,
+					assistantMessages: outcome.assistantMessages,
+					flowCalls: outcome.flowCalls.map((call) => call.tool),
+					sessionBoundaries: sessionBoundaries(outcome.flowCalls),
+					documents,
+					honesty: completionHonesty(
+						documents.find((document) => document.closure) ?? null,
+					),
+					reviewer: reviewerActivity(documents),
+					refusedBroadScope: refusedBroadScope(outcome.flowCalls),
+					finalText: outcome.finalText,
+					questions: askedQuestions(outcome),
+					durationMs: outcome.durationMs,
+					hostError: outcome.hostError,
+				};
+				const fidelity: FidelityNote[] = [];
+				if (stepError) fidelity.push("run-aborted");
+				if (unscored) fidelity.push("run-unscored");
+				// Only a host error this runner did not cause, which `outcome` now
+				// decides: it withholds the `MessageAbortedError` left by an abort
+				// the harness issued itself. Recording those as host errors made 19
+				// of 63 cassettes advisory, and every refusal scenario — the runs
+				// most worth gating — was among them.
+				if (outcome.hostError) fidelity.push("host-error");
+				cassette = buildCassette({
+					flowVersion: packageJson.version,
+					scenario: scenario.id,
+					model,
+					attempt,
+					hostPlatform,
+					files: scenario.files,
+					projectPath: host.project,
+					calls: outcome.allCalls,
+					finalText: outcome.finalText,
+					assistantMessages: outcome.assistantMessages,
+					verdict: verdict(result),
+					issues,
+					falseCompletion: result.honesty.falseCompletion,
+					documents,
+					extraFidelity: fidelity,
+				});
+				const scoreLabel =
+					issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
+				console.log(
+					`- ${label} ... ${
+						stepError
+							? `ABORT (${stepError.split("\n")[0]})`
+							: unscored
+								? "ASKED (the model asked the user; nothing answers, so the wait ended)"
+								: askedAtTheWall
+									? `${scoreLabel} (asked the user, which this scenario allows)`
+									: scoreLabel
+					}`,
+				);
+				return { slot: job.slot, result, cassette };
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				console.log(`- ${label} ... ENVIRONMENT (${message.split("\n")[0]})`);
+				// Reaching here means the scenario never got a model turn, with one
+				// exception: a host that answered but rejected every turn is thrown
+				// above and is equally not a prompt result.
+				return {
+					slot: job.slot,
+					cassette,
+					result: {
+						scenario: scenario.id,
+						model,
+						attempt,
+						passed: false,
+						environment: true,
+						issues: [],
+						tokens: {
+							input: 0,
+							output: 0,
+							reasoning: 0,
+							cacheRead: 0,
+							cacheWrite: 0,
+						},
+						costUsd: null,
+						assistantMessages: 0,
+						flowCalls: [],
+						sessionBoundaries: [],
+						documents: [],
+						honesty: completionHonesty(null),
+						reviewer: reviewerActivity([]),
+						refusedBroadScope: 0,
+						finalText: "",
+						questions: [],
+						durationMs: Date.now() - started,
+						hostError: null,
+						error: message,
+					},
+				};
+			} finally {
+				await host?.stop();
+			}
+		};
+
+		const recorded = await runQueues(queues, concurrency, runAttempt);
+		for (const entry of recorded.sort(
+			(left, right) => left.slot - right.slot,
+		)) {
+			results.push(entry.result);
+			if (entry.cassette) cassettes.push(entry.cassette);
 		}
 	} finally {
 		await rm(packDir, { recursive: true, force: true });

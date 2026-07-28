@@ -28,6 +28,22 @@ import packageJson from "../package.json" with { type: "json" };
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const REQUEST_TIMEOUT_MS = 120_000;
+/** What OpenCode names the error it stamps on a message an abort killed. */
+const ABORT_ERROR_NAME = "MessageAbortedError";
+/**
+ * How long a session may make no progress at all before it is called wedged.
+ *
+ * Distinct from the whole-scenario deadline, which a wedge would otherwise wait
+ * out in full: three of the four recorded timeouts sat with the same incomplete
+ * tool call for twenty minutes, and the diagnostic the deadline printed said so.
+ * Once nothing has changed for this long while a call stays incomplete, waiting
+ * the remaining seventeen minutes buys no further evidence.
+ *
+ * Generous on purpose. It bounds a *silent* session, not a slow one — any new
+ * message or part resets it — so the only way to trip it honestly is a command
+ * that emits nothing for three minutes, which no scenario fixture does.
+ */
+const STALLED_MS = 3 * 60_000;
 
 /** A single tool invocation observed in the transcript. */
 export type ObservedToolCall = {
@@ -355,6 +371,79 @@ export function pendingCallLabel(part: {
  * both for a human judging whether asking was right and for a check that reads
  * whether the blocker was named at all.
  */
+/**
+ * Whether an error on an assistant message is one this harness caused.
+ *
+ * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
+ * escalation nothing here answers, or a deadline — and OpenCode stamps
+ * `MessageAbortedError` on the message it killed. Reporting that as a host error
+ * put 88 false alarms in front of the 4 real timeouts across 408 recorded runs,
+ * because escalating is the designed end of three scenarios.
+ *
+ * Attributed by the flag rather than by session id: aborting a parent kills its
+ * reviewer subtask too, and that child's abort has the same cause. It takes the
+ * flag as an argument because with no abort issued, an abort error is real news —
+ * something outside this process ended the turn.
+ */
+export function isSelfAbortError(
+	error: unknown,
+	selfAborted: boolean,
+): boolean {
+	if (!selfAborted || !error || typeof error !== "object") return false;
+	return (error as { name?: unknown }).name === ABORT_ERROR_NAME;
+}
+
+/**
+ * Whether a session has stopped rather than slowed.
+ *
+ * An incomplete tool call is what separates the two: with one outstanding and no
+ * new message or part for this long, nothing is coming, and the whole-scenario
+ * deadline would only reach the same finding with the same evidence after
+ * seventeen more minutes of it. With nothing outstanding the session is between
+ * turns, which is the quiet window's business, not this one's.
+ */
+export function isWedged(
+	pending: readonly string[],
+	unchangedMs: number,
+	thresholdMs: number,
+): boolean {
+	return pending.length > 0 && unchangedMs >= thresholdMs;
+}
+
+/**
+ * Runs `queues` with at most `concurrency` of them in flight, each queue in order.
+ *
+ * The nesting is the contract. Attempts across queues are independent — every one
+ * boots its own host on its own port over its own temp workspace — but a queue is
+ * keyed by model, and running its own jobs one at a time is what keeps it from
+ * racing itself for a single provider's rate limit. So queues go wide and jobs go
+ * deep, never the other way around.
+ */
+export async function runQueues<Job, Result>(
+	queues: readonly (readonly Job[])[],
+	concurrency: number,
+	run: (job: Job) => Promise<Result>,
+): Promise<Result[]> {
+	const results: Result[] = [];
+	let next = 0;
+	await Promise.all(
+		Array.from(
+			{ length: Math.max(1, Math.min(concurrency, queues.length)) },
+			async () => {
+				for (;;) {
+					// Read and advance in one synchronous step, so no two workers can claim
+					// the same queue.
+					const queue = queues[next];
+					next += 1;
+					if (!queue) return;
+					for (const job of queue) results.push(await run(job));
+				}
+			},
+		),
+	);
+	return results;
+}
+
 export function askedQuestions(outcome: Outcome): string[] {
 	return outcome.allCalls
 		.filter((call) => call.tool === "question")
@@ -573,6 +662,17 @@ export class EvalHost {
 	private server: ChildProcess | null = null;
 	private serverLog = "";
 	private baseUrl = "";
+	/**
+	 * Whether this harness aborted a session itself.
+	 *
+	 * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
+	 * escalation nothing here answers, or a deadline. OpenCode stamps
+	 * `MessageAbortedError` on the message it killed, and reporting that as a host
+	 * error puts 88 false alarms in front of the 4 real timeouts across 408
+	 * recorded runs: escalating is the designed end of three scenarios, so almost
+	 * every one of them carried it.
+	 */
+	private selfAborted = false;
 
 	readonly project: string;
 	private readonly scratch: string;
@@ -765,10 +865,11 @@ export class EvalHost {
 		command: string,
 		args: string,
 		model: string,
-		options: { quietMs?: number; timeoutMs?: number } = {},
+		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
+		const stalledMs = Math.min(options.stalledMs ?? STALLED_MS, timeoutMs);
 		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
 			command,
 			arguments: args,
@@ -839,29 +940,53 @@ export class EvalHost {
 			// attempts each burned their full twenty minutes producing nothing after the
 			// model asked.
 			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
-				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
-					() => {},
-				);
+				await this.abortSession(sessionId);
 				return "escalated";
 			}
-			if (Date.now() > deadline) {
-				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
-					() => {},
-				);
-				const stalledSeconds = Math.round((Date.now() - changedAt) / 1_000);
-				const [count = "0", parts = "0"] = signature.split(":");
-				const suspended =
-					suspendedMs > 0
-						? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
-						: "";
+			const stalled = Date.now() - changedAt;
+			const suspended =
+				suspendedMs > 0
+					? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
+					: "";
+			const wedged = (elapsedMs: number) =>
+				`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${pending.join(", ") || "none"}.`;
+			// A wedge is diagnosable long before the deadline, and the deadline used to
+			// prove it the slow way: three of the four recorded timeouts spent seventeen
+			// further minutes on the same incomplete tool call, then printed the sentence
+			// below. Ending it here reaches the same finding with the same evidence and
+			// hands the remaining attempts their wall clock back. Wedges are already out
+			// of every pass-rate denominator, so nothing scored changes.
+			if (isWedged(pending, stalled, stalledMs)) {
+				await this.abortSession(sessionId);
 				throw new Error(
-					(stalledSeconds * 1_000 >= quietMs
-						? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. No new message or part for ${stalledSeconds}s while these tool calls stayed incomplete: ${pending.join(", ") || "none"}.`
+					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedged(stalled)}${suspended}`,
+				);
+			}
+			if (Date.now() > deadline) {
+				await this.abortSession(sessionId);
+				const [count = "0", parts = "0"] = signature.split(":");
+				throw new Error(
+					(stalled >= quietMs
+						? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. ${wedged(stalled)}`
 						: `Scenario exceeded ${timeoutMs}ms without going quiet: still working. The session was producing output up to the deadline (${count} messages, ${parts} parts), so it was working or looping rather than stuck.`) +
 						suspended,
 				);
 			}
 		}
+	}
+
+	/**
+	 * Ends a wait this harness will not win, and remembers that it did.
+	 *
+	 * The flag is what keeps `outcome` from reporting Flow's own abort as a host
+	 * error. Set before the request rather than after it, because a rejected POST
+	 * does not mean the abort failed to land.
+	 */
+	private async abortSession(sessionId: string): Promise<void> {
+		this.selfAborted = true;
+		await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
+			() => {},
+		);
 	}
 
 	private async messages(sessionId: string): Promise<unknown> {
@@ -974,7 +1099,13 @@ export class EvalHost {
 					tokens.cacheRead += used.cache?.read ?? 0;
 					tokens.cacheWrite += used.cache?.write ?? 0;
 				}
-				if (entry.info.error && !hostError)
+				// An abort this harness issued is not a condition of the host, so it is
+				// not reported as one.
+				if (
+					entry.info.error &&
+					!hostError &&
+					!isSelfAbortError(entry.info.error, this.selfAborted)
+				)
 					hostError = JSON.stringify(entry.info.error);
 			}
 			for (const part of entry.parts) {
