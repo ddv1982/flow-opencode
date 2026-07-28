@@ -255,9 +255,9 @@ export function savePlan(
 	environment: TransitionEnvironment,
 ): MutationResult<null> {
 	assertPlan(input.plan);
-	assertDeclaredGate(input.plan);
-	assertDeclaredExternalEvidence(input.plan);
 	if (!session) {
+		assertDeclaredGate(input.plan);
+		assertDeclaredExternalEvidence(input.plan);
 		if (input.expectedRevision !== 0) {
 			fail("A new Flow session must start from expectedRevision 0.");
 		}
@@ -297,6 +297,13 @@ export function savePlan(
 		input,
 	);
 	if (replay) return { session, value: null, replayed: true };
+	// After the replay check, not before it. These two guards are new in this version,
+	// and a plan-save accepted by an earlier one could have carried no `gate` and no
+	// `externalEvidence`. Asserting first turned the retry of an already-accepted
+	// request into a refusal on upgrade, which is the one thing an idempotent operation
+	// id is for. A new write still has to declare both.
+	assertDeclaredGate(input.plan);
+	assertDeclaredExternalEvidence(input.plan);
 	assertRevision(session, input.expectedRevision);
 	assertMutable(session);
 	if (session.approval === "approved") fail("An approved plan is immutable.");

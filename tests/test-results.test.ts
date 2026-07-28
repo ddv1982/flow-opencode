@@ -119,8 +119,17 @@ describe("observing named test results", () => {
 		]);
 	});
 
-	test("reports nothing for an unparseable or empty report", () => {
-		for (const report of ["", "not xml at all", "<testsuites></testsuites>"]) {
+	test("reports nothing for an unparseable, empty, or suiteless report", () => {
+		// The last one is the fail-closed case: a bare `<testcase>` in text that is not a
+		// report -- a truncated write, a log quoting a case name -- must not name a
+		// declared case passed just because the element appears.
+		for (const report of [
+			"",
+			"not xml at all",
+			"<testsuites></testsuites>",
+			'<testcase name="anything"/>',
+			'garbage <testcase name="anything" classname="s"/> more garbage',
+		]) {
 			expect(observeAssertions(["anything"], report)).toEqual([
 				{ name: "anything", status: "absent" },
 			]);
@@ -185,10 +194,26 @@ describe("reading a report from the workspace", () => {
 		const root = await workspace();
 		try {
 			// The path is the caller's, so this is the one place a caller could reach
-			// outside the repository for something to call a result.
+			// outside the repository for something to call a result. Both cases write a
+			// real file first: `/etc/hosts` used to stand in for the absolute case and
+			// proved nothing, because `join(root, "/etc/hosts")` lands *inside* the
+			// workspace and the assertion passed only because nothing was there.
+			const outside = join(root, "..", "outside.xml");
+			await writeFile(outside, '<testsuite><testcase name="x"/></testsuite>');
 			expect(await readWorkspaceTestReport(root, "../outside.xml")).toBeNull();
-			expect(await readWorkspaceTestReport(root, "/etc/hosts")).toBeNull();
+			expect(await readWorkspaceTestReport(root, outside)).toBeNull();
+			// And the containment check must still admit what it is for. This is the
+			// assertion that fails when a POSIX prefix test is used on Windows.
+			await mkdir(join(root, "nested"), { recursive: true });
+			await writeFile(
+				join(root, "nested", "report.xml"),
+				'<testsuite><testcase name="ok"/></testsuite>',
+			);
+			expect(
+				await readWorkspaceTestReport(root, "nested/report.xml"),
+			).not.toBeNull();
 		} finally {
+			await rm(join(root, "..", "outside.xml"), { force: true });
 			await rm(root, { recursive: true, force: true });
 		}
 	});

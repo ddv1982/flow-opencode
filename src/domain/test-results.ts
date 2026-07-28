@@ -69,6 +69,13 @@ function labels(attributes: Record<string, string>): string[] {
 	];
 }
 
+/** Every declared name, unobserved. The shape of every fail-closed route. */
+function absent(declared: readonly string[]): ObservedAssertion[] {
+	return declared
+		.slice(0, MAX_DECLARED_ASSERTIONS)
+		.map((name) => ({ name, status: "absent" as const }));
+}
+
 /**
  * Outcomes for the declared names, and nothing else: a full case inventory would put
  * an unbounded copy of someone's suite into durable state to answer a question about
@@ -79,6 +86,12 @@ export function observeAssertions(
 	report: string,
 ): ObservedAssertion[] {
 	const outcomes = new Map<string, "passed" | "failed" | "skipped">();
+	// A bare `<testcase>` is not a report. Without this, any text containing one --
+	// a truncated write, a log that quoted a case name, a file that is not JUnit at
+	// all -- could name a declared case `passed`, and this rule exists to fail closed.
+	// Every JUnit writer wraps cases in a suite, so requiring the wrapper costs
+	// nothing real and makes a fragment read `absent` instead of satisfying anything.
+	if (!/<testsuites?\b/.test(report)) return absent(declared);
 	for (const match of report.matchAll(TESTCASE)) {
 		const body = match[3] ?? "";
 		const status = NEGATIVE.test(body)

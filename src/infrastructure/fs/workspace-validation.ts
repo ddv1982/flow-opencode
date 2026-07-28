@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
 	type ObservedValidation,
 	persistObservedValidation,
@@ -34,7 +34,14 @@ export async function readWorkspaceTestReport(
 ): Promise<{ text: string; modifiedMs: number } | null> {
 	const root = resolve(workspace);
 	const target = resolve(join(root, relativePath));
-	if (target !== root && !target.startsWith(`${root}/`)) return null;
+	// `relative`, not a prefix test: `resolve` yields `C:\ws\report.xml` on Windows,
+	// which never starts with `C:\ws/`, so a prefix test rejected every legitimate
+	// report there. That failed *closed* into recording each declared case `absent`,
+	// which is the wrong closed: it made the one platform this evidence rule exists
+	// for the one platform where no report could ever satisfy it.
+	const inside = relative(root, target);
+	if (inside === "" || isAbsolute(inside) || inside.split(/[\\/]/)[0] === "..")
+		return null;
 	const info = await stat(target).catch(() => null);
 	if (!info?.isFile() || info.size > MAX_TEST_REPORT_BYTES) return null;
 	return { text: await readFile(target, "utf8"), modifiedMs: info.mtimeMs };

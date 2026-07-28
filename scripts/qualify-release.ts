@@ -286,6 +286,32 @@ export function qualificationFailures(report: Report): string[] {
 			);
 		}
 	}
+	// Per gated scenario, not across the report. The count above reads every result row,
+	// so a full matrix run on one provider merged with a second provider's re-run of a
+	// single pair satisfied it while every remaining gated guarantee rested on one
+	// vendor. The claim is that each gated scenario held for two providers, so that is
+	// what gets counted — and only pairs with a scored attempt count, because a pair
+	// whose every attempt was excluded measured nothing.
+	const perScenario = new Map<string, Set<string>>();
+	for (const [label, rate] of Object.entries(rates)) {
+		const scenario = label.split(" @ ")[0] ?? label;
+		if (PASS_RATE_THRESHOLDS[scenario] == null || rate.attempts === 0) continue;
+		const model = label.split(" @ ")[1] ?? "";
+		for (const provider of providers([model])) {
+			(
+				perScenario.get(scenario) ??
+				perScenario.set(scenario, new Set()).get(scenario)
+			)?.add(provider);
+		}
+	}
+	for (const [scenario, covered] of perScenario) {
+		if (covered.size < MIN_PROVIDERS) {
+			failures.push(
+				`scenario '${scenario}' was measured by ${covered.size} provider(s) (${[...covered].join(", ") || "none"}); each gated scenario needs ${MIN_PROVIDERS}, so a merged report cannot rest one guarantee on a single vendor`,
+			);
+		}
+	}
+
 	for (const [label, rate] of Object.entries(rates)) {
 		const scenario = label.split(" @ ")[0] ?? label;
 		const threshold = PASS_RATE_THRESHOLDS[scenario];

@@ -85,8 +85,12 @@ describe("release qualification", () => {
 		const failures = qualificationFailures(
 			report({ models: ["anthropic/claude-opus-5"] }),
 		);
-		expect(failures).toHaveLength(1);
 		expect(failures[0]).toContain("at least 2");
+		// And once per gated scenario, because the report-wide count is not the claim:
+		// each gated guarantee is the thing that has to have held for two vendors.
+		expect(
+			failures.filter((failure) => failure.includes("was measured by")),
+		).toHaveLength(GATED.length);
 	});
 
 	test("splits a gateway model id on its first slash only", () => {
@@ -336,6 +340,31 @@ describe("merging a re-run into a matrix", () => {
 		const merged = mergeReports([base(), rerun()]).report;
 		expect((merged.results ?? []).map((result) => result.scenario)).toEqual(
 			expect.arrayContaining(GATED),
+		);
+	});
+
+	test("refuses a merge that rests a gated scenario on one vendor", () => {
+		// The hole the merge opened: provider count came from the union of result rows,
+		// so a full matrix on one vendor plus another vendor's re-run of a single pair
+		// cleared the two-provider bar while every other gated guarantee rested on one.
+		const single = report({ models: ["anthropic/claude-opus-5"] });
+		const merged = mergeReports([
+			{
+				...single,
+				summary: {
+					...single.summary,
+					passRates: { ...single.summary.passRates, ...WEDGED },
+				},
+			},
+			rerun({ models: ["openai/gpt-5.6"] }),
+		]);
+		expect(merged.failures).toEqual([]);
+		const failures = qualificationFailures(merged.report);
+		expect(failures.join()).toContain("single vendor");
+		// The union still reads as two providers, which is exactly why the report-wide
+		// count could not be the check.
+		expect(failures.some((failure) => failure.includes(`at least ${2}`))).toBe(
+			false,
 		);
 	});
 
