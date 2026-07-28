@@ -148,8 +148,23 @@ export type Outcome = {
 	readonly hostError: string | null;
 };
 
+/**
+ * One measurable claim about Flow, and everything needed to price it.
+ *
+ * The shape is deliberately small, because a scenario is an experiment and the
+ * suite's credibility rests on each one being readable in a sitting: a fixture, a
+ * sequence of commands, and a `check` that turns a finished run into a list of
+ * failures. Anything a scenario cannot express in those terms is a scenario that
+ * measures the harness instead of the product.
+ *
+ * The two optional fields are both about what a run is *allowed* to do, since a
+ * scenario that scores every unusual ending as a failure reports prompt defects
+ * that are not there.
+ */
 export type Scenario = {
+	/** Stable across runs: report rows, cassette names, and the gate index it. */
 	readonly id: string;
+	/** The claim in one sentence, printed beside the rate it produced. */
 	readonly description: string;
 	/** Files seeded into the fixture repository before the first command. */
 	readonly files: Readonly<Record<string, string>>;
@@ -218,6 +233,13 @@ export type CredentialSync = {
 	readonly snapshot: string | null;
 };
 
+/**
+ * The two ends of the credential copy: the developer's real file, and the child's.
+ *
+ * `XDG_DATA_HOME` is read from the *parent* environment rather than the child's,
+ * which is the point — the child's is deliberately redirected into scratch, so
+ * resolving the source there would find the empty copy instead of the original.
+ */
 function providerCredentialPaths(childData: string): {
 	source: string;
 	target: string;
@@ -419,6 +441,13 @@ export async function syncProviderCredentialsBack(
  */
 const reservedPorts = new Set<number>();
 
+/**
+ * A loopback port no host in this process has been given yet.
+ *
+ * Bounded retries rather than a loop, because the kernel handing out a port this
+ * process already reserved is a collision to skip, while twenty of them in a row
+ * means something else is wrong and a hang would be the worst way to report it.
+ */
 async function availablePort(): Promise<number> {
 	for (let attempt = 0; attempt < 20; attempt += 1) {
 		const server = createServer();
@@ -440,6 +469,13 @@ async function availablePort(): Promise<number> {
 	throw new Error("Could not reserve a local port.");
 }
 
+/**
+ * A GET against the child host, with a non-2xx raised rather than returned.
+ *
+ * The body is read into the error on purpose: a failing host request is a harness
+ * defect or a dead server, and the status alone has never been enough to tell
+ * those apart from a scenario's own output.
+ */
 async function fetchJson(
 	url: string,
 	timeout = REQUEST_TIMEOUT_MS,
@@ -453,6 +489,7 @@ async function fetchJson(
 	return response.json();
 }
 
+/** `fetchJson` for the requests that drive a session, with the same error rule. */
 async function postJson(
 	url: string,
 	body: unknown,
@@ -713,9 +750,22 @@ export function passRates(
 	return [...rates];
 }
 
+/**
+ * One scenario-and-model pair's result, kept as four numbers rather than a ratio.
+ *
+ * The distinctions are the whole point, and collapsing any of them into the
+ * denominator is a defect this suite has already shipped once. `attempts` counts
+ * only what was scored, so it is not `passed + failed` plus everything else:
+ * `unscored` is an attempt the scenario refused to judge, and `aborted` one that
+ * never finished. Both are reasons to re-run a pair, not a smaller sample of it —
+ * an excluded attempt once shrank a pair to two and let it clear a 100% threshold
+ * on the two that remained.
+ */
 export type PassRate = {
 	passed: number;
+	/** Attempts that produced a judgeable result, which is the only honest base. */
 	attempts: number;
+	/** Attempts the scenario declined to score, e.g. an ask it does not allow. */
 	unscored: number;
 	/** Attempts that never finished: a wedge, a timeout, a lost turn. */
 	aborted: number;
@@ -814,6 +864,13 @@ export async function preparePackageCache(
 	return cache;
 }
 
+/**
+ * One message as the host's HTTP API returns it, narrowed to what scoring reads.
+ *
+ * Declared rather than imported because it is another process's wire format, and a
+ * host upgrade that drops a field should surface here as a scoring change to think
+ * about — not as a type error in a dependency, and not as a silent zero.
+ */
 type MessageEntry = {
 	info: {
 		role: string;

@@ -7,6 +7,15 @@
 
 import { askedQuestions, type Outcome, type Scenario } from "./harness.js";
 
+/**
+ * The Session v5 document, narrowed to the fields the checks actually read.
+ *
+ * A partial mirror on purpose. Importing Flow's own schema would let a check assert
+ * against the types the product was built from, which is how a scenario stops being
+ * an independent measurement: the eval has to describe the document it expects to
+ * find on disk, so a rename that breaks the contract fails a check rather than
+ * silently travelling through it.
+ */
 type PlanFeature = { id: string; title: string };
 type Review = {
 	kind: string;
@@ -32,6 +41,14 @@ type SessionDoc = {
 	closure: { kind: string } | null;
 };
 
+/**
+ * A parsed `.flow/` document read as the shape above, without validating it.
+ *
+ * An unchecked cast, and deliberately so: every field access below is optional or
+ * guarded, so a document that does not match reads as absent and fails the check
+ * that needed it. Validating here would turn a wrong document into a harness crash
+ * and cost the attempt, when a wrong document is exactly the finding.
+ */
 function asSession(
 	document: Record<string, unknown> | null,
 ): SessionDoc | null {
@@ -49,6 +66,7 @@ function closedDocument(outcome: Outcome): SessionDoc | null {
 	return null;
 }
 
+/** Flow tool names in call order, for checks about which step ran and when. */
 function calledTools(outcome: Outcome): string[] {
 	return outcome.flowCalls.map((call) => call.tool);
 }
@@ -207,6 +225,14 @@ function allSessions(outcome: Outcome): SessionDoc[] {
 	];
 }
 
+/**
+ * The smallest repository a scenario can be measured in: one function, one test,
+ * one passing gate.
+ *
+ * Shared by most scenarios so that what differs between them is the goal and not
+ * the terrain. Kept trivially green on purpose — a fixture that starts red cannot
+ * distinguish work the model broke from work it never did.
+ */
 const HELLO_FIXTURE: Record<string, string> = {
 	"package.json": `${JSON.stringify(
 		{
@@ -330,6 +356,14 @@ const BROKEN_GATE_FIXTURE: Record<string, string> = {
 	"src/invariant.test.ts": `import { expect, test } from "bun:test";\n\n// Pre-existing red test. The goal below does not authorize changing it.\ntest("pre-existing repository invariant", () => {\n\texpect(2 + 2).toBe(5);\n});\n`,
 };
 
+/**
+ * Every claim the suite measures, in the order a report prints them.
+ *
+ * Adding one has a cost the gate makes explicit: `scripts/qualify-release.ts` fails
+ * a release for any scenario with no published threshold, so a new scenario forces a
+ * decision about what its rate is allowed to mean before it can ship — entered as
+ * ungated until a full matrix gives it a baseline.
+ */
 export const SCENARIOS: readonly Scenario[] = [
 	{
 		id: "happy-path",

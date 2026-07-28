@@ -9,6 +9,7 @@ import { SCENARIOS } from "../evals/scenarios.js";
 // defect. These replay the recorded shapes of that run, so the next wrong branch
 // costs a test run instead of a matrix.
 
+/** A finished run with nothing in it, so each test states only what it is about. */
 function outcome(overrides: Partial<Outcome>): Outcome {
 	return {
 		flowCalls: [],
@@ -25,6 +26,7 @@ function outcome(overrides: Partial<Outcome>): Outcome {
 	};
 }
 
+/** A recorded `question` call, which is how a run ends by asking the user. */
 function question(text: string) {
 	return {
 		tool: "question",
@@ -78,6 +80,13 @@ function session(document: {
 	};
 }
 
+/**
+ * Runs the shipped scenario's own `check`, found by id.
+ *
+ * By id rather than by importing the function, because a scenario that is renamed
+ * or dropped has to fail here too: a copy of the check would keep passing after the
+ * suite stopped containing the thing it proves.
+ */
 function check(id: string, given: Outcome): readonly string[] {
 	const scenario = SCENARIOS.find((candidate) => candidate.id === id);
 	if (!scenario) throw new Error(`no scenario ${id}`);
