@@ -361,14 +361,24 @@ and the step ends as soon as the session goes quiet holding one. Four recorded
 attempts each burned their full twenty minutes in that state before it was
 reported apart.
 
-Whether asking was right is the whole question, and it is scenario-specific. Two
+Whether asking was right is the whole question, and it is scenario-specific. Six
 scenarios set `mayEscalate` because the contract leaves the model no move of its
 own: a gate that cannot pass makes `completed` closure unavailable, and every other
 closure needs authority only the user can grant (`skills/flow-run/SKILL.md`). There
 asking is the intended end, and their checks hold on it — the blocker may be named
 in the question instead of a closing summary, and the invariant is what the model
-did *not* do. It counts only when the last step asked; a question during an earlier
-step ends the run before the step that probes the invariant ever runs.
+did *not* do.
+
+`mayEscalate` is consulted only for a question the *last* step ended on, because
+that is the only one nothing answers. A question during an earlier step is carried
+through: the runner aborts the pending turn, runs the next step, and that step's
+prompt is the answer. Three scenarios open with `flow-plan`, where asking for
+approval is exactly what `plan-only-stops` gates at 100%, and the step after it says
+"you have my approval". Excluding those attempts was measured wrong at 7.0.2 — one
+`continuation-accepted` attempt asked correctly, went unscored, and left the pair
+with two scored attempts against a floor of three, so a run that did nothing wrong
+would have failed qualification. Two of the three affected scenarios are gated at
+100%.
 
 `mayEscalate` is not a prediction that the model will call the `question` tool.
 Asking in closing prose satisfies the same contract, and only a tool call ends a
@@ -382,7 +392,7 @@ the blocker and stopping fails it, which one measured attempt did while satisfyi
 every other assertion. (Where the ask itself must be visible, `goal-change-refused` is
 the scenario that produces one.)
 
-Everywhere else an ask is excluded and left to you. Where the prompt already
+Everywhere else an ask at the wall is excluded and left to you. Where the prompt already
 granted authority to proceed, stopping to ask is closer to a defect than to
 caution. The report records every question, so read those and the run's
 `finalText` before concluding anything about the prompts.

@@ -81,12 +81,37 @@ export type ObservedToolCall = {
  * How a step's wait ended.
  *
  * `escalated` means the model asked the user and stopped. That is often the right
- * move — it is what a model should do when a gate cannot pass — but nothing here
- * answers, so the session can never progress and its durable state is mid-flight
- * by definition. It is reported apart from a pass or a failure rather than waited
- * out and scored as one.
+ * move — it is what a model should do when a gate cannot pass, or after saving a
+ * plan it wants approved — but nothing in this wait answers, so the turn is aborted
+ * before returning. Whether that ends the run is the runner's call, not this one's:
+ * a scenario with a step still to come answers the question with that step's prompt,
+ * and only a question the last step ends on leaves the state mid-flight by
+ * definition. That case is reported apart from a pass or a failure rather than
+ * waited out and scored as one.
  */
 export type CommandEnd = "quiet" | "escalated";
+
+/**
+ * What the questions a run asked mean for its result.
+ *
+ * A question the final step ended on has nothing left to answer it, so the durable
+ * state is mid-flight: that is scored only where the scenario declared asking an
+ * acceptable end. A question during an earlier step is not an exclusion — the runner
+ * carries the run into the next step, whose prompt is the answer. Three scenarios
+ * open with `flow-plan`, where asking for approval is the behaviour `plan-only-stops`
+ * gates at 100%; excluding those attempts cost a correct run its score, and cost a
+ * gated pair needing three scored attempts its qualification.
+ */
+export function askedScoring(
+	escalatedSteps: readonly number[],
+	stepCount: number,
+	mayEscalate: boolean,
+): { readonly escalated: boolean; readonly unscored: boolean } {
+	return {
+		escalated: escalatedSteps.length > 0,
+		unscored: escalatedSteps.includes(stepCount - 1) && !mayEscalate,
+	};
+}
 
 /** Everything a scenario is allowed to assert against. */
 export type Outcome = {
@@ -150,9 +175,9 @@ export type Scenario = {
 	 * Set it where the contract leaves the model no move of its own: a gate that
 	 * cannot pass makes `completed` closure unavailable, and any other closure needs
 	 * authority only the user can grant, so asking is the correct end — not a
-	 * missing result. It counts only when the *last* step asked, because a question
-	 * during an earlier step ends the run before the step that probes the invariant
-	 * ever runs.
+	 * missing result. It is consulted only for a question the *last* step ended on:
+	 * an earlier step's question is answered by the step after it, so it needs no
+	 * permission here and costs the attempt nothing.
 	 */
 	readonly mayEscalate?: boolean;
 	/** Returns a list of failures. Empty means the scenario passed. */

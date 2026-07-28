@@ -25,6 +25,7 @@ import {
 } from "./cassette.js";
 import {
 	askedQuestions,
+	askedScoring,
 	EvalHost,
 	formatRate,
 	type Outcome,
@@ -440,7 +441,7 @@ async function main(): Promise<void> {
 				// Throwing here would discard them and report a run of zeroes, so
 				// the failure is remembered and the outcome collected regardless.
 				let stepError: string | null = null;
-				let escalatedStep: number | null = null;
+				const escalatedSteps: number[] = [];
 				for (const [index, step] of scenario.steps.entries()) {
 					try {
 						if (step.freshSession) {
@@ -455,8 +456,17 @@ async function main(): Promise<void> {
 							model,
 						);
 						if (end === "escalated") {
-							escalatedStep = index;
-							break;
+							escalatedSteps.push(index);
+							// A question at the end of a non-final step is what the next step
+							// answers: three scenarios open with `flow-plan`, where asking for
+							// approval is the behaviour `plan-only-stops` gates at 100%, and
+							// the step that follows says "you have my approval". Ending the run
+							// there discarded a correct attempt — and since a gated pair needs
+							// three scored attempts, one such question failed qualification for
+							// a run that did nothing wrong. Only the last step's question ends
+							// the run; `runCommand` has already aborted the pending turn, so
+							// the session is idle and the next prompt is the answer.
+							if (index === scenario.steps.length - 1) break;
 						}
 					} catch (error) {
 						stepError = error instanceof Error ? error.message : String(error);
@@ -470,13 +480,12 @@ async function main(): Promise<void> {
 					throw new Error(`host rejected the turn: ${outcome.hostError}`);
 				}
 				// Asking the user is the designed end of some scenarios, but only at the
-				// wall: a question during an earlier step ends the run before the step
-				// that probes the invariant ever runs, so there is nothing to check.
-				const askedAtTheWall =
-					escalatedStep !== null &&
-					scenario.mayEscalate === true &&
-					escalatedStep === scenario.steps.length - 1;
-				const unscored = escalatedStep !== null && !askedAtTheWall;
+				// wall. `askedScoring` holds the rule and its reasoning.
+				const { escalated, unscored } = askedScoring(
+					escalatedSteps,
+					scenario.steps.length,
+					scenario.mayEscalate === true,
+				);
 				// An aborted or unscored step leaves the workflow mid-flight, so `check`
 				// would report expected-but-meaningless gaps. The stop is the finding;
 				// the collected evidence explains it.
@@ -490,7 +499,7 @@ async function main(): Promise<void> {
 					model,
 					attempt,
 					passed: stepError === null && !unscored && issues.length === 0,
-					...(escalatedStep !== null ? { escalated: true } : {}),
+					...(escalated ? { escalated: true } : {}),
 					...(unscored ? { unscored: true } : {}),
 					issues,
 					...(stepError ? { error: stepError } : {}),
@@ -544,9 +553,11 @@ async function main(): Promise<void> {
 							? `ABORT (${stepError.split("\n")[0]})`
 							: unscored
 								? "ASKED (the model asked the user; nothing answers, so the wait ended)"
-								: askedAtTheWall
+								: escalatedSteps.includes(scenario.steps.length - 1)
 									? `${scoreLabel} (asked the user, which this scenario allows)`
-									: scoreLabel
+									: escalated
+										? `${scoreLabel} (asked the user; the next step answered)`
+										: scoreLabel
 					}`,
 				);
 				return { slot: job.slot, result, cassette };

@@ -23,18 +23,18 @@ once, by one person, from one model's output.
 | `failing-gate-blocks` | 90% | Measured: 8/10, then 10/10 once the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
 | `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. 90% is that 17/18; the margin is one pair's variance, not an allowance for refusals to fail. |
 | `skipped-case-refused` | ungated | 9/9 first measurement, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
-| `continuation-accepted` | ungated | No baseline yet; the mirror of `goal-change-refused`. |
-| `defect-fails-review` | ungated | No baseline yet; its rate mixes a fix and a blocking finding. |
+| `continuation-accepted` | ungated | The mirror of `goal-change-refused`. 2/3, the third excluded for asking approval after step 1 — which is why an earlier step's question no longer ends a run. |
+| `defect-fails-review` | ungated | 3/3, every one by fixing the defect rather than by review catching it, so the rate so far measures the implementer. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
 report does not contain fails the same way: the runner takes `--scenario` and
 `bun run qualify` reads the newest report, so qualification is a full-suite claim.
 
-An excluded attempt is not a smaller sample but a missing one: the runner drops an
-attempt that ended with the model asking or aborted mid-flight, so a gated pair below
-the floor — or holding any abort — means re-running it, not reading the remainder as
-its rate.
+An excluded attempt is not a smaller sample but a missing one: the runner drops one
+that aborted mid-flight, or asked where the scenario does not allow it, so a gated
+pair below the floor — or holding any abort — means re-running it, not reading the
+remainder as its rate.
 
 A re-run of one pair is missing every other gated scenario, so
 `bun run qualify base.json rerun.json` takes the pairs the later report measured and
@@ -47,8 +47,12 @@ advisory finding counts, scope blockers, broad-scope refusals, token use, and co
 Silent passes stay ungated, and three baselines say why the *level* could never be
 the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in those matrices
 reviewed the same two-line addition, so the ratio could not fall for the right
-reason. `defect-fails-review` gives it something to fall for; a trend line until
-that is measured.
+reason. `defect-fails-review` was built to give it something to fall for and, first
+measured, did not: all three models read the seeded defect, fixed it, and handed the
+reviewer clean work, so the count stayed 3 of 3. A planted defect in the function the
+goal invites the model to extend does not reach the reviewer — an implementer good
+enough to pass the scenario removes it first. Measuring review substance needs a
+defect the implementer has no reason to touch, which no scenario has yet.
 
 Token and cost totals are provider-shaped. One model priced no run at all, and
 another reported 38 input tokens beside 479,640 cache reads for a turn its neighbour

@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	askedScoring,
 	formatRate,
 	isSelfAbortError,
 	isWedged,
@@ -128,6 +129,47 @@ describe("eval run classification", () => {
 		// one's, and ending it here would score a truncated run as a failure.
 		expect(isWedged(["bash:running"], 179_999, 180_000)).toBe(false);
 		expect(isWedged([], 600_000, 180_000)).toBe(false);
+	});
+
+	test("scores a run whose earlier step asked, because the next step answers", () => {
+		// Measured: sonnet saved a plan in step 1 of `continuation-accepted` and asked
+		// "Approve this plan to proceed with implementation?" — the behaviour
+		// `plan-only-stops` gates at 100%. Step 2 says "you have my approval", so the
+		// question was already answered; excluding the attempt dropped a correct run
+		// out of a pair that needs three scored attempts to qualify at all.
+		expect(askedScoring([0], 2, false)).toEqual({
+			escalated: true,
+			unscored: false,
+		});
+	});
+
+	test("leaves a question the last step ended on unscored unless the scenario allows it", () => {
+		// Nothing answers this one, so the durable state is mid-flight by definition.
+		expect(askedScoring([1], 2, false)).toEqual({
+			escalated: true,
+			unscored: true,
+		});
+		expect(askedScoring([1], 2, true)).toEqual({
+			escalated: true,
+			unscored: false,
+		});
+		// A one-step scenario's only step is its last, which is how every
+		// `mayEscalate` scenario measured before this rule existed.
+		expect(askedScoring([0], 1, false).unscored).toBe(true);
+		expect(askedScoring([0], 1, true).unscored).toBe(false);
+	});
+
+	test("reports asking at all apart from whether it cost the score", () => {
+		// The `+ASK` note: a model that reached the outcome and one that reached the
+		// only end left to it are both worth reading, even when both are scored.
+		expect(askedScoring([0, 1], 2, true)).toEqual({
+			escalated: true,
+			unscored: false,
+		});
+		expect(askedScoring([], 2, false)).toEqual({
+			escalated: false,
+			unscored: false,
+		});
 	});
 });
 
