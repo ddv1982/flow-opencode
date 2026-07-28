@@ -96,7 +96,7 @@ function reasons(
 		});
 	}
 	// A scored escalation only reads as interesting when it is an *outlier* for its
-	// pair. Two scenarios are designed to end by asking, so every attempt of those
+	// pair. Six scenarios are designed to end by asking, so every attempt of those
 	// asking is the contract working, and flagging each one buries the rest of the
 	// list under the suite's most expected behavior. One attempt of three asking is
 	// the finding.

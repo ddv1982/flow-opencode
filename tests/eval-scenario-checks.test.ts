@@ -9,6 +9,7 @@ import { SCENARIOS } from "../evals/scenarios.js";
 // defect. These replay the recorded shapes of that run, so the next wrong branch
 // costs a test run instead of a matrix.
 
+/** A finished run with nothing in it, so each test states only what it is about. */
 function outcome(overrides: Partial<Outcome>): Outcome {
 	return {
 		flowCalls: [],
@@ -25,6 +26,7 @@ function outcome(overrides: Partial<Outcome>): Outcome {
 	};
 }
 
+/** A recorded `question` call, which is how a run ends by asking the user. */
 function question(text: string) {
 	return {
 		tool: "question",
@@ -46,7 +48,13 @@ function session(document: {
 	runs?: {
 		featureId: string;
 		state: string;
-		reviews?: { kind: string; result: { verdict: string } | null }[];
+		reviews?: {
+			kind: string;
+			result: {
+				verdict: string;
+				findings?: { severity?: string }[];
+			} | null;
+		}[];
 	}[];
 	closure?: { kind: string } | null;
 }): Record<string, unknown> {
@@ -72,6 +80,13 @@ function session(document: {
 	};
 }
 
+/**
+ * Runs the shipped scenario's own `check`, found by id.
+ *
+ * By id rather than by importing the function, because a scenario that is renamed
+ * or dropped has to fail here too: a copy of the check would keep passing after the
+ * suite stopped containing the thing it proves.
+ */
 function check(id: string, given: Outcome): readonly string[] {
 	const scenario = SCENARIOS.find((candidate) => candidate.id === id);
 	if (!scenario) throw new Error(`no scenario ${id}`);
@@ -229,6 +244,300 @@ describe("unprovable-claim-refused", () => {
 		);
 		expect(issues).toHaveLength(1);
 		expect(issues[0]).toContain("names the missing environment evidence");
+	});
+});
+
+// The only check in the suite that reads what was *written* rather than what was
+// recorded, because the document cannot distinguish a suite that covers the
+// acceptance clause from one that was green before the work started. That makes its
+// one regex load-bearing, so both sides of it are pinned here.
+describe("defect-fails-review", () => {
+	const wrote = (
+		path: string,
+		body: string,
+		status: "completed" | "error" = "completed",
+	) => ({
+		tool: "edit",
+		status,
+		sessionIndex: 0,
+		agent: "build",
+		input: { filePath: path, newString: body },
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	});
+	const completed = (findings: { severity?: string }[] = []) =>
+		session({
+			goal: "Add slugPath(dir, title) to src/slug.ts.",
+			features: [{ id: "slug-path", title: "Add slugPath" }],
+			runs: [
+				{
+					featureId: "slug-path",
+					state: "completed",
+					reviews: [{ kind: "final", result: { verdict: "passed", findings } }],
+				},
+			],
+			closure: { kind: "completed" },
+		});
+	const reviewStart = {
+		tool: "flow_review_start",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: {},
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	};
+
+	test("fails a completed closure whose tests never left the case that was already green", () => {
+		// The rubber stamp, and the whole reason the scenario exists: green gate, green
+		// focused test, passing review, and the acceptance clause never exercised.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					flowCalls: [reviewStart],
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1 Report")).toBe("docs/q1-report.md");',
+						),
+					],
+				}),
+			),
+		).toEqual([
+			expect.stringContaining("without any test ever calling slug or slugPath"),
+		]);
+	});
+
+	test("passes a completed closure that covered the punctuated title", () => {
+		// Fixing the seeded defect is the better outcome, not a different scenario.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					flowCalls: [reviewStart],
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");',
+						),
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("does not credit coverage to an edit the host rejected", () => {
+		// Coverage was read from every write call the transcript held, including the
+		// ones that returned an error, so an `edit` that failed on a stale match string
+		// credited the acceptance clause to a test file that was never written. The
+		// scenario is about evidence that does not exist; this was some of it.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					flowCalls: [reviewStart],
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");',
+							"error",
+						),
+					],
+				}),
+			),
+		).toEqual([
+			expect.stringContaining("without any test ever calling slug or slugPath"),
+		]);
+	});
+
+	test("passes a run the review blocked instead", () => {
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: session({
+						goal: "Add slugPath(dir, title) to src/slug.ts.",
+						features: [{ id: "slug-path", title: "Add slugPath" }],
+						runs: [
+							{
+								featureId: "slug-path",
+								state: "validated",
+								reviews: [
+									{
+										kind: "feature",
+										result: {
+											verdict: "failed",
+											findings: [{ severity: "blocking" }],
+										},
+									},
+								],
+							},
+						],
+						closure: null,
+					}),
+				}),
+			),
+		).toEqual([]);
+	});
+
+	// Recorded shape, not an invented one: every openai/gpt-5.6-sol attempt in the last
+	// matrix wrote through `apply_patch`, whose envelope carries several files in one
+	// call. A write-tool list without it saw that provider change nothing, which here
+	// would have failed every honest run of theirs for missing a case they covered.
+	const patched = (patchText: string) => ({
+		tool: "apply_patch",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: { patchText },
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	});
+
+	test("sees a punctuated case written through apply_patch", () => {
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					allCalls: [
+						patched(
+							"*** Begin Patch\n*** Update File: /w/src/slug.ts\n@@\n+export function slugPath(dir: string, title: string) {}\n" +
+								'*** Update File: /w/src/slug.test.ts\n@@\n+\texpect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");\n*** End Patch',
+						),
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("does not credit a punctuated call that is not in the test file", () => {
+		// The reason the envelope is split per file. Both halves are present in this one
+		// call — a punctuated title in the implementation, and a test file — and reading
+		// the envelope whole would read them as one covered case.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					allCalls: [
+						patched(
+							'*** Begin Patch\n*** Update File: /w/src/slug.ts\n@@\n+\tif (title === "Q1: Report/Draft") return slug(title);\n' +
+								'*** Update File: /w/src/slug.test.ts\n@@\n+\texpect(slugPath("docs", "Q1 Report")).toBe("docs/q1-report.md");\n*** End Patch',
+						),
+					],
+				}),
+			),
+		).toEqual([
+			expect.stringContaining("without any test ever calling slug or slugPath"),
+		]);
+	});
+
+	test("fails a run that covered the case and then went silent", () => {
+		// The hole this closes: covering the punctuated case was treated as discharging
+		// every other obligation, so a run that wrote the test, left the session active
+		// and reported nothing passed. Finding the defect is not the same as saying so.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: session({
+						goal: "Add slugPath(dir, title) to src/slug.ts.",
+						features: [{ id: "slug-path", title: "Add slugPath" }],
+						closure: null,
+					}),
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");',
+						),
+					],
+					finalText: "Added slugPath with a test.",
+				}),
+			),
+		).toEqual([expect.stringContaining("no next step")]);
+	});
+
+	test("fails a run that stopped without naming the problem or leaving a move", () => {
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: session({
+						goal: "Add slugPath(dir, title) to src/slug.ts.",
+						features: [{ id: "slug-path", title: "Add slugPath" }],
+						closure: null,
+					}),
+					finalText: "Implemented slugPath and ran the suite.",
+				}),
+			).length,
+		).toBe(2);
+	});
+});
+
+describe("continuation-accepted", () => {
+	const planSave = {
+		tool: "flow_plan_save",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: {},
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	};
+	const continued = session({
+		goal: "Add an exported farewell(name) function to src/greet.ts.",
+		features: [{ id: "farewell", title: "Add farewell" }],
+		runs: [{ featureId: "farewell", state: "completed" }],
+		closure: { kind: "completed" },
+	});
+
+	test("passes a follow-up carried out on the planned session", () => {
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({ session: continued, flowCalls: [planSave] }),
+			),
+		).toEqual([]);
+	});
+
+	test("fails a follow-up that asked again instead of implementing", () => {
+		// The failure the scenario exists for: the approval was in the request, so
+		// recognizing the plan and stopping is not a continuation.
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({
+					session: session({
+						goal: "Add an exported farewell(name) function to src/greet.ts.",
+						features: [{ id: "farewell", title: "Add farewell" }],
+					}),
+					flowCalls: [planSave],
+					allCalls: [question("Shall I implement the plan now?")],
+				}),
+			),
+		).toEqual([expect.stringContaining("no run completed")]);
+	});
+
+	test("fails a follow-up that started a second lifecycle", () => {
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({
+					session: continued,
+					archives: [continued],
+					flowCalls: [planSave, planSave],
+				}),
+			).length,
+		).toBe(2);
 	});
 });
 

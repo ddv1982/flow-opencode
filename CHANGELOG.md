@@ -4,15 +4,19 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
+No changes yet.
+
+## [7.1.0] - 2026-07-28
+
 The last route to a dishonest `completed` closure is closed, and the two claims
 that rested on prompt prose are now measured.
 
-Qualified on Flow 7.0.2 / OpenCode 1.18.6 from two reports: the 63-run matrix of
-2026-07-28T03:20Z across `opencode/claude-sonnet-5`, `openai/gpt-5.6-sol`, and
-`xai/grok-4.5` (62/62 scored passed), plus 2026-07-28T07:09Z re-measuring
-`failing-gate-blocks @ xai/grok-4.5`, whose third attempt in the matrix had wedged on
-a `grep` call that never returned. That pair went 3/3 on the re-run and the wedge did
-not recur.
+Qualified on Flow 7.0.2 / OpenCode 1.18.6 from the 81-run matrix of 2026-07-28T16:23Z
+across `opencode/claude-sonnet-5`, `openai/gpt-5.6-sol`, and `xai/grok-4.5`: 81/81
+passed, nothing excluded, nothing aborted, and all 81 cassettes reproduced without a
+fidelity caveat. Two earlier matrices needed a merged re-run to qualify — one for a
+wedged `grep` call, one for an attempt excluded over a question it was right to ask.
+Neither recurred.
 
 - **A plan declares its canonical gate.** `plan.gate` is the exact command that
   validates the whole repository, named at planning time and locked by approval. A
@@ -110,8 +114,8 @@ not recur.
 - **A regression scenario for the hole named results closed.** `skipped-case-refused`
   seeds a fixture whose Windows-only case is an ordinary `test.skipIf`, so the declared
   command runs here, on the right host, and exits zero. Declaring the command is no
-  longer enough; the plan has to name the case. It went 9/9 across three providers on
-  first measurement and stays ungated anyway: every attempt declared `platform:
+  longer enough; the plan has to name the case. It went 9/9 across three providers
+  twice and stays ungated anyway: every attempt declared `platform:
   "win32"` on a Linux host, so the platform rule refuses first and the named-case rule
   is never what binds. What the scenario measures today is the declaration, not the
   observation.
@@ -119,6 +123,24 @@ not recur.
   the rule and the prompts landed; the margin is one pair's own variance rather than an
   allowance for refusals to fail. See
   [release qualification](docs/release-qualification.md).
+- **`continuation-accepted` is gated at 100%,** and a new scenario plants a defect for
+  the reviewer. The first is the mirror of `goal-change-refused`: one rule is enforced
+  by refusing a changed goal and the other by accepting an unchanged one, so gating only
+  the refusal would let a build that refuses every continuation qualify. The second,
+  `defect-fails-review`, went 9/9 twice and never by the route it was built for — one
+  attempt left the planted defect in place, built past it, and the review passed without
+  mentioning it. It stays ungated because its rate measures the implementer, not the
+  reviewer. Silent review passes did fall below the ceiling for the first time, 38 of
+  42, so that metric can now move; the findings behind it were about untested edge cases
+  rather than the plant, which is the same limitation from the other side.
+- **A question the next step answers no longer voids the attempt.** An eval run that
+  stopped to ask the user was excluded wherever the scenario did not declare asking an
+  acceptable end — including a question asked partway through, which the following
+  step's prompt answers. Three scenarios open by planning, where asking for approval is
+  the behaviour another scenario gates at 100%, and one measured run lost its score for
+  doing exactly that. Since a gated pair needs three scored attempts, one correct
+  question could fail a release and force a paid re-run. Only a question the last step
+  ends on is excluded now.
 - **Seven cassettes are pinned, so CI replays real decisions.** One per scenario from
   the 2026-07-28 matrix, spread across three providers. All 63 candidates from that run
   replayed against this code; the only divergence was the attempt that wedged
@@ -141,6 +163,12 @@ not recur.
 
 The prompt surface got smaller, not larger: the typed gate replaced the prose that
 asked the model to judge whether its own coverage claim was honest.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.1.0 --global --force
+```
 
 ## [7.0.2] - 2026-07-27
 

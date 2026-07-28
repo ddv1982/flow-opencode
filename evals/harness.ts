@@ -11,7 +11,6 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
 	chmod,
-	copyFile,
 	cp,
 	mkdir,
 	mkdtemp,
@@ -28,6 +27,22 @@ import packageJson from "../package.json" with { type: "json" };
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const REQUEST_TIMEOUT_MS = 120_000;
+/** What OpenCode names the error it stamps on a message an abort killed. */
+const ABORT_ERROR_NAME = "MessageAbortedError";
+/**
+ * How long a session may make no progress at all before it is called wedged.
+ *
+ * Distinct from the whole-scenario deadline, which a wedge would otherwise wait
+ * out in full: three of the four recorded timeouts sat with the same incomplete
+ * tool call for twenty minutes, and the diagnostic the deadline printed said so.
+ * Once nothing has changed for this long while a call stays incomplete, waiting
+ * the remaining seventeen minutes buys no further evidence.
+ *
+ * Generous on purpose. It bounds a *silent* session, not a slow one — any new
+ * message or part resets it — so the only way to trip it honestly is a command
+ * that emits nothing for three minutes, which no scenario fixture does.
+ */
+const STALLED_MS = 3 * 60_000;
 
 /** A single tool invocation observed in the transcript. */
 export type ObservedToolCall = {
@@ -65,12 +80,37 @@ export type ObservedToolCall = {
  * How a step's wait ended.
  *
  * `escalated` means the model asked the user and stopped. That is often the right
- * move — it is what a model should do when a gate cannot pass — but nothing here
- * answers, so the session can never progress and its durable state is mid-flight
- * by definition. It is reported apart from a pass or a failure rather than waited
- * out and scored as one.
+ * move — it is what a model should do when a gate cannot pass, or after saving a
+ * plan it wants approved — but nothing in this wait answers, so the turn is aborted
+ * before returning. Whether that ends the run is the runner's call, not this one's:
+ * a scenario with a step still to come answers the question with that step's prompt,
+ * and only a question the last step ends on leaves the state mid-flight by
+ * definition. That case is reported apart from a pass or a failure rather than
+ * waited out and scored as one.
  */
 export type CommandEnd = "quiet" | "escalated";
+
+/**
+ * What the questions a run asked mean for its result.
+ *
+ * A question the final step ended on has nothing left to answer it, so the durable
+ * state is mid-flight: that is scored only where the scenario declared asking an
+ * acceptable end. A question during an earlier step is not an exclusion — the runner
+ * carries the run into the next step, whose prompt is the answer. Three scenarios
+ * open with `flow-plan`, where asking for approval is the behaviour `plan-only-stops`
+ * gates at 100%; excluding those attempts cost a correct run its score, and cost a
+ * gated pair needing three scored attempts its qualification.
+ */
+export function askedScoring(
+	escalatedSteps: readonly number[],
+	stepCount: number,
+	mayEscalate: boolean,
+): { readonly escalated: boolean; readonly unscored: boolean } {
+	return {
+		escalated: escalatedSteps.length > 0,
+		unscored: escalatedSteps.includes(stepCount - 1) && !mayEscalate,
+	};
+}
 
 /** Everything a scenario is allowed to assert against. */
 export type Outcome = {
@@ -108,8 +148,23 @@ export type Outcome = {
 	readonly hostError: string | null;
 };
 
+/**
+ * One measurable claim about Flow, and everything needed to price it.
+ *
+ * The shape is deliberately small, because a scenario is an experiment and the
+ * suite's credibility rests on each one being readable in a sitting: a fixture, a
+ * sequence of commands, and a `check` that turns a finished run into a list of
+ * failures. Anything a scenario cannot express in those terms is a scenario that
+ * measures the harness instead of the product.
+ *
+ * The two optional fields are both about what a run is *allowed* to do, since a
+ * scenario that scores every unusual ending as a failure reports prompt defects
+ * that are not there.
+ */
 export type Scenario = {
+	/** Stable across runs: report rows, cassette names, and the gate index it. */
 	readonly id: string;
+	/** The claim in one sentence, printed beside the rate it produced. */
 	readonly description: string;
 	/** Files seeded into the fixture repository before the first command. */
 	readonly files: Readonly<Record<string, string>>;
@@ -134,9 +189,9 @@ export type Scenario = {
 	 * Set it where the contract leaves the model no move of its own: a gate that
 	 * cannot pass makes `completed` closure unavailable, and any other closure needs
 	 * authority only the user can grant, so asking is the correct end — not a
-	 * missing result. It counts only when the *last* step asked, because a question
-	 * during an earlier step ends the run before the step that probes the invariant
-	 * ever runs.
+	 * missing result. It is consulted only for a question the *last* step ended on:
+	 * an earlier step's question is answered by the step after it, so it needs no
+	 * permission here and costs the attempt nothing.
 	 */
 	readonly mayEscalate?: boolean;
 	/** Returns a list of failures. Empty means the scenario passed. */
@@ -164,6 +219,27 @@ export type Scenario = {
  * developer's own OpenCode too until they log in again. One recorded run lost
  * an xAI account's refresh token this way after a single scenario.
  */
+export type CredentialSync = {
+	readonly source: string;
+	readonly target: string;
+	/**
+	 * The bytes this host was handed, or null when there was no file to copy.
+	 *
+	 * Kept for the whole life of the host because it is the only thing that can
+	 * tell a token this host rotated from one it merely carried: at sync time the
+	 * real file may already hold another host's newer credential, and the child
+	 * copy cannot say which of its own entries are stale.
+	 */
+	readonly snapshot: string | null;
+};
+
+/**
+ * The two ends of the credential copy: the developer's real file, and the child's.
+ *
+ * `XDG_DATA_HOME` is read from the *parent* environment rather than the child's,
+ * which is the point — the child's is deliberately redirected into scratch, so
+ * resolving the source there would find the empty copy instead of the original.
+ */
 function providerCredentialPaths(childData: string): {
 	source: string;
 	target: string;
@@ -176,88 +252,239 @@ function providerCredentialPaths(childData: string): {
 	};
 }
 
+/**
+ * Copies the developer's credentials into a host's scratch home, remembering what
+ * was copied so `syncProviderCredentialsBack` can tell a rotation from a carry.
+ *
+ * Returns null only when opted out, which is the one case where there is nothing to
+ * sync. A missing source file is not that: the host still runs, the provider may
+ * authenticate from the environment, and a login the child performs is still worth
+ * carrying back.
+ */
 async function carryProviderCredentials(
 	childData: string,
-): Promise<{ source: string; target: string } | null> {
+): Promise<CredentialSync | null> {
 	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return null;
 	const paths = providerCredentialPaths(childData);
 	await mkdir(join(childData, "opencode"), { recursive: true, mode: 0o700 });
+	let snapshot: string | null = null;
 	try {
-		await copyFile(paths.source, paths.target);
+		// Read-then-write rather than `copyFile`, because the bytes handed to the
+		// child have to be the same bytes remembered as the snapshot. Copying and
+		// then reading the source again would let a concurrent host's sync land in
+		// between, and the snapshot would describe a file this host never saw.
+		snapshot = await readFile(paths.source, "utf8");
+		await writeFile(paths.target, snapshot, { mode: 0o600 });
 	} catch {
 		// No stored credentials; the provider may still authenticate from the env.
 	}
-	return paths;
+	return { ...paths, snapshot };
 }
 
 /**
- * Copies a host's (possibly refreshed) credential file back over the real
- * `auth.json` it was copied from, so a rotated token propagates instead of
- * being discarded with the scratch directory. Only ever called sequentially
- * from `stop()`, so there is no concurrent-writer race to guard against.
+ * The real file's contents with this host's own credential changes applied, or
+ * null when it rotated nothing.
  *
- * Two failure modes get guarded against explicitly, because what is being
+ * Serializing the writes was only half the fix. Every host copies the same
+ * snapshot, so a host that refreshed nothing still holds a full credential file,
+ * and writing it back wholesale reverts every rotation that landed while it was
+ * running. Concurrently that is the ordinary case rather than a corner: a matrix
+ * runs one host per model, each authenticating to a different provider, so the
+ * last host out would discard the other two providers' new refresh tokens — and
+ * a discarded rotation is dead at the provider, not merely misplaced here.
+ *
+ * So a sync carries entries and not files. Per top-level key, which is per
+ * provider in OpenCode's `auth.json`:
+ *
+ * - Changed against the snapshot: this host rotated it, so it wins.
+ * - Equal to the snapshot: this host only carried it, so whatever the real file
+ *   holds now wins — that is either the same value or a newer host's rotation.
+ * - Present in the snapshot and gone from the child: the child logged out of it,
+ *   which is a change like any other and is applied as a removal.
+ * - Present in the real file and in neither: another host's new provider, left
+ *   alone.
+ *
+ * With no snapshot there is nothing to diff against, so every child entry reads
+ * as changed and merges over the current file. That is the pre-existing
+ * behaviour, narrowed from the whole file to the keys the child actually holds.
+ */
+export function mergeCredentials(
+	current: string,
+	child: string,
+	snapshot: string | null,
+): string | null {
+	const asRecord = (text: string | null): Record<string, unknown> | null => {
+		if (text === null) return null;
+		try {
+			const parsed: unknown = JSON.parse(text);
+			return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+				? (parsed as Record<string, unknown>)
+				: null;
+		} catch {
+			return null;
+		}
+	};
+	const childEntries = asRecord(child);
+	// The caller has already refused an unparseable child; a non-object one is the
+	// same refusal, since there are no entries to carry out of it.
+	if (!childEntries) return null;
+	const currentEntries = asRecord(current);
+	// Nothing coherent to merge into. Returning the child whole is the old
+	// behaviour and the only one available, and it beats leaving a broken file.
+	if (!currentEntries) return child;
+	const before = asRecord(snapshot) ?? {};
+
+	const merged: Record<string, unknown> = { ...currentEntries };
+	const same = (left: unknown, right: unknown) =>
+		JSON.stringify(left) === JSON.stringify(right);
+	for (const [provider, value] of Object.entries(childEntries)) {
+		if (!same(value, before[provider])) merged[provider] = value;
+	}
+	for (const provider of Object.keys(before)) {
+		if (!(provider in childEntries)) delete merged[provider];
+	}
+
+	// A host that rotated nothing does not write at all, which is the common case
+	// and the one worth not touching the developer's credential store over.
+	if (same(merged, currentEntries)) return null;
+	return `${JSON.stringify(merged, null, 2)}\n`;
+}
+
+/**
+ * Serializes credential sync-backs, and counts them for unique temp names.
+ *
+ * Hosts run concurrently and every one of them ends in `stop()`, but they all
+ * write the *same* real `auth.json`, so the syncs have to be made sequential
+ * again by hand. Two concurrent `writeFile`s on one path can interleave and a
+ * `rename` then publishes the mix — and the JSON check cannot catch that,
+ * because it validates the child file before the write, not the bytes that
+ * land.
+ */
+const syncCredentials = sequencer();
+let credentialSyncCount = 0;
+
+/**
+ * Carries a host's rotated credentials back into the real `auth.json` it was
+ * copied from, so a refresh propagates instead of being discarded with the
+ * scratch directory — and so it propagates without reverting anyone else's.
+ *
+ * Four failure modes get guarded against explicitly, because what is being
  * overwritten is the developer's own live credential store, not scratch state:
  *
  * - A child copy that fails to parse as JSON must never replace a good file —
  *   this is what stands between a bug in a scenario and a broken `auth.json`.
+ * - A host must not write back what it did not change. `mergeCredentials` says
+ *   why at length; the short version is that every host holds a full copy of the
+ *   same snapshot, so writing files instead of entries makes the last host out
+ *   the one that decides, and revokes what the others rotated.
  * - The write itself goes to a temp file beside the real one and is `rename`d
  *   into place, which is atomic on the same filesystem. A plain overwrite that
  *   is interrupted (a kill, a crash, a lost power) would leave the real file
  *   truncated instead.
+ * - Concurrent hosts must not write at once. Every call takes a temp path no
+ *   other call can name and waits its turn in `syncCredentials`, so a parallel
+ *   matrix run reads and replaces the file one host at a time — and a failed
+ *   sync's cleanup can only ever remove its own temp file. The read of the real
+ *   file happens inside that turn, since a merge that read it before waiting
+ *   would compute its result against a file another host has since replaced.
  */
-async function syncProviderCredentialsBack(
-	paths: { source: string; target: string } | null,
+export async function syncProviderCredentialsBack(
+	paths: CredentialSync | null,
 ): Promise<void> {
 	if (!paths) return;
-	let contents: string;
-	try {
-		contents = await readFile(paths.target, "utf8");
-	} catch {
-		// The child never wrote a credential file (no refresh happened, or the
-		// provider authenticated purely from the env); nothing to carry back.
-		return;
-	}
-	try {
-		JSON.parse(contents);
-	} catch {
-		console.error(
-			`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
-		);
-		return;
-	}
-	const tempPath = `${paths.source}.eval-sync-${process.pid}.tmp`;
-	try {
-		await writeFile(tempPath, contents, { mode: 0o600 });
-		await rename(tempPath, paths.source);
-	} catch (error) {
-		// Failing to sync back must not crash the run over a host that already
-		// finished its scenario; it only means the next host risks the same stale
-		// credential this whole mechanism exists to avoid, which is no worse than
-		// before this fix existed.
-		console.error(
-			`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
-		);
-		await rm(tempPath, { force: true });
-	}
-}
-
-async function availablePort(): Promise<number> {
-	const server = createServer();
-	await new Promise<void>((resolve, reject) => {
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", resolve);
+	credentialSyncCount += 1;
+	const tempPath = `${paths.source}.eval-sync-${process.pid}-${credentialSyncCount}.tmp`;
+	await syncCredentials(async () => {
+		let contents: string;
+		try {
+			contents = await readFile(paths.target, "utf8");
+		} catch {
+			// The child never wrote a credential file (no refresh happened, or the
+			// provider authenticated purely from the env); nothing to carry back.
+			return;
+		}
+		try {
+			JSON.parse(contents);
+		} catch {
+			console.error(
+				`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
+			);
+			return;
+		}
+		let current = "";
+		try {
+			current = await readFile(paths.source, "utf8");
+		} catch {
+			// The real file is gone — the developer logged out mid-run, or there was
+			// never one to copy. The child's own entries are all there is.
+		}
+		const merged = mergeCredentials(current, contents, paths.snapshot);
+		// Nothing this host rotated, so nothing to publish. Leaving the file alone is
+		// the point: an untouched credential store cannot be damaged by a sync.
+		if (merged === null) return;
+		try {
+			await writeFile(tempPath, merged, { mode: 0o600 });
+			await rename(tempPath, paths.source);
+		} catch (error) {
+			// Failing to sync back must not crash the run over a host that already
+			// finished its scenario; it only means the next host risks the same stale
+			// credential this whole mechanism exists to avoid, which is no worse than
+			// before this fix existed.
+			console.error(
+				`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+			await rm(tempPath, { force: true });
+		}
 	});
-	const address = server.address();
-	if (!address || typeof address === "string") {
-		throw new Error("Could not reserve a local port.");
-	}
-	await new Promise<void>((resolve, reject) =>
-		server.close((error) => (error ? reject(error) : resolve())),
-	);
-	return address.port;
 }
 
+/**
+ * Ports this process has already handed out.
+ *
+ * The kernel picks a free port for a listener that asks for 0, but that
+ * listener has to be closed before the child server can take the port — and
+ * once it is closed the same port is free to be picked again. Sequentially the
+ * previous host still held its port, so a repeat was impossible; concurrently
+ * two hosts can be handed one port and the second dies on bind. Remembering
+ * what was handed out closes that, since all the hosts are in one process.
+ */
+const reservedPorts = new Set<number>();
+
+/**
+ * A loopback port no host in this process has been given yet.
+ *
+ * Bounded retries rather than a loop, because the kernel handing out a port this
+ * process already reserved is a collision to skip, while twenty of them in a row
+ * means something else is wrong and a hang would be the worst way to report it.
+ */
+async function availablePort(): Promise<number> {
+	for (let attempt = 0; attempt < 20; attempt += 1) {
+		const server = createServer();
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(0, "127.0.0.1", resolve);
+		});
+		const address = server.address();
+		const port =
+			address && typeof address !== "string" ? address.port : undefined;
+		await new Promise<void>((resolve, reject) =>
+			server.close((error) => (error ? reject(error) : resolve())),
+		);
+		if (port === undefined) break;
+		if (reservedPorts.has(port)) continue;
+		reservedPorts.add(port);
+		return port;
+	}
+	throw new Error("Could not reserve a local port.");
+}
+
+/**
+ * A GET against the child host, with a non-2xx raised rather than returned.
+ *
+ * The body is read into the error on purpose: a failing host request is a harness
+ * defect or a dead server, and the status alone has never been enough to tell
+ * those apart from a scenario's own output.
+ */
 async function fetchJson(
 	url: string,
 	timeout = REQUEST_TIMEOUT_MS,
@@ -271,6 +498,7 @@ async function fetchJson(
 	return response.json();
 }
 
+/** `fetchJson` for the requests that drive a session, with the same error rule. */
 async function postJson(
 	url: string,
 	body: unknown,
@@ -345,6 +573,98 @@ export function pendingCallLabel(part: {
 		typeof command === "string" ? (command.split("\n")[0] ?? "") : "";
 	if (line === "") return label;
 	return `${label} (${line.length > 120 ? `${line.slice(0, 117)}...` : line})`;
+}
+
+/**
+ * Whether an error on an assistant message is one this harness caused.
+ *
+ * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
+ * escalation nothing here answers, or a deadline — and OpenCode stamps
+ * `MessageAbortedError` on the message it killed. Reporting that as a host error
+ * put 88 false alarms in front of the 4 real timeouts across 408 recorded runs,
+ * because escalating is the designed end of six scenarios.
+ *
+ * Attributed by the flag rather than by session id: aborting a parent kills its
+ * reviewer subtask too, and that child's abort has the same cause. It takes the
+ * flag as an argument because with no abort issued, an abort error is real news —
+ * something outside this process ended the turn.
+ */
+export function isSelfAbortError(
+	error: unknown,
+	selfAborted: boolean,
+): boolean {
+	if (!selfAborted || !error || typeof error !== "object") return false;
+	return (error as { name?: unknown }).name === ABORT_ERROR_NAME;
+}
+
+/**
+ * Whether a session has stopped rather than slowed.
+ *
+ * An incomplete tool call is what separates the two: with one outstanding and no
+ * new message or part for this long, nothing is coming, and the whole-scenario
+ * deadline would only reach the same finding with the same evidence after
+ * seventeen more minutes of it. With nothing outstanding the session is between
+ * turns, which is the quiet window's business, not this one's.
+ */
+export function isWedged(
+	pending: readonly string[],
+	unchangedMs: number,
+	thresholdMs: number,
+): boolean {
+	return pending.length > 0 && unchangedMs >= thresholdMs;
+}
+
+/**
+ * A gate that runs what it is handed one job at a time, in the order handed to it.
+ *
+ * For work that is only safe alone: writing the developer's real `auth.json`, which
+ * every host does on its way out and which concurrency turned from a sequence into
+ * a race. A promise chain rather than a lock, because there is one thread — each
+ * caller appends itself to the tail and waits on what is already there. The tail is
+ * always a settled-either-way promise, or one rejection would strand every job
+ * behind it.
+ */
+export function sequencer(): <T>(job: () => Promise<T>) => Promise<T> {
+	let tail: Promise<unknown> = Promise.resolve();
+	return <T>(job: () => Promise<T>) => {
+		const run = tail.then(job);
+		tail = run.catch(() => {});
+		return run;
+	};
+}
+
+/**
+ * Runs `queues` with at most `concurrency` of them in flight, each queue in order.
+ *
+ * The nesting is the contract. Attempts across queues are independent — every one
+ * boots its own host on its own port over its own temp workspace — but a queue is
+ * keyed by model, and running its own jobs one at a time is what keeps it from
+ * racing itself for a single provider's rate limit. So queues go wide and jobs go
+ * deep, never the other way around.
+ */
+export async function runQueues<Job, Result>(
+	queues: readonly (readonly Job[])[],
+	concurrency: number,
+	run: (job: Job) => Promise<Result>,
+): Promise<Result[]> {
+	const results: Result[] = [];
+	let next = 0;
+	await Promise.all(
+		Array.from(
+			{ length: Math.max(1, Math.min(concurrency, queues.length)) },
+			async () => {
+				for (;;) {
+					// Read and advance in one synchronous step, so no two workers can claim
+					// the same queue.
+					const queue = queues[next];
+					next += 1;
+					if (!queue) return;
+					for (const job of queue) results.push(await run(job));
+				}
+			},
+		),
+	);
+	return results;
 }
 
 /**
@@ -439,9 +759,22 @@ export function passRates(
 	return [...rates];
 }
 
+/**
+ * One scenario-and-model pair's result, kept as four numbers rather than a ratio.
+ *
+ * The distinctions are the whole point, and collapsing any of them into the
+ * denominator is a defect this suite has already shipped once. `attempts` counts
+ * only what was scored, so it is not `passed + failed` plus everything else:
+ * `unscored` is an attempt the scenario refused to judge, and `aborted` one that
+ * never finished. Both are reasons to re-run a pair, not a smaller sample of it —
+ * an excluded attempt once shrank a pair to two and let it clear a 100% threshold
+ * on the two that remained.
+ */
 export type PassRate = {
 	passed: number;
+	/** Attempts that produced a judgeable result, which is the only honest base. */
 	attempts: number;
+	/** Attempts the scenario declined to score, e.g. an ask it does not allow. */
 	unscored: number;
 	/** Attempts that never finished: a wedge, a timeout, a lost turn. */
 	aborted: number;
@@ -540,6 +873,13 @@ export async function preparePackageCache(
 	return cache;
 }
 
+/**
+ * One message as the host's HTTP API returns it, narrowed to what scoring reads.
+ *
+ * Declared rather than imported because it is another process's wire format, and a
+ * host upgrade that drops a field should surface here as a scoring change to think
+ * about — not as a type error in a dependency, and not as a silent zero.
+ */
 type MessageEntry = {
 	info: {
 		role: string;
@@ -569,14 +909,45 @@ type MessageEntry = {
 	}[];
 };
 
+/**
+ * One throwaway OpenCode host, over one fixture repository, for one attempt.
+ *
+ * The isolation is the measurement. Every host gets its own port, its own XDG
+ * directories, its own scratch copy of the plugin and of `auth.json`, and its own
+ * git fixture — so nothing an attempt does can reach the developer's sessions, and
+ * nothing about the developer's machine can explain a result. `stop()` is what
+ * makes that true rather than aspirational, and it is why the credential sync has
+ * to happen before the scratch directory goes.
+ *
+ * Constructed through `start` rather than `new`, because a host is only meaningful
+ * once the server is listening and the fixture is committed, and a half-booted one
+ * would be scored as a failed attempt.
+ */
 export class EvalHost {
 	private server: ChildProcess | null = null;
 	private serverLog = "";
 	private baseUrl = "";
+	/**
+	 * When this harness last aborted a session itself, or 0 if it never did.
+	 *
+	 * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
+	 * escalation nothing here answers, or a deadline. OpenCode stamps
+	 * `MessageAbortedError` on the message it killed, and reporting that as a host
+	 * error puts 88 false alarms in front of the 4 real timeouts across 408
+	 * recorded runs: escalating is the designed end of six scenarios, so almost
+	 * every one of them carried it.
+	 *
+	 * A timestamp rather than a flag, because a scenario runs several commands
+	 * against one host: a message an abort killed was created before that abort,
+	 * so an abort error on a message created *after* the last one this harness
+	 * issued is real news — something outside this process ended a later turn —
+	 * and a bare flag would have swallowed it for the rest of the attempt.
+	 */
+	private lastSelfAbortAt = 0;
 
 	readonly project: string;
 	private readonly scratch: string;
-	private credentialPaths: { source: string; target: string } | null = null;
+	private credentialPaths: CredentialSync | null = null;
 
 	private constructor(project: string, scratch: string) {
 		this.project = project;
@@ -765,10 +1136,11 @@ export class EvalHost {
 		command: string,
 		args: string,
 		model: string,
-		options: { quietMs?: number; timeoutMs?: number } = {},
+		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
+		const stalledMs = Math.min(options.stalledMs ?? STALLED_MS, timeoutMs);
 		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
 			command,
 			arguments: args,
@@ -839,29 +1211,54 @@ export class EvalHost {
 			// attempts each burned their full twenty minutes producing nothing after the
 			// model asked.
 			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
-				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
-					() => {},
-				);
+				await this.abortSession(sessionId);
 				return "escalated";
 			}
-			if (Date.now() > deadline) {
-				await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
-					() => {},
-				);
-				const stalledSeconds = Math.round((Date.now() - changedAt) / 1_000);
-				const [count = "0", parts = "0"] = signature.split(":");
-				const suspended =
-					suspendedMs > 0
-						? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
-						: "";
+			const stalled = Date.now() - changedAt;
+			const suspended =
+				suspendedMs > 0
+					? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
+					: "";
+			const wedged = (elapsedMs: number) =>
+				`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${pending.join(", ") || "none"}.`;
+			// A wedge is diagnosable long before the deadline, and the deadline used to
+			// prove it the slow way: three of the four recorded timeouts spent seventeen
+			// further minutes on the same incomplete tool call, then printed the sentence
+			// below. Ending it here reaches the same finding with the same evidence and
+			// hands the remaining attempts their wall clock back. Wedges are already out
+			// of every pass-rate denominator, so nothing scored changes.
+			if (isWedged(pending, stalled, stalledMs)) {
+				await this.abortSession(sessionId);
 				throw new Error(
-					(stalledSeconds * 1_000 >= quietMs
-						? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. No new message or part for ${stalledSeconds}s while these tool calls stayed incomplete: ${pending.join(", ") || "none"}.`
+					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedged(stalled)}${suspended}`,
+				);
+			}
+			if (Date.now() > deadline) {
+				await this.abortSession(sessionId);
+				const [count = "0", parts = "0"] = signature.split(":");
+				throw new Error(
+					(stalled >= quietMs
+						? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. ${wedged(stalled)}`
 						: `Scenario exceeded ${timeoutMs}ms without going quiet: still working. The session was producing output up to the deadline (${count} messages, ${parts} parts), so it was working or looping rather than stuck.`) +
 						suspended,
 				);
 			}
 		}
+	}
+
+	/**
+	 * Ends a wait this harness will not win, and remembers that it did.
+	 *
+	 * The timestamp is what keeps `outcome` from reporting Flow's own abort as a
+	 * host error. Stamped before the request rather than after it, because a
+	 * rejected POST does not mean the abort failed to land — and because every
+	 * message the abort can be blamed for was already created by now.
+	 */
+	private async abortSession(sessionId: string): Promise<void> {
+		this.lastSelfAbortAt = Date.now();
+		await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
+			() => {},
+		);
 	}
 
 	private async messages(sessionId: string): Promise<unknown> {
@@ -974,7 +1371,19 @@ export class EvalHost {
 					tokens.cacheRead += used.cache?.read ?? 0;
 					tokens.cacheWrite += used.cache?.write ?? 0;
 				}
-				if (entry.info.error && !hostError)
+				// An abort this harness issued is not a condition of the host, so it is
+				// not reported as one. A message with no creation time cannot be placed
+				// against the abort, so it keeps the older, broader attribution.
+				const created = entry.info.time?.created;
+				if (
+					entry.info.error &&
+					!hostError &&
+					!isSelfAbortError(
+						entry.info.error,
+						this.lastSelfAbortAt > 0 &&
+							(created === undefined || created <= this.lastSelfAbortAt),
+					)
+				)
 					hostError = JSON.stringify(entry.info.error);
 			}
 			for (const part of entry.parts) {

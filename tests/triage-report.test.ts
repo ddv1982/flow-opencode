@@ -67,7 +67,7 @@ describe("eval report triage", () => {
 	});
 
 	test("ignores an escalation every attempt of the pair made", () => {
-		// Two scenarios are designed to end by asking. Three of three asking is the
+		// Six scenarios are designed to end by asking. Three of three asking is the
 		// contract working, and flagging each one is what buried the real findings.
 		const asked = [1, 2, 3].map((attempt) =>
 			run({ scenario: "failing-gate-blocks", attempt, escalated: true }),

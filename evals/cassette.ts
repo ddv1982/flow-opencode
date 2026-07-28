@@ -72,6 +72,20 @@ export type CassetteEvent =
 			sessionIndex: number;
 			input: Record<string, unknown>;
 			rawOutput: string;
+			/**
+			 * Whether the host accepted the call, for the graders that distinguish an
+			 * attempted write from one that landed.
+			 *
+			 * Recording keeps errored calls deliberately — an `edit` the model meant to
+			 * make is evidence even when it failed — so without this the two are
+			 * indistinguishable on replay, and a scenario that credits coverage would
+			 * credit it to a file that was never written.
+			 *
+			 * Optional so cassettes recorded before it stay replayable: absent means
+			 * completed, which is what replay assumed for every event when the field did
+			 * not exist.
+			 */
+			status?: "completed" | "error" | undefined;
 	  }>;
 
 /** Conditions a decision-layer replay cannot reproduce, so it reports them. */
@@ -331,6 +345,7 @@ export function buildCassette(options: {
 			...base,
 			input: call.input,
 			rawOutput: boundedOutput(call.rawOutput),
+			status: call.status === "error" ? "error" : "completed",
 		});
 	}
 

@@ -78,10 +78,12 @@ These are real parts of the workflow with no runtime enforcement. They are the
 reason Flow asks you to read the review rather than trust the verdict.
 
 - **Goal alignment.** That a new request is a continuation rather than a different
-  goal. The most-repeated rule in the repository and the least enforced;
-  `goal-change-refused` in `evals/` is the only evidence for it.
+  goal. The most-repeated rule in the repository and the least enforced; the evidence
+  is a pair in `evals/`, `goal-change-refused` and `continuation-accepted`.
 - **Review substance.** That the reviewer read the artifacts, completed the risk
   checklist, and failed an unprovable claim instead of passing it conditionally.
+  `unprovable-claim-refused` and `defect-fails-review` put work in front of it that
+  should not pass; neither can force the review path.
 - **Evidence completeness.** That an `externalEvidence` entry names the observation
   the goal actually asks for, a command that would really produce it, and the platform
   it actually needs — `other` restores the command-only rule. The runtime

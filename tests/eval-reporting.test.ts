@@ -1,14 +1,23 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	askedScoring,
 	formatRate,
+	isSelfAbortError,
+	isWedged,
+	mergeCredentials,
 	onlyAwaitingAnswer,
 	passRates,
 	pendingCallLabel,
 	refusedBroadScope,
 	reportedCost,
+	runQueues,
+	sequencer,
 	sessionBoundaries,
+	syncProviderCredentialsBack,
 } from "../evals/harness.js";
 import {
 	completionHonesty,
@@ -37,6 +46,131 @@ describe("eval run classification", () => {
 			false,
 		);
 		expect(onlyAwaitingAnswer([])).toBe(false);
+	});
+
+	// The measured defect: 92 of 408 recorded runs carried a `MessageAbortedError`
+	// and only 4 of them were timeouts. The rest were this harness ending an
+	// escalation nothing answers — the designed end of six scenarios — and
+	// reporting its own abort as a condition of the host buried the real ones.
+	test("does not report its own abort as a host error", () => {
+		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };
+		expect(isSelfAbortError(abort, true)).toBe(true);
+	});
+
+	test("reports an abort nobody here issued, and every other error always", () => {
+		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };
+		// No abort issued makes an abort error real news: something outside this
+		// process ended the turn, which is exactly what the field is for.
+		expect(isSelfAbortError(abort, false)).toBe(false);
+		expect(isSelfAbortError({ name: "ProviderAuthError" }, true)).toBe(false);
+		expect(isSelfAbortError("Aborted", true)).toBe(false);
+		expect(isSelfAbortError(null, true)).toBe(false);
+	});
+
+	// Three of the four real timeouts sat on the same incomplete tool call for the
+	// full twenty minutes, then printed the diagnostic that said so. Calling it at
+	// three reaches the same finding on the same evidence.
+	test("calls a session wedged once nothing changes while a call stays open", () => {
+		expect(isWedged(["bash:running"], 180_000, 180_000)).toBe(true);
+		expect(isWedged(["bash:running"], 200_000, 180_000)).toBe(true);
+	});
+
+	// The matrix spent 2.5h of wall clock on 2.5h of model time because it ran one
+	// attempt at a time. Only money would otherwise be the first thing to test the
+	// scheduler that fixes it, so the nesting it promises is proven here.
+	test("runs queues concurrently and every job in every queue", async () => {
+		const inFlight: string[] = [];
+		let peak = 0;
+		const run = async (job: string) => {
+			inFlight.push(job);
+			peak = Math.max(peak, inFlight.length);
+			await Bun.sleep(1);
+			inFlight.splice(inFlight.indexOf(job), 1);
+			return job;
+		};
+		const done = await runQueues(
+			[
+				["a1", "a2", "a3"],
+				["b1", "b2", "b3"],
+			],
+			2,
+			run,
+		);
+		expect(done.sort()).toEqual(["a1", "a2", "a3", "b1", "b2", "b3"]);
+		expect(peak).toBe(2);
+	});
+
+	test("never runs two jobs from one queue at once", async () => {
+		// The whole point of keying a queue by model: overlap inside one queue would
+		// race one provider's rate limit against itself.
+		let open = 0;
+		let overlapped = false;
+		await runQueues([["a1", "a2", "a3", "a4"]], 4, async () => {
+			open += 1;
+			if (open > 1) overlapped = true;
+			await Bun.sleep(1);
+			open -= 1;
+		});
+		expect(overlapped).toBe(false);
+	});
+
+	test("never idles a worker and never starves a queue", async () => {
+		// More workers than queues cannot help, and fewer must still drain every one.
+		const seen: number[] = [];
+		await runQueues([[1], [2], [3]], 2, async (job) => {
+			seen.push(job);
+		});
+		expect(seen.sort()).toEqual([1, 2, 3]);
+		expect(await runQueues([], 4, async (job) => job)).toEqual([]);
+	});
+
+	test("waits on a session that is slow rather than stopped", () => {
+		// Under the threshold the model may still be working, and no incomplete call
+		// means the session is between turns — the quiet window's business, not this
+		// one's, and ending it here would score a truncated run as a failure.
+		expect(isWedged(["bash:running"], 179_999, 180_000)).toBe(false);
+		expect(isWedged([], 600_000, 180_000)).toBe(false);
+	});
+
+	test("scores a run whose earlier step asked, because the next step answers", () => {
+		// Measured: sonnet saved a plan in step 1 of `continuation-accepted` and asked
+		// "Approve this plan to proceed with implementation?" — the behaviour
+		// `plan-only-stops` gates at 100%. Step 2 says "you have my approval", so the
+		// question was already answered; excluding the attempt dropped a correct run
+		// out of a pair that needs three scored attempts to qualify at all.
+		expect(askedScoring([0], 2, false)).toEqual({
+			escalated: true,
+			unscored: false,
+		});
+	});
+
+	test("leaves a question the last step ended on unscored unless the scenario allows it", () => {
+		// Nothing answers this one, so the durable state is mid-flight by definition.
+		expect(askedScoring([1], 2, false)).toEqual({
+			escalated: true,
+			unscored: true,
+		});
+		expect(askedScoring([1], 2, true)).toEqual({
+			escalated: true,
+			unscored: false,
+		});
+		// A one-step scenario's only step is its last, which is how every
+		// `mayEscalate` scenario measured before this rule existed.
+		expect(askedScoring([0], 1, false).unscored).toBe(true);
+		expect(askedScoring([0], 1, true).unscored).toBe(false);
+	});
+
+	test("reports asking at all apart from whether it cost the score", () => {
+		// The `+ASK` note: a model that reached the outcome and one that reached the
+		// only end left to it are both worth reading, even when both are scored.
+		expect(askedScoring([0, 1], 2, true)).toEqual({
+			escalated: true,
+			unscored: false,
+		});
+		expect(askedScoring([], 2, false)).toEqual({
+			escalated: false,
+			unscored: false,
+		});
 	});
 });
 
@@ -559,5 +693,223 @@ describe("eval cost reporting", () => {
 
 	test("reports zero for a run that produced no output", () => {
 		expect(reportedCost(0, 0)).toBe(0);
+	});
+});
+
+// What this guards is not eval state but the developer's own live credential
+// store: every host copies the real `auth.json` in and syncs a refreshed one
+// back, and hosts now finish concurrently. Two writers on one file publish a mix
+// of both, and the JSON check cannot catch it — it validates the child copy
+// before the write, not the bytes that land.
+describe("eval credential sync-back", () => {
+	test("runs one job at a time, in the order it was handed them", async () => {
+		const queue = sequencer();
+		const order: string[] = [];
+		let open = 0;
+		let overlapped = false;
+		const job = (name: string, pauses: number) => async () => {
+			open += 1;
+			if (open > 1) overlapped = true;
+			// Several awaits, because one write is several: a single suspension point
+			// would let a serial-looking implementation pass on luck alone.
+			for (let pause = 0; pause < pauses; pause += 1) await Bun.sleep(1);
+			order.push(name);
+			open -= 1;
+			return name;
+		};
+		// The slowest first, so anything that does not actually wait finishes early.
+		const done = await Promise.all([
+			queue(job("first", 5)),
+			queue(job("second", 3)),
+			queue(job("third", 1)),
+		]);
+		expect(overlapped).toBe(false);
+		expect(order).toEqual(["first", "second", "third"]);
+		expect(done).toEqual(["first", "second", "third"]);
+	});
+
+	test("keeps running later jobs after one of them throws", async () => {
+		// A sync that fails is a warning, not the end of the run — and must not take
+		// every host still to finish down with it.
+		const queue = sequencer();
+		const ran: string[] = [];
+		const failed = queue(async () => {
+			throw new Error("nope");
+		});
+		const after = queue(async () => {
+			ran.push("after");
+		});
+		await expect(failed).rejects.toThrow("nope");
+		await after;
+		expect(ran).toEqual(["after"]);
+	});
+
+	test("leaves the real auth.json whole when hosts finish at once", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "flow-eval-sync-"));
+		const source = join(dir, "auth.json");
+		await writeFile(source, JSON.stringify({ before: true }));
+		// Large enough that a write cannot land in one step, which is what let two
+		// concurrent writers interleave into a single temp path.
+		const hosts = await Promise.all(
+			[1, 2, 3, 4].map(async (host) => {
+				const target = join(dir, `child-${host}.json`);
+				await writeFile(
+					target,
+					JSON.stringify({ host, pad: "x".repeat(2_000_000) }),
+				);
+				return { source, target, snapshot: null };
+			}),
+		);
+		const complaints = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			await Promise.all(hosts.map(syncProviderCredentialsBack));
+		} finally {
+			complaints.mockRestore();
+		}
+
+		// Every sync landed. A shared temp path fails here first: one host's cleanup
+		// removes the file another host is about to rename, so the rename ENOENTs.
+		expect(complaints.mock.calls).toEqual([]);
+		const landed = JSON.parse(await readFile(source, "utf8")) as {
+			host?: number;
+		};
+		// Exactly one host's file, not a splice of several and not the old one.
+		expect([1, 2, 3, 4]).toContain(landed.host ?? 0);
+		// And no temp file survives to be renamed over the real one later.
+		expect((await readdir(dir)).filter((name) => name.includes("eval-sync"))) //
+			.toEqual([]);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	test("does nothing for a host that carried no credentials", async () => {
+		await syncProviderCredentialsBack(null);
+	});
+
+	// Serializing the writes stopped two of them landing as one file, and left the
+	// worse half of the same bug: every host writes back a full copy of one shared
+	// snapshot, so the last host out decides the whole file. What it reverts is not
+	// stale local state -- a consumed refresh token is revoked at the provider, so
+	// restoring the snapshot's copy kills the credential for the developer too.
+	describe("merging one host's rotations into the real file", () => {
+		const snapshot = JSON.stringify({
+			alpha: { refresh: "alpha-1" },
+			beta: { refresh: "beta-1" },
+		});
+
+		test("does not revert a rotation from a host that refreshed nothing", () => {
+			// The matrix case. Two hosts copy the same file; one refreshes `beta` and
+			// syncs first; the other carried `beta` untouched and syncs second.
+			const rotated = JSON.stringify({
+				alpha: { refresh: "alpha-1" },
+				beta: { refresh: "beta-2" },
+			});
+			const merged = mergeCredentials(rotated, snapshot, snapshot);
+			// Nothing of its own to publish, so it does not write at all.
+			expect(merged).toBeNull();
+		});
+
+		test("keeps both when two hosts rotate different providers", () => {
+			// One host per model, each authenticating to its own provider, is the
+			// ordinary shape of a matrix run rather than a corner of it.
+			const afterAlpha = mergeCredentials(
+				snapshot,
+				JSON.stringify({
+					alpha: { refresh: "alpha-2" },
+					beta: { refresh: "beta-1" },
+				}),
+				snapshot,
+			);
+			expect(afterAlpha).not.toBeNull();
+			const afterBeta = mergeCredentials(
+				afterAlpha ?? "",
+				JSON.stringify({
+					alpha: { refresh: "alpha-1" },
+					beta: { refresh: "beta-2" },
+				}),
+				snapshot,
+			);
+			expect(JSON.parse(afterBeta ?? "")).toEqual({
+				alpha: { refresh: "alpha-2" },
+				beta: { refresh: "beta-2" },
+			});
+		});
+
+		test("leaves a provider only the real file knows about alone", () => {
+			// A provider the developer logged into after the snapshot was taken, or one
+			// another host added. Absent from both the snapshot and the child, so the
+			// child has said nothing about it and must not remove it.
+			const merged = mergeCredentials(
+				JSON.stringify({ ...JSON.parse(snapshot), gamma: { refresh: "g-1" } }),
+				JSON.stringify({
+					alpha: { refresh: "alpha-2" },
+					beta: { refresh: "beta-1" },
+				}),
+				snapshot,
+			);
+			expect(JSON.parse(merged ?? "")).toEqual({
+				alpha: { refresh: "alpha-2" },
+				beta: { refresh: "beta-1" },
+				gamma: { refresh: "g-1" },
+			});
+		});
+
+		test("carries a logout across as the change it is", () => {
+			// Dropped against the snapshot rather than merely absent, which is the one
+			// case a merge of present keys alone would silently undo.
+			const merged = mergeCredentials(
+				snapshot,
+				JSON.stringify({ alpha: { refresh: "alpha-1" } }),
+				snapshot,
+			);
+			expect(JSON.parse(merged ?? "")).toEqual({
+				alpha: { refresh: "alpha-1" },
+			});
+		});
+
+		test("merges over the current file when there is no snapshot to diff", () => {
+			// Opted out of the copy, or there was no credential file to copy. Every
+			// child entry reads as changed, which is the old whole-file behaviour
+			// narrowed to the keys the child actually holds.
+			const merged = mergeCredentials(
+				JSON.stringify({ gamma: { refresh: "g-1" } }),
+				JSON.stringify({ alpha: { refresh: "alpha-1" } }),
+				null,
+			);
+			expect(JSON.parse(merged ?? "")).toEqual({
+				gamma: { refresh: "g-1" },
+				alpha: { refresh: "alpha-1" },
+			});
+		});
+
+		test("falls back to the child when the real file is unreadable", () => {
+			// Nothing coherent to merge into, so the child's copy is both the only
+			// option and better than leaving a broken file in place.
+			expect(mergeCredentials("", snapshot, snapshot)).toBe(snapshot);
+			expect(mergeCredentials("[]", snapshot, snapshot)).toBe(snapshot);
+		});
+
+		test("refuses a child that holds no entries", () => {
+			// The caller already rejects an unparseable child; an array or a bare value
+			// is the same refusal, since there is nothing in it to carry out.
+			expect(mergeCredentials(snapshot, "[]", snapshot)).toBeNull();
+			expect(mergeCredentials(snapshot, "null", snapshot)).toBeNull();
+		});
+
+		test("writes nothing through the real sync when no token rotated", async () => {
+			// End to end, because the merge being right is only half of it: a host with
+			// nothing to say must leave the file's own bytes untouched.
+			const dir = await mkdtemp(join(tmpdir(), "flow-eval-merge-"));
+			const source = join(dir, "auth.json");
+			const target = join(dir, "child.json");
+			const rotated = JSON.stringify({
+				alpha: { refresh: "alpha-1" },
+				beta: { refresh: "beta-2" },
+			});
+			await writeFile(source, rotated);
+			await writeFile(target, snapshot);
+			await syncProviderCredentialsBack({ source, target, snapshot });
+			expect(await readFile(source, "utf8")).toBe(rotated);
+			await rm(dir, { recursive: true, force: true });
+		});
 	});
 });

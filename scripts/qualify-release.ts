@@ -51,6 +51,23 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// exit zero — which its own check asserts directly. Gating the rate would publish a
 	// number for a guarantee it does not isolate. Isolating it needs a case this host
 	// skips with no platform gate on the entry.
+	"continuation-accepted": 1,
+	// Gated on its first matrix, which the note it replaces said not to do, because the
+	// number is not what gates it: this is the mirror of `goal-change-refused`, already
+	// at 1.0, and the pair only means something read together. One rule is enforced by
+	// refusing a changed goal and the other by accepting an unchanged one, so a
+	// regression that refuses everything satisfies the gated half and would pass. 9/9
+	// across three providers is the evidence that 1.0 is reachable; the mirror is the
+	// reason it is the right bar.
+	"defect-fails-review": null,
+	// Ungated, and now for a finding rather than a missing baseline. It went 9/9 on
+	// first measurement and 9/9 again, but never by the route it was built to exercise:
+	// the defect is planted in the function the goal invites the model to extend, so a
+	// model good enough to pass either fixes it or routes around it before review sees
+	// it. One attempt left the defect in place, built past it, and review passed
+	// without mentioning it. The rate therefore measures the implementer, and gating it
+	// would publish a number for the reviewer. Isolating review substance needs a
+	// defect the implementer has no reason to touch, which no scenario has yet.
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */

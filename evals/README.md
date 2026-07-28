@@ -46,6 +46,19 @@ to skip the copy and rely on environment credentials only.
 `FLOW_EVAL_MODEL` accepts a comma-separated list as an alternative to `--model`.
 `FLOW_OPENCODE_SMOKE_VERSION` overrides the pinned host.
 
+Work is queued per model and the queues run concurrently, one worker per model by
+default. Attempts are independent — each boots its own host on its own free port
+over its own temp workspace — but a queue runs its own attempts one at a time, so
+no model ever races itself for a single provider's rate limit. The 63-run matrix
+spent 2.5h of wall clock on 2.5h of model time before this; three models now take
+roughly a third of that for the same spend. Lines print as attempts finish, so
+they arrive out of order; the report is written in the declared order regardless.
+`--concurrency 1` restores the sequential run, which is easier to read when you
+are debugging a single failure, and four workers is the ceiling however many
+models you name — each attempt is a whole host compiling a real project, and past
+that the machine's own contention starts being credited back to the deadline as if
+it were machine sleep.
+
 Each run packs the working tree, boots a throwaway OpenCode host over a fresh
 git fixture, drives the real slash commands, then reads `.flow/session.json` and
 `.flow/history/`. Reports land in `evals/results/` (git-ignored).
@@ -65,9 +78,11 @@ therefore lower than the same run would report now.
 | `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run, and with the plan's declared gate itself observed passing at `broad` scope |
 | `plan-only-stops` | `/flow-plan` saves a plan and starts no run |
 | `goal-change-refused` | a materially different request does not mutate, replace, or close the active session |
+| `continuation-accepted` | a follow-up that continues the planned goal is carried out on the same session, with one saved plan and a run that actually completes |
 | `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, the red test is reported rather than deleted, the user is left a deferred-or-abandoned choice, and no review submission is rejected for dropping a live prior finding id (asking the user how to close is an accepted end) |
 | `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
 | `skipped-case-refused` | a declared acceptance case this host *skips* is never reported as verified, even though the declared command exits zero here |
+| `defect-fails-review` | a green suite that never exercises the goal's acceptance clause does not become a `completed` closure: the seeded defect is fixed and covered, or a review blocks it |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.
@@ -78,6 +93,28 @@ held three of three at 6.9.0, though one attempt offered abandoning the active
 session as its *recommended* option: the invariant survived because the model
 asked rather than because it preferred continuing, which is the margin any cut to
 the alignment prose would be spending.
+
+`continuation-accepted` is its mirror, and the pair is what makes either one
+evidence. Alignment was measured in one direction only, so a model that treated
+every follow-up as drift — asked about all of them, replanned all of them — passed
+the drift scenario and failed nothing. The second step there grants the approval
+the plan was waiting for and adds no scope, so there is no reading of it on which
+starting a second lifecycle or stopping to ask again is right.
+
+`defect-fails-review` is the only scenario whose fixture ships a defect. Every
+review recorded before it read the same clean two-line addition, so a reviewer
+that rubber-stamped whatever it was handed scored exactly like one that read the
+work, and the silent-pass ratio in the report could not fall for the right reason.
+The seeded `slug` replaces spaces and nothing else, the test that covers it uses a
+title with no punctuation, and the goal's acceptance clause is about punctuation — so
+the obvious implementation holds a green gate, a green focused test, and a false claim
+at once. The title the goal names comes out as `q1:-report/draft`: a colon Windows
+rejects, and a second path separator that breaks the `<dir>/<slug>.md` shape the goal
+asked for. Two routes pass: notice and cover the punctuated case, or let the
+review find it. Closing `completed` while no test ever called `slug` with a
+punctuated title is the failure, and the check reads that from the edit calls
+rather than from the document, because a focused observation records the command
+and its exit code and both look identical either way.
 
 `resumes-after-interruption` is the only scenario that crosses a session
 boundary. A step marked `freshSession` gets a new host session over the same
@@ -292,16 +329,27 @@ different things:
   against the prompts. A scenario that sets `mayEscalate` is the exception: there
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
-- `ABORT` — a step blew the timeout. The message says whether the session was
-  `wedged` (no new message or part, with the incomplete tool calls named, each with
-  the first line of its command) or `still working` (producing output up to the
-  deadline, so looping rather than stuck). Tokens and tool calls collected before the
-  abort are kept. Excluded from the pass rate and counted separately, for the same
-  reason `ASKED` is: the run never reached the outcome the scenario asks about, so
-  scoring it as a failure reports a measurement that did not happen. One wedged
-  attempt was the only failing threshold in a recorded report. `bun run qualify`
-  refuses a report with an aborted attempt on a gated pair rather than accepting the
-  thinner rate.
+- `ABORT` — a step ended without going quiet, either `wedged` (no new message or
+  part while tool calls stayed incomplete, each named with the first line of its
+  command) or `still working` (producing output up to the deadline, so looping
+  rather than stuck). A wedge is called at three minutes of no change rather than
+  waited out to the twenty-minute deadline: three of the four recorded timeouts sat
+  on the same incomplete tool call for the full twenty and then printed exactly that
+  diagnostic, so the remaining seventeen minutes bought no evidence. Tokens and tool
+  calls collected before the abort are kept. Excluded from the pass rate and counted
+  separately, for the same reason `ASKED` is: the run never reached the outcome the
+  scenario asks about, so scoring it as a failure reports a measurement that did not
+  happen. One wedged attempt was the only failing threshold in a recorded report.
+  `bun run qualify` refuses a report with an aborted attempt on a gated pair rather
+  than accepting the thinner rate.
+
+`hostError` is only an error the harness did not cause. It aborts sessions itself —
+to end an escalation nothing answers, or at a deadline — and OpenCode stamps
+`MessageAbortedError` on the message it kills. Reporting that as a condition of the
+host put 92 abort records in front of the 4 real timeouts across 408 recorded runs,
+since escalating is the designed end of six scenarios. An abort error with no
+abort issued still reports, because then something outside the process ended the
+turn.
 
 Suspending the machine mid-run is credited back rather than charged to the
 model: an iteration that takes far longer than its own poll interval is time the
@@ -313,14 +361,24 @@ and the step ends as soon as the session goes quiet holding one. Four recorded
 attempts each burned their full twenty minutes in that state before it was
 reported apart.
 
-Whether asking was right is the whole question, and it is scenario-specific. Two
+Whether asking was right is the whole question, and it is scenario-specific. Six
 scenarios set `mayEscalate` because the contract leaves the model no move of its
 own: a gate that cannot pass makes `completed` closure unavailable, and every other
 closure needs authority only the user can grant (`skills/flow-run/SKILL.md`). There
 asking is the intended end, and their checks hold on it — the blocker may be named
 in the question instead of a closing summary, and the invariant is what the model
-did *not* do. It counts only when the last step asked; a question during an earlier
-step ends the run before the step that probes the invariant ever runs.
+did *not* do.
+
+`mayEscalate` is consulted only for a question the *last* step ended on, because
+that is the only one nothing answers. A question during an earlier step is carried
+through: the runner aborts the pending turn, runs the next step, and that step's
+prompt is the answer. Three scenarios open with `flow-plan`, where asking for
+approval is exactly what `plan-only-stops` gates at 100%, and the step after it says
+"you have my approval". Excluding those attempts was measured wrong at 7.0.2 — one
+`continuation-accepted` attempt asked correctly, went unscored, and left the pair
+with two scored attempts against a floor of three, so a run that did nothing wrong
+would have failed qualification. Two of the three affected scenarios are gated at
+100%.
 
 `mayEscalate` is not a prediction that the model will call the `question` tool.
 Asking in closing prose satisfies the same contract, and only a tool call ends a
@@ -334,7 +392,7 @@ the blocker and stopping fails it, which one measured attempt did while satisfyi
 every other assertion. (Where the ask itself must be visible, `goal-change-refused` is
 the scenario that produces one.)
 
-Everywhere else an ask is excluded and left to you. Where the prompt already
+Everywhere else an ask at the wall is excluded and left to you. Where the prompt already
 granted authority to proceed, stopping to ask is closer to a defect than to
 caution. The report records every question, so read those and the run's
 `finalText` before concluding anything about the prompts.

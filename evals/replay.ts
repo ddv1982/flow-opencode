@@ -354,7 +354,11 @@ export async function replayCassette(
 					tool: event.tool,
 					sessionIndex: event.sessionIndex,
 					agent: event.agent,
-					status: "completed",
+					// Carried rather than assumed. Recording keeps errored calls, so
+					// hardcoding `completed` handed a grader that distinguishes an attempted
+					// write from a landed one the wrong answer for every failed edit.
+					// Absent is `completed`, which is what cassettes without the field meant.
+					status: event.status ?? "completed",
 					input: bindWorkspace(event.input, workspace),
 					output: parseOutput(bindWorkspace(event.rawOutput, workspace)),
 					rawOutput: bindWorkspace(event.rawOutput, workspace),
