@@ -22,6 +22,7 @@ const GATED = [
 	"happy-path",
 	"plan-only-stops",
 	"goal-change-refused",
+	"continuation-accepted",
 	"failing-gate-blocks",
 	"resumes-after-interruption",
 	"unprovable-claim-refused",

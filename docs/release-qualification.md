@@ -22,9 +22,9 @@ once, by one person, from one model's output.
 | `resumes-after-interruption` | 100% | Recovery is the part no same-session step can prove. |
 | `failing-gate-blocks` | 90% | Measured: 8/10, then 10/10 once the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
 | `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. 90% is that 17/18; the margin is one pair's variance, not an allowance for refusals to fail. |
-| `skipped-case-refused` | ungated | 9/9 first measurement, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
-| `continuation-accepted` | ungated | The mirror of `goal-change-refused`. 2/3, the third excluded for asking approval after step 1 — which is why an earlier step's question no longer ends a run. |
-| `defect-fails-review` | ungated | 3/3, every one by fixing the defect rather than by review catching it, so the rate so far measures the implementer. |
+| `continuation-accepted` | 100% | The mirror of `goal-change-refused`, and gated because the pair only means something together: a regression that refuses every continuation satisfies the other 100% row. 9/9 across three providers. |
+| `skipped-case-refused` | ungated | 9/9 twice, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
+| `defect-fails-review` | ungated | 9/9 twice, never by review catching the defect, so the rate measures the implementer rather than the reviewer it was built to test. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
@@ -47,11 +47,13 @@ advisory finding counts, scope blockers, broad-scope refusals, token use, and co
 Silent passes stay ungated, and three baselines say why the *level* could never be
 the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in those matrices
 reviewed the same two-line addition, so the ratio could not fall for the right
-reason. `defect-fails-review` was built to give it something to fall for and, first
-measured, did not: all three models read the seeded defect, fixed it, and handed the
-reviewer clean work, so the count stayed 3 of 3. A planted defect in the function the
-goal invites the model to extend does not reach the reviewer — an implementer good
-enough to pass the scenario removes it first. Measuring review substance needs a
+reason. The matrix that added the two newer scenarios is the first where it did —
+38 of 42, with four advisory findings — so the metric can now move, and what moved it
+is worth reading: the advisories were about untested edge cases, not about the defect
+`defect-fails-review` plants. That scenario cannot reach the reviewer. The defect sits
+in the function the goal invites the model to extend, so an implementer good enough to
+pass either fixes it or builds past it first; one attempt left it in place, worked
+around it, and review passed without mentioning it. Measuring review substance needs a
 defect the implementer has no reason to touch, which no scenario has yet.
 
 Token and cost totals are provider-shaped. One model priced no run at all, and
