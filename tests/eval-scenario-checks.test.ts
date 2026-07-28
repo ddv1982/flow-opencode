@@ -243,9 +243,13 @@ describe("unprovable-claim-refused", () => {
 // acceptance clause from one that was green before the work started. That makes its
 // one regex load-bearing, so both sides of it are pinned here.
 describe("defect-fails-review", () => {
-	const wrote = (path: string, body: string) => ({
+	const wrote = (
+		path: string,
+		body: string,
+		status: "completed" | "error" = "completed",
+	) => ({
 		tool: "edit",
-		status: "completed" as const,
+		status,
 		sessionIndex: 0,
 		agent: "build",
 		input: { filePath: path, newString: body },
@@ -316,6 +320,31 @@ describe("defect-fails-review", () => {
 				}),
 			),
 		).toEqual([]);
+	});
+
+	test("does not credit coverage to an edit the host rejected", () => {
+		// Coverage was read from every write call the transcript held, including the
+		// ones that returned an error, so an `edit` that failed on a stale match string
+		// credited the acceptance clause to a test file that was never written. The
+		// scenario is about evidence that does not exist; this was some of it.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					flowCalls: [reviewStart],
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");',
+							"error",
+						),
+					],
+				}),
+			),
+		).toEqual([
+			expect.stringContaining("without any test ever calling slug or slugPath"),
+		]);
 	});
 
 	test("passes a run the review blocked instead", () => {
