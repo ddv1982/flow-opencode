@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SCENARIOS } from "../evals/scenarios.js";
 import {
+	mergeReports,
 	providers,
 	qualificationFailures,
 } from "../scripts/qualify-release.js";
@@ -40,6 +41,8 @@ function report(overrides: {
 	>;
 	falseCompletions?: number;
 	unsubmitted?: number;
+	recordedAt?: string;
+	flowVersion?: string;
 }) {
 	const models = overrides.models ?? [
 		"anthropic/claude-opus-5",
@@ -47,7 +50,9 @@ function report(overrides: {
 	];
 	const scenarios = overrides.scenarios ?? GATED;
 	return {
-		flowVersion: "7.0.2",
+		flowVersion: overrides.flowVersion ?? "7.0.2",
+		opencodeVersion: "1.18.6",
+		recordedAt: overrides.recordedAt ?? "2026-07-28T03:20:43.936Z",
 		summary: {
 			passRates:
 				overrides.rates ??
@@ -253,5 +258,104 @@ describe("release qualification", () => {
 		expect(
 			failures.filter((failure) => failure.includes("no published threshold")),
 		).toEqual([]);
+	});
+});
+
+// Merging exists because re-measuring one wedged pair cost a whole matrix, and a gate
+// that expensive to satisfy gets argued with instead. These pin the direction of the
+// asymmetry: a merge may make qualification harder, never easier.
+describe("merging a re-run into a matrix", () => {
+	const WEDGED = {
+		"failing-gate-blocks @ anthropic/claude-opus-5": {
+			passed: 2,
+			attempts: 2,
+			unscored: 0,
+			aborted: 1,
+		},
+	};
+	const RERUN = {
+		"failing-gate-blocks @ anthropic/claude-opus-5": {
+			passed: 3,
+			attempts: 3,
+			unscored: 0,
+			aborted: 0,
+		},
+	};
+
+	function base(rates: typeof WEDGED = WEDGED) {
+		const full = report({});
+		return {
+			...full,
+			summary: {
+				...full.summary,
+				passRates: { ...full.summary.passRates, ...rates },
+			},
+		};
+	}
+
+	function rerun(overrides: Parameters<typeof report>[0] = {}) {
+		return {
+			...report({
+				scenarios: ["failing-gate-blocks"],
+				models: ["anthropic/claude-opus-5"],
+				recordedAt: "2026-07-28T09:00:00.000Z",
+				...overrides,
+			}),
+			summary: {
+				passRates: RERUN,
+				falseCompletions: 0,
+				closedCompleted: 0,
+				reviewer: { assignments: 0, unsubmitted: 0 },
+			},
+		};
+	}
+
+	test("qualifies the matrix once the wedged pair is re-measured", () => {
+		expect(qualificationFailures(base()).join()).toContain(
+			"aborted mid-flight",
+		);
+		const merged = mergeReports([base(), rerun()]);
+		expect(merged.failures).toEqual([]);
+		expect(qualificationFailures(merged.report)).toEqual([]);
+		expect(merged.notes.join()).toContain("superseded by 3/3");
+	});
+
+	test("takes the newer measurement whichever order the reports are given", () => {
+		const forwards = mergeReports([base(), rerun()]).report;
+		const backwards = mergeReports([rerun(), base()]).report;
+		expect(backwards.summary?.passRates).toEqual(forwards.summary?.passRates);
+		expect(qualificationFailures(backwards)).toEqual([]);
+	});
+
+	test("keeps the coverage of the full run, so a re-run cannot narrow the claim", () => {
+		// The re-run alone is a one-scenario report and fails on every gated scenario it
+		// does not contain. Merged, it inherits the matrix's coverage and nothing else.
+		expect(qualificationFailures(rerun()).join()).toContain(
+			"does not contain it",
+		);
+		const merged = mergeReports([base(), rerun()]).report;
+		expect((merged.results ?? []).map((result) => result.scenario)).toEqual(
+			expect.arrayContaining(GATED),
+		);
+	});
+
+	test("refuses to merge a report from another build", () => {
+		const { failures } = mergeReports([
+			base(),
+			rerun({ flowVersion: "7.1.0" }),
+		]);
+		expect(failures.join()).toContain("one build");
+	});
+
+	test("still counts a false completion from the superseded run", () => {
+		// The direction that matters. A pair's *rate* is replaced, but the failure Flow
+		// exists to prevent is summed, so re-running cannot launder one away.
+		const merged = mergeReports([
+			{ ...base(), summary: { ...base().summary, falseCompletions: 1 } },
+			rerun(),
+		]);
+		expect(qualificationFailures(merged.report).join()).toContain(
+			"false completion",
+		);
 	});
 });

@@ -3,6 +3,7 @@
 //
 //   bun run qualify                       # newest report in evals/results/
 //   bun run qualify evals/results/x.json  # one exact report
+//   bun run qualify base.json rerun.json  # a matrix plus the pairs it re-measured
 //
 // The thresholds live here rather than in prose because "the evals looked fine" was
 // the entire release bar: every recorded pass rate was read by eye, from one model,
@@ -125,6 +126,106 @@ export function providers(models: readonly string[]): string[] {
 	];
 }
 
+/**
+ * One report, or a base report with the re-runs that supersede parts of it.
+ *
+ * An abort disqualifies a report and the fix is to re-measure that pair, but the rule
+ * that qualification is a full-suite claim meant a re-run could not count: a
+ * one-scenario report is missing every other gated scenario, so re-measuring one
+ * wedged pair cost a whole matrix. That is the pressure that gets a gate ignored
+ * rather than satisfied.
+ *
+ * So a later report replaces the pairs it contains and nothing else. The scenario
+ * coverage and provider count come from the union, so a supplementary report cannot
+ * narrow the claim, and the suite-level counters are summed rather than replaced: a
+ * false completion or an unsubmitted review in either report still disqualifies, even
+ * if the run that produced it was superseded. That asymmetry is deliberate — a merge
+ * may only ever make qualification harder than the reports it came from.
+ *
+ * What it cannot prevent is re-running one pair until it passes. Nothing mechanical
+ * can, so the replacement is named in the output instead, and a merged pass is
+ * recorded as merged.
+ */
+export function mergeReports(reports: readonly Report[]): {
+	report: Report;
+	notes: string[];
+	failures: string[];
+} {
+	// Oldest first, by what the runner recorded rather than by argument order, so
+	// `qualify new.json old.json` cannot make the older measurement the winner.
+	const ordered = reports
+		.map((report, index) => ({ report, index }))
+		.toSorted((left, right) => {
+			const when = (entry: { report: Report }) => entry.report.recordedAt ?? "";
+			if (when(left) === when(right)) return left.index - right.index;
+			return when(left) < when(right) ? -1 : 1;
+		})
+		.map((entry) => entry.report);
+	const base = ordered[0];
+	if (!base) return { report: {}, notes: [], failures: [] };
+	if (ordered.length === 1) return { report: base, notes: [], failures: [] };
+
+	const notes: string[] = [];
+	const failures: string[] = [];
+	const passRates = { ...(base.summary?.passRates ?? {}) };
+	const results = [...(base.results ?? [])];
+	const totals = {
+		falseCompletions: base.summary?.falseCompletions ?? 0,
+		closedCompleted: base.summary?.closedCompleted ?? 0,
+		assignments: base.summary?.reviewer?.assignments ?? 0,
+		unsubmitted: base.summary?.reviewer?.unsubmitted ?? 0,
+		silentPasses: base.summary?.reviewer?.silentPasses ?? 0,
+	};
+	for (const later of ordered.slice(1)) {
+		const build = (report: Report) =>
+			`Flow ${report.flowVersion ?? "?"} on OpenCode ${report.opencodeVersion ?? "?"}`;
+		if (
+			later.flowVersion !== base.flowVersion ||
+			later.opencodeVersion !== base.opencodeVersion
+		) {
+			failures.push(
+				`a report recorded ${later.recordedAt ?? "at an unknown time"} measures ${build(later)}, but the base report measures ${build(base)}; a merged qualification has to describe one build`,
+			);
+			continue;
+		}
+		for (const [label, rate] of Object.entries(
+			later.summary?.passRates ?? {},
+		)) {
+			const previous = passRates[label];
+			if (previous) {
+				notes.push(
+					`${label}: ${previous.passed}/${previous.attempts} scored${(previous.aborted ?? 0) > 0 ? ` with ${previous.aborted} aborted` : ""}, superseded by ${rate.passed}/${rate.attempts} from the re-run`,
+				);
+			}
+			passRates[label] = rate;
+		}
+		results.push(...(later.results ?? []));
+		totals.falseCompletions += later.summary?.falseCompletions ?? 0;
+		totals.closedCompleted += later.summary?.closedCompleted ?? 0;
+		totals.assignments += later.summary?.reviewer?.assignments ?? 0;
+		totals.unsubmitted += later.summary?.reviewer?.unsubmitted ?? 0;
+		totals.silentPasses += later.summary?.reviewer?.silentPasses ?? 0;
+	}
+	return {
+		report: {
+			...base,
+			summary: {
+				passRates,
+				falseCompletions: totals.falseCompletions,
+				closedCompleted: totals.closedCompleted,
+				reviewer: {
+					assignments: totals.assignments,
+					unsubmitted: totals.unsubmitted,
+					silentPasses: totals.silentPasses,
+				},
+			},
+			results,
+		},
+		notes,
+		failures,
+	};
+}
+
 export function qualificationFailures(report: Report): string[] {
 	const failures: string[] = [];
 	const summary = report.summary ?? {};
@@ -224,14 +325,26 @@ export function qualificationFailures(report: Report): string[] {
 }
 
 async function main(): Promise<void> {
-	const path = process.argv[2] ?? (await newestReport());
-	const report = JSON.parse(await readFile(path, "utf8")) as Report;
-	console.log(
-		`Qualifying Flow ${report.flowVersion ?? "?"} on OpenCode ${report.opencodeVersion ?? "?"} from ${path}`,
+	const paths = process.argv.slice(2).filter((arg) => !arg.startsWith("-"));
+	if (paths.length === 0) paths.push(await newestReport());
+	const loaded = await Promise.all(
+		paths.map(
+			async (path) => JSON.parse(await readFile(path, "utf8")) as Report,
+		),
 	);
-	const failures = qualificationFailures(report);
+	const merged = mergeReports(loaded);
+	const report = merged.report;
+	console.log(
+		`Qualifying Flow ${report.flowVersion ?? "?"} on OpenCode ${report.opencodeVersion ?? "?"} from ${paths.join(" + ")}`,
+	);
+	for (const note of merged.notes) console.log(`  merged: ${note}`);
+	const failures = [...merged.failures, ...qualificationFailures(report)];
 	if (failures.length === 0) {
-		console.log("QUALIFIED: every published threshold held.");
+		console.log(
+			merged.notes.length > 0
+				? `QUALIFIED (merged from ${paths.length} reports): every published threshold held. Record both reports with the release — the pairs above were measured separately.`
+				: "QUALIFIED: every published threshold held.",
+		);
 		return;
 	}
 	console.error(

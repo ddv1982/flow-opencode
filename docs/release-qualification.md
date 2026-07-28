@@ -27,13 +27,19 @@ once, by one person, from one model's output.
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
 report does not contain fails the same way: the runner takes `--scenario` and
-`bun run qualify` reads the newest report, so qualification is a full-suite claim or
-it is nothing.
+`bun run qualify` reads the newest report, so qualification is a full-suite claim.
 
 An excluded attempt is not a smaller sample, it is a missing one: the runner drops an
 attempt that ended with the model asking or aborted mid-flight, so a gated pair below
 the floor — or holding any abort — means re-run that pair rather than read the
 remainder as its rate.
+
+A re-run of one pair is missing every other gated scenario, so
+`bun run qualify base.json rerun.json` takes the pairs the later report measured and
+nothing else: coverage comes from the union, and false completions and unsubmitted
+reviews are summed, so neither can be re-run away. A merge may only make
+qualification harder. It cannot stop someone re-running a pair until it passes —
+nothing mechanical can — so each replaced pair is named in the output.
 
 Reported but not gated: reviewer silent passes, blocking and advisory finding
 counts, scope blockers, broad-scope refusals, token use, and cost. These are trend
@@ -41,10 +47,8 @@ numbers.
 
 Silent passes stay ungated, and three baselines say why the *level* could never be
 the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in the last matrix
-reviewed the same two-line addition, and no scenario plants a defect for a reviewer
-to find, so the ratio cannot fall for the right reason. It is a trend line until a
-scenario hands the reviewer something wrong; a move in either direction is the
-evidence, and that is what a reported number catches.
+reviewed the same two-line addition, and no scenario plants a defect, so the ratio
+cannot fall for the right reason. A trend line until one does.
 
 Token and cost totals are provider-shaped and reported as such. One model priced no
 run at all, and another reported 38 input tokens beside
@@ -75,19 +79,12 @@ bun run eval -- --model <anthropic-id> --model <openai-id> --repeat 3
 bun run qualify
 ```
 
-Three tiers, because one price for every question is what made the suite something
-run at release instead of during work:
-
-| Tier | Command | Cost | Answers |
-| --- | --- | --- | --- |
-| Replay | `bun run replay` | free | does the runtime still reach the same outcome on decisions a model already made? |
-| Smoke | `bun run eval:smoke -- --model <id>` | one model, one attempt | did a prompt change break the ordinary path? |
-| Matrix | the two commands above | ≥ 2 providers × 3 attempts | may this be released? |
-
-Only the last qualifies. A replay proves nothing about the prompts, and a single
-attempt of a stochastic scenario is not a rate. See
-[../evals/README.md](../evals/README.md), and `bun run triage` for which runs in a
-report are worth reading.
+Only the full matrix qualifies a release. The cheaper tiers — a free replay of
+recorded decisions, a one-model smoke run — answer questions during work and are
+described with their prices in
+[../evals/README.md](../evals/README.md#three-tiers-three-prices). A replay proves
+nothing about the prompts, and a single attempt of a stochastic scenario is not a
+rate. `bun run triage` says which runs in a report are worth reading.
 
 The scheduled workflow (`.github/workflows/evals.yml`) does the same weekly and
 publishes the report as an artifact. It skips itself when no model matrix or
