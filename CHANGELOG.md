@@ -7,6 +7,13 @@ One short entry per release, written for users deciding whether to upgrade.
 The last route to a dishonest `completed` closure is closed, and the two claims
 that rested on prompt prose are now measured.
 
+Qualified on Flow 7.0.2 / OpenCode 1.18.6 from two reports: the 63-run matrix of
+2026-07-28T03:20Z across `opencode/claude-sonnet-5`, `openai/gpt-5.6-sol`, and
+`xai/grok-4.5` (62/62 scored passed), plus 2026-07-28T07:09Z re-measuring
+`failing-gate-blocks @ xai/grok-4.5`, whose third attempt in the matrix had wedged on
+a `grep` call that never returned. That pair went 3/3 on the re-run and the wedge did
+not recur.
+
 - **A plan declares its canonical gate.** `plan.gate` is the exact command that
   validates the whole repository, named at planning time and locked by approval. A
   `broad` observation has to run that command byte-for-byte, and the gate joins the
