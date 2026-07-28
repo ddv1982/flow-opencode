@@ -55,6 +55,39 @@ describe("observing named test results", () => {
 		]);
 	});
 
+	test("reads Bun's own shape, where the path is in `file` and classname is empty", () => {
+		// Verbatim from `bun test --reporter=junit`, which is the runner Flow is built
+		// on. It emits `classname=""`, so treating only `classname` as the suite made
+		// the most natural qualified name the one form that did not match — a refusal
+		// of a case that passed.
+		const bun = `<testsuites>
+      <testcase name="renames a reserved device name" classname="" time="0" file="src/platform.test.ts" line="4" assertions="1" />
+      <testcase name="creates the replacement on Windows" classname="" time="0" file="src/platform.test.ts" line="9" assertions="0">
+        <skipped />
+      </testcase>
+    </testsuites>`;
+		for (const name of [
+			"creates the replacement on Windows",
+			"src/platform.test.ts creates the replacement on Windows",
+			"src/platform.test.ts > creates the replacement on Windows",
+		]) {
+			expect(observeAssertions([name], bun)).toEqual([
+				{ name, status: "skipped" },
+			]);
+		}
+		expect(
+			observeAssertions(
+				["src/platform.test.ts > renames a reserved device name"],
+				bun,
+			),
+		).toEqual([
+			{
+				name: "src/platform.test.ts > renames a reserved device name",
+				status: "passed",
+			},
+		]);
+	});
+
 	test("accepts a name qualified by its suite, however the runner joins it", () => {
 		for (const name of [
 			"renames a reserved device name",

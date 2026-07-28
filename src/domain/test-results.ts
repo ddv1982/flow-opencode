@@ -40,13 +40,33 @@ function decodeEntities(value: string): string {
  *
  * Runners disagree about where the suite name goes, so the bare name and the three
  * common joins are all accepted rather than guessing at one runner's shape.
+ *
+ * `file` is read as a suite too, because Bun — the runner Flow itself is built on —
+ * emits `classname=""` and puts the path in `file`. Measured against real
+ * `bun test --reporter=junit` output: without this, the bare name matched and
+ * `src/platform.test.ts > creates the replacement on Windows` read `absent`, which is
+ * a refusal of a case that passed. The most natural way to write a qualified name was
+ * the one way it did not work.
  */
 function labels(attributes: Record<string, string>): string[] {
 	const name = attributes.name ?? "";
-	const suite = attributes.classname ?? attributes.class ?? "";
 	if (name === "") return [];
-	if (suite === "") return [name];
-	return [name, `${suite} ${name}`, `${suite}.${name}`, `${suite} > ${name}`];
+	const suites = [
+		attributes.classname,
+		attributes.class,
+		attributes.file,
+		attributes.filepath,
+	].filter((suite): suite is string => suite !== undefined && suite !== "");
+	return [
+		name,
+		...new Set(
+			suites.flatMap((suite) => [
+				`${suite} ${name}`,
+				`${suite}.${name}`,
+				`${suite} > ${name}`,
+			]),
+		),
+	];
 }
 
 /**
