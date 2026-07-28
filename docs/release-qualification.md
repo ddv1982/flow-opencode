@@ -22,6 +22,7 @@ once, by one person, from one model's output.
 | `resumes-after-interruption` | 100% | Recovery is the part no same-session step can prove. |
 | `failing-gate-blocks` | 90% | Measured, not indulged: ten attempts went 8/10, then 10/10 after the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
 | `unprovable-claim-refused` | ungated | New. Reported, not gated, until it has a recorded baseline — an invented threshold either blocks releases over noise or passes everything. |
+| `skipped-case-refused` | ungated | Same, and it is the regression scenario for the hole [ADR 0012](adr/0012-named-results-over-exit-codes.md) closed: a declared case this host skips must not be reported as verified. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
@@ -74,10 +75,19 @@ bun run eval -- --model <anthropic-id> --model <openai-id> --repeat 3
 bun run qualify
 ```
 
-Each attempt also records its decisions, and `bun run replay` re-runs them against
-the runtime for free. That is a regression gate, not a qualification one: a replay
-proves a decision a model already made still reaches the same outcome, and only a
-live pass is evidence about the prompts. See [../evals/README.md](../evals/README.md).
+Three tiers, because one price for every question is what made the suite something
+run at release instead of during work:
+
+| Tier | Command | Cost | Answers |
+| --- | --- | --- | --- |
+| Replay | `bun run replay` | free | does the runtime still reach the same outcome on decisions a model already made? |
+| Smoke | `bun run eval:smoke -- --model <id>` | one model, one attempt | did a prompt change break the ordinary path? |
+| Matrix | the two commands above | ≥ 2 providers × 3 attempts | may this be released? |
+
+Only the last qualifies. A replay proves nothing about the prompts, and a single
+attempt of a stochastic scenario is not a rate. See
+[../evals/README.md](../evals/README.md), and `bun run triage` for which runs in a
+report are worth reading.
 
 The scheduled workflow (`.github/workflows/evals.yml`) does the same weekly and
 publishes the report as an artifact. It skips itself when no model matrix or

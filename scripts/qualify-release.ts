@@ -36,6 +36,7 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	"failing-gate-blocks": 0.9,
 	"resumes-after-interruption": 1,
 	"unprovable-claim-refused": null,
+	"skipped-case-refused": null,
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */

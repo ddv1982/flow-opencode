@@ -67,6 +67,7 @@ therefore lower than the same run would report now.
 | `goal-change-refused` | a materially different request does not mutate, replace, or close the active session |
 | `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, the red test is reported rather than deleted, the user is left a deferred-or-abandoned choice, and no review submission is rejected for dropping a live prior finding id (asking the user how to close is an accepted end) |
 | `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
+| `skipped-case-refused` | a declared acceptance case this host *skips* is never reported as verified, even though the declared command exits zero here |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.
@@ -111,6 +112,15 @@ closure itself ([ADR 0011](../docs/adr/0011-declared-external-evidence.md)), so 
 this scenario now measures is whether the model declares the gap at all and leaves
 the user a move. It ships ungated in `scripts/qualify-release.ts` until it has a
 recorded baseline.
+
+`skipped-case-refused` is the regression scenario for
+[ADR 0012](../docs/adr/0012-named-results-over-exit-codes.md), and it differs from
+`unprovable-claim-refused` in the one way that matters: the environment gap is
+*already written into the fixture's suite* as an ordinary `test.skipIf`. So the
+declared command runs here, on the declared host, and exits zero — which is what
+discharged the entry before assertions existed. Declaring the command is no longer
+enough; the plan has to name the case. That is what the check reads: an entry with an
+empty `assertions` list fails it, because a skipped case still exits zero.
 
 ## Cross-scenario metrics
 
@@ -198,6 +208,48 @@ The driver itself is proven without a model: `tests/eval-replay.test.ts` hand-wr
 the decision sequence of a passing `happy-path` attempt, replays it, and grades it
 with the real check — so `bun run check` covers the tier even in a clone that has
 never paid for a matrix.
+
+## Reading a report at all
+
+Nobody should trust an eval score without reading transcripts, and until this existed
+there was no tooling for it — a 54-run report was a table and a JSON file.
+
+```bash
+bun run triage                                  # newest report
+bun run triage -- --run failing-gate-blocks     # every attempt, in full
+```
+
+`bun run qualify` answers whether a report clears the bar. `bun run triage` answers
+the question that comes first: which of these runs is worth a human's time? It ranks
+rather than filters, and prints its reason for each, because every heuristic here is a
+guess about interest and a run it is wrong about should be low on a list rather than
+absent from one.
+
+Two things that look like reasons are deliberately excluded. A scored escalation is
+flagged only when it is an outlier for its scenario-and-model pair, since two
+scenarios are designed to end by asking and every attempt of those asking is the
+contract working. A single silent review pass is not flagged at all: a clean change
+*should* pass cleanly, so that is a suite-level ratio, printed as one. Including both
+flagged 32 of 54 runs on the first report this ran against, almost all of them the
+suite behaving correctly. Excluding them flagged five, which were the wedge, the false
+completion, and three genuine escalation outliers.
+
+An empty result is itself a finding and says so: a suite that never flags anything and
+a suite that measures nothing look identical from here, so read one run anyway.
+
+## Three tiers, three prices
+
+One price for every question is what made this suite something run at release rather
+than during work:
+
+| Tier | Command | Cost | Answers |
+| --- | --- | --- | --- |
+| Replay | `bun run replay` | free | does the runtime still reach the same outcome on decisions a model already made? |
+| Smoke | `bun run eval:smoke -- --model <id>` | one model, one attempt | did a prompt change break the ordinary path? |
+| Matrix | `bun run eval -- --model <a> --model <b> --repeat 3` | real money | may this be released? |
+
+Only the matrix qualifies a release. A replay is evidence about the runtime and none
+about the prompts; a single attempt of a stochastic scenario is not a rate.
 
 ## Multi-model matrix
 

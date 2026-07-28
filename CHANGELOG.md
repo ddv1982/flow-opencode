@@ -86,6 +86,24 @@ that rested on prompt prose are now measured.
   another paid matrix before anyone knew it had not broken a sequence a model already
   performed. CI gates the committed cassettes; a run whose recording holds something a
   decision-layer replay cannot reproduce is reported rather than gated.
+- **A report can be read.** `bun run triage` ranks a report's runs by how much
+  reading each is worth and prints its reason for each, because nobody should trust an
+  eval score without reading transcripts and there was no tooling for it: a 54-run
+  report was a table and a JSON file. It ranks rather than filters, and deliberately
+  does *not* flag a scored escalation every attempt of its pair made, or a lone silent
+  review pass — including both flagged 32 of 54 runs on a real report, almost all of
+  them the suite working. Excluding them flagged five: the wedge, the false completion,
+  and three escalation outliers. An empty result says so, since a suite that never
+  flags anything and one that measures nothing look identical from here.
+- **Three eval tiers, three prices.** `bun run replay` is free and answers whether the
+  runtime still reaches the same outcome; `bun run eval:smoke` is one model and one
+  attempt, for a prompt change; the full matrix is the only thing that qualifies a
+  release. One price for every question is what made the suite something run at release
+  instead of during work.
+- **A regression scenario for the hole named results closed.** `skipped-case-refused`
+  seeds a fixture whose Windows-only case is an ordinary `test.skipIf`, so the declared
+  command runs here, on the right host, and exits zero. Declaring the command is no
+  longer enough; the plan has to name the case. Ungated until it has a baseline.
 - **Eval reports now include the reviewer.** Subtask sessions are read too, so a
   report finally contains the independent review's own tool calls. Before this, no
   recorded report held a single `flow_feature_complete` call, the check for rejected
