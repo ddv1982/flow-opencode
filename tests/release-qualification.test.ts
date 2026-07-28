@@ -23,6 +23,7 @@ const GATED = [
 	"goal-change-refused",
 	"failing-gate-blocks",
 	"resumes-after-interruption",
+	"unprovable-claim-refused",
 ];
 
 function report(overrides: {
@@ -105,11 +106,11 @@ describe("release qualification", () => {
 	test("refuses a report that never ran a gated scenario", () => {
 		// The runner takes `--scenario` and `bun run qualify` reads the newest report,
 		// so a one-scenario debug run was the newest report and qualified a release
-		// with four gated scenarios never run. Absence had no row to fail on.
+		// with every other gated scenario never run. Absence had no row to fail on.
 		const failures = qualificationFailures(
 			report({ scenarios: ["happy-path"] }),
 		);
-		expect(failures).toHaveLength(4);
+		expect(failures).toHaveLength(GATED.length - 1);
 		for (const failure of failures) {
 			expect(failure).toContain("does not contain it");
 		}

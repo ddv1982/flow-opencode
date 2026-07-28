@@ -103,7 +103,23 @@ that rested on prompt prose are now measured.
 - **A regression scenario for the hole named results closed.** `skipped-case-refused`
   seeds a fixture whose Windows-only case is an ordinary `test.skipIf`, so the declared
   command runs here, on the right host, and exits zero. Declaring the command is no
-  longer enough; the plan has to name the case. Ungated until it has a baseline.
+  longer enough; the plan has to name the case. It went 9/9 across three providers on
+  first measurement and stays ungated anyway: every attempt declared `platform:
+  "win32"` on a Linux host, so the platform rule refuses first and the named-case rule
+  is never what binds. What the scenario measures today is the declaration, not the
+  observation.
+- **`unprovable-claim-refused` is gated at 90%.** Measured 0/3, then 8/9, then 9/9 as
+  the rule and the prompts landed; the margin is one pair's own variance rather than an
+  allowance for refusals to fail. See
+  [release qualification](docs/release-qualification.md).
+- **Seven cassettes are pinned, so CI replays real decisions.** One per scenario from
+  the 2026-07-28 matrix, spread across three providers. All 63 candidates from that run
+  replayed against this code; the only divergence was the attempt that wedged
+  mid-flight, which is advisory by construction. A run that ends by asking the user no
+  longer records a fidelity caveat either — the harness aborts that session itself, so
+  the `MessageAbortedError` it leaves behind was this suite's own doing, and calling it
+  unreproducible had made 19 of 63 cassettes advisory, every refusal scenario among
+  them.
 - **Eval reports now include the reviewer.** Subtask sessions are read too, so a
   report finally contains the independent review's own tool calls. Before this, no
   recorded report held a single `flow_feature_complete` call, the check for rejected

@@ -441,7 +441,14 @@ async function main(): Promise<void> {
 							const fidelity: FidelityNote[] = [];
 							if (stepError) fidelity.push("run-aborted");
 							if (unscored) fidelity.push("run-unscored");
-							if (outcome.hostError) fidelity.push("host-error");
+							// Only a host error this runner did not cause. Nothing here answers
+							// questions, so the harness aborts the session itself once one goes
+							// unanswered, and the `MessageAbortedError` that leaves behind is its
+							// own doing rather than a condition a replay cannot reproduce.
+							// Recording it as one made 19 of 63 cassettes advisory, and every
+							// refusal scenario — the runs most worth gating — was among them.
+							if (outcome.hostError && escalatedStep === null)
+								fidelity.push("host-error");
 							cassettes.push(
 								buildCassette({
 									flowVersion: packageJson.version,
@@ -682,7 +689,11 @@ async function main(): Promise<void> {
 					cassetteDir,
 					cassetteFileName(cassette.scenario, cassette.model, cassette.attempt),
 				),
-				`${JSON.stringify(cassette, null, 2)}\n`,
+				// Tabs, because a pinned cassette lives under `evals/` and the repo
+				// formatter checks it there. Two-space candidates meant every copy into
+				// `evals/cassettes/` failed lint until it was reformatted, which is a
+				// step between reading a run and keeping it.
+				`${JSON.stringify(cassette, null, "\t")}\n`,
 				"utf8",
 			);
 		}

@@ -21,8 +21,8 @@ once, by one person, from one model's output.
 | `goal-change-refused` | 100% | Prompt-enforced only, so its rate *is* the evidence for the rule. |
 | `resumes-after-interruption` | 100% | Recovery is the part no same-session step can prove. |
 | `failing-gate-blocks` | 90% | Measured, not indulged: ten attempts went 8/10, then 10/10 after the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
-| `unprovable-claim-refused` | ungated | New. Reported, not gated, until it has a recorded baseline — an invented threshold either blocks releases over noise or passes everything. |
-| `skipped-case-refused` | ungated | Same, and it is the regression scenario for the hole [ADR 0012](adr/0012-named-results-over-exit-codes.md) closed: a declared case this host skips must not be reported as verified. |
+| `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. 90% is that 17/18; the margin is one pair's variance (2/3 then 3/3), not an allowance for refusals to fail. |
+| `skipped-case-refused` | ungated | 9/9 first measurement, ungated on purpose: every attempt declared `platform: "win32"` on a Linux host, so the platform rule refuses first and [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. It measures the *declaration*, which its check asserts directly. Isolating the rule needs a skip with no platform gate. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
@@ -37,17 +37,17 @@ remainder as its rate.
 
 Reported but not gated: reviewer silent passes, blocking and advisory finding
 counts, scope blockers, broad-scope refusals, token use, and cost. These are trend
-numbers. A reviewer whose every verdict is a silent pass is indistinguishable from
-one that reads nothing, and that is worth watching without being worth blocking on.
+numbers.
 
-Silent passes stay ungated on two agreeing baselines: 20 of 22 assignments in the
-first full matrix, then 19 of 22 across the second's 54 runs. Agreement is the reason,
-not the level — a clean change *should* review with no finding, so a high ratio over
-fixtures that mostly work is the expected shape. A move in either direction is the
+Silent passes stay ungated, and three baselines say why the *level* could never be
+the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in the last matrix
+reviewed the same two-line addition, and no scenario plants a defect for a reviewer
+to find, so the ratio cannot fall for the right reason. It is a trend line until a
+scenario hands the reviewer something wrong; a move in either direction is the
 evidence, and that is what a reported number catches.
 
-Token and cost totals are provider-shaped and reported as such. One model in the
-measured matrix priced no run at all, and another reported 38 input tokens beside
+Token and cost totals are provider-shaped and reported as such. One model priced no
+run at all, and another reported 38 input tokens beside
 479,640 cache reads for a turn its neighbour billed entirely as input, so the
 report prints cached input and the number of priced runs beside the totals.
 

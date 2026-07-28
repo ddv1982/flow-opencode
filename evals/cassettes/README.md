@@ -12,3 +12,16 @@ walk the happy path, and the set is read by hand — keep it readable.
 
 See [../README.md](../README.md#replaying-recorded-decisions) for what a cassette
 can and cannot reproduce.
+
+## What is pinned, and why these
+
+One per scenario, from the Flow 7.0.2 matrix of 2026-07-28, spread across three
+providers on purpose — a set drawn from one model records that model's habits rather
+than the runtime's rules. Every one was gated in that report (empty `fidelity`), and
+all 63 candidates replayed with the only divergence being the attempt that wedged
+mid-flight, which is advisory by construction.
+
+Picked by decision reached, not by provider or size: the ordinary path, the
+plan-only stop, the refused goal change, the blocking gate, the unprovable claim,
+the skipped acceptance case, and the resume across a fresh session with no
+transcript. Replacing one is cheaper than adding an eighth.
