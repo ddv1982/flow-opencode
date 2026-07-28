@@ -125,7 +125,12 @@ export type Cassette = Readonly<{
  */
 const SECRET_PATTERNS: readonly RegExp[] = [
 	// Provider key prefixes, longest first so a longer prefix is not half-matched.
-	/\b(?:sk-ant|sk-proj|sk-or|sk|xai|gsk|hf|dop_v1|shpat)-[A-Za-z0-9_-]{16,}/g,
+	// `[-_]`, because the separator is not the same for all of them: Anthropic, OpenAI
+	// and xAI hyphenate, while Groq, Hugging Face, DigitalOcean and Shopify use an
+	// underscore. Requiring a hyphen meant `gsk_`, `hf_`, `dop_v1_` and `shpat_` were
+	// four prefixes listed here that could never match — the scrubber read as covering
+	// them while passing them straight into a committed artifact.
+	/\b(?:sk-ant|sk-proj|sk-or|sk|xai|gsk|hf|dop_v1|shpat)[-_][A-Za-z0-9_-]{16,}/g,
 	/\bgithub_pat_[A-Za-z0-9_]{20,}/g,
 	/\bgh[pousr]_[A-Za-z0-9]{16,}/g,
 	/\bAIza[A-Za-z0-9_-]{20,}/g,

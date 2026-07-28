@@ -43,6 +43,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job runs a model-driven agent that executes arbitrary commands for
+          # hours with provider secrets in the environment. A GITHUB_TOKEN left in
+          # .git/config would be a repository-scoped write credential it never uses:
+          # the job only reads the checkout, runs the eval, and uploads an artifact.
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

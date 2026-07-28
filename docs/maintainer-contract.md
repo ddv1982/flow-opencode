@@ -158,10 +158,10 @@ repair.
 
 `flow_status` may add process-local `/flow-auto` context to top-level workflow data:
 `autoContinuation` reports whether this host has been observed to report assistant
-message parentage, which continuation depends on. It has three states and only two
-are surfaced — `supported`, `unsupported` with a reason and recovery, and an
-unreported `unknown` before any assistant message exists, since the absence of a
-signal is not a limitation. `/flow-auto` activation states an `unsupported` host
+message parentage, which continuation depends on. Two values are surfaced:
+`supported`, and `unsupported` with a reason and recovery. Before any assistant
+message exists the field is omitted rather than reported `unknown`, since the absence
+of a signal is not a limitation. `/flow-auto` activation states an `unsupported` host
 plainly instead of letting continuation fail silently after every feature. This
 adds no Session v5 field and never blocks a transition.
 

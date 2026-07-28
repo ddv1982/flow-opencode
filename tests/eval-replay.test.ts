@@ -264,6 +264,12 @@ describe("cassette hygiene", () => {
 				"export OPENAI_API_KEY=sk-proj-BBBBBBBBBBBBBBBBBBBBBBBB",
 				"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.CCCCCCCCCCCC",
 				"ghp_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+				// Underscore-separated prefixes, which the hyphen-only pattern could not
+				// match: four of the nine listed here were dead until measured.
+				"GROQ_API_KEY=gsk_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+				"hf_FFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+				"dop_v1_0123456789abcdef0123456789abcdef",
+				"shpat_GGGGGGGGGGGGGGGGGGGGGGGGGGGG",
 				'"password": "hunter2hunter2"',
 			].join("\n"),
 		);
@@ -272,6 +278,10 @@ describe("cassette hygiene", () => {
 			"sk-ant-api03",
 			"sk-proj-",
 			"ghp_D",
+			"gsk_E",
+			"hf_F",
+			"dop_v1_0",
+			"shpat_G",
 			"hunter2hunter2",
 			"eyJhbGciOiJIUzI1NiJ9",
 		]) {
