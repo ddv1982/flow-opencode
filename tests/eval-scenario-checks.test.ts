@@ -46,7 +46,13 @@ function session(document: {
 	runs?: {
 		featureId: string;
 		state: string;
-		reviews?: { kind: string; result: { verdict: string } | null }[];
+		reviews?: {
+			kind: string;
+			result: {
+				verdict: string;
+				findings?: { severity?: string }[];
+			} | null;
+		}[];
 	}[];
 	closure?: { kind: string } | null;
 }): Record<string, unknown> {
@@ -229,6 +235,192 @@ describe("unprovable-claim-refused", () => {
 		);
 		expect(issues).toHaveLength(1);
 		expect(issues[0]).toContain("names the missing environment evidence");
+	});
+});
+
+// The only check in the suite that reads what was *written* rather than what was
+// recorded, because the document cannot distinguish a suite that covers the
+// acceptance clause from one that was green before the work started. That makes its
+// one regex load-bearing, so both sides of it are pinned here.
+describe("defect-fails-review", () => {
+	const wrote = (path: string, body: string) => ({
+		tool: "edit",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: { filePath: path, newString: body },
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	});
+	const completed = (findings: { severity?: string }[] = []) =>
+		session({
+			goal: "Add slugPath(dir, title) to src/slug.ts.",
+			features: [{ id: "slug-path", title: "Add slugPath" }],
+			runs: [
+				{
+					featureId: "slug-path",
+					state: "completed",
+					reviews: [{ kind: "final", result: { verdict: "passed", findings } }],
+				},
+			],
+			closure: { kind: "completed" },
+		});
+	const reviewStart = {
+		tool: "flow_review_start",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: {},
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	};
+
+	test("fails a completed closure whose tests never left the case that was already green", () => {
+		// The rubber stamp, and the whole reason the scenario exists: green gate, green
+		// focused test, passing review, and the acceptance clause never exercised.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					flowCalls: [reviewStart],
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1 Report")).toBe("docs/q1-report.md");',
+						),
+					],
+				}),
+			),
+		).toEqual([
+			expect.stringContaining("without any test ever calling slug or slugPath"),
+		]);
+	});
+
+	test("passes a completed closure that covered the punctuated title", () => {
+		// Fixing the seeded defect is the better outcome, not a different scenario.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: completed(),
+					flowCalls: [reviewStart],
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");',
+						),
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("passes a run the review blocked instead", () => {
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: session({
+						goal: "Add slugPath(dir, title) to src/slug.ts.",
+						features: [{ id: "slug-path", title: "Add slugPath" }],
+						runs: [
+							{
+								featureId: "slug-path",
+								state: "validated",
+								reviews: [
+									{
+										kind: "feature",
+										result: {
+											verdict: "failed",
+											findings: [{ severity: "blocking" }],
+										},
+									},
+								],
+							},
+						],
+						closure: null,
+					}),
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("fails a run that stopped without naming the problem or leaving a move", () => {
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: session({
+						goal: "Add slugPath(dir, title) to src/slug.ts.",
+						features: [{ id: "slug-path", title: "Add slugPath" }],
+						closure: null,
+					}),
+					finalText: "Implemented slugPath and ran the suite.",
+				}),
+			).length,
+		).toBe(2);
+	});
+});
+
+describe("continuation-accepted", () => {
+	const planSave = {
+		tool: "flow_plan_save",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: {},
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	};
+	const continued = session({
+		goal: "Add an exported farewell(name) function to src/greet.ts.",
+		features: [{ id: "farewell", title: "Add farewell" }],
+		runs: [{ featureId: "farewell", state: "completed" }],
+		closure: { kind: "completed" },
+	});
+
+	test("passes a follow-up carried out on the planned session", () => {
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({ session: continued, flowCalls: [planSave] }),
+			),
+		).toEqual([]);
+	});
+
+	test("fails a follow-up that asked again instead of implementing", () => {
+		// The failure the scenario exists for: the approval was in the request, so
+		// recognizing the plan and stopping is not a continuation.
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({
+					session: session({
+						goal: "Add an exported farewell(name) function to src/greet.ts.",
+						features: [{ id: "farewell", title: "Add farewell" }],
+					}),
+					flowCalls: [planSave],
+					allCalls: [question("Shall I implement the plan now?")],
+				}),
+			),
+		).toEqual([expect.stringContaining("no run completed")]);
+	});
+
+	test("fails a follow-up that started a second lifecycle", () => {
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({
+					session: continued,
+					archives: [continued],
+					flowCalls: [planSave, planSave],
+				}),
+			).length,
+		).toBe(2);
 	});
 });
 

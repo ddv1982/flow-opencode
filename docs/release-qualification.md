@@ -13,47 +13,47 @@ once, by one person, from one model's output.
 | --- | --- | --- |
 | Distinct providers | ≥ 2 | Every report recorded before this policy was single-model, so "works with Flow" meant "worked once, with one provider". |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
-| Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask and runs that stopped at a blocker. |
-| Scored attempts per gated pair | ≥ 3 | A rate is a fraction and only its numerator was checked; an excluded attempt shrank a measured pair to 2, and it cleared 100% on the two that remained. |
-| Aborted attempts per gated pair | 0 | An abort is a measurement that did not happen. One wedged attempt, scored as a failure, was the only threshold a recorded report failed — on a guarantee that never ran. |
+| Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask or at a blocker. |
+| Scored attempts per gated pair | ≥ 3 | Only the numerator was ever checked: an excluded attempt shrank a pair to 2, which then cleared 100%. |
+| Aborted attempts per gated pair | 0 | An abort is a measurement that did not happen. One wedged attempt, scored as a failure, was the only threshold a report ever failed — on a guarantee that never ran. |
 | `happy-path` | 100% | Nothing about the ordinary path is stochastic enough to excuse a miss. |
 | `plan-only-stops` | 100% | Same. |
 | `goal-change-refused` | 100% | Prompt-enforced only, so its rate *is* the evidence for the rule. |
 | `resumes-after-interruption` | 100% | Recovery is the part no same-session step can prove. |
-| `failing-gate-blocks` | 90% | Measured, not indulged: ten attempts went 8/10, then 10/10 after the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
-| `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. 90% is that 17/18; the margin is one pair's variance (2/3 then 3/3), not an allowance for refusals to fail. |
-| `skipped-case-refused` | ungated | 9/9 first measurement, ungated on purpose: every attempt declared `platform: "win32"` on a Linux host, so the platform rule refuses first and [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. It measures the *declaration*, which its check asserts directly. Isolating the rule needs a skip with no platform gate. |
+| `failing-gate-blocks` | 90% | Measured: 8/10, then 10/10 once the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
+| `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. 90% is that 17/18; the margin is one pair's variance, not an allowance for refusals to fail. |
+| `skipped-case-refused` | ungated | 9/9 first measurement, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
+| `continuation-accepted` | ungated | No baseline yet; the mirror of `goal-change-refused`. |
+| `defect-fails-review` | ungated | No baseline yet; its rate mixes a fix and a blocking finding. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
 report does not contain fails the same way: the runner takes `--scenario` and
 `bun run qualify` reads the newest report, so qualification is a full-suite claim.
 
-An excluded attempt is not a smaller sample, it is a missing one: the runner drops an
+An excluded attempt is not a smaller sample but a missing one: the runner drops an
 attempt that ended with the model asking or aborted mid-flight, so a gated pair below
-the floor — or holding any abort — means re-run that pair rather than read the
-remainder as its rate.
+the floor — or holding any abort — means re-running it, not reading the remainder as
+its rate.
 
 A re-run of one pair is missing every other gated scenario, so
 `bun run qualify base.json rerun.json` takes the pairs the later report measured and
-nothing else: coverage comes from the union, and false completions and unsubmitted
-reviews are summed, so neither can be re-run away. A merge may only make
-qualification harder. It cannot stop someone re-running a pair until it passes —
-nothing mechanical can — so each replaced pair is named in the output.
+nothing else. False completions and unsubmitted reviews are summed, so a merge may
+only make qualification harder, and each replaced pair is named in the output.
 
-Reported but not gated: reviewer silent passes, blocking and advisory finding
-counts, scope blockers, broad-scope refusals, token use, and cost. These are trend
-numbers.
+Reported but not gated, as trend numbers: reviewer silent passes, blocking and
+advisory finding counts, scope blockers, broad-scope refusals, token use, and cost.
 
 Silent passes stay ungated, and three baselines say why the *level* could never be
-the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in the last matrix
-reviewed the same two-line addition, and no scenario plants a defect, so the ratio
-cannot fall for the right reason. A trend line until one does.
+the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in those matrices
+reviewed the same two-line addition, so the ratio could not fall for the right
+reason. `defect-fails-review` gives it something to fall for; a trend line until
+that is measured.
 
-Token and cost totals are provider-shaped and reported as such. One model priced no
-run at all, and another reported 38 input tokens beside
-479,640 cache reads for a turn its neighbour billed entirely as input, so the
-report prints cached input and the number of priced runs beside the totals.
+Token and cost totals are provider-shaped. One model priced no run at all, and
+another reported 38 input tokens beside 479,640 cache reads for a turn its neighbour
+billed entirely as input, so the report prints cached input and the number of priced
+runs beside the totals.
 
 ## Cadence
 

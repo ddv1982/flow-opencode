@@ -51,6 +51,17 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// exit zero — which its own check asserts directly. Gating the rate would publish a
 	// number for a guarantee it does not isolate. Isolating it needs a case this host
 	// skips with no platform gate on the entry.
+	"continuation-accepted": null,
+	"defect-fails-review": null,
+	// Both ungated for the ordinary reason: no matrix has measured them yet, and the
+	// first number either scenario produces is a baseline rather than a bar. Gate them
+	// in the release after the one that first measures them.
+	//
+	// `defect-fails-review` in particular should not be gated on its first rate. Its
+	// two passing routes are a fix and a blocking finding, and which one a model takes
+	// is the thing being measured — a rate that mixes them says less than the pair of
+	// counts beside it, so read the silent-pass and blocking-finding lines first and
+	// decide what the rate is allowed to mean afterwards.
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */
