@@ -15,6 +15,26 @@ not fold a materially different request into the active goal.
 State lives in `.flow/session.json`, so the workflow survives a restart, a
 context change, or a lost transcript.
 
+Flow is in preview: an opinionated workflow for consequential multi-step changes,
+for people who read the review. It is worth its ceremony when a wrong change is
+expensive, and it is overhead when it is not.
+
+## When not to use Flow
+
+- **Small changes.** A one-file fix or a rename pays for a plan, a validation, a
+  review, and a close that it did not need.
+- **Exploration.** Approval locks the plan, and a materially different request will
+  not be folded into the active goal.
+- **Speed above all.** A serial lifecycle with an independent review is slower than
+  asking directly, deliberately.
+- **Trusting the verdict without reading it.** The review is a model judgment, not
+  a proof. [What Flow guarantees](docs/guarantees.md) separates the rules the
+  runtime enforces from the ones that are judgment.
+- **Parallel features, several repositories, or team orchestration.** Flow runs one
+  durable feature at a time in one project.
+
+[Positioning](docs/positioning.md) has the longer version.
+
 ## Install
 
 Install the exact npm release through OpenCode:
@@ -59,6 +79,10 @@ validate against the real workspace, obtain an independent review — and keeps
 going through every runnable feature without handing back between them, until it
 can close the session.
 
+Continuation between features needs a host that reports assistant message
+parentage. Flow says so plainly when it detects a host that does not: the lifecycle
+still works, one `/flow-run` at a time.
+
 Send `/flow-auto stop` or `/flow-auto cancel` in the same OpenCode session to
 revoke only the in-process continuation. That does not close, defer, abandon, or
 otherwise change the durable Flow session.
@@ -86,7 +110,8 @@ you granted.
 
 ## How Flow works
 
-1. Planning saves a small feature DAG. Approval locks it.
+1. Planning saves a small feature DAG, including the repository's canonical
+   validation command. Approval locks both.
 2. One feature starts, chosen only from those whose dependencies are complete.
 3. Before editing, the manager gathers the evidence the feature needs and works
    through an adversarial risk checklist: failure ordering, repeated and
@@ -95,9 +120,10 @@ you granted.
 4. The manager implements the feature, serially or by integrating a bounded
    worker wave.
 5. Flow observes the exact armed validation command against the current
-   workspace, then opens one independent review assignment. A newer relevant
-   failure or a source change invalidates an older pass, and review cannot be
-   requested while evidence the outcome depends on is knowingly missing.
+   workspace, then opens one independent review assignment. Broad evidence runs
+   the plan's declared gate and nothing else. A newer relevant failure or a source
+   change invalidates an older pass, and review cannot be requested while evidence
+   the outcome depends on is knowingly missing.
 6. A passing review advances the plan. A failed feature is never picked up again
    implicitly — Flow reports the blocker and waits for an explicit retry or an
    independent-feature choice. The last passing feature allows closure, and every

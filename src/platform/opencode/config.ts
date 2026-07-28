@@ -18,6 +18,7 @@ export function createConfigHook(
 		}
 		applyFlowConfig(config, {
 			onWarning: (warning) => log("warn", warning),
+			onNotice: (notice) => log("info", notice),
 			onCollision: (kind, name) =>
 				log(
 					"warn",

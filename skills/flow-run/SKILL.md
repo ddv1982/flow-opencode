@@ -97,9 +97,9 @@ feature and current worktree:
 
 - Preserve every named finding/requirement; map each to an observable acceptance
   outcome.
-- Inventory exact commands, behavior evidence, required operating system,
-  architecture, service, credential, external setting, or hardware, and an
-  authorized path for each.
+- Inventory each `externalEvidence` command, its platform, and where it writes a
+  JUnit report: arm it with `resultsPath` naming that file, or its declared cases go
+  unobserved and the entry stays open on exit zero.
 - Reuse one conversational run baseline of unrelated work, deletions, renames,
   file types, and executable modes. Refresh changed facts; give each review only
   facts the feature changes or depends on, and give final review the full
@@ -110,9 +110,8 @@ feature and current worktree:
   state-machine work, express it as a compact matrix with `state/interleaving`,
   `event`, `expected outcome`, `cleanup/invariant`, and `evidence` columns.
 
-Carry the checklist/IDs through workers and review. Required evidence needing
-user or external authority stops before implementation. If skipped or unavailable, it forbids
-`flow_review_start`; a substitute pass cannot cure it.
+Carry the checklist/IDs through workers and review. Evidence needing user or
+external authority stops before implementation.
 
 ## Implement
 
@@ -156,9 +155,8 @@ checks from the changed behavior and risk:
   sufficient alone only for genuinely mechanical or documentation-only work.
 - UI claims need visual inspection when a runnable target is available.
 - Cleanup claims need behavior-preservation evidence, not formatting alone.
-- `scope: "broad"` is a coverage claim, not a stronger label. Use it only for the
-  repository's canonical applicable gate or a justified equivalent covering the
-  delivered repository state.
+- `scope: "broad"` runs the plan's declared `gate` and nothing else; the runtime
+  refuses any other command at that scope.
 
 Immediately before each evidence Bash command, call `flow_validation_start`
 with current revision, feature id, exact command, and `scope` (`focused` or
@@ -166,35 +164,29 @@ with current revision, feature id, exact command, and `scope` (`focused` or
 records the host observation; copy no host-observed fields into a later request.
 The command is durable, so include no secrets.
 
-Exact plan-listed gate commands are recorded byte-for-byte.
-A failed, incomplete, or source-drifted exact plan-listed observation creates a
-freshness boundary. Before new review admission, that gate needs a complete
-exit-zero observation for current source recorded after its latest relevant
-failure or drift; returning to an older digest does not revive an earlier pass,
-and substitute broad validation cannot discharge it. Plan-listed validation prose
-that has never run as an exact command remains reviewer judgment, not a fabricated
-pass or failure.
+A failed, incomplete, or source-drifted observation of a plan-listed command or of
+the declared `gate` blocks review until that same command passes for current
+source. No substitute discharges it; reverting the source revives nothing.
 
-A gate that cannot pass withholds completed closure, and reporting the blocker is
-half the move. Fix the gate, or ask the user to choose deferred or abandoned
-closure. Ending the turn having done neither leaves the workflow with no next step.
+A gate or `externalEvidence` command that cannot pass withholds completed closure,
+and reporting the blocker is half the move. Reach the passing command, or ask the
+user to choose deferred or abandoned closure. Ending the turn having done neither
+leaves the workflow with no next step, whatever the blocker was.
 
 Every host-observed validation advances the session revision, so the revision
 that armed a completed command is stale. The `[flow-validation]` marker reports
-`passed` and `recordedRevision`. Use `recordedRevision` for the next
+`passed`, `recordedRevision`, and any declared `assertions` with what the report
+said about each. Use `recordedRevision` for the next
 `flow_validation_start`, or for `flow_review_start` only when `passed: true`. If
 the marker is absent or malformed, refresh compact status before mutating.
 
 Use focused validation for ordinary features. For the final feature, run the
-repository's broad applicable gate after the last relevant edit. A source edit
-invalidates earlier applicability. Failed or unavailable checks are blockers,
-not passing evidence. If the canonical gate cannot run, explain why the chosen
-equivalent is broad enough.
+plan's declared `gate` at broad scope after the last relevant edit. A source edit
+invalidates earlier applicability. Failed or unavailable checks are blockers, not
+passing evidence.
 
-Immediately before review admission, reconcile the preflight inventory against
-the recorded current-source observations. Do not call `flow_review_start` while
-known required behavior or environment evidence is skipped or unavailable,
-including requirements that are not exact stored commands.
+Immediately before review admission, reconcile the preflight inventory against the
+recorded current-source observations.
 
 ## Review and record
 

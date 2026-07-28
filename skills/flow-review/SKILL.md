@@ -71,11 +71,9 @@ read-only access. It is evidence, not a verdict. Lack of shell access alone is
 not a failure; a missing or conflicting baseline fact, or a material mode,
 platform, race, or failure-path claim without proof, is.
 
-Validation scope is a claim. Treat `broad` as adequate only when the durable
-command is the repository's canonical applicable gate or a justified equivalent
-for the delivered state. Flow deliberately projects no raw command output; use
-the durable command, exit code, completeness, digest, source binding, and your
-workspace inspection. A weak or unclear coverage claim is an evidence gap.
+Flow deliberately projects no raw command output; use the durable command, exit
+code, completeness, digest, source binding, and your workspace inspection. A weak or
+unclear coverage claim is an evidence gap.
 
 For a final assignment, also inspect broad validation and confirm docs,
 commands, package surfaces, and remaining gaps are consistent with completion.

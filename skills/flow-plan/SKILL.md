@@ -47,6 +47,19 @@ Save one plan with:
 - `overview`: the implementation approach and important boundaries.
 - `requirements`: acceptance criteria, constraints, and non-goals.
 - `decisions`: assumptions and architecture or scope choices already made.
+- `gate`: the canonical whole-repository command, read from repository
+  configuration. Broad evidence later runs this command byte-for-byte, so a check
+  too weak to fail forecloses broad evidence for the session.
+- `externalEvidence`: each acceptance observation needing an operating system,
+  architecture, service, credential, setting, or hardware this host may lack, as
+  `requirement`, `environment`, the exact `command` whose passing is that observation,
+  `platform`: `win32`, `darwin`, `linux`, or `other` for a non-OS environment, and
+  `assertions`: the test case names whose passing is that observation, empty for
+  evidence that is not a test result. Empty list when the goal is fully observable
+  here. That command, on that platform, reporting those cases passing is what
+  satisfies it: final review and completed closure stay refused until then. A skipped
+  case exits zero and satisfies nothing, and recording the gap as a `requirements`
+  non-goal declares nothing.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 
@@ -60,19 +73,14 @@ Preserve stable finding, issue, or requirement IDs exactly in the saved feature
 `summary` or `validation`; each stays traceable from the immutable plan to one
 outcome and its evidence.
 
-When `validation` names an executable command, record the exact plan-listed
-command byte-for-byte. Unrun behavior prose remains reviewer judgment, never a
-fabricated command result. Explicitly name any required operating system,
-architecture, service, credential, external setting, hardware, or evidence
-environment for `flow-run` to preflight before implementation.
+A `validation` entry naming a command is recorded byte-for-byte; prose there stays
+reviewer judgment, never a fabricated result.
 
 Before saving, confirm:
 
 - every requirement maps to a feature or an explicit non-goal;
 - targets name real files, modules, routes, commands, or artifacts;
 - validation names the behavior or contract the check will prove;
-- every required evidence environment has an identified execution path, and
-  any path needing user or external authority is explicit;
 - dependencies capture true ordering without circular or hidden work;
 - assumptions and intentional gaps are visible in `decisions`.
 

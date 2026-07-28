@@ -60,6 +60,12 @@ jobs:
       - name: Run checks
         run: bun run check
 
+      # Free and offline: the committed cassettes replay recorded model decisions
+      # against this build's runtime, so a change that refuses a sequence a real model
+      # already performed fails here rather than at the next paid matrix.
+      - name: Replay recorded model decisions
+        run: bun run replay
+
   platform-persistence:
     strategy:
       fail-fast: false

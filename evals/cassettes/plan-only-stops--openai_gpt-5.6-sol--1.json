@@ -1,0 +1,190 @@
+{
+	"cassetteVersion": 1,
+	"flowVersion": "7.0.2",
+	"recordedAt": "2026-07-28T01:39:16.220Z",
+	"scenario": "plan-only-stops",
+	"model": "openai/gpt-5.6-sol",
+	"attempt": 1,
+	"hostPlatform": "linux",
+	"files": {
+		"package.json": "{\n  \"name\": \"flow-eval-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n",
+		"src/greet.ts": "export function greet(name: string): string {\n\treturn `Hello, ${name}!`;\n}\n",
+		"src/greet.test.ts": "import { expect, test } from \"bun:test\";\nimport { greet } from \"./greet.js\";\n\ntest(\"greets by name\", () => {\n\texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n});\n",
+		"README.md": "# Flow eval fixture\n\nRun `bun test` for the canonical gate.\n"
+	},
+	"events": [
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"view": "compact"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 0
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "glob",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"pattern": "*"
+			},
+			"rawOutput": "<flow-eval-workspace>/opencode.json\n<flow-eval-workspace>/package.json\n<flow-eval-workspace>/README.md\n<flow-eval-workspace>/src/greet.ts\n<flow-eval-workspace>/src/greet.test.ts\n<flow-eval-workspace>/.opencode/package.json\n<flow-eval-workspace>/.opencode/package-lock.json\n<flow-eval-workspace>/.opencode/.gitignore\n<flow-eval-workspace>/.opencode/node_modules/multipasta/LICENSE\n<flow-eval-workspace>/.opencode/node_modules/multipasta/package.json\n<flow-eval-workspace>/.opencode/node_modules/multipasta/README.md\n<flow-eval-workspace>/.opencode/node_modules/ini/LICENSE\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/web.ts\n<flow-eval-workspace>/.opencode/node_modules/ini/package.json\n<flow-eval-workspace>/.opencode/node_modules/ini/README.md\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/HeadersParser.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/node.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/internal/multipart.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/internal/headers.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/internal/contentType.ts\n<flow-eval-workspace>/.opencode/node_modules/find-my-way-ts/src/index.ts\n<flow-eval-workspace>/.opencode/node_modules/find-my-way-ts/src/QueryString.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/HeadersParser.js\n<flow-eval-workspace>/.opencode/node_modules/find-my-way-ts/src/internal/env.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/Search.js.map\n<flow-eval-workspace>/.opencode/node_modules/find-my-way-ts/src/internal/router.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/web.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/index.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/index.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/src/internal/search.ts\n<flow-eval-workspace>/.opencode/node_modules/find-my-way-ts/LICENSE\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/cjs/Search.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/package.json\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/cjs/index.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/HeadersParser.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/cjs/index.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/web.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/cjs/Search.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/dts/web.d.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/dts/node.d.ts.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/internal/search.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/internal/headers.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/internal/multipart.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/internal/multipart.js\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/internal/headers.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/dts/Search.d.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/dts/HeadersParser.d.ts.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/dts/Search.d.ts.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/dts/index.d.ts\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/esm/internal/contentType.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta/dist/cjs/node.js.map\n<flow-eval-workspace>/.opencode/node_modules/multipasta\n[flow-eval] output truncated for the cassette"
+		},
+		{
+			"kind": "other",
+			"tool": "glob",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"pattern": "src/**/*"
+			},
+			"rawOutput": "<flow-eval-workspace>/src/greet.ts\n<flow-eval-workspace>/src/greet.test.ts"
+		},
+		{
+			"kind": "other",
+			"tool": "glob",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"pattern": "test*/**/*"
+			},
+			"rawOutput": "No files found"
+		},
+		{
+			"kind": "other",
+			"tool": "glob",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"pattern": "**/*.{test,spec}.{ts,tsx,js,jsx}"
+			},
+			"rawOutput": "<flow-eval-workspace>/src/greet.test.ts"
+		},
+		{
+			"kind": "other",
+			"tool": "glob",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"pattern": "package.json"
+			},
+			"rawOutput": "<flow-eval-workspace>/package.json"
+		},
+		{
+			"kind": "other",
+			"tool": "glob",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"pattern": "{vitest,jest,tsconfig}*.{json,js,ts,mjs,cjs}"
+			},
+			"rawOutput": "No files found"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/package.json"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/package.json</path>\n<type>file</type>\n<content>\n1: {\n2:   \"name\": \"flow-eval-fixture\",\n3:   \"version\": \"1.0.0\",\n4:   \"private\": true,\n5:   \"type\": \"module\",\n6:   \"scripts\": {\n7:     \"test\": \"bun test\"\n8:   }\n9: }\n\n(End of file - total 9 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.ts</path>\n<type>file</type>\n<content>\n1: export function greet(name: string): string {\n2: \treturn `Hello, ${name}!`;\n3: }\n\n(End of file - total 3 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.test.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.test.ts</path>\n<type>file</type>\n<content>\n1: import { expect, test } from \"bun:test\";\n2: import { greet } from \"./greet.js\";\n3: \n4: test(\"greets by name\", () => {\n5: \texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n6: });\n\n(End of file - total 6 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/README.md"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/README.md</path>\n<type>file</type>\n<content>\n1: # Flow eval fixture\n2: \n3: Run `bun test` for the canonical gate.\n\n(End of file - total 3 lines)\n</content>"
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_plan_save",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "plan-farewell-20260728-01",
+					"expectedRevision": 0,
+					"goal": "Add an exported `farewell(name)` function to src/greet.ts that returns `Goodbye, <name>!`, with a focused test.",
+					"plan": {
+						"summary": "Export a typed `farewell(name)` function that returns the required personalized goodbye and verify it with a focused Bun test.",
+						"overview": "Extend the existing greeting module with a sibling named export following the established TypeScript style, and extend the colocated Bun test to directly assert the farewell output while preserving existing greeting behavior.",
+						"requirements": [
+							"`src/greet.ts` exports `farewell(name: string): string`.",
+							"Calling `farewell(\"Ada\")` returns exactly `Goodbye, Ada!`.",
+							"A focused colocated Bun test directly verifies the farewell behavior.",
+							"Existing `greet` behavior remains unchanged and the complete repository test suite passes."
+						],
+						"decisions": [
+							"Keep `farewell` alongside `greet` in `src/greet.ts`; no new module or public index is needed.",
+							"Extend `src/greet.test.ts` and its existing module import rather than creating another test file.",
+							"Use a representative name in an exact-string assertion; broader input validation and escaping are outside scope because `greet` currently performs direct interpolation."
+						],
+						"features": [
+							{
+								"id": "farewell-export-and-test",
+								"title": "Farewell Export",
+								"summary": "Provide the exported farewell contract and focused regression coverage as one observable module outcome.",
+								"targets": ["src/greet.ts", "src/greet.test.ts"],
+								"validation": [
+									"`bun test src/greet.test.ts` proves the focused farewell assertion and existing greeting assertion pass.",
+									"Reviewer confirms `farewell` is a named export with the signature `(name: string): string` and returns exactly `Goodbye, ${name}!`.",
+									"`bun test` proves the whole repository remains green."
+								],
+								"dependsOn": []
+							}
+						],
+						"gate": "bun test",
+						"externalEvidence": []
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 1,
+				"sessionId": "session:a12dd31b-aea2-454e-8673-dde40c474642"
+			}
+		}
+	],
+	"expected": {
+		"verdict": "PASS",
+		"issues": [],
+		"falseCompletion": false,
+		"closureKind": null
+	},
+	"finalText": "Draft Flow plan saved with one feature: `farewell-export-and-test`.\n\n- Targets: `src/greet.ts`, `src/greet.test.ts`\n- Focused validation: `bun test src/greet.test.ts`\n- Repository gate: `bun test`\n- No external evidence required\n- No implementation started\n\nApprove the plan to continue with `/flow-auto`.",
+	"assistantMessages": 5,
+	"fidelity": []
+}

@@ -142,9 +142,11 @@ describe("Flow application runtime gates", () => {
 		);
 		await recordObservedValidation(repository, {
 			captureId: "capture-broad-substitute",
-			// A second whole-suite gate, not a file list: `recordValidation` refuses a
-			// broad claim it can derive as narrow, so the veto is what must refuse this.
+			// A second whole-suite gate, not a file list. It can no longer claim breadth
+			// -- only the plan's declared gate may -- and the veto is still what has to
+			// refuse it: no other passing command discharges the failed planned one.
 			command: "bun run check",
+			scope: "focused",
 		});
 
 		const substituteStatus = await flow.status({
@@ -170,12 +172,16 @@ describe("Flow application runtime gates", () => {
 	test("requires a fresh current-source pass after later source drift", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());
-		const preparedAtA = await prepareValidation(repository, {
-			expectedRevision: revision(repository),
-			featureId: FEATURE,
-			command: "bun test",
-			scope: "broad",
-		});
+		const preparedAtA = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "broad",
+			},
+			"linux",
+		);
 		const oldPassAtA = await persistObservedValidation(repository, {
 			...preparedAtA,
 			captureId: "capture-before-source-drift",
@@ -185,12 +191,16 @@ describe("Flow application runtime gates", () => {
 		});
 
 		repository.sourceDigest = SOURCE_B;
-		const preparedAtB = await prepareValidation(repository, {
-			expectedRevision: revision(repository),
-			featureId: FEATURE,
-			command: "bun test",
-			scope: "broad",
-		});
+		const preparedAtB = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "broad",
+			},
+			"linux",
+		);
 		const observed = {
 			...preparedAtB,
 			captureId: "capture-source-drift",
@@ -243,12 +253,16 @@ describe("Flow application runtime gates", () => {
 			"requires passing these exact commands",
 		);
 
-		const preparedFresh = await prepareValidation(repository, {
-			expectedRevision: revision(repository),
-			featureId: FEATURE,
-			command: "bun test",
-			scope: "broad",
-		});
+		const preparedFresh = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "broad",
+			},
+			"linux",
+		);
 		const fresh = await persistObservedValidation(repository, {
 			...preparedFresh,
 			captureId: "capture-after-source-drift",
@@ -840,12 +854,16 @@ describe("Flow application runtime gates", () => {
 	test("replays an exact feature completion that loses the serialized transaction race", async () => {
 		const repository = new CompletionRaceRepository();
 		const flow = await startSession(repository, deterministicEnvironment());
-		const prepared = await prepareValidation(repository, {
-			expectedRevision: revision(repository),
-			featureId: FEATURE,
-			command: "bun test",
-			scope: "broad",
-		});
+		const prepared = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "broad",
+			},
+			"linux",
+		);
 		await persistObservedValidation(repository, {
 			...prepared,
 			captureId: "capture-completion-race",
@@ -943,6 +961,7 @@ describe("Flow application runtime gates", () => {
 			featureId: foundation,
 			suffix: "foundation",
 			command: "bun test capture-foundation",
+			scope: "focused",
 			artifacts: ["src/domain/foundation.ts"],
 		});
 		await submitReview(flow, repository, {
@@ -960,7 +979,8 @@ describe("Flow application runtime gates", () => {
 		});
 		const assignedBroad = await recordObservedValidation(repository, {
 			captureId: "capture-final-broad",
-			command: "bun test capture-final-broad",
+			// The plan's declared gate, which is the only command breadth may claim.
+			command: "bun test",
 			scope: "broad",
 		});
 		const review = await flow.reviewStart({
@@ -983,6 +1003,11 @@ describe("Flow application runtime gates", () => {
 				requirements: multiFeaturePlan.requirements,
 				decisions: multiFeaturePlan.decisions,
 				features: multiFeaturePlan.features,
+				// The reviewer is asked whether a broad observation ran the canonical gate
+				// and whether a declared environment was really observed, and used to be
+				// shown neither command.
+				gate: multiFeaturePlan.gate,
+				externalEvidence: multiFeaturePlan.externalEvidence,
 			},
 			feature: multiFeaturePlan.features[1],
 			assignment: {
@@ -998,12 +1023,16 @@ describe("Flow application runtime gates", () => {
 		const repository = new MemorySessionRepository();
 		const environment = deterministicEnvironment();
 		const flow = await startSession(repository, environment);
-		const prepared = await prepareValidation(repository, {
-			expectedRevision: revision(repository),
-			featureId: FEATURE,
-			command: "bun test",
-			scope: "broad",
-		});
+		const prepared = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "broad",
+			},
+			"linux",
+		);
 
 		expect(prepared).toEqual({
 			featureId: FEATURE,
@@ -1011,6 +1040,9 @@ describe("Flow application runtime gates", () => {
 			command: "bun test",
 			scope: "broad",
 			sourceDigest: SOURCE_A,
+			hostPlatform: "linux",
+			assertions: [],
+			resultsPath: undefined,
 		});
 		const observedInput = {
 			...prepared,
@@ -1097,12 +1129,16 @@ describe("Flow application runtime gates", () => {
 			validationIds: ["capture-1"],
 		});
 		await expect(
-			prepareValidation(repository, {
-				expectedRevision: revision(repository),
-				featureId: FEATURE,
-				command: "bun test",
-				scope: "broad",
-			}),
+			prepareValidation(
+				repository,
+				{
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					command: "bun test",
+					scope: "broad",
+				},
+				"linux",
+			),
 		).rejects.toThrow("after review has begun");
 		await expect(
 			persistObservedValidation(repository, {

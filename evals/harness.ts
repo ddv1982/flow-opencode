@@ -17,6 +17,7 @@ import {
 	mkdtemp,
 	readdir,
 	readFile,
+	rename,
 	rm,
 	writeFile,
 } from "node:fs/promises";
@@ -40,10 +41,24 @@ export type ObservedToolCall = {
 	 * already been told before the interruption.
 	 */
 	readonly sessionIndex: number;
+	/**
+	 * The agent that made the call, as the host recorded it on the message.
+	 *
+	 * `flow_feature_complete` admits a new completion only from `flow-reviewer`, so
+	 * a recording that loses this cannot be replayed: the same arguments take the
+	 * replay path instead of the submitting one.
+	 */
+	readonly agent: string;
 	readonly input: Record<string, unknown>;
 	/** Tool output, parsed as JSON when the tool returned a Flow envelope. */
 	readonly output: unknown;
 	readonly rawOutput: string;
+	/**
+	 * Host-reported metadata for the call: for Bash, the `exit` code and the
+	 * truncation flag the validation capture hook reads. Recorded because those two
+	 * fields decide whether an observation can ever be eligible.
+	 */
+	readonly metadata: Record<string, unknown>;
 };
 
 /**
@@ -137,18 +152,93 @@ export type Scenario = {
  * Only the credential file is copied, into a 0700 scratch directory that is
  * removed in `stop()`. Set `FLOW_EVAL_NO_AUTH_COPY=1` to opt out and rely purely
  * on environment credentials.
+ *
+ * Returns the source/target paths so `stop()` can sync any rotated tokens back,
+ * or `null` when opted out. Some providers (observed for both OpenAI and xAI)
+ * issue single-use, rotating OAuth refresh tokens: refreshing consumes the old
+ * one and the provider revokes it. A child host that refreshes only updates its
+ * own scratch copy, which `stop()` then deletes, so the real `auth.json` is left
+ * holding a now-dead refresh token. The *next* host copies that same stale file
+ * and fails outright, and — because the token was genuinely rotated against the
+ * provider, not merely misplaced locally — the credential is dead for the
+ * developer's own OpenCode too until they log in again. One recorded run lost
+ * an xAI account's refresh token this way after a single scenario.
  */
-async function carryProviderCredentials(childData: string): Promise<void> {
-	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return;
+function providerCredentialPaths(childData: string): {
+	source: string;
+	target: string;
+} {
 	const parentData =
 		process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share");
-	const source = join(parentData, "opencode", "auth.json");
-	const target = join(childData, "opencode", "auth.json");
+	return {
+		source: join(parentData, "opencode", "auth.json"),
+		target: join(childData, "opencode", "auth.json"),
+	};
+}
+
+async function carryProviderCredentials(
+	childData: string,
+): Promise<{ source: string; target: string } | null> {
+	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return null;
+	const paths = providerCredentialPaths(childData);
 	await mkdir(join(childData, "opencode"), { recursive: true, mode: 0o700 });
 	try {
-		await copyFile(source, target);
+		await copyFile(paths.source, paths.target);
 	} catch {
 		// No stored credentials; the provider may still authenticate from the env.
+	}
+	return paths;
+}
+
+/**
+ * Copies a host's (possibly refreshed) credential file back over the real
+ * `auth.json` it was copied from, so a rotated token propagates instead of
+ * being discarded with the scratch directory. Only ever called sequentially
+ * from `stop()`, so there is no concurrent-writer race to guard against.
+ *
+ * Two failure modes get guarded against explicitly, because what is being
+ * overwritten is the developer's own live credential store, not scratch state:
+ *
+ * - A child copy that fails to parse as JSON must never replace a good file —
+ *   this is what stands between a bug in a scenario and a broken `auth.json`.
+ * - The write itself goes to a temp file beside the real one and is `rename`d
+ *   into place, which is atomic on the same filesystem. A plain overwrite that
+ *   is interrupted (a kill, a crash, a lost power) would leave the real file
+ *   truncated instead.
+ */
+async function syncProviderCredentialsBack(
+	paths: { source: string; target: string } | null,
+): Promise<void> {
+	if (!paths) return;
+	let contents: string;
+	try {
+		contents = await readFile(paths.target, "utf8");
+	} catch {
+		// The child never wrote a credential file (no refresh happened, or the
+		// provider authenticated purely from the env); nothing to carry back.
+		return;
+	}
+	try {
+		JSON.parse(contents);
+	} catch {
+		console.error(
+			`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
+		);
+		return;
+	}
+	const tempPath = `${paths.source}.eval-sync-${process.pid}.tmp`;
+	try {
+		await writeFile(tempPath, contents, { mode: 0o600 });
+		await rename(tempPath, paths.source);
+	} catch (error) {
+		// Failing to sync back must not crash the run over a host that already
+		// finished its scenario; it only means the next host risks the same stale
+		// credential this whole mechanism exists to avoid, which is no worse than
+		// before this fix existed.
+		console.error(
+			`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		await rm(tempPath, { force: true });
 	}
 }
 
@@ -237,6 +327,27 @@ export function onlyAwaitingAnswer(pending: readonly string[]): boolean {
 }
 
 /**
+ * One incomplete tool call, named well enough to diagnose after the run.
+ *
+ * `bash:running` was the whole diagnostic a wedged attempt left behind, and it does
+ * not say whether the model armed something interactive or something slow. The
+ * command is already in the recorded input, bounded to its first line here because
+ * this goes into an error message. The tool name stays the prefix so
+ * `onlyAwaitingAnswer` keeps matching.
+ */
+export function pendingCallLabel(part: {
+	tool?: string;
+	state?: { status: string; input?: Record<string, unknown> };
+}): string {
+	const label = `${part.tool ?? "tool"}:${part.state?.status}`;
+	const command = part.state?.input?.command;
+	const line =
+		typeof command === "string" ? (command.split("\n")[0] ?? "") : "";
+	if (line === "") return label;
+	return `${label} (${line.length > 120 ? `${line.slice(0, 117)}...` : line})`;
+}
+
+/**
  * Everything the model asked the user, as recorded tool input.
  *
  * A model at a wall it may not climb puts the blocker in its question rather than
@@ -248,6 +359,26 @@ export function askedQuestions(outcome: Outcome): string[] {
 	return outcome.allCalls
 		.filter((call) => call.tool === "question")
 		.map((call) => JSON.stringify(call.input));
+}
+
+/**
+ * Broad-scope claims the runtime refused, either for selecting which tests the
+ * command runs or for not being the plan-declared gate.
+ *
+ * The declared gate closed a real hole, but it also added a rule a model can walk
+ * into. Each refusal costs a turn, and no durable document can show one: the write
+ * never happened. A run that recovers looks identical to a run that never erred.
+ * Recovering is correct, so this is reported and never scored; a rising count means
+ * the plan surface is not naming the gate clearly enough.
+ */
+export function refusedBroadScope(
+	calls: readonly { readonly tool: string; readonly rawOutput: string }[],
+): number {
+	return calls.filter(
+		(call) =>
+			call.tool === "flow_validation_start" &&
+			/A broad observation (?:cannot select|must run)/.test(call.rawOutput),
+	).length;
 }
 
 /**
@@ -272,6 +403,11 @@ export function sessionBoundaries(
  * were not scored -- an allowed ask, a lost host -- are counted apart rather than
  * dropped, so a scenario whose every attempt went unscored still gets a row saying
  * so instead of leaving the table without a trace.
+ *
+ * An abort is counted apart for the same reason and was not: a wedged attempt ends
+ * with no issues and `passed: false`, which is indistinguishable in a rate from a run
+ * that reached the wrong outcome. One such attempt produced the only failing
+ * threshold in a measured report, on a guarantee that never ran.
  */
 export function passRates(
 	results: readonly {
@@ -280,13 +416,20 @@ export function passRates(
 		readonly passed: boolean;
 		readonly environment?: boolean;
 		readonly unscored?: boolean;
+		readonly error?: string;
 	}[],
 ): [string, PassRate][] {
 	const rates = new Map<string, PassRate>();
 	for (const result of results) {
 		const label = `${result.scenario} @ ${result.model}`;
-		const rate = rates.get(label) ?? { passed: 0, attempts: 0, unscored: 0 };
+		const rate = rates.get(label) ?? {
+			passed: 0,
+			attempts: 0,
+			unscored: 0,
+			aborted: 0,
+		};
 		if (result.environment || result.unscored) rate.unscored += 1;
+		else if (result.error !== undefined) rate.aborted += 1;
 		else {
 			rate.attempts += 1;
 			if (result.passed) rate.passed += 1;
@@ -296,14 +439,24 @@ export function passRates(
 	return [...rates];
 }
 
-export type PassRate = { passed: number; attempts: number; unscored: number };
+export type PassRate = {
+	passed: number;
+	attempts: number;
+	unscored: number;
+	/** Attempts that never finished: a wedge, a timeout, a lost turn. */
+	aborted: number;
+};
 
 /** One pass-rate row. Nothing scored says so, rather than reading as `0/0`. */
 export function formatRate(rate: PassRate): string {
-	const excluded = rate.unscored > 0 ? `  ${rate.unscored} excluded` : "";
-	if (rate.attempts === 0) return `nothing scored${excluded}`;
+	const excluded = [
+		rate.unscored > 0 ? `${rate.unscored} excluded` : "",
+		rate.aborted > 0 ? `${rate.aborted} aborted` : "",
+	].filter(Boolean);
+	const suffix = excluded.length === 0 ? "" : `  ${excluded.join(", ")}`;
+	if (rate.attempts === 0) return `nothing scored${suffix}`;
 	const flaky = rate.passed > 0 && rate.passed < rate.attempts ? "  FLAKY" : "";
-	return `${rate.passed}/${rate.attempts}${flaky}${excluded}`;
+	return `${rate.passed}/${rate.attempts}${flaky}${suffix}`;
 }
 
 /**
@@ -390,6 +543,7 @@ export async function preparePackageCache(
 type MessageEntry = {
 	info: {
 		role: string;
+		agent?: string;
 		time?: { created: number; completed?: number };
 		error?: unknown;
 		cost?: number;
@@ -410,6 +564,7 @@ type MessageEntry = {
 			input?: Record<string, unknown>;
 			output?: string;
 			error?: string;
+			metadata?: Record<string, unknown>;
 		};
 	}[];
 };
@@ -421,6 +576,7 @@ export class EvalHost {
 
 	readonly project: string;
 	private readonly scratch: string;
+	private credentialPaths: { source: string; target: string } | null = null;
 
 	private constructor(project: string, scratch: string) {
 		this.project = project;
@@ -442,7 +598,7 @@ export class EvalHost {
 		const project = join(scratch, "project");
 		await mkdir(childHome, { recursive: true });
 		await mkdir(join(project, ".opencode"), { recursive: true });
-		await carryProviderCredentials(childData);
+		const credentialPaths = await carryProviderCredentials(childData);
 
 		// Flow derives source identity from git, so the fixture must be a repo.
 		for (const [relative, contents] of Object.entries(options.files)) {
@@ -478,6 +634,7 @@ export class EvalHost {
 		);
 
 		const host = new EvalHost(project, scratch);
+		host.credentialPaths = credentialPaths;
 		const port = await availablePort();
 		host.baseUrl = `http://127.0.0.1:${port}`;
 		host.server = spawn(
@@ -662,7 +819,7 @@ export class EvalHost {
 							part.state.status !== "completed" &&
 							part.state.status !== "error",
 					)
-					.map((part) => `${part.tool ?? "tool"}:${part.state?.status}`),
+					.map((part) => pendingCallLabel(part)),
 			);
 			const busy =
 				pending.length > 0 ||
@@ -712,22 +869,82 @@ export class EvalHost {
 	}
 
 	/**
+	 * Every session descended from the given ones, breadth-first, appended after
+	 * them.
+	 *
+	 * A reviewer runs as a subtask in a child session, so its transcript is not in
+	 * the parent's. Reading only the parents left the whole independent review
+	 * invisible: no recorded report contained a single `flow_feature_complete` call,
+	 * and the check for submissions the runtime rejected could never fire.
+	 *
+	 * A host that does not expose children yields nothing rather than failing —
+	 * losing the subtask transcript is a smaller loss than losing the run.
+	 */
+	private async descendantSessions(
+		sessionIds: readonly string[],
+	): Promise<string[]> {
+		const known = new Set(sessionIds);
+		const found: string[] = [];
+		let frontier = [...sessionIds];
+		while (frontier.length > 0) {
+			const next: string[] = [];
+			for (const parent of frontier) {
+				let children: { id?: string }[];
+				try {
+					children = (await fetchJson(
+						`${this.baseUrl}/session/${parent}/children`,
+					)) as { id?: string }[];
+				} catch {
+					continue;
+				}
+				for (const child of Array.isArray(children) ? children : []) {
+					if (typeof child.id !== "string" || known.has(child.id)) continue;
+					known.add(child.id);
+					found.push(child.id);
+					next.push(child.id);
+				}
+			}
+			frontier = next;
+		}
+		return found;
+	}
+
+	/**
 	 * Collects the durable and observed outcome a scenario asserts against.
 	 *
-	 * Sessions are read in the order they were used and their transcripts joined,
-	 * so a scenario that resumes in a fresh session still sees one continuous
-	 * tool-call spine.
+	 * Sessions are read in the order they were used, their subtask sessions appended
+	 * after them, and every transcript merged in message-creation order — so a
+	 * scenario that resumes in a fresh session, or dispatches a reviewer subtask,
+	 * still sees one continuous tool-call spine in the order the calls happened.
+	 *
+	 * Merging by time rather than by session matters for the subtasks: a reviewer's
+	 * submission belongs between the manager's review dispatch and whatever the
+	 * manager did next, and appending it at the end would record a sequence no run
+	 * ever performed.
 	 */
 	async outcome(
 		sessionIds: readonly string[],
 		durationMs: number,
 	): Promise<Outcome> {
+		const ordered = [
+			...sessionIds,
+			...(await this.descendantSessions(sessionIds)),
+		];
 		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
-		for (const [sessionIndex, sessionId] of sessionIds.entries()) {
-			for (const entry of (await this.messages(sessionId)) as MessageEntry[]) {
-				messages.push({ sessionIndex, entry });
+		for (const [sessionIndex, sessionId] of ordered.entries()) {
+			let entries: MessageEntry[];
+			try {
+				entries = (await this.messages(sessionId)) as MessageEntry[];
+			} catch {
+				continue;
 			}
+			for (const entry of entries) messages.push({ sessionIndex, entry });
 		}
+		messages.sort(
+			(left, right) =>
+				(left.entry.info.time?.created ?? 0) -
+				(right.entry.info.time?.created ?? 0),
+		);
 		const allCalls: ObservedToolCall[] = [];
 		const tokens = {
 			input: 0,
@@ -764,7 +981,11 @@ export class EvalHost {
 				if (
 					part.type === "text" &&
 					!part.synthetic &&
-					entry.info.role === "assistant"
+					entry.info.role === "assistant" &&
+					// Only the sessions the scenario drove. A reviewer subtask reports to
+					// the manager, not to the user, so its closing text is not the run's
+					// final report and must not displace it.
+					sessionIndex < sessionIds.length
 				) {
 					finalText = part.text ?? finalText;
 				}
@@ -779,11 +1000,13 @@ export class EvalHost {
 				allCalls.push({
 					tool: part.tool,
 					sessionIndex,
+					agent: entry.info.agent ?? "",
 					status:
 						(part.state?.status as ObservedToolCall["status"]) ?? "pending",
 					input: part.state?.input ?? {},
 					output: parsed,
 					rawOutput: raw,
+					metadata: part.state?.metadata ?? {},
 				});
 			}
 		}
@@ -845,6 +1068,11 @@ export class EvalHost {
 				}),
 			]);
 		}
+		// Must happen before the scratch directory is removed: a refresh the child
+		// performed lives only in its copy of `auth.json`, and losing it here is
+		// exactly what silently rotates the developer's own stored refresh token
+		// out from under them.
+		await syncProviderCredentialsBack(this.credentialPaths);
 		await rm(this.scratch, { recursive: true, force: true });
 	}
 }

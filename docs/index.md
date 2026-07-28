@@ -4,9 +4,16 @@ This directory is the maintained documentation source for Flow v7 and Session
 v5. The public overview and installation instructions live in the
 [README](../README.md).
 
+- [Positioning](positioning.md) — what Flow is for, and when not to use it.
+- [What Flow guarantees](guarantees.md) — the guarantee map: which claims are
+  enforced, attested, declared, judged, or unenforced.
+- [Release qualification](release-qualification.md) — the published eval
+  thresholds and the release cadence.
 - [Development](development.md) — repository structure and verification.
 - [Maintainer contract](maintainer-contract.md) — runtime and release
   invariants.
+- [Validation and review](validation-and-review.md) — the evidence, review, and
+  closure invariants, split out of the contract.
 - [Troubleshooting](troubleshooting.md) — configuration and session recovery.
 - [ADR 0001](adr/0001-skills-first-flow-architecture.md) — the minimal-runtime
   direction.
@@ -23,6 +30,13 @@ v5. The public overview and installation instructions live in the
   process-local timing.
 - [ADR 0009](adr/0009-scope-keyed-validation-veto.md) — a `broad` claim vetoes
   review until that same command passes.
+- [ADR 0010](adr/0010-declared-canonical-gate.md) — the plan declares the canonical
+  gate, and the two claims that rested on prose are measured.
+- [ADR 0011](adr/0011-declared-external-evidence.md) — the plan declares acceptance
+  evidence this host cannot produce, as a command and the platform that observes it.
+- [ADR 0012](adr/0012-named-results-over-exit-codes.md) — acceptance evidence names
+  the test cases whose passing is the observation, so exit zero for a skipped case
+  discharges nothing.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

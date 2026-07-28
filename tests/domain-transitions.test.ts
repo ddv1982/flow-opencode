@@ -5,8 +5,11 @@ import {
 	MAX_PLAN_FEATURES,
 	MAX_VALIDATIONS_PER_RUN,
 } from "../src/domain/limits.js";
+import { operationInputDigest } from "../src/domain/operation.js";
 import type {
+	EvidencePlatform,
 	FeatureId,
+	ObservedAssertion,
 	Plan,
 	ReviewAssignment,
 	Session,
@@ -43,6 +46,8 @@ const plan: Plan = {
 	overview: "Build the kernel, then expose it.",
 	requirements: ["Keep lifecycle state canonical."],
 	decisions: ["Use one full review per run."],
+	gate: "bun test",
+	externalEvidence: [],
 	features: [
 		{
 			id: FOUNDATION,
@@ -63,17 +68,20 @@ const plan: Plan = {
 	],
 };
 
-function oneFeaturePlan(validation: string[]): Plan {
+function oneFeaturePlan(validation: string[], gate = "bun test"): Plan {
 	const feature = plan.features.find(({ id }) => id === DELIVERY);
 	if (!feature) throw new Error("Expected the delivery plan feature.");
-	return { ...plan, features: [{ ...feature, validation, dependsOn: [] }] };
+	return {
+		...plan,
+		gate,
+		features: [{ ...feature, validation, dependsOn: [] }],
+	};
 }
 
-const plannedGatePlan = oneFeaturePlan([
-	PROSE_VALIDATION,
+const plannedGatePlan = oneFeaturePlan(
+	[PROSE_VALIDATION, PLANNED_GATE, PLANNED_GATE],
 	PLANNED_GATE,
-	PLANNED_GATE,
-]);
+);
 
 function deterministicEnvironment(): TransitionEnvironment {
 	const sequences = new Map<string, number>();
@@ -133,6 +141,8 @@ function validate(
 		sourceDigest?: SourceDigest;
 		exitCode?: number;
 		outputComplete?: boolean;
+		hostPlatform?: EvidencePlatform;
+		observedAssertions?: ObservedAssertion[];
 	},
 ): Session {
 	const run = session.runs.find((candidate) => candidate.state === "active");
@@ -153,6 +163,10 @@ function validate(
 		exitCode: options.exitCode ?? 0,
 		outputDigest: OUTPUT,
 		outputComplete: options.outputComplete ?? true,
+		...(options.observedAssertions
+			? { observedAssertions: options.observedAssertions }
+			: {}),
+		hostPlatform: options.hostPlatform ?? "linux",
 	}).session;
 }
 
@@ -878,7 +892,14 @@ describe("Session v5 domain state machine", () => {
 				[
 					{ id: "source-a-failure", exitCode: 1 },
 					{ id: "source-b-pass", sourceDigest: SOURCE_B },
-					{ id: "source-a-substitute", command: SUBSTITUTE_GATE },
+					// Recorded focused: a broad claim on anything but the declared gate is
+					// refused at arm time now, and what this row proves is that another
+					// passing command does not discharge the veto.
+					{
+						id: "source-a-substitute",
+						command: SUBSTITUTE_GATE,
+						scope: "focused",
+					},
 				],
 				SOURCE_A,
 			],
@@ -918,6 +939,7 @@ describe("Session v5 domain state machine", () => {
 		retry = validate(retry, {
 			id: "retry-substitute",
 			command: SUBSTITUTE_GATE,
+			scope: "focused",
 		});
 		expect(() =>
 			requestReview(retry, DELIVERY, retryEnvironment, "review-substitute"),
@@ -1020,20 +1042,27 @@ describe("Session v5 domain state machine", () => {
 			).toThrow("cannot select which tests it runs");
 		}
 		// A whole-suite gate keeps its claim, including when a flag or a directory
-		// narrows nothing the runtime can see.
+		// narrows nothing the runtime can see -- as the plan's declared gate, which is
+		// now the only command a broad observation may run.
 		for (const command of [
 			"bun test",
 			"bun run check",
 			"bun test --coverage",
 			"pytest tests/",
 			"bun run scripts/check.ts",
-			// Not a gate at all, and still accepted: nothing in the command contradicts
-			// breadth, it simply cannot fail. Measured closing a run over a red gate,
-			// and left open deliberately -- see ADR 0009.
-			"git diff --check && git diff --name-status",
 		]) {
+			const declared = deterministicEnvironment();
+			const withGate = begin(
+				approve(
+					saveDraft(declared, {
+						plan: oneFeaturePlan([PROSE_VALIDATION], command),
+					}),
+				),
+				DELIVERY,
+				declared,
+			);
 			expect(() =>
-				validate(session, {
+				validate(withGate, {
 					id: `broad-${command}`,
 					featureId: DELIVERY,
 					command,
@@ -1041,15 +1070,481 @@ describe("Session v5 domain state machine", () => {
 				}),
 			).not.toThrow();
 		}
+		// Any other command is refused whatever its shape, which is what closes the
+		// can't-fail escape ADR 0009 left open: `git diff --check` contradicts nothing
+		// about breadth and cannot fail, and it is no longer the claimant's call.
+		for (const command of [
+			"git diff --check && git diff --name-status",
+			"bun run check",
+			"true",
+		]) {
+			expect(() =>
+				validate(session, {
+					id: `undeclared-${command}`,
+					featureId: DELIVERY,
+					command,
+					scope: "broad",
+				}),
+			).toThrow("must run the plan-declared canonical gate");
+		}
+	});
+
+	test("keeps a can't-fail gate visible in the plan the user approves", () => {
+		const environment = deterministicEnvironment();
+		// The residual hole, pinned on purpose. Declaring `git diff --check` as the
+		// canonical gate is still accepted: deciding which commands are tests remains a
+		// whitelist. What changed is when and where the claim is made -- at planning
+		// time, in the immutable document approval locks, instead of mid-run against
+		// whatever the suite happened to be doing.
+		const cannotFail = "git diff --check && git diff --name-status";
+		const session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: oneFeaturePlan([PROSE_VALIDATION], cannotFail),
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		expect(
+			validate(session, {
+				id: "declared-cannot-fail",
+				featureId: DELIVERY,
+				command: cannotFail,
+				scope: "broad",
+			}).plan?.gate,
+		).toBe(cannotFail);
+	});
+
+	test("refuses a plan whose declared gate selects its own tests", () => {
+		const environment = deterministicEnvironment();
+		// The same rule one step earlier, where it is cheapest to fix: a plan cannot
+		// declare a hand-picked subset as the repository's whole-suite gate.
+		expect(() =>
+			saveDraft(environment, {
+				plan: oneFeaturePlan([PROSE_VALIDATION], "bun test -t greet"),
+			}),
+		).toThrow("canonical gate cannot select which tests it runs");
+	});
+
+	test("requires a new plan to declare its external evidence", () => {
+		const environment = deterministicEnvironment();
+		const { externalEvidence: _omitted, ...withoutEvidence } = oneFeaturePlan([
+			PROSE_VALIDATION,
+		]);
+		expect(() => saveDraft(environment, { plan: withoutEvidence })).toThrow(
+			"must declare `externalEvidence`",
+		);
+		// An empty list is the answer, not the absence of one.
+		expect(
+			saveDraft(environment, {
+				plan: { ...withoutEvidence, externalEvidence: [] },
+			}).plan?.externalEvidence,
+		).toEqual([]);
+		// And an entry must name the host, because prose is what the runtime could not
+		// compare with the machine the command ran on.
+		expect(() =>
+			saveDraft(environment, {
+				plan: {
+					...withoutEvidence,
+					externalEvidence: [
+						{
+							requirement: "observed on Windows",
+							environment: "Windows (win32) host with bun installed",
+							command: "bun test src/platform.test.ts",
+						},
+					],
+				},
+			}),
+		).toThrow("must declare `platform`");
+	});
+
+	test("keeps a non-OS environment on the declared command alone", () => {
+		const environment = deterministicEnvironment();
+		// `other` is the honest answer for a service, credential, or device: Flow
+		// cannot compare it with anything the host reports, so the declared command
+		// stays the whole check and the environment stays reviewer judgment.
+		const probe = "bun scripts/live-billing-probe.mjs";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...oneFeaturePlan([PROSE_VALIDATION]),
+						externalEvidence: [
+							{
+								requirement: "the sandbox account is charged once",
+								environment: "Stripe test credentials",
+								command: probe,
+								platform: "other",
+								assertions: [],
+							},
+						],
+					},
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		// Before it passes, the refusal has no OS to name and says the environment.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-before-probe"),
+		).toThrow("needs Stripe test credentials,");
+		session = validate(session, {
+			id: "billing-probe",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-billing-probe",
+		);
+		expect(
+			sessionStatus(pass(accepted.session, DELIVERY, accepted.assignment)),
+		).toBe("completed");
+	});
+
+	test("refuses final review and completed closure until the declared command passes", () => {
+		const environment = deterministicEnvironment();
+		// The measured failure: a goal whose acceptance needs a machine this host is
+		// not, satisfied with a proxy the model wrote itself and then closed
+		// `completed` over, with a passing review. The declared command is the only
+		// discharge, so the proxy cannot be the evidence.
+		const probe = "bun scripts/windows-probe.mjs";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...oneFeaturePlan([PROSE_VALIDATION]),
+						externalEvidence: [
+							{
+								requirement:
+									"the original reserved name cannot be created and the safe one can",
+								environment: "Windows",
+								command: probe,
+								platform: "win32",
+								assertions: [],
+							},
+						],
+					},
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		session = validate(session, {
+			id: "wine-proxy",
+			featureId: DELIVERY,
+			command: "bash /tmp/wintest/verify.sh",
+			scope: "focused",
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-with-proxy"),
+		).toThrow(JSON.stringify(probe));
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-with-proxy"),
+		).toThrow("deferred or abandoned closure");
+		// Never observed at all is the other state, and reads as work to do.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-with-proxy"),
+		).toThrow("needs Windows on win32");
+		// A recorded failure of the declared command is not satisfaction either.
+		session = validate(session, {
+			id: "probe-fails-off-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			exitCode: 3,
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-red-probe"),
+		).toThrow(JSON.stringify(probe));
+		// Nor is the declared command passing on the host that was never the point:
+		// the measured false completion was exactly this, green because the case that
+		// needed Windows is skipped anywhere else.
+		session = validate(session, {
+			id: "probe-passes-off-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "linux",
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-linux-pass"),
+		).toThrow(JSON.stringify(probe));
+		// And the refusal has to say which of the two states this is. "Has not passed"
+		// about a command that just went green sends the reader to re-run it.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-linux-pass"),
+		).toThrow("passed on linux but this entry declares win32");
+		session = validate(session, {
+			id: "probe-passes",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-probe",
+		);
+		const completed = pass(accepted.session, DELIVERY, accepted.assignment);
+		expect(sessionStatus(completed)).toBe("completed");
+		// The closure guard states the same rule independently of the review path, so
+		// a plan whose entry was never observed cannot be closed `completed` even if
+		// its features somehow completed.
+		const unobserved: Session = {
+			...completed,
+			plan: completed.plan && {
+				...completed.plan,
+				externalEvidence: [
+					{
+						requirement: "observed on Windows",
+						environment: "Windows",
+						command: "bun scripts/never-ran.mjs",
+						platform: "win32",
+						assertions: [],
+					},
+				],
+			},
+		};
+		expect(() =>
+			closeSession(unobserved, {
+				operationId: "close-unobserved",
+				expectedRevision: unobserved.revision,
+				sessionId: unobserved.id,
+				kind: "completed",
+				summary: "Claimed complete.",
+			}),
+		).toThrow("Close deferred or abandoned instead");
+		expect(
+			closeSession(unobserved, {
+				operationId: "close-deferred",
+				expectedRevision: unobserved.revision,
+				sessionId: unobserved.id,
+				kind: "deferred",
+				summary: "Needs a Windows host.",
+			}).session.closure?.kind,
+		).toBe("deferred");
+	});
+
+	test("refuses a declared command that exited zero for a case that never ran", () => {
+		const environment = deterministicEnvironment();
+		// The half `hostPlatform` left open. The command is right, the host is right,
+		// the exit code is zero — and the case the acceptance turns on was skipped,
+		// which is also exit zero. Nothing in the record before this said so.
+		const probe = "bun test src/platform.test.ts";
+		const acceptance = "creates the replacement on Windows";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...oneFeaturePlan([PROSE_VALIDATION]),
+						externalEvidence: [
+							{
+								requirement: "the safe name can be created on Windows",
+								environment: "Windows",
+								command: probe,
+								platform: "win32",
+								assertions: [acceptance],
+							},
+						],
+					},
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-pass",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+		});
+		session = validate(session, {
+			id: "skipped-on-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+			observedAssertions: [{ name: acceptance, status: "skipped" }],
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-skip"),
+		).toThrow(JSON.stringify(probe));
+		// And the refusal names which case, and what it did instead of passing: the two
+		// earlier states read "has not passed", which is wrong about a green command.
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-skip"),
+		).toThrow(`${JSON.stringify(acceptance)} skipped`);
+		// Naming no report at all reaches the same place, which is what makes the
+		// field unskippable rather than one more thing to leave out.
+		session = validate(session, {
+			id: "no-report-named",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+		});
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-without-report"),
+		).toThrow(`${JSON.stringify(acceptance)} absent`);
+		session = validate(session, {
+			id: "ran-on-windows",
+			featureId: DELIVERY,
+			command: probe,
+			scope: "focused",
+			hostPlatform: "win32",
+			observedAssertions: [{ name: acceptance, status: "passed" }],
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-pass",
+		);
+		expect(
+			sessionStatus(pass(accepted.session, DELIVERY, accepted.assignment)),
+		).toBe("completed");
+	});
+
+	test("requires a new plan to declare assertions for every external entry", () => {
+		const environment = deterministicEnvironment();
+		expect(() =>
+			saveDraft(environment, {
+				plan: {
+					...oneFeaturePlan([PROSE_VALIDATION]),
+					externalEvidence: [
+						{
+							requirement: "observed on Windows",
+							environment: "Windows",
+							command: "bun test src/platform.test.ts",
+							platform: "win32",
+						},
+					],
+				},
+			}),
+		).toThrow("must declare `assertions`");
+	});
+
+	test("admits a feature review while plan-level external evidence is outstanding", () => {
+		const environment = deterministicEnvironment();
+		// The best outcome the eval matrix recorded, and one a blanket veto would
+		// refuse: split the goal into the half this host can prove and the half it
+		// cannot, then prove the first. Only the final review claims the whole plan.
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: {
+						...plan,
+						features: plan.features.map((feature) => ({
+							...feature,
+							validation: [PROSE_VALIDATION],
+						})),
+						externalEvidence: [
+							{
+								requirement: "observed on Windows",
+								environment: "Windows",
+								command: "bun scripts/windows-probe.mjs",
+								platform: "win32",
+								assertions: [],
+							},
+						],
+					},
+				}),
+			),
+			FOUNDATION,
+			environment,
+		);
+		session = validate(session, {
+			id: "foundation-focused",
+			featureId: FOUNDATION,
+			command: "bun test src/foundation.test.ts",
+			scope: "focused",
+		});
+		expect(
+			requestReview(session, FOUNDATION, environment).assignment.kind,
+		).toBe("feature");
+	});
+
+	test("requires a new plan to declare its canonical gate", () => {
+		const environment = deterministicEnvironment();
+		const { gate: _omitted, ...withoutGate } = oneFeaturePlan([
+			PROSE_VALIDATION,
+		]);
+		expect(() => saveDraft(environment, { plan: withoutGate })).toThrow(
+			"must declare `gate`",
+		);
+	});
+
+	test("replays a plan-save accepted before the declarations were required", () => {
+		// The upgrade path. A session written by a version without these guards holds an
+		// operation record whose plan declared no `gate` and no `externalEvidence`, and a
+		// client retrying that exact request must still get the recorded replay -- that
+		// is the whole contract of an operation id. Asserting the new declarations before
+		// the replay check turned the retry into a refusal on upgrade.
+		const environment = deterministicEnvironment();
+		const { gate: _omitted, ...withoutGate } = oneFeaturePlan([
+			PROSE_VALIDATION,
+		]);
+		const request = {
+			operationId: "plan-save-1",
+			expectedRevision: 0,
+			goal: "Ship Flow v6",
+			plan: withoutGate as Plan,
+		};
+		// Built by hand because this version cannot produce it: the record fingerprints a
+		// request whose plan declared no gate, which is what an older session holds.
+		const legacy: Session = {
+			version: 5,
+			id: "legacy-session",
+			revision: 1,
+			goal: request.goal,
+			approval: "pending",
+			plan: withoutGate as Plan,
+			runs: [],
+			operations: [
+				{
+					id: request.operationId,
+					kind: "plan-save",
+					inputDigest: operationInputDigest(request),
+					committedRevision: 1,
+				},
+			],
+			closure: null,
+		};
+		const replayed = savePlan(legacy, request, environment);
+		expect(replayed.replayed).toBe(true);
+		expect(replayed.session.revision).toBe(1);
+		// A new write of the same undeclared plan still has to declare both.
+		expect(() =>
+			savePlan(legacy, { ...request, operationId: "plan-save-2" }, environment),
+		).toThrow("must declare `gate`");
 	});
 
 	test("blocks a substitute broad command after the gate failed", () => {
 		const environment = deterministicEnvironment();
-		// Prose-only plan validation, so nothing but the `broad` claim can engage the
-		// veto. This is the recorded failure mode: the gate is observed red, then a
-		// second broad command is armed and review accepts it in its place. The
-		// substitute names no test file, so it is the veto that has to refuse it --
-		// `recordValidation` never sees a claim it can derive as narrow.
+		// Prose-only plan validation, so only the declared gate can engage the veto.
+		// This is the recorded failure mode: the gate is observed red, then a second
+		// command is armed and review accepts it in its place. It can no longer claim
+		// breadth, and the point stands without that -- review needs the failed command
+		// itself to pass, not a substitute of any scope.
 		let session = begin(
 			approve(
 				saveDraft(environment, { plan: oneFeaturePlan([PROSE_VALIDATION]) }),
@@ -1068,7 +1563,7 @@ describe("Session v5 domain state machine", () => {
 			id: "substitute-broad",
 			featureId: DELIVERY,
 			command: "bun run check",
-			scope: "broad",
+			scope: "focused",
 		});
 		const run = session.runs.at(-1);
 		if (!run) throw new Error("Expected the active run.");
@@ -1124,7 +1619,7 @@ describe("Session v5 domain state machine", () => {
 			id: "foundation-substitute",
 			featureId: FOUNDATION,
 			command: "bun run check",
-			scope: "broad",
+			scope: "focused",
 		});
 		expect(() =>
 			requestReview(session, FOUNDATION, environment, "review-foundation"),
@@ -1161,7 +1656,9 @@ describe("Session v5 domain state machine", () => {
 		passingIds.push("current-broad");
 		session = validate(session, {
 			id: "current-broad",
-			command: SUBSTITUTE_GATE,
+			// The declared gate, which is the only command a broad observation may run,
+			// and separate from all 64 planned focused commands.
+			command: "bun test",
 		});
 		expect(() =>
 			validate(session, { id: "over-limit", command: "bun run extra" }),
@@ -1189,10 +1686,23 @@ describe("Session v5 domain state machine", () => {
 			scope: "focused",
 			exitCode: 1,
 		});
-		prospective = validate(prospective, {
-			id: "legacy-substitute-pass",
-			command: SUBSTITUTE_GATE,
-		});
+		// Recorded against a plan that declared this command as its gate, then
+		// reattached to the planned-gate plan. A broad substitute can no longer be
+		// recorded against a plan that names a different gate, and this is state
+		// accepted before either rule existed.
+		prospective = {
+			...validate(
+				{
+					...prospective,
+					plan: oneFeaturePlan(
+						[PROSE_VALIDATION, PLANNED_GATE, PLANNED_GATE],
+						SUBSTITUTE_GATE,
+					),
+				},
+				{ id: "legacy-substitute-pass", command: SUBSTITUTE_GATE },
+			),
+			plan: prospective.plan,
+		};
 		expect(() =>
 			requestReview(prospective, DELIVERY, environment, "new-admission"),
 		).toThrow(PLANNED_GATE);

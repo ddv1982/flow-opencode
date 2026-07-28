@@ -218,6 +218,7 @@ describe("Flow v6 OpenCode host schemas", () => {
 				"command",
 				"expectedRevision",
 				"featureId",
+				"resultsPath",
 				"scope",
 			],
 			flow_review_start: [

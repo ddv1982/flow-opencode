@@ -24,9 +24,11 @@ import type {
 import { reviewResultSemanticIssues } from "./session.js";
 import { FlowTransitionError } from "./transition-error.js";
 import {
+	externalEvidenceRefusal,
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
+	unsatisfiedExternalEvidence,
 } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
@@ -151,6 +153,55 @@ function assertPlan(plan: Plan): void {
 	if (issue) fail(issue);
 }
 
+/**
+ * A newly saved plan must name the repository's canonical gate.
+ *
+ * Checked here rather than in `planIssue` because it is a rule about what this
+ * build writes, not an invariant every Session v5 document satisfies: a plan saved
+ * before the field existed must still hydrate, and it keeps the weaker rule that a
+ * `broad` label is the claimant's word.
+ */
+function assertDeclaredGate(plan: Plan): void {
+	if (plan.gate === undefined) {
+		fail(
+			"A saved plan must declare `gate`: the exact canonical command that validates the whole repository, which every broad observation then has to run.",
+		);
+	}
+}
+
+/**
+ * A newly saved plan must answer whether anything the goal asks for is unobservable
+ * here.
+ *
+ * An empty list is a real answer and the common one. What the field removes is the
+ * third state: a run that noticed the gap, wrote it into `requirements` as a
+ * non-goal, and left nothing for the runtime to check. Requiring the field asks the
+ * question while the answer is still cheap, which is the same reason `gate` is
+ * required rather than inferred.
+ */
+function assertDeclaredExternalEvidence(plan: Plan): void {
+	if (plan.externalEvidence === undefined) {
+		fail(
+			"A saved plan must declare `externalEvidence`: every acceptance observation needing an environment this host may not be, each with the exact command whose passing is that observation. Declare an empty list when the goal is fully observable here.",
+		);
+	}
+	// Required for the same reason the command is: the entry has to name the host
+	// before there is any pressure to accept the wrong one. An entry hydrated from an
+	// older document keeps the weaker command-only rule.
+	if (plan.externalEvidence?.some((entry) => entry.platform === undefined)) {
+		fail(
+			"Every `externalEvidence` entry must declare `platform`: the operating system that can observe it (`win32`, `darwin`, or `linux`), or `other` when the missing environment is a service, credential, setting, or device rather than an OS. Flow compares an OS against the host the command actually ran on.",
+		);
+	}
+	// Required for the same reason `platform` is, against the other half of the same
+	// measured failure: the declared command exited zero for a case that never ran.
+	if (plan.externalEvidence?.some((entry) => entry.assertions === undefined)) {
+		fail(
+			"Every `externalEvidence` entry must declare `assertions`: the test case names whose passing is that observation, so a run cannot discharge it by exiting zero for a case that was skipped. Declare an empty list when the evidence is not a test result — a credential, a device, or a setting has no case names.",
+		);
+	}
+}
+
 function assertArtifacts(artifacts: readonly Artifact[]): void {
 	const issue = artifactIssues(artifacts)[0];
 	if (issue) fail(issue);
@@ -205,6 +256,8 @@ export function savePlan(
 ): MutationResult<null> {
 	assertPlan(input.plan);
 	if (!session) {
+		assertDeclaredGate(input.plan);
+		assertDeclaredExternalEvidence(input.plan);
 		if (input.expectedRevision !== 0) {
 			fail("A new Flow session must start from expectedRevision 0.");
 		}
@@ -244,6 +297,13 @@ export function savePlan(
 		input,
 	);
 	if (replay) return { session, value: null, replayed: true };
+	// After the replay check, not before it. These two guards are new in this version,
+	// and a plan-save accepted by an earlier one could have carried no `gate` and no
+	// `externalEvidence`. Asserting first turned the retry of an already-accepted
+	// request into a refusal on upgrade, which is the one thing an idempotent operation
+	// id is for. A new write still has to declare both.
+	assertDeclaredGate(input.plan);
+	assertDeclaredExternalEvidence(input.plan);
 	assertRevision(session, input.expectedRevision);
 	assertMutable(session);
 	if (session.approval === "approved") fail("An approved plan is immutable.");
@@ -447,6 +507,29 @@ export function startReview(
 		);
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
+	// Only the final review, and deliberately: a run that split the goal into a
+	// feature this host can prove and one it cannot, then passed the first and
+	// blocked the second, produced the best outcome the eval matrix has recorded.
+	// Vetoing every feature review over a plan-level gap would refuse that work.
+	// The final review is where the whole plan is claimed verified, which is the
+	// claim declared external evidence exists to hold.
+	if (kind === "final") {
+		const unsatisfied = unsatisfiedExternalEvidence(
+			session,
+			input.sourceDigest,
+		);
+		if (unsatisfied.length > 0) {
+			fail(
+				`Final review requires the plan's declared external evidence to pass for the current workspace content: ${unsatisfied
+					.map((entry) =>
+						externalEvidenceRefusal(session, entry, input.sourceDigest),
+					)
+					.join(
+						", ",
+					)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
+			);
+		}
+	}
 	const applicable = run.validations.filter(
 		(validation) =>
 			isValidationEligible(validation, input.sourceDigest) &&
@@ -715,6 +798,20 @@ export function closeSession(
 	assertMutable(session);
 	if (input.kind === "completed" && sessionStatus(session) !== "completed") {
 		fail("A completed close requires every planned feature to pass review.");
+	}
+	// Reachable only through a plan whose external evidence was satisfied and then
+	// invalidated, since the final review already checked it. Stated here anyway
+	// because this is the claim the field exists to hold, and it should not depend on
+	// which path reached the closure.
+	if (input.kind === "completed") {
+		const unsatisfied = unsatisfiedExternalEvidence(session);
+		if (unsatisfied.length > 0) {
+			fail(
+				`A completed close requires the plan's declared external evidence to have passed: ${unsatisfied
+					.map((entry) => externalEvidenceRefusal(session, entry))
+					.join(", ")}. Close deferred or abandoned instead.`,
+			);
+		}
 	}
 	let closure: SessionClosure | null = null;
 	const next = commit(

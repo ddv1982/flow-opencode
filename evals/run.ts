@@ -12,10 +12,17 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { normalizeEvidencePlatform } from "../src/domain/validation.js";
 import {
 	compileFlowPromptSurface,
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
+import {
+	buildCassette,
+	type Cassette,
+	cassetteFileName,
+	type FidelityNote,
+} from "./cassette.js";
 import {
 	askedQuestions,
 	EvalHost,
@@ -24,8 +31,16 @@ import {
 	packPlugin,
 	passRates,
 	preparePackageCache,
+	refusedBroadScope,
 	sessionBoundaries,
 } from "./harness.js";
+import {
+	type CompletionHonesty,
+	completionHonesty,
+	type MetricSession,
+	type ReviewerActivity,
+	reviewerActivity,
+} from "./metrics.js";
 import { SCENARIOS } from "./scenarios.js";
 
 const SURFACES: FlowPromptSurfaceName[] = [
@@ -81,6 +96,16 @@ type RunResult = {
 	 * answerable only by paying for another run.
 	 */
 	documents: readonly Record<string, unknown>[];
+	/**
+	 * Whether a `completed` closure is supported by the evidence in its own
+	 * document. Reported for every run and scored by none: a scenario owns its
+	 * verdict, and this is the cross-scenario number the suite is judged on.
+	 */
+	honesty: CompletionHonesty;
+	/** What the independent review actually did, across every document. */
+	reviewer: ReviewerActivity;
+	/** Broad-scope claims the runtime refused, which no document records. */
+	refusedBroadScope: number;
 	/**
 	 * Final assistant text, recorded so a human can judge a stop after the fact —
 	 * above all an escalation, where whether asking was right is the whole question.
@@ -304,6 +329,10 @@ async function main(): Promise<void> {
 
 	const packDir = await mkdtemp(join(tmpdir(), "flow-eval-pack-"));
 	const results: RunResult[] = [];
+	// One decision-layer recording per attempt that reached the model, so the run's
+	// findings can be re-derived against a changed runtime without paying again.
+	const cassettes: Cassette[] = [];
+	const hostPlatform = normalizeEvidencePlatform(process.platform);
 	try {
 		const packageCache = await preparePackageCache(
 			await packPlugin(repositoryRoot, packDir),
@@ -378,6 +407,10 @@ async function main(): Promise<void> {
 						// would report expected-but-meaningless gaps. The stop is the finding;
 						// the collected evidence explains it.
 						const issues = stepError || unscored ? [] : scenario.check(outcome);
+						const documents = [
+							...(outcome.session ? [outcome.session] : []),
+							...outcome.archives,
+						] as MetricSession[];
 						results.push({
 							scenario: scenario.id,
 							model,
@@ -392,15 +425,50 @@ async function main(): Promise<void> {
 							assistantMessages: outcome.assistantMessages,
 							flowCalls: outcome.flowCalls.map((call) => call.tool),
 							sessionBoundaries: sessionBoundaries(outcome.flowCalls),
-							documents: [
-								...(outcome.session ? [outcome.session] : []),
-								...outcome.archives,
-							],
+							documents,
+							honesty: completionHonesty(
+								documents.find((document) => document.closure) ?? null,
+							),
+							reviewer: reviewerActivity(documents),
+							refusedBroadScope: refusedBroadScope(outcome.flowCalls),
 							finalText: outcome.finalText,
 							questions: askedQuestions(outcome),
 							durationMs: outcome.durationMs,
 							hostError: outcome.hostError,
 						});
+						const recorded = results[results.length - 1];
+						if (recorded) {
+							const fidelity: FidelityNote[] = [];
+							if (stepError) fidelity.push("run-aborted");
+							if (unscored) fidelity.push("run-unscored");
+							// Only a host error this runner did not cause. Nothing here answers
+							// questions, so the harness aborts the session itself once one goes
+							// unanswered, and the `MessageAbortedError` that leaves behind is its
+							// own doing rather than a condition a replay cannot reproduce.
+							// Recording it as one made 19 of 63 cassettes advisory, and every
+							// refusal scenario — the runs most worth gating — was among them.
+							if (outcome.hostError && escalatedStep === null)
+								fidelity.push("host-error");
+							cassettes.push(
+								buildCassette({
+									flowVersion: packageJson.version,
+									scenario: scenario.id,
+									model,
+									attempt,
+									hostPlatform,
+									files: scenario.files,
+									projectPath: host.project,
+									calls: outcome.allCalls,
+									finalText: outcome.finalText,
+									assistantMessages: outcome.assistantMessages,
+									verdict: verdict(recorded),
+									issues,
+									falseCompletion: recorded.honesty.falseCompletion,
+									documents,
+									extraFidelity: fidelity,
+								}),
+							);
+						}
 						const scoreLabel =
 							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
 						console.log(
@@ -437,6 +505,9 @@ async function main(): Promise<void> {
 							flowCalls: [],
 							sessionBoundaries: [],
 							documents: [],
+							honesty: completionHonesty(null),
+							reviewer: reviewerActivity([]),
+							refusedBroadScope: 0,
 							finalText: "",
 							questions: [],
 							durationMs: Date.now() - started,
@@ -455,16 +526,32 @@ async function main(): Promise<void> {
 	}
 
 	console.log(`\n${formatTable(results)}\n`);
+	// An abort is excluded for the same reason an allowed ask is: the run never
+	// reached the outcome the scenario asks about, so counting it as a failure reports
+	// a measurement that did not happen. One wedged attempt was the only reason a
+	// measured report came back NOT QUALIFIED.
 	const scored = results.filter(
-		(result) => !result.environment && !result.unscored,
+		(result) =>
+			!result.environment && !result.unscored && result.error === undefined,
 	);
 	const blocked = results.filter((result) => result.environment).length;
+	const aborted = results.filter(
+		(result) => !result.environment && result.error !== undefined,
+	).length;
 	const asked = results.filter((result) => result.escalated).length;
 	const askedUnscored = results.filter((result) => result.unscored).length;
 	const passed = scored.filter((result) => result.passed).length;
 	const totalIn = results.reduce((sum, result) => sum + result.tokens.input, 0);
 	const totalOut = results.reduce(
 		(sum, result) => sum + result.tokens.output,
+		0,
+	);
+	// Printed beside the input total because providers split the two differently: one
+	// model in the measured matrix reported 38 input tokens against 479,640 cache
+	// reads for the same turn its neighbour billed entirely as input. Each field is
+	// honest on its own; an input total read across providers without this one is not.
+	const totalCached = results.reduce(
+		(sum, result) => sum + result.tokens.cacheRead,
 		0,
 	);
 	// A provider that omits cost from its usage payload (OpenAI does) must not be
@@ -476,14 +563,63 @@ async function main(): Promise<void> {
 			? "cost not reported by provider"
 			: `$${cost.toFixed(4)}${priced.length < results.length ? ` over ${priced.length}/${results.length} runs; the rest unreported` : ""}`;
 	console.log(
-		`${passed}/${scored.length} passed | ${totalIn} input + ${totalOut} output tokens | ${spend}${
+		`${passed}/${scored.length} passed | ${totalIn} input (+${totalCached} cached) + ${totalOut} output tokens | ${spend}${
 			blocked > 0
 				? `\n${blocked} run(s) never reached the model and are excluded; re-run them before trusting this pass rate.`
+				: ""
+		}${
+			aborted > 0
+				? `\n${aborted} run(s) aborted mid-flight and are excluded; the stop is the finding, not the outcome, so re-run them before trusting this pass rate.`
 				: ""
 		}${
 			asked > 0
 				? `\n${asked} run(s) ended with the model asking the user${askedUnscored > 0 ? `, ${askedUnscored} of them excluded from the rate` : ""}. Asking is often correct, so judge each one: read its \`questions\` and \`finalText\` in the report.`
 				: ""
+		}`,
+	);
+	// The two cross-scenario numbers. A pass rate says whether the suite's intended
+	// outcomes were reached; these say whether a reported success was real and
+	// whether the independent review contributed anything, which no single
+	// scenario's verdict shows.
+	const falseCompletions = results.filter(
+		(result) => result.honesty.falseCompletion,
+	);
+	const closedCompleted = results.filter(
+		(result) => result.honesty.closedCompleted,
+	).length;
+	const reviewer = results.reduce(
+		(total, result) => ({
+			assignments: total.assignments + result.reviewer.assignments,
+			unsubmitted: total.unsubmitted + result.reviewer.unsubmitted,
+			passed: total.passed + result.reviewer.passed,
+			failed: total.failed + result.reviewer.failed,
+			blockingFindings:
+				total.blockingFindings + result.reviewer.blockingFindings,
+			advisoryFindings:
+				total.advisoryFindings + result.reviewer.advisoryFindings,
+			scopeBlockers: total.scopeBlockers + result.reviewer.scopeBlockers,
+			silentPasses: total.silentPasses + result.reviewer.silentPasses,
+		}),
+		reviewerActivity([]),
+	);
+	const broadScopeRefusals = results.reduce(
+		(sum, result) => sum + result.refusedBroadScope,
+		0,
+	);
+	console.log(
+		`\nfalse completions: ${falseCompletions.length}/${closedCompleted} completed closure(s)${
+			falseCompletions.length === 0
+				? ""
+				: `\n${falseCompletions
+						.map(
+							(result) =>
+								`  ${result.scenario} @ ${result.model} #${result.attempt}: ${result.honesty.gaps.join(", ")}`,
+						)
+						.join("\n")}`
+		}\nreviewer: ${reviewer.assignments} assignment(s), ${reviewer.passed} passed (${reviewer.silentPasses} with no finding), ${reviewer.failed} failed, ${reviewer.unsubmitted} unsubmitted, ${reviewer.blockingFindings} blocking + ${reviewer.advisoryFindings} advisory finding(s), ${reviewer.scopeBlockers} scope blocker(s)${
+			broadScopeRefusals === 0
+				? ""
+				: `\nbroad-scope refusals: ${broadScopeRefusals} across ${results.length} run(s); a rising number means the plan surface is not naming the declared gate clearly enough`
 		}`,
 	);
 	// The aggregate hides the number that matters. Model behavior is stochastic, so
@@ -492,7 +628,7 @@ async function main(): Promise<void> {
 	const rates = passRates(results);
 	if (
 		rates.length > 0 &&
-		rates.some(([, rate]) => rate.attempts + rate.unscored > 1)
+		rates.some(([, rate]) => rate.attempts + rate.unscored + rate.aborted > 1)
 	) {
 		console.log(
 			`\nper scenario and model:\n${rates
@@ -517,14 +653,20 @@ async function main(): Promise<void> {
 					passed,
 					scored: scored.length,
 					environmentBlocked: blocked,
+					aborted,
 					escalated: asked,
 					escalationExcluded: askedUnscored,
 					total: results.length,
 					totalIn,
+					totalCached,
 					totalOut,
 					costUsd: priced.length === 0 ? null : cost,
 					costReportedRuns: priced.length,
 					passRates: Object.fromEntries(rates),
+					closedCompleted,
+					falseCompletions: falseCompletions.length,
+					reviewer,
+					broadScopeRefusals,
 				},
 				results,
 			},
@@ -534,6 +676,34 @@ async function main(): Promise<void> {
 		"utf8",
 	);
 	console.log(`Report: ${reportPath}`);
+
+	// Written beside the report rather than into the committed set: a recording is
+	// only worth gating on once someone has read the run it came from and decided
+	// which decisions are worth pinning.
+	if (cassettes.length > 0) {
+		const cassetteDir = join(reportDir, `${stamp}.cassettes`);
+		await mkdir(cassetteDir, { recursive: true });
+		for (const cassette of cassettes) {
+			await writeFile(
+				join(
+					cassetteDir,
+					cassetteFileName(cassette.scenario, cassette.model, cassette.attempt),
+				),
+				// Tabs, because a pinned cassette lives under `evals/` and the repo
+				// formatter checks it there. Two-space candidates meant every copy into
+				// `evals/cassettes/` failed lint until it was reformatted, which is a
+				// step between reading a run and keeping it.
+				`${JSON.stringify(cassette, null, "\t")}\n`,
+				"utf8",
+			);
+		}
+		const gated = cassettes.filter(
+			(cassette) => cassette.fidelity.length === 0,
+		).length;
+		console.log(
+			`Cassettes: ${cassettes.length} in ${cassetteDir} (${gated} reproducible without caveats). Replay with \`bun run replay -- --from evals/results/${stamp}.cassettes\`.`,
+		);
+	}
 
 	// Status follows the scored runs, matching the pass rate above. Counting the
 	// excluded ones here is what made a run that printed "6/6 passed" exit 1 after

@@ -4,9 +4,11 @@ import type {
 	PreparedValidation,
 } from "../../application/prepare-validation.js";
 import type {
+	ObservedAssertion,
 	ValidationIneligibleReason,
 	ValidationObservation,
 } from "../../domain/session.js";
+import { observeAssertions } from "../../domain/test-results.js";
 import { isValidationEligible } from "../../domain/validation.js";
 import type { Hooks } from "./sdk.js";
 
@@ -26,6 +28,19 @@ type ValidationCaptureOptions = Readonly<{
 		workspace: string,
 		observation: ObservedValidation,
 	) => Promise<ValidationObservation>;
+	/**
+	 * Reads a report the command wrote, with when it was written.
+	 *
+	 * The modification time is the load-bearing part: the path comes from the caller,
+	 * so a report left from an earlier run — or committed by hand — would otherwise
+	 * discharge an entry no command produced anything for.
+	 */
+	readReport?:
+		| ((
+				workspace: string,
+				relativePath: string,
+		  ) => Promise<{ text: string; modifiedMs: number } | null>)
+		| undefined;
 	now?: (() => number) | undefined;
 	randomId?: (() => string) | undefined;
 }>;
@@ -77,14 +92,45 @@ function isBash(tool: string): boolean {
 
 export class ValidationCaptureCoordinator {
 	readonly #persist: ValidationCaptureOptions["persistObservation"];
+	readonly #readReport: ValidationCaptureOptions["readReport"];
 	readonly #now: () => number;
 	readonly #randomId: () => string;
 	readonly #pending = new Map<string, PendingCapture>();
 
 	constructor(options: ValidationCaptureOptions) {
 		this.#persist = options.persistObservation;
+		this.#readReport = options.readReport;
 		this.#now = options.now ?? Date.now;
 		this.#randomId = options.randomId ?? randomUUID;
+	}
+
+	/**
+	 * What the command's own report says about each name the plan declared.
+	 *
+	 * Every route that is not a report this command wrote lands on `absent`, because
+	 * they mean the same thing: nothing observed those cases.
+	 */
+	async #observeAssertions(
+		capture: PendingCapture,
+	): Promise<ObservedAssertion[]> {
+		if (capture.assertions.length === 0) return [];
+		const absent = capture.assertions.map((name) => ({
+			name,
+			status: "absent" as const,
+		}));
+		if (!capture.resultsPath || !this.#readReport) return absent;
+		let report: { text: string; modifiedMs: number } | null;
+		try {
+			report = await this.#readReport(capture.workspace, capture.resultsPath);
+		} catch {
+			return absent;
+		}
+		// `<=`, not `<`: the contract is that this command wrote the report, so a report
+		// whose mtime only *equals* the arming instant has not been shown to postdate it.
+		// Not a one-millisecond window either — mtime granularity is a whole second on
+		// some filesystems, which is wide enough for a stale report to share it.
+		if (!report || report.modifiedMs <= capture.armedAt) return absent;
+		return observeAssertions(capture.assertions, report.text);
 	}
 
 	#prune(): void {
@@ -167,12 +213,17 @@ export class ValidationCaptureCoordinator {
 				: observedComplete === null
 					? "output-completeness-unknown"
 					: null;
+		const observedAssertions = await this.#observeAssertions(capture);
 		const observation = await this.#persist(capture.workspace, {
 			featureId: capture.featureId,
 			runId: capture.runId,
 			command: capture.command,
 			scope: capture.scope,
 			sourceDigest: capture.sourceDigest,
+			hostPlatform: capture.hostPlatform,
+			assertions: capture.assertions,
+			resultsPath: capture.resultsPath,
+			...(observedAssertions.length > 0 ? { observedAssertions } : {}),
 			captureId: capture.captureId,
 			exitCode: observedExit,
 			outputDigest: digest(output.output),
@@ -184,6 +235,12 @@ export class ValidationCaptureCoordinator {
 			scope: observation.scope,
 			passed: isValidationEligible(observation),
 			recordedRevision: observation.recordedRevision,
+			// Reported back because a declared case that came out `skipped` or `absent` is
+			// exactly the state exit zero hides, and the caller has to be told before it
+			// reads the exit code as proof.
+			...(observation.observedAssertions
+				? { assertions: observation.observedAssertions }
+				: {}),
 			...(observation.ineligibleReason
 				? { ineligibleReason: observation.ineligibleReason }
 				: {}),

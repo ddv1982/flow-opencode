@@ -59,15 +59,20 @@ feature.
 code, output digest, and completeness stored directly on the active run. It is
 not a detached receipt or caller-authored success claim.
 
-**Broad validation**: A coverage claim that the command is the repository's
-canonical applicable gate or a justified equivalent for the delivered state. The
-string `broad` does not make a narrow check comprehensive, and claiming it binds
-the claimant: a `broad` observation that does not pass vetoes review until that
-same command passes.
+**Declared gate**: The plan's `gate`, the exact canonical command that validates
+the whole repository. It is named before implementation and locked by approval, so
+the coverage decision sits in the document the user approves. A plan saved before
+this field existed declares none and keeps the older rule.
+
+**Broad validation**: An observation of the declared gate. Any other command is
+refused the claim, as is one that selects which tests it runs. Claiming it binds the
+claimant: a `broad` observation that does not pass vetoes review until that same
+command passes.
 
 **Vetoed command**: A command whose latest evidence blocks review until it passes
-again for the current source — one an observation claimed at `broad` scope, or one
-whose bytes equal an entry in the active feature's validation list. Reset does not
+again for the current source — one an observation claimed at `broad` scope, the
+plan's declared gate, or one whose bytes equal an entry in the active feature's
+validation list. Reset does not
 erase the failure and no other passing command discharges it. The veto is
 prospective; the maintainer contract owns the exact admission rule.
 

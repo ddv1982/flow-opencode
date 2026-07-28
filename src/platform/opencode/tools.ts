@@ -8,6 +8,7 @@ import {
 } from "../../domain/artifact.js";
 import {
 	MAX_ARTIFACTS,
+	MAX_DECLARED_ASSERTIONS,
 	MAX_PATH_BYTES,
 	MAX_PLAN_BYTES,
 	MAX_PLAN_FEATURES,
@@ -19,7 +20,9 @@ import {
 	FINDING_ID_MESSAGE,
 	FINDING_ID_PATTERN,
 } from "../../domain/review-findings.js";
+import type { EvidencePlatform } from "../../domain/session.js";
 import { reviewResultSemanticIssues } from "../../domain/session.js";
+import { EVIDENCE_PLATFORMS } from "../../domain/validation.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import {
@@ -33,7 +36,10 @@ import {
 	flowSessionClose,
 	flowStatus,
 } from "../../infrastructure/fs/workspace-flow-service.js";
-import type { AutoTimingSnapshot } from "./auto-drive.js";
+import type {
+	AutoContinuationSupport,
+	AutoTimingSnapshot,
+} from "./auto-drive.js";
 import { type Hooks, type ToolContext, tool } from "./sdk.js";
 import type { ValidationCaptureCoordinator } from "./validation-capture.js";
 
@@ -98,6 +104,36 @@ const plan = host
 		requirements: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		decisions: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		features: host.array(planFeature).min(1).max(MAX_PLAN_FEATURES),
+		/**
+		 * The exact canonical command every broad observation must run.
+		 *
+		 * Optional here and required by `savePlan`, like every other plan rule the
+		 * domain owns: the persisted schema has to keep hydrating plans written before
+		 * the field existed, and the two schemas stay at parity.
+		 */
+		gate: text.optional(),
+		/**
+		 * Acceptance observations needing an environment this host may not be, each
+		 * with the exact command whose passing is that observation. Optional and
+		 * required by `savePlan` for the same reason `gate` is.
+		 */
+		externalEvidence: host
+			.array(
+				host
+					.object({
+						requirement: text,
+						environment: text,
+						command: text,
+						platform: host.enum(EVIDENCE_PLATFORMS).optional(),
+						assertions: host
+							.array(text)
+							.max(MAX_DECLARED_ASSERTIONS)
+							.optional(),
+					})
+					.strict(),
+			)
+			.max(MAX_PLAN_FEATURES)
+			.optional(),
 	})
 	.strict()
 	.superRefine((value, context) => {
@@ -163,6 +199,9 @@ const ValidationStartArgs = {
 			featureId,
 			command: text,
 			scope: host.enum(["focused", "broad"]),
+			resultsPath: boundedHostText("Validation results path", {
+				maxBytes: MAX_PATH_BYTES,
+			}).optional(),
 		})
 		.strict(),
 };
@@ -221,8 +260,12 @@ type ToolOptions = Readonly<{
 		command: string;
 		scope: "focused" | "broad";
 		sourceDigest: `sha256:${string}`;
+		hostPlatform: EvidencePlatform;
+		assertions: readonly string[];
+		resultsPath: string | undefined;
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
+	autoContinuationSupport?: (() => AutoContinuationSupport) | undefined;
 }>;
 
 function json(value: unknown): string {
@@ -252,24 +295,49 @@ function toolError(error: unknown): string {
 	});
 }
 
-function withAutoTiming(
+/**
+ * Adds the process-local `/flow-auto` context to a status response: how long the
+ * latest lease has been active, and whether this host can carry a continuation at
+ * all. Both are observations about the process, never Session v5 state, and a
+ * failure to collect either leaves the response untouched.
+ */
+function withAutoContext(
 	response: FlowToolResponse,
-	snapshot: ToolOptions["autoTimingSnapshot"],
+	options: ToolOptions,
 ): FlowToolResponse {
-	if (!snapshot) return response;
+	let workflowData = response.workflowData;
 	try {
-		const timing = snapshot();
-		if (!timing) return response;
-		return {
-			...response,
-			workflowData: {
-				...response.workflowData,
-				autoTiming: timing,
-			},
-		};
+		const timing = options.autoTimingSnapshot?.();
+		if (timing) workflowData = { ...workflowData, autoTiming: timing };
 	} catch {
-		return response;
+		// Timing is diagnostic; losing it must not fail a status read.
 	}
+	try {
+		const support = options.autoContinuationSupport?.();
+		// `unknown` is withheld deliberately: before any assistant message exists it
+		// is the absence of a signal, and reporting it invites a caller to relay it as
+		// a limitation.
+		if (support === "supported" || support === "unsupported") {
+			workflowData = {
+				...workflowData,
+				autoContinuation: {
+					scope: "current-plugin-process",
+					support,
+					...(support === "unsupported"
+						? {
+								reason: "host-reports-no-assistant-message-parentage",
+								recovery: "Drive each feature with /flow-run.",
+							}
+						: {}),
+				},
+			};
+		}
+	} catch {
+		// Same: a capability probe never blocks a read.
+	}
+	return workflowData === response.workflowData
+		? response
+		: { ...response, workflowData };
 }
 
 async function execute<T extends FlowToolResponse>(
@@ -315,10 +383,7 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			args: StatusArgs,
 			execute: (args, context) =>
 				execute(context, async (workspace) =>
-					withAutoTiming(
-						await flowStatus(workspace, args),
-						options.autoTimingSnapshot,
-					),
+					withAutoContext(await flowStatus(workspace, args), options),
 				),
 		}),
 		flow_plan_save: tool({

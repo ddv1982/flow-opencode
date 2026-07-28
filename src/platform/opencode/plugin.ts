@@ -4,6 +4,7 @@ import { flowStatus } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
+	readWorkspaceTestReport,
 } from "../../infrastructure/fs/workspace-validation.js";
 import { resolveFlowPluginVersion } from "../../version.js";
 import { AutoDriveCoordinator } from "./auto-drive.js";
@@ -128,6 +129,17 @@ function createCommandHook(
 		if (command !== "flow-auto")
 			return void autoDrive.deactivate(input.sessionID);
 		const metadata = await autoDrive.activate(input.sessionID);
+		// Preflight, not a gate. The lifecycle works either way; what changes is
+		// whether the user is told up front that this host cannot carry the
+		// continuation, instead of watching Flow stop after every feature and
+		// guessing which of the two it is.
+		if (autoDrive.continuationSupport() === "unsupported") {
+			output.parts.unshift(
+				textPart(
+					"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+				),
+			);
+		}
 		const instruction = output.parts.find(
 			(part): part is TextPart =>
 				part.type === "text" && part.synthetic === true,
@@ -259,11 +271,13 @@ const FlowPlugin: Plugin = async (ctx) => {
 	});
 	const validation = new ValidationCaptureCoordinator({
 		persistObservation: persistWorkspaceValidation,
+		readReport: readWorkspaceTestReport,
 	});
 	const tools = createTools(ctx, {
 		validation,
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
+		autoContinuationSupport: () => autoDrive.continuationSupport(),
 	});
 	return {
 		config: createConfigHook(ctx, {

@@ -1,0 +1,452 @@
+{
+	"cassetteVersion": 1,
+	"flowVersion": "7.0.2",
+	"recordedAt": "2026-07-28T01:31:07.237Z",
+	"scenario": "resumes-after-interruption",
+	"model": "opencode/claude-sonnet-5",
+	"attempt": 3,
+	"hostPlatform": "linux",
+	"files": {
+		"package.json": "{\n  \"name\": \"flow-eval-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n",
+		"src/greet.ts": "export function greet(name: string): string {\n\treturn `Hello, ${name}!`;\n}\n",
+		"src/greet.test.ts": "import { expect, test } from \"bun:test\";\nimport { greet } from \"./greet.js\";\n\ntest(\"greets by name\", () => {\n\texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n});\n",
+		"README.md": "# Flow eval fixture\n\nRun `bun test` for the canonical gate.\n"
+	},
+	"events": [
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"view": "compact"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 0
+			}
+		},
+		{
+			"kind": "bash",
+			"agent": "build",
+			"sessionIndex": 0,
+			"command": "cat package.json 2>/dev/null; echo \"---\"; ls src 2>/dev/null; echo \"---\"; find . -maxdepth 3 -iname \"*greet*\" -not -path \"*/node_modules/*\"; echo \"---\"; find . -maxdepth 2 -not -path \"*/node_modules/*\" -not -path \"*/.git/*\"",
+			"output": "{\n  \"name\": \"flow-eval-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n---\ngreet.test.ts\ngreet.ts\n---\n./src/greet.test.ts\n./src/greet.ts\n---\n.\n./src\n./src/greet.test.ts\n./src/greet.ts\n./README.md\n./.git\n./package.json\n./.opencode\n./.opencode/.gitignore\n./.opencode/package-lock.json\n./.opencode/package.json\n./.opencode/node_modules\n./opencode.json\n",
+			"metadata": {
+				"output": "{\n  \"name\": \"flow-eval-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n---\ngreet.test.ts\ngreet.ts\n---\n./src/greet.test.ts\n./src/greet.ts\n---\n.\n./src\n./src/greet.test.ts\n./src/greet.ts\n./README.md\n./.git\n./package.json\n./.opencode\n./.opencode/.gitignore\n./.opencode/package-lock.json\n./.opencode/package.json\n./.opencode/node_modules\n./opencode.json\n",
+				"exit": 0,
+				"truncated": false
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.ts</path>\n<type>file</type>\n<content>\n1: export function greet(name: string): string {\n2: \treturn `Hello, ${name}!`;\n3: }\n\n(End of file - total 3 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.test.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.test.ts</path>\n<type>file</type>\n<content>\n1: import { expect, test } from \"bun:test\";\n2: import { greet } from \"./greet.js\";\n3: \n4: test(\"greets by name\", () => {\n5: \texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n6: });\n\n(End of file - total 6 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "<flow-eval-workspace>/README.md"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/README.md</path>\n<type>file</type>\n<content>\n1: # Flow eval fixture\n2: \n3: Run `bun test` for the canonical gate.\n\n(End of file - total 3 lines)\n</content>"
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_plan_save",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "plan-farewell-1",
+					"expectedRevision": 0,
+					"goal": "Add an exported `farewell(name)` function to src/greet.ts that returns `Goodbye, <name>!`, with a focused test.",
+					"plan": {
+						"summary": "Add an exported `farewell(name)` function to src/greet.ts returning `Goodbye, <name>!`, covered by a focused test in src/greet.test.ts.",
+						"overview": "Extend src/greet.ts with a new exported `farewell(name: string): string` function mirroring the existing `greet` function's style, returning the template string `Goodbye, ${name}!`. Add a corresponding test case in src/greet.test.ts (using bun:test, same pattern as the existing 'greets by name' test) that imports `farewell` and asserts the exact return value for a sample name.",
+						"requirements": [
+							"`farewell` is exported from src/greet.ts and accepts a single `name: string` parameter, returning a string.",
+							"Return value is exactly `Goodbye, <name>!` (e.g. `farewell(\"Ada\")` -> `\"Goodbye, Ada!\"`).",
+							"A focused test exists in src/greet.test.ts exercising `farewell` and asserting the exact output.",
+							"Existing `greet` function and its test remain unchanged and passing.",
+							"Non-goal: no CLI wiring, no i18n/pluralization, no changes to README or package.json."
+						],
+						"decisions": [
+							"Follow the existing `greet` function's style/signature exactly (plain function, template literal return) for consistency.",
+							"Test added to the existing src/greet.test.ts file rather than a new test file, matching current single-file test convention.",
+							"Gate command per README.md is `bun test`."
+						],
+						"gate": "bun test",
+						"externalEvidence": [],
+						"features": [
+							{
+								"id": "farewell-function",
+								"title": "Add farewell function with test",
+								"summary": "Implement exported `farewell(name)` in src/greet.ts returning `Goodbye, <name>!`, with a focused passing test.",
+								"targets": ["src/greet.ts", "src/greet.test.ts"],
+								"validation": [
+									"bun test — new farewell test case passes and existing greet test still passes"
+								],
+								"dependsOn": []
+							}
+						]
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 1,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"view": "compact"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 1,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"view": "detail"
+			},
+			"observed": {
+				"status": "error"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"view": "detail"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 1,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_plan_approve",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"operationId": "approve-farewell-1",
+					"expectedRevision": 1
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 2,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_guidance",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"id": "flow-run"
+			},
+			"observed": {
+				"status": "error"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_run_start",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"operationId": "start-farewell-1",
+					"expectedRevision": 2,
+					"featureId": "farewell-function"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 3,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.ts</path>\n<type>file</type>\n<content>\n1: export function greet(name: string): string {\n2: \treturn `Hello, ${name}!`;\n3: }\n\n(End of file - total 3 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.test.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.test.ts</path>\n<type>file</type>\n<content>\n1: import { expect, test } from \"bun:test\";\n2: import { greet } from \"./greet.js\";\n3: \n4: test(\"greets by name\", () => {\n5: \texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n6: });\n\n(End of file - total 6 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "edit",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.ts",
+				"oldString": "export function greet(name: string): string {\n\treturn `Hello, ${name}!`;\n}",
+				"newString": "export function greet(name: string): string {\n\treturn `Hello, ${name}!`;\n}\n\nexport function farewell(name: string): string {\n\treturn `Goodbye, ${name}!`;\n}"
+			},
+			"rawOutput": "Edit applied successfully."
+		},
+		{
+			"kind": "other",
+			"tool": "edit",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.test.ts",
+				"oldString": "import { expect, test } from \"bun:test\";\nimport { greet } from \"./greet.js\";\n\ntest(\"greets by name\", () => {\n\texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n});",
+				"newString": "import { expect, test } from \"bun:test\";\nimport { farewell, greet } from \"./greet.js\";\n\ntest(\"greets by name\", () => {\n\texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n});\n\ntest(\"says farewell by name\", () => {\n\texpect(farewell(\"Ada\")).toBe(\"Goodbye, Ada!\");\n});"
+			},
+			"rawOutput": "Edit applied successfully."
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_validation_start",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"expectedRevision": 3,
+					"featureId": "farewell-function",
+					"command": "bun test",
+					"scope": "broad"
+				}
+			},
+			"observed": {
+				"status": "ok"
+			}
+		},
+		{
+			"kind": "bash",
+			"agent": "build",
+			"sessionIndex": 1,
+			"command": "bun test",
+			"output": "bun test v1.3.2 (b131639c)\n\n 2 pass\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [11.00ms]\n",
+			"metadata": {
+				"output": "bun test v1.3.2 (b131639c)\n\n 2 pass\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [11.00ms]\n",
+				"exit": 0,
+				"truncated": false
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_review_start",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"operationId": "review-farewell-1",
+					"expectedRevision": 4,
+					"featureId": "farewell-function",
+					"artifactsChanged": [
+						{
+							"path": "src/greet.ts"
+						},
+						{
+							"path": "src/greet.test.ts"
+						}
+					],
+					"packet": {
+						"summary": "Added exported `farewell(name: string): string` to src/greet.ts returning `Goodbye, ${name}!`, mirroring the existing `greet` function's style. Added a focused test in src/greet.test.ts asserting `farewell(\"Ada\")` === \"Goodbye, Ada!\". Existing `greet` function/test unchanged and passing.\n\nRequirement mapping:\n- farewell exported, accepts name:string, returns string -> src/greet.ts:5-7 (verified)\n- Returns exactly `Goodbye, <name>!` -> src/greet.test.ts new test case (verified)\n- Focused test in src/greet.test.ts -> added (verified)\n- Existing greet function/test unchanged and passing -> verified, both tests pass\n- Non-goal: no CLI/i18n/README/package.json changes -> confirmed, no such files touched\n\nValidation: bun test (broad/gate) -> 2 pass, 0 fail, recordedRevision 4.\n\nBaseline: src/greet.ts and src/greet.test.ts were small (3 and 6 lines respectively); no unrelated files touched, no deletions/renames, no executable-mode changes.",
+						"riskLenses": [
+							"mechanical string-template correctness",
+							"test isolation (no shared state between greet/farewell tests)"
+						]
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 5,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479",
+				"assignmentId": "review:0f42ea8d-dcbb-4b55-925f-7e0e2be1d213"
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "task",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"description": "Independent review of farewell feature",
+				"prompt": "Perform independent review for assignment id \"review:0f42ea8d-dcbb-4b55-925f-7e0e2be1d213\" (featureId \"farewell-function\") in this Flow session. Call flow_status with view \"reviewer\" and assignmentId \"review:0f42ea8d-dcbb-4b55-925f-7e0e2be1d213\" to load the assignment, inspect the workspace source at src/greet.ts and src/greet.test.ts, verify the implementation against the plan requirements and the packet summary, then call flow_feature_complete directly with your verdict (passed/failed) and terminalDisposition. Use a fresh operationId, expectedRevision from the reviewer status, featureId \"farewell-function\", and assignmentId as given.",
+				"subagent_type": "flow-reviewer"
+			},
+			"rawOutput": "<task id=\"ses_059a82942ffeGmr7Ahcx3xvbbX\" state=\"completed\">\n<task_result>\nReview submitted successfully — verdict **passed**, terminalDisposition **submitted**, revision advanced to 6.\n\nSummary of outcome: The `farewell-function` feature was verified against the workspace source. `src/greet.ts` correctly adds an exported `farewell(name: string): string` returning `` `Goodbye, ${name}!` `` (lines 5-7), mirroring the existing `greet` function's style, which remains unchanged (lines 1-3). `src/greet.test.ts` adds a focused test (lines 8-10) asserting `farewell(\"Ada\") === \"Goodbye, Ada!\"`, and the original `greets by name` test is preserved unchanged. Only the two targeted files were touched, matching plan non-goals (no CLI/i18n/README/package.json changes). The `bun test` broad validation recorded exitCode 0 with matching sourceDigest and complete output. This is a single-feature plan with no prior findings, so the final review's requirement/feature coverage is complete. The session now shows `status: completed`, progress 1/1, with `nextAction: flow_session_close`.\n</task_result>\n</task>"
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "flow-reviewer",
+			"sessionIndex": 2,
+			"input": {
+				"request": {
+					"view": "reviewer",
+					"assignmentId": "review:0f42ea8d-dcbb-4b55-925f-7e0e2be1d213"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 5,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479",
+				"assignmentId": "review:0f42ea8d-dcbb-4b55-925f-7e0e2be1d213"
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "flow-reviewer",
+			"sessionIndex": 2,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.ts</path>\n<type>file</type>\n<content>\n1: export function greet(name: string): string {\n2: \treturn `Hello, ${name}!`;\n3: }\n4: \n5: export function farewell(name: string): string {\n6: \treturn `Goodbye, ${name}!`;\n7: }\n\n(End of file - total 7 lines)\n</content>"
+		},
+		{
+			"kind": "other",
+			"tool": "read",
+			"agent": "flow-reviewer",
+			"sessionIndex": 2,
+			"input": {
+				"filePath": "<flow-eval-workspace>/src/greet.test.ts"
+			},
+			"rawOutput": "<path><flow-eval-workspace>/src/greet.test.ts</path>\n<type>file</type>\n<content>\n1: import { expect, test } from \"bun:test\";\n2: import { farewell, greet } from \"./greet.js\";\n3: \n4: test(\"greets by name\", () => {\n5: \texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n6: });\n7: \n8: test(\"says farewell by name\", () => {\n9: \texpect(farewell(\"Ada\")).toBe(\"Goodbye, Ada!\");\n10: });\n\n(End of file - total 10 lines)\n</content>"
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_feature_complete",
+			"agent": "flow-reviewer",
+			"sessionIndex": 2,
+			"input": {
+				"request": {
+					"operationId": "review-submit:farewell-function-final-1",
+					"expectedRevision": 5,
+					"featureId": "farewell-function",
+					"assignmentId": "review:0f42ea8d-dcbb-4b55-925f-7e0e2be1d213",
+					"summary": "Final review passed. Verified requirements: farewell exported returning Goodbye, <name>! (src/greet.ts:5-7, verified); focused test asserting exact output (src/greet.test.ts:8-10, verified); existing greet function/test unchanged (verified); no CLI/i18n/README/package.json changes (verified). Single-feature plan fully covered. bun test validation exitCode 0, sourceDigest matches, no prior findings.",
+					"result": {
+						"verdict": "passed",
+						"findings": [],
+						"terminalDisposition": "submitted"
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 6,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"view": "compact"
+			},
+			"observed": {
+				"status": "error"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"view": "compact"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 6,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_session_close",
+			"agent": "build",
+			"sessionIndex": 1,
+			"input": {
+				"request": {
+					"operationId": "close-farewell-1",
+					"expectedRevision": 6,
+					"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479",
+					"kind": "completed",
+					"summary": "Added exported farewell(name) to src/greet.ts returning 'Goodbye, <name>!' with a focused passing test; bun test gate passed and independent review passed."
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 7,
+				"sessionId": "session:67099090-8eb2-4222-91af-34a91fe22479"
+			}
+		}
+	],
+	"expected": {
+		"verdict": "PASS",
+		"issues": [],
+		"falseCompletion": false,
+		"closureKind": "completed"
+	},
+	"finalText": "The Flow session completed and closed successfully.\n\n**Goal:** Add an exported `farewell(name)` function to `src/greet.ts` that returns `Goodbye, <name>!`, with a focused test.\n\n**Closure:** completed — Added exported `farewell(name)` to `src/greet.ts` returning `'Goodbye, <name>!'` with a focused passing test; `bun test` gate passed and independent review passed.\n\n**Progress:** 1 of 1 features complete\n\n**Feature: farewell-function** — Add farewell function with test\n- attempts: 1; latest state: completed\n- outcome: Final review passed. Verified requirements:\n  - `farewell` exported returning `Goodbye, <name>!` (src/greet.ts:5-7, verified)\n  - focused test asserting exact output (src/greet.test.ts:8-10, verified)\n  - existing `greet` function/test unchanged (verified)\n  - no CLI/i18n/README/package.json changes (verified)\n- terminal findings: none\n\n**Validation:** `bun test` — 2 pass, 0 fail (broad/gate scope)\n\n**Artifacts changed:** `src/greet.ts`, `src/greet.test.ts`\n\nNo Git or release mutations were made.",
+	"assistantMessages": 25,
+	"fidelity": []
+}

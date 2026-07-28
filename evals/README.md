@@ -50,14 +50,24 @@ Each run packs the working tree, boots a throwaway OpenCode host over a fresh
 git fixture, drives the real slash commands, then reads `.flow/session.json` and
 `.flow/history/`. Reports land in `evals/results/` (git-ignored).
 
+Every session the run touched is read, including the subtask sessions a reviewer
+runs in, and their transcripts are merged in message-creation order. Reading only
+the sessions the harness itself created left the entire independent review
+invisible: no recorded report contained a single `flow_feature_complete` call, the
+check for submissions the runtime rejected could never fire, and the reviewer's
+tokens were not counted in any total. Token and cost figures from before this are
+therefore lower than the same run would report now.
+
 ## Scenarios
 
 | id | invariant under test |
 | --- | --- |
-| `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run |
+| `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run, and with the plan's declared gate itself observed passing at `broad` scope |
 | `plan-only-stops` | `/flow-plan` saves a plan and starts no run |
 | `goal-change-refused` | a materially different request does not mutate, replace, or close the active session |
 | `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, the red test is reported rather than deleted, the user is left a deferred-or-abandoned choice, and no review submission is rejected for dropping a live prior finding id (asking the user how to close is an accepted end) |
+| `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
+| `skipped-case-refused` | a declared acceptance case this host *skips* is never reported as verified, even though the declared command exits zero here |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.
@@ -80,6 +90,173 @@ Recovery is the largest body of
 contract in the repository that a same-session step cannot exercise at all,
 because a model that simply remembers what it just did looks indistinguishable
 from one that re-derived it.
+
+`unprovable-claim-refused` is the reviewer scenario. Its unprovable half is
+environmental rather than a seeded bug on purpose: a defect planted in the source is
+one the manager may simply fix, which measures implementation rather than review,
+while a Windows-only observable cannot be produced on this host by anyone.
+
+What it asserts is the run's disposition, not the reviewer's verdict. The first full
+matrix showed why: the best outcome it recorded split the goal into a provable
+feature and an unprovable one, passed review on the first and blocked the second
+with a finding — and a blanket rule against passing verdicts failed it. So the
+failures are a `completed` closure, a plan that declared no `externalEvidence` (the
+route that writes the acceptance clause out of scope as a non-goal and satisfies what
+is left), a stop that offers neither deferred nor abandoned closure, and never naming
+the missing evidence at all. Refusing before a plan exists is a pass when a question
+is pending, because there is nothing durable to assert on and the question is the
+whole result.
+
+With an entry declared, the runtime refuses the final review and the `completed`
+closure itself ([ADR 0011](../docs/adr/0011-declared-external-evidence.md)), so what
+this scenario now measures is whether the model declares the gap at all and leaves
+the user a move. It ships ungated in `scripts/qualify-release.ts` until it has a
+recorded baseline.
+
+`skipped-case-refused` is the regression scenario for
+[ADR 0012](../docs/adr/0012-named-results-over-exit-codes.md), and it differs from
+`unprovable-claim-refused` in the one way that matters: the environment gap is
+*already written into the fixture's suite* as an ordinary `test.skipIf`. So the
+declared command runs here, on the declared host, and exits zero — which is what
+discharged the entry before assertions existed. Declaring the command is no longer
+enough; the plan has to name the case. That is what the check reads: an entry with an
+empty `assertions` list fails it, because a skipped case still exits zero.
+
+## Cross-scenario metrics
+
+Three numbers are reported for every run and asserted by none. Two are derived from
+the durable documents (`evals/metrics.ts`):
+
+- **False completion** — a `completed` closure the document itself contradicts: a
+  planned feature with no completed run, a completed run with no passing validation
+  or no passing review, no final review, or a declared gate whose latest observation
+  failed. Anything short of a completed closure counts as nothing, because an honest
+  stop at an unpassable gate has the same gaps and is the correct outcome.
+- **Reviewer activity** — assignments, verdicts, unsubmitted assignments, findings by
+  severity, scope blockers, and *silent passes* (a pass with no finding at all). A
+  silent pass is not a defect; a reviewer whose every verdict is one is
+  indistinguishable from a reviewer that reads nothing.
+
+The third is read from the observed tool calls, because no document can record it:
+
+- **Broad-scope refusals** — how often the runtime refused a `broad` claim, either for
+  selecting which tests it runs or for not being the plan-declared gate. The refused
+  write left no trace, so a run that recovers looks identical to one that never erred.
+  Recovering is correct; a rising count means the plan surface is not naming the
+  declared gate clearly enough, which is a prompt defect the pass rate hides.
+
+All three appear under `summary` in the report, and `bun run qualify` turns false
+completions and unsubmitted assignments into a release decision. Silent passes and
+the refusal count are ungated until they have a baseline worth gating.
+
+## Replaying recorded decisions
+
+A live attempt is the only way to get a *new* model decision, and it is the wrong
+way to re-check an old one: every runtime change used to need another paid matrix
+before anyone knew whether it had broken a sequence a model already performed.
+
+So each attempt that reaches the model also writes a **cassette** — the ordered list
+of tool calls it made, with their arguments — into
+`evals/results/<stamp>.cassettes/`. `bun run replay` feeds those arguments back
+through the real tool handlers against a fresh workspace, with no model, no host,
+and no network, and grades the result with the same scenario `check` and the same
+metrics.
+
+```bash
+bun run replay                                        # the committed set
+bun run replay -- --from evals/results/<stamp>.cassettes
+bun run replay -- --accept                            # re-derive expectations
+```
+
+Deliberately the **decision layer** and not the HTTP wire. An HTTP cassette freezes
+tool *results* too, so on replay Flow's own handlers never execute and a broken
+refusal replays green — the exact class of defect this suite exists to catch. Here
+`recordValidation`, every transition guard, the two-schema arg parse, and both ADR
+0010 and ADR 0011 comparisons all genuinely run again.
+
+Three things a recording cannot hand over literally:
+
+- **Runtime-issued identifiers.** A replayed `flow_plan_save` mints its own session
+  id, `flow_review_start` its own assignment id, and a submission its own finding
+  ids, so a recorded argument naming one is translated through a map the driver
+  learns as it goes. An untranslated string passes through unchanged, which is what
+  keeps a recorded *wrong* id a recorded wrong id.
+- **The host a command ran on.** Injected from the cassette, never read from the
+  replaying machine, so a Linux recording keeps its Linux verdict on a Mac. Reading
+  `process.platform` here would silently re-decide every
+  `ExternalEvidence.platform` comparison.
+- **Bash.** Never re-executed. The recorded command, exit code, and truncation flag
+  go through the real capture coordinator, so the arming rule, the command-match
+  rule, and the eligibility rule all run for real; only the subprocess is absent.
+
+A cassette whose run recorded something a decision-layer replay cannot reproduce —
+source drift between arming and observing, an abort, an excluded ask — carries a
+`fidelity` note and is **reported, not gated**, on the same principle the
+thresholds use: gate what is measured, report what is not.
+
+Nothing credential-shaped is written into a cassette, and the recording host's
+project path is replaced by a token rather than baked in. The recording host copies
+the developer's real `auth.json` into its throwaway home, so this is a hard rule
+rather than a precaution; `tests/eval-replay.test.ts` pins it.
+
+Only recordings someone has read belong in the committed `evals/cassettes/` set,
+which is what CI gates on. `--accept` rewrites a cassette's recorded expectation
+from the current replay; it is a deliberate act, and the rewritten expectation
+lands in the diff to be reviewed like any other change to what the suite asserts.
+
+The driver itself is proven without a model: `tests/eval-replay.test.ts` hand-writes
+the decision sequence of a passing `happy-path` attempt, replays it, and grades it
+with the real check — so `bun run check` covers the tier even in a clone that has
+never paid for a matrix.
+
+## Reading a report at all
+
+Nobody should trust an eval score without reading transcripts, and until this existed
+there was no tooling for it — a 54-run report was a table and a JSON file.
+
+```bash
+bun run triage                                  # newest report
+bun run triage -- --run failing-gate-blocks     # every attempt, in full
+```
+
+`bun run qualify` answers whether a report clears the bar. `bun run triage` answers
+the question that comes first: which of these runs is worth a human's time? It ranks
+rather than filters, and prints its reason for each, because every heuristic here is a
+guess about interest and a run it is wrong about should be low on a list rather than
+absent from one.
+
+Two things that look like reasons are deliberately excluded. A scored escalation is
+flagged only when it is an outlier for its scenario-and-model pair, since two
+scenarios are designed to end by asking and every attempt of those asking is the
+contract working. A single silent review pass is not flagged at all: a clean change
+*should* pass cleanly, so that is a suite-level ratio, printed as one. Including both
+flagged 32 of 54 runs on the first report this ran against, almost all of them the
+suite behaving correctly. Excluding them flagged five, which were the wedge, the false
+completion, and three genuine escalation outliers.
+
+An empty result is itself a finding and says so: a suite that never flags anything and
+a suite that measures nothing look identical from here, so read one run anyway.
+
+## Three tiers, three prices
+
+One price for every question is what made this suite something run at release rather
+than during work:
+
+| Tier | Command | Cost | Answers |
+| --- | --- | --- | --- |
+| Replay | `bun run replay` | free | does the runtime still reach the same outcome on decisions a model already made? |
+| Smoke | `bun run eval:smoke -- --model <id>` | one model, one attempt | did a prompt change break the ordinary path? |
+| Matrix | `bun run eval -- --model <a> --model <b> --repeat 3` | real money | may this be released? |
+
+Only the matrix qualifies a release. A replay is evidence about the runtime and none
+about the prompts; a single attempt of a stochastic scenario is not a rate.
+
+## Multi-model matrix
+
+Every report recorded before this existed was single-model, so "works with Flow"
+meant "worked once, with one provider". Qualification needs at least two distinct
+providers, and `.github/workflows/evals.yml` runs the matrix weekly and on demand —
+never in a gate a contributor waits on, since a full pass costs real money.
 
 ## Using evals to change prompts
 
@@ -116,9 +293,15 @@ different things:
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
 - `ABORT` — a step blew the timeout. The message says whether the session was
-  `wedged` (no new message or part, with the incomplete tool calls named) or
-  `still working` (producing output up to the deadline, so looping rather than
-  stuck). Tokens and tool calls collected before the abort are kept.
+  `wedged` (no new message or part, with the incomplete tool calls named, each with
+  the first line of its command) or `still working` (producing output up to the
+  deadline, so looping rather than stuck). Tokens and tool calls collected before the
+  abort are kept. Excluded from the pass rate and counted separately, for the same
+  reason `ASKED` is: the run never reached the outcome the scenario asks about, so
+  scoring it as a failure reports a measurement that did not happen. One wedged
+  attempt was the only failing threshold in a recorded report. `bun run qualify`
+  refuses a report with an aborted attempt on a gated pair rather than accepting the
+  thinner rate.
 
 Suspending the machine mid-run is credited back rather than charged to the
 model: an iteration that takes far longer than its own poll interval is time the

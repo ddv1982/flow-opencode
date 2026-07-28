@@ -336,6 +336,7 @@ describe("Flow close recovery and delivery", () => {
 			featureId: foundation,
 			suffix: "delivery-foundation-1",
 			command: "bun test foundation",
+			scope: "focused",
 			artifacts: ["zeta.ts", "shared.ts", "superseded-only.ts"],
 		});
 		await submitReview(flow, repository, {
@@ -356,6 +357,7 @@ describe("Flow close recovery and delivery", () => {
 			featureId: foundation,
 			suffix: "delivery-foundation-2",
 			command: "bun test foundation",
+			scope: "focused",
 			artifacts: ["shared.ts", "latest-a.ts"],
 		});
 		await submitReview(flow, repository, {

@@ -6,6 +6,7 @@ import {
 } from "../domain/feature-id.js";
 import {
 	MAX_ARTIFACTS,
+	MAX_DECLARED_ASSERTIONS,
 	MAX_PATH_BYTES,
 	MAX_PLAN_BYTES,
 	MAX_PLAN_FEATURES,
@@ -23,7 +24,10 @@ import {
 import type { Session, SourceDigest } from "../domain/session.js";
 import { reviewResultSemanticIssues } from "../domain/session.js";
 import { sessionInvariantIssues } from "../domain/session-invariants.js";
-import { VALIDATION_INELIGIBLE_REASONS } from "../domain/validation.js";
+import {
+	EVIDENCE_PLATFORMS,
+	VALIDATION_INELIGIBLE_REASONS,
+} from "../domain/validation.js";
 
 const encoder = new TextEncoder();
 
@@ -79,6 +83,35 @@ const PlanFeatureSchema = z
 	})
 	.strict();
 
+const ExternalEvidenceSchema = z
+	.object({
+		requirement: boundedText("External evidence requirement"),
+		environment: boundedText("External evidence environment"),
+		command: boundedText("External evidence command"),
+		/**
+		 * Optional for the same reason the field around it is: an entry written before
+		 * `platform` existed still hydrates and keeps the command-only rule, while
+		 * `savePlan` refuses a new entry without it.
+		 */
+		platform: z.enum(EVIDENCE_PLATFORMS).optional(),
+		/**
+		 * Optional under the same rule: an entry written before `assertions` existed
+		 * keeps the exit-code rule, and `savePlan` refuses a new entry without it.
+		 */
+		assertions: z
+			.array(boundedText("External evidence assertion"))
+			.max(MAX_DECLARED_ASSERTIONS)
+			.optional(),
+	})
+	.strict();
+
+const ObservedAssertionSchema = z
+	.object({
+		name: boundedText("Observed assertion name"),
+		status: z.enum(["passed", "failed", "skipped", "absent"]),
+	})
+	.strict();
+
 const PlanSchema = z
 	.object({
 		summary: boundedText("Plan summary"),
@@ -92,6 +125,21 @@ const PlanSchema = z
 			.max(MAX_PLAN_FEATURES)
 			.default([]),
 		features: z.array(PlanFeatureSchema).min(1).max(MAX_PLAN_FEATURES),
+		/**
+		 * Optional in the persisted schema so a plan written before the field existed
+		 * still hydrates; `savePlan` refuses a new plan without it.
+		 */
+		gate: boundedText("Plan gate").optional(),
+		/**
+		 * Optional for the same reason `gate` is: a plan written before the field
+		 * existed still hydrates, and `savePlan` refuses a new plan without it. An
+		 * empty array is the declared answer that nothing here needs another
+		 * environment, which is different from never having been asked.
+		 */
+		externalEvidence: z
+			.array(ExternalEvidenceSchema)
+			.max(MAX_PLAN_FEATURES)
+			.optional(),
 	})
 	.strict()
 	.superRefine((plan, context) => {
@@ -151,6 +199,16 @@ const ValidationObservationSchema = z
 		outputDigest: SourceDigestSchema,
 		outputComplete: z.boolean(),
 		recordedRevision: RevisionSchema,
+		/** The host this command ran on; absent in documents written before it existed. */
+		hostPlatform: z.enum(EVIDENCE_PLATFORMS).optional(),
+		/** Where the command wrote a report, and what it said about each declared case. */
+		resultsPath: boundedText("Validation results path", {
+			maxBytes: MAX_PATH_BYTES,
+		}).optional(),
+		observedAssertions: z
+			.array(ObservedAssertionSchema)
+			.max(MAX_DECLARED_ASSERTIONS)
+			.optional(),
 		ineligibleReason: z.enum(VALIDATION_INELIGIBLE_REASONS).optional(),
 	})
 	.strict()
@@ -356,6 +414,15 @@ export const ValidationStartInputSchema = z
 				featureId: FeatureIdSchema,
 				command: boundedText("Validation command"),
 				scope: z.enum(["focused", "broad"]),
+				/**
+				 * Repository-relative JUnit XML the command writes, when the plan declared
+				 * test names for it. Only the caller knows where its own command reports,
+				 * which is why this is a parameter — and why the file has to be written
+				 * after the command is armed to count for anything.
+				 */
+				resultsPath: boundedText("Validation results path", {
+					maxBytes: MAX_PATH_BYTES,
+				}).optional(),
 			})
 			.strict(),
 	})

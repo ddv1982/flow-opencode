@@ -19,6 +19,9 @@ const prepared: PreparedValidation = {
 	command: "bun test tests/runtime-gates.test.ts",
 	scope: "focused",
 	sourceDigest: SOURCE,
+	hostPlatform: "linux",
+	assertions: [],
+	resultsPath: undefined,
 };
 
 function persistedObservation(
@@ -36,11 +39,126 @@ function persistedObservation(
 		outputDigest: input.outputDigest,
 		outputComplete: input.outputComplete,
 		recordedRevision,
+		...(input.hostPlatform ? { hostPlatform: input.hostPlatform } : {}),
+		...(input.resultsPath ? { resultsPath: input.resultsPath } : {}),
+		...(input.observedAssertions
+			? { observedAssertions: input.observedAssertions }
+			: {}),
 		...(input.ineligibleReason
 			? { ineligibleReason: input.ineligibleReason }
 			: {}),
 	};
 }
+
+const REPORT = `<testsuites><testcase name="on Windows" classname="s"/></testsuites>`;
+
+/**
+ * Runs one capture to completion and returns what was persisted.
+ *
+ * Written as a helper because the interesting variable is only ever the report and
+ * when it was written; everything else about the capture is the same each time.
+ */
+async function capture(options: {
+	prepared: PreparedValidation;
+	readReport?: (
+		workspace: string,
+		relativePath: string,
+	) => Promise<{ text: string; modifiedMs: number } | null>;
+	armedAt: number;
+}): Promise<ObservedValidation> {
+	let persisted: ObservedValidation | null = null;
+	const coordinator = new ValidationCaptureCoordinator({
+		randomId: () => "capture-1",
+		now: () => options.armedAt,
+		...(options.readReport ? { readReport: options.readReport } : {}),
+		persistObservation: (_workspace, input) => {
+			persisted = input;
+			return Promise.resolve(persistedObservation(input));
+		},
+	});
+	coordinator.arm("session", "/workspace", options.prepared);
+	coordinator.observeToolBefore(
+		{ tool: "bash", sessionID: "session", callID: "bash-1" },
+		{ args: { command: options.prepared.command } },
+	);
+	await coordinator.observeToolAfter(
+		{
+			tool: "bash",
+			sessionID: "session",
+			callID: "bash-1",
+			args: { command: options.prepared.command },
+		},
+		{
+			title: "gate",
+			output: "1 pass",
+			metadata: { exit: 0, truncated: false },
+		},
+	);
+	if (!persisted) throw new Error("Nothing was persisted.");
+	return persisted;
+}
+
+describe("observing declared assertions from the command's own report", () => {
+	const declared: PreparedValidation = {
+		...prepared,
+		assertions: ["on Windows"],
+		resultsPath: "junit.xml",
+	};
+
+	test("records what the report says when the command wrote it", async () => {
+		const observed = await capture({
+			prepared: declared,
+			armedAt: 1_000,
+			readReport: async () => ({ text: REPORT, modifiedMs: 2_000 }),
+		});
+		expect(observed.observedAssertions).toEqual([
+			{ name: "on Windows", status: "passed" },
+		]);
+		expect(observed.resultsPath).toBe("junit.xml");
+	});
+
+	test("ignores a report that does not postdate the arming", async () => {
+		// The path is the one half of this a caller supplies, so a report left from an
+		// earlier run — or committed by hand — would otherwise discharge an entry no
+		// command produced anything for. Exit zero is unchanged; the claim is not.
+		//
+		// The equal case is the one that was open: mtime granularity is a whole second on
+		// some filesystems, so "same millisecond as arming" is not a hypothetical width.
+		for (const modifiedMs of [4_999, 5_000]) {
+			const observed = await capture({
+				prepared: declared,
+				armedAt: 5_000,
+				readReport: async () => ({ text: REPORT, modifiedMs }),
+			});
+			expect(observed.observedAssertions).toEqual([
+				{ name: "on Windows", status: "absent" },
+			]);
+			expect(observed.exitCode).toBe(0);
+		}
+	});
+
+	test("reaches the same absence when no report is named or none can be read", async () => {
+		for (const options of [
+			{ prepared: { ...declared, resultsPath: undefined }, armedAt: 1 },
+			{ prepared: declared, armedAt: 1, readReport: async () => null },
+			{
+				prepared: declared,
+				armedAt: 1,
+				readReport: () => Promise.reject(new Error("unreadable")),
+			},
+		]) {
+			const observed = await capture(options);
+			expect(observed.observedAssertions).toEqual([
+				{ name: "on Windows", status: "absent" },
+			]);
+		}
+	});
+
+	test("records nothing when the plan declared no names for this command", async () => {
+		const observed = await capture({ prepared, armedAt: 1 });
+		expect(observed.observedAssertions).toBeUndefined();
+	});
+});
 
 describe("OpenCode validation capture", () => {
 	test("captures the exact next Bash command and persists its structured observation directly", async () => {

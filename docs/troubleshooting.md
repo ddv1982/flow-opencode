@@ -23,6 +23,13 @@ cache cleaner, or configuration-repair CLI. Follow the official
 [OpenCode plugin documentation](https://opencode.ai/docs/plugins/) for npm or
 configuration failures.
 
+## `/flow-auto` stops after every feature
+
+Continuation is anchored to the assistant message that owns the lease, so a host
+that reports no assistant message parentage cannot carry it. Flow says so at
+`/flow-auto` startup when it has observed that, and `flow_status` reports
+`autoContinuation.support`. Nothing is broken: drive each feature with `/flow-run`.
+
 ## Flow reports a duplicate runtime
 
 More than one Flow copy loaded for the same project. Remove duplicate global,
@@ -94,6 +101,19 @@ long-running command that is already in progress.
 An absent structured exit code, truncated output, nonzero exit, persistence-time
 digest mismatch, or session/run change is recorded as unusable or fails closed.
 Run the final command again after the workspace is stable.
+
+## Validation was refused for claiming broad scope
+
+Two rules refuse the claim, and the message names which. A command that selects
+which tests it runs — by test file or by test-name filter — cannot be broad at all;
+record it as `focused`. Any command other than the plan's declared `gate` is refused
+because the plan already answered what breadth means for this repository. Arm the
+declared gate, or record this command as focused.
+
+The plan is immutable, so a gate that turns out to be wrong cannot be edited: finish
+or explicitly close the session, then plan again with the right command. A gate that
+genuinely cannot run in this environment is a blocker to report, not a reason to
+relabel something smaller.
 
 ## Review cannot start
 

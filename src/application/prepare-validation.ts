@@ -1,5 +1,8 @@
+import { ARTIFACT_PATH_MESSAGE, isArtifactPath } from "../domain/artifact.js";
 import { MAX_VALIDATION_ID_LENGTH } from "../domain/limits.js";
 import type {
+	EvidencePlatform,
+	ObservedAssertion,
 	Session,
 	SourceDigest,
 	ValidationIneligibleReason,
@@ -7,7 +10,11 @@ import type {
 	ValidationScope,
 } from "../domain/session.js";
 import { activeRun, recordValidation } from "../domain/transitions.js";
-import { LONGEST_VALIDATION_INELIGIBLE_REASON } from "../domain/validation.js";
+import {
+	declaredAssertions,
+	LONGEST_EVIDENCE_PLATFORM,
+	LONGEST_VALIDATION_INELIGIBLE_REASON,
+} from "../domain/validation.js";
 import type { SessionRepository } from "./ports/session-repository.js";
 import { SessionSchema, type ValidationStartRequest } from "./schema.js";
 
@@ -17,6 +24,22 @@ export type PreparedValidation = Readonly<{
 	command: string;
 	scope: ValidationScope;
 	sourceDigest: SourceDigest;
+	/**
+	 * The host that will run this command, supplied by the caller because reading it
+	 * belongs to infrastructure. It is armed here rather than read when the
+	 * observation is persisted so the recorded host is the one Flow armed against.
+	 */
+	hostPlatform: EvidencePlatform;
+	/** The test names the approved plan declares for this exact command. */
+	assertions: readonly string[];
+	/**
+	 * Where the caller says this command writes a JUnit report.
+	 *
+	 * The one half that must come from the caller, since only it knows what its own
+	 * command does — which is why the capture adapter reads nothing from a file that
+	 * was not written after this arming.
+	 */
+	resultsPath: string | undefined;
 }>;
 
 export type ObservedValidation = PreparedValidation &
@@ -26,6 +49,8 @@ export type ObservedValidation = PreparedValidation &
 		exitCode: number | null;
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
+		/** What the report said about each declared name; absent when none were declared. */
+		observedAssertions?: ObservedAssertion[] | undefined;
 		/**
 		 * Set by the capture adapter when the host could not supply the evidence a
 		 * passing validation requires. Source drift is detected here and overrides it.
@@ -61,11 +86,19 @@ function maximumSerializedObservation(
 	return {
 		...prepared,
 		captureId: maximumSerializedUnusedCaptureId(session),
-		// The widest exit code and the longest reason, so this probe stays an upper
-		// bound on the serialized size of any observation that could be recorded.
+		// The widest exit code and the longest reason and platform, so this probe stays
+		// an upper bound on the serialized size of any observation that could be
+		// recorded.
 		exitCode: Number.MIN_SAFE_INTEGER,
 		outputDigest: prepared.sourceDigest,
 		outputComplete: false,
+		hostPlatform: LONGEST_EVIDENCE_PLATFORM,
+		// The declared names and the caller's path are fixed by now, so the only free
+		// part is each outcome; `skipped` is the longest of the four.
+		observedAssertions: prepared.assertions.map((name) => ({
+			name,
+			status: "skipped" as const,
+		})),
 		ineligibleReason: LONGEST_VALIDATION_INELIGIBLE_REASON,
 	};
 }
@@ -84,6 +117,7 @@ function assertValidationCanBeRecorded(
 export async function prepareValidation(
 	repository: SessionRepository,
 	input: ValidationStartRequest,
+	hostPlatform: EvidencePlatform,
 ): Promise<PreparedValidation> {
 	return repository.transact(async (transaction) => {
 		const session = await transaction.load();
@@ -100,12 +134,18 @@ export async function prepareValidation(
 		if (run.reviews.length > 0) {
 			throw new Error("Validation cannot start after review has begun.");
 		}
+		if (input.resultsPath !== undefined && !isArtifactPath(input.resultsPath)) {
+			throw new Error(`Validation results path: ${ARTIFACT_PATH_MESSAGE}`);
+		}
 		const prepared = {
 			featureId: run.featureId,
 			runId: run.id,
 			command: input.command,
 			scope: input.scope,
 			sourceDigest: await transaction.computeSourceDigest(),
+			hostPlatform,
+			assertions: declaredAssertions(session, input.command),
+			resultsPath: input.resultsPath,
 		};
 		assertValidationCanBeRecorded(session, prepared);
 		return prepared;

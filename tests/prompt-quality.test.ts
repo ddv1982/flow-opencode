@@ -42,8 +42,35 @@ const MANAGER_GUIDANCE = [
 const MAX_MANAGER_PROMPT_BYTES = 34_000;
 const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
 
-/** Total shipped prompt bytes across every surface. Baseline: 38,495. */
-const MAX_TOTAL_PROMPT_BYTES = 38_700;
+/**
+ * Total shipped prompt bytes across every surface. Baseline: 38,495.
+ *
+ * Ratcheted to 38,500 when `plan.gate` replaced the prose that told the model what
+ * `broad` scope meant. The field is a net subtraction: a typed command the runtime
+ * matches byte-for-byte cost less prompt than the two paragraphs asking the model
+ * to judge whether its own claim was honest, and it is checked rather than trusted.
+ *
+ * Held at 38,500 through `plan.externalEvidence`, which landed at 38,307, and the
+ * rule above is why: the ceiling forced the addition to be a field with a guard plus
+ * one bullet, and it paid for itself out of the prose the guard made redundant — the
+ * environment inventory the plan now enumerates, the review-admission reconciliation
+ * the veto performs, a fabricated-result sentence flow-plan already carried, and the
+ * sentence that let a reviewer accept "a justified equivalent" for the canonical
+ * gate. That last one was a licence to accept a substitute, on the surface whose
+ * measured failure was accepting one. The reviewer needed no new prose: it is
+ * already told that a platform claim without proof is a failure, and a final review
+ * over unsatisfied evidence is now refused before the reviewer is asked at all.
+ *
+ * Held at 38,500 again through declared `assertions` and `resultsPath`, which landed
+ * at 38,485 — fifteen bytes of headroom, and the same rule did the work. Two cuts paid
+ * for the addition: the plan-time confirmation that "every required evidence
+ * environment has an identified execution path", which is now the field the runtime
+ * refuses a plan without, and the flow-run inventory sentence that said the same thing
+ * a second time. A ceiling this tight is the point — it is why each of the last three
+ * evidence rules arrived as a checked field rather than another paragraph asking the
+ * model to be careful.
+ */
+const MAX_TOTAL_PROMPT_BYTES = 38_500;
 
 /**
  * Absolute-rule markers per surface. Both Anthropic and OpenAI advise reserving
@@ -54,7 +81,7 @@ const MAX_TOTAL_PROMPT_BYTES = 38_700;
 const MAX_ABSOLUTE_RULES: Readonly<Record<FlowPromptSurfaceName, number>> = {
 	"flow-auto": 27,
 	"flow-plan": 17,
-	"flow-run": 51,
+	"flow-run": 49,
 	"flow-review": 3,
 	"flow-status": 7,
 	"flow-reviewer": 25,
