@@ -117,19 +117,24 @@ describe("observing declared assertions from the command's own report", () => {
 		expect(observed.resultsPath).toBe("junit.xml");
 	});
 
-	test("ignores a report that predates the arming", async () => {
+	test("ignores a report that does not postdate the arming", async () => {
 		// The path is the one half of this a caller supplies, so a report left from an
 		// earlier run — or committed by hand — would otherwise discharge an entry no
 		// command produced anything for. Exit zero is unchanged; the claim is not.
-		const observed = await capture({
-			prepared: declared,
-			armedAt: 5_000,
-			readReport: async () => ({ text: REPORT, modifiedMs: 4_999 }),
-		});
-		expect(observed.observedAssertions).toEqual([
-			{ name: "on Windows", status: "absent" },
-		]);
-		expect(observed.exitCode).toBe(0);
+		//
+		// The equal case is the one that was open: mtime granularity is a whole second on
+		// some filesystems, so "same millisecond as arming" is not a hypothetical width.
+		for (const modifiedMs of [4_999, 5_000]) {
+			const observed = await capture({
+				prepared: declared,
+				armedAt: 5_000,
+				readReport: async () => ({ text: REPORT, modifiedMs }),
+			});
+			expect(observed.observedAssertions).toEqual([
+				{ name: "on Windows", status: "absent" },
+			]);
+			expect(observed.exitCode).toBe(0);
+		}
 	});
 
 	test("reaches the same absence when no report is named or none can be read", async () => {

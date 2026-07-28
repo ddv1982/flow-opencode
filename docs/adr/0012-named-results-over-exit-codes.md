@@ -66,9 +66,10 @@ the file. It reads four attributes out of one element.
 
 Regex over XML, which is normally wrong, is right here: one bounded, well-specified
 element, and a parser dependency to read four attributes is a worse trade than a
-pattern with a suite pinning it. JUnit XML because it is the one format every runner
-already emits — `bun test --reporter=junit`, likewise jest, vitest, pytest, go, cargo
-— so one reader covers the repositories Flow runs in without adopting anything.
+pattern with a suite pinning it. JUnit XML because every runner can reach it: native
+in bun (`--reporter=junit`), vitest, and pytest, one adapter away in jest, go, and
+cargo. Not emitted unprompted everywhere, so one reader covers Flow's repositories
+without adopting a format nobody writes.
 
 Only `externalEvidence` names cases. `plan.gate` does not, and should not: a gate is a
 whole-suite claim, and naming a handful of cases inside it would make it look narrower

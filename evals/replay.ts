@@ -31,7 +31,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative as relativePath, resolve } from "node:path";
 import {
 	persistObservedValidation,
 	prepareValidation,
@@ -94,7 +94,18 @@ async function seedWorkspace(
 ): Promise<string> {
 	const workspace = await mkdtemp(join(tmpdir(), "flow-replay-"));
 	for (const [relative, contents] of Object.entries(files)) {
-		const target = join(workspace, relative);
+		// The paths come from the cassette, and `--from` points at any directory, so a
+		// recording this repository did not produce could write outside the workspace
+		// through a `..` segment. Committed cassettes are trusted; the flag is not.
+		const target = resolve(workspace, relative);
+		const inside = relativePath(workspace, target);
+		if (
+			inside === "" ||
+			isAbsolute(inside) ||
+			inside.split(/[\\/]/)[0] === ".."
+		) {
+			throw new Error(`Cassette file escapes the workspace: ${relative}`);
+		}
 		await mkdir(join(target, ".."), { recursive: true });
 		await writeFile(target, contents, "utf8");
 	}
@@ -434,6 +445,10 @@ export async function replayCassette(
  * `tool.schema` is Zod, and `args` is the raw shape a host wraps in an object, so
  * this is the same parse the host performs — which makes the schema mirror part of
  * what the replay tier covers rather than something only a unit test sees.
+ *
+ * Strict, because Zod 4 strips unknown keys by default: a recorded call carrying a
+ * field the schema has since dropped would have parsed clean and replayed green,
+ * which is the one thing this parse exists to catch.
  */
 function parseArgs(
 	definition: HostTool,
@@ -441,5 +456,6 @@ function parseArgs(
 ): unknown {
 	return tool.schema
 		.object(definition.args as Parameters<typeof tool.schema.object>[0])
+		.strict()
 		.parse(input);
 }

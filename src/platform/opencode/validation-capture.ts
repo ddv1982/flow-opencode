@@ -125,7 +125,11 @@ export class ValidationCaptureCoordinator {
 		} catch {
 			return absent;
 		}
-		if (!report || report.modifiedMs < capture.armedAt) return absent;
+		// `<=`, not `<`: the contract is that this command wrote the report, so a report
+		// whose mtime only *equals* the arming instant has not been shown to postdate it.
+		// Not a one-millisecond window either — mtime granularity is a whole second on
+		// some filesystems, which is wide enough for a stale report to share it.
+		if (!report || report.modifiedMs <= capture.armedAt) return absent;
 		return observeAssertions(capture.assertions, report.text);
 	}
 
