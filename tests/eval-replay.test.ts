@@ -241,6 +241,52 @@ describe("decision-layer replay", () => {
 		expect(result.divergences.join("\n")).toContain("flow_feature_complete");
 	}, 30_000);
 
+	// An `edit` is passed through rather than re-executed, so its recorded status is
+	// the only thing a replayed grader can read it from.
+	const editEvent = (status?: "completed" | "error") => ({
+		kind: "other" as const,
+		tool: "edit",
+		agent: "build",
+		sessionIndex: 0,
+		input: { filePath: "src/greet.test.ts", newString: "expect(1).toBe(1);" },
+		rawOutput: "",
+		...(status ? { status } : {}),
+	});
+
+	test("carries a failed write's status instead of replaying it as landed", async () => {
+		// Recording keeps errored calls on purpose, and the `other` branch used to
+		// reconstruct every one of them as `completed`. Any grader that distinguishes
+		// an attempted write from a landed one -- `defect-fails-review` reads coverage
+		// exactly this way -- would then credit a file the host never wrote, which is
+		// the same false evidence the live scoring was just fixed to refuse.
+		const cassette = happyPathCassette();
+		const result = await replayCassette({
+			...cassette,
+			events: [...cassette.events, editEvent("error")],
+		});
+		const writes = result.outcome.allCalls.filter(
+			(call) => call.tool === "edit",
+		);
+		expect(writes).toHaveLength(1);
+		expect(writes[0]?.status).toBe("error");
+	}, 30_000);
+
+	test("reads a cassette with no recorded status as landed", async () => {
+		// The seven committed cassettes predate the field. Absent has to keep meaning
+		// completed, or adding it would silently rescore every recording taken before
+		// it existed.
+		const cassette = happyPathCassette();
+		const result = await replayCassette({
+			...cassette,
+			events: [...cassette.events, editEvent()],
+		});
+		const writes = result.outcome.allCalls.filter(
+			(call) => call.tool === "edit",
+		);
+		expect(writes).toHaveLength(1);
+		expect(writes[0]?.status).toBe("completed");
+	}, 30_000);
+
 	test("reports a divergence when a recorded ok replays as a refusal", async () => {
 		// A gate declared but never observed is the state ADR 0010 exists for, so
 		// removing the broad observation has to change the outcome.
