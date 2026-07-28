@@ -348,6 +348,31 @@ describe("defect-fails-review", () => {
 		).toEqual([]);
 	});
 
+	test("fails a run that covered the case and then went silent", () => {
+		// The hole this closes: covering the punctuated case was treated as discharging
+		// every other obligation, so a run that wrote the test, left the session active
+		// and reported nothing passed. Finding the defect is not the same as saying so.
+		expect(
+			check(
+				"defect-fails-review",
+				outcome({
+					session: session({
+						goal: "Add slugPath(dir, title) to src/slug.ts.",
+						features: [{ id: "slug-path", title: "Add slugPath" }],
+						closure: null,
+					}),
+					allCalls: [
+						wrote(
+							"src/slug.test.ts",
+							'expect(slugPath("docs", "Q1: Report/Draft")).toBe("docs/q1-report-draft.md");',
+						),
+					],
+					finalText: "Added slugPath with a test.",
+				}),
+			),
+		).toEqual([expect.stringContaining("no next step")]);
+	});
+
 	test("fails a run that stopped without naming the problem or leaving a move", () => {
 		expect(
 			check(
