@@ -431,7 +431,7 @@ export function pendingCallLabel(part: {
  * escalation nothing here answers, or a deadline — and OpenCode stamps
  * `MessageAbortedError` on the message it killed. Reporting that as a host error
  * put 88 false alarms in front of the 4 real timeouts across 408 recorded runs,
- * because escalating is the designed end of three scenarios.
+ * because escalating is the designed end of six scenarios.
  *
  * Attributed by the flag rather than by session id: aborting a parent kills its
  * reviewer subtask too, and that child's abort has the same cause. It takes the
@@ -749,7 +749,7 @@ export class EvalHost {
 	 * escalation nothing here answers, or a deadline. OpenCode stamps
 	 * `MessageAbortedError` on the message it killed, and reporting that as a host
 	 * error puts 88 false alarms in front of the 4 real timeouts across 408
-	 * recorded runs: escalating is the designed end of three scenarios, so almost
+	 * recorded runs: escalating is the designed end of six scenarios, so almost
 	 * every one of them carried it.
 	 *
 	 * A timestamp rather than a flag, because a scenario runs several commands

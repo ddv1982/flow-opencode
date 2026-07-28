@@ -49,7 +49,7 @@ describe("eval run classification", () => {
 
 	// The measured defect: 92 of 408 recorded runs carried a `MessageAbortedError`
 	// and only 4 of them were timeouts. The rest were this harness ending an
-	// escalation nothing answers — the designed end of three scenarios — and
+	// escalation nothing answers — the designed end of six scenarios — and
 	// reporting its own abort as a condition of the host buried the real ones.
 	test("does not report its own abort as a host error", () => {
 		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };

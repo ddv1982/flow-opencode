@@ -347,7 +347,7 @@ different things:
 to end an escalation nothing answers, or at a deadline — and OpenCode stamps
 `MessageAbortedError` on the message it kills. Reporting that as a condition of the
 host put 92 abort records in front of the 4 real timeouts across 408 recorded runs,
-since escalating is the designed end of three scenarios. An abort error with no
+since escalating is the designed end of six scenarios. An abort error with no
 abort issued still reports, because then something outside the process ended the
 turn.
 
