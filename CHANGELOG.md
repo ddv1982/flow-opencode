@@ -6,6 +6,29 @@ One short entry per release, written for users deciding whether to upgrade.
 
 No changes yet.
 
+## [7.2.0] - 2026-08-10
+
+Measured assurance lore makes Flow's evidence boundary visible at close and adds a
+paired way to test whether the workflow earns its cost.
+
+- Close delivery now derives tiered assurance for every completion check: runtime
+  enforced, host attested, caller declared, or model judged. The projection names
+  its limitations instead of presenting unlike evidence as equally certain. The
+  Session v5 schema and public command/tool inventory are unchanged.
+- Eval reports now count workflow ceremony and evidence interventions, and an
+  ungated adjacent-defect scenario gives independent review a defect that
+  implementation is explicitly not authorized to repair.
+- `bun run benchmark` runs seed-shuffled Flow and ordinary OpenCode arms against the
+  same hidden-graded tasks, then compares correctness, false completion, messages,
+  tokens, duration, and cost. The benchmark is exploratory and does not qualify a
+  release.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.2.0 --global --force
+```
+
 ## [7.1.0] - 2026-07-28
 
 The last route to a dishonest `completed` closure is closed, and the two claims

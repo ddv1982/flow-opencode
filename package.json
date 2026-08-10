@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "7.1.0",
+	"version": "7.2.0",
 	"description": "Small durable planning, validation, and review workflow for OpenCode",
 	"type": "module",
 	"repository": {
@@ -33,6 +33,7 @@
 		"clean": "bun run scripts/clean-dist.ts",
 		"eval": "bun run evals/run.ts",
 		"eval:smoke": "bun run evals/run.ts -- --repeat 1",
+		"benchmark": "bun run evals/benchmark-run.ts",
 		"lint": "bunx biome check biome.json src tests scripts evals --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"release:metadata": "bun run scripts/release-metadata.ts",
 		"package:smoke": "bun test tests/package-smoke.test.ts",

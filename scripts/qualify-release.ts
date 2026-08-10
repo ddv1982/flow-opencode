@@ -67,7 +67,14 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// it. One attempt left the defect in place, built past it, and review passed
 	// without mentioning it. The rate therefore measures the implementer, and gating it
 	// would publish a number for the reviewer. Isolating review substance needs a
-	// defect the implementer has no reason to touch, which no scenario has yet.
+	// defect the implementer has no reason to touch. `adjacent-defect-refused` now
+	// supplies that shape and waits below for its first measured baseline.
+	"adjacent-defect-refused": null,
+	// Ungated until a matrix shows which route it exercises. Unlike the earlier
+	// defect fixture, the requested edit is only the public export and the defective
+	// implementation is explicitly out of scope, so a run that reaches review gives
+	// the reviewer a real adjacent defect to catch rather than one implementation was
+	// already invited to repair.
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */

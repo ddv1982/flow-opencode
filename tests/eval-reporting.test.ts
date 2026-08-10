@@ -20,8 +20,10 @@ import {
 	syncProviderCredentialsBack,
 } from "../evals/harness.js";
 import {
+	aggregateOperationalMetrics,
 	completionHonesty,
 	type MetricSession,
+	operationalMetrics,
 	reviewerActivity,
 } from "../evals/metrics.js";
 
@@ -505,6 +507,126 @@ describe("eval completion honesty", () => {
 				],
 			}).gaps,
 		).toEqual(["completed-run-without-passing-validation"]);
+	});
+});
+
+describe("eval operational metrics", () => {
+	test("reports ceremony and evidence interventions without changing the verdict", () => {
+		const session: MetricSession = {
+			plan: {
+				gate: "bun test",
+				features: [{ id: "delivery" }],
+				externalEvidence: [
+					{
+						requirement: "Windows acceptance",
+						environment: "Windows",
+						platform: "win32",
+						command: "bun test windows",
+						assertions: ["creates the file"],
+					},
+				],
+			},
+			runs: [
+				{
+					featureId: "delivery",
+					attempt: 1,
+					state: "blocked",
+					validations: [
+						{
+							command: "bun test",
+							exitCode: 1,
+							outputComplete: true,
+						},
+					],
+					reviews: [
+						{
+							kind: "feature",
+							result: {
+								verdict: "failed",
+								findings: [{ severity: "blocking" }],
+							},
+						},
+					],
+				},
+				{
+					featureId: "delivery",
+					attempt: 2,
+					state: "active",
+					validations: [],
+					reviews: [{ kind: "feature", result: null }],
+				},
+			],
+			closure: null,
+		};
+
+		const metric = operationalMetrics([session], {
+			flowCalls: [
+				"flow_plan_save",
+				"flow_validation_start",
+				"flow_review_start",
+				"flow_validation_start",
+			],
+			assistantMessages: 7,
+			durationMs: 12_345,
+		});
+
+		expect(metric).toEqual({
+			flowCalls: 4,
+			validationAttempts: 2,
+			validationObservations: 1,
+			failedValidationObservations: 1,
+			reviewAssignments: 2,
+			reviewRetries: 1,
+			featuresAttempted: 1,
+			featureAttempts: 2,
+			assistantMessages: 7,
+			durationMs: 12_345,
+			closureKind: null,
+			interventions: [
+				"validation-failure",
+				"review-failure",
+				"unsubmitted-review",
+				"external-evidence-unsatisfied",
+			],
+		});
+	});
+
+	test("aggregates counts and keeps closure and intervention categories visible", () => {
+		const clean = operationalMetrics(
+			[{ runs: [], closure: { kind: "completed" } }],
+			{
+				flowCalls: ["flow_session_close"],
+				assistantMessages: 2,
+				durationMs: 5,
+			},
+		);
+		const blocked = operationalMetrics(
+			[
+				{
+					runs: [
+						{
+							validations: [{ exitCode: 1, outputComplete: true }],
+						},
+					],
+					closure: { kind: "deferred" },
+				},
+			],
+			{
+				flowCalls: ["flow_validation_start"],
+				assistantMessages: 3,
+				durationMs: 7,
+			},
+		);
+
+		expect(aggregateOperationalMetrics([clean, blocked])).toMatchObject({
+			flowCalls: 2,
+			validationAttempts: 1,
+			failedValidationObservations: 1,
+			assistantMessages: 5,
+			durationMs: 12,
+			closures: { completed: 1, deferred: 1 },
+			interventions: { "validation-failure": 1 },
+		});
 	});
 });
 

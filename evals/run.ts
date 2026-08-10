@@ -37,9 +37,12 @@ import {
 	sessionBoundaries,
 } from "./harness.js";
 import {
+	aggregateOperationalMetrics,
 	type CompletionHonesty,
 	completionHonesty,
 	type MetricSession,
+	type OperationalMetrics,
+	operationalMetrics,
 	type ReviewerActivity,
 	reviewerActivity,
 } from "./metrics.js";
@@ -106,6 +109,8 @@ type RunResult = {
 	honesty: CompletionHonesty;
 	/** What the independent review actually did, across every document. */
 	reviewer: ReviewerActivity;
+	/** Workflow ceremony and evidence interventions, reported but not gated. */
+	operational: OperationalMetrics;
 	/** Broad-scope claims the runtime refused, which no document records. */
 	refusedBroadScope: number;
 	/**
@@ -513,6 +518,11 @@ async function main(): Promise<void> {
 						documents.find((document) => document.closure) ?? null,
 					),
 					reviewer: reviewerActivity(documents),
+					operational: operationalMetrics(documents, {
+						flowCalls: outcome.flowCalls.map((call) => call.tool),
+						assistantMessages: outcome.assistantMessages,
+						durationMs: outcome.durationMs,
+					}),
 					refusedBroadScope: refusedBroadScope(outcome.flowCalls),
 					finalText: outcome.finalText,
 					questions: askedQuestions(outcome),
@@ -591,6 +601,11 @@ async function main(): Promise<void> {
 						documents: [],
 						honesty: completionHonesty(null),
 						reviewer: reviewerActivity([]),
+						operational: operationalMetrics([], {
+							flowCalls: [],
+							assistantMessages: 0,
+							durationMs: Date.now() - started,
+						}),
 						refusedBroadScope: 0,
 						finalText: "",
 						questions: [],
@@ -696,6 +711,11 @@ async function main(): Promise<void> {
 		(sum, result) => sum + result.refusedBroadScope,
 		0,
 	);
+	const operational = aggregateOperationalMetrics(
+		results
+			.filter((result) => !result.environment)
+			.map((result) => result.operational),
+	);
 	console.log(
 		`\nfalse completions: ${falseCompletions.length}/${closedCompleted} completed closure(s)${
 			falseCompletions.length === 0
@@ -710,6 +730,11 @@ async function main(): Promise<void> {
 			broadScopeRefusals === 0
 				? ""
 				: `\nbroad-scope refusals: ${broadScopeRefusals} across ${results.length} run(s); a rising number means the plan surface is not naming the declared gate clearly enough`
+		}\noperations: ${operational.flowCalls} Flow call(s), ${operational.featureAttempts} feature attempt(s), ${operational.validationAttempts} validation arm(s), ${operational.reviewAssignments} review assignment(s), ${operational.assistantMessages} assistant message(s), ${Math.round(operational.durationMs / 1_000)}s aggregate elapsed\ninterventions: ${
+			Object.entries(operational.interventions)
+				.filter(([, count]) => count > 0)
+				.map(([kind, count]) => `${kind}=${count}`)
+				.join(", ") || "none observed"
 		}`,
 	);
 	// The aggregate hides the number that matters. Model behavior is stochastic, so
@@ -757,6 +782,7 @@ async function main(): Promise<void> {
 					falseCompletions: falseCompletions.length,
 					reviewer,
 					broadScopeRefusals,
+					operational,
 				},
 				results,
 			},

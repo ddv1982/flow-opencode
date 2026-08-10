@@ -229,7 +229,8 @@ manager contract.
   derived `workflowData.delivery`: initial success, archive-pending recovery,
   exact retry, and delayed replay from history. The projection contains the
   goal, closure, completed/total progress, every planned feature's attempt count,
-  latest outcome, terminal findings, and Flow-reported artifact groups.
+  latest outcome, terminal findings, Flow-reported artifact groups, and derived
+  tiered assurance with explicit limitations.
 - Delivery is recomputed from the canonical closed Session or archive. It is not
   written into Session v5 or archive JSON and is not a report artifact unless
   the user separately requests one.
@@ -284,7 +285,7 @@ user starting point.
 | `flow_review_start` | Create the run's independent review assignment. |
 | `flow_feature_complete` | Reviewer-only new result submission; exact accepted requests remain read-only replays while the Session v5 workflow is active. |
 | `flow_feature_reset` | Supersede a failed attempt and optionally atomically start the exact authorized retry or dependency-independent feature through `nextFeatureId`. |
-| `flow_session_close` | Close and archive the session, returning the same concise derived delivery on every durably accepted close path. |
+| `flow_session_close` | Close and archive the session, returning the same concise derived delivery and tiered assurance on every durably accepted close path. |
 
 The nine lifecycle tools accept a nested `request`, return state under
 `workflowData`, and require the current revision plus a stable operation ID for

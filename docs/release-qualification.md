@@ -25,6 +25,7 @@ once, by one person, from one model's output.
 | `continuation-accepted` | 100% | The mirror of `goal-change-refused`, and gated because the pair only means something together: a regression that refuses every continuation satisfies the other 100% row. 9/9 across three providers. |
 | `skipped-case-refused` | ungated | 9/9 twice, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
 | `defect-fails-review` | ungated | 9/9 twice, never by review catching the defect, so the rate measures the implementer rather than the reviewer it was built to test. |
+| `adjacent-defect-refused` | ungated | Out-of-scope defect isolates reviewer substance; awaiting a baseline. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
@@ -41,8 +42,8 @@ A re-run of one pair is missing every other gated scenario, so
 nothing else. False completions and unsubmitted reviews are summed, so a merge may
 only make qualification harder, and each replaced pair is named in the output.
 
-Reported but not gated, as trend numbers: reviewer silent passes, blocking and
-advisory finding counts, scope blockers, broad-scope refusals, token use, and cost.
+Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
+messages, duration, tokens, and cost.
 
 Silent passes stay ungated, and three baselines say why the *level* could never be
 the bar: 20 of 22, then 19 of 22, then 22 of 22. Every assignment in those matrices
@@ -54,7 +55,8 @@ is worth reading: the advisories were about untested edge cases, not about the d
 in the function the goal invites the model to extend, so an implementer good enough to
 pass either fixes it or builds past it first; one attempt left it in place, worked
 around it, and review passed without mentioning it. Measuring review substance needs a
-defect the implementer has no reason to touch, which no scenario has yet.
+defect the implementer has no authority to touch. `adjacent-defect-refused` now
+supplies that shape and awaits a baseline.
 
 Token and cost totals are provider-shaped. One model priced no run at all, and
 another reported 38 input tokens beside 479,640 cache reads for a turn its neighbour
@@ -91,6 +93,9 @@ described with their prices in
 [../evals/README.md](../evals/README.md#three-tiers-three-prices). A replay proves
 nothing about the prompts, and a single attempt of a stochastic scenario is not a
 rate. `bun run triage` says which runs in a report are worth reading.
+
+`bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
+ordinary OpenCode on hidden-graded tasks. It is not a qualification input.
 
 The scheduled workflow (`.github/workflows/evals.yml`) does the same weekly and
 publishes the report as an artifact. It skips itself when no model matrix or

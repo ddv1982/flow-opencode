@@ -37,6 +37,8 @@ v5. The public overview and installation instructions live in the
 - [ADR 0012](adr/0012-named-results-over-exit-codes.md) — acceptance evidence names
   the test cases whose passing is the observation, so exit zero for a skipped case
   discharges nothing.
+- [ADR 0013](adr/0013-derived-assurance-and-paired-value-measurement.md) — assurance
+  and paired measurement.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

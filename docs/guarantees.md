@@ -110,11 +110,17 @@ reason Flow asks you to read the review rather than trust the verdict.
   host surface. Capability-gated and best-effort: see
   [ADR 0008](adr/0008-bounded-auto-continuation.md).
 
+## Assurance at close
+
+Every close derives `delivery.assurance` from canonical closed state. It labels tiers
+and limits, distinguishes supported/unsupported/unclaimed completion, marks legacy
+gaps not applicable, and is neither persisted nor a correctness probability. See
+[ADR 0013](adr/0013-derived-assurance-and-paired-value-measurement.md).
+
 ## How this page is kept honest
 
-Every TS-enforced row has a test in `tests/`. Every model-judgment row is either
-covered by a scenario in `evals/` or listed above as unmeasured. The false-completion
-metric in `evals/metrics.ts` measures the whole stack at once: whether a `completed`
-closure is supported by the evidence in its own document.
+Every enforced row has a test; every judgment is evaluated or labelled unmeasured.
+Eval false completion independently audits the document, while the paired benchmark
+measures hidden-graded correctness against ordinary OpenCode.
 
 Release thresholds are in [release qualification](release-qualification.md).

@@ -83,6 +83,7 @@ therefore lower than the same run would report now.
 | `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
 | `skipped-case-refused` | a declared acceptance case this host *skips* is never reported as verified, even though the declared command exits zero here |
 | `defect-fails-review` | a green suite that never exercises the goal's acceptance clause does not become a `completed` closure: the seeded defect is fixed and covered, or a review blocks it |
+| `adjacent-defect-refused` | an out-of-scope adjacent defect is not rubber-stamped |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.
@@ -101,7 +102,7 @@ the drift scenario and failed nothing. The second step there grants the approval
 the plan was waiting for and adds no scope, so there is no reading of it on which
 starting a second lifecycle or stopping to ask again is right.
 
-`defect-fails-review` is the only scenario whose fixture ships a defect. Every
+`defect-fails-review` was the first defect fixture. Every
 review recorded before it read the same clean two-line addition, so a reviewer
 that rubber-stamped whatever it was handed scored exactly like one that read the
 work, and the silent-pass ratio in the report could not fall for the right reason.
@@ -161,8 +162,8 @@ empty `assertions` list fails it, because a skipped case still exits zero.
 
 ## Cross-scenario metrics
 
-Three numbers are reported for every run and asserted by none. Two are derived from
-the durable documents (`evals/metrics.ts`):
+The original measures are reported for every run and asserted by none. Two are
+derived from durable documents (`evals/metrics.ts`):
 
 - **False completion** — a `completed` closure the document itself contradicts: a
   planned feature with no completed run, a completed run with no passing validation
@@ -182,9 +183,20 @@ The third is read from the observed tool calls, because no document can record i
   Recovering is correct; a rising count means the plan surface is not naming the
   declared gate clearly enough, which is a prompt defect the pass rate hides.
 
-All three appear under `summary` in the report, and `bun run qualify` turns false
+Ungated operational metrics add calls/retries, messages, duration, closures, and
+evidence interventions.
+
+These appear under `summary` in the report, and `bun run qualify` turns false
 completions and unsubmitted assignments into a release decision. Silent passes and
-the refusal count are ungated until they have a baseline worth gating.
+the refusal and operational counts are ungated until they have a baseline worth
+gating.
+
+## Paired value benchmark
+
+`bun run benchmark -- --model <id> --repeat 3 --seed <text>` seed-shuffles identical,
+hidden-graded tasks through isolated Flow and ordinary arms. Reports compare
+correctness, false completion, messages, tokens, duration, and cost. This is
+exploratory, not qualification; see [ADR 0013](../docs/adr/0013-derived-assurance-and-paired-value-measurement.md).
 
 ## Replaying recorded decisions
 

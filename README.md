@@ -40,7 +40,7 @@ expensive, and it is overhead when it is not.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@7.1.0 --global --force
+opencode plugin opencode-plugin-flow@7.2.0 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -51,7 +51,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@7.1.0"]
+  "plugin": ["opencode-plugin-flow@7.2.0"]
 }
 ```
 
@@ -128,7 +128,8 @@ you granted.
    implicitly — Flow reports the blocker and waits for an explicit retry or an
    independent-feature choice. The last passing feature allows closure, and every
    accepted close returns a delivery summary derived from recorded state: each
-   feature's attempts, latest outcome, and terminal findings.
+   feature's attempts, latest outcome, terminal findings, and tiered assurance with
+   explicit limitations.
 
 Findings keep stable ids across retries, and a failed review must carry every
 still-live finding forward — the runtime rejects a submission that drops one. A

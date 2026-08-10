@@ -27,6 +27,7 @@ export type MetricSession = {
 	} | null;
 	readonly runs?: readonly {
 		readonly featureId?: string;
+		readonly attempt?: number;
 		readonly state?: string;
 		readonly validations?: readonly {
 			readonly command?: string;
@@ -53,6 +54,36 @@ export type MetricSession = {
 		}[];
 	}[];
 	readonly closure?: { readonly kind?: string } | null;
+};
+
+export type EvidenceIntervention =
+	| "validation-failure"
+	| "review-failure"
+	| "unsubmitted-review"
+	| "external-evidence-unsatisfied";
+
+/** Operational cost and intervention signals for one model run. */
+export type OperationalMetrics = {
+	readonly flowCalls: number;
+	readonly validationAttempts: number;
+	readonly validationObservations: number;
+	readonly failedValidationObservations: number;
+	readonly reviewAssignments: number;
+	readonly reviewRetries: number;
+	readonly featuresAttempted: number;
+	readonly featureAttempts: number;
+	readonly assistantMessages: number;
+	readonly durationMs: number;
+	readonly closureKind: string | null;
+	readonly interventions: readonly EvidenceIntervention[];
+};
+
+export type OperationalTotals = Omit<
+	OperationalMetrics,
+	"closureKind" | "interventions"
+> & {
+	readonly closures: Readonly<Record<string, number>>;
+	readonly interventions: Readonly<Record<EvidenceIntervention, number>>;
 };
 
 /** Why recorded evidence does not support the closure the run claimed. */
@@ -109,6 +140,145 @@ function eligible(observation: {
 		observation.exitCode === 0 &&
 		observation.outputComplete === true
 	);
+}
+
+function externalEntrySatisfied(
+	session: MetricSession,
+	entry: NonNullable<MetricSession["plan"]>["externalEvidence"] extends
+		| readonly (infer Entry)[]
+		| undefined
+		? Entry
+		: never,
+): boolean {
+	return (session.runs ?? [])
+		.flatMap((run) => run.validations ?? [])
+		.some(
+			(observation) =>
+				observation.command === entry.command &&
+				(entry.platform === undefined ||
+					entry.platform === "other" ||
+					observation.hostPlatform === entry.platform) &&
+				(entry.assertions ?? []).every((name) =>
+					(observation.observedAssertions ?? []).some(
+						(assertion) =>
+							assertion.name === name && assertion.status === "passed",
+					),
+				) &&
+				eligible(observation),
+		);
+}
+
+/**
+ * Measures workflow ceremony and the evidence mechanisms that actually engaged.
+ *
+ * These are report-only observations. They do not enter Session v5 and do not
+ * become release gates until repeated baselines justify a threshold.
+ */
+export function operationalMetrics(
+	sessions: readonly MetricSession[],
+	input: Readonly<{
+		flowCalls: readonly string[];
+		assistantMessages: number;
+		durationMs: number;
+	}>,
+): OperationalMetrics {
+	const runs = sessions.flatMap((session) => session.runs ?? []);
+	const validations = runs.flatMap((run) => run.validations ?? []);
+	const reviews = runs.flatMap((run) => run.reviews ?? []);
+	const interventions = new Set<EvidenceIntervention>();
+	if (validations.some((observation) => !eligible(observation))) {
+		interventions.add("validation-failure");
+	}
+	if (reviews.some((review) => review.result?.verdict === "failed")) {
+		interventions.add("review-failure");
+	}
+	if (reviews.some((review) => review.result === null)) {
+		interventions.add("unsubmitted-review");
+	}
+	if (
+		sessions.some((session) =>
+			(session.plan?.externalEvidence ?? []).some(
+				(entry) => !externalEntrySatisfied(session, entry),
+			),
+		)
+	) {
+		interventions.add("external-evidence-unsatisfied");
+	}
+	const closed = sessions.find(
+		(session) => session.closure?.kind !== undefined,
+	);
+	return {
+		flowCalls: input.flowCalls.length,
+		validationAttempts: input.flowCalls.filter(
+			(tool) => tool === "flow_validation_start",
+		).length,
+		validationObservations: validations.length,
+		failedValidationObservations: validations.filter(
+			(observation) => !eligible(observation),
+		).length,
+		reviewAssignments: reviews.length,
+		reviewRetries: runs.filter(
+			(run) => (run.attempt ?? 1) > 1 && (run.reviews ?? []).length > 0,
+		).length,
+		featuresAttempted: new Set(
+			runs.flatMap((run) => (run.featureId ? [run.featureId] : [])),
+		).size,
+		featureAttempts: runs.length,
+		assistantMessages: input.assistantMessages,
+		durationMs: input.durationMs,
+		closureKind: closed?.closure?.kind ?? null,
+		interventions: [...interventions],
+	};
+}
+
+export function aggregateOperationalMetrics(
+	metrics: readonly OperationalMetrics[],
+): OperationalTotals {
+	const totals: OperationalTotals = {
+		flowCalls: 0,
+		validationAttempts: 0,
+		validationObservations: 0,
+		failedValidationObservations: 0,
+		reviewAssignments: 0,
+		reviewRetries: 0,
+		featuresAttempted: 0,
+		featureAttempts: 0,
+		assistantMessages: 0,
+		durationMs: 0,
+		closures: {},
+		interventions: {
+			"validation-failure": 0,
+			"review-failure": 0,
+			"unsubmitted-review": 0,
+			"external-evidence-unsatisfied": 0,
+		},
+	};
+	for (const metric of metrics) {
+		for (const key of [
+			"flowCalls",
+			"validationAttempts",
+			"validationObservations",
+			"failedValidationObservations",
+			"reviewAssignments",
+			"reviewRetries",
+			"featuresAttempted",
+			"featureAttempts",
+			"assistantMessages",
+			"durationMs",
+		] as const) {
+			(totals as Record<typeof key, number>)[key] += metric[key];
+		}
+		if (metric.closureKind) {
+			(totals.closures as Record<string, number>)[metric.closureKind] =
+				(totals.closures[metric.closureKind] ?? 0) + 1;
+		}
+		for (const intervention of metric.interventions) {
+			(totals.interventions as Record<EvidenceIntervention, number>)[
+				intervention
+			] += 1;
+		}
+	}
+	return totals;
 }
 
 /**

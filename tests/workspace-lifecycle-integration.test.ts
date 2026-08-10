@@ -329,6 +329,9 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				latestAttempts: ["source.ts"],
 				supersededAttemptsOnly: [],
 			},
+			assurance: expect.objectContaining({
+				conclusion: "completion-supported",
+			}),
 			report: expect.any(Array),
 		});
 		expect(await loadSession(workspace)).toBeNull();

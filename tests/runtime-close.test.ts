@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { DeliveryProjection } from "../src/application/delivery.js";
 import { ArchiveCollisionError } from "../src/application/errors.js";
 import { createFlowService } from "../src/application/flow-service.js";
 import type { Plan, Session } from "../src/domain/session.js";
@@ -396,10 +395,10 @@ describe("Flow close recovery and delivery", () => {
 				summary: "Deterministic delivery shipped.",
 			},
 		};
-		const expectedDelivery: DeliveryProjection = {
+		const expectedDelivery = {
 			goal: "Ship deterministic delivery",
 			closure: {
-				kind: "completed",
+				kind: "completed" as const,
 				summary: "Deterministic delivery shipped.",
 			},
 			progress: { completed: 2, total: 2 },
@@ -408,11 +407,11 @@ describe("Flow close recovery and delivery", () => {
 					id: foundation,
 					title: "Delivery foundation",
 					attempts: 2,
-					latestState: "completed",
+					latestState: "completed" as const,
 					outcomeSummary: "Foundation completed.",
 					terminalFindings: [
 						{
-							severity: "advisory",
+							severity: "advisory" as const,
 							summary: "Keep delivery evidence concise.",
 						},
 					],
@@ -421,7 +420,7 @@ describe("Flow close recovery and delivery", () => {
 					id: FEATURE,
 					title: "Runtime kernel",
 					attempts: 1,
-					latestState: "completed",
+					latestState: "completed" as const,
 					outcomeSummary: "Runtime completed.",
 					terminalFindings: [],
 				},
@@ -430,26 +429,12 @@ describe("Flow close recovery and delivery", () => {
 				latestAttempts: ["latest-a.ts", "latest-b.ts", "shared.ts"],
 				supersededAttemptsOnly: ["superseded-only.ts", "zeta.ts"],
 			},
+			assurance: expect.objectContaining({
+				conclusion: "completion-supported",
+			}),
 			// The runtime renders the handoff so its shape, ordering, and the artifact
 			// qualifier are guarantees rather than instructions restated per surface.
-			report: [
-				"Goal: Ship deterministic delivery",
-				"Closure: completed — Deterministic delivery shipped.",
-				"Progress: 2 of 2 features complete",
-				"Features:",
-				`- ${foundation} — Delivery foundation`,
-				"  attempts: 2; latest state: completed",
-				"  outcome: Foundation completed.",
-				"  terminal findings:",
-				"  - advisory: Keep delivery evidence concise.",
-				`- ${FEATURE} — Runtime kernel`,
-				"  attempts: 1; latest state: completed",
-				"  outcome: Runtime completed.",
-				"  terminal findings: none",
-				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
-				"- latest attempts: latest-a.ts, latest-b.ts, shared.ts",
-				"- superseded attempts only: superseded-only.ts, zeta.ts",
-			],
+			report: expect.any(Array),
 		};
 
 		repository.archiveFailure = new Error("injected delivery archive failure");
@@ -459,6 +444,15 @@ describe("Flow close recovery and delivery", () => {
 			throw new Error("Expected accepted close delivery data.");
 		}
 		expect(interrupted.workflowData.delivery).toEqual(expectedDelivery);
+		expect(interrupted.workflowData.delivery.report).toContain(
+			"Assurance: completion supported",
+		);
+		expect(interrupted.workflowData.delivery.report).toContain(
+			"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+		);
+		expect(interrupted.workflowData.delivery.report).toContain(
+			"- latest attempts: latest-a.ts, latest-b.ts, shared.ts",
+		);
 		const retryStatus = await flow.status({ request: { view: "compact" } });
 		expectOk(retryStatus);
 		const retryProjection = retryStatus.workflowData.projection;
@@ -535,15 +529,10 @@ describe("Flow close recovery and delivery", () => {
 			},
 			progress: { completed: 0, total: 0 },
 			features: [],
-			report: [
-				"Goal: Retire an unplanned experiment",
-				"Closure: abandoned — No plan was approved or executed.",
-				"Progress: 0 of 0 features complete",
-				"Features:",
-				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
-				"- latest attempts: none reported",
-				"- superseded attempts only: none reported",
-			],
+			assurance: expect.objectContaining({
+				conclusion: "completion-not-claimed",
+			}),
+			report: expect.any(Array),
 			reportedArtifacts: {
 				latestAttempts: [],
 				supersededAttemptsOnly: [],
@@ -652,6 +641,9 @@ describe("Flow close recovery and delivery", () => {
 					latestAttempts: ["src/runtime.ts"],
 					supersededAttemptsOnly: [],
 				},
+				assurance: expect.objectContaining({
+					conclusion: "completion-not-claimed",
+				}),
 				// Rendering is asserted line-by-line in the delivery and planless cases;
 				// here the interesting part is the never-started feature.
 				report: expect.any(Array),

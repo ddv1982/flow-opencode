@@ -954,12 +954,14 @@ export class EvalHost {
 		this.scratch = scratch;
 	}
 
-	/** Boots a throwaway OpenCode host with the packed plugin over a git fixture. */
+	/** Boots a throwaway OpenCode host over a git fixture. */
 	static async start(options: {
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
+		/** False creates the paired benchmark's ordinary OpenCode control host. */
+		withFlow?: boolean;
 	}): Promise<EvalHost> {
 		const scratch = await mkdtemp(join(tmpdir(), "flow-eval-"));
 		await chmod(scratch, 0o700);
@@ -989,18 +991,27 @@ export class EvalHost {
 				throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
 		}
 
-		// Populate OpenCode's exact-version cache from the prepared install so the
-		// eval exercises the bytes a user would install, without touching the network.
-		const packages = join(childCache, "opencode", "packages");
-		await mkdir(packages, { recursive: true });
-		await cp(
-			options.packageCache,
-			join(packages, `opencode-plugin-flow@${packageJson.version}`),
-			{ recursive: true },
-		);
+		// Populate OpenCode's exact-version cache from the prepared install so Flow
+		// runs exercise the bytes a user would install, without touching the network.
+		// The ordinary OpenCode benchmark arm deliberately receives no plugin config.
+		if (options.withFlow !== false) {
+			const packages = join(childCache, "opencode", "packages");
+			await mkdir(packages, { recursive: true });
+			await cp(
+				options.packageCache,
+				join(packages, `opencode-plugin-flow@${packageJson.version}`),
+				{ recursive: true },
+			);
+		}
 		await writeFile(
 			join(project, "opencode.json"),
-			`${JSON.stringify({ plugin: [`opencode-plugin-flow@${packageJson.version}`] }, null, 2)}\n`,
+			`${JSON.stringify(
+				options.withFlow === false
+					? {}
+					: { plugin: [`opencode-plugin-flow@${packageJson.version}`] },
+				null,
+				2,
+			)}\n`,
 			"utf8",
 		);
 
@@ -1138,9 +1149,6 @@ export class EvalHost {
 		model: string,
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
-		const quietMs = options.quietMs ?? 25_000;
-		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
-		const stalledMs = Math.min(options.stalledMs ?? STALLED_MS, timeoutMs);
 		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
 			command,
 			arguments: args,
@@ -1148,7 +1156,32 @@ export class EvalHost {
 		}).catch((error) => {
 			this.serverLog += `\ncommand POST rejected: ${String(error)}`;
 		});
+		return this.waitForQuiet(sessionId, options);
+	}
 
+	/** Sends an ordinary user prompt for the benchmark control arm. */
+	async runPrompt(
+		sessionId: string,
+		prompt: string,
+		model: string,
+		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
+	): Promise<CommandEnd> {
+		void postJson(`${this.baseUrl}/session/${sessionId}/message`, {
+			model: splitModel(model),
+			parts: [{ type: "text", text: prompt }],
+		}).catch((error) => {
+			this.serverLog += `\nmessage POST rejected: ${String(error)}`;
+		});
+		return this.waitForQuiet(sessionId, options);
+	}
+
+	private async waitForQuiet(
+		sessionId: string,
+		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number },
+	): Promise<CommandEnd> {
+		const quietMs = options.quietMs ?? 25_000;
+		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
+		const stalledMs = Math.min(options.stalledMs ?? STALLED_MS, timeoutMs);
 		const poll = 2_000;
 		// Deadlines are wall-clock, so suspending the machine mid-scenario blows
 		// them the instant it resumes and reports a hang that never happened. An
