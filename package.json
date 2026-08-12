@@ -69,10 +69,10 @@
 		"@biomejs/biome": "2.5.5",
 		"@opencode-ai/plugin": "1.18.6",
 		"@types/bun": "1.3.14",
-		"@types/node": "26.1.1",
+		"@types/node": "26.2.0",
 		"typescript": "7.0.2"
 	},
 	"overrides": {
-		"@types/node": "26.1.1"
+		"@types/node": "26.2.0"
 	}
 }
