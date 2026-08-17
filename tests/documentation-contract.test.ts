@@ -448,10 +448,11 @@ describe("Flow v6 documentation contract", () => {
 		);
 		// Release notes must state the schema impact explicitly rather than the
 		// uninformative "public surface is unchanged".
-		const unreleased = section(changelog, "[Unreleased]");
-		const currentChangeNotes = /No changes yet\./i.test(unreleased)
-			? currentReleaseNotes
-			: unreleased;
+		const unreleased = section(changelog, "[Unreleased]").trim();
+		const currentChangeNotes =
+			unreleased.length === 0 || /No changes yet\./i.test(unreleased)
+				? currentReleaseNotes
+				: unreleased;
 		expect(currentChangeNotes).toMatch(/Session v5 schema/i);
 		expect(currentChangeNotes).not.toMatch(
 			/public surface (?:is|are) unchanged/i,

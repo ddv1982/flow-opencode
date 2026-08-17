@@ -4,8 +4,6 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-No changes yet.
-
 ## [7.3.2] - 2026-08-17
 
 Eval and release discipline for thin-router planning.
