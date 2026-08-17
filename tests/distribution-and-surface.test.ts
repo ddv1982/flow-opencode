@@ -322,7 +322,7 @@ describe("command preflight", () => {
 			synthetic: true,
 		});
 		expect((managerOutput.parts[1] as { text?: string }).text).toContain(
-			"# Flow Plan",
+			"# Flow plan router",
 		);
 		expect((managerOutput.parts[1] as { text?: string }).text).toContain(
 			"the preceding non-synthetic Flow request",

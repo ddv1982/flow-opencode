@@ -1,4 +1,8 @@
-import { type FlowGuidanceId, getFlowGuidance } from "./guidance/catalog.js";
+import {
+	FLOW_MANAGER_KERNEL,
+	type FlowGuidanceId,
+	getFlowGuidance,
+} from "./guidance/catalog.js";
 
 export type FlowPromptSurfaceName =
 	| "flow-auto"
@@ -103,35 +107,119 @@ function skillBody(id: FlowGuidanceId): string {
 		.trim();
 }
 
-const MANAGER_COMMANDS = {
-	"flow-auto": {
-		guidance: "flow",
-		action:
-			"Drive the Flow lifecycle only within the user's authorized scope. Stop after planning when implementation was not authorized: $ARGUMENTS",
-	},
-	"flow-plan": {
-		guidance: "flow-plan",
-		action: "Create or revise the Flow plan for: $ARGUMENTS",
-	},
-	"flow-run": {
-		guidance: "flow-run",
-		action: "Execute exactly one approved Flow feature: $ARGUMENTS",
-	},
-} as const;
+const FLOW_AUTO_PROMPT = [
+	"# Flow router",
+	"Drive the Flow lifecycle only within the user's authorized scope. Stop after planning when implementation was not authorized: $ARGUMENTS",
+	"## Route from status",
+	[
+		'1. Call `flow_status { request: { view: "compact" } }` first.',
+		"Trust its `nextAction` as the durable default.",
+		"If the top-level response is an error, report its exact summary and recovery;",
+		"when delivery is present, report `workflowData.delivery.report` verbatim.",
+		"Stop without another mutation.",
+	].join(" "),
+	[
+		"2. For `archiveRetry`, call the projected `flow_session_close` request byte-for-byte,",
+		"report delivery, and refresh compact status.",
+		"Stop if publication remains unconfirmed, otherwise continue from the refreshed projection.",
+	].join(" "),
+	[
+		"3. Before another manager mutation, align the compact-projected goal with the request.",
+		"Continue only for the same goal or a narrowing that preserves every outcome.",
+		"Close a completed session as completed before new work.",
+		"If the user explicitly chooses deferred or abandoned closure for a non-completed session,",
+		"call `flow_session_close` with compact session id/revision, fresh operation id, that kind,",
+		"and optional summary; report delivery, follow exact `archiveRetry`, and stop.",
+		"Otherwise new or expanded work makes no mutation: say it has not started and offer continue, defer, or abandon.",
+	].join(" "),
+	[
+		'4. With no session or a draft, load `flow_guidance { id: "flow-plan" }` and follow it;',
+		"stop after planning if implementation was not authorized.",
+	].join(" "),
+	[
+		'5. For an approved ready, running, or blocked feature, load `flow_guidance { id: "flow-run" }`',
+		"and follow it for exactly that feature.",
+	].join(" "),
+	[
+		"6. After `flow-run`, reload compact status.",
+		"Route blocked outcomes through the loaded retry and checkpoint contract;",
+		"otherwise continue the end-to-end loop.",
+	].join(" "),
+	"",
+	FLOW_MANAGER_KERNEL,
+].join("\n");
 
-function managerCommand(surface: keyof typeof MANAGER_COMMANDS): string {
-	const command = MANAGER_COMMANDS[surface];
-	return `${skillBody(command.guidance)}\n\n## Command\n\n${command.action}`;
-}
+const FLOW_PLAN_PROMPT = [
+	"# Flow plan router",
+	"Create or revise the Flow plan for: $ARGUMENTS",
+	[
+		'Call `flow_status { request: { view: "compact" } }` first.',
+		"On top-level error, report exact summary/recovery and stop.",
+		"For `archiveRetry`, replay the projected `flow_session_close` request byte-for-byte,",
+		"report delivery, and refresh only if publication is unconfirmed.",
+	].join(" "),
+	[
+		"Before mutation, align the projected goal with `/flow-plan`;",
+		"continue only for the same goal or a method/emphasis narrowing that preserves every requested outcome.",
+		"Close completed work.",
+		"For a non-completed session, an explicit deferred/abandoned choice calls `flow_session_close`;",
+		"other new scope makes no mutation.",
+	].join(" "),
+	[
+		'Load `flow_guidance { id: "flow-plan" }` and follow it to create, revise, or approve the plan.',
+		"If the user asked only for a plan and an approved same-goal session already exists,",
+		"read detail once, report its immutable plan/progress, and stop without saving, approving, or running.",
+	].join(" "),
+].join("\n");
+
+const FLOW_RUN_PROMPT = [
+	"# Flow run router",
+	"Execute exactly one approved Flow feature: $ARGUMENTS",
+	[
+		'Call `flow_status { request: { view: "compact" } }` first.',
+		"Treat `nextAction` as the durable default workflow direction.",
+		"If the top-level response status is `error`, report its exact summary and recovery when present",
+		"and stop without routing its `nextAction`.",
+	].join(" "),
+	[
+		"If compact status contains `archiveRetry`, call `flow_session_close` once",
+		"with the projected request byte-for-byte, report delivery, and stop.",
+	].join(" "),
+	[
+		"When the projection contains an active goal, align it with the current `/flow-run` request",
+		"before another manager lifecycle mutation.",
+		"Continue only for the same goal or a method/emphasis narrowing that preserves all outcomes;",
+		"close completed work.",
+		"If the aligned request explicitly chooses deferred or abandoned closure for a non-completed session,",
+		"call `flow_session_close` and stop.",
+	].join(" "),
+	[
+		"If status is `idle` or `planning`, report its projected planning action,",
+		"explain that `/flow-run` requires an approved feature, and stop without mutation.",
+	].join(" "),
+	[
+		'Load `flow_guidance { id: "flow-run" }` and follow it to implement, validate,',
+		"independently review, and record the approved feature.",
+		"Route every compact projection as documented in that guide.",
+	].join(" "),
+	[
+		'For blocked status or `await-user-direction`, call `flow_status { request: { view: "detail" } }`',
+		"exactly once as directed by the loaded guide.",
+	].join(" "),
+	"",
+	FLOW_MANAGER_KERNEL,
+].join("\n");
 
 export function compileFlowPromptSurface(
 	surface: FlowPromptSurfaceName,
 ): string {
 	switch (surface) {
 		case "flow-auto":
+			return FLOW_AUTO_PROMPT;
 		case "flow-plan":
+			return FLOW_PLAN_PROMPT;
 		case "flow-run":
-			return managerCommand(surface);
+			return FLOW_RUN_PROMPT;
 		case "flow-status":
 			return FLOW_STATUS_PROMPT;
 		case "flow-review":

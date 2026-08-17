@@ -172,10 +172,17 @@ describe("Flow prompt structure", () => {
 			expect(getFlowGuidance(id).content).toStartWith("---\n");
 			expect(body(getFlowGuidance(id).content).length).toBeGreaterThan(200);
 		}
-		for (const [surface, guidance] of MANAGER_GUIDANCE) {
-			const prompt = compileFlowPromptSurface(surface);
-			expect(prompt).toStartWith(body(getFlowGuidance(guidance).content));
-		}
+		// Manager surfaces are now thin routers that load guides via flow_guidance
+		const flowAuto = compileFlowPromptSurface("flow-auto");
+		expect(flowAuto).toContain('flow_guidance { id: "flow-plan" }');
+		expect(flowAuto).toContain('flow_guidance { id: "flow-run" }');
+
+		const flowPlan = compileFlowPromptSurface("flow-plan");
+		expect(flowPlan).toContain('flow_guidance { id: "flow-plan" }');
+
+		const flowRun = compileFlowPromptSurface("flow-run");
+		expect(flowRun).toContain('flow_guidance { id: "flow-run" }');
+
 		for (const surface of SURFACES) {
 			expect(compileFlowPromptSurface(surface).trim().length).toBeGreaterThan(
 				40,
