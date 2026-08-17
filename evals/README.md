@@ -200,6 +200,8 @@ exploratory, not qualification; see [ADR 0013](../docs/adr/0013-derived-assuranc
 
 ## Replaying recorded decisions
 
+Start here: `bun run replay` (free; no model). Paid evals are above.
+
 A live attempt is the only way to get a *new* model decision, and it is the wrong
 way to re-check an old one: every runtime change used to need another paid matrix
 before anyone knew whether it had broken a sequence a model already performed.

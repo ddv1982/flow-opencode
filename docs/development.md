@@ -10,7 +10,8 @@ bun install --frozen-lockfile
 bun run check
 ```
 
-`bun run check` is the canonical deterministic gate. Use focused commands while iterating:
+`bun run check` is the canonical deterministic gate. Use focused commands while
+iterating:
 
 ```bash
 bun run typecheck
