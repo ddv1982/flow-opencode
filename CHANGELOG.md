@@ -4,7 +4,13 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-No changes yet.
+Planning no longer dispatches `flow-worker` for inventory or review. The 7.3.0
+thin routers left `/flow-auto` telling the manager to delegate active work to
+workers while loading only `flow-plan`, which never mentioned the assignment
+checklist those workers refuse to start without. The first planning review wave
+then failed closed on a missing matrix and had to be reissued. Worker waves
+remain an implementation-only option after a feature run starts. The Session v5 schema
+and the published command, tool, guide, and agent inventory are unchanged.
 
 ## [7.3.0] - 2026-08-17
 
