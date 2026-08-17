@@ -19,7 +19,7 @@ import FlowPlugin from "../src/index.js";
 //   - the install block pins the exact published version
 //   - command, tool, guide and agent inventories are derived from source
 //   - the maintained document set and its section structure
-//   - CHANGELOG release structure and the version/date invariants
+//   - CHANGELOG release structure: top entry matches package.json version/date
 //   - every relative link resolves
 //
 // The byte ceilings are sprawl alarms, reviewed as a trend at release. They are
@@ -424,13 +424,12 @@ describe("Flow v6 documentation contract", () => {
 
 	test("keeps the CHANGELOG release structure valid", async () => {
 		const changelog = await readFile("CHANGELOG.md", "utf8");
-		expect(changelog).toMatch(/^## \[Unreleased\]$/m);
+		expect(changelog).not.toMatch(/^## \[Unreleased\]$/m);
 
 		const releaseHeadings = [
 			...changelog.matchAll(/^## \[([^\]]+)\](?: - ([^\n]+))?$/gm),
 		];
-		expect(releaseHeadings[0]?.[1]).toBe("Unreleased");
-		const currentRelease = releaseHeadings[1];
+		const currentRelease = releaseHeadings[0];
 		expect(currentRelease?.[1]).toBe(packageVersion);
 
 		const releaseDate = currentRelease?.[2] ?? "";
@@ -448,13 +447,8 @@ describe("Flow v6 documentation contract", () => {
 		);
 		// Release notes must state the schema impact explicitly rather than the
 		// uninformative "public surface is unchanged".
-		const unreleased = section(changelog, "[Unreleased]").trim();
-		const currentChangeNotes =
-			unreleased.length === 0 || /No changes yet\./i.test(unreleased)
-				? currentReleaseNotes
-				: unreleased;
-		expect(currentChangeNotes).toMatch(/Session v5 schema/i);
-		expect(currentChangeNotes).not.toMatch(
+		expect(currentReleaseNotes).toMatch(/Session v5 schema/i);
+		expect(currentReleaseNotes).not.toMatch(
 			/public surface (?:is|are) unchanged/i,
 		);
 	});

@@ -1,8 +1,8 @@
 # Changelog
 
-One short entry per release, written for users deciding whether to upgrade.
-
-## [Unreleased]
+One short entry per release, written for users deciding whether to upgrade. Add a
+dated `## [version]` section when cutting a release; there is no rolling
+`[Unreleased]` heading.
 
 ## [7.3.2] - 2026-08-17
 
