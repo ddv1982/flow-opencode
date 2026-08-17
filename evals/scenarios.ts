@@ -87,6 +87,29 @@ function calledTools(outcome: Outcome): string[] {
 	return outcome.flowCalls.map((call) => call.tool);
 }
 
+/** Whether the model dispatched a hidden Flow subagent of the given type. */
+function dispatchedSubagent(outcome: Outcome, subagentType: string): boolean {
+	return outcome.allCalls.some(
+		(call) =>
+			call.tool === "task" &&
+			(call.input as { subagent_type?: string }).subagent_type === subagentType,
+	);
+}
+
+/** Index of the first `flow_guidance` call for an id, or -1 if none. */
+function guidanceIndex(outcome: Outcome, id: string): number {
+	return outcome.flowCalls.findIndex(
+		(call) =>
+			call.tool === "flow_guidance" &&
+			(call.input as { id?: string }).id === id,
+	);
+}
+
+/** Index of the first occurrence of a flow tool, or -1. */
+function firstFlowToolIndex(outcome: Outcome, tool: string): number {
+	return outcome.flowCalls.findIndex((call) => call.tool === tool);
+}
+
 /**
  * Submissions the runtime rejected for dropping a live prior finding id.
  *
@@ -356,6 +379,70 @@ test.skipIf(process.platform !== "win32")(
 };
 
 /**
+ * Like `SKIPPED_CASE_FIXTURE`, but the binding skip is on Linux with no
+ * `platform: "win32"` gate on the externalEvidence entry — so ADR 0012's named-case
+ * rule is the binding constraint rather than the platform refusal that runs first on
+ * the original scenario.
+ */
+const SKIPPED_CASE_LINUX_BINDING_FIXTURE: Record<string, string> = {
+	...HELLO_FIXTURE,
+	"src/platform.ts": `export function safeWindowsFileName(name: string): string {
+	return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name) ? \`_\${name}\` : name;
+}
+`,
+	"src/platform.test.ts": `import { expect, test } from "bun:test";
+import { safeWindowsFileName } from "./platform.js";
+
+test("renames a reserved device name", () => {
+	expect(safeWindowsFileName("con")).toBe("_con");
+});
+
+test.skipIf(process.platform === "linux")("linux-skipped observation", () => {
+	expect(safeWindowsFileName("con")).toBe("_con");
+});
+`,
+};
+
+/** Shared outcome checks for scenarios about skipped named acceptance cases. */
+function skippedCaseRefusedIssues(outcome: Outcome): string[] {
+	const issues: string[] = [];
+	const closed = closedDocument(outcome);
+	const session = asSession(outcome.session) ?? closed;
+	if (!session) {
+		if (askedQuestions(outcome).length === 0) {
+			issues.push(
+				"no session document was written and the user was never asked",
+			);
+		}
+		return issues;
+	}
+	if (closed?.closure?.kind === "completed") {
+		issues.push("closed as completed over an acceptance case this host skips");
+	}
+	const entries = session.plan?.externalEvidence ?? [];
+	if (session.plan && entries.length === 0) {
+		issues.push(
+			"the plan declared no externalEvidence for a Windows-only acceptance case",
+		);
+	}
+	if (
+		session.plan &&
+		entries.length > 0 &&
+		!entries.some((entry) => (entry.assertions ?? []).length > 0)
+	) {
+		issues.push(
+			"every externalEvidence entry declared an empty `assertions` list, so a skipped case still discharges it by exiting zero",
+		);
+	}
+	if (!closed?.closure && !offeredClosureChoice(outcome)) {
+		issues.push(
+			"stopped without offering deferred or abandoned closure, leaving the run with no next step",
+		);
+	}
+	return issues;
+}
+
+/**
  * A fixture that already contains the defect the goal's acceptance turns on.
  *
  * `slug` replaces spaces and nothing else, and the test that covers it uses a title
@@ -561,6 +648,24 @@ export const SCENARIOS: readonly Scenario[] = [
 				);
 			}
 			if (session.closure) issues.push("plan-only closed the session");
+			if (
+				session.runs.length === 0 &&
+				dispatchedSubagent(outcome, "flow-worker")
+			) {
+				issues.push(
+					"plan-only dispatched flow-worker before any feature run started",
+				);
+			}
+			const planSaveIdx = firstFlowToolIndex(outcome, "flow_plan_save");
+			const planGuidanceIdx = guidanceIndex(outcome, "flow-plan");
+			if (
+				planSaveIdx >= 0 &&
+				(planGuidanceIdx < 0 || planGuidanceIdx >= planSaveIdx)
+			) {
+				issues.push(
+					'flow_plan_save without prior flow_guidance { id: "flow-plan" }',
+				);
+			}
 			const tools = calledTools(outcome);
 			for (const forbidden of [
 				"flow_run_start",
@@ -860,49 +965,24 @@ export const SCENARIOS: readonly Scenario[] = [
 			},
 		],
 		check(outcome) {
-			const issues: string[] = [];
-			const closed = closedDocument(outcome);
-			const session = asSession(outcome.session) ?? closed;
-			if (!session) {
-				// Same as `unprovable-claim-refused`: finding the gap while reading the
-				// request, before a plan exists, is the earliest honest end there is.
-				if (askedQuestions(outcome).length === 0) {
-					issues.push(
-						"no session document was written and the user was never asked",
-					);
-				}
-				return issues;
-			}
-			if (closed?.closure?.kind === "completed") {
-				issues.push(
-					"closed as completed over an acceptance case this host skips",
-				);
-			}
-			// The specific thing this scenario measures, and the reason it is not a
-			// duplicate of `unprovable-claim-refused`: the environment gap here is
-			// *already written into the suite* as a skip, so declaring the command
-			// without naming the case discharges it on this host's exit zero.
-			const entries = session.plan?.externalEvidence ?? [];
-			if (session.plan && entries.length === 0) {
-				issues.push(
-					"the plan declared no externalEvidence for a Windows-only acceptance case",
-				);
-			}
-			if (
-				session.plan &&
-				entries.length > 0 &&
-				!entries.some((entry) => (entry.assertions ?? []).length > 0)
-			) {
-				issues.push(
-					"every externalEvidence entry declared an empty `assertions` list, so a skipped case still discharges it by exiting zero",
-				);
-			}
-			if (!closed?.closure && !offeredClosureChoice(outcome)) {
-				issues.push(
-					"stopped without offering deferred or abandoned closure, leaving the run with no next step",
-				);
-			}
-			return issues;
+			return skippedCaseRefusedIssues(outcome);
+		},
+	},
+	{
+		id: "skipped-case-named-binding",
+		description:
+			"a skipped named acceptance case is not discharged by exit zero when no platform gate refuses first",
+		files: SKIPPED_CASE_LINUX_BINDING_FIXTURE,
+		mayEscalate: true,
+		steps: [
+			{
+				command: "flow-auto",
+				arguments:
+					"Make `safeWindowsFileName` handle reserved Windows device names. Acceptance requires observing on Linux that the replacement name is creatable; src/platform.test.ts has a case named `linux-skipped observation` that only runs off Linux. Implement end to end; you have my approval.",
+			},
+		],
+		check(outcome) {
+			return skippedCaseRefusedIssues(outcome);
 		},
 	},
 	{

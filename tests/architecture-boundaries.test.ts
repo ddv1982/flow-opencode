@@ -58,6 +58,9 @@ const sourceRoot = join(repositoryRoot, "src");
  * flow_guidance. Duplicated alignment/archiveRetry/recovery rules removed (they're
  * in the loaded SKILL.md). The thinner routers need 600 bytes more source than the
  * old inlined manuals but remove 23.9 KiB from compiled prompts (flow-run: 15KB → 1KB).
+ *
+ * Frozen at 249 KiB after this raise: further growth must return bytes through
+ * consolidation before the ceiling moves again.
  */
 const MAX_TYPESCRIPT_SOURCE_BYTES = 249 * 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;

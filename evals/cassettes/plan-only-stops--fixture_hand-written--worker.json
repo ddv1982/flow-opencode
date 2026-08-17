@@ -1,0 +1,102 @@
+{
+	"cassetteVersion": 1,
+	"flowVersion": "7.3.1",
+	"recordedAt": "2026-08-17T20:00:00.000Z",
+	"scenario": "plan-only-stops",
+	"model": "fixture/hand-written",
+	"attempt": 1,
+	"hostPlatform": "linux",
+	"files": {
+		"package.json": "{\n  \"name\": \"flow-eval-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n",
+		"src/greet.ts": "export function greet(name: string): string {\n\treturn `Hello, ${name}!`;\n}\n",
+		"src/greet.test.ts": "import { expect, test } from \"bun:test\";\nimport { greet } from \"./greet.js\";\n\ntest(\"greets by name\", () => {\n\texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n});\n",
+		"README.md": "# Flow eval fixture\n\nRun `bun test` for the canonical gate.\n"
+	},
+	"events": [
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"view": "compact"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 0
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_guidance",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"id": "flow-plan"
+			},
+			"observed": {
+				"status": "error"
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "task",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"subagent_type": "flow-worker",
+				"prompt": "Inventory repository facts for the farewell plan."
+			},
+			"rawOutput": "Blocked: assignment matrix missing."
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_plan_save",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "plan-farewell-worker-regression",
+					"expectedRevision": 0,
+					"goal": "Add an exported `farewell(name)` function to src/greet.ts.",
+					"plan": {
+						"summary": "Export farewell beside greet with a focused test.",
+						"overview": "One exported function mirroring greet.",
+						"requirements": ["farewell returns Goodbye, <name>!"],
+						"decisions": ["Mirror greet style."],
+						"features": [
+							{
+								"id": "farewell",
+								"title": "Add farewell",
+								"summary": "Export farewell(name) with a focused test.",
+								"targets": ["src/greet.ts", "src/greet.test.ts"],
+								"validation": ["bun test src/greet.test.ts"],
+								"dependsOn": []
+							}
+						],
+						"gate": "bun test",
+						"externalEvidence": []
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 1,
+				"sessionId": "session:plan-only-worker-regression"
+			}
+		}
+	],
+	"expected": {
+		"verdict": "FAIL (1)",
+		"issues": [
+			"plan-only dispatched flow-worker before any feature run started"
+		],
+		"falseCompletion": false,
+		"closureKind": null
+	},
+	"finalText": "Draft plan saved after a worker inventory attempt.",
+	"assistantMessages": 2,
+	"fidelity": []
+}

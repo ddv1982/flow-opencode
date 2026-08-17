@@ -51,6 +51,10 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// exit zero — which its own check asserts directly. Gating the rate would publish a
 	// number for a guarantee it does not isolate. Isolating it needs a case this host
 	// skips with no platform gate on the entry.
+	"skipped-case-named-binding": null,
+	// Linux-binding variant of the named-case rule: the skip is on Linux with no
+	// `platform: "win32"` gate, so ADR 0012's named-case satisfaction is the binding
+	// constraint. Ungated until a matrix establishes a baseline.
 	"continuation-accepted": 1,
 	// Gated on its first matrix, which the note it replaces said not to do, because the
 	// number is not what gates it: this is the mirror of `goal-change-refused`, already

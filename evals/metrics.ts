@@ -426,3 +426,41 @@ export function reviewerActivity(
 		silentPasses,
 	};
 }
+
+export type GuidanceSkipSignal =
+	| "plan-save-without-guidance"
+	| "run-start-without-guidance";
+
+/**
+ * Whether a manager mutation ran without loading the guide thin routers delegate to.
+ *
+ * Reported, not gated: baselines for how often models skip `flow_guidance` under lazy
+ * loading need a matrix before a threshold is honest.
+ */
+export function guidanceSkipSignals(
+	flowCalls: readonly { tool: string; input: Record<string, unknown> }[],
+): readonly GuidanceSkipSignal[] {
+	const signals: GuidanceSkipSignal[] = [];
+	let sawPlanGuidance = false;
+	let sawRunGuidance = false;
+	for (const call of flowCalls) {
+		if (call.tool === "flow_guidance") {
+			const id = call.input.id as string | undefined;
+			if (id === "flow-plan") sawPlanGuidance = true;
+			if (id === "flow-run") sawRunGuidance = true;
+		}
+		if (call.tool === "flow_plan_save" && !sawPlanGuidance) {
+			signals.push("plan-save-without-guidance");
+		}
+		if (call.tool === "flow_run_start" && !sawRunGuidance) {
+			signals.push("run-start-without-guidance");
+		}
+	}
+	return signals;
+}
+
+export function countGuidanceSkips(
+	flowCalls: readonly { tool: string; input: Record<string, unknown> }[],
+): number {
+	return guidanceSkipSignals(flowCalls).length;
+}

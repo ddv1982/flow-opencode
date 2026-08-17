@@ -69,8 +69,12 @@ const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
  * a second time. A ceiling this tight is the point — it is why each of the last three
  * evidence rules arrived as a checked field rather than another paragraph asking the
  * model to be careful.
+ *
+ * Ratcheted to 16,000 after 7.3.0 thin routers landed at 14,761 total shipped bytes
+ * (~55% below the old inlined-manual footprint). Headroom buys one router edit before
+ * the ceiling forces another cut.
  */
-const MAX_TOTAL_PROMPT_BYTES = 38_500;
+const MAX_TOTAL_PROMPT_BYTES = 16_000;
 
 /**
  * Absolute-rule markers per surface. Both Anthropic and OpenAI advise reserving

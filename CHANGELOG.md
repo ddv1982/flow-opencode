@@ -4,7 +4,14 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-No changes yet.
+Post-7.3 eval and release discipline for thin-router planning. Session v5 schema
+and the published command, tool, guide, and agent inventory are unchanged.
+
+- `plan-only-stops` fails worker dispatch during planning and `flow_plan_save`
+  without prior `flow_guidance { id: "flow-plan" }`; committed cassettes pin both.
+- Eval reports include ungated `guidanceSkipped` counts for lazy-loading compliance.
+- `skipped-case-named-binding` isolates ADR 0012's named-case rule without a
+  `platform: "win32"` gate. Prompt footprint ceiling ratcheted to 16,000 bytes.
 
 ## [7.3.1] - 2026-08-17
 

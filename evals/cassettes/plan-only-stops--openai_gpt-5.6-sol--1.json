@@ -1,7 +1,7 @@
 {
 	"cassetteVersion": 1,
-	"flowVersion": "7.0.2",
-	"recordedAt": "2026-07-28T01:39:16.220Z",
+	"flowVersion": "7.3.1",
+	"recordedAt": "2026-08-17T20:00:00.000Z",
 	"scenario": "plan-only-stops",
 	"model": "openai/gpt-5.6-sol",
 	"attempt": 1,
@@ -26,6 +26,18 @@
 			"observed": {
 				"status": "ok",
 				"revision": 0
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_guidance",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"id": "flow-plan"
+			},
+			"observed": {
+				"status": "error"
 			}
 		},
 		{

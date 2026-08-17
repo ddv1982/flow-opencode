@@ -40,6 +40,7 @@ import {
 	aggregateOperationalMetrics,
 	type CompletionHonesty,
 	completionHonesty,
+	countGuidanceSkips,
 	type MetricSession,
 	type OperationalMetrics,
 	operationalMetrics,
@@ -113,6 +114,8 @@ type RunResult = {
 	operational: OperationalMetrics;
 	/** Broad-scope claims the runtime refused, which no document records. */
 	refusedBroadScope: number;
+	/** Manager mutations that ran without loading the expected guide first. */
+	guidanceSkips: number;
 	/**
 	 * Final assistant text, recorded so a human can judge a stop after the fact —
 	 * above all an escalation, where whether asking was right is the whole question.
@@ -524,6 +527,7 @@ async function main(): Promise<void> {
 						durationMs: outcome.durationMs,
 					}),
 					refusedBroadScope: refusedBroadScope(outcome.flowCalls),
+					guidanceSkips: countGuidanceSkips(outcome.flowCalls),
 					finalText: outcome.finalText,
 					questions: askedQuestions(outcome),
 					durationMs: outcome.durationMs,
@@ -607,6 +611,7 @@ async function main(): Promise<void> {
 							durationMs: Date.now() - started,
 						}),
 						refusedBroadScope: 0,
+						guidanceSkips: 0,
 						finalText: "",
 						questions: [],
 						durationMs: Date.now() - started,
@@ -711,6 +716,10 @@ async function main(): Promise<void> {
 		(sum, result) => sum + result.refusedBroadScope,
 		0,
 	);
+	const guidanceSkipped = results.reduce(
+		(sum, result) => sum + result.guidanceSkips,
+		0,
+	);
 	const operational = aggregateOperationalMetrics(
 		results
 			.filter((result) => !result.environment)
@@ -735,6 +744,10 @@ async function main(): Promise<void> {
 				.filter(([, count]) => count > 0)
 				.map(([kind, count]) => `${kind}=${count}`)
 				.join(", ") || "none observed"
+		}${
+			guidanceSkipped === 0
+				? ""
+				: `\nguidance skipped: ${guidanceSkipped} manager mutation(s) without prior flow_guidance across ${results.length} run(s)`
 		}`,
 	);
 	// The aggregate hides the number that matters. Model behavior is stochastic, so
@@ -782,6 +795,7 @@ async function main(): Promise<void> {
 					falseCompletions: falseCompletions.length,
 					reviewer,
 					broadScopeRefusals,
+					guidanceSkipped,
 					operational,
 				},
 				results,
