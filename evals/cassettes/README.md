@@ -33,3 +33,8 @@ decision — so replacing one would drop a distinct refusal. It is a hand-writte
 decision-layer sequence (`fixture/hand-written`), not a paid-model score: the
 reviewer submits a failed verdict with a blocking finding, and a silent pass now
 fails the scenario check. Replay still executes the real handlers.
+
+`plan-only-stops` cassettes pin thin-router planning: `flow_guidance` before
+`flow_plan_save`, and no `flow-worker` dispatch before a feature run starts. The
+negative `plan-only-stops--fixture_hand-written--worker.json` cassette fails
+replay when that worker dispatch regresses.

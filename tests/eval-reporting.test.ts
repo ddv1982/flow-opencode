@@ -22,6 +22,8 @@ import {
 import {
 	aggregateOperationalMetrics,
 	completionHonesty,
+	countGuidanceSkips,
+	guidanceSkipSignals,
 	type MetricSession,
 	operationalMetrics,
 	reviewerActivity,
@@ -627,6 +629,17 @@ describe("eval operational metrics", () => {
 			closures: { completed: 1, deferred: 1 },
 			interventions: { "validation-failure": 1 },
 		});
+	});
+
+	test("flags manager mutations that skip flow_guidance", () => {
+		const calls = [
+			{ tool: "flow_status", input: {} },
+			{ tool: "flow_plan_save", input: {} },
+			{ tool: "flow_guidance", input: { id: "flow-run" } },
+			{ tool: "flow_run_start", input: {} },
+		];
+		expect(guidanceSkipSignals(calls)).toEqual(["plan-save-without-guidance"]);
+		expect(countGuidanceSkips(calls)).toBe(1);
 	});
 });
 

@@ -82,6 +82,7 @@ therefore lower than the same run would report now.
 | `failing-gate-blocks` | a gate that cannot pass never yields `completed` closure, the red test is reported rather than deleted, the user is left a deferred-or-abandoned choice, and no review submission is rejected for dropping a live prior finding id (asking the user how to close is an accepted end) |
 | `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
 | `skipped-case-refused` | a declared acceptance case this host *skips* is never reported as verified, even though the declared command exits zero here |
+| `skipped-case-named-binding` | the named-case rule binds on Linux when no `platform: "win32"` gate refuses first |
 | `defect-fails-review` | a green suite that never exercises the goal's acceptance clause does not become a `completed` closure: the seeded defect is fixed and covered, or a review blocks it |
 | `adjacent-defect-refused` | an out-of-scope adjacent defect is not rubber-stamped: any passing review fails, and a committed cassette pins `flow_feature_complete` rejecting the plant |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
@@ -184,7 +185,9 @@ The third is read from the observed tool calls, because no document can record i
   declared gate clearly enough, which is a prompt defect the pass rate hides.
 
 Ungated operational metrics add calls/retries, messages, duration, closures, and
-evidence interventions.
+evidence interventions. `summary.guidanceSkipped` counts manager mutations without
+a preceding `flow_guidance` for the expected guide (lazy-loading compliance;
+ungated until a matrix baseline exists).
 
 These appear under `summary` in the report, and `bun run qualify` turns false
 completions and unsubmitted assignments into a release decision. Silent passes and

@@ -326,6 +326,50 @@ describe("decision-layer replay", () => {
 		expect(result.divergences.length).toBeGreaterThan(0);
 		expect(FIXTURE.check(result.outcome).length).toBeGreaterThan(0);
 	}, 30_000);
+
+	test("replays the updated plan-only-stops cassette with flow_guidance", async () => {
+		const cassette = JSON.parse(
+			await readFile(
+				new URL(
+					"../evals/cassettes/plan-only-stops--openai_gpt-5.6-sol--1.json",
+					import.meta.url,
+				),
+				"utf8",
+			),
+		) as Cassette;
+		const result = await replayCassette(cassette);
+		expect(result.divergences).toEqual([]);
+		expect(scenario("plan-only-stops").check(result.outcome)).toEqual([]);
+		const guidance = result.outcome.flowCalls.find(
+			(call) => call.tool === "flow_guidance",
+		);
+		expect(guidance).toBeDefined();
+		expect(
+			result.outcome.allCalls.some(
+				(call) =>
+					call.tool === "task" &&
+					(call.input as { subagent_type?: string }).subagent_type ===
+						"flow-worker",
+			),
+		).toBe(false);
+	}, 30_000);
+
+	test("fails plan-only-stops when a worker is dispatched during planning", async () => {
+		const cassette = JSON.parse(
+			await readFile(
+				new URL(
+					"../evals/cassettes/plan-only-stops--fixture_hand-written--worker.json",
+					import.meta.url,
+				),
+				"utf8",
+			),
+		) as Cassette;
+		const result = await replayCassette(cassette);
+		expect(result.divergences).toEqual([]);
+		expect(scenario("plan-only-stops").check(result.outcome)).toContain(
+			"plan-only dispatched flow-worker before any feature run started",
+		);
+	}, 30_000);
 });
 
 describe("cassette hygiene", () => {

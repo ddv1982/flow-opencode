@@ -563,6 +563,109 @@ describe("plan-only-stops", () => {
 					],
 					flowCalls: [
 						{
+							tool: "flow_guidance",
+							status: "completed",
+							sessionIndex: 0,
+							agent: "build",
+							input: { id: "flow-plan" },
+							output: null,
+							rawOutput: "",
+							metadata: {},
+						},
+						{
+							tool: "flow_plan_save",
+							status: "completed",
+							sessionIndex: 0,
+							agent: "build",
+							input: {},
+							output: null,
+							rawOutput: "",
+							metadata: {},
+						},
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	const workerTask = {
+		tool: "task",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: { subagent_type: "flow-worker", prompt: "inventory slice" },
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	};
+
+	const planGuidance = {
+		tool: "flow_guidance",
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input: { id: "flow-plan" },
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	};
+
+	test("fails when flow-worker is dispatched before any feature run starts", () => {
+		const issues = check(
+			"plan-only-stops",
+			outcome({
+				session: session({
+					goal: "Add an exported farewell(name) function to src/greet.ts.",
+					features: [{ id: "farewell", title: "Add farewell" }],
+				}),
+				allCalls: [workerTask],
+				flowCalls: [planGuidance],
+			}),
+		);
+		expect(issues).toContain(
+			"plan-only dispatched flow-worker before any feature run started",
+		);
+	});
+
+	test("fails when flow_plan_save runs without prior flow_guidance flow-plan", () => {
+		const issues = check(
+			"plan-only-stops",
+			outcome({
+				session: session({
+					goal: "Add an exported farewell(name) function to src/greet.ts.",
+					features: [{ id: "farewell", title: "Add farewell" }],
+				}),
+				flowCalls: [
+					{
+						tool: "flow_plan_save",
+						status: "completed",
+						sessionIndex: 0,
+						agent: "build",
+						input: {},
+						output: null,
+						rawOutput: "",
+						metadata: {},
+					},
+				],
+			}),
+		);
+		expect(issues).toContain(
+			'flow_plan_save without prior flow_guidance { id: "flow-plan" }',
+		);
+	});
+
+	test("passes when flow_guidance precedes flow_plan_save", () => {
+		expect(
+			check(
+				"plan-only-stops",
+				outcome({
+					session: session({
+						goal: "Add an exported farewell(name) function to src/greet.ts.",
+						features: [{ id: "farewell", title: "Add farewell" }],
+					}),
+					flowCalls: [
+						planGuidance,
+						{
 							tool: "flow_plan_save",
 							status: "completed",
 							sessionIndex: 0,
