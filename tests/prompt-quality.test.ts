@@ -193,6 +193,17 @@ describe("Flow prompt structure", () => {
 		).toThrow("Unsupported Flow prompt surface");
 	});
 
+	test("keeps worker dispatch inside an active feature run", () => {
+		// 7.3.0 thin routers load only flow-plan during planning. If the kernel still
+		// says "delegate active Flow work to flow-worker" and flow-plan is silent,
+		// the first planning review wave refuses for a missing assignment matrix.
+		expect(FLOW_MANAGER_KERNEL).toContain("After a feature run starts");
+		expect(FLOW_MANAGER_KERNEL).not.toContain("Delegate active Flow work");
+		expect(getFlowGuidance("flow-plan").content).toContain(
+			"Do not dispatch `flow-worker` while planning",
+		);
+	});
+
 	test("routes every manager surface through compact status and lazy guides", () => {
 		for (const [surface] of MANAGER_GUIDANCE) {
 			expect(compileFlowPromptSurface(surface)).toContain(

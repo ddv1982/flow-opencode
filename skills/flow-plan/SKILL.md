@@ -36,8 +36,10 @@ without rediscovering the goal.
   saving, approving, or running.
 - If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and report
   an incomplete plugin load.
-- Inspect relevant code, tests, docs, scripts, and conventions. Ask only for a
-  missing product choice that materially changes the outcome.
+- Inspect relevant code, tests, docs, scripts, and conventions in this manager
+  context. Do not dispatch `flow-worker` while planning; that role is only for
+  authorized implementation slices after approval. Ask only for a missing
+  product choice that materially changes the outcome.
 
 ## Plan contract
 

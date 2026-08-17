@@ -18,8 +18,8 @@ export const FLOW_MANAGER_KERNEL = [
 		"the independent reviewer submits only its own result.",
 	].join(" "),
 	[
-		"- Delegate active Flow work only to `flow-worker` and independent review only to `flow-reviewer`;",
-		"never use generic or general-purpose agents.",
+		"- After a feature run starts, delegate implementation slices only to `flow-worker`",
+		"and independent review only to `flow-reviewer`; never use generic or general-purpose agents.",
 	].join(" "),
 	[
 		"- Make one automatic fresh full retry only when the projected `nextAction`",

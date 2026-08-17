@@ -480,6 +480,10 @@ describe("Flow v6 documentation contract", () => {
 		expect(combined).toContain("bun run smoke:live");
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
 		expect(combined).toContain("npm publish");
+		const release = await readFile(".github/workflows/release.yml", "utf8");
+		expect(release).toMatch(/^ {4}branches:\n {6}- main$/m);
+		expect(release).toContain('tag="v${version}"');
+		expect(release).toContain('--target "${GITHUB_SHA}"');
 
 		// Model-driven evals need credentials and cost real money, so they run on a
 		// schedule and never on a pull request. `evals.yml` is the one workflow allowed
